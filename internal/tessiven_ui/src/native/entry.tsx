@@ -14,7 +14,7 @@ declare global {
     webkit?: { messageHandlers?: { canvas?: { postMessage: (message: unknown) => void } } };
     serviceCanvas?: {
       update: (input: { render_id: string; version: Version; historical: boolean; dark: boolean; contrast: boolean; bottomInset?: number }) => void;
-      command: (input: { canvas_id: string; version_id: number; action: 'expand' | 'collapse' | 'all' | 'group' }) => void;
+      command: (input: { canvas_id: string; version_id: number; action: 'expand' | 'collapse' | 'all' | 'group' | 'clearSelection' }) => void;
     };
   }
 }
@@ -51,6 +51,7 @@ function NativeCanvas() {
       if (!control || value.canvas_id !== version?.canvas_id || value.version_id !== version.number) return;
       touch?.reset();
       switch (value.action) {
+        case 'clearSelection': control.clearSelection(); break;
         case 'expand': control.expandAll(); break;
         case 'collapse': control.collapseAll(); break;
         case 'all': case 'group': control.setServiceScope(value.action); break;
@@ -78,7 +79,7 @@ function NativeCanvas() {
   notify('ready');
   return <main class="tessiven" ref={host}><Show when={input()} keyed>{value => <TessivenGraph
     version={value.version} historical={value.historical} t={t} visible={true}
-    onAsk={selection => notify('ask', value.version, selection)} onDetails={selection => notify('details', value.version, selection)}
+    onAsk={selection => notify('ask', value.version, selection)} onSelectionChange={selection => notify('selection', value.version, selection)}
     onInspect={() => undefined} onViewportControl={value => { control = value; }}
     tools="hidden" onZoomChange={setScale} onViewOptions={options => notify('viewOptions', value.version, undefined, options)}
     onRenderState={state => notify(state, value.version)}

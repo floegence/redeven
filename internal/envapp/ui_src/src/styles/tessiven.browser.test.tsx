@@ -236,22 +236,28 @@ describe('Tessiven real graph interactions', () => {
     } finally { engine.dispose(); }
   });
 
-  it('preserves native render notifications and details while controlling touch zoom', async () => {
+  it('keeps native selection explicit while controlling touch zoom', async () => {
     host = document.createElement('div');
     host.className = 'tessiven';
     host.style.cssText = 'width:1250px;height:740px;position:relative';
     document.body.append(host);
-    const states = vi.fn(), details = vi.fn();
+    const states = vi.fn(), selection = vi.fn();
     let control: TessivenViewportControl | undefined;
     dispose = render(() => <TessivenGraph version={fixture()} historical={false}
       t={tessivenText('en-US')} onAsk={() => {}} onInspect={() => {}}
       tools="hidden"
-      onDetails={details} onRenderState={states} onViewportControl={value => { control = value; }} />, host);
+      onSelectionChange={selection} onRenderState={states} onViewportControl={value => { control = value; }} />, host);
     await expect.poll(() => states.mock.calls.at(-1)?.[0]).toBe('rendered');
     expect(states.mock.calls[0][0]).toBe('loading');
     await userEvent.click(host.querySelector('.tessiven-node')!);
-    expect(details).toHaveBeenCalledOnce();
-    expect(details.mock.calls[0][0].object_refs).toEqual(['node-0']);
+    expect(selection).toHaveBeenCalledOnce();
+    expect(selection.mock.calls[0][0].object_refs).toEqual(['node-0']);
+    expect(host.querySelector('[data-graph-object][data-selected="true"]')).not.toBeNull();
+    control!.pan(10, 20);
+    expect(selection).toHaveBeenCalledOnce();
+    control!.clearSelection();
+    expect(selection.mock.calls.at(-1)?.[0].object_refs).toEqual([]);
+    expect(host.querySelector('[data-graph-object][data-selected="true"]')).toBeNull();
     expect(host.querySelector('.tessiven-object-popup')).toBeNull();
     expect(host.querySelector('.tessiven-canvas-tools [aria-label="Canvas menu"]')).toBeNull();
     expect(page.getByRole('button', { name: 'Fit canvas', exact: true }).query()).toBeNull();

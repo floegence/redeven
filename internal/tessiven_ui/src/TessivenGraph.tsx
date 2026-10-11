@@ -61,6 +61,7 @@ export type TessivenViewportControl = {
   expandAll: () => void;
   collapseAll: () => void;
   setServiceScope: (scope: NodeServiceScope) => void;
+  clearSelection: () => void;
 };
 export function TessivenGraph(props: {
   version: Version;
@@ -72,7 +73,7 @@ export function TessivenGraph(props: {
   visible?: boolean;
   browseState?: GraphBrowseState;
   onBrowseState?: (state: GraphBrowseState) => void;
-  onDetails?: (selection: Selection) => void;
+  onSelectionChange?: (selection: Selection) => void;
   onViewportControl?: (control: TessivenViewportControl) => void;
   onRenderState?: (state: 'loading' | 'rendered' | 'error') => void;
   tools?: 'all' | 'hidden';
@@ -99,7 +100,8 @@ export function TessivenGraph(props: {
     edges: [],
     bounds: { x: 0, y: 0, width: 1, height: 1 },
   });
-  const [selected, setSelected] = createSignal<GraphObjectRef | null>(null);
+  const [selectionState, setSelectionState] = createSignal<{ object: GraphObjectRef | null; refs: string[] }>({ object: null, refs: [] });
+  const selected = () => selectionState().object;
   const [hovered, setHovered] = createSignal<GraphObjectRef | null>(null);
   const [popup, setPopup] = createSignal<{
     event: GraphObjectEvent;
@@ -127,6 +129,7 @@ export function TessivenGraph(props: {
     expandAll: () => toggleAll(true),
     collapseAll: () => toggleAll(false),
     setServiceScope: updateServiceScope,
+    clearSelection: () => { select(null); close(); },
     pan(dx, dy) {
       close();
       setViewport(previous => ({ ...previous, x: previous.x + dx, y: previous.y + dy }));
@@ -340,7 +343,7 @@ export function TessivenGraph(props: {
         setSelectedNodes((previous) => ({ ...previous, [group.id]: nodeID }));
       }
       const viewID = appearance(nodeID, group?.id) ?? nodeID;
-      setSelected({ kind: 'node', id: viewID });
+      select({ kind: 'node', id: viewID });
       pendingLocate = viewID;
       centerSelection();
       const bounds = host!.getBoundingClientRect();
@@ -364,22 +367,20 @@ export function TessivenGraph(props: {
       target?.focus({ preventScroll: true });
     }
   }
+  function select(object: GraphObjectRef | null, refs?: string[]) {
+    const selectionRefs = refs ?? (object?.kind === 'edge'
+      ? projection().relations.get(object.id)?.map(value => value.id) ?? []
+      : object ? [canonicalRef(object.id)] : []);
+    const selection: Selection = { canvas_id: props.version.canvas_id, version_id: props.version.number, object_refs: selectionRefs.slice(0, 100) };
+    setSelectionState({ object, refs: selectionRefs });
+    props.onSelectionChange?.(selection);
+    return { ...selection, object_refs: selectionRefs };
+  }
   function show(event: GraphObjectEvent, refs?: string[], menu = false) {
-    setSelected(event.object);
-    const selectionRefs =
-        refs ??
-        (event.object?.kind === 'edge'
-          ? (projection()
-              .relations.get(event.object.id)
-              ?.map((value) => value.id) ?? [])
-          : event.object
-            ? [canonicalRef(event.object.id)]
-            : []);
-    if (props.onDetails) {
-      if (!menu && !selectionRefs.length) return;
-      const selection = { canvas_id: props.version.canvas_id, version_id: props.version.number, object_refs: selectionRefs.slice(0, 100) };
-      if (menu) props.onAsk(selection);
-      else props.onDetails(selection);
+    const selection = select(event.object, refs);
+    const selectionRefs = selection.object_refs;
+    if (props.onSelectionChange) {
+      if (menu) props.onAsk({ ...selection, object_refs: selectionRefs.slice(0, 100) });
       return;
     }
     setPopup({
@@ -410,7 +411,7 @@ export function TessivenGraph(props: {
       ? projection().graph.nodes.find(node => node.id === current.id)
       : undefined;
     if (!node || (expanded().has(id) && node.parentId === id))
-      setSelected({ kind: 'node', id });
+      select({ kind: 'node', id });
     setExpanded((previous) => {
       const next = new Set(previous);
       if (next.has(id)) next.delete(id);
@@ -423,12 +424,13 @@ export function TessivenGraph(props: {
     if (scope === serviceScope()) return;
     positionMode = 'compact';
     close();
+    if (props.onSelectionChange) select(null);
     setServiceScope(scope);
   }
   function toggleAll(open: boolean) {
     const current = selected();
     const node = current?.kind === 'node' ? projection().graph.nodes.find(node => node.id === current.id) : undefined;
-    if (!open && node?.parentId) setSelected({ kind: 'node', id: node.parentId });
+    if (!open && node?.parentId) select({ kind: 'node', id: node.parentId });
     setExpanded(new Set(open ? (props.version.document.groups ?? []).map(group => group.id) : []));
     close();
   }
@@ -436,7 +438,7 @@ export function TessivenGraph(props: {
     setExpanded(previous => new Set([...previous, groupId]));
     setSelectedNodes(previous => ({ ...previous, [groupId]: nodeId }));
     const id = appearance(nodeId, groupId)!;
-    setSelected({ kind: 'node', id });
+    select({ kind: 'node', id });
     pendingLocate = id;
     centerSelection();
     const current = popup();
@@ -489,6 +491,7 @@ export function TessivenGraph(props: {
               <button
                 class="tessiven-service"
                 data-service-id={id}
+                data-selected={props.onSelectionChange && members.some(instance => selectionState().refs.includes(instance.id)) ? 'true' : undefined}
                 data-relation-endpoint={endpoint?.(id)}
                 data-kind={service()?.kind}
                 data-member={grouped ? members.some(instance => grouped.has(instance.id)) : undefined}
