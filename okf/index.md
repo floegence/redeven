@@ -45,6 +45,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Desktop drag latency](operations/remote-desktop-drag-latency.md) - Assess repeated native drag measurements and raw-pointer dispatch over the production SSH placement bridge.
 - [Physical desktop responsiveness and local input](operations/remote-desktop-responsive-input-results.md) - Compare physical-seat receipts and DRM feedback on orange and udesk26, and verify local text independently of clipboard synchronization.
 - [Orange AFBC capture qualification](operations/remote-desktop-orange-afbc-results.md) - Verify legacy Rockchip component normalization with real pixels, lock/unlock fencing and explicit product/performance acceptance limits.
+- [Physical-device remote desktop Viewer qualification](operations/remote-desktop-device-viewer-results.md) - Assess actual udesk26 toolkit input, unlock and paint recovery while identifying incomplete orange, IME, cursor and competitor acceptance.
 - [Desktop reconnect qualification](operations/remote-desktop-recovery-results.md) - Verify published sound continuity, Mac physical hotplug, locked reconnect and Wayland display recovery.
 - [Wayland desktop qualification](operations/remote-desktop-wayland-results.md) - Assess real GNOME office interaction and retained capture limits after virtual graphics provisioning.
 - [Host Applications](architecture/host-applications.md) - Browse host applications and apply shared authorization and session lifecycle rules.

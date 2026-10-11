@@ -3,7 +3,7 @@ type: Qualification Record
 title: Orange AFBC capture qualification
 description: Verify the bounded legacy Rockchip scanout import repair and distinguish native qualification from deployed Viewer acceptance.
 tags: [desktop, drm, rockchip, qualification]
-timestamp: 2026-10-11T13:03:33Z
+timestamp: 2026-10-11T14:10:00Z
 ---
 # Summary
 
@@ -80,7 +80,9 @@ Known-pattern rows avoid an unrelated GNOME notification. Exact color and edge
 assertions remain unchanged. No credentials are retained in the fixture,
 service protocol, arguments, environment or maintained record.
 
-# Measurements And Acceptance Limits
+# Boundaries
+
+## Measurements And Acceptance Limits
 
 Three candidate-only rounds each use 100 alternating pointer moves, maximum
 dimension 1920, 15 FPS and original pixels. A private-socket client measures
@@ -102,29 +104,14 @@ on orange and 19.6 / 16.0 / 19.4% on udesk26 over five-second samples
 (`USER_HZ=100`). No successful same-configuration orange AFBC baseline exists.
 These data do not establish a 70% CPU reduction or all latency targets.
 
-## Real Desktop acceptance
+## Deployed Viewer boundary
 
-On 2026-10-11 the task-owned Desktop build first refreshed and then updated
-the `udesk26 v0.22.34 QA` SSH Runtime through its real Env App flow. The host
-was running an older Runtime image before that update; the service socket alone
-was therefore not sufficient evidence of compatibility. After the update,
-Env App's administrator-authorized deployment completed and the panel reached
-the real `Connect to desktop` state.
-
-The real Viewer opened at `/_redeven_desktop/` and displayed the physical
-udesk26 desktop (the Clash Verge window and panel were visible). Its toolbar
-reported `Control`, the keyboard input surface was enabled, and the Viewer
-sent the built-in `Switch application (Alt + Tab)` shortcut successfully. The
-session was then disconnected from the Viewer and showed the explicit
-`Desktop disconnected` state. This proves the deployed udesk26 path through
-capture, Viewer presentation, control-channel input, shortcut handling and
-teardown. It does not substitute for a latency measurement.
-
-The same task-owned Desktop could not complete the orange flow during this
-run: the orange SSH transport timed out while its card remained unchecked.
-No orange service or host state was changed by manual commands. Orange's native
-AFBC and lock/input evidence above remains valid, while its current Env App and
-Viewer acceptance is an external connectivity blocker for this qualification.
+The [physical-device Viewer record](remote-desktop-device-viewer-results.md)
+owns the 2026-10-11 Env App deployment, actual toolkit input, physical unlock,
+window switching and bounded recovery measurements. Toolbar status or a
+shortcut submission alone is not host-effect evidence. udesk26 has real
+functional evidence, while orange's current product update and Viewer path
+remain unqualified. These limits do not invalidate the native AFBC tests above.
 
 The [earlier responsiveness record](remote-desktop-responsive-input-results.md)
 owns previous X11/client-input evidence and does not qualify this repair's
