@@ -1,4 +1,5 @@
 import { completeTessivenRuntimeHandoff } from './tessivenRuntimeHandoff';
+import { registeredTessivenConnections } from './tessivenRegisteredConnections';
 import { TessivenRuntimes, type TessivenRuntimeInventory, type TessivenRuntimePath, type TessivenRuntimeTarget } from './tessivenRuntimes';
 import { prepareGatewayMemberPartition, clearGatewayMemberPartition, closeGatewayMemberTransport } from './gatewayMemberPartition';
 import { manageRuntimeGateway, previewRuntimeGateway } from './runtimeControlClient';
@@ -10466,6 +10467,11 @@ async function tessivenRuntimeInventory(
       target,
       connect: async (connectSignal, message) => {
         await preflightTessivenHostEffect(source, message, connectSignal);
+        const fresh = await tessivenRuntimeInventory(source, connectSignal, true);
+        const current = fresh.paths.filter(candidate => candidate.target.runtime_ref === runtimeRef);
+        if (current.length !== 1 || current[0]?.target.generation !== target.generation
+            || current[0]?.target.identity !== target.identity)
+          throw new RuntimeControlError('TESSIVEN_RESOURCE_CONFLICT', 'The registered Runtime changed before connecting.', 409);
         if (saved.local) {
           const attached = currentLocalEnvironmentRuntimeRecord(
             preferences.local_environment,
@@ -10600,7 +10606,9 @@ async function tessivenRuntimeInventory(
         const i18n = createDesktopI18n(
           desktopLanguageState().getSnapshot().resolved_locale,
         );
-        const self = source.record.environment_id === saved.id;
+        const sourceIdentity = tessivenRuntimeIdentity(source.record.startup);
+        const self = source.record.environment_id === saved.id
+          || (!!sourceIdentity && sourceIdentity === target.identity);
         launcherOperations.create({
           operation_key: operationKey,
           action: kind,
@@ -10782,6 +10790,31 @@ async function tessivenRuntimeInventory(
     paths.push(path);
   }
   if (directOnly) return { paths, sources };
+  const owners = Array.from(sessionsByKey.values()).filter(owner => liveSession(owner.session_key) === owner);
+  for (const registered of registeredTessivenConnections(preferences, owners)) {
+    const target = registered.target;
+    paths.push({
+      target,
+      connect: async (connectSignal, message) => {
+        await preflightTessivenHostEffect(source, message, connectSignal);
+        const fresh = registeredTessivenConnections(await loadDesktopPreferencesCached(),
+          Array.from(sessionsByKey.values()).filter(owner => liveSession(owner.session_key) === owner));
+        const matches = fresh.filter(candidate => candidate.target.runtime_ref === target.runtime_ref);
+        const current = matches.length === 1 ? matches[0] : undefined;
+        if (!current || current.target.generation !== target.generation)
+          throw new RuntimeControlError('TESSIVEN_RESOURCE_CONFLICT', 'The registered connection changed before connecting.', 409);
+        const result = current.kind === 'url'
+          ? await openRemoteEnvironmentFromLauncher({ kind: 'open_remote_environment',
+              environment_id: current.registration.id, label: current.registration.label,
+              external_local_ui_url: current.registration.local_ui_url })
+          : await openCloudEnvironmentFromLauncher({ kind: 'open_provider_environment', environment_id: current.registration.id });
+        if (!result.ok) throw new RuntimeControlError('TESSIVEN_TARGET_UNAVAILABLE', result.message, 409);
+        return { runtime_ref: target.runtime_ref, status: 'authentication_required' };
+      },
+      inspect: async () => ({ runtime_ref: target.runtime_ref,
+        status: target.connected ? 'connected' : 'disconnected', target }),
+    });
+  }
   const gatewayCatalogs = await Promise.all(
     (await gatewayStore().list()).map(async (gateway) => {
       const catalogSignal = AbortSignal.any([
@@ -11109,6 +11142,7 @@ async function executeTessivenGatewayBusiness(
       agent: transport.agent,
       signal,
       headers: {
+        Origin: transport.origin,
         Cookie: cookies
           .map((cookie) => `${cookie.name}=${cookie.value}`)
           .join('; '),

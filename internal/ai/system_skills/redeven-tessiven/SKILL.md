@@ -33,7 +33,8 @@ such nodes unbound; an explicitly requested observation may be recorded as
 
 1. Use `tessiven.runtimes` to discover authorized paths. Distinguish the current
    Desktop device from the machine executing Flower. Registered, online,
-   connected and authenticated are independent facts. A failed source is not
+   connected and authenticated are independent facts; `null` authentication
+   means it has not been verified, even if a native window is open. A failed source is not
    an empty directory. Discovery never starts Gateway, Runtime or a business
    session.
 2. Select one exact `runtime_ref` and `generation` from the result and retain
@@ -44,6 +45,9 @@ such nodes unbound; an explicitly requested observation may be recorded as
    registered connection. Desktop owns saved credentials and any password,
    MFA or authorization prompt. The user need not open Env App beforehand.
    Authentication-required and native confirmation results are not success.
+   Saved URL and Cloud application paths retain their original Desktop
+   connection/authentication entry. Honor their reported capabilities; they
+   do not provide a private process-control or generic remote business path.
 4. Use `tessiven.runtime.inspect` for status or limited diagnosis. Inspect
    resources with `tessiven.inspect`; only actual inspection establishes
    service bindings and identities. Remote inspections also return a connection

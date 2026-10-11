@@ -266,5 +266,7 @@
   "runtimeGatewayBusinessOnly": "Gateway-Verbindungen ermöglichen den Dienstzugriff. Prozessaktionen der Laufzeit erfordern eine direkte Desktop-Verbindung.",
   "runtimeRecoveryRequired": "Setzen Sie die Authentifizierung oder Wiederherstellung der ausgewählten Umgebung in Desktop fort.",
   "runtimeLoadFailed": "Umgebungen konnten nicht aktualisiert werden. Ihre Auswahl bleibt erhalten.",
-  "runtimeActionFailed": "Die Aktion kann nicht fortgesetzt werden. Prüfen Sie die Umgebung oder stellen Sie die Verbindung in Desktop wieder her."
+  "runtimeActionFailed": "Die Aktion kann nicht fortgesetzt werden. Prüfen Sie die Umgebung oder stellen Sie die Verbindung in Desktop wieder her.",
+  "runtimeAuthenticationUnknown": "Authentifizierung nicht geprüft",
+  "runtimeRegisteredApplicationOnly": "Verwenden Sie das Desktop-Fenster dieser Verbindung für den Zugriff und die Authentifizierung. Prozessaktionen erfordern eine registrierte direkte Verbindung zur Laufzeitumgebung."
 }

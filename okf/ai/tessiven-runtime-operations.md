@@ -56,7 +56,11 @@ Desktop request. Live Runtime policy clamps source and target rights again at
 the dispatch boundary; an unreadable configuration fails closed.
 
 A source-scoped Desktop inventory includes saved direct placements even when
-unconnected or stopped. Runtime Presence remains the sole capability owner.
+unconnected or stopped. Saved URL and Cloud application registrations retain
+separate exact paths and their original native connection/authentication entry;
+they do not gain a private control or generic remote business adapter. An open
+window proves connection only; unobserved authentication is reported as unknown.
+Runtime Presence remains the sole capability owner.
 Registered Desktop Gateways use the original `require_ready` client and bounded
 parallel catalog observations. An existing member session is authenticated only
 when its normal Runtime access-status endpoint confirms it; a window or
@@ -86,7 +90,7 @@ authorization, and unavailable placements. Tessiven does not require an already
 open Env App, auto-pair a Gateway, or ask Flower to handle authentication secrets.
 
 Gateway service operations use the original member transport, certificate pin,
-and Electron session Cookie owner to reach the fixed Runtime-local
+and exact logical member Origin, with the Electron session Cookie owner to reach the fixed Runtime-local
 `POST /_redeven_proxy/api/tessiven/business` endpoint. Its payload contains
 verified Runtime identity and a typed local resource request only. It cannot
 carry claimed permission flags, an arbitrary URL, another Runtime reference,
@@ -156,6 +160,7 @@ persistent database lineages retain their current shapes.
 - `internal/localui/tessiven_control.go` — Private source registration and lifecycle preflight.
 - `internal/gatewayhost/client.go` — Shared exact official service record and host catalog client with private credential ownership.
 - `internal/gatewayhost/client_test.go` — Real host API admission accepts the complete record and rejects stopped or unknown shapes.
+- `desktop/src/main/tessivenRegisteredConnections.test.ts` — Offline URL/Cloud registrations, exact configuration/document fencing and unknown authentication.
 - `desktop/src/main/tessivenRuntimes.test.ts` — Exact path/identity fencing, access-only capability and ambiguity denial.
 - `desktop/src/main/tessivenRuntimeHandoff.test.ts` — No effect before acceptance, cancellation and validation failure.
 - `desktop/src/main/main.ts` — Original registry, Gateway transport, authentication and lifecycle adapters.

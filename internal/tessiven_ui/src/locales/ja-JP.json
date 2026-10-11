@@ -266,5 +266,7 @@
   "runtimeGatewayBusinessOnly": "Gateway 接続はサービスへのアクセスを提供します。ランタイムのプロセス操作には Desktop の直接接続が必要です。",
   "runtimeRecoveryRequired": "Desktop で選択した環境の認証または接続の復元を続けてください。",
   "runtimeLoadFailed": "環境を更新できませんでした。現在の選択は保持されています。",
-  "runtimeActionFailed": "操作を続行できません。環境を確認するか、Desktop で接続を復元してください。"
+  "runtimeActionFailed": "操作を続行できません。環境を確認するか、Desktop で接続を復元してください。",
+  "runtimeAuthenticationUnknown": "認証状態は未確認",
+  "runtimeRegisteredApplicationOnly": "この接続の Desktop ウィンドウで環境にアクセスし、認証を行ってください。プロセス操作には登録済みのランタイムへの直接接続が必要です。"
 }

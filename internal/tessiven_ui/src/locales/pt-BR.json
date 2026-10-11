@@ -266,5 +266,7 @@
   "runtimeGatewayBusinessOnly": "Conexões Gateway permitem acesso aos serviços. Operações do processo do ambiente de execução exigem uma conexão direta do Desktop.",
   "runtimeRecoveryRequired": "Continue no Desktop para autenticar ou restaurar o ambiente selecionado.",
   "runtimeLoadFailed": "Não foi possível atualizar os ambientes. Sua seleção atual foi mantida.",
-  "runtimeActionFailed": "Não foi possível continuar a ação. Inspecione o ambiente ou restaure sua conexão no Desktop."
+  "runtimeActionFailed": "Não foi possível continuar a ação. Inspecione o ambiente ou restaure sua conexão no Desktop.",
+  "runtimeAuthenticationUnknown": "Autenticação não verificada",
+  "runtimeRegisteredApplicationOnly": "Use a janela do Desktop desta conexão para acessar o ambiente e se autenticar. As operações de processos exigem uma conexão direta registrada com o ambiente de execução."
 }

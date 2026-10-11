@@ -266,5 +266,7 @@
   "runtimeGatewayBusinessOnly": "Gateway 連線支援服務存取。執行階段程序操作需要 Desktop 直接連線。",
   "runtimeRecoveryRequired": "請在 Desktop 中繼續驗證或恢復所選環境。",
   "runtimeLoadFailed": "無法重新整理環境。目前選取項目已保留。",
-  "runtimeActionFailed": "操作無法繼續。請檢查環境，或在 Desktop 中恢復連線。"
+  "runtimeActionFailed": "操作無法繼續。請檢查環境，或在 Desktop 中恢復連線。",
+  "runtimeAuthenticationUnknown": "尚未檢查驗證狀態",
+  "runtimeRegisteredApplicationOnly": "透過此連線的 Desktop 視窗存取環境並完成驗證。程序操作需要已登錄的執行階段直接連線。"
 }

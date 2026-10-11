@@ -12,7 +12,7 @@ export type TessivenRuntimeTarget = {
   registered: boolean;
   online: boolean | null;
   connected: boolean;
-  authenticated: boolean;
+  authenticated: boolean | null;
   actions: string[];
   reason?: string;
 };

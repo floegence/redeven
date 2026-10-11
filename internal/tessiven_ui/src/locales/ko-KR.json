@@ -266,5 +266,7 @@
   "runtimeGatewayBusinessOnly": "Gateway 연결은 서비스 접근을 제공합니다. 런타임 프로세스 작업에는 Desktop 직접 연결이 필요합니다.",
   "runtimeRecoveryRequired": "Desktop에서 선택한 환경의 인증 또는 연결 복원을 계속하세요.",
   "runtimeLoadFailed": "환경을 새로 고칠 수 없습니다. 현재 선택은 유지됩니다.",
-  "runtimeActionFailed": "작업을 진행할 수 없습니다. 환경을 확인하거나 Desktop에서 연결을 복원하세요."
+  "runtimeActionFailed": "작업을 진행할 수 없습니다. 환경을 확인하거나 Desktop에서 연결을 복원하세요.",
+  "runtimeAuthenticationUnknown": "인증 상태를 확인하지 않음",
+  "runtimeRegisteredApplicationOnly": "이 연결의 Desktop 창에서 환경에 접근하고 인증하세요. 프로세스 작업에는 등록된 런타임 직접 연결이 필요합니다."
 }
