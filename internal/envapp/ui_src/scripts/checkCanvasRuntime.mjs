@@ -494,6 +494,8 @@ async function verifyLayeredCanvas(page, name) {
   };
   const extent = nodes => Math.max(...nodes.map(node => node.x + node.width)) - Math.min(...nodes.map(node => node.x));
   const initial = await geometry();
+  const palettePaths = await surface.locator('.floe-graph__minimap path').count();
+  assert.ok(palettePaths > 1, 'The overview distinguishes topology colors');
   ordered(initial);
   const graphBounds = await surface.locator('.floe-infinite-canvas').boundingBox();
   const viewportTransform = () => surface.locator('.floe-infinite-canvas__viewport').evaluate(element => element.style.transform);
@@ -569,7 +571,7 @@ async function verifyLayeredCanvas(page, name) {
   assert.equal(anchorAfterBulk.y, anchorBeforeBulk.y);
   assert.equal(await viewportTransform(), viewportBeforeBulk);
   await surface.getByRole('button', { name: 'View', exact: true }).click();
-  assert.equal(await page.getByRole('menuitem', { name: 'Collapse all', exact: true }).getAttribute('aria-disabled'), 'true');
+  assert.ok(await page.getByRole('menuitem', { name: 'Collapse all', exact: true }).isDisabled());
   await page.getByRole('menuitem', { name: 'Expand all', exact: true }).click();
   await until(async () => await surface.locator('.tessiven-node').count() === 10, 'bulk expand restores all hosts');
   await surface.getByRole('button', { name: 'View', exact: true }).click();
@@ -581,7 +583,7 @@ async function verifyLayeredCanvas(page, name) {
   await until(async () => await surface.getByRole('status', { name: 'Arranging canvas', exact: true }).count() === 0, 'all host service scope');
   await surface.getByRole('button', { name: 'Fit canvas', exact: true }).click();
   const overview = surface.getByRole('region', { name: 'Canvas overview', exact: true });
-  assert.equal(await overview.locator('path').count(), 3);
+  assert.equal(await overview.locator('path').count(), palettePaths, 'Restored inventory retains its overview palette');
   const mini = await overview.boundingBox();
   const indicator = await overview.locator('rect').boundingBox();
   const dragX = (Math.max(mini.x, indicator.x) + Math.min(mini.x + mini.width, indicator.x + indicator.width)) / 2;
