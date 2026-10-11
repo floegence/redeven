@@ -100,6 +100,6 @@ let web=WKWebView(frame:NSRect(x:0,y:0,width:480,height:360),configuration:confi
 bridge.web=web
 let window=NSWindow(contentRect:web.frame,styleMask:[.titled],backing:.buffered,defer:false)
 window.contentView=web; window.orderFront(nil)
-web.load(URLRequest(url:URL(string:"redeven-canvas://bundle/index.html")!))
+web.load(URLRequest(url:URL(string:"redeven-canvas://bundle/index.html#render_id=qualification")!))
 DispatchQueue.main.asyncAfter(deadline:.now()+30){print("Native canvas deadline exceeded");exit(1)}
 application.run()
