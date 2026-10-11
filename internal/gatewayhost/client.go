@@ -37,13 +37,24 @@ func DefaultRoot() string {
 	return filepath.Join(home, ".redeven", "gateways", "default", "state")
 }
 func TokenPath(root string) string { return filepath.Join(root, "gateway-host-admin.json") }
+
+// ServiceRecord is the exact public record written by the official Gateway CLI.
+// It locates the host API and does not contain member state or credentials.
+type ServiceRecord struct {
+	Status                 string `json:"status"`
+	PID                    int    `json:"pid,omitempty"`
+	Listen                 string `json:"listen,omitempty"`
+	MemberListen           string `json:"member_listen,omitempty"`
+	StateRoot              string `json:"state_root"`
+	Executable             string `json:"executable,omitempty"`
+	ProcessStartedAtUnixMS int64  `json:"process_started_at_unix_ms,omitempty"`
+	ErrorMessage           string `json:"error_message,omitempty"`
+}
+
 func Open(root string) (*Client, error) {
 	// Read the Gateway's published service record, never its private member store.
-	var status struct {
-		Listen string `json:"listen"`
-		PID    int    `json:"pid"`
-	}
-	if root == "" || gatewaystate.Read(filepath.Join(root, "gateway-service.pid.json"), &status) != nil || status.PID <= 0 {
+	var status ServiceRecord
+	if root == "" || gatewaystate.Read(filepath.Join(root, "gateway-service.pid.json"), &status) != nil || status.PID <= 0 || status.Status != "running" {
 		return nil, errors.New("Gateway service record is unavailable")
 	}
 	return New(root, status.Listen)
