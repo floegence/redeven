@@ -1,6 +1,7 @@
 /* global window, document, requestAnimationFrame, cancelAnimationFrame, MutationObserver, DOMMatrix, getComputedStyle */
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { createServer } from 'vite';
 import { chromium } from 'playwright';
@@ -9,7 +10,11 @@ const root = path.resolve(import.meta.dirname, '..');
 const output = path.resolve(process.argv[2] ?? '/tmp/redeven-tessiven-pan');
 const counts = (process.argv[3] ?? '100,500,1000').split(',').map(Number);
 const fixture = await mkdtemp(path.join(root, '.pan-'));
-const report = { cases: [], errors: [] };
+const report = {
+  source_commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
+  floe_version: JSON.parse(await readFile(path.join(root, 'node_modules/@floegence/floe-webapp-core/package.json'), 'utf8')).version,
+  cases: [], errors: [],
+};
 let server, browser;
 const percentile = (values, ratio) => [...values].sort((a, b) => a - b)[Math.floor(values.length * ratio)] ?? 0;
 try {
@@ -34,6 +39,7 @@ render(()=><App/>,document.getElementById('root'));`);
   server = await createServer({ configFile: path.join(root, 'vite.config.ts'), server: { host: '127.0.0.1', port: 0, strictPort: false } });
   await server.listen();
   browser = await chromium.launch({ headless: true });
+  report.browser = browser.version();
   const page = await browser.newPage({ viewport: { width: 1440, height: 960 } });
   page.on('pageerror', error => report.errors.push(error.message));
   await page.goto(`${server.resolvedUrls.local[0]}${path.basename(fixture)}/`);
