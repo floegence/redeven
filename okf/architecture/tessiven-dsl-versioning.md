@@ -96,10 +96,15 @@ startup database upgrades independently.
 optional tool `version` or HTTP `?version=` requests an exact supported DSL
 schema; unknown versions are errors. Existing read permissions still apply.
 Flower creates current DSL documents and edits exact historical YAML; it relies
-on Runtime migration instead of manually relabeling versions. Unsupported
+on Runtime migration for edits valid under their source schema. Unsupported
 versions require an upgraded compatible Runtime. Historical placement repairs
 must be evidence-backed under the
 [Flower contract](../ai/tessiven-flower-and-operations.md).
+
+New vocabulary must be validated under its defining schema. An exact edit that
+adds `groupLayouts` to a historical source includes the reviewed version-header
+upgrade in the same atomic edit batch. Ordinary edits valid in the original
+schema continue to upgrade automatically; no historical YAML is rewritten.
 
 # Evidence
 

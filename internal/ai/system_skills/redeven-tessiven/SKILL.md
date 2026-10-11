@@ -43,8 +43,10 @@ such nodes unbound; an explicitly requested observation may be recorded as
   `version` selects a supported historical schema. Read results identify the
   original `dsl_version` and the reviewed `migrations`. Literal YAML remains
   the immutable source, so use its exact text for edits. The Runtime upgrades
-  supported `v1` and `v1.0.0` input when saving a new snapshot; do not rewrite the
-  version header yourself or relabel an unknown/future document. Unknown
+  supported `v1` and `v1.0.0` input when saving a new snapshot. For edits that
+  introduce vocabulary unavailable in the source schema, include the reviewed
+  upgrade to `redeven.io/tessiven/v1.1.0` in the same exact-edit batch; otherwise
+  let the Runtime upgrade the header. Never relabel an unknown/future document. Unknown
   versions require a compatible Runtime. Migration never invents placements,
   evidence or management bindings; repair historical placement diagnostics
   from actual evidence before saving.
