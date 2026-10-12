@@ -7,6 +7,17 @@ import {
 } from './envAppFloatingWindowStack';
 
 describe('Env App floating window stack', () => {
+  it('keeps Flower context previews above the companion while preserving stack activation order', () => {
+    const stack = createEnvAppFloatingWindowStack();
+    stack.register('page');
+    stack.register('launcher');
+    expect(stack.zIndex('page', 'flowerContext')).toBe(2100);
+    expect(stack.zIndex('launcher', 'flowerContext')).toBe(2101);
+    stack.activate('page');
+    expect(stack.zIndex('page', 'flowerContext')).toBe(2101);
+    expect(stack.zIndex('launcher', 'flowerContext')).toBe(2100);
+    expect(stack.zIndex('page')).toBe(1001);
+  });
   it('registers, activates, and unregisters windows with compact unique layers', () => {
     const stack = createEnvAppFloatingWindowStack();
     const unregisterA = stack.register('a');
@@ -31,7 +42,7 @@ describe('Env App floating window stack', () => {
     expect(stack.order()).toEqual([]);
   });
 
-  it('keeps every supported window inside the fixed 1000-1099 band', () => {
+  it('keeps every supported window inside its fixed product band', () => {
     const stack = createEnvAppFloatingWindowStack();
     for (let index = 0; index < MAX_ENV_APP_FLOATING_WINDOWS; index += 1) {
       stack.register('window-' + index);
@@ -41,6 +52,9 @@ describe('Env App floating window stack', () => {
     expect(new Set(layers)).toHaveLength(MAX_ENV_APP_FLOATING_WINDOWS);
     expect(Math.min(...layers)).toBe(ENV_APP_FLOATING_LAYER.windowBase);
     expect(Math.max(...layers)).toBe(ENV_APP_FLOATING_LAYER.windowCeiling);
+    const contextLayers = stack.order().map(stackId => stack.zIndex(stackId, 'flowerContext'));
+    expect(Math.min(...contextLayers)).toBe(2100);
+    expect(Math.max(...contextLayers)).toBe(2199);
     expect(() => stack.register('window-overflow')).toThrow(RangeError);
   });
 

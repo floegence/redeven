@@ -24,6 +24,7 @@ import { retainEqualValue, retainKeyedItems } from './presentationIdentity';
 import { FlowerProviderBrandIcon } from './settings/FlowerProviderBrandIcon';
 import { WebSearchActivity } from './WebSearchActivity';
 import type { Accessor, Component, JSX } from 'solid-js';
+import { Dynamic } from 'solid-js/web';
 import { For, Match, Show, Suspense, Switch, batch, createEffect, createMemo, createResource, createSignal, lazy, on, onCleanup, onMount, untrack } from 'solid-js';
 import { cn, useMobileLayout, createAdaptiveSidebar, createRetainedContent } from '@floegence/floe-webapp-core';
 import type { UIFirstSelectionEvent } from '@floegence/floe-webapp-core';
@@ -56,7 +57,8 @@ import {
   replaceFlowerTextSelection,
 } from './attachments/flowerAttachmentModel';
 import { FlowerChatContextChips } from './chat/FlowerChatContextChips';
-import { FlowerChatContextPreview } from './chat/FlowerChatContextPreview';
+import { FlowerChatContextPreview, type FlowerContextSnapshotPreviewProps } from './chat/FlowerChatContextPreview';
+import { FlowerContextIcon } from './icons/FlowerContextIcon';
 import { FlowerProgressIndicator } from './chat/FlowerProgressIndicator';
 import { parseChatContextAction, parseChatMessageReferences } from './chat/flowerChatContextModel';
 import {
@@ -632,6 +634,8 @@ export type FlowerSurfaceProps = Readonly<{
   embeddedConversation?: FlowerEmbeddedConversation;
   /** Read and freeze the current host page for a new draft only. */
   captureNewConversationContext?: () => FlowerPageContextSnapshot | undefined;
+  /** Host-owned presentation shared with Ask Flower; snapshot validity stays here. */
+  renderContextSnapshotPreview?: Component<FlowerContextSnapshotPreviewProps>;
   filesystemScopeKey?: string;
   filesystemScrollViewportProps?: JSX.HTMLAttributes<HTMLDivElement>;
   approvalScrollViewportProps?: Omit<JSX.HTMLAttributes<HTMLDivElement>, 'style'> & { style?: JSX.CSSProperties } & Readonly<Record<`data-${string}`, string>>;
@@ -7220,6 +7224,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const composerHasExplicitReferences = createMemo(() => composerReferences().some(reference => reference.kind !== 'page_context'));
   const [pageContextPreviewID, setPageContextPreviewID] = createSignal('');
   const pageContextPreview = createMemo(() => composerReferences().find((reference): reference is Extract<FlowerComposerDraftReference, { kind: 'page_context' }> => reference.local_id === pageContextPreviewID() && reference.kind === 'page_context'));
+  createEffect(() => { if (pageContextPreviewID() && !pageContextPreview()) setPageContextPreviewID(''); });
 
   type CompanionEntry = Readonly<{
     kind: 'pending' | 'status' | 'editor' | 'inspect';
@@ -11816,7 +11821,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                           </>}>
                             <button type="button" class="flower-composer-reference-chip-preview" title={reference.label}
                               onClick={() => setPageContextPreviewID(reference.local_id)}>
-                              <FileText class="size-[18px] shrink-0" aria-hidden="true" />
+                              <FlowerContextIcon tone="page_context" name={reference.label} />
                               <span class="flower-composer-reference-chip-label">{reference.label}</span>
                             </button>
                           </Show>
@@ -12128,17 +12133,19 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         }}
         permissionLabel={composerPermissionCopy()?.label} onEditPermissionMode={() => { queueMicrotask(() => openPermissionMenu()); }}
         threadID={selectedThreadID()} fullAccess={selectedThread()?.permission_type === 'full_access'} adapter={props.adapter} copy={copy().computer} requested={requestedComputerAccess()} />
-      <Dialog class="flower-page-context-preview" open={Boolean(pageContextPreview())} title={pageContextPreview()?.label ?? ''}
-        onOpenChange={open => { if (!open) setPageContextPreviewID(''); }}>
-        <Show when={pageContextPreview()}>{reference => <pre class="whitespace-pre-wrap break-words text-xs">{reference().content}</pre>}</Show>
-      </Dialog>
-      <FlowerChatContextPreview
-        preview={contextSnapshotPreview()}
-        open={contextSnapshotPreview() !== null}
-				truncatedLabel={copy().chat.truncatedLabel}
-        zIndex={FLOWER_SURFACE_LAYER.contextPreview}
-        onClose={() => setContextSnapshotPreview(null)}
-      />
+      <Show when={pageContextPreview()} keyed>{reference => (
+        <Dynamic component={props.renderContextSnapshotPreview ?? FlowerChatContextPreview}
+          title={reference.label} subtitle={reference.title} body={reference.content}
+          truncatedLabel={copy().chat.truncatedLabel} zIndex={FLOWER_SURFACE_LAYER.contextPreview}
+          onClose={() => setPageContextPreviewID('')} />
+      )}</Show>
+      <Show when={contextSnapshotPreview()} keyed>{preview => (
+        <Dynamic component={props.renderContextSnapshotPreview ?? FlowerChatContextPreview}
+          title={preview.title} subtitle={preview.action.subtitle} body={preview.action.body}
+          sourcePath={preview.action.type === 'open_text_preview' ? preview.action.source_path : `process://${preview.action.pid}`}
+          truncated={preview.action.truncated} truncatedLabel={copy().chat.truncatedLabel}
+          zIndex={FLOWER_SURFACE_LAYER.contextPreview} onClose={() => setContextSnapshotPreview(null)} />
+      )}</Show>
       <FlowerAttachmentPreviewWindow
         source={attachmentPreview()}
         zIndex={FLOWER_SURFACE_LAYER.attachmentPreview}

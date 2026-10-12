@@ -805,7 +805,7 @@ vi.mock('./pages/EnvAIPage', () => ({
           </button>
           <button
             type="button"
-            class="flower-chat-context-preview-window"
+            class="flower-context-preview-window flower-turn-launcher-related-surface"
             style={{ position: 'fixed', top: '60px', 'z-index': 200 }} data-testid="activity-flower-context-preview"
           >
             Flower context preview

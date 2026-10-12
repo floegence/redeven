@@ -19,6 +19,34 @@ const edit = (textarea: HTMLTextAreaElement, value: string) => {
 };
 
 describe('Flower new conversation page context', () => {
+  it('uses the shared reference icon and host preview, retiring stale previews on refresh and removal', async () => {
+    const capture = vi.fn(() => monitorContext);
+    const [open, setOpen] = createSignal(false);
+    const runtime = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: vi.fn(async () => []) }, {
+      presentation: 'companion', get companionOpen() { return open(); }, get engaged() { return open(); },
+      captureNewConversationContext: capture, onCompanionOpenRequest: () => setOpen(true),
+      renderContextSnapshotPreview: props => <section data-testid="host-context-preview"><h2>{props.title}</h2><pre>{props.body}</pre><button onClick={props.onClose}>Close</button></section>,
+    });
+    await waitFor(() => Boolean(runtime.querySelector('textarea')));
+    const editor = runtime.querySelector('textarea') as HTMLTextAreaElement;
+    editor.click();
+    const showPreview = () => (runtime.querySelector('.flower-composer-reference-chip-preview') as HTMLButtonElement).click();
+    expect(runtime.querySelector('[data-flower-context-icon="page_context"]')).not.toBeNull();
+    showPreview();
+    await waitFor(() => Boolean(runtime.querySelector('[data-testid="host-context-preview"]')));
+    expect(runtime.querySelector('[data-testid="host-context-preview"] pre')?.textContent).toBe(monitorContext.content);
+    expect(document.querySelector('.flower-page-context-preview')).toBeNull();
+    setOpen(false);
+    capture.mockReturnValue({ label: 'Files', title: 'Files page', content: 'frozen files' });
+    editor.click();
+    expect(runtime.querySelector('[data-testid="host-context-preview"]')).toBeNull();
+    showPreview();
+    expect(runtime.querySelector('[data-testid="host-context-preview"] pre')?.textContent).toBe('frozen files');
+    (runtime.querySelector('.flower-composer-reference-chip-remove') as HTMLButtonElement).click();
+    expect(runtime.querySelector('[data-testid="host-context-preview"]')).toBeNull();
+    expect(runtime.querySelector('textarea')).toBe(editor);
+  });
+
   it('refreshes on each blank companion opening while preserving text, selection and attachments', async () => {
     const capture = vi.fn(() => monitorContext);
     const [open, setOpen] = createSignal(false);

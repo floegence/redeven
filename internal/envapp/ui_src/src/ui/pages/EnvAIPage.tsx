@@ -2,6 +2,7 @@ import { createMemo, type JSX } from 'solid-js';
 import { useNotification } from '@floegence/floe-webapp-core';
 
 import { useEnvFilesystemPicker } from '../services/filesystemPicker';
+import { FlowerContextSnapshotPreview } from '../widgets/FlowerContextPreviewWindow';
 import { FlowerSurface } from '../../../../../flower_ui/src';
 import type {
   FlowerCompanionPresenceProjection,
@@ -193,6 +194,7 @@ export function EnvAIPage(props: EnvAIPageProps) {
       renderContent={() => <FlowerSurface
         embeddedConversation={props.embeddedConversation}
         captureNewConversationContext={props.captureNewConversationContext}
+        renderContextSnapshotPreview={FlowerContextSnapshotPreview}
         adapter={adapter()}
         filesystemScopeKey={filesystemPicker.scopeKey}
         filesystemScrollViewportProps={filesystemPicker.scrollViewportProps}
