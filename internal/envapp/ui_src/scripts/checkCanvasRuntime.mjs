@@ -94,6 +94,7 @@ const provider = http.createServer(async (request, response) => {
       probe.phase = 'promoted';
       probe.guidanceRequests += 1;
       send({ type: 'response.output_text.delta', delta: 'Guidance was admitted after the active response stopped.' });
+      await probe.guidanceDone.promise;
     } else if (isPreserved) {
       probe.preservedRequests += 1;
       send({ type: 'response.output_text.delta', delta: 'The preserved queued message remains ordered.' });
@@ -431,7 +432,7 @@ async function verifyQueuedSendNow(page) {
   const guidance = 'Use the selected canvas to explain the deployment path.';
   const preserved = 'Keep this queued follow-up for after the guidance.';
   queuedSendProbe = {
-    phase: 'active', active: releaseGate(), guidance, preserved, cancelled: false,
+    phase: 'active', active: releaseGate(), guidanceDone: releaseGate(), guidance, preserved, cancelled: false,
     requests: [], guidanceRequests: 0, preservedRequests: 0,
   };
   try {
@@ -440,42 +441,48 @@ async function verifyQueuedSendNow(page) {
     await replies.getByRole('button', { name: 'Send', exact: true }).click();
     await replies.locator('[data-flower-thinking-active="true"]').waitFor();
 
-    for (const [index, text] of [guidance, preserved].entries()) {
+    for (const [index, text] of [preserved, guidance].entries()) {
       await replies.locator('.flower-composer textarea').fill(text);
       await replies.getByRole('button', { name: 'Send', exact: true }).click();
       await until(async () => await replies.locator('[data-flower-queued-turn-dock-id]').count() === index + 1, 'queued follow-up admission');
     }
     const queued = replies.locator('[data-flower-queued-turn-dock-id]');
-    assert.equal(await queued.nth(0).locator('.flower-queued-turn-label').innerText(), guidance);
-    assert.equal(await queued.nth(1).locator('.flower-queued-turn-label').innerText(), preserved);
+    assert.equal(await queued.nth(0).locator('.flower-queued-turn-label').innerText(), preserved);
+    assert.equal(await queued.nth(1).locator('.flower-queued-turn-label').innerText(), guidance);
     await page.screenshot({ path: path.join(output, 'queued-send-now-active.png'), animations: 'disabled' });
 
-    await queued.nth(0).getByRole('button', { name: 'Send now', exact: true }).click();
+    await queued.nth(1).getByRole('button', { name: 'Send now', exact: true }).click();
     await until(() => queuedSendProbe.cancelled, 'active provider response cancellation');
     await until(() => queuedSendProbe.guidanceRequests === 1, 'promoted guidance provider request');
     const guidanceRequest = queuedSendProbe.requests.find(request => request.text.includes(guidance));
     assert.ok(guidanceRequest, 'The promoted request reaches the provider');
     assert.ok(guidanceRequest.text.includes(active), 'The promoted request retains the original conversation history');
+    assert.ok(guidanceRequest.text.includes(reply), 'The promoted request retains previously completed assistant work');
+    assert.ok(!guidanceRequest.text.includes(preserved), 'Unselected queued input is not injected into the promoted request');
     await until(async () => await replies.locator('[data-flower-queued-turn-dock-id]').count() === 1, 'preserved queued message remains');
     assert.equal(await replies.locator('[data-flower-queued-turn-dock-id]').first().locator('.flower-queued-turn-label').innerText(), preserved);
     assert.equal(queuedSendProbe.guidanceRequests, 1, 'The promoted message is sent once');
-    assert.equal(queuedSendProbe.preservedRequests, 0, 'The later queued message waits in canonical order');
+    assert.equal(queuedSendProbe.preservedRequests, 0, 'The remaining queued message waits until the selected response completes');
+    await page.screenshot({ path: path.join(output, 'queued-send-now-guidance-active.png'), animations: 'disabled' });
+    queuedSendProbe.guidanceDone.release();
+    await until(() => queuedSendProbe.preservedRequests === 1, 'remaining queued input starts after the selected response completes');
     await until(() => page.locator('.tessiven [data-flower-selected-thread-status="success"]').count(), 'promoted turn completion');
+    await until(async () => await queued.count() === 0, 'completed queue consumption');
+    assert.equal(queuedSendProbe.guidanceRequests, 1, 'The selected guidance is not replayed while draining the queue');
+    assert.equal(queuedSendProbe.preservedRequests, 1, 'The remaining queued input is sent once');
     await page.screenshot({ path: path.join(output, 'queued-send-now-completed.png'), animations: 'disabled' });
     report.queued_send_now = {
       cancelled_active_response: queuedSendProbe.cancelled,
       provider_requests: queuedSendProbe.requests.length,
       guidance_requests: queuedSendProbe.guidanceRequests,
-      preserved_queue_count: 1,
+      preserved_queue_count_before_completion: 1,
+      preserved_requests: queuedSendProbe.preservedRequests,
       preserved_prompt: preserved,
     };
     report.scenarios.push('send-now-cancels-active-response-preserves-queued-order');
-    // Remove the verified fixture through the normal queue action so later
-    // qualification scenarios start without unrelated pending work.
-    await queued.first().getByRole('button', { name: 'Delete queued message', exact: true }).click();
-    await until(async () => await queued.count() === 0, 'verified queued fixture cleanup');
   } finally {
     queuedSendProbe.active.release();
+    queuedSendProbe.guidanceDone.release();
     queuedSendProbe = undefined;
   }
 }
