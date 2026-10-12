@@ -88,7 +88,7 @@ func TestFrozenPresentationReadsImmutableSourceAcrossDSLVersions(t *testing.T) {
 	if len(without.Model.Presentation.GroupLayouts) != 0 || with.Model.Presentation.GroupLayouts["application"].MaxPerLine != 2 || len(with.Model.Relations) != len(without.Model.Relations) {
 		t.Fatal("optional layout negotiation changed graph facts")
 	}
-	with.Model.Objects = []ViewObject{{ID: "generic", Name: "Generic object", Kind: "Future object", Facts: []ViewFact{{Label: "Region", Value: "Local"}}, ObjectRefs: []string{"core-01"}}}
+	with.Model.Objects = []ViewObject{{ID: "generic", Name: "Generic object", Kind: "Future object", Description: "Fixed plain-text description", Facts: []ViewFact{{Label: "Region", Value: "Local"}}, ObjectRefs: []string{"core-01"}}}
 	data, _ := json.Marshal(with)
 	var value any
 	if err := json.Unmarshal(data, &value); err != nil {
@@ -97,6 +97,14 @@ func TestFrozenPresentationReadsImmutableSourceAcrossDSLVersions(t *testing.T) {
 	if err := schema.Validate(value); err != nil {
 		t.Fatal(err)
 	}
+	generic := value.(map[string]any)["model"].(map[string]any)["objects"].([]any)[0].(map[string]any)
+	for _, invalid := range []any{"", strings.Repeat("x", 4001), float64(42)} {
+		generic["description"] = invalid
+		if err := schema.Validate(value); err == nil {
+			t.Fatal("generic descriptions must remain bounded plain strings")
+		}
+	}
+
 	document.APIVersion = "redeven.io/tessiven/v99.0.0"
 	if mapped := projectPresentation(document, nil); mapped.Compatibility.Status != "unavailable" || len(mapped.Model.Nodes) != 0 {
 		t.Fatal("unreviewed canonical DSL was automatically granted display support")
