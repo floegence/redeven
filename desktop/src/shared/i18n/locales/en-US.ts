@@ -252,6 +252,8 @@ export const enUS = {
     reviewTitle: 'Review and apply',
     reviewHelp: 'Check the complete settings for the next start. Your current connection stays active until restart.',
     changePassword: 'Change password',
+    setPassword: 'Set password',
+    removePassword: 'Remove password',
     passwordHelp: 'Enter and confirm a new access password. It is saved only when you apply the changes.',
     passwordMismatch: 'The passwords do not match.',
     passwordAndFactor: 'Access password and authenticator',

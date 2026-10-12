@@ -19,6 +19,8 @@
     "reviewTitle": "검토 및 적용",
     "reviewHelp": "다음 시작에 사용할 전체 설정을 확인하세요. 다시 시작하기 전까지 현재 연결은 유지됩니다.",
     "changePassword": "비밀번호 변경",
+    "setPassword": "비밀번호 설정",
+    "removePassword": "비밀번호 제거",
     "passwordHelp": "새 접근 비밀번호를 입력하고 확인하세요. 변경 사항을 적용할 때 저장됩니다.",
     "passwordMismatch": "비밀번호가 일치하지 않습니다.",
     "passwordAndFactor": "접근 비밀번호 및 인증 앱",

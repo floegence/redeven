@@ -62,13 +62,13 @@ function Fixture() {
   const [settings, setSettings] = createSignal('');
   const [draft, setDraft] = createSignal(initialDraft);
   const [baseline, setBaseline] = createSignal(initialDraft);
-  const [passwordConfigured, setPasswordConfigured] = createSignal(query.has('secure'));
+  const [passwordConfigured, setPasswordConfigured] = createSignal(query.has('secure') || query.has('password'));
   const [pending, setPending] = createSignal(false);
   const [saveError, setSaveError] = createSignal('');
   const [copied, setCopied] = createSignal('');
   const copy = async (value: string) => { setCopied(value); };
   const requests: Array<SecurityRequest | DesktopCertificateRequest> = [];
-  let securityState: SecurityResult = { https_ready: query.has('secure'), enabled: query.get('secure') === 'enabled', password_configured: query.has('secure'), recovery_pending: query.has('recovery'), recovery_codes_remaining: 8, revision: 1 };
+  let securityState: SecurityResult = { https_ready: query.has('secure'), enabled: query.get('secure') === 'enabled', password_configured: passwordConfigured(), recovery_pending: query.has('recovery'), recovery_codes_remaining: 8, revision: 1 };
   let securityAction: SecurityAction = 'setup';
   const enrollmentQR = qrcode(0, 'M');
   enrollmentQR.addData('otpauth://totp/Redeven%20Acceptance?secret=JBSWY3DPEHPK3PXP&issuer=Redeven');
@@ -126,7 +126,7 @@ function Fixture() {
             selectedEndpointID={selected()?.host === name ? selected()?.id : undefined}
             selectEndpointForQRCode={(id) => setSelected({ host: name, id })} openInBrowser={copy} copyEnvironmentValue={copy} />
         </div>
-        <button class="mt-6 cursor-pointer" onClick={() => { setActive(''); setDraft(initialDraft); setBaseline(initialDraft); setPasswordConfigured(query.has('secure')); setPending(false); setSaveError(''); setSettings(name); }}>{i18n.t('settings.settingsWindowTitle')}</button>
+        <button class="mt-6 cursor-pointer" onClick={() => { setActive(''); setDraft(initialDraft); setBaseline(initialDraft); setPasswordConfigured(query.has('secure') || query.has('password')); setPending(false); setSaveError(''); setSettings(name); }}>{i18n.t('settings.settingsWindowTitle')}</button>
       </article>}</For>
     </div>
     <output data-copy-result class="mt-6 block font-mono">{copied()}</output>

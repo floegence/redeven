@@ -208,9 +208,77 @@ describe('Environment access workflows', () => {
     input('local-ui-password','密'.repeat(25));input('access-password-confirm','密'.repeat(25));button('Continue').click();await settle();
     expect(document.body.textContent).toContain('at most 72 UTF-8 bytes');expect(test.save).not.toHaveBeenCalled();
   });
-  it('reviews password removal together with the required local-only access change', async () => {
-    const test=await mount();test.setDraft(d=>({...d,local_ui_bind:'0.0.0.0:23998'}));button('Manage protection').click();await settle();button('Remove stored password').click();await settle();
+  it('keeps password actions and their consequences together before two-factor protection', async () => {
+    await mount({ security: async () => disabledSecurity });
+    button('Manage protection').click(); await settle();
+    const change = button('Change password');
+    const remove = button('Remove password');
+    const card = change.closest('section')!;
+    expect(card.contains(remove)).toBe(true);
+    expect(document.getElementById(card.getAttribute('aria-labelledby')!)?.textContent).toBe('Access password');
+    expect(card.textContent).toContain('Password set');
+    const consequence = document.getElementById(remove.getAttribute('aria-describedby')!)!;
+    expect(card.contains(consequence)).toBe(true);
+    expect(consequence.textContent).toContain('limits browser access to this environment');
+    expect(card.textContent).toContain('Changes apply the next time the Environment starts');
+    expect(card.compareDocumentPosition(document.querySelector('.two-factor-setting')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(remove.closest('details')).toBeNull();
+  });
+  it('offers password setup without removal when no password is saved', async () => {
+    const test = await mount({ passwordConfigured: false });
+    button('Manage protection').click(); await settle();
+    expect(document.body.textContent).toContain('No password');
+    expect(document.body.textContent).not.toContain('Remove password');
+    button('Set password').click(); await settle();
+    expect(document.querySelector('[data-flow-heading]')?.textContent).toBe('Set password');
+    expect(document.getElementById('local-ui-password')).not.toBeNull();
+    expect(test.save).not.toHaveBeenCalled();
+  });
+  it('waits for security authority before allowing a password operation and keeps failures blocked', async () => {
+    let rejectStatus!: (reason: Error) => void;
+    const manage = vi.fn()
+      .mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectStatus = reject; }))
+      .mockResolvedValue(disabledSecurity);
+    const test = await mount({ security: manage });
+    button('Manage protection').click(); await settle();
+    expect(button('Change password').disabled).toBe(true);
+    expect(button('Remove password').disabled).toBe(true);
+    rejectStatus(new Error('SECURITY_UNAVAILABLE')); await settle();
+    expect(button('Change password').disabled).toBe(true);
+    expect(button('Remove password').disabled).toBe(true);
+    expect(button('Retry')).toBeDefined();
+    expect(test.draft().local_ui_password_mode).toBe('keep');
+    button('Retry').click(); await settle();
+    expect(button('Change password').disabled).toBe(false);
+    expect(button('Remove password').disabled).toBe(false);
+    expect(manage).toHaveBeenLastCalledWith({ action: 'status' });
+  });
+  it('reviews password removal together with the required local-only access change without saving on entry', async () => {
+    const test=await mount();test.setDraft(d=>({...d,local_ui_bind:'0.0.0.0:23998'}));button('Manage protection').click();await settle();button('Remove password').click();await settle();
     expect(test.draft().local_ui_bind).toBe('localhost:23998');expect(test.draft().local_ui_password_mode).toBe('clear');expect(document.body.textContent).toContain('Review both changes');
+    expect(test.save).not.toHaveBeenCalled();
+  });
+  it('verifies identity before staging password removal when two-factor protection is enabled', async () => {
+    let enabled = true;
+    const manage = vi.fn(async (request: SecurityRequest) => {
+      if (request.action === 'commit') enabled = false;
+      return { ...disabledSecurity, enabled, operation_id: request.action === 'disable' ? 'disable-op' : undefined };
+    });
+    const test = await mount({ protocol: 'https', security: manage });
+    test.setDraft(d => ({ ...d, local_ui_bind: '0.0.0.0:23998' }));
+    button('Manage protection').click(); await settle(); button('Remove password').click(); await settle();
+    expect(document.querySelector('.access-flow-plan')?.textContent).toContain('Remove password');
+    expect(test.draft().local_ui_password_mode).toBe('keep');
+    expect(test.draft().local_ui_bind).toBe('0.0.0.0:23998');
+    button('Verify and continue').click(); await settle();
+    const fields = [...document.querySelectorAll<HTMLInputElement>('.two-factor-form input')];
+    fields.forEach((field, index) => { field.value = index ? '123456' : 'owner'; field.dispatchEvent(new Event('input', { bubbles: true })); });
+    button('Continue').click(); await settle(); button('Turn off two-factor').click(); await settle();
+    expect(manage).toHaveBeenLastCalledWith({ action: 'commit', operation_id: 'disable-op', saved: false });
+    expect(test.draft().local_ui_password_mode).toBe('clear');
+    expect(test.draft().local_ui_bind).toBe('localhost:23998');
+    expect(document.querySelector('[data-flow-heading]')?.textContent).toBe('Review and apply');
+    expect(test.save).not.toHaveBeenCalled();
   });
   it('preserves advanced edits and focus across unrelated runtime snapshots', async () => {
     const test=await mount({url:'http://localhost:23998/'});await editAccess();const details=document.querySelector<HTMLDetailsElement>('.environment-access-advanced')!;details.open=true;await settle();

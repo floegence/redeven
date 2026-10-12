@@ -54,6 +54,25 @@
 .access-flow-review dt { color: var(--muted-foreground); }
 .access-flow-review dd { min-width: 0; overflow-wrap: anywhere; }
 .access-workflow .two-factor-setting { padding: 1.125rem; border: 1px solid var(--border); border-radius: .625rem; }
+.access-flow-security-settings { display: grid; gap: 1rem; min-width: 0; }
+.access-flow-security-settings > :is(.access-flow-password-setting, .two-factor-setting) {
+  padding: 1.125rem;
+  border: 1px solid color-mix(in srgb, var(--foreground) 8%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--foreground) 4%, var(--background));
+  min-width: 0;
+}
+.access-flow-password-header { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; min-width: 0; }
+.access-flow-password-identity { display: flex; align-items: flex-start; gap: 12px; flex: 1 1 13rem; min-width: 0; }
+.access-flow-password-identity > div { min-width: 0; }
+.access-flow-password-icon { display: grid; place-items: center; flex: 0 0 36px; height: 36px; border-radius: 10px; background: var(--muted); color: var(--muted-foreground); }
+.access-flow-password-identity h3 { font-size: 13px; font-weight: 550; line-height: 1.5; }
+.access-flow-password-identity p { margin-top: 4px; font-size: 12px; line-height: 1.6; color: var(--muted-foreground); }
+.access-flow-password-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; min-width: 0; max-width: 100%; }
+.access-flow-password-actions button { height: auto; min-height: 32px; white-space: nowrap; }
+.access-flow-password-actions .access-flow-password-remove { color: var(--error); }
+.access-flow-password-guidance { display: grid; gap: .25rem; margin-top: 1rem; padding-top: .75rem; border-top: 1px solid var(--border); color: var(--muted-foreground); font-size: .75rem; line-height: 1.7; overflow-wrap: anywhere; }
+@media (pointer: coarse) { .access-flow-password-actions button { min-height: 44px; } }
 .access-workflow > .two-factor-setting { margin: 1.5rem; }
 .access-workflow .two-factor-flow { max-width: 35rem; margin-inline: auto; }
 .access-workflow .two-factor-heading { text-align: start; }
@@ -71,6 +90,8 @@
   .access-flow-steps li { gap: .375rem; font-size: .625rem; }
   .access-flow-notice { flex-wrap: wrap; }
   .access-flow-notice button { margin-inline-start: auto; }
+  .access-flow-password-actions { flex-basis: 100%; }
+  .access-flow-security-settings > :is(.access-flow-password-setting, .two-factor-setting) { padding: .875rem; }
 }
 
 
