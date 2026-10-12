@@ -366,7 +366,7 @@ func recordOllamaContextLive(t *testing.T, ctx context.Context, svc *Service, me
 	go func() {
 		defer close(done)
 		for {
-			frame, err := subscription.Next(ctx)
+			frame, err := readFlowerLiveStreamEnvelope(ctx, subscription)
 			if err != nil {
 				if ctx.Err() == nil && err != io.EOF {
 					t.Errorf("context stream: %v", err)

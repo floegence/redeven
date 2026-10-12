@@ -43,6 +43,7 @@ function mount(transformed = false, overrides: Partial<FlowerSurfaceAdapter> = {
     }
   } };
   const navigate = vi.fn();
+  const accepted = vi.fn();
   dispose = render(() => <FloeConfigProvider><LayoutProvider>
     {graph && <TessivenGraph t={tessivenText('en-US')} historical={false} onAsk={() => {}} onInspect={() => {}}
       version={{ canvas_id: 'commerce', number: 2, created_at: 1, digest: 'fixture', document_yaml: '', source: 'flower', summary: '',
@@ -58,12 +59,13 @@ function mount(transformed = false, overrides: Partial<FlowerSurfaceAdapter> = {
         } }} />}
     <TessivenFlowerPanel
     request={request()} visible initialComposer={initialComposer} t={tessivenText('en-US')} onOpenConversation={navigate}
+    onAccepted={accepted}
     onRemoveReference={id => setRequest(previous => ({ ...previous, selection: {
       ...previous.selection, object_refs: previous.selection.object_refs.filter(ref => ref !== id),
     } }))}
     renderSurface={surface => <CanvasFlowerTestSurface {...surface} adapter={adapter} />}
   /></LayoutProvider></FloeConfigProvider>, host);
-  return { setRequest, sent, connections, navigate, push: (event: FlowerLiveStreamEnvelope) => { queued.push(event); wake(); } };
+  return { setRequest, sent, connections, navigate, accepted, push: (event: FlowerLiveStreamEnvelope) => { queued.push(event); wake(); } };
 }
 const editor = () => page.getByRole('textbox');
 const replyMenu = () => page.getByRole('button', { name: 'Reply actions', exact: true });
@@ -587,6 +589,11 @@ it('keeps late acceptance bound to its original canvas and resumes the accepted 
   runtime.setRequest({ selection: { canvas_id: 'analytics', version_id: 1, object_refs: [] }, labels: {}, nonce: 1 });
   await editor().fill('Unsaved analytics draft');
   accept(await canvasFlowerAdapter().launchTurn(runtime.sent.mock.calls[0][0]));
+  await expect.poll(() => runtime.accepted.mock.calls.length).toBe(1);
+  expect(runtime.accepted.mock.calls[0]).toEqual([
+    { selection: { canvas_id: 'commerce', version_id: 2, object_refs: ['orders'] }, labels: { orders: 'Orders API' }, nonce: 0 },
+    'canvas-thread',
+  ]);
   await expect.element(editor()).toHaveValue('Unsaved analytics draft');
   await expectConversationAction(false);
   runtime.setRequest({ selection: { canvas_id: 'commerce', version_id: 2, object_refs: [] }, labels: {}, nonce: 2 });
@@ -649,6 +656,8 @@ it.each([{ objectRefs: [] }, { objectRefs: ['orders'] }])('retries an uncertain 
   fail(flowerTurnAdmissionError('unknown', new Error('Test response lost')));
   await expect.poll(() => runtime.sent.mock.calls.length).toBe(2);
   expect(runtime.sent.mock.calls[1][0]).toEqual(runtime.sent.mock.calls[0][0]);
+  await expect.poll(() => runtime.accepted.mock.calls.length).toBe(1);
+  expect(runtime.accepted.mock.calls[0][0].selection).toEqual({ canvas_id: 'commerce', version_id: 2, object_refs: objectRefs });
   await expect.element(editor()).toHaveValue('Separate draft');
 });
 

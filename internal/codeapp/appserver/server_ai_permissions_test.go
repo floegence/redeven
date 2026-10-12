@@ -113,7 +113,7 @@ func TestServer_AI_Permissions_AllowReadsAndProtectMutations(t *testing.T) {
 		if rr.status == http.StatusForbidden {
 			t.Fatalf("GET %s unexpectedly denied: %s", path, rr.body.String())
 		}
-		if rr.status != http.StatusOK || !strings.Contains(rr.body.String(), `"kind":"ready"`) {
+		if rr.status != http.StatusOK || !strings.Contains(decodedFlowerLiveSSEData(t, rr.body.String()), `"kind":"ready"`) {
 			t.Fatalf("GET %s status=%d body=%s", path, rr.status, rr.body.String())
 		}
 	}

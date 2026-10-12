@@ -165,14 +165,10 @@ func (s *Service) setComputerViewer(ctx context.Context, meta *session.Meta, req
 		if subscriber.closed || liveCtx.Err() != nil {
 			return
 		}
-		select {
-		case <-subscriber.media:
-		default:
-		}
 		if frame.ErrorCode != "" {
 			subscriber.viewerRequest = ComputerViewerRequest{}
 		}
-		subscriber.media <- batch
+		replaceFlowerLiveSubscriberMediaLocked(s, subscriber, batch)
 	})
 	if err != nil {
 		cancel()

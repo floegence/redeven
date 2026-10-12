@@ -39,7 +39,14 @@ func serveAIFlowerLiveStreamWithTiming(
 		return
 	}
 	defer subscription.Close()
+	serveFlowerLiveStreamFrames(w, r, subscription, heartbeatInterval, writeTimeout)
+}
 
+type flowerLiveStreamReader interface {
+	Next(context.Context) (*ai.FlowerLiveStreamFrame, error)
+}
+
+func serveFlowerLiveStreamFrames(w http.ResponseWriter, r *http.Request, subscription flowerLiveStreamReader, heartbeatInterval, writeTimeout time.Duration) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: "streaming response is unavailable"})
@@ -85,6 +92,11 @@ func serveAIFlowerLiveStreamWithTiming(
 			continue
 		}
 		if err != nil {
+			if errors.Is(err, ai.ErrFlowerLiveSync) {
+				// Invalid logical envelopes cannot recover through reconnect.
+				// Keep this fixed public message independent of private data.
+				_ = write("event: error\ndata: ", []byte(`{"code":"flower_live_sync_error","message":"Flower live stream synchronization failed"}`))
+			}
 			return
 		}
 		if frame == nil || write("data: ", frame.Data) != nil {

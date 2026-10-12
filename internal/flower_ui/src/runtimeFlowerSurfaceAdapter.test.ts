@@ -6,7 +6,9 @@ import type {
   FlowerSettingsDraft,
   FlowerSettingsSnapshot,
   FlowerThreadReadStatus,
+  FlowerLiveStreamConnectInput,
 } from './contracts/flowerSurfaceContracts';
+import { flowerLiveWireFixture } from './test/flowerLiveWireFixture';
 import {
   createRuntimeFlowerSurfaceAdapter,
   type FlowerRuntimeTransport,
@@ -81,7 +83,9 @@ function routerDecision(): FlowerRouterDecision {
 }
 
 function adapterOptions(
-  transportOverrides: Partial<FlowerRuntimeTransport> = {},
+  transportOverrides: Partial<Omit<FlowerRuntimeTransport, 'connectLiveStream'>> & {
+    connectLiveStream?: (input: FlowerLiveStreamConnectInput) => AsyncIterable<unknown>;
+  } = {},
   optionOverrides: Partial<RuntimeFlowerSurfaceAdapterOptions> = {},
 ): RuntimeFlowerSurfaceAdapterOptions {
   const transport: FlowerRuntimeTransport = {
@@ -105,6 +109,9 @@ function adapterOptions(
     forkThread: vi.fn(async () => ({ thread: undefined })),
 	    submitApproval: vi.fn(async (input) => approvalResult(input.thread_id, input.interaction_id, input.approved)),
     ...transportOverrides,
+    connectLiveStream: transportOverrides.connectLiveStream ? async function* (input) {
+      for await (const envelope of transportOverrides.connectLiveStream!(input)) yield* flowerLiveWireFixture(envelope);
+    } : undefined,
   };
   return {
     runtime: {
@@ -143,6 +150,40 @@ function adapterOptions(
 }
 
 describe('runtime Flower surface adapter read state', () => {
+  it('rejects the removed unfragmented wire shape at the production adapter boundary', async () => {
+    const base = adapterOptions();
+    const adapter = createRuntimeFlowerSurfaceAdapter({ ...base, transport: {
+      ...base.transport,
+      connectLiveStream: async function* () { yield { data: '{"schema_version":1,"kind":"ready"}' }; },
+    } });
+    const iterator = adapter.connectLiveStream!({ signal: new AbortController().signal })[Symbol.asyncIterator]();
+    await expect(iterator.next()).rejects.toMatchObject({ code: 'flower_live_sync_error' });
+  });
+
+  it('maps the full reconstructed large current rather than a partial history projection', async () => {
+    const current = {
+      thread_id: 'large', view_version: 20705, activity: 'active', run_id: 'run', turn_id: 'turn',
+      items: Array.from({ length: 395 }, (_, index) => ({ id: `history-${index}`, kind: 'assistant', ordinal: index,
+        turn_id: `turn-${index}`, run_id: `run-${index}`, text: 'historical text '.repeat(260) })),
+    };
+    const base = adapterOptions();
+    const adapter = createRuntimeFlowerSurfaceAdapter({ ...base, transport: {
+      ...base.transport,
+      connectLiveStream: async function* () { yield* flowerLiveWireFixture({ schema_version: 1, kind: 'thread.batch', thread_id: 'large', current }); },
+    } });
+    const iterator = adapter.connectLiveStream!({ signal: new AbortController().signal })[Symbol.asyncIterator]();
+    expect(await iterator.next()).toMatchObject({ done: false, value: { current } });
+    expect((await iterator.next()).done).toBe(true);
+  });
+
+  it('rejects an unsupported logical schema after assembly', async () => {
+    const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ connectLiveStream: async function* () {
+      yield { schema_version: 2, kind: 'ready' };
+    } }));
+    const iterator = adapter.connectLiveStream!({ signal: new AbortController().signal })[Symbol.asyncIterator]();
+    await expect(iterator.next()).rejects.toThrow('unsupported schema version');
+  });
+
   it('preserves closed safety classifications from the real frame transport', async () => {
     const frame = { session_id: 'observer', target_id: 'task-page', viewer_revision: 1, sequence: 1, mime_type: 'image/png', error_code: 'computer_control_required' };
     const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ connectLiveStream: async function* () {

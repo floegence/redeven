@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi, afterEach } from 'vitest';
 import { modelDirectoryWireFixture } from '../../test/modelDirectoryWireFixture';
 import type { AgentSettingsResponse } from '../pages/settings/types';
 import { createEnvLocalFlowerSurfaceAdapter } from './envLocalFlowerSurfaceAdapter';
+import { flowerLiveWireFixture } from '../../../../../flower_ui/src/test/flowerLiveWireFixture';
 import type {
   FlowerAttachmentStagingScope,
   FlowerApprovalCommandResult,
@@ -327,7 +328,7 @@ describe('Env local Flower surface adapter', () => {
 
 	it('consumes one cancellable workspace fetch-SSE stream without replay cursors', async () => {
 		fetchMock.mockResolvedValue(new Response(
-			'data: {"schema_version":1,"kind":"ready","summaries":[]}\n\n',
+			`data: ${flowerLiveWireFixture({ schema_version: 1, kind: 'ready', summaries: [] })[0]!.data}\n\n`,
 			{ status: 200, headers: { 'Content-Type': 'text/event-stream; charset=utf-8' } },
 		));
 		const adapter = createEnvLocalFlowerSurfaceAdapter({
@@ -351,6 +352,15 @@ describe('Env local Flower surface adapter', () => {
 		expect(url).not.toContain('summary_generation=');
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 	});
+
+  it('surfaces an explicit stream synchronization failure through the Env App SSE reader', async () => {
+    fetchMock.mockResolvedValue(new Response('event: error\ndata: {"code":"flower_live_sync_error"}\n\n', {
+      status: 200, headers: { 'Content-Type': 'text/event-stream' },
+    }));
+    const adapter = createEnvLocalFlowerSurfaceAdapter({ envPublicID: 'env', envLabel: 'Environment', rpc: { ai: {} } as any });
+    const iterator = adapter.connectLiveStream!({ signal: new AbortController().signal })[Symbol.asyncIterator]();
+    await expect(iterator.next()).rejects.toMatchObject({ code: 'flower_live_sync_error' });
+  });
 
 	it('creates and releases attachment staging scopes without exposing the capability', async () => {
 		fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {

@@ -721,7 +721,7 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
     transport: {
       listThreads: () => runtimeJSON(bridge, 'GET', '/_redeven_proxy/api/ai/threads?limit=200'),
 		loadThread: (threadID) => runtimeJSON(bridge, 'GET', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}`),
-      connectLiveStream: async function* (input: FlowerLiveStreamConnectInput): AsyncIterable<unknown> {
+      connectLiveStream: async function* (input: FlowerLiveStreamConnectInput) {
         const path = '/_redeven_proxy/api/ai/flower/stream';
         const streamID = `flower-${globalThis.crypto.randomUUID()}`;
         const streamController = new AbortController();
@@ -740,7 +740,7 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
             fetch: runtimeFlowerStreamFetch(bridge, streamID),
             onActivity: resetActivityTimer,
           })) {
-            yield JSON.parse(frame.data) as unknown;
+            yield frame;
           }
         } finally {
           input.signal.removeEventListener('abort', abort);

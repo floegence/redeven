@@ -1,5 +1,6 @@
 import { modelDirectoryWireFixture } from '../../../../internal/envapp/ui_src/src/test/modelDirectoryWireFixture';
 import { resolveFlowerProviderModels } from '../../../../internal/flower_ui/src/settings/modelSelection';
+import { flowerLiveWireFixture } from '../../../../internal/flower_ui/src/test/flowerLiveWireFixture';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -236,7 +237,7 @@ describe('Local Environment Flower surface adapter', () => {
     let streamListener: ((event: RuntimeFlowerStreamEvent) => void) | undefined;
     const startRuntimeFlowerStream = vi.fn(async (request: RuntimeFlowerStreamRequest) => {
       queueMicrotask(() => {
-        const data = JSON.stringify({ schema_version: 1, kind: 'ready' });
+        const data = flowerLiveWireFixture({ schema_version: 1, kind: 'ready' })[0]!.data;
         streamListener?.({ stream_id: request.stream_id, kind: 'chunk', chunk: new TextEncoder().encode(`data: ${data}\n\n`) });
         streamListener?.({ stream_id: request.stream_id, kind: 'end' });
       });
@@ -290,12 +291,35 @@ describe('Local Environment Flower surface adapter', () => {
         thread_id: 'thread-1', view_version: index + 1, activity: 'active', turn_id: 'turn', run_id: 'run',
         queue: [], interactions: [], items: [{ id: 'reply', kind: 'assistant', ordinal: 1, turn_id: 'turn', run_id: 'run', live: true, text: 'Live reply '.repeat(index + 1) }],
       } };
-      listener?.({ stream_id: id, kind: 'chunk', chunk: new TextEncoder().encode(`data: ${JSON.stringify(value)}\n\n`) });
+      for (const frame of flowerLiveWireFixture(value, `update-${index}`)) {
+        listener?.({ stream_id: id, kind: 'chunk', chunk: new TextEncoder().encode(`data: ${frame.data}\n\n`) });
+      }
       expect(await next).toEqual({ done: false, value });
       expect(listener).toBeDefined();
     }
     listener?.({ stream_id: id, kind: 'end' });
     expect((await iterator.next()).done).toBe(true);
+    expect(listener).toBeUndefined();
+  });
+
+  it('surfaces an explicit synchronization error from Desktop IPC and closes its reader', async () => {
+    let listener: ((event: RuntimeFlowerStreamEvent) => void) | undefined;
+    let streamID = '';
+    const bridge: DesktopSettingsBridge = {
+      ...attachmentBridgeStubs(),
+      save: vi.fn(async () => ({ ok: true as const, snapshot: {} as never })),
+      requestRuntimeFlower: vi.fn(), cancel: vi.fn(),
+      startRuntimeFlowerStream: vi.fn(async (request) => {
+        streamID = request.stream_id;
+        return { ok: true as const, status: 200, content_type: 'text/event-stream' };
+      }),
+      subscribeRuntimeFlowerStream: vi.fn((receive) => { listener = receive; return () => { listener = undefined; }; }),
+    };
+    const iterator = createLocalEnvironmentFlowerSurfaceAdapter(bridge).connectLiveStream!({ signal: new AbortController().signal })[Symbol.asyncIterator]();
+    const pending = iterator.next();
+    await vi.waitFor(() => expect(streamID).not.toBe(''));
+    listener?.({ stream_id: streamID, kind: 'chunk', chunk: new TextEncoder().encode('event: error\ndata: {"code":"flower_live_sync_error"}\n\n') });
+    await expect(pending).rejects.toMatchObject({ code: 'flower_live_sync_error' });
     expect(listener).toBeUndefined();
   });
 

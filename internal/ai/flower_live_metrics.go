@@ -94,7 +94,7 @@ func (m *flowerLiveMetrics) runtimeFirstThinkingPublishLatency(latency time.Dura
 
 func (m *flowerLiveMetrics) subscriberDropped(reason flowerLiveSubscriberCloseReason) {
 	switch reason {
-	case flowerLiveSubscriberCloseOversizedBatch:
+	case flowerLiveSubscriberCloseOversizedEnvelope:
 		m.subscriberOversizedBatches.Add(1)
 	case flowerLiveSubscriberCloseGlobalQueueLimit:
 		m.globalQueueOverflows.Add(1)

@@ -3,6 +3,9 @@ package appserver
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
+	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -106,7 +109,7 @@ func TestServeAIFlowerLiveStreamFlushesReadyFrameWithSafeHeaders(t *testing.T) {
 		t.Fatalf("unsafe stream headers=%v", response.header)
 	}
 	body := response.body.String()
-	if !strings.HasPrefix(body, "data: ") || !strings.Contains(body, `"kind":"ready"`) || !strings.HasSuffix(body, "\n\n") {
+	if !strings.HasPrefix(body, "data: ") || !strings.Contains(body, `"fragment_count":1`) || !strings.Contains(decodedFlowerLiveSSEData(t, body), `"kind":"ready"`) || !strings.HasSuffix(body, "\n\n") {
 		t.Fatalf("ready frame=%q", body)
 	}
 	if len(response.deadlines) < 2 || !response.deadlines[len(response.deadlines)-1].IsZero() {
@@ -135,7 +138,7 @@ func TestServeAIFlowerLiveStreamRefreshesDeadlineForIdleHeartbeat(t *testing.T) 
 		t.Fatalf("flushes=%d, want ready frame and heartbeat", response.flushes)
 	}
 	body := response.body.String()
-	if !strings.Contains(body, `"kind":"ready"`) || !strings.HasSuffix(body, "\n\n: heartbeat\n\n") {
+	if !strings.Contains(body, `"fragment_count":1`) || !strings.Contains(decodedFlowerLiveSSEData(t, body), `"kind":"ready"`) || !strings.HasSuffix(body, "\n\n: heartbeat\n\n") {
 		t.Fatalf("stream did not contain two complete frames: %q", body)
 	}
 	if len(response.deadlineWrites) != 4 {
@@ -145,5 +148,67 @@ func TestServeAIFlowerLiveStreamRefreshesDeadlineForIdleHeartbeat(t *testing.T) 
 		if !response.deadlineWrites[index].IsZero() {
 			t.Fatalf("frame %d left an active write deadline: %v", index/2, response.deadlineWrites)
 		}
+	}
+}
+
+func decodedFlowerLiveSSEData(t *testing.T, body string) string {
+	t.Helper()
+	first := strings.Split(strings.TrimPrefix(body, "data: "), "\n\n")[0]
+	var fragment ai.FlowerLiveStreamFragment
+	if err := json.Unmarshal([]byte(first), &fragment); err != nil {
+		t.Fatal(err)
+	}
+	data, err := base64.StdEncoding.DecodeString(fragment.DataBase64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
+}
+
+func readFlowerLiveStreamEnvelope(ctx context.Context, subscription *ai.FlowerLiveStreamSubscription) (*ai.FlowerLiveStreamFrame, error) {
+	var result ai.FlowerLiveStreamFrame
+	for index := 0; ; index++ {
+		frame, err := subscription.Next(ctx)
+		if err != nil {
+			return nil, err
+		}
+		var fragment ai.FlowerLiveStreamFragment
+		if err := json.Unmarshal(frame.Data, &fragment); err != nil {
+			return nil, err
+		}
+		data, err := base64.StdEncoding.DecodeString(fragment.DataBase64)
+		if err != nil {
+			return nil, err
+		}
+		result.Kind = frame.Kind
+		result.Data = append(result.Data, data...)
+		if index+1 == fragment.FragmentCount {
+			return &result, nil
+		}
+	}
+}
+
+type failedFlowerLiveStream struct{ err error }
+
+func (stream failedFlowerLiveStream) Next(context.Context) (*ai.FlowerLiveStreamFrame, error) {
+	return nil, stream.err
+}
+
+func TestServeFlowerLiveStreamReportsTerminalSynchronizationError(t *testing.T) {
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/ai/flower/stream", nil)
+	serveFlowerLiveStreamFrames(response, request, failedFlowerLiveStream{err: ai.ErrFlowerLiveSync}, time.Second, time.Second)
+	want := "event: error\ndata: {\"code\":\"flower_live_sync_error\",\"message\":\"Flower live stream synchronization failed\"}\n\n"
+	if response.Code != http.StatusOK || response.Body.String() != want {
+		t.Fatalf("terminal synchronization event status=%d body=%q", response.Code, response.Body.String())
+	}
+}
+
+func TestServeFlowerLiveStreamKeepsOrdinaryReconnectFenceNonTerminal(t *testing.T) {
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/ai/flower/stream", nil)
+	serveFlowerLiveStreamFrames(response, request, failedFlowerLiveStream{err: io.EOF}, time.Second, time.Second)
+	if response.Body.Len() != 0 {
+		t.Fatalf("ordinary reconnect fence became a terminal synchronization error: %q", response.Body.String())
 	}
 }

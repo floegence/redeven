@@ -539,13 +539,13 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
     transport: {
       listThreads: () => fetchLocalApiJSON('/_redeven_proxy/api/ai/threads?limit=200', { method: 'GET' }),
       loadThread: (threadID) => fetchLocalApiJSON<unknown>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}`, { method: 'GET' }),
-      connectLiveStream: async function* (input: FlowerLiveStreamConnectInput): AsyncIterable<unknown> {
+      connectLiveStream: async function* (input: FlowerLiveStreamConnectInput) {
         // Workspace SSE owns observation for every thread. Selection and
         // recovery are client cache concerns; never send replay cursors.
         for await (const frame of readSessionEvents('/_redeven_proxy/api/ai/flower/stream', {
           method: 'GET', signal: input.signal,
         })) {
-          yield JSON.parse(frame.data) as unknown;
+          yield frame;
         }
       },
       loadSubagentDetail: (parentThreadID, childThreadID) => fetchLocalApiJSON(

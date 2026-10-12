@@ -38,7 +38,7 @@ func TestForkPublishesNamedDestinationAndReplaysWithoutDuplicates(t *testing.T) 
 	defer cancel()
 	for _, subscription := range []*FlowerLiveStreamSubscription{first, second} {
 		for {
-			frame, err := subscription.Next(ctx)
+			frame, err := readFlowerLiveStreamEnvelope(ctx, subscription)
 			if err != nil {
 				t.Fatal(err)
 			}
