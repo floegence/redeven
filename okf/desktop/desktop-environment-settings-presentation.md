@@ -52,8 +52,10 @@ status indicator and the existing Open Env App action. Runtime placement facts
 and address disclosures share that card's inset and separators. Address headers
 must not alternate between a different reading edge and a separate outer card.
 Address help remains a separate control outside the native summary; using help
-does not toggle the address disclosure. Expanded content retains the bounded,
-scrollable address table, filtering, Copy,
+does not toggle the address disclosure. Expanded addresses use frameless rows
+aligned with the section label, without a separate background or visible table
+header. Column labels remain available to assistive technology. Content retains
+bounded scrolling, filtering, Copy,
 Open and QR actions. Native details keep expansion ownership. Remote internal
 listeners retain their scope explanation and on-demand disclosure. Address
 semantics remain owned by

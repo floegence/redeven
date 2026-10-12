@@ -15,6 +15,8 @@ const browser = await chromium.launch({ headless: true });
 const report = { commit: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(), pid: process.pid,
   url: server.resolvedUrls.local[0], cases: [], errors: [], status: 'running' };
 const contrastOnly = process.argv.includes('--contrast-only');
+const addressesOnly = process.argv.includes('--addresses-only');
+const themeName = process.argv.find(arg => arg.startsWith('--theme='))?.slice(8);
 const connectionWidth = Number(process.argv.find(arg => arg.startsWith('--width='))?.slice(8));
 const connectionKind = process.argv.find(arg => arg.startsWith('--kind='))?.slice(7);
 await writeFile(`${output}/report.json`, JSON.stringify(report, null, 2));
@@ -45,7 +47,7 @@ try {
       assert.ok(action.height >= 32, `${label}: action target ${action.text}`);
     }
   }
-  if (!process.argv.includes('--connection-only')) for (const preset of builtInShellThemePresets) for (const width of (contrastOnly ? [1280] : [1280, 390, 320]).filter(width => !connectionWidth || width === connectionWidth)) {
+  if (!process.argv.includes('--connection-only')) for (const preset of builtInShellThemePresets.filter(preset => !themeName || preset.name === themeName)) for (const width of (contrastOnly ? [1280] : [1280, 390, 320]).filter(width => !connectionWidth || width === connectionWidth)) {
     const locale = width === 320 ? 'de-DE' : 'zh-CN';
     t = createDesktopI18n(locale).t;
     await page.setViewportSize({ width, height: 900 });
@@ -82,6 +84,38 @@ try {
     if (contrastOnly) { report.cases.push(`${preset.name}-contrast`); continue; }
     for (const disclosure of await dialog.locator('.redeven-address-group--summary > summary').all()) await disclosure.click();
     await layout(`${preset.name}-${width}-addresses`);
+    const addressLists = await dialog.locator('.redeven-address-group--summary').evaluateAll(groups => groups.map(group => {
+      const viewport = group.querySelector('.redeven-address-viewport');
+      const header = group.querySelector('thead');
+      const style = getComputedStyle(viewport);
+      return { border: parseFloat(style.borderTopWidth), radius: parseFloat(style.borderRadius), background: style.backgroundColor,
+        headerHeight: header.getBoundingClientRect().height,
+        readingEdge: group.querySelector('.redeven-card-endpoint-content').getBoundingClientRect().left
+          + parseFloat(getComputedStyle(group.querySelector('.redeven-card-endpoint-content')).paddingLeft)
+          - group.querySelector('.redeven-address-title').getBoundingClientRect().left };
+    }));
+    for (const list of addressLists) {
+      assert.equal(list.border, 0, 'address lists have no nested outer border');
+      assert.equal(list.radius, 0, 'address lists share the parent surface');
+      assert.equal(list.background, 'rgba(0, 0, 0, 0)', 'address lists have no separate background');
+      assert.ok(list.headerHeight <= 1, 'column labels are available without a visible header');
+      assert.ok(Math.abs(list.readingEdge) < 1, 'addresses align with their section label');
+    }
+    if (addressesOnly && width === 1280) {
+      await page.evaluate(async () => {
+        await Promise.all(document.getAnimations().filter(animation => animation.effect.getTiming().iterations !== Infinity).map(animation => animation.finished.catch(() => {})));
+      });
+      const violations = await page.evaluate(async () => (await window.axe.run('.redeven-environment-settings-dialog', {
+        runOnly: ['wcag2a', 'wcag2aa', 'wcag21aa'],
+      })).violations.map(({ id, nodes }) => ({ id, nodes: nodes.map(({ target, html, failureSummary }) => ({ target, html, failureSummary })) })));
+      assert.deepEqual(violations, [], `${preset.name}: accessible expanded addresses`);
+    }
+    if (width === 1280 && ['classic-light', 'paper', 'mist', 'ocean'].includes(preset.name)) {
+      await dialog.locator('.environment-settings-scroll:visible').evaluate(body => { body.scrollTop = 0; });
+      await page.mouse.move(0, 0);
+      await dialog.screenshot({ path: `${output}/addresses-${preset.name}.png`, animations: 'disabled' });
+    }
+    if (addressesOnly) { report.cases.push(`${preset.name}-${width}-addresses`); continue; }
     await button('accessFlow.manageProtection').click();
     await dialog.locator('.access-flow-password-setting').waitFor();
     assert.deepEqual(await shell(dialog.locator('.access-flow-password-setting')), connection);
@@ -103,7 +137,7 @@ try {
     await layout(`${preset.name}-${width}-review`);
     report.cases.push(`${preset.name}-${width}`);
   }
-  if (!contrastOnly) {
+  if (!contrastOnly && !addressesOnly) {
   const { mixedEnvironmentFixture } = await server.ssrLoadModule(fileURLToPath(new URL('../src/testSupport/mixedEnvironmentFixture.ts', import.meta.url)));
   const { snapshot } = mixedEnvironmentFixture({ linkState: 'unbound' });
   const original = snapshot.environments.find(entry => entry.kind === 'ssh_environment');
