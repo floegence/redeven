@@ -516,13 +516,6 @@
       "envTypeProvider": "Provider",
       "envTypeRemote": "원격"
     },
-    "runtimeStatus": {
-      "triggerLabel": "{environment} 환경 상태",
-      "runtime": "런타임",
-      "started": "시작 시간",
-      "cpu": "CPU",
-      "memory": "메모리"
-    },
     "flowerCompanion": {
       "openAria": "Flower 보조 작업 영역. {status}",
       "collapse": "Flower 접기",

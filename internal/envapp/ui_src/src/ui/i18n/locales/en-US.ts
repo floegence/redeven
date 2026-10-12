@@ -1780,13 +1780,6 @@ export const enUS = defineDictionary({
       envTypeProvider: 'Provider',
       envTypeRemote: 'Remote',
     },
-    runtimeStatus: {
-      triggerLabel: 'Environment status for {environment}',
-      runtime: 'Runtime',
-      started: 'Started',
-      cpu: 'CPU',
-      memory: 'Memory',
-    },
     flowerCompanion: {
       openAria: 'Flower companion. {status}',
       collapse: 'Collapse Flower',

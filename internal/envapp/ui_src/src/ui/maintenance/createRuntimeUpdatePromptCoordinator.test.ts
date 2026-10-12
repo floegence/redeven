@@ -90,8 +90,6 @@ function createCoordinatorHarness(options: Readonly<{
       canAdmin,
       envStatus,
       version: {
-        currentPing: () => null,
-        currentPingLoading: () => false,
         currentProcessStartedAtMs: () => null,
         runtimeService: () => undefined,
         currentVersion,

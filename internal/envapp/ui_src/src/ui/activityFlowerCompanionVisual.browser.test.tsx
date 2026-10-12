@@ -102,11 +102,11 @@ describe('Flower bottom companion computed visual contract', () => {
   it('keeps the collapsed composer transparent and shadowless', () => {
     const { companion, composer } = mountCompanion('collapsed');
     const frameStyle = getComputedStyle(companion);
-    expect(frameStyle.boxShadow).toBe('none');
+    expect(frameStyle.boxShadow).not.toBe('none');
     for (const side of ['top', 'right', 'bottom', 'left']) {
       expect(frameStyle.getPropertyValue(`border-${side}-width`)).toBe('1px');
     }
-    expect(frameStyle.borderRadius).toBe('5px');
+    expect(frameStyle.borderRadius).toBe('8px');
     expectUnframedComposer(composer);
   });
 

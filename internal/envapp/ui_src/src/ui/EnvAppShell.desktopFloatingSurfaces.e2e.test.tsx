@@ -258,7 +258,7 @@ vi.mock('@floegence/floe-webapp-core/layout', async (importOriginal) => ({
         ))}
       </div>
       {props.children}
-      <div data-testid="activity-bottom-bar">{props.bottomBarItems}</div>
+      <Show when={props.bottomBarMode !== 'hidden'}><footer data-testid="activity-bottom-bar">{props.bottomBarItems}</footer></Show>
     </div>
   ),
   StatusIndicator: (props: any) => <div>{props.label ?? props.status}</div>,
@@ -640,8 +640,6 @@ vi.mock('./maintenance/createRuntimeUpdatePromptCoordinator', () => ({
 }));
 vi.mock('./maintenance/createAgentVersionModel', () => ({
   createAgentVersionModel: () => ({
-    currentPing: () => null,
-    currentPingLoading: () => false,
     currentProcessStartedAtMs: () => 0,
     runtimeService: () => undefined,
     currentVersion: () => 'v1.0.0',
@@ -1342,7 +1340,9 @@ describe('EnvAppShell desktop floating surfaces', () => {
         working_dir: '/workspace/app',
       }));
       expect(host.querySelector('[data-testid="workbench-flower-activation"]')?.textContent).toBe('ai|focus_latest_or_create|true|true|true|thread-launched');
-      expect(host.querySelector('#redeven-activity-flower-companion')).toBeNull();
+      const retainedCompanion = host.querySelector('#redeven-activity-flower-companion');
+      expect(retainedCompanion?.getAttribute('aria-hidden')).toBe('true');
+      expect((retainedCompanion as HTMLElement)?.inert).toBe(true);
       expect(windowOpenMock).not.toHaveBeenCalled();
     } finally {
       dispose();

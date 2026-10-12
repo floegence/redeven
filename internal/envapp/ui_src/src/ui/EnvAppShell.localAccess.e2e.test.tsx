@@ -741,7 +741,7 @@ vi.mock('@floegence/floe-webapp-core/layout', () => ({
               )}
           </For>
         </div>
-        {props.bottomBarItems}
+        <Show when={props.bottomBarMode !== 'hidden'}><footer data-floe-shell-slot="bottom-bar">{props.bottomBarItems}</footer></Show>
         {layoutIsMobile && props.mobileAccessory}
         <div
           data-testid="mock-env-context-state"
@@ -4987,6 +4987,7 @@ describe('EnvAppShell environment entry affordances', () => {
 
       expect(host.textContent).toContain('Unlock local runtime');
       expect(host.querySelector('[data-activity-flower-bottom-bar]')).toBeNull();
+      expect(host.querySelector('[data-floe-shell-slot="bottom-bar"]')).toBeNull();
       expect(host.querySelector('[data-activity-flower-companion-anchor]')).toBeNull();
       expect(host.querySelector('#redeven-activity-flower-companion')).toBeNull();
       expect(host.querySelector('#redeven-activity-flower-product')).toBeNull();
@@ -5003,7 +5004,8 @@ describe('EnvAppShell environment entry affordances', () => {
       await flushAsync();
 
       expect(host.textContent).not.toContain('Unlock local runtime');
-      expect(host.querySelector('[data-activity-flower-bottom-bar]')).toBeTruthy();
+      expect(host.querySelector('[data-activity-flower-bottom-bar]')).toBeNull();
+      expect(host.querySelector('[data-floe-shell-slot="bottom-bar"]')).toBeNull();
       expect(host.querySelector('[data-activity-flower-companion-anchor]')).toBeTruthy();
       expect(host.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-companion-visibility')).toBe('visible');
       expect(host.querySelector('#redeven-activity-flower-product')?.getAttribute('data-presentation')).toBe('collapsed');
@@ -5228,7 +5230,7 @@ describe('EnvAppShell environment entry affordances', () => {
     } finally { dispose(); }
   });
 
-  it('shows Desktop provider identity while loading local runtime details from the local route', async () => {
+  it('preserves the Desktop provider session label during local-route recovery', async () => {
     window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     installDesktopSessionContext({
@@ -5255,12 +5257,12 @@ describe('EnvAppShell environment entry affordances', () => {
     const dispose = render(() => <EnvAppShell />, host);
 
     try {
-      await flushUntil(() => getEnvironmentMock.mock.calls.length > 0 && (host.textContent?.includes('Acme Desktop') ?? false), 40);
+      await flushUntil(() => protocolSnapshot.state === 'connected' && getEnvironmentMock.mock.calls.length > 0, 40);
+      publishProtocolWaiting({ code: 'AGENT_OFFLINE', status: 503, message: 'Runtime is offline' });
+      await flushAsync();
 
       expect(host.textContent).toContain('Acme Desktop');
-      const identityTrigger = host.querySelector<HTMLElement>('[data-environment-runtime-trigger]');
-      expect(identityTrigger?.getAttribute('aria-label')).toContain('env_provider');
-      expect(identityTrigger?.getAttribute('aria-label')).toContain('Provider');
+      expect(host.querySelector('[data-environment-runtime-trigger]')).toBeNull();
       expect(window.sessionStorage.getItem('redeven_env_public_id')).toBe('env_provider');
       expect(getEnvironmentMock).toHaveBeenCalledWith({ source: 'local', envId: 'env_local' });
       expect(getEnvironmentMock).not.toHaveBeenCalledWith({ source: 'controlplane', envId: 'env_provider' });
@@ -5275,18 +5277,16 @@ describe('EnvAppShell environment entry affordances', () => {
       sessionSource: 'external_local_ui' as const,
       label: 'External Local UI',
       localEnvironmentID: 'https://127.0.0.1:24000/',
-      expectedType: 'Remote',
     },
     {
       sessionSource: 'ssh_environment' as const,
       label: 'SSH Workstation',
       localEnvironmentID: 'ssh:workstation:2222:key_agent:remote_default',
-      expectedType: 'SSH',
     },
   ];
 
   for (const testCase of nonProviderRemoteDesktopCases) {
-    it(`does not treat remote_desktop ${testCase.sessionSource} sessions as provider identity`, async () => {
+    it(`preserves the ${testCase.sessionSource} session label during local-route recovery`, async () => {
       window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
       getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
       installDesktopSessionContext({
@@ -5302,12 +5302,12 @@ describe('EnvAppShell environment entry affordances', () => {
       const dispose = render(() => <EnvAppShell />, host);
 
       try {
-        await flushUntil(() => getEnvironmentMock.mock.calls.length > 0 && (host.textContent?.includes(testCase.label) ?? false), 40);
+        await flushUntil(() => protocolSnapshot.state === 'connected' && getEnvironmentMock.mock.calls.length > 0, 40);
+        publishProtocolWaiting({ code: 'AGENT_OFFLINE', status: 503, message: 'Runtime is offline' });
+        await flushAsync();
 
         expect(host.textContent).toContain(testCase.label);
-        const identityTrigger = host.querySelector<HTMLElement>('[data-environment-runtime-trigger]');
-        expect(identityTrigger?.getAttribute('aria-label')).toContain(testCase.localEnvironmentID);
-        expect(identityTrigger?.getAttribute('aria-label')).toContain(testCase.expectedType);
+        expect(host.querySelector('[data-environment-runtime-trigger]')).toBeNull();
         expect(host.textContent).not.toContain('Provider');
         expect(getEnvironmentMock).toHaveBeenCalledWith({ source: 'local', envId: 'env_local' });
         expect(getEnvironmentMock).not.toHaveBeenCalledWith({ source: 'controlplane', envId: testCase.localEnvironmentID });

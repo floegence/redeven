@@ -3,7 +3,7 @@ type: UI Contract
 title: Plugin surfaces
 description: Env App manages official and external plugins through an accessible Launcher, searchable category discovery, exact inventory identities, explicit review, SDK-owned surfaces, Activity windows and pinned pages, and Workbench widgets.
 tags: [ui, plugins, activity, workbench, plugin-center]
-timestamp: 2026-09-11T00:00:00Z
+timestamp: 2026-10-12T00:00:00Z
 quality_exception: Cross-surface discovery, navigation, permissions, and SDK surface presentation contract; installation, package review, and saved layout continuity are separate concepts.
 ---
 # Summary
@@ -31,7 +31,7 @@ at least 44px touch targets. Its title and actions share one row, followed by a
 full-width 16px search input. Initial focus goes to the close button so browsing
 does not open the system keyboard. Search, category, and tile nodes survive
 responsive movement and reopening. Covered Shell content remains inert through exit
-presence while the bottom bar remains usable, and the mobile trigger exposes the
+presence while mobile navigation remains usable, and the mobile trigger exposes the
 drawer disclosure state. [Mobile shell navigation](mobile-shell-navigation.md)
 owns placement, mutual exclusion, keyboard, and focus contracts. Search normalizes Unicode with
 NFKC and locale-aware case folding, matches display name, canonical keywords,
@@ -239,7 +239,7 @@ stable component id derived from `inventoryKey`. Released
 `ActivityAppsMain` mounts the full-page contribution on first activation and
 keeps its DOM while other Activity pages are selected. View activation drives
 the released `visible` and `hidden` lifecycle, and returning to the page does not
-create another slot. The Activity Bar, top bar, and bottom bar remain visible.
+create another slot. The Activity Bar and top bar remain visible.
 Pinned Activity entries follow Flower and retain the saved pin order.
 Mobile never receives dynamic plugin tab entries and continues to use the
 Launcher and Activity window presentation.

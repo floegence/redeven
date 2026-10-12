@@ -11,8 +11,6 @@ type VersionRpc = Readonly<{
 }>;
 
 export type AgentVersionModel = Readonly<{
-  currentPing: Accessor<SysPingResponse | null>;
-  currentPingLoading: Accessor<boolean>;
   currentProcessStartedAtMs: Accessor<number | null>;
   runtimeService: Accessor<SysPingResponse['runtimeService']>;
   currentVersion: Accessor<string>;
@@ -153,8 +151,6 @@ export function createAgentVersionModel(args: CreateAgentVersionModelArgs): Agen
   };
 
   return {
-    currentPing,
-    currentPingLoading: () => currentPingResource.loading,
     currentProcessStartedAtMs,
     runtimeService: () => currentPing()?.runtimeService,
     currentVersion,

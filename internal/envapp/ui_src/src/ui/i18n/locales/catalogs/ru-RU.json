@@ -516,13 +516,6 @@
       "envTypeProvider": "Provider",
       "envTypeRemote": "Удалённая"
     },
-    "runtimeStatus": {
-      "triggerLabel": "Состояние окружения {environment}",
-      "runtime": "Среда выполнения",
-      "started": "Запущена",
-      "cpu": "CPU",
-      "memory": "Память"
-    },
     "flowerCompanion": {
       "openAria": "Панель Flower. {status}",
       "collapse": "Свернуть Flower",

@@ -3,7 +3,7 @@ type: UI Contract
 title: Env App floating layer order
 description: One product-owned stacking contract orders movable windows, Flower, plugin surfaces, blocking modals, and command UI.
 tags: [ui, floating-windows, flower, plugins, dialogs, focus]
-timestamp: 2026-09-26T00:00:00Z
+timestamp: 2026-10-12T00:00:00Z
 ---
 # Summary
 
@@ -25,7 +25,7 @@ The product layer constants are the only authority for these bands. Published fl
 ## Dialog placement
 
 Mobile plugin and tools navigation is local to the released Shell content region,
-not a global launcher modal. Its bottom bar stays interactive. The
+not a global launcher modal. Its mobile navigation bar stays interactive. The
 [mobile shell navigation](mobile-shell-navigation.md) contract owns this boundary;
 global product confirmations still cover it and the navigation bar.
 
