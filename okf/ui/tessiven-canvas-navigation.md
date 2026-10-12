@@ -51,7 +51,9 @@ bounds, so fitting a newly mapped or isolated node keeps it inside the viewport.
 Default browsing shows one directed overview connector per root endpoint pair.
 Grouped endpoints resolve to their root group; ungrouped hosts and external
 resources retain their own endpoints. Counts deduplicate original relation IDs,
-and reverse calls retain an independent arrow. Group-internal relationships
+and reverse calls retain an independent arrow. Paths print aggregate counts;
+single-relation types and protocols remain in accessible names and clicked
+details, keeping short parallel connectors free of overlapping text. Group-internal relationships
 remain in the canonical pool overview and never create a group self-loop.
 Clicking a connector opens the existing categorized relationship browser; the
 [relationship summary contract](tessiven-relationship-summaries.md) owns complete

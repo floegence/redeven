@@ -1868,6 +1868,8 @@
   fill: var(--graph-edge-active, var(--foreground));
   opacity: .9;
 }
+/* Exact semantics remain in accessible names and details; paths show counts. */
+.tessiven-canvas .floe-graph__edge-label:not([data-count='true']) { display: none; }
 @media (forced-colors: active) {
   .tessiven-canvas[data-connection-focus] .floe-graph__edge { stroke: Highlight; }
   .tessiven-canvas[data-connection-focus] .floe-graph__edge-label { fill: Highlight; }
