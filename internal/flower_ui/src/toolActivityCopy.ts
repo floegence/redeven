@@ -27,6 +27,7 @@ export const toolActivityEnUS = {
   "back": "Go back",
   "reload": "Reload page",
   "read": "Read",
+  "viewImage": "View",
   "readFiles": "Read files",
   "edit": "Edit",
   "delete": "Delete",
