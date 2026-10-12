@@ -79,7 +79,7 @@ func TestServerPinnedConversationPosition(t *testing.T) {
 		ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
 		seen := make(map[string]int64)
 		for len(seen) < len(ids) {
-			frame, err := observer.Next(ctx)
+			frame, err := readFlowerLiveStreamEnvelope(ctx, observer)
 			if err != nil {
 				cancel()
 				t.Fatal(err)

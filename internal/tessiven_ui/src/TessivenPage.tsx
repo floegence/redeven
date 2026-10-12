@@ -89,6 +89,7 @@ export function TessivenPage(props: {
     refreshGeneration = 0,
     disposed = false;
   let creation: { request_id: string; title: string } | undefined;
+  let flowerSelectionNonce = 0;
   const historical = () =>
     browseHistory() ||
     !!canvas()?.archived ||
@@ -146,7 +147,7 @@ export function TessivenPage(props: {
       selection: value,
       labels: selectionLabels(value),
       prompt,
-      nonce: Date.now(),
+      nonce: ++flowerSelectionNonce,
       flower_thread_id: canvas()?.flower_thread_id,
     };
     const existing = flowerSessions().find(
@@ -162,14 +163,27 @@ export function TessivenPage(props: {
     }
 
   }
-  async function bindFlowerThread(threadID: string) {
-    const current = canvas();
-    if (!current || current.flower_thread_id === threadID) return;
-    await request('POST', `/canvases/${encodeURIComponent(current.id)}/flower-thread`, { thread_id: threadID });
-    setCanvas({ ...current, flower_thread_id: threadID });
-    const session = flowerSessions().find(item => item.id === current.id);
+  async function bindFlowerThread(canvasID: string, threadID: string) {
+    const session = flowerSessions().find(item => item.id === canvasID);
+    if (session?.request().flower_thread_id === threadID) return;
+    await request('POST', `/canvases/${encodeURIComponent(canvasID)}/flower-thread`, { thread_id: threadID });
+    setCanvas(previous => previous?.id === canvasID ? { ...previous, flower_thread_id: threadID } : previous);
     if (session) session.update({ ...session.request(), flower_thread_id: threadID });
   }
+  const acceptFlowerRequest = (submitted: CanvasFlowerRequest, threadID: string) => {
+    const session = flowerSessions().find(item => item.id === submitted.selection.canvas_id);
+    if (!session) return;
+    const current = session.request();
+    if (current.nonce === submitted.nonce
+      && current.selection.version_id === submitted.selection.version_id
+      && current.selection.object_refs.length === submitted.selection.object_refs.length
+      && current.selection.object_refs.every((id, index) => id === submitted.selection.object_refs[index])) {
+      session.update({ ...current, selection: { ...current.selection, object_refs: [] }, labels: {}, prompt: undefined });
+    }
+    void bindFlowerThread(submitted.selection.canvas_id, threadID).catch(cause => {
+      if (!disposed) setError(message(cause));
+    });
+  };
   const ask = (prompt?: string) => {
     const value = selection();
     if (value) askSelection(value, prompt);
@@ -703,7 +717,7 @@ export function TessivenPage(props: {
             t={props.t}
             renderSurface={props.renderFlower}
             onOpenConversation={props.onOpenFlower}
-            onThreadBound={threadID => void bindFlowerThread(threadID)}
+            onAccepted={acceptFlowerRequest}
           />
         </Show>
       </div>

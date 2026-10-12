@@ -584,7 +584,7 @@ func assertAskUserContinuationLiveThinking(t *testing.T, live *FlowerLiveStreamS
 	sawPreparing := false
 	for time.Now().Before(deadline) {
 		ctx, cancel := context.WithDeadline(context.Background(), deadline)
-		frame, err := live.Next(ctx)
+		frame, err := readFlowerLiveStreamEnvelope(ctx, live)
 		cancel()
 		if err != nil {
 			t.Fatalf("read continuation live frame: %v", err)

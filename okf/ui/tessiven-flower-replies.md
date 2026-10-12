@@ -3,7 +3,7 @@ type: UI Contract
 title: Tessiven Flower replies
 description: Read canonical Flower output in a quiet movable canvas window.
 tags: [ui, tessiven, flower]
-timestamp: 2026-10-09T00:00:00Z
+timestamp: 2026-10-11T00:00:00Z
 ---
 # Summary
 
@@ -89,7 +89,10 @@ It loads the full Env App, verifies Workbench persistence and reload, opens the
 standalone canvas through its Dock action, and opens the Activity canvas through
 the Activity Bar with its navigation rail visible. Both surfaces send a Flower turn,
 display the canonical streamed reply and exercise the reply menu in the compact
-window. Light and dark screenshots and a machine-readable report provide
+window. Accepted sends consume their explicit canvas references before an ordinary
+follow-up. A canonical current exceeding the reported 1.49 MB incident size then
+proves waiting phase, first thinking, tool result and assistant text are visible
+while a scripted provider is paused before completion; reload preserves history. Light and dark screenshots and a machine-readable report provide
 reviewable evidence. Short, narrow Activity and standalone windows also receive
 a real `ask_user` interaction, scroll to its last choice and submit it through
 the canonical Runtime boundary. Only the model response is scripted; this does not qualify

@@ -1,11 +1,14 @@
 package ai
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -20,23 +23,30 @@ const (
 	flowerLiveMaxSubscribersPerEndpoint = 256
 	flowerLiveBaselinePageLimit         = 200
 	flowerLiveSubscriberBatchLimit      = 16
-	flowerLiveSubscriberByteLimit       = 1 << 20
+	flowerLivePendingFrameByteLimit     = 1 << 20
+	flowerLiveFragmentByteLimit         = 32 << 10
+	flowerLiveFrameByteLimit            = 64 << 10
+	flowerLiveEnvelopeByteLimit         = 32 << 20
 	flowerLiveGlobalQueuedByteLimit     = 32 << 20
 )
 
-var ErrFlowerLiveTooManySubscribers = errors.New("too many Flower live observers")
+var (
+	ErrFlowerLiveTooManySubscribers = errors.New("too many Flower live observers")
+	ErrFlowerLiveSync               = errors.New("flower live stream synchronization failed")
+)
 
 type flowerLiveSubscriberCloseReason string
 
 const (
-	flowerLiveSubscriberCloseClient           flowerLiveSubscriberCloseReason = "client_closed"
-	flowerLiveSubscriberCloseService          flowerLiveSubscriberCloseReason = "service_closed"
-	flowerLiveSubscriberCloseOversizedBatch   flowerLiveSubscriberCloseReason = "oversized_batch"
-	flowerLiveSubscriberCloseInitQueueLimit   flowerLiveSubscriberCloseReason = "initialization_queue_limit"
-	flowerLiveSubscriberCloseBatchQueueLimit  flowerLiveSubscriberCloseReason = "batch_queue_limit"
-	flowerLiveSubscriberCloseByteQueueLimit   flowerLiveSubscriberCloseReason = "byte_queue_limit"
-	flowerLiveSubscriberCloseGlobalQueueLimit flowerLiveSubscriberCloseReason = "global_queue_limit"
-	flowerLiveSubscriberCloseSummaryRefresh   flowerLiveSubscriberCloseReason = "summary_refresh_failed"
+	flowerLiveSubscriberCloseClient            flowerLiveSubscriberCloseReason = "client_closed"
+	flowerLiveSubscriberCloseService           flowerLiveSubscriberCloseReason = "service_closed"
+	flowerLiveSubscriberCloseOversizedEnvelope flowerLiveSubscriberCloseReason = "oversized_envelope"
+	flowerLiveSubscriberCloseEncoding          flowerLiveSubscriberCloseReason = "envelope_encoding_failed"
+	flowerLiveSubscriberCloseInitQueueLimit    flowerLiveSubscriberCloseReason = "initialization_queue_limit"
+	flowerLiveSubscriberCloseBatchQueueLimit   flowerLiveSubscriberCloseReason = "batch_queue_limit"
+	flowerLiveSubscriberCloseByteQueueLimit    flowerLiveSubscriberCloseReason = "byte_queue_limit"
+	flowerLiveSubscriberCloseGlobalQueueLimit  flowerLiveSubscriberCloseReason = "global_queue_limit"
+	flowerLiveSubscriberCloseSummaryRefresh    flowerLiveSubscriberCloseReason = "summary_refresh_failed"
 )
 
 type FlowerLiveStreamKind string
@@ -111,6 +121,9 @@ func (s *Service) PublishFlowerComputerFrame(meta *session.Meta, frame FlowerCom
 		return errors.New("private computer frames require an individual observer")
 	}
 	batch := newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamComputerFrame, ThreadID: frame.ThreadID, ComputerFrame: &frame})
+	if batch.err != nil {
+		return ErrFlowerLiveSync
+	}
 	if len(batch.data) > 4096 {
 		return errors.New("computer frame metadata is too large")
 	}
@@ -120,11 +133,7 @@ func (s *Service) PublishFlowerComputerFrame(meta *session.Meta, frame FlowerCom
 		if subscriber.endpointID == meta.EndpointID && subscriber.userPublicID == meta.UserPublicID && !subscriber.closed {
 			// Media is lossy: a slow viewer gets only the newest frame and
 			// never consumes or disconnects the lifecycle queue.
-			select {
-			case <-subscriber.media:
-			default:
-			}
-			subscriber.media <- batch
+			replaceFlowerLiveSubscriberMediaLocked(s, subscriber, batch)
 		}
 	}
 	return nil
@@ -195,9 +204,21 @@ type FlowerLiveStreamFrame struct {
 	Data []byte
 }
 
+// Every public envelope takes this wire path, including one-fragment envelopes.
+// Fragmentation happens after the public projection has removed private fields.
+type FlowerLiveStreamFragment struct {
+	EnvelopeID    string `json:"envelope_id"`
+	FragmentIndex int    `json:"fragment_index"`
+	FragmentCount int    `json:"fragment_count"`
+	TotalBytes    int    `json:"total_bytes"`
+	DataBase64    string `json:"data_base64"`
+}
+
 type flowerLiveEncodedBatch struct {
 	kind FlowerLiveStreamKind
 	data []byte
+	id   string
+	err  error
 }
 
 type flowerLiveSubscriber struct {
@@ -215,8 +236,15 @@ type flowerLiveSubscriber struct {
 	media           chan *flowerLiveEncodedBatch
 	queueLimit      int
 	queuedBytes     int
+	mediaBytes      int
 	initializing    bool
 	buffered        []*flowerLiveEncodedBatch
+	initial         []*flowerLiveEncodedBatch
+	active          *flowerLiveEncodedBatch
+	activeIndex     int
+	activeAccounted bool
+	wake            chan struct{}
+	closeErr        error
 	closed          bool
 }
 
@@ -224,6 +252,7 @@ type FlowerLiveStreamSubscription struct {
 	service    *Service
 	subscriber *flowerLiveSubscriber
 	closeOnce  sync.Once
+	nextMu     sync.Mutex
 }
 
 func (s *Service) SubscribeFlowerLiveStream(ctx context.Context, meta *session.Meta, _ FlowerLiveStreamRequest) (*FlowerLiveStreamSubscription, error) {
@@ -254,7 +283,7 @@ func (s *Service) SubscribeFlowerLiveStream(ctx context.Context, meta *session.M
 	subscriber := &flowerLiveSubscriber{
 		observerID: rand.Text(), observerContext: ctx,
 		id: s.flowerLiveSubscriberSeq, endpointID: endpointID, userPublicID: userPublicID,
-		media: make(chan *flowerLiveEncodedBatch, 1),
+		media: make(chan *flowerLiveEncodedBatch, 1), wake: make(chan struct{}, 1),
 		queue: make(chan *flowerLiveEncodedBatch, flowerLiveSubscriberBatchLimit), queueLimit: flowerLiveSubscriberBatchLimit, initializing: true,
 	}
 	s.flowerLiveSubscribers[subscriber.id] = subscriber
@@ -271,8 +300,20 @@ func (s *Service) SubscribeFlowerLiveStream(ctx context.Context, meta *session.M
 			return nil, err
 		}
 	}
-	currentBaselines := make([]*flowerLiveEncodedBatch, 0)
-	if s.threadRuntime != nil {
+	retainInitial := func(batch *flowerLiveEncodedBatch) bool {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if !retainFlowerLiveBatchLocked(s, subscriber, batch) {
+			return false
+		}
+		subscriber.initial = append(subscriber.initial, batch)
+		return true
+	}
+	ready := newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{
+		SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamReady, Summaries: summaries, ObserverID: subscriber.observerID,
+	})
+	retained := retainInitial(ready)
+	if retained && s.threadRuntime != nil {
 		for _, summary := range summaries {
 			if !flowerLiveSummaryNeedsCurrentBaseline(summary) {
 				continue
@@ -282,28 +323,29 @@ func (s *Service) SubscribeFlowerLiveStream(ctx context.Context, meta *session.M
 				continue
 			}
 			copy := current
-			currentBaselines = append(currentBaselines, newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{
+			if !retainInitial(newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{
 				SchemaVersion: FlowerLiveSchemaVersion,
 				Kind:          FlowerLiveStreamThreadBatch,
 				ThreadID:      summary.ThreadID,
 				Current:       &copy,
-			}))
+			})) {
+				break
+			}
 			for _, status := range s.flowerComputerStatusesForCurrent(ctxOrBackground(ctx), current, "") {
 				statusCopy := status
-				currentBaselines = append(currentBaselines, newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{
+				if !retainInitial(newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{
 					SchemaVersion:  FlowerLiveSchemaVersion,
 					Kind:           FlowerLiveStreamComputerStatus,
 					ThreadID:       status.ThreadID,
 					ComputerStatus: &statusCopy,
-				}))
+				})) {
+					break
+				}
 			}
 		}
 	}
-	ready := newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{
-		SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamReady, Summaries: summaries, ObserverID: subscriber.observerID,
-	})
 	s.mu.Lock()
-	finalizeFlowerLiveSubscriberInitializationLocked(s, subscriber, ready, currentBaselines)
+	finalizeFlowerLiveSubscriberInitializationLocked(s, subscriber)
 	s.mu.Unlock()
 	return &FlowerLiveStreamSubscription{service: s, subscriber: subscriber}, nil
 }
@@ -352,29 +394,28 @@ func (s *Service) listFlowerLiveBaseline(ctx context.Context, meta *session.Meta
 	}
 }
 
-func finalizeFlowerLiveSubscriberInitializationLocked(service *Service, subscriber *flowerLiveSubscriber, ready *flowerLiveEncodedBatch, baselines []*flowerLiveEncodedBatch) {
-	if service == nil || subscriber == nil || subscriber.closed || ready == nil {
+func finalizeFlowerLiveSubscriberInitializationLocked(service *Service, subscriber *flowerLiveSubscriber) {
+	if service == nil || subscriber == nil || subscriber.closed {
 		return
 	}
-	initialQueueCapacity := 1 + len(baselines) + len(subscriber.buffered)
+	// Initialization preserves its complete baseline before buffered live work.
+	// All of these envelopes were budgeted when retained, rather than after the
+	// potentially large baseline had already been built.
+	initialQueueCapacity := len(subscriber.initial) + len(subscriber.buffered)
 	if initialQueueCapacity > cap(subscriber.queue) {
 		subscriber.queue = make(chan *flowerLiveEncodedBatch, initialQueueCapacity)
 	}
-	subscriber.queueLimit = initialQueueCapacity
-	if !enqueueFlowerLiveSubscriberDirectLocked(service, subscriber, ready) {
-		return
+	for _, batch := range subscriber.initial {
+		subscriber.queue <- batch
 	}
-	for _, baseline := range baselines {
-		if !enqueueFlowerLiveSubscriberDirectLocked(service, subscriber, baseline) {
-			return
-		}
-	}
-	subscriber.initializing = false
 	for _, batch := range subscriber.buffered {
-		enqueueFlowerLiveSubscriberLocked(service, subscriber, batch)
+		subscriber.queue <- batch
 	}
+	subscriber.initial = nil
 	subscriber.buffered = nil
+	subscriber.initializing = false
 	subscriber.queueLimit = flowerLiveSubscriberBatchLimit
+	wakeFlowerLiveSubscriberLocked(subscriber)
 }
 
 func flowerLiveSummaryNeedsCurrentBaseline(summary ThreadView) bool {
@@ -554,44 +595,43 @@ func (s *Service) PublishFlowerViewerReadState(meta *session.Meta, threadID stri
 func newFlowerLiveEncodedBatch(envelope FlowerLiveStreamEnvelope) *flowerLiveEncodedBatch {
 	data, err := json.Marshal(envelope)
 	if err != nil {
-		data = []byte(`{"schema_version":1,"kind":"ready"}`)
+		return &flowerLiveEncodedBatch{kind: envelope.Kind, err: ErrFlowerLiveSync}
 	}
-	return &flowerLiveEncodedBatch{kind: envelope.Kind, data: data}
+	return &flowerLiveEncodedBatch{kind: envelope.Kind, data: data, id: rand.Text()}
 }
 
-func enqueueFlowerLiveSubscriberLocked(service *Service, subscriber *flowerLiveSubscriber, batch *flowerLiveEncodedBatch) bool {
-	if subscriber == nil || batch == nil || subscriber.closed || service == nil {
-		return false
+func wakeFlowerLiveSubscriberLocked(subscriber *flowerLiveSubscriber) {
+	if subscriber.wake == nil {
+		subscriber.wake = make(chan struct{}, 1)
 	}
-	if len(batch.data) > flowerLiveSubscriberByteLimit {
-		closeFlowerLiveSubscriberLocked(service, subscriber, flowerLiveSubscriberCloseOversizedBatch)
-		return false
+	select {
+	case subscriber.wake <- struct{}{}:
+	default:
 	}
-	if subscriber.initializing {
-		subscriber.buffered = append(subscriber.buffered, batch)
-		if len(subscriber.buffered) > flowerLiveSubscriberBatchLimit {
-			closeFlowerLiveSubscriberLocked(service, subscriber, flowerLiveSubscriberCloseInitQueueLimit)
-			return false
-		}
-		return true
-	}
-	return enqueueFlowerLiveSubscriberDirectLocked(service, subscriber, batch)
 }
 
-func enqueueFlowerLiveSubscriberDirectLocked(service *Service, subscriber *flowerLiveSubscriber, batch *flowerLiveEncodedBatch) bool {
-	queueLimit := subscriber.queueLimit
-	if queueLimit <= 0 {
-		queueLimit = flowerLiveSubscriberBatchLimit
-	}
-	if len(batch.data) > flowerLiveSubscriberByteLimit {
-		closeFlowerLiveSubscriberLocked(service, subscriber, flowerLiveSubscriberCloseOversizedBatch)
+func validateFlowerLiveBatchLocked(service *Service, subscriber *flowerLiveSubscriber, batch *flowerLiveEncodedBatch) bool {
+	if service == nil || subscriber == nil || subscriber.closed || batch == nil {
 		return false
 	}
-	if len(subscriber.queue) >= queueLimit {
-		closeFlowerLiveSubscriberLocked(service, subscriber, flowerLiveSubscriberCloseBatchQueueLimit)
+	if batch.err != nil || len(batch.data) == 0 {
+		subscriber.closeErr = ErrFlowerLiveSync
+		closeFlowerLiveSubscriberLocked(service, subscriber, flowerLiveSubscriberCloseEncoding)
 		return false
 	}
-	if subscriber.queuedBytes+len(batch.data) > flowerLiveSubscriberByteLimit {
+	if len(batch.data) > flowerLiveEnvelopeByteLimit {
+		subscriber.closeErr = ErrFlowerLiveSync
+		closeFlowerLiveSubscriberLocked(service, subscriber, flowerLiveSubscriberCloseOversizedEnvelope)
+		return false
+	}
+	return true
+}
+
+func retainFlowerLiveBatchLocked(service *Service, subscriber *flowerLiveSubscriber, batch *flowerLiveEncodedBatch) bool {
+	if !validateFlowerLiveBatchLocked(service, subscriber, batch) {
+		return false
+	}
+	if subscriber.queuedBytes+subscriber.mediaBytes+len(batch.data) > flowerLiveEnvelopeByteLimit {
 		closeFlowerLiveSubscriberLocked(service, subscriber, flowerLiveSubscriberCloseByteQueueLimit)
 		return false
 	}
@@ -599,18 +639,157 @@ func enqueueFlowerLiveSubscriberDirectLocked(service *Service, subscriber *flowe
 		closeFlowerLiveSubscriberLocked(service, subscriber, flowerLiveSubscriberCloseGlobalQueueLimit)
 		return false
 	}
-	subscriber.queue <- batch
 	subscriber.queuedBytes += len(batch.data)
 	service.flowerLiveQueuedBytes += len(batch.data)
 	return true
+}
+
+// Media stays lossy and separate from the lifecycle queue, but its retained
+// bytes still count against the connection and global memory limits.
+func replaceFlowerLiveSubscriberMediaLocked(service *Service, subscriber *flowerLiveSubscriber, batch *flowerLiveEncodedBatch) bool {
+	if service == nil || subscriber == nil || subscriber.closed || batch == nil {
+		return false
+	}
+	select {
+	case previous := <-subscriber.media:
+		subscriber.mediaBytes -= len(previous.data)
+		service.flowerLiveQueuedBytes -= len(previous.data)
+	default:
+	}
+	if batch.err != nil || len(batch.data) == 0 || len(batch.data) > flowerLiveEnvelopeByteLimit ||
+		subscriber.queuedBytes+subscriber.mediaBytes+len(batch.data) > flowerLiveEnvelopeByteLimit ||
+		service.flowerLiveQueuedBytes+len(batch.data) > flowerLiveGlobalQueuedByteLimit {
+		return false
+	}
+	subscriber.mediaBytes += len(batch.data)
+	service.flowerLiveQueuedBytes += len(batch.data)
+	subscriber.media <- batch
+	wakeFlowerLiveSubscriberLocked(subscriber)
+	return true
+}
+
+func releaseFlowerLiveBatchLocked(service *Service, subscriber *flowerLiveSubscriber, batch *flowerLiveEncodedBatch) {
+	subscriber.queuedBytes -= len(batch.data)
+	service.flowerLiveQueuedBytes -= len(batch.data)
+}
+
+func enqueueFlowerLiveSubscriberLocked(service *Service, subscriber *flowerLiveSubscriber, batch *flowerLiveEncodedBatch) bool {
+	if !validateFlowerLiveBatchLocked(service, subscriber, batch) {
+		return false
+	}
+	if subscriber.initializing {
+		if count := len(subscriber.buffered); count > 0 && flowerLiveTextAppend(subscriber.buffered[count-1], batch) {
+			releaseFlowerLiveBatchLocked(service, subscriber, subscriber.buffered[count-1])
+			subscriber.buffered = subscriber.buffered[:count-1]
+		}
+		if len(subscriber.buffered) >= flowerLiveSubscriberBatchLimit {
+			closeFlowerLiveSubscriberLocked(service, subscriber, flowerLiveSubscriberCloseInitQueueLimit)
+			return false
+		}
+		if !retainFlowerLiveBatchLocked(service, subscriber, batch) {
+			return false
+		}
+		subscriber.buffered = append(subscriber.buffered, batch)
+		return true
+	}
+	return enqueueFlowerLiveSubscriberDirectLocked(service, subscriber, batch)
+}
+
+func enqueueFlowerLiveSubscriberDirectLocked(service *Service, subscriber *flowerLiveSubscriber, batch *flowerLiveEncodedBatch) bool {
+	if !validateFlowerLiveBatchLocked(service, subscriber, batch) {
+		return false
+	}
+	queueLimit := subscriber.queueLimit
+	if queueLimit <= 0 {
+		queueLimit = flowerLiveSubscriberBatchLimit
+	}
+	// Only the unsent tail can be replaced. Next consumes this channel under the
+	// same lock, so an envelope whose first fragment was sent is never changed.
+	queued := make([]*flowerLiveEncodedBatch, 0, len(subscriber.queue))
+	for len(subscriber.queue) > 0 {
+		queued = append(queued, <-subscriber.queue)
+	}
+	if len(queued) > 0 && flowerLiveTextAppend(queued[len(queued)-1], batch) {
+		releaseFlowerLiveBatchLocked(service, subscriber, queued[len(queued)-1])
+		queued = queued[:len(queued)-1]
+	}
+	for _, pending := range queued {
+		subscriber.queue <- pending
+	}
+	if len(queued) >= queueLimit {
+		closeFlowerLiveSubscriberLocked(service, subscriber, flowerLiveSubscriberCloseBatchQueueLimit)
+		return false
+	}
+	if !retainFlowerLiveBatchLocked(service, subscriber, batch) {
+		return false
+	}
+	subscriber.queue <- batch
+	wakeFlowerLiveSubscriberLocked(subscriber)
+	return true
+}
+
+// Text growth may be coalesced only when every other public envelope field is
+// unchanged. Tool, interaction, lifecycle and first-item boundaries stay ordered.
+func flowerLiveTextAppend(previous, next *flowerLiveEncodedBatch) bool {
+	if previous.kind != FlowerLiveStreamThreadBatch || next.kind != FlowerLiveStreamThreadBatch {
+		return false
+	}
+	var before, after map[string]any
+	decode := func(data []byte, value *map[string]any) error {
+		decoder := json.NewDecoder(bytes.NewReader(data))
+		decoder.UseNumber()
+		return decoder.Decode(value)
+	}
+	if decode(previous.data, &before) != nil || decode(next.data, &after) != nil || before["subagent_current"] != nil || after["subagent_current"] != nil {
+		return false
+	}
+	oldCurrent, oldOK := before["current"].(map[string]any)
+	newCurrent, newOK := after["current"].(map[string]any)
+	if !oldOK || !newOK || newCurrent["activity"] != "active" || newCurrent["turn_id"] == nil || newCurrent["run_id"] == nil {
+		return false
+	}
+	oldNumber, oldOK := oldCurrent["view_version"].(json.Number)
+	newNumber, newOK := newCurrent["view_version"].(json.Number)
+	oldVersion, oldErr := oldNumber.Int64()
+	newVersion, newErr := newNumber.Int64()
+	if !oldOK || !newOK || oldErr != nil || newErr != nil || newVersion <= oldVersion || newVersion > 1<<53-1 {
+		return false
+	}
+	oldItems, oldOK := oldCurrent["items"].([]any)
+	newItems, newOK := newCurrent["items"].([]any)
+	if !oldOK || !newOK || len(oldItems) != len(newItems) {
+		return false
+	}
+	changed := false
+	for index, value := range newItems {
+		oldItem, oldOK := oldItems[index].(map[string]any)
+		newItem, newOK := value.(map[string]any)
+		if !oldOK || !newOK {
+			return false
+		}
+		if oldItem["text"] == newItem["text"] {
+			continue
+		}
+		oldText, oldOK := oldItem["text"].(string)
+		newText, newOK := newItem["text"].(string)
+		if !oldOK || !newOK || !strings.HasPrefix(newText, oldText) || newItem["live"] != true ||
+			(newItem["kind"] != "assistant" && newItem["kind"] != "thinking") ||
+			newItem["turn_id"] != newCurrent["turn_id"] || newItem["run_id"] != newCurrent["run_id"] {
+			return false
+		}
+		newItem["text"] = oldText
+		changed = true
+	}
+	newCurrent["view_version"] = oldNumber
+	return changed && reflect.DeepEqual(before, after)
 }
 
 func closeFlowerLiveSubscriberLocked(service *Service, subscriber *flowerLiveSubscriber, reason flowerLiveSubscriberCloseReason) {
 	if subscriber == nil || subscriber.closed {
 		return
 	}
-	queuedBatches := len(subscriber.queue) + len(subscriber.buffered)
-	queuedBytes := subscriber.queuedBytes
+	queuedBatches := len(subscriber.queue) + len(subscriber.buffered) + len(subscriber.initial)
+	queuedBytes := subscriber.queuedBytes + subscriber.mediaBytes
 	subscriber.closed = true
 	if subscriber.viewerCancel != nil {
 		subscriber.viewerCancel()
@@ -620,17 +799,14 @@ func closeFlowerLiveSubscriberLocked(service *Service, subscriber *flowerLiveSub
 		subscriber.viewerStop = nil
 		subscriber.viewerCancel = nil
 	}
+	service.flowerLiveQueuedBytes -= subscriber.queuedBytes + subscriber.mediaBytes
+	subscriber.queuedBytes = 0
+	subscriber.mediaBytes = 0
 	subscriber.buffered = nil
+	subscriber.initial = nil
+	subscriber.active = nil
 	for len(subscriber.queue) > 0 {
-		batch := <-subscriber.queue
-		subscriber.queuedBytes -= len(batch.data)
-		service.flowerLiveQueuedBytes -= len(batch.data)
-	}
-	if subscriber.queuedBytes < 0 {
-		subscriber.queuedBytes = 0
-	}
-	if service.flowerLiveQueuedBytes < 0 {
-		service.flowerLiveQueuedBytes = 0
+		<-subscriber.queue
 	}
 	delete(service.flowerLiveSubscribers, subscriber.id)
 	if service.flowerLiveSubscribersByEndpoint[subscriber.endpointID] > 0 {
@@ -640,7 +816,7 @@ func closeFlowerLiveSubscriberLocked(service *Service, subscriber *flowerLiveSub
 	service.flowerLiveMetrics.subscriberDropped(reason)
 	if service.log != nil && reason != flowerLiveSubscriberCloseClient && reason != flowerLiveSubscriberCloseService {
 		service.log.Warn(
-			"ai: Flower live subscriber closed by reconnect fence",
+			"ai: Flower live subscriber closed",
 			"endpoint_id", logsafe.Text(subscriber.endpointID, 256),
 			"subscriber_id", subscriber.id,
 			"reason", reason,
@@ -653,6 +829,7 @@ func closeFlowerLiveSubscriberLocked(service *Service, subscriber *flowerLiveSub
 	default:
 	}
 	close(subscriber.queue)
+	wakeFlowerLiveSubscriberLocked(subscriber)
 }
 
 func (service *Service) fenceFlowerLiveEndpoint(endpointID string) {
@@ -699,37 +876,84 @@ func (s *FlowerLiveStreamSubscription) Next(ctx context.Context) (*FlowerLiveStr
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	consume := func(batch *flowerLiveEncodedBatch, ok bool) (*FlowerLiveStreamFrame, error) {
-		if !ok {
-			return nil, io.EOF
+	s.nextMu.Lock()
+	defer s.nextMu.Unlock()
+	for {
+		if err := ctx.Err(); err != nil {
+			return nil, err
 		}
 		s.service.mu.Lock()
-		s.subscriber.queuedBytes -= len(batch.data)
-		s.service.flowerLiveQueuedBytes -= len(batch.data)
-		s.service.mu.Unlock()
-		return &FlowerLiveStreamFrame{Kind: batch.kind, Data: batch.data}, nil
-	}
-	// Always drain lifecycle work before presenting optional media.
-	select {
-	case batch, ok := <-s.subscriber.queue:
-		return consume(batch, ok)
-	default:
-	}
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	case batch, ok := <-s.subscriber.queue:
-		return consume(batch, ok)
-	case batch := <-s.subscriber.media:
-		s.service.mu.Lock()
-		closed := s.subscriber.closed
-		s.service.mu.Unlock()
-		if closed {
+		subscriber := s.subscriber
+		if subscriber.closed {
+			err := subscriber.closeErr
+			s.service.mu.Unlock()
+			if err != nil {
+				return nil, err
+			}
 			return nil, io.EOF
 		}
-		return &FlowerLiveStreamFrame{Kind: batch.kind, Data: batch.data}, nil
+		if subscriber.active == nil {
+			// Lifecycle work always wins over optional lossy media.
+			if len(subscriber.queue) > 0 {
+				subscriber.active = <-subscriber.queue
+				subscriber.activeAccounted = true
+			} else {
+				select {
+				case subscriber.active = <-subscriber.media:
+					subscriber.activeAccounted = false
+				default:
+				}
+			}
+			subscriber.activeIndex = 0
+		}
+		if batch := subscriber.active; batch != nil {
+			if batch.err != nil || len(batch.data) == 0 || len(batch.data) > flowerLiveEnvelopeByteLimit {
+				subscriber.closeErr = ErrFlowerLiveSync
+				closeFlowerLiveSubscriberLocked(s.service, subscriber, flowerLiveSubscriberCloseEncoding)
+				s.service.mu.Unlock()
+				return nil, ErrFlowerLiveSync
+			}
+			if batch.id == "" {
+				batch.id = rand.Text()
+			}
+			count := (len(batch.data) + flowerLiveFragmentByteLimit - 1) / flowerLiveFragmentByteLimit
+			offset := subscriber.activeIndex * flowerLiveFragmentByteLimit
+			end := min(offset+flowerLiveFragmentByteLimit, len(batch.data))
+			fragment := FlowerLiveStreamFragment{
+				EnvelopeID: batch.id, FragmentIndex: subscriber.activeIndex, FragmentCount: count,
+				TotalBytes: len(batch.data), DataBase64: base64.StdEncoding.EncodeToString(batch.data[offset:end]),
+			}
+			data, err := json.Marshal(fragment)
+			// Next retains at most one encoded wire frame. No list of fragments
+			// is ever queued, so the pending-frame budget stays independent of
+			// the complete envelope's retained-byte budget.
+			if err != nil || len(data) > flowerLiveFrameByteLimit || len(data) > flowerLivePendingFrameByteLimit {
+				subscriber.closeErr = ErrFlowerLiveSync
+				closeFlowerLiveSubscriberLocked(s.service, subscriber, flowerLiveSubscriberCloseEncoding)
+				s.service.mu.Unlock()
+				return nil, ErrFlowerLiveSync
+			}
+			subscriber.activeIndex++
+			if subscriber.activeIndex == count {
+				if subscriber.activeAccounted {
+					releaseFlowerLiveBatchLocked(s.service, subscriber, batch)
+				} else {
+					subscriber.mediaBytes -= len(batch.data)
+					s.service.flowerLiveQueuedBytes -= len(batch.data)
+				}
+				subscriber.active = nil
+			}
+			s.service.mu.Unlock()
+			return &FlowerLiveStreamFrame{Kind: batch.kind, Data: data}, nil
+		}
+		wake := subscriber.wake
+		s.service.mu.Unlock()
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-wake:
+		}
 	}
-
 }
 
 func (s *FlowerLiveStreamSubscription) Close() {
@@ -737,15 +961,7 @@ func (s *FlowerLiveStreamSubscription) Close() {
 		return
 	}
 	s.closeOnce.Do(func() {
-		s.service.mu.Lock()
-		if !s.subscriber.closed {
-			closeFlowerLiveSubscriberLocked(s.service, s.subscriber, flowerLiveSubscriberCloseClient)
-		}
-		for batch := range s.subscriber.queue {
-			s.subscriber.queuedBytes -= len(batch.data)
-			s.service.flowerLiveQueuedBytes -= len(batch.data)
-		}
-		s.service.mu.Unlock()
+		closeFlowerLiveSubscription(s.service, s.subscriber)
 	})
 }
 

@@ -601,7 +601,8 @@ export type FlowerEmbeddedConversation = Readonly<{
   emptyContent?: JSX.Element;
   composerContext?: JSX.Element;
   onSubmit?: () => void;
-  onThreadBound?: (threadID: string) => void;
+  /** Captured at submission and invoked once after canonical admission. */
+  onAccepted?: (receipt: Pick<FlowerTurnLaunchReceipt, 'client_request_id' | 'thread_id'>) => void;
   render: (parts: FlowerConversationParts) => JSX.Element;
 }>;
 
@@ -4418,7 +4419,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const acceptTurnLaunchReceipt = (receipt: FlowerTurnLaunchReceipt): boolean => {
     const requestID = trimString(receipt.client_request_id);
     const threadID = trimString(receipt.thread_id);
-    if (threadID) props.embeddedConversation?.onThreadBound?.(threadID);
     if (!requestID || !threadID) {
       throw flowerTurnAdmissionError(
         'unknown',
@@ -5007,6 +5007,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const selectedID = trimString(selectedThreadID());
     const frozenContextAction = props.embeddedConversation?.contextAction
       ?? (!selectedID ? props.embeddedConversation?.initialContextAction : undefined);
+    const notifyEmbeddedAccepted = props.embeddedConversation?.onAccepted;
     const frozenModelID = selectedComposerModelID();
     const frozenPermissionType = composerPermissionType();
     const frozenReasoningSelection = serializeFlowerReasoningSelection(composerLaunchReasoningSelection());
@@ -5116,6 +5117,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       if (launchController.snapshot().items.length === 0) {
         releaseAttachmentStagingScope(retainedSessionKey);
       }
+      notifyEmbeddedAccepted?.({ client_request_id: clientRequestID, thread_id: canonicalThreadID });
     };
     let preserveClientRequestID = false;
     if (inspection.codePoints <= FLOWER_INLINE_TEXT_CODE_POINT_LIMIT) {

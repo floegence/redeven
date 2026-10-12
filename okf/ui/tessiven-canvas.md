@@ -3,7 +3,7 @@ type: UI Contract
 title: Tessiven canvas
 description: Render progressively detailed service topology and exact object context.
 tags: [ui, tessiven, graph]
-timestamp: 2026-10-09T00:00:00Z
+timestamp: 2026-10-11T00:00:00Z
 quality_exception: Cross-surface canvas interaction contract for Activity, standalone windows, topology browsing, and exact object actions; document, Runtime, and Flower lifecycle remain separately owned.
 ---
 # Summary
@@ -75,6 +75,12 @@ Layout, routing, view controls and large-graph rendering follow the
 - Sends freeze the visible selection before asynchronous preparation. Unknown
   delivery retries retain that payload and request identity. Switching objects
   or canvases cannot retarget an in-flight request or its eventual response.
+  The existing Flower admission handoff notifies Tessiven exactly once, whether
+  an HTTP receipt or canonical current confirms first. Tessiven consumes only
+  references matching the submitted canvas, version, selection nonce and ordered
+  object references, then binds that original canvas to the admitted thread.
+  Failed or unknown admission retains references; a newer selection remains.
+  Opening the reply window stays a separate submission presentation action.
 - Settings, permissions, model selection, attachments, stop, approval and retry
   use the native Flower controls. Opening the full conversation is optional.
   Env App and Desktop readiness keep the canvas visible and confine recovery controls to

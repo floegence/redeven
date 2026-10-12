@@ -25,8 +25,14 @@ const output = options.get('--output');
 const temp = await mkdtemp(path.join(os.tmpdir(), 'redeven-canvas-acceptance-'));
 const state = path.join(temp, 'state');
 const libraryPath = path.join(state, 'local-environment/apps/tessiven/canvases.sqlite');
-const report = { commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(), scenarios: [], question_geometry: [], canvas_context: [] };
+const report = {
+  commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
+  source_dirty: Boolean(execFileSync('git', ['status', '--porcelain'], { cwd: root, encoding: 'utf8' }).trim()),
+  runtime_executable_sha256: createHash('sha256').update(await readFile(options.get('--binary'))).digest('hex'),
+  scenarios: [], question_geometry: [], canvas_context: [],
+};
 let runtime, browser, runtimeLog = '', providerCalls = 0, questionNext = false;
+let streamProbe;
 let canvasSaveNext;
 let canvasSaveCallID;
 const canvasToolOutputs = new Map();
@@ -58,6 +64,40 @@ const provider = http.createServer(async (request, response) => {
   providerCalls++;
   response.setHeader('Content-Type', 'text/event-stream');
   const send = value => response.write(`data: ${JSON.stringify(value)}\n\n`);
+  if (streamProbe && input.tools?.length) {
+    const probe = streamProbe;
+    if (probe.phase === 'seed') {
+      streamProbe = undefined;
+      const text = 'Historical observation. '.repeat(68000);
+      const reasoning = { type: 'reasoning', id: `history-${providerCalls}`, summary: [{ type: 'summary_text', text }] };
+      send({ type: 'response.reasoning_summary_text.delta', delta: text });
+      send({ type: 'response.output_text.delta', delta: reply });
+      const message = { type: 'message', id: `seed-${providerCalls}`, role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: reply, annotations: [] }] };
+      send({ type: 'response.completed', response: { id: `response-${providerCalls}`, status: 'completed', output: [reasoning, message], usage: { input_tokens: 20, output_tokens: 15 } } });
+      response.end('data: [DONE]\n\n');
+      return;
+    }
+    if (probe.phase === 'thinking') {
+      await probe.waiting.promise;
+      send({ type: 'response.reasoning_summary_text.delta', delta: 'Checking the large canonical history before reading canvases.' });
+      await probe.thinking.promise;
+      const item = { type: 'function_call', id: `probe-${providerCalls}`, call_id: `probe-${providerCalls}`, name: 'tessiven_list', arguments: '{}' };
+      send({ type: 'response.output_item.added', output_index: 0, item });
+      send({ type: 'response.output_item.done', output_index: 0, item });
+      probe.phase = 'body';
+      send({ type: 'response.completed', response: { id: `response-${providerCalls}`, status: 'completed', output: [item], usage: { input_tokens: 20, output_tokens: 15 } } });
+      response.end('data: [DONE]\n\n');
+      return;
+    }
+    await probe.tool.promise;
+    send({ type: 'response.output_text.delta', delta: 'The large-history stream is visible before completion.' });
+    await probe.body.promise;
+    streamProbe = undefined;
+    const item = { type: 'message', id: `probe-reply-${providerCalls}`, role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: 'The large-history stream is visible before completion.', annotations: [] }] };
+    send({ type: 'response.completed', response: { id: `response-${providerCalls}`, status: 'completed', output: [item], usage: { input_tokens: 20, output_tokens: 15 } } });
+    response.end('data: [DONE]\n\n');
+    return;
+  }
   if (canvasSaveNext && input.tools?.some(tool => tool.name === 'tessiven_save')) {
     const item = { type: 'function_call', id: `canvas-${providerCalls}`, call_id: `canvas-${providerCalls}`, name: 'tessiven_save',
       arguments: JSON.stringify(canvasSaveNext) };
@@ -271,7 +311,7 @@ async function verifyReplies(page, name, newConversation) {
   await localCall.click();
   await detail.getByRole('button', { name: 'Ask Flower', exact: true }).click();
   await sendCanvasMessage(page, `Explain this selected call for ${name}.`, ['demo-api-call']);
-  await replies.getByRole('button', { name: 'Remove reference demo-api-call', exact: true }).click();
+  assert.equal(await replies.locator('.flower-composer-context-reference').count(), 0, 'Accepted sends consume the canvas reference');
   await sendCanvasMessage(page, `Continue without a reference for ${name}.`, null);
   report.scenarios.push(`${name}-explicit-reference-and-ordinary-follow-ups`);
   const title = replies.locator('[data-floe-floating-window-titlebar]');
@@ -291,6 +331,58 @@ async function verifyReplies(page, name, newConversation) {
   await page.locator('html:not(.dark)').waitFor();
   assert.equal(await surface.locator('.tessiven-error, .tessiven-notice').count(), 0, 'Canvas and update connection have no error');
   report.scenarios.push(name);
+}
+
+function releaseGate() {
+  let release;
+  const promise = new Promise(resolve => { release = resolve; });
+  return { promise, release };
+}
+
+async function verifyLargeHistoryStream(page, origin) {
+  const replies = page.locator('.tessiven-flower-output');
+  streamProbe = { phase: 'seed' };
+  let threadID;
+  const receipt = page.waitForResponse(response => response.request().method() === 'POST'
+    && new URL(response.url()).pathname.endsWith('/turns')
+    && response.request().postDataJSON()?.input?.text === 'Create the large-history transport fixture.');
+  await sendCanvasMessage(page, 'Create the large-history transport fixture.', null);
+  threadID = (await (await receipt).json()).data.thread_id;
+  const detail = await requestJSON(origin, `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}`);
+  const bytes = Buffer.byteLength(JSON.stringify(detail.current));
+  assert.ok(bytes >= 1_489_792, `Current must reproduce the incident size, got ${bytes}`);
+  const probe = { phase: 'thinking', waiting: releaseGate(), thinking: releaseGate(), tool: releaseGate(), body: releaseGate() };
+  streamProbe = probe;
+  try {
+    await replies.locator('.flower-composer textarea').fill('Verify progressive delivery with the full large history.');
+    await replies.getByRole('button', { name: 'Send', exact: true }).click();
+    await replies.locator('[data-flower-progress-kind="waiting_response"]').waitFor();
+    probe.waiting.release();
+    await replies.locator('[data-flower-thinking-active="true"]').filter({ hasText: 'Checking the large canonical history' }).waitFor();
+    assert.equal(await page.locator('.tessiven [data-flower-selected-thread-status="success"]').count(), 0);
+    probe.thinking.release();
+    await until(async () => {
+      const current = (await requestJSON(origin, `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}`)).current;
+      return current.items.some(item => item.kind === 'tool' && item.activity?.tool_name === 'tessiven.list' && item.activity.status === 'success');
+    }, 'canonical tool result before provider completion');
+    await replies.locator('.flower-activity-inline-row').filter({ hasText: /canvas/i }).last().waitFor();
+    probe.tool.release();
+    await replies.getByText('The large-history stream is visible before completion.', { exact: true }).waitFor();
+    assert.equal(await page.locator('.tessiven [data-flower-selected-thread-status="success"]').count(), 0);
+    await page.screenshot({ path: path.join(output, 'flower-large-history-before-completion.png'), animations: 'disabled' });
+    probe.body.release();
+    await until(() => page.locator('.tessiven [data-flower-selected-thread-status="success"]').count(), 'large-history completion');
+    // A new connection must reconstruct the same large full history baseline.
+    await page.reload();
+    await page.locator('.tessiven').getByRole('button', { name: 'Commerce / Example', exact: true }).click();
+    await replies.locator('.flower-composer textarea').waitFor();
+    await replies.getByText('The large-history stream is visible before completion.', { exact: true }).waitFor();
+    assert.ok(!/reason=(oversized_envelope|envelope_encoding_failed)/u.test(runtimeLog), 'Large history must not cause an envelope synchronization error');
+    report.large_history_stream = { thread_id: threadID, current_bytes: bytes, updates_before_completion: ['waiting_response', 'thinking', 'tool_result', 'assistant'], reload: true };
+    report.scenarios.push('large-history-progressive-stream-and-reload');
+  } finally {
+    for (const name of ['waiting', 'thinking', 'tool', 'body']) probe[name].release();
+  }
 }
 
 async function verifyShortQuestion(page, name) {
@@ -716,7 +808,7 @@ try {
   await waitFlowerReady(origin);
   await new Promise(resolve => provider.listen(0, '127.0.0.1', resolve));
   await requestJSON(origin, '/_redeven_proxy/api/ai/provider_bundle', 'PUT', {
-    model_profile: { current_model_id: 'fixture/gpt-5-mini', providers: [{ id: 'fixture', name: 'Local acceptance', type: 'openai', base_url: `http://127.0.0.1:${provider.address().port}/v1`, models: [{ model_name: 'gpt-5-mini', input_modalities: ['text', 'image'], context_window: 400000, max_output_tokens: 8192 }] }] },
+    model_profile: { current_model_id: 'fixture/gpt-5-mini', providers: [{ id: 'fixture', name: 'Local acceptance', type: 'openai', base_url: `http://127.0.0.1:${provider.address().port}/v1`, models: [{ model_name: 'gpt-5-mini', input_modalities: ['text', 'image'], context_window: 2000000, max_output_tokens: 8192 }] }] },
     provider_api_key_patches: [{ provider_id: 'fixture', api_key: 'fixture-only' }], web_search_provider_key_patches: [],
   });
   browser = await chromium.launch({ headless: true });
@@ -751,6 +843,7 @@ try {
   assert.equal(new URL(popup.url()).searchParams.get('window'), 'service-canvas');
   assert.equal(await popup.locator('[data-floe-shell-slot], [data-workbench-dock-action]').count(), 0, 'Standalone canvas has no Env App shell');
   await verifyReplies(popup, 'standalone-replies-light', true);
+  await verifyLargeHistoryStream(popup, origin);
   await verifyShortQuestion(popup, 'standalone');
   await saveLayeredCanvas(popup, origin);
   await verifyLayeredCanvas(popup, 'standalone-hadoop');

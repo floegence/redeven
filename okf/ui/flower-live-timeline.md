@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower live current state
 description: One workspace stream, typed current views, and bounded browser caches.
 tags: [ui, flower, live, threads]
-timestamp: 2026-10-08T00:00:00Z
+timestamp: 2026-10-11T00:00:00Z
 quality_exception: Cross-domain Flower live-state contract spanning transport, cache ownership, current-view publication, lifecycle identity, routing, and reconnect recovery.
 ---
 # Summary
@@ -109,13 +109,35 @@ The server never silently drops an authoritative frame. An initial baseline
 paginates the complete workspace summary inventory and includes current views
 for active and waiting threads, even when the inventory exceeds one catalog
 page or the ordinary live-frame count. A missing, repeated, or non-advancing
-page cursor fails the subscription before `ready`. If one subscriber exceeds
-its byte budget, or one encoded frame is itself oversized, the server closes
-that subscriber. The client treats the disconnect as loss of cache authority
-and reconnects; the new baseline restores summaries and the selected current
-view. This fail-fast resynchronization contract avoids a second replay protocol
-while ensuring a lost terminal update cannot leave the UI permanently running
-or waiting.
+page cursor fails the subscription before `ready`.
+
+Every final sanitized public envelope uses the same transport-fragment shape:
+`envelope_id`, zero-based `fragment_index`, `fragment_count`, `total_bytes`, and
+`data_base64`. Raw fragments contain at most 32 KiB; encoded SSE data frames
+contain at most 64 KiB. A small envelope is one fragment. The logical envelope
+limit is 32 MiB, separate from the 1 MiB pending-frame budget and the existing
+queue-count limit. Initialization, queued and actively transmitted envelope
+bytes remain subject to the 32 MiB global retained-byte limit. The server
+produces only the next requested fragment; it never enqueues all fragments.
+Only unsent current views with pure text growth may coalesce. Tool, interaction,
+identity, lifecycle and terminal changes preserve order; slow observers cannot
+block Flower execution.
+
+One connection assembles one envelope at a time and validates identity, order,
+counts, Base64, byte bounds, complete UTF-8 and JSON before the existing mapper,
+frame queue and `ThreadCache` receive it. A snapshot replaces current only after
+complete assembly; no partial history becomes visible. Disconnect discards
+unfinished assembly while retaining the last displayed view. Queue or global
+budget closure reconnects through the existing baseline. Corrupt fragments,
+encoding failures and envelopes beyond 32 MiB produce a terminal
+`flower_live_sync_error`, preserving visible content and stopping automatic
+reconnect. Encoding failure never fabricates `ready`.
+
+Runtime compatibility epoch 51 requires this fragment contract for Desktop;
+there is no older wire decoder. Full current history remains complete and
+replaceable, including root and SubAgent views. Fragmentation fixes frame-size
+limits without reducing full-snapshot bandwidth or adding sparse history merge,
+cursor replay, acknowledgements or a second lifecycle.
 
 The baseline list is built from one Floret root-inventory `List` projection.
 Redeven does not call `View` for each row; timeline, attachment, context, and
@@ -188,6 +210,7 @@ and short ThreadID. Display labels never become canonical titles.
 - `redeven:internal/ai/flower_live_stream.go` - Workspace baseline and current-state stream.
 - `redeven:internal/ai/flower_runtime_current_publisher.go` - Single current-view cadence and structural-boundary publisher.
 - `redeven:internal/ai/flower_runtime_current_publisher_test.go` - Deterministic progressive thinking, terminal flush, stale-version, and immutable-routing coverage.
+- `redeven:internal/flower_ui/src/flowerLiveWire.ts` - Strict connection-local atomic envelope assembly.
 - `redeven:internal/flower_ui/src/liveTransport.ts` - Single connection and epoch fencing.
 - `redeven:internal/flower_ui/src/threadCache.ts` - Summary/detail separation and bounded view cache.
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Selection, current-view application, and quiet reconnect integration.

@@ -188,7 +188,7 @@ func nextFlowerTitleSummary(
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	for {
-		frame, err := subscription.Next(ctx)
+		frame, err := readFlowerLiveStreamEnvelope(ctx, subscription)
 		if err != nil {
 			t.Fatalf("next Flower title summary: %v", err)
 		}

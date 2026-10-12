@@ -30,7 +30,7 @@ export function TessivenFlowerPanel(props: {
   renderSurface: (props: CanvasFlowerSurfaceProps) => JSX.Element;
   onOpenConversation: (threadID: string) => void;
   onRemoveReference: (objectRef: string) => void;
-  onThreadBound?: (threadID: string) => void;
+  onAccepted?: (request: CanvasFlowerRequest, threadID: string) => void;
 }) {
   const [boundary, setBoundary] = createSignal<HTMLDivElement>();
   const canvasID = () => props.request.selection.canvas_id;
@@ -112,7 +112,11 @@ export function TessivenFlowerPanel(props: {
     get initialContextAction() { return contextAction(); },
     get contextAction() { return props.request.selection.object_refs.length ? contextAction() : undefined; },
     get request() { return props.request.nonce ? props.request : undefined; },
-    onThreadBound: props.onThreadBound,
+    get onAccepted() {
+      const request = props.request;
+      const accept = props.onAccepted;
+      return (receipt: { thread_id: string }) => accept?.(request, receipt.thread_id);
+    },
     placeholder: '',
     composerContext: <Show when={props.request.selection.object_refs.length > 0}>
       <FlowerComposerContextReferences label={props.t('flowerReference')}>

@@ -167,7 +167,7 @@ func (f *ollamaTaskFixture) observe() func() {
 	go func() {
 		defer close(done)
 		for {
-			frame, err := sub.Next(f.ctx)
+			frame, err := readFlowerLiveStreamEnvelope(f.ctx, sub)
 			if err != nil {
 				return
 			}

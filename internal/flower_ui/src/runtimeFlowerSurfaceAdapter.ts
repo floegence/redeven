@@ -44,6 +44,7 @@ import {
   type FlowerLiveThreadMapperOptions,
 } from './flowerLiveMapper';
 import { applyFlowerRuntimeCurrentView } from './runtimeCurrentView';
+import { assembleFlowerLiveEnvelopes, type FlowerLiveTransportFrame } from './flowerLiveWire';
 
 export type RuntimeThreadPinMetadata = Readonly<{
   thread_id: string;
@@ -107,7 +108,7 @@ type RuntimeApprovalSubmitInput = FlowerSubmitApprovalRequest;
 export type FlowerRuntimeTransport = Readonly<{
   listThreads(): Promise<ListThreadsResponse>;
   loadThread(threadID: string): Promise<unknown>;
-  connectLiveStream?: (input: FlowerLiveStreamConnectInput) => AsyncIterable<unknown>;
+  connectLiveStream?: (input: FlowerLiveStreamConnectInput) => AsyncIterable<FlowerLiveTransportFrame>;
   loadSubagentDetail(parentThreadID: string, childThreadID: string): Promise<LoadSubagentDetailResponse>;
   readTerminalProcess?(runID: string, processID: string, input: { after_seq: number }): Promise<FlowerTerminalProcessSnapshot>;
   markThreadRead(threadID: string, input: MarkThreadReadInput): Promise<MarkThreadReadResponse>;
@@ -217,6 +218,7 @@ function mapRuntimeThreadView(raw: unknown, options: RuntimeFlowerSurfaceAdapter
 function mapRuntimeLiveStreamEnvelope(raw: unknown, options: RuntimeFlowerSurfaceAdapterOptions): FlowerLiveStreamEnvelope {
   const value = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
   const kind = trim(value.kind);
+  if (value.schema_version !== 1) throw new Error('Flower live stream returned an unsupported schema version.');
   if (kind !== 'ready' && kind !== 'summary.batch' && kind !== 'thread.batch' && kind !== 'viewer.read_state' && kind !== 'computer.frame' && kind !== 'computer.status') {
     throw new Error('Flower live stream returned an unsupported envelope.');
   }
@@ -335,7 +337,7 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
     loadThread,
     ...(options.transport.connectLiveStream ? {
       connectLiveStream: async function* (input: FlowerLiveStreamConnectInput): AsyncIterable<FlowerLiveStreamEnvelope> {
-        for await (const envelope of options.transport.connectLiveStream!(input)) {
+        for await (const envelope of assembleFlowerLiveEnvelopes(options.transport.connectLiveStream!(input))) {
           yield mapRuntimeLiveStreamEnvelope(envelope, options);
         }
       },

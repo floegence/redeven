@@ -1,7 +1,9 @@
 package ai
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -61,7 +63,7 @@ func TestFlowerWorkspaceStreamBaselinesAndBroadcastsCanonicalComputerStatus(t *t
 		Items: []flruntime.ThreadItem{{
 			ID: callID, TurnID: turnID, RunID: runID, Kind: flruntime.ThreadItemTool,
 			Activity: &observation.ActivityItem{ItemID: callID, ToolID: callID, ToolName: "browser.navigate", Kind: observation.ActivityKindTool,
-				Status: observation.ActivityStatusSuccess, Presentation: &tools.ActivityPresentation{TargetRefs: []tools.ActivityTargetRef{{Kind: "computer_control", ResourceRef: "browser-main"}}}},
+				Status: observation.ActivityStatusSuccess, Presentation: &tools.ActivityPresentation{TargetRefs: []tools.ActivityTargetRef{{Kind: "computer_control", Label: "Browser", ResourceRef: "browser-main"}}}},
 		}},
 		Interactions: []flruntime.ThreadInteraction{{
 			ID: interactionID, TurnID: turnID, RunID: runID, Kind: flruntime.ThreadInteractionInput, ToolCallID: callID,
@@ -87,6 +89,9 @@ func TestFlowerWorkspaceStreamBaselinesAndBroadcastsCanonicalComputerStatus(t *t
 		t.Fatal(err)
 	}
 	svc.targetResolver = registry
+	if _, err := json.Marshal(FlowerLiveStreamEnvelope{SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamThreadBatch, Current: &current}); err != nil {
+		t.Fatalf("fixture current encoding: %v", err)
+	}
 
 	subscription, err := svc.SubscribeFlowerLiveStream(ctx, meta, FlowerLiveStreamRequest{})
 	if err != nil {
@@ -666,7 +671,7 @@ func TestFlowerLiveViewerReadStateIsSharedOnlyWithSameUser(t *testing.T) {
 	if firstFrame.Kind != FlowerLiveStreamViewerReadState || secondFrame.Kind != FlowerLiveStreamViewerReadState {
 		t.Fatalf("same-user frame kinds=%q/%q, want viewer.read_state", firstFrame.Kind, secondFrame.Kind)
 	}
-	if len(firstFrame.Data) == 0 || len(secondFrame.Data) == 0 || &firstFrame.Data[0] != &secondFrame.Data[0] {
+	if !bytes.Equal(firstFrame.Data, secondFrame.Data) {
 		t.Fatal("same-user tabs did not share one immutable encoded viewer batch")
 	}
 	if !strings.Contains(string(firstFrame.Data), `"last_seen_activity_revision":7`) {
@@ -681,13 +686,49 @@ func TestFlowerLiveViewerReadStateIsSharedOnlyWithSameUser(t *testing.T) {
 
 func nextFlowerLiveStreamFrame(t *testing.T, subscription *FlowerLiveStreamSubscription) *FlowerLiveStreamFrame {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	frame, err := subscription.Next(ctx)
+	frame, err := readFlowerLiveStreamEnvelope(ctx, subscription)
 	if err != nil {
-		t.Fatalf("read Flower live stream frame: %v", err)
+		t.Fatal(err)
 	}
 	return frame
+}
+
+func readFlowerLiveStreamEnvelope(ctx context.Context, subscription *FlowerLiveStreamSubscription) (*FlowerLiveStreamFrame, error) {
+	var assembled []byte
+	var first FlowerLiveStreamFragment
+	var kind FlowerLiveStreamKind
+	for index := 0; ; index++ {
+		frame, err := subscription.Next(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if len(frame.Data) > flowerLiveFrameByteLimit {
+			return nil, fmt.Errorf("wire frame exceeds byte budget: %d", len(frame.Data))
+		}
+		var fragment FlowerLiveStreamFragment
+		if err := json.Unmarshal(frame.Data, &fragment); err != nil {
+			return nil, fmt.Errorf("decode Flower live stream fragment: %w", err)
+		}
+		if index == 0 {
+			first, kind = fragment, frame.Kind
+		}
+		if fragment.EnvelopeID == "" || fragment.EnvelopeID != first.EnvelopeID || fragment.FragmentIndex != index || fragment.FragmentCount != first.FragmentCount || fragment.TotalBytes != first.TotalBytes {
+			return nil, fmt.Errorf("invalid fragment ordering: %#v", fragment)
+		}
+		data, err := base64.StdEncoding.Strict().DecodeString(fragment.DataBase64)
+		if err != nil || len(data) > flowerLiveFragmentByteLimit {
+			return nil, fmt.Errorf("decode raw Flower fragment: bytes=%d error=%v", len(data), err)
+		}
+		assembled = append(assembled, data...)
+		if index+1 == first.FragmentCount {
+			if len(assembled) != first.TotalBytes {
+				return nil, fmt.Errorf("assembled bytes=%d want %d", len(assembled), first.TotalBytes)
+			}
+			return &FlowerLiveStreamFrame{Kind: kind, Data: assembled}, nil
+		}
+	}
 }
 
 func TestFlowerLiveStreamSharesEncodedBatchesAcrossObservers(t *testing.T) {
@@ -727,7 +768,7 @@ func TestFlowerLiveStreamSharesEncodedBatchesAcrossObservers(t *testing.T) {
 	if firstBatch.Kind != FlowerLiveStreamThreadBatch || secondBatch.Kind != FlowerLiveStreamThreadBatch {
 		t.Fatalf("batch kinds=%q/%q, want thread.batch", firstBatch.Kind, secondBatch.Kind)
 	}
-	if len(firstBatch.Data) == 0 || len(secondBatch.Data) == 0 || &firstBatch.Data[0] != &secondBatch.Data[0] {
+	if !bytes.Equal(firstBatch.Data, secondBatch.Data) {
 		t.Fatal("observers did not receive the same immutable encoded batch")
 	}
 }
@@ -764,7 +805,7 @@ func TestFlowerLiveStreamSharesCanonicalOrderAtObserverScale(t *testing.T) {
 					canonical = frame
 					continue
 				}
-				if string(frame.Data) != string(canonical.Data) || &frame.Data[0] != &canonical.Data[0] {
+				if !bytes.Equal(frame.Data, canonical.Data) {
 					t.Fatalf("observer %d did not receive the shared encoded batch", index)
 				}
 			}
@@ -790,7 +831,7 @@ func TestFlowerLiveStreamGlobalQueuedReferenceBudget(t *testing.T) {
 	}
 }
 
-func TestFlowerLiveStreamOversizedFrameClosesSubscriberForReconnect(t *testing.T) {
+func TestFlowerLiveStreamOversizedEnvelopeStopsInvalidReconnect(t *testing.T) {
 	svc := newFlowerLiveMemoryTestService()
 	subscriber := &flowerLiveSubscriber{
 		id: 1, endpointID: "env_live_oversized", queue: make(chan *flowerLiveEncodedBatch, flowerLiveSubscriberBatchLimit),
@@ -798,18 +839,18 @@ func TestFlowerLiveStreamOversizedFrameClosesSubscriberForReconnect(t *testing.T
 	}
 	svc.flowerLiveSubscribers[subscriber.id] = subscriber
 	svc.flowerLiveSubscribersByEndpoint[subscriber.endpointID] = 1
-	oversized := &flowerLiveEncodedBatch{kind: FlowerLiveStreamThreadBatch, data: make([]byte, flowerLiveSubscriberByteLimit+1)}
+	oversized := &flowerLiveEncodedBatch{kind: FlowerLiveStreamThreadBatch, data: make([]byte, flowerLiveEnvelopeByteLimit+1)}
 	if enqueueFlowerLiveSubscriberLocked(svc, subscriber, oversized) {
-		t.Fatal("oversized frame was accepted")
+		t.Fatal("oversized envelope was accepted")
 	}
 	if !subscriber.closed {
-		t.Fatal("oversized frame did not close subscriber")
+		t.Fatal("oversized envelope did not close subscriber")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	subscription := &FlowerLiveStreamSubscription{service: svc, subscriber: subscriber}
-	if frame, err := subscription.Next(ctx); !errors.Is(err, io.EOF) || frame != nil {
-		t.Fatalf("oversized subscriber next=(%#v, %v), want EOF", frame, err)
+	if frame, err := subscription.Next(ctx); !errors.Is(err, ErrFlowerLiveSync) || frame != nil {
+		t.Fatalf("oversized subscriber next=(%#v, %v), want terminal synchronization error", frame, err)
 	}
 }
 
@@ -830,7 +871,13 @@ func TestFlowerLiveStreamInitializationKeepsLargeBaselineBeforeReady(t *testing.
 	svc.flowerLiveSubscribers[subscriber.id] = subscriber
 	svc.flowerLiveSubscribersByEndpoint[subscriber.endpointID] = 1
 	svc.mu.Lock()
-	finalizeFlowerLiveSubscriberInitializationLocked(svc, subscriber, ready, baselines)
+	for _, batch := range append([]*flowerLiveEncodedBatch{ready}, baselines...) {
+		if !retainFlowerLiveBatchLocked(svc, subscriber, batch) {
+			t.Fatal("initial baseline retention failed")
+		}
+		subscriber.initial = append(subscriber.initial, batch)
+	}
+	finalizeFlowerLiveSubscriberInitializationLocked(svc, subscriber)
 	svc.mu.Unlock()
 	if subscriber.closed || subscriber.initializing {
 		t.Fatal("large baseline initialization closed or left subscriber initializing")
