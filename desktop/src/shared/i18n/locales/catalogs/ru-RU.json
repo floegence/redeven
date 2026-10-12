@@ -433,6 +433,7 @@
       "pendingSending": "Отправка",
       "pendingQueued": "В очереди",
       "queuedSendNow": "Отправить сейчас",
+      "queuedSendNowDescription": "Остановить текущий ответ и отправить это сообщение из очереди сейчас",
       "queuedDelete": "Удалить сообщение из очереди",
       "scrollToLatest": "Прокрутить к последнему",
       "runErrorTitle": "Flower не смог завершить этот ответ.",

@@ -1356,3 +1356,5 @@ Document published Floret v7.15.1 canonical calibration, tokenizer estimates, an
 - 2026-10-09: Adopted published Floret v7.26.0 independent context compaction, removed ordinary-turn manual sources, and documented canonical anchors, usage invalidation, and real DeepSeek qualification.
 
 - 2026-10-11: Flower workspace envelopes use bounded transport fragments with complete atomic current replacement and compatibility epoch 51. Accepted Tessiven sends consume only their frozen selection and bind their original canvas; unknown delivery and newer selections remain intact.
+
+- 2026-10-11: Flower queue Send now uses the released stop-and-send command during active replies and interaction waits, preserves canonical queue ownership, and sanitizes every queue mutation response.

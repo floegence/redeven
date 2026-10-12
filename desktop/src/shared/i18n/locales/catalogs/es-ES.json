@@ -424,6 +424,7 @@
       "pendingSending": "Enviando",
       "pendingQueued": "En cola",
       "queuedSendNow": "Enviar ahora",
+      "queuedSendNowDescription": "Detener la respuesta actual y enviar ahora este mensaje en cola",
       "queuedDelete": "Eliminar mensaje en cola",
       "scrollToLatest": "Ir a lo más reciente",
       "runErrorTitle": "Flower no pudo completar esta respuesta.",

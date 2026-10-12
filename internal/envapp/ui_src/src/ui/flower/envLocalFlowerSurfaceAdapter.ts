@@ -583,8 +583,8 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
 		`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/queue/${encodeURIComponent(queueID)}`,
         { method: 'DELETE' },
       ),
-      promoteQueuedTurn: (threadID, queueID) => fetchLocalApiJSON(
-		`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/queue/${encodeURIComponent(queueID)}/promote`,
+      sendQueuedTurnNow: (threadID, queueID) => fetchLocalApiJSON(
+		`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/queue/${encodeURIComponent(queueID)}/send-now`,
         { method: 'POST' },
       ),
       forkThread: (threadID, body) => fetchLocalApiJSON<LoadThreadResponse>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/fork`, {

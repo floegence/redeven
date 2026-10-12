@@ -191,6 +191,7 @@ main() {
         src/ui/FlowerSurface.decisionSurface.browser.test.tsx \
         src/ui/FlowerSurface.inputSubmission.browser.test.tsx \
         src/ui/FlowerSurface.inputResponse.browser.test.tsx \
+        src/ui/FlowerSurface.queuedSendNow.browser.test.tsx \
         src/ui/FlowerSurface.setupGuide.browser.test.tsx \
         src/ui/FlowerSurface.providerReadiness.browser.test.tsx \
         src/ui/FlowerSurface.modelMenu.browser.test.tsx \

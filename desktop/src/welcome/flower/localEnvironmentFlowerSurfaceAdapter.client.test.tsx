@@ -1084,7 +1084,7 @@ describe('Local Environment Flower surface adapter', () => {
 
     await adapter.reorderQueuedTurns?.('thread /1', ['queue /2', 'queue /3']);
     await adapter.deleteQueuedTurn?.('thread /1', 'queue /2');
-    const bootstrap = await adapter.promoteQueuedTurn?.('thread /1', 'queue /3');
+    const bootstrap = await adapter.sendQueuedTurnNow?.('thread /1', 'queue /3');
 
     expect(bootstrap?.thread.queued_turns).toEqual([]);
     expect(calls.map((call) => `${call.method} ${call.path}`)).toEqual([
@@ -1092,7 +1092,7 @@ describe('Local Environment Flower surface adapter', () => {
       'GET /_redeven_proxy/api/ai/threads/thread%20%2F1',
       'DELETE /_redeven_proxy/api/ai/threads/thread%20%2F1/queue/queue%20%2F2',
       'GET /_redeven_proxy/api/ai/threads/thread%20%2F1',
-      'POST /_redeven_proxy/api/ai/threads/thread%20%2F1/queue/queue%20%2F3/promote',
+      'POST /_redeven_proxy/api/ai/threads/thread%20%2F1/queue/queue%20%2F3/send-now',
       'GET /_redeven_proxy/api/ai/threads/thread%20%2F1',
     ]);
     expect(calls[0].body).toEqual({ ordered_queue_ids: ['queue /2', 'queue /3'] });

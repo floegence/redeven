@@ -33,6 +33,7 @@ const report = {
 };
 let runtime, browser, runtimeLog = '', providerCalls = 0, questionNext = false;
 let streamProbe;
+let queuedSendProbe;
 let canvasSaveNext;
 let canvasSaveCallID;
 const canvasToolOutputs = new Map();
@@ -62,8 +63,48 @@ const provider = http.createServer(async (request, response) => {
       canvasToolOutputs.set(item.call_id, JSON.parse(item.output.replace(/^ERROR: /, '')));
   }
   providerCalls++;
+  const requestText = JSON.stringify(input.input ?? []);
   response.setHeader('Content-Type', 'text/event-stream');
   const send = value => response.write(`data: ${JSON.stringify(value)}\n\n`);
+  // The active scripted provider response is intentionally held open. The
+  // Send-now path must cancel that exact HTTP response before admitting the
+  // selected queued turn. Releasing on response close prevents this fixture
+  // from keeping server.close() alive when the runtime aborts the request.
+  if (queuedSendProbe?.phase === 'active') {
+    const probe = queuedSendProbe;
+    const releaseOnClose = () => {
+      if (response.writableEnded) return;
+      probe.cancelled = true;
+      probe.phase = 'awaiting-promoted';
+      probe.active.release();
+    };
+    response.once('close', releaseOnClose);
+    send({ type: 'response.reasoning_summary_text.delta', delta: 'The active response is paused while queued guidance is selected.' });
+    await probe.active.promise;
+    response.off('close', releaseOnClose);
+    if (!response.writableEnded) response.end('data: [DONE]\n\n');
+    return;
+  }
+  if (queuedSendProbe?.phase === 'awaiting-promoted' || queuedSendProbe?.phase === 'promoted') {
+    const probe = queuedSendProbe;
+    probe.requests.push({ input: input.input ?? [], text: requestText });
+    const isPreserved = requestText.includes(probe.preserved);
+    const isGuidance = requestText.includes(probe.guidance) && !isPreserved;
+    if (isGuidance) {
+      probe.phase = 'promoted';
+      probe.guidanceRequests += 1;
+      send({ type: 'response.output_text.delta', delta: 'Guidance was admitted after the active response stopped.' });
+    } else if (isPreserved) {
+      probe.preservedRequests += 1;
+      send({ type: 'response.output_text.delta', delta: 'The preserved queued message remains ordered.' });
+    } else {
+      send({ type: 'response.output_text.delta', delta: 'Unexpected duplicate or reordered queued message.' });
+    }
+    const message = { type: 'message', id: `queued-${providerCalls}`, role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: isGuidance ? 'Guidance was admitted after the active response stopped.' : 'The preserved queued message remains ordered.', annotations: [] }] };
+    send({ type: 'response.completed', response: { id: `queued-response-${providerCalls}`, status: 'completed', output: [message], usage: { input_tokens: 20, output_tokens: 15 } } });
+    response.end('data: [DONE]\n\n');
+    return;
+  }
   if (streamProbe && input.tools?.length) {
     const probe = streamProbe;
     if (probe.phase === 'seed') {
@@ -382,6 +423,56 @@ async function verifyLargeHistoryStream(page, origin) {
     report.scenarios.push('large-history-progressive-stream-and-reload');
   } finally {
     for (const name of ['waiting', 'thinking', 'tool', 'body']) probe[name].release();
+  }
+}
+
+async function verifyQueuedSendNow(page) {
+  const replies = page.locator('.tessiven-flower-output');
+  const guidance = 'Use the selected canvas to explain the deployment path.';
+  const preserved = 'Keep this queued follow-up for after the guidance.';
+  queuedSendProbe = {
+    phase: 'active', active: releaseGate(), guidance, preserved, cancelled: false,
+    requests: [], guidanceRequests: 0, preservedRequests: 0,
+  };
+  try {
+    const active = 'Start a long response before queueing follow-ups.';
+    await replies.locator('.flower-composer textarea').fill(active);
+    await replies.getByRole('button', { name: 'Send', exact: true }).click();
+    await replies.locator('[data-flower-thinking-active="true"]').waitFor();
+
+    for (const text of [guidance, preserved]) {
+      await replies.locator('.flower-composer textarea').fill(text);
+      await replies.getByRole('button', { name: 'Send', exact: true }).click();
+    }
+    await until(async () => await replies.locator('[data-flower-queued-turn-dock-id]').count() === 2, 'two queued follow-ups');
+    const queued = replies.locator('[data-flower-queued-turn-dock-id]');
+    assert.equal(await queued.nth(0).locator('.flower-queued-turn-label').innerText(), guidance);
+    assert.equal(await queued.nth(1).locator('.flower-queued-turn-label').innerText(), preserved);
+    await page.screenshot({ path: path.join(output, 'queued-send-now-active.png'), animations: 'disabled' });
+
+    await queued.nth(0).getByRole('button', { name: 'Send now', exact: true }).click();
+    await until(() => queuedSendProbe.cancelled, 'active provider response cancellation');
+    await until(() => queuedSendProbe.guidanceRequests === 1, 'promoted guidance provider request');
+    const guidanceRequest = queuedSendProbe.requests.find(request => request.text.includes(guidance));
+    assert.ok(guidanceRequest, 'The promoted request reaches the provider');
+    assert.ok(guidanceRequest.text.includes(active), 'The promoted request retains the original conversation history');
+    await until(async () => await replies.locator('[data-flower-queued-turn-dock-id]').count() === 1, 'preserved queued message remains');
+    assert.equal(await replies.locator('[data-flower-queued-turn-dock-id]').first().locator('.flower-queued-turn-label').innerText(), preserved);
+    assert.equal(queuedSendProbe.guidanceRequests, 1, 'The promoted message is sent once');
+    assert.equal(queuedSendProbe.preservedRequests, 0, 'The later queued message waits in canonical order');
+    await until(() => page.locator('.tessiven [data-flower-selected-thread-status="success"]').count(), 'promoted turn completion');
+    await page.screenshot({ path: path.join(output, 'queued-send-now-completed.png'), animations: 'disabled' });
+    report.queued_send_now = {
+      cancelled_active_response: queuedSendProbe.cancelled,
+      provider_requests: queuedSendProbe.requests.length,
+      guidance_requests: queuedSendProbe.guidanceRequests,
+      preserved_queue_count: 1,
+      preserved_prompt: preserved,
+    };
+    report.scenarios.push('send-now-cancels-active-response-preserves-queued-order');
+  } finally {
+    queuedSendProbe.active.release();
+    queuedSendProbe = undefined;
   }
 }
 
@@ -844,6 +935,7 @@ try {
   assert.equal(await popup.locator('[data-floe-shell-slot], [data-workbench-dock-action]').count(), 0, 'Standalone canvas has no Env App shell');
   await verifyReplies(popup, 'standalone-replies-light', true);
   await verifyLargeHistoryStream(popup, origin);
+  await verifyQueuedSendNow(popup);
   await verifyShortQuestion(popup, 'standalone');
   await saveLayeredCanvas(popup, origin);
   await verifyLayeredCanvas(popup, 'standalone-hadoop');

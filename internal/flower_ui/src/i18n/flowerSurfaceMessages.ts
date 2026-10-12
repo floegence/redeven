@@ -195,6 +195,7 @@ export const flowerSurfaceEnUS = {
     pendingSending: 'Sending',
     pendingQueued: 'Queued',
     queuedSendNow: 'Send now',
+    queuedSendNowDescription: 'Stop the current reply and send this queued message now',
     queuedDelete: 'Delete queued message',
     scrollToLatest: 'Scroll to latest',
     runtimeRestartedDivider: 'Redeven runtime restarted',

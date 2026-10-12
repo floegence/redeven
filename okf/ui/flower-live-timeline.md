@@ -33,6 +33,19 @@ failure produces an actionable localized notification and leaves Stop retryable.
 Thread navigation, draft editing, and attachments remain available throughout.
 Queued input follows Floret admission and never starts automatically after Stop.
 
+Queued messages expose **Send now** through the adapter's `sendQueuedTurnNow`
+capability. It calls the existing `send-now` command to safely stop the current
+reply and admit the selected queued input; running, approval and answer waits
+permit this action. Ordinary Send continues to queue. Read-only access, pending
+Stop and another send on the same thread disable the action; adapters without
+the capability hide it. One temporary per-thread request freezes the adapter,
+ThreadID, queue ID and connection epoch. Its selected row shows stable loading
+feedback while queue deletion and reordering are disabled. Draft editing and
+thread navigation remain available. Only canonical current removes a consumed
+queue item. A failed or unknown response refreshes the original thread without
+changing selection; any still-queued item may retry with the same queue identity.
+The UI never resubmits its content or chains separate Stop and Send commands.
+
 An accepted send receipt proves admission through the exact request and Thread identities; it does not order runtime content. The receipt binds the outbox entry to the canonical ThreadID, settles the submitted draft, and transfers the still-current New Chat selection. A valid current view independently confirms and removes that entry when it contains the same canonical request key, even when its runtime detail is unchanged or older than the cached view. A missing receipt identity, conflicting identity, malformed success body, timeout, or disconnect is an unknown admission result: Flower preserves the original outbox request and never reports a definitive send failure. A valid receipt without a usable current view triggers canonical detail loading. A later navigation invalidates only the selection transfer, not admission or cache convergence. Only accepted runtime content may move the transcript, clear runtime errors, or update status presentation.
 
 A pending typed input interaction is valid only when `questions` is a non-empty

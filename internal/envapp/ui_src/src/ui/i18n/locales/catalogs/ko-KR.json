@@ -5326,6 +5326,7 @@
       "pendingSending": "보내는 중",
       "pendingQueued": "대기열에 추가됨",
       "queuedSendNow": "지금 보내기",
+      "queuedSendNowDescription": "현재 응답을 중지하고 대기 중인 메시지를 지금 보내기",
       "queuedDelete": "대기열 메시지 삭제",
       "scrollToLatest": "최신으로 스크롤",
       "runErrorTitle": "Flower가 이 답변을 완료하지 못했습니다.",

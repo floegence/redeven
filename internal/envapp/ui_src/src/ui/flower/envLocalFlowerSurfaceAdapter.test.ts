@@ -293,6 +293,28 @@ describe('Env local Flower surface adapter', () => {
 		);
 	});
 
+	it('sends one canonical queued turn now through the send-now route before reloading detail', async () => {
+		fetchMock
+			.mockResolvedValueOnce(jsonResponse({ ok: true }))
+			.mockResolvedValueOnce(jsonResponse(liveBootstrap('thread/send-now', 'running')));
+		const adapter = createEnvLocalFlowerSurfaceAdapter({
+			envPublicID: 'env_a',
+			envLabel: 'Demo Env',
+			rpc: { ai: {} } as any,
+		});
+
+		await adapter.sendQueuedTurnNow?.('thread/send-now', 'queue/first');
+
+		expect(fetchMock).toHaveBeenNthCalledWith(1,
+			'/_redeven_proxy/api/ai/threads/thread%2Fsend-now/queue/queue%2Ffirst/send-now',
+			expect.objectContaining({ method: 'POST' }),
+		);
+		expect(fetchMock).toHaveBeenNthCalledWith(2,
+			'/_redeven_proxy/api/ai/threads/thread%2Fsend-now',
+			expect.objectContaining({ method: 'GET' }),
+		);
+	});
+
 	it('does not retain the legacy live polling transport', () => {
 		const adapter = createEnvLocalFlowerSurfaceAdapter({
 			envPublicID: 'env_a',

@@ -5326,6 +5326,7 @@
       "pendingSending": "送信中",
       "pendingQueued": "キュー済み",
       "queuedSendNow": "今すぐ送信",
+      "queuedSendNowDescription": "現在の返信を停止して、この待機中のメッセージを今すぐ送信",
       "queuedDelete": "キュー内のメッセージを削除",
       "scrollToLatest": "最新へスクロール",
       "runErrorTitle": "Flower はこの返信を完了できませんでした。",
