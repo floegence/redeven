@@ -30,6 +30,8 @@ export type SubagentDetailWindowProps = Readonly<{
   status: FlowerSubagentPanelStatus;
   statusLabel: string;
   statusIndicator: JSX.Element;
+  liveConfirmed?: boolean;
+  syncNotice?: JSX.Element;
   agentTypeLabel: string;
   elapsedLabel: string;
   description: string;
@@ -287,7 +289,7 @@ export function SubagentDetailWindow(props: SubagentDetailWindowProps): JSX.Elem
         <header ref={overview} tabIndex={-1} class="flower-subagent-detail-overview">
           <div class={cn('flower-subagent-detail-signal', `flower-subagent-detail-signal-${props.status}`)} aria-hidden="true">
             <Show when={props.status === 'running'} fallback={<Bot class="h-4 w-4" />}>
-              <FlowerThinkingOrb class="flower-subagent-detail-thinking-orb" running />
+              <FlowerThinkingOrb class="flower-subagent-detail-thinking-orb" running={props.liveConfirmed !== false} />
             </Show>
           </div>
           <div class="flower-subagent-detail-overview-copy">
@@ -314,6 +316,7 @@ export function SubagentDetailWindow(props: SubagentDetailWindowProps): JSX.Elem
             </Show>
           </div>
         </header>
+        {props.syncNotice}
 
         <Show when={props.loading && !props.detailAvailable}>
           <div class="flower-subagent-detail-loading" role="status" aria-label={props.threadLoadingLabel}>

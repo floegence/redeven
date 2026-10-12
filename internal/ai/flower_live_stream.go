@@ -215,10 +215,24 @@ type FlowerLiveStreamFragment struct {
 }
 
 type flowerLiveEncodedBatch struct {
-	kind FlowerLiveStreamKind
-	data []byte
-	id   string
-	err  error
+	kind                FlowerLiveStreamKind
+	data                []byte
+	id                  string
+	err                 error
+	encodingDiagnostics *flowerLiveEncodingDiagnostics
+}
+
+type flowerLiveEncodingDiagnostics struct {
+	threadID        string
+	current         *flowerLiveCurrentEncodingDiagnostics
+	subagentCurrent *flowerLiveCurrentEncodingDiagnostics
+}
+
+type flowerLiveCurrentEncodingDiagnostics struct {
+	threadID    string
+	turnID      string
+	runID       string
+	viewVersion uint64
 }
 
 type flowerLiveSubscriber struct {
@@ -595,9 +609,42 @@ func (s *Service) PublishFlowerViewerReadState(meta *session.Meta, threadID stri
 func newFlowerLiveEncodedBatch(envelope FlowerLiveStreamEnvelope) *flowerLiveEncodedBatch {
 	data, err := json.Marshal(envelope)
 	if err != nil {
-		return &flowerLiveEncodedBatch{kind: envelope.Kind, err: ErrFlowerLiveSync}
+		return &flowerLiveEncodedBatch{
+			kind: envelope.Kind,
+			err:  errors.Join(ErrFlowerLiveSync, err),
+			encodingDiagnostics: &flowerLiveEncodingDiagnostics{
+				threadID:        flowerLiveDiagnosticIdentity(identity.ThreadID(envelope.ThreadID)),
+				current:         flowerLiveCurrentEncodingContext(envelope.Current),
+				subagentCurrent: flowerLiveCurrentEncodingContext(envelope.SubagentCurrent),
+			},
+		}
 	}
 	return &flowerLiveEncodedBatch{kind: envelope.Kind, data: data, id: rand.Text()}
+}
+
+func flowerLiveCurrentEncodingContext(current *flruntime.ThreadView) *flowerLiveCurrentEncodingDiagnostics {
+	if current == nil {
+		return nil
+	}
+	return &flowerLiveCurrentEncodingDiagnostics{
+		threadID: flowerLiveDiagnosticIdentity(current.ThreadID), turnID: flowerLiveDiagnosticIdentity(current.TurnID),
+		runID: flowerLiveDiagnosticIdentity(current.RunID), viewVersion: current.ViewVersion,
+	}
+}
+
+// Malformed identities may contain private data; diagnostics retain only valid
+// identifiers rather than echoing arbitrary runtime values into logs.
+func flowerLiveDiagnosticIdentity(value interface {
+	String() string
+	MarshalText() ([]byte, error)
+}) string {
+	if value.String() == "" {
+		return ""
+	}
+	if _, err := value.MarshalText(); err != nil {
+		return "[invalid]"
+	}
+	return value.String()
 }
 
 func wakeFlowerLiveSubscriberLocked(subscriber *flowerLiveSubscriber) {
@@ -616,7 +663,7 @@ func validateFlowerLiveBatchLocked(service *Service, subscriber *flowerLiveSubsc
 	}
 	if batch.err != nil || len(batch.data) == 0 {
 		subscriber.closeErr = ErrFlowerLiveSync
-		closeFlowerLiveSubscriberLocked(service, subscriber, flowerLiveSubscriberCloseEncoding)
+		closeFlowerLiveSubscriberLocked(service, subscriber, flowerLiveSubscriberCloseEncoding, batch)
 		return false
 	}
 	if len(batch.data) > flowerLiveEnvelopeByteLimit {
@@ -784,7 +831,7 @@ func flowerLiveTextAppend(previous, next *flowerLiveEncodedBatch) bool {
 	return changed && reflect.DeepEqual(before, after)
 }
 
-func closeFlowerLiveSubscriberLocked(service *Service, subscriber *flowerLiveSubscriber, reason flowerLiveSubscriberCloseReason) {
+func closeFlowerLiveSubscriberLocked(service *Service, subscriber *flowerLiveSubscriber, reason flowerLiveSubscriberCloseReason, failedBatch ...*flowerLiveEncodedBatch) {
 	if subscriber == nil || subscriber.closed {
 		return
 	}
@@ -815,14 +862,27 @@ func closeFlowerLiveSubscriberLocked(service *Service, subscriber *flowerLiveSub
 	service.flowerLiveMetrics.subscriberClosed()
 	service.flowerLiveMetrics.subscriberDropped(reason)
 	if service.log != nil && reason != flowerLiveSubscriberCloseClient && reason != flowerLiveSubscriberCloseService {
-		service.log.Warn(
-			"ai: Flower live subscriber closed",
+		attrs := []any{
 			"endpoint_id", logsafe.Text(subscriber.endpointID, 256),
 			"subscriber_id", subscriber.id,
 			"reason", reason,
 			"queued_batches", queuedBatches,
 			"queued_bytes", queuedBytes,
-		)
+		}
+		if reason == flowerLiveSubscriberCloseEncoding && len(failedBatch) > 0 && failedBatch[0] != nil {
+			batch := failedBatch[0]
+			attrs = append(attrs, "kind", batch.kind, "error", logsafe.Error(batch.err))
+			if diagnostics := batch.encodingDiagnostics; diagnostics != nil {
+				attrs = append(attrs, "thread_id", diagnostics.threadID)
+				if current := diagnostics.current; current != nil {
+					attrs = append(attrs, "current_thread_id", current.threadID, "turn_id", current.turnID, "run_id", current.runID, "view_version", current.viewVersion)
+				}
+				if current := diagnostics.subagentCurrent; current != nil {
+					attrs = append(attrs, "subagent_thread_id", current.threadID, "subagent_turn_id", current.turnID, "subagent_run_id", current.runID, "subagent_view_version", current.viewVersion)
+				}
+			}
+		}
+		service.log.Warn("ai: Flower live subscriber closed", attrs...)
 	}
 	select {
 	case <-subscriber.media:
@@ -909,7 +969,7 @@ func (s *FlowerLiveStreamSubscription) Next(ctx context.Context) (*FlowerLiveStr
 		if batch := subscriber.active; batch != nil {
 			if batch.err != nil || len(batch.data) == 0 || len(batch.data) > flowerLiveEnvelopeByteLimit {
 				subscriber.closeErr = ErrFlowerLiveSync
-				closeFlowerLiveSubscriberLocked(s.service, subscriber, flowerLiveSubscriberCloseEncoding)
+				closeFlowerLiveSubscriberLocked(s.service, subscriber, flowerLiveSubscriberCloseEncoding, batch)
 				s.service.mu.Unlock()
 				return nil, ErrFlowerLiveSync
 			}

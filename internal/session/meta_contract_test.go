@@ -10,6 +10,7 @@ func TestMetaJSONContract(t *testing.T) {
 	t.Parallel()
 
 	expected := map[string]string{
+		"DesktopSource":                "-",
 		"ChannelID":                    "channel_id",
 		"EndpointID":                   "endpoint_id",
 		"FloeApp":                      "floe_app",

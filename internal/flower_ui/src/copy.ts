@@ -511,6 +511,14 @@ export type FlowerSurfaceCopy = Readonly<{
     threadEmpty: string;
     threadSyncingLatest: string;
     threadSyncFailed: string;
+    syncConnecting: string;
+    syncReconnecting: string;
+    syncFailed: string;
+    syncAuthorization: string;
+    syncLocked: string;
+    syncResync: string;
+    stopUnconfirmed: string;
+    syncTimeout: string;
     composerErrorTitle: string;
     turnProcess: FlowerTurnProcessCopy;
     expandThinking: string;
@@ -870,6 +878,14 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     threadEmpty: 'This conversation has no content yet.',
     threadSyncingLatest: 'Syncing the latest reply...',
     threadSyncFailed: 'Flower could not sync the latest reply. Try again.',
+    syncConnecting: "Connecting live updates. Displayed state may be outdated.",
+    syncReconnecting: "Reconnecting live updates. Displayed state may be outdated.",
+    syncFailed: "Live updates stopped because data could not be read or applied. Displayed state may be outdated.",
+    syncAuthorization: "Live updates require authorization. Restore access, then resync. Displayed state may be outdated.",
+    syncLocked: "Live updates are locked. Unlock access, then resync. Displayed state may be outdated.",
+    syncResync: "Resync",
+    stopUnconfirmed: "Stop submitted; status has not synchronized. Resync to confirm.",
+    syncTimeout: "Synchronization timed out after 15 seconds. Try again.",
     composerErrorTitle: 'Flower could not send.',
     turnProcess: {
       failed: 'Flower could not complete this turn.', cancelled: 'Stopped', interrupted: 'This turn was interrupted.',

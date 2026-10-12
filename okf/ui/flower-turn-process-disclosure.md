@@ -7,7 +7,7 @@ timestamp: 2026-10-12T00:00:00Z
 ---
 # Summary
 
-Published Floret v7.29.0 owns each turn's identity, outcome, final output boundary and durations. Flower consumes only validated detail accepted by ThreadCache. Successful ordinary turns default to collapsed, including legacy history whose explicitly typed process can be separated safely from assistant output. Failure, cancellation and interruption default to expanded. Users, resolved clarification answers and every final segment remain visible in their original order; unknown assistant output is never hidden. Pending interactions remain expanded without a turn disclosure control. Reading protection overrides automatic collapse once, without a later timer.
+Published Floret v7.29.1 owns each turn's identity, outcome, final output boundary and durations. Flower consumes only validated detail accepted by ThreadCache. Successful ordinary turns default to collapsed, including legacy history whose explicitly typed process can be separated safely from assistant output. Failure, cancellation and interruption default to expanded. Users, resolved clarification answers and every final segment remain visible in their original order; unknown assistant output is never hidden. Pending interactions remain expanded without a turn disclosure control. Reading protection overrides automatic collapse once, without a later timer.
 
 # Contract
 
@@ -43,7 +43,7 @@ Disclosure choices are ephemeral presentation state, not lifecycle authority. Re
 
 # Evidence
 
-- `redeven:go.mod` - Published Floret v7.29.0 dependency.
+- `redeven:go.mod` - Published Floret v7.29.1 dependency.
 - `redeven:internal/ai/flower_current_projection_test.go` - Preserves canonical historical turn facts through the public projection.
 - `redeven:internal/flower_ui/src/runtimeCurrentView.ts` - Validates and maps current turn facts.
 - `redeven:internal/flower_ui/src/flowerTurnPresentation.test.ts` - Eligibility, final segment and duration contracts.

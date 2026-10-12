@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"net/url"
@@ -37,12 +38,17 @@ func flowerCurrentJSON(current flruntime.ThreadView) (json.RawMessage, error) {
 	// Keep all product-specific redaction in the existing public projection,
 	// then add only scoped preview URLs from the original opaque references.
 	public := publicFloretThreadView(current)
+	// Typed failures are consumed below; only the product-safe error crosses
+	// the public boundary.
+	public.Failure = nil
 	encoded, err := json.Marshal(public)
 	if err != nil {
 		return nil, err
 	}
 	var root map[string]any
-	if err := json.Unmarshal(encoded, &root); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(encoded))
+	decoder.UseNumber()
+	if err := decoder.Decode(&root); err != nil {
 		return nil, err
 	}
 	threadID := strings.TrimSpace(current.ThreadID.String())
@@ -86,8 +92,6 @@ func flowerCurrentJSON(current flruntime.ThreadView) (json.RawMessage, error) {
 
 	// Floret's typed failure is consumed at this boundary. Its internal message
 	// must not become a second public UI contract.
-	delete(root, "failure")
-	delete(root, "error")
 	if current.Failure != nil {
 		code, message := projectFloretTurnFailure(current.Failure, "floret_turn_failed")
 		if code == "" && message == "" {
@@ -149,84 +153,75 @@ func projectCurrentAttachmentURLs(parent map[string]any, attachments []flruntime
 	}
 }
 
-func replaceFlowerCurrentJSONField(encoded []byte, field string, current flruntime.ThreadView) ([]byte, error) {
-	currentJSON, err := flowerCurrentJSON(current)
-	if err != nil {
-		return nil, err
-	}
-	var currentValue any
-	if err := json.Unmarshal(currentJSON, &currentValue); err != nil {
-		return nil, err
-	}
-	var root map[string]any
-	if err := json.Unmarshal(encoded, &root); err != nil {
-		return nil, err
-	}
-	root[field] = currentValue
-	return json.Marshal(root)
-}
+// The explicit current field in each wire envelope overrides the embedded raw
+// field, so private runtime data never reaches envelope serialization.
+type flowerCurrentJSONView flruntime.ThreadView
 
-func replaceFlowerCurrentJSON(encoded []byte, current flruntime.ThreadView) ([]byte, error) {
-	return replaceFlowerCurrentJSONField(encoded, "current", current)
-}
-
-func marshalFlowerCurrentEnvelope(value any, current flruntime.ThreadView) ([]byte, error) {
-	encoded, err := json.Marshal(value)
-	if err != nil {
-		return nil, err
-	}
-	return replaceFlowerCurrentJSON(encoded, current)
+func (current flowerCurrentJSONView) MarshalJSON() ([]byte, error) {
+	return flowerCurrentJSON(flruntime.ThreadView(current))
 }
 
 func (d FlowerThreadDetail) MarshalJSON() ([]byte, error) {
 	type wire FlowerThreadDetail
-	return marshalFlowerCurrentEnvelope(wire(d), d.Current)
+	return json.Marshal(struct {
+		wire
+		Current flowerCurrentJSONView `json:"current"`
+	}{wire(d), flowerCurrentJSONView(d.Current)})
 }
 
 func (d FlowerSubagentDetailResponse) MarshalJSON() ([]byte, error) {
 	type wire FlowerSubagentDetailResponse
-	return marshalFlowerCurrentEnvelope(wire(d), d.Current)
+	return json.Marshal(struct {
+		wire
+		Current flowerCurrentJSONView `json:"current"`
+	}{wire(d), flowerCurrentJSONView(d.Current)})
 }
 
 func (r SendUserTurnResponse) MarshalJSON() ([]byte, error) {
 	type wire SendUserTurnResponse
-	return marshalFlowerCurrentEnvelope(wire(r), r.Current)
+	return json.Marshal(struct {
+		wire
+		Current flowerCurrentJSONView `json:"current"`
+	}{wire(r), flowerCurrentJSONView(r.Current)})
 }
 
 func (r SubmitRequestUserInputResponseResponse) MarshalJSON() ([]byte, error) {
 	type wire SubmitRequestUserInputResponseResponse
-	return marshalFlowerCurrentEnvelope(wire(r), r.Current)
+	return json.Marshal(struct {
+		wire
+		Current flowerCurrentJSONView `json:"current"`
+	}{wire(r), flowerCurrentJSONView(r.Current)})
 }
 
 func (r SubmitFlowerApprovalResponse) MarshalJSON() ([]byte, error) {
 	type wire SubmitFlowerApprovalResponse
-	return marshalFlowerCurrentEnvelope(wire(r), r.Current)
+	return json.Marshal(struct {
+		wire
+		Current flowerCurrentJSONView `json:"current"`
+	}{wire(r), flowerCurrentJSONView(r.Current)})
 }
 
 func (r aiSendUserTurnResp) MarshalJSON() ([]byte, error) {
 	type wire aiSendUserTurnResp
-	return marshalFlowerCurrentEnvelope(wire(r), r.Current)
+	return json.Marshal(struct {
+		wire
+		Current flowerCurrentJSONView `json:"current"`
+	}{wire(r), flowerCurrentJSONView(r.Current)})
 }
 
 func (r aiSubmitRequestUserInputResponseResp) MarshalJSON() ([]byte, error) {
 	type wire aiSubmitRequestUserInputResponseResp
-	return marshalFlowerCurrentEnvelope(wire(r), r.Current)
+	return json.Marshal(struct {
+		wire
+		Current flowerCurrentJSONView `json:"current"`
+	}{wire(r), flowerCurrentJSONView(r.Current)})
 }
 
 func (e FlowerLiveStreamEnvelope) MarshalJSON() ([]byte, error) {
 	type wire FlowerLiveStreamEnvelope
-	encoded, err := json.Marshal(wire(e))
-	if err != nil {
-		return nil, err
-	}
-	if e.Current != nil {
-		encoded, err = replaceFlowerCurrentJSON(encoded, *e.Current)
-		if err != nil {
-			return nil, err
-		}
-	}
-	if e.SubagentCurrent != nil {
-		return replaceFlowerCurrentJSONField(encoded, "subagent_current", *e.SubagentCurrent)
-	}
-	return encoded, nil
+	return json.Marshal(struct {
+		wire
+		Current         *flowerCurrentJSONView `json:"current,omitempty"`
+		SubagentCurrent *flowerCurrentJSONView `json:"subagent_current,omitempty"`
+	}{wire(e), (*flowerCurrentJSONView)(e.Current), (*flowerCurrentJSONView)(e.SubagentCurrent)})
 }

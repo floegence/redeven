@@ -8,7 +8,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -21,6 +23,192 @@ import (
 	"github.com/floegence/floret/v7/tools"
 	"github.com/floegence/redeven/internal/session"
 )
+
+func TestFlowerLiveEncodingFailureRetainsCauseAndLogsSafeCurrentContext(t *testing.T) {
+	for _, child := range []bool{false, true} {
+		t.Run(fmt.Sprintf("subagent_%t", child), func(t *testing.T) {
+			svc := newFlowerLiveMemoryTestService()
+			var logs bytes.Buffer
+			svc.log = slog.New(slog.NewJSONHandler(&logs, nil))
+			subscriber := &flowerLiveSubscriber{
+				id: 1, endpointID: "env-encoding-diagnostic", queue: make(chan *flowerLiveEncodedBatch, flowerLiveSubscriberBatchLimit),
+			}
+			svc.flowerLiveSubscribers[subscriber.id] = subscriber
+			svc.flowerLiveSubscribersByEndpoint[subscriber.endpointID] = 1
+			current := flruntime.ThreadView{
+				ThreadID: "thread-encoding-diagnostic", TurnID: "turn-encoding-diagnostic", RunID: "run-encoding-diagnostic", ViewVersion: 4457,
+				Turns:   []flruntime.ThreadTurn{{TurnID: "turn-encoding-diagnostic", RunID: "private-invalid-run\nvalue"}},
+				Failure: &flruntime.ThreadTurnFailure{Code: flruntime.ThreadTurnFailureEngineContract, Message: "private-provider-diagnostic"},
+			}
+			envelope := FlowerLiveStreamEnvelope{SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamThreadBatch, ThreadID: "parent-encoding-diagnostic"}
+			if child {
+				current.RunID = "private-invalid-active-run\nvalue"
+				envelope.SubagentCurrent = &current
+			} else {
+				envelope.Current = &current
+			}
+			batch := newFlowerLiveEncodedBatch(envelope)
+			var marshalErr *json.MarshalerError
+			if !errors.Is(batch.err, ErrFlowerLiveSync) || !errors.Is(batch.err, identity.ErrInvalid) || !errors.As(batch.err, &marshalErr) {
+				t.Fatalf("encoding cause was lost: %v", batch.err)
+			}
+			if enqueueFlowerLiveSubscriberLocked(svc, subscriber, batch) {
+				t.Fatal("invalid current envelope was admitted")
+			}
+			public := &FlowerLiveStreamSubscription{service: svc, subscriber: subscriber}
+			if frame, err := public.Next(t.Context()); frame != nil || err != ErrFlowerLiveSync || errors.Is(err, identity.ErrInvalid) {
+				t.Fatalf("public error contract changed: frame=%#v error=%v", frame, err)
+			}
+			var diagnostic map[string]any
+			if err := json.Unmarshal(logs.Bytes(), &diagnostic); err != nil {
+				t.Fatal(err)
+			}
+			if diagnostic["reason"] != string(flowerLiveSubscriberCloseEncoding) || diagnostic["kind"] != string(FlowerLiveStreamThreadBatch) || diagnostic["thread_id"] != envelope.ThreadID {
+				t.Fatalf("encoding context missing: %#v", diagnostic)
+			}
+			prefix, threadField := "", "current_thread_id"
+			expectedRunID := "run-encoding-diagnostic"
+			if child {
+				prefix, threadField, expectedRunID = "subagent_", "subagent_thread_id", "[invalid]"
+			}
+			if diagnostic[threadField] != current.ThreadID.String() || diagnostic[prefix+"turn_id"] != current.TurnID.String() || diagnostic[prefix+"run_id"] != expectedRunID || diagnostic[prefix+"view_version"] != float64(current.ViewVersion) {
+				t.Fatalf("current identity diagnostics missing: %#v", diagnostic)
+			}
+			message, _ := diagnostic["error"].(string)
+			if !strings.Contains(message, identity.ErrInvalid.Error()) || strings.ContainsAny(message, "\r\n") {
+				t.Fatalf("encoding diagnostic error=%q", message)
+			}
+			if strings.Contains(logs.String(), "private-invalid") || strings.Contains(logs.String(), "private-provider-diagnostic") {
+				t.Fatalf("private runtime data crossed the diagnostic boundary: %s", &logs)
+			}
+		})
+	}
+}
+
+func TestFlowerWorkspaceStreamEncodesActivityUpdatesThroughFinalAnswer(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	thread, err := svc.CreateThread(ctx, meta, "Activity stream regression", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstObserved, secondObserved := make(chan struct{}), make(chan struct{})
+	releaseFirst, releaseSecond := sync.OnceFunc(func() { close(firstObserved) }), sync.OnceFunc(func() { close(secondObserved) })
+	t.Cleanup(releaseFirst)
+	t.Cleanup(releaseSecond)
+	tool := tools.Define[struct{}](tools.Definition{
+		Name: "inspect_activity", ReadOnly: true, InputSchema: tools.StrictObject(map[string]any{}, nil),
+		Permission: tools.PermissionSpec{Mode: tools.PermissionAllow},
+	}, nil, nil, func(ctx context.Context, invocation tools.Invocation[struct{}]) (tools.Result, error) {
+		for index, observed := range []<-chan struct{}{firstObserved, secondObserved} {
+			invocation.UpdateActivity(tools.ActivityUpdate{
+				Activity: &tools.ActivityPresentation{Label: fmt.Sprintf("activity-update-%d", index+1), Renderer: tools.ActivityRendererTerminal,
+					Payload: tools.TerminalActivityPayload{Operation: "exec", Command: "inspect", Output: fmt.Sprintf("activity-output-%d", index+1), Status: "running"}},
+				Metadata: map[string]any{"run_id": invocation.RunID.String(), "turn_id": invocation.TurnID.String()},
+			})
+			select {
+			case <-observed:
+			case <-ctx.Done():
+				return tools.Result{}, ctx.Err()
+			}
+		}
+		return tools.Result{Text: "Inspection complete."}, nil
+	})
+	var calls atomic.Int32
+	gateway := testFloretGatewayFunc(func(context.Context, flprovider.Request) (<-chan flprovider.Event, error) {
+		events := make(chan flprovider.Event, 2)
+		switch calls.Add(1) {
+		case 1:
+			events <- flprovider.Event{Type: flprovider.EventToolCalls, ToolCalls: []flprovider.ToolCall{{ID: "call-activity", Name: "inspect_activity", Args: `{}`}}}
+			events <- flprovider.Event{Type: flprovider.EventDone, Reason: "tool_calls"}
+		case 2:
+			events <- flprovider.Event{Type: flprovider.EventDelta, Text: "Final activity answer."}
+			events <- flprovider.Event{Type: flprovider.EventDone, Reason: "stop"}
+		default:
+			t.Error("unexpected provider request after the final answer")
+		}
+		close(events)
+		return events, nil
+	})
+	agent, err := flruntime.NewAgent(flconfig.AgentConfig{
+		Profile: flconfig.AgentProfile{ID: "activity-assistant", Name: "Activity assistant"}, SystemPrompt: "Inspect, then answer.",
+		Context: flconfig.ContextPolicy{ContextWindowTokens: flconfig.DefaultContextWindowTokens},
+	}, gateway, flruntime.WithAgentTools(tool), flruntime.WithAgentEffectAuthorization(flruntime.EffectAuthorizationGateFunc(
+		func(ctx context.Context, request flruntime.EffectAuthorizationRequest, effect flruntime.AuthorizedEffect) (flruntime.EffectDispatchResult, error) {
+			return effect(ctx, flruntime.EffectAuthorizationProof{
+				EffectAttemptID: request.EffectAttemptID, RequestFingerprint: request.RequestFingerprint,
+				ThreadID: request.ThreadID, TurnID: request.TurnID, RunID: request.RunID, ToolCallID: request.ToolCallID,
+				PolicyRevision: "test-policy", AuditReference: "test-audit", AuditHash: "test-audit-hash", AuthorizedAt: time.Now().UTC(),
+			})
+		})))
+	if err != nil {
+		t.Fatal(err)
+	}
+	const requestKey = "request-activity-stream"
+	svc.floretEffects.put(identity.ThreadID(thread.ThreadID), requestKey, floretEffectRequest{agent: agent, meta: *meta,
+		req: SendUserTurnRequest{Options: RunOptions{PermissionType: "approval_required"}}})
+	subscription, err := svc.SubscribeFlowerLiveStream(ctx, meta, FlowerLiveStreamRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer subscription.Close()
+	if ready := nextFlowerLiveStreamFrame(t, subscription); ready.Kind != FlowerLiveStreamReady {
+		t.Fatalf("ready kind=%q", ready.Kind)
+	}
+	admitted, err := svc.threadRuntime.Send(ctx, flruntime.SendInput{ThreadID: identity.ThreadID(thread.ThreadID), Input: flruntime.UserInput{Text: "Inspect activity."}, RequestKey: requestKey})
+	if err != nil {
+		t.Fatal(err)
+	}
+	seenFirst, seenSecond, snapshots := false, false, 0
+	for {
+		frame, err := readFlowerLiveStreamEnvelope(ctx, subscription)
+		if err != nil {
+			t.Fatalf("live stream stopped before the final answer: %v", err)
+		}
+		var envelope FlowerLiveStreamEnvelope
+		if err := json.Unmarshal(frame.Data, &envelope); err != nil {
+			t.Fatalf("published envelope is invalid: %v", err)
+		}
+		if envelope.Current == nil || envelope.ThreadID != thread.ThreadID {
+			continue
+		}
+		current := envelope.Current
+		snapshots++
+		if current.TurnID != admitted.TurnID || current.RunID != admitted.RunID {
+			t.Fatalf("current execution identity changed: current=%s/%s admitted=%s/%s", current.TurnID, current.RunID, admitted.TurnID, admitted.RunID)
+		}
+		for _, turn := range current.Turns {
+			if turn.TurnID != admitted.TurnID || turn.RunID != admitted.RunID {
+				t.Fatalf("historical turn identity changed after activity: %+v", turn)
+			}
+		}
+		if strings.Contains(string(frame.Data), "activity-update-1") {
+			seenFirst = true
+			releaseFirst()
+		}
+		if strings.Contains(string(frame.Data), "activity-update-2") {
+			seenSecond = true
+			releaseSecond()
+		}
+		if current.Activity != flruntime.ThreadActivityIdle {
+			continue
+		}
+		if current.LastOutcome == nil || *current.LastOutcome != flruntime.TurnOutcomeCompleted || !strings.Contains(string(frame.Data), "Final activity answer.") || !seenFirst || !seenSecond || snapshots < 3 {
+			t.Fatalf("final current lost activity or answer: snapshots=%d activity=%t/%t frame=%s", snapshots, seenFirst, seenSecond, frame.Data)
+		}
+		break
+	}
+	detail, err := svc.GetFlowerThreadDetail(ctx, meta, thread.ThreadID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(detail)
+	if err != nil || !strings.Contains(string(encoded), "Final activity answer.") {
+		t.Fatalf("canonical final detail is not publishable: %s, %v", encoded, err)
+	}
+}
 
 func TestFlowerWorkspaceStreamAcceptsEmptySelectionAndReceivesBackgroundThreadUpdates(t *testing.T) {
 	t.Parallel()

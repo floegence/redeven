@@ -1369,3 +1369,10 @@ Document published Floret v7.15.1 canonical calibration, tokenizer estimates, an
 - 2026-10-11: Flower workspace envelopes use bounded transport fragments with complete atomic current replacement and compatibility epoch 51. Accepted Tessiven sends consume only their frozen selection and bind their original canvas; unknown delivery and newer selections remain intact.
 
 - 2026-10-11: Flower queue Send now uses the released stop-and-send command during active replies and interaction waits, preserves canonical queue ownership, and sanitizes every queue mutation response.
+
+## 2026-10-12 — Flower live synchronization recovery
+
+Adopt published Floret v7.29.1 for canonical execution identity and the permanent
+schema 13-to-14 edge. Consolidate public current encoding and workspace transport
+recovery, with bounded reads, persistent synchronization notices and canonical
+Stop confirmation.

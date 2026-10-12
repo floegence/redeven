@@ -58,6 +58,7 @@ main() {
       src/ui/activityFlowerSummary.test.ts \
       src/ui/FlowerSurface.emptyStatePresentation.test.tsx \
       src/ui/FlowerSurface.navigation.test.tsx \
+      src/ui/FlowerSurface.liveRecovery.test.tsx \
       src/ui/FlowerSurface.providerReadiness.test.tsx \
       src/ui/FlowerSurface.modelMenu.test.tsx \
       src/ui/modelMenu.test.ts \
@@ -118,6 +119,7 @@ main() {
       internal/flower_ui/src/runtimeCurrentView.stability.test.ts \
       internal/flower_ui/src/flowerDecisionCurrent.test.ts \
       internal/flower_ui/src/flowerLiveFrameQueue.test.ts \
+      internal/flower_ui/src/liveTransport.test.ts \
       internal/flower_ui/src/inputResponse.test.ts \
       internal/flower_ui/src/flowerApprovalPresentation.test.ts \
       internal/flower_ui/src/flowerSurfaceModel.test.ts \
@@ -177,6 +179,7 @@ main() {
         src/ui/flowerCompanionTailMotion.browser.test.tsx \
         src/ui/FlowerSurface.finalArchitecture.browser.test.tsx \
         src/ui/FlowerSurface.streamingStability.browser.test.tsx \
+        src/ui/FlowerSurface.liveRecovery.browser.test.tsx \
         src/ui/FlowerSurface.turnProcess.browser.test.tsx \
         src/ui/FlowerMarkdown.streamingStability.browser.test.tsx \
         src/ui/FlowerMarkdown.highlight.browser.test.tsx \

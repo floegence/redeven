@@ -55,6 +55,7 @@ async function mount(initial = current(), copy?: FlowerSurfaceCopy) {
   const seed = applyFlowerRuntimeCurrentView(thread({ thread_id: 'process', title: 'Process disclosure', messages: [] }), initial);
   const peer = thread({ thread_id: 'peer', title: 'Another conversation' });
   const live = liveStream(initial);
+  live.envelope({ schema_version: 1, kind: 'ready', summaries: [seed, peer] });
   const root = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: vi.fn(async () => [applyFlowerRuntimeCurrentView(seed, live.current()), peer]),
     loadThread: vi.fn(async (id) => id === peer.thread_id ? liveBootstrap(peer) : { thread: applyFlowerRuntimeCurrentView(seed, live.current()), current: live.current() }), connectLiveStream: live.connect }, { copy });
   root.style.height = '780px';
@@ -219,6 +220,7 @@ describe('completed turn process disclosure', () => {
     const child = subagentSummary({ parent_thread_id: 'parent', thread_id: 'process', status: 'completed' });
     const parent = thread({ thread_id: 'parent', subagents: [child] });
     const live = liveStream(liveBootstrap(parent).current);
+    live.envelope({ schema_version: 1, kind: 'ready', summaries: [parent] });
     const root = renderSurfaceWithAdapter({ ...adapter(true), listThreads: vi.fn(async () => [parent]),
       loadThread: vi.fn(async () => liveBootstrap(parent, 1)), connectLiveStream: live.connect,
       loadSubagentDetail: vi.fn(async () => ({ summary: child, current: current(true, history === 'legacy'
