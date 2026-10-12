@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { presentationFormat, presentationCapabilities } from '../internal/tessiven_ui/src/native/contract.ts';
 
 assert.equal(process.platform, 'darwin', 'Native canvas acceptance requires macOS WebKit');
 const root = path.resolve(import.meta.dirname, '..');
@@ -16,7 +17,10 @@ const document = JSON.parse(await readFile(path.join(root, 'internal/envapp/ui_s
 document.presentation.initiallyExpanded = document.groups.map(group => group.id);
 document.groups.find(group => group.id === 'g-master').instanceRefs = ['inst-nn-a', 'inst-nn-b'];
 const input = {
-  version: { canvas_id: 'qualification', number: 1, document_yaml: '', document, digest: 'fixture', created_at: 0, source: 'example', summary: '' },
+  version: { canvas_id: 'qualification', number: 1, source: 'example', view: {
+    format: presentationFormat, model: (({ apiVersion: _version, kind: _kind, ...model }) => model)(document),
+    capabilities: [...presentationCapabilities], compatibility: { status: 'complete', limitations: [] },
+  } },
   render_id: 'qualification', historical: false, dark: false, contrast: false,
 };
 const fixture = path.resolve(output, 'input.json');

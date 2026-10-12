@@ -32,7 +32,7 @@ import type {
   Observation,
   Selection,
   TessivenText,
-  Version,
+  RenderVersion,
 } from './types';
 
 export type ResourceAction =
@@ -64,10 +64,11 @@ export type TessivenViewportControl = {
   clearSelection: () => void;
 };
 export function TessivenGraph(props: {
-  version: Version;
+  version: RenderVersion;
   historical: boolean;
   t: TessivenText;
   onAsk: (selection: Selection) => void;
+  askReferenceMode?: 'display' | 'source';
   onInspect: (instance: Instance) => void;
   onInspectRuntime?: (runtimeRef:string)=>void;
   locate?: string;
@@ -84,7 +85,7 @@ export function TessivenGraph(props: {
   const [expanded, setExpanded] = createSignal(
     new Set(
       props.browseState?.expanded ??
-        props.version.document.presentation?.initiallyExpanded ??
+        props.version.view.model.presentation?.initiallyExpanded ??
         [],
     ),
   );
@@ -140,7 +141,7 @@ export function TessivenGraph(props: {
   createEffect(() => props.onZoomChange?.(viewport().scale));
   const zoom = (factor: number) => zoomAt(factor, (host?.clientWidth ?? 0) / 2, (host?.clientHeight ?? 0) / 2);
   createEffect(() => {
-    const groups = props.version.document.groups ?? [];
+    const groups = props.version.view.model.groups ?? [];
     props.onViewOptions?.({
       hasGroups: groups.length > 0,
       canExpand: groups.some(group => !expanded().has(group.id)),
@@ -159,12 +160,12 @@ export function TessivenGraph(props: {
     });
   });
   const requestedProjection = createMemo(() =>
-    projectCanvas(props.version.document, expanded(), selectedNodes(), serviceScope()),
+    projectCanvas(props.version.view.model, expanded(), selectedNodes(), serviceScope()),
   );
   const [renderedProjection, setRenderedProjection] = createSignal<Projection>();
   const projection = () => renderedProjection() ?? requestedProjection();
   const groupTones = createMemo(() => new Map(
-    (props.version.document.groups ?? []).map((group, index) => [group.id, index % 4]),
+    (props.version.view.model.groups ?? []).map((group, index) => [group.id, index % 4]),
   ));
   const resourceTone = (kind: string) => ['domain', 'cdn', 'load_balancer'].includes(kind) ? 'network' : 'storage';
   const minimapStyle = (node: GraphLayoutNode) => {
@@ -210,10 +211,11 @@ export function TessivenGraph(props: {
           'resources',
           'relations',
           'evidence',
+          'objects',
         ].flatMap((kind) =>
           (
             (
-              props.version.document as unknown as Record<
+              props.version.view.model as unknown as Record<
                 string,
                 { id: string }[]
               >
@@ -225,7 +227,7 @@ export function TessivenGraph(props: {
   const services = createMemo(
     () =>
       new Map(
-        (props.version.document.services ?? []).map((service) => [
+        (props.version.view.model.services ?? []).map((service) => [
           service.id,
           service,
         ]),
@@ -279,7 +281,7 @@ export function TessivenGraph(props: {
     });
     void engine
       .layout(input, {
-        ...projectLayoutOptions(props.version.document, projected, positionMode),
+        ...projectLayoutOptions(props.version.view.model, projected, positionMode),
         anchor: anchor
           ? { nodeId: anchor.id, position: { x: anchor.x, y: anchor.y } }
           : undefined,
@@ -326,7 +328,7 @@ export function TessivenGraph(props: {
   createEffect(() => {
     const id = props.locate;
     if (!id || !host) return;
-    const document = props.version.document;
+    const document = props.version.view.model;
     const relation = document.relations?.find(
       (value) => value.id === id || value.evidenceRefs.includes(id),
     );
@@ -377,11 +379,23 @@ export function TessivenGraph(props: {
     props.onSelectionChange?.(selection);
     return { ...selection, object_refs: selectionRefs };
   }
+  function askableRefs(refs: string[]) {
+    return [...new Set(refs.flatMap(id => {
+      const object = props.version.view.model.objects?.find(value => value.id === id);
+      return object ? object.objectRefs ?? [] : [id];
+    }))];
+  }
+  function askRefs(refs: string[]) {
+    return props.askReferenceMode === 'display' ? refs : askableRefs(refs);
+  }
+  function canAsk(refs: string[]) {
+    return !refs.length || askableRefs(refs).length > 0;
+  }
   function show(event: GraphObjectEvent, refs?: string[], menu = false) {
     const selection = select(event.object, refs);
     const selectionRefs = selection.object_refs;
     if (props.onSelectionChange) {
-      if (menu) props.onAsk({ ...selection, object_refs: selectionRefs.slice(0, 100) });
+      if (menu && canAsk(selectionRefs)) props.onAsk({ ...selection, object_refs: askRefs(selectionRefs).slice(0, 100) });
       return;
     }
     setPopup({
@@ -391,6 +405,7 @@ export function TessivenGraph(props: {
     });
   }
   function ask(refs: string[]) {
+    if (!canAsk(refs)) return;
     if (refs.length > 100) {
       const object = popup()?.event.object;
       const edge =
@@ -403,7 +418,7 @@ export function TessivenGraph(props: {
     props.onAsk({
       canvas_id: props.version.canvas_id,
       version_id: props.version.number,
-      object_refs: refs,
+      object_refs: askRefs(refs).slice(0, 100),
     });
   }
   function toggle(id: string) {
@@ -432,7 +447,7 @@ export function TessivenGraph(props: {
     const current = selected();
     const node = current?.kind === 'node' ? projection().graph.nodes.find(node => node.id === current.id) : undefined;
     if (!open && node?.parentId) select({ kind: 'node', id: node.parentId });
-    setExpanded(new Set(open ? (props.version.document.groups ?? []).map(group => group.id) : []));
+    setExpanded(new Set(open ? (props.version.view.model.groups ?? []).map(group => group.id) : []));
     close();
   }
   function locateNode(nodeId: string, groupId: string) {
@@ -664,6 +679,15 @@ export function TessivenGraph(props: {
           </div>
         </section>
       );
+    if (card.kind === 'object')
+      return (
+        <section class="tessiven-resource tessiven-generic-object" data-resource="storage">
+          <header><span>{card.object.kind}</span><button onClick={context.openMenu} aria-label={props.t('objectMenu')}>⋯</button></header>
+          <div class="tessiven-resource-name"><TessivenIcon kind="tessiven" /><span><strong>{card.object.name}</strong><small>{card.object.id}</small></span></div>
+          <Show when={card.object.description}><p>{card.object.description}</p></Show>
+          <dl class="tessiven-object-facts"><For each={card.object.facts?.slice(0, 3)}>{fact => <div><dt>{fact.label}</dt><dd>{fact.value}</dd></div>}</For></dl>
+        </section>
+      );
     if (card.kind === 'resource')
       return (
         <section
@@ -741,13 +765,13 @@ export function TessivenGraph(props: {
           <output aria-label={props.t('zoomLevel')}>{Math.round(viewport().scale * 100)}%</output>
           <button type="button" onClick={() => zoom(1.25)} disabled={viewport().scale >= 3} aria-label={props.t('zoomIn')} title={props.t('zoomIn')}><Plus aria-hidden="true" /></button>
         </div>
-        <Show when={props.version.document.groups?.length}>
+        <Show when={props.version.view.model.groups?.length}>
           <Dropdown triggerClass="tessiven-canvas-view" triggerAriaLabel={props.t('canvasView')}
             trigger={<><Layers aria-hidden="true" /><span>{props.t('canvasView')}</span><ChevronDown aria-hidden="true" /></>}
             value={serviceScope()}
             items={() => [
-              { id: 'expand', label: props.t('expandAllGroups'), icon: () => <ChevronDown />, disabled: props.version.document.groups!.every(group => expanded().has(group.id)) },
-              { id: 'collapse', label: props.t('collapseAllGroups'), icon: () => <ChevronUp />, disabled: !props.version.document.groups!.some(group => expanded().has(group.id)) },
+              { id: 'expand', label: props.t('expandAllGroups'), icon: () => <ChevronDown />, disabled: props.version.view.model.groups!.every(group => expanded().has(group.id)) },
+              { id: 'collapse', label: props.t('collapseAllGroups'), icon: () => <ChevronUp />, disabled: !props.version.view.model.groups!.some(group => expanded().has(group.id)) },
               { id: 'scope', label: '', separator: true },
               { id: 'all', label: props.t('allNodeServices') },
               { id: 'group', label: props.t('groupNodeServices') },
@@ -789,8 +813,8 @@ export function TessivenGraph(props: {
             <Show when={!value.menu}>
               <div class="tessiven-detail-content">
                 <Show when={!value.refs.length}>
-                  <strong>{props.version.document.metadata.title}</strong>
-                  <p>{props.version.document.metadata.description}</p>
+                  <strong>{props.version.view.model.metadata.title}</strong>
+                  <p>{props.version.view.model.metadata.description}</p>
                   <For
                     each={
                       ['nodes', 'services', 'resources', 'relations'] as const
@@ -799,7 +823,7 @@ export function TessivenGraph(props: {
                     {(kind) => (
                       <p>
                         {props.t(`collection.${kind}`)} ·{' '}
-                        {props.version.document[kind]?.length ?? 0}
+                        {props.version.view.model[kind]?.length ?? 0}
                       </p>
                     )}
                   </For>
@@ -809,7 +833,7 @@ export function TessivenGraph(props: {
                     const item = allObjects().get(id) as
                       | (Record<string, unknown> & { id: string })
                       | undefined;
-                    const instance = props.version.document.instances?.find(
+                    const instance = props.version.view.model.instances?.find(
                       (member) => member.id === id,
                     );
                     const title = String(
@@ -820,7 +844,7 @@ export function TessivenGraph(props: {
                         id,
                     );
                     const related = (
-                      props.version.document.relations ?? []
+                      props.version.view.model.relations ?? []
                     ).filter(
                       (relation) =>
                         relation.id === id ||
@@ -839,7 +863,7 @@ export function TessivenGraph(props: {
                       ]),
                     ];
                     const hosted =
-                      props.version.document.instances?.filter(
+                      props.version.view.model.instances?.filter(
                         (member) =>
                           member.serviceRef === id || member.nodeRef === id,
                       ) ?? [];
@@ -849,6 +873,9 @@ export function TessivenGraph(props: {
                       <section class="tessiven-detail-object">
                         <strong>{title}</strong>
                         <code>{id}</code>
+                        <Show when={item && 'facts' in item}>
+                          <dl class="tessiven-object-facts"><For each={item?.facts as { label: string; value: string }[] | undefined}>{fact => <div><dt>{fact.label}</dt><dd>{fact.value}</dd></div>}</For></dl>
+                        </Show>
                         <Show when={item?.description}>
                           <p>{String(item?.description)}</p>
                         </Show>
@@ -875,7 +902,7 @@ export function TessivenGraph(props: {
                                 member.id}{' '}
                               ·{' '}
                               {
-                                props.version.document.nodes?.find(
+                                props.version.view.model.nodes?.find(
                                   (node) => node.id === member.nodeRef,
                                 )?.name
                               }{' '}
@@ -894,7 +921,7 @@ export function TessivenGraph(props: {
                           <p>
                             {props.t(`role.${instance?.role}`)} ·{' '}
                             {
-                              props.version.document.nodes?.find(
+                              props.version.view.model.nodes?.find(
                                 (node) => node.id === instance?.nodeRef,
                               )?.name
                             }
@@ -947,7 +974,7 @@ export function TessivenGraph(props: {
                         <For each={evidenceRefs.slice(0, 8)}>
                           {(ref) => {
                             const evidence =
-                              props.version.document.evidence?.find(
+                              props.version.view.model.evidence?.find(
                                 (value) => value.id === ref,
                               );
                             return (
@@ -981,6 +1008,7 @@ export function TessivenGraph(props: {
             <Button
               class="tessiven-ask-flower"
               role={value.menu ? 'menuitem' : undefined}
+              disabled={!canAsk(value.refs)}
               size="sm"
               variant="ghost"
               onClick={() => ask(value.refs)}

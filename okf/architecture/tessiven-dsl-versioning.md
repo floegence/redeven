@@ -92,6 +92,11 @@ startup database upgrades independently.
 
 # Schema And Flower Contract
 
+Native rendering uses the independently frozen
+[canvas presentation contract](tessiven-canvas-presentation.md), not the current
+DSL identity. Every DSL release must verify its explicit mapping to the oldest
+supported display contract without rewriting source or granting resource authority.
+
 `tessiven.schema` and `GET /schema` default to the current frozen schema. The
 optional tool `version` or HTTP `?version=` requests an exact supported DSL
 schema; unknown versions are errors. Existing read permissions still apply.

@@ -6,23 +6,15 @@ import fs from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { supportedAPIVersions, canvasKind } from '../../../tessiven_ui/src/native/contract.ts';
+import { supportedPresentationFormats, presentationCapabilities, legacyAPIVersions } from '../../../tessiven_ui/src/native/contract.ts';
 const native = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../tessiven_ui/native');
 const dependencies = path.resolve(native, '../../envapp/ui_src/node_modules');
 const output = process.argv[2];
 if (!output) throw new Error('Pass the renderer output directory');
-// The v1.1.0 renderer maps optional group packing to the released graph API.
-// All other fields must retain the frozen baseline shape; additional format
-// support requires a deliberate renderer change.
-const schemas = await Promise.all(supportedAPIVersions.map(async apiVersion => {
-  const version = apiVersion.slice('redeven.io/tessiven/'.length);
-  const schema = JSON.parse(await fs.readFile(path.resolve(native, `../../../spec/tessiven/${version}.schema.json`), 'utf8'));
-  if (schema.properties.apiVersion.const !== apiVersion || schema.properties.kind.const !== canvasKind) throw new Error('Native format does not match its frozen schema');
-  delete schema.$id; delete schema.title; delete schema.properties.apiVersion;
-  if (version === 'v1.1.0') delete schema.properties.presentation.properties.groupLayouts;
-  return JSON.stringify(schema);
-}));
-if (new Set(schemas).size !== 1) throw new Error('Native formats require different rendering contracts');
+// The independently frozen presentation schema is the native rendering boundary.
+// DSL migration support never grants a downloaded document rendering capability.
+const schema = JSON.parse(await fs.readFile(path.resolve(native, '../../../spec/tessiven-presentation/v1.schema.json'), 'utf8'));
+if (!supportedPresentationFormats.includes(schema.properties.format.const)) throw new Error('Native presentation does not match its frozen schema');
 const core = path.join(dependencies, '@floegence/floe-webapp-core/dist');
 const modules = new Set();
 await build({
@@ -85,7 +77,8 @@ packages.set('elkjs', { name: 'elkjs', version: corePackage.dependencies.elkjs, 
 packages.set('libavoid-js', { name: 'libavoid-js', version: corePackage.dependencies['libavoid-js'], license: 'LGPL-2.1-or-later' });
 const sourceCommit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: native, encoding: 'utf8' }).trim();
 await fs.writeFile(path.join(output, 'renderer-manifest.json'), JSON.stringify({
-  format: 1, source_commit: sourceCommit, supported_api_versions: supportedAPIVersions,
+  format: 2, source_commit: sourceCommit, supported_presentation_formats: supportedPresentationFormats,
+  capabilities: presentationCapabilities, legacy_api_versions: legacyAPIVersions,
   packages: [...packages.values()].sort((a, b) => a.name.localeCompare(b.name)),
   files,
 }, null, 2) + '\n');

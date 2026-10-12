@@ -93,6 +93,10 @@ func (g *Server) handleTessivenAPI(w http.ResponseWriter, r *http.Request) bool 
 		writeTessivenResult(w, result, err)
 		return true
 	}
+	if r.Method == http.MethodGet && path == "/presentation-contract" {
+		writeTessivenResult(w, tessiven.CurrentPresentationContract(), nil)
+		return true
+	}
 	if r.Method == http.MethodGet && path == "/events" {
 		g.handleTessivenEvents(w, r)
 		return true
@@ -183,7 +187,7 @@ func (g *Server) handleTessivenAPI(w http.ResponseWriter, r *http.Request) bool 
 				}
 			}
 		}
-		if len(parts) == 4 && parts[2] == "versions" && r.Method == http.MethodGet {
+		if (len(parts) == 4 || len(parts) == 5 && parts[4] == "presentation") && parts[2] == "versions" && r.Method == http.MethodGet {
 			var version int64
 			var err error
 			if parts[3] != "latest" {
@@ -193,8 +197,18 @@ func (g *Server) handleTessivenAPI(w http.ResponseWriter, r *http.Request) bool 
 				writeTessivenError(w, err)
 				return true
 			}
-			result, err := g.tessiven.Version(r.Context(), id, version)
-			writeTessivenResult(w, result, err)
+			if len(parts) == 5 {
+				capabilities, err := tessiven.ParsePresentationCapabilities(r.URL.Query().Get("capabilities"))
+				if err != nil {
+					writeTessivenError(w, err)
+					return true
+				}
+				result, err := g.tessiven.Presentation(r.Context(), id, version, r.URL.Query().Get("format"), capabilities)
+				writeTessivenResult(w, result, err)
+			} else {
+				result, err := g.tessiven.Version(r.Context(), id, version)
+				writeTessivenResult(w, result, err)
+			}
 			return true
 		}
 	}
@@ -261,6 +275,8 @@ func writeTessivenError(w http.ResponseWriter, err error) {
 		status, code, message = 409, "TESSIVEN_ARCHIVED", err.Error()
 	case errors.Is(err, tessiven.ErrInvalidRequest):
 		status, code, message = 400, "TESSIVEN_INVALID_REQUEST", err.Error()
+	case errors.Is(err, tessiven.ErrPresentationUnsupported):
+		status, code, message = 409, "TESSIVEN_PRESENTATION_UNSUPPORTED", err.Error()
 	}
 	writeJSON(w, status, apiResp{OK: false, Error: message, ErrorCode: code, Data: data})
 }
@@ -335,6 +351,19 @@ func tessivenQueryAllowed(method, path, raw string) bool {
 			}
 		} else if strings.HasSuffix(path, "/versions") && key == "before" {
 			if _, err := parseTessivenVersion(list[0], false); err != nil {
+				return false
+			}
+		} else if strings.HasSuffix(path, "/presentation") {
+			switch key {
+			case "format":
+				if len(list[0]) == 0 || len(list[0]) > 128 {
+					return false
+				}
+			case "capabilities":
+				if _, err := tessiven.ParsePresentationCapabilities(list[0]); err != nil {
+					return false
+				}
+			default:
 				return false
 			}
 		} else {

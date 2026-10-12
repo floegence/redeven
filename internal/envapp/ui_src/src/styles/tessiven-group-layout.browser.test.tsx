@@ -1,3 +1,4 @@
+import { toRenderVersion, toRenderModel } from '../../../../tessiven_ui/src/presentation';
 import '../index.css';
 import '../../../../tessiven_ui/src/tessiven.css';
 import { render } from 'solid-js/web';
@@ -32,7 +33,7 @@ it('keeps a DOWN architecture with a row-packed peer pool across compact reflows
   host.style.cssText = 'width:1200px;height:680px;position:relative'; window.document.body.append(host);
   let control: TessivenViewportControl | undefined, state = '';
   const version = { canvas_id: 'cluster', number: 1, document } as Version;
-  dispose = render(() => <TessivenGraph version={version} historical={false} t={tessivenText('en-US')}
+  dispose = render(() => <TessivenGraph version={toRenderVersion(version)} historical={false} t={tessivenText('en-US')}
     onAsk={() => {}} onInspect={() => {}} onViewportControl={value => { control = value; }}
     onRenderState={value => { state = value; }} />, host);
   const ready = async () => { await expect.poll(() => state, { timeout: 20000 }).toBe('rendered'); };
@@ -72,9 +73,9 @@ it('uses identical member geometry in the main graph and thumbnail with authored
   const engine = createGraphLayoutEngine(), t = tessivenText('en-US');
   let state = '';
   const unmount = render(() => <>
-    <TessivenGraph version={{ canvas_id: 'pool', number: 1, document } as Version} historical={false} t={t}
+    <TessivenGraph version={toRenderVersion({ canvas_id: 'pool', number: 1, document } as Version)} historical={false} t={t}
       onAsk={() => {}} onInspect={() => {}} onRenderState={value => { state = value; }} />
-    <div style="display:none"><TessivenThumbnail document={document} t={t} engine={engine} /></div>
+    <div style="display:none"><TessivenThumbnail model={toRenderModel(document)} t={t} engine={engine} /></div>
   </>, host);
   dispose = () => { unmount(); engine.dispose(); };
   await expect.poll(() => state).toBe('rendered');

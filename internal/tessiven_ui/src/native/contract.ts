@@ -1,9 +1,10 @@
-// Rendering compatibility is explicit; a server migration registry is not a
-// promise that a native renderer understands every registered document.
-export const supportedAPIVersions = [
+// Presentation formats describe bundled rendering capabilities, independently
+// of the DSL versions supported by the server's storage and migration registry.
+export const presentationFormat = 'redeven.io/tessiven-presentation/v1';
+export const supportedPresentationFormats = [presentationFormat] as const;
+export const presentationCapabilities = ['group_layouts'] as const;
+export const legacyAPIVersions = [
   'redeven.io/tessiven/v1',
   'redeven.io/tessiven/v1.0.0',
   'redeven.io/tessiven/v1.1.0',
 ] as const;
-export type RenderableAPIVersion = typeof supportedAPIVersions[number];
-export const canvasKind = 'ServiceCanvas';

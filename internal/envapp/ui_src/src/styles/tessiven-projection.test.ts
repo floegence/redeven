@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { projectCanvas, projectLayoutOptions, projectLayoutLayers, projectPositions } from '../../../../tessiven_ui/src/projection';
+import { toRenderModel, toRenderVersion } from '../../../../tessiven_ui/src/presentation';
+import type { RenderModel, Version } from '../../../../tessiven_ui/src/types';
 import { sharedHostsDocument } from './tessiven-shared-hosts.fixture';
 
 describe('shared physical hosts in logical groups', () => {
@@ -164,5 +166,35 @@ describe('shared physical hosts in logical groups', () => {
       expect(card.kind === 'node' && card.instances.length).toBe(17);
       expect(projected.graph.nodes.find(node => node.id === id)!.height).toBeGreaterThan(900);
     }
+  });
+});
+
+describe('independent canvas presentation boundary', () => {
+  it('passes display data without exposing the source DSL or original document', () => {
+    const document = sharedHostsDocument();
+    const original = JSON.stringify(document);
+    const source = { canvas_id: 'canvas', number: 2, source: 'flower', document, document_yaml: 'original YAML', digest: 'source digest' } as Version;
+    const rendered = toRenderVersion(source);
+    expect(rendered.view.format).toBe('redeven.io/tessiven-presentation/v1');
+    expect(rendered.view.model).not.toHaveProperty('apiVersion');
+    expect(rendered.view.model).not.toHaveProperty('kind');
+    expect(rendered).not.toHaveProperty('document_yaml');
+    expect(rendered).not.toHaveProperty('digest');
+    expect(rendered.view.model.groups).toEqual(document.groups);
+    expect(rendered.view.model.presentation).toEqual(document.presentation);
+    expect(JSON.stringify(document)).toBe(original);
+  });
+
+  it('projects a generic object and its exact relationship without inventing a host', () => {
+    const model: RenderModel = toRenderModel(sharedHostsDocument());
+    model.objects = [{ id: 'queue', name: 'Work queue', kind: 'Queue', facts: [{ label: 'Region', value: 'Local' }], objectRefs: ['queue'] }];
+    model.relations!.push({ id: 'queue-call', from: 'node-3', to: 'queue', kind: 'calls', evidenceRefs: [] });
+    const original = JSON.stringify(model);
+    const projected = projectCanvas(model, new Set(['hdfs', 'zk']), {});
+    expect(projected.cards.get('queue')).toEqual({ kind: 'object', object: model.objects[0] });
+    expect(projected.graph.nodes.find(value => value.id === 'queue')).toMatchObject({ id: 'queue', label: 'Work queue' });
+    expect(projected.graph.edges.find(value => value.target === 'queue')).toMatchObject({ source: 'node-3', target: 'queue' });
+    expect(projected.memberships.has('queue')).toBe(false);
+    expect(JSON.stringify(model)).toBe(original);
   });
 });

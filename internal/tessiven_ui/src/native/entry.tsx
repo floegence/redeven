@@ -3,8 +3,8 @@ import { render } from 'solid-js/web';
 import { Plus, Minus, Maximize } from '@floegence/floe-webapp-core/icons';
 import { TessivenGraph, type TessivenViewportControl, type GraphBrowseState, type TessivenViewOptions } from '../TessivenGraph';
 import { attachTouchViewport } from './touchViewport';
-import type { Version, Selection } from '../types';
-import { supportedAPIVersions, canvasKind } from './contract';
+import type { RenderVersion, Selection } from '../types';
+import { supportedPresentationFormats } from './contract';
 import enUS from '../locales/en-US.json';
 import '../tessiven.css';
 import '../../native/native.css';
@@ -13,18 +13,18 @@ declare global {
   interface Window {
     webkit?: { messageHandlers?: { canvas?: { postMessage: (message: unknown) => void } } };
     serviceCanvas?: {
-      update: (input: { render_id: string; version: Version; historical: boolean; dark: boolean; contrast: boolean; bottomInset?: number }) => void;
+      update: (input: { render_id: string; version: RenderVersion; historical: boolean; dark: boolean; contrast: boolean; bottomInset?: number }) => void;
       command: (input: { canvas_id: string; version_id: number; action: 'expand' | 'collapse' | 'all' | 'group' | 'clearSelection' }) => void;
     };
   }
 }
 
 const renderID = new URLSearchParams(location.hash.slice(1)).get('render_id');
-const notify = (type: string, version?: Version, selection?: Selection, options?: TessivenViewOptions) =>
+const notify = (type: string, version?: RenderVersion, selection?: Selection, options?: TessivenViewOptions) =>
   window.webkit?.messageHandlers?.canvas?.postMessage({
     type, render_id: renderID, canvas_id: version?.canvas_id, version_id: version?.number, selection, ...options,
   });
-let currentVersion: Version | undefined;
+let currentVersion: RenderVersion | undefined;
 const t = (key: string, values?: Record<string, string | number>) => {
   const template = enUS[key as keyof typeof enUS];
   if (template === undefined) throw new Error(`Unknown Tessiven message: ${key}`);
@@ -32,7 +32,7 @@ const t = (key: string, values?: Record<string, string | number>) => {
 };
 
 function NativeCanvas() {
-  const [input, setInput] = createSignal<{ version: Version; historical: boolean }>();
+  const [input, setInput] = createSignal<{ version: RenderVersion; historical: boolean }>();
   const [scale, setScale] = createSignal(1);
   const browsing = new Map<string, GraphBrowseState>();
   let control: TessivenViewportControl | undefined;
@@ -60,7 +60,9 @@ function NativeCanvas() {
     update(value) {
       if (!renderID || value.render_id !== renderID) return;
       currentVersion = value.version;
-      if (!supportedAPIVersions.includes(value.version.document.apiVersion) || value.version.document.kind !== canvasKind) {
+      if (!value.version || !value.version.canvas_id || !Number.isSafeInteger(value.version.number) || value.version.number < 1
+        || !value.version.view || !supportedPresentationFormats.some(format => format === value.version.view.format)
+        || !value.version.view.model?.metadata || value.version.view.compatibility?.status === 'unavailable') {
         notify('error', value.version);
         return;
       }
@@ -78,7 +80,7 @@ function NativeCanvas() {
   };
   notify('ready');
   return <main class="tessiven" ref={host}><Show when={input()} keyed>{value => <TessivenGraph
-    version={value.version} historical={value.historical} t={t} visible={true}
+    version={value.version} historical={value.historical} t={t} visible={true} askReferenceMode="display"
     onAsk={selection => notify('ask', value.version, selection)} onSelectionChange={selection => notify('selection', value.version, selection)}
     onInspect={() => undefined} onViewportControl={value => { control = value; }}
     tools="hidden" onZoomChange={setScale} onViewOptions={options => notify('viewOptions', value.version, undefined, options)}

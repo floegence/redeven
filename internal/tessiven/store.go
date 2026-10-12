@@ -200,7 +200,7 @@ func (s *Service) Canvas(ctx context.Context, id string) (Canvas, error) {
 	err := scanCanvas(s.db.QueryRowContext(ctx, `SELECT id,title,description,latest_version,archived,created_at,updated_at,flower_thread_id FROM canvases WHERE id=?`, id), &c)
 	return c, notFound(err)
 }
-func readVersion(ctx context.Context, q interface {
+func readVersionSource(ctx context.Context, q interface {
 	QueryRowContext(context.Context, string, ...any) *sql.Row
 }, id string, number int64) (Version, error) {
 	var v Version
@@ -210,6 +210,18 @@ func readVersion(ctx context.Context, q interface {
 	}
 	if digest(v.DocumentYAML) != v.Digest {
 		return v, errors.New("tessiven stored version failed integrity validation")
+	}
+	if len(v.DocumentYAML) > MaxDocumentBytes {
+		return v, errors.New("tessiven stored version exceeds the document limit")
+	}
+	return v, nil
+}
+func readVersion(ctx context.Context, q interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}, id string, number int64) (Version, error) {
+	v, err := readVersionSource(ctx, q, id, number)
+	if err != nil {
+		return v, err
 	}
 	validation := validateDocument(v.DocumentYAML, true)
 	if !validation.Valid {

@@ -11,6 +11,17 @@ const query =
         allowed[key]!(url.searchParams.get(key)!),
     );
 export const TESSIVEN_RUNTIME_ROUTES = [
+  { path: `${TESSIVEN_RUNTIME_BASE}/presentation-contract`, methods: ['GET'], allowsQuery: noQuery },
+  {
+    path: new RegExp(`^${TESSIVEN_RUNTIME_BASE}/canvases/${canvas}/versions/(latest|[1-9][0-9]{0,14})/presentation$`),
+    methods: ['GET'],
+    allowsQuery: query({
+      format: value => value.length > 0 && value.length <= 128,
+      capabilities: value => value === '' || value.split(',').length <= 16
+        && value.split(',').every(item => /^[a-z0-9_]{1,64}$/.test(item))
+        && new Set(value.split(',')).size === value.split(',').length,
+    }),
+  },
  {path:`${TESSIVEN_RUNTIME_BASE}/runtimes`,methods:['GET'],allowsQuery:noQuery},
  {path:`${TESSIVEN_RUNTIME_BASE}/runtimes/inspect`,methods:['POST'],allowsQuery:noQuery},
  {path:`${TESSIVEN_RUNTIME_BASE}/runtimes/actions`,methods:['POST'],allowsQuery:noQuery},

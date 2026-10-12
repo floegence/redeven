@@ -5,7 +5,8 @@ import type {
   GraphLayoutOptions,
 } from '@floegence/floe-webapp-core/graph';
 import type {
-  CanvasDocument,
+  RenderModel,
+  GenericObject,
   CanvasNode,
   Group,
   Instance,
@@ -26,7 +27,8 @@ export type Card =
     }
   | { kind: 'node'; node: CanvasNode; instances: Instance[]; group?: Group; groupInstances: Instance[] }
   | { kind: 'resource'; resource: Resource }
-  | { kind: 'service'; service: BusinessService; instanceCount: number };
+  | { kind: 'service'; service: BusinessService; instanceCount: number }
+  | { kind: 'object'; object: GenericObject };
 export type Projection = {
   graph: GraphInput;
   cards: Map<string, Card>;
@@ -47,10 +49,10 @@ export type InternalRelation = {
 const internalRelationHeight = (count: number) => count ? 36 + count * 30 : 0;
 export type NodeServiceScope = 'all' | 'group';
 
-// Rendering identities are derived from stable DSL IDs. Grouping never changes
+// Rendering identities are derived from stable business object IDs. Grouping never changes
 // the stored graph or turns a group into a service-operation target.
 export function projectCanvas(
-  document: CanvasDocument,
+  document: RenderModel,
   expanded: ReadonlySet<string>,
   selectedNodes: Readonly<Record<string, string>>,
   serviceScope: NodeServiceScope = 'all',
@@ -170,6 +172,11 @@ export function projectCanvas(
     });
     cards.set(resource.id, { kind: 'resource', resource });
   }
+  for (const object of document.objects ?? []) {
+    nodes.push({ id: object.id, label: object.name, width: 240,
+      height: 116 + (object.description ? 36 : 0) + Math.min(object.facts?.length ?? 0, 3) * 24 });
+    cards.set(object.id, { kind: 'object', object });
+  }
   const serviceTargets = new Map<string, Set<string>>();
   const serviceCounts = new Map<string, number>();
   const instanceTargets = (instance: Instance, detailed: boolean): string[] => {
@@ -231,7 +238,7 @@ export function projectCanvas(
   const edges: GraphEdge[] = [];
   const internalRelations = new Map<string, InternalRelation[]>();
   const objectNames = new Map<string, string>();
-  for (const item of [...(document.nodes ?? []), ...(document.groups ?? []), ...(document.services ?? []), ...(document.resources ?? [])])
+  for (const item of [...(document.nodes ?? []), ...(document.groups ?? []), ...(document.services ?? []), ...(document.resources ?? []), ...(document.objects ?? [])])
     objectNames.set(item.id, item.name);
   const endpointLabel = (id: string) => {
     const instance = byID.get(id);
@@ -321,7 +328,7 @@ export function projectCanvas(
   return { graph: { nodes, edges }, cards, relations: relationGroups, internalRelations, appearances, memberships, instanceMemberships: instanceGroups };
 }
 
-export function projectPositions(document: CanvasDocument, projection: Projection) {
+export function projectPositions(document: RenderModel, projection: Projection) {
   const visible = new Set(projection.graph.nodes.map(node => node.id));
   return (document.presentation?.positions ?? []).flatMap(position => {
     const nodeId = projection.appearances.get(position.objectRef)?.[0] ?? position.objectRef;
@@ -330,7 +337,7 @@ export function projectPositions(document: CanvasDocument, projection: Projectio
 }
 
 export function projectLayoutLayers(
-  document: CanvasDocument,
+  document: RenderModel,
   projection: Projection,
 ): string[][] | undefined {
   const authored = document.presentation?.layers;
@@ -342,7 +349,7 @@ export function projectLayoutLayers(
 
 /** Product geometry budgets shared by the full canvas and its preview. */
 export function projectLayoutOptions(
-  document: CanvasDocument,
+  document: RenderModel,
   projection: Projection,
   positionMode: GraphLayoutOptions['positionMode'] = 'preferred',
 ): GraphLayoutOptions {
@@ -372,8 +379,8 @@ export type Difference = {
   change: 'added' | 'removed' | 'changed';
 };
 export function compareDocuments(
-  before: CanvasDocument,
-  after: CanvasDocument,
+  before: RenderModel,
+  after: RenderModel,
 ): Difference[] {
   const output: Difference[] = [];
   for (const kind of [

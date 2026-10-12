@@ -28,6 +28,7 @@ import {
   type CanvasFlowerSurfaceProps,
 } from './TessivenFlowerPanel';
 import { TessivenGraph, type GraphBrowseState } from './TessivenGraph';
+import { toRenderVersion } from './presentation';
 import { TessivenIcon } from './TessivenIcon';
 import { TessivenLibraryCard } from './TessivenLibraryCard';
 import { compareDocuments, type Difference } from './projection';
@@ -628,7 +629,7 @@ export function TessivenPage(props: {
                         browseStates.set(current.canvas_id, state)
                       }
                       visible={props.visible}
-                      version={current}
+                      version={toRenderVersion(current)}
                       historical={historical()}
                       t={props.t}
                       onAsk={askSelection}

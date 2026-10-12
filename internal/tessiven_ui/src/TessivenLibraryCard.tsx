@@ -5,6 +5,7 @@ import {
   type GraphLayoutEngine,
 } from '@floegence/floe-webapp-core/graph';
 import { TessivenIcon } from './TessivenIcon';
+import { toRenderModel } from './presentation';
 import { TessivenThumbnail } from './TessivenThumbnail';
 import type { Canvas, TessivenText, TessivenTransport, Version } from './types';
 
@@ -69,7 +70,7 @@ export function TessivenLibraryCard(props: {
               </div>
             }
           >
-            <TessivenThumbnail document={preview()!.document} t={props.t} engine={layoutEngine} />
+            <TessivenThumbnail model={toRenderModel(preview()!.document)} t={props.t} engine={layoutEngine} />
           </Show>
         </div>
         <Show when={preview()?.source === 'example'}>

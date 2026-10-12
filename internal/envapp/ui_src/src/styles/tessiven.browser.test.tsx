@@ -1,3 +1,4 @@
+import { toRenderVersion, toRenderModel } from '../../../../tessiven_ui/src/presentation';
 import '../index.css';
 import '../../../../tessiven_ui/src/tessiven.css';
 import { render } from 'solid-js/web';
@@ -141,7 +142,7 @@ function mount(count = 2, version = fixture(count), browseState?: GraphBrowseSta
   dispose = render(
     () => (
       <TessivenGraph
-        version={version}
+        version={toRenderVersion(version)}
         t={tessivenText('en-US')}
         historical={false}
         onAsk={ask}
@@ -224,9 +225,9 @@ describe('Tessiven real graph interactions', () => {
     document.body.append(host);
     const engine = createGraphLayoutEngine();
     dispose = render(() => <>
-      <TessivenGraph version={version} historical={false} t={tessivenText('en-US')}
+      <TessivenGraph version={toRenderVersion(version)} historical={false} t={tessivenText('en-US')}
         onAsk={() => {}} onInspect={() => {}} />
-      <TessivenThumbnail document={version.document} t={tessivenText('en-US')} engine={engine} />
+      <TessivenThumbnail model={toRenderModel(version.document)} t={tessivenText('en-US')} engine={engine} />
     </>, host);
     try {
       await expect.poll(() => host.querySelector('.tessiven-thumbnail-resource small')?.textContent).toBeTruthy();
@@ -244,7 +245,7 @@ describe('Tessiven real graph interactions', () => {
     document.body.append(host);
     const states = vi.fn(), selection = vi.fn();
     let control: TessivenViewportControl | undefined;
-    dispose = render(() => <TessivenGraph version={fixture()} historical={false}
+    dispose = render(() => <TessivenGraph version={toRenderVersion(fixture())} historical={false}
       t={tessivenText('en-US')} onAsk={() => {}} onInspect={() => {}}
       tools="hidden"
       onSelectionChange={selection} onRenderState={states} onViewportControl={value => { control = value; }} />, host);
@@ -342,7 +343,7 @@ describe('Tessiven real graph interactions', () => {
     const preview = document.createElement('div');
     host.append(preview);
     const engine = createGraphLayoutEngine();
-    const unmount = render(() => <TessivenThumbnail document={version.document} t={tessivenText('en-US')} engine={engine} />, preview);
+    const unmount = render(() => <TessivenThumbnail model={toRenderModel(version.document)} t={tessivenText('en-US')} engine={engine} />, preview);
     try {
       await expect.poll(() => host.querySelectorAll('.tessiven-node').length).toBe(2);
       await expect.poll(() => preview.querySelectorAll('[data-preview-object]').length).toBe(5);

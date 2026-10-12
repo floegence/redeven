@@ -8,6 +8,8 @@ describe('Tessiven Desktop request authority', () => {
   it('allows exact canvas and version routes through the existing local adapter', () => {
     for (const path of [
       `${base}/schema`,
+      `${base}/presentation-contract`,
+      `${base}/canvases/canvas/versions/latest/presentation?format=redeven.io%2Ftessiven-presentation%2Fv1&capabilities=group_layouts`,
       `${base}/schema?version=v1`,
       `${base}/schema?version=v1.0.0`,
       `${base}/events`,
@@ -35,6 +37,10 @@ describe('Tessiven Desktop request authority', () => {
       `${base}/canvases?archived=true&archived=false`,
       `${base}/canvases/c/versions/0`,
       `${base}/host`,
+      `${base}/presentation-contract?target=remote`,
+      `${base}/canvases/c/versions/1/presentation?format=v1&target=remote`,
+      `${base}/canvases/c/versions/1/presentation?format=v1&format=v2`,
+      `${base}/canvases/c/versions/1/presentation?format=v1&capabilities=group_layouts,group_layouts`,
     ])
       expect(() => runtimeFlowerPath(path)).toThrow();
     expect(runtimeFlowerMethodAllowed(`${base}/schema`, 'POST')).toBe(false);
