@@ -3125,6 +3125,14 @@
   padding: 0.625rem 0.75rem;
 }
 
+.flower-message-bubble-user.flower-message-bubble-error {
+  color: var(--flower-user-inset-foreground);
+}
+
+.flower-message-bubble-user.flower-message-bubble-error .flower-message-error-kicker {
+  color: inherit;
+}
+
 .flower-message-error-kicker {
   display: inline-flex;
   align-items: center;
@@ -4687,6 +4695,8 @@ button.flower-composer-context-source:focus-visible,
 /* Theme-colored insets need a selection distinct from their own surface. */
 .flower-message-bubble-user :is(.flower-chat-md-inline-code, .flower-chat-md-code-block, th)::selection,
 .flower-message-bubble-user :is(.flower-chat-md-inline-code, .flower-chat-md-code-block, th) ::selection,
+.flower-message-bubble-user.flower-message-bubble-error::selection,
+.flower-message-bubble-user.flower-message-bubble-error ::selection,
 .flower-queued-turn-bubble::selection,
 .flower-queued-turn-bubble ::selection {
   background: var(--flower-user-inset-foreground);
@@ -4723,8 +4733,16 @@ button.flower-composer-context-source:focus-visible,
     forced-color-adjust: auto;
   }
 
+  .flower-message-bubble-user.flower-message-bubble-error {
+    background: Canvas;
+    color: CanvasText;
+    forced-color-adjust: auto;
+  }
+
   .flower-message-bubble-user :is(.flower-chat-md-inline-code, .flower-chat-md-code-block, th)::selection,
   .flower-message-bubble-user :is(.flower-chat-md-inline-code, .flower-chat-md-code-block, th) ::selection,
+  .flower-message-bubble-user.flower-message-bubble-error::selection,
+  .flower-message-bubble-user.flower-message-bubble-error ::selection,
   .flower-queued-turn-bubble::selection,
   .flower-queued-turn-bubble ::selection {
     background: Highlight;

@@ -31908,15 +31908,15 @@
         "title": "Flower message appearance",
         "type": "UI Contract"
       },
-      "body_length": 2790,
+      "body_length": 3014,
       "summary": "Flower owns transcript message presentation in the shared Env App and Desktop\nUI. Published Floe theme tokens own the palette. Sent user messages use the\ntheme's text-selection accent with readable foreground text. Native selection\nmust remain visible within a filled bubble and its insets. Theme changes alter\npaint only, preserving message DOM, geometry and active selection. Queued input\nkeeps its quieter pending presentation; forced colors use system roles.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Filled messages and content\n\nSent user content, context bubbles and answered-question receipts use\n`selection-bg` and `selection-fg`. Classic Light's bright selection accent uses\ndark ink derived from the theme foreground to meet body-text contrast without\nchanging the accent. Queued bubbles retain their soft theme-derived background\nand ordinary foreground.\n\nLinks retain underlines and use the bubble foreground in idle, hover and focus\nstates. Keyboard focus has a visible outline. Quotes, receipt labels and\nreference labels inherit the bubble foreground. Reference chips retain their\nsource text and actions with a transparent face, readable detail text and a\nforeground-derived boundary. Tables and code retain separate theme-colored\ninsets; their text derives from the theme foreground with bounded lightness.\n\n## Native text selection\n\nFilled bubble text uses Floe's contrasting `selection-on-primary` pair. Code,\ntable-header insets and queued input use the theme's dark/light reading roles\nin reverse, keeping selection distinct from their own faces. Selecting text\nnever changes parsing, content, copy behavior or transport state.",
-          "char_count": 1146
+          "body": "## Filled messages and content\n\nSent user content, context bubbles and answered-question receipts use\n`selection-bg` and `selection-fg`. Classic Light's bright selection accent uses\ndark ink derived from the theme foreground to meet body-text contrast without\nchanging the accent. Queued bubbles retain their soft theme-derived background\nand ordinary foreground.\n\nFailed user messages retain the error surface with its icon and heading. Their\ntext and selection use the inset reading roles so the error background cannot\nleave selection-colored message text unreadable.\n\nLinks retain underlines and use the bubble foreground in idle, hover and focus\nstates. Keyboard focus has a visible outline. Quotes, receipt labels and\nreference labels inherit the bubble foreground. Reference chips retain their\nsource text and actions with a transparent face, readable detail text and a\nforeground-derived boundary. Tables and code retain separate theme-colored\ninsets; their text derives from the theme foreground with bounded lightness.\n\n## Native text selection\n\nFilled bubble text uses Floe's contrasting `selection-on-primary` pair. Code,\ntable-header insets and queued input use the theme's dark/light reading roles\nin reverse, keeping selection distinct from their own faces. Selecting text\nnever changes parsing, content, copy behavior or transport state.",
+          "char_count": 1353
         },
         {
           "id": "boundaries",
@@ -31929,8 +31929,8 @@
           "id": "acceptance",
           "title": "Acceptance",
           "level": 1,
-          "body": "Browser coverage measures actual rendered colors across all 26 published\npresets and both surface materials. Ordinary and selected message text must\nreach 4.5:1. Selection faces must remain visibly distinct from their containing\nface, including references, receipts, quotes, tables and code. Tests also cover\nlink hover/focus, native selection preservation during theme changes, narrow\nlayout and forced colors. Code highlighting retains its independent\n[stable-content contract](flower-code-highlighting.md).",
-          "char_count": 509
+          "body": "Browser coverage measures actual rendered colors across all 26 published\npresets and both surface materials. Ordinary and selected message text must\nreach 4.5:1. Selection faces must remain visibly distinct from their containing\nface, including references, receipts, quotes, tables and code. Tests also cover\nlink hover/focus, native selection preservation during theme changes, narrow\nlayout, failed messages and forced colors. Code highlighting retains its independent\n[stable-content contract](flower-code-highlighting.md).",
+          "char_count": 526
         }
       ],
       "snippet": "Flower owns transcript message presentation in the shared Env App and Desktop UI. Published Floe theme tokens own the palette. Sent user messages use the theme's text-selection accent with readable foreground text. Native selection",
@@ -36901,5 +36901,5 @@
       ]
     }
   ],
-  "source_sha256": "87f5ee747b9caabf219b9ba0d36cc045e333e769f8722318d83138da5157ea5c"
+  "source_sha256": "9a168bc945618d289ebf5865cbb7bc054fd26760cb027f22a9fdf49f2a7e5893"
 }

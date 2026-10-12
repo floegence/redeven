@@ -92,6 +92,12 @@ function mount() {
       <div class="flower-message-row flower-message-row-user">
         <div class="flower-message-bubble flower-message-bubble-framed flower-message-bubble-user flower-queued-turn-bubble"><span data-copy>Waiting to send</span></div>
       </div>
+      <div class="flower-message-row flower-message-row-user">
+        <div class="flower-message-bubble flower-message-bubble-framed flower-message-bubble-user flower-message-bubble-error">
+          <div class="flower-message-error-kicker" data-copy>Message error</div>
+          <span data-copy>Preserve the failed message for review.</span>
+        </div>
+      </div>
     </div>
   </div>, host);
   return host;
