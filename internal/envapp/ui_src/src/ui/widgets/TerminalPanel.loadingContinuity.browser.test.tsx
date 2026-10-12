@@ -225,6 +225,83 @@ describe('TerminalPanel loading continuity', () => {
     vi.restoreAllMocks();
   });
 
+  it('keeps the Activity Flower footer host available without sessions and unregisters it on removal', async () => {
+    const unregister = vi.fn();
+    const register = vi.fn(() => unregister);
+    const [enabled, setEnabled] = createSignal(true);
+    const host = document.createElement('div');
+    Object.assign(host.style, { width: '960px', height: '640px' });
+    document.body.append(host);
+    disposeRendered = render(() => <TerminalSessionCatalogProvider>
+      <TerminalPanel registerActivityFlowerAnchor={enabled() ? register : undefined} />
+    </TerminalSessionCatalogProvider>, host);
+    await vi.waitFor(() => expect(register).toHaveBeenCalledTimes(1));
+    const anchor = host.querySelector<HTMLElement>('[data-terminal-flower-anchor]')!;
+    expect(anchor.closest('[data-testid="terminal-status-bar"]')).not.toBeNull();
+    expect(anchor.getBoundingClientRect().height).toBe(24);
+    setEnabled(false);
+    await vi.waitFor(() => expect(unregister).toHaveBeenCalledTimes(1));
+    expect(host.querySelector('[data-terminal-flower-anchor]')).toBeNull();
+    expect(host.querySelector('[data-testid="terminal-status-bar"]')).toBeNull();
+  });
+
+  it.each(['workbench', 'mobile'] as const)('does not register a Flower entry in a %s terminal', async (mode) => {
+    layoutState.mobile = mode === 'mobile';
+    const register = vi.fn();
+    const host = document.createElement('div');
+    Object.assign(host.style, { width: '960px', height: '640px' });
+    document.body.append(host);
+    disposeRendered = render(() => <TerminalSessionCatalogProvider>
+      <TerminalPanel variant={mode === 'workbench' ? 'workbench' : 'panel'} registerActivityFlowerAnchor={register} />
+    </TerminalSessionCatalogProvider>, host);
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    expect(register).not.toHaveBeenCalled();
+    expect(host.querySelector('[data-terminal-flower-anchor]')).toBeNull();
+  });
+
+  it('reserves the center for Flower and keeps geometry and recovery controls on the right in narrow footers', async () => {
+    rpcState.sessions = [createdSession()];
+    const register = vi.fn(() => vi.fn());
+    const host = document.createElement('div');
+    Object.assign(host.style, { width: '960px', height: '640px' });
+    document.body.append(host);
+    disposeRendered = render(() => <TerminalSessionCatalogProvider>
+      <TerminalPanel registerActivityFlowerAnchor={register} />
+    </TerminalSessionCatalogProvider>, host);
+    await vi.waitFor(() => expect(runtimeState.propsBySession.has('created-session')).toBe(true));
+    const runtime = runtimeState.propsBySession.get('created-session');
+    runtime.onGeometryPresentation('created-session', {
+      lifecycleEpoch: 1, rendererEpoch: 1, requestEpoch: 1,
+      local: { cols: 160, rows: 40 },
+      effective: { cols: 80, rows: 24, lifecycleEpoch: 1, rendererEpoch: 1, generation: 1, presentationSequence: 1 },
+    });
+    for (const width of [960, 720, 640]) {
+      host.style.width = `${width}px`;
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      const anchor = host.querySelector<HTMLElement>('[data-terminal-flower-anchor]')!;
+      const geometry = host.querySelector<HTMLElement>('[data-testid="terminal-shared-geometry-status-notice"]')!;
+      const footer = anchor.closest<HTMLElement>('[data-testid="terminal-status-bar"]')!;
+      const rect = anchor.getBoundingClientRect();
+      const bounds = footer.getBoundingClientRect();
+      expect(bounds.height).toBe(28);
+      expect(rect.height).toBe(24);
+      expect(rect.width).toBeGreaterThan(96);
+      expect(rect.width).toBeLessThanOrEqual(360);
+      expect(Math.abs(rect.left + rect.width / 2 - bounds.left - bounds.width / 2)).toBeLessThan(1);
+      expect(geometry.getBoundingClientRect().left).toBeGreaterThanOrEqual(rect.right);
+      expect(geometry.getBoundingClientRect().right).toBeLessThanOrEqual(bounds.right);
+      expect(geometry.getBoundingClientRect().width).toBe(bounds.width <= 720 ? 28 : 104);
+      const short = geometry.querySelector<HTMLElement>('.terminal-shared-geometry-notice__short')!;
+      expect(getComputedStyle(short).display).toBe(bounds.width <= 720 ? 'none' : 'inline');
+      runtime.onRuntimeStatus('created-session', { state: 'degraded', retryable: true });
+      const recovery = host.querySelector<HTMLElement>('[data-testid="terminal-recovery-status-actions"]')!;
+      expect(recovery.getBoundingClientRect().left).toBeGreaterThanOrEqual(rect.right);
+      expect(recovery.getBoundingClientRect().right).toBeLessThanOrEqual(bounds.right);
+      runtime.onRuntimeStatus('created-session', { state: 'idle' });
+      expect(host.scrollWidth).toBe(host.clientWidth);
+    }
+  });
+
   it('keeps one animated curtain node while only its text changes from creating to attaching', async () => {
     const create = deferred<ReturnType<typeof createdSession>>();
     const host = renderCreateFlow(vi.fn(() => create.promise));

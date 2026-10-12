@@ -10,7 +10,7 @@ import {
   type DropdownItem,
 } from '@floegence/floe-webapp-core/ui';
 import './adaptive-sidebar.css';
-import { For, Index, Show, batch, createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, untrack } from 'solid-js';
+import { For, Index, Show, batch, createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, onMount, untrack } from 'solid-js';
 import { cn, createAdaptiveSidebar, createRetainedContent, createUIFirstSelection, deferAfterPaint, isMacLikePlatform, matchKeybind, useCurrentWidgetId, useLayout, useNotification, useResolvedFloeConfig, useTheme, useViewActivation } from '@floegence/floe-webapp-core';
 import { Activity, BugIcon, Copy, Download, Folder, FolderPlus, Link, Menu, Pencil, Refresh, Terminal, Trash, X } from '@floegence/floe-webapp-core/icons';
 
@@ -209,6 +209,7 @@ export function resolveSystemTerminalThemeColors(
 }
 
 export interface TerminalPanelProps {
+  registerActivityFlowerAnchor?: (anchor: HTMLElement) => () => void;
   registerPageContext?: FlowerPageContextRegistrar;
   variant?: TerminalPanelVariant;
   mobileSessionsOpen?: boolean;
@@ -2430,9 +2431,21 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     });
   });
 
+  const showActivityFlowerEntry = () => (
+    variant === 'panel' && !isMobileLayout() && displayModeSelected()
+    && Boolean(props.registerActivityFlowerAnchor)
+  );
+  const ActivityFlowerAnchor = () => {
+    let anchor!: HTMLDivElement;
+    let unregister: (() => void) | undefined;
+    onMount(() => { unregister = props.registerActivityFlowerAnchor?.(anchor); });
+    onCleanup(() => unregister?.());
+    return <div ref={anchor} class="terminal-flower-anchor" data-terminal-flower-anchor aria-hidden="true" />;
+  };
+
   const showTerminalStatusBar = createMemo(() => {
     const hasSession = Boolean(activeSession() || activePendingSession());
-    return hasSession;
+    return hasSession || showActivityFlowerEntry();
   });
 
   const activeRuntimeStatusMessage = createMemo(() => {
@@ -5380,10 +5393,11 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
               <div
                 data-testid="terminal-status-bar"
                 data-terminal-runtime-state={activeRuntimeStatus().state}
-                class="relative z-10 grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-1 overflow-hidden border-t border-border bg-background leading-none text-muted-foreground"
+                class="terminal-status-bar relative z-10 grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-1 overflow-hidden border-t border-border bg-background leading-none text-muted-foreground"
                 classList={{
                   'h-11 min-h-11 max-h-11 px-1 text-[11px]': useMobileRecoveryStatusBar(),
                   'h-7 min-h-7 max-h-7 px-2 text-[10px]': !useMobileRecoveryStatusBar(),
+                  'terminal-status-bar--flower': showActivityFlowerEntry(),
                 }}
                 style={{
                   transform: useMobileRecoveryStatusBar()
@@ -5395,7 +5409,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                   <TerminalFontStatus font={resolvedFont()} inline />
                   <span
                     class="min-w-0 max-w-[40%] truncate"
-                    classList={{ hidden: useMobileRecoveryStatusBar() }}
+                    classList={{ hidden: useMobileRecoveryStatusBar() || !activeDisplaySessionId() }}
                   >
                     {i18n.t('terminal.statusSession')}: {statusBarSessionLabel()}
                   </span>
@@ -5413,6 +5427,9 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                   >
                     {activeRuntimeStatusMessage()}
                   </span>
+                </div>
+                <Show when={showActivityFlowerEntry()}><ActivityFlowerAnchor /></Show>
+                <div class="terminal-status-bar-right flex min-w-0 items-center justify-end gap-2 whitespace-nowrap">
                   <Show when={!isMobileLayout() ? activeGeometryPresentation() : null}>
                     {(presentation) => (
                       <TerminalSharedGeometryNotice
@@ -5427,16 +5444,15 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                   <span
                     data-terminal-history-rows={activeHistoryRows() === null ? '' : String(activeHistoryRows())}
                     class="terminal-shared-geometry-history ml-auto shrink-0"
-                    classList={{ hidden: useMobileRecoveryStatusBar() }}
+                    classList={{ hidden: useMobileRecoveryStatusBar() || !activeDisplaySessionId() }}
                   >
                     {i18n.t('terminal.statusHistory')}: {activeHistoryRows() === null ? '-' : activeHistoryRows()}
                   </span>
-                </div>
-                <Show when={activeRuntimeStatus().state === 'degraded' || activeRuntimeStatus().state === 'blocking'}>
-                  <div
-                    data-testid="terminal-recovery-status-actions"
-                    class="flex min-w-max shrink-0 items-center gap-1 whitespace-nowrap"
-                  >
+                  <Show when={activeRuntimeStatus().state === 'degraded' || activeRuntimeStatus().state === 'blocking'}>
+                    <div
+                      data-testid="terminal-recovery-status-actions"
+                      class="flex min-w-max shrink-0 items-center gap-1 whitespace-nowrap"
+                    >
                       <Show
                         when={activeRuntimeStatus().retryable !== false}
                         fallback={(
@@ -5482,8 +5498,9 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                       >
                         <BugIcon class="size-3.5" aria-hidden="true" />
                       </button>
-                  </div>
-                </Show>
+                    </div>
+                  </Show>
+                </div>
               </div>
             </Show>
             <span

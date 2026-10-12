@@ -1100,7 +1100,18 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   const [flowerProductMountHost, setFlowerProductMountHost] = createSignal<HTMLElement | null>(null);
   const [flowerProductMountContainer, setFlowerProductMountContainer] = createSignal<HTMLDivElement | null>(null);
   const [flowerProductMountRequested, setFlowerProductMountRequested] = createSignal(false);
-  const [activityFlowerAnchor, setActivityFlowerAnchor] = createSignal<HTMLElement | null>(null);
+  const [activityFlowerViewportAnchor, setActivityFlowerViewportAnchor] = createSignal<HTMLElement | null>(null);
+  const [activityTerminalFlowerAnchor, setActivityTerminalFlowerAnchor] = createSignal<HTMLElement | null>(null);
+  const registerActivityFlowerAnchor = (anchor: HTMLElement) => {
+    setActivityTerminalFlowerAnchor(anchor);
+    return () => setActivityTerminalFlowerAnchor((current) => current === anchor ? null : current);
+  };
+  const activityFlowerUsesTerminalFooter = createMemo(() => (
+    viewMode() === 'activity' && !layout.isMobile()
+    && layout.sidebarActiveTab() === 'terminal' && Boolean(activityTerminalFlowerAnchor())
+  ));
+  const activityFlowerAnchor = () => activityFlowerUsesTerminalFooter()
+    ? activityTerminalFlowerAnchor() : activityFlowerViewportAnchor();
   createEffect(() => {
     if (canUseFlower()) setFlowerProductMountRequested(true);
   });
@@ -3811,7 +3822,10 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
         />
   );
 
-  const ActivityTerminalPage = () => <EnvTerminalPage registerPageContext={registerPageContext('terminal')} />;
+  const ActivityTerminalPage = () => <EnvTerminalPage
+    registerPageContext={registerPageContext('terminal')}
+    registerActivityFlowerAnchor={canUseFlower() ? registerActivityFlowerAnchor : undefined}
+  />;
   const ActivityMonitorPage = () => <EnvMonitorPage registerPageContext={registerPageContext('monitor')} />;
   const ActivityFileBrowserPage = () => <EnvFileBrowserPage registerPageContext={registerPageContext('files')} />;
   const ActivityCodespacesPage = () => <EnvCodespacesPage registerPageContext={registerPageContext('codespaces')} />;
@@ -4911,9 +4925,10 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
 
   const renderActivityFlowerAnchor = () => (
     <div
-      ref={setActivityFlowerAnchor}
+      ref={setActivityFlowerViewportAnchor}
       class="flower-activity-companion-anchor"
       data-activity-flower-companion-anchor
+      hidden={activityFlowerUsesTerminalFooter()}
       aria-hidden="true"
     />
   );
