@@ -424,6 +424,7 @@
       "pendingSending": "Wird gesendet",
       "pendingQueued": "In Warteschlange",
       "queuedSendNow": "Jetzt senden",
+      "queuedSendNowDescription": "Aktuelle Antwort stoppen und diese wartende Nachricht jetzt senden",
       "queuedDelete": "Nachricht aus Warteschlange löschen",
       "scrollToLatest": "Zum neuesten scrollen",
       "runErrorTitle": "Flower konnte diese Antwort nicht abschließen.",

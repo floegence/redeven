@@ -116,7 +116,7 @@ export type FlowerRuntimeTransport = Readonly<{
   movePinnedThread?(threadID: string, input: FlowerThreadPinPosition): Promise<{ pins: readonly RuntimeThreadPinMetadata[] }>;
   reorderQueuedTurns?(threadID: string, orderedQueueIDs: readonly string[]): Promise<unknown>;
   deleteQueuedTurn?(threadID: string, queueID: string): Promise<unknown>;
-  promoteQueuedTurn?(threadID: string, queueID: string): Promise<unknown>;
+  sendQueuedTurnNow?(threadID: string, queueID: string): Promise<unknown>;
   forkThread(threadID: string, input: Readonly<{ client_request_id: string; title: string }>): Promise<LoadThreadResponse>;
   deleteThread?(threadID: string): Promise<void>;
   submitApproval(input: RuntimeApprovalSubmitInput): Promise<FlowerApprovalCommandResult>;
@@ -419,13 +419,13 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
           return loadThread(tid);
         },
       } : {}),
-      ...(options.transport.promoteQueuedTurn ? {
-        promoteQueuedTurn: async (threadID: string, queueID: string) => {
+      ...(options.transport.sendQueuedTurnNow ? {
+        sendQueuedTurnNow: async (threadID: string, queueID: string) => {
           const tid = trim(threadID);
           const qid = trim(queueID);
           if (!tid) throw new Error(missingThreadIDMessage(options));
           if (!qid) throw new Error('Missing Flower queued turn id.');
-          await options.transport.promoteQueuedTurn!(tid, qid);
+          await options.transport.sendQueuedTurnNow!(tid, qid);
           return loadThread(tid);
         },
       } : {}),

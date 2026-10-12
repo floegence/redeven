@@ -871,6 +871,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 		setThreadCache((cache) => cache.select(trimString(threadID) || null));
 	};
   const [queuedTurnReorder, setQueuedTurnReorder] = createSignal<FlowerQueuedTurnReorderState | null>(null);
+  const queuedTurnSendInFlight = new Map<string, string>();
+  const [queuedTurnSendRevision, setQueuedTurnSendRevision] = createSignal(0);
+  const queuedTurnSendPending = (threadID: string, queueID?: string): boolean => {
+    queuedTurnSendRevision();
+    const pendingQueueID = queuedTurnSendInFlight.get(trimString(threadID));
+    return Boolean(pendingQueueID && (!queueID || pendingQueueID === trimString(queueID)));
+  };
   // Reactive state updates are batched. Keep a synchronous guard as well so
   // Enter repeat and a same-tick click cannot admit the same draft twice.
   const launchChatTurnInFlight = new Set<string>();
@@ -3355,6 +3362,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const queuedTurnReorderEnabled = () => Boolean(
     props.adapter.reorderQueuedTurns
     && !selectedThreadReadOnly()
+    && !queuedTurnSendPending(trimString(selectedThreadID()))
     && selectedCanonicalQueuedTurns().length > 1
   );
   const beginQueuedTurnDrag = (event: DragEvent & { currentTarget: HTMLDivElement }, queueID: string) => {
@@ -3365,7 +3373,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const threadID = trimString(selectedThreadID());
     const orderedQueueIDs = selectedCanonicalQueuedTurns().map((turn) => trimString(turn.queue_id));
     const draggedQueueID = trimString(queueID);
-    if (!threadID || !draggedQueueID || !orderedQueueIDs.includes(draggedQueueID)) {
+    if (!threadID || queuedTurnSendPending(threadID) || !draggedQueueID || !orderedQueueIDs.includes(draggedQueueID)) {
       event.preventDefault();
       return;
     }
@@ -3417,6 +3425,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const commitQueuedTurnReorder = (event: DragEvent) => {
     const reorder = queuedTurnReorder();
     if (!reorder || reorder.phase !== 'dragging' || reorder.threadID !== selectedThreadID()) return;
+    if (queuedTurnSendPending(reorder.threadID)) return;
     event.preventDefault();
     const changed = reorder.orderedQueueIDs.some((queueID, index) => queueID !== reorder.originalQueueIDs[index]);
     if (!changed || !props.adapter.reorderQueuedTurns) {
@@ -3444,6 +3453,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       !props.adapter.deleteQueuedTurn
       || !threadID
       || !queueID
+      || queuedTurnSendPending(threadID)
     ) return;
     setQueuedTurnReorder(null);
     try {
@@ -3461,25 +3471,42 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       notifyThreadActionError(getErrorMessage(error));
     }
   };
-  const queuedTurnPromotionBlocked = createMemo(() => {
-    if (selectedThreadReadOnly()) return true;
-    const status = selectedThreadLiveStatus();
-    return status === 'running' || status === 'waiting_approval' || status === 'waiting_user';
-  });
-  const promoteQueuedTurn = async (turn: FlowerQueuedTurn): Promise<void> => {
+  const queuedTurnSendBlocked = (threadID: string): boolean => {
+    return selectedThreadReadOnly()
+      || selectedThreadStopPending()
+      || queuedTurnSendPending(threadID)
+      || transportOutbox().forThread(threadID).some((entry) => !entry.terminalError)
+      || !props.adapter.sendQueuedTurnNow;
+  };
+  const sendQueuedTurnNow = async (turn: FlowerQueuedTurn): Promise<void> => {
     const threadID = trimString(selectedThreadID());
     const queueID = trimString(turn.queue_id);
-    if (!props.adapter.promoteQueuedTurn || !threadID || !queueID || queuedTurnPromotionBlocked()) return;
+    const adapter = props.adapter;
+    if (!adapter.sendQueuedTurnNow || !threadID || !queueID || queuedTurnSendBlocked(threadID)) return;
+    const requestEpoch = liveTransport.connectionEpoch();
+    queuedTurnSendInFlight.set(threadID, queueID);
+    setQueuedTurnSendRevision((value) => value + 1);
+    setQueuedTurnReorder(null);
     transcriptScroll.startFollowing();
     scrollTranscriptToBottom({ smooth: false });
     requestTranscriptAnimationFrame(() => scrollTranscriptToBottom({ smooth: false }));
     try {
-	  const requestEpoch = liveTransport.connectionEpoch();
-	  const live = await props.adapter.promoteQueuedTurn(threadID, queueID);
-	  receiveThreadView(live, 'user_action', requestEpoch);
-      requestComposerFocus();
+      const live = await adapter.sendQueuedTurnNow(threadID, queueID);
+      receiveThreadView(live, 'user_action', requestEpoch);
+      if (requestEpoch === liveTransport.connectionEpoch() && selectedThreadID() === threadID) requestComposerFocus();
     } catch (error) {
+      try {
+        const live = await adapter.loadThread(threadID);
+        receiveThreadView(live, 'background_refresh', requestEpoch);
+      } catch (recoveryError) {
+        reportThreadDetailDiagnostic(threadID, 'request_or_mapping', 'background_refresh', recoveryError);
+      }
       notifyThreadActionError(getErrorMessage(error));
+    } finally {
+      if (queuedTurnSendInFlight.get(threadID) === queueID) {
+        queuedTurnSendInFlight.delete(threadID);
+        setQueuedTurnSendRevision((value) => value + 1);
+      }
     }
   };
   const setThreadDetailLoading = (threadID: string, loading: boolean) => {
@@ -6299,23 +6326,29 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   </Show>
                 </div>
                 <div class="flower-queued-turn-actions">
-                  <button
-                    type="button"
-                    class="flower-queued-turn-action flower-queued-turn-send"
-                    disabled={queuedTurnPromotionBlocked()}
-                    aria-label={copy().chat.queuedSendNow}
-                    title={copy().chat.queuedSendNow}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      void promoteQueuedTurn(turn());
-                    }}
-                  >
-                    <Send aria-hidden="true" />
-                  </button>
+                  <Show when={props.adapter.sendQueuedTurnNow}>
+                    <button
+                      type="button"
+                      class="flower-queued-turn-action flower-queued-turn-send"
+                      disabled={queuedTurnSendBlocked(trimString(selectedThreadID()))}
+                      aria-busy={queuedTurnSendPending(trimString(selectedThreadID()), queueID()) ? 'true' : undefined}
+                      aria-label={copy().chat.queuedSendNow}
+                      title={copy().chat.queuedSendNowDescription}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void sendQueuedTurnNow(turn());
+                      }}
+                    >
+                      <Show when={!queuedTurnSendPending(trimString(selectedThreadID()), queueID())} fallback={<Refresh class="motion-safe:animate-spin" aria-hidden="true" />}>
+                        <Send aria-hidden="true" />
+                      </Show>
+                    </button>
+                  </Show>
                   <Show when={props.adapter.deleteQueuedTurn}>
                     <button
                       type="button"
                       class="flower-queued-turn-action flower-queued-turn-delete"
+                      disabled={queuedTurnSendPending(trimString(selectedThreadID()))}
                       aria-label={copy().chat.queuedDelete}
                       title={copy().chat.queuedDelete}
                       data-flower-queued-turn-delete={queueID()}

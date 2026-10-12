@@ -5618,15 +5618,19 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			}
 			view, err := aiSvc.EditQueuedInput(r.Context(), meta, threadID, parts[2], body)
 			if err != nil {
-				status := http.StatusBadRequest
 				message := err.Error()
 				if errors.Is(err, flruntime.ErrRequestConflict) {
-					status, message = http.StatusConflict, "This message has changed or already started. Refresh the queue and try again."
+					message = "This message has changed or already started. Refresh the queue and try again."
 				}
-				writeJSON(w, status, apiResp{OK: false, Error: message})
+				writeJSON(w, aiThreadActionHTTPStatus(err), apiResp{OK: false, Error: message})
 				return
 			}
-			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: view})
+			public, err := ai.MarshalFlowerCurrentView(view)
+			if err != nil {
+				writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: public})
 			return
 
 		case action == "queue" && r.Method == http.MethodPost && len(parts) == 4 && (strings.TrimSpace(parts[3]) == "promote" || strings.TrimSpace(parts[3]) == "send-now"):
@@ -5650,14 +5654,15 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				view, err = aiSvc.PromoteQueuedInput(r.Context(), meta, threadID, queueID)
 			}
 			if err != nil {
-				status := http.StatusBadRequest
-				if errors.Is(err, sql.ErrNoRows) {
-					status = http.StatusNotFound
-				}
-				writeJSON(w, status, apiResp{OK: false, Error: err.Error()})
+				writeJSON(w, aiThreadActionHTTPStatus(err), apiResp{OK: false, Error: err.Error()})
 				return
 			}
-			writeJSON(w, http.StatusAccepted, apiResp{OK: true, Data: view})
+			public, err := ai.MarshalFlowerCurrentView(view)
+			if err != nil {
+				writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusAccepted, apiResp{OK: true, Data: public})
 			return
 
 		case action == "queue" && r.Method == http.MethodDelete && len(parts) == 3:

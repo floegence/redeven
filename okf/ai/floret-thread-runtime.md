@@ -101,6 +101,9 @@ admitted item returns HTTP 409, without reconstructing attachments or context.
 current response and starts that chosen input in a new turn, preserving confirmed
 work and unknown-effect boundaries. This is explicit stop-and-send, not injection
 into a current provider request. Existing idle-only `promote` semantics remain.
+Queue edit, promotion and send-now responses use the same sanitized public
+current projection as other Flower views; private resource locators never cross
+the HTTP boundary. Busy threads and request conflicts use HTTP 409.
 The runtime owns the bounded transition after Stop acceptance; a lost client
 connection cannot cancel it. A Host shutdown leaves unadmitted messages queued.
 

@@ -424,6 +424,7 @@
       "pendingSending": "发送中",
       "pendingQueued": "已排队",
       "queuedSendNow": "立即发送",
+      "queuedSendNowDescription": "停止当前回复并立即发送此排队消息",
       "queuedDelete": "删除排队消息",
       "scrollToLatest": "滚动到最新",
       "runErrorTitle": "Flower 未能完成这次回复。",

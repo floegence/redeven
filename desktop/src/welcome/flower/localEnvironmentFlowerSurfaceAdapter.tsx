@@ -789,10 +789,10 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
         'DELETE',
         `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/queue/${encodeURIComponent(queueID)}`,
       ),
-      promoteQueuedTurn: (threadID, queueID) => runtimeJSON(
+      sendQueuedTurnNow: (threadID, queueID) => runtimeJSON(
         bridge,
         'POST',
-        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/queue/${encodeURIComponent(queueID)}/promote`,
+        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/queue/${encodeURIComponent(queueID)}/send-now`,
       ),
       forkThread: (threadID, body) => runtimeJSON<LoadThreadResponse>(
         bridge,

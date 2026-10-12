@@ -436,6 +436,7 @@ export type FlowerSurfaceCopy = Readonly<{
     pendingSending: string;
     pendingQueued: string;
     queuedSendNow: string;
+    queuedSendNowDescription: string;
     queuedDelete: string;
     scrollToLatest: string;
     runtimeRestartedDivider: string;
@@ -782,6 +783,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     pendingSending: 'Sending',
     pendingQueued: 'Queued',
     queuedSendNow: 'Send now',
+    queuedSendNowDescription: 'Stop the current reply and send this queued message now',
     queuedDelete: 'Delete queued message',
     scrollToLatest: 'Scroll to latest',
     runtimeRestartedDivider: 'Redeven runtime restarted',

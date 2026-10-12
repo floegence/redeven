@@ -364,7 +364,7 @@ describe('runtime Flower surface adapter read state', () => {
 	});
 
 	it('keeps read APIs while removing mutation affordances for read-only viewers', () => {
-		const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({}, { canMutate: false }));
+		const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ sendQueuedTurnNow: vi.fn(async () => undefined) }, { canMutate: false }));
 
 		expect(adapter.canMutate).toBe(false);
 		expect(adapter.listThreads).toBeTypeOf('function');
@@ -378,6 +378,7 @@ describe('runtime Flower surface adapter read state', () => {
 		expect(adapter.forkThread).toBeUndefined();
 		expect(adapter.deleteThread).toBeUndefined();
 		expect(adapter.deleteQueuedTurn).toBeUndefined();
+		expect(adapter.sendQueuedTurnNow).toBeUndefined();
 		expect(adapter.uploadAttachment).toBeUndefined();
 	});
 
@@ -417,6 +418,30 @@ describe('runtime Flower surface adapter read state', () => {
 		expect(deleteQueuedTurn).toHaveBeenCalledWith('thread_1', 'followup_middle');
 		expect(loadThread).toHaveBeenCalledWith('thread_1');
 		expect(result?.thread.thread_id).toBe('thread_1');
+	});
+
+	it('sends one canonical queued turn now and reconciles from the thread bootstrap', async () => {
+		const sendQueuedTurnNow = vi.fn(async () => undefined);
+		const loadThread = vi.fn(async () => ({
+			thread: {
+				thread_id: 'thread_1', title: 'Queue', title_status: 'ready', title_generation: 1,
+				model_id: 'default/gpt-5', permission_type: 'approval_required', working_dir: '/workspace',
+				queued_turn_count: 0, run_status: 'running', active_run_id: 'run_1',
+				run_progress: { run_id: 'run_1', turn_id: 'turn_1', phase: 'preparing' },
+				created_at_unix_ms: 1, updated_at_unix_ms: 2, last_message_at_unix_ms: 2, read_status: readStatus(),
+			},
+			current: { thread_id: 'thread_1', view_version: 4, activity: 'active', run_id: 'run_1', turn_id: 'turn_1', run_progress: { phase: 'preparing' }, items: [] },
+		}));
+		const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ sendQueuedTurnNow, loadThread }));
+
+		const result = await adapter.sendQueuedTurnNow?.(' thread_1 ', ' followup_first ');
+
+		expect(sendQueuedTurnNow).toHaveBeenCalledWith('thread_1', 'followup_first');
+		expect(loadThread).toHaveBeenCalledWith('thread_1');
+		expect(result?.thread.thread_id).toBe('thread_1');
+		await expect(adapter.sendQueuedTurnNow?.('  ', 'followup_first')).rejects.toThrow();
+		await expect(adapter.sendQueuedTurnNow?.('thread_1', '  ')).rejects.toThrow();
+		expect(sendQueuedTurnNow).toHaveBeenCalledTimes(1);
 	});
 
 		it('maps the published SSE transport into typed Flower envelopes', async () => {

@@ -424,6 +424,7 @@
       "pendingSending": "Envoi en cours",
       "pendingQueued": "En file d’attente",
       "queuedSendNow": "Envoyer maintenant",
+      "queuedSendNowDescription": "Arrêter la réponse en cours et envoyer ce message en attente maintenant",
       "queuedDelete": "Supprimer le message en attente",
       "scrollToLatest": "Aller au message le plus récent",
       "runErrorTitle": "Flower n’a pas pu terminer cette réponse.",

@@ -424,6 +424,7 @@
       "pendingSending": "Enviando",
       "pendingQueued": "Na fila",
       "queuedSendNow": "Enviar agora",
+      "queuedSendNowDescription": "Parar a resposta atual e enviar esta mensagem em fila agora",
       "queuedDelete": "Excluir mensagem da fila",
       "scrollToLatest": "Rolar para o mais recente",
       "runErrorTitle": "O Flower não conseguiu concluir esta resposta.",

@@ -5326,6 +5326,7 @@
       "pendingSending": "傳送中",
       "pendingQueued": "已排入佇列",
       "queuedSendNow": "立即傳送",
+      "queuedSendNowDescription": "停止目前回覆並立即傳送此排隊訊息",
       "queuedDelete": "刪除佇列訊息",
       "scrollToLatest": "捲動到最新",
       "runErrorTitle": "Flower 未能完成這次回覆。",
