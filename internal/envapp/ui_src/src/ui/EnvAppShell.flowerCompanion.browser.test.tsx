@@ -2,7 +2,7 @@ import '../index.css';
 import './flower-feature.css';
 
 
-import { Show, createContext, createEffect, createSignal, onCleanup, useContext } from 'solid-js';
+import { Show, createContext, createEffect, createSignal, onCleanup, onMount, useContext } from 'solid-js';
 import { Portal, render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { commands, page, userEvent } from 'vitest/browser';
@@ -184,7 +184,7 @@ vi.mock('@floegence/floe-webapp-core/app', async (importOriginal) => ({
     return (
       <div
         data-testid="activity-body-content"
-        style={{ position: 'relative', height: testFilesMenu ? '100%' : '1200px', padding: testFilesMenu ? '0' : '12px' }}
+        style={{ position: 'relative', height: testFilesMenu || testTerminalFooter ? '100%' : '1200px', padding: testFilesMenu ? '0' : '12px' }}
       >
         <Show when={testFilesMenu}>
           <FileBrowserWorkspace
@@ -201,6 +201,9 @@ vi.mock('@floegence/floe-webapp-core/app', async (importOriginal) => ({
               </div>
             )
           : null}
+        <Show when={testTerminalFooter && props.activeId?.() === 'terminal'}>
+          {floeRegistryComponents().find((component: any) => component.id === 'terminal')?.component?.()}
+        </Show>
         <button
           type="button"
           data-testid="activity-open-flower-launcher"
@@ -646,7 +649,17 @@ vi.mock('./workbench/EnvWorkbenchPage', () => ({
     );
   },
 }));
-vi.mock('./pages/EnvTerminalPage', () => ({ EnvTerminalPage: () => <div /> }));
+let testTerminalFooter = false;
+vi.mock('./pages/EnvTerminalPage', () => ({ EnvTerminalPage: (props: any) => {
+  const Anchor = () => {
+    let anchor!: HTMLDivElement;
+    let unregister: (() => void) | undefined;
+    onMount(() => { unregister = props.registerActivityFlowerAnchor?.(anchor); });
+    onCleanup(() => unregister?.());
+    return <div ref={anchor} data-terminal-flower-anchor style={{ width: '360px', height: '24px' }} />;
+  };
+  return <Show when={testTerminalFooter}><div data-testid="terminal-status-bar" style={{ position: 'absolute', bottom: '0', left: '0', right: '0', height: '28px', display: 'flex', 'align-items': 'center', 'justify-content': 'center' }}><Show when={props.registerActivityFlowerAnchor}><Anchor /></Show></div></Show>;
+} }));
 vi.mock('./pages/EnvMonitorPage', () => ({ EnvMonitorPage: () => <div /> }));
 vi.mock('./pages/EnvFileBrowserPage', () => ({ EnvFileBrowserPage: () => <div /> }));
 vi.mock('./pages/EnvCodespacesPage', () => ({ EnvCodespacesPage: () => <div /> }));
@@ -1117,6 +1130,7 @@ afterEach(async () => {
 });
 
 beforeEach(() => {
+  testTerminalFooter = false;
   vi.clearAllMocks();
   testFilesMenu = false;
   testRealFlowerLauncher = false;
@@ -1342,6 +1356,36 @@ describe('EnvAppShell Activity Flower browser integration', () => {
       expect(document.querySelectorAll('#redeven-activity-flower-product')).toHaveLength(1);
       expect(document.querySelector('[data-activity-flower-mobile-companion]')).toBeNull();
     }
+  });
+
+  it('anchors the retained Flower editor inside the Activity Terminal footer and leaves Workbench without an entry', async () => {
+    testTerminalFooter = true;
+    await page.viewport(1280, 800);
+    const fixture = await mountShell();
+    await userEvent.click(page.getByRole('button', { name: 'Terminal', exact: true }));
+    await vi.waitFor(() => expect(document.querySelector('[data-terminal-flower-anchor]')).toBeTruthy());
+    const anchor = document.querySelector<HTMLElement>('[data-terminal-flower-anchor]')!;
+    await vi.waitFor(() => expect(elementRect(fixture.companion).bottom).toBeCloseTo(elementRect(anchor).bottom, 0));
+    expect(elementRect(fixture.companion).width).toBe(360);
+    const footer = anchor.parentElement!;
+    const footerHeight = footer.clientHeight;
+    expect(footerHeight).toBe(28);
+    expect(elementRect(fixture.companion).height).toBe(24);
+    await userEvent.fill(fixture.input, 'Same terminal draft');
+    await vi.waitFor(() => expect(fixture.product.dataset.presentation).toBe('expanded'));
+    expect(footer.clientHeight).toBe(footerHeight);
+    await userEvent.click(footer, { position: { x: 20, y: 20 } });
+    await vi.waitFor(() => expect(fixture.companion.dataset.companionPhase).toBe('collapsed'));
+    await userEvent.click(page.getByRole('button', { name: 'Monitoring', exact: true }));
+    const floatingAnchor = document.querySelector<HTMLElement>('[data-activity-flower-companion-anchor]')!;
+    await vi.waitFor(() => expect(elementRect(fixture.companion).bottom).toBeCloseTo(elementRect(floatingAnchor).bottom, 0));
+    expect(document.querySelector('[data-testid="activity-flower-composer"]')).toBe(fixture.textarea);
+    expect(fixture.input.value).toBe('Same terminal draft');
+    await userEvent.click(page.getByRole('button', { name: 'Terminal', exact: true }));
+    await userEvent.click(page.getByTestId('activity-switch-workbench'));
+    await vi.waitFor(() => expect(fixture.companion.getAttribute('aria-hidden')).toBe('true'));
+    expect(document.querySelector('[data-testid="activity-flower-composer"]')).toBe(fixture.textarea);
+    expect(envAIPageMountSequence).toBe(1);
   });
 
   it.each([

@@ -5145,6 +5145,57 @@ html.dark .git-content-skeleton__block {
   container-type: inline-size;
 }
 
+.terminal-status-bar {
+  container-type: inline-size;
+  container-name: terminal-footer;
+}
+
+.terminal-status-bar--flower {
+  grid-template-columns: minmax(0, 1fr) min(360px, 45%) minmax(0, 1fr);
+}
+
+.terminal-flower-anchor {
+  width: 100%;
+  min-width: 0;
+  height: 24px;
+  pointer-events: none;
+}
+
+@container terminal-footer (max-width: 1000px) {
+  .terminal-status-bar--flower .terminal-shared-geometry-history {
+    display: none;
+  }
+
+  .terminal-status-bar--flower .terminal-shared-geometry-notice:not(.terminal-shared-geometry-notice--mobile) {
+    width: 104px;
+    min-width: 104px;
+  }
+
+  .terminal-status-bar--flower .terminal-shared-geometry-notice:not(.terminal-shared-geometry-notice--mobile) .terminal-shared-geometry-notice__full {
+    display: none;
+  }
+
+  .terminal-status-bar--flower .terminal-shared-geometry-notice:not(.terminal-shared-geometry-notice--mobile) .terminal-shared-geometry-notice__short {
+    display: inline;
+  }
+}
+
+@container terminal-footer (max-width: 720px) {
+  .terminal-status-bar--flower .terminal-shared-geometry-notice:not(.terminal-shared-geometry-notice--mobile) {
+    width: 28px;
+    min-width: 28px;
+  }
+
+  .terminal-status-bar--flower .terminal-shared-geometry-notice:not(.terminal-shared-geometry-notice--mobile) .terminal-shared-geometry-notice__chrome {
+    justify-content: center;
+    padding-inline: 0;
+  }
+
+  .terminal-status-bar--flower .terminal-shared-geometry-notice:not(.terminal-shared-geometry-notice--mobile) .terminal-shared-geometry-notice__short {
+    display: none;
+  }
+}
+
 .terminal-shared-geometry-notice {
   width: 184px;
   min-width: 184px;

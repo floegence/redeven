@@ -10,7 +10,10 @@ import { useTerminalSessionCatalog } from '../services/terminalSessionCatalog';
 import { canLaunchProcess } from '../utils/permission';
 import { TerminalPanel } from '../widgets/TerminalPanel';
 
-export function EnvTerminalPage(props: { registerPageContext?: FlowerPageContextRegistrar } = {}) {
+export function EnvTerminalPage(props: {
+  registerPageContext?: FlowerPageContextRegistrar;
+  registerActivityFlowerAnchor?: (anchor: HTMLElement) => () => void;
+} = {}) {
   const env = useEnvContext();
   const i18n = useI18n();
   const terminalCatalog = useTerminalSessionCatalog();
@@ -58,6 +61,7 @@ export function EnvTerminalPage(props: { registerPageContext?: FlowerPageContext
         }
       >
         <TerminalPanel registerPageContext={props.registerPageContext}
+          registerActivityFlowerAnchor={props.registerActivityFlowerAnchor}
           variant="panel"
           mobileSessionsOpen={env.terminalSessionsOpen?.()}
           onMobileSessionsOpenChange={env.setTerminalSessionsOpen}

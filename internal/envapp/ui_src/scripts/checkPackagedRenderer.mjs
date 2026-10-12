@@ -848,6 +848,8 @@ async function verifyBuiltFlowerLifecycle(browser, tls) {
     const product = page.locator('#redeven-activity-flower-product');
     const surface = page.locator('#redeven-flower-surface');
     const composer = page.locator('.flower-composer textarea');
+    await page.getByRole('button', { name: 'Monitoring', exact: true }).click();
+    await page.locator('.runtime-monitor-panel').waitFor({ state: 'visible' });
     const verifyCollapsedOutline = async () => {
       const appearance = await page.evaluate(() => {
         const frame = globalThis.getComputedStyle(globalThis.document.querySelector('#redeven-activity-flower-companion'));
@@ -996,7 +998,7 @@ async function verifyBuiltFlowerLifecycle(browser, tls) {
       await page.evaluate(() => {
         globalThis.__redevenBuiltPreviewCopy = '';
         navigator.clipboard.writeText = async text => { globalThis.__redevenBuiltPreviewCopy = text; };
-        document.addEventListener('copy', event => {
+        globalThis.document.addEventListener('copy', event => {
           const text = event.clipboardData?.getData('text/plain');
           if (text) globalThis.__redevenBuiltPreviewCopy = text;
         }, { once: true });
@@ -1119,6 +1121,48 @@ async function verifyBuiltFlowerLifecycle(browser, tls) {
     }
 
     await page.getByRole('button', { name: 'Terminal', exact: true }).click();
+    const terminalAnchor = page.locator('[data-terminal-flower-anchor]');
+    await terminalAnchor.waitFor({ state: 'visible' });
+    await page.waitForFunction(() => (
+      globalThis.document.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-companion-phase') === 'collapsed'
+    ));
+    const verifyTerminalFooter = async () => {
+      const geometry = await page.evaluate(() => {
+        const anchor = globalThis.document.querySelector('[data-terminal-flower-anchor]');
+        const footer = anchor.closest('[data-testid="terminal-status-bar"]');
+        const frame = globalThis.document.querySelector('#redeven-activity-flower-companion');
+        const bounds = footer.getBoundingClientRect();
+        const entry = anchor.getBoundingClientRect();
+        const companion = frame.getBoundingClientRect();
+        const editor = globalThis.document.querySelector('.flower-composer textarea').getBoundingClientRect();
+        return { footerHeight: bounds.height, entryWidth: entry.width, entryHeight: entry.height,
+          centered: Math.abs(entry.left + entry.width / 2 - bounds.left - bounds.width / 2) < 1,
+          inside: companion.top >= bounds.top && companion.bottom <= bounds.bottom,
+          aligned: Math.abs(companion.bottom - entry.bottom) < 1,
+          editorInside: editor.top >= companion.top && editor.bottom <= companion.bottom,
+          sameComposer: globalThis.__redevenBuiltFlowerIdentity.composer === globalThis.document.querySelector('.flower-composer textarea'),
+          count: globalThis.document.querySelectorAll('.flower-composer textarea').length };
+      });
+      if (geometry.footerHeight !== 28 || geometry.entryHeight !== 24 || geometry.entryWidth > 360
+        || geometry.entryWidth <= 0 || !geometry.centered || !geometry.inside || !geometry.aligned || !geometry.editorInside
+        || !geometry.sameComposer || geometry.count !== 1) {
+        throw new Error(`built Activity Terminal Flower must share its footer and editor: ${JSON.stringify(geometry)}`);
+      }
+    };
+    await verifyTerminalFooter();
+    await page.setViewportSize({ width: 900, height: 700 });
+    await page.waitForTimeout(150);
+    await verifyTerminalFooter();
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await composer.click();
+    await page.waitForFunction(() => (
+      globalThis.document.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-companion-phase') === 'expanded'
+    ));
+    await page.locator('[data-testid="terminal-status-bar"]').click({ position: { x: 16, y: 16 } });
+    await page.waitForFunction(() => (
+      globalThis.document.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-companion-phase') === 'collapsed'
+    ));
+    await verifyTerminalFooter();
     await page.getByRole('button', { name: 'Flower', exact: true }).click();
     await page.waitForFunction(() => (
       globalThis.document.querySelector('#redeven-activity-flower-product')?.getAttribute('data-presentation') === 'full_page'
