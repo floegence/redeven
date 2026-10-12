@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* global window, document, innerHeight */
+/* global window, document, innerHeight, getComputedStyle, requestAnimationFrame, cancelAnimationFrame */
 // A fresh product Runtime and optional owned Electron tree qualify pool summaries.
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
@@ -19,7 +19,7 @@ const [binary, outputArgument, desktopBundle] = process.argv.slice(2);
 assert(binary && outputArgument, 'Usage: <Runtime bundle binary> <evidence directory> [Desktop bundle]');
 const root = path.resolve(import.meta.dirname, '../../../..'), output = path.resolve(outputArgument);
 const temp = await mkdtemp(path.join(os.tmpdir(), 'redeven-relation-summary-')), state = path.join(temp, 'state'), marker = randomUUID();
-const report = { commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(), marker, state, scenarios: [], geometry: [], errors: [] };
+const report = { commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(), marker, state, scenarios: [], geometry: [], performance: [], errors: [] };
 const originals = new Map();
 let app, welcome, runtime, browser, page, runtimeLog = '', origin;
 async function until(read, label, timeout = 30000) {
@@ -41,6 +41,36 @@ async function ready(count) {
   }
   assert.equal(await page.locator('.tessiven-error').count(), 0);
 }
+async function measurePointerPan(count) {
+  const viewport = page.locator('.floe-infinite-canvas__viewport');
+  const before = await viewport.evaluate(element => getComputedStyle(element).transform);
+  await page.evaluate(() => {
+    const metric = { frames: [], tasks: [], last: performance.now(), frame: 0 };
+    metric.observer = new PerformanceObserver(list => metric.tasks.push(...list.getEntries().map(entry => entry.duration)));
+    metric.observer.observe({ type: 'longtask' });
+    const frame = time => { metric.frames.push(time - metric.last); metric.last = time; metric.frame = requestAnimationFrame(frame); };
+    metric.frame = requestAnimationFrame(frame); window.relationPanMetric = metric;
+  });
+  const surface = await page.locator('.tessiven-canvas').boundingBox();
+  await page.mouse.move(surface.x + 40, surface.y + 70); await page.mouse.down();
+  for (let step = 1; step <= 40; step++) {
+    await page.mouse.move(surface.x + 40 + step * 4, surface.y + 70 + step * 2);
+    await delay(16);
+  }
+  await page.mouse.up();
+  const metric = await page.evaluate(() => {
+    const value = window.relationPanMetric;
+    cancelAnimationFrame(value.frame); value.observer.disconnect(); delete window.relationPanMetric;
+    const frames = value.frames.sort((a,b) => a-b);
+    return { frameCount: frames.length, frameP95: frames[Math.floor(frames.length * .95)] ?? 0, longTaskMax: Math.max(0, ...value.tasks) };
+  });
+  metric.viewportChanged = before !== await viewport.evaluate(element => getComputedStyle(element).transform);
+  report.performance.push({ count, gesture: 'pointer-drag', ...metric });
+  assert(metric.viewportChanged, 'Real pointer drag changes the viewport');
+  assert(metric.frameCount >= 10 && metric.frameP95 < 50, 'Pointer drag frame budget');
+  assert(metric.longTaskMax < 100, 'Pointer drag long-task budget');
+  await page.getByRole('button', { name: 'Fit canvas', exact: true }).click();
+}
 async function canvas(count) {
   const id = `pool-${count}`;
   if (app) {
@@ -56,6 +86,7 @@ async function canvas(count) {
   const hide = page.getByRole('button', { name: 'Hide replies', exact: true });
   await hide.waitFor(); await hide.click();
   await page.getByRole('button', { name: 'Show replies', exact: true }).waitFor();
+  await measurePointerPan(count);
   assert.equal(await page.locator('[data-floe-shell-slot], [data-workbench-dock-action]').count(), 0);
 }
 try {
