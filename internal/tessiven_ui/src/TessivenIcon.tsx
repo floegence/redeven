@@ -1,6 +1,7 @@
 import type { Component } from 'solid-js';
 import { Dynamic } from 'solid-js/web';
 import { resolveTessivenIcon } from './iconRoles';
+import './tessiven-icon.css';
 
 // Semantic silhouettes stay legible at service-row size and in monochrome.
 const glyphs: Record<string, Component> = {

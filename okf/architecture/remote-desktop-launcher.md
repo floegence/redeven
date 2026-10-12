@@ -19,6 +19,12 @@ that session. A successfully opened viewer retains its independent lifetime.
 
 ## Target and readiness
 
+Remote Desktop uses one monitor-and-pointer silhouette in its launcher and
+Workbench Dock. The Dock renders a blue screen on the shared themed tile;
+Host Applications retains its stacked application windows and play mark.
+Their identities must remain distinct at Dock and widget-header sizes, in
+every shipped theme and high-contrast mode.
+
 The launcher identifies the target using Desktop's connection label when present.
 In a browser connected to Local UI it uses the Runtime's reported hostname, never
 the generic `Local Environment` name. Cloud environment names remain user-defined.
@@ -117,6 +123,9 @@ product adapters must not weaken either boundary to accept malformed session dat
 
 # Evidence
 
+- `internal/envapp/ui_src/src/ui/icons/RemoteDesktopIcon.tsx`: shared monitor-and-pointer silhouette and compact launcher rendering.
+- `internal/envapp/ui_src/src/ui/icons/WorkbenchSoftIcons.tsx`: themed Remote Desktop Dock tile.
+- `internal/envapp/ui_src/src/styles/navigationIcons.browser.test.tsx`: actual-size silhouettes, theme and high-contrast checks.
 - `internal/envapp/ui_src/src/ui/pages/RemoteDesktopPanel.tsx`: target identity, state-derived actions, settings and window lifecycle.
 - `internal/envapp/ui_src/src/ui/pages/RemoteDesktopPanel.test.tsx`: connection failure retention, display selection, takeover and cancellation.
 - `internal/envapp/ui_src/src/ui/pages/RemoteDesktopPanel.browser.test.tsx`: same-dialog stage progression, masked pending credentials, responsive actions and reduced motion.

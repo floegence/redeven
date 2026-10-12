@@ -498,6 +498,15 @@ describe('redevenWorkbenchWidgets plugin behavior', () => {
 });
 
 describe('redevenWorkbenchWidgets assistant metadata', () => {
+  it('distinguishes Remote Desktop from Host Applications in the Dock and widget chrome', () => {
+    const desktop = redevenWorkbenchWidgets.find((widget) => widget.type === 'redeven.remote-desktop');
+    const applications = redevenWorkbenchWidgets.find((widget) => widget.type === 'redeven.applications');
+
+    expect(desktop?.icon).toBeDefined();
+    expect(applications?.icon).toBeDefined();
+    expect(desktop?.icon).not.toBe(applications?.icon);
+  });
+
   it('uses a compact singleton icon for the Flower workbench widget', () => {
     const flower = redevenWorkbenchWidgets.find((widget) => widget.type === 'redeven.ai');
 
