@@ -97,15 +97,16 @@ type run struct {
 	platformHTTPTransport func() (http.RoundTripper, error)
 	log                   *slog.Logger
 
-	stateDir       string
-	agentHomeDir   string
-	workingDir     string
-	scope          *filesystemscope.Registry
-	shell          string
-	host           runHostCapabilities
-	cfg            *config.AIConfig
-	permissionType FlowerPermissionType
-	muPermission   sync.RWMutex
+	stateDir           string
+	agentHomeDir       string
+	workingDir         string
+	scope              *filesystemscope.Registry
+	shell              string
+	host               runHostCapabilities
+	cfg                *config.AIConfig
+	permissionType     FlowerPermissionType
+	supportsImageInput bool
+	muPermission       sync.RWMutex
 
 	sessionMeta          *session.Meta
 	resolveProviderKey   func(providerID string) (string, bool, error)
@@ -1311,7 +1312,7 @@ type toolCallOutcome struct {
 	Attachments           []ToolAttachment
 }
 
-type targetToolExecution struct {
+type toolExecutionOutput struct {
 	inputRequired *fltools.InputRequest
 
 	TargetID    string
@@ -1596,7 +1597,7 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		if strings.HasPrefix(toolName, "mcp_") {
 			partial = result
 		}
-		if target, ok := result.(targetToolExecution); ok {
+		if target, ok := result.(toolExecutionOutput); ok {
 			partial = target.Payload
 			outcome.Attachments = append([]ToolAttachment(nil), target.Attachments...)
 		}
@@ -1631,7 +1632,7 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		setToolError(toolErr, recoveryAction, partial)
 		return outcome, nil
 	}
-	if target, ok := result.(targetToolExecution); ok {
+	if target, ok := result.(toolExecutionOutput); ok {
 		if r.publishComputerFrame != nil && len(target.Attachments) > 0 {
 			for _, attachment := range target.Attachments {
 				if strings.HasPrefix(attachment.ResourceRef, "computer://") {
@@ -2004,6 +2005,9 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 	}
 	if strings.HasPrefix(toolName, "tessiven.") {
 		return r.execTessivenTool(ctx, meta, toolName, args)
+	}
+	if toolName == "image.read" {
+		return r.toolImageRead(ctx, meta, toolID, args)
 	}
 	if r.shouldRouteTargetTool(toolName) {
 		return r.execTargetTool(ctx, toolID, toolName, args)
@@ -3153,7 +3157,7 @@ func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string
 		}
 		call := TargetToolCall{ThreadID: threadID, TurnID: turnID, RunID: runID, ToolCallID: toolID, ToolName: toolName, TargetID: target.ID}
 		var completed []TargetToolResult
-		if prior, ok := output.(targetToolExecution); ok {
+		if prior, ok := output.(toolExecutionOutput); ok {
 			completed = []TargetToolResult{{TargetID: prior.TargetID, Result: prior.Payload}}
 		}
 		output = computerTakeoverExecution(call, target, computerPauseSafety(TargetToolResult{}, outputErr), completed...)
@@ -3287,7 +3291,7 @@ func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string
 			if result.TargetName == "" {
 				result.TargetName = target.DisplayName
 			}
-			return targetToolExecution{TargetID: targetID, Payload: targetToolResultPayload(result, targetID, target), Attachments: toolAttachmentsFromTarget(result.Attachments)}, err
+			return toolExecutionOutput{TargetID: targetID, Payload: targetToolResultPayload(result, targetID, target), Attachments: toolAttachmentsFromTarget(result.Attachments)}, err
 		}
 		return nil, err
 	}
@@ -3306,7 +3310,7 @@ func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string
 	if result.TargetName == "" {
 		result.TargetName = target.DisplayName
 	}
-	return targetToolExecution{TargetID: targetID, Payload: targetToolResultPayload(result, targetID, target), Attachments: toolAttachmentsFromTarget(result.Attachments)}, nil
+	return toolExecutionOutput{TargetID: targetID, Payload: targetToolResultPayload(result, targetID, target), Attachments: toolAttachmentsFromTarget(result.Attachments)}, nil
 }
 
 func toolAttachmentsFromTarget(source []TargetToolAttachment) []ToolAttachment {

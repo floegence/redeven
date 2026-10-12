@@ -16,7 +16,7 @@ import (
 // A safety pause is a completed observation followed by canonical user input,
 // not a failed action that the model should retry. External control remains
 // host-owned; Floret owns the durable waiting interaction and continuation.
-func computerTakeoverExecution(call TargetToolCall, target TargetDescriptor, safety InteractionSafetyDecision, observed ...TargetToolResult) targetToolExecution {
+func computerTakeoverExecution(call TargetToolCall, target TargetDescriptor, safety InteractionSafetyDecision, observed ...TargetToolResult) toolExecutionOutput {
 	slog.Info("computer assistance requested", "thread_id", call.ThreadID, "target_id", target.ID, "reason", computerAssistanceKind(safety))
 	safety.ActionID = call.ToolCallID
 	safety.Level = "takeover"
@@ -41,14 +41,14 @@ func computerTakeoverExecution(call TargetToolCall, target TargetDescriptor, saf
 	}
 	summary, prompt := computerAssistanceInstructions(safety)
 	result.ActionSummary = summary
-	return targetToolExecution{TargetID: target.ID, Payload: targetToolResultPayload(result, target.ID, target), inputRequired: &fltools.InputRequest{
+	return toolExecutionOutput{TargetID: target.ID, Payload: targetToolResultPayload(result, target.ID, target), inputRequired: &fltools.InputRequest{
 		Summary:   summary,
 		Questions: []fltools.InputQuestion{{ID: "computer_control", Prompt: prompt, Kind: "select", Options: []string{"Return control to Flower"}}},
 	}}
 }
 
-func computerInstallExecution() targetToolExecution {
-	return targetToolExecution{Payload: map[string]any{"browser_installation_required": true}, inputRequired: &fltools.InputRequest{
+func computerInstallExecution() toolExecutionOutput {
+	return toolExecutionOutput{Payload: map[string]any{"browser_installation_required": true}, inputRequired: &fltools.InputRequest{
 		Summary:   "Prepare the built-in browser?",
 		Questions: []fltools.InputQuestion{{ID: "browser_install", Kind: "select", Prompt: "Open browser setup to install the built-in browser or complete system preparation. Choose download in the environment or upload through Desktop. Authorize system preparation in the environment terminal if requested. Nothing downloads until you confirm. You can disable this browser to continue without it and stop future prompts.", Options: []string{"Continue with installed browser", "Continue without built-in browser"}}},
 	}}
@@ -71,8 +71,8 @@ func computerInstallInteraction(view flruntime.ThreadView, interaction flruntime
 	return false
 }
 
-func computerConnectionExecution() targetToolExecution {
-	return targetToolExecution{Payload: map[string]any{"browser_source": "system", "connection_required": true}, inputRequired: &fltools.InputRequest{
+func computerConnectionExecution() toolExecutionOutput {
+	return toolExecutionOutput{Payload: map[string]any{"browser_source": "system", "connection_required": true}, inputRequired: &fltools.InputRequest{
 		Summary:   "Connect your system browser",
 		Questions: []fltools.InputQuestion{{ID: "browser_connection", Kind: "select", Prompt: "Chrome is not currently connected. Open Connect Chrome in Flower to reconnect or set up the extension. An installed extension does not need reinstalling. Flower resumes automatically after the connection is verified and creates its own task tab. Safari browser automation is not supported by this connection. No managed browser or desktop automation will be substituted.", Options: []string{"Continue with connected browser"}}},
 	}}

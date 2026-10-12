@@ -18,6 +18,13 @@ function item(overrides: Partial<FlowerActivityItem>): FlowerActivityItem {
   };
 }
 
+it('renders a typed tool image as authorized media without a unavailable-result notice', () => {
+  const resource_ref = `image://${'c'.repeat(64)}/png`;
+  const result = presentFlowerActivityItem(item({ tool_name: 'image.read', label: 'photo.png', renderer: 'structured', target_refs: [{ kind: 'tool_image', label: 'photo.png', resource_ref }] }));
+  expect(result.detailBlocks).toContainEqual({ kind: 'image', resource_ref, name: 'photo.png' });
+  expect(result.detailBlocks.some(block => block.kind === 'structured_rows' && block.notice)).toBe(false);
+});
+
 const fileActions = {
   read_app: {
     action_id: 'read_app',

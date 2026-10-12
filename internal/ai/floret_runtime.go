@@ -3,7 +3,6 @@ package ai
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -45,6 +44,7 @@ func (r *run) prepareFloretHostedAgent(ctx context.Context, req RunRequest, prov
 		capability.ProviderID = strings.TrimSpace(providerID)
 	}
 	req.ModelCapability = capability
+	r.supportsImageInput = capability.SupportsImageInput
 	if !capability.SupportsStrictJSONSchema && strings.EqualFold(strings.TrimSpace(req.Options.ResponseFormat), "json_schema") {
 		req.Options.ResponseFormat = "json_object"
 	}
@@ -172,19 +172,8 @@ func (r *run) prepareFloretHostedAgent(ctx context.Context, req RunRequest, prov
 	}
 	attachmentResolver := r.floretAttachmentResolver(frozenAttachments, flProvider)
 	flProvider.attachmentResolver = func(ctx context.Context, attachment flprovider.Attachment) (ContentPart, error) {
-		if strings.HasPrefix(strings.TrimSpace(attachment.ResourceRef), "computer://") {
-			if resolver, ok := r.targetToolExecutor.(TargetToolAttachmentResolver); ok {
-				body, err := resolver.ResolveTargetToolAttachment(ctx, strings.TrimSpace(attachment.ResourceRef))
-				if err != nil {
-					return ContentPart{}, err
-				}
-				mimeType := strings.TrimSpace(attachment.MIMEType)
-				if mimeType == "" {
-					mimeType = "image/png"
-				}
-				return ContentPart{Type: "image", Text: strings.TrimSpace(attachment.Name), MimeType: mimeType, FileURI: "data:" + mimeType + ";base64," + base64.StdEncoding.EncodeToString(body)}, nil
-			}
-			return ContentPart{}, errors.New("target attachment resolver is unavailable")
+		if isToolMediaRef(attachment.ResourceRef) {
+			return r.resolveFloretToolMedia(ctx, attachment)
 		}
 		return attachmentResolver(ctx, runtimeAttachmentFromProvider(attachment))
 	}

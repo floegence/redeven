@@ -143,6 +143,9 @@ it('clears delivery feedback after a rejected send without leaving an endless an
   await expect.poll(() => document.querySelector('.flower-model-status-indicator')).not.toBeNull();
   runtime.reject();
   await expect.poll(() => document.querySelector('.flower-model-status-indicator')).toBeNull();
+  await expect.element(editor()).toHaveValue('');
+  await expect.element(page.getByRole('button', { name: 'Restore to empty editor', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: 'Restore to empty editor', exact: true }).click();
   await expect.element(editor()).toHaveValue('Draw this canvas');
 });
 

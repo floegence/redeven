@@ -335,7 +335,6 @@
     "threadEmpty": "This conversation has no content yet.",
     "threadSyncingLatest": "Syncing the latest reply...",
     "threadSyncFailed": "Flower could not sync the latest reply. Try again.",
-    "activeTurnBusy": "The previous reply is still active. You can stop it before sending again.",
     "composerErrorTitle": "Flower could not send.",
     "expandThinking": "Expand full thinking",
     "collapseThinking": "Collapse thinking",
@@ -463,7 +462,19 @@
     "runErrorCopyDetails": "Copy details",
     "runErrorContextBudgetInvalid": "The output allowance leaves no room for input. Increase the model's configured context window or lower its output limit, then retry. For Ollama, set num_ctx in the Modelfile and reload the model.",
     "runErrorContextFixedOverhead": "The system instructions and tool definitions exceed the model's available context. Increase the serving context window or choose a model with more context, then retry. Compressing chat history cannot resolve this.",
-    "runErrorContextCompactionLimit": "The conversation still exceeds the model's context limit after compression. Shorten the input or choose a model with more context, then retry."
+    "runErrorContextCompactionLimit": "The conversation still exceeds the model's context limit after compression. Shorten the input or choose a model with more context, then retry.",
+    "preparingSend": "Preparing message",
+    "sendFailed": "Send failed",
+    "sendUnknown": "Confirmation needed",
+    "sendUnknownDescription": "The send result is unknown. Later messages are paused. Retry this same request or refresh the conversation.",
+    "retrySend": "Retry send",
+    "refreshSend": "Refresh confirmation",
+    "restoreSend": "Restore to empty editor",
+    "deleteUnsent": "Delete unsent message",
+    "sendWaiting": "Waiting to send",
+    "attachmentRecoveryDescription": "Attachments are unavailable after restart. Restore text and references, then select the files again. Refresh to check whether the original request was accepted.",
+    "removeRecoveryCopy": "Remove local recovery copy",
+    "removeRecoveryCopyDescription": "Remove this local recovery copy and resume later messages. This does not cancel the original server request."
   },
   "threadList": {
     "title": "Conversations",
@@ -798,7 +809,8 @@
     "dialogProviderModelID": "Provider model ID",
     "dialogContextWindow": "Context window",
     "dialogMaxOutput": "Max output",
-    "dialogEffectiveContextPercent": "Effective context %"
+    "dialogEffectiveContextPercent": "Effective context %",
+    "imageModelRequired": "This conversation contains images. Choose a model that supports image input."
   },
   "filesystemPicker": {
     "path": "Directory path",

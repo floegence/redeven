@@ -5365,7 +5365,6 @@
       "threadEmpty": "この会話にはまだ内容がありません。",
       "threadSyncingLatest": "最新の返信を同期しています...",
       "threadSyncFailed": "Flower は最新の返信を同期できませんでした。もう一度お試しください。",
-      "activeTurnBusy": "前の返信はまだ実行中です。もう一度送信する前に停止できます。",
       "composerErrorTitle": "Flower は送信できませんでした。",
       "expandThinking": "思考をすべて展開",
       "collapseThinking": "思考を折りたたむ",
@@ -5494,7 +5493,19 @@
       "runErrorCopyDetails": "詳細をコピー",
       "runErrorContextBudgetInvalid": "出力用の予約枠でコンテキストが埋まり、入力を収められません。モデルのコンテキストウィンドウを広げるか、出力上限を下げてから再試行してください。Ollama では、Modelfile に num_ctx を設定し、モデルを再読み込みしてください。",
       "runErrorContextFixedOverhead": "システム指示とツール定義が、モデルで使用できるコンテキスト容量を超えています。サーバー側のコンテキストウィンドウを広げるか、より大きなコンテキストを持つモデルを選んで再試行してください。会話履歴の圧縮では解決できません。",
-      "runErrorContextCompactionLimit": "圧縮後も会話がモデルのコンテキスト上限を超えています。入力を短くするか、より大きなコンテキストを持つモデルを選んで再試行してください。"
+      "runErrorContextCompactionLimit": "圧縮後も会話がモデルのコンテキスト上限を超えています。入力を短くするか、より大きなコンテキストを持つモデルを選んで再試行してください。",
+      "preparingSend": "メッセージを準備中",
+      "sendFailed": "送信に失敗",
+      "sendUnknown": "確認が必要",
+      "sendUnknownDescription": "送信結果が不明なため、後続のメッセージは一時停止しています。同じリクエストを再試行するか、会話を更新してください。",
+      "retrySend": "送信を再試行",
+      "refreshSend": "確認状態を更新",
+      "restoreSend": "空の入力欄に戻す",
+      "deleteUnsent": "未送信メッセージを削除",
+      "sendWaiting": "送信待ち",
+      "attachmentRecoveryDescription": "再起動後は添付ファイルを利用できません。テキストと参照を復元してから、ファイルを選び直してください。更新すると元のリクエストの受理状況を確認できます。",
+      "removeRecoveryCopy": "ローカルの復元用コピーを削除",
+      "removeRecoveryCopyDescription": "このローカルの復元用コピーを削除し、後続のメッセージの送信を再開します。元のサーバーへのリクエストは取り消されません。"
     },
     "threadList": {
       "title": "会話",
@@ -5829,7 +5840,8 @@
       "dialogEffectiveContextPercent": "有効コンテキスト（%）",
       "dialogDynamicModelMetadata": "動的モデルメタデータ",
       "dialogOpenAICompatibleNativeEndpoint": "OpenAI 互換のネイティブエンドポイント",
-      "dialogLocalOpenAICompatibleEndpoint": "ローカルの OpenAI 互換エンドポイント"
+      "dialogLocalOpenAICompatibleEndpoint": "ローカルの OpenAI 互換エンドポイント",
+      "imageModelRequired": "この会話には画像が含まれています。画像入力に対応したモデルを選択してください。"
     },
     "computer": {
       "title": "ブラウザーとデスクトップ",

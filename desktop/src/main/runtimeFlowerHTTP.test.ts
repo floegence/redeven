@@ -13,11 +13,20 @@ import {
 	runtimeFlowerInvalidJSONError,
 	runtimeFlowerPrivateBridgeHeaders,
   runtimeFlowerComputerFrame,
+  runtimeFlowerToolImage,
   runtimeFlowerMessageFile,
 } from './runtimeFlowerHTTP';
-import { RUNTIME_FLOWER_COMPUTER_MEDIA_PATH } from '../shared/runtimeFlowerIPC';
+import { RUNTIME_FLOWER_COMPUTER_MEDIA_PATH, RUNTIME_FLOWER_TOOL_IMAGE_PATH } from '../shared/runtimeFlowerIPC';
 
 describe('computer media transport', () => {
+  it('admits only immutable thread-scoped native tool images', () => {
+    const route = `/_redeven_proxy/api/ai/threads/thread_1/tool-media/${'a'.repeat(64)}/jpeg`;
+    expect(RUNTIME_FLOWER_TOOL_IMAGE_PATH.test(route)).toBe(true);
+    for (const value of [route + '?thread_id=other', route + '/extra', route.replace('/jpeg', '/svg')]) expect(RUNTIME_FLOWER_TOOL_IMAGE_PATH.test(value)).toBe(false);
+    const response = { status: 200, headers: { 'content-type': 'image/jpeg' }, body: '', bytes: Buffer.from([255, 216, 255]) };
+    expect(runtimeFlowerToolImage(response).bytes).toEqual(new Uint8Array(response.bytes));
+    expect(() => runtimeFlowerToolImage({ ...response, headers: { 'content-type': 'image/svg+xml' } })).toThrow();
+  });
   it('preserves bounded video and inert HTML bytes while rejecting active documents', () => {
     const response = { status: 200, headers: { 'content-type': 'video/mp4' }, body: '', bytes: Buffer.from([0, 128, 255]) };
     expect(runtimeFlowerMessageFile(response).bytes).toEqual(new Uint8Array([0, 128, 255]));

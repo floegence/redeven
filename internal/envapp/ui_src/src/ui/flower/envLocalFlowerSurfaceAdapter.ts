@@ -1,6 +1,7 @@
 import { flowerExtensionsAdapter } from '../../../../../flower_ui/host/extensionsAdapter';
 import { computerManagementAdapter } from '../../../../../flower_ui/host/computerUseAdapter';
 import { computerFramePath } from '../../../../../flower_ui/host/computerFramePath';
+import { toolImagePath } from '../../../../../flower_ui/host/toolImagePath';
 import { messageFilePath } from '../../../../../flower_ui/host/messageFilePath';
 import { messageAttachmentPath } from '../../../../../flower_ui/host/messageAttachmentPath';
 import { COMPUTER_FRAME_RATE_KEY, computerFrameRate } from '../../../../../flower_ui/src/computerViewer';
@@ -702,6 +703,13 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
     loadStagedAttachmentPreview: (attachment, scope, signal) => loadEnvStagedAttachmentPreview(attachment, scope, signal),
     previewStagedAttachment: previewEnvStagedAttachment,
     loadComputerFrame: loadEnvComputerFrame,
+    loadToolImage: async (input) => {
+      const response = await fetch(toolImagePath(input), await prepareLocalApiRequestInit({ method: 'GET', signal: input.signal }));
+      if (!response.ok) throw new Error('Image preview is unavailable.');
+      const blob = await response.blob();
+      if (!['image/png', 'image/jpeg', 'image/webp'].includes(blob.type) || blob.size > (10 << 20)) throw new Error('Invalid tool image.');
+      return blob;
+    },
     loadMessageAttachment: ({ url, signal }) => loadEnvMessageAttachment(url, signal),
     loadMessageFile: async ({ path, signal }) => {
       const response = await fetch(messageFilePath(path), await prepareLocalApiRequestInit({ method: 'GET', signal }));

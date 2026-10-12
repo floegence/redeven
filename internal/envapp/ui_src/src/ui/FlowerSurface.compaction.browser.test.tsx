@@ -162,7 +162,9 @@ it('reuses the same request key after an uncertain command admission', async () 
   await waitFor(() => Boolean(surface.querySelector('textarea')), 10000);
   await enterCommand(surface);
   await waitFor(() => keys.length === 1 && flowerSurfaceNotifications().length > 0);
-  await enterCommand(surface);
+  const retry = surface.querySelector<HTMLButtonElement>('[data-flower-transport-delivery="unknown"] [aria-label="Retry send"]');
+  expect(retry).toBeTruthy();
+  retry!.click();
   await waitFor(() => keys.length === 2);
   expect(keys[1]).toBe(keys[0]);
   expect(base.launchTurn).not.toHaveBeenCalled();

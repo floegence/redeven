@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	anthropic "github.com/anthropics/anthropic-sdk-go"
-	openai "github.com/openai/openai-go"
-	oresponses "github.com/openai/openai-go/responses"
+	openai "github.com/openai/openai-go/v3"
+	oresponses "github.com/openai/openai-go/v3/responses"
 )
 
 func TestProviderUsageNormalizationKeepsDisjointCacheBuckets(t *testing.T) {

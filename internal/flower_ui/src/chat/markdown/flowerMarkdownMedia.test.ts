@@ -4,6 +4,19 @@ import { markdownMediaEnUS } from './mediaCopy';
 import type { FlowerSurfaceAdapter } from '../../contracts/flowerSurfaceContracts';
 
 describe('Flower Markdown resource resolution', () => {
+  it('loads a canonical tool image through thread membership and never reopens the source file', async () => {
+    const loadToolImage = vi.fn(async () => new Blob(['pixels'], { type: 'image/jpeg' }));
+    const loadMessageFile = vi.fn();
+    const adapter = { loadToolImage, loadMessageFile } as unknown as FlowerSurfaceAdapter;
+    const controller = new AbortController();
+    const ref = `image://${'b'.repeat(64)}/jpeg`;
+    const resource = await resolveFlowerMarkdownMedia({ kind: 'image', title: 'photo.jpg', src: ref }, controller.signal, { adapter, threadID: 'thread-a', workingDirectory: '/project', copy: markdownMediaEnUS, onActionError: vi.fn() });
+    expect(loadToolImage).toHaveBeenCalledWith({ thread_id: 'thread-a', resource_ref: ref, signal: controller.signal });
+    expect(loadMessageFile).not.toHaveBeenCalled();
+    expect(resource.src).toMatch(/^blob:/);
+    expect(resource.reveal).toBeUndefined();
+    controller.abort();
+  });
   it('resolves paths without granting URL or application API authority', () => {
     expect(flowerMarkdownFilePath('./reports/a b.html', '/project')).toBe('/project/reports/a b.html');
     expect(flowerMarkdownFilePath('../image.png', '/project/reports')).toBe('/project/image.png');

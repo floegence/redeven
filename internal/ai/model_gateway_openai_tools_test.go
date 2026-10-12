@@ -11,9 +11,9 @@ import (
 	"time"
 
 	"github.com/floegence/redeven/internal/config"
-	openai "github.com/openai/openai-go"
-	oresponses "github.com/openai/openai-go/responses"
-	oshared "github.com/openai/openai-go/shared"
+	openai "github.com/openai/openai-go/v3"
+	oresponses "github.com/openai/openai-go/v3/responses"
+	oshared "github.com/openai/openai-go/v3/shared"
 )
 
 func boolPtr(v bool) *bool { return &v }
@@ -821,7 +821,7 @@ func TestDecorateChatCompletionParams_WebSearchPayloads(t *testing.T) {
 				Model:    oshared.ChatModel("test-model"),
 				Messages: []openai.ChatCompletionMessageParamUnion{openai.UserMessage("hello")},
 			}
-			tools := []openai.ChatCompletionToolParam{}
+			tools := []openai.ChatCompletionToolUnionParam{}
 			decorateChatCompletionParams(&params, tc.mode, &tools)
 			if len(tools) > 0 {
 				params.Tools = tools

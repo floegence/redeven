@@ -6,6 +6,7 @@ export const RUNTIME_FLOWER_STREAM_EVENT_CHANNEL = 'redeven-desktop:runtime-flow
 export const RUNTIME_FLOWER_COMPUTER_MEDIA_PATH = /^\/_redeven_proxy\/api\/ai\/threads\/[A-Za-z0-9_-]+\/computer-media\/[A-Za-z0-9_-]+\/[a-f0-9]{64}$/u;
 
 export type RuntimeFlowerMedia = Readonly<{ bytes: Uint8Array; mime_type: string }>;
+export const RUNTIME_FLOWER_TOOL_IMAGE_PATH = /^\/_redeven_proxy\/api\/ai\/threads\/[A-Za-z0-9_-]+\/tool-media\/[a-f0-9]{64}\/(png|jpeg|webp)$/u;
 
 export type RuntimeFlowerRequestMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 

@@ -244,6 +244,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Provider configuration validation](ai/provider-configuration-validation.md) - Validate required provider fields and credentials while preserving optional defaults and keyless Ollama and compatible-endpoint chat.
 - [Provider API and catalog review](ai/provider-api-catalog-review.md) - Check current official models, endpoint compatibility, regional configuration, and released-adapter blockers.
 
+- [Direct image reading and retention](ai/image-read-and-retention.md) - Authorize native image reads, preserve immutable snapshots and collect from complete canonical inventory.
 - [AI tool runtime](ai/ai-tool-runtime.md) - Builtin tool registry, permission checks, and activity projection.
 - [Flower storage ownership and migrations](ai/flower-storage-ownership-and-migrations.md) - Preserve owner lineages and deterministic canonical imports without mutable request decoders.
 - [Flower backup and recovery](ai/flower-backup-and-recovery.md) - Review protected complete-set snapshots and restore data without replaying old work.

@@ -1411,7 +1411,7 @@ SOFTWARE.
 | github.com/ebitengine/purego | v0.9.1 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/ebitengine/purego@v0.9.1 | Detected from LICENSE. |
 | github.com/floegence/floe-native-apps | v0.22.34 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floe-native-apps@v0.22.34 | Detected from LICENSE. |
 | github.com/floegence/floeterm/terminal-go | v0.19.2 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floeterm/terminal-go@v0.19.2 | Floegence first-party dependency. |
-| github.com/floegence/floret/v7 | v7.27.2 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floret/v7@v7.27.2 | Detected from LICENSE. |
+| github.com/floegence/floret/v7 | v7.28.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floret/v7@v7.28.0 | Detected from LICENSE. |
 | github.com/floegence/flowersec/flowersec-go/v5 | v5.11.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/flowersec/flowersec-go/v5@v5.11.0 | Floegence first-party dependency. |
 | github.com/floegence/redeven-service-templates | v0.6.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redeven-service-templates@v0.6.0 | Floegence first-party versioned Managed Service template catalog. |
 | github.com/floegence/redevplugin/v3 | v3.0.35 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redevplugin/v3@v3.0.35 | Floegence first-party dependency. |
@@ -1436,7 +1436,7 @@ SOFTWARE.
 | github.com/modelcontextprotocol/go-sdk | v1.8.0 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/modelcontextprotocol/go-sdk@v1.8.0 | Detected from LICENSE. |
 | github.com/ncruces/go-strftime | v1.0.0 | MIT | Runtime | https://pkg.go.dev/github.com/ncruces/go-strftime@v1.0.0 | Detected from LICENSE. |
 | github.com/nwaples/rardecode/v2 | v2.2.0 | BSD-style | Runtime | https://pkg.go.dev/github.com/nwaples/rardecode/v2@v2.2.0 | Detected from LICENSE. |
-| github.com/openai/openai-go | v1.12.0 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/openai/openai-go@v1.12.0 | Detected from LICENSE. |
+| github.com/openai/openai-go/v3 | v3.76.0 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/openai/openai-go/v3@v3.76.0 | Detected from LICENSE. |
 | github.com/pelletier/go-toml/v2 | v2.4.3 | MIT | Runtime | https://pkg.go.dev/github.com/pelletier/go-toml/v2@v2.4.3 | Detected from LICENSE. |
 | github.com/pierrec/lz4/v4 | v4.1.22 | BSD-style | Runtime | https://pkg.go.dev/github.com/pierrec/lz4/v4@v4.1.22 | Detected from LICENSE. |
 | github.com/pkoukk/tiktoken-go | v0.1.8 | MIT | Runtime | https://pkg.go.dev/github.com/pkoukk/tiktoken-go@v0.1.8 | Detected from LICENSE. |
@@ -1455,7 +1455,7 @@ SOFTWARE.
 | github.com/STARRY-S/zip | v0.2.3 | BSD-style | Runtime | https://pkg.go.dev/github.com/STARRY-S/zip@v0.2.3 | Detected from LICENSE. |
 | github.com/tdewolff/parse/v2 | v2.8.16 | MIT | Runtime | https://pkg.go.dev/github.com/tdewolff/parse/v2@v2.8.16 | Detected from LICENSE.md. |
 | github.com/tetratelabs/wazero | v1.12.0 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/tetratelabs/wazero@v1.12.0 | Detected from LICENSE. |
-| github.com/tidwall/gjson | v1.18.0 | MIT | Runtime | https://pkg.go.dev/github.com/tidwall/gjson@v1.18.0 | Detected from LICENSE. |
+| github.com/tidwall/gjson | v1.19.0 | MIT | Runtime | https://pkg.go.dev/github.com/tidwall/gjson@v1.19.0 | Detected from LICENSE. |
 | github.com/tidwall/match | v1.1.1 | MIT | Runtime | https://pkg.go.dev/github.com/tidwall/match@v1.1.1 | Detected from LICENSE. |
 | github.com/tidwall/pretty | v1.2.1 | MIT | Runtime | https://pkg.go.dev/github.com/tidwall/pretty@v1.2.1 | Detected from LICENSE. |
 | github.com/tidwall/sjson | v1.2.5 | MIT | Runtime | https://pkg.go.dev/github.com/tidwall/sjson@v1.2.5 | Detected from LICENSE. |
@@ -1469,7 +1469,7 @@ SOFTWARE.
 | golang.org/x/crypto | v0.57.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/crypto@v0.57.0 | Detected from LICENSE. |
 | golang.org/x/image | v0.46.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/image@v0.46.0 | Detected from LICENSE. |
 | golang.org/x/mod | v0.41.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/mod@v0.41.0 | Detected from LICENSE. |
-| golang.org/x/net | v0.59.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/net@v0.59.0 | Detected from LICENSE. |
+| golang.org/x/net | v0.60.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/net@v0.60.0 | Detected from LICENSE. |
 | golang.org/x/oauth2 | v0.35.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/oauth2@v0.35.0 | Detected from LICENSE. |
 | golang.org/x/sync | v0.23.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/sync@v0.23.0 | Detected from LICENSE. |
 | golang.org/x/sys | v0.48.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/sys@v0.48.0 | Detected from LICENSE. |

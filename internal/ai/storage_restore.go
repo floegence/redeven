@@ -54,8 +54,11 @@ func validateFlowerManifest(manifest flowerSnapshotManifest, id string) error {
 			return errors.New("invalid Flower snapshot file")
 		}
 		root := file.Path
-		if strings.HasPrefix(root, "ai/uploads/") {
-			root = "ai/uploads"
+		for _, tree := range flowerStorageRoots[3:] {
+			if strings.HasPrefix(root, tree+"/") {
+				root = tree
+				break
+			}
 		}
 		for _, suffix := range []string{"-wal", "-shm", "-journal"} {
 			root = strings.TrimSuffix(root, suffix)
@@ -70,7 +73,7 @@ func validateFlowerManifest(manifest flowerSnapshotManifest, id string) error {
 		}
 	}
 	for root := range roots {
-		if root != "ai/uploads" && !files[root] {
+		if !flowerStorageTree(root) && !files[root] {
 			return errors.New("snapshot database is missing")
 		}
 	}
@@ -88,8 +91,10 @@ func validFlowerManifestFile(file flowerSnapshotFile, raw bool) bool {
 	if err != nil || len(digest) != 32 {
 		return false
 	}
-	if strings.HasPrefix(file.Path, "ai/uploads/") {
-		return true
+	for _, tree := range flowerStorageRoots[3:] {
+		if strings.HasPrefix(file.Path, tree+"/") {
+			return true
+		}
 	}
 	for _, root := range flowerStorageRoots[:3] {
 		if file.Path == root {
@@ -133,7 +138,7 @@ func verifyFlowerSnapshot(ctx context.Context, state, id string) (flowerSnapshot
 		if err != nil {
 			return manifest, err
 		}
-		if relative == "ai/uploads" && !info.IsDir() || relative != "ai/uploads" && !info.Mode().IsRegular() {
+		if flowerStorageTree(relative) && !info.IsDir() || !flowerStorageTree(relative) && !info.Mode().IsRegular() {
 			return manifest, errors.New("invalid snapshot root type")
 		}
 	}
@@ -185,17 +190,37 @@ func restoreFlowerSnapshotWith(ctx context.Context, opts Options, id string, rep
 	}()
 	source := filepath.Join(opts.StateDir, flowerMaintenanceDir, "snapshots", id)
 	for _, root := range manifest.Roots {
-		if root == "ai/uploads" {
+		if flowerStorageTree(root) {
 			if err := copyFlowerTree(ctx, filepath.Join(source, root), filepath.Join(stage, root)); err != nil {
 				return err
 			}
 		}
 	}
 	for _, file := range manifest.Files {
-		if strings.HasPrefix(file.Path, "ai/uploads/") {
+		if slices.ContainsFunc(flowerStorageRoots[3:], func(root string) bool { return strings.HasPrefix(file.Path, root+"/") }) {
 			continue
 		}
 		if err := copyFlowerFile(ctx, filepath.Join(source, file.Path), filepath.Join(stage, file.Path)); err != nil {
+			return err
+		}
+	}
+	// Released snapshots did not include tool media. Preserve their previous
+	// restore behavior by carrying the stopped generation's immutable bytes;
+	// canonical retention will collect any unowned bytes after activation.
+	mediaRoot := "computer/keyframes"
+	if !slices.Contains(manifest.Roots, mediaRoot) {
+		present, err := flowerPathExists(filepath.Join(opts.StateDir, mediaRoot))
+		if err != nil {
+			return err
+		}
+		if present {
+			if err := copyFlowerTree(ctx, filepath.Join(opts.StateDir, mediaRoot), filepath.Join(stage, mediaRoot)); err != nil {
+				return err
+			}
+		}
+	}
+	for _, root := range flowerStorageRoots[3:] {
+		if err := os.MkdirAll(filepath.Join(stage, root), 0700); err != nil {
 			return err
 		}
 	}
@@ -271,7 +296,7 @@ func flowerReplacementPaths() []string {
 			paths = append(paths, root+suffix)
 		}
 	}
-	return append(paths, "ai/uploads")
+	return append(paths, flowerStorageRoots[3:]...)
 }
 
 func validateFlowerDestination(state, relative string) error {
@@ -316,6 +341,11 @@ func recoverFlowerReplacementWith(ctx context.Context, state string, afterRename
 		return err
 	}
 	paths := flowerReplacementPaths()
+	// A released in-flight restore has the exact original path list and leaves
+	// tool media untouched. Finish that operation before any new generation.
+	if len(operation.Items) == len(paths)-1 {
+		paths = paths[:len(paths)-1]
+	}
 	if operation.Format != 1 || !validFlowerSnapshotID(operation.ID) || !validFlowerSnapshotID(operation.SourceSnapshot) || operation.TargetBuild == "" || operation.Step < 0 || operation.Step > len(paths) || len(operation.Items) != len(paths) {
 		return errors.New("invalid Flower replacement operation")
 	}
@@ -331,6 +361,11 @@ func recoverFlowerReplacementWith(ctx context.Context, state string, afterRename
 	for _, file := range operation.Files {
 		if !validFlowerManifestFile(file, false) || seenFiles[file.Path] {
 			return errors.New("invalid prepared Flower checksum")
+		}
+		if !slices.ContainsFunc(operation.Items, func(item flowerReplacementItem) bool {
+			return item.HasPrepared && (file.Path == item.Path || flowerStorageTree(item.Path) && strings.HasPrefix(file.Path, item.Path+"/"))
+		}) {
+			return errors.New("prepared Flower file has no replacement owner")
 		}
 		seenFiles[file.Path] = true
 	}

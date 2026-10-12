@@ -15,11 +15,11 @@ import (
 	aoption "github.com/anthropics/anthropic-sdk-go/option"
 	flprovider "github.com/floegence/floret/v7/provider"
 	"github.com/floegence/redeven/internal/config"
-	openai "github.com/openai/openai-go"
-	ooption "github.com/openai/openai-go/option"
-	"github.com/openai/openai-go/packages/param"
-	oresponses "github.com/openai/openai-go/responses"
-	oshared "github.com/openai/openai-go/shared"
+	openai "github.com/openai/openai-go/v3"
+	ooption "github.com/openai/openai-go/v3/option"
+	"github.com/openai/openai-go/v3/packages/param"
+	oresponses "github.com/openai/openai-go/v3/responses"
+	oshared "github.com/openai/openai-go/v3/shared"
 )
 
 const (
@@ -303,7 +303,7 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 		event := stream.Current()
 		switch strings.TrimSpace(event.Type) {
 		case "response.output_text.delta":
-			delta := event.Delta.OfString
+			delta := event.Delta
 			if delta == "" {
 				continue
 			}
@@ -311,7 +311,7 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 			emitProviderEvent(onEvent, StreamEvent{Type: StreamEventTextDelta, Text: delta})
 
 		case "response.reasoning_summary_text.delta":
-			delta := event.Delta.OfString
+			delta := event.Delta
 			reasoningBuf.WriteString(delta)
 			emitProviderEvent(onEvent, StreamEvent{Type: StreamEventThinkingDelta, Text: delta})
 
@@ -335,7 +335,7 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 				pc.Name = name
 			}
 			emitStart(pc)
-			if raw := strings.TrimSpace(item.Arguments); raw != "" {
+			if raw := strings.TrimSpace(item.Arguments.OfString); raw != "" {
 				pc.ArgsRaw.WriteString(raw)
 				emitDelta(pc)
 			}
@@ -345,7 +345,7 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 			if pc == nil {
 				continue
 			}
-			delta := event.Delta.OfString
+			delta := event.Delta
 			if delta == "" {
 				continue
 			}
@@ -380,7 +380,7 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 			if name := canonicalProviderToolName(item.Name, aliases); name != "" {
 				pc.Name = name
 			}
-			if raw := strings.TrimSpace(item.Arguments); raw != "" && strings.TrimSpace(pc.ArgsRaw.String()) == "" {
+			if raw := strings.TrimSpace(item.Arguments.OfString); raw != "" && strings.TrimSpace(pc.ArgsRaw.String()) == "" {
 				pc.ArgsRaw.WriteString(raw)
 			}
 			emitEnd(pc, pc.ArgsRaw.String())
@@ -512,7 +512,7 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 				continue
 			}
 			toolName := canonicalProviderToolName(item.Name, aliases)
-			rawArgs := strings.TrimSpace(item.Arguments)
+			rawArgs := strings.TrimSpace(item.Arguments.OfString)
 			args := map[string]any{}
 			if rawArgs != "" {
 				_ = json.Unmarshal([]byte(rawArgs), &args)
@@ -1173,8 +1173,8 @@ func (p *moonshotProvider) Turn(ctx context.Context, req ModelGatewayRequest) (M
 	return result, nil
 }
 
-func buildOpenAIChatTools(defs []ToolDef, strict bool, aliases providerToolAliases) []openai.ChatCompletionToolParam {
-	out := make([]openai.ChatCompletionToolParam, 0, len(defs))
+func buildOpenAIChatTools(defs []ToolDef, strict bool, aliases providerToolAliases) []openai.ChatCompletionToolUnionParam {
+	out := make([]openai.ChatCompletionToolUnionParam, 0, len(defs))
 	for _, def := range defs {
 		name := strings.TrimSpace(def.Name)
 		if name == "" {
@@ -1193,7 +1193,7 @@ func buildOpenAIChatTools(defs []ToolDef, strict bool, aliases providerToolAlias
 		if len(schema) > 0 {
 			fn.Parameters = oshared.FunctionParameters(schema)
 		}
-		out = append(out, openai.ChatCompletionToolParam{Function: fn})
+		out = append(out, openai.ChatCompletionToolUnionParam{OfFunction: &openai.ChatCompletionFunctionToolParam{Function: fn}})
 	}
 	return out
 }
@@ -1328,7 +1328,7 @@ func applyAnthropicReasoning(params *anthropic.MessageNewParams, controls Provid
 	return nil
 }
 
-func decorateChatCompletionParams(params *openai.ChatCompletionNewParams, webSearchMode string, tools *[]openai.ChatCompletionToolParam) {
+func decorateChatCompletionParams(params *openai.ChatCompletionNewParams, webSearchMode string, tools *[]openai.ChatCompletionToolUnionParam) {
 	if params == nil {
 		return
 	}
@@ -1358,9 +1358,9 @@ func decorateChatCompletionParams(params *openai.ChatCompletionNewParams, webSea
 	}
 }
 
-func openAIChatToolOverride(v map[string]any) openai.ChatCompletionToolParam {
+func openAIChatToolOverride(v map[string]any) openai.ChatCompletionToolUnionParam {
 	b, _ := json.Marshal(v)
-	return param.Override[openai.ChatCompletionToolParam](json.RawMessage(b))
+	return param.Override[openai.ChatCompletionToolUnionParam](json.RawMessage(b))
 }
 
 func decorateResponsesParams(params *oresponses.ResponseNewParams, webSearchMode string, tools *[]oresponses.ToolUnionParam) {
@@ -1370,7 +1370,7 @@ func decorateResponsesParams(params *oresponses.ResponseNewParams, webSearchMode
 	switch strings.TrimSpace(webSearchMode) {
 	case providerWebSearchModeOpenAIResponsesBuiltin:
 		if tools != nil {
-			*tools = append(*tools, oresponses.ToolParamOfWebSearchPreview(oresponses.WebSearchToolTypeWebSearchPreview))
+			*tools = append(*tools, oresponses.ToolParamOfWebSearchPreview(oresponses.WebSearchPreviewToolTypeWebSearchPreview))
 		}
 	case providerWebSearchModeQwenResponsesWebSearch:
 		if tools != nil {
@@ -1397,38 +1397,66 @@ func buildOpenAIChatMessagesWithCapability(messages []Message, capability config
 	}
 	replayReasoning := replayField != ""
 	out := make([]openai.ChatCompletionMessageParamUnion, 0, len(messages)+2)
+	toolImages := make([]openai.ChatCompletionContentPartUnionParam, 0)
+	flushToolImages := func() {
+		if len(toolImages) == 0 {
+			return
+		}
+		out = append(out, openai.UserMessage(toolImages))
+		toolImages = nil
+	}
 	for _, msg := range messages {
 		role := strings.ToLower(strings.TrimSpace(msg.Role))
+		if role != "tool" {
+			flushToolImages()
+		}
 		switch role {
 		case "system":
 			if txt := joinMessageText(msg); txt != "" {
 				out = append(out, openai.SystemMessage(txt))
 			}
 		case "tool":
+			results := make([]ContentPart, 0, 1)
+			images := make([]ContentPart, 0)
 			for _, part := range msg.Content {
-				if strings.ToLower(strings.TrimSpace(part.Type)) != "tool_result" {
-					continue
+				switch strings.ToLower(strings.TrimSpace(part.Type)) {
+				case "tool_result":
+					results = append(results, part)
+				case "image":
+					images = append(images, part)
+				case "file":
+					return nil, errors.New("chat completions does not support file tool output")
 				}
-				callID := strings.TrimSpace(part.ToolCallID)
+			}
+			if len(images) > 0 && len(results) != 1 {
+				return nil, errors.New("tool images require exactly one tool result")
+			}
+			for _, result := range results {
+				callID := contentPartCallID(result)
 				if callID == "" {
-					callID = strings.TrimSpace(part.ToolUseID)
+					return nil, errors.New("tool result is missing a call ID")
 				}
-				if callID == "" {
-					continue
-				}
-				output := strings.TrimSpace(part.Text)
-				if output == "" && len(part.JSON) > 0 {
-					output = string(part.JSON)
-				}
+				output := contentPartToolResultText(result)
 				if output == "" {
 					output = "{}"
 				}
 				out = append(out, openai.ToolMessage(output, callID))
+				if len(images) > 0 {
+					// Chat tool messages accept text only. Keep all parallel results
+					// together, then send their native images with explicit call identity.
+					toolImages = append(toolImages, openai.TextContentPart("Images returned by tool call "+callID+" ("+contentPartToolName(result)+")"))
+					for _, image := range images {
+						if strings.TrimSpace(image.FileURI) == "" {
+							return nil, errors.New("tool image has no resolved input")
+						}
+						toolImages = append(toolImages, openai.ImageContentPart(openai.ChatCompletionContentPartImageImageURLParam{URL: image.FileURI}))
+					}
+				}
 			}
 		case "assistant":
 			var textBuf strings.Builder
 			var reasoningBuf strings.Builder
-			toolCalls := make([]openai.ChatCompletionMessageToolCallParam, 0, 2)
+			toolCalls := make([]openai.ChatCompletionMessageToolCallUnionParam, 0, 2)
 			appendAssistantText := func(text string) {
 				text = strings.TrimSpace(text)
 				if text == "" {
@@ -1477,13 +1505,13 @@ func buildOpenAIChatMessagesWithCapability(messages []Message, capability config
 					if !json.Valid([]byte(argsRaw)) {
 						argsRaw = "{}"
 					}
-					toolCalls = append(toolCalls, openai.ChatCompletionMessageToolCallParam{
+					toolCalls = append(toolCalls, openai.ChatCompletionMessageToolCallUnionParam{OfFunction: &openai.ChatCompletionMessageFunctionToolCallParam{
 						ID: callID,
-						Function: openai.ChatCompletionMessageToolCallFunctionParam{
+						Function: openai.ChatCompletionMessageFunctionToolCallFunctionParam{
 							Name:      name,
 							Arguments: argsRaw,
 						},
-					})
+					}})
 				}
 			}
 			content := strings.TrimSpace(textBuf.String())
@@ -1513,7 +1541,7 @@ func buildOpenAIChatMessagesWithCapability(messages []Message, capability config
 						contentParts = append(contentParts, openai.ImageContentPart(openai.ChatCompletionContentPartImageImageURLParam{URL: uri}))
 					}
 				case "file":
-					continue
+					return nil, errors.New("chat completions does not support file input")
 				}
 			}
 			if len(contentParts) == 0 {
@@ -1531,6 +1559,7 @@ func buildOpenAIChatMessagesWithCapability(messages []Message, capability config
 			out = append(out, openai.UserMessage(contentParts))
 		}
 	}
+	flushToolImages()
 	return out, nil
 }
 
@@ -1675,22 +1704,34 @@ func buildOpenAIInput(messages []Message, aliases providerToolAliases) (orespons
 				}
 			}
 		case "tool":
+			media := false
+			results := 0
 			for _, part := range msg.Content {
-				if strings.TrimSpace(part.Type) != "tool_result" {
+				switch strings.ToLower(strings.TrimSpace(part.Type)) {
+				case "image", "file":
+					media = true
+				case "tool_result":
+					results++
+				}
+			}
+			if media && results != 1 {
+				return nil, "", errors.New("tool media requires exactly one tool result")
+			}
+			for _, part := range msg.Content {
+				if !strings.EqualFold(strings.TrimSpace(part.Type), "tool_result") {
 					continue
 				}
-				callID := strings.TrimSpace(part.ToolCallID)
+				callID := contentPartCallID(part)
 				if callID == "" {
-					callID = strings.TrimSpace(part.ToolUseID)
+					return nil, "", errors.New("tool result is missing a call ID")
 				}
-				if callID == "" {
-					continue
+				output, err := buildOpenAIResponsesToolOutput(msg, part, media)
+				if err != nil {
+					return nil, "", err
 				}
-				output := strings.TrimSpace(part.Text)
-				if output == "" && len(part.JSON) > 0 {
-					output = string(part.JSON)
-				}
-				items = append(items, oresponses.ResponseInputItemParamOfFunctionCallOutput(callID, output))
+				items = append(items, oresponses.ResponseInputItemUnionParam{
+					OfFunctionCallOutput: &oresponses.ResponseInputItemFunctionCallOutputParam{CallID: openai.String(callID), Output: output},
+				})
 			}
 		case "assistant":
 			handledAssistantPart := false
@@ -1812,6 +1853,53 @@ func buildOpenAIInput(messages []Message, aliases providerToolAliases) (orespons
 	return items, instructions, nil
 }
 
+func contentPartCallID(part ContentPart) string {
+	if id := strings.TrimSpace(part.ToolCallID); id != "" {
+		return id
+	}
+	return strings.TrimSpace(part.ToolUseID)
+}
+
+func contentPartToolResultText(part ContentPart) string {
+	if text := strings.TrimSpace(part.Text); text != "" {
+		return text
+	}
+	return string(part.JSON)
+}
+
+func buildOpenAIResponsesToolOutput(msg Message, result ContentPart, media bool) (oresponses.ResponseInputItemFunctionCallOutputOutputUnionParam, error) {
+	if !media {
+		return oresponses.ResponseInputItemFunctionCallOutputOutputUnionParam{OfString: openai.String(contentPartToolResultText(result))}, nil
+	}
+	content := make(oresponses.ResponseFunctionCallOutputItemListParam, 0, len(msg.Content))
+	for _, part := range msg.Content {
+		switch strings.ToLower(strings.TrimSpace(part.Type)) {
+		case "text", "tool_result":
+			if text := contentPartToolResultText(part); text != "" {
+				content = append(content, oresponses.ResponseFunctionCallOutputItemUnionParam{OfInputText: &oresponses.ResponseInputTextContentParam{Text: text}})
+			}
+		case "image":
+			if strings.TrimSpace(part.FileURI) == "" {
+				return oresponses.ResponseInputItemFunctionCallOutputOutputUnionParam{}, errors.New("tool image has no resolved input")
+			}
+			content = append(content, oresponses.ResponseFunctionCallOutputItemUnionParam{OfInputImage: &oresponses.ResponseInputImageContentParam{
+				ImageURL: openai.String(part.FileURI), Detail: oresponses.ResponseInputImageContentDetailAuto,
+			}})
+		case "file":
+			file := oresponses.ResponseInputFileContentParam{Filename: openai.String(part.Text)}
+			if data, ok := extractDataURLBase64(part.FileURI); ok {
+				file.FileData = openai.String(data)
+			} else if strings.HasPrefix(part.FileURI, "https://") || strings.HasPrefix(part.FileURI, "http://") {
+				file.FileURL = openai.String(part.FileURI)
+			} else {
+				return oresponses.ResponseInputItemFunctionCallOutputOutputUnionParam{}, errors.New("tool file has no supported resolved input")
+			}
+			content = append(content, oresponses.ResponseFunctionCallOutputItemUnionParam{OfInputFile: &file})
+		}
+	}
+	return oresponses.ResponseInputItemFunctionCallOutputOutputUnionParam{OfResponseFunctionCallOutputItemArray: content}, nil
+}
+
 func extractDataURLBase64(raw string) (string, bool) {
 	raw = strings.TrimSpace(raw)
 	if !strings.HasPrefix(raw, "data:") {
@@ -1858,10 +1946,14 @@ func (p *anthropicProvider) prepareTurn(ctx context.Context, req ModelGatewayReq
 		return nil, err
 	}
 	tools := buildAnthropicTools(req.Tools)
+	messages, err := buildAnthropicMessages(req.Messages)
+	if err != nil {
+		return nil, err
+	}
 	params := anthropic.MessageNewParams{
 		Model:     anthropic.Model(strings.TrimSpace(req.Model)),
 		MaxTokens: modelGatewayDefaultMaxOutputTokens,
-		Messages:  buildAnthropicMessages(req.Messages),
+		Messages:  messages,
 		Tools:     tools,
 	}
 	if req.Budgets.MaxOutputToken > 0 {
@@ -2106,7 +2198,7 @@ func buildAnthropicTools(defs []ToolDef) []anthropic.ToolUnionParam {
 	return out
 }
 
-func buildAnthropicMessages(messages []Message) []anthropic.MessageParam {
+func buildAnthropicMessages(messages []Message) ([]anthropic.MessageParam, error) {
 	out := make([]anthropic.MessageParam, 0, len(messages)+1)
 	for _, msg := range messages {
 		role := strings.ToLower(strings.TrimSpace(msg.Role))
@@ -2116,66 +2208,82 @@ func buildAnthropicMessages(messages []Message) []anthropic.MessageParam {
 		blocks := make([]anthropic.ContentBlockParamUnion, 0, len(msg.Content)+1)
 		for _, part := range msg.Content {
 			switch strings.ToLower(strings.TrimSpace(part.Type)) {
+			case "tool_call":
+				callID := contentPartCallID(part)
+				name := contentPartToolName(part)
+				args := strings.TrimSpace(part.ArgsJSON)
+				if args == "" {
+					args = string(part.JSON)
+				}
+				if callID == "" || name == "" || !json.Valid([]byte(args)) {
+					return nil, errors.New("anthropic tool call has invalid identity or arguments")
+				}
+				blocks = append(blocks, anthropic.NewToolUseBlock(callID, json.RawMessage(args), name))
 			case "tool_result":
-				callID := strings.TrimSpace(part.ToolCallID)
+				callID := contentPartCallID(part)
 				if callID == "" {
-					callID = strings.TrimSpace(part.ToolUseID)
+					return nil, errors.New("anthropic tool result is missing a call ID")
 				}
-				if callID == "" {
-					continue
-				}
-				content := strings.TrimSpace(part.Text)
-				if content == "" && len(part.JSON) > 0 {
-					content = string(part.JSON)
-				}
-				blocks = append(blocks, anthropic.NewToolResultBlock(callID, content, false))
+				blocks = append(blocks, anthropic.NewToolResultBlock(callID, contentPartToolResultText(part), false))
 			case "image":
 				uri := strings.TrimSpace(part.FileURI)
-				if uri == "" {
-					continue
-				}
 				if b64, ok := extractDataURLBase64(uri); ok {
-					mediaType := strings.TrimSpace(part.MimeType)
-					if mediaType == "" {
-						mediaType = "image/png"
-					}
-					blocks = append(blocks, anthropic.NewImageBlockBase64(mediaType, b64))
-					continue
-				}
-				if strings.HasPrefix(uri, "http://") || strings.HasPrefix(uri, "https://") {
+					blocks = append(blocks, anthropic.NewImageBlockBase64(part.MimeType, b64))
+				} else if strings.HasPrefix(uri, "http://") || strings.HasPrefix(uri, "https://") {
 					blocks = append(blocks, anthropic.NewImageBlock(anthropic.URLImageSourceParam{URL: uri}))
+				} else {
+					return nil, errors.New("anthropic image has no supported resolved input")
 				}
 			case "file":
-				uri := strings.TrimSpace(part.FileURI)
-				if uri == "" {
-					continue
-				}
 				mime := strings.ToLower(strings.TrimSpace(part.MimeType))
-				b64, ok := extractDataURLBase64(uri)
+				b64, ok := extractDataURLBase64(part.FileURI)
 				if !ok {
-					continue
+					return nil, errors.New("anthropic file requires inline data")
 				}
-				switch mime {
-				case "application/pdf":
+				switch {
+				case mime == "application/pdf":
 					blocks = append(blocks, anthropic.NewDocumentBlock(anthropic.Base64PDFSourceParam{Data: b64}))
-				default:
-					if !isTextLikeMimeType(mime) {
-						continue
-					}
+				case isTextLikeMimeType(mime):
 					decoded, err := base64.StdEncoding.DecodeString(b64)
 					if err != nil {
-						continue
-					}
-					if len(decoded) == 0 {
-						continue
+						return nil, fmt.Errorf("decode Anthropic text file: %w", err)
 					}
 					blocks = append(blocks, anthropic.NewDocumentBlock(anthropic.PlainTextSourceParam{Data: string(decoded)}))
+				default:
+					return nil, fmt.Errorf("anthropic does not support file MIME type %q", mime)
 				}
 			default:
 				if txt := strings.TrimSpace(part.Text); txt != "" {
 					blocks = append(blocks, anthropic.NewTextBlock(txt))
 				}
 			}
+		}
+		if role == "tool" {
+			var result *anthropic.ToolResultBlockParam
+			content := make([]anthropic.ToolResultBlockParamContentUnion, 0, len(blocks))
+			for _, block := range blocks {
+				switch {
+				case block.OfToolResult != nil:
+					if result != nil {
+						return nil, errors.New("anthropic tool message requires exactly one result")
+					}
+					result = block.OfToolResult
+					content = append(content, result.Content...)
+				case block.OfText != nil:
+					content = append(content, anthropic.ToolResultBlockParamContentUnion{OfText: block.OfText})
+				case block.OfImage != nil:
+					content = append(content, anthropic.ToolResultBlockParamContentUnion{OfImage: block.OfImage})
+				case block.OfDocument != nil:
+					content = append(content, anthropic.ToolResultBlockParamContentUnion{OfDocument: block.OfDocument})
+				default:
+					return nil, errors.New("anthropic tool message has unsupported content")
+				}
+			}
+			if result == nil {
+				return nil, errors.New("anthropic tool message is missing its result")
+			}
+			result.Content = content
+			blocks = []anthropic.ContentBlockParamUnion{{OfToolResult: result}}
 		}
 		if len(blocks) == 0 {
 			if txt := joinMessageText(msg); txt != "" {
@@ -2194,7 +2302,7 @@ func buildAnthropicMessages(messages []Message) []anthropic.MessageParam {
 	if len(out) == 0 {
 		out = append(out, anthropic.NewUserMessage(anthropic.NewTextBlock("Continue.")))
 	}
-	return out
+	return out, nil
 }
 
 func isTextLikeMimeType(mime string) bool {
@@ -2223,6 +2331,11 @@ func validateGatewayAttachmentParts(messages []Message, route string) error {
 				return fmt.Errorf("message %d attachment %d is incomplete", messageIndex, partIndex)
 			}
 			if partType == "image" {
+				switch route {
+				case "openai-responses", "openai-chat", "anthropic":
+				default:
+					return fmt.Errorf("provider route %q does not support image input", route)
+				}
 				switch mimeType {
 				case "image/png", "image/jpeg", "image/gif", "image/webp":
 				default:

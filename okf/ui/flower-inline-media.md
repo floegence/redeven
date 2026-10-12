@@ -26,6 +26,9 @@ preview error without interrupting the conversation.
   filesystem scope. They are never interpreted as application routes.
 - A screenshot uses the exact `computer://target/digest` reference returned by
   the tool. Loading uses the existing thread-authorized computer frame adapter.
+- `image.read` results use the exact `image://digest/format` snapshot reference.
+  Activity and assistant Markdown load it through the thread-authorized binary
+  media adapter. Preview failure offers retry; it never reopens the source file.
 - An `html preview` fence or a local `.html` / `.htm` link renders an interactive
   preview. Ordinary `html` fences remain copyable source code. Raw HTML remains
   escaped. External HTML pages must be saved locally before inline preview.

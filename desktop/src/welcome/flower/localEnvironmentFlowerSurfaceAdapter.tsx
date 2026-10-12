@@ -2,6 +2,7 @@ import { flowerExtensionsAdapter } from '../../../../internal/flower_ui/host/ext
 import type { DesktopSecurityRequest, SecurityResult } from '../../shared/runtimeSecurity';
 import { computerManagementAdapter } from '../../../../internal/flower_ui/host/computerUseAdapter';
 import { computerFramePath } from '../../../../internal/flower_ui/host/computerFramePath';
+import { toolImagePath } from '../../../../internal/flower_ui/host/toolImagePath';
 import { messageFilePath } from '../../../../internal/flower_ui/host/messageFilePath';
 import { messageAttachmentPath } from '../../../../internal/flower_ui/host/messageAttachmentPath';
 import { COMPUTER_FRAME_RATE_KEY, computerFrameRate } from '../../../../internal/flower_ui/src/computerViewer';
@@ -836,6 +837,15 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
         throw new Error('Flower returned invalid computer media.');
       }
       return new Blob([new Uint8Array(frame.bytes)], { type: frame.mime_type });
+    },
+    loadToolImage: async (input) => {
+      input.signal.throwIfAborted();
+      const image = await runtimeJSON<RuntimeFlowerMedia>(bridge, 'GET', toolImagePath(input));
+      input.signal.throwIfAborted();
+      if (!(image.bytes instanceof Uint8Array) || !['image/png', 'image/jpeg', 'image/webp'].includes(image.mime_type) || image.bytes.length > (10 << 20)) {
+        throw new Error('Image preview is unavailable.');
+      }
+      return new Blob([new Uint8Array(image.bytes)], { type: image.mime_type });
     },
     loadMessageFile: async ({ path, signal }) => {
       signal.throwIfAborted();

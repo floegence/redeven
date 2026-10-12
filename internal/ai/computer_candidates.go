@@ -583,7 +583,7 @@ func (r *run) execComputerManagement(ctx context.Context, toolID, toolName strin
 	if err != nil {
 		return nil, err
 	}
-	return targetToolExecution{TargetID: target.ID, Payload: map[string]any{"target_id": target.ID, "target_name": target.DisplayName, "target_kind": target.Kind, "capabilities": target.Capabilities, "execution_location": target.Locality, "selected": true, "next_step": "Observe the selected page or application before acting."}}, nil
+	return toolExecutionOutput{TargetID: target.ID, Payload: map[string]any{"target_id": target.ID, "target_name": target.DisplayName, "target_kind": target.Kind, "capabilities": target.Capabilities, "execution_location": target.Locality, "selected": true, "next_step": "Observe the selected page or application before acting."}}, nil
 }
 
 // Default selection describes a new task page without launching anything. The

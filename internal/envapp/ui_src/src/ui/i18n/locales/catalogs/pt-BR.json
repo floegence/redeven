@@ -5365,7 +5365,6 @@
       "threadEmpty": "Esta conversa ainda não tem conteúdo.",
       "threadSyncingLatest": "Sincronizando a resposta mais recente...",
       "threadSyncFailed": "O Flower não conseguiu sincronizar a resposta mais recente. Tente novamente.",
-      "activeTurnBusy": "A resposta anterior ainda está ativa. Você pode interrompê-la antes de enviar novamente.",
       "composerErrorTitle": "O Flower não pôde enviar.",
       "expandThinking": "Expandir todo o raciocínio",
       "collapseThinking": "Recolher o raciocínio",
@@ -5494,7 +5493,19 @@
       "runErrorCopyDetails": "Copiar detalhes",
       "runErrorContextBudgetInvalid": "A capacidade reservada para a saída não deixa espaço para a entrada. Aumente a janela de contexto configurada do modelo ou reduza o limite de saída e tente novamente. No Ollama, defina num_ctx no Modelfile e recarregue o modelo.",
       "runErrorContextFixedOverhead": "As instruções do sistema e as definições das ferramentas excedem o contexto disponível do modelo. Aumente a janela de contexto do servidor ou escolha um modelo com mais contexto e tente novamente. Compactar o histórico da conversa não resolve esse problema.",
-      "runErrorContextCompactionLimit": "A conversa ainda excede o limite de contexto do modelo após a compactação. Encurte a entrada ou escolha um modelo com mais contexto e tente novamente."
+      "runErrorContextCompactionLimit": "A conversa ainda excede o limite de contexto do modelo após a compactação. Encurte a entrada ou escolha um modelo com mais contexto e tente novamente.",
+      "preparingSend": "Preparando mensagem",
+      "sendFailed": "Falha no envio",
+      "sendUnknown": "Confirmação necessária",
+      "sendUnknownDescription": "O resultado do envio é desconhecido. As mensagens seguintes estão pausadas. Tente a mesma solicitação novamente ou atualize a conversa.",
+      "retrySend": "Tentar envio novamente",
+      "refreshSend": "Atualizar confirmação",
+      "restoreSend": "Restaurar no editor vazio",
+      "deleteUnsent": "Excluir mensagem não enviada",
+      "sendWaiting": "Aguardando envio",
+      "attachmentRecoveryDescription": "Os anexos não estão disponíveis após reiniciar. Restaure o texto e as referências e selecione os arquivos novamente. Atualize para verificar se a solicitação original foi aceita.",
+      "removeRecoveryCopy": "Remover cópia local de recuperação",
+      "removeRecoveryCopyDescription": "Remove esta cópia local de recuperação e retoma as mensagens seguintes. A solicitação original ao servidor não é cancelada."
     },
     "threadList": {
       "title": "Conversas",
@@ -5829,7 +5840,8 @@
       "dialogEffectiveContextPercent": "% de contexto efetivo",
       "dialogDynamicModelMetadata": "Metadados dinâmicos do modelo",
       "dialogOpenAICompatibleNativeEndpoint": "Endpoint nativo compatível com OpenAI",
-      "dialogLocalOpenAICompatibleEndpoint": "Endpoint local compatível com OpenAI"
+      "dialogLocalOpenAICompatibleEndpoint": "Endpoint local compatível com OpenAI",
+      "imageModelRequired": "Esta conversa contém imagens. Escolha um modelo que aceite imagens."
     },
     "computer": {
       "title": "Navegador e área de trabalho",

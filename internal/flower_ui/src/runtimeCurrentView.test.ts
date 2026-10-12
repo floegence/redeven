@@ -457,8 +457,8 @@ describe('applyFlowerRuntimeCurrentView', () => {
     const result = applyFlowerRuntimeCurrentView(summary(), current);
     expect(result.messages.map((message) => message.content)).toEqual(['active work']);
     expect(result.queued_turns).toEqual([
-      { queue_id: 'queue:queued-first', prompt: 'first queued', created_at_ms: result.updated_at_ms },
-      { queue_id: 'queue:queued-second', prompt: 'second queued', created_at_ms: result.updated_at_ms },
+      { queue_id: 'queue:queued-first', request_key: 'queued-first', prompt: 'first queued', created_at_ms: result.updated_at_ms },
+      { queue_id: 'queue:queued-second', request_key: 'queued-second', prompt: 'second queued', created_at_ms: result.updated_at_ms },
     ]);
     expect(result.queued_turn_count).toBe(2);
   });

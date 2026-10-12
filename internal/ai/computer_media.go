@@ -11,15 +11,32 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 const maxComputerFrameBytes = 16 << 20
 
-type computerMediaStore struct{ directory string }
+// toolMediaStore stores immutable host-owned image bytes. Floret owns every
+// canonical descriptor and membership; this store never reconstructs history.
+type toolMediaStore struct {
+	directory string
+	writes    *sync.Mutex
+}
 
-func (s computerMediaStore) path(ref string) (string, error) {
-	if !filepath.IsAbs(s.directory) || !computerFrameResourcePattern.MatchString(ref) {
-		return "", errors.New("invalid computer media reference")
+func newToolMediaStore(directory string) toolMediaStore {
+	return toolMediaStore{directory: directory, writes: &sync.Mutex{}}
+}
+
+func (s toolMediaStore) path(ref string) (string, error) {
+	if !filepath.IsAbs(s.directory) {
+		return "", errors.New("invalid tool media reference")
+	}
+	if imageSnapshotResourcePattern.MatchString(ref) {
+		parts := strings.Split(strings.TrimPrefix(ref, "image://"), "/")
+		return filepath.Join(s.directory, "images", parts[0]+"."+parts[1]), nil
+	}
+	if !computerFrameResourcePattern.MatchString(ref) {
+		return "", errors.New("invalid tool media reference")
 	}
 	parts := strings.Split(strings.TrimPrefix(ref, "computer://"), "/")
 	return filepath.Join(s.directory, parts[0], parts[1]+".png"), nil
@@ -52,7 +69,12 @@ func validateComputerPixels(body []byte) error {
 	return nil
 }
 
-func (s computerMediaStore) put(ctx context.Context, attachment TargetToolAttachment, body []byte) error {
+func (s toolMediaStore) put(ctx context.Context, attachment TargetToolAttachment, body []byte) error {
+	if s.writes == nil {
+		return errors.New("tool media store is unavailable")
+	}
+	s.writes.Lock()
+	defer s.writes.Unlock()
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -60,7 +82,7 @@ func (s computerMediaStore) put(ctx context.Context, attachment TargetToolAttach
 	if err != nil {
 		return err
 	}
-	if err := validateComputerFrame(attachment, body); err != nil {
+	if err := validateToolMedia(attachment, body); err != nil {
 		return err
 	}
 	if _, err := os.Stat(destination); err == nil {
@@ -72,7 +94,7 @@ func (s computerMediaStore) put(ctx context.Context, attachment TargetToolAttach
 	if err := os.MkdirAll(filepath.Dir(destination), 0700); err != nil {
 		return err
 	}
-	temp, err := os.CreateTemp(filepath.Dir(destination), ".frame-")
+	temp, err := os.CreateTemp(filepath.Dir(destination), ".snapshot-")
 	if err != nil {
 		return err
 	}
@@ -94,7 +116,7 @@ func (s computerMediaStore) put(ctx context.Context, attachment TargetToolAttach
 	return os.Rename(temp.Name(), destination)
 }
 
-func (s computerMediaStore) read(ctx context.Context, ref string) ([]byte, error) {
+func (s toolMediaStore) read(ctx context.Context, ref string) ([]byte, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -111,8 +133,9 @@ func (s computerMediaStore) read(ctx context.Context, ref string) ([]byte, error
 	if err != nil {
 		return nil, err
 	}
-	hash := ref[strings.LastIndexByte(ref, '/')+1:]
-	if err := validateComputerFrame(TargetToolAttachment{ResourceRef: ref, MIMEType: "image/png", SizeBytes: int64(len(body)), SHA256: hash}, body); err != nil {
+	attachment := toolMediaDescriptor(ref)
+	attachment.SizeBytes = int64(len(body))
+	if err := validateToolMedia(attachment, body); err != nil {
 		return nil, err
 	}
 	if err := ctx.Err(); err != nil {

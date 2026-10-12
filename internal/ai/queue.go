@@ -12,7 +12,7 @@ import (
 )
 
 func queuedInputView(threadID string, queued flruntime.QueuedInput) QueuedTurnView {
-	view := QueuedTurnView{QueueID: queued.ID, Text: queued.Input.Text, CreatedAtUnixMs: queued.CreatedAt.UnixMilli()}
+	view := QueuedTurnView{QueueID: queued.ID, RequestKey: string(queued.RequestKey), Text: queued.Input.Text, CreatedAtUnixMs: queued.CreatedAt.UnixMilli()}
 	for index, attachment := range queued.Input.Attachments {
 		uploadID, _ := uploadIDFromFloretResourceRef(attachment.ResourceRef)
 		attachmentID := uploadID

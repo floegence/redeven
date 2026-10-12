@@ -203,6 +203,12 @@ func buildPromptToolUsageSection(snapshot promptRuntimeSnapshot) promptSection {
 		"- When a call depends on a previous result, wait for that result and emit the dependent call in a later response.",
 		"- The runtime does not infer dependencies or conflicts between calls; express dependencies through response boundaries.",
 	}
+	if promptToolAvailable(snapshot.AvailableToolNames, "image.read") {
+		lines = append(lines,
+			"- Inspect referenced local images with image.read. It reads authorized image bytes directly, preserves an immutable snapshot, and provides native image content to a compatible model. A browser, screenshot workaround or temporary HTTP service is unnecessary.",
+			"- If image.read reports an unsupported model, ask for an image-capable model; do not bypass missing vision through another tool. Permission, scope and target errors must be repaired at their own boundary.",
+		)
+	}
 	if strings.TrimSpace(snapshot.PermissionType) == string(FlowerPermissionReadonly) {
 		lines = append(lines,
 			"Follow this workflow for every task:",

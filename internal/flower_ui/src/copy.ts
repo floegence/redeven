@@ -119,6 +119,7 @@ export type FlowerSettingsCopy = Readonly<{
   noModelSelected: string;
   text: string;
   imageInput: string;
+  imageModelRequired: string;
   selectModelPlaceholder: string;
   defaultPermissionTitle: string;
   defaultPermissionDescription: string;
@@ -433,6 +434,18 @@ export type FlowerSurfaceCopy = Readonly<{
     composerReferenceRemove: (path: string) => string;
     composerReferenceAdded: (path: string) => string;
     composerReferenceExists: (path: string) => string;
+    sendWaiting: string;
+    preparingSend: string;
+    sendFailed: string;
+    sendUnknown: string;
+    sendUnknownDescription: string;
+    retrySend: string;
+    refreshSend: string;
+    restoreSend: string;
+    deleteUnsent: string;
+    attachmentRecoveryDescription: string;
+    removeRecoveryCopy: string;
+    removeRecoveryCopyDescription: string;
     pendingSending: string;
     pendingQueued: string;
     queuedSendNow: string;
@@ -485,7 +498,6 @@ export type FlowerSurfaceCopy = Readonly<{
     threadEmpty: string;
     threadSyncingLatest: string;
     threadSyncFailed: string;
-    activeTurnBusy: string;
     composerErrorTitle: string;
     expandThinking: string;
     collapseThinking: string;
@@ -780,6 +792,18 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     composerReferenceRemove: (path) => `Remove reference ${path}`,
     composerReferenceAdded: (path) => `${path} referenced.`,
     composerReferenceExists: (path) => `${path} is already referenced.`,
+    sendWaiting: "Waiting to send",
+    preparingSend: "Preparing message",
+    sendFailed: "Send failed",
+    sendUnknown: "Confirmation needed",
+    sendUnknownDescription: "The send result is unknown. Later messages are paused. Retry this same request or refresh the conversation.",
+    retrySend: "Retry send",
+    refreshSend: "Refresh confirmation",
+    restoreSend: "Restore to empty editor",
+    deleteUnsent: "Delete unsent message",
+    attachmentRecoveryDescription: "Attachments are unavailable after restart. Restore text and references, then select the files again. Refresh to check whether the original request was accepted.",
+    removeRecoveryCopy: "Remove local recovery copy",
+    removeRecoveryCopyDescription: "Remove this local recovery copy and resume later messages. This does not cancel the original server request.",
     pendingSending: 'Sending',
     pendingQueued: 'Queued',
     queuedSendNow: 'Send now',
@@ -832,7 +856,6 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     threadEmpty: 'This conversation has no content yet.',
     threadSyncingLatest: 'Syncing the latest reply...',
     threadSyncFailed: 'Flower could not sync the latest reply. Try again.',
-    activeTurnBusy: 'The previous reply is still active. You can stop it before sending again.',
     composerErrorTitle: 'Flower could not send.',
     expandThinking: 'Expand full thinking',
     collapseThinking: 'Collapse thinking',
@@ -1192,6 +1215,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     noModelSelected: 'No model selected',
     text: 'Text',
     imageInput: 'Image input',
+    imageModelRequired: 'This conversation contains images. Choose a model that supports image input.',
     selectModelPlaceholder: 'Select model',
     defaultPermissionTitle: 'Default permission',
     defaultPermissionDescription: 'Applies to new Flower threads. Existing threads keep their own permission.',

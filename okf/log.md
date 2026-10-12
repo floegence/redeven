@@ -1,5 +1,16 @@
 # Redeven OKF Update Log
 
+## 2026-10-11: Ordered send feedback and direct image reads
+
+- Show unconfirmed delivery in the existing queue dock and dispatch one ordered
+  request per thread, with explicit failed/unknown recovery and request-level
+  IndexedDB persistence.
+- Add [direct image reads](ai/image-read-and-retention.md), native provider
+  attachments, immutable snapshots and authenticated Activity previews.
+- Adopt Floret v7.28.0 affected-record writes and complete media retention;
+  preserve domain schema 13, history and old storage restore semantics.
+- Review Runtime/Desktop epoch 52 for ordered delivery and tool-image routes.
+
 ## 2026-10-11: Runtime-bound Ask Flower references
 
 - Bind [context action admission](ai/flower-context-action-records.md) to the connected resource endpoint; Desktop Cloud binding remains display and navigation identity.

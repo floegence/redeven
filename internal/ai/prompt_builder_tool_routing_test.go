@@ -255,3 +255,12 @@ func TestBuildLayeredSystemPrompt_ReadonlyRoutesThroughReadonlyExclusiveTools(t 
 	assertPromptNotContains(t, prompt, "curl")
 	assertPromptNotContains(t, prompt, "file.read")
 }
+
+func TestBuildLayeredSystemPromptRoutesImagesToSharedAuthorizedTool(t *testing.T) {
+	for _, permission := range []FlowerPermissionType{FlowerPermissionReadonly, FlowerPermissionApprovalRequired, FlowerPermissionFullAccess} {
+		prompt := buildPromptForToolSetTest(t, permission, []ToolDef{{Name: "image.read", Visibility: ToolVisibilitySharedReadonly}})
+		assertPromptContains(t, prompt, "Inspect referenced local images with image.read")
+		assertPromptContains(t, prompt, "temporary HTTP service is unnecessary")
+		assertPromptContains(t, prompt, "do not bypass missing vision through another tool")
+	}
+}

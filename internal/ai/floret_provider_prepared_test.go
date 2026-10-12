@@ -123,13 +123,16 @@ func TestAnthropicTextAttachmentDoesNotSilentlyTruncate(t *testing.T) {
 		" \t\r\n  ",
 		"第一行\r\n第二行🙂\r\n",
 	} {
-		messages := buildAnthropicMessages([]Message{{
+		messages, err := buildAnthropicMessages([]Message{{
 			Role: "user",
 			Content: []ContentPart{{
 				Type: "file", Text: "long.txt", MimeType: "text/plain",
 				FileURI: "data:text/plain;base64," + base64.StdEncoding.EncodeToString([]byte(body)),
 			}},
 		}})
+		if err != nil {
+			t.Fatal(err)
+		}
 		if len(messages) != 1 || len(messages[0].Content) != 1 || messages[0].Content[0].OfDocument == nil || messages[0].Content[0].OfDocument.Source.OfText == nil {
 			t.Fatalf("Anthropic text attachment did not produce one plain-text document: %#v", messages)
 		}

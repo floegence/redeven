@@ -86,7 +86,7 @@ func floretContextProjectionForInput(input RunInput, authority *flowerCanonicalR
 		case contextActionKindFilePath:
 			reference, err = floretFilePathReference(item, index, *authority)
 			title = "User-selected file"
-			instruction = "The user explicitly selected the referenced file. Read it with the file tool if its contents are needed."
+			instruction = "The user explicitly selected the referenced file. Use image.read for image contents; use the file tool for text contents. Reading an image does not require a browser or HTTP server."
 			metadata = contextActionFilePathMetadata(action, item)
 		case contextActionKindTerminal:
 			reference, hasReference = floretTerminalSelectionReference(item, index)

@@ -174,11 +174,14 @@ it('consumes references when the canonical queue accepts a send before its turn 
   accept({ client_request_id: input.client_request_id, thread_id: 'canvas-thread', current });
 });
 
-it('keeps a rejected send editable with its canvas references', async () => {
+it('preserves a rejected send for explicit restoration with its canvas references', async () => {
   const runtime = mount({ launchTurn: async () => { throw flowerTurnAdmissionError('rejected', new Error('Test admission rejected')); } });
   await select();
   await send('Keep this draft');
   await expect.poll(() => runtime.sent.mock.calls.length).toBe(1);
+  await expect.element(editor()).toHaveValue('');
+  await expect.element(page.getByRole('button', { name: 'Restore to empty editor', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: 'Restore to empty editor', exact: true }).click();
   await expect.element(editor()).toHaveValue('Keep this draft');
   await expect.element(page.getByRole('button', { name: 'Send', exact: true })).toBeEnabled();
   expect(referenceText()).toContain('Orders API');
@@ -194,6 +197,9 @@ it('retains references while admission is unknown and consumes them after the fr
   } });
   await select();
   await send('Keep until confirmed');
+  await expect.poll(() => runtime.sent.mock.calls.length).toBe(1);
+  await expect.element(page.getByRole('button', { name: 'Retry send', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Retry send', exact: true }).click();
   await expect.poll(() => runtime.sent.mock.calls.length).toBe(2);
   expect(referenceText()).toContain('Orders API');
   expect(runtime.bindings()).toHaveLength(0);

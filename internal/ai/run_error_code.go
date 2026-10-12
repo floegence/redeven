@@ -11,7 +11,7 @@ import (
 
 	flprovider "github.com/floegence/floret/v7/provider"
 	flruntime "github.com/floegence/floret/v7/runtime"
-	openai "github.com/openai/openai-go"
+	openai "github.com/openai/openai-go/v3"
 )
 
 const (

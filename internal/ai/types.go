@@ -274,6 +274,7 @@ type FlowerAttachmentView struct {
 
 type QueuedTurnView struct {
 	QueueID         string                 `json:"queue_id"`
+	RequestKey      string                 `json:"request_key"`
 	Text            string                 `json:"text"`
 	CreatedAtUnixMs int64                  `json:"created_at_unix_ms"`
 	Attachments     []FlowerAttachmentView `json:"attachments,omitempty"`

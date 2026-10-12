@@ -14,11 +14,12 @@ import (
 	"github.com/floegence/redeven/internal/session"
 )
 
-// floretBootstrapResult contains the only two Floret runtime boundaries used
-// by Redeven: the typed thread service and its product effect adapter.
+// floretBootstrapResult keeps Floret lifecycle, canonical retention, and the
+// typed thread service behind their published runtime contracts.
 type floretBootstrapResult struct {
 	activate       func(context.Context) error
 	prepareRestore func(context.Context) (flruntime.RestorePreparation, error)
+	mediaInventory func(context.Context) (flruntime.MediaInventory, error)
 	close          func() error
 	threadRuntime  flruntime.ThreadService
 	effects        *floretEffectAdapter
@@ -226,6 +227,7 @@ func configureFloretRuntime(host *flruntime.Host) (*floretBootstrapResult, error
 	return &floretBootstrapResult{
 		activate:       host.Activate,
 		prepareRestore: host.PrepareRestore,
+		mediaInventory: host.MediaInventory,
 		close:          func() error { return host.Shutdown(context.Background()) },
 		threadRuntime:  threadRuntime,
 		effects:        effects,

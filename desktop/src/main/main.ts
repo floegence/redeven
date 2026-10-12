@@ -290,6 +290,7 @@ import {
   openRuntimeFlowerHTTPStream,
   runtimeFlowerPrivateBridgeHeaders,
   runtimeFlowerComputerFrame,
+  runtimeFlowerToolImage,
   runtimeFlowerMessageFile,
 	runtimeFlowerInvalidJSONError,
   type RuntimeFlowerHTTPResponse,
@@ -512,6 +513,7 @@ import {
   CANCEL_RUNTIME_FLOWER_STREAM_CHANNEL,
   REQUEST_RUNTIME_FLOWER_CHANNEL,
   RUNTIME_FLOWER_COMPUTER_MEDIA_PATH,
+  RUNTIME_FLOWER_TOOL_IMAGE_PATH,
   RUNTIME_FLOWER_STREAM_EVENT_CHANNEL,
   START_RUNTIME_FLOWER_STREAM_CHANNEL,
   normalizeRuntimeFlowerStreamID,
@@ -11604,6 +11606,9 @@ async function requestRuntimeFlower(request: RuntimeFlowerRequest): Promise<Runt
   }
   if ((RUNTIME_FLOWER_COMPUTER_MEDIA_PATH.test(path) || path.startsWith('/_redeven_proxy/api/ai/computer/private-frame?')) && response.status === 200) {
     return { ok: true, data: runtimeFlowerComputerFrame(response) };
+  }
+  if (RUNTIME_FLOWER_TOOL_IMAGE_PATH.test(path) && response.status === 200) {
+    return { ok: true, data: runtimeFlowerToolImage(response) };
   }
   if (path.startsWith('/_redeven_proxy/api/fs/file?') && response.status === 200) {
     return { ok: true, data: runtimeFlowerMessageFile(response) };

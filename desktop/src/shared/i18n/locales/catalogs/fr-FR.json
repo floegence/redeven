@@ -463,7 +463,6 @@
       "threadEmpty": "Cette conversation ne contient encore aucun contenu.",
       "threadSyncingLatest": "Synchronisation de la dernière réponse...",
       "threadSyncFailed": "Flower n’a pas pu synchroniser la dernière réponse. Réessayez.",
-      "activeTurnBusy": "La réponse précédente est toujours active. Vous pouvez l’arrêter avant de renvoyer votre message.",
       "composerErrorTitle": "Flower n’a pas pu envoyer.",
       "expandThinking": "Développer toute la réflexion",
       "collapseThinking": "Réduire la réflexion",
@@ -592,7 +591,19 @@
       "runErrorCopyDetails": "Copier les détails",
       "runErrorContextBudgetInvalid": "La capacité réservée à la sortie ne laisse aucune place à l’entrée. Augmentez la fenêtre de contexte configurée du modèle ou réduisez la limite de sortie, puis réessayez. Avec Ollama, définissez num_ctx dans le Modelfile et rechargez le modèle.",
       "runErrorContextFixedOverhead": "Les instructions système et les définitions des outils dépassent le contexte disponible du modèle. Augmentez la fenêtre de contexte du serveur ou choisissez un modèle offrant davantage de contexte, puis réessayez. Compresser l’historique de discussion ne résoudra pas ce problème.",
-      "runErrorContextCompactionLimit": "La conversation dépasse encore la limite de contexte du modèle après compression. Raccourcissez l’entrée ou choisissez un modèle offrant davantage de contexte, puis réessayez."
+      "runErrorContextCompactionLimit": "La conversation dépasse encore la limite de contexte du modèle après compression. Raccourcissez l’entrée ou choisissez un modèle offrant davantage de contexte, puis réessayez.",
+      "preparingSend": "Préparation du message",
+      "sendFailed": "Échec de l’envoi",
+      "sendUnknown": "Confirmation nécessaire",
+      "sendUnknownDescription": "Le résultat de l’envoi est inconnu. Les messages suivants sont en pause. Réessayez la même demande ou actualisez la conversation.",
+      "retrySend": "Réessayer l’envoi",
+      "refreshSend": "Actualiser la confirmation",
+      "restoreSend": "Restaurer dans l’éditeur vide",
+      "deleteUnsent": "Supprimer le message non envoyé",
+      "sendWaiting": "En attente d’envoi",
+      "attachmentRecoveryDescription": "Les pièces jointes sont indisponibles après le redémarrage. Restaurez le texte et les références, puis sélectionnez à nouveau les fichiers. Actualisez pour vérifier si la demande initiale a été acceptée.",
+      "removeRecoveryCopy": "Supprimer la copie locale de récupération",
+      "removeRecoveryCopyDescription": "Supprime cette copie locale de récupération et reprend les messages suivants. La demande initiale au serveur n’est pas annulée."
     },
     "threadList": {
       "title": "Discussions",
@@ -927,7 +938,8 @@
       "dialogEffectiveContextPercent": "Contexte effectif %",
       "dialogDynamicModelMetadata": "Métadonnées dynamiques du modèle",
       "dialogOpenAICompatibleNativeEndpoint": "Point de terminaison natif compatible avec OpenAI",
-      "dialogLocalOpenAICompatibleEndpoint": "Point de terminaison local compatible avec OpenAI"
+      "dialogLocalOpenAICompatibleEndpoint": "Point de terminaison local compatible avec OpenAI",
+      "imageModelRequired": "Cette conversation contient des images. Choisissez un modèle qui accepte les images."
     },
     "reasoningControl": {
       "default": "Par défaut",
