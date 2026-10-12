@@ -5506,7 +5506,30 @@
       "sendWaiting": "En attente d’envoi",
       "attachmentRecoveryDescription": "Les pièces jointes sont indisponibles après le redémarrage. Restaurez le texte et les références, puis sélectionnez à nouveau les fichiers. Actualisez pour vérifier si la demande initiale a été acceptée.",
       "removeRecoveryCopy": "Supprimer la copie locale de récupération",
-      "removeRecoveryCopyDescription": "Supprime cette copie locale de récupération et reprend les messages suivants. La demande initiale au serveur n’est pas annulée."
+      "removeRecoveryCopyDescription": "Supprime cette copie locale de récupération et reprend les messages suivants. La demande initiale au serveur n’est pas annulée.",
+      "turnProcess": {
+        "worked": "Temps de travail : {duration}",
+        "elapsed": "Durée totale : {duration}",
+        "waiting": "Attente de votre réponse ou approbation : {duration}",
+        "expand": "Développer le déroulement du travail",
+        "collapse": "Réduire le déroulement du travail",
+        "lessThanSecond": "moins d’une seconde",
+        "hour": {
+          "one": "{count} heure",
+          "other": "{count} heures"
+        },
+        "minute": {
+          "one": "{count} minute",
+          "other": "{count} minutes"
+        },
+        "second": {
+          "one": "{count} seconde",
+          "other": "{count} secondes"
+        },
+        "failed": "Flower n’a pas pu terminer ce tour.",
+        "cancelled": "Arrêté",
+        "interrupted": "Ce tour a été interrompu."
+      }
     },
     "threadList": {
       "title": "Discussions",

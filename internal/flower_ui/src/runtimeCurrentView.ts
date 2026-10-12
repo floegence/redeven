@@ -422,6 +422,7 @@ export function applyFlowerRuntimeCurrentView(
               : current.last_outcome === 'completed'
                 ? 'success'
                 : 'idle';
+  const turns = validateFlowerRuntimeTurns(current);
   const messages = runtimeMessages(base, current);
   const approvalActions = runtimeApprovalActions(base, current);
   const inputRequest = runtimeInputRequest(current);
@@ -467,9 +468,46 @@ export function applyFlowerRuntimeCurrentView(
     queued_turns: queuedTurns,
     restored_inputs: current.restored_inputs ?? [],
     messages,
+    turns,
     error: trim(current.error)
       ? { code: trim(current.run_error_code) || 'floret_turn_failed', message: trim(current.error), ...(trim(current.run_error_detail) ? { detail: trim(current.run_error_detail) } : {}) }
       : undefined,
   };
   return retainThreadPresentation(base, projected);
+}
+
+function validateFlowerRuntimeTurns(current: FlowerRuntimeCurrentView) {
+  const seen = new Set<string>();
+  const duplicateItems = new Set<string>();
+  const items = new Map<string, FlowerRuntimeCurrentItem>();
+  for (const item of current.items ?? []) {
+    if (items.has(item.id)) duplicateItems.add(item.id);
+    items.set(item.id, item);
+  }
+  return (current.turns ?? []).map((turn) => {
+    const failure = () => { throw new Error('Flower contract error: invalid canonical turn presentation.'); };
+    if (!trim(turn.turn_id) || !trim(turn.run_id) || seen.has(turn.turn_id)) failure();
+    seen.add(turn.turn_id);
+    const start = Date.parse(turn.started_at);
+    const end = turn.ended_at === undefined ? undefined : Date.parse(turn.ended_at);
+    if (!Number.isFinite(start) || end !== undefined && (!Number.isFinite(end) || end < start)) failure();
+    if (turn.kind !== undefined && turn.kind !== 'context_compaction') failure();
+    if (turn.outcome !== undefined && !['completed', 'failed', 'cancelled', 'interrupted'].includes(turn.outcome)) failure();
+    if ((turn.outcome === undefined) !== (end === undefined)) failure();
+    if (![turn.elapsed_ms, turn.waiting_ms, turn.work_duration_ms].every((value) => Number.isSafeInteger(value) && value >= 0)
+      || turn.waiting_ms + turn.work_duration_ms !== turn.elapsed_ms) failure();
+    if (end !== undefined && Math.abs(end - start - turn.elapsed_ms) > 1) failure();
+    if (end === undefined && turn.elapsed_ms !== 0) failure();
+    if (!Array.isArray(turn.final_item_ids) || typeof turn.final_boundary_complete !== 'boolean') failure();
+    if (!turn.final_boundary_complete && turn.final_item_ids.length || turn.final_boundary_complete && turn.outcome !== 'completed') failure();
+    const refs = new Set<string>();
+    let ordinal = 0;
+    for (const id of turn.final_item_ids) {
+      const item = items.get(id);
+      if (!trim(id) || refs.has(id) || duplicateItems.has(id) || !item || item.kind !== 'assistant' || item.live || !trim(item.text)
+        || item.turn_id !== turn.turn_id || item.run_id !== turn.run_id || item.ordinal < ordinal) failure();
+      refs.add(id); ordinal = item!.ordinal;
+    }
+    return { ...turn, final_item_ids: [...turn.final_item_ids] };
+  });
 }

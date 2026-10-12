@@ -606,7 +606,39 @@
       "sendWaiting": "等待发送",
       "attachmentRecoveryDescription": "重启后附件不可用。请恢复文字和引用，再重新选择文件。可刷新确认原请求是否已受理。",
       "removeRecoveryCopy": "移除本地恢复副本",
-      "removeRecoveryCopyDescription": "移除本地恢复副本并继续发送后续消息，不会取消原服务器请求。"
+      "removeRecoveryCopyDescription": "移除本地恢复副本并继续发送后续消息，不会取消原服务器请求。",
+      "turnProcess": {
+        "worked": "工作了 {duration}",
+        "elapsed": "总历时：{duration}",
+        "waiting": "等待用户回答或审批：{duration}",
+        "expand": "展开工作过程",
+        "collapse": "收起工作过程",
+        "lessThanSecond": "不足 1 秒",
+        "hour": {
+          "kind": "plural",
+          "forms": {
+            "one": "{count} 小时",
+            "other": "{count} 小时"
+          }
+        },
+        "minute": {
+          "kind": "plural",
+          "forms": {
+            "one": "{count} 分",
+            "other": "{count} 分"
+          }
+        },
+        "second": {
+          "kind": "plural",
+          "forms": {
+            "one": "{count} 秒",
+            "other": "{count} 秒"
+          }
+        },
+        "failed": "Flower 未能完成本轮对话。",
+        "cancelled": "已停止",
+        "interrupted": "本轮对话异常中断。"
+      }
     },
     "threadList": {
       "title": "对话",

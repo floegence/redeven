@@ -141,6 +141,8 @@ main() {
       internal/flower_ui/src/flowerCompanionRunTracker.test.ts \
       internal/flower_ui/src/flowerCompanionTailMotion.test.ts \
       internal/flower_ui/src/flowerScrollTail.test.ts \
+      internal/flower_ui/src/flowerTurnPresentation.test.ts \
+      internal/flower_ui/src/flowerTurnDisclosure.test.ts \
       internal/flower_ui/src/flowerPendingTurns.test.ts \
       internal/flower_ui/src/flowerTerminalOutput.test.ts \
       internal/flower_ui/src/FlowerSurface.references.test.ts \
@@ -175,6 +177,7 @@ main() {
         src/ui/flowerCompanionTailMotion.browser.test.tsx \
         src/ui/FlowerSurface.finalArchitecture.browser.test.tsx \
         src/ui/FlowerSurface.streamingStability.browser.test.tsx \
+        src/ui/FlowerSurface.turnProcess.browser.test.tsx \
         src/ui/FlowerMarkdown.streamingStability.browser.test.tsx \
         src/ui/FlowerMarkdown.highlight.browser.test.tsx \
         src/ui/FlowerStatusAndThreadMenu.browser.test.tsx \

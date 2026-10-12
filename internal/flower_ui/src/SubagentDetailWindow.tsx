@@ -37,6 +37,7 @@ export type SubagentDetailWindowProps = Readonly<{
   error: string;
   detailAvailable: boolean;
   entries: readonly FlowerTimelineEntry[];
+  renderTimeline?: () => JSX.Element;
   renderEntry: (entry: Accessor<FlowerTimelineEntry>) => JSX.Element;
   bindScroll: (node: HTMLDivElement) => void;
   onScroll: () => void;
@@ -358,7 +359,7 @@ export function SubagentDetailWindow(props: SubagentDetailWindowProps): JSX.Elem
                 when={ledgerItems().length > 0}
                 fallback={<div class="flower-subagent-detail-empty">{props.copy.emptyDescription}</div>}
               >
-                <For each={ledgerItemKeys()}>
+                <Show when={props.renderTimeline} fallback={<For each={ledgerItemKeys()}>
                   {(itemKey) => {
                     const item = createMemo(() => ledgerItemsByKey().get(itemKey) ?? null);
                     const last = createMemo(() => ledgerItemKeys().at(-1) === itemKey);
@@ -368,7 +369,7 @@ export function SubagentDetailWindow(props: SubagentDetailWindowProps): JSX.Elem
                       </Show>
                     );
                   }}
-                </For>
+                </For>}>{props.renderTimeline?.()}</Show>
               </Show>
             </div>
             <Show when={props.showScrollToLatest}>

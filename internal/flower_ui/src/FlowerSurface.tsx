@@ -70,6 +70,8 @@ import { FlowerContextCompactionDivider } from './chat/FlowerContextCompactionDi
 import { compactionDividerDetail } from './chat/flowerContextPresentation';
 import { FlowerThinkingOrb } from './FlowerThinkingOrb';
 import { FlowerThinkingDisclosure } from './FlowerThinkingDisclosure';
+import { FlowerTurnTimeline } from './FlowerTurnTimeline';
+import { createFlowerTurnDisclosureStore } from './flowerTurnDisclosure';
 import type { FlowerComputerStageSessionState, FlowerComputerStageSnapshot } from './FlowerComputerStage';
 import { WebFetchSearchingOrb } from './WebFetchSearchingOrb';
 import { FlowerComposerContextIndicator } from './chat/FlowerComposerContextIndicator';
@@ -1320,6 +1322,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     },
     { defer: false },
   ));
+  const turnDisclosureChoices = createFlowerTurnDisclosureStore();
   const transcriptScroll = createFlowerScrollTailController({
     canFollowLatest: () => selectedThreadHasContent() || selectedThreadHasLiveProgress() || visibleTransportOutbox().length > 0,
     onUserInteraction: () => { if (selectedThreadTailPreparing()) cancelSelectedThreadTailReveal(); },
@@ -6019,8 +6022,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const visibleTimelineEntries = createMemo((): readonly FlowerTimelineEntry[] => {
     return selectedTimelineEntries().filter((entry) => entry.type !== 'queued_turn');
   });
-  const visibleTimelineEntryKeys = createMemo(() => visibleTimelineEntries().map((entry) => entry.key));
-  const visibleTimelineEntriesByKey = createMemo(() => new Map(visibleTimelineEntries().map((entry) => [entry.key, entry] as const)));
 
 
   const shouldSubmitOnEnterKeydown = (event: KeyboardEvent): boolean => {
@@ -10446,6 +10447,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       detailAvailable={Boolean(subagentDetailThread())}
       entries={subagentDetailTimelineEntries()}
       renderEntry={(entry) => timelineEntry(entry, subagentDetailScroll)}
+      renderTimeline={() => <FlowerTurnTimeline thread={subagentDetailThread()} entries={subagentDetailTimelineEntries()}
+        runtimeID={props.adapter.runtime.runtime_id} scope="subagent" choices={turnDisclosureChoices}
+        scroll={subagentDetailScroll} reducedMotion={reducedMotionPreferred} copy={copy().chat.turnProcess}
+        renderEntry={(entry) => timelineEntry(entry, subagentDetailScroll)} />}
       bindScroll={bindSubagentDetailViewport}
       onScroll={subagentDetailScroll.onScroll}
       onWheel={subagentDetailScroll.onWheel}
@@ -12006,16 +12011,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               when={selectedThreadHasContent() || selectedThreadHasLiveProgress() || visibleTransportOutbox().length > 0}
               fallback={selectedThreadFallbackState()}
             >
-              <For each={visibleTimelineEntryKeys()}>
-                {(entryKey) => {
-                  const entry = createMemo(() => visibleTimelineEntriesByKey().get(entryKey) ?? null);
-                  return (
-                    <Show when={entry()}>
-                      {(value) => timelineEntry(value, transcriptScroll)}
-                    </Show>
-                  );
-                }}
-              </For>
+              <FlowerTurnTimeline thread={selectedThread()} entries={visibleTimelineEntries()}
+                runtimeID={props.adapter.runtime.runtime_id} scope="main" choices={turnDisclosureChoices}
+                scroll={transcriptScroll} reducedMotion={reducedMotionPreferred} copy={copy().chat.turnProcess}
+                renderEntry={(entry) => timelineEntry(entry, transcriptScroll)} />
               {threadLevelApprovalPanel()}
             </Show>
           </div>

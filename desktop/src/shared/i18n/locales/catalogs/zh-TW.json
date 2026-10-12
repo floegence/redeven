@@ -606,7 +606,39 @@
       "sendWaiting": "等待傳送",
       "attachmentRecoveryDescription": "重新啟動後附件無法使用。請還原文字和參照，再重新選擇檔案。可重新整理確認原請求是否已受理。",
       "removeRecoveryCopy": "移除本機還原副本",
-      "removeRecoveryCopyDescription": "移除本機還原副本並繼續傳送後續訊息，不會取消原伺服器請求。"
+      "removeRecoveryCopyDescription": "移除本機還原副本並繼續傳送後續訊息，不會取消原伺服器請求。",
+      "turnProcess": {
+        "worked": "工作了 {duration}",
+        "elapsed": "總經過時間：{duration}",
+        "waiting": "等待使用者回答或核准：{duration}",
+        "expand": "展開工作過程",
+        "collapse": "收起工作過程",
+        "lessThanSecond": "不到 1 秒",
+        "hour": {
+          "kind": "plural",
+          "forms": {
+            "one": "{count} 小時",
+            "other": "{count} 小時"
+          }
+        },
+        "minute": {
+          "kind": "plural",
+          "forms": {
+            "one": "{count} 分",
+            "other": "{count} 分"
+          }
+        },
+        "second": {
+          "kind": "plural",
+          "forms": {
+            "one": "{count} 秒",
+            "other": "{count} 秒"
+          }
+        },
+        "failed": "Flower 未能完成這輪對話。",
+        "cancelled": "已停止",
+        "interrupted": "這輪對話異常中斷。"
+      }
     },
     "threadList": {
       "title": "對話",

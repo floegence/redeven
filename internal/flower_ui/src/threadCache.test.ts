@@ -488,4 +488,13 @@ describe('title updates independent of runtime revisions', () => {
     expect(current.cache.views.get('a')?.thread.title).toBe('a');
     expect(current.cache.views.get('a')?.thread.messages[0]?.content).toBe('Next');
   });
+  it('strips turn presentation from summaries and retains accepted historical outcomes', () => {
+    const turns = [{ turn_id: 'turn', run_id: 'run', started_at: '2026-10-11T12:00:00Z', ended_at: '2026-10-11T12:00:01Z', outcome: 'interrupted' as const, elapsed_ms: 1000, waiting_ms: 0, work_duration_ms: 1000, final_item_ids: [], final_boundary_complete: false }];
+    const detail = { ...thread('a', 1, 'Partial'), turns };
+    let cache = receive(createThreadCache(), { version: 1, thread: detail });
+    expect(cache.summaries.get('a')?.turns).toBeUndefined();
+    cache = cache.replaceSummary({ ...thread('a', 2, ''), turns: [{ ...turns[0], outcome: 'completed' }] });
+    expect(cache.summaries.get('a')?.turns).toBeUndefined();
+    expect(cache.views.get('a')?.thread.turns?.[0].outcome).toBe('interrupted');
+  });
 });

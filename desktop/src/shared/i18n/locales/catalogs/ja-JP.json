@@ -606,7 +606,39 @@
       "sendWaiting": "送信待ち",
       "attachmentRecoveryDescription": "再起動後は添付ファイルを利用できません。テキストと参照を復元してから、ファイルを選び直してください。更新すると元のリクエストの受理状況を確認できます。",
       "removeRecoveryCopy": "ローカルの復元用コピーを削除",
-      "removeRecoveryCopyDescription": "このローカルの復元用コピーを削除し、後続のメッセージの送信を再開します。元のサーバーへのリクエストは取り消されません。"
+      "removeRecoveryCopyDescription": "このローカルの復元用コピーを削除し、後続のメッセージの送信を再開します。元のサーバーへのリクエストは取り消されません。",
+      "turnProcess": {
+        "worked": "作業時間：{duration}",
+        "elapsed": "経過時間：{duration}",
+        "waiting": "回答または承認の待機時間：{duration}",
+        "expand": "作業過程を展開",
+        "collapse": "作業過程を折りたたむ",
+        "lessThanSecond": "1 秒未満",
+        "hour": {
+          "kind": "plural",
+          "forms": {
+            "one": "{count} 時間",
+            "other": "{count} 時間"
+          }
+        },
+        "minute": {
+          "kind": "plural",
+          "forms": {
+            "one": "{count} 分",
+            "other": "{count} 分"
+          }
+        },
+        "second": {
+          "kind": "plural",
+          "forms": {
+            "one": "{count} 秒",
+            "other": "{count} 秒"
+          }
+        },
+        "failed": "Flower はこのターンを完了できませんでした。",
+        "cancelled": "停止しました",
+        "interrupted": "このターンは中断されました。"
+      }
     },
     "threadList": {
       "title": "会話",

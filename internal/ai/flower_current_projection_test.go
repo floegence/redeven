@@ -440,3 +440,24 @@ func TestContextBudgetDiagnosticMatchesCurrentAndSummary(t *testing.T) {
 		t.Fatal("retry retained obsolete budget failure")
 	}
 }
+
+func TestFlowerCurrentPreservesCanonicalHistoricalTurnPresentation(t *testing.T) {
+	completed, interrupted := flruntime.TurnOutcomeCompleted, flruntime.TurnOutcomeInterrupted
+	start := time.Date(2026, 10, 11, 12, 0, 0, 0, time.UTC)
+	end := start.Add(138 * time.Second)
+	current := flruntime.ThreadView{ThreadID: "thread", Turns: []flruntime.ThreadTurn{
+		{TurnID: "old", RunID: "old-run", StartedAt: start, EndedAt: &end, Outcome: &interrupted, ElapsedMS: 138000, WorkDurationMS: 138000, FinalItemIDs: []string{}},
+		{TurnID: "new", RunID: "new-run", StartedAt: start, EndedAt: &end, Outcome: &completed, ElapsedMS: 138000, WaitingMS: 20000, WorkDurationMS: 118000, FinalItemIDs: []string{"final-a", "final-b"}, FinalBoundaryComplete: true},
+	}}
+	encoded, err := flowerCurrentJSON(current)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded flruntime.ThreadView
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(decoded.Turns, current.Turns) {
+		t.Fatalf("turn facts lost: %+v", decoded.Turns)
+	}
+}

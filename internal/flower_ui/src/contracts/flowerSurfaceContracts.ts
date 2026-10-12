@@ -556,6 +556,7 @@ export type FlowerQueuedTurnAttachment = Readonly<{
 }>;
 
 export type FlowerThreadSnapshot = Readonly<{
+  turns?: readonly FlowerRuntimeTurn[];
   cancellation?: FlowerThreadCancellation;
   thread_id: string;
   title: string;
@@ -769,7 +770,23 @@ export type FlowerThreadCancellation = Readonly<{
   requested_at: string;
 }>;
 
+// Canonical detail facts from Floret. Summaries never author turn presentation.
+export type FlowerRuntimeTurn = Readonly<{
+  turn_id: string;
+  run_id: string;
+  kind?: 'context_compaction';
+  started_at: string;
+  ended_at?: string;
+  outcome?: 'completed' | 'failed' | 'cancelled' | 'interrupted';
+  elapsed_ms: number;
+  waiting_ms: number;
+  work_duration_ms: number;
+  final_item_ids: readonly string[];
+  final_boundary_complete: boolean;
+}>;
+
 export type FlowerRuntimeCurrentView = Readonly<{
+  turns?: readonly FlowerRuntimeTurn[] | null;
   turn_kind?: 'context_compaction';
   cancellation?: FlowerThreadCancellation;
   restored_inputs?: readonly FlowerRestoredInput[];

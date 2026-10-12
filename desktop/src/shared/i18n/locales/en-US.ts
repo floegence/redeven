@@ -415,6 +415,12 @@ export const enUS = {
     ...flowerSurfaceEnUS,
     chat: {
       ...flowerSurfaceEnUS.chat,
+      turnProcess: {
+        ...flowerSurfaceEnUS.chat.turnProcess,
+        hour: plural(flowerSurfaceEnUS.chat.turnProcess.hour.forms),
+        minute: plural(flowerSurfaceEnUS.chat.turnProcess.minute.forms),
+        second: plural(flowerSurfaceEnUS.chat.turnProcess.second.forms),
+      },
       webSearch: {
         ...flowerSurfaceEnUS.chat.webSearch,
         sources: plural(flowerSurfaceEnUS.chat.webSearch.sources.forms),

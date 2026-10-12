@@ -606,7 +606,39 @@
       "sendWaiting": "전송 대기 중",
       "attachmentRecoveryDescription": "다시 시작한 후에는 첨부 파일을 사용할 수 없습니다. 텍스트와 참조를 복원한 다음 파일을 다시 선택하세요. 새로 고쳐 원래 요청이 접수되었는지 확인할 수 있습니다.",
       "removeRecoveryCopy": "로컬 복구 사본 제거",
-      "removeRecoveryCopyDescription": "이 로컬 복구 사본을 제거하고 이후 메시지 전송을 재개합니다. 원래 서버 요청은 취소되지 않습니다."
+      "removeRecoveryCopyDescription": "이 로컬 복구 사본을 제거하고 이후 메시지 전송을 재개합니다. 원래 서버 요청은 취소되지 않습니다.",
+      "turnProcess": {
+        "worked": "{duration} 동안 작업함",
+        "elapsed": "총 경과 시간: {duration}",
+        "waiting": "사용자 응답 또는 승인을 기다린 시간: {duration}",
+        "expand": "작업 과정 펼치기",
+        "collapse": "작업 과정 접기",
+        "lessThanSecond": "1초 미만",
+        "hour": {
+          "kind": "plural",
+          "forms": {
+            "one": "{count} 시간",
+            "other": "{count} 시간"
+          }
+        },
+        "minute": {
+          "kind": "plural",
+          "forms": {
+            "one": "{count} 분",
+            "other": "{count} 분"
+          }
+        },
+        "second": {
+          "kind": "plural",
+          "forms": {
+            "one": "{count} 초",
+            "other": "{count} 초"
+          }
+        },
+        "failed": "Flower가 이번 대화를 완료하지 못했습니다.",
+        "cancelled": "중지됨",
+        "interrupted": "이번 대화가 중단되었습니다."
+      }
     },
     "threadList": {
       "title": "대화",

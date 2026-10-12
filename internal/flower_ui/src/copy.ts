@@ -12,6 +12,21 @@ import { localizedFlowerProviderModelNote } from './settings/providerModelNotes'
 import type { FlowerProviderTypeLabels } from './settings/providerTypeLabels';
 import { localizedFlowerProviderTypeLabels } from './settings/providerTypeLabels';
 
+export type FlowerTurnProcessCopy = Readonly<{
+  failed: string;
+  cancelled: string;
+  interrupted: string;
+  worked: (duration: string) => string;
+  elapsed: (duration: string) => string;
+  waiting: (duration: string) => string;
+  expand: string;
+  collapse: string;
+  lessThanSecond: string;
+  hour: (count: number) => string;
+  minute: (count: number) => string;
+  second: (count: number) => string;
+}>;
+
 export type FlowerWebSearchCopy = Readonly<{
  search: string; openPage: string; findInPage: string; webActivity: string;
  noDetails: string; noSources: string; sourcesUnavailable: string;
@@ -499,6 +514,7 @@ export type FlowerSurfaceCopy = Readonly<{
     threadSyncingLatest: string;
     threadSyncFailed: string;
     composerErrorTitle: string;
+    turnProcess: FlowerTurnProcessCopy;
     expandThinking: string;
     collapseThinking: string;
     modelStatus: Readonly<{
@@ -857,6 +873,16 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     threadSyncingLatest: 'Syncing the latest reply...',
     threadSyncFailed: 'Flower could not sync the latest reply. Try again.',
     composerErrorTitle: 'Flower could not send.',
+    turnProcess: {
+      failed: 'Flower could not complete this turn.', cancelled: 'Stopped', interrupted: 'This turn was interrupted.',
+      worked: (duration) => `Worked for ${duration}`,
+      elapsed: (duration) => `Total elapsed: ${duration}`,
+      waiting: (duration) => `Waiting for your input or approval: ${duration}`,
+      expand: 'Expand work process', collapse: 'Collapse work process', lessThanSecond: 'less than a second',
+      hour: (count) => `${count} ${count === 1 ? 'hour' : 'hours'}`,
+      minute: (count) => `${count} ${count === 1 ? 'minute' : 'minutes'}`,
+      second: (count) => `${count} ${count === 1 ? 'second' : 'seconds'}`,
+    },
     expandThinking: 'Expand full thinking',
     collapseThinking: 'Collapse thinking',
     modelStatus: {
