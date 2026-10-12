@@ -1,6 +1,7 @@
+import { FileItemIcon } from '@floegence/floe-webapp-core/file-browser';
 import { FeedbackIndicator, Button } from '@floegence/floe-webapp-core/ui';
 import { For, Show, createEffect, createSignal, onCleanup } from 'solid-js';
-import { ChevronLeft, FileText, FolderOpen } from '@floegence/floe-webapp-core/icons';
+import { ChevronLeft } from '@floegence/floe-webapp-core/icons';
 import { Dialog } from '@floegence/floe-webapp-core/ui';
 import { useFlowerExtensions } from './context';
 const formatUnknownError = (error: unknown) => error instanceof Error ? error.message : String(error);
@@ -58,7 +59,7 @@ export function SkillFilesDialog(props: { entry: SkillCatalogEntry | null; onClo
           <code class="min-w-0 break-all text-xs text-muted-foreground">{tree()?.dir || props.entry?.path}</code>
         </div>
         <div class="flower-extension-list rounded-lg border">
-          <For each={tree()?.entries}>{(entry) => <Button variant="ghost" class="h-auto w-full justify-start rounded-none px-4 py-3 text-left" icon={entry.is_dir ? FolderOpen : FileText} disabled={loading() || !props.canInteract} onClick={() => void load(entry.is_dir ? 'tree' : 'file', entry.path)}><span class="break-all">{entry.name}</span></Button>}</For>
+          <For each={tree()?.entries}>{(entry) => <Button variant="ghost" class="h-auto w-full justify-start rounded-none px-4 py-3 text-left" disabled={loading() || !props.canInteract} onClick={() => void load(entry.is_dir ? 'tree' : 'file', entry.path)}><FileItemIcon size={16} item={{ name: entry.name, type: entry.is_dir ? 'folder' : 'file' }} class="size-4 shrink-0" /><span class="break-all">{entry.name}</span></Button>}</For>
         </div>
       </>}>
         {(current) => <>

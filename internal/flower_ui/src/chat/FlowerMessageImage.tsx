@@ -1,6 +1,6 @@
+import { FileItemIcon } from '@floegence/floe-webapp-core/file-browser';
 import type { Component } from 'solid-js';
 import { createEffect, createSignal, onCleanup, Show } from 'solid-js';
-import { FileText } from '@floegence/floe-webapp-core/icons';
 
 export type FlowerMessageImageProps = Readonly<{
   src: string;
@@ -66,7 +66,7 @@ export const FlowerMessageImage: Component<FlowerMessageImageProps> = (props) =>
           fallback={<div ref={loadingElement} class="flower-message-image" data-loading="true" aria-hidden="true" />}
         >
           <div class="flower-message-file" data-image-fallback="true" role="img" aria-label={`${props.unavailableLabel}: ${props.alt || props.name}`}>
-            <FileText class="size-5 shrink-0" aria-hidden="true" />
+            <FileItemIcon size={24} item={{ name: props.name, type: 'file' }} class="size-6 shrink-0" />
             <span class="flower-message-file-copy">
               <span class="flower-message-file-name">{props.name}</span>
               <span class="flower-message-file-meta">{props.unavailableLabel}</span>

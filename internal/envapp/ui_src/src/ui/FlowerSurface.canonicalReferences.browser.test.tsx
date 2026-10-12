@@ -3,6 +3,7 @@ import './flower-feature.css';
 
 import { page, userEvent } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
+import { builtInShellThemePresets } from '@floegence/floe-webapp-core/themes';
 
 import {
   adapter,
@@ -73,6 +74,9 @@ describe('Flower canonical reference browser presentation', () => {
             label: 'redeven-env-app (4242)',
             text: 'CPU 12.5% · Memory 128 MB',
           },
+          { reference_id: 'context:image', kind: 'file', label: 'preview.png' },
+          { reference_id: 'context:config', kind: 'file', label: 'config.json' },
+          { reference_id: 'context:pdf', kind: 'file', label: 'report.pdf' },
         ],
       }],
     });
@@ -96,7 +100,7 @@ describe('Flower canonical reference browser presentation', () => {
     expect(runtime.querySelectorAll('[data-flower-chat-context-chip="true"]')).toHaveLength(0);
 
     threadLoad.resolve(canonicalBootstrap);
-    await waitFor(() => runtime.querySelectorAll('[data-flower-chat-context-chip="true"]').length === 5);
+    await waitFor(() => runtime.querySelectorAll('[data-flower-chat-context-chip="true"]').length === 8);
     await waitFor(() => surface.getAttribute('data-flower-selected-thread-loading') === 'false');
     await waitFor(() => {
       const transcript = runtime.querySelector('.flower-chat-transcript');
@@ -124,6 +128,14 @@ describe('Flower canonical reference browser presentation', () => {
       expectContained(chip.getBoundingClientRect(), gridRect);
       expect(chip.scrollWidth).toBeLessThanOrEqual(chip.clientWidth + 1);
     }
+    for (const [index, kind] of [[1, 'ts'], [2, 'folder'], [5, 'image'], [6, 'json'], [7, 'pdf']] as const) {
+      const icon = chips[index].querySelector<SVGSVGElement>('svg')!;
+      expect(icon.getAttribute('data-file-icon-type')).toBe(kind);
+      expect(icon.getBoundingClientRect().width).toBe(16);
+      expect(icon.getAttribute('aria-hidden')).toBe('true');
+    }
+    expect(attachment.querySelector('svg')?.getAttribute('data-file-icon-size')).toBe('detailed');
+    expect(attachment.querySelector('svg')?.getBoundingClientRect().width).toBe(24);
     for (let index = 1; index < chips.length; index += 1) {
       expect(chips[index - 1]!.getBoundingClientRect().bottom)
         .toBeLessThanOrEqual(chips[index]!.getBoundingClientRect().top + 1);
@@ -157,6 +169,18 @@ describe('Flower canonical reference browser presentation', () => {
     completion.resolve();
     await waitFor(() => fileChip.disabled === false);
     expect(document.activeElement).toBe(fileChip);
-    expect((await page.screenshot({ save: false })).length).toBeGreaterThan(1_000);
+    try {
+      for (const name of ['classic-light', 'classic-dark']) {
+        const preset = builtInShellThemePresets.find(preset => preset.name === name)!;
+        document.documentElement.classList.toggle('dark', preset.mode === 'dark');
+        document.documentElement.classList.toggle('light', preset.mode === 'light');
+        for (const [token, value] of Object.entries(preset.semanticTokens ?? {}))
+          if (value) document.documentElement.style.setProperty(token, value);
+        await page.screenshot({ element: bubble, path: `./__screenshots__/flower-reference-icons-${name}.png` });
+      }
+    } finally {
+      document.documentElement.classList.remove('dark', 'light');
+      document.documentElement.removeAttribute('style');
+    }
   });
 });

@@ -1,7 +1,7 @@
+import { FileItemIcon } from '@floegence/floe-webapp-core/file-browser';
 import type { Component } from 'solid-js';
 import { Match, Show, Switch, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { FileText } from '@floegence/floe-webapp-core/icons';
 import { FloatingWindow } from '@floegence/floe-webapp-core/ui';
 
 export type FlowerAttachmentPreviewSource = Readonly<{
@@ -122,7 +122,7 @@ export const FlowerAttachmentPreviewWindow: Component<FlowerAttachmentPreviewWin
             <Show when={!error()} fallback={<div class="flower-attachment-preview-state flower-attachment-preview-error">{error()}</div>}>
               <Switch fallback={(
                 <div class="flower-attachment-preview-state">
-                  <FileText aria-hidden="true" />
+                  <FileItemIcon size={40} item={{ name: props.source!.name, type: 'file' }} class="size-10 shrink-0" />
                   <span>{props.unavailableLabel}</span>
                 </div>
               )}>

@@ -1,9 +1,9 @@
 ---
 type: UI Contract
 title: File icon presentation
-description: Consume the released Floe file icon catalog consistently across Files and Git.
-tags: [ui, files, git, upstream]
-timestamp: 2026-09-20T00:00:00Z
+description: Consume the released Floe file icon catalog consistently across Files, Git, Flower, and Ask Flower.
+tags: [ui, files, git, flower, upstream]
+timestamp: 2026-10-12T00:00:00Z
 ---
 # Summary
 
@@ -16,8 +16,8 @@ capabilities; those operations retain their existing permission and format check
 
 # Contract
 
-Files lists, grids, directory trees, pickers, and Git labels consume the same
-released `FileItemIcon` contract. Exact names, filename patterns, and longest
+Files lists, grids, directory trees, pickers, Git labels, Flower, and Ask Flower
+consume the same released `FileItemIcon` contract. Exact names, filename patterns, and longest
 suffixes are resolved upstream. Directory packages such as `.xcodeproj` keep
 directory navigation semantics while receiving their specific artwork. Custom
 icon overrides, open-folder state, symbolic links, and broken links retain the
@@ -37,6 +37,25 @@ the shared 48 px icon space. The archive action uses 16 px and its dialog uses
 36 px. Filenames provide accessible text; decorative SVGs remain hidden from
 assistive technology.
 
+Flower's Activity page, companion window, Workbench surface, and Desktop host
+share the same rendering components. Composer file/directory references,
+reference suggestions, submitted message references, Ask Flower references and
+their file actions, working-directory identities, and the Skills file list use
+the released filename artwork. The shared context icon component keeps terminal,
+process, and environment identities distinct from files. Quoted file selections
+use their source filename rather than the localized selection label. Submitted
+file and directory chips use a small neutral icon surface inside the blue user
+bubble so product colors remain legible without recoloring the artwork.
+
+Ask Flower and submitted context chips use 16 px compact artwork. Main composer
+references, suggestions, attachment files, and unavailable image thumbnails use
+18 px compact artwork. Tool Activity file preview and directory actions use 14 px. Message file cards
+and failed image cards use 24 px
+detailed artwork; unsupported attachment previews use 40 px. Image thumbnails
+and successfully loaded media remain content previews. Unknown filenames still
+receive the upstream generic file artwork. Icons never alter canonical reference
+resolution, attachment admission, preview availability, removal, or focus behavior.
+
 # Boundaries
 
 The upstream design studies are regression fixtures, not public demo pages or
@@ -54,3 +73,8 @@ upstream before a Redeven upgrade.
 - `redeven:internal/envapp/ui_src/src/ui/widgets/GitFileLabel.tsx` - Compact file identity in Git inventories.
 - `redeven:internal/envapp/ui_src/src/styles/fileIconIntegration.browser.test.tsx` - Real Files grid/list, directory packages, Git labels, and product colors across shell themes.
 - `redeven:internal/envapp/ui_src/src/floeWebappDependencyPolicy.test.ts` - Public release and lockfile consistency.
+- `redeven:internal/flower_ui/src/icons/FlowerContextIcon.tsx` - One file identity mapping for launcher drafts and submitted context chips.
+- `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Shared composer suggestions, file references, and message attachment cards across hosts.
+- `redeven:internal/flower_ui/src/attachments/FlowerAttachmentLane.tsx` - File identities and unavailable image thumbnail artwork with preserved attachment actions.
+- `redeven:internal/envapp/ui_src/src/ui/flower/FlowerChatContextChips.test.tsx` - Filename recognition, reactive artwork changes, and retained reference controls during snapshots.
+- `redeven:internal/envapp/ui_src/src/styles/flower-composer-context.browser.test.tsx` - Ask Flower file types, directory packages, compact geometry, themes, and narrow-window interactions.

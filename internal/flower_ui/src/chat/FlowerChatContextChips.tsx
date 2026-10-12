@@ -1,7 +1,6 @@
 import type { Component } from 'solid-js';
 import { createMemo, For, Show } from 'solid-js';
-import { Dynamic } from 'solid-js/web';
-import { Activity, FileText, Folder, Paperclip, Terminal } from '@floegence/floe-webapp-core/icons';
+import { FlowerContextIcon } from '../icons/FlowerContextIcon';
 import type { FlowerChatContextChip, FlowerChatContextDisplay } from '../contracts/flowerChatContextTypes';
 
 type FlowerChatContextChipsProps = Readonly<{
@@ -11,17 +10,6 @@ type FlowerChatContextChipsProps = Readonly<{
   onChipClick: (chip: FlowerChatContextChip) => void | Promise<void>;
   canActivateChip?: (chip: FlowerChatContextChip) => boolean;
 }>;
-
-function chipIcon(tone: string): Component<{ class?: string }> {
-  switch (tone) {
-    case 'environment': return Activity;
-    case 'directory': return Folder;
-    case 'attachment': return Paperclip;
-    case 'process': return Activity;
-    case 'terminal': return Terminal;
-    default: return FileText;
-  }
-}
 
 export const FlowerChatContextChips: Component<FlowerChatContextChipsProps> = (props) => {
   const chipsByID = createMemo(() => new Map(
@@ -41,7 +29,6 @@ export const FlowerChatContextChips: Component<FlowerChatContextChipsProps> = (p
           {(chipID) => {
             const initialChip = chipsByID().get(chipID)!;
             const chip = () => chipsByID().get(chipID) ?? initialChip;
-            const icon = createMemo(() => chipIcon(chip().tone));
             const interactive = () => chip().action !== null && (props.canActivateChip?.(chip()) ?? true);
             const accessibleLabel = () => [
               chip().label,
@@ -70,7 +57,7 @@ export const FlowerChatContextChips: Component<FlowerChatContextChipsProps> = (p
             const content = (
               <>
                 <span class="flower-chat-context-chip-icon">
-                  <Dynamic component={icon()} />
+                  <FlowerContextIcon tone={chip().tone} name={chip().label} />
                 </span>
                 <span class="flower-chat-context-chip-text">
                   <span class="flower-chat-context-chip-label">{chip().label}</span>

@@ -59,6 +59,8 @@ it('keeps every source in the input with bounded scrolling, preview actions and 
   const rows = [...input.querySelectorAll<HTMLElement>('.flower-composer-context-reference')];
   expect(rows).toHaveLength(6);
   expect(rows[0].textContent).toBe('checkout.ts');
+  expect(rows[0].querySelector('.flower-composer-context-icon svg')?.getAttribute('data-file-icon-type')).toBe('ts');
+  expect(rows[4].querySelector('.flower-composer-context-icon svg')?.getAttribute('data-file-icon-kind')).toBe('folder');
   expect(input.querySelector('.flower-composer-context-heading')).toBeNull();
   expect(document.querySelector('.flower-turn-launcher-message-surface')?.textContent).not.toContain('selected content');
   expect(list.clientHeight).toBeLessThanOrEqual(80);
@@ -90,6 +92,26 @@ it('keeps every source in the input with bounded scrolling, preview actions and 
   await page.getByRole('textbox').fill('Explain these references');
   await page.getByRole('button', { name: 'Launch turn', exact: true }).click();
   expect(runtime.onSubmit).toHaveBeenCalledWith(expect.objectContaining({ prompt: 'Explain these references', intent }));
+});
+
+it('uses filename artwork for Ask Flower files, directory packages and pending attachments', async () => {
+  await page.viewport(390, 700);
+  mount({ ...intent, context_items: [
+    { kind: 'file_path', path: '/workspace/preview.png', is_directory: false },
+    { kind: 'file_path', path: '/workspace/config.json', is_directory: false },
+    { kind: 'file_path', path: '/workspace/App.xcodeproj', is_directory: true },
+  ], pending_attachments: [new File(['report'], 'report.pdf', { type: 'application/pdf' })] });
+  await expect.element(page.getByRole('textbox')).toBeVisible();
+  const input = document.querySelector<HTMLElement>('[data-testid="flower-turn-launcher-editor-shell"]')!;
+  const icons = [...input.querySelectorAll<SVGSVGElement>('.flower-composer-context-icon svg')];
+  expect(icons.map(icon => icon.getAttribute('data-file-icon-type'))).toEqual(['image', 'json', 'xcode', 'pdf']);
+  for (const icon of icons) {
+    expect(icon.getAttribute('aria-hidden')).toBe('true');
+    expect(icon.getAttribute('data-file-icon-size')).toBe('compact');
+    expect(icon.getBoundingClientRect().width).toBe(16);
+  }
+  expect(input.scrollWidth).toBe(input.clientWidth);
+  await page.screenshot({ element: input, path: '__screenshots__/ask-flower-file-icons.png' });
 });
 
 it('wraps many references into a bounded viewport and restores editor focus after the last removal', async () => {

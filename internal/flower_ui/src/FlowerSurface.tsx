@@ -1,3 +1,4 @@
+import { FileItemIcon } from '@floegence/floe-webapp-core/file-browser';
 import { flowerMenuModels } from './modelMenu';
 import { flowerDirectoryDesktopStatus } from './modelDirectory';
 import {
@@ -26,7 +27,7 @@ import type { Accessor, Component, JSX } from 'solid-js';
 import { For, Match, Show, Suspense, Switch, batch, createEffect, createMemo, createResource, createSignal, lazy, on, onCleanup, onMount, untrack } from 'solid-js';
 import { cn, useMobileLayout, createAdaptiveSidebar, createRetainedContent } from '@floegence/floe-webapp-core';
 import type { UIFirstSelectionEvent } from '@floegence/floe-webapp-core';
-import { AlertCircle, AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Copy, ExternalLink, FileText, FolderOpen, Globe, GripVertical, Link, Menu, MoreHorizontal, MonitorPointer, Paperclip, Pencil, Plus, Refresh, Send, Settings, Shield, Terminal, Trash, XCircle, Zap } from '@floegence/floe-webapp-core/icons';
+import { AlertCircle, AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Copy, ExternalLink, FileText, Globe, GripVertical, Link, Menu, MoreHorizontal, MonitorPointer, Paperclip, Pencil, Plus, Refresh, Send, Settings, Shield, Terminal, Trash, XCircle, Zap } from '@floegence/floe-webapp-core/icons';
 import { createInputHistoryController, type InputHistoryEntry, type MarkdownMediaProps } from '@floegence/floe-webapp-core/chat';
 import { flowerInputHistoryEntries } from './composer/flowerInputHistory';
 
@@ -8550,7 +8551,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 if (action()) openActivityFilePreview(messageID(), blockIndex(), itemID(), action()!);
               }}
             >
-              <FileText class="h-3.5 w-3.5" />
+              <FileItemIcon size={14} item={{ name: displayName(), type: 'file' }} class="size-3.5" />
             </button>
           </Show>
           <Show when={canBrowseDirectory() && action()}>
@@ -8565,7 +8566,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 openActivityFileBrowser(messageID(), blockIndex(), itemID(), action()!);
               }}
             >
-              <FolderOpen class="h-3.5 w-3.5" />
+              <FileItemIcon size={14} item={{ name: displayName(), type: 'folder' }} open class="size-3.5" />
             </button>
           </Show>
         </div>
@@ -9745,7 +9746,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             });
           }}
         >
-          <FileText class="size-5 shrink-0" aria-hidden="true" />
+          <FileItemIcon size={24} item={{ name: (block() as Extract<FlowerRenderableMessageBlock, { type: 'file' }>).name, type: 'file' }} class="size-6 shrink-0" />
           <span class="flower-message-file-copy">
             <span class="flower-message-file-name">{(block() as Extract<FlowerRenderableMessageBlock, { type: 'file' }>).name}</span>
             <span class="flower-message-file-meta">
@@ -11131,9 +11132,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                       onClick={() => void commitComposerReference(candidate)}
                     >
                       <span class="flower-composer-reference-option-icon" aria-hidden="true">
-                        {candidate.kind === 'directory'
-                          ? <FolderOpen class="h-4 w-4" />
-                          : <FileText class="h-4 w-4" />}
+                        <FileItemIcon size={18} item={{ name: candidate.label, type: candidate.kind === 'directory' ? 'folder' : 'file' }} class="size-[18px] shrink-0" />
                       </span>
                       <span class="flower-composer-reference-option-copy">
                         <span class="flower-composer-reference-option-name">{candidate.label}</span>
@@ -11695,9 +11694,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                           data-reference-kind={reference.kind}
                         >
                           <span class="flower-composer-reference-chip-icon" aria-hidden="true">
-                            {reference.kind === 'directory'
-                              ? <FolderOpen class="h-3.5 w-3.5" />
-                              : <FileText class="h-3.5 w-3.5" />}
+                            <FileItemIcon size={18} item={{ name: reference.label, type: reference.kind === 'directory' ? 'folder' : 'file' }} class="size-[18px] shrink-0" />
                           </span>
                           <span class="flower-composer-reference-chip-label">{reference.label}</span>
                           <button

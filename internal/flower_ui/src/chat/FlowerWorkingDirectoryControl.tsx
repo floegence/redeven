@@ -1,5 +1,6 @@
 import { Show, type Component } from 'solid-js';
-import { ChevronDown, FolderOpen } from '@floegence/floe-webapp-core/icons';
+import { ChevronDown } from '@floegence/floe-webapp-core/icons';
+import { FileItemIcon } from '@floegence/floe-webapp-core/file-browser';
 
 export const FlowerWorkingDirectoryControl: Component<{
   name: string;
@@ -23,7 +24,7 @@ export const FlowerWorkingDirectoryControl: Component<{
       disabled={props.disabled}
       onClick={props.onClick}
     >
-      <FolderOpen class="flower-working-directory-icon" aria-hidden="true" />
+      <FileItemIcon size={16} item={{ name: props.name, type: 'folder' }} open class="flower-working-directory-icon" />
       <span class="flower-working-directory-name" aria-hidden="true">
         <span class="flower-working-directory-name-start">{hasSuffix() ? characters().slice(0, -8).join('') : props.name}</span>
         <Show when={hasSuffix()}>

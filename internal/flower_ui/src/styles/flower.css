@@ -772,7 +772,7 @@
 }
 
 .flower-working-directory-browse { max-width: 14rem; }
-.flower-working-directory-icon { width: 0.875rem; height: 0.875rem; flex: 0 0 auto; }
+.flower-working-directory-icon { width: 1rem; height: 1rem; flex: 0 0 auto; }
 .flower-working-directory-browse .flower-working-directory-icon { color: var(--muted-foreground); }
 .flower-working-directory-chevron { width: 0.7rem; height: 0.7rem; flex: 0 0 auto; }
 .flower-working-directory-name { display: flex; min-width: 0; font-weight: 500; white-space: nowrap; }
@@ -3278,10 +3278,10 @@
 }
 
 .flower-chat-context-chip-icon {
-  margin-top: 0.1rem;
+  margin-top: 0.05rem;
   flex-shrink: 0;
-  width: 0.875rem;
-  height: 0.875rem;
+  width: 1rem;
+  height: 1rem;
 }
 
 .flower-chat-context-chip-icon svg {
@@ -3319,6 +3319,19 @@
 .flower-message-bubble-user .flower-chat-context-chip {
   border-color: color-mix(in srgb, currentColor 32%, transparent);
   background: transparent;
+}
+
+.flower-message-bubble-user .flower-chat-context-chip:has([data-file-icon-kind]) {
+  align-items: center;
+}
+
+.flower-message-bubble-user .flower-chat-context-chip-icon:has([data-file-icon-kind]) {
+  width: 1.375rem;
+  height: 1.375rem;
+  margin-top: 0;
+  border-radius: 0.25rem;
+  background: var(--card);
+  padding: 0.1875rem;
 }
 
 .flower-message-bubble-user .flower-chat-context-chip:focus-visible {
@@ -4275,8 +4288,8 @@
 }
 
 .flower-composer-context-icon svg {
-  width: 0.75rem;
-  height: 0.75rem;
+  width: 1rem;
+  height: 1rem;
 }
 
 .flower-composer-context-label {
@@ -8293,8 +8306,8 @@ button.flower-composer-context-source:focus-visible,
 }
 
 .flower-attachment-image-placeholder > svg {
-  width: 1rem;
-  height: 1rem;
+  width: 1.125rem;
+  height: 1.125rem;
 }
 
 button.flower-attachment-preview-trigger {
@@ -8320,16 +8333,16 @@ button.flower-attachment-preview-trigger:disabled {
 
 .flower-attachment-file-icon {
   display: inline-flex;
-  width: 1rem;
-  height: 1rem;
+  width: 1.125rem;
+  height: 1.125rem;
   align-items: center;
   justify-content: center;
   color: var(--muted-foreground);
 }
 
 .flower-attachment-file-icon > svg {
-  width: 1rem;
-  height: 1rem;
+  width: 1.125rem;
+  height: 1.125rem;
 }
 
 .flower-attachment-body,
@@ -8529,8 +8542,8 @@ button.flower-attachment-preview-trigger:disabled {
 }
 
 .flower-attachment-preview-state > svg {
-  width: 1rem;
-  height: 1rem;
+  width: 2.5rem;
+  height: 2.5rem;
 }
 
 .flower-attachment-preview-error {
