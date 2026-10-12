@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest';
-import { TessivenRuntimes, type TessivenRuntimePath } from './tessivenRuntimes';
+import { TessivenRuntimes, withExecutionRuntimePath, type TessivenRuntimePath } from './tessivenRuntimes';
 import type { HostMessage } from './tessivenHost';
 const permissions = { read: true, write: true, execute: true, admin: true };
 function fixture() {
@@ -97,4 +97,41 @@ it('rejects ambiguous registered references without acquiring either path', asyn
     service.execute(message('connect'), new AbortController().signal),
   ).rejects.toMatchObject({ code: 'TESSIVEN_TARGET_UNAVAILABLE' });
   expect(path.connect).not.toHaveBeenCalled();
+});
+
+it('keeps the current-device local Runtime as one actionable owner path', async () => {
+  const { path, message } = fixture();
+  path.target.runtime_ref = 'local:local';
+  path.target.source = 'desktop';
+  path.target.actions.push('restart');
+  path.lifecycle = vi.fn(async () => ({ runtime_ref: 'local:local', status: 'handoff_required' }));
+  const service = new TessivenRuntimes(async () => ({
+    paths: withExecutionRuntimePath(path, true), sources: [],
+  }));
+  const directory = await service.execute(message('directory'), new AbortController().signal);
+  expect(directory).toMatchObject({ targets: [path.target] });
+  expect((directory as { targets: unknown[] }).targets).toHaveLength(1);
+  for (const action of ['status', 'restart']) {
+    await service.execute({ ...message(action), request: { ...message(action).request, runtime_ref: 'local:local' } }, new AbortController().signal);
+  }
+  expect(path.inspect).toHaveBeenCalledOnce();
+  expect(path.lifecycle).toHaveBeenCalledOnce();
+});
+
+it('retains a distinct execution alias for a connected remote owner', async () => {
+  const { path, message } = fixture();
+  path.target.runtime_ref = 'ssh:exact';
+  path.target.source = 'desktop';
+  path.inspect = vi.fn(async () => ({ runtime_ref: 'ssh:exact', status: 'connected' }));
+  const service = new TessivenRuntimes(async () => ({
+    paths: withExecutionRuntimePath(path, true), sources: [],
+  }));
+  const directory = await service.execute(message('directory'), new AbortController().signal);
+  expect(directory).toMatchObject({ targets: [
+    { runtime_ref: 'local:local', location: 'execution_machine', generation: '2', identity: 'runtime-verified' },
+    { runtime_ref: 'ssh:exact', location: 'current_device', generation: '2', identity: 'runtime-verified' },
+  ] });
+  expect(await service.execute({ ...message('status'), request: { ...message('status').request, runtime_ref: 'local:local' } }, new AbortController().signal)).toEqual({ runtime_ref: 'local:local', status: 'connected' });
+  expect(path.inspect).toHaveBeenCalledOnce();
+  expect(withExecutionRuntimePath(path, false)).toEqual([path]);
 });

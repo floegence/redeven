@@ -1,6 +1,6 @@
 import { completeTessivenRuntimeHandoff } from './tessivenRuntimeHandoff';
 import { registeredTessivenConnections } from './tessivenRegisteredConnections';
-import { TessivenRuntimes, type TessivenRuntimeInventory, type TessivenRuntimePath, type TessivenRuntimeTarget } from './tessivenRuntimes';
+import { TessivenRuntimes, withExecutionRuntimePath, type TessivenRuntimeInventory, type TessivenRuntimePath, type TessivenRuntimeTarget } from './tessivenRuntimes';
 import { prepareGatewayMemberPartition, clearGatewayMemberPartition, closeGatewayMemberTransport } from './gatewayMemberPartition';
 import { manageRuntimeGateway, previewRuntimeGateway } from './runtimeControlClient';
 import { connectTessivenHost, type TessivenHost, type HostMessage } from './tessivenHost';
@@ -10761,33 +10761,7 @@ async function tessivenRuntimeInventory(
         };
       },
     };
-    if (source.record.environment_id === saved.id)
-      paths.push({
-        ...path,
-        target: {
-          ...target,
-          runtime_ref: 'local:local',
-          location: 'execution_machine',
-        },
-        connect: async (connectSignal, message) => ({
-          ...((await path.connect(connectSignal, message)) as object),
-          runtime_ref: 'local:local',
-        }),
-        inspect: async (request, inspectSignal) => ({
-          ...((await path.inspect(request, inspectSignal)) as object),
-          runtime_ref: 'local:local',
-        }),
-        lifecycle: async (request, lifecycleSignal, permissions, scope) => ({
-          ...((await path.lifecycle!(
-            request,
-            lifecycleSignal,
-            permissions,
-            scope,
-          )) as object),
-          runtime_ref: 'local:local',
-        }),
-      });
-    paths.push(path);
+    paths.push(...withExecutionRuntimePath(path, source.record.environment_id === saved.id));
   }
   if (directOnly) return { paths, sources };
   const owners = Array.from(sessionsByKey.values()).filter(owner => liveSession(owner.session_key) === owner);
