@@ -1,3 +1,4 @@
+import { projectOverviewConnections } from '../../../../tessiven_ui/src/connections';
 import { toRenderVersion, toRenderModel } from '../../../../tessiven_ui/src/presentation';
 import '../index.css';
 import '../../../../tessiven_ui/src/tessiven.css';
@@ -380,7 +381,7 @@ describe('Tessiven real graph interactions', () => {
     await page.getByRole('button', { name: 'Fit canvas', exact: true }).hover();
     expect(projectLayoutLayers(version.document, projected)).toEqual(version.document.presentation?.layers);
     expect([...host.querySelectorAll('.floe-graph__edge')].map(edge => edge.parentElement!.getAttribute('data-graph-object')).sort())
-      .toEqual(projected.graph.edges.map(edge => edge.id).sort());
+      .toEqual(projectOverviewConnections(projected).edges.map(edge => edge.id).sort());
     const metrics = routeMetrics();
     // The unchanged user fixture previously had 26,020px of routes, 11,043.5px
     // of shared segments, and 32 crossings at these saved positions.
@@ -473,7 +474,7 @@ describe('Tessiven real graph interactions', () => {
     }
     expect(projectLayoutLayers(document, projected)).toEqual(document.presentation?.layers);
     expect([...host.querySelectorAll('.floe-graph__edge')].map(edge => edge.parentElement!.getAttribute('data-graph-object')).sort())
-      .toEqual(projected.graph.edges.map(edge => edge.id).sort());
+      .toEqual(projectOverviewConnections(projected).edges.map(edge => edge.id).sort());
   });
   it('preserves declared root layers and compacts layout across collapse and expand', async () => {
     const document = structuredClone(hadoopDocument) as Version['document'];
@@ -541,7 +542,7 @@ describe('Tessiven real graph interactions', () => {
       ...[...projected.internalRelations.values()].flat().map(item => item.relation.id),
     ]).size).toBe(40);
     expect([...host.querySelectorAll('.floe-graph__edge')].map(edge => edge.parentElement!.getAttribute('data-graph-object')).sort())
-      .toEqual(projected.graph.edges.map(edge => edge.id).sort());
+      .toEqual(projectOverviewConnections(projected).edges.map(edge => edge.id).sort());
   });
   it('lays out runtime nodes and opens details on click with immutable Ask context', async () => {
     const { ask, setVisible } = mount();

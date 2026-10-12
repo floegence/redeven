@@ -16,6 +16,7 @@ import {
   fitGraphViewport,
   type GraphLayout,
   type GraphLayoutNode,
+  type GraphLayoutEdge,
   type GraphNodeRenderContext,
   type GraphObjectEvent,
   type GraphObjectRef,
@@ -25,8 +26,9 @@ import { ChevronDown, ChevronUp, Link, ExternalLink, Layers, Maximize, Minus, Pl
 import '@floegence/floe-webapp-core/graph.css';
 import { projectCanvas, projectLayoutOptions, type NodeServiceScope, type Projection } from './projection';
 import { TessivenIcon } from './TessivenIcon';
+import { projectOverviewConnections, projectNodeConnections } from './connections';
 import { TessivenRelationDetails } from './TessivenRelationDetails';
-import { summaryReferences, type RelationSummary } from './relations';
+import { summarizeRelations, summaryReferences, type RelationSummary } from './relations';
 import { TessivenServiceRelations, type ServiceRelationEndpoint } from './TessivenServiceRelations';
 import { FlowerIcon } from '../../flower_ui/src/icons/FlowerIcon';
 import type {
@@ -106,12 +108,18 @@ export function TessivenGraph(props: {
   });
   const [selectionState, setSelectionState] = createSignal<{ object: GraphObjectRef | null; refs: string[] }>({ object: null, refs: [] });
   const selected = () => selectionState().object;
-  const [hovered, setHovered] = createSignal<GraphObjectRef | null>(null);
+  const [connectionFocus, setConnectionFocus] = createSignal<GraphObjectRef | null>(null);
+  const [visibleRoutes, setVisibleRoutes] = createSignal<readonly GraphLayoutEdge[]>([]);
+  const [routingPending, setRoutingPending] = createSignal(false);
+  const routeCache = new Map<string, readonly GraphLayoutEdge[]>();
+  let displayedEdges = new Set<string>();
+  let leaveTimer: ReturnType<typeof setTimeout> | undefined;
+  let pointerPressed = false;
   const [popup, setPopup] = createSignal<{
     event: GraphObjectEvent;
     refs: string[];
     menu: boolean;
-    summary?: { groupRef: string; key?: string };
+    summary?: { refs: string[]; title?: string; summaries: readonly RelationSummary[]; key?: string };
   } | null>(null);
   const [error, setError] = createSignal('');
   const engine = createGraphLayoutEngine();
@@ -128,7 +136,19 @@ export function TessivenGraph(props: {
       return { scale, x: x - (x - previous.x) * ratio + dx, y: y - (y - previous.y) * ratio + dy };
     });
   };
-  onCleanup(() => { generation += 1; engine.dispose(); });
+  onCleanup(() => { generation += 1; clearTimeout(leaveTimer); engine.dispose(); });
+  onMount(() => {
+    const down = (event: PointerEvent) => { pointerPressed = event.composedPath().includes(host!); };
+    const up = () => { pointerPressed = false; };
+    document.addEventListener('pointerdown', down, true);
+    document.addEventListener('pointerup', up, true);
+    document.addEventListener('pointercancel', up, true);
+    onCleanup(() => {
+      document.removeEventListener('pointerdown', down, true);
+      document.removeEventListener('pointerup', up, true);
+      document.removeEventListener('pointercancel', up, true);
+    });
+  });
   onMount(() => props.onViewportControl?.({
     fit,
     expandAll: () => toggleAll(true),
@@ -190,7 +210,7 @@ export function TessivenGraph(props: {
     };
   };
   const linkedNode = createMemo(() => {
-    const object = hovered() ?? selected();
+    const object = connectionFocus() ?? selected();
     const card = object?.kind === 'node' ? projection().cards.get(object.id) : undefined;
     return card?.kind === 'node' ? card.node.id : undefined;
   });
@@ -255,20 +275,10 @@ export function TessivenGraph(props: {
       [...currentExpanded].some(id => !previousExpanded.has(id))
     ) positionMode = 'compact';
     previousExpanded = new Set(currentExpanded);
-    const input = {
-      ...projected.graph,
-      edges: projected.graph.edges.map((edge) => {
-        const relations = projected.relations.get(edge.id)!;
-        return {
-          ...edge,
-          label:
-            relations.length > 1
-              ? String(relations.length)
-              : (relations[0].protocol ??
-                props.t(`relation.${relations[0].kind}`)),
-        };
-      }),
-    };
+    const input = projected.graph;
+    untrack(resetConnections);
+    const controller = new AbortController();
+    onCleanup(() => controller.abort());
     const id = ++generation;
     setLayoutPending(true);
     const anchor = untrack(() => {
@@ -285,12 +295,18 @@ export function TessivenGraph(props: {
     void engine
       .layout(input, {
         ...projectLayoutOptions(props.version.view.model, projected, positionMode),
+        routing: 'none',
         anchor: anchor
           ? { nodeId: anchor.id, position: { x: anchor.x, y: anchor.y } }
           : undefined,
       })
-      .then((next) => {
+      .then(async (geometry) => {
         if (id !== generation) return;
+        const overview = projectOverviewConnections(projected);
+        const edges = await engine.route(geometry, overview.edges, {}, { signal: controller.signal });
+        if (id !== generation || controller.signal.aborted) return;
+        const next = { ...geometry, edges };
+        routeCache.clear();
         batch(() => {
           setRenderedProjection(projected);
           setLayout(next);
@@ -305,13 +321,82 @@ export function TessivenGraph(props: {
         centerSelection();
       })
       .catch((cause: unknown) => {
-        if (id === generation) {
+        if (id === generation && !controller.signal.aborted) {
           setError(String(cause));
           setLayoutPending(false);
           props.onRenderState?.('error');
         }
       });
   });
+  const overviewConnections = createMemo(() => projectOverviewConnections(projection()));
+  const connections = createMemo(() => {
+    const focus = connectionFocus();
+    if (!focus) return overviewConnections();
+    const card = projection().cards.get(focus.id);
+    if (card?.kind === 'node') return projectNodeConnections(projection(), focus.id);
+    const overview = overviewConnections();
+    return { ...overview, edges: overview.edges.filter(edge => edge.source === focus.id || edge.target === focus.id) };
+  });
+  const shownLayout = createMemo(() => ({ ...layout(), edges: visibleRoutes().map(edge => {
+    const values = connections().relations.get(edge.id) ?? [];
+    return { ...edge, label: values.length > 1 ? String(values.length)
+      : values[0]?.protocol ?? (values[0] ? props.t(`relation.${values[0].kind}`) : edge.label) };
+  }) }));
+  createEffect(() => {
+    const geometry = layout(), current = connections(), focus = connectionFocus();
+    if (!geometry.nodes.length) { setVisibleRoutes([]); return; }
+    const isNode = focus && projection().cards.get(focus.id)?.kind === 'node';
+    if (!isNode) {
+      const ids = new Set(current.edges.map(edge => edge.id));
+      setVisibleRoutes(geometry.edges.filter(edge => ids.has(edge.id)));
+      setRoutingPending(false); return;
+    }
+    const key = focus.id;
+    const cached = routeCache.get(key);
+    if (cached) {
+      routeCache.delete(key); routeCache.set(key, cached);
+      setVisibleRoutes(cached); setRoutingPending(false); return;
+    }
+    setVisibleRoutes([]);
+    if (!current.edges.length) { setRoutingPending(false); return; }
+    const controller = new AbortController(), revision = generation;
+    setRoutingPending(true);
+    onCleanup(() => controller.abort());
+    void engine.route(geometry, current.edges, {}, { signal: controller.signal }).then(routes => {
+      if (controller.signal.aborted || revision !== generation) return;
+      routeCache.set(key, routes);
+      if (routeCache.size > 32) routeCache.delete(routeCache.keys().next().value!);
+      batch(() => { setVisibleRoutes(routes); setRoutingPending(false); setError(''); });
+    }).catch((cause: unknown) => {
+      if (!controller.signal.aborted && revision === generation) { setRoutingPending(false); setError(String(cause)); }
+    });
+  });
+  createEffect(() => {
+    const next = new Set(visibleRoutes().map(edge => edge.id));
+    const entering = new Set([...next].filter(id => !displayedEdges.has(id)));
+    displayedEdges = next;
+    if (!entering.size || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    queueMicrotask(() => {
+      if (!host?.isConnected) return;
+      for (const element of host.querySelectorAll<SVGElement>('.floe-graph__edges > g'))
+        if (entering.has(element.dataset.graphObject!))
+          element.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 140, easing: 'ease-out' });
+    });
+  });
+  function retainConnections() { clearTimeout(leaveTimer); leaveTimer = undefined; }
+  function resetConnections() { retainConnections(); setConnectionFocus(null); }
+  function leaveConnections() {
+    retainConnections();
+    if (popup()) return;
+    leaveTimer = setTimeout(() => { leaveTimer = undefined; setConnectionFocus(null); }, 120);
+  }
+  function hoverConnections(object: GraphObjectRef | null) {
+    if (pointerPressed) return;
+    if (!object) { leaveConnections(); return; }
+    retainConnections();
+    if (object.kind === 'edge') return;
+    if (connectionFocus()?.id !== object.id) setConnectionFocus(object);
+  }
   let pendingLocate: string | undefined;
   const centerSelection = () => {
     if (!pendingLocate || !host) return;
@@ -366,6 +451,7 @@ export function TessivenGraph(props: {
   function close(restore = false) {
     const owner = popup()?.event.owner;
     setPopup(null);
+    leaveConnections();
     if (restore) {
       const object = selected();
       const target = owner instanceof HTMLElement && owner.isConnected && owner.matches('button, a, input, select, textarea, [tabindex]')
@@ -375,7 +461,7 @@ export function TessivenGraph(props: {
   }
   function select(object: GraphObjectRef | null, refs?: string[]) {
     const selectionRefs = refs ?? (object?.kind === 'edge'
-      ? projection().relations.get(object.id)?.map(value => value.id) ?? []
+      ? connections().relations.get(object.id)?.map(value => value.id) ?? []
       : object ? [canonicalRef(object.id)] : []);
     const selection: Selection = { canvas_id: props.version.canvas_id, version_id: props.version.number, object_refs: selectionRefs.slice(0, 100) };
     setSelectionState({ object, refs: selectionRefs });
@@ -395,6 +481,21 @@ export function TessivenGraph(props: {
     return !refs.length || askableRefs(refs).length > 0;
   }
   function show(event: GraphObjectEvent, refs?: string[], menu = false) {
+    if (!refs && event.object?.kind === 'edge') {
+      const edge = connections().edges.find(value => value.id === event.object!.id);
+      const relations = connections().relations.get(event.object.id) ?? [];
+      if (edge && (edge.id.startsWith('@overview/') || relations.length > 1)) {
+        const scope = [...new Set([canonicalRef(edge.source), canonicalRef(edge.target)])];
+        const details = relations.map(value => projection().relationDetails.get(value.id)!);
+        const summaries = summarizeRelations(details, new Set(details.flatMap(value => value.nodeRefs)));
+        select(event.object, scope); retainConnections();
+        if (menu) { show(event, scope, true); return; }
+        setPopup({ event, refs: scope, menu: false, summary: { refs: scope,
+          title: `${projection().graph.nodes.find(node => node.id === edge.source)?.label ?? edge.source} → ${projection().graph.nodes.find(node => node.id === edge.target)?.label ?? edge.target}`, summaries } });
+        return;
+      }
+    }
+    if (event.object?.kind === 'node') { retainConnections(); setConnectionFocus(event.object); }
     const selection = select(event.object, refs);
     const selectionRefs = selection.object_refs;
     if (props.onSelectionChange) {
@@ -413,7 +514,7 @@ export function TessivenGraph(props: {
       const object = popup()?.event.object;
       const edge =
         object?.kind === 'edge'
-          ? projection().graph.edges.find((edge) => edge.id === object.id)
+          ? connections().edges.find((edge) => edge.id === object.id)
           : undefined;
       refs = edge ? [canonicalRef(edge.source), canonicalRef(edge.target)] : object ? [canonicalRef(object.id)] : [];
     }
@@ -921,7 +1022,7 @@ export function TessivenGraph(props: {
     const origin = rowEvent(event, groupRef);
     if (menu) { show(origin, refs, true); return; }
     select(origin.object, refs);
-    setPopup({ event: origin, refs, menu: false, summary: { groupRef, key: summary?.key } });
+    setPopup({ event: origin, refs, menu: false, summary: { refs: [groupRef], summaries: projection().groupRelations.get(groupRef) ?? [], key: summary?.key } });
   };
   const locateEndpoint = (ref: string) => {
     const endpoint = [...projection().relationDetails.values()].find(detail => detail.from.ref === ref || detail.to.ref === ref);
@@ -939,9 +1040,16 @@ export function TessivenGraph(props: {
     <div
       class="tessiven-canvas"
       ref={host}
+      data-connection-focus={connectionFocus()?.id}
+      data-connections-pending={routingPending() || undefined}
       // InfiniteCanvas owns panning, so a pointer drag over a card must never
       // fall through to the browser's native text-selection gesture.
       onSelectStart={(event) => event.preventDefault()}
+      onGotPointerCapture={event => {
+        if (event.target instanceof Element && event.target.matches('.floe-infinite-canvas')) {
+          close(); resetConnections();
+        }
+      }}
     >
       <Show when={error()}>
         <div role="alert" class="tessiven-error">
@@ -949,18 +1057,19 @@ export function TessivenGraph(props: {
         </div>
       </Show>
       <GraphCanvas
-        layout={layout()}
+        layout={shownLayout()}
+        highlight={null}
         viewport={viewport()}
         onViewportChange={setViewport}
         ariaLabel={props.t('canvasLabel')}
         selected={selected()}
         renderNode={renderCard}
         renderGroup={renderCard}
-        onActivate={(event) => show(event)}
+        onActivate={(event) => { if (event.object) show(event); else { select(null); close(); resetConnections(); } }}
         onContextMenu={(event) => show(event, undefined, true)}
-        onHover={setHovered}
-        onInteractionStart={() => close()}
-        minimap={layout().nodes.length ? { ariaLabel: props.t('canvasOverview'), nodeStyle: minimapStyle } : undefined}
+        onHover={hoverConnections}
+        onInteractionStart={() => { close(); resetConnections(); }}
+        minimap={layout().nodes.length ? { ariaLabel: props.t('canvasOverview'), nodeStyle: minimapStyle, edges: layout().edges } : undefined}
       />
       <Show when={props.tools !== 'hidden'}><nav class="tessiven-canvas-tools" aria-label={props.t('canvasView')}>
         <button type="button" onClick={fit} aria-label={props.t('fit')} title={props.t('fit')}><Maximize aria-hidden="true" /></button>
@@ -1011,6 +1120,8 @@ export function TessivenGraph(props: {
           <TessivenObjectPopup
             event={value.event}
             onClose={close}
+            onRetainConnections={retainConnections}
+            onLeaveConnections={leaveConnections}
             t={props.t}
             menu={value.menu}
             relationBrowser={!!value.summary}
@@ -1042,8 +1153,8 @@ export function TessivenGraph(props: {
               </div>
             </Show>
             <Show when={!value.menu && value.summary}>{scope => <TessivenRelationDetails
-              groupRef={scope().groupRef} initialKey={scope().key}
-              summaries={projection().groupRelations.get(scope().groupRef) ?? []}
+              scopeRefs={scope().refs} title={scope().title} initialKey={scope().key}
+              summaries={scope().summaries}
               details={projection().relationDetails} nodes={props.version.view.model.nodes ?? []} t={props.t}
               renderDetail={id => renderDetails([id], value.event)} canAsk={canAsk} onAsk={ask} onLocate={locateEndpoint}
               onInspect={(event, id) => {
@@ -1077,6 +1188,8 @@ function TessivenObjectPopup(props: {
   t: TessivenText;
   menu: boolean;
   relationBrowser?: boolean;
+  onRetainConnections: () => void;
+  onLeaveConnections: () => void;
   children: JSX.Element;
 }) {
   let panel: HTMLDivElement | undefined;
@@ -1129,6 +1242,8 @@ function TessivenObjectPopup(props: {
     >
       <div
         ref={panel}
+        onPointerEnter={props.onRetainConnections}
+        onPointerLeave={props.onLeaveConnections}
         class="tessiven-popup"
         data-relation-browser={props.relationBrowser || undefined}
         role={props.menu ? 'menu' : 'dialog'}

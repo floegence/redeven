@@ -5,12 +5,16 @@ import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import qualifyRelationships from '../internal/envapp/ui_src/scripts/fixtures/nativeServiceCanvasRelations.mjs';
+import qualifyConnections from '../internal/envapp/ui_src/scripts/fixtures/nativeServiceCanvasConnections.mjs';
 import { repeatedCallsDocument } from '../internal/envapp/ui_src/src/styles/tessiven-relation-summary.fixture.ts';
+import { connectionDocument } from '../internal/envapp/ui_src/src/styles/tessiven-connections.fixture.ts';
 
 assert.equal(process.platform, 'darwin', 'Native canvas acceptance requires macOS WebKit');
 const root = path.resolve(import.meta.dirname, '..');
 const relations = process.argv.includes('--relations');
-const args = process.argv.slice(2).filter(value => value !== '--relations');
+const connections = process.argv.includes('--connections');
+assert(!(relations && connections), 'Choose one qualification scenario');
+const args = process.argv.slice(2).filter(value => !['--relations', '--connections'].includes(value));
 assert(args.length === 1 || args.length === 3 && args[1] === '--renderer-dir',
   'Usage: node scripts/check_native_service_canvas.mjs <evidence-directory> [--renderer-dir <frozen-renderer-directory>] [--relations]');
 const output = path.resolve(args[0]);
@@ -67,9 +71,9 @@ const { build } = await import(pathToFileURL(path.join(root, 'internal/envapp/ui
 const adapter = await build({ entryPoints: [path.join(root, 'internal/tessiven_ui/src/presentation.ts')],
   bundle: true, platform: 'node', format: 'esm', write: false, logLevel: 'silent' });
 const { toRenderVersion } = await import('data:text/javascript;base64,' + Buffer.from(adapter.outputFiles[0].text).toString('base64'));
-const document = relations ? repeatedCallsDocument(1000)
+const document = connections ? connectionDocument() : relations ? repeatedCallsDocument(1000)
   : JSON.parse(await readFile(path.join(root, 'internal/envapp/ui_src/src/styles/fixtures/tessiven-hadoop.json'), 'utf8'));
-if (!relations) {
+if (!relations && !connections) {
   document.presentation.initiallyExpanded = document.groups.map(group => group.id);
   document.groups.find(group => group.id === 'g-master').instanceRefs = ['inst-nn-a', 'inst-nn-b'];
 }
@@ -84,15 +88,15 @@ const input = {
 const fixture = path.resolve(output, 'input.json');
 await writeFile(fixture, JSON.stringify(input));
 const qualification = path.join(output, 'qualification.js');
-if (relations) await writeFile(qualification, `return (${qualifyRelationships.toString()})();`);
+if (relations || connections) await writeFile(qualification, `return (${(connections ? qualifyConnections : qualifyRelationships).toString()})();`);
 const result = execFileSync('swift', [path.join(root, 'internal/envapp/ui_src/scripts/fixtures/nativeServiceCanvas.swift'), renderer, fixture, output,
-  ...(relations ? [qualification] : [])], {
+  ...(relations || connections ? [qualification, connections ? 'a2-b2' : 'host-999-agent-call'] : [])], {
   encoding: 'utf8', timeout: 150000,
 });
 console.log(result);
 await writeFile(path.resolve(output, 'report.json'), JSON.stringify({
   source_commit: manifest.source_commit, current_source_commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
   renderer_mode: frozen ? 'frozen' : 'current', presentation_format: version.view.format,
-  capabilities: version.view.capabilities, packages: manifest.packages, scenario: relations ? 'pool-relationship-summaries' : 'canvas-navigation', result,
+  capabilities: version.view.capabilities, packages: manifest.packages, scenario: connections ? 'progressive-connections' : relations ? 'pool-relationship-summaries' : 'canvas-navigation', result,
   screenshots: ['native-light.png', 'native-dark.png', 'native-hc-light.png', 'native-hc-dark.png'],
 }, null, 2) + '\n');

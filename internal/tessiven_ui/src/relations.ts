@@ -102,6 +102,6 @@ export function summarizeRelations(details: Iterable<RelationDetail>, nodeScope:
   return [...patterns.values()].map(({ summary, refs, nodes }) => ({ ...summary, relationRefs: [...refs], nodeRefs: [...nodes] }));
 }
 
-export function summaryReferences(groupRef: string, summary?: RelationSummary): string[] {
-  return [...new Set([groupRef, ...(summary ? [summary.from.canonicalRef, summary.to.canonicalRef] : [])])];
+export function summaryReferences(scopeRefs: string | readonly string[], summary?: RelationSummary): string[] {
+  return [...new Set([...(typeof scopeRefs === 'string' ? [scopeRefs] : scopeRefs), ...(summary ? [summary.from.canonicalRef, summary.to.canonicalRef] : [])])];
 }

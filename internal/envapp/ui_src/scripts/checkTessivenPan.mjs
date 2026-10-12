@@ -26,6 +26,7 @@ import { createSignal, Show } from 'solid-js';
 import '../src/index.css';
 import '../../../tessiven_ui/src/tessiven.css';
 import { TessivenGraph } from '../../../tessiven_ui/src/TessivenGraph';
+import { toRenderVersion } from '../../../tessiven_ui/src/presentation';
 import { tessivenText } from '../../../tessiven_ui/src/i18n';
 import { scaleDocument } from '../src/styles/tessiven-scale.fixture';
 function App() {
@@ -33,7 +34,7 @@ function App() {
  let control, scale=1;
  window.loadGraph=(count)=>{setVersion(undefined); requestAnimationFrame(()=>setVersion({canvas_id:'pan',number:1,document:scaleDocument(count,true)}))};
  window.zoomGraph=()=>{const rect=[...document.querySelectorAll('.tessiven-node')].map(node=>node.getBoundingClientRect()).find(rect=>rect.left>=0&&rect.top>=0&&rect.right<innerWidth&&rect.bottom<innerHeight); const x=rect.x+rect.width/2,y=rect.y+rect.height/2;control.zoom(1/scale,x,y,720-x,460-y)};
- return <div class="tessiven" style={{height:'calc(100vh - 16px)',width:'calc(100vw - 16px)'}}><Show when={version()}>{v=><TessivenGraph version={v()} historical={false} t={tessivenText('en-US')} onAsk={()=>{}} onInspect={()=>{}} onViewportControl={value=>control=value} onZoomChange={value=>scale=value}/>}</Show></div>
+ return <div class="tessiven" style={{height:'calc(100vh - 16px)',width:'calc(100vw - 16px)'}}><Show when={version()}>{v=><TessivenGraph version={toRenderVersion(v())} historical={false} t={tessivenText('en-US')} onAsk={()=>{}} onInspect={()=>{}} onViewportControl={value=>control=value} onZoomChange={value=>scale=value}/>}</Show></div>
 }
 render(()=><App/>,document.getElementById('root'));`);
   server = await createServer({ configFile: path.join(root, 'vite.config.ts'), server: { host: '127.0.0.1', port: 0, strictPort: false } });

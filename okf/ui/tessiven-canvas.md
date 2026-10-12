@@ -10,8 +10,9 @@ quality_exception: Cross-surface canvas interaction contract for Activity, stand
 
 Tessiven presents one progressively detailed canvas for understanding where
 business services run. Solid Runtime node cards sit inside tinted dashed visual
-groups; external dependencies use a separate card treatment. Edges are muted
-until a related group or object is focused. Wheel zoom and drag pan belong to
+groups; external dependencies use a separate card treatment. Default connections
+show root-level overview; hover and focus show only the current group or host's
+relationships. Wheel zoom and drag pan belong to
 the canvas, while object details and the read-only document remain normal selectable
 text. Flower is the editing surface; the canvas has no manual content editor.
 
@@ -42,7 +43,7 @@ Layout, routing, view controls and large-graph rendering follow the
   bar. New canvas immediately creates and opens an empty saved canvas.
 - Each library card previews the current saved document through the same
   projection and published Floe layout engine used by the canvas. It shows
-  nodes, groups, resources, and routed relationships without creating a second
+  nodes, groups, resources, and overview relationships without creating a second
   editable graph surface. Title, version, date, description, and object counts
   sit in a lower overlay; hover and keyboard focus reveal details without
   changing card geometry, while touch displays those details by default.
@@ -142,8 +143,8 @@ Layout, routing, view controls and large-graph rendering follow the
 - Every logical group exposes a visible, labeled expand or collapse action with
   a directional icon. The action remains in the group header in both states and
   uses the same state as the projected group contents.
-- Clicking opens object details. Hover tracks related edges without opening
-  explanatory UI; right-click, keyboard context menu, and touch context entry
+- Clicking opens object details. Hover shows the current connection scope under
+  the navigation contract without opening explanatory UI; right-click, keyboard context menu, and touch context entry
   open Ask Flower with the exact immutable canvas/version selection.
 - Every graph Ask Flower entry uses the canonical Flower bloom in a compact
   accented action, including object details, context menus and the canvas menu.

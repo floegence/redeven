@@ -42,11 +42,19 @@ it('keeps a DOWN architecture with a row-packed peer pool across compact reflows
     expect(boxes[0].width).toBeGreaterThan(0);
     expect(boxes[0].top).toBeCloseTo(boxes[1].top); expect(boxes[1].top).toBeCloseTo(boxes[2].top);
     expect(boxes[0].right).toBeLessThan(boxes[1].left); expect(boxes[1].right).toBeLessThan(boxes[2].left);
-    expect(host.querySelectorAll('.floe-graph__edge')).toHaveLength(3);
+    expect(host.querySelectorAll('.floe-graph__edge')).toHaveLength(0);
     const group = host.querySelector('.tessiven-group')!.getBoundingClientRect();
     for (const box of boxes) { expect(box.left).toBeGreaterThan(group.left); expect(box.right).toBeLessThan(group.right); expect(box.bottom).toBeLessThan(group.bottom); }
   };
   await ready(); aligned();
+  const connections = new Set<string>();
+  for (let i = 0; i < 3; i++) {
+    host.querySelector<HTMLElement>(`[data-graph-object="host-${i}"]`)!.focus();
+    await expect.poll(() => host.querySelectorAll('.floe-graph__edge').length).toBe(2);
+    for (const edge of host.querySelectorAll('.floe-graph__edge')) connections.add(edge.parentElement!.getAttribute('data-graph-object')!);
+  }
+  expect([...connections].sort()).toEqual(['@detail/host-0/host-1', '@detail/host-1/host-2', '@detail/host-2/host-0']);
+  host.querySelector<HTMLElement>('[data-graph-object="host-2"]')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
   for (let i = 0; i < 3; i++) {
     control!.collapseAll(); await expect.poll(() => host.querySelectorAll('.tessiven-node').length).toBe(0); await ready();
     control!.expandAll(); await expect.poll(() => host.querySelectorAll('.tessiven-node').length).toBe(3); await ready(); aligned();

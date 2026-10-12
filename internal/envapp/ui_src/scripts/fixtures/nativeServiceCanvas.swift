@@ -6,6 +6,7 @@ let fixture = try Data(contentsOf: URL(fileURLWithPath: CommandLine.arguments[2]
 let output = URL(fileURLWithPath: CommandLine.arguments[3], isDirectory: true)
 let qualification = CommandLine.arguments.count > 4
   ? try String(contentsOfFile: CommandLine.arguments[4], encoding: .utf8) : nil
+let expectedSelection = CommandLine.arguments.count > 5 ? CommandLine.arguments[5] : "host-999-agent-call"
 let application = NSApplication.shared
 application.setActivationPolicy(.regular)
 final class Assets: NSObject, WKURLSchemeHandler {
@@ -115,7 +116,7 @@ final class Bridge: NSObject, WKScriptMessageHandler {
         switch result {
         case .failure(let error): self.fail(String(describing:error))
         case .success(let value):
-          if qualification != nil, !self.selections.contains(["host-999-agent-call"]) {
+          if qualification != nil, !self.selections.contains([expectedSelection]) {
             self.fail("Native bridge did not receive the exact original relationship")
           }
           print(value)

@@ -5,6 +5,7 @@ import {
   type GraphLayoutNode,
 } from '@floegence/floe-webapp-core/graph';
 import { projectCanvas, projectLayoutOptions } from './projection';
+import { projectOverviewConnections } from './connections';
 import { TessivenIcon } from './TessivenIcon';
 import type { RenderModel, TessivenText } from './types';
 
@@ -23,7 +24,9 @@ export function TessivenThumbnail(props: {
   );
   const [layout] = createResource(projection, async (projected) => {
     try {
-      return await props.engine.layout(projected.graph, projectLayoutOptions(props.model, projected));
+      const geometry = await props.engine.layout(projected.graph, { ...projectLayoutOptions(props.model, projected), routing: 'none' });
+      const edges = await props.engine.route(geometry, projectOverviewConnections(projected).edges);
+      return { ...geometry, edges };
     } catch {
       return undefined;
     }
