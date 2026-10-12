@@ -16,6 +16,7 @@ const rpcState = vi.hoisted(() => ({
 const runtimeState = vi.hoisted(() => ({
   propsBySession: new Map<string, any>(),
 }));
+const flowerLauncher = vi.hoisted(() => vi.fn());
 
 vi.mock('@floegence/floe-webapp-protocol', () => ({
   useProtocol: () => ({ session: protocolState.client, status: protocolState.status }),
@@ -49,7 +50,7 @@ vi.mock('../pages/EnvContext', () => ({
       openDebugConsole: vi.fn(),
       openSettings: vi.fn(),
       openFileBrowserAtPath: vi.fn(async () => undefined),
-      openFlowerTurnLauncher: vi.fn(),
+      openFlowerTurnLauncher: flowerLauncher,
     };
   },
 }));
@@ -113,6 +114,7 @@ vi.mock('./TerminalSessionRuntime', () => ({
     runtimeState.propsBySession.set(props.session.id, props);
     return (
       <div
+        class="redeven-terminal-surface"
         data-terminal-runtime-session={props.session.id}
         data-terminal-runtime-parent-loading={
           props.initialLoadingCurtainOwnedByParent?.() ? 'true' : 'false'
@@ -128,6 +130,8 @@ import { TerminalSessionCatalogProvider } from '../services/terminalSessionCatal
 import type { TerminalPanelSessionOperations } from './TerminalPanel';
 import { TerminalPanel } from './TerminalPanel';
 import type { FlowerPageContextRegistrar } from '../flower/flowerPageContext';
+import { flowerPageContextSnapshot } from '../flower/flowerPageContext';
+import type { SemanticTerminalViewportHandle } from './semanticTerminalViewport';
 
 let disposeRendered: (() => void) | null = null;
 
@@ -215,6 +219,7 @@ describe('TerminalPanel loading continuity', () => {
     layoutState.active = () => true;
     rpcState.sessions = [];
     runtimeState.propsBySession.clear();
+    flowerLauncher.mockClear();
     sessionStorage.clear();
   });
 
@@ -223,6 +228,65 @@ describe('TerminalPanel loading continuity', () => {
     disposeRendered = null;
     document.body.innerHTML = '';
     vi.restoreAllMocks();
+  });
+
+  it('captures the active displayed screen for page references and right-click Ask Flower without reading scrollback', async () => {
+    let readPage = (): Readonly<Record<string, unknown>> | undefined => undefined;
+    const host = renderCreateFlow(vi.fn(async () => createdSession()), read => { readPage = read; });
+    await vi.waitFor(() => expect(runtimeState.propsBySession.has('created-session')).toBe(true));
+    const runtime = runtimeState.propsBySession.get('created-session');
+    let screen = '$ run tests\nvisible failure 🪷';
+    let selection = 'selected fragment';
+    const readBufferLine = vi.fn(() => 'offscreen live output');
+    const viewport: SemanticTerminalViewportHandle = {
+      activate: vi.fn(async () => undefined), focus: vi.fn(), forceResize: vi.fn(), setAppearance: vi.fn(),
+      getDimensions: () => ({ rows: 24, cols: 80 }),
+      getTerminalInfo: () => ({ rows: 24, cols: 80, bufferLength: 1000 }),
+      readBufferLine, getVisibleScreenText: () => screen,
+      getSelectionText: () => selection, hasSelection: () => Boolean(selection),
+      copySelection: vi.fn(async () => ({ copied: false, reason: 'empty_selection', source: 'command' } as const)),
+      getTouchScrollRuntime: () => ({ isAlternateScreen: () => false, getScrollbackLength: () => 976,
+        scrollLines: vi.fn(), sendAlternateScreenInput: vi.fn() }),
+      setSearchResultsCallback: vi.fn(), clearSearch: vi.fn(), findNext: vi.fn(), findPrevious: vi.fn(),
+      getPresentation: () => null,
+    };
+    runtime.registerViewport('created-session', viewport);
+    const readInactiveScreen = vi.fn(() => 'inactive session content');
+    runtime.registerViewport('inactive-session', { ...viewport, getVisibleScreenText: readInactiveScreen });
+    expect(readPage()).toEqual({
+      session: { id: 'created-session', name: 'Workspace', working_directory: '/workspace' },
+      screen_text: screen,
+    });
+    const frozen = flowerPageContextSnapshot({ environmentID: 'env-1', environmentName: 'Development',
+      pageID: 'terminal', pageName: 'Terminal', capturedAtMs: 1, state: readPage() });
+    const frozenScreen = screen;
+    screen = 'scrolled history currently visible';
+    expect(JSON.parse(frozen.content).state.screen_text).toBe(frozenScreen);
+    expect(readPage()?.screen_text).toBe(screen);
+
+    const surface = host.querySelector<HTMLElement>('[data-terminal-runtime-session]')!;
+    const ask = async () => {
+      surface.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 450, clientY: 200 }));
+      await userEvent.click(page.getByRole('menuitem', { name: 'Ask Flower', exact: true }));
+      return flowerLauncher.mock.calls.at(-1)?.[0].context_items[0];
+    };
+    // The explicit selection path stays intact; automatic page capture always uses the screen.
+    expect((await ask()).selection).toBe(selection);
+    selection = '';
+    expect((await ask()).selection).toBe(screen);
+    expect(readBufferLine).not.toHaveBeenCalled();
+    expect(readInactiveScreen).not.toHaveBeenCalled();
+    screen = `${'🪷'.repeat(10_001)}\nlatest prompt`;
+    const bounded = readPage()?.screen_text as string;
+    expect(Array.from(bounded)).toHaveLength(10_000);
+    expect(bounded.startsWith('...')).toBe(true);
+    expect(bounded.endsWith('latest prompt')).toBe(true);
+    expect((await ask()).selection).toBe(bounded);
+
+    runtime.registerViewport('created-session', null);
+    expect(readPage()).toEqual({ session: { id: 'created-session', name: 'Workspace', working_directory: '/workspace' } });
+    runtime.registerViewport('created-session', { ...viewport, getVisibleScreenText: () => { throw new Error('disposed viewport'); } });
+    expect(readPage()).toEqual({ session: { id: 'created-session', name: 'Workspace', working_directory: '/workspace' } });
   });
 
   it('keeps the Activity Flower footer host available without sessions and unregisters it on removal', async () => {

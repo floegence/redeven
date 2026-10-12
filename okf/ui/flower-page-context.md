@@ -13,7 +13,9 @@ data or replacing its native editor. Existing conversations never receive it.
 Each explicit opening without a selected thread or New action refreshes it;
 navigation and editing within that opening do not. Submission and
 same-request retry use its exact visible text; the existing draft and transport
-owners retain failed intent. Unloaded or unauthorized page facts are omitted.
+owners retain failed intent. Terminal references include the currently displayed
+screen through the same local capture path as right-click Ask Flower. Unloaded or
+unauthorized page facts are omitted.
 
 # Contract
 
@@ -35,13 +37,25 @@ IDs, rather than the last built-in surface. Every snapshot identifies the
 environment, page ID/name and capture time. It adds only current page facts:
 Monitor sort/internal-session preference, latest displayed metrics and selected
 process; committed file directory/mode/selection or Git repository/branch/commit;
-active terminal identity/name/known directory; resource view/filter and explicit
+active terminal identity/name/known directory and displayed screen; resource view/filter and explicit
 selection; or Tessiven canvas/version. Plugin Center supplies its filters and
 selected plugin identity. Plugin pages supply only host-known plugin, instance and
 surface identity. No additional request, plugin document/selection readback, file
-body, terminal output or complete resource/monitor table is captured. Unloaded
+body, full terminal history or complete resource/monitor table is captured. Unloaded
 facts are omitted. Snapshot text is bounded before entering the draft, so its
 preview and submitted text remain identical.
+
+Terminal reads only the active session's local semantic viewport, including a
+currently projected history or alternate screen. Automatic capture uses the
+whole displayed screen even when text is selected; explicit right-click Ask
+Flower continues to prefer the selection. Both screen paths share the same
+10,000-character Unicode limit and retain the end of an oversized screen. The
+automatic page reference remains within its 6,000-character budget: it trims
+the screen prefix before JSON serialization, preserving page/session identity,
+escaped text and the latest displayed lines. Empty, unavailable or disposed
+viewports omit screen text and retain known session facts. Capture never scrolls,
+attaches, fetches history or waits for output. Later output cannot change a frozen
+reference; a new explicit blank opening or New action reads the current screen.
 
 `ComposerDraftStore` owns `page_context`, its frozen label/title/text and the
 edit-time capture marker. Shell retains reader functions, never copied context.
@@ -75,6 +89,7 @@ one retained Flower product; page capture adds no lifecycle or stream.
 - `redeven:internal/flower_ui/src/icons/FlowerContextIcon.tsx` - Shared reference identity includes a dedicated page-context glyph.
 
 - `redeven:internal/envapp/ui_src/src/ui/flower/flowerPageContext.ts` - Reader functions and bounded immutable page snapshots.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.loadingContinuity.browser.test.tsx` - Active screen capture, right-click parity, selection preservation, Unicode bounds and unavailable viewports.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.pageContext.test.tsx` - Explicit opening and New refresh, first edit, removal, retained draft and attachments, existing threads, first-turn consumption and frozen same-request retry.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.pageContext.browser.test.tsx` - Native editor identity, preview dismissal and bounded chips at narrow widths.
 - `redeven:internal/envapp/ui_src/src/ui/services/sessionRestart.test.ts` - Frozen reference and removed-reference marker survive controlled restart.

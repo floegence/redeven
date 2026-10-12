@@ -445,18 +445,7 @@ function readTerminalScreenText(viewport: SemanticTerminalViewportHandle | null)
   if (!viewport) return '';
 
   try {
-    const terminalInfo = viewport.getTerminalInfo();
-    const rowCount = Math.max(0, Math.floor(Number(terminalInfo?.rows ?? 0)));
-    const bufferLength = Math.max(0, Math.floor(Number(terminalInfo?.bufferLength ?? 0)));
-    if (rowCount <= 0 || bufferLength <= 0) return '';
-
-    const lines: string[] = [];
-    const startRow = Math.max(0, bufferLength - rowCount);
-    for (let row = startRow; row < bufferLength; row += 1) {
-      lines.push(viewport.readBufferLine(row, { trimRight: true }));
-    }
-
-    const text = lines.join('\n').trim();
+    const text = viewport.getVisibleScreenText().trim();
     const characters = Array.from(text);
     if (characters.length <= MAX_INLINE_TERMINAL_CONTEXT_CHARS) return text;
     return `...${characters.slice(-(MAX_INLINE_TERMINAL_CONTEXT_CHARS - 3)).join('')}`;
@@ -2194,7 +2183,12 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   props.registerPageContext?.(() => {
     const session = activeSession();
-    return session ? { session: { id: session.id, name: session.name, working_directory: session.workingDir } } : undefined;
+    if (!session) return undefined;
+    const screenText = readTerminalScreenText(viewportRegistry.get(session.id) ?? null);
+    return {
+      session: { id: session.id, name: session.name, working_directory: session.workingDir },
+      ...(screenText ? { screen_text: screenText } : {}),
+    };
   });
 
   const [terminalChromeDeadlineRevision, setTerminalChromeDeadlineRevision] = createSignal(0);
