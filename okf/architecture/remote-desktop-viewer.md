@@ -41,6 +41,11 @@ the chosen mode only after a successor active frame is painted.
 
 Client text is available when either `text_input` or the existing clipboard
 capability is present. DRM service text does not enable clipboard synchronization.
+In local input mode, Ctrl+V and Command+V read the local text clipboard and submit
+one bounded operation through that same native text path, even when host
+clipboard synchronization is unavailable. A delayed read is discarded after an
+input-mode change or authority change; denied local clipboard access reports a
+failure without changing host synchronization.
 Its fixed unprivileged selection helper replaces the host text clipboard; the
 root attachment alone validates authority and injects the paste chord. Settings
 explain that mutation and require finishing or canceling host composition before

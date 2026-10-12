@@ -10,7 +10,7 @@ const base = config.base;
 let session = config.session, control, media, player, epoch = 0, sequence = 0;
 let generation = 0, state = 'disconnected', reason = '', painted = false, stopped = false, retry;
 let unlocking = false, lockedFrame = 0;
-let backend = '', capabilities = {}, stats, clipboardText = '', clipboardSync = false, clipboardBusy = false;
+let backend = '', capabilities = {}, stats, clipboardText = '', clipboardSync = false, clipboardRead;
 let original = false, quality = 'smooth', audio = false, volume = .7, pinned = false, hideTimer;
 let textInput = 'host';
 let awaitingMedia = [], reconnectAttempts = 0, noticeTimer, awaitingState = false;
@@ -53,16 +53,17 @@ function command(method, values = {}, takeover = false) {
 }
 function release(target) { if (target === generation && ['active', 'locked'].includes(state)) command('release_input'); }
 function clientTextAvailable() { return !!(capabilities.text_input || capabilities.clipboard); }
+function commitClientText(text, target) {
+  pointer.flush();
+  if (unlockAuthorized(target)) { notice('unlockPhysicalOnly'); return; }
+  if (!active(target)) return;
+  if (textInput !== 'paste' || !clientTextAvailable()) { notice('textInputRequired'); return; }
+  if (new TextEncoder().encode(text).length > 16000) { notice('textTooLong'); return; }
+  command('input', { input: { kind: 'paste', text } });
+}
 const input = hostApplicationInput.createRemoteInput({
   surface: canvas, label: copy('input'),
-  commitText(text, target) {
-    pointer.flush();
-    if (unlockAuthorized(target)) { notice('unlockPhysicalOnly'); return; }
-    if (!active(target)) return;
-    if (textInput !== 'paste' || !clientTextAvailable()) { notice('textInputRequired'); return; }
-    if (new TextEncoder().encode(text).length > 16000) { notice('textTooLong'); return; }
-    command('input', { input: { kind: 'paste', text } });
-  },
+  commitText: commitClientText,
   sendKey(key, target) {
     pointer.flush();
     if (unlockAuthorized(target)) {
@@ -73,7 +74,7 @@ const input = hostApplicationInput.createRemoteInput({
   release,
   clipboard(event, target) {
     if (unlocking && ((event.ctrlKey || event.metaKey) || event.shiftKey && event.code === 'Insert')) { event.preventDefault(); notice('unlockPhysicalOnly'); return true; }
-    if (!clipboardSync || !active(target) || !(event.ctrlKey || event.metaKey) || event.code !== 'KeyV') return false;
+    if (!(clipboardSync || textInput === 'paste' && clientTextAvailable()) || !active(target) || !(event.ctrlKey || event.metaKey) || event.code !== 'KeyV') return false;
     event.preventDefault(); void localClipboard(target, true); return true;
   },
 });
@@ -450,6 +451,7 @@ $('settings').onclick = () => {
   textMode.setAttribute('aria-describedby', 'text-input-hint');
   textMode.onchange = () => {
     pointer.reset(); input.bindTarget(null);
+    clipboardRead = undefined;
     textInput = textMode.value; textMode.title = copy(textInput === 'host' ? 'hostInput' : 'pasteInput');
     updateTransitionControls();
   };
@@ -473,17 +475,25 @@ function section(title, children) {
   section.append(...children); return section;
 }
 async function localClipboard(target, paste = false) {
-  if (!authorized(target) || clipboardBusy) return;
-  clipboardBusy = true;
+  if (!authorized(target) || clipboardRead) return;
   const current = epoch;
+  const clientText = paste && textInput === 'paste';
+  const read = clipboardRead = {};
   try {
     const text = await navigator.clipboard.readText();
-    if (current !== epoch || !authorized(target)) return;
-    if (paste) pasteClipboard(text);
+    if (clipboardRead !== read || current !== epoch || !authorized(target)) return;
+    if (clientText) commitClientText(text, target);
+    else if (paste) pasteClipboard(text);
     else if (text !== clipboardText) { clipboardText = text; command('set_clipboard', { text }); }
-  } catch { if (current === epoch && authorized(target)) disableClipboardSync(); } finally { clipboardBusy = false; }
+  } catch {
+    if (clipboardRead === read && current === epoch && authorized(target)) {
+      if (clientText) notice('clipboardFailed');
+      else disableClipboardSync();
+    }
+  } finally { if (clipboardRead === read) clipboardRead = undefined; }
 }
 function clearClipboard() {
+  clipboardRead = undefined;
   clipboardSync = false; clipboardText = '';
   if ($('clipboard-text')) $('clipboard-text').value = '';
   if ($('clipboard-sync')) $('clipboard-sync').checked = false;
