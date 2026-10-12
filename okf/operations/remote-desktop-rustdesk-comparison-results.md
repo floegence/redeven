@@ -8,9 +8,8 @@ timestamp: 2026-10-12T10:32:00Z
 # Summary
 
 The primary qualification task owns this comparison. Published native
-`v0.22.37` remains below the required RustDesk parity boundary. The first complete
-udesk26 pair matches every input, but Redeven has worse dynamic latency and
-eight presentation freezes; the second candidate run reproduces the regression.
+`v0.22.37` remains below the required RustDesk parity boundary. Three alternating
+udesk26 pairs reproduce worse candidate dynamic latency and frame pacing.
 Earlier Orange evidence is limited by missing responses, failed carrier recovery
 and unstable networking. Complete paired presentation, quality and resource
 evidence is mandatory; retained failures cannot become successful samples.
@@ -113,6 +112,14 @@ does not itself establish hardware decoding.
 | 1 / RustDesk | 100/100 | 101.74 / 147.97 | 100/100 | 130.67 / 448.16 | 32.77 | 0 |
 | 1 / Redeven | 100/100 | 98.09 / 143.54 | 100/100 | 178.06 / 460.40 | 32.58 | 8 |
 | 2 / Redeven | 100/100 | 128.05 / 230.85 | 100/100 | 181.55 / 715.30 | 30.89 | 23 |
+| 2 / RustDesk | 100/100 | 95.13 / 130.41 | 99/100 | 131.06 / 258.91 | 29.72 | 4 |
+| 3 / RustDesk | 100/100 | 99.44 / 124.03 | 100/100 | 126.44 / 146.86 | 33.37 | 2 |
+| 3 / Redeven | 100/100 | 97.72 / 197.81 | 100/100 | 178.86 / 646.85 | 30.62 | 15 |
+
+Round-two RustDesk source events contain all 100 measured inputs, but response
+sequence 19 is absent from sampled client pixels; matched-only percentiles retain
+that limitation. Round-three Redeven has an idle maximum of 945.30 ms and a
+motion maximum of 1223.99 ms. All six latency workloads retain their failures.
 
 Completed latency captures have exact-window input scope, no outside or mismatched
 window events, and no stream errors. First-round static retries and second-round
@@ -141,12 +148,20 @@ are comparably readable and yield identical OCR output, but dynamic quality
 remains incomplete. Neither resource nor full quality parity is accepted yet. Raw evidence lives in the task-owned
 `redeven-udesk26-rustdesk-baseline/paired-20261012` set.
 
-The control Mac automatically locks before the second RustDesk half. Native
-window actions require manual unlock; bounded samplers have already ended. The
-operator-authorized SSH password remains only in the isolated Desktop state
-pending test completion and must be removed afterward. No credential is recorded in evidence. Thirty-six copied source and host
-resource files pass SHA-256 readback after each scene ends; initially copied live
-source tails remain separately identifiable.
+All three pairs finish after the operator unlocks the control Mac. Every accepted
+static sample contains at least 40 seconds of resource observations. Seventy-two
+copied source and host resource files pass SHA-256 readback after scenes end;
+initially copied live source tails remain separately identifiable. The temporary
+SSH password remains only in the isolated Desktop state pending test completion
+and must be removed afterward; no credential is recorded in evidence.
+
+Across all three motion workloads, candidate LAN send rate is 7.76–8.27 Mbps
+versus baseline 3.81–4.16 Mbps. Candidate idle input sends 3.95–4.81 Mbps versus
+baseline approximately 0.014 Mbps. End-of-run clock-offset midpoint differs by
+30.94 ms from the initial probe and their bounds do not intersect. One constant
+offset therefore cannot establish source-age parity; input-to-client latency
+uses only the Mac clock and is unaffected. Full quality and resource acceptance,
+including incremental Viewer memory, remains open.
 
 Offline probes use the same synthetic scene pixels and the installed private
 media interpreter. x264 ultrafast/veryfast/fast P50 encoding is
@@ -155,7 +170,11 @@ need presentation evidence rather than a blind replacement. PNG compression
 levels 1/6 encode identical pixels in 30.38/42.39 ms and produce
 416236/335415 bytes. This approximately 19% byte reduction costs processing
 time and does not itself resolve interactive full-frame refinement overhead.
-No production encoder or transport behavior changes during these probes. This interim record does not complete three alternating pairs.
+An installed-stack VP9 realtime probe produces approximately 3.62 Mbps with
+14.62/18.01 ms P50/P95 encoding, versus AV1's 25–43 ms encoding in these probes.
+These synthetic measurements identify candidates, not presentation acceptance.
+No production encoder or transport behavior changes during these probes. Three
+alternating pairs are recorded; they establish a failing baseline, not parity.
 
 # Evidence
 
