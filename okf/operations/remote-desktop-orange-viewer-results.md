@@ -1,198 +1,152 @@
 ---
 type: Qualification Record
 title: Orange remote desktop Viewer follow-up
-description: Record Orange live Viewer, input failures and measured RustDesk comparison boundaries.
+description: Record published native deployment, real Viewer recovery and the measured RustDesk acceptance boundary.
 tags: [desktop, ssh, deployment, qualification]
-timestamp: 2026-10-12T06:45:00Z
+timestamp: 2026-10-12T07:17:49Z
 ---
 # Summary
 
-Env App owns permanent desktop service updates and Runtime admission. Orange's
-earlier Runtime and service admission were updated through the real product
-flow, and the controlling Mac opened a live Viewer. The v0.22.35 Runtime upgrade
-succeeds, but its service deployment stops at module extraction because that
-published module omits nested MPP assets. Published native `v0.22.36` restores
-service-kit extraction and passes real system GTK text and cancellation checks.
-Its release gate fails because Alpine retired the pinned libseccomp archive.
-Published native `v0.22.37` repairs fresh private desktop acquisition and retains
-installed r6 identities; its release qualification and real Viewer update remain pending. Earlier client
-measurements still show unmatched responses, latency tails and motion freezes. RustDesk parity requires
-three complete paired rounds at equal delivered visual quality; native capture/encoding FPS
-and source checks cannot establish that outcome.
+Env App owns permanent desktop updates and executable admission. Orange now
+runs published native `v0.22.37` through that product flow; all thirteen owning
+release qualification jobs pass. Real Viewer local paste, mixed Unicode,
+physical lock, wrong-password rejection, correct unlock and successor input
+pass. A scoped native media connection failure recovers automatically and
+accepts successor text. The operator explicitly defers Mac local Pinyin;
+host Pinyin also remains unvalidated. Earlier client measurements show latency
+tails and motion freezes. RustDesk parity remains unqualified until three
+complete paired rounds prove equal or better delivered performance.
 
 # Contract
 
-## Product Update And Identity
+## Current Product Deployment
 
-The earlier Desktop build failed with exit 71: the release-contract CLI compared
-its canonical module URL with a symlinked checkout argument, skipped execution
-and returned success without verification evidence. Commit `b7d994aff911` uses
-Node 26 entrypoint identity; all 31 linked-path and manifest tests pass. The
-[release gate](../release/redevplugin-release-gates.md) owns verification rules.
-Intermittent SSH banner failures and `write EPIPE` preserved the installed
-Runtime. A later normal **Actions → Update** and Env App service update succeeded.
+The task Desktop uses state `/tmp/redeven-orange-viewer-desktop` and a bundle
+built from Redeven `bb6683b5ce18`, consuming published native `v0.22.37` with
+`GOWORK=off`. Normal **Actions → Update** installs that Runtime on Orange at
+`/home/tang/.redeven/runtime/managed/bin/redeven`, SHA-256
+`256000b266aab552a24a1f8b4f8748d4086def2c5bb32a6add5a5d2ab6b11ce9`.
+Existing remote state `/home/tang/.redeven` is preserved; remote state isolation
+is not claimed. Only bounded task fixtures receive qualification input.
 
-That earlier Runtime was `b7d994aff911`, PID `223454`, SHA-256
-`7840330016371c66dd392a24fce3cec9781f31fb3de0f48b410c8f0b34399dd2`.
-Service PID `280685` admits that image, with deployment identity
-`eac4eceadcb23c2ac9b2ab44ed0684385985cbddc1b3f8c83abe59b9234510f4`.
-Deployment identity is distinct from native recipe identity; the
-[SSH deployment contract](../architecture/remote-desktop-ssh-deployment.md)
-owns service update and admission.
+Env App **Remote desktop → Set up → Authorize and continue** deploys identity
+`e753227f5651d1b43a1bc82601de8a47baff284d435976536d4d00e156ac2a94`
+and admits that Runtime digest. Readback hashes are
+`3c735511bce9e2f4196518a0dd5d78c72c62fe4d1ab260134b70474461335ae7`
+for the service, `1e541f185e95ac9e42c67f8c55b0fef5a6785779db1f2cf32c9447fe492dd42a`
+for the worker and `399d8c540d590d41641d57ce8f7ee0bed1cc206e2e927bf434a0891f28a6ab9f`
+for media. Physical GNOME Wayland session `2` supplies 1920 × 1080 output.
+MPP journal readback confirms H.264 at 12 Mbps and 60 FPS; configuration does
+not establish delivered client FPS. The [SSH deployment owner](../architecture/remote-desktop-ssh-deployment.md)
+defines update and admission; deployment identity differs from recipe identity.
 
-The latest normal Desktop update installs Runtime `f5428b6eb834`, built
-`2026-10-12T03:39:16Z`, SHA-256
-`869ed2fe36d60a5b4aac13bf68ed917d680f5a1d8a84a665aeaaa79d5f9fc7de`,
-PID `381199`. Earlier Desktop PID `53392` used the matching published-dependency bundle.
-Env App service setup then fails before privilege or installation:
-`desktop-service-kit` fails in both the bundle and its focused CLI test because
-Go module packaging omits nested MPP headers. The old service remains unchanged
-and cannot admit the new Runtime. No production files are replaced manually.
-Physical Wayland session `2` remains active and unlocked.
+## Release And Regression Evidence
 
-The task profile is `/tmp/redeven-orange-viewer-desktop`; local Runtime PID
-`24771` uses `127.0.0.1:24438`. Remote state is existing `/home/tang/.redeven`,
-so remote state isolation was not achieved. Only bounded task fixtures receive
-qualification input.
+Redeven `b7d994aff911` fixes Node 26 linked-entrypoint identity after Desktop
+exit 71 exposed skipped release verification; all 31 affected checks pass.
+The [release gate](../release/redevplugin-release-gates.md) owns that boundary.
+SSH banner failures and `write EPIPE` preserve the installed Runtime.
 
-## RustDesk Comparison Preparation
+Native `b4c7e715711c`, immutable `v0.22.35`, passes checkout qualification.
+Physical shared capture/MPP measures 53.83 FPS and upload/encoding P50/P95
+5.31/5.83 ms. Redeven setup nevertheless fails before installation because the
+Go module omits nested MPP assets; the old service remains usable.
 
-The operator requires latency and performance at least equal to RustDesk.
-The official stable baseline is RustDesk `1.5.0`, source
-`fada664df7a294d1d1a9ca3e7cd3637069122f17`. Downloaded ARM64 Linux and macOS
-artifacts match their official release SHA-256 digests. The Linux AppImage is
-also verified and prepared for a scoped test setup. The operator authorizes a temporary direct-LAN RustDesk session and bounded
-native observation of the two test windows. The temporary clients run without
-public-broker registration or a permanent service installation.
+Native `064b068c8fa5`, immutable `v0.22.36`, moves that closure outside `vendor`
+and passes public-module service-kit extraction. Its paste modifier fix fails
+three real system GTK 3.24.33/IBus 1.5.26 rounds before the change and passes
+three afterward: Unicode, emoji, readonly-target release and cancellation with
+successor input. Prepared GTK/simple IM fixtures had hidden the problem.
+These checks do not establish genuine IME composition. The release gate fails
+because `libseccomp-2.6.0-r1.apk` is retired on both architectures; no GitHub
+Release is created or immutable tag rewritten.
 
-The comparison must keep the physical output, original pixel dimensions,
-refresh rate, client viewport and delivered visual quality equal. Use one
-measured Viewer at a time and alternate product order in three paired rounds.
-Record route, codec, hardware use, network conditions and all failed or
-unmatched samples. Idle response, active scrolling and static desktop work
-must be represented; lowering quality does not satisfy performance acceptance.
+Authorized `10f2deb5fb6157aa21199e4d972c9d3d1ed10858`, immutable `v0.22.37`,
+pins publisher-signed libseccomp 2.6.1-r0 and preserves installed r6 identities.
+All 198 AMD64 and 199 ARM64 archives pass hash/size and publisher-signature
+checks. A disposable native ARM64 Alpine fixture passes production installation,
+pixels, Unicode, reconnection and activation as existing unprivileged `nobody`.
+Numeric-UID bus and AMD64 emulation failures remain recorded.
 
-Primary latency is test input observed on the Mac to its matching scene
-sequence visible in client-window pixels, using one client monotonic clock.
-Compare P50/P95, unique presented FPS, frame gaps and freezes, and complete host
-and client process-tree resource use. Source timecode age requires separate
-clock-offset uncertainty. Numeric client/native command-ID equality, CUA call
-duration and private native packet arrival are insufficient substitutes.
-Client-window observation excludes physical photons.
+All thirteen owning qualification jobs pass, including both native architectures,
+private desktop, media, security and provenance. Release publication at
+`2026-10-12T05:45:51Z` binds the reviewed main tip to that tag; public proxy and
+checksum evidence bind module sum `h1:V88v8+sHgrMkyMzlVTNnL9VhCvXanupA2EpXoRiRWGo=`.
+Redeven's dependency, service-kit and affected Viewer checks pass with `GOWORK=off`.
+Subsequent upstream security commit `4b38b897c10b` is unreleased and is outside
+this deployed candidate; later main changes do not alter the immutable tag.
 
-Orange remains active and unlocked on Ubuntu 22.04.5, Orange Pi 5 Max, with the
-performance CPU governor. A new twelve-packet network probe loses one packet;
-received RTT ranges from 6.971 to 128.716 ms. These observations require repeated
-paired comparison, not attribution of network variation to either product.
-The controlling Mac is unlocked, and both real client windows were exercised.
+## Real Viewer Acceptance
 
-## Current Measurement And Input Failures
+Explicit local paste previously depended on host clipboard synchronization,
+which DRM does not advertise. The product adapter now uses existing bounded
+client text, fences delayed reads after mode/authority changes and reports denied
+clipboard access. Browser/Electron checks cover Unicode, limits and mode fencing.
 
-The first candidate idle run matches 95 of 100 responses, with P50/P95
-168.65/1039.40 ms. Its motion run matches 96 of 100, with P50/P95
-155.98/255.37 ms, 25.80 unique presented FPS and 11 freezes above 250 ms.
-RustDesk's initial idle run matches all 100 at 204.19/305.98 ms; its repeated
-motion run matches all 100 at 120.23/139.27 ms, 40.00 presented FPS and no
-freezes above 250 ms. These are preliminary rounds: the repeated RustDesk
-motion run lacks a complete simultaneous resource trace, and a Wi-Fi probe
-alone cannot assign product latency tails to network conditions.
+The updated real Viewer in **Use local input method** passes full-buffer GTK
+assertions for `abC中文😀$` and `Orange 验证：中文 日本語 한국어 😀` through paste.
+Synthetic `typeText` does not deliver the same mixed string. Automation does not
+trigger genuine Mac Pinyin even in System Settings; the operator defers its
+manual test. The host Pinyin fixture expires without a result. Both IME outcomes
+remain unvalidated; paste is not composition evidence.
 
-Performance commit `b4c7e715711c188e2395dea25914e3a2e3bc2092` is published as
-immutable native module tag `v0.22.35`. Release qualification passes after a
-targeted rerun of the ARM64 original-media download failure.
-Its physical shared capture/MPP path measures 53.83 FPS, and 1080p shared upload
-plus encoding measures P50/P95 5.31/5.83 ms. Redeven `f5428b6eb834` consumes
-published `v0.22.35`; neither native throughput nor isolated installation
-qualifies the real client.
+Physical GNOME lock sets `LockedHint=yes`. Viewer disables ordinary input,
+clipboard and shortcuts and offers **Start unlocking**. One physical wrong
+password submission reports failure and retains the lock. Authorized correct
+input is interrupted by transport failure; Runtime records local-agent stream
+`operation_failed`, and a separate SSH probe has a banner timeout. A new Viewer
+opened through Env App while locked then accepts the authorized physical
+credential. `LockedHint=no` and ordinary controls return; local paste plus Enter
+passes successor `A`. Interrupted attempts remain failures.
 
-The earlier real Viewer in Use local input method submits the test string
-`Orange 验证：中文 日本語 한국어 😀`; the task GTK document instead contains
-`Ovangv ：   ` followed by newline. A later single `A` becomes `v`.
-The test target logs Ctrl+V key events whose V-down modifier state sometimes
-lacks Control. Independent native tests reproduce failure against Orange's
-system GTK 3.24.33/IBus 1.5.26 target. The prepared GTK target and the system
-fixture with only its own simple IM context each pass three runs. No host input
-method preference is changed; this evidence does not qualify genuine IME.
+A bounded fault verifies the sole active task native media worker by parent,
+command and start time, then signals that exact process through pidfd. Viewer
+automatically restores capture/control; a fresh GTK successor passes local paste
+plus Enter. The root service and unrelated processes stay running. This proves
+native media socket recovery, not recovery for every transport failure. All
+sampling and fixtures stop before credential entry. Credentials never enter
+evidence, command arguments, environment or diagnostics.
 
-Native commit `064b068c8fa596186538c4df5432d133125afda9`, published as immutable
-module tag `v0.22.36`, moves the
-pinned API closure outside `vendor`, preserves header/license bytes and deployed
-names, and checks every embedded desktop asset against Go module archive rules.
-An actual module archive round trip passes service-kit extraction; source binary
-permission checks belong to the checkout because Go archives remove executable
-bits. Both architecture artifacts/provenance and the source gate pass.
+## RustDesk Measurement Boundary
 
-The same native commit holds Control until selection completion/error and revokes
-input before waiting for the clipboard child. Transfer identity fences retired
-completion from successor input. The unchanged system-default GTK target fails
-three rounds before the fix and passes three complete rounds afterward, including
-Unicode, emoji, readonly-target modifier release and cancellation followed by
-acknowledged successor input. This uses the actual user HOME and session bus; it
-does not change host input-method preferences or establish genuine IME behavior.
-The operator authorizes only this upstream commit and version for publication.
-The public Go proxy and checksum database bind `v0.22.36` to that commit with
-module sum `h1:RjJuUSImyjeUy2R+LHKSYrxqa9ic+sSucfL9mMNJEQ8=`. Both the
-public module's focused packing/service-kit checks and Redeven's service-kit CLI
-test pass with `GOWORK=off`. Redeven consumes this published version; activation
-on Orange waits for the owning release gate. The native fix still runs only in
-the task-owned qualification service. Main source checks pass. The first release
-attempt has AMD64 media/private download failures and an ARM64 native GTK4
-4.0/glibc 2.31 editing timeout after 41 successful commits. Their original traces
-remain available. A failed-job rerun passes the AMD64 media and complete ARM64
-native lanes, including GTK4 and system Xpra. Three private AMD64 attempts fail
-acquiring the retired `libseccomp-2.6.0-r1.apk`; the final release gate fails.
-Actual GET requests return 404 at all five reviewed sources on both
-architectures. No immutable tag is rewritten or GitHub Release created.
+The official baseline is RustDesk `1.5.0`, source
+`fada664df7a294d1d1a9ca3e7cd3637069122f17`. ARM64 Linux/macOS artifacts match
+official digests. The operator authorizes a temporary direct-LAN session and
+bounded native observation of only two test windows, without permanent service
+installation or public broker registration.
 
-Native commit `10f2deb5fb6157aa21199e4d972c9d3d1ed10858`, published as module
-tag `v0.22.37`, replaces only that retired private-desktop dependency with
-publisher-signed `libseccomp-2.6.1-r0.apk`, preserves exact installed r6
-identities and recalculates the complete archive budgets. All 198 AMD64 and 199
-ARM64 original archives pass hash and size checks; both updated APKs and signed
-architecture indexes pass publisher verification. The source gate, race tests,
-provenance checks and Go vulnerability scan pass. A disposable native ARM64
-Alpine fixture passes production installation, decoded pixels, Unicode input,
-reconnection and activation as its existing unprivileged `nobody` account.
-A numeric UID without an account fails private-bus authentication; AMD64
-emulation fails resource preparation and is not native qualification evidence.
-These failed local attempts are retained. Neither failure weakens activation
-checks or changes host accounts.
+Three paired alternating rounds must use equal physical output, resolution,
+refresh rate, viewport and delivered detail quality, with one measured Viewer
+at a time. Idle, motion and static workloads compare P50/P95 latency, unique
+presented FPS, gaps/freezes and complete CPU/memory/bandwidth including SSH
+wrappers. Retain codec/hardware/route/network conditions and every unmatched or
+failed sample. Lowering quality cannot satisfy acceptance.
 
-The operator separately authorizes only this upstream commit/version for
-publication. Main equals origin/main and source CI passes. The public proxy and
-checksum database bind `v0.22.37` to this commit with module sum
-`h1:V88v8+sHgrMkyMzlVTNnL9VhCvXanupA2EpXoRiRWGo=`.
-Redeven consumes the published artifact with `GOWORK=off`; native AMD64 and
-complete release qualification remain pending. Production activation waits
-for that release gate.
+One Mac monotonic clock relates passive test input to its matching sequence in
+client-window pixels. Native command-ID equality, packet arrival and CUA duration
+are insufficient substitutes. Observation excludes physical photons; source age
+requires clock-offset uncertainty and each viewport needs fresh marker calibration.
 
-A separate Viewer regression couples local Ctrl+V/Command+V to host clipboard
-synchronization, which DRM does not advertise. The product fix routes explicit
-local paste through the existing bounded client text command, discards delayed
-reads after mode/authority changes, and reports denied clipboard access without
-mutating host synchronization. Browser and Electron qualification pass, including
-Unicode, byte limits and mode-change fencing. A real updated Viewer readback
-remains required.
+Earlier candidate idle matches 95/100 at 168.65/1039.40 ms P50/P95. Motion matches
+96/100 at 155.98/255.37 ms, 25.80 presented FPS and eleven freezes above 250 ms.
+RustDesk idle matches 100/100 at 204.19/305.98 ms; repeated motion matches 100/100
+at 120.23/139.27 ms, 40.00 FPS and zero freezes. These preliminary runs predate
+the current candidate; repeated RustDesk motion lacks complete resource evidence.
+No three-round current comparison has completed.
 
-# Boundaries
-
-Real Viewer lock, wrong/correct password, successor input and bounded
-control-socket recovery remain required for this follow-up. Stop all observation
-before credential entry; credentials never enter evidence, command arguments,
-environment or diagnostics. The
-[native AFBC record](remote-desktop-orange-afbc-results.md) owns the separate
-native capture and physical lock/input qualification.
-RustDesk parity remains unqualified until both products complete the same
-measured workloads and any proven candidate bottlenecks are resolved.
+After removing a task-owned CPU-heavy diagnostic, network instability persists.
+A later ten-packet probe receives nine, with RTT min/mean/max
+10.580/568.597/2190.747 ms. Low host load and Wi-Fi observations cannot assign
+product latency tails to the network. Current calibration is interrupted when
+the controlling Mac locks; real UI sampling requires manual Mac unlock.
 
 # Evidence
 
-- `scripts/redevplugin_release_contract.mjs` and its tests: linked CLI execution, evidence generation and strict manifest rejection.
-- `desktop/src/main/runtimePackageCache.ts`: source package construction and verified package reuse.
-- `desktop/src/main/sshRuntime.ts`: staged update, process identity and activation ownership.
-- `desktop/src/main/remoteDesktopDeployment.ts`: Env App-authorized native service update and executable admission.
-- [RustDesk 1.5.0 official release](https://github.com/rustdesk/rustdesk/releases/tag/1.5.0): baseline source identity, original artifacts and SHA-256 digests.
-- [Native v0.22.35 source checks](https://github.com/floegence/floe-native-apps/actions/runs/38197885554): exact published performance commit passes Linux, macOS and Windows source checks.
-- [Native v0.22.35 release qualification](https://github.com/floegence/floe-native-apps/actions/runs/38198120459): owning installed-stack lane; all jobs pass in attempt 2 after a targeted ARM64 original-media download rerun. This lane used the checkout and did not establish module archive completeness.
-- `internal/codeapp/appserver/remote_desktop_viewer/viewer.js` and `internal/envapp/ui_src/scripts/checkRemoteDesktopViewer.mjs`: explicit local paste, bounded text and delayed-read fencing.
-- Native `hostdesktop/login_text_qualification_linux_test.go`: target-document qualification; packaged GTK success does not establish the system GTK/IBus boundary.
+- `scripts/redevplugin_release_contract.mjs` and tests: linked CLI execution and release verification.
+- `desktop/src/main/sshRuntime.ts` and `remoteDesktopDeployment.ts`: normal update and Env App admission.
+- `internal/codeapp/appserver/remote_desktop_viewer/viewer.js` and `internal/envapp/ui_src/scripts/checkRemoteDesktopViewer.mjs`: lock authority, recovery and bounded paste.
+- Native `hostdesktop/login_text_qualification_linux_test.go`: actual GTK/IBus document and cancellation checks.
+- [RustDesk official release](https://github.com/rustdesk/rustdesk/releases/tag/1.5.0): baseline source and artifact digests.
+- [Native v0.22.35 source checks](https://github.com/floegence/floe-native-apps/actions/runs/38197885554) and [qualification](https://github.com/floegence/floe-native-apps/actions/runs/38198120459): earlier capture and checkout qualification boundary.
+- [Native v0.22.37 source checks](https://github.com/floegence/floe-native-apps/actions/runs/38207557472), [qualification](https://github.com/floegence/floe-native-apps/actions/runs/38207784817) and [release](https://github.com/floegence/floe-native-apps/releases/tag/v0.22.37): current published dependency and thirteen successful owning jobs.
+- [Native AFBC record](remote-desktop-orange-afbc-results.md): separate native physical capture and lock/input qualification.
