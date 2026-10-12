@@ -57,6 +57,7 @@ export type TessivenViewOptions = {
   canExpand: boolean;
   canCollapse: boolean;
   serviceScope: NodeServiceScope;
+  relationshipBrowserOpen: boolean;
 };
 export type TessivenViewportControl = {
   zoom: (factor: number, x: number, y: number, dx?: number, dy?: number) => void;
@@ -85,6 +86,7 @@ export function TessivenGraph(props: {
   tools?: 'all' | 'hidden';
   onViewOptions?: (options: TessivenViewOptions) => void;
   onZoomChange?: (scale: number) => void;
+  floatingBoundary?: HTMLElement;
 }) {
   const [expanded, setExpanded] = createSignal(
     new Set(
@@ -170,6 +172,7 @@ export function TessivenGraph(props: {
       canExpand: groups.some(group => !expanded().has(group.id)),
       canCollapse: groups.some(group => expanded().has(group.id)),
       serviceScope: serviceScope(),
+      relationshipBrowserOpen: !!popup()?.summary,
     });
   });
   onCleanup(() => {
@@ -1119,6 +1122,7 @@ export function TessivenGraph(props: {
         {(value) => (
           <TessivenObjectPopup
             event={value.event}
+            boundary={props.floatingBoundary}
             onClose={close}
             onRetainConnections={retainConnections}
             onLeaveConnections={leaveConnections}
@@ -1184,6 +1188,7 @@ export function TessivenGraph(props: {
 
 function TessivenObjectPopup(props: {
   event: GraphObjectEvent;
+  boundary?: HTMLElement;
   onClose: (restore?: boolean) => void;
   t: TessivenText;
   menu: boolean;
@@ -1200,6 +1205,7 @@ function TessivenObjectPopup(props: {
     const measure = () => { if (panel) setSize({ width: panel.offsetWidth, height: panel.offsetHeight }); };
     const observer = new ResizeObserver(measure);
     if (panel) observer.observe(panel);
+    if (props.boundary) observer.observe(props.boundary);
     measure();
     panel?.querySelector<HTMLElement>('button')?.focus({ preventScroll: true });
     const focus = (event: FocusEvent) => {
@@ -1236,6 +1242,7 @@ function TessivenObjectPopup(props: {
   return (
     <SurfaceFloatingLayer
       owner={props.event.owner}
+      boundary={props.boundary}
       position={props.event.position}
       estimatedSize={size()}
       class="tessiven-popup-layer"

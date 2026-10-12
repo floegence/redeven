@@ -1,4 +1,4 @@
-/* global document, window, getComputedStyle, KeyboardEvent, MouseEvent */
+/* global document, window, getComputedStyle, KeyboardEvent, MouseEvent, requestAnimationFrame, innerHeight */
 // Run in actual WKWebView, preserving the native exact-selection bridge.
 export default async function qualifyConnections() {
   const ids = () => [...document.querySelectorAll('.floe-graph__edge')]
@@ -28,6 +28,13 @@ export default async function qualifyConnections() {
   document.querySelector('[data-graph-object="@overview/a/b"] .floe-graph__edge-target')
     .dispatchEvent(new MouseEvent('click', { bubbles: true }));
   await until(() => document.querySelectorAll('[data-summary-key]').length === 1);
+  document.documentElement.style.setProperty('--native-bottom-inset', '96px');
+  await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  await until(() => {
+    const popup = document.querySelector('.tessiven-popup').getBoundingClientRect();
+    return popup.bottom <= innerHeight - 96 && popup.top >= 11;
+  });
+  document.documentElement.style.setProperty('--native-bottom-inset', '0px');
   document.querySelector('[data-summary-key]').click();
   await until(() => document.querySelectorAll('[data-exact-relation-id]').length === 2);
   document.querySelector('[data-exact-relation-id="a2-b2"]').click();
@@ -38,7 +45,7 @@ export default async function qualifyConnections() {
     window.serviceCanvas.command({ canvas_id: 'qualification', version_id: 1, action: 'expand' });
     await until(() => document.querySelectorAll('.tessiven-node').length === 5 && equal(overview));
   }
-  window.serviceCanvas.command({ canvas_id: 'qualification', version_id: 1, action: 'fit' });
+  document.querySelector('.native-canvas-tools button[aria-label="Fit canvas"]').click();
   document.querySelector('[data-graph-object="@overview/a/b"] .floe-graph__edge-target')
     .dispatchEvent(new MouseEvent('click', { bubbles: true }));
   await until(() => document.querySelector('[data-summary-key]'));
