@@ -12,6 +12,7 @@ import type { DesktopCertificateReport, DesktopCertificateRequest } from '../sha
 import type { SecurityRequest, SecurityResult } from '../shared/runtimeSecurity';
 import type { DesktopSettingsDraft } from '../shared/settingsIPC';
 import { IDLE_LAUNCHER_BUSY_STATE } from './launcherBusyState';
+import type { EnvironmentCardTone } from './viewModel';
 
 const disposers: Array<() => void> = [];
 const settle = () => new Promise((resolve) => setTimeout(resolve, 40));
@@ -41,6 +42,7 @@ async function mount(options: { focusAccess?: 'access' | 'certificate'; url?: st
   const [liveSnapshot, setSnapshot] = createSignal(snapshot);
   const [isOpen, setOpen] = createSignal(true);
   const [runtimeStatus, setRuntimeStatus] = createSignal(url ? 'Running' : 'Not running');
+  const [runtimeStatusTone, setRuntimeStatusTone] = createSignal<EnvironmentCardTone>(url ? 'success' : 'neutral');
   const [settingsError, setSettingsError] = createSignal('');
   const copy = vi.fn(async () => {});
   const save = vi.fn(async () => {});
@@ -56,12 +58,12 @@ async function mount(options: { focusAccess?: 'access' | 'certificate'; url?: st
       applyAccessMode={(mode) => setDraft((current) => applyDesktopAccessModeToDraft(current, mode))}
       applyAccessFixedPort={(port) => setDraft((current) => applyDesktopAccessFixedPortToDraft(current, port))}
       toggleAutoPort={() => {}} saveSettings={save} runtimeRestartAvailable={Boolean(url)} runtimeRunning={Boolean(url)}
-      runtimeStatusLabel={runtimeStatus()} runtimeStatusTone="neutral" dark={false}
+      runtimeStatusLabel={runtimeStatus()} runtimeStatusTone={runtimeStatusTone()} dark={false}
       desktopOpenLabel="Open Env App" openInDesktop={() => {}} openInBrowser={open} copyEnvironmentValue={copy}
       resetAccess={() => setDraft(baseline)} cancelSettings={() => setOpen(false)} clearStoredLocalUIPassword={() => setDraft(current => ({...current, local_ui_password: '', local_ui_password_mode: 'clear'}))} certificate={certificate} security={options.security} />)} />
   ), host));
   await settle();
-  return { snapshot, draft, setDraft, copy, save, open, certificate, setSnapshot, setOpen, setRuntimeStatus, setSettingsError };
+  return { snapshot, draft, setDraft, copy, save, open, certificate, setSnapshot, setOpen, setRuntimeStatus, setRuntimeStatusTone, setSettingsError };
 }
 
 afterEach(() => {
@@ -81,6 +83,21 @@ const ready = { status: 'ready', code: '', identity: 'ready', trust: 'untrusted'
 const disabledSecurity: SecurityResult = { https_ready: true, enabled: false, password_configured: true, recovery_pending: false, recovery_codes_remaining: 0, revision: 1 };
 
 describe('Environment access workflows', () => {
+  it('updates the accessible runtime status text and semantic tone without rebuilding the settings form', async () => {
+    const test = await mount({ url: 'http://localhost:23998/' });
+    const status = document.querySelector('[role="status"].environment-access-status')!;
+    expect(status.textContent).toContain('Running');
+    expect(status.getAttribute('data-status-tone')).toBe('success');
+    for (const [label, tone] of [['Check failed', 'warning'], ['Not running', 'neutral']] as const) {
+      test.setRuntimeStatus(label);
+      test.setRuntimeStatusTone(tone);
+      await settle();
+      expect(document.querySelector('.environment-access-status')).toBe(status);
+      expect(status.textContent).toContain(label);
+      expect(status.getAttribute('data-status-tone')).toBe(tone);
+    }
+  });
+
   it('keeps review, close and discard in the footer action group while pending feedback stays text-only', async () => {
     const test = await mount();
     test.setDraft(draft => ({ ...draft, local_ui_bind: 'localhost:25000' })); await settle();

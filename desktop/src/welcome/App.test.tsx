@@ -2424,8 +2424,9 @@ describe('DesktopWelcomeShell', () => {
 
     expect(appSrc).toContain('const runtime = buildEnvironmentSettingsRuntimeModel(environment);');
     expect(appSrc).toContain('statusLabel: localizedEnvironmentStatusLabel(i18n(), runtime.status_label)');
-    expect(dialogSrc).toContain('<RuntimeStatusOrb running={props.runtimeRunning} dark={props.dark} />');
     expect(dialogSrc).toContain('{props.runtimeStatusLabel}');
+    expect(appSrc).toContain('statusTone: runtime.status_tone');
+    expect(appSrc).toContain('runtimeStatusTone={settingsRuntimePresentation().statusTone}');
     expect(dialogSrc).not.toContain("accessModel().current_runtime_url !== ''");
   });
 
