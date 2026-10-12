@@ -54,6 +54,29 @@ export default async function qualifyConnections(page, { report, output, setThem
   assert((await page.locator('.tessiven-relation-exact').innerText()).includes('instance-a2'));
   await page.getByRole('button', { name: 'Close', exact: true }).click();
   report.scenarios.push('overview-classification-and-original-details');
+  const touch = await page.context().newCDPSession(page);
+  try {
+    await touch.send('Emulation.setTouchEmulationEnabled', { enabled: true });
+    const box = await page.getByRole('group', { name: 'a1', exact: true }).boundingBox();
+    await touch.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: box.x + 80, y: box.y + 20 }] });
+    await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await wait(focused); await page.locator('.tessiven-popup').waitFor();
+    const canvas = await page.locator('.tessiven-canvas').boundingBox();
+    await touch.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: canvas.x + 20, y: canvas.y + 60 }] });
+    await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await wait(overview);
+    assert.equal(await page.locator('.tessiven-popup').count(), 0);
+  } finally {
+    await touch.send('Emulation.setTouchEmulationEnabled', { enabled: false }); await touch.detach();
+  }
+  report.scenarios.push('real-touch-object-and-blank-reset');
+  await page.getByRole('group', { name: 'a1', exact: true }).hover({ position: { x: 80, y: 20 } }); await wait(focused);
+  const node = await page.getByRole('group', { name: 'a1', exact: true }).boundingBox();
+  await page.mouse.down(); await page.mouse.move(node.x + 120, node.y + 60, { steps: 6 });
+  await wait(overview); await page.mouse.up();
+  assert.notEqual((await geometry()).viewport, before.viewport, 'Dragging a node pans and restores overview');
+  await page.getByRole('button', { name: 'Fit canvas', exact: true }).click();
+  report.scenarios.push('node-drag-resets-focused-connectors');
   for (let i = 0; i < 3; i++) {
     for (const name of ['Collapse all', 'Expand all']) {
       await page.getByRole('button', { name: 'View', exact: true }).click();

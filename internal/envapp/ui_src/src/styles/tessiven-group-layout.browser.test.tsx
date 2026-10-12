@@ -36,7 +36,11 @@ it('keeps a DOWN architecture with a row-packed peer pool across compact reflows
   dispose = render(() => <TessivenGraph version={toRenderVersion(version)} historical={false} t={tessivenText('en-US')}
     onAsk={() => {}} onInspect={() => {}} onViewportControl={value => { control = value; }}
     onRenderState={value => { state = value; }} />, host);
-  const ready = async () => { await expect.poll(() => state, { timeout: 20000 }).toBe('rendered'); };
+  const ready = async () => {
+    await expect.poll(() => state, { timeout: 20000 }).toBe('rendered');
+    await page.getByRole('button', { name: 'Fit canvas', exact: true }).hover();
+    await expect.poll(() => host.querySelectorAll('.floe-graph__edge').length).toBe(0);
+  };
   const aligned = () => {
     const boxes = [0,1,2].map(i => host.querySelector<HTMLElement>(`[data-node-id="host-${i}"]`)!.getBoundingClientRect());
     expect(boxes[0].width).toBeGreaterThan(0);

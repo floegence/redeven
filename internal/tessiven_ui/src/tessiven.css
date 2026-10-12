@@ -1857,3 +1857,18 @@
 
 .tessiven-generic-object > p { margin: 0 16px 8px; font-size: 11px; line-height: 18px; color: var(--muted-foreground); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .tessiven-object-facts dt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* A focused scope contains only relevant paths and should be easy to follow. */
+.tessiven-canvas[data-connection-focus] .floe-graph__edge {
+  stroke: var(--graph-edge-active, var(--foreground));
+  stroke-width: 1.8px;
+  opacity: .9;
+}
+.tessiven-canvas[data-connection-focus] .floe-graph__edge-label {
+  fill: var(--graph-edge-active, var(--foreground));
+  opacity: .9;
+}
+@media (forced-colors: active) {
+  .tessiven-canvas[data-connection-focus] .floe-graph__edge { stroke: Highlight; }
+  .tessiven-canvas[data-connection-focus] .floe-graph__edge-label { fill: Highlight; }
+}
