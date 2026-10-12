@@ -2,12 +2,14 @@ import type { Component } from 'solid-js';
 import { Show, createMemo } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { FloatingWindow } from '@floegence/floe-webapp-core/ui';
-import type { FlowerChatContextSnapshotAction, FlowerChatContextSnapshotPreview } from '../contracts/flowerChatContextTypes';
 
-type FlowerChatContextPreviewProps = Readonly<{
-  preview: FlowerChatContextSnapshotPreview | null;
-  open: boolean;
-	truncatedLabel: string;
+export type FlowerContextSnapshotPreviewProps = Readonly<{
+  title: string;
+  subtitle: string;
+  body: string;
+  sourcePath?: string;
+  truncated?: boolean;
+  truncatedLabel: string;
   zIndex?: number;
   onClose: () => void;
 }>;
@@ -32,70 +34,30 @@ function resolveSizing(viewport: { width: number; height: number }) {
   return { compact, margin, defaultSize: { width: defaultWidth, height: defaultHeight }, minSize: { width: minWidth, height: minHeight } };
 }
 
-const TextPreviewPanel: Component<{ action: Extract<FlowerChatContextSnapshotAction, { type: 'open_text_preview' }>; truncatedLabel: string }> = (props) => {
-  return (
-    <div class="flower-chat-context-preview-body">
-      <div class="flower-chat-context-preview-title">{props.action.title}</div>
-      <Show when={props.action.subtitle}>
-        <div class="flower-chat-context-preview-subtitle">{props.action.subtitle}</div>
-      </Show>
-      <pre class="flower-chat-context-preview-content">{props.action.body}</pre>
-      <Show when={props.action.truncated}>
-		<span class="flower-chat-context-preview-truncated" role="note">{props.truncatedLabel}</span>
-      </Show>
-    </div>
-  );
-};
-
-const ProcessPreviewPanel: Component<{ action: Extract<FlowerChatContextSnapshotAction, { type: 'open_process_preview' }>; truncatedLabel: string }> = (props) => {
-  return (
-    <div class="flower-chat-context-preview-body">
-      <div class="flower-chat-context-preview-title">{props.action.title}</div>
-      <Show when={props.action.subtitle}>
-        <div class="flower-chat-context-preview-subtitle">{props.action.subtitle}</div>
-      </Show>
-      <pre class="flower-chat-context-preview-content">{props.action.body}</pre>
-      <Show when={props.action.truncated}>
-		<span class="flower-chat-context-preview-truncated" role="note">{props.truncatedLabel}</span>
-      </Show>
-    </div>
-  );
-};
-
-const PreviewPanel: Component<{ action: FlowerChatContextSnapshotAction; truncatedLabel: string }> = (props) => {
-  switch (props.action.type) {
-    case 'open_text_preview':
-		return <TextPreviewPanel action={props.action} truncatedLabel={props.truncatedLabel} />;
-    case 'open_process_preview':
-		return <ProcessPreviewPanel action={props.action} truncatedLabel={props.truncatedLabel} />;
-  }
-};
-
-export const FlowerChatContextPreview: Component<FlowerChatContextPreviewProps> = (props) => {
+/** Default snapshot host for consumers without a product preview window. */
+export const FlowerChatContextPreview: Component<FlowerContextSnapshotPreviewProps> = (props) => {
   const viewport = createMemo(() => currentViewportSize());
   const sizing = createMemo(() => resolveSizing(viewport()));
-
-  const preview = () => props.preview;
-
   return (
-    <Show when={props.open && preview() != null}>
-      <FloatingWindow
-        open
-        onOpenChange={(next) => {
-          if (!next) props.onClose();
-        }}
-        title={preview()!.title}
-        class={cn('flower-chat-context-preview-window', 'shadow-[0_28px_72px_-42px_var(--redeven-shadow-color)]')}
-        defaultSize={sizing().defaultSize}
-        minSize={sizing().minSize}
-        resizable
-        draggable
-        zIndex={props.zIndex ?? 162}
-      >
-        <div class="flower-chat-context-preview-surface">
-			<PreviewPanel action={preview()!.action} truncatedLabel={props.truncatedLabel} />
+    <FloatingWindow
+      open
+      onOpenChange={next => { if (!next) props.onClose(); }}
+      title={props.title}
+      class={cn('flower-chat-context-preview-window', 'shadow-[0_28px_72px_-42px_var(--redeven-shadow-color)]')}
+      defaultSize={sizing().defaultSize}
+      minSize={sizing().minSize}
+      resizable
+      draggable
+      zIndex={props.zIndex ?? 162}
+    >
+      <div class="flower-chat-context-preview-surface">
+        <div class="flower-chat-context-preview-body">
+          <div class="flower-chat-context-preview-title">{props.title}</div>
+          <Show when={props.subtitle}><div class="flower-chat-context-preview-subtitle">{props.subtitle}</div></Show>
+          <pre class="flower-chat-context-preview-content">{props.body}</pre>
+          <Show when={props.truncated}><span class="flower-chat-context-preview-truncated" role="note">{props.truncatedLabel}</span></Show>
         </div>
-      </FloatingWindow>
-    </Show>
+      </div>
+    </FloatingWindow>
   );
 };

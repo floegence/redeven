@@ -280,7 +280,6 @@ const FLOWER_RELATED_SURFACE_SELECTOR = [
   '.flower-turn-launcher-window',
   '.flower-turn-launcher-related-surface',
   '.flower-chat-context-preview-window',
-  '.flower-page-context-preview',
   '.flower-subagent-detail-window',
   '.flower-working-dir-picker',
   '.flower-provider-dialog',

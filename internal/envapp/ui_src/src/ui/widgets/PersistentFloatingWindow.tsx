@@ -15,6 +15,7 @@ import {
 } from '../services/desktopWindowChrome';
 import { readUIStorageJSON, writeUIStorageJSON } from '../services/uiStorage';
 import { useEnvAppFloatingWindowStack } from '../context/EnvAppFloatingWindowStackContext';
+import type { EnvAppFloatingWindowStackLayer } from '../utils/envAppFloatingWindowStack';
 import { ENV_APP_FLOATING_LAYER } from '../utils/envAppLayers';
 
 type PersistentFloatingWindowRect = Readonly<{
@@ -163,6 +164,7 @@ function applyFloatingWindowInputSurfaceContracts(binding: PersistentFloatingWin
 export interface PersistentFloatingWindowProps extends Omit<FloatingWindowProps, 'zIndex'> {
   persistenceKey?: string;
   stackId?: string;
+  stackLayer?: EnvAppFloatingWindowStackLayer;
   onActivate?: () => void;
   contentClass?: string;
   footerClass?: string;
@@ -182,7 +184,8 @@ export function PersistentFloatingWindow(props: PersistentFloatingWindowProps): 
   const persistenceKey = () => compact(props.persistenceKey);
   const stackId = () => compact(props.stackId) || persistenceKey() || fallbackStackId;
   const windowZIndex = createMemo(() => (
-    floatingWindowStack?.zIndex(stackId()) ?? ENV_APP_FLOATING_LAYER.windowBase
+    floatingWindowStack?.zIndex(stackId(), props.stackLayer)
+      ?? (props.stackLayer === 'flowerContext' ? ENV_APP_FLOATING_LAYER.flowerContextBase : ENV_APP_FLOATING_LAYER.windowBase)
   ));
   const persistedRect = createMemo(() => {
     const key = persistenceKey();

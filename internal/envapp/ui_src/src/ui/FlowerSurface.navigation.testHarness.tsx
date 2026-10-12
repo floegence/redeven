@@ -213,7 +213,7 @@ vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => {
     );
   },
   FloatingWindow: (props: any) => {
-    if (props.class === 'flower-computer-stage' || (props.class === 'flower-subagent-detail-window' && typeof window.matchMedia === 'function')) {
+    if ((props.class?.includes('flower-context-preview-window') && typeof window.matchMedia === 'function') || props.class === 'flower-computer-stage' || (props.class === 'flower-subagent-detail-window' && typeof window.matchMedia === 'function')) {
       return <Dynamic component={actual.FloatingWindow} {...props} />;
     }
     const presence = actual.createFloatingPresence({
@@ -294,7 +294,7 @@ vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => {
       onChange={(event) => props.onChange?.((event.currentTarget as HTMLInputElement).checked)}
     />
   ),
-  Dialog: (props: any) => props.presentation || props.class === 'flower-page-context-preview' ? <Dynamic component={actual.Dialog} {...props} /> : (
+  Dialog: (props: any) => props.presentation ? <Dynamic component={actual.Dialog} {...props} /> : (
     <Show when={props.open}>
       <div role="dialog">{props.children}{props.footer}</div>
     </Show>
@@ -1010,6 +1010,7 @@ const mountFlowerSurface = (
     copy?: FlowerSurfaceProps['copy'];
     embeddedConversation?: FlowerSurfaceProps['embeddedConversation'];
     captureNewConversationContext?: FlowerSurfaceProps['captureNewConversationContext'];
+    renderContextSnapshotPreview?: FlowerSurfaceProps['renderContextSnapshotPreview'];
     focusThreadRequest?: FlowerThreadFocusRequest | null;
     settingsFocusRequest?: number;
     mobileThreadsOpen?: boolean;
@@ -1037,6 +1038,7 @@ const mountFlowerSurface = (
       copy={props.copy}
       embeddedConversation={props.embeddedConversation}
       captureNewConversationContext={props.captureNewConversationContext}
+      renderContextSnapshotPreview={props.renderContextSnapshotPreview}
       notify={(notification) => {
         notifications.push(notification);
       }}
@@ -1104,6 +1106,7 @@ export function renderSurfaceWithAdapterProps(
     copy?: FlowerSurfaceProps['copy'];
     embeddedConversation?: FlowerSurfaceProps['embeddedConversation'];
     captureNewConversationContext?: FlowerSurfaceProps['captureNewConversationContext'];
+    renderContextSnapshotPreview?: FlowerSurfaceProps['renderContextSnapshotPreview'];
     focusThreadRequest?: FlowerThreadFocusRequest | null;
     settingsFocusRequest?: number;
     mobileThreadsOpen?: boolean;

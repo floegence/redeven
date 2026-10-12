@@ -1,5 +1,6 @@
 import { Show, createMemo, type JSX } from 'solid-js';
 import { cn, useLayout } from '@floegence/floe-webapp-core';
+import type { EnvAppFloatingWindowStackLayer } from '../utils/envAppFloatingWindowStack';
 import { Dialog } from '../primitives/EnvAppModal';
 import { PersistentFloatingWindow, type PersistentFloatingWindowSurfaceRef } from './PersistentFloatingWindow';
 
@@ -21,6 +22,7 @@ export interface PreviewWindowProps {
   minSize?: WindowSize;
   maxSize?: WindowSize;
   stackId?: string;
+  stackLayer?: EnvAppFloatingWindowStackLayer;
   onActivate?: () => void;
   floatingClass?: string;
   mobileClass?: string;
@@ -42,6 +44,7 @@ export function PreviewWindow(props: PreviewWindowProps) {
           headerActions={props.headerActions}
           footer={props.footer}
           stackId={props.stackId}
+          stackLayer={props.stackLayer}
           onActivate={props.onActivate}
           persistenceKey={props.persistenceKey}
           defaultSize={props.defaultSize ?? PREVIEW_WINDOW_DEFAULT_SIZE}

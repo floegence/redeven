@@ -6,11 +6,13 @@ export const MAX_ENV_APP_FLOATING_WINDOWS = (
   ENV_APP_FLOATING_LAYER.windowCeiling - ENV_APP_FLOATING_LAYER.windowBase + 1
 );
 
+export type EnvAppFloatingWindowStackLayer = 'window' | 'flowerContext';
+
 export type EnvAppFloatingWindowStack = Readonly<{
   order: Accessor<readonly string[]>;
   register: (stackId: string) => () => void;
   activate: (stackId: string) => void;
-  zIndex: (stackId: string) => number;
+  zIndex: (stackId: string, layer?: EnvAppFloatingWindowStackLayer) => number;
 }>;
 
 function normalizeStackId(value: string): string {
@@ -59,10 +61,11 @@ export function createEnvAppFloatingWindowStack(): EnvAppFloatingWindowStack {
     });
   };
 
-  const zIndex = (value: string): number => {
+  const zIndex = (value: string, layer: EnvAppFloatingWindowStackLayer = 'window'): number => {
     const stackId = normalizeStackId(value);
     const index = order().indexOf(stackId);
-    return ENV_APP_FLOATING_LAYER.windowBase + Math.max(0, index);
+    const base = layer === 'flowerContext' ? ENV_APP_FLOATING_LAYER.flowerContextBase : ENV_APP_FLOATING_LAYER.windowBase;
+    return base + Math.max(0, index);
   };
 
   return Object.freeze({ order, register, activate, zIndex });

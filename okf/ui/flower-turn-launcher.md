@@ -47,11 +47,24 @@ attachment names, references and Copy. They have no promote, retry or run
 identity synthesized by the UI. Re-running preserved input requires an explicit
 new submission; old approvals and uncertain tool effects cannot resume.
 
+## Context preview presentation
+
+Env App renders launcher references and composer/chat snapshots through one
+`FlowerContextPreviewWindow`, using the existing `PreviewWindow` and
+`FilePreviewContent`. It retains shared geometry persistence, safe-area limits,
+drag/resize, localized footer controls and text/media viewers. Launcher owns
+attachment IO, request sequencing and object-URL disposal; Flower owns draft or
+canonical snapshot validity. Extracting the presentation creates no additional
+reader, draft or lifecycle authority. Related-surface markers keep preview input
+owned by Flower, and Escape dismisses the preview before its companion.
+
 # Boundaries
 
 Composer drafts and the transport outbox own only unconfirmed browser input, stable request identity, and presentation-only launch settings. They never become authorization evidence or canonical queue, interaction, effect, turn, Thread settings, or Agent lifecycle state. Secret answers bypass the outbox, and canonical confirmation or terminal cleanup removes transport state instead of projecting a second durable command.
 
 # Evidence
+
+- `redeven:internal/envapp/ui_src/src/ui/widgets/FlowerContextPreviewWindow.tsx` - Shared host presentation; immutable snapshots use the existing text viewer.
 
 - `redeven:internal/flower_ui/src/composer/createFlowerComposerDraftCoordinator.ts` - Per-thread composer draft owner.
 - `redeven:internal/flower_ui/src/transportOutbox.ts` - IndexedDB request recovery without secret answers.

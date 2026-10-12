@@ -1,6 +1,5 @@
 import { Show, createEffect, createSignal, onCleanup } from 'solid-js';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
-import { Button } from '@floegence/floe-webapp-core/ui';
 import {
   FlowerTurnLauncherPanel as SharedFlowerTurnLauncherPanel,
   FlowerTurnLauncherWindow as SharedFlowerTurnLauncherWindow,
@@ -25,7 +24,7 @@ import { basenameFromPath, fileItemFromPath } from '../utils/filePreviewItem';
 import { getRedevenFilePreviewReadPlan } from '../file-preview/readPlan';
 import { useI18n } from '../i18n';
 import { useFilePreviewContext } from './FilePreviewContext';
-import { FilePreviewContent } from './FilePreviewContent';
+import { FlowerContextPreviewWindow, type FlowerContextPreviewState } from './FlowerContextPreviewWindow';
 import { PreviewWindow } from './PreviewWindow';
 import { RemoteFileBrowser } from './RemoteFileBrowser';
 import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
@@ -35,8 +34,6 @@ import { desktopWindowChromeBridge } from '../services/desktopWindowChrome';
 import { createAskFlowerWindowViewportInsets } from '../../../../../../desktop/src/shared/askFlowerWindowViewport';
 
 const INLINE_TEXT_PREVIEW_MAX_CHARS = 120_000;
-const CONTEXT_PREVIEW_DEFAULT_SIZE = { width: 880, height: 640 };
-const CONTEXT_PREVIEW_MIN_SIZE = { width: 380, height: 280 };
 const FLOWER_TURN_LAUNCHER_STACK_ID = 'flower-turn-launcher';
 
 function createFlowerTurnLauncherCopy(i18n: ReturnType<typeof useI18n>): FlowerTurnLauncherWindowCopyInput {
@@ -119,25 +116,6 @@ type FlowerTurnLauncherWindowProps = Readonly<{
   onSubmit: (input: FlowerTurnLauncherSubmitInput) => Promise<void>;
 }>;
 
-type ContextPreviewState = Readonly<{
-  title: string;
-  subtitle: string;
-  item: FileItem;
-  descriptor: FilePreviewDescriptor;
-  text?: string;
-  message?: string;
-  objectUrl?: string;
-  bytes?: Uint8Array<ArrayBuffer> | null;
-  truncated?: boolean;
-  loading?: boolean;
-  error?: string | null;
-  xlsxSheetName?: string;
-  xlsxRows?: string[][];
-  helper?: string;
-  actionLabel?: string;
-  onAction?: () => void;
-}>;
-
 type ContextBrowserState = Readonly<{
   path: string;
   title: string;
@@ -159,7 +137,7 @@ function fileItemForContextPreview(path: string, name: string | undefined, fallb
   return fileItemFromPath(normalizedPath, String(name ?? '').trim() || basenameFromPath(normalizedPath));
 }
 
-function revokeContextPreviewResources(preview: ContextPreviewState | null) {
+function revokeContextPreviewResources(preview: FlowerContextPreviewState | null) {
   const objectUrl = String(preview?.objectUrl ?? '').trim();
   if (!objectUrl) return;
   URL.revokeObjectURL(objectUrl);
@@ -243,7 +221,7 @@ function contextPreviewStateForText(params: {
   helper?: string;
   actionLabel?: string;
   onAction?: () => void;
-}): ContextPreviewState {
+}): FlowerContextPreviewState {
   return {
     title: params.title,
     subtitle: params.subtitle,
@@ -266,7 +244,7 @@ function contextPreviewStateForMessage(params: {
   actionLabel?: string;
   onAction?: () => void;
   error?: string | null;
-}): ContextPreviewState {
+}): FlowerContextPreviewState {
   return {
     title: params.title,
     subtitle: params.subtitle,
@@ -285,7 +263,7 @@ function contextPreviewStateLoading(params: {
   subtitle: string;
   item: FileItem;
   helper?: string;
-}): ContextPreviewState {
+}): FlowerContextPreviewState {
   return {
     title: params.title,
     subtitle: params.subtitle,
@@ -319,7 +297,7 @@ async function buildFileLikeContextPreview(params: {
   onAction?: () => void;
   blob?: Blob;
   copy: ReturnType<typeof useI18n>;
-}): Promise<ContextPreviewState> {
+}): Promise<FlowerContextPreviewState> {
   const descriptor = describeFilePreview(params.name);
   const helperParts = params.helper ? [params.helper] : [];
   const truncated = !!params.truncated;
@@ -466,7 +444,7 @@ export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
     open: () => props.open && props.placement !== 'panel',
     chrome: desktopWindowChromeBridge(),
   });
-  const [contextPreview, setContextPreview] = createSignal<ContextPreviewState | null>(null);
+  const [contextPreview, setContextPreview] = createSignal<FlowerContextPreviewState | null>(null);
   const [contextBrowser, setContextBrowser] = createSignal<ContextBrowserState | null>(null);
   let previewRequestSeq = 0;
 
@@ -478,7 +456,7 @@ export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
 
   const activateLauncher = () => floatingWindowStack?.activate(FLOWER_TURN_LAUNCHER_STACK_ID);
 
-  const updateContextPreview = (next: ContextPreviewState | null) => {
+  const updateContextPreview = (next: FlowerContextPreviewState | null) => {
     setContextPreview((current) => {
       if (current?.objectUrl && current.objectUrl !== next?.objectUrl) {
         revokeContextPreviewResources(current);
@@ -693,67 +671,7 @@ export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
         </div>
       </PreviewWindow>
 
-      <PreviewWindow
-        open={!!contextPreview()}
-        onOpenChange={(open) => {
-          if (!open) closeContextPreview();
-        }}
-        title={contextPreview()?.title || i18n.t('flowerTurnLauncher.contextPreviewTitle')}
-        description={contextPreview()?.subtitle || undefined}
-        stackId="flower-turn-context-preview"
-        persistenceKey="flower-turn-context-preview"
-        defaultSize={CONTEXT_PREVIEW_DEFAULT_SIZE}
-        minSize={CONTEXT_PREVIEW_MIN_SIZE}
-        floatingClass="flower-turn-launcher-related-surface flower-turn-context-surface"
-        mobileClass="flower-turn-launcher-related-surface flower-turn-context-surface"
-        footer={(
-          <div class="flex w-full flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
-            <Button size="sm" variant="outline" class="cursor-pointer" onClick={closeContextPreview}>
-              {i18n.t('common.actions.close')}
-            </Button>
-            <Show when={contextPreview()?.actionLabel && contextPreview()?.onAction}>
-              <Button
-                size="sm"
-                variant="default"
-                class="cursor-pointer"
-                onClick={() => {
-                  contextPreview()?.onAction?.();
-                }}
-              >
-                {contextPreview()?.actionLabel}
-              </Button>
-            </Show>
-          </div>
-        )}
-      >
-        <div class="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
-          <Show when={contextPreview()?.helper}>
-            <div class={`shrink-0 border-b px-3 py-2 text-xs ${contextPreview()?.error ? 'border-error/20 bg-error/5 text-error' : 'border-border/70 bg-muted/25 text-muted-foreground'}`}>
-              {contextPreview()?.helper}
-            </div>
-          </Show>
-          <div class="min-h-0 flex-1 overflow-hidden">
-            <Show when={contextPreview()}>
-              {(preview) => (
-                <FilePreviewContent
-                  surface="window"
-                  item={preview().item}
-                  descriptor={preview().descriptor}
-                  text={preview().text}
-                  message={preview().message}
-                  objectUrl={preview().objectUrl}
-                  bytes={preview().bytes}
-                  truncated={preview().truncated}
-                  loading={preview().loading}
-                  error={preview().error}
-                  xlsxSheetName={preview().xlsxSheetName}
-                  xlsxRows={preview().xlsxRows}
-                />
-              )}
-            </Show>
-          </div>
-        </div>
-      </PreviewWindow>
+      <FlowerContextPreviewWindow preview={contextPreview()} onClose={closeContextPreview} />
     </>
   );
 }

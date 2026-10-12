@@ -2,6 +2,7 @@ export const ENV_APP_FLOATING_LAYER = {
   windowBase: 1000,
   windowCeiling: 1099,
   flowerCompanion: 2000,
+  flowerContextBase: 2100,
   pluginPanel: 3000,
   pluginContextMenu: 3100,
   productModal: 4000,

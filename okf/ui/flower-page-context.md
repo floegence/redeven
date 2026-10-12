@@ -45,8 +45,13 @@ preview and submitted text remain identical.
 
 `ComposerDraftStore` owns `page_context`, its frozen label/title/text and the
 edit-time capture marker. Shell retains reader functions, never copied context.
-A compact chip opens the exact frozen content and supports removal with the
-existing focus rules. Page changes and subsequent edits do not refresh it;
+A compact chip uses the shared purpose-designed page-context icon and opens the
+exact frozen content in the same host preview as right-click Ask Flower. Env App
+uses one `FlowerContextPreviewWindow` with its existing text viewer, persisted
+geometry, drag/resize, safe-area and closing behavior. Flower owns reference
+validity; refresh, removal or scope replacement closes the obsolete preview.
+The preview adds no reader or context state owner. Removal keeps the existing
+focus rules. Page changes and subsequent edits do not refresh it;
 removal stays effective within the current opening, including after a controlled
 Runtime restart. The next explicit blank companion opening or New action captures
 again. Submitted outbox requests and their same-request retries keep their
@@ -65,6 +70,9 @@ supply facts rather than instructions, execution location or permissions. The
 one retained Flower product; page capture adds no lifecycle or stream.
 
 # Evidence
+
+- `redeven:internal/envapp/ui_src/src/ui/widgets/FlowerContextPreviewWindow.tsx` - One host presentation for launcher and composer/chat snapshots.
+- `redeven:internal/flower_ui/src/icons/FlowerContextIcon.tsx` - Shared reference identity includes a dedicated page-context glyph.
 
 - `redeven:internal/envapp/ui_src/src/ui/flower/flowerPageContext.ts` - Reader functions and bounded immutable page snapshots.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.pageContext.test.tsx` - Explicit opening and New refresh, first edit, removal, retained draft and attachments, existing threads, first-turn consumption and frozen same-request retry.

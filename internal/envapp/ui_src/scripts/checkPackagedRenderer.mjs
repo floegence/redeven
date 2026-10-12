@@ -988,13 +988,56 @@ async function verifyBuiltFlowerLifecycle(browser, tls) {
     const pageReference = page.locator('[data-reference-kind="page_context"]');
     await pageReference.waitFor({ state: 'visible' });
     await pageReference.locator('.flower-composer-reference-chip-preview').click();
-    const preview = page.locator('.flower-page-context-preview');
+    const preview = page.locator('.flower-context-preview-window');
+    const readPreviewSnapshot = async () => {
+      const editor = preview.locator('.monaco-editor textarea');
+      await editor.waitFor({ state: 'attached' });
+      await preview.locator('.view-line').filter({ hasText: /page/ }).first().waitFor();
+      await page.evaluate(() => {
+        globalThis.__redevenBuiltPreviewCopy = '';
+        navigator.clipboard.writeText = async text => { globalThis.__redevenBuiltPreviewCopy = text; };
+        document.addEventListener('copy', event => {
+          const text = event.clipboardData?.getData('text/plain');
+          if (text) globalThis.__redevenBuiltPreviewCopy = text;
+        }, { once: true });
+      });
+      await preview.locator('.view-lines').click({ position: { x: 20, y: 10 } });
+      await page.keyboard.press('ControlOrMeta+A');
+      await page.keyboard.press('ControlOrMeta+C');
+      const copied = await page.waitForFunction(() => globalThis.__redevenBuiltPreviewCopy, undefined, { timeout: 5_000 });
+      return copied.jsonValue();
+    };
     await preview.waitFor({ state: 'visible' });
-    const frozenPageText = await preview.locator('pre').textContent();
+    const frozenPageText = await readPreviewSnapshot();
     const frozenPage = JSON.parse(frozenPageText);
     if (frozenPage.page.id !== 'monitor' || !frozenPage.environment.id || !frozenPage.captured_at
       || !frozenPage.state.sort) throw new Error('built companion must capture the visible Monitor page');
-    await preview.locator('pre').click();
+    if (await pageReference.locator('[data-flower-context-icon="page_context"]').count() !== 1) {
+      throw new Error('page context must use its shared purpose-designed icon');
+    }
+    const previewRoot = preview.locator('xpath=ancestor-or-self::*[@data-floe-geometry-surface="floating-window"]');
+    if (Number(await previewRoot.evaluate(element => element.style.zIndex)) <= 2000) {
+      throw new Error('the shared context window must be above the expanded companion');
+    }
+    const beforeDrag = await previewRoot.boundingBox();
+    const titlebar = await preview.locator('[data-floe-floating-window-titlebar]').boundingBox();
+    await page.mouse.move(titlebar.x + 80, titlebar.y + titlebar.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(titlebar.x + 104, titlebar.y + titlebar.height / 2 + 12);
+    await page.mouse.up();
+    const afterDrag = await previewRoot.boundingBox();
+    if (Math.abs(afterDrag.x - beforeDrag.x - 24) > 1 || Math.abs(afterDrag.y - beforeDrag.y - 12) > 1) {
+      throw new Error('the shared context preview must remain draggable');
+    }
+    const handle = await preview.locator('[data-floe-floating-window-resize-handle="se"]').boundingBox();
+    await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(handle.x + handle.width / 2 + 20, handle.y + handle.height / 2 + 16);
+    await page.mouse.up();
+    const afterResize = await previewRoot.boundingBox();
+    if (afterResize.width < afterDrag.width + 19 || afterResize.height < afterDrag.height + 15) {
+      throw new Error('the shared context preview must remain resizable');
+    }
     if (await companion.getAttribute('data-companion-phase') !== 'expanded') {
       throw new Error('page reference preview interaction must remain owned by Flower');
     }
@@ -1010,7 +1053,7 @@ async function verifyBuiltFlowerLifecycle(browser, tls) {
     await composer.click();
     await pageReference.locator('.flower-composer-reference-chip-preview').click();
     await preview.waitFor({ state: 'visible' });
-    const refreshedPageText = await preview.locator('pre').textContent();
+    const refreshedPageText = await readPreviewSnapshot();
     if (JSON.parse(refreshedPageText).page.id !== 'files' || refreshedPageText === frozenPageText) {
       throw new Error('reopening a new conversation must capture the current Files page');
     }
@@ -1029,7 +1072,7 @@ async function verifyBuiltFlowerLifecycle(browser, tls) {
     await pageReference.waitFor({ state: 'visible' });
     await pageReference.locator('.flower-composer-reference-chip-preview').click();
     await preview.waitFor({ state: 'visible' });
-    const reopenedPageText = await preview.locator('pre').textContent();
+    const reopenedPageText = await readPreviewSnapshot();
     if (JSON.parse(reopenedPageText).page.id !== 'files' || reopenedPageText === refreshedPageText) {
       throw new Error('reopening must replace a removed page reference with a fresh capture');
     }
@@ -1038,7 +1081,7 @@ async function verifyBuiltFlowerLifecycle(browser, tls) {
     await page.getByRole('button', { name: 'New chat', exact: true }).click();
     await pageReference.locator('.flower-composer-reference-chip-preview').click();
     await preview.waitFor({ state: 'visible' });
-    const newPageText = await preview.locator('pre').textContent();
+    const newPageText = await readPreviewSnapshot();
     if (JSON.parse(newPageText).page.id !== 'files' || newPageText === reopenedPageText) {
       throw new Error('each explicit New must refresh the current page reference');
     }

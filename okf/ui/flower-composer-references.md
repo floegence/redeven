@@ -57,7 +57,11 @@ The menu is a compact opaque popover projected through the shared surface-aware 
 
 [Activity origin page references](flower-page-context.md) owns opening/New capture,
 authorized page readers, layout scope and removal. The existing draft coordinator
-owns the frozen page chip alongside file references.
+owns the frozen page chip alongside file references. Its page-context glyph lives
+in the shared reference icon system. Host snapshot presentation is injected
+without transferring draft or canonical-reference authority; Env App reuses the
+right-click Ask Flower preview window and text viewer for both editable and
+submitted snapshots.
 
 ## Bounded discovery
 
