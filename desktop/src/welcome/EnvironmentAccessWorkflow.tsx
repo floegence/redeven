@@ -29,6 +29,9 @@ export function EnvironmentAccessWorkflow(props: Props) {
   const [notice, setNotice] = createSignal('');
   const [certificateReady, setCertificateReady] = createSignal(false);
   const [certificateReport, setCertificateReport] = createSignal<DesktopCertificateReport>();
+  const passwordTitleID = createUniqueId();
+  const passwordTimingID = createUniqueId();
+  const passwordRemovalHelpID = createUniqueId();
   let root: HTMLDivElement | undefined;
   let alive = true;
   onCleanup(() => { alive = false; });
@@ -64,6 +67,8 @@ export function EnvironmentAccessWorkflow(props: Props) {
   const savedPending = () => props.snapshot.runtime_configuration_pending;
   const saving = createMemo(() => busyStateMatchesAction(props.busyState, 'save_settings'));
   const protectedAccess = () => security.status()?.enabled || security.status()?.recovery_pending;
+  const passwordActionAvailable = () => !saving() && (!props.security || (Boolean(security.status()) && !security.busy()));
+  const passwordActionLabel = () => props.baselineSnapshot.local_ui_password_configured ? 'accessFlow.changePassword' : 'accessFlow.setPassword';
   const remote = () => Boolean(props.snapshot.runtime_connection && !runtimeConnectionIsOnThisDevice(props.snapshot.runtime_connection));
   const scope = (network: boolean) => t(network ? 'settings.sharedLocalNetworkLabel' : remote() ? 'settings.environmentOnlyLabel' : 'settings.localOnlyLabel');
   const securitySummary = () => !props.security ? t('security.unavailable') : !security.status() ? t(security.busy() ? 'environmentStatus.checking' : 'security.unavailable')
@@ -105,6 +110,7 @@ export function EnvironmentAccessWorkflow(props: Props) {
     go('review');
   }
   function changePassword(remove = false) {
+    if (!passwordActionAvailable()) return;
     setTask(remove ? 'remove' : 'password'); setConfirmation('');
     if (protectedAccess()) { setContinuation(remove ? 'remove' : 'password'); go('guard'); }
     else if (remove) removePassword(); else go('password');
@@ -241,19 +247,37 @@ export function EnvironmentAccessWorkflow(props: Props) {
         </Show>
         <Show when={page() === 'security'}>
           {heading('accessFlow.loginProtection', 'accessFlow.securityHelp')}
-          <div class="access-flow-summary"><section><Key class="access-flow-icon" aria-hidden="true" /><div><h3>{t('settings.passwordTitle')}</h3><p>{t(props.baselineSnapshot.local_ui_password_configured ? 'settings.passwordSet' : 'settings.noPassword')}</p></div><Button size="sm" variant="outline" onClick={() => changePassword()}>{t('accessFlow.changePassword')}</Button></section></div>
-          <Show when={props.security}><TwoFactorSettings environmentID={props.snapshot.environment_id} i18n={props.i18n} manage={props.security!}
-            configureHTTPS={() => {}} controller={security} />
-          </Show>
-          <Show when={props.baselineSnapshot.local_ui_password_configured}><details class="environment-access-advanced"><summary><ChevronRight class="h-3.5 w-3.5" aria-hidden="true" />{t('settings.removeStoredPassword')}</summary><div class="environment-access-advanced-content"><p class="access-flow-help">{t('accessFlow.removePasswordHelp')}</p><Button size="sm" variant="outline" onClick={() => changePassword(true)}>{t('settings.removeStoredPassword')}</Button></div></details></Show>
+          <div class="access-flow-security-settings">
+            <section class="access-flow-password-setting" aria-labelledby={passwordTitleID}>
+              <div class="access-flow-password-header">
+                <div class="access-flow-password-identity">
+                  <span class="access-flow-password-icon" aria-hidden="true"><Key size={19} /></span>
+                  <div><h3 id={passwordTitleID}>{t('settings.passwordTitle')}</h3><p>{t(props.baselineSnapshot.local_ui_password_configured ? 'settings.passwordSet' : 'settings.noPassword')}</p></div>
+                </div>
+                <div class="access-flow-password-actions">
+                  <Button size="sm" variant="outline" disabled={!passwordActionAvailable()} aria-describedby={passwordTimingID} onClick={() => changePassword()}>{t(passwordActionLabel())}</Button>
+                  <Show when={props.baselineSnapshot.local_ui_password_configured}>
+                    <Button size="sm" variant="ghost" class="access-flow-password-remove" disabled={!passwordActionAvailable()} aria-describedby={passwordRemovalHelpID} onClick={() => changePassword(true)}>{t('accessFlow.removePassword')}</Button>
+                  </Show>
+                </div>
+              </div>
+              <div class="access-flow-password-guidance">
+                <p id={passwordTimingID}>{t('settings.applyNextStartHelp')}</p>
+                <Show when={props.baselineSnapshot.local_ui_password_configured}><p id={passwordRemovalHelpID}>{t('accessFlow.removePasswordHelp')}</p></Show>
+              </div>
+            </section>
+            <Show when={props.security}><TwoFactorSettings environmentID={props.snapshot.environment_id} i18n={props.i18n} manage={props.security!}
+              configureHTTPS={() => {}} controller={security} />
+            </Show>
+          </div>
         </Show>
         <Show when={page() === 'guard'}>
           {heading('accessFlow.disableFirst', 'accessFlow.disableFirstHelp')}{steps()}
-          <div class="access-flow-card"><ol class="access-flow-plan"><li>{t('security.ownerHelp')}</li><li>{t('security.disable')}</li><li>{t(continuation() === 'http' ? 'accessFlow.changeAccess' : 'accessFlow.changePassword')}</li></ol></div>
+          <div class="access-flow-card"><ol class="access-flow-plan"><li>{t('security.ownerHelp')}</li><li>{t('security.disable')}</li><li>{t(continuation() === 'http' ? 'accessFlow.changeAccess' : continuation() === 'remove' ? 'accessFlow.removePassword' : passwordActionLabel())}</li></ol></div>
           <p class="access-flow-notice"><AlertCircle class="h-4 w-4" aria-hidden="true" />{t(security.status()?.recovery_pending ? 'accessFlow.recoverFirst' : 'accessFlow.securityImmediate')}</p>
         </Show>
         <Show when={page() === 'password'}>
-          {heading(task() === 'password' ? 'accessFlow.changePassword' : 'security.newPassword', 'accessFlow.passwordHelp')}{steps()}
+          {heading(task() === 'password' ? passwordActionLabel() : 'security.newPassword', 'accessFlow.passwordHelp')}{steps()}
           <form id="access-password-form" class="access-flow-password" onSubmit={event => { event.preventDefault(); passwordNext(); }}>
             <label><span>{t('security.newPassword')}</span><Input id="local-ui-password" type="password" autocomplete="new-password" value={props.draft.local_ui_password} aria-invalid={Boolean(localError())} aria-describedby={localError() ? 'settings-error' : undefined} onInput={event => { props.updateDraftField('local_ui_password', event.currentTarget.value); setLocalError(''); }} /></label>
             <label><span>{t('security.confirmPassword')}</span><Input id="access-password-confirm" type="password" autocomplete="new-password" value={confirmation()} aria-invalid={Boolean(localError())} aria-describedby={localError() ? 'settings-error' : undefined} onInput={event => { setConfirmation(event.currentTarget.value); setLocalError(''); }} /></label>

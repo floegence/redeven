@@ -19,6 +19,8 @@
     "reviewTitle": "Vérifier et appliquer",
     "reviewHelp": "Vérifiez les paramètres du prochain démarrage. La connexion actuelle reste active jusqu’au redémarrage.",
     "changePassword": "Modifier le mot de passe",
+    "setPassword": "Définir un mot de passe",
+    "removePassword": "Supprimer le mot de passe",
     "passwordHelp": "Saisissez et confirmez le nouveau mot de passe d’accès. Il sera enregistré lorsque vous appliquerez les modifications.",
     "passwordMismatch": "Les mots de passe ne correspondent pas.",
     "passwordAndFactor": "Mot de passe d’accès et application d’authentification",

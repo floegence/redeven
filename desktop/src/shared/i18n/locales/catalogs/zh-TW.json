@@ -19,6 +19,8 @@
     "reviewTitle": "確認並套用變更",
     "reviewHelp": "確認下次啟動使用的完整設定。重新啟動前，目前連線保持不變。",
     "changePassword": "變更密碼",
+    "setPassword": "設定密碼",
+    "removePassword": "移除密碼",
     "passwordHelp": "輸入並確認新的存取密碼，確認套用變更時才會儲存。",
     "passwordMismatch": "兩次輸入的密碼不一致。",
     "passwordAndFactor": "存取密碼 + 驗證器",

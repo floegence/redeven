@@ -19,6 +19,8 @@
     "reviewTitle": "确认并应用更改",
     "reviewHelp": "确认下次启动使用的完整设置。重启前，当前连接保持不变。",
     "changePassword": "修改密码",
+    "setPassword": "设置密码",
+    "removePassword": "移除密码",
     "passwordHelp": "输入并确认新的访问密码，确认应用更改时才会保存。",
     "passwordMismatch": "两次输入的密码不一致。",
     "passwordAndFactor": "访问密码 + 验证器",

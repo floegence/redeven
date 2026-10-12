@@ -19,6 +19,8 @@
     "reviewTitle": "確認して適用",
     "reviewHelp": "次回起動時の設定を確認します。再起動するまで現在の接続は維持されます。",
     "changePassword": "パスワードを変更",
+    "setPassword": "パスワードを設定",
+    "removePassword": "パスワードを削除",
     "passwordHelp": "新しいアクセスパスワードを入力して確認します。変更を適用するまで保存されません。",
     "passwordMismatch": "パスワードが一致しません。",
     "passwordAndFactor": "アクセスパスワードと認証アプリ",

@@ -69,13 +69,71 @@ try {
     })).violations.map(({ id, nodes }) => ({ id, targets: nodes.map(node => node.target) })));
     assert.deepEqual(violations, []);
   }
+  const locales = ['en-US', 'zh-CN', 'zh-TW', 'ja-JP', 'ko-KR', 'de-DE', 'fr-FR', 'es-ES', 'pt-BR', 'ru-RU'];
+  for (const preset of ['classic-light', 'ocean']) for (const locale of locales) for (const width of [1280, 390, 320]) {
+    await page.setViewportSize({ width, height: 900 });
+    await open(locale, preset, 'Local Environment', '&password=1');
+    await button('accessFlow.manageProtection').click();
+    const card = dialog.getByRole('region', { name: t('settings.passwordTitle'), exact: true });
+    const change = card.getByRole('button', { name: t('accessFlow.changePassword'), exact: true });
+    const remove = card.getByRole('button', { name: t('accessFlow.removePassword'), exact: true });
+    await remove.waitFor();
+    await layout(`password-${preset}-${locale}-${width}`);
+    assert.equal(await change.isEnabled(), true);
+    assert.equal(await remove.isEnabled(), true);
+    for (const control of [change, remove]) {
+      const geometry = await control.evaluate(el => ({ height: el.getBoundingClientRect().height, cursor: getComputedStyle(el).cursor, overflow: el.scrollWidth > el.clientWidth }));
+      assert.ok(geometry.height >= 32); assert.equal(geometry.cursor, 'pointer'); assert.equal(geometry.overflow, false);
+    }
+    const shells = await dialog.locator('.access-flow-password-setting, .two-factor-setting').evaluateAll(elements => elements.map(el => {
+      const s = getComputedStyle(el); return { background: s.backgroundColor, border: s.border, radius: s.borderRadius, padding: s.padding };
+    }));
+    assert.deepEqual(shells[0], shells[1], 'password and two-factor cards share one visual treatment');
+    await change.focus(); await page.keyboard.press('Tab');
+    assert.equal(await remove.evaluate(el => el === document.activeElement), true, 'password actions are adjacent in keyboard order');
+    if (locale === 'zh-CN' && [1280, 390].includes(width)) {
+      await remove.evaluate(el => el.blur()); await capture(`password-${preset}-${locale}-${width}`);
+    }
+  }
+  report.cases.push('grouped-password-actions-and-matching-security-cards-in-10-locales-2-themes-3-widths');
+  await page.setViewportSize({ width: 640, height: 900 });
+  await open('fr-FR', 'ocean', 'Local Environment', '&password=1');
+  await button('accessFlow.manageProtection').click();
+  await page.addStyleTag({ content: '.access-flow-security-settings :is(button, p, h3, span) { font-size: 24px !important; }' });
+  await layout('password-enlarged-text'); await capture('password-enlarged-text');
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await open('zh-CN', 'classic-light', 'Local Environment', '&password=1');
+  await button('accessFlow.manageProtection').click(); await assertA11y();
+  await button('accessFlow.changePassword').focus(); await page.keyboard.press('Tab'); await page.keyboard.press('Enter');
+  await dialog.locator('.access-flow-review').waitFor();
+  assert.equal(await page.evaluate(() => window.accessFixture.draft.local_ui_password_mode), 'clear');
+  assert.equal(await page.evaluate(() => window.accessFixture.draft.local_ui_bind), 'localhost:23998');
+  assert.equal(await page.evaluate(() => window.accessFixture.security.password_configured), true, 'entering review never removes the active password');
+  await button('common.cancel').click(); await button('settings.discardChanges').click();
+  assert.equal(await page.evaluate(() => window.accessFixture.draft.local_ui_password_mode), 'keep');
+  await open('en-US', 'classic-light', 'Local Environment', '&secure=enabled');
+  await button('accessFlow.manageProtection').click(); await button('accessFlow.removePassword').click();
+  assert.ok((await dialog.locator('.access-flow-plan').innerText()).includes(t('accessFlow.removePassword')));
+  assert.equal(await page.evaluate(() => window.accessFixture.draft.local_ui_password_mode), 'keep');
+  await open(); await button('accessFlow.manageProtection').click(); await button('accessFlow.setPassword').waitFor();
+  assert.equal(await button('accessFlow.removePassword').count(), 0);
+  await button('accessFlow.setPassword').click(); await page.locator('#local-ui-password').waitFor();
+  const touchContext = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  const touchPage = await touchContext.newPage();
+  await touchPage.goto(`${report.url}environment-endpoints.html?locale=en-US&password=1`);
+  await touchPage.locator('[data-environment="Local Environment"] > button').tap();
+  await touchPage.getByRole('button', { name: 'Manage protection', exact: true }).tap();
+  for (const control of await touchPage.locator('.access-flow-password-actions button').all()) assert.ok((await control.boundingBox()).height >= 44);
+  await touchContext.close();
+  report.cases.push('password-keyboard-review-cancel-protected-removal-setup-touch-and-accessibility');
+
+  if (!process.argv.includes('--password-only')) {
   await open('zh-CN'); await layout('overview'); await capture('overview-zh-CN');
   assert.equal(await page.locator('#local-ui-port').count(), 0, 'opening shows tasks, not unrelated fields');
   await editAccess(); await layout('access'); await capture('access-zh-CN');
   assert.ok((await page.locator('#local-ui-port').boundingBox()).width <= 128, 'port remains compact');
   report.cases.push('task-overview-and-fixed-footer');
 
-  const locales = ['en-US', 'zh-CN', 'zh-TW', 'ja-JP', 'ko-KR', 'de-DE', 'fr-FR', 'es-ES', 'pt-BR', 'ru-RU'];
   const presets = process.argv.includes('--interactions-only') ? builtInShellThemePresets.filter(p => ['classic-light', 'ocean'].includes(p.name)) : builtInShellThemePresets;
   for (const preset of presets) for (const locale of locales) {
     await open(locale, preset.name); await layout(`${preset.name}/${locale}/overview`);
@@ -267,6 +325,7 @@ try {
     await layout(`single-line-${locale}-recovery-actions`);
   }
   report.cases.push('single-line-certificate-and-recovery-actions-in-10-locales-at-320px');
+  }
 
   assert.deepEqual(report.errors, []); report.status = 'passed';
   console.log(`Access settings passed: ${report.cases.length} scenarios. Evidence: ${output}`);

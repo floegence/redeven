@@ -4,7 +4,7 @@ title: Desktop environment settings
 description: Open one target-bound settings session, preserve independent drafts, and save through the registered owner.
 tags: [desktop, environments, settings, interaction]
 quality_exception: One target-bound settings session joins connection drafts, access prerequisites, and restart recovery; keep their cross-domain authority and focus handoff together.
-timestamp: 2026-09-27T17:29:30Z
+timestamp: 2026-10-12T05:15:00Z
 ---
 # Summary
 
@@ -139,6 +139,17 @@ A protected HTTP or password change first explains the dependency, verifies
 identity and explicitly commits disabling two-factor, then resumes the original
 task. Recovery-pending protection must be restored before that change. Password
 removal also selects local-only access and reviews both changes together.
+Sign-in protection groups password state, Set or Change password, and Remove
+password in one labeled card before the two-factor card. Both cards share the
+same surface, border, radius and spacing. Password actions retain published
+button affordances, stay adjacent in keyboard order, and reflow as whole controls
+at narrow widths. The removal action references its nearby browser-scope
+consequence; next-start timing stays in the same card. An unset password offers
+Set password without a removal action. When security management is available,
+password operations wait for its authoritative status; loading or failed status
+cannot bypass the protected-change prerequisite. The existing error and Retry
+surface owns recovery. Entering removal stages only the draft and review;
+explicit saving owns persistence.
 Authenticator enrollment, recovery-code confirmation and management use the same
 window body and fixed actions, never a nested dialog. Committed security changes
 are immediate and survive canceling later access edits. Their authoritative
@@ -219,7 +230,7 @@ SSH field and secret details are owned by
 - `redeven:desktop/scripts/check-settings-restart.mjs` - Full Welcome shell acceptance for Local, SSH, WSL and container restart handoff, focus, dismissal, retry, narrow layouts and reduced motion.
 
 - `redeven:desktop/scripts/check-settings-expansion.mjs` - Per-frame window, footer and disclosure measurements, rapid reversals, immediate focus exclusion and reduced motion.
-- `redeven:desktop/scripts/check-access-settings.mjs` - Browser evidence for control proportions, all shipped themes and locales, narrow panels, enlarged text, real scrolling, certificate presentation and save recovery.
+- `redeven:desktop/scripts/check-access-settings.mjs` - Browser evidence for grouped password actions, matching security cards, keyboard and touch interaction, control proportions, all shipped themes and locales, narrow panels, enlarged text, real scrolling, certificate presentation and save recovery. `--password-only` selects focused password acceptance.
 - `redeven:desktop/src/welcome/EnvironmentAccessWorkflow.tsx` - Task navigation, prerequisite continuation and contextual review/save feedback.
 - `redeven:desktop/src/welcome/EnvironmentSettingsDialog.css` - Product geometry, responsive fields and fixed action baseline.
 - `redeven:desktop/src/welcome/EnvironmentSettingsDialog.tsx` - Published modal and tabs with retained, independently scrolling panels.

@@ -19,6 +19,8 @@
     "reviewTitle": "Revisar y aplicar",
     "reviewHelp": "Revisa los ajustes del próximo inicio. La conexión actual seguirá activa hasta el reinicio.",
     "changePassword": "Cambiar contraseña",
+    "setPassword": "Establecer contraseña",
+    "removePassword": "Eliminar contraseña",
     "passwordHelp": "Introduce y confirma la nueva contraseña de acceso. Solo se guardará al aplicar los cambios.",
     "passwordMismatch": "Las contraseñas no coinciden.",
     "passwordAndFactor": "Contraseña de acceso y autenticador",

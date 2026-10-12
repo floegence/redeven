@@ -19,6 +19,8 @@
     "reviewTitle": "Prüfen und anwenden",
     "reviewHelp": "Prüfen Sie alle Einstellungen für den nächsten Start. Die aktuelle Verbindung bleibt bis zum Neustart bestehen.",
     "changePassword": "Passwort ändern",
+    "setPassword": "Passwort festlegen",
+    "removePassword": "Passwort entfernen",
     "passwordHelp": "Geben Sie ein neues Zugriffspasswort ein und bestätigen Sie es. Es wird erst beim Anwenden gespeichert.",
     "passwordMismatch": "Die Passwörter stimmen nicht überein.",
     "passwordAndFactor": "Zugriffspasswort und Authenticator",
