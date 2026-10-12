@@ -31,7 +31,7 @@ type ComputerUseRuntime struct {
 	mu                     sync.RWMutex
 	registry               *TargetRegistry
 	bindings               ComputerTargetBindingStore
-	media                  computerMediaStore
+	media                  toolMediaStore
 	executors              map[string]TargetToolExecutor
 	liveFrames             map[string]*computerLiveSampler
 	liveWG                 sync.WaitGroup
@@ -107,7 +107,7 @@ type TargetStartupError struct{ Code, Reason string }
 func (e *TargetStartupError) Error() string { return e.Code + ": " + e.Reason }
 
 func NewComputerUseRuntime(registry *TargetRegistry, executors map[string]TargetToolExecutor, mediaDirectory string) *ComputerUseRuntime {
-	r := &ComputerUseRuntime{browserService: BrowserServiceStatus{State: "idle", Generation: rand.Text()}, registry: registry, executors: executors, media: computerMediaStore{directory: mediaDirectory}}
+	r := &ComputerUseRuntime{browserService: BrowserServiceStatus{State: "idle", Generation: rand.Text()}, registry: registry, executors: executors, media: newToolMediaStore(mediaDirectory)}
 	for _, executor := range executors {
 		if browser, ok := executor.(*PlaywrightTargetExecutor); ok {
 			browser.runtimeManaged = true

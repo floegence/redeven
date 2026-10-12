@@ -4,6 +4,7 @@ import type {
   FlowerRuntimeCurrentView,
   FlowerTurnLaunchInput,
 } from './contracts/flowerSurfaceContracts';
+import type { FlowerComposerDraftReference } from './composer/createFlowerComposerDraftCoordinator';
 
 export type TransportOutboxInput = FlowerTurnLaunchInput;
 
@@ -20,11 +21,16 @@ export type TransportOutboxEntry = Readonly<{
   threadId: string;
   input: TransportOutboxInput;
   attachmentLabels: readonly string[];
+  /** Unadmitted composer references available for explicit draft recovery. */
+  draftReferences?: readonly FlowerComposerDraftReference[];
   createdAtMs: number;
   /** Frozen effective settings for provisional UI only; never authorization evidence. */
   provisionalThreadSettings?: TransportOutboxProvisionalThreadSettings;
   /** A durable terminal state that must not be retried automatically. */
   terminalError?: 'attachments_unavailable_after_restart' | 'storage_restored';
+  /** Request delivery only; canonical current remains the queue authority. */
+  delivery?: 'pending' | 'accepted' | 'failed' | 'unknown';
+  deliveryError?: string;
 }>;
 
 export type TransportOutboxReconciliation = Readonly<{
@@ -35,6 +41,8 @@ export type TransportOutboxReconciliation = Readonly<{
 export type TransportOutboxReconciliationOptions = Readonly<{
   canConfirm?: (entry: TransportOutboxEntry) => boolean;
 }>;
+
+type TransportOutboxOptions = Readonly<{ onExpired?: () => void }>;
 
 export type TransportOutbox = Readonly<{
   entries: ReadonlyMap<string, TransportOutboxEntry>;
@@ -82,15 +90,15 @@ function openOutboxDatabase(): Promise<IDBDatabase | null> {
   });
 }
 
-async function persistEntries(entries: ReadonlyMap<string, TransportOutboxEntry>): Promise<void> {
+async function persistEntries(puts: readonly TransportOutboxEntry[], deletes: readonly string[]): Promise<void> {
   const database = await openOutboxDatabase();
   if (!database) return;
   try {
     await new Promise<void>((resolve, reject) => {
       const transaction = database.transaction(OUTBOX_STORE, 'readwrite');
       const store = transaction.objectStore(OUTBOX_STORE);
-      store.clear();
-      for (const entry of entries.values()) store.put(entry);
+      for (const requestId of deletes) store.delete(requestId);
+      for (const entry of puts) store.put(entry);
       transaction.oncomplete = () => resolve();
       transaction.onerror = () => reject(transaction.error ?? new Error('Flower transport outbox write failed.'));
       transaction.onabort = () => reject(transaction.error ?? new Error('Flower transport outbox write was aborted.'));
@@ -111,6 +119,7 @@ function durableEntry(entry: TransportOutboxEntry): TransportOutboxEntry {
 type persistenceTracker = {
   latest: Promise<void>;
   error: Error | null;
+  onExpired?: () => void;
 };
 
 let persistenceTail: Promise<void> = Promise.resolve();
@@ -119,9 +128,10 @@ function errorFrom(value: unknown): Error {
   return value instanceof Error ? value : new Error(clean(value) || 'Flower transport outbox persistence failed.');
 }
 
-function persist(entries: ReadonlyMap<string, TransportOutboxEntry>, tracker: persistenceTracker): void {
-  const durable = new Map([...entries].map(([id, entry]) => [id, durableEntry(entry)]));
-  const write = persistenceTail.then(() => persistEntries(durable));
+function persist(before: ReadonlyMap<string, TransportOutboxEntry>, after: ReadonlyMap<string, TransportOutboxEntry>, tracker: persistenceTracker): void {
+  const puts = [...after].filter(([id, entry]) => before.get(id) !== entry).map(([, entry]) => durableEntry(entry));
+  const deletes = [...before.keys()].filter(id => !after.has(id));
+  const write = persistenceTail.then(() => persistEntries(puts, deletes));
   tracker.latest = write;
   persistenceTail = write.then(
     () => {
@@ -196,15 +206,16 @@ function create(
       cleanupTimer = undefined;
       const next = pruneEntries(currentEntries, Date.now());
       if (next.size !== currentEntries.size) {
+        persist(currentEntries, next, tracker);
         currentEntries = next;
-        persist(currentEntries, tracker);
+        tracker.onExpired?.();
       }
       scheduleCleanup();
     }, delayMs);
   };
   const replace = (next: ReadonlyMap<string, TransportOutboxEntry>): TransportOutbox => {
     stopCleanup();
-    persist(next, tracker);
+    persist(currentEntries, next, tracker);
     return create(next, tracker);
   };
   const outbox: TransportOutbox = {
@@ -236,11 +247,14 @@ function create(
       if (requestedThreadId && requestedThreadId !== acceptedThreadId) return this;
       if (entry.threadId === acceptedThreadId && requestedThreadId === acceptedThreadId) return this;
       const next = new Map(currentEntries);
-      next.set(id, {
-        ...entry,
-        threadId: acceptedThreadId,
-        input: { ...entry.input, thread_id: acceptedThreadId },
-      });
+      for (const [pendingId, pendingEntry] of currentEntries) {
+        if (pendingId !== id && (requestedThreadId || pendingEntry.threadId !== entry.threadId || clean(pendingEntry.input.thread_id))) continue;
+        next.set(pendingId, {
+          ...pendingEntry,
+          threadId: acceptedThreadId,
+          input: { ...pendingEntry.input, thread_id: acceptedThreadId },
+        });
+      }
       return replace(next);
     },
     dropThread(threadId) {
@@ -274,7 +288,7 @@ function create(
     },
     forThread(threadId) {
       const id = clean(threadId);
-      return [...currentEntries.values()].filter((entry) => entry.threadId === id);
+      return [...currentEntries.values()].filter((entry) => entry.threadId === id).sort((a, b) => a.createdAtMs - b.createdAtMs);
     },
     persistenceError() {
       return tracker.error;
@@ -290,13 +304,13 @@ function create(
   return outbox;
 }
 
-export function createTransportOutbox(): TransportOutbox {
-  return create(new Map());
+export function createTransportOutbox(options: TransportOutboxOptions = {}): TransportOutbox {
+  return create(new Map(), { latest: Promise.resolve(), error: null, onExpired: options.onExpired });
 }
 
-export async function restoreTransportOutbox(): Promise<TransportOutbox> {
+export async function restoreTransportOutbox(options: TransportOutboxOptions = {}): Promise<TransportOutbox> {
   const database = await openOutboxDatabase();
-  if (!database) return createTransportOutbox();
+  if (!database) return createTransportOutbox(options);
   let entries: TransportOutboxEntry[];
   try {
     entries = await new Promise<TransportOutboxEntry[]>((resolve, reject) => {
@@ -320,6 +334,7 @@ export async function restoreTransportOutbox(): Promise<TransportOutbox> {
       requestId,
       threadId: clean(entry.threadId),
       input,
+      ...(entry.terminalError ? {} : { delivery: entry.delivery === 'accepted' || entry.delivery === 'failed' ? entry.delivery : 'unknown' }),
       attachmentLabels: Array.isArray(entry.attachmentLabels)
         ? entry.attachmentLabels.map(clean).filter(Boolean)
         : Array.isArray(legacy.attachmentNames) ? legacy.attachmentNames.map(clean).filter(Boolean) : [],
@@ -330,5 +345,5 @@ export async function restoreTransportOutbox(): Promise<TransportOutbox> {
       ),
     });
   }
-  return create(restored).pruneExpired();
+  return create(restored, { latest: Promise.resolve(), error: null, onExpired: options.onExpired }).pruneExpired();
 }

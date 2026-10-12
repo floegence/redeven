@@ -46,6 +46,21 @@ describe('createFlowerComposerDraftCoordinator', () => {
     expect(session.snapshot()).toMatchObject({ revision: 3, value: { text: 'abc' } });
   });
 
+  it('tracks text ownership separately from other draft edits and preserves it on scope transfer', () => {
+    const coordinator = createFlowerComposerDraftCoordinator();
+    const session = coordinator.open('');
+    session.mutate(value => ({ ...value, text: 'A' }));
+    const originalTextRevision = session.snapshot().text_revision;
+    session.mutate(value => ({ ...value, references: [{ local_id: 'reference', kind: 'file', path: '/tmp/chart.png', label: 'chart.png' }] }));
+    expect(session.snapshot().text_revision).toBe(originalTextRevision);
+    session.mutate(value => ({ ...value, text: 'B' }));
+    session.mutate(value => ({ ...value, text: 'A' }));
+    expect(session.snapshot().text_revision).toBe(originalTextRevision + 2);
+    const transferred = coordinator.moveScope('', 'thread-created');
+    expect(transferred.text_revision).toBe(originalTextRevision + 2);
+    expect(transferred.value.text).toBe('A');
+  });
+
   it('clears the complete scope value and notifies every session', () => {
     const coordinator = createFlowerComposerDraftCoordinator();
     const first = coordinator.open('thread-1');

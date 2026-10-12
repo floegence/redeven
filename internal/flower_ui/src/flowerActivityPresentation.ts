@@ -203,6 +203,7 @@ export type FlowerActivitySubagentsDetail = Readonly<{
 }>;
 
 export type FlowerActivityDetailBlock =
+  | Readonly<{ kind: 'image'; resource_ref: string; name: string }>
   | Readonly<{
     kind: 'structured';
     lines: readonly FlowerActivityDetailLine[];
@@ -1527,8 +1528,10 @@ function presentationForStructured(item: FlowerActivityItem, copy?: FlowerActivi
   else if (item.tool_name === 'computer.exec' && !active) detailBlocks.push({ kind: 'structured_rows', section: 'inputs', rows: [], notice: words.inputUnavailable });
   if (errorBlock) detailBlocks.push(errorBlock);
   if (rows.length > 0) detailBlocks.push({ kind: 'structured_rows', section: 'results', rows, ...(!errorBlock && (item.status === 'error' || item.status === 'canceled') ? { notice: words.partialOutput } : {}) });
-  else if (!active) detailBlocks.push({ kind: 'structured_rows', section: 'results', rows: [], notice: item.chips?.some(chip => chip.kind === 'partial_execution') ? words.partialOutput : item.target_refs?.some(ref => ref.kind === 'computer_frame') ? undefined : item.payload?.rows_provided === true ? words.noOutput : words.detailsUnavailable });
+  else if (!active) detailBlocks.push({ kind: 'structured_rows', section: 'results', rows: [], notice: item.chips?.some(chip => chip.kind === 'partial_execution') ? words.partialOutput : item.target_refs?.some(ref => ref.kind === 'computer_frame' || ref.kind === 'tool_image') ? undefined : item.payload?.rows_provided === true ? words.noOutput : words.detailsUnavailable });
   if (detailLines.length > 0) detailBlocks.push({ kind: 'structured', lines: detailLines });
+  const image = item.target_refs?.find(ref => ref.kind === 'tool_image' && /^image:\/\/[a-f0-9]{64}\/(png|jpeg|webp)$/u.test(ref.resource_ref ?? ''));
+  if (image?.resource_ref) detailBlocks.push({ kind: 'image', resource_ref: image.resource_ref, name: image.label || trimString(item.label) });
   let meta = trimString(item.description) !== titleText(title) ? trimString(item.description) : '';
   if (computer) {
     const frameTarget = item.target_refs?.find(ref => ref.kind === 'computer_frame');

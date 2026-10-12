@@ -30,8 +30,8 @@ func toolSuccessSummary(toolName string) string {
 		return "terminal.terminate"
 	case "file.read":
 		return "file.read"
-	case "attachment.read":
-		return "attachment.read"
+	case "attachment.read", "image.read":
+		return toolName
 	case "file.edit", "file.write":
 		return "file.updated"
 	case "apply_patch":
@@ -202,7 +202,7 @@ func normalizeTruncatedToolPayload(toolName string, payload any) (any, bool) {
 		return m, truncated
 	case "file.read":
 		return normalizeFileReadPayload(payload)
-	case "attachment.read":
+	case "attachment.read", "image.read":
 		return normalizeJSONCompatibleToolPayload(payload)
 	case "file.edit", "file.write":
 		return normalizeFileMutationPayload(payload)
@@ -569,6 +569,14 @@ func builtInToolDefinitions() []ToolDef {
 			Source:           "builtin",
 			Namespace:        "builtin.attachment",
 			Priority:         100,
+		},
+		{
+			Name:         "image.read",
+			Description:  "Read a project-scoped PNG, JPEG, WebP or GIF image directly for visual inspection. Requires an image-capable model. Detects the actual format, preserves resolution within limits, and reads the first GIF frame. The immutable image snapshot remains in this thread history. Do not start a browser or HTTP server to inspect a local image.",
+			InputSchema:  toSchema(map[string]any{"type": "object", "properties": withTargetID(map[string]any{"file_path": map[string]any{"type": "string", "minLength": 1, "description": "Image path relative to the working directory, or an authorized absolute path."}}), "required": []string{"file_path"}, "additionalProperties": false}),
+			Visibility:   ToolVisibilitySharedReadonly,
+			Capabilities: []ToolCapabilityClass{ToolCapabilityReadonlyLocal},
+			Source:       "builtin", Namespace: "builtin.image", Priority: 100,
 		},
 		{
 			Name:             "file.read",

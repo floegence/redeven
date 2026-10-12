@@ -21,6 +21,8 @@ type runHostCapabilities struct {
 	resolveRunModel           func(context.Context, *config.AIConfig, string, string, *run) (resolvedRunModel, error)
 	publishContextUsage       func(FlowerContextUsage)
 	openLiveAttachment        func(context.Context, UploadOwner, string) (openedCanonicalAttachment, error)
+	saveToolMedia             func(context.Context, TargetToolAttachment, []byte) error
+	readToolMedia             func(context.Context, string) ([]byte, error)
 	terminal                  runTerminalHost
 }
 
@@ -85,6 +87,7 @@ func (s *Service) bindExactRunExecutionCapabilities(endpointID string, execution
 	return runHostCapabilities{
 		authorityThreadID: effectAuthorityThreadID,
 		tessiven:          s.tessiven, tessivenResources: s.tessivenResources,
+		saveToolMedia: s.toolMedia.put, readToolMedia: s.resolveToolMedia,
 		terminal: terminal,
 	}, nil
 }

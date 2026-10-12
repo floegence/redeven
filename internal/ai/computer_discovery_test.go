@@ -162,7 +162,7 @@ func TestComputerAutonomousManagedPagesAndPopupSelection(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if result.(targetToolExecution).inputRequired != nil {
+		if result.(toolExecutionOutput).inputRequired != nil {
 			t.Fatal("full access required manual browser setup")
 		}
 	}
@@ -207,7 +207,7 @@ func TestComputerAutonomousManagedPagesAndPopupSelection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	body, _ := json.Marshal(result.(targetToolExecution).Payload)
+	body, _ := json.Marshal(result.(toolExecutionOutput).Payload)
 	if !strings.Contains(string(body), "Child result") || !strings.Contains(string(body), "unsaved") {
 		t.Fatalf("selected page lost state: %s", body)
 	}

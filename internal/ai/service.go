@@ -148,9 +148,9 @@ type Service struct {
 	interactionSafetyGate InteractionSafetyGate
 
 	mu sync.Mutex
-	// threadSettingsMu serializes persisted thread-setting changes with the
-	// admission boundary that freezes settings for a new turn.
-	threadSettingsMu sync.Mutex
+	// Each thread serializes settings changes with its own admission boundary.
+	threadSettingsLocksMu sync.Mutex
+	threadSettingsLocks   map[threadSettingsLockKey]*threadSettingsLock
 
 	typedSendMu  sync.Mutex
 	typedSendOps map[string]*typedSendOperation
@@ -171,10 +171,12 @@ type Service struct {
 	flowerRuntimeRouteKnown         map[string]bool
 	flowerSubagentBoundaryByThread  map[string]string
 
+	toolMedia  toolMediaStore
 	uploadsDir string
 	threadsDB  *threadstore.Store
 
 	closeFloret            func() error
+	floretMediaInventory   func(context.Context) (flruntime.MediaInventory, error)
 	threadRuntime          flruntime.ThreadService
 	floretEffects          *floretEffectAdapter
 	orphanMu               sync.Mutex
@@ -238,12 +240,12 @@ func (s *Service) ResolveTargetToolAttachmentForThread(ctx context.Context, meta
 	if threadID == "" || targetID == "" || resourceRef == "" {
 		return nil, errors.New("computer frame ownership is invalid")
 	}
-	detail, err := s.GetFlowerThreadDetail(ctx, meta, threadID)
-	if err != nil || detail == nil {
-		return nil, errors.New("computer frame thread is unavailable")
+	current, err := s.authorizeToolMediaThread(ctx, meta, threadID)
+	if err != nil {
+		return nil, err
 	}
 	owned := false
-	for _, item := range detail.Current.Items {
+	for _, item := range current.Items {
 		if item.Activity == nil || item.Activity.Presentation == nil {
 			continue
 		}
@@ -447,9 +449,11 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 		flowerRuntimeParentByThread:     make(map[string]string),
 		flowerRuntimeRouteKnown:         make(map[string]bool),
 		flowerSubagentBoundaryByThread:  make(map[string]string),
+		toolMedia:                       newToolMediaStore(filepath.Join(opts.StateDir, "computer", "keyframes")),
 		uploadsDir:                      uploadsDir,
 		threadsDB:                       ts,
 		closeFloret:                     floretBootstrap.close,
+		floretMediaInventory:            floretBootstrap.mediaInventory,
 		threadRuntime:                   floretBootstrap.threadRuntime,
 		floretEffects:                   floretBootstrap.effects,
 		orphanCanonicalRootIDs:          make(map[string]struct{}),
@@ -462,6 +466,7 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 	}
 	svc.skillManager.mcpManager = mcpManager
 	if computer, ok := opts.TargetToolExecutor.(*ComputerUseRuntime); ok {
+		svc.toolMedia = computer.media
 		computer.mu.Lock()
 		computer.bindings = ts
 		computer.mu.Unlock()
@@ -513,6 +518,12 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 	}
 	if interruptedUploads > 0 {
 		logger.Info("ai: interrupted upload recovery completed", "count", interruptedUploads)
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, errors.Join(err, svc.Close())
+	}
+	if !opts.skipStorageMaintenance {
+		svc.maintainToolMedia(ctx, "pre_activation", true)
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, errors.Join(err, svc.Close())

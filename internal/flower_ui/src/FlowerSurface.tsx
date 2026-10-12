@@ -28,7 +28,7 @@ import { For, Match, Show, Suspense, Switch, batch, createEffect, createMemo, cr
 import { cn, useMobileLayout, createAdaptiveSidebar, createRetainedContent } from '@floegence/floe-webapp-core';
 import type { UIFirstSelectionEvent } from '@floegence/floe-webapp-core';
 import { AlertCircle, AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Copy, ExternalLink, FileText, Globe, GripVertical, Link, Menu, MoreHorizontal, MonitorPointer, Paperclip, Pencil, Plus, Refresh, Send, Settings, Shield, Terminal, Trash, XCircle, Zap } from '@floegence/floe-webapp-core/icons';
-import { createInputHistoryController, type InputHistoryEntry, type MarkdownMediaProps } from '@floegence/floe-webapp-core/chat';
+import { createInputHistoryController, MarkdownMedia, type InputHistoryEntry, type MarkdownMediaProps } from '@floegence/floe-webapp-core/chat';
 import { flowerInputHistoryEntries } from './composer/flowerInputHistory';
 
 import { FlowerContextMenu } from './FlowerContextMenu';
@@ -192,7 +192,6 @@ import {
 import {
   createTransportOutbox,
   restoreTransportOutbox,
-  type TransportOutbox,
   type TransportOutboxEntry,
   type TransportOutboxProvisionalThreadSettings,
 } from './transportOutbox';
@@ -384,9 +383,15 @@ type ActiveSubagentDetail = Readonly<{
   detail: FlowerSubagentDetail | null;
   error: string;
 }>;
+type FlowerQueueDockRow = Readonly<{
+  requestKey: string;
+  canonical?: FlowerQueuedTurn;
+  transport?: TransportOutboxEntry;
+}>;
 type PendingAdmissionHandoff = Readonly<{
   sessionKey: string;
   selectionSequence: number;
+  scopeBinding?: { transferred: boolean; threadID?: string };
   settle: (threadID: string, transferDraftScope: boolean) => void;
 }>;
 
@@ -506,7 +511,6 @@ async function withFlowerThreadListTimeout<T>(promise: Promise<T>): Promise<T> {
 }
 
 const FLOWER_APPROVAL_CONFLICT_ERROR_CODE = 'AI_APPROVAL_CONFLICT';
-const FLOWER_ACTIVE_TURN_ADMISSION_ERROR_CODE = 'floret_thread_admission_blocked';
 
 function isFlowerApprovalConflict(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
@@ -515,13 +519,6 @@ function isFlowerApprovalConflict(error: unknown): boolean {
   return trimString(code) === FLOWER_APPROVAL_CONFLICT_ERROR_CODE || Number(record.status) === 409;
 }
 
-function isFlowerActiveTurnAdmissionError(error: unknown): boolean {
-  const code = error && typeof error === 'object' && 'code' in error
-    ? trimString(String((error as { code?: unknown }).code ?? ''))
-    : '';
-  return code === FLOWER_ACTIVE_TURN_ADMISSION_ERROR_CODE
-    || getErrorMessage(error).toLowerCase().includes('already has an active turn');
-}
 
 function flowerApprovalRequest(
   thread: FlowerThreadSnapshot,
@@ -810,12 +807,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [snapshot, setSnapshot] = createSignal<FlowerSettingsSnapshot | null>(null);
   const settingsLoading = () => !snapshot() && !loadError();
 	const [threadCache, setThreadCache] = createSignal(createThreadCache());
-  const [transportOutbox, setTransportOutbox] = createSignal(createTransportOutbox());
+  const outboxExpirationChanged = () => setOutboxRetryTick(tick => tick + 1);
+  const [transportOutbox, setTransportOutbox] = createSignal(createTransportOutbox({ onExpired: outboxExpirationChanged }));
   const [stoppingThreadIDs, setStoppingThreadIDs] = createSignal<ReadonlySet<string>>(new Set());
-  const [busyAdmissionThreadIDs, setBusyAdmissionThreadIDs] = createSignal<ReadonlySet<string>>(new Set());
   const stopThreadRequests = new Map<string, Promise<void>>();
-  const activeTurnAdmissionRecoveryRequests = new Map<string, Promise<void>>();
-  const busyAdmissionNotifiedThreadIDs = new Set<string>();
   const updateThreadIDMembership = (
     setter: typeof setStoppingThreadIDs,
     threadID: string,
@@ -846,7 +841,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 	);
 	let transportOutboxDisposed = false;
 	onMount(() => {
-		void restoreTransportOutbox().then((restored) => {
+		void restoreTransportOutbox({ onExpired: outboxExpirationChanged }).then((restored) => {
 			if (transportOutboxDisposed) {
 				restored.dispose();
 				return;
@@ -864,6 +859,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 	onCleanup(() => {
 		transportOutboxDisposed = true;
 		pendingAdmissionHandoffs.clear();
+    outboxResendInFlight.clear();
+    launchChatTurnInFlight.clear();
+    outboxDraftRestorers.clear();
+    outboxAdapters.clear();
 		transportOutbox().dispose();
 	});
 	const threads = createMemo<readonly FlowerThreadSnapshot[]>((previous) => retainEqualValue(previous, [...threadCache().summaries.values()]));
@@ -882,6 +881,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   // Reactive state updates are batched. Keep a synchronous guard as well so
   // Enter repeat and a same-tick click cannot admit the same draft twice.
   const launchChatTurnInFlight = new Set<string>();
+  const [preparingSendRevision, setPreparingSendRevision] = createSignal(0);
+  const composerSendPreparing = () => {
+    preparingSendRevision();
+    return launchChatTurnInFlight.has(currentComposerSessionKey());
+  };
+  const outboxDraftRestorers = new Map<string, () => boolean>();
+  const outboxAdapters = new Map<string, FlowerSurfaceAdapter>();
   const [settingsSaving, setSettingsSaving] = createSignal(false);
   const [modelSourceRefreshing, setModelSourceRefreshing] = createSignal(false);
   const [threadsRefreshing, setThreadsRefreshing] = createSignal(false);
@@ -1492,7 +1498,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (!threadID) return false;
     return flowerThreadHasActiveTurnEvidence(selectedThread())
       || flowerThreadHasActiveTurnEvidence(selectedThreadSummary())
-      || busyAdmissionThreadIDs().has(threadID)
       || stoppingThreadIDs().has(threadID);
   });
   const selectedThreadCanStop = createMemo(() => (
@@ -1627,12 +1632,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 		if (!draftSnapshot) throw new Error('Flower composer draft session snapshot is unavailable.');
 		return draftSnapshot();
 	};
-	const visibleTransportOutbox = createMemo(() => (
-	    transportOutbox().forThread(currentComposerSessionKey()).filter((entry) => !entry.operation)
-	  ));
 	const [outboxRetryTick, setOutboxRetryTick] = createSignal(0);
-	const outboxRetryAttempts = new Map<string, number>();
-	const outboxRetryTimers = new Map<string, ReturnType<typeof setTimeout>>();
+	const visibleTransportOutbox = createMemo(() => {
+    outboxRetryTick();
+    return transportOutbox().forThread(currentComposerSessionKey());
+  });
+  const selectedQueueDockRows = createMemo<readonly FlowerQueueDockRow[]>(() => {
+    const canonical = selectedQueuedTurns().map(turn => ({ requestKey: trimString(turn.request_key) || trimString(turn.queue_id), canonical: turn }));
+    const confirmed = new Set(canonical.map(row => row.requestKey));
+    return [...canonical, ...visibleTransportOutbox().filter(entry => !confirmed.has(entry.requestId)).map(entry => ({ requestKey: entry.requestId, transport: entry }))];
+  });
   const composerSessionDraftFromValue = (value: FlowerComposerDraftValue): FlowerComposerSessionDraft => ({
     chatDraft: value.text,
     references: value.references,
@@ -2060,6 +2069,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     setModelMenuOpen(true);
     queueMicrotask(() => modelSearchRef?.focus());
   };
+  const modelErrorMessage = (error: unknown) => (
+    error && typeof error === 'object' && 'code' in error && error.code === 'thread_image_model_unsupported'
+      ? copy().settings.imageModelRequired
+      : getErrorMessage(error) || copy().chat.messageErrorFallback
+  );
   const handleModelTriggerKeyDown = (event: KeyboardEvent) => {
     if (event.key === 'Enter' || event.key === ' ' || event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
@@ -2115,7 +2129,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         updateCurrentComposerSessionDraft((draft) => (
           trimString(draft.modelIDOverride) === mid ? { ...draft, modelIDOverride: previousDraftOverride } : draft
         ));
-        notifyModelError(getErrorMessage(error) || copy().chat.messageErrorFallback);
+        notifyModelError(modelErrorMessage(error));
       } finally {
         setPendingModelPatch((current) => (
           current?.threadID === pendingSessionKey && current.requested === mid ? null : current
@@ -2148,7 +2162,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       }
     } catch (error) {
       if (selectedThreadDetailMatches(threadID)) {
-        notifyModelError(getErrorMessage(error) || copy().chat.messageErrorFallback);
+        notifyModelError(modelErrorMessage(error));
       }
     } finally {
       setPendingModelPatch((current) => (current?.threadID === threadID && current.requested === mid ? null : current));
@@ -3265,7 +3279,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       settingsState,
     } = result;
     const retained = result.cache.views.get(threadID)?.thread ?? candidate.thread;
-    const currentOutbox = transportOutbox();
+    let currentOutbox = transportOutbox();
+    if (current) {
+      for (const entry of currentOutbox.matchCurrent(current, { canConfirm: canConfirmOutboxEntry })) {
+        if (!entry.input.thread_id) currentOutbox = currentOutbox.bindAcceptedThread(entry.requestId, threadID);
+      }
+    }
     const reconciliation = current
       ? currentOutbox.reconcile(current, { canConfirm: canConfirmOutboxEntry })
       : { outbox: currentOutbox, admitted: [] };
@@ -3275,9 +3294,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       if (entry.threadId.startsWith(`${PENDING_NEW_THREAD_ID}:`)) embeddedThreads.set(entry.threadId, threadID);
       const handoff = pendingAdmissionHandoffs.get(entry.requestId);
       if (!handoff) return [];
+      if (handoff.sessionKey.startsWith(`${PENDING_NEW_THREAD_ID}:`)) embeddedThreads.set(handoff.sessionKey, threadID);
       const transferDraftScope = Boolean(
         !selectionTransferred
-        && isPendingDraftKey(entry.threadId)
         && isPendingDraftKey(handoff.sessionKey)
         && handoff.selectionSequence === threadLoadSequence
         && !nextCache.selectedId
@@ -3289,6 +3308,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return [{ entry, handoff, transferDraftScope }];
     });
     batch(() => {
+      for (const entry of reconciliation.admitted) { outboxDraftRestorers.delete(entry.requestId); outboxAdapters.delete(entry.requestId); }
       for (const { entry, handoff, transferDraftScope } of admittedHandoffs) {
         handoff.settle(threadID, transferDraftScope);
         pendingAdmissionHandoffs.delete(entry.requestId);
@@ -3313,14 +3333,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const detailConverged = !threadSummaryNeedsDetail(acceptedSummary, retained);
     if (detailConverged && createdForkThreadID() === threadID) setCreatedForkThreadID('');
     if (detailConverged && threadID === selectedThreadID()) setThreadLoadError('');
-    if (
-      busyAdmissionThreadIDs().has(threadID)
-      && !flowerThreadHasActiveTurnEvidence(retained)
-      && detailConverged
-    ) {
-      updateThreadIDMembership(setBusyAdmissionThreadIDs, threadID, false);
-      busyAdmissionNotifiedThreadIDs.delete(threadID);
-    }
 
     if (runtimeState === 'accepted' && (
       previous
@@ -3663,19 +3675,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return request;
   };
 
-  const recoverActiveTurnAdmission = (threadID: string): Promise<void> => {
-    const tid = trimString(threadID);
-    if (!tid) return Promise.resolve();
-    const existing = activeTurnAdmissionRecoveryRequests.get(tid);
-    if (existing) return existing;
-    const request = requestThreadDetail(
-      tid,
-      'background_refresh',
-      true,
-    ).finally(() => activeTurnAdmissionRecoveryRequests.delete(tid));
-    activeTurnAdmissionRecoveryRequests.set(tid, request);
-    return request;
-  };
 
   createEffect(() => {
     const threadID = trimString(selectedThreadID());
@@ -4467,7 +4466,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const handoff = pendingAdmissionHandoffs.get(requestID);
     const transferDraftScope = Boolean(
       handoff
-      && isPendingDraftKey(entry.threadId)
       && isPendingDraftKey(handoff.sessionKey)
       && handoff.selectionSequence === threadLoadSequence
       && !threadCache().selectedId
@@ -4476,7 +4474,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     batch(() => {
       handoff?.settle(threadID, transferDraftScope);
       pendingAdmissionHandoffs.delete(requestID);
-      setTransportOutbox(currentOutbox.bindAcceptedThread(requestID, threadID));
+      setTransportOutbox(currentOutbox.bindAcceptedThread(requestID, threadID).put({
+        ...entry, threadId: threadID, input: { ...entry.input, thread_id: threadID }, delivery: 'accepted', deliveryError: undefined,
+      }));
+      outboxDraftRestorers.delete(requestID);
+      outboxAdapters.delete(requestID);
       if (transferDraftScope) {
         setThreadCache((cache) => cache.select(threadID));
         setLoadError('');
@@ -4511,69 +4513,92 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
   };
 
-	createEffect(() => {
-		outboxRetryTick();
-		if (surfaceDisposed || !props.adapter.launchTurn) return;
-		for (const entry of transportOutbox().entries.values()) {
-			if (outboxResendInFlight.has(entry.requestId)) continue;
-			if (entry.terminalError) continue;
+  // One ordered transport owner per thread. A current confirmation can release
+  // the next request before a slow HTTP response returns; unknown outcomes pause
+  // only their originating thread until the user retries the same identity.
+  createEffect(() => {
+    outboxRetryTick();
+    const retainedIDs = new Set(transportOutbox().entries.keys());
+    for (const requestID of pendingAdmissionHandoffs.keys()) if (!retainedIDs.has(requestID)) pendingAdmissionHandoffs.delete(requestID);
+    for (const requestID of outboxDraftRestorers.keys()) if (!retainedIDs.has(requestID)) outboxDraftRestorers.delete(requestID);
+    for (const requestID of outboxAdapters.keys()) if (!retainedIDs.has(requestID)) outboxAdapters.delete(requestID);
+    for (const requestID of outboxResendInFlight) if (!retainedIDs.has(requestID)) outboxResendInFlight.delete(requestID);
+    if (surfaceDisposed || !props.adapter.launchTurn) return;
+    const blockedThreads = new Set<string>();
+    const activeThreads = new Set([...transportOutbox().entries.values()].filter(entry => outboxResendInFlight.has(entry.requestId) && entry.delivery !== 'accepted').map(entry => entry.threadId));
+    for (const entry of transportOutbox().entries.values()) {
+      if (entry.delivery === 'failed' || entry.delivery === 'accepted') continue;
+      if (blockedThreads.has(entry.threadId)) continue;
+      if (entry.terminalError) {
+        if (entry.delivery === 'unknown') blockedThreads.add(entry.threadId);
+        continue;
+      }
+      blockedThreads.add(entry.threadId);
       if (entry.operation === 'context_compaction' && !props.adapter.compactThreadContext) continue;
-			if ((entry.input.attachment_ids?.length ?? 0) > 0 && !trimString(entry.input.staging_scope?.capability)) continue;
-			if (isPendingDraftKey(entry.threadId) && !pendingAdmissionHandoffs.has(entry.requestId)) {
-				pendingAdmissionHandoffs.set(entry.requestId, {
-					sessionKey: entry.threadId,
-					selectionSequence: entry.threadId === pendingDraftKey() ? threadLoadSequence : -1,
-					settle: () => undefined,
-				});
-			}
-			outboxResendInFlight.add(entry.requestId);
-			const requestEpoch = liveTransport.connectionEpoch();
-			const request = entry.operation === 'context_compaction'
-        ? props.adapter.compactThreadContext!(entry.threadId, { storage_generation: entry.input.storage_generation ?? '', client_request_id: entry.requestId }).then((current) => ({ client_request_id: entry.requestId, thread_id: entry.threadId, current }))
-        : props.adapter.launchTurn(entry.input);
-      void request.then((receipt) => {
-				outboxRetryAttempts.delete(entry.requestId);
-				const retryTimer = outboxRetryTimers.get(entry.requestId);
-				if (retryTimer !== undefined) clearTimeout(retryTimer);
-				outboxRetryTimers.delete(entry.requestId);
+      if ((entry.input.attachment_ids?.length ?? 0) > 0 && !trimString(entry.input.staging_scope?.capability)) continue;
+      if (isPendingDraftKey(entry.threadId) && !pendingAdmissionHandoffs.has(entry.requestId)) {
+        pendingAdmissionHandoffs.set(entry.requestId, {
+          sessionKey: entry.threadId,
+          selectionSequence: entry.threadId === pendingDraftKey() ? threadLoadSequence : -1,
+          settle: () => undefined,
+        });
+      }
+      if (entry.delivery === 'unknown' || activeThreads.has(entry.threadId)) continue;
+      outboxResendInFlight.add(entry.requestId);
+      setOutboxRetryTick(tick => tick + 1);
+      const adapter = outboxAdapters.get(entry.requestId) ?? props.adapter;
+      const requestEpoch = liveTransport.connectionEpoch();
+      const dispatch = async () => {
+        try {
+          await transportOutbox().flushPersistence();
+        } catch (error) {
+          throw flowerTurnAdmissionError('not_sent', error);
+        }
+        if (surfaceDisposed || !transportOutbox().entries.has(entry.requestId)) return;
+        const receipt = entry.operation === 'context_compaction'
+          ? await adapter.compactThreadContext!(entry.threadId, { storage_generation: entry.input.storage_generation ?? '', client_request_id: entry.requestId }).then(current => ({ client_request_id: entry.requestId, thread_id: entry.threadId, current }))
+          : await adapter.launchTurn(entry.input);
+        if (surfaceDisposed) return;
+        if (trimString(receipt.client_request_id) !== entry.requestId) {
+          throw flowerTurnAdmissionError('unknown', new Error('Flower send returned a different client request identity.'));
+        }
         if (entry.operation === 'context_compaction') {
+          pendingAdmissionHandoffs.get(entry.requestId)?.settle(receipt.thread_id, false);
+          pendingAdmissionHandoffs.delete(entry.requestId);
           if (receipt.current && requestEpoch === liveTransport.connectionEpoch()) applyRuntimeCurrent(receipt.current);
-          setTransportOutbox((outbox) => outbox.drop(entry.requestId));
+          setTransportOutbox(outbox => outbox.drop(entry.requestId));
         } else applyAcceptedTurnLaunchReceipt(receipt, requestEpoch);
-			}).catch((error) => {
-                if (error && typeof error === 'object' && error.code === 'AI_STORAGE_RESTORED') {
-                    pendingAdmissionHandoffs.delete(entry.requestId);
-                    setTransportOutbox((outbox) => outbox.put({ ...entry, terminalError: 'storage_restored' }));
-                    return;
-                }
-				if (flowerTurnAdmissionFailureKind(error) !== 'unknown') {
-					pendingAdmissionHandoffs.delete(entry.requestId);
-					setTransportOutbox((outbox) => outbox.drop(entry.requestId));
-					const sessionKey = entry.threadId;
-					updateComposerSessionDraft(sessionKey, (draft) => ({
-						...draft,
-						chatDraft: draft.chatDraft || entry.input.prompt,
-					}));
-					notifyComposerError(getErrorMessage(error));
-					return;
-				}
-				const attempt = (outboxRetryAttempts.get(entry.requestId) ?? 0) + 1;
-				outboxRetryAttempts.set(entry.requestId, attempt);
-				if (outboxRetryTimers.has(entry.requestId)) return;
-				const delay = Math.min(10_000, 250 * 2 ** Math.min(attempt - 1, 5));
-				outboxRetryTimers.set(entry.requestId, setTimeout(() => {
-					outboxRetryTimers.delete(entry.requestId);
-					setOutboxRetryTick((tick) => tick + 1);
-				}, delay));
-			}).finally(() => {
-				outboxResendInFlight.delete(entry.requestId);
-			});
-		}
-	});
-	onCleanup(() => {
-		for (const timer of outboxRetryTimers.values()) clearTimeout(timer);
-		outboxRetryTimers.clear();
-	});
+      };
+      void dispatch().catch(error => {
+        if (surfaceDisposed) return;
+        const retained = transportOutbox().entries.get(entry.requestId);
+        // A canonical confirmation wins over a late transport error.
+        if (!retained || retained.delivery === 'accepted') return;
+        const failure = error as FlowerTurnLaunchFailure;
+        if (failure.fresh_decision) setHandlerState(handlerStateFromDecision(failure.fresh_decision));
+        if (error && typeof error === 'object' && error.code === 'AI_STORAGE_RESTORED') {
+          pendingAdmissionHandoffs.delete(entry.requestId);
+          setTransportOutbox(outbox => outbox.put({ ...retained, terminalError: 'storage_restored', delivery: 'failed', deliveryError: getErrorMessage(error) }));
+          return;
+        }
+        const unknown = flowerTurnAdmissionFailureKind(error) === 'unknown';
+        if (entry.operation === 'context_compaction') {
+          const code = error && typeof error === 'object' && 'code' in error ? error.code : '';
+          notifyComposerError(code === 'context_compaction_busy' ? copy().chat.compactContextBusy : getErrorMessage(error));
+          if (!unknown) {
+            pendingAdmissionHandoffs.delete(entry.requestId);
+            setTransportOutbox(outbox => outbox.drop(entry.requestId));
+            return;
+          }
+        }
+        setTransportOutbox(outbox => outbox.put({ ...retained, delivery: unknown ? 'unknown' : 'failed', deliveryError: getErrorMessage(error) }));
+        if (!isPendingDraftKey(retained.threadId)) void requestThreadDetail(retained.threadId, 'background_refresh', true).catch(() => undefined);
+      }).finally(() => {
+        outboxResendInFlight.delete(entry.requestId);
+        if (!surfaceDisposed) setOutboxRetryTick(tick => tick + 1);
+      });
+    }
+  });
 
   const applyFlowerLiveStreamEnvelope = (envelope: FlowerLiveStreamEnvelope): void => {
     if (envelope.kind === 'computer.frame') {
@@ -4999,9 +5024,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   const launchChatTurn = async (promptInput: string) => {
-    // Sending disables the textarea while admission is in flight, which makes
-    // the browser blur it. Keep the original owner so focus can be restored
-    // only when the user has not moved to another control meanwhile.
+    // Preserve focus ownership while preparing this immutable submission.
     const focusOwner = typeof document === 'undefined' ? null : document.activeElement;
     const focusSelectionSequence = threadLoadSequence;
     const inspection = inspectFlowerText(promptInput);
@@ -5071,7 +5094,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     props.embeddedConversation?.onSubmit?.();
     const launchController = operation.controller;
     const launchSessionKey = operation.sessionKey;
+    const scopeBinding = [...pendingAdmissionHandoffs.values()].find(handoff => handoff.sessionKey === launchSessionKey)?.scopeBinding ?? { transferred: false };
+    const submissionScopeKey = () => scopeBinding.transferred && scopeBinding.threadID ? scopeBinding.threadID : launchSessionKey;
+    const submissionSession = () => submissionScopeKey() === launchSessionKey ? operation.session : draftSessionFor(submissionScopeKey());
     const frozenDraft = operationClaim.snapshot.value;
+    const frozenTextRevision = operationClaim.snapshot.text_revision;
     const frozenDraftAttachmentLocalIDs = new Set(frozenDraft.attachments.map((item) => item.local_id));
     const frozenAttachmentLocalIDs = new Set(
       launchController.snapshot().items
@@ -5100,70 +5127,23 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     };
     cancelActiveLongTextSubmission = cancelLongTextSubmission;
     const settleAcceptedComposerDraft = (canonicalThreadID: string, transferDraftScope: boolean) => {
-      launchController.consumeReady(consumedAttachmentLocalIDs);
-      const remainingAttachments = flowerComposerDraftAttachments(launchController.snapshot().items);
       const canonicalSessionKey = trimString(canonicalThreadID);
+      scopeBinding.threadID = canonicalSessionKey;
       const moveDraft = transferDraftScope || launchSessionKey.startsWith(`${PENDING_NEW_THREAD_ID}:`);
-      if (
-        moveDraft
-        && isPendingDraftKey(launchSessionKey)
-        && canonicalSessionKey
-        && canonicalSessionKey !== launchSessionKey
-      ) {
+      if (moveDraft && !scopeBinding.transferred && isPendingDraftKey(launchSessionKey) && canonicalSessionKey && canonicalSessionKey !== launchSessionKey) {
+        scopeBinding.transferred = true;
+        if (launchChatTurnInFlight.has(launchSessionKey)) {
+          launchChatTurnInFlight.add(canonicalSessionKey);
+          setPreparingSendRevision(revision => revision + 1);
+        }
         draftCoordinator.moveScope(launchSessionKey, canonicalSessionKey);
       }
-      const acceptedSessionKeys = new Set((moveDraft
-        ? [launchSessionKey, canonicalSessionKey]
-        : [launchSessionKey]
-      ).map((value) => trimString(value) || pendingDraftKey()));
-      const retainedSessionKey = moveDraft && canonicalSessionKey
-        ? canonicalSessionKey
-        : launchSessionKey;
-      if (composerDraftOperationActive(operation)) {
-        for (const sessionKey of acceptedSessionKeys) draftSessionFor(sessionKey).mutate((value) => ({
-          ...value,
-          text: sessionKey === retainedSessionKey && value.text !== frozenDraft.text ? value.text : '',
-          attachments: sessionKey === retainedSessionKey ? remainingAttachments : [],
-          references: sessionKey === retainedSessionKey ? value.references : [],
-          mode: 'ordinary',
-          client_request_id: undefined,
-          prepared_long_text_local_id: undefined,
-          prepared_long_text_attachment_id: undefined,
-        }));
-      }
-      for (const sessionKey of acceptedSessionKeys) {
-        updateComposerSessionDraft(sessionKey, (draft) => ({
-          ...draft,
-          chatDraft: sessionKey === retainedSessionKey && draft.chatDraft !== frozenDraft.text ? draft.chatDraft : '',
-          references: sessionKey === retainedSessionKey ? draft.references : [],
-          inputPromptSignature: '',
-          inputDrafts: {},
-          activeInputQuestionID: '',
-          ...(draft.reasoningOverride ? { reasoningOverride: undefined } : {}),
-        }));
-      }
-      if (launchController.snapshot().items.length === 0) {
-        releaseAttachmentStagingScope(retainedSessionKey);
-      }
+      const stagingScopeID = launchController.snapshot().staging_scope?.staging_scope_id;
+      const scopeStillPending = stagingScopeID && [...transportOutbox().entries.values()].some(entry => entry.requestId !== clientRequestID && entry.input.staging_scope?.staging_scope_id === stagingScopeID);
+      if (launchController.snapshot().items.length === 0 && !scopeStillPending) releaseAttachmentStagingScope(moveDraft ? canonicalSessionKey : launchSessionKey);
       notifyEmbeddedAccepted?.({ client_request_id: clientRequestID, thread_id: canonicalThreadID });
     };
-    let preserveClientRequestID = false;
-    if (inspection.codePoints <= FLOWER_INLINE_TEXT_CODE_POINT_LIMIT) {
-      operation.session.mutate((value) => value.client_request_id === clientRequestID
-        ? {
-          ...value,
-          text: '',
-          references: [],
-          mode: 'ordinary',
-          client_request_id: undefined,
-        }
-        : value);
-      updateComposerSessionDraft(launchSessionKey, (draft) => ({
-        ...draft,
-        chatDraft: '',
-        references: [],
-      }));
-    }
+    let handedToOutbox = false;
     try {
       let attachmentSnapshot = launchController.snapshot();
       let attachmentItems = attachmentItemsForSubmission(attachmentSnapshot);
@@ -5191,7 +5171,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           return;
         }
         try {
-          launchStagingScope = await ensureAttachmentStagingScope(launchSessionKey);
+          launchStagingScope = await ensureAttachmentStagingScope(submissionScopeKey());
         } catch {
           notifyComposerError(attachmentCopy().unavailable);
           return;
@@ -5229,7 +5209,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           notifyComposerError(attachmentCopy().unavailable);
           return;
         }
-        const transitioned = operation.session.mutate((value) => (
+        const transitioned = submissionSession().mutate((value) => (
           value.client_request_id === clientRequestID
             ? {
               ...value,
@@ -5277,7 +5257,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       if (selectedID) cancelDeferredThreadSelection();
       if (!submissionCurrent()) return;
       transcriptScroll.startFollowing();
-      let originalCommandFenced = false;
       try {
         const decision = currentHandlerDecision() ?? await resolveHandlerDecision();
         if (!submissionCurrent()) return;
@@ -5312,21 +5291,22 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         // their original generation, so restored data cannot replay old input.
         const storageGeneration = await props.adapter.resolveStorageGeneration?.();
         if (!submissionCurrent()) return;
+        const admittedThreadID = selectedID || scopeBinding.threadID;
         const launchInput: FlowerTurnLaunchInput = {
           ...(storageGeneration ? { storage_generation: storageGeneration } : {}),
           client_request_id: clientRequestID,
-          thread_id: selectedID || undefined,
+          thread_id: admittedThreadID || undefined,
           ...(launchStagingScope ? { staging_scope: launchStagingScope } : {}),
           prompt,
           ...(attachmentIDs.length > 0 ? { attachment_ids: attachmentIDs } : {}),
           ...(contextAction ? { context_action: contextAction } : {}),
-          decision: selectedID ? null : decision,
-          ...(!selectedID && draftPermissionType ? { permission_type: draftPermissionType } : {}),
-          ...(!selectedID && draftModelID ? { model_id: draftModelID } : {}),
-          ...(!selectedID && draftReasoningSelection ? { reasoning_selection: draftReasoningSelection } : {}),
-          ...(!selectedID && draftWorkingDir ? { working_dir: draftWorkingDir } : {}),
+          decision: admittedThreadID ? null : decision,
+          ...(!admittedThreadID && draftPermissionType ? { permission_type: draftPermissionType } : {}),
+          ...(!admittedThreadID && draftModelID ? { model_id: draftModelID } : {}),
+          ...(!admittedThreadID && draftReasoningSelection ? { reasoning_selection: draftReasoningSelection } : {}),
+          ...(!admittedThreadID && draftWorkingDir ? { working_dir: draftWorkingDir } : {}),
         };
-        const provisionalThreadSettings = !selectedID && frozenPermissionType
+        const provisionalThreadSettings = !admittedThreadID && frozenPermissionType
           ? {
             model_id: launchModelID,
             working_dir: frozenDisplayedWorkingDir,
@@ -5334,122 +5314,81 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             ...(draftReasoningSelection ? { reasoning_selection: draftReasoningSelection } : {}),
           } satisfies TransportOutboxProvisionalThreadSettings
           : undefined;
-        // Fence before publishing the outbox entry because Solid effects may
-        // observe the new entry synchronously.
-        outboxResendInFlight.add(clientRequestID);
-        originalCommandFenced = true;
+        outboxAdapters.set(clientRequestID, props.adapter);
         pendingAdmissionHandoffs.set(clientRequestID, {
           sessionKey: launchSessionKey,
           selectionSequence: focusSelectionSequence,
+          scopeBinding,
           settle: settleAcceptedComposerDraft,
         });
         let durableOutbox = transportOutbox();
         setTransportOutbox((outbox) => {
           durableOutbox = outbox.put({
             requestId: clientRequestID,
-            threadId: selectedID || launchSessionKey,
+            threadId: admittedThreadID || launchSessionKey,
             input: launchInput,
             attachmentLabels: readyItems.map((attachment) => attachment.name),
+            draftReferences: frozenDraft.references,
             createdAtMs: Date.now(),
+            delivery: 'pending',
             ...(provisionalThreadSettings ? { provisionalThreadSettings } : {}),
           });
           return durableOutbox;
         });
-        await durableOutbox.flushPersistence();
-        if (!submissionCurrent()) return;
-        // The original command and recovery resend share one request-id fence.
-        // Otherwise persisting the outbox entry can immediately trigger a
-        // duplicate send before this command has returned its current view.
-        const requestEpoch = liveTransport.connectionEpoch();
-        const returnedReceipt = await props.adapter.launchTurn(launchInput);
-        if (trimString(returnedReceipt.client_request_id) !== clientRequestID) {
-          throw flowerTurnAdmissionError(
-            'unknown',
-            new Error('Flower send returned a different client request identity.'),
-          );
-        }
-        applyAcceptedTurnLaunchReceipt(returnedReceipt, requestEpoch);
+        // Transfer the frozen draft only after the outbox owns the complete
+        // request. Preparation retains the editor, later edits belong to the
+        // next submission, and acceptance never clears that newer draft.
+        handedToOutbox = true;
+        const submittedFiles = launchController.localFiles().filter(file => consumedAttachmentLocalIDs.includes(file.local_id));
+        const submittedAttachments = flowerComposerDraftAttachments(readyItems);
+        outboxDraftRestorers.set(clientRequestID, () => {
+          const sessionKey = transportOutbox().entries.get(clientRequestID)?.threadId ?? launchSessionKey;
+          const value = draftSessionFor(sessionKey).snapshot().value;
+          if (value.text || value.references.length || value.attachments.length) return false;
+          const controller = attachmentControllerFor(sessionKey);
+          const localFileIDs = new Set(submittedFiles.map(file => file.local_id));
+          batch(() => {
+            controller.hydrateDraft(submittedAttachments.map(item => ({
+              local_id: item.local_id, request_id: item.upload_request_id, source: item.source,
+              name: item.name, mime_type: item.mime_type, size_bytes: item.size_bytes,
+              ...(!localFileIDs.has(item.local_id) && item.staged ? { staged: item.staged } : {}),
+            })));
+            controller.restoreLocalFiles(submittedFiles);
+            draftSessionFor(sessionKey).mutate(current => ({ ...current, text: promptInput, references: frozenDraft.references,
+              attachments: flowerComposerDraftAttachments(controller.snapshot().items), mode: 'ordinary', client_request_id: undefined }));
+            updateComposerSessionDraft(sessionKey, draft => ({ ...draft, chatDraft: promptInput, references: frozenDraft.references }));
+          });
+          return true;
+        });
+        launchController.consumeReady(consumedAttachmentLocalIDs);
+        const submittedSession = submissionSession();
+        const ownsSubmittedText = submittedSession.snapshot().text_revision === frozenTextRevision;
+        submittedSession.mutate(value => value.client_request_id === clientRequestID ? {
+          ...value,
+          text: ownsSubmittedText ? '' : value.text,
+          references: value.references.filter(reference => !frozenDraft.references.some(submitted => submitted.local_id === reference.local_id)),
+          attachments: flowerComposerDraftAttachments(launchController.snapshot().items),
+          mode: 'ordinary', client_request_id: undefined,
+          prepared_long_text_local_id: undefined, prepared_long_text_attachment_id: undefined,
+        } : value);
+        // Do not wait for IndexedDB or HTTP in the preparation guard.
+        // Dispatch waits for durable storage in the sole owner above.
+        void durableOutbox.flushPersistence().catch(() => undefined);
       } catch (error) {
-        if (originalCommandFenced) {
-          outboxResendInFlight.delete(clientRequestID);
-          originalCommandFenced = false;
+        if (!handedToOutbox) {
+          pendingAdmissionHandoffs.delete(clientRequestID);
+          if (preparedLongTextLocalID) launchController.remove(preparedLongTextLocalID);
+          if (composerSessionStillCurrent(launchSessionKey)) notifyComposerError(getErrorMessage(error));
         }
-        const failure = error as FlowerTurnLaunchFailure;
-        if (failure.fresh_decision) {
-          setHandlerState(handlerStateFromDecision(failure.fresh_decision));
-        }
-        if (flowerTurnAdmissionFailureKind(error) === 'unknown') {
-          preserveClientRequestID = true;
-          setOutboxRetryTick((tick) => tick + 1);
-          if (composerSessionStillCurrent(launchSessionKey)) {
-            operation.session.mutate((value) => value.client_request_id === clientRequestID
-              ? { ...value, mode: inspection.codePoints > FLOWER_INLINE_TEXT_CODE_POINT_LIMIT ? 'over_limit_editing' : 'ordinary' }
-              : value);
-          }
-          return;
-        }
-        pendingAdmissionHandoffs.delete(clientRequestID);
-        setTransportOutbox((outbox) => outbox.drop(clientRequestID));
-        if (composerSessionStillCurrent(launchSessionKey)) {
-          if (selectedID && isFlowerActiveTurnAdmissionError(error)) {
-            updateThreadIDMembership(setBusyAdmissionThreadIDs, selectedID, true);
-            if (!busyAdmissionNotifiedThreadIDs.has(selectedID)) {
-              busyAdmissionNotifiedThreadIDs.add(selectedID);
-              notifyComposerError(copy().chat.activeTurnBusy);
-            }
-            void recoverActiveTurnAdmission(selectedID);
-          } else {
-            notifyComposerError(getErrorMessage(error));
-          }
-        }
-        if (preparedLongTextLocalID) launchController.remove(preparedLongTextLocalID);
-        if (composerDraftOperationActive(operation)) {
-          const rejected = operation.session.snapshot();
-          if (rejected.value.client_request_id === clientRequestID) {
-            releaseAttachmentStagingScope(launchSessionKey);
-            operation.session.mutate((value) => ({
-              ...value,
-              text: value.text || promptInput,
-              references: value.references.length > 0 ? value.references : frozenDraft.references,
-              mode: inspection.codePoints > FLOWER_INLINE_TEXT_CODE_POINT_LIMIT ? 'over_limit_editing' : 'ordinary',
-              client_request_id: undefined,
-              prepared_long_text_local_id: undefined,
-              prepared_long_text_attachment_id: undefined,
-            }));
-          }
-          if (composerSessionStillCurrent(launchSessionKey) && currentComposerSessionDraft().chatDraft === '') {
-            updateComposerSessionDraft(launchSessionKey, (draft) => ({
-              ...draft,
-              chatDraft: promptInput,
-              references: draft.references.length > 0 ? draft.references : frozenDraft.references,
-            }));
-            operation.session.mutate((value) => ({
-              ...value,
-              text: value.text || promptInput,
-              references: value.references.length > 0 ? value.references : frozenDraft.references,
-              mode: inspection.codePoints > FLOWER_INLINE_TEXT_CODE_POINT_LIMIT ? 'over_limit_editing' : 'ordinary',
-              client_request_id: undefined,
-              prepared_long_text_local_id: undefined,
-              prepared_long_text_attachment_id: undefined,
-            }));
-          }
-        }
-        return;
-      }
-      updateThreadIDMembership(setBusyAdmissionThreadIDs, selectedID, false);
-      busyAdmissionNotifiedThreadIDs.delete(selectedID);
-      if (originalCommandFenced) {
-        outboxResendInFlight.delete(clientRequestID);
-        originalCommandFenced = false;
       }
     } finally {
+      if (scopeBinding.transferred && scopeBinding.threadID) launchChatTurnInFlight.delete(scopeBinding.threadID);
       if (cancelActiveLongTextSubmission === cancelLongTextSubmission) cancelActiveLongTextSubmission = null;
       setLongTextPreparing(false);
       if (composerDraftOperationActive(operation)) {
-        const shared = operation.session.snapshot();
-        if (!preserveClientRequestID && shared.value.client_request_id === clientRequestID) {
-          releaseAttachmentStagingScope(launchSessionKey);
-          operation.session.mutate((value) => ({
+        const shared = submissionSession().snapshot();
+        if (!handedToOutbox && shared.value.client_request_id === clientRequestID) {
+          submissionSession().mutate((value) => ({
             ...value,
             mode: inspection.codePoints > FLOWER_INLINE_TEXT_CODE_POINT_LIMIT ? 'over_limit_editing' : 'ordinary',
             client_request_id: undefined,
@@ -5475,8 +5414,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const request = (async () => {
       try {
         await props.adapter.stopThread(stoppingThreadID);
-        updateThreadIDMembership(setBusyAdmissionThreadIDs, stoppingThreadID, false);
-        busyAdmissionNotifiedThreadIDs.delete(stoppingThreadID);
         if (selectedThreadDetailMatches(stoppingThreadID)) {
           returnToChat();
         }
@@ -5528,10 +5465,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const sessionKey = currentComposerSessionKey();
     if (launchChatTurnInFlight.has(sessionKey)) return;
     launchChatTurnInFlight.add(sessionKey);
+    setPreparingSendRevision(revision => revision + 1);
     try {
       await launchChatTurn(promptInput);
     } finally {
       launchChatTurnInFlight.delete(sessionKey);
+      setPreparingSendRevision(revision => revision + 1);
     }
   };
 
@@ -6101,38 +6040,37 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       notifyComposerError(copy().chat.compactContextBusy);
       return;
     }
+    const pendingOperation = transportOutbox().forThread(threadID).find(entry => entry.operation === 'context_compaction' && !entry.terminalError);
+    if (pendingOperation) {
+      notifyComposerError(pendingOperation.delivery === 'unknown' ? copy().chat.sendUnknownDescription : copy().chat.compactContextBusy);
+      return;
+    }
     const sessionKey = currentComposerSessionKey();
     if (launchChatTurnInFlight.has(sessionKey)) return;
     launchChatTurnInFlight.add(sessionKey);
+    setPreparingSendRevision(revision => revision + 1);
     const session = draftSessionFor(sessionKey);
     const frozen = session.snapshot();
     const frozenCommand = parseFlowerSlashCommand(frozen.value.text);
-    const pendingOperation = transportOutbox().forThread(threadID).find((entry) => entry.operation === 'context_compaction');
-    const requestID = pendingOperation?.requestId ?? createFlowerClientRequestID();
-    const requestEpoch = liveTransport.connectionEpoch();
-    if (outboxResendInFlight.has(requestID)) { launchChatTurnInFlight.delete(sessionKey); return; }
-    outboxResendInFlight.add(requestID);
+    const requestID = createFlowerClientRequestID();
     try {
-      const storageGeneration = pendingOperation?.input.storage_generation ?? await props.adapter.resolveStorageGeneration?.() ?? '';
-      setTransportOutbox((outbox) => outbox.put({
+      if (outboxResendInFlight.has(requestID)) return;
+      const storageGeneration = await props.adapter.resolveStorageGeneration?.() ?? '';
+      if (surfaceDisposed) return;
+      outboxAdapters.set(requestID, props.adapter);
+      pendingAdmissionHandoffs.set(requestID, { sessionKey, selectionSequence: threadLoadSequence, settle: () => {
+        if (session.snapshot().text_revision === frozen.text_revision && (frozenCommand.kind === 'intent' || frozenCommand.kind === 'suggest')) updateComposerSessionText(sessionKey, '');
+      } });
+      setTransportOutbox(outbox => outbox.put({
         operation: 'context_compaction', requestId: requestID, threadId: threadID,
         input: { client_request_id: requestID, thread_id: threadID, storage_generation: storageGeneration, prompt: '' },
-        attachmentLabels: [], createdAtMs: Date.now(),
+        attachmentLabels: [], createdAtMs: Date.now(), delivery: 'pending',
       }));
-      await transportOutbox().flushPersistence();
-      const current = await props.adapter.compactThreadContext(threadID, { storage_generation: storageGeneration, client_request_id: requestID });
-      setTransportOutbox((outbox) => outbox.drop(requestID));
-      if (requestEpoch === liveTransport.connectionEpoch()) applyRuntimeCurrent(current);
-      if (session.snapshot().revision === frozen.revision && (frozenCommand.kind === 'intent' || frozenCommand.kind === 'suggest')) {
-        updateComposerSessionText(sessionKey, '');
-      }
     } catch (error) {
-      if (flowerTurnAdmissionFailureKind(error) !== 'unknown') setTransportOutbox((outbox) => outbox.drop(requestID));
-      const code = error && typeof error === 'object' && 'code' in error ? error.code : '';
-      notifyComposerError(code === 'context_compaction_busy' ? copy().chat.compactContextBusy : getErrorMessage(error));
+      notifyComposerError(getErrorMessage(error));
     } finally {
-      outboxResendInFlight.delete(requestID);
       launchChatTurnInFlight.delete(sessionKey);
+      setPreparingSendRevision(revision => revision + 1);
     }
   };
 
@@ -6281,89 +6219,121 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const attachments = (turn.attachments ?? []).map((attachment) => trimString(attachment.name)).filter(Boolean);
     return attachments.join(', ') || copy().chat.pendingQueued;
   };
+  const discardUnsentOutboxEntry = (entry: TransportOutboxEntry) => {
+    if ((entry.delivery === 'unknown' && !entry.terminalError) || entry.delivery === 'accepted' || outboxResendInFlight.has(entry.requestId)) return;
+    pendingAdmissionHandoffs.delete(entry.requestId);
+    outboxDraftRestorers.delete(entry.requestId);
+    outboxAdapters.delete(entry.requestId);
+    setTransportOutbox(outbox => outbox.drop(entry.requestId));
+  };
+  const restoreUnsentOutboxEntry = (entry: TransportOutboxEntry) => {
+    if ((entry.delivery === 'unknown' && !entry.terminalError) || entry.delivery === 'accepted' || outboxResendInFlight.has(entry.requestId)) return;
+    const draft = draftSessionFor(entry.threadId).snapshot().value;
+    if (draft.text || draft.references.length || draft.attachments.length) return;
+    const restore = !entry.terminalError && outboxDraftRestorers.get(entry.requestId);
+    if (restore) {
+      if (!restore()) return;
+    } else {
+      if (!entry.terminalError && (entry.input.attachment_ids?.length ?? 0) > 0) return;
+      batch(() => {
+        draftSessionFor(entry.threadId).mutate(value => ({ ...value, text: entry.input.prompt, references: entry.draftReferences ?? [], mode: 'ordinary', client_request_id: undefined }));
+        updateComposerSessionDraft(entry.threadId, value => ({ ...value, chatDraft: entry.input.prompt, references: entry.draftReferences ?? [] }));
+      });
+    }
+    if (entry.delivery !== 'unknown') discardUnsentOutboxEntry(entry);
+    focusComposerIfConnected();
+  };
+  const retryOutboxEntry = (entry: TransportOutboxEntry) => {
+    if (entry.terminalError || outboxResendInFlight.has(entry.requestId)) return;
+    setTransportOutbox(outbox => outbox.put({ ...entry, delivery: 'pending', deliveryError: undefined }));
+    setOutboxRetryTick(tick => tick + 1);
+  };
+  const refreshOutboxEntry = (entry: TransportOutboxEntry) => {
+    if (isPendingDraftKey(entry.threadId)) { void refreshDirectory(); return; }
+    void requestThreadDetail(entry.threadId, 'user_action', true).catch(error => notifyThreadActionError(getErrorMessage(error)));
+  };
   const queuedTurnsDock = () => (
-    <Show when={selectedQueuedTurns().length > 0}>
-      <div
-        class="flower-queued-turn-dock"
-        role="list"
-        aria-label={copy().chat.pendingQueued}
-        onDragOver={previewQueuedTurnDropAtEnd}
-        onDrop={commitQueuedTurnReorder}
-      >
-        <FlowerKeyedList scope={selectedThreadID()} focusFallback={focusComposerIfConnected} each={selectedQueuedTurns()} identity={(turn) => JSON.stringify([selectedThreadID(), turn.queue_id])}>
-          {(turn) => {
+    <Show when={selectedQueueDockRows().length > 0}>
+      <div class="flower-queued-turn-dock" role="list" aria-label={copy().chat.pendingQueued}
+        onDragOver={previewQueuedTurnDropAtEnd} onDrop={commitQueuedTurnReorder}>
+        <FlowerKeyedList scope={currentComposerSessionKey()} focusFallback={focusComposerIfConnected}
+          each={selectedQueueDockRows()} identity={row => row.requestKey}>
+          {row => {
+            const transport = () => row().transport;
+            const turn = (): FlowerQueuedTurn => row().canonical ?? {
+              queue_id: row().requestKey, prompt: transport()?.input.prompt ?? '',
+              created_at_ms: transport()?.createdAtMs ?? 0, context_action: transport()?.input.context_action,
+            };
             const queueID = () => trimString(turn().queue_id);
+            const label = () => transport()?.operation === 'context_compaction' ? copy().chat.compactContext
+              : transport()?.input.prompt || transport()?.attachmentLabels.join(', ') || queuedTurnDisplayLabel(turn());
             const dragging = () => queuedTurnReorder()?.draggedQueueID === queueID();
-            const attachmentCount = () => turn().attachments?.length ?? 0;
-            return (
-              <div
-                class="flower-queued-turn-item"
-                role="listitem"
-                aria-label={`${copy().chat.pendingQueued}: ${queuedTurnDisplayLabel(turn())}`}
-                draggable={queuedTurnReorderEnabled()}
-                data-flower-queued-turn-dock-id={queueID()}
-                data-flower-queued-turn-dragging={dragging() && queuedTurnReorder()?.phase === 'dragging' ? 'true' : undefined}
-                onDragStart={(event) => beginQueuedTurnDrag(event, queueID())}
-                onDragOver={(event) => previewQueuedTurnDrop(event, queueID())}
-                onDrop={(event) => {
-                  event.stopPropagation();
-                  commitQueuedTurnReorder(event);
-                }}
-                onDragEnd={finishQueuedTurnDrag}
-              >
+            const failed = () => transport()?.delivery === 'failed' || Boolean(transport()?.terminalError && transport()?.delivery !== 'unknown' && transport()?.delivery !== 'accepted');
+            const unknown = () => transport()?.delivery === 'unknown';
+            const settled = () => transport()?.delivery === 'accepted';
+            const recoveryCopy = () => Boolean(transport()?.terminalError);
+            const mutableUnsent = () => { outboxRetryTick(); return Boolean(transport() && (!unknown() || recoveryCopy()) && !settled() && !outboxResendInFlight.has(row().requestKey)); };
+            const emptyDraft = () => { const value = reactiveDraftSnapshotFor(currentComposerSessionKey()).value; return !value.text && !value.references.length && !value.attachments.length; };
+            const sending = () => { outboxRetryTick(); return outboxResendInFlight.has(row().requestKey); };
+            const status = () => transport() ? failed() ? copy().chat.sendFailed : unknown() ? copy().chat.sendUnknown : settled() ? copy().chat.pendingQueued : sending() ? copy().chat.pendingSending : copy().chat.sendWaiting : copy().chat.pendingQueued;
+            const deliveryDescription = () => transport()?.terminalError === 'attachments_unavailable_after_restart' ? copy().chat.attachmentRecoveryDescription
+              : transport()?.terminalError === 'storage_restored' ? copy().chat.restoredInputDescription
+              : unknown() ? copy().chat.sendUnknownDescription : '';
+            return <div class="flower-queued-turn-item" role="listitem" aria-label={`${status()}: ${label()}`}
+              draggable={!transport() && queuedTurnReorderEnabled()}
+              data-flower-queued-turn-dock-id={queueID()}
+              data-flower-transport-outbox-id={transport()?.requestId}
+              data-flower-transport-delivery={transport()?.delivery}
+              data-flower-delivery-explanation={deliveryDescription() ? 'true' : undefined}
+              data-flower-queued-turn-dragging={dragging() && queuedTurnReorder()?.phase === 'dragging' ? 'true' : undefined}
+              title={transport()?.terminalError === 'attachments_unavailable_after_restart' ? copy().chat.attachmentRecoveryDescription
+                : transport()?.terminalError === 'storage_restored' ? copy().chat.restoredInputDescription
+                : unknown() ? copy().chat.sendUnknownDescription : transport()?.deliveryError}
+              onDragStart={event => { if (!transport()) beginQueuedTurnDrag(event, queueID()); }}
+              onDragOver={event => { if (!transport()) previewQueuedTurnDrop(event, queueID()); }}
+              onDrop={event => { event.stopPropagation(); commitQueuedTurnReorder(event); }} onDragEnd={finishQueuedTurnDrag}>
+              <Show when={!transport()} fallback={<Show when={failed() || unknown()} fallback={<Show when={sending()} fallback={<Clock class="flower-queued-turn-handle" aria-hidden="true" />}><Refresh class="flower-queued-turn-handle motion-safe:animate-spin" aria-hidden="true" /></Show>}><AlertCircle class="flower-queued-turn-handle" aria-hidden="true" /></Show>}>
                 <GripVertical class="flower-queued-turn-handle" aria-hidden="true" />
-                <div class="flower-queued-turn-content">
-                  <span class="flower-queued-turn-label">{queuedTurnDisplayLabel(turn())}</span>
-                  <Show when={attachmentCount() > 0}>
-                    <span class="flower-queued-turn-compact-meta" title={(turn().attachments ?? []).map((attachment) => attachment.name).join(', ')}>
-                      <Paperclip aria-hidden="true" />
-                      <span>{attachmentCount()}</span>
-                    </span>
-                  </Show>
-                  <Show when={turn().context_action}>
-                    <span class="flower-queued-turn-compact-meta" title={copy().chat.linkedContextLabel}>
-                      <FileText aria-hidden="true" />
-                    </span>
-                  </Show>
-                </div>
-                <div class="flower-queued-turn-actions">
-                  <Show when={props.adapter.sendQueuedTurnNow}>
-                    <button
-                      type="button"
-                      class="flower-queued-turn-action flower-queued-turn-send"
-                      disabled={queuedTurnSendBlocked(trimString(selectedThreadID()))}
-                      aria-busy={queuedTurnSendPending(trimString(selectedThreadID()), queueID()) ? 'true' : undefined}
-                      aria-label={copy().chat.queuedSendNow}
-                      title={copy().chat.queuedSendNowDescription}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        void sendQueuedTurnNow(turn());
-                      }}
-                    >
-                      <Show when={!queuedTurnSendPending(trimString(selectedThreadID()), queueID())} fallback={<Refresh class="motion-safe:animate-spin" aria-hidden="true" />}>
-                        <Send aria-hidden="true" />
-                      </Show>
-                    </button>
-                  </Show>
-                  <Show when={props.adapter.deleteQueuedTurn}>
-                    <button
-                      type="button"
-                      class="flower-queued-turn-action flower-queued-turn-delete"
-                      disabled={queuedTurnSendPending(trimString(selectedThreadID()))}
-                      aria-label={copy().chat.queuedDelete}
-                      title={copy().chat.queuedDelete}
-                      data-flower-queued-turn-delete={queueID()}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        void deleteQueuedTurn(turn());
-                      }}
-                    >
-                      <Trash aria-hidden="true" />
-                    </button>
-                  </Show>
-                </div>
+              </Show>
+              <div class="flower-queued-turn-content">
+                <span class="flower-queued-turn-label">{label()}</span>
+                <Show when={transport()}><span class="flower-queued-turn-compact-meta" role="status">{status()}</span></Show>
+                <Show when={(turn().attachments?.length ?? transport()?.attachmentLabels.length ?? 0) > 0}>
+                  <span class="flower-queued-turn-compact-meta" title={transport()?.attachmentLabels.join(', ') ?? turn().attachments?.map(attachment => attachment.name).join(', ')}><Paperclip aria-hidden="true" /></span>
+                </Show>
+                <Show when={turn().context_action}><span class="flower-queued-turn-compact-meta" title={copy().chat.linkedContextLabel}><FileText aria-hidden="true" /></span></Show>
               </div>
-            );
+              <div class="flower-queued-turn-actions">
+                <Show when={transport()} fallback={<>
+                  <Show when={props.adapter.sendQueuedTurnNow}><button type="button" class="flower-queued-turn-action flower-queued-turn-send"
+                    disabled={queuedTurnSendBlocked(trimString(selectedThreadID()))}
+                    aria-busy={queuedTurnSendPending(trimString(selectedThreadID()), queueID()) ? 'true' : undefined}
+                    aria-label={copy().chat.queuedSendNow} title={copy().chat.queuedSendNowDescription}
+                    onClick={event => { event.stopPropagation(); void sendQueuedTurnNow(turn()); }}>
+                    <Show when={!queuedTurnSendPending(trimString(selectedThreadID()), queueID())} fallback={<Refresh class="motion-safe:animate-spin" aria-hidden="true" />}><Send aria-hidden="true" /></Show>
+                  </button></Show>
+                  <Show when={props.adapter.deleteQueuedTurn}><button type="button" class="flower-queued-turn-action flower-queued-turn-delete"
+                    disabled={queuedTurnSendPending(trimString(selectedThreadID()))} aria-label={copy().chat.queuedDelete} title={copy().chat.queuedDelete}
+                    data-flower-queued-turn-delete={queueID()} onClick={event => { event.stopPropagation(); void deleteQueuedTurn(turn()); }}><Trash aria-hidden="true" /></button></Show>
+                </>}>
+                  {entry => <>
+                    <Show when={(failed() || unknown()) && !entry().terminalError}><button type="button" class="flower-queued-turn-action" aria-label={copy().chat.retrySend} title={copy().chat.retrySend}
+                      onClick={() => retryOutboxEntry(entry())}><Refresh aria-hidden="true" /></button></Show>
+                    <Show when={unknown() || settled() || recoveryCopy()}><button type="button" class="flower-queued-turn-action" aria-label={copy().chat.refreshSend} title={copy().chat.refreshSend}
+                      onClick={() => refreshOutboxEntry(entry())}><Refresh aria-hidden="true" /></button></Show>
+                    <Show when={(failed() || unknown()) && !entry().operation}><button type="button" class="flower-queued-turn-action" aria-label={copy().chat.restoredInputCopy} title={copy().chat.restoredInputCopy}
+                      onClick={() => void writeClipboardText(entry().input.prompt, copy().chat.restoredInputCopy).catch(error => notifyThreadActionError(getErrorMessage(error)))}><Copy aria-hidden="true" /></button></Show>
+                    <Show when={mutableUnsent() && !entry().operation}><button type="button" class="flower-queued-turn-action" aria-label={copy().chat.restoreSend} title={copy().chat.restoreSend}
+                      disabled={!emptyDraft()}
+                      onClick={() => restoreUnsentOutboxEntry(entry())}><Pencil aria-hidden="true" /></button>
+                      <button type="button" class="flower-queued-turn-action flower-queued-turn-delete" aria-label={recoveryCopy() ? copy().chat.removeRecoveryCopy : copy().chat.deleteUnsent}
+                        title={recoveryCopy() ? copy().chat.removeRecoveryCopyDescription : copy().chat.deleteUnsent}
+                        onClick={() => discardUnsentOutboxEntry(entry())}><Trash aria-hidden="true" /></button></Show>
+                  </>}
+                </Show>
+              </div>
+              <Show when={deliveryDescription()}>{description => <p class="flower-queued-turn-delivery-explanation">{description()}</p>}</Show>
+            </div>;
           }}
         </FlowerKeyedList>
       </div>
@@ -6581,7 +6551,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return retainEqualValue(previous, usage);
   });
   const selectedThreadHasLiveProgress = createMemo(() => selectedRunProgress() != null);
-  const selectedPendingDelivery = createMemo(() => visibleTransportOutbox().find(entry => !entry.terminalError));
+  const selectedPendingDelivery = createMemo(() => {
+    outboxRetryTick();
+    return visibleTransportOutbox().find(entry => !entry.terminalError && entry.delivery !== 'failed' && entry.delivery !== 'unknown' && (entry.delivery === 'accepted' || outboxResendInFlight.has(entry.requestId)));
+  });
   const showScrollToLatestButton = createMemo(() => (
     (selectedThreadHasContent() || selectedThreadHasLiveProgress())
     && !selectedThreadTailPreparing()
@@ -7724,10 +7697,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       : 'send'
   ));
   const composerPrimaryActionIcon = createMemo(() => composerPrimaryActionIsStop() ? FlowerStopIcon : composerPrimaryActionIsCommand() ? Clock : ArrowUp);
-  const composerPrimaryActionLabel = createMemo(() => composerPrimaryActionIsStop() ? selectedThreadStopLabel() : composerPrimaryActionIsCommand() ? copy().chat.compactContext : copy().chat.send);
+  const composerPrimaryActionLabel = createMemo(() => composerPrimaryActionIsStop() ? selectedThreadStopLabel() : composerSendPreparing() ? copy().chat.preparingSend : composerPrimaryActionIsCommand() ? copy().chat.compactContext : copy().chat.send);
   const composerPrimaryActionDisabled = createMemo(() => {
     if (composerReferenceMutationCount() > 0) return true;
     if (longTextPreparing()) return false;
+    if (composerSendPreparing() && !composerPrimaryActionIsStop()) return true;
     if (selectedThreadStopPending()) return true;
     if (selectedThreadReadOnly()) return true;
     // A detail-sync error belongs to the selected conversation. New chats
@@ -7744,7 +7718,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const hasSendableText = composerTextOverLimit() ? composerChatDraftHasRawText() : Boolean(composerChatDraftText());
     return !readyForChat() || !handlerAllowsSubmitIntent() || (!hasSendableText && !composerHasReadyAttachments() && !composerHasReferences());
   });
-  const composerPrimaryActionLoading = createMemo(() => selectedThreadStopPending());
+  const composerPrimaryActionLoading = createMemo(() => selectedThreadStopPending() || composerSendPreparing());
 
   let capturedComposerPrimaryAction: ComposerPrimaryAction | undefined;
   const captureComposerPrimaryAction = () => {
@@ -9279,6 +9253,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return <Switch>
       <Match when={detailProps.block.kind === 'error'}>{errorDetailBlock(blockOfKind('error'))}</Match>
       <Match when={detailProps.block.kind === 'structured_rows'}><FlowerActivityRows block={blockOfKind('structured_rows')()} copy={copy().chat} /></Match>
+      <Match when={detailProps.block.kind === 'image'}><MarkdownMedia source={{ kind: 'image', src: blockOfKind('image')().resource_ref, title: blockOfKind('image')().name }} labels={copy().chat.media} resolve={resolveMessageMedia()} /></Match>
       <Match when={detailProps.block.kind === 'computer'}>{computerBlock(blockOfKind('computer'))}</Match>
       <Match when={detailProps.block.kind === 'subagents'}>{subagentsDetailBlock(blockOfKind('subagents'))}</Match>
       <Match when={detailProps.block.kind === 'web_search'}>{webSearchBlock(blockOfKind('web_search'))}</Match>
@@ -10187,34 +10162,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     );
   }
 
-  const transportOutboxEntry = (submission: Accessor<ReturnType<TransportOutbox['forThread']>[number]>) => {
-    const contextLabels = createMemo(() => submission().attachmentLabels);
-    return (
-      <div
-        class="flower-message-row flower-message-row-user"
-        data-flower-transport-outbox-id={submission().requestId}
-      >
-        <div class="flower-message-block-stack flower-message-block-stack-user">
-          <div class="flower-message-bubble flower-message-bubble-framed flower-message-bubble-user">
-            <Show when={submission().input.prompt}>
-              <span class="flower-message-plain-text">{submission().input.prompt}</span>
-            </Show>
-            <Show when={contextLabels().length > 0}>
-              <div class="flower-transport-outbox-context">
-                <For each={contextLabels()}>{(label) => <span>{label}</span>}</For>
-              </div>
-            </Show>
-            <Show when={submission().terminalError}>
-              <div class="flower-message-error flower-transport-outbox-error flower-preserved-input-notice" role="alert">
-                {submission().terminalError === 'storage_restored' ? copy().chat.restoredInputDescription : copy().attachments.restoreFailed}
-                <button type="button" class="flower-copy-input" onClick={() => void writeClipboardText(submission().input.prompt, copy().chat.restoredInputCopy).catch((error) => notifyThreadActionError(getErrorMessage(error)))}>{copy().chat.restoredInputCopy}</button>
-              </div>
-            </Show>
-          </div>
-        </div>
-      </div>
-    );
-  };
 
   const compactionDividerEntry = (entry: Accessor<Extract<FlowerTimelineEntry, { type: 'context_compaction' }>>) => {
     const decoration = createMemo(() => entry().decoration);
@@ -12069,7 +12016,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   );
                 }}
               </For>
-              <For each={visibleTransportOutbox()}>{(submission) => transportOutboxEntry(() => submission)}</For>
               {threadLevelApprovalPanel()}
             </Show>
           </div>

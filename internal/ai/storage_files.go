@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 )
 
@@ -87,6 +88,9 @@ func CheckFlowerSnapshot(ctx context.Context, state, id string) error {
 // preserved; no database may open until the whole replacement is verified.
 func verifyFlowerReplacementFiles(ctx context.Context, state, root string, operation flowerReplacement) error {
 	for _, relative := range flowerStorageRoots {
+		if !slices.ContainsFunc(operation.Items, func(item flowerReplacementItem) bool { return item.Path == relative }) {
+			continue
+		}
 		prepared := filepath.Join(root, "prepared", relative)
 		if err := validateFlowerDestination(root, "prepared/"+relative); err != nil {
 			return err
@@ -129,12 +133,12 @@ func verifyFlowerReplacementFiles(ctx context.Context, state, root string, opera
 			if actual != file {
 				return errFlowerChecksum
 			}
-			if relative == "ai/uploads" {
+			if flowerStorageTree(relative) {
 				file.Path = strings.TrimPrefix(file.Path, relative+"/")
 				expected = append(expected, file)
 			}
 		}
-		if relative == "ai/uploads" {
+		if flowerStorageTree(relative) {
 			actual, err := hashFlowerFiles(ctx, filepath.Join(base, relative))
 			if err != nil {
 				return err

@@ -138,7 +138,7 @@ func TestComputerTargetRejectedSelectionDoesNotChangeBinding(t *testing.T) {
 			}
 			result, err := r.execTargetTool(ctx, "rejected", "computer.click", map[string]any{"target": "desktop.screen", "x": 10, "y": 10})
 			if reason == "takeover" {
-				paused, ok := result.(targetToolExecution)
+				paused, ok := result.(toolExecutionOutput)
 				if err != nil || !ok || paused.inputRequired == nil {
 					t.Fatalf("takeover did not request canonical input: %v", err)
 				}

@@ -24,7 +24,7 @@ func TestSystemBrowserDiscoveryRequestsConnectionWithoutManagedFallback(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	execution, ok := value.(targetToolExecution)
+	execution, ok := value.(toolExecutionOutput)
 	if !ok || execution.inputRequired == nil || !strings.Contains(execution.inputRequired.Summary, "Connect") {
 		t.Fatalf("system browser request did not produce connection assistance: %#v", value)
 	}
@@ -67,7 +67,7 @@ func TestSampledSafetyPauseBecomesCanonicalInputWithOriginalTarget(t *testing.T)
 			if err != nil {
 				t.Fatalf("sampled safety escaped as an ordinary tool error: %v", err)
 			}
-			execution, ok := value.(targetToolExecution)
+			execution, ok := value.(toolExecutionOutput)
 			if !ok || execution.inputRequired == nil || execution.TargetID != target.ID || !strings.Contains(execution.inputRequired.Summary, "CAPTCHA") {
 				t.Fatalf("original safety cause/target lost: %#v", value)
 			}
@@ -169,7 +169,7 @@ func TestComputerSamplingReadFailureDoesNotAcquireUserControl(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	execution, ok := value.(targetToolExecution)
+	execution, ok := value.(toolExecutionOutput)
 	if !ok || execution.inputRequired != nil {
 		t.Fatalf("invented human step: %#v", value)
 	}

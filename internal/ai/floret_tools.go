@@ -513,7 +513,7 @@ func floretToolResourceKinds(toolName string) []string {
 	switch strings.TrimSpace(toolName) {
 	case "terminal.exec":
 		return []string{"command"}
-	case "file.read", "read_file", "read_files", "rgrep", "find", "file.edit", "file.write", "apply_patch":
+	case "image.read", "file.read", "read_file", "read_files", "rgrep", "find", "file.edit", "file.write", "apply_patch":
 		return []string{"file"}
 	case "attachment.read":
 		return []string{"attachment"}
@@ -564,7 +564,7 @@ func floretToolResources(inv fltools.Invocation[map[string]any]) ([]fltools.Reso
 		if processID := strings.TrimSpace(anyToString(args["process_id"])); processID != "" {
 			return []fltools.ResourceRef{{Kind: "terminal_process", Value: processID}}, nil
 		}
-	case "file.read", "read_file", "file.edit", "file.write":
+	case "image.read", "file.read", "read_file", "file.edit", "file.write":
 		if path := strings.TrimSpace(anyToString(args["file_path"])); path != "" {
 			return []fltools.ResourceRef{{Kind: "file", Value: path}}, nil
 		}
@@ -812,7 +812,7 @@ func floretToolAttachments(items []ToolAttachment) []fltools.ArtifactRef {
 	out := make([]fltools.ArtifactRef, 0, len(items))
 	for _, item := range items {
 		ref := strings.TrimSpace(item.ResourceRef)
-		if ref == "" || !strings.HasPrefix(ref, "computer://") {
+		if !isToolMediaRef(ref) {
 			continue
 		}
 		out = append(out, fltools.ArtifactRef{ID: ref, SafeLabel: strings.TrimSpace(item.Name), Kind: "image", MIME: strings.TrimSpace(item.MIMEType), SizeBytes: item.SizeBytes, SHA256: strings.TrimSpace(item.SHA256)})
@@ -1342,6 +1342,15 @@ func floretActivityForToolResult(r *run, result ToolResult) (*fltools.ActivityPr
 				activity.TargetRefs = append(activity.TargetRefs, fltools.ActivityTargetRef{
 					Kind: "computer_frame", ResourceRef: attachment.ResourceRef,
 					Label: firstNonEmptyString(anyToString(payload["target_name"]), anyToString(payload["target_id"]), "Computer"),
+				})
+			}
+		}
+	}
+	if toolName == "image.read" {
+		for _, attachment := range result.Attachments {
+			if imageSnapshotResourcePattern.MatchString(attachment.ResourceRef) {
+				activity.TargetRefs = append(activity.TargetRefs, fltools.ActivityTargetRef{
+					Kind: "tool_image", ResourceRef: attachment.ResourceRef, Label: attachment.Name,
 				})
 			}
 		}

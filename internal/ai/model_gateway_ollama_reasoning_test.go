@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/floegence/redeven/internal/config"
-	"github.com/openai/openai-go"
+	"github.com/openai/openai-go/v3"
 )
 
 func TestE2E_FlowerOllamaReasoningOnlyContinuation(t *testing.T) {

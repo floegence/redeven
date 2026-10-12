@@ -10,7 +10,7 @@ import { adapter, deferred, launchReceipt, liveBootstrap, renderSurfaceWithAdapt
 // Keep the thread rail visible while exercising the conversation contract.
 beforeEach(() => page.viewport(1280, 900));
 
-it('preserves old outbox input after restoration and never refreshes its generation or retries it', async () => {
+it('retries restored outbox input only explicitly with its original generation', async () => {
   const initial = thread({ thread_id: 'thread-restored', messages: [], status: 'idle' });
   const original = createTransportOutbox().put({
     requestId: 'storage-old-request', threadId: initial.thread_id,
@@ -37,8 +37,11 @@ it('preserves old outbox input after restoration and never refreshes its generat
   await waitFor(() => runtime.querySelector('[data-thread-id="thread-restored"] button') !== null);
   (runtime.querySelector('[data-thread-id="thread-restored"] button') as HTMLButtonElement).click();
   await waitFor(() => runtime.textContent?.includes('Preserved queue text') === true);
+  await waitFor(() => runtime.querySelector('[data-flower-transport-outbox-id="storage-old-request"] [aria-label="Retry send"]') !== null);
+  expect(launchTurn).not.toHaveBeenCalled();
+  (runtime.querySelector('[data-flower-transport-outbox-id="storage-old-request"] [aria-label="Retry send"]') as HTMLButtonElement).click();
   await waitFor(() => launchTurn.mock.calls.length === 1);
-  await waitFor(() => runtime.querySelector('[data-flower-transport-outbox-id="storage-old-request"]')?.textContent?.includes('Copy') === true);
+  await waitFor(() => runtime.querySelector('[data-flower-transport-outbox-id="storage-old-request"] [aria-label="Copy input"]') !== null);
   await wait(600);
   expect(launchTurn).toHaveBeenCalledTimes(1);
   expect(launchTurn.mock.calls[0]?.[0].storage_generation).toBe('a'.repeat(32));

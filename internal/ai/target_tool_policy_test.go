@@ -71,7 +71,7 @@ func TestComputerUseUsesCurrentTargetWhenModelOmitsTarget(t *testing.T) {
 	if len(executor.calls) != 1 || executor.calls[0].TargetID != "browser-main" {
 		t.Fatalf("executor calls = %#v", executor.calls)
 	}
-	payload, ok := result.(targetToolExecution)
+	payload, ok := result.(toolExecutionOutput)
 	if !ok {
 		t.Fatalf("result type = %T", result)
 	}

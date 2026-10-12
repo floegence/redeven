@@ -173,6 +173,14 @@ var builtinDefinitions = map[string]Definition{
 		Name: "browser.reload", Mutating: true, RequiresApproval: true,
 		Presentation: withPresentationOptions(presentation(ToolPresentationInteraction, "approval", "browser", "browser", "args", "result"), operation("reload"), labelFields("target_name", "target_id"), resultPayloadFields("target_id", "target_name", "execution_location", "action_summary", "safety", "after_frame"), chipFields("target_name", "execution_location")),
 	},
+	"image.read": {
+		Name: "image.read", Mutating: false, RequiresApproval: false,
+		Presentation: withPresentationOptions(
+			presentation(ToolPresentationContext, "readonly", "structured", "context", "args", "result"),
+			operation("read"), labelFields("display_name"),
+			resultPayloadFields("display_name", "mime_type", "width", "height", "size_bytes", "first_frame"),
+		),
+	},
 	"attachment.read": {
 		Name:             "attachment.read",
 		Mutating:         false,

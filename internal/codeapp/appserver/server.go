@@ -4867,13 +4867,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid computer media reference"})
 			return
 		}
-		if detail, err := aiSvc.GetFlowerThreadDetail(r.Context(), meta, threadID); err != nil {
-			writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "computer frame is unavailable"})
-			return
-		} else if detail == nil {
-			writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "computer frame is unavailable"})
-			return
-		}
+
 		resourceRef := "computer://" + mediaParts[0] + "/" + mediaParts[1]
 		body, err := aiSvc.ResolveTargetToolAttachmentForThread(r.Context(), meta, threadID, mediaParts[0], resourceRef)
 		if err != nil {
@@ -4888,6 +4882,30 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/png")
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("ETag", `"`+digest+`"`)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(body)
+		return
+	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/_redeven_proxy/api/ai/threads/") && strings.Contains(r.URL.Path, "/tool-media/"):
+		meta, ok := g.requirePermission(w, r, requiredPermissionRead)
+		if !ok || !g.requireAIService(w, aiSvc) {
+			return
+		}
+		rest := strings.TrimPrefix(r.URL.Path, "/_redeven_proxy/api/ai/threads/")
+		parts := strings.Split(rest, "/tool-media/")
+		if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid tool media reference"})
+			return
+		}
+		resourceRef := "image://" + parts[1]
+		body, mimeType, err := aiSvc.ResolveToolImageForThread(r.Context(), meta, parts[0], resourceRef)
+		if err != nil {
+			writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "tool image is unavailable"})
+			return
+		}
+		w.Header().Set("Content-Type", mimeType)
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("ETag", `"`+fmt.Sprintf("%x", sha256.Sum256(body))+`"`)
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(body)
 		return
@@ -5079,10 +5097,14 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 					status := http.StatusBadRequest
 					if errors.Is(err, sql.ErrNoRows) {
 						status = http.StatusNotFound
-					} else if errors.Is(err, ai.ErrThreadBusy) {
+					} else if errors.Is(err, ai.ErrThreadBusy) || errors.Is(err, ai.ErrThreadImageModelUnsupported) {
 						status = http.StatusConflict
 					}
-					writeJSON(w, status, apiResp{OK: false, Error: err.Error()})
+					code := ""
+					if errors.Is(err, ai.ErrThreadImageModelUnsupported) {
+						code = "thread_image_model_unsupported"
+					}
+					writeJSON(w, status, apiResp{OK: false, ErrorCode: code, Error: err.Error()})
 					return
 				}
 			}

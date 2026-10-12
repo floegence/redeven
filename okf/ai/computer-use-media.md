@@ -14,6 +14,11 @@ lifetimes. A missing, changed or unauthorized reference fails explicitly and
 cannot fall back to an unrestricted image URL. Successful tool metadata alone
 does not prove the user can see a frame.
 
+Durable keyframes share one byte store and canonical retention entry point with
+[direct image reads](image-read-and-retention.md). Existing `computer://`
+references and their physical root remain unchanged. The media resolver owns
+membership authorization without a preceding product detail load.
+
 # Contract
 
 Safe results return target identity, execution location, summary and safety.

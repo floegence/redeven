@@ -1,5 +1,5 @@
 import { TESSIVEN_RUNTIME_ROUTES } from './runtimeTessivenRoutes';
-import { RUNTIME_FLOWER_COMPUTER_MEDIA_PATH, type RuntimeFlowerRequest } from '../shared/runtimeFlowerIPC';
+import { RUNTIME_FLOWER_COMPUTER_MEDIA_PATH, RUNTIME_FLOWER_TOOL_IMAGE_PATH, type RuntimeFlowerRequest } from '../shared/runtimeFlowerIPC';
 import { runtimeFlowerDeleteQuery } from './runtimeFlowerHTTP';
 
 function compact(value: unknown): string {
@@ -97,6 +97,7 @@ const RUNTIME_FLOWER_ROUTES: readonly RuntimeFlowerRoute[] = [
       && /^\d+$/u.test(parsed.searchParams.get('viewer_revision')!) && /^\d+$/u.test(parsed.searchParams.get('frame_id')!);
   } },
   { path: RUNTIME_FLOWER_COMPUTER_MEDIA_PATH, methods: ['GET'] },
+  { path: RUNTIME_FLOWER_TOOL_IMAGE_PATH, methods: ['GET'] },
   { path: '/_redeven_proxy/api/ai/provider_bundle', methods: ['PUT'] },
   { path: '/_redeven_proxy/api/ai/current_model', methods: ['PUT'] },
   { path: '/_redeven_proxy/api/ai/models', methods: ['GET'], allowsQuery: parsed => parsed.search === '' || parsed.search === '?mode=baseline' },

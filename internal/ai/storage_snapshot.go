@@ -26,7 +26,16 @@ import (
 const flowerMaintenanceDir = "flower-maintenance"
 const flowerReadStateRelative = "apps/appserver/thread_read_state.sqlite"
 
-var flowerStorageRoots = []string{"ai/threads.sqlite", "ai/floret_threads.sqlite", flowerReadStateRelative, "ai/uploads"}
+var flowerStorageRoots = []string{"ai/threads.sqlite", "ai/floret_threads.sqlite", flowerReadStateRelative, "ai/uploads", "computer/keyframes"}
+
+func flowerStorageTree(root string) bool {
+	for _, tree := range flowerStorageRoots[3:] {
+		if root == tree {
+			return true
+		}
+	}
+	return false
+}
 
 // FlowerSnapshotSummary contains no conversation, database, or credential data.
 type FlowerSnapshotSummary struct {
@@ -235,9 +244,9 @@ func captureFlowerSnapshot(ctx context.Context, state, build, kind string, raw b
 		}
 		manifest.Roots = append(manifest.Roots, relative)
 		destination := filepath.Join(stage, relative)
-		if index == 3 {
+		if flowerStorageTree(relative) {
 			if !info.IsDir() {
-				return manifest, errors.New("managed Flower uploads path is not a directory")
+				return manifest, errors.New("managed Flower resource path is not a directory")
 			}
 			if err = copyFlowerTree(ctx, source, destination); err != nil {
 				return manifest, err

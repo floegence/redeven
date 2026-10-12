@@ -1112,6 +1112,7 @@ function mapFlowerQueuedTurns(raw: unknown): FlowerThreadSnapshot['queued_turns'
       : undefined;
     return {
       queue_id: queueID,
+      ...(trim(record.request_key) ? { request_key: trim(record.request_key) } : {}),
       prompt: trim(record.text),
       created_at_ms: unixMs(record.created_at_unix_ms, 'queued_turn.created_at_unix_ms'),
       ...(attachments && attachments.length > 0 ? { attachments } : {}),

@@ -538,6 +538,7 @@ export type FlowerThreadReadStatus = Readonly<{
 
 export type FlowerQueuedTurn = Readonly<{
   queue_id: string;
+  request_key?: string;
   prompt: string;
   created_at_ms: number;
   attachments?: readonly FlowerQueuedTurnAttachment[];
@@ -1356,6 +1357,7 @@ export type FlowerSurfaceAdapter = Readonly<{
   loadStagedAttachmentPreview?: (attachment: FlowerStagedAttachment, scope: FlowerAttachmentStagingScope, signal: AbortSignal) => Promise<Blob>;
   previewStagedAttachment?: (attachment: FlowerStagedAttachment, scope: FlowerAttachmentStagingScope) => void | Promise<void>;
   loadComputerFrame?: (input: FlowerComputerFrameSource & Readonly<{ signal: AbortSignal }>) => Promise<Blob>;
+  loadToolImage?: (input: Readonly<{ thread_id: string; resource_ref: string; signal: AbortSignal }>) => Promise<Blob>;
   loadMessageAttachment?: (input: Readonly<{ url: string; signal: AbortSignal }>) => Promise<Blob>;
   openMessageFile?: (input: Readonly<{ path: string; action: 'preview' | 'reveal' }>) => Promise<void>;
   loadMessageFile?: (input: Readonly<{ path: string; signal: AbortSignal }>) => Promise<Blob>;

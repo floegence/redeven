@@ -13,8 +13,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/openai/openai-go"
-	ooption "github.com/openai/openai-go/option"
+	"github.com/openai/openai-go/v3"
+	ooption "github.com/openai/openai-go/v3/option"
 )
 
 const platformGatewayProviderType = "redeven_platform"

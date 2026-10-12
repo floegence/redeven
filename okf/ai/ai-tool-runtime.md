@@ -18,6 +18,7 @@ This concept is the stable overview for the subject. Detailed contracts are main
 - [AI tool permissions and dispatch](tool-permission-runtime.md)
 - [AI tool approval runtime](tool-approval-runtime.md)
 - [AI terminal tool runtime](terminal-tool-runtime.md)
+- [Direct image reading and tool media retention](image-read-and-retention.md)
 - [AI model and context runtime](model-context-runtime.md)
 - [Floret thread runtime integration](floret-thread-runtime.md)
 - [Flower subagent runtime](subagent-runtime.md)

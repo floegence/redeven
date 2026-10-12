@@ -5365,7 +5365,6 @@
       "threadEmpty": "Diese Unterhaltung enthält noch keine Inhalte.",
       "threadSyncingLatest": "Neueste Antwort wird synchronisiert...",
       "threadSyncFailed": "Flower konnte die neueste Antwort nicht synchronisieren. Versuche es erneut.",
-      "activeTurnBusy": "Die vorherige Antwort ist noch aktiv. Du kannst sie stoppen, bevor du erneut sendest.",
       "composerErrorTitle": "Flower konnte nicht senden.",
       "expandThinking": "Vollständige Überlegungen anzeigen",
       "collapseThinking": "Überlegungen einklappen",
@@ -5494,7 +5493,19 @@
       "runErrorCopyDetails": "Details kopieren",
       "runErrorContextBudgetInvalid": "Der reservierte Ausgabebereich lässt keinen Platz für Eingaben. Vergrößern Sie das konfigurierte Kontextfenster des Modells oder senken Sie das Ausgabelimit und versuchen Sie es erneut. Setzen Sie bei Ollama num_ctx im Modelfile und laden Sie das Modell neu.",
       "runErrorContextFixedOverhead": "Systemanweisungen und Werkzeugdefinitionen überschreiten den verfügbaren Modellkontext. Vergrößern Sie das serverseitige Kontextfenster oder wählen Sie ein Modell mit größerem Kontext und versuchen Sie es erneut. Das Komprimieren des Chatverlaufs löst dieses Problem nicht.",
-      "runErrorContextCompactionLimit": "Die Unterhaltung überschreitet auch nach der Komprimierung das Kontextlimit des Modells. Kürzen Sie die Eingabe oder wählen Sie ein Modell mit größerem Kontext und versuchen Sie es erneut."
+      "runErrorContextCompactionLimit": "Die Unterhaltung überschreitet auch nach der Komprimierung das Kontextlimit des Modells. Kürzen Sie die Eingabe oder wählen Sie ein Modell mit größerem Kontext und versuchen Sie es erneut.",
+      "preparingSend": "Nachricht wird vorbereitet",
+      "sendFailed": "Senden fehlgeschlagen",
+      "sendUnknown": "Bestätigung erforderlich",
+      "sendUnknownDescription": "Das Sendeergebnis ist unbekannt. Weitere Nachrichten sind angehalten. Wiederhole dieselbe Anfrage oder aktualisiere den Chat.",
+      "retrySend": "Senden wiederholen",
+      "refreshSend": "Bestätigung aktualisieren",
+      "restoreSend": "In leeres Eingabefeld übernehmen",
+      "deleteUnsent": "Ungesendete Nachricht löschen",
+      "sendWaiting": "Warten auf Versand",
+      "attachmentRecoveryDescription": "Anhänge sind nach dem Neustart nicht verfügbar. Stelle Text und Verweise wieder her und wähle die Dateien erneut aus. Aktualisiere, um die Annahme der ursprünglichen Anfrage zu prüfen.",
+      "removeRecoveryCopy": "Lokale Wiederherstellungskopie entfernen",
+      "removeRecoveryCopyDescription": "Entfernt diese lokale Wiederherstellungskopie und setzt spätere Nachrichten fort. Die ursprüngliche Serveranfrage wird nicht abgebrochen."
     },
     "threadList": {
       "title": "Unterhaltungen",
@@ -5829,7 +5840,8 @@
       "dialogEffectiveContextPercent": "Effektiver Kontext in %",
       "dialogDynamicModelMetadata": "Dynamische Modellmetadaten",
       "dialogOpenAICompatibleNativeEndpoint": "Nativer OpenAI-kompatibler Endpunkt",
-      "dialogLocalOpenAICompatibleEndpoint": "Lokaler OpenAI-kompatibler Endpunkt"
+      "dialogLocalOpenAICompatibleEndpoint": "Lokaler OpenAI-kompatibler Endpunkt",
+      "imageModelRequired": "Diese Unterhaltung enthält Bilder. Wähle ein Modell, das Bildeingaben unterstützt."
     },
     "computer": {
       "title": "Browser und Desktop",

@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	flprovider "github.com/floegence/floret/v7/provider"
-	oresponses "github.com/openai/openai-go/responses"
+	oresponses "github.com/openai/openai-go/v3/responses"
 )
 
 // Map native output items into Floret events without taking ownership of tools

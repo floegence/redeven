@@ -148,7 +148,7 @@ func TestBuildOpenAIInput_EncodesFunctionCallAndOutput(t *testing.T) {
 	if items[1].OfFunctionCallOutput == nil {
 		t.Fatalf("second item must be function_call_output")
 	}
-	if items[1].OfFunctionCallOutput.CallID != "call_1" {
+	if items[1].OfFunctionCallOutput.CallID.Value != "call_1" {
 		t.Fatalf("function_call_output call_id=%q, want call_1", items[1].OfFunctionCallOutput.CallID)
 	}
 }

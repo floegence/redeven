@@ -7,9 +7,9 @@ import (
 
 	anthropic "github.com/anthropics/anthropic-sdk-go"
 	"github.com/floegence/redeven/internal/config"
-	openai "github.com/openai/openai-go"
-	oresponses "github.com/openai/openai-go/responses"
-	oshared "github.com/openai/openai-go/shared"
+	openai "github.com/openai/openai-go/v3"
+	oresponses "github.com/openai/openai-go/v3/responses"
+	oshared "github.com/openai/openai-go/v3/shared"
 )
 
 func TestApplyResponsesReasoningOpenAIEffort(t *testing.T) {

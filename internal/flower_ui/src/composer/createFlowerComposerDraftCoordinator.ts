@@ -59,6 +59,8 @@ export type FlowerComposerDraftValue = Readonly<{
 export type FlowerComposerDraftSnapshot = Readonly<{
   scope_id: string;
   revision: number;
+  /** Tracks text changes independently from references, settings, and uploads. */
+  text_revision: number;
   value: FlowerComposerDraftValue;
   updated_at_unix_ms: number;
 }>;
@@ -157,6 +159,7 @@ export function createFlowerComposerDraftCoordinator(
         snapshot: {
           scope_id: scopeID,
           revision: 0,
+          text_revision: 0,
           value: emptyDraft(),
           updated_at_unix_ms: now(),
         },
@@ -197,6 +200,7 @@ export function createFlowerComposerDraftCoordinator(
     cell.snapshot = {
       ...cell.snapshot,
       revision: cell.snapshot.revision + 1,
+      text_revision: cell.snapshot.text_revision + (cell.snapshot.value.text === value.text ? 0 : 1),
       value,
       updated_at_unix_ms: now(),
     };
@@ -360,6 +364,7 @@ export function createFlowerComposerDraftCoordinator(
       from.cell.snapshot = {
         scope_id: fromScopeID,
         revision: sourceSnapshot.revision + 1,
+        text_revision: sourceSnapshot.text_revision + (sourceSnapshot.value.text ? 1 : 0),
         value: emptyDraft(),
         updated_at_unix_ms: now(),
       };

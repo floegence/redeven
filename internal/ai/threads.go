@@ -31,7 +31,8 @@ func newProductRequestID(prefix string) (string, error) {
 
 func validClientRequestID(clientRequestID string) bool {
 	clientRequestID = strings.TrimSpace(clientRequestID)
-	return clientRequestID != "" && len(clientRequestID) <= 200 && !strings.ContainsAny(clientRequestID, "\r\n\x00")
+	_, err := identity.ParseLogicalRequestID(clientRequestID)
+	return err == nil
 }
 
 func threadPermissionType(th *threadstore.ThreadSettings) (FlowerPermissionType, error) {
@@ -264,8 +265,10 @@ func (s *Service) lockCanonicalThreadSettingsMutation(ctx context.Context, endpo
 	if endpointID == "" || threadID == "" {
 		return nil, nil, nil, errors.New("invalid thread identity")
 	}
-	s.threadSettingsMu.Lock()
-	unlock := s.threadSettingsMu.Unlock
+	unlock, err := s.lockThreadSettings(ctxOrBackground(ctx), endpointID, threadID)
+	if err != nil {
+		return nil, nil, nil, err
+	}
 	fail := func(err error) (*threadstore.Store, *threadstore.ThreadSettings, func(), error) {
 		unlock()
 		return nil, nil, nil, err
@@ -1087,6 +1090,9 @@ func (s *Service) SetThreadModel(ctx context.Context, meta *session.Meta, thread
 	if currentModelID == modelID {
 		return nil
 	}
+	if err := s.validateThreadImageModel(ctx, threadID, modelID, cfg); err != nil {
+		return err
+	}
 
 	reasoningCapability, modelDefaultReasoning, _, err := s.threadReasoningDefaults(ctx, meta, modelID)
 	if err != nil {
@@ -1339,6 +1345,9 @@ func (s *Service) DeleteThread(ctx context.Context, meta *session.Meta, threadID
 		})
 	}
 	s.scheduleThreadstoreCompaction("thread_delete")
+	s.startServiceWorker(func() {
+		s.maintainToolMedia(s.lifecycleCtx, "thread_delete", false)
+	})
 	return nil
 }
 

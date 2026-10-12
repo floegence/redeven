@@ -427,6 +427,7 @@ export function applyFlowerRuntimeCurrentView(
   const inputRequest = runtimeInputRequest(current);
   const queuedTurns = (current.queue ?? []).map((queued) => ({
     queue_id: trim(queued.id),
+    request_key: trim(queued.request_key),
     prompt: String(queued.input?.text ?? ''),
     created_at_ms: itemCreatedAt({ created_at: queued.created_at } as FlowerRuntimeCurrentItem, base.updated_at_ms),
     ...(queued.input?.attachments?.length ? {

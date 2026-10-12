@@ -26,11 +26,11 @@ func computerFrameFixture(t *testing.T) ([]byte, TargetToolAttachment) {
 func TestComputerKeyframesRecoverAndRejectChangedContent(t *testing.T) {
 	body, attachment := computerFrameFixture(t)
 	dir := t.TempDir()
-	first := computerMediaStore{directory: dir}
+	first := newToolMediaStore(dir)
 	if err := first.put(t.Context(), attachment, body); err != nil {
 		t.Fatal(err)
 	}
-	restarted := computerMediaStore{directory: dir}
+	restarted := newToolMediaStore(dir)
 	recovered, err := restarted.read(t.Context(), attachment.ResourceRef)
 	if err != nil || !bytes.Equal(body, recovered) {
 		t.Fatalf("restart: %v", err)
@@ -48,7 +48,7 @@ func TestComputerKeyframesRecoverAndRejectChangedContent(t *testing.T) {
 
 func TestComputerKeyframesRejectInvalidImagesAndReferences(t *testing.T) {
 	body, attachment := computerFrameFixture(t)
-	store := computerMediaStore{directory: t.TempDir()}
+	store := newToolMediaStore(t.TempDir())
 	for _, ref := range []string{"computer://../bad", "computer://target/unknown", "https://example.test/image.png"} {
 		if _, err := store.read(t.Context(), ref); err == nil {
 			t.Fatalf("invalid ref accepted: %s", ref)

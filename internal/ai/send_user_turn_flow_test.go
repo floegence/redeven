@@ -58,7 +58,7 @@ func TestSendUserTurnReturnsImmediateTypedCurrent(t *testing.T) {
 	}
 }
 
-func TestSendUserTurnRejectsMissingExistingRequestIdentity(t *testing.T) {
+func TestSendUserTurnRejectsInvalidRequestIdentityBeforeAdmission(t *testing.T) {
 	svc := newRealtimeTestService(t, 2*time.Second)
 	meta := testSendTurnMeta()
 	thread, err := svc.CreateThread(t.Context(), meta, "missing identity", "", "", "")
@@ -66,19 +66,21 @@ func TestSendUserTurnRejectsMissingExistingRequestIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = svc.SendUserTurn(t.Context(), meta, SendUserTurnRequest{
-		ThreadID: thread.ThreadID,
-		Input:    RunInput{Text: "must not be admitted"},
-	})
-	if err == nil || !strings.Contains(err.Error(), "invalid client_request_id") {
-		t.Fatalf("SendUserTurn error=%v, want invalid client_request_id", err)
+	for _, requestID := range []string{"", "request with spaces", "request/image", "request-图片", strings.Repeat("r", 129)} {
+		_, err = svc.SendUserTurn(t.Context(), meta, SendUserTurnRequest{
+			ThreadID: thread.ThreadID, ClientRequestID: requestID,
+			Input: RunInput{Text: "must not be admitted"},
+		})
+		if err == nil || !strings.Contains(err.Error(), "invalid client_request_id") {
+			t.Fatalf("SendUserTurn(%q) error=%v, want invalid client_request_id", requestID, err)
+		}
 	}
 	view, viewErr := svc.threadRuntime.View(t.Context(), identity.ThreadID(thread.ThreadID))
 	if viewErr != nil {
 		t.Fatal(viewErr)
 	}
 	if len(view.Items) != 0 || len(view.Queue) != 0 {
-		t.Fatalf("missing request identity mutated runtime view: %#v", view)
+		t.Fatalf("invalid request identity mutated runtime view: %#v", view)
 	}
 }
 

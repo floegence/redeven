@@ -32,6 +32,8 @@ export async function resolveFlowerMarkdownMedia(
   let filePath: string | undefined;
   if (frame && source.kind === 'image' && context.adapter.loadComputerFrame) {
     blob = await context.adapter.loadComputerFrame({ thread_id: context.threadID, target_id: frame[1], sha256: frame[2], resource_ref: source.src!, signal });
+  } else if (/^image:\/\/[a-f0-9]{64}\/(png|jpeg|webp)$/u.test(source.src ?? '') && source.kind === 'image' && context.adapter.loadToolImage) {
+    blob = await context.adapter.loadToolImage({ thread_id: context.threadID, resource_ref: source.src!, signal });
   } else {
     const path = flowerMarkdownFilePath(source.src ?? '', context.workingDirectory);
     if (!path || !context.adapter.loadMessageFile) throw new Error('Media source is unavailable');

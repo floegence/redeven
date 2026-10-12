@@ -9,6 +9,42 @@ afterEach(() => {
 });
 
 describe('TransportOutbox', () => {
+  it('writes and deletes only the changed request instead of rewriting the store', async () => {
+    const operations: string[] = [];
+    vi.stubGlobal('indexedDB', { open: () => {
+      const request = { result: {
+        objectStoreNames: { contains: () => true }, close: () => undefined,
+        transaction: () => {
+          const transaction = { oncomplete: null as null | (() => void), onerror: null, onabort: null,
+            objectStore: () => ({ put: (entry: { requestId: string }) => operations.push(`put:${entry.requestId}`),
+              delete: (id: string) => operations.push(`delete:${id}`) }) };
+          queueMicrotask(() => transaction.oncomplete?.());
+          return transaction;
+        },
+      }, onsuccess: null as null | (() => void) };
+      queueMicrotask(() => request.onsuccess?.());
+      return request;
+    } });
+    let outbox = createTransportOutbox();
+    const entry = (id: string) => ({ requestId: id, threadId: 'thread', input: { client_request_id: id, thread_id: 'thread', prompt: id }, attachmentLabels: [], createdAtMs: Date.now() });
+    outbox = outbox.put(entry('a')); await outbox.flushPersistence();
+    outbox = outbox.put(entry('b')); await outbox.flushPersistence();
+    outbox = outbox.drop('a'); await outbox.flushPersistence();
+    expect(operations).toEqual(['put:a', 'put:b', 'delete:a']);
+    outbox.dispose();
+  });
+
+  it('binds successive new-chat requests to the first accepted thread', () => {
+    const outbox = createTransportOutbox()
+      .put({ requestId: 'first', threadId: '__new_thread__', input: { client_request_id: 'first', prompt: 'A' }, attachmentLabels: [], createdAtMs: 1 })
+      .put({ requestId: 'second', threadId: '__new_thread__', input: { client_request_id: 'second', prompt: 'B' }, attachmentLabels: [], createdAtMs: 2 })
+      .bindAcceptedThread('first', 'accepted-thread');
+    expect(outbox.forThread('accepted-thread').map(entry => [entry.requestId, entry.input.thread_id])).toEqual([
+      ['first', 'accepted-thread'], ['second', 'accepted-thread'],
+    ]);
+    outbox.dispose();
+  });
+
   it('reloads terminal restored-data input without changing its original generation', async () => {
     const entry = { requestId: 'old-input', threadId: 'thread-a', input: { client_request_id: 'old-input', prompt: 'Preserve this', storage_generation: 'a'.repeat(32) }, attachmentLabels: [], createdAtMs: Date.now(), terminalError: 'storage_restored' };
     vi.stubGlobal('indexedDB', { open: () => {
@@ -265,7 +301,7 @@ describe('TransportOutbox', () => {
                 oncomplete: null as null | (() => void),
                 onerror: null as null | (() => void),
                 onabort: null as null | (() => void),
-                objectStore: () => ({ clear: () => undefined, put: () => undefined }),
+                objectStore: () => ({ delete: () => undefined, put: () => undefined }),
               };
               queueMicrotask(() => transaction.oncomplete?.());
               return transaction;
@@ -292,7 +328,8 @@ describe('TransportOutbox', () => {
   it('expires terminal entries during a long-lived page session', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(1_000);
-    const outbox = createTransportOutbox().put({
+    const onExpired = vi.fn();
+    const outbox = createTransportOutbox({ onExpired }).put({
       requestId: 'terminal-entry',
       threadId: 'thread-a',
       input: { client_request_id: 'terminal-entry', thread_id: 'thread-a', prompt: 'attached', attachment_ids: ['attachment-1'] },
@@ -305,6 +342,7 @@ describe('TransportOutbox', () => {
     await vi.advanceTimersByTimeAsync(24 * 60 * 60 * 1000 + 1);
 
     expect(outbox.entries.has('terminal-entry')).toBe(false);
+    expect(onExpired).toHaveBeenCalledTimes(1);
     await outbox.flushPersistence();
     outbox.dispose();
   });

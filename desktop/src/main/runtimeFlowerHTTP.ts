@@ -14,6 +14,14 @@ export function runtimeFlowerComputerFrame(response: RuntimeFlowerHTTPResponse):
   return { bytes: new Uint8Array(response.bytes), mime_type: 'image/png' };
 }
 
+export function runtimeFlowerToolImage(response: RuntimeFlowerHTTPResponse): RuntimeFlowerMedia {
+  const mime = String(response.headers['content-type'] ?? '');
+  if (!['image/png', 'image/jpeg', 'image/webp'].includes(mime) || response.bytes.length === 0 || response.bytes.length > (10 << 20)) {
+    throw new Error('Flower returned invalid tool image.');
+  }
+  return { bytes: new Uint8Array(response.bytes), mime_type: mime };
+}
+
 export function runtimeFlowerMessageFile(response: RuntimeFlowerHTTPResponse): RuntimeFlowerMedia {
   const mime = String(response.headers['content-type'] ?? '').toLowerCase();
   if (!/^(image\/(?!svg\+xml)|video\/|audio\/|text\/plain(?:;|$))/.test(mime) || response.bytes.length > (64 << 20)) {

@@ -5367,7 +5367,6 @@
       "threadEmpty": "此对话暂无内容。",
       "threadSyncingLatest": "正在同步最新回复...",
       "threadSyncFailed": "Flower 无法同步最新回复，请重试。",
-      "activeTurnBusy": "上一条回复仍在运行。停止后即可再次发送。",
       "composerErrorTitle": "Flower 发送失败。",
       "expandThinking": "展开完整思考",
       "collapseThinking": "收起思考",
@@ -5494,7 +5493,19 @@
       "runErrorCopyDetails": "复制详情",
       "runErrorContextBudgetInvalid": "预留的输出额度占满了上下文窗口，无法容纳输入。请增大模型配置中的上下文窗口或降低输出上限后重试。使用 Ollama 时，请在 Modelfile 中设置 num_ctx 并重新加载模型。",
       "runErrorContextFixedOverhead": "系统指令和工具定义已超出模型的可用上下文容量。请增大服务端的上下文窗口，或选择上下文容量更大的模型后重试。压缩聊天记录无法解决此问题。",
-      "runErrorContextCompactionLimit": "压缩后，对话仍超出模型的上下文上限。请缩短输入内容，或选择上下文容量更大的模型后重试。"
+      "runErrorContextCompactionLimit": "压缩后，对话仍超出模型的上下文上限。请缩短输入内容，或选择上下文容量更大的模型后重试。",
+      "preparingSend": "正在准备消息",
+      "sendFailed": "发送失败",
+      "sendUnknown": "等待确认",
+      "sendUnknownDescription": "发送结果未知，后续消息已暂停。请重试同一请求或刷新会话。",
+      "retrySend": "重试发送",
+      "refreshSend": "刷新确认状态",
+      "restoreSend": "恢复到空输入框",
+      "deleteUnsent": "删除未发送消息",
+      "sendWaiting": "等待发送",
+      "attachmentRecoveryDescription": "重启后附件不可用。请恢复文字和引用，再重新选择文件。可刷新确认原请求是否已受理。",
+      "removeRecoveryCopy": "移除本地恢复副本",
+      "removeRecoveryCopyDescription": "移除本地恢复副本并继续发送后续消息，不会取消原服务器请求。"
     },
     "threadList": {
       "title": "对话",
@@ -5829,7 +5840,8 @@
       "dialogEffectiveContextPercent": "有效上下文 %",
       "dialogDynamicModelMetadata": "动态模型元数据",
       "dialogOpenAICompatibleNativeEndpoint": "OpenAI 兼容原生端点",
-      "dialogLocalOpenAICompatibleEndpoint": "本地 OpenAI 兼容端点"
+      "dialogLocalOpenAICompatibleEndpoint": "本地 OpenAI 兼容端点",
+      "imageModelRequired": "此会话包含图片，请选择支持图片输入的模型。"
     },
     "computer": {
       "title": "浏览器与桌面",

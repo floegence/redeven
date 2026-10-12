@@ -69,7 +69,7 @@ func TestComputerMissingBrowserRequestsConsentAndDisabledBrowserCannotRun(t *tes
 	if err != nil {
 		t.Fatal(err)
 	}
-	execution, ok := value.(targetToolExecution)
+	execution, ok := value.(toolExecutionOutput)
 	if !ok || execution.inputRequired == nil || execution.inputRequired.Questions[0].ID != "browser_install" {
 		t.Fatalf("missing canonical consent: %#v", value)
 	}
