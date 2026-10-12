@@ -28,7 +28,7 @@ once, and interactions in an already expanded companion do not refresh it.
 An untouched initial blank draft not yet explicitly opened captures on its first
 text edit, paste, attachment or file reference instead. Switching pages and
 selecting or reopening an existing thread never add context. Escape focus
-restoration never captures or reopens. Full Flower, Workbench, mobile and standalone windows do not provide
+restoration never captures or reopens. Full Flower, Tessiven, Workbench, mobile and standalone windows do not provide
 automatic page context. Embedded Tessiven keeps its existing context path.
 
 Each Activity page exposes a read-only function over already authorized,
@@ -37,8 +37,8 @@ IDs, rather than the last built-in surface. Every snapshot identifies the
 environment, page ID/name and capture time. It adds only current page facts:
 Monitor sort/internal-session preference, latest displayed metrics and selected
 process; committed file directory/mode/selection or Git repository/branch/commit;
-active terminal identity/name/known directory and displayed screen; resource view/filter and explicit
-selection; or Tessiven canvas/version. Plugin Center supplies its filters and
+active terminal identity/name/known directory and displayed screen; or resource
+view/filter and explicit selection. Plugin Center supplies its filters and
 selected plugin identity. Plugin pages supply only host-known plugin, instance and
 surface identity. No additional request, plugin document/selection readback, file
 body, full terminal history or complete resource/monitor table is captured. Unloaded

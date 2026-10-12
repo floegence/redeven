@@ -3265,6 +3265,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     viewMode() === 'activity'
     && !layout.isMobile()
     && activityFlowerPlacement() !== 'full_page'
+    && layout.sidebarActiveTab() !== ENV_TESSIVEN_ACTIVITY_ID
     && !activityFlowerLauncherVisible()
     && !accessGateVisible()
     && !recoveryVisible()
@@ -3308,7 +3309,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       : viewMode() === 'activity'
         && (activityFlowerPlacement() === 'full_page'
           ? activityFlowerResidentInFullPageHost()
-          : !layout.isMobile() && activityFlowerResidentInCompanionHost()))
+          : activityFlowerCompanionVisible() && activityFlowerResidentInCompanionHost()))
     && !activityFlowerLauncherVisible()
     && !accessGateVisible()
     && !recoveryVisible()
