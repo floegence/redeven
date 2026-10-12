@@ -1,0 +1,64 @@
+---
+type: UI Contract
+title: Flower message appearance
+description: Recognize sent user messages and keep their text, references and native selections readable in every shell theme.
+tags: [flower, themes, accessibility, selection]
+timestamp: 2026-10-11T00:00:00Z
+---
+
+# Summary
+
+Flower owns transcript message presentation in the shared Env App and Desktop
+UI. Published Floe theme tokens own the palette. Sent user messages use the
+theme's text-selection accent with readable foreground text. Native selection
+must remain visible within a filled bubble and its insets. Theme changes alter
+paint only, preserving message DOM, geometry and active selection. Queued input
+keeps its quieter pending presentation; forced colors use system roles.
+
+# Contract
+
+## Filled messages and content
+
+Sent user content, context bubbles and answered-question receipts use
+`selection-bg` and `selection-fg`. Classic Light's bright selection accent uses
+dark ink derived from the theme foreground to meet body-text contrast without
+changing the accent. Queued bubbles retain their soft theme-derived background
+and ordinary foreground.
+
+Links retain underlines and use the bubble foreground in idle, hover and focus
+states. Keyboard focus has a visible outline. Quotes, receipt labels and
+reference labels inherit the bubble foreground. Reference chips retain their
+source text and actions with a transparent face, readable detail text and a
+foreground-derived boundary. Tables and code retain separate theme-colored
+insets; their text derives from the theme foreground with bounded lightness.
+
+## Native text selection
+
+Filled bubble text uses Floe's contrasting `selection-on-primary` pair. Code,
+table-header insets and queued input use the theme's dark/light reading roles
+in reverse, keeping selection distinct from their own faces. Selecting text
+never changes parsing, content, copy behavior or transport state.
+
+# Boundaries
+
+Forced colors map sent bubbles to `Highlight` / `HighlightText`, pending input
+and insets to native reading surfaces, and selection to contrasting system
+roles. Palette and material ownership remain with
+[Desktop shell theme state](../desktop/desktop-shell-theme-state.md) and
+[shared surface material](surface-material.md).
+
+# Acceptance
+
+Browser coverage measures actual rendered colors across all 26 published
+presets and both surface materials. Ordinary and selected message text must
+reach 4.5:1. Selection faces must remain visibly distinct from their containing
+face, including references, receipts, quotes, tables and code. Tests also cover
+link hover/focus, native selection preservation during theme changes, narrow
+layout and forced colors. Code highlighting retains its independent
+[stable-content contract](flower-code-highlighting.md).
+
+# Evidence
+
+- [Shared message styles](../../internal/flower_ui/src/styles/flower.css)
+- [Shared transcript rendering](../../internal/flower_ui/src/FlowerSurface.tsx)
+- [Theme, contrast and selection acceptance](../../internal/envapp/ui_src/src/styles/flowerMessageContrast.browser.test.tsx)

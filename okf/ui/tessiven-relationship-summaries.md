@@ -15,7 +15,9 @@ remain authoritative; summaries never edit documents or manufacture observations
 Full details remain available through search, node filters and bounded pagination.
 Missing visible endpoints suppress previews rather than connecting substitute rows.
 
-# Group Summaries
+# Contract
+
+## Group summaries
 
 Patterns use ordered canonical endpoint identities, endpoint granularity,
 relationship kind, exact protocol and locality. Instance endpoints normalize to
@@ -40,7 +42,7 @@ Geometry budgets the displayed preview rows and the optional all-patterns action
 Expanded group headers use a fixed budget. Main graph and thumbnail share this
 projection; raw relationship volume never expands every group's top padding.
 
-# Interaction And Details
+## Interaction and details
 
 Hover and keyboard focus never open a popup. A local summary may draw one service
 pattern preview only when both real inventory rows are visible. Logical and
@@ -58,6 +60,9 @@ Summary-level Ask Flower references the owning group and canonical endpoints;
 the all-patterns view references the group. Exact details reference the original
 relationship ID. Synthetic summary keys are display identities only, never DSL
 objects or Flower references. No list is silently truncated to 100 references.
+
+# Boundaries
+
 Native hosts use the same summary browser and retain the existing single-object
 selection callback when an exact relationship is selected.
 The native renderer loads the published Floe foundation stylesheet as well as

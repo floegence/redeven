@@ -1,0 +1,171 @@
+import '../index.css';
+import '../ui/flower-feature.css';
+
+import { builtInShellThemePresets } from '@floegence/floe-webapp-core/themes';
+import { render } from 'solid-js/web';
+import { commands, page, userEvent } from 'vitest/browser';
+import { afterEach, expect, it } from 'vitest';
+import { FlowerMarkdownBlock } from '../../../../flower_ui/src/chat/markdown/FlowerMarkdownBlock';
+
+let dispose: (() => void) | undefined;
+const media = commands as unknown as {
+  emulateMediaPreferences: (preferences: { forcedColors: 'active' | 'none' }) => Promise<void>;
+};
+afterEach(async () => {
+  await media.emulateMediaPreferences({ forcedColors: 'none' });
+  dispose?.();
+  document.body.replaceChildren();
+  document.documentElement.removeAttribute('style');
+  document.documentElement.removeAttribute('data-floe-shell-theme');
+  document.documentElement.removeAttribute('data-floe-surface-style');
+  document.documentElement.classList.remove('light', 'dark');
+  window.getSelection()?.removeAllRanges();
+});
+
+function applyTheme(preset: typeof builtInShellThemePresets[number], material: string) {
+  const root = document.documentElement;
+  root.removeAttribute('style');
+  root.classList.toggle('dark', preset.mode === 'dark');
+  root.classList.toggle('light', preset.mode === 'light');
+  root.dataset.floeShellTheme = preset.name;
+  root.dataset.floeSurfaceStyle = material;
+  for (const [name, value] of Object.entries(preset.semanticTokens ?? {})) {
+    if (value) root.style.setProperty(name, value);
+  }
+}
+
+function colors() {
+  const context = document.createElement('canvas').getContext('2d')!;
+  const rgb = (value: string): number[] => {
+    context.clearRect(0, 0, 1, 1);
+    context.fillStyle = value;
+    context.fillRect(0, 0, 1, 1);
+    return [...context.getImageData(0, 0, 1, 1).data];
+  };
+  const mix = (front: number[], back: number[]): number[] => front.slice(0, 3)
+    .map((value, index) => value * front[3] / 255 + back[index] * (1 - front[3] / 255));
+  const background = (node: HTMLElement | null): number[] => node
+    ? mix(rgb(getComputedStyle(node).backgroundColor), background(node.parentElement))
+    : [255, 255, 255];
+  const luminance = (color: number[]): number => color.slice(0, 3).map((value) => {
+    const channel = value / 255;
+    return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+  }).reduce((sum, value, index) => sum + value * [0.2126, 0.7152, 0.0722][index], 0);
+  const contrast = (first: number[], second: number[]): number => {
+    const a = luminance(first), b = luminance(second);
+    return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+  };
+  return { rgb, mix, background, contrast };
+}
+
+function mount() {
+  const host = document.createElement('div');
+  document.body.append(host);
+  dispose = render(() => <div class="flower-chat-shell" style={{ width: 'min(760px, 100%)', padding: '24px' }}>
+    <div class="flower-transcript-stack">
+      <div class="flower-message-bubble flower-message-bubble-assistant flower-message-bubble-plain">
+        <span data-copy>Review the proposed change.</span>
+      </div>
+      <div class="flower-message-row flower-message-row-user">
+        <div class="flower-message-bubble flower-message-bubble-framed flower-message-bubble-user">
+          <span class="flower-message-plain-text" data-copy>Make my messages easier to recognize.</span>
+          <FlowerMarkdownBlock content={'**Readable text** and [a helpful link](https://example.com). Use `--theme`.\n\n> Keep quoted instructions clear.\n\n| Setting | Value |\n| --- | --- |\n| Theme | Auto |\n\n```\nplain code remains readable\n```'} copyCodeLabel="Copy code" codeCopiedLabel="Copied" />
+          <div class="flower-chat-context-chips-divider"><span class="flower-chat-context-chips-divider-label" data-copy>References</span></div>
+          <div class="flower-chat-context-chips-grid">
+            {['file', 'selection', 'directory', 'terminal', 'process', 'snapshot', 'environment', 'attachment'].map(tone => (
+              <button class="flower-chat-context-chip" data-tone={tone} data-flower-chat-context-interactive="true">
+                <span class="flower-chat-context-chip-text">
+                  <span class="flower-chat-context-chip-label" data-copy>{tone}</span>
+                  <span class="flower-chat-context-chip-detail" data-copy>/workspace/readable-reference</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div class="flower-message-row flower-message-row-user">
+        <section class="flower-message-bubble flower-message-bubble-framed flower-message-bubble-user flower-input-response-receipt">
+          <div class="flower-input-response-status" data-copy>Answered</div>
+          <dl><dt class="flower-input-response-question" data-copy>Which theme?</dt><dd class="flower-input-response-answer" data-copy>Follow the system</dd><dd class="flower-input-response-answer flower-input-response-answer-redacted" data-copy>Answer hidden</dd></dl>
+        </section>
+      </div>
+      <div class="flower-message-row flower-message-row-user">
+        <div class="flower-message-bubble flower-message-bubble-framed flower-message-bubble-user flower-queued-turn-bubble"><span data-copy>Waiting to send</span></div>
+      </div>
+    </div>
+  </div>, host);
+  return host;
+}
+
+it.each(['standard', 'soft-neumorphic'])('keeps sent messages and selected text readable across every preset with %s material', async (material) => {
+  await page.viewport(900, 900);
+  const host = mount();
+  const { rgb, mix, background, contrast } = colors();
+  for (const preset of builtInShellThemePresets) {
+    applyTheme(preset, material);
+    const label = `${preset.name}/${material}`;
+    const bubble = host.querySelector<HTMLElement>('.flower-message-bubble-user')!;
+    const face = background(bubble);
+    const probe = document.createElement('span');
+    probe.style.backgroundColor = 'var(--selection-bg)';
+    bubble.parentElement!.append(probe);
+    expect.soft(face, `${label} uses the text-selection accent`).toEqual(background(probe));
+    probe.remove();
+    for (const node of host.querySelectorAll<HTMLElement>('[data-copy], .flower-chat-md-link, .flower-chat-md-inline-code, .flower-chat-md-blockquote p, th, td, pre code')) {
+      const style = getComputedStyle(node);
+      const nodeFace = background(node);
+      const paint = rgb(style.color);
+      paint[3] *= Number(style.opacity);
+      const text = mix(paint, nodeFace);
+      expect.soft(contrast(text, nodeFace), `${label}: ${node.textContent}`).toBeGreaterThanOrEqual(4.5);
+      if (!node.closest('.flower-message-bubble-user')) continue;
+      const selected = getComputedStyle(node, '::selection');
+      const selectionFace = mix(rgb(selected.backgroundColor), nodeFace);
+      expect.soft(contrast(mix(rgb(selected.color), selectionFace), selectionFace), `${label}: selected ${node.textContent}`).toBeGreaterThanOrEqual(4.5);
+      expect.soft(contrast(selectionFace, nodeFace), `${label}: visible selection ${node.textContent}`).toBeGreaterThanOrEqual(1.5);
+    }
+    const link = host.querySelector<HTMLAnchorElement>('.flower-chat-md-link')!;
+    await userEvent.hover(link);
+    expect.soft(contrast(rgb(getComputedStyle(link).color), face), `${label} hovered link`).toBeGreaterThanOrEqual(4.5);
+    link.focus();
+    expect.soft(contrast(rgb(getComputedStyle(link).color), face), `${label} focused link`).toBeGreaterThanOrEqual(4.5);
+    await userEvent.unhover(link);
+  }
+});
+
+it('preserves native selection and message geometry when changing themes at mobile width', async () => {
+  await page.viewport(390, 800);
+  const host = mount();
+  const text = host.querySelector<HTMLElement>('.flower-message-plain-text')!;
+  const range = document.createRange();
+  range.selectNodeContents(text);
+  const selection = window.getSelection()!;
+  selection.addRange(range);
+  const initial = text.getBoundingClientRect();
+  for (const name of ['paper', 'porcelain-dark', 'hc-light', 'graphite']) {
+    const preset = builtInShellThemePresets.find(preset => preset.name === name)!;
+    applyTheme(preset, 'standard');
+    expect(selection.toString()).toBe(text.textContent);
+    expect(text.getBoundingClientRect().width).toBe(initial.width);
+    expect(host.scrollWidth).toBeLessThanOrEqual(390);
+    await page.screenshot({ element: host, path: `__screenshots__/flower-message-${name}.png` });
+  }
+});
+
+it('uses system colors for sent messages, insets and native selection in forced colors', async () => {
+  const host = mount();
+  const { rgb, mix, background, contrast } = colors();
+  await media.emulateMediaPreferences({ forcedColors: 'active' });
+  for (const name of ['classic-light', 'classic-dark', 'porcelain-light', 'porcelain-dark']) {
+    applyTheme(builtInShellThemePresets.find(preset => preset.name === name)!, 'soft-neumorphic');
+    for (const node of host.querySelectorAll<HTMLElement>('[data-copy], .flower-chat-md-link, .flower-chat-md-inline-code, .flower-chat-md-blockquote p, th, td, pre code')) {
+      const face = background(node);
+      expect.soft(contrast(rgb(getComputedStyle(node).color), face), `${name}: system text ${node.textContent}`).toBeGreaterThanOrEqual(4.5);
+      if (!node.closest('.flower-message-bubble-user')) continue;
+      const selected = getComputedStyle(node, '::selection');
+      const selectionFace = mix(rgb(selected.backgroundColor), face);
+      expect.soft(contrast(rgb(selected.color), selectionFace), `${name}: system selection text ${node.textContent}`).toBeGreaterThanOrEqual(4.5);
+      expect.soft(contrast(selectionFace, face), `${name}: visible system selection ${node.textContent}`).toBeGreaterThanOrEqual(1.5);
+    }
+  }
+});
