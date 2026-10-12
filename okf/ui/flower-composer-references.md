@@ -55,7 +55,7 @@ The menu is a compact opaque popover projected through the shared surface-aware 
 
 ## New conversation origin page
 
-[Activity origin page references](flower-page-context.md) owns once-only capture,
+[Activity origin page references](flower-page-context.md) owns opening/New capture,
 authorized page readers, layout scope and removal. The existing draft coordinator
 owns the frozen page chip alongside file references.
 
