@@ -1,5 +1,6 @@
 import { Button, StableText, Switch } from '@floegence/floe-webapp-core/ui';
-import { MonitorPointer, Refresh, ChevronRight, ArrowRight, AlertCircle, Check } from '@floegence/floe-webapp-core/icons';
+import { Refresh, ChevronRight, ArrowRight, AlertCircle, Check } from '@floegence/floe-webapp-core/icons';
+import { RemoteDesktopIcon } from '../icons/RemoteDesktopIcon';
 import { For, Match, Show, Switch as MatchSwitch, createMemo, createSignal, createUniqueId, onCleanup, onMount } from 'solid-js';
 import { Dialog } from '../primitives/EnvAppModal';
 import { useI18n } from '../i18n';
@@ -38,7 +39,7 @@ export function RemoteDesktopLauncher() {
   const [open, setOpen] = createSignal(false);
   const i18n = useI18n();
   return <>
-    <Button variant="outline" onClick={() => setOpen(true)}><MonitorPointer class="w-4 h-4" />{i18n.t('remoteDesktop.title')}</Button>
+    <Button variant="outline" onClick={() => setOpen(true)}><RemoteDesktopIcon class="w-4 h-4" />{i18n.t('remoteDesktop.title')}</Button>
     <Dialog open={open()} onOpenChange={setOpen} title={i18n.t('remoteDesktop.title')} closeLabel={i18n.t('common.actions.close')} escapeKeyPhase="bubble"
       class="remote-desktop-dialog" contentClass="remote-desktop-dialog-content">
       <Show when={open()}><RemoteDesktopPanel onConnected={() => setOpen(false)} /></Show>
@@ -331,7 +332,7 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
     <MatchSwitch>
     <Match when={!deploymentOperation() && !confirmation() && busy() !== 'connect'}>
     <div class="remote-desktop-host">
-      <div class="remote-desktop-host-icon" aria-hidden="true"><MonitorPointer size={24} /></div>
+      <div class="remote-desktop-host-icon" aria-hidden="true"><RemoteDesktopIcon size={24} /></div>
       <div class="remote-desktop-identity">
         <h3 title={hostName()}>{hostName()}</h3>
         <p class="remote-desktop-state" role="status"><span class="remote-desktop-state-dot" data-ready={capabilities()?.state === 'ready' && available() && full() && !preparing() && (capabilities()?.backend !== 'wayland' || capabilities()?.authorization === 'saved' && status()?.unattended)} aria-hidden="true" />{stateCopy()}</p>
@@ -406,7 +407,7 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
     <Match when={deploymentOperation()}>
       {operation => <div class="remote-desktop-deployment-flow">
         <div class="remote-desktop-flow-header">
-          <div class="remote-desktop-flow-icon" aria-hidden="true"><MonitorPointer size={22} /></div>
+          <div class="remote-desktop-flow-icon" aria-hidden="true"><RemoteDesktopIcon size={22} /></div>
           <div>
             <p class="remote-desktop-flow-eyebrow" title={hostName()}>{hostName()}</p>
             <h3>{i18n.t(operationLabels[operation()])}</h3>

@@ -10,7 +10,7 @@ import { EnvPageLoading } from '../pages/EnvPageLoading';
 
 import { CodespacesWorkbenchIcon } from '../icons/CodespacesIcon';
 import { ContainersWorkbenchIcon } from '../icons/ContainersIcon';
-import { HostApplicationsWorkbenchIcon, WebServicesWorkbenchIcon } from '../icons/WorkbenchSoftIcons';
+import { HostApplicationsWorkbenchIcon, RemoteDesktopWorkbenchIcon, WebServicesWorkbenchIcon } from '../icons/WorkbenchSoftIcons';
 import { FlowerWorkbenchIcon } from '../icons/FlowerSoftAuraIcon';
 import { useI18n, type I18nHelpers } from '../i18n';
 import { useEnvContext } from '../pages/EnvContext';
@@ -388,7 +388,7 @@ export const redevenWorkbenchWidgets: readonly WorkbenchWidgetDefinition[] = [
   {
     type: 'redeven.remote-desktop',
     label: 'Remote Desktop',
-    icon: HostApplicationsWorkbenchIcon,
+    icon: RemoteDesktopWorkbenchIcon,
     body: RemoteDesktopWidget,
     defaultTitle: 'Remote Desktop',
     defaultSize: { width: 520, height: 580 },

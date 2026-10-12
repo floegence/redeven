@@ -1,0 +1,14 @@
+@media (forced-colors: active) {
+  .remote-desktop-glyph rect {
+    fill: Canvas;
+    fill-opacity: 1;
+    stroke: CanvasText;
+  }
+  .remote-desktop-glyph path {
+    stroke: CanvasText;
+  }
+  .remote-desktop-glyph path:last-child {
+    fill: CanvasText;
+    stroke: Canvas;
+  }
+}

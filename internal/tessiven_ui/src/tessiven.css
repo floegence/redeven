@@ -1173,33 +1173,6 @@
 .tessiven-unplaced[data-placement="missing"] small {
   color: var(--ts-icon-amber);
 }
-.tessiven-icon {
-  width: 23px;
-  height: 23px;
-  flex: none;
-}
-.tessiven-icon .glyph-main {
-  fill: var(--ts-glyph, currentColor);
-}
-.tessiven-icon .glyph-accent {
-  fill: var(--ts-glyph-accent, currentColor);
-}
-.tessiven-icon .glyph-cut {
-  fill: var(--ts-glyph-cut, var(--background));
-}
-.tessiven-icon :is(.glyph-line, .glyph-outline, .glyph-cut-line) {
-  fill: none;
-  stroke: var(--ts-glyph-accent, currentColor);
-  stroke-width: 1.5;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-.tessiven-icon .glyph-outline {
-  stroke: var(--ts-glyph, currentColor);
-}
-.tessiven-icon .glyph-cut-line {
-  stroke: var(--ts-glyph-cut, var(--background));
-}
 .tessiven :is([data-kind='web'], [data-kind='workload']) {
   --ts-glyph: var(--ts-icon-blue);
 }
@@ -1472,26 +1445,6 @@
     background: Canvas;
     color: CanvasText;
     border-bottom: 1px solid CanvasText;
-  }
-  .tessiven-icon .glyph-main,
-  .tessiven-icon .glyph-accent {
-    fill: CanvasText;
-  }
-  .tessiven-icon .glyph-cut {
-    fill: Canvas;
-  }
-  .tessiven-icon :is(.glyph-line, .glyph-outline) {
-    stroke: CanvasText;
-  }
-  .tessiven-icon .glyph-cut-line {
-    stroke: Canvas;
-  }
-  .tessiven-icon:is(
-      [data-kind='domain'],
-      [data-kind='database']
-    )
-    .glyph-line {
-    stroke: Canvas;
   }
   .tessiven-canvas .floe-infinite-canvas {
     background-image: none;

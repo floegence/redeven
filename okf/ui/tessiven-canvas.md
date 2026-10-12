@@ -110,7 +110,10 @@ Layout, routing, view controls and large-graph rendering follow the
   header has no duplicate canvas shortcut. In Workbench, the Service Canvas
   action sits immediately to the right of the Plugin Center action, uses a
   themed rounded tile icon, and opens a dedicated Service Canvas window. The
-  toolbar reuses the shared resource-header sizing used by other resource
+  shared Tessiven icon owns its paint and high-contrast stylesheet; Activity
+  navigation must render it before the lazy canvas page or its stylesheet loads.
+  Loading the canvas later must not change the navigation mark's paint.
+  The toolbar reuses the shared resource-header sizing used by other resource
   pages. It participates in the desktop titlebar drag/no-drag contract, and
   the window renders only the canvas surface and its own controls; it does not
   mount the Activity or Workbench shell, navigation, or Env App frame.
@@ -270,6 +273,7 @@ No additional menu or local layout engine owns these rules.
 - `internal/tessiven_ui/src/tessiven.css`
 - `internal/tessiven_ui/src/TessivenIcon.tsx`
 - `internal/envapp/ui_src/src/styles/tessiven-icons.browser.test.tsx` - Distinct silhouettes, graph/thumbnail parity, theme and high-contrast rendering.
+- `internal/envapp/ui_src/src/styles/navigationIcons.browser.test.tsx` - Cold navigation paint, lazy stylesheet continuity, and actual-size theme checks.
 - `internal/tessiven_ui/src/transport.ts`
 - `internal/tessiven/store.go`
 - `internal/tessiven/store_test.go`

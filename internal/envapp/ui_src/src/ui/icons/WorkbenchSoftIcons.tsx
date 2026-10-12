@@ -1,5 +1,6 @@
 import { createUniqueId, For, type JSX } from 'solid-js';
 import { useTheme } from '@floegence/floe-webapp-core';
+import { RemoteDesktopGlyph } from './RemoteDesktopIcon';
 
 function WorkbenchIconTile(props: { name: string; class?: string; children: JSX.Element }) {
   const theme = useTheme();
@@ -84,6 +85,30 @@ export function HostApplicationsWorkbenchIcon(props: { class?: string }) {
       <path d="M15 23h24" stroke="var(--muted-foreground)" stroke-opacity=".3" />
       <circle cx="19" cy="19.5" r="1" fill="var(--muted-foreground)" />
       <path d="m24 28 7 4-7 4z" fill="var(--primary)" opacity=".72" />
+    </WorkbenchIconTile>
+  );
+}
+
+export function RemoteDesktopWorkbenchIcon(props: { class?: string }) {
+  const screenId = `remote-desktop-screen-${createUniqueId()}`;
+
+  return (
+    <WorkbenchIconTile name="remote-desktop" class={props.class}>
+      <defs>
+        <linearGradient id={screenId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="light-dark(#d9eaf2, #b9d8e8)" />
+          <stop offset="100%" stop-color="light-dark(#adcddd, #8bb6cc)" />
+        </linearGradient>
+      </defs>
+      <g transform="translate(4.8 4.8) scale(1.6)" style={{
+        color: 'light-dark(#587f98, #87afc7)',
+        '--remote-desktop-screen': `url(#${screenId})`,
+        '--remote-desktop-screen-opacity': '1',
+        '--remote-desktop-pointer': 'light-dark(#355e79, #294c65)',
+        '--remote-desktop-pointer-outline': 'light-dark(#edf4f7, #daeaf2)',
+      }}>
+        <RemoteDesktopGlyph />
+      </g>
     </WorkbenchIconTile>
   );
 }
