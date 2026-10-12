@@ -28,6 +28,7 @@ await build({
     },
   }],
   resolve: { alias: [
+    { find: /^@floegence\/floe-webapp-core\/styles$/, replacement: path.join(core, 'styles.css') },
     { find: /^@floegence\/floe-webapp-core\/graph\.css$/, replacement: path.join(core, 'graph.css') },
     { find: /^@floegence\/floe-webapp-core\/(graph|icons|ui)$/, replacement: `${core}/$1.js` },
     { find: /^@floegence\/floe-webapp-core$/, replacement: path.join(core, 'index.js') },

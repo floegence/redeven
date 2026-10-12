@@ -6,14 +6,18 @@ export default async function qualifyRelationships() {
       if (read()) return;
       await new Promise(resolve => setTimeout(resolve, 50));
     }
-    throw Error('Native relationship state timed out');
+    const panel = document.querySelector('.tessiven-popup');
+    throw Error(`Native relationship state timed out: ${read.toString()}\n${JSON.stringify({
+      bounds: panel?.getBoundingClientRect().toJSON(), viewport: [innerWidth, innerHeight],
+      parent: panel?.parentElement?.outerHTML.slice(0, 1200),
+    })}\n${document.body.innerText.slice(0, 500)}`);
   };
   const rows = () => [...document.querySelectorAll('[data-relation-summary]')];
   const button = name => [...document.querySelectorAll('button')].find(item => item.getAttribute('aria-label') === name);
   const click = element => { if (!element) throw Error('Native action missing'); element.click(); };
   const command = action => window.serviceCanvas.command({ canvas_id: 'qualification', version_id: 1, action });
   await until(() => rows().length === 2 && !document.querySelector('[aria-label="Arranging canvas"]'));
-  for (const row of rows()) if (!row.textContent.includes('Relations: 1000')) throw Error('Native count is not exact');
+  for (const row of rows()) if (row.getAttribute('data-relation-count') !== '1000') throw Error('Native count is not exact');
   click(rows()[0]);
   await until(() => document.querySelectorAll('[data-exact-relation-id]').length === 50);
   for (let i = 0; i < 19; i++) click(button('Next page'));

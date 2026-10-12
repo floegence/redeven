@@ -111,7 +111,7 @@ export function TessivenServiceRelations(props: {
           <For each={items()}>{item => {
             const kind = () => item.protocol ?? props.t(`relation.${item.kind}`);
             return <button type="button" class="tessiven-local-relation"
-              data-relation-id={item.relation?.id} data-relation-summary={item.summary?.key}
+              data-relation-id={item.relation?.id} data-relation-summary={item.summary?.key} data-relation-count={item.summary?.relationRefs.length}
               data-active={active()?.key === item.key}
               aria-label={`${item.fromLabel} ${kind()} ${item.toLabel}${item.summary ? ` · ${props.t('relationCount', { count: item.summary.relationRefs.length })}` : ''}`}
               onPointerEnter={event => { if (event.pointerType !== 'touch') { setFocused(undefined); setHovered(item.key); } }}
@@ -123,7 +123,7 @@ export function TessivenServiceRelations(props: {
               onContextMenu={event => { clear(); if (item.summary) props.onSummaryContextMenu?.(event, item.summary); else props.onContextMenu(event, item.key); }}>
               <span>{item.fromLabel}</span><ArrowRight aria-hidden="true" /><span>{item.toLabel}</span>
               <small classList={{ 'tessiven-relation-summary-meta': !!item.summary }}><span>{kind()}</span>
-                <Show when={item.summary}>{summary => <span>{props.t(`relationLocality.${summary().locality}`)} · {props.t('relationCount', { count: summary().relationRefs.length })}</span>}</Show>
+                <Show when={item.summary}>{summary => <span><span>{props.t(`relationLocality.${summary().locality}`)}</span><span class="tessiven-relation-summary-count"> · {summary().relationRefs.length}</span></span>}</Show>
               </small>
             </button>;
           }}</For>

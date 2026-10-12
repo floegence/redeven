@@ -36,7 +36,7 @@ async function ready(count) {
   const group = await page.locator('.tessiven-group').boundingBox();
   report.geometry.push({ count, group });
   for (const row of await page.locator('[data-relation-summary]').all()) {
-    assert((await row.innerText()).includes(`Relations: ${count}`), 'Original relation count');
+    assert.equal(await row.getAttribute('data-relation-count'), String(count), 'Original relation count');
     const box = await row.boundingBox(); assert(box.y + box.height <= group.y + group.height, 'Pattern inside group');
   }
   assert.equal(await page.locator('.tessiven-error').count(), 0);
@@ -50,9 +50,12 @@ async function canvas(count) {
     page = await until(() => app.context().pages().find(candidate => candidate.url().includes('/_redeven_proxy/env/') && new URL(candidate.url()).searchParams.get('canvas') === id), 'Owned standalone canvas');
   } else await page.goto(new URL(`/_redeven_proxy/env/?surface=tessiven&window=service-canvas&canvas=${id}`, origin).href);
   page.on('pageerror', error => report.errors.push(error.message));
-  const hide = page.getByRole('button', { name: 'Hide replies', exact: true });
-  if (await hide.count()) await hide.click();
   await ready(count);
+  // Flower loads independently of graph readiness. Close its public companion
+  // window after it mounts so short-viewport graph controls remain accessible.
+  const hide = page.getByRole('button', { name: 'Hide replies', exact: true });
+  await hide.waitFor(); await hide.click();
+  await page.getByRole('button', { name: 'Show replies', exact: true }).waitFor();
   assert.equal(await page.locator('[data-floe-shell-slot], [data-workbench-dock-action]').count(), 0);
 }
 try {

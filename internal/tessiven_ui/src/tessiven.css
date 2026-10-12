@@ -836,7 +836,9 @@
   line-height: 11px;
 }
 .tessiven-relation-summary-meta > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tessiven-relation-summary-meta > span:last-child { color: var(--ts-ink); }
+.tessiven-relation-summary-meta > span:last-child { display: flex; color: var(--ts-ink); }
+.tessiven-relation-summary-meta > span:last-child > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.tessiven-relation-summary-count { flex-shrink: 0; white-space: pre; }
 .tessiven-pool-relations,
 .tessiven-relation-more {
   display: inline-flex;
