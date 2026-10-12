@@ -1471,6 +1471,7 @@ const TOOL_ACTIONS: Readonly<Record<string, keyof FlowerToolActivityCopy>> = {
   'computer.click': 'click', 'computer.double_click': 'doubleClick', 'computer.type': 'type',
   'computer.key': 'key', 'computer.scroll': 'scroll', 'computer.drag': 'drag', 'computer.wait': 'wait',
   'browser.navigate': 'navigate', 'browser.back': 'back', 'browser.reload': 'reload',
+  'image.read': 'viewImage',
   rgrep: 'searchFiles', find: 'findFiles', read_files: 'readFiles', use_skill: 'skill',
   'okf.index': 'knowledgeIndex', 'okf.search': 'knowledgeSearch', 'okf.open': 'knowledgeOpen',
   sources: 'sources', ask_user: 'question', write_todos: 'todos', web_fetch: 'fetch',

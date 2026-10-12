@@ -187,6 +187,7 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
         back: t(i18n, k('chat.toolActivity.back')),
         reload: t(i18n, k('chat.toolActivity.reload')),
         read: t(i18n, k('chat.toolActivity.read')),
+        viewImage: t(i18n, k('chat.toolActivity.viewImage')),
         readFiles: t(i18n, k('chat.toolActivity.readFiles')),
         edit: t(i18n, k('chat.toolActivity.edit')),
         delete: t(i18n, k('chat.toolActivity.delete')),
