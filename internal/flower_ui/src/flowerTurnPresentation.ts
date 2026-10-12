@@ -30,7 +30,7 @@ export function projectFlowerTurnProcess(entries: readonly FlowerTimelineEntry[]
     const final = facts.get(id)?.final_item_ids.includes(entry.message.id);
     const dialogue = entry.message.role !== 'assistant' || entry.blocks.some((block) => block.type === 'input_response');
     // Without an exact final boundary, assistant prose may contain a conclusion.
-    // Only exclusively typed process blocks are safe to hide by manual choice.
+    // Only exclusively typed process blocks are safe to hide.
     const explicitProcess = entry.blocks.length > 0 && entry.blocks.every((block) => block.type === 'activity'
       || block.type === 'content' && block.block_type === 'thinking');
     if (!final && !dialogue && (completeBoundaries.has(id) || explicitProcess)) groups.get(id)!.push(entry.key);
@@ -39,7 +39,7 @@ export function projectFlowerTurnProcess(entries: readonly FlowerTimelineEntry[]
     const turn = facts.get(turnID);
     const pending = pendingTurnIDs.includes(turnID);
     const disclosable = Boolean(turn?.outcome && turn.ended_at && !turn.kind && processKeys.length && !pending);
-    const disclosure: FlowerTurnDisclosurePolicy = !disclosable ? 'none' : completeBoundaries.has(turnID) ? 'automatic' : 'manual';
+    const disclosure: FlowerTurnDisclosurePolicy = !disclosable ? 'none' : turn?.outcome === 'completed' ? 'automatic' : 'manual';
     return [turnID, { turnID, turn, processKeys, summaryKey: processKeys[0], terminalKey: terminalKeys.get(turnID), disclosure }];
   }));
 }

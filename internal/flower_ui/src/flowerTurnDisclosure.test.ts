@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createFlowerTurnDisclosureStore } from './flowerTurnDisclosure';
 
 describe('turn disclosure interface state', () => {
-  it('defaults manual-only history to expanded and retains deliberate collapse when details change', () => createRoot((dispose) => {
+  it('defaults abnormal history to expanded and retains deliberate collapse when details change', () => createRoot((dispose) => {
     const store = createFlowerTurnDisclosureStore();
     const protect = vi.fn(() => false);
     expect(store.expanded('legacy', 'manual')).toBe(true);

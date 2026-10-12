@@ -609,8 +609,6 @@
       "removeRecoveryCopyDescription": "このローカルの復元用コピーを削除し、後続のメッセージの送信を再開します。元のサーバーへのリクエストは取り消されません。",
       "turnProcess": {
         "worked": "作業時間：{duration}",
-        "elapsed": "経過時間：{duration}",
-        "waiting": "回答または承認の待機時間：{duration}",
         "expand": "作業過程を展開",
         "collapse": "作業過程を折りたたむ",
         "lessThanSecond": "1 秒未満",

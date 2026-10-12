@@ -65,7 +65,6 @@ function mount() {
     <div class="flower-transcript-stack">
       <div class="flower-turn-summary">
         <button class="flower-turn-summary-button" aria-expanded="true"><span data-copy>Worked for 2 minutes 18 seconds</span></button>
-        <div class="flower-turn-timing"><span data-copy>Total elapsed: 2 minutes 38 seconds</span><span data-copy>Waiting for your input or approval: 20 seconds</span></div>
       </div>
       <div class="flower-message-bubble flower-message-bubble-assistant flower-message-bubble-plain">
         <span data-copy>Review the proposed change.</span>

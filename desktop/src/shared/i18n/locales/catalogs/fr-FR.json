@@ -609,8 +609,6 @@
       "removeRecoveryCopyDescription": "Supprime cette copie locale de récupération et reprend les messages suivants. La demande initiale au serveur n’est pas annulée.",
       "turnProcess": {
         "worked": "Temps de travail : {duration}",
-        "elapsed": "Durée totale : {duration}",
-        "waiting": "Attente de votre réponse ou approbation : {duration}",
         "expand": "Développer le déroulement du travail",
         "collapse": "Réduire le déroulement du travail",
         "lessThanSecond": "moins d’une seconde",

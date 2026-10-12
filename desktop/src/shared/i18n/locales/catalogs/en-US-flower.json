@@ -478,8 +478,6 @@
     "removeRecoveryCopyDescription": "Remove this local recovery copy and resume later messages. This does not cancel the original server request.",
     "turnProcess": {
       "worked": "Worked for {duration}",
-      "elapsed": "Total elapsed: {duration}",
-      "waiting": "Waiting for your input or approval: {duration}",
       "expand": "Expand work process",
       "collapse": "Collapse work process",
       "lessThanSecond": "less than a second",

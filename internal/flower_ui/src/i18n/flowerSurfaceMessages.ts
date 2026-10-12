@@ -255,7 +255,7 @@ export const flowerSurfaceEnUS = {
     composerErrorTitle: 'Flower could not send.',
     turnProcess: {
       failed: 'Flower could not complete this turn.', cancelled: 'Stopped', interrupted: 'This turn was interrupted.',
-      worked: 'Worked for {duration}', elapsed: 'Total elapsed: {duration}', waiting: 'Waiting for your input or approval: {duration}',
+      worked: 'Worked for {duration}',
       expand: 'Expand work process', collapse: 'Collapse work process', lessThanSecond: 'less than a second',
       hour: { one: '{count} hour', other: '{count} hours' },
       minute: { one: '{count} minute', other: '{count} minutes' },

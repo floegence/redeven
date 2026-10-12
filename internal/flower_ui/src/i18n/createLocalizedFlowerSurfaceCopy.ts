@@ -370,8 +370,6 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
         cancelled: t(i18n, k('chat.turnProcess.cancelled')),
         interrupted: t(i18n, k('chat.turnProcess.interrupted')),
         worked: (duration) => t(i18n, k('chat.turnProcess.worked'), { duration }),
-        elapsed: (duration) => t(i18n, k('chat.turnProcess.elapsed'), { duration }),
-        waiting: (duration) => t(i18n, k('chat.turnProcess.waiting'), { duration }),
         expand: t(i18n, k('chat.turnProcess.expand')),
         collapse: t(i18n, k('chat.turnProcess.collapse')),
         lessThanSecond: t(i18n, k('chat.turnProcess.lessThanSecond')),

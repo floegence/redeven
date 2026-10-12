@@ -5502,8 +5502,6 @@
       "removeRecoveryCopyDescription": "Entfernt diese lokale Wiederherstellungskopie und setzt spätere Nachrichten fort. Die ursprüngliche Serveranfrage wird nicht abgebrochen.",
       "turnProcess": {
         "worked": "Arbeitszeit: {duration}",
-        "elapsed": "Gesamtdauer: {duration}",
-        "waiting": "Warten auf Ihre Antwort oder Genehmigung: {duration}",
         "expand": "Arbeitsverlauf aufklappen",
         "collapse": "Arbeitsverlauf zuklappen",
         "lessThanSecond": "weniger als eine Sekunde",

@@ -11201,14 +11201,12 @@ button.flower-attachment-preview-trigger:disabled {
 .flower-turn-summary-button:focus-visible { outline: 2px solid var(--ring); outline-offset: 4px; }
 .flower-turn-summary-chevron { width: 0.875rem; height: 0.875rem; flex-shrink: 0; transition: transform 140ms ease; }
 .flower-turn-summary-button[aria-expanded='true'] .flower-turn-summary-chevron { transform: rotate(90deg); }
-.flower-turn-timing { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; margin-top: 0.25rem; color: var(--flower-turn-foreground); font-size: 0.75rem; line-height: 1.25rem; }
 @media (prefers-reduced-motion: reduce) { .flower-turn-summary-button, .flower-turn-summary-chevron { transition: none; } }
 @media (forced-colors: active) {
   .flower-turn-summary { border-color: CanvasText; }
   .flower-turn-summary-button { color: ButtonText; }
   .flower-turn-summary-button:hover { color: ButtonText; text-decoration: underline; }
   .flower-turn-summary-button:focus-visible { outline-color: Highlight; }
-  .flower-turn-timing { color: CanvasText; }
 }
 .flower-turn-ended { margin: 0.5rem 0 0.75rem; color: var(--muted-foreground); font-size: 0.75rem; line-height: 1.25rem; }
 @media (forced-colors: active) { .flower-turn-ended { color: CanvasText; } }
