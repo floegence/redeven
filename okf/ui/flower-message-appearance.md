@@ -25,6 +25,10 @@ dark ink derived from the theme foreground to meet body-text contrast without
 changing the accent. Queued bubbles retain their soft theme-derived background
 and ordinary foreground.
 
+Failed user messages retain the error surface with its icon and heading. Their
+text and selection use the inset reading roles so the error background cannot
+leave selection-colored message text unreadable.
+
 Links retain underlines and use the bubble foreground in idle, hover and focus
 states. Keyboard focus has a visible outline. Quotes, receipt labels and
 reference labels inherit the bubble foreground. Reference chips retain their
@@ -54,7 +58,7 @@ presets and both surface materials. Ordinary and selected message text must
 reach 4.5:1. Selection faces must remain visibly distinct from their containing
 face, including references, receipts, quotes, tables and code. Tests also cover
 link hover/focus, native selection preservation during theme changes, narrow
-layout and forced colors. Code highlighting retains its independent
+layout, failed messages and forced colors. Code highlighting retains its independent
 [stable-content contract](flower-code-highlighting.md).
 
 # Evidence
