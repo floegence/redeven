@@ -1120,6 +1120,23 @@ async function verifyBuiltFlowerLifecycle(browser, tls) {
       throw new Error(`built Flower did not preserve its full-page identity: ${JSON.stringify(fullPageIdentity)}`);
     }
 
+    const draftBeforeTessiven = await composer.inputValue();
+    await page.getByRole('button', { name: 'Tessiven service canvas', exact: true }).click();
+    await page.locator('.tessiven').waitFor({ state: 'visible' });
+    await companion.waitFor({ state: 'hidden' });
+    const tessivenPlacement = await product.evaluate(element => ({
+      hidden: element.hidden, inert: element.hasAttribute('inert'),
+      ariaHidden: element.getAttribute('aria-hidden'),
+      editorBoxes: element.querySelector('.flower-composer textarea').getClientRects().length,
+      sameSurface: globalThis.__redevenBuiltFlowerIdentity.surface === element.querySelector('#redeven-flower-surface'),
+      sameComposer: globalThis.__redevenBuiltFlowerIdentity.composer === element.querySelector('.flower-composer textarea'),
+    }));
+    if (!tessivenPlacement.hidden || !tessivenPlacement.inert || tessivenPlacement.ariaHidden !== 'true'
+      || tessivenPlacement.editorBoxes !== 0 || !tessivenPlacement.sameSurface || !tessivenPlacement.sameComposer
+      || await composer.inputValue() !== draftBeforeTessiven) {
+      throw new Error(`built Tessiven must hide the retained global Flower companion: ${JSON.stringify(tessivenPlacement)}`);
+    }
+
     await page.getByRole('button', { name: 'Terminal', exact: true }).click();
     const terminalAnchor = page.locator('[data-terminal-flower-anchor]');
     await terminalAnchor.waitFor({ state: 'visible' });
@@ -1193,6 +1210,7 @@ async function verifyBuiltFlowerLifecycle(browser, tls) {
       identity_preserved: true,
       single_collapsed_outline: true,
       frozen_page_context_verified: true,
+      tessiven_companion_hidden: true,
     };
   } finally {
     await page.close();

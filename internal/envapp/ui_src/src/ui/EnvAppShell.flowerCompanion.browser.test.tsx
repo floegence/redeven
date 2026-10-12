@@ -184,6 +184,7 @@ vi.mock('@floegence/floe-webapp-core/app', async (importOriginal) => ({
     return (
       <div
         data-testid="activity-body-content"
+        data-active-id={props.activeId?.()}
         style={{ position: 'relative', height: testFilesMenu || testTerminalFooter ? '100%' : '1200px', padding: testFilesMenu ? '0' : '12px' }}
       >
         <Show when={testFilesMenu}>
@@ -1356,6 +1357,35 @@ describe('EnvAppShell Activity Flower browser integration', () => {
       expect(document.querySelectorAll('#redeven-activity-flower-product')).toHaveLength(1);
       expect(document.querySelector('[data-activity-flower-mobile-companion]')).toBeNull();
     }
+  });
+
+  it.each([false, true])('hides the global Flower entry on Tessiven from expanded=%s while retaining the draft and editor', async expanded => {
+    const fixture = await mountShell();
+    const surface = document.querySelector<HTMLElement>('[data-testid="env-ai-page"]')!;
+    setInputValue(fixture.input, 'Retained global draft');
+    if (expanded) {
+      await userEvent.click(fixture.input);
+      await vi.waitFor(() => expect(fixture.companion.dataset.companionPhase).toBe('expanded'));
+    }
+    await userEvent.click(page.getByRole('button', { name: 'Tessiven service canvas', exact: true }));
+    await vi.waitFor(() => expect(document.querySelector('[data-testid="activity-body-content"]')?.getAttribute('data-active-id')).toBe('tessiven'));
+    await vi.waitFor(() => expect(fixture.companion.getAttribute('aria-hidden')).toBe('true'));
+    expect(fixture.companion.hasAttribute('inert')).toBe(true);
+    expect(fixture.product.hidden).toBe(true);
+    expect(fixture.product.getAttribute('aria-hidden')).toBe('true');
+    expect(fixture.product.hasAttribute('inert')).toBe(true);
+    expect(surface.dataset.engaged).toBe('false');
+    expect(surface.dataset.transcriptVisible).toBe('false');
+    expect(fixture.input.getClientRects()).toHaveLength(0);
+    expect(document.querySelector('[data-testid="activity-flower-composer"]')).toBe(fixture.input);
+    expect(fixture.input.value).toBe('Retained global draft');
+    await userEvent.click(page.getByRole('button', { name: 'File Browser', exact: true }));
+    await vi.waitFor(() => expect(fixture.product.hidden).toBe(false));
+    expect(fixture.companion.getAttribute('aria-hidden')).toBeNull();
+    expect(document.querySelector('[data-testid="env-ai-page"]')).toBe(surface);
+    expect(document.querySelector('[data-testid="activity-flower-composer"]')).toBe(fixture.input);
+    expect(fixture.input.value).toBe('Retained global draft');
+    expect(envAIPageMountSequence).toBe(1);
   });
 
   it('anchors the retained Flower editor inside the Activity Terminal footer and leaves Workbench without an entry', async () => {
