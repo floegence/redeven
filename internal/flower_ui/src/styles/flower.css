@@ -2878,9 +2878,33 @@
 }
 
 .flower-message-bubble-user {
+  --flower-user-bubble-background: var(--selection-bg);
+  --flower-user-bubble-foreground: var(--selection-fg);
+  --flower-user-inset-foreground: oklch(from var(--foreground) min(l, 0.4) c h);
   max-width: min(78%, var(--flower-chat-user-bubble-width));
-  background: color-mix(in srgb, var(--primary) 15%, var(--flower-chat-surface-elevated));
-  color: color-mix(in srgb, var(--foreground) 95%, var(--primary) 5%);
+  background: var(--flower-user-bubble-background);
+  color: var(--flower-user-bubble-foreground);
+}
+
+:root.dark .flower-message-bubble-user {
+  --flower-user-inset-foreground: oklch(from var(--foreground) max(l, 0.8) c h);
+}
+
+/* Classic Light's bright selection accent needs dark ink for body-sized copy. */
+:root[data-floe-shell-theme='classic-light'] .flower-message-bubble-user {
+  --flower-user-bubble-foreground: oklch(from var(--foreground) min(l, 0.2) c h);
+}
+
+.flower-message-bubble-user::selection,
+.flower-message-bubble-user ::selection {
+  background: var(--selection-on-primary-bg);
+  color: var(--selection-on-primary-fg);
+}
+
+.flower-message-bubble-user :is(.flower-chat-md-link, .flower-chat-md-blockquote,
+  .flower-input-response-status, .flower-input-response-question,
+  .flower-input-response-answer-redacted, .flower-chat-context-chips-divider-label) {
+  color: inherit;
 }
 
 .flower-message-bubble-framed.flower-message-bubble-user {
@@ -2917,7 +2941,7 @@
 .flower-input-response-row + .flower-input-response-row {
   margin-top: 0.5rem;
   padding-top: 0.625rem;
-  border-top: 1px solid color-mix(in srgb, var(--primary) 16%, transparent);
+  border-top: 1px solid color-mix(in srgb, currentColor 24%, transparent);
 }
 
 .flower-input-response-question {
@@ -2946,9 +2970,14 @@
 }
 
 .flower-queued-turn-bubble {
+  --flower-user-bubble-background: color-mix(in srgb, var(--primary) 9%, var(--flower-chat-surface-elevated));
+  --flower-user-bubble-foreground: var(--foreground);
   border-style: dashed;
   border-color: color-mix(in srgb, var(--primary) 32%, var(--flower-chat-surface-border));
-  background: color-mix(in srgb, var(--primary) 9%, var(--flower-chat-surface-elevated));
+}
+
+:root[data-floe-shell-theme='classic-light'] .flower-queued-turn-bubble {
+  --flower-user-bubble-foreground: var(--foreground);
 }
 
 .flower-transport-outbox-context {
@@ -3277,6 +3306,24 @@
   font-size: 0.625rem;
   opacity: 0.75;
   margin-top: 0.05rem;
+}
+
+.flower-message-bubble-user .flower-chat-context-chip {
+  border-color: color-mix(in srgb, currentColor 32%, transparent);
+  background: transparent;
+}
+
+.flower-message-bubble-user .flower-chat-context-chip:focus-visible {
+  outline-color: currentColor;
+}
+
+.flower-message-bubble-user .flower-chat-context-chip-detail {
+  opacity: 1;
+}
+
+.flower-message-bubble-user .flower-chat-context-chips-divider::before,
+.flower-message-bubble-user .flower-chat-context-chips-divider::after {
+  background: color-mix(in srgb, currentColor 24%, transparent);
 }
 
 .flower-chat-context-chip-truncated {
@@ -4533,14 +4580,20 @@ button.flower-composer-context-source:focus-visible,
   text-underline-offset: 0.18em;
 }
 
-.flower-message-bubble-user .flower-chat-md-link {
-  color: color-mix(in srgb, var(--primary) 66%, var(--foreground) 34%);
-}
-
 .flower-chat-md-link:hover,
 .flower-chat-md-link:focus-visible {
   color: color-mix(in srgb, var(--primary) 92%, var(--foreground) 8%);
   outline: none;
+}
+
+.flower-message-bubble-user .flower-chat-md-link:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.flower-message-bubble-user .flower-chat-md-link:hover,
+.flower-message-bubble-user .flower-chat-md-link:focus-visible {
+  color: inherit;
 }
 
 .flower-chat-md-inline-code {
@@ -4559,6 +4612,7 @@ button.flower-composer-context-source:focus-visible,
 .flower-message-bubble-user .flower-chat-md-inline-code {
   border-color: color-mix(in srgb, var(--primary) 32%, var(--foreground) 18%);
   background: var(--flower-chat-surface-soft);
+  color: var(--flower-user-inset-foreground);
 }
 
 .flower-chat-md-blockquote {
@@ -4586,6 +4640,15 @@ button.flower-composer-context-source:focus-visible,
 .flower-chat-md-block th {
   background: color-mix(in srgb, var(--flower-chat-surface-elevated) 82%, var(--foreground) 5%);
   font-weight: 600;
+}
+
+.flower-message-bubble-user .flower-chat-md-block th {
+  color: var(--flower-user-inset-foreground);
+}
+
+.flower-message-bubble-user .flower-chat-md-block :is(th, td),
+.flower-message-bubble-user .flower-chat-md-blockquote {
+  border-color: color-mix(in srgb, currentColor 32%, transparent);
 }
 
 .flower-chat-md-code-frame {
@@ -4618,6 +4681,55 @@ button.flower-composer-context-source:focus-visible,
 .flower-message-bubble-user .flower-chat-md-code-block {
   border-color: color-mix(in srgb, var(--primary) 24%, var(--flower-chat-surface-border));
   background: color-mix(in srgb, var(--flower-chat-surface-elevated) 78%, var(--primary) 9%);
+  color: var(--flower-user-inset-foreground);
+}
+
+/* Theme-colored insets need a selection distinct from their own surface. */
+.flower-message-bubble-user :is(.flower-chat-md-inline-code, .flower-chat-md-code-block, th)::selection,
+.flower-message-bubble-user :is(.flower-chat-md-inline-code, .flower-chat-md-code-block, th) ::selection,
+.flower-queued-turn-bubble::selection,
+.flower-queued-turn-bubble ::selection {
+  background: var(--flower-user-inset-foreground);
+  color: var(--background);
+}
+
+@media (forced-colors: active) {
+  .flower-message-bubble-user {
+    --flower-user-bubble-background: Highlight;
+    --flower-user-bubble-foreground: HighlightText;
+    forced-color-adjust: none;
+  }
+
+  :root[data-floe-shell-theme='classic-light'] .flower-message-bubble-user {
+    --flower-user-bubble-foreground: HighlightText;
+  }
+
+  .flower-queued-turn-bubble {
+    --flower-user-bubble-background: Canvas;
+    --flower-user-bubble-foreground: CanvasText;
+  }
+
+  :root[data-floe-shell-theme='classic-light'] .flower-queued-turn-bubble {
+    --flower-user-bubble-foreground: CanvasText;
+  }
+
+  .flower-message-bubble-user::selection,
+  .flower-message-bubble-user ::selection {
+    background: HighlightText;
+    color: Highlight;
+  }
+
+  .flower-message-bubble-user :is(.flower-chat-md-inline-code, .flower-chat-md-code-block, th) {
+    forced-color-adjust: auto;
+  }
+
+  .flower-message-bubble-user :is(.flower-chat-md-inline-code, .flower-chat-md-code-block, th)::selection,
+  .flower-message-bubble-user :is(.flower-chat-md-inline-code, .flower-chat-md-code-block, th) ::selection,
+  .flower-queued-turn-bubble::selection,
+  .flower-queued-turn-bubble ::selection {
+    background: Highlight;
+    color: HighlightText;
+  }
 }
 
 .flower-chat-md-code-copy {
