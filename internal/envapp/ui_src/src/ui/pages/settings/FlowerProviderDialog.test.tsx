@@ -214,3 +214,38 @@ describe('shared Flower provider dialog', () => {
     } finally { dialog.dispose(); }
   });
 });
+
+describe('ChatGPT local authentication boundary', () => {
+  function localDialog(available: boolean, auth: import('../../../../../../flower_ui/src/contracts/flowerSurfaceContracts').FlowerChatGPTAuth = vi.fn(async () => ({ id: 'attempt', state: 'waiting' }))) {
+    const host = document.createElement('div'); document.body.append(host);
+    const [open, setOpen] = createSignal(true), [local, setLocal] = createSignal(available), [binding, setBinding] = createSignal('local-connection');
+    const provider = { id: 'openai', type: 'openai' as const, models: [] };
+    const dispose = render(() => <FlowerProviderDialog open={open()} mode="create" provider={provider} chatGPTAvailable={local()} chatGPTBindingID={binding()} chatGPTAuth={auth} keyConfigured={false} webSearchKeyConfigured={false} onOpenChange={setOpen} onConfirm={vi.fn()} />, host);
+    const button = (text: string) => [...host.querySelectorAll('button')].find(el => {
+      const visible = el.cloneNode(true) as HTMLElement;
+      visible.querySelectorAll('[aria-hidden=true]').forEach(node => node.remove());
+      return visible.textContent?.trim() === text;
+    })!;
+    (host.querySelector('[aria-controls=flower-provider-type-openai]') as HTMLButtonElement).click();
+    return { host, button, dispose, setOpen, setLocal, setBinding };
+  }
+  it('disables the remote tab with persistent guidance and no sign-in controls', () => {
+    const auth = vi.fn(); const dialog = localDialog(false, auth);
+    expect(dialog.button('ChatGPT account').disabled).toBe(true);
+    dialog.button('ChatGPT account').click();
+    expect(dialog.host.textContent).toContain('ChatGPT sign-in is available only on this device');
+    expect(dialog.host.textContent).not.toContain('Continue with ChatGPT');
+    expect(dialog.host.querySelector('input[type=password]')).not.toBeNull();
+    expect(auth).not.toHaveBeenCalled(); dialog.dispose();
+  });
+  it('cancels a pending sign-in on target changes and fences a late start response', async () => {
+    let resolveStart!: (result: { id: string; state: string }) => void;
+    const auth = vi.fn((action: string) => action === 'start' ? new Promise<{ id: string; state: string }>(resolve => { resolveStart = resolve; }) : Promise.resolve({}));
+    const dialog = localDialog(true, auth);
+    dialog.button('Continue with ChatGPT').click();
+    dialog.setBinding('different-connection'); dialog.setLocal(false);
+    resolveStart({ id: 'late-attempt', state: 'waiting' });
+    await vi.waitFor(() => expect(auth).toHaveBeenCalledWith('cancel', expect.objectContaining({ attempt_id: 'late-attempt' })));
+    expect(dialog.host.textContent).not.toContain('Waiting for authorization'); dialog.dispose();
+  });
+});

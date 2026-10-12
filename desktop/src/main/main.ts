@@ -11425,6 +11425,7 @@ async function runtimeFlowerAccessHeaders(
   environment: DesktopLocalEnvironmentState | null,
 ): Promise<Record<string, string>> {
   const bridgeHeaders = runtimeFlowerPrivateBridgeHeaders(record.startup);
+  if (environment && !('session' in record) && environment.id === record.environment_id) bridgeHeaders['X-Redeven-Host-Access'] = 'local_host';
   const host = tessivenHostFor(record.startup);
   if (host) bridgeHeaders['X-Redeven-Tessiven-Source'] = host.host.source();
   if (record.startup.password_required !== true) {
@@ -18963,6 +18964,7 @@ function installDesktopDiagnosticsHooks(
       diagnosticHeaders ?? details.requestHeaders as Record<string, string | string[]>,
       {
         webServiceForwardID, graphicalWindow,
+        verifiedLocalHost: sessionRecord.target.kind === 'local_environment' && sessionRecord.target.route === 'local_host' && sessionRecord.transport.kind === 'native_local_bridge',
         tessivenSource: tessivenHostFor(sessionRecord.startup)?.host.source(),
         trustedEnvAppFrame: (contentsID === sessionRecord.root_window.webContentsID
           || [...sessionRecord.child_windows.values()].some(window => window.webContentsID === contentsID))
@@ -19915,7 +19917,25 @@ if (!app.requestSingleInstanceLock()) {
     }
 
     try {
-      await openExternalURL(normalized.url);
+      const preferences = await loadDesktopPreferencesCached();
+      const local = currentLocalEnvironmentRuntimeRecord(preferences.local_environment);
+      const requested = new URL(normalized.url);
+      const publicURLs = local ? [local.startup.local_ui_url, ...(local.startup.local_ui_urls ?? [])] : [];
+      const localEntry = local && !requested.search && !requested.hash && ['/', '/_redeven_proxy/env/'].includes(requested.pathname)
+        && publicURLs.some(value => { try { return new URL(value).origin === requested.origin; } catch { return false; } });
+      if (localEntry) {
+        const response = await fetch(new URL('/_redeven_desktop/local-runtime-browser-handoff', local.startup.local_ui_bridge_url), {
+          method: 'POST', headers: { ...runtimeFlowerPrivateBridgeHeaders(local.startup), 'X-Redeven-Host-Access': 'local_host', 'Content-Type': 'application/json' },
+          body: JSON.stringify({ entry_url: requested.toString() }), signal: AbortSignal.timeout(8_000), redirect: 'error',
+        });
+        if (!response.ok) throw new Error('Could not verify the local Runtime browser entry.');
+        const entry = await response.json() as { entry_url: string };
+        const handoff = new URL(entry.entry_url);
+        if (handoff.origin !== requested.origin || handoff.pathname !== requested.pathname) throw new Error('Invalid local Runtime browser entry.');
+        await openExternalURL(handoff.toString());
+      } else {
+        await openExternalURL(normalized.url);
+      }
       return {
         ok: true,
       };

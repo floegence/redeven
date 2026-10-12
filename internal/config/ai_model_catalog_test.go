@@ -152,3 +152,25 @@ func TestModelMigrationPreservesSmallerContextWithInheritedOutputLimit(t *testin
 		t.Fatalf("context override lost: %+v", model)
 	}
 }
+
+func TestChatGPTModelOverridesRemainBoundToReviewedAccountInventory(t *testing.T) {
+	first := AIProviderModel{ModelName: "first", ContextWindow: 100000, InputModalities: []string{"text", "image"}}
+	second := AIProviderModel{ModelName: "second", ContextWindow: 200000, InputModalities: []string{"text"}}
+	for _, wire := range []string{"unavailable", "second"} {
+		t.Run(wire, func(t *testing.T) {
+			selection := &AIModelSelection{SelectedModels: []string{"first"}, ModelOverrides: []AIProviderModel{{ModelName: "first", WireModelName: wire, MaxOutputTokens: 1234}}}
+			p := AIProvider{Type: "openai", AuthMethod: AIAuthChatGPT, AccountID: "account", ModelSelection: selection}.WithDiscoveredModels([]AIProviderModel{first, second})
+			models := p.EffectiveModels()
+			if wire == "unavailable" {
+				if len(models) != 0 {
+					t.Fatalf("wire override bypassed account inventory: %+v", models)
+				}
+			} else if len(models) != 1 || models[0].ModelName != "first" || models[0].EffectiveWireModelName() != "second" || models[0].ContextWindow != second.ContextWindow || len(models[0].InputModalities) != 1 || models[0].MaxOutputTokens != 1234 {
+				t.Fatalf("override lost identity, target capabilities, or user parameters: %+v", models)
+			}
+			if selection.SelectedModels[0] != "first" || selection.ModelOverrides[0].WireModelName != wire {
+				t.Fatal("inventory resolution mutated saved preferences")
+			}
+		})
+	}
+}

@@ -378,6 +378,7 @@ function mapProvider(provider: NonNullable<AIConfig['providers']>[number]): Flow
     ...(trim(provider.base_url) ? { base_url: trim(provider.base_url) } : {}),
     ...(provider.web_search ? { web_search: { mode: provider.web_search.mode ?? 'disabled' } } : {}),
     model_selection: provider.model_selection,
+    auth_method: provider.auth_method, account_id: provider.account_id,
     models: (provider.models ?? []).map(mapProviderModel).filter((model) => model.model_name),
   };
 }
@@ -394,6 +395,8 @@ export function mapEnvFlowerSettings(settings: AgentSettingsResponse): FlowerSet
   const providerSecrets = settings.ai_secrets?.provider_api_key_set ?? {};
   const webSecrets = settings.ai_secrets?.web_search_provider_api_key_set ?? {};
   return {
+    auth_capabilities: settings.auth_capabilities,
+    chatgpt_accounts: settings.chatgpt_accounts,
     defaults: {
       permission_type: normalizePermissionType(ai?.permission_type),
       computer_use_enabled: ai?.computer_use_enabled !== false,
@@ -607,6 +610,14 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
     loadSettings,
     loadModelDirectory: async refresh => directoryForSurface(await resource.loadDirectory(refresh)),
     subscribeModelDirectory: listener => resource.subscribe(directory => listener(directoryForSurface(directory))),
+    chatGPTAuth: async (action, input) => {
+      const result = await fetchLocalApiJSON<Awaited<ReturnType<NonNullable<FlowerSurfaceAdapter['chatGPTAuth']>>>>(`/_redeven_proxy/api/ai/auth/chatgpt/${action}`, { method: 'POST', body: JSON.stringify(input) });
+      if (action === 'sign-out') {
+        resource.invalidate();
+        if (options.onSettingsChanged) void Promise.resolve(options.onSettingsChanged()).catch(() => undefined);
+      }
+      return result;
+    },
     discoverProviderModels: (input) => fetchLocalApiJSON('/_redeven_proxy/api/ai/model_catalog', { method: 'POST', body: JSON.stringify(input) }),
     saveDefaultPermission: async (permissionType) => {
       await updateDefaultAIPermission(normalizePermissionType(permissionType));
@@ -646,7 +657,9 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       await fetchLocalApiJSON<unknown>('/_redeven_proxy/api/ai/provider_bundle', {
         method: 'PUT',
         body: JSON.stringify({
+          auth_schema_version: 1,
           model_profile: await draftToModelProfile(draft),
+          chatgpt_attempts: draft.model_profile.providers.flatMap(p => p.chatgpt_attempt ? [{ provider_id: p.id, ...p.chatgpt_attempt }] : []),
           provider_api_key_patches: providerAPIKeyPatches,
           web_search_provider_key_patches: webSearchKeyPatches,
         }),

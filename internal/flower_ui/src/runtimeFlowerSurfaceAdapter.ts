@@ -128,6 +128,7 @@ export type RuntimeFlowerSurfaceAdapterOptions = Readonly<{
   canMutate?: boolean;
   transport: FlowerRuntimeTransport;
   mapperOptions: FlowerLiveThreadMapperOptions;
+  chatGPTAuth?: FlowerSurfaceAdapter['chatGPTAuth'];
   discoverProviderModels?: FlowerModelCatalogDiscovery;
   loadSettings: () => Promise<FlowerSettingsSnapshot>;
   loadModelDirectory?: FlowerSurfaceAdapter['loadModelDirectory'];
@@ -327,6 +328,7 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
     loadSettings: options.loadSettings,
     loadModelDirectory: options.loadModelDirectory,
     subscribeModelDirectory: options.subscribeModelDirectory,
+    chatGPTAuth: options.chatGPTAuth,
     discoverProviderModels: options.discoverProviderModels,
     saveDefaultPermission: options.saveDefaultPermission,
     ...(options.saveComputerUseEnabled ? { saveComputerUseEnabled: options.saveComputerUseEnabled } : {}),

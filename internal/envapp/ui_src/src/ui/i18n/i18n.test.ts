@@ -575,6 +575,11 @@ describe('Env App i18n dictionaries', () => {
           .replace(/`[^`]+`/g, '');
         expect(value, `${locale}:${key}`).not.toMatch(/ZXQ(?:KEEP|SEG|GARDER)|QXZ/);
         for (const term of FORBIDDEN_GENERIC_ENGLISH_TERMS) {
+          // The product requirement fixes this exact localized notice, including Runtime.
+          if (locale === 'zh-CN' && key === 'flowerSurface.settings.dialogChatGPTLocalOnly' && term === 'Runtime') {
+            expect(value).toBe('ChatGPT 官方登录仅支持本机 Desktop 或本地 Runtime。');
+            continue;
+          }
           expect(value, `${locale}:${key}:${term}`).not.toMatch(new RegExp(`\\b${term.replaceAll(' ', '[\\s-]+')}\\b`, 'i'));
         }
       }

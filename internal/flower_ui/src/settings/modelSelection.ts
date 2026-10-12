@@ -15,7 +15,7 @@ export function defaultFlowerProviderModels(_type: FlowerProviderType): FlowerPr
 }
 
 export function flowerProviderModelChoices(provider: FlowerProviderDraft): FlowerProviderModel[] {
-  const choices = new Map((provider.catalog_models ?? recommendedModelsForFlowerProviderType(provider.type)).map((model) => [model.model_name, model]));
+  const choices = new Map((provider.catalog_models ?? (provider.auth_method === 'chatgpt' ? [] : recommendedModelsForFlowerProviderType(provider.type))).map((model) => [model.model_name, model]));
   for (const model of provider.model_selection?.custom_models ?? []) choices.set(model.model_name, applyModelOverride(choices.get(model.model_name) ?? { model_name: model.model_name }, model));
   for (const model of provider.models) {
     if (!choices.has(model.model_name)) choices.set(model.model_name, model);
@@ -32,7 +32,7 @@ function applyModelOverride(model: FlowerProviderModel, override?: FlowerProvide
 export function resolveFlowerProviderModels(provider: FlowerProvider, discovered?: readonly FlowerProviderModel[]): FlowerProviderModel[] {
   if (!provider.model_selection) return (provider.models ?? []).map(cloneFlowerModel);
   const selection = provider.model_selection;
-  const catalog = discovered ?? (flowerProviderUsesCatalog(provider.type) ? recommendedModelsForFlowerProviderType(provider.type) : []);
+  const catalog = discovered ?? (provider.auth_method !== 'chatgpt' && flowerProviderUsesCatalog(provider.type) ? recommendedModelsForFlowerProviderType(provider.type) : []);
   const overrides = new Map((selection.model_overrides ?? []).map((model) => [model.model_name, model]));
   const models = new Map(catalog.map((model) => [model.model_name, applyModelOverride(model, overrides.get(model.model_name))]));
   for (const override of overrides.values()) {
@@ -69,12 +69,13 @@ function serializeFlowerModel(model: FlowerProviderModel): FlowerProviderModel {
 export function serializeFlowerProvider(provider: FlowerProviderDraft): FlowerProvider {
   const out: FlowerProvider = {
     id: provider.id, name: provider.name, type: provider.type, base_url: provider.base_url,
+    auth_method: provider.auth_method, account_id: provider.account_id,
     web_search: provider.web_search, models: provider.models.map(serializeFlowerModel),
   };
   if (provider.type === 'openai_compatible') return out;
   // Offline legacy preferences require an explicit selection action before saving.
   if (provider.model_selection && provider.model_selection.selected_models == null) return { ...out, models: [], model_selection: provider.model_selection };
-  const catalog = flowerProviderUsesCatalog(provider.type) ? recommendedModelsForFlowerProviderType(provider.type) : (provider.catalog_models ?? []);
+  const catalog = provider.auth_method !== 'chatgpt' && flowerProviderUsesCatalog(provider.type) ? recommendedModelsForFlowerProviderType(provider.type) : (provider.catalog_models ?? []);
   const catalogByName = new Map(catalog.map((model) => [model.model_name, model]));
   const selected = provider.models.map((model) => model.model_name);
   const customModels = new Map((provider.model_selection?.custom_models ?? []).map((model) => [model.model_name, serializeFlowerModel(model)]));
@@ -83,7 +84,7 @@ export function serializeFlowerProvider(provider: FlowerProviderDraft): FlowerPr
     const preset = catalogByName.get(model.model_name) ?? (overrides.has(model.model_name) && model.wire_model_name
       ? catalog.find((entry) => (entry.wire_model_name || entry.model_name) === model.wire_model_name) : undefined);
     if (!preset) {
-      if (provider.type !== 'ollama' && !model.unavailable) customModels.set(model.model_name, serializeFlowerModel(model));
+      if (provider.type !== 'ollama' && provider.auth_method !== 'chatgpt' && !model.unavailable) customModels.set(model.model_name, serializeFlowerModel(model));
       else if (!model.unavailable) overrides.set(model.model_name, serializeFlowerModel(model));
       continue;
     }

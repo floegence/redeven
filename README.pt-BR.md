@@ -130,6 +130,8 @@ O Flower mantém na conversa as referências e a seleção de dispositivo enviad
 
 O Flower permite combinar operações semânticas do navegador e da área de trabalho em scripts com limites de execução. Selecione um perfil de navegador gerenciado, uma aba autorizada do Chrome ou uma janela de aplicativo, com permissões explícitas para sites e aplicativos em cada tarefa. As capturas de tela são solicitadas quando necessárias, e o visualizador é aberto sob demanda. A execução em segundo plano depende do destino e da ação; a automação do Windows e do Safari não está incluída.
 
+Flower oferece suporte a chaves de API e ao login oficial com um plano do ChatGPT. O login da conta está disponível apenas por um Desktop local ou um ambiente de execução local verificado; permanece desativado nas configurações remotas. As conversas remotas ainda podem usar a fonte de modelos Desktop existente. O uso do ChatGPT nunca muda automaticamente para a cobrança de API.
+
 <!-- readme-section:security -->
 <a id="security"></a>
 

@@ -3,11 +3,12 @@
   "release_review": {
     "release_version": "v0.13.12",
     "previous_release": "v0.13.11",
-    "reviewed_at": "2026-10-11",
-    "review_id": "flower-ordered-delivery-tool-images-v1",
-    "summary": "Epoch 52 adds ordered visible TransportOutbox delivery and canonical tool-image previews. Runtime and Desktop share image.read authorization, immutable media retention, native provider resolution and explicit incompatible-model recovery.",
-    "same_window_rationale": "The compatibility epoch advances because older bundled clients do not understand tool-image media routes or the pending delivery contract. Canonical history, fragmented streams, generation recovery and domain schema remain unchanged.",
+    "reviewed_at": "2026-10-12",
+    "review_id": "flower-chatgpt-local-auth-v1",
+    "summary": "Epoch 53 adds verified local ChatGPT authentication, sanitized account capability and plan-billing model descriptors. Provider bundle auth_schema_version prevents older clients from erasing account bindings or changing billing unintentionally.",
+    "same_window_rationale": "The compatibility epoch advances. Remote configuration cannot start, reauthorize, discover account models or save ChatGPT authentication. Existing API-key clients retain their contract until a ChatGPT binding requires the explicit authentication schema.",
     "checked_surfaces": [
+      "Epoch 53: native local Desktop admission, one-shot local Runtime browser handoff, SSH/Gateway/remote/unknown denial, renderer header stripping, provider bundle authentication schema, Runtime and Desktop source resolution, rotating token storage, full Responses history and native namespace replay. Domain schema and Floret public API remain unchanged.",
       "Epoch 52: per-thread ordered transport delivery, frozen drafts and references, definite/unknown result recovery, native image.read in all permission modes, authorized immutable tool-image previews, compatible model selection, complete media retention and storage restore. Desktop attach/start, Local UI health, startup reports, sys.ping, Env App and SSH bootstrap consume the same epoch.",
       "Epoch 51: fragmented Flower baseline, root and SubAgent current, terminal updates, ordered UTF-8 assembly, terminal sync errors and reconnect recovery; Desktop attach/start, Local UI health, startup reports, sys.ping, Env App and SSH bootstrap use the canonical epoch. Canvas receipt/current admission clears only the submitted selection and binds the original canvas.",
       "Epoch 50: private Desktop source admission and revocation, exact Runtime discovery/action routes, Gateway authenticated business authorization, resource/path identity, native lifecycle handoff, normal password/MFA access, no mutation replay and original operation queries.",
@@ -98,7 +99,7 @@
     ]
   },
   "runtime_protocol_version": "redeven-runtime-v2",
-  "compatibility_epoch": 52,
+  "compatibility_epoch": 53,
   "upgrade_from_runtime_epochs": [
     9,
     10,
@@ -142,7 +143,8 @@
     48,
     49,
     50,
-    51
+    51,
+    52
   ],
   "minimum_desktop_version": "v0.13.0",
   "minimum_runtime_version": "v0.13.0"

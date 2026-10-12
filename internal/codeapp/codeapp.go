@@ -14,6 +14,7 @@ import (
 
 	"github.com/floegence/redeven/internal/ai"
 	"github.com/floegence/redeven/internal/auditlog"
+	"github.com/floegence/redeven/internal/chatgpt"
 	"github.com/floegence/redeven/internal/codeapp/appserver"
 	"github.com/floegence/redeven/internal/codeapp/codeserver"
 	"github.com/floegence/redeven/internal/codeapp/registry"
@@ -271,6 +272,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	}
 
 	secrets := settings.NewSecretsStore(filepath.Join(stateAbs, "secrets.json"))
+	chatGPT := chatgpt.New(secrets)
 	tessivenSvc, err := tessiven.Open(filepath.Join(stateAbs, "apps", "tessiven", "canvases.sqlite"))
 	if err != nil {
 		_ = reg.Close()
@@ -312,6 +314,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	}
 
 	aiReady := newAIReadinessController(ctx, ai.Options{
+		ChatGPT:               chatGPT,
 		PlatformHTTPTransport: opts.PlatformHTTPTransport,
 		Tessiven:              tessivenSvc, TessivenResources: tessivenResources,
 		Logger:            logger,
@@ -414,6 +417,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	}()
 	browserRuntime, _ := opts.ComputerUseExecutor.(*ai.ComputerUseRuntime)
 	appSrv, err := appserver.New(appserver.Options{
+		ChatGPT:               chatGPT,
 		HostApplications:      hostApps,
 		RemoteDesktop:         remoteDesktop,
 		Logger:                logger,

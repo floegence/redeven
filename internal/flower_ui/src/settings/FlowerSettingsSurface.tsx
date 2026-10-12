@@ -139,6 +139,8 @@ function normalizeProviderForSave(provider: FlowerProviderDraft): FlowerProvider
     ? normalizeSecretPatch(provider.web_search_api_key)
     : null;
   return {
+    auth_method: provider.auth_method, account_id: provider.account_id,
+    chatgpt_attempt: provider.chatgpt_attempt, chatgpt_account: provider.chatgpt_account,
     model_selection: provider.model_selection,
     catalog_models: provider.catalog_models,
     id: trim(provider.id),
@@ -163,6 +165,7 @@ function normalizeProviderForSave(provider: FlowerProviderDraft): FlowerProvider
 }
 
 export type FlowerSettingsSurfaceProps = Readonly<{
+  chatGPTAuth?: import('../contracts/flowerSurfaceContracts').FlowerChatGPTAuth;
   onDiscoverModels?: FlowerModelCatalogDiscovery;
   snapshot: FlowerSettingsSnapshot | null;
   onSaveDefaultPermission: (permissionType: FlowerPermissionType) => Promise<FlowerSettingsSnapshot>;
@@ -204,7 +207,7 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
   createEffect(() => {
     const snapshot = props.snapshot;
     if (!snapshot) return;
-    const rows = (snapshot.model_profile?.providers ?? []).map(cloneProviderForForm);
+    const rows = (snapshot.model_profile?.providers ?? []).map(provider => ({ ...cloneProviderForForm(provider), chatgpt_account: snapshot.chatgpt_accounts?.[provider.id] }));
     setProviders(rows);
     setCurrentModelID(trim(snapshot.model_profile?.current_model_id));
     const savedPermission = snapshot.defaults.permission_type ?? 'approval_required';
@@ -340,7 +343,7 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
       const missingCredential = missingFlowerProviderCredential(provider,
         providerSecretConfigured(props.snapshot, provider.id), providerWebSearchSecretConfigured(props.snapshot, provider.id));
       if (missingCredential) {
-        return { ok: false, error: missingCredential === 'provider' ? copy().needsKey : copy().needsBraveKey };
+        return { ok: false, error: missingCredential === 'provider' ? provider.auth_method === 'chatgpt' ? copy().dialog.chatGPT.planPermission : copy().needsKey : copy().needsBraveKey };
       }
       if (flowerProviderTypeRequiresBaseURL(provider.type) && !trim(provider.base_url)) {
         return { ok: false, error: copy().validation.providerRequiresBaseURL(providerDisplayName(provider, copy().providerTypeLabels)) };
@@ -427,7 +430,7 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
     try {
       const saved = await saveBuiltDraft(result);
       if (!saved) return;
-      const savedProviders = (saved.model_profile?.providers ?? []).map(cloneProviderForForm);
+      const savedProviders = (saved.model_profile?.providers ?? []).map(provider => ({ ...cloneProviderForForm(provider), chatgpt_account: saved.chatgpt_accounts?.[provider.id] }));
       setProviders(savedProviders);
       setCurrentModelID(trim(saved.model_profile?.current_model_id));
       setProviderDialogOpen(false);
@@ -621,7 +624,8 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
                     const modelNames = () => provider.models.map((model) => trim(model.model_name)).filter(Boolean);
                     const hasImageInput = () => provider.models.some((model) => flowerModelSupportsImage(model.input_modalities));
                     const isDefault = () => currentModelID().startsWith(`${providerID()}/`);
-                    const keyReady = () => providerSecretConfigured(props.snapshot, provider.id) || !!trim(provider.provider_api_key);
+                    const isChatGPT = () => provider.auth_method === 'chatgpt';
+                    const keyReady = () => isChatGPT() ? provider.chatgpt_account?.state === 'ready' : providerSecretConfigured(props.snapshot, provider.id) || !!trim(provider.provider_api_key);
                     const webSearch = () => flowerProviderSearchSummary(provider.models, copy().dialog.catalog);
                     return (
                       <div class="flower-settings-provider-card">
@@ -645,9 +649,9 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
                             </div>
                           </div>
                           <div class="flower-settings-provider-status">
-                            <span>{copy().apiKey}</span>
+                            <span>{isChatGPT() ? copy().dialog.chatGPT.account : copy().apiKey}</span>
                             <span class={cn('flower-settings-dot-pill', keyReady() && 'flower-settings-dot-pill-active')}>
-                              {flowerProviderAPIKeyOptional(provider.type) ? copy().dialog.catalog.optionalKey : keyReady() ? copy().ready : copy().needsKey}
+                              {keyReady() ? copy().ready : isChatGPT() ? copy().dialog.chatGPT.reauthorize : flowerProviderAPIKeyOptional(provider.type) ? copy().dialog.catalog.optionalKey : copy().needsKey}
                             </span>
                           </div>
                           <details class="flower-settings-provider-details">
@@ -743,6 +747,10 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
 
       <FlowerProviderDialog
         onDiscoverModels={props.onDiscoverModels}
+        chatGPTAuth={props.chatGPTAuth}
+        chatGPTAvailable={props.snapshot?.auth_capabilities?.openai_chatgpt.available === true}
+        chatGPTBindingID={props.snapshot?.auth_capabilities?.openai_chatgpt.binding_id}
+        chatGPTAccount={props.snapshot?.chatgpt_accounts?.[providerDialogProvider()?.id ?? '']}
         open={providerDialogOpen()}
         mode={providerDialogMode()}
         provider={providerDialogProvider()}

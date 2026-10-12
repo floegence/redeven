@@ -17,11 +17,16 @@ import (
 	"sync"
 	"time"
 
+	"github.com/floegence/redeven/internal/chatgpt"
 	"github.com/floegence/redeven/internal/config"
 )
 
 type ModelCatalogRequest struct {
 	ProviderID string `json:"provider_id,omitempty"`
+	AuthMethod string `json:"auth_method,omitempty"`
+	AccountID  string `json:"account_id,omitempty"`
+	AttemptID  string `json:"attempt_id,omitempty"`
+	ScopeID    string `json:"scope_id,omitempty"`
 	Type       string `json:"type"`
 	BaseURL    string `json:"base_url,omitempty"`
 	APIKey     string `json:"api_key,omitempty"`
@@ -39,6 +44,16 @@ type ModelCatalogResponse struct {
 // DiscoverModelCatalog queries an explicitly selected endpoint without changing
 // configuration, installing models, or retaining credentials in catalog data.
 func (s *Service) DiscoverModelCatalog(ctx context.Context, in ModelCatalogRequest) (ModelCatalogResponse, error) {
+	if in.AuthMethod == config.AIAuthChatGPT {
+		if s.chatGPT == nil || in.Type != "openai" || in.BaseURL != "" && in.BaseURL != chatgpt.Resource || in.APIKey != "" {
+			return ModelCatalogResponse{}, errors.New("invalid ChatGPT catalog request")
+		}
+		models, err := s.chatGPT.Models(ctx, in.AccountID)
+		if err != nil {
+			return ModelCatalogResponse{}, err
+		}
+		return reviewedChatGPTCatalog(models), nil
+	}
 	if in.APIKey == "" && in.ProviderID != "" && s != nil && s.resolveProviderKey != nil {
 		key, _, err := s.resolveProviderKey(in.ProviderID)
 		if err != nil {
@@ -258,14 +273,14 @@ func catalogJSON(ctx context.Context, client *http.Client, method, endpoint, key
 	return nil
 }
 
-func resolveModelCatalogs(ctx context.Context, cfg *config.AIConfig, resolveKey func(string) (string, bool, error), modelID string) (*config.AIConfig, error) {
-	next, _, err := resolveModelCatalogResults(ctx, cfg, resolveKey, modelID)
+func resolveModelCatalogs(ctx context.Context, cfg *config.AIConfig, resolveKey func(string) (string, bool, error), modelID string, accountClients ...*chatgpt.Client) (*config.AIConfig, error) {
+	next, _, err := resolveModelCatalogResults(ctx, cfg, resolveKey, modelID, accountClients...)
 	return next, err
 }
 
 // Each provider owns one result slot. Collection order follows configuration,
 // while a slow endpoint cannot consume another provider's discovery opportunity.
-func resolveModelCatalogResults(ctx context.Context, cfg *config.AIConfig, resolveKey func(string) (string, bool, error), modelID string) (*config.AIConfig, map[string]error, error) {
+func resolveModelCatalogResults(ctx context.Context, cfg *config.AIConfig, resolveKey func(string) (string, bool, error), modelID string, accountClients ...*chatgpt.Client) (*config.AIConfig, map[string]error, error) {
 	failures := make(map[string]error)
 	if cfg == nil {
 		return nil, failures, nil
@@ -276,7 +291,7 @@ func resolveModelCatalogResults(ctx context.Context, cfg *config.AIConfig, resol
 	slots := make(chan struct{}, 4)
 	var workers sync.WaitGroup
 	for i, p := range next.Providers {
-		if (p.Type != "ollama" && p.Type != "openrouter") || p.ModelSelection == nil || (modelID != "" && !strings.HasPrefix(modelID, p.ID+"/")) {
+		if (p.Type != "ollama" && p.Type != "openrouter" && p.EffectiveAuthMethod() != config.AIAuthChatGPT) || p.ModelSelection == nil || (modelID != "" && !strings.HasPrefix(modelID, p.ID+"/")) {
 			continue
 		}
 		if p.ModelSelection.SelectedModels == nil {
@@ -294,6 +309,24 @@ func resolveModelCatalogResults(ctx context.Context, cfg *config.AIConfig, resol
 				defer func() { <-slots }()
 			case <-ctx.Done():
 				results[i] = ctx.Err()
+				return
+			}
+			if p.EffectiveAuthMethod() == config.AIAuthChatGPT {
+				if len(accountClients) == 0 || accountClients[0] == nil {
+					results[i] = chatgpt.Failure("authorization_required")
+					return
+				}
+				models, err := accountClients[0].Models(ctx, p.AccountID)
+				if err != nil {
+					results[i] = err
+					return
+				}
+				catalog := reviewedChatGPTCatalog(models)
+				reviewed := make([]config.AIProviderModel, 0, len(catalog.Models))
+				for _, m := range catalog.Models {
+					reviewed = append(reviewed, m.AIProviderModel)
+				}
+				next.Providers[i] = p.WithDiscoveredModels(reviewed)
 				return
 			}
 			key := ""
@@ -335,4 +368,21 @@ func modelAliasGroup(p config.AIProvider, m config.AIProviderModel) string {
 	raw, _ := json.Marshal([]any{p.ID, p.BaseURL, m.ModelDigest, m.ContextWindow, m.MaxOutputTokens, m.EffectiveContextWindowPercent, m.InputModalities, m.ReasoningCapability, m.DefaultReasoningSelection})
 	sum := sha256.Sum256(raw)
 	return hex.EncodeToString(sum[:])
+}
+
+// Account availability narrows reviewed capabilities; unknown slugs never run.
+func reviewedChatGPTCatalog(models []chatgpt.Model) ModelCatalogResponse {
+	out := ModelCatalogResponse{Models: []ModelCatalogModel{}}
+	for _, accountModel := range models {
+		reviewed, ok := config.AIModelCatalogEntry("openai", accountModel.Slug)
+		if !ok {
+			continue
+		}
+		reviewed.DisplayName = accountModel.DisplayName
+		out.Models = append(out.Models, ModelCatalogModel{AIProviderModel: reviewed, WebSearch: config.ResolveAIWebSearch(config.AIProvider{Type: "openai"}, accountModel.Slug, false).AIWebSearchAvailability})
+	}
+	return out
+}
+func ReviewedChatGPTCatalog(models []chatgpt.Model) ModelCatalogResponse {
+	return reviewedChatGPTCatalog(models)
 }

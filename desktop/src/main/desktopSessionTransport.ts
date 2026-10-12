@@ -30,6 +30,7 @@ export type DesktopPrivateBridgeRequestScope = Readonly<{
   graphicalWindow?: boolean;
   // Main-process facts, never renderer request fields.
   tessivenSource?: string;
+  verifiedLocalHost?: boolean;
   trustedEnvAppFrame?: boolean;
 }>;
 
@@ -41,7 +42,7 @@ export function desktopPrivateBridgeRequestHeaders(
   scope: DesktopPrivateBridgeRequestScope = {},
 ): DesktopRequestHeaders {
   requestHeaders = Object.fromEntries(Object.entries(requestHeaders).filter(
-    ([name]) => name.toLowerCase() !== 'x-redeven-tessiven-source',
+    ([name]) => !['x-redeven-tessiven-source', 'x-redeven-host-access'].includes(name.toLowerCase()),
   ));
   if (transport.kind !== 'native_local_bridge' && transport.kind !== 'placement_bridge') {
     return requestHeaders;
@@ -79,6 +80,10 @@ export function desktopPrivateBridgeRequestHeaders(
       && (pathname === '/api/local/direct/connect_artifact'
         || pathname.startsWith('/_redeven_proxy/api/'))) {
     authorizedHeaders['X-Redeven-Tessiven-Source'] = scope.tessivenSource!;
+  }
+  if (scope.verifiedLocalHost && scope.trustedEnvAppFrame && !scope.webServiceForwardID
+      && (pathname === '/api/local/direct/connect_artifact' || pathname.startsWith('/_redeven_proxy/api/'))) {
+    authorizedHeaders['X-Redeven-Host-Access'] = 'local_host';
   }
   return authorizedHeaders;
 }

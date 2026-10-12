@@ -5,10 +5,11 @@ go 1.27.2
 require (
 	github.com/anthropics/anthropic-sdk-go v1.22.1
 	github.com/bodgit/sevenzip v1.6.1
+	github.com/coreos/go-oidc/v3 v3.21.0
 	github.com/creack/pty v1.1.24
 	github.com/floegence/floe-native-apps v0.22.34
 	github.com/floegence/floeterm/terminal-go v0.19.2
-	github.com/floegence/floret/v7 v7.29.1
+	github.com/floegence/floret/v7 v7.29.2
 	github.com/floegence/flowersec/flowersec-go/v5 v5.11.0
 	github.com/floegence/redeven-service-templates v0.6.0
 	github.com/floegence/redevplugin/v3 v3.0.35
@@ -51,6 +52,7 @@ require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/ebitengine/purego v0.9.1 // indirect
 	github.com/flynn/noise v1.1.0 // indirect
+	github.com/go-jose/go-jose/v4 v4.1.4 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/google/jsonschema-go v0.4.3 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
@@ -86,7 +88,7 @@ require (
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	go4.org v0.0.0-20230225012048-214862532bf5 // indirect
-	golang.org/x/oauth2 v0.35.0 // indirect
+	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	modernc.org/libc v1.75.7 // indirect
 	modernc.org/mathutil v1.7.1 // indirect

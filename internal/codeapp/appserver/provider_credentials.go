@@ -29,7 +29,15 @@ func validateAIProviderBundleCredentials(profile config.AIModelProfile, store *s
 		if provider.ModelSelection != nil && provider.ModelSelection.SelectedModels == nil {
 			return fmt.Errorf("provider %q requires explicit selected_models", id)
 		}
-		if !config.AIProviderAPIKeyOptional(provider.Type) {
+		if provider.EffectiveAuthMethod() == config.AIAuthChatGPT {
+			account, ok, err := store.ChatGPTAccount(provider.AccountID)
+			if err != nil {
+				return fmt.Errorf("read ChatGPT credential: %w", err)
+			}
+			if !ok || !account.PlanEnabled() {
+				return fmt.Errorf("provider %q requires ChatGPT plan permission", id)
+			}
+		} else if !config.AIProviderAPIKeyOptional(provider.Type) {
 			configured, err := hasKey(id, keyUpdates, store.HasAIProviderAPIKey)
 			if err != nil {
 				return fmt.Errorf("read provider %q credential: %w", id, err)

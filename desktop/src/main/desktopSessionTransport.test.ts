@@ -332,3 +332,19 @@ describe('Tessiven native source attribution', () => {
       { [header]: 'spoofed' }, { tessivenSource: source, trustedEnvAppFrame: true })[header]).toBeUndefined();
   });
 });
+
+it('admits ChatGPT locality only for native local Env App frames and strips renderer claims', () => {
+  const transport = resolveDesktopSessionTransport(localTarget, localStartup);
+  const url = 'http://127.0.0.1:43123/_redeven_proxy/api/settings';
+  const forged = { 'x-redeven-host-access': 'local_host' };
+  expect(desktopPrivateBridgeRequestHeaders(transport, localStartup, url, forged, { trustedEnvAppFrame: true }))
+    .not.toHaveProperty('x-redeven-host-access');
+  expect(desktopPrivateBridgeRequestHeaders(transport, localStartup, url, forged, { trustedEnvAppFrame: true }))
+    .not.toHaveProperty('X-Redeven-Host-Access');
+  expect(desktopPrivateBridgeRequestHeaders(transport, localStartup, url, forged, { trustedEnvAppFrame: true, verifiedLocalHost: true }))
+    .toHaveProperty('X-Redeven-Host-Access', 'local_host');
+  expect(desktopPrivateBridgeRequestHeaders(transport, localStartup, url, forged, { verifiedLocalHost: true }))
+    .not.toHaveProperty('X-Redeven-Host-Access');
+  expect(desktopPrivateBridgeRequestHeaders(transport, localStartup, url, forged, { trustedEnvAppFrame: true, verifiedLocalHost: true, webServiceForwardID: 'web' }))
+    .not.toHaveProperty('X-Redeven-Host-Access');
+});

@@ -130,6 +130,8 @@ Flower conserve dans la conversation les références et le choix de l’apparei
 
 Flower peut combiner des opérations sémantiques du navigateur et du bureau dans des scripts aux limites d’exécution définies. Sélectionnez un profil de navigateur géré, un onglet Chrome autorisé ou une fenêtre d’application, avec des autorisations explicites pour les sites et les applications de chaque tâche. Les captures d’écran sont demandées au besoin et la visionneuse s’ouvre à la demande. L’exécution en arrière-plan dépend de la cible et de l’action ; l’automatisation de Windows et de Safari n’est pas incluse.
 
+Flower prend en charge les clés API et la connexion officielle avec un forfait ChatGPT. La connexion au compte est disponible uniquement via un Desktop local ou un moteur d’exécution local vérifié ; elle reste désactivée dans les paramètres distants. Les conversations distantes peuvent toujours utiliser la source de modèles Desktop existante. L’utilisation de ChatGPT ne bascule jamais automatiquement vers la facturation API.
+
 <!-- readme-section:security -->
 <a id="security"></a>
 

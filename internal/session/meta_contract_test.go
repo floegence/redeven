@@ -11,6 +11,7 @@ func TestMetaJSONContract(t *testing.T) {
 
 	expected := map[string]string{
 		"DesktopSource":                "-",
+		"LocalHostAccess":              "-",
 		"ChannelID":                    "channel_id",
 		"EndpointID":                   "endpoint_id",
 		"FloeApp":                      "floe_app",

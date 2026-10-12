@@ -1,6 +1,7 @@
 package settings
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"os"
@@ -41,6 +42,7 @@ type secretsFile struct {
 	SchemaVersion int               `json:"schema_version"`
 	AI            *aiSecrets        `json:"ai,omitempty"`
 	WebSearch     *webSearchSecrets `json:"web_search,omitempty"`
+	ChatGPT       *chatGPTSecrets   `json:"chatgpt,omitempty"`
 }
 
 type aiSecrets struct {
@@ -106,28 +108,40 @@ func (s *SecretsStore) getWebSearchProviderKey(providerID string) (string, bool,
 }
 
 func (s *SecretsStore) HasAIProviderAPIKey(providerID string) (bool, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	unlock, err := s.lock(context.Background())
+	if err != nil {
+		return false, err
+	}
+	defer unlock()
 	_, ok, err := s.getAIProviderKey(providerID)
 	return ok, err
 }
 
 func (s *SecretsStore) GetAIProviderAPIKey(providerID string) (string, bool, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	unlock, err := s.lock(context.Background())
+	if err != nil {
+		return "", false, err
+	}
+	defer unlock()
 	return s.getAIProviderKey(providerID)
 }
 
 func (s *SecretsStore) HasWebSearchProviderAPIKey(providerID string) (bool, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	unlock, err := s.lock(context.Background())
+	if err != nil {
+		return false, err
+	}
+	defer unlock()
 	_, ok, err := s.getWebSearchProviderKey(providerID)
 	return ok, err
 }
 
 func (s *SecretsStore) GetWebSearchProviderAPIKey(providerID string) (string, bool, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	unlock, err := s.lock(context.Background())
+	if err != nil {
+		return "", false, err
+	}
+	defer unlock()
 	return s.getWebSearchProviderKey(providerID)
 }
 
@@ -135,8 +149,11 @@ func (s *SecretsStore) ListAIProviderAPIKeyIDs() ([]string, error) {
 	if s == nil {
 		return nil, errors.New("nil secrets store")
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	unlock, err := s.lock(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
 	sf, err := s.loadLocked()
 	if err != nil {
 		return nil, err
@@ -159,8 +176,11 @@ func (s *SecretsStore) ListWebSearchProviderAPIKeyIDs() ([]string, error) {
 	if s == nil {
 		return nil, errors.New("nil secrets store")
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	unlock, err := s.lock(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
 	sf, err := s.loadLocked()
 	if err != nil {
 		return nil, err
@@ -227,15 +247,18 @@ func (s *SecretsStore) ApplyAIProviderAPIKeyPatches(patches []AIProviderAPIKeyPa
 		return nil
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	unlock, err := s.lock(context.Background())
+	if err != nil {
+		return err
+	}
+	defer unlock()
 
 	sf, err := s.loadLocked()
 	if err != nil {
 		return err
 	}
 	if sf == nil {
-		sf = &secretsFile{SchemaVersion: 1}
+		sf = &secretsFile{SchemaVersion: 2}
 	}
 	if sf.SchemaVersion == 0 {
 		sf.SchemaVersion = 1
@@ -278,15 +301,18 @@ func (s *SecretsStore) ApplyWebSearchProviderAPIKeyPatches(patches []WebSearchPr
 		return nil
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	unlock, err := s.lock(context.Background())
+	if err != nil {
+		return err
+	}
+	defer unlock()
 
 	sf, err := s.loadLocked()
 	if err != nil {
 		return err
 	}
 	if sf == nil {
-		sf = &secretsFile{SchemaVersion: 1}
+		sf = &secretsFile{SchemaVersion: 2}
 	}
 	if sf.SchemaVersion == 0 {
 		sf.SchemaVersion = 1
@@ -327,8 +353,11 @@ func (s *SecretsStore) GetAIProviderAPIKeySet(providerIDs []string) (map[string]
 	}
 	out := make(map[string]bool, len(providerIDs))
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	unlock, err := s.lock(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
 	sf, err := s.loadLocked()
 	if err != nil {
 		return nil, err
@@ -355,8 +384,11 @@ func (s *SecretsStore) GetWebSearchProviderAPIKeySet(providerIDs []string) (map[
 	}
 	out := make(map[string]bool, len(providerIDs))
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	unlock, err := s.lock(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
 	sf, err := s.loadLocked()
 	if err != nil {
 		return nil, err
@@ -385,7 +417,7 @@ func (s *SecretsStore) loadLocked() (*secretsFile, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return &secretsFile{SchemaVersion: 1}, nil
+			return &secretsFile{SchemaVersion: 2}, nil
 		}
 		return nil, err
 	}
@@ -393,8 +425,21 @@ func (s *SecretsStore) loadLocked() (*secretsFile, error) {
 	if err := json.Unmarshal(b, &sf); err != nil {
 		return nil, err
 	}
+	if sf.SchemaVersion < 0 || sf.SchemaVersion > 2 {
+		return nil, errors.New("unsupported secrets schema")
+	}
+	migrated := sf.SchemaVersion < 2
+	// Keep every contiguous migration edge; existing API keys remain intact.
 	if sf.SchemaVersion == 0 {
 		sf.SchemaVersion = 1
+	}
+	if sf.SchemaVersion == 1 {
+		sf.SchemaVersion = 2
+	}
+	if migrated {
+		if err := s.saveLocked(&sf); err != nil {
+			return nil, err
+		}
 	}
 	return &sf, nil
 }

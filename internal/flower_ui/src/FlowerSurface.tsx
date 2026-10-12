@@ -2396,6 +2396,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   ): string => {
     const code = trimString(error?.code);
     switch (code) {
+      case 'chatgpt_usage_unavailable': return copy().settings.dialog.chatGPT.usageUnavailable;
+      case 'chatgpt_authorization_required': return copy().settings.dialog.chatGPT.authorizationRequired;
+      case 'chatgpt_plan_permission_required': return copy().settings.dialog.chatGPT.planPermission;
       case 'provider_auth_failed':
         return copy().chat.runErrors.providerAuthFailed;
       case 'provider_missing_key':
@@ -2753,6 +2756,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     });
   });
   type ComposerModelOption = Readonly<{
+    billingSource?: 'chatgpt_plan';
     id: string;
     label: string;
     name?: string;
@@ -2772,7 +2776,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     pending?: boolean;
   }>;
   const catalogModelOptions = createMemo<readonly ComposerModelOption[]>(() => (modelDirectory()?.models ?? []).map(model => ({
-    id: model.id, label: model.label || model.id,
+    id: model.id, label: model.label || model.id, billingSource: model.billing_source,
     name: model.label?.split(' / ').slice(1).join(' / ') || model.model_name,
     group: model.provider_name || (model.source === 'platform' ? 'Redeven AI' : model.source === 'desktop_model_source' ? 'Desktop' : copy().settings.dialog.catalog.unavailableModel),
     source: model.source === 'runtime_config' ? 'model_profile' : model.source || 'thread_snapshot',
@@ -6555,7 +6559,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       )
       || code === 'provider_request_invalid'
     ));
-    const actionable = code === 'provider_auth_failed'
+    const actionable = code === 'chatgpt_authorization_required' || code === 'chatgpt_plan_permission_required' || code === 'provider_auth_failed'
       || code === 'provider_missing_key'
       || code === 'provider_model_unavailable'
       || code === 'provider_unreachable'
@@ -6589,7 +6593,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         }}><StableText reserve={[copy().chat.messageCopied, copy().chat.runErrorCopyDetails]}>{detailsCopied() ? copy().chat.messageCopied : copy().chat.runErrorCopyDetails}</StableText></Button>
       </details>
     ) : undefined;
-    const action = () => contextFailure ? (
+    const action = () => code === 'chatgpt_usage_unavailable' ? (
+      <a href="https://chatgpt.com/settings/usage" target="_blank" rel="noopener noreferrer" class="cursor-pointer whitespace-nowrap text-sm font-medium text-primary hover:underline">{copy().settings.dialog.chatGPT.manageUsage}</a>
+    ) : contextFailure ? (
       <>
         <Button size="sm" variant="outline" icon={Settings} onClick={openSettings}>{copy().chat.runErrorActions.openSettings}</Button>
         <Button size="sm" variant="ghost" icon={Refresh} disabled={retryPending()} onClick={() => void retryContinuation()}>{copy().chat.retryReply}</Button>
@@ -11892,6 +11898,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 <div class="flower-composer-footer">
                     <div class="flower-model-stack">
                       {composerControls()}
+                      <Show when={selectedModelOption()?.billingSource === 'chatgpt_plan'}>
+                        <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+                          <span>{copy().settings.dialog.chatGPT.planSource}</span>
+                          <a href="https://chatgpt.com/settings/usage" target="_blank" rel="noopener noreferrer" class="cursor-pointer whitespace-nowrap font-medium text-primary hover:underline">{copy().settings.dialog.chatGPT.manageUsage}</a>
+                        </div>
+                      </Show>
                       <Show when={needsSetup() && !composerModelLoading()}>
                         <div class="flower-setup-inline" role="status">{selectedComposerModelID() ? copy().chat.modelsUnavailable : copy().chat.configureProviderBeforeChat}</div>
                       </Show>
@@ -12291,6 +12303,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             <Suspense fallback={<div class="p-4 flower-body-copy text-muted-foreground" role="status">{copy().chat.loadingSettings}</div>}>
               <FlowerSettingsSurface
                 onDiscoverModels={props.adapter.discoverProviderModels}
+                chatGPTAuth={props.adapter.chatGPTAuth}
                 snapshot={snapshot()}
                 copy={copy().settings}
                 onSaveDefaultPermission={saveDefaultPermission}

@@ -33,6 +33,7 @@ import (
 	"github.com/floegence/redeven/internal/ai"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/auditlog"
+	"github.com/floegence/redeven/internal/chatgpt"
 	"github.com/floegence/redeven/internal/codeapp/codeserver"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/containerresource"
@@ -57,6 +58,7 @@ import (
 )
 
 type Options struct {
+	ChatGPT              *chatgpt.Client
 	Logger               *slog.Logger
 	ListenAddr           string
 	DistFS               stdfs.FS
@@ -256,6 +258,7 @@ type Server struct {
 	localPermissionCap    *config.PermissionSet
 	configMu              sync.Mutex
 	secrets               *settings.SecretsStore
+	chatGPT               *chatgpt.Client
 	pluginPlatform        http.Handler
 	pluginMarketSnapshot  func(context.Context) (pluginmarket.Snapshot, error)
 	pluginMarketRefresh   func(context.Context) (pluginmarket.Snapshot, error)
@@ -411,11 +414,15 @@ func New(opts Options) (*Server, error) {
 		addr = "127.0.0.1:0"
 	}
 
+	chatGPTClient := opts.ChatGPT
 	secrets := opts.SecretsStore
 	if secrets == nil {
 		// Keep user-managed secrets in the same state dir as config.json.
 		dir := filepath.Dir(strings.TrimSpace(opts.ConfigPath))
 		secrets = settings.NewSecretsStore(filepath.Join(dir, "secrets.json"))
+	}
+	if chatGPTClient == nil && secrets != nil {
+		chatGPTClient = chatgpt.New(secrets)
 	}
 
 	stateDir := filepath.Dir(strings.TrimSpace(opts.ConfigPath))
@@ -455,6 +462,7 @@ func New(opts Options) (*Server, error) {
 		stateDir:              stateDir,
 		localPermissionPolicy: localPermissionPolicy,
 		secrets:               secrets,
+		chatGPT:               chatGPTClient,
 		pluginPlatform:        opts.PluginPlatform,
 		pluginMarketSnapshot:  opts.PluginMarketSnapshot,
 		pluginMarketRefresh:   opts.PluginMarketRefresh,
@@ -1443,7 +1451,9 @@ func parseThreadDeleteForceQuery(rawQuery string) (bool, error) {
 }
 
 type settingsView struct {
-	ConfigPath string `json:"config_path"`
+	ConfigPath       string                           `json:"config_path"`
+	AuthCapabilities authCapabilities                 `json:"auth_capabilities"`
+	ChatGPTAccounts  map[string]chatgpt.AccountStatus `json:"chatgpt_accounts,omitempty"`
 
 	Connection settingsConnectionView `json:"connection"`
 	Runtime    settingsRuntimeView    `json:"runtime"`
@@ -1637,6 +1647,7 @@ func (g *Server) saveAIProviderBundle(
 	modelProfile config.AIModelProfile,
 	aiKeyPatches []settings.AIProviderAPIKeyPatch,
 	webSearchKeyPatches []settings.WebSearchProviderAPIKeyPatch,
+	allowChatGPTAuthentication bool,
 ) (*config.Config, error) {
 	if err := validateAIProviderBundleCredentials(modelProfile, g.secrets, aiKeyPatches, webSearchKeyPatches); err != nil {
 		return nil, aiProviderBundleSaveError{status: http.StatusBadRequest, err: err}
@@ -1665,6 +1676,9 @@ func (g *Server) saveAIProviderBundle(
 	var updated *config.Config
 	persist := func(nextAI *config.AIConfig) error {
 		cfg, err := g.updateConfigLocked(func(c *config.Config) error {
+			if !allowChatGPTAuthentication && !preservesChatGPTBindings(c.AI, modelProfile) {
+				return errChatGPTLocalOnly
+			}
 			c.AI = nextAI
 			return nil
 		})
@@ -1675,6 +1689,9 @@ func (g *Server) saveAIProviderBundle(
 		return nil
 	}
 	if err := aiSvc.SetModelProfile(&modelProfile, persist); err != nil {
+		if errors.Is(err, errChatGPTLocalOnly) {
+			return nil, aiProviderBundleSaveError{status: http.StatusForbidden, err: err}
+		}
 		return nil, aiProviderBundleSaveError{status: http.StatusBadRequest, err: err}
 	}
 	if err := g.secrets.ApplyAIProviderAPIKeyPatches(aiKeyPatches); err != nil {
@@ -1974,7 +1991,7 @@ func (g *Server) buildDiagnosticsExportView(sourceLimit int, summaryLimit int) (
 	return view, nil
 }
 
-func (g *Server) toSettingsView(cfg *config.Config, aiSvc *ai.Service) settingsView {
+func (g *Server) toSettingsView(cfg *config.Config, aiSvc *ai.Service, access ...*session.Meta) settingsView {
 	configPath := ""
 	secrets := (*settings.SecretsStore)(nil)
 	if g != nil {
@@ -1984,6 +2001,20 @@ func (g *Server) toSettingsView(cfg *config.Config, aiSvc *ai.Service) settingsV
 	direct := controlArtifactPoolSettingsView(cfg, time.Now().Unix())
 
 	var out settingsView
+	out.AuthCapabilities = localAuthCapabilities(nil)
+	if len(access) > 0 {
+		out.AuthCapabilities = localAuthCapabilities(access[0])
+	}
+	out.ChatGPTAccounts = map[string]chatgpt.AccountStatus{}
+	if cfg != nil && cfg.AI != nil && g.chatGPT != nil && out.AuthCapabilities.OpenAIChatGPT.Available {
+		for _, p := range cfg.AI.Providers {
+			if p.EffectiveAuthMethod() == config.AIAuthChatGPT {
+				if account, err := g.chatGPT.Status(p.AccountID); err == nil {
+					out.ChatGPTAccounts[p.ID] = account
+				}
+			}
+		}
+	}
 	out.ConfigPath = strings.TrimSpace(configPath)
 	out.AIReadiness = g.aiReadinessSnapshot()
 	if cfg != nil {
@@ -2179,6 +2210,7 @@ func (g *Server) requirePermission(w http.ResponseWriter, r *http.Request, perm 
 		meta := g.localSessionMeta(route)
 		if meta != nil {
 			meta.DesktopSource = desktopSourceFromRequest(r)
+			meta.LocalHostAccess = VerifiedLocalHost(r)
 		}
 		if meta == nil {
 			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "app server not ready"})
@@ -2906,7 +2938,8 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: err.Error()})
 			return
 		}
-		view := g.toSettingsView(cfg, aiSvc)
+		view := g.toSettingsView(cfg, aiSvc, meta)
+		view.AuthCapabilities = localAuthCapabilities(meta)
 		if view.AIRuntime != nil {
 			view.AIRuntime.PlatformAvailable = aiSvc.PlatformAvailableForSession(meta)
 		}
@@ -3084,7 +3117,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, apiResp{
 			OK: true,
 			Data: settingsUpdateView{
-				Settings: g.toSettingsView(updated, aiSvc),
+				Settings: g.toSettingsView(updated, aiSvc, meta),
 			},
 		})
 		return
@@ -3484,7 +3517,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, apiResp{
 			OK: true,
 			Data: settingsUpdateView{
-				Settings: g.toSettingsView(updated, aiSvc),
+				Settings: g.toSettingsView(updated, aiSvc, meta),
 				AIUpdate: aiUpdate,
 			},
 		})
@@ -3530,7 +3563,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		g.appendAudit(meta, "ai_computer_use_update", "success", map[string]any{"enabled": enabled}, nil)
-		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: settingsUpdateView{Settings: g.toSettingsView(updated, aiSvc)}})
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: settingsUpdateView{Settings: g.toSettingsView(updated, aiSvc, meta)}})
 		return
 
 	case (r.Method == http.MethodGet || r.Method == http.MethodPost) && r.URL.Path == "/_redeven_proxy/api/ai/computer/managed/profiles":
@@ -3910,6 +3943,10 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: target})
 		return
 
+	case strings.HasPrefix(r.URL.Path, "/_redeven_proxy/api/ai/auth/chatgpt"):
+		g.handleChatGPTAuth(w, r)
+		return
+
 	case r.Method == http.MethodPut && r.URL.Path == "/_redeven_proxy/api/ai/provider_bundle":
 		meta, ok := g.requirePermission(w, r, requiredPermissionAdmin)
 		if !ok {
@@ -3927,9 +3964,15 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			APIKey     *string `json:"api_key"`
 		}
 		type reqBody struct {
-			ModelProfile                config.AIModelProfile `json:"model_profile"`
-			ProviderAPIKeyPatches       []keyPatch            `json:"provider_api_key_patches,omitempty"`
-			WebSearchProviderKeyPatches []keyPatch            `json:"web_search_provider_key_patches,omitempty"`
+			AuthSchemaVersion int                   `json:"auth_schema_version,omitempty"`
+			ModelProfile      config.AIModelProfile `json:"model_profile"`
+			ChatGPTAttempts   []struct {
+				ProviderID string `json:"provider_id"`
+				AttemptID  string `json:"attempt_id"`
+				ScopeID    string `json:"scope_id"`
+			} `json:"chatgpt_attempts,omitempty"`
+			ProviderAPIKeyPatches       []keyPatch `json:"provider_api_key_patches,omitempty"`
+			WebSearchProviderKeyPatches []keyPatch `json:"web_search_provider_key_patches,omitempty"`
 		}
 		dec := json.NewDecoder(r.Body)
 		dec.DisallowUnknownFields()
@@ -3946,6 +3989,28 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		modelProfile := body.ModelProfile
 		if err := modelProfile.Validate(); err != nil {
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: fmt.Sprintf("invalid ai model profile: %s", err.Error())})
+			return
+		}
+		previous, err := g.loadConfigLocked()
+		if err != nil {
+			writeJSON(w, 500, apiResp{OK: false, Error: "configuration unavailable"})
+			return
+		}
+		needsAuthContract := false
+		for _, p := range modelProfile.Providers {
+			needsAuthContract = needsAuthContract || p.EffectiveAuthMethod() == config.AIAuthChatGPT
+		}
+		if previous.AI != nil {
+			for _, p := range previous.AI.Providers {
+				needsAuthContract = needsAuthContract || p.EffectiveAuthMethod() == config.AIAuthChatGPT
+			}
+		}
+		if !localAuthCapabilities(meta).OpenAIChatGPT.Available && !preservesChatGPTBindings(previous.AI, modelProfile) {
+			writeJSON(w, 403, apiResp{OK: false, Error: "ChatGPT authentication must be managed on this device.", ErrorCode: "chatgpt_local_only"})
+			return
+		}
+		if body.AuthSchemaVersion != 0 && body.AuthSchemaVersion != 1 || needsAuthContract && body.AuthSchemaVersion != 1 {
+			writeJSON(w, 409, apiResp{OK: false, Error: "Update this client before saving ChatGPT authentication.", ErrorCode: "auth_client_update_required"})
 			return
 		}
 		providerIDs := make(map[string]struct{}, len(modelProfile.Providers))
@@ -4019,7 +4084,37 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			"ai_active_run_count":  activeRunCount,
 		}
 
-		updated, saveErr := g.saveAIProviderBundle(aiSvc, modelProfile, aiKeyPatches, webSearchKeyPatches)
+		bindings := make([]chatgpt.Binding, 0, len(body.ChatGPTAttempts))
+		for _, attempt := range body.ChatGPTAttempts {
+			var accountID string
+			for _, p := range modelProfile.Providers {
+				if p.ID == attempt.ProviderID && p.EffectiveAuthMethod() == config.AIAuthChatGPT {
+					accountID = p.AccountID
+				}
+			}
+			if !localAuthCapabilities(meta).OpenAIChatGPT.Available || accountID == "" || attempt.ScopeID == "" {
+				writeJSON(w, 403, apiResp{OK: false, Error: "invalid local ChatGPT binding"})
+				return
+			}
+			bindings = append(bindings, chatgpt.Binding{Owner: meta.LocalHostAccess + ":" + meta.ChannelID + ":" + attempt.ScopeID, AttemptID: attempt.AttemptID, AccountID: accountID})
+		}
+		var updated *config.Config
+		saveErr := g.chatGPT.UseAttempts(bindings, func(accounts []settings.ChatGPTAccount) error {
+			for _, account := range accounts {
+				if !account.PlanEnabled() {
+					return chatgpt.Failure("plan_permission_required")
+				}
+			}
+			for _, account := range accounts {
+				account.WelcomeAcknowledged = true
+				if err := g.secrets.UpdateChatGPTAccount(r.Context(), account.ID(), func(stored *settings.ChatGPTAccount) error { *stored = account; return nil }); err != nil {
+					return err
+				}
+			}
+			var err error
+			updated, err = g.saveAIProviderBundle(aiSvc, modelProfile, aiKeyPatches, webSearchKeyPatches, localAuthCapabilities(meta).OpenAIChatGPT.Available)
+			return err
+		})
 		if saveErr != nil {
 			status := http.StatusBadRequest
 			var bundleErr aiProviderBundleSaveError
@@ -4027,14 +4122,18 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				status = bundleErr.status
 			}
 			g.appendAudit(meta, "ai_provider_bundle_update", "failure", auditDetail, saveErr)
-			writeJSON(w, status, apiResp{OK: false, Error: saveErr.Error()})
+			code := ""
+			if errors.Is(saveErr, errChatGPTLocalOnly) {
+				code = "chatgpt_local_only"
+			}
+			writeJSON(w, status, apiResp{OK: false, Error: saveErr.Error(), ErrorCode: code})
 			return
 		}
 		g.appendAudit(meta, "ai_provider_bundle_update", "success", auditDetail, nil)
 		writeJSON(w, http.StatusOK, apiResp{
 			OK: true,
 			Data: settingsUpdateView{
-				Settings: g.toSettingsView(updated, aiSvc),
+				Settings: g.toSettingsView(updated, aiSvc, meta),
 				AIUpdate: aiUpdate,
 			},
 		})
@@ -4569,6 +4668,29 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		if err := dec.Decode(&struct{}{}); err != io.EOF {
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid model catalog request"})
 			return
+		}
+		if body.AuthMethod == config.AIAuthChatGPT {
+			meta, ok := g.requirePermission(w, r, requiredPermissionAdmin)
+			if !ok {
+				return
+			}
+			if !localAuthCapabilities(meta).OpenAIChatGPT.Available {
+				writeJSON(w, 403, apiResp{OK: false, Error: "ChatGPT sign-in is available only on this device.", ErrorCode: "chatgpt_local_only"})
+				return
+			}
+			if body.Type != "openai" || body.APIKey != "" || body.BaseURL != "" && strings.TrimRight(body.BaseURL, "/") != "https://api.openai.com/v1" {
+				writeJSON(w, 400, apiResp{OK: false, Error: "ChatGPT requires the public OpenAI Responses endpoint."})
+				return
+			}
+			if body.AttemptID != "" {
+				models, err := g.chatGPT.AttemptModels(r.Context(), meta.LocalHostAccess+":"+meta.ChannelID+":"+body.ScopeID, body.AttemptID)
+				if err != nil {
+					writeJSON(w, 400, apiResp{OK: false, Error: "ChatGPT models are unavailable.", ErrorCode: "chatgpt_models_unavailable"})
+					return
+				}
+				writeJSON(w, 200, apiResp{OK: true, Data: ai.ReviewedChatGPTCatalog(models)})
+				return
+			}
 		}
 		out, err := aiSvc.DiscoverModelCatalog(r.Context(), body)
 		if err != nil {

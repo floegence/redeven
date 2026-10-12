@@ -574,7 +574,7 @@ func TestFloretDependencyUsesPublishedRelease(t *testing.T) {
 
 	const (
 		floretModule  = "github.com/floegence/floret/v7"
-		floretVersion = "v7.29.1"
+		floretVersion = "v7.29.2"
 	)
 	root := repoRootForTest(t)
 	goMod := readRepoFile(t, root, "go.mod")
@@ -670,7 +670,7 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 			"Floret ThreadService is the only lifecycle boundary",
 			"one workspace SSE",
 			"redeven-desktop-placement-h2/1",
-			"\"compatibility_epoch\": 52",
+			"\"compatibility_epoch\": 53",
 			"flower-title-generation-v1",
 			"title_generation",
 			"redeven-runtime-v2",

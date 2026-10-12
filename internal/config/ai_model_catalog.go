@@ -74,7 +74,7 @@ func (p AIProvider) EffectiveModels() []AIProviderModel {
 		return cloneAIModels(p.Models)
 	}
 	models := AIProviderCatalog(p.Type)
-	if p.Type == "ollama" || p.Type == "openrouter" {
+	if p.Type == "ollama" || p.Type == "openrouter" || p.EffectiveAuthMethod() == AIAuthChatGPT {
 		models = cloneAIModels(p.discoveredModels)
 	}
 	// A selected local alias may have a different name from its provider wire ID.
@@ -93,6 +93,15 @@ func (p AIProvider) EffectiveModels() []AIProviderModel {
 	for i := range models {
 		for _, override := range p.ModelSelection.ModelOverrides {
 			if override.ModelName == models[i].ModelName {
+				if p.EffectiveAuthMethod() == AIAuthChatGPT && override.WireModelName != "" && override.WireModelName != models[i].EffectiveWireModelName() {
+					for _, target := range cloneAIModels(p.discoveredModels) {
+						if target.EffectiveWireModelName() == override.WireModelName {
+							target.ModelName = models[i].ModelName
+							models[i] = target
+							break
+						}
+					}
+				}
 				models[i] = applyAIModelOverride(models[i], override)
 				break
 			}
@@ -111,9 +120,16 @@ func (p AIProvider) EffectiveModels() []AIProviderModel {
 			models = append(models, custom)
 		}
 	}
+	if p.EffectiveAuthMethod() == AIAuthChatGPT {
+		models = slices.DeleteFunc(models, func(model AIProviderModel) bool {
+			return !slices.ContainsFunc(p.discoveredModels, func(available AIProviderModel) bool {
+				return available.EffectiveWireModelName() == model.EffectiveWireModelName()
+			})
+		})
+	}
 	if p.ModelSelection.SelectedModels == nil {
 		// Legacy dynamic preferences are unavailable until their selection is frozen.
-		if p.Type == "ollama" || p.Type == "openrouter" {
+		if p.Type == "ollama" || p.Type == "openrouter" || p.EffectiveAuthMethod() == AIAuthChatGPT {
 			return nil
 		}
 		return slices.DeleteFunc(models, func(m AIProviderModel) bool { return slices.Contains(p.ModelSelection.DisabledModels, m.ModelName) })

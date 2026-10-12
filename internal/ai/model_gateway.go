@@ -14,6 +14,7 @@ import (
 	anthropic "github.com/anthropics/anthropic-sdk-go"
 	aoption "github.com/anthropics/anthropic-sdk-go/option"
 	flprovider "github.com/floegence/floret/v7/provider"
+	"github.com/floegence/redeven/internal/chatgpt"
 	"github.com/floegence/redeven/internal/config"
 	openai "github.com/openai/openai-go/v3"
 	ooption "github.com/openai/openai-go/v3/option"
@@ -91,6 +92,8 @@ type openAIProvider struct {
 	gemini           bool
 	parallelTools    parallelToolCallsWireMode
 	requireTerminal  bool
+	chatGPT          bool
+	chatGPTToken     func(context.Context) (string, error)
 }
 
 type parallelToolCallsWireMode string
@@ -145,6 +148,9 @@ func (p *openAIProvider) prepareTurn(ctx context.Context, req ModelGatewayReques
 	if err := validateGatewayAttachmentParts(req.Messages, route); err != nil {
 		return nil, err
 	}
+	if useChat && p.chatGPT {
+		return nil, errors.New("ChatGPT requires Responses")
+	}
 	if useChat {
 		return p.prepareChatTurn(ctx, req)
 	}
@@ -163,7 +169,7 @@ func (p *openAIProvider) prepareTurn(ctx context.Context, req ModelGatewayReques
 	if req.ProviderControls.TopP != nil {
 		params.TopP = openai.Float(*req.ProviderControls.TopP)
 	}
-	if state := req.PreviousState; state != nil {
+	if state := req.PreviousState; state != nil && !p.chatGPT {
 		if state.Kind != providerContinuationKindOpenAIResponses || strings.TrimSpace(state.ID) == "" || len(state.Attributes) != 0 {
 			return nil, errors.New("invalid OpenAI Responses continuation state")
 		}
@@ -210,18 +216,60 @@ func (p *openAIProvider) prepareTurn(ctx context.Context, req ModelGatewayReques
 		params.Tools = tools
 	}
 
+	records := []chatGPTNativeRecord{}
+	canonical := []json.RawMessage{}
+	if p.chatGPT {
+		params.MaxOutputTokens = param.Opt[int64]{}
+		params.Temperature = param.Opt[float64]{}
+		params.TopP = param.Opt[float64]{}
+		params.Store = openai.Bool(false)
+		params.Include = append(params.Include, oresponses.ResponseIncludableReasoningEncryptedContent)
+		params.Tools, err = chatGPTNamespaces(params.Tools)
+		if err != nil {
+			return nil, err
+		}
+		params.Input.OfInputItemList, records, canonical, err = chatGPTReplay(req, inputItems)
+		if err != nil {
+			return nil, err
+		}
+	}
 	return newPreparedModelWire(p.providerType, req.Model, flprovider.RequestFormatOpenAIResponses, params, func(ctx context.Context, payload []byte, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
-		return p.streamResponsesTurn(ctx, aliases, payload, onEvent)
+		return p.streamResponsesTurn(ctx, aliases, payload, onEvent, chatGPTStreamContext{Request: req, Records: records, Canonical: canonical})
 	})
 }
 
-func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases providerToolAliases, payload []byte, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
-	stream := p.client.Responses.NewStreaming(ctx, oresponses.ResponseNewParams{}, ooption.WithRequestBody("application/json", payload))
+func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases providerToolAliases, payload []byte, onEvent func(StreamEvent), chatGPTContext ...chatGPTStreamContext) (ModelGatewayResult, error) {
+	options := []ooption.RequestOption{ooption.WithRequestBody("application/json", payload)}
+	if p.chatGPTToken != nil {
+		token, err := p.chatGPTToken(ctx)
+		if err != nil {
+			return ModelGatewayResult{}, err
+		}
+		options = append(options, ooption.WithAPIKey(token), ooption.WithMaxRetries(0))
+	}
+	stream := p.client.Responses.NewStreaming(ctx, oresponses.ResponseNewParams{}, options...)
 	defer func() { _ = stream.Close() }()
 	var textBuf strings.Builder
 	var completed oresponses.Response
 	gotCompleted := false
 	var reasoningBuf strings.Builder
+	var assistantFragments []Message
+	fragmentStart := 0
+	originalOnEvent := onEvent
+	if p.chatGPT {
+		onEvent = func(event StreamEvent) {
+			if event.Type == StreamEventHostedTool {
+				text := textBuf.String()[fragmentStart:]
+				if text != "" {
+					assistantFragments = append(assistantFragments, Message{Role: "assistant", Content: []ContentPart{{Type: "text", Text: text}}})
+				}
+				fragmentStart = textBuf.Len()
+			}
+			if originalOnEvent != nil {
+				originalOnEvent(event)
+			}
+		}
+	}
 	hosted := newResponsesHostedEvents(onEvent)
 
 	type partialCall struct {
@@ -317,6 +365,9 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 
 		case "response.output_item.added":
 			item := event.Item
+			if p.chatGPT && item.Type == "function_call" && item.Namespace != chatGPTToolNamespace {
+				return ModelGatewayResult{}, errors.New("unexpected ChatGPT tool namespace")
+			}
 			hosted.item(item)
 			if strings.TrimSpace(item.Type) != "function_call" {
 				continue
@@ -366,6 +417,9 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 
 		case "response.output_item.done":
 			item := event.Item
+			if p.chatGPT && item.Type == "function_call" && item.Namespace != chatGPTToolNamespace {
+				return ModelGatewayResult{}, errors.New("unexpected ChatGPT tool namespace")
+			}
 			hosted.item(item)
 			if strings.TrimSpace(item.Type) != "function_call" {
 				continue
@@ -385,17 +439,35 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 			}
 			emitEnd(pc, pc.ArgsRaw.String())
 
-		case "response.completed", "response.incomplete":
+		case "response.incomplete":
+			if p.chatGPT {
+				return ModelGatewayResult{}, errors.New("ChatGPT response is incomplete")
+			}
+			completed = event.Response
+			gotCompleted = true
+		case "response.completed":
 			completed = event.Response
 			gotCompleted = true
 			for _, item := range completed.Output {
+				if p.chatGPT && item.Type == "function_call" && item.Namespace != chatGPTToolNamespace {
+					return ModelGatewayResult{}, errors.New("unexpected ChatGPT tool namespace")
+				}
 				hosted.item(item)
 			}
 		case "response.failed", "error":
+			if p.chatGPT {
+				return ModelGatewayResult{}, chatGPTStreamError(event)
+			}
 			return ModelGatewayResult{}, errors.New("provider response failed")
 		}
 	}
 	if err := stream.Err(); err != nil {
+		if p.chatGPT {
+			var upstream *openai.Error
+			if errors.As(err, &upstream) {
+				return ModelGatewayResult{}, &chatgpt.RequestError{Status: upstream.StatusCode, Code: upstream.Code, RequestID: upstream.Response.Header.Get("x-request-id"), Body: json.RawMessage(upstream.RawJSON())}
+			}
+		}
 		return ModelGatewayResult{}, err
 	}
 	if p.requireTerminal && !gotCompleted {
@@ -537,6 +609,17 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 	}
 	emitProviderEvent(onEvent, StreamEvent{Type: StreamEventUsage, Usage: partialUsageFromTurnUsage(result.Usage)})
 	emitProviderEvent(onEvent, StreamEvent{Type: StreamEventFinishReason, FinishHint: result.FinishReason})
+	if p.chatGPT {
+		if len(chatGPTContext) != 1 {
+			return ModelGatewayResult{}, errors.New("missing ChatGPT request identity")
+		}
+		native := chatGPTContext[0]
+		var stateErr error
+		result.ProviderState, stateErr = chatGPTState(native.Request, result, completed, aliases, native.Records, native.Canonical, append(assistantFragments, Message{Role: "assistant", Content: []ContentPart{{Type: "text", Text: textBuf.String()[fragmentStart:]}}}))
+		if stateErr != nil {
+			return ModelGatewayResult{}, stateErr
+		}
+	}
 	return result, nil
 }
 

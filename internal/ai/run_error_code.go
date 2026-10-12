@@ -11,10 +11,14 @@ import (
 
 	flprovider "github.com/floegence/floret/v7/provider"
 	flruntime "github.com/floegence/floret/v7/runtime"
+	"github.com/floegence/redeven/internal/chatgpt"
 	openai "github.com/openai/openai-go/v3"
 )
 
 const (
+	runErrorCodeChatGPTUsage               = "chatgpt_usage_unavailable"
+	runErrorCodeChatGPTAuthorization       = "chatgpt_authorization_required"
+	runErrorCodeChatGPTPermission          = "chatgpt_plan_permission_required"
 	runErrorCodeProviderAuthFailed         = "provider_auth_failed"
 	runErrorCodeProviderMissingKey         = "provider_missing_key"
 	runErrorCodeProviderRateLimited        = "provider_rate_limited"
@@ -37,6 +41,12 @@ const (
 func userFacingRunError(code string, fallback string) string {
 	fallback = strings.TrimSpace(fallback)
 	switch strings.TrimSpace(code) {
+	case runErrorCodeChatGPTUsage:
+		return "ChatGPT plan usage is unavailable for this request. Manage your usage or try again later."
+	case runErrorCodeChatGPTAuthorization:
+		return "Your ChatGPT connection needs authorization. Open provider settings and sign in again."
+	case runErrorCodeChatGPTPermission:
+		return "Allow access to your ChatGPT plan in provider settings before using this model."
 	case runErrorCodeProviderAuthFailed:
 		return "The selected AI provider rejected the saved credentials. Open Settings and update the Local AI Profile key."
 	case runErrorCodeProviderMissingKey:
@@ -83,6 +93,27 @@ func classifyRunFailureCode(err error, fallback string) string {
 	if err == nil {
 		return strings.TrimSpace(fallback)
 	}
+	var accountError *chatgpt.Error
+	if errors.As(err, &accountError) {
+		if code := chatGPTRunFailureCode(accountError.Code); code != "" {
+			return code
+		}
+	}
+	var accountRequest *chatgpt.RequestError
+	if errors.As(err, &accountRequest) {
+		if code := chatGPTRunFailureCode(accountRequest.Code); code != "" {
+			return code
+		}
+		if accountRequest.Status == http.StatusUnauthorized {
+			return runErrorCodeChatGPTAuthorization
+		}
+		if accountRequest.Status == http.StatusForbidden {
+			return runErrorCodeChatGPTPermission
+		}
+		if code := providerHTTPStatusRunErrorCode(accountRequest.Status); code != "" {
+			return code
+		}
+	}
 	var openAIError *openai.Error
 	if errors.As(err, &openAIError) && openAIError != nil {
 		if code := providerHTTPStatusRunErrorCode(openAIError.StatusCode); code != "" {
@@ -120,6 +151,11 @@ func classifyRunFailureCode(err error, fallback string) string {
 		return runErrorCodeProviderUnreachable
 	}
 	text := strings.ToLower(strings.TrimSpace(err.Error()))
+	if _, code, ok := strings.Cut(text, "chatgpt: "); ok {
+		if result := chatGPTRunFailureCode(strings.TrimSpace(code)); result != "" {
+			return result
+		}
+	}
 	if status, ok := providerHTTPStatusFromSDKError(text); ok {
 		if code := providerHTTPStatusRunErrorCode(status); code != "" {
 			return code
@@ -286,4 +322,17 @@ func contextBudgetFailureDetail(failure *flruntime.ThreadTurnFailure) string {
 	default:
 		return ""
 	}
+}
+
+func chatGPTRunFailureCode(code string) string {
+	switch code {
+	case "subscription_sharing_usage_limit_exceeded", "subscription_sharing_usage_unavailable":
+		return runErrorCodeChatGPTUsage
+	case "plan_permission_required", "chatpass_v2_scope_not_authorized", "subscription_sharing_user_not_eligible", "chatpass_v2_invalid_authorization_context":
+		return runErrorCodeChatGPTPermission
+	}
+	if chatgpt.Failure(code).Action == "sign_in" {
+		return runErrorCodeChatGPTAuthorization
+	}
+	return ""
 }

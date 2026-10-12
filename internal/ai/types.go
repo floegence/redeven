@@ -21,6 +21,7 @@ import (
 )
 
 type Model struct {
+	BillingSource             string                         `json:"billing_source,omitempty"`
 	DefaultReasoningSelection config.AIReasoningSelection    `json:"default_reasoning_selection,omitempty"`
 	AliasGroup                string                         `json:"alias_group,omitempty"`
 	Quantization              string                         `json:"quantization,omitempty"`
