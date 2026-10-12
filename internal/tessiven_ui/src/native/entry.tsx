@@ -39,6 +39,7 @@ function NativeCanvas() {
   let control: TessivenViewportControl | undefined;
   const zoom = (factor: number) => { touch?.reset(); control?.zoom(factor, window.innerWidth / 2, window.innerHeight / 2); };
   let host: HTMLElement | undefined;
+  let floatingBoundary: HTMLDivElement | undefined;
   let touch: ReturnType<typeof attachTouchViewport> | undefined;
   onMount(() => {
     if (host) {
@@ -80,11 +81,12 @@ function NativeCanvas() {
     },
   };
   notify('ready');
-  return <main class="tessiven" ref={host}><Show when={input()} keyed>{value => <TessivenGraph
+  return <main class="tessiven" ref={host}><div class="native-canvas-floating-boundary" ref={floatingBoundary} role="presentation" /><Show when={input()} keyed>{value => <TessivenGraph
     version={value.version} historical={value.historical} t={t} visible={true} askReferenceMode="display"
     onAsk={selection => notify('ask', value.version, selection)} onSelectionChange={selection => notify('selection', value.version, selection)}
     onInspect={() => undefined} onViewportControl={value => { control = value; }}
     tools="hidden" onZoomChange={setScale} onViewOptions={options => notify('viewOptions', value.version, undefined, options)}
+    floatingBoundary={floatingBoundary}
     onRenderState={state => notify(state, value.version)}
     browseState={browsing.get(value.version.canvas_id)}
     onBrowseState={state => browsing.set(value.version.canvas_id, state)}

@@ -16,6 +16,8 @@ button { cursor: pointer; appearance: none; border: 0; background: transparent; 
 .native-canvas-tools svg { width: 18px; height: 18px; }
 .native-canvas-tools output { width: 44px; text-align: center; font-size: 12px; font-variant-numeric: tabular-nums; }
 .native-canvas-tools button:last-child { margin-left: 4px; border-left: 1px solid var(--border); border-radius: 0; }
+.native-canvas-floating-boundary { position: absolute; inset: 12px 12px calc(12px + var(--native-bottom-inset, 0px)); pointer-events: none; }
+.tessiven-popup[data-relation-browser='true'] { max-height: calc(100dvh - 24px - var(--native-bottom-inset, 0px)); }
 .tessiven .floe-graph__edge { opacity: 0.65; stroke-width: 1.5px; }
 
 .tessiven .floe-infinite-canvas__viewport { will-change: transform; }

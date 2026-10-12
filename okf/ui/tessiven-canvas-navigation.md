@@ -111,6 +111,11 @@ even while the main canvas shows a focused host's detailed paths.
   and the mutually exclusive host-service scope. It uses Floe's projected
   floating-layer placement and keyboard navigation; narrow canvases retain
   accessible icon controls and move the overview above the toolbar.
+- Native relationship browsers report their open state through the current
+  renderer's view-options receipt. The client yields its selection card to this browser,
+  restoring it on close or exact relationship selection. Native floating layers
+  use Floe boundaries to avoid the client's bottom overlay; resizing reclamps the
+  panel without rebuilding the graph or viewport.
 - Complete packing and routing run off the renderer thread. Nodes and routes
   outside the viewport are culled without discarding canonical graph records.
   Floe clips route painting to viewport bounds plus overscan while retaining
