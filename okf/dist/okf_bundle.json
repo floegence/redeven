@@ -2361,7 +2361,7 @@
               "plugins",
               "ui"
             ],
-            "summary": "Env App owns one global stacking contract for cross-surface UI. Movable product and plugin windows share a compact most-recently-used band from 1000 through 1099; the expanded Flower companion is 2000, its context previews use 2100 through 2199, the plugin launcher Panel is 3000, blocking product modals are 4000, and the command palette is 5000. No surface may escape its assigned band through an ad hoc `z-index`. A window interaction changes only the movable-window order, while higher product layers remain stable and operable.\n\nPublished Floe Webapp constrains dialogs and floating windows to the visible\nviewport or owning projected surface. Toolbar and keyboard changes preserve\nreachable window controls and local content scrolling; temporary bounds do not\nreplace the live preferred geometry.",
+            "summary": "Env App owns one global stacking contract for cross-surface UI. Movable product and plugin windows share a most-recently-used band from 1000 through 1099; the expanded Flower companion is 2000, its context previews use 2100 through 2199, the plugin launcher Panel is 3000, blocking product modals are 4000, and the command palette is 5000. No surface may escape its assigned band through an ad hoc `z-index`. A window interaction changes only the movable-window order, while higher product layers remain stable and operable.\n\nPublished Floe Webapp constrains dialogs and floating windows to the visible\nviewport or owning projected surface. Toolbar and keyboard changes preserve\nreachable window controls and local content scrolling; temporary bounds do not\nreplace the live preferred geometry.",
             "section_count": 2
           },
           {
@@ -29419,8 +29419,8 @@
         "title": "Env App floating layer order",
         "type": "UI Contract"
       },
-      "body_length": 11048,
-      "summary": "Env App owns one global stacking contract for cross-surface UI. Movable product and plugin windows share a compact most-recently-used band from 1000 through 1099; the expanded Flower companion is 2000, its context previews use 2100 through 2199, the plugin launcher Panel is 3000, blocking product modals are 4000, and the command palette is 5000. No surface may escape its assigned band through an ad hoc `z-index`. A window interaction changes only the movable-window order, while higher product layers remain stable and operable.\n\nPublished Floe Webapp constrains dialogs and floating windows to the visible\nviewport or owning projected surface. Toolbar and keyboard changes preserve\nreachable window controls and local content scrolling; temporary bounds do not\nreplace the live preferred geometry.",
+      "body_length": 11040,
+      "summary": "Env App owns one global stacking contract for cross-surface UI. Movable product and plugin windows share a most-recently-used band from 1000 through 1099; the expanded Flower companion is 2000, its context previews use 2100 through 2199, the plugin launcher Panel is 3000, blocking product modals are 4000, and the command palette is 5000. No surface may escape its assigned band through an ad hoc `z-index`. A window interaction changes only the movable-window order, while higher product layers remain stable and operable.\n\nPublished Floe Webapp constrains dialogs and floating windows to the visible\nviewport or owning projected surface. Toolbar and keyboard changes preserve\nreachable window controls and local content scrolling; temporary bounds do not\nreplace the live preferred geometry.",
       "sections": [
         {
           "id": "contract",
@@ -29509,7 +29509,7 @@
           "description": "Verifies trusted plugin window interaction dismisses the expanded companion across the iframe boundary."
         }
       ],
-      "snippet": "Env App owns one global stacking contract for cross-surface UI. Movable product and plugin windows share a compact most-recently-used band from 1000 through 1099; the expanded Flower companion is 2000, its context previews use 2100 through ",
+      "snippet": "Env App owns one global stacking contract for cross-surface UI. Movable product and plugin windows share a most-recently-used band from 1000 through 1099; the expanded Flower companion is 2000, its context previews use 2100 through 2199, th",
       "links": [
         {
           "label": "mobile shell navigation",
@@ -37752,5 +37752,5 @@
       ]
     }
   ],
-  "source_sha256": "207f8c5102d149fa90597ae8888ff17ae70626cb0e366c34f120e14b613ddfb3"
+  "source_sha256": "6f89df6d82398fe4b9dc5db5d76cfaefbf9cd598bfd689bc101bbc7c731a9cf0"
 }
