@@ -47,6 +47,27 @@ export type TessivenRuntimeInventory = {
     reason?: string;
   }[];
 };
+
+// The execution alias borrows the same registered owner and identity checks.
+export function withExecutionRuntimePath(
+  path: TessivenRuntimePath,
+  executionRuntime: boolean,
+): TessivenRuntimePath[] {
+  if (!executionRuntime || path.target.runtime_ref === 'local:local') return [path];
+  return [{
+    ...path,
+    target: { ...path.target, runtime_ref: 'local:local', location: 'execution_machine' },
+    connect: async (signal, message) => ({
+      ...((await path.connect(signal, message)) as object), runtime_ref: 'local:local',
+    }),
+    inspect: async (request, signal) => ({
+      ...((await path.inspect(request, signal)) as object), runtime_ref: 'local:local',
+    }),
+    ...(path.lifecycle ? { lifecycle: async (request, signal, permissions, scope) => ({
+      ...((await path.lifecycle!(request, signal, permissions, scope)) as object), runtime_ref: 'local:local',
+    }) } : {}),
+  }, path];
+}
 const mutation = (action: string) =>
   ['connect', 'start', 'stop', 'restart', 'update'].includes(action);
 function denied(): never {

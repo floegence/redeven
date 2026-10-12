@@ -68,6 +68,10 @@ last-seen timestamp is insufficient. Each target reports registration, online
 observation, connection, authentication, identity, generation, observation time,
 source, location, and supported actions separately.
 
+An execution alias borrows its verified direct owner only when the registered
+path has a different reference. The current-device `local:local` path appears
+once; duplicate references remain ambiguous and cannot authorize dispatch.
+
 The authenticated local Runtime owner can also read the default official local
 Gateway host catalog on the Flower execution machine. The shared Gateway host
 client reads its published service record and holds its private host credential;
