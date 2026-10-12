@@ -1,4 +1,5 @@
 import { createSignal } from 'solid-js';
+import type { FlowerTurnDisclosurePolicy } from './flowerTurnPresentation';
 
 // Interface-lifetime state only. Canonical outcomes stay in ThreadCache.
 export function createFlowerTurnDisclosureStore() {
@@ -9,26 +10,26 @@ export function createFlowerTurnDisclosureStore() {
       revision();
       return choices.get(key)?.settled ?? false;
     },
-    expanded(key: string, eligible: boolean): boolean {
+    expanded(key: string, policy: FlowerTurnDisclosurePolicy): boolean {
       revision();
-      return !eligible || (choices.get(key)?.expanded ?? false);
+      return policy === 'none' || (choices.get(key)?.expanded ?? policy !== 'automatic');
     },
-    observe(key: string, eligible: boolean, protect: () => boolean, beforeSettle?: (expanded: boolean) => void): boolean {
+    observe(key: string, policy: FlowerTurnDisclosurePolicy, protect: () => boolean, beforeSettle?: (expanded: boolean) => void): boolean {
       const previous = choices.get(key);
       if (previous?.settled) return false;
-      if (!eligible) {
+      if (policy === 'none') {
         if (!previous) choices.set(key, { settled: false, expanded: true });
         return false;
       }
-      const expanded = previous ? protect() : false;
+      const expanded = policy === 'manual' || Boolean(previous && protect());
       if (previous) beforeSettle?.(expanded);
       choices.set(key, { settled: true, expanded });
       setRevision((value) => value + 1);
       return !expanded && Boolean(previous);
     },
-    toggle(key: string, eligible: boolean) {
-      if (!eligible) return;
-      const expanded = !(choices.get(key)?.expanded ?? false);
+    toggle(key: string, policy: FlowerTurnDisclosurePolicy) {
+      if (policy === 'none') return;
+      const expanded = !(choices.get(key)?.expanded ?? policy !== 'automatic');
       choices.set(key, { settled: true, expanded });
       setRevision((value) => value + 1);
     },

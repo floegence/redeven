@@ -71,6 +71,7 @@ afterEach(async () => { document.getSelection()?.removeAllRanges(); await media.
 describe('completed turn process disclosure', () => {
   it('collapses successful work despite a tool failure, retaining final DOM and both final segments', async () => {
     const { root, live } = await mount();
+    expect(summary(root)).toBeNull();
     const final = message(root, 'final-a');
     live.push(current(true));
     await waitFor(() => summary(root)?.getAttribute('aria-expanded') === 'false');
@@ -99,8 +100,15 @@ describe('completed turn process disclosure', () => {
     expect(root.querySelector('[data-flower-thinking-view="preview"]')).not.toBeNull();
     live.push(current(true, { last_outcome: outcome, turns: [turn({ outcome, final_item_ids: [], final_boundary_complete: false })] }));
     await waitFor(() => Boolean(root.querySelector('.flower-turn-ended')));
-    expect(summary(root)).toBeNull(); expect(hidden(root, 'progress')).toBe(false);
+    expect(summary(root)?.getAttribute('aria-expanded')).toBe('true');
+    expect(hidden(root, 'progress')).toBe(false);
     expect(root.querySelector('[data-flower-thinking-view="preview"]')).not.toBeNull();
+    summary(root)!.click();
+    expect(hidden(root, 'thinking')).toBe(true);
+    expect(hidden(root, 'tool')).toBe(true);
+    expect(hidden(root, 'progress')).toBe(false);
+    expect(hidden(root, 'final-a')).toBe(false);
+    expect(root.querySelector('.flower-turn-ended')?.textContent).toBeTruthy();
   });
   it.each(['selection', 'focus', 'thinking', 'tool', 'pointer', 'keyboard', 'menu', 'reading'] as const)('protects %s inspection once at completion', async (protection) => {
     const { root, live } = await mount();
@@ -175,7 +183,8 @@ describe('completed turn process disclosure', () => {
     const done = current(true);
     const oldItems = done.items!.filter((item) => !item.id.startsWith('final-')).map((item) => ({ ...item, id: `old-${item.id}`, turn_id: 'old-turn', run_id: 'old-run' }));
     const { root } = await mount({ ...done, items: [...oldItems, ...done.items!], turns: [turn({ turn_id: 'old-turn', run_id: 'old-run', outcome: 'cancelled', final_item_ids: [], final_boundary_complete: false }), turn()] });
-    expect(root.querySelectorAll('.flower-turn-summary-button')).toHaveLength(1);
+    expect(root.querySelectorAll('.flower-turn-summary-button')).toHaveLength(2);
+    expect(summary(root)?.getAttribute('aria-expanded')).toBe('true');
     expect(hidden(root, 'old-progress')).toBe(false);
     expect(root.querySelector('.flower-turn-ended')?.textContent).toBe('Stopped');
     expect(hidden(root, 'progress')).toBe(true);
@@ -225,8 +234,54 @@ describe('completed turn process disclosure', () => {
     expect(message(root, 'final-a').closest('.flower-turn-row-viewport')?.getAttribute('data-state')).toBe('open');
   });
   it('keeps a legacy completion without authoritative final references expanded', async () => {
-    const { root } = await mount(current(true, { turns: [turn({ final_item_ids: [], final_boundary_complete: false })] }));
-    expect(summary(root)).toBeNull(); expect(hidden(root, 'progress')).toBe(false);
+    const legacy = current(true, { turns: [turn({ final_item_ids: [], final_boundary_complete: false })] });
+    const { root, live } = await mount(legacy);
+    expect(summary(root)?.getAttribute('aria-expanded')).toBe('true');
+    expect(hidden(root, 'progress')).toBe(false);
+    const toolButton = message(root, 'tool').querySelector<HTMLButtonElement>('button')!;
+    toolButton.focus(); summary(root)!.click();
+    expect(document.activeElement).toBe(summary(root));
+    expect(hidden(root, 'thinking')).toBe(true);
+    expect(hidden(root, 'tool')).toBe(true);
+    expect(hidden(root, 'progress')).toBe(false);
+    expect(hidden(root, 'final-a')).toBe(false);
+    expect(hidden(root, 'final-b')).toBe(false);
+    root.querySelector<HTMLButtonElement>('[data-thread-id="peer"] button')!.click();
+    await waitFor(() => Boolean(root.querySelector('[data-flower-message-id="m1"]')));
+    root.querySelector<HTMLButtonElement>('[data-thread-id="process"] button')!.click();
+    await waitFor(() => summary(root)?.getAttribute('aria-expanded') === 'false');
+    live.push({ ...legacy, view_version: 3 });
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    expect(summary(root)?.getAttribute('aria-expanded')).toBe('false');
+    const reloadedFinal = message(root, 'final-a');
+    live.push({ ...legacy, view_version: 4 });
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    expect(message(root, 'final-a')).toBe(reloadedFinal);
+  });
+  it('offers independent expanded controls for the legacy stopped and completed turns seen in Desktop', async () => {
+    const done = current(true);
+    const oldItems = done.items!.map((item) => ({ ...item, id: `old-${item.id}`, turn_id: 'old-turn', run_id: 'old-run' }));
+    const { root } = await mount({ ...done, items: [...oldItems, ...done.items!], turns: [
+      turn({ turn_id: 'old-turn', run_id: 'old-run', outcome: 'cancelled', elapsed_ms: 91730, waiting_ms: 0, work_duration_ms: 91730,
+        ended_at: '2026-10-11T12:01:31.730Z', final_item_ids: [], final_boundary_complete: false }),
+      turn({ elapsed_ms: 8541, waiting_ms: 0, work_duration_ms: 8541, ended_at: '2026-10-11T12:00:08.541Z', final_item_ids: [], final_boundary_complete: false }),
+    ] });
+    const buttons = [...root.querySelectorAll<HTMLButtonElement>('.flower-turn-summary-button')];
+    expect(buttons.map((button) => button.getAttribute('aria-expanded'))).toEqual(['true', 'true']);
+    expect(buttons[0].textContent).toContain('1 minute 31 seconds');
+    expect(buttons[1].textContent).toContain('8 seconds');
+    buttons[0].click();
+    expect(hidden(root, 'old-thinking')).toBe(true);
+    expect(hidden(root, 'old-tool')).toBe(true);
+    expect(hidden(root, 'old-final-a')).toBe(false);
+    expect(hidden(root, 'old-final-b')).toBe(false);
+    expect(root.querySelector('.flower-turn-ended')?.textContent).toBe('Stopped');
+    expect(buttons[1].getAttribute('aria-expanded')).toBe('true');
+    buttons[1].click();
+    expect(hidden(root, 'thinking')).toBe(true);
+    expect(hidden(root, 'final-a')).toBe(false);
+    buttons[0].click();
+    expect(hidden(root, 'old-tool')).toBe(false);
   });
   it('supports reduced motion, forced colors, and a narrow window', async () => {
     await media.emulateMediaPreferences({ reducedMotion: 'reduce', forcedColors: 'active' });

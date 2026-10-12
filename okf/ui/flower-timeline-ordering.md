@@ -13,7 +13,7 @@ Flower renders the ordered items in Floret's typed current view. Canonical stabl
 
 Floret canonical journal order is authoritative for durable rows. Current-process assistant and thinking drafts arrive only inside the typed current view and disappear when canonical terminal output replaces them. Repeated provider attempts use the same stable output identity, so late or duplicate completion cannot append a second assistant or tool row.
 
-Thinking is presentation state over the same canonical current view. While a thinking block is live, Flower shows a tail-following preview capped at four visual lines and fades its older prefix; the user may expand the complete accumulated text. Settling does not force the inner disclosure closed. Successful whole-turn collapse and reading protection follow [Flower completed turn process disclosure](flower-turn-process-disclosure.md), without changing message order, live transport ownership or persisted content.
+Thinking is presentation state over the same canonical current view. While a thinking block is live, Flower shows a tail-following preview capped at four visual lines and fades its older prefix; the user may expand the complete accumulated text. Settling does not force the inner disclosure closed. Whole-turn disclosure and reading protection follow [Flower terminal turn process disclosure](flower-turn-process-disclosure.md), without changing message order, live transport ownership or persisted content.
 
 Queued input is canonical Floret state and appears exactly once in the queue lane. An idle Send appears as the user row; a busy Send appears directly in the queue. Flower never guesses ordering from timestamps, prompt equality, or a local operation reducer.
 
