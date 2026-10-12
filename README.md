@@ -130,6 +130,8 @@ Flower keeps the references and device selection you submit with the conversatio
 
 Flower can combine semantic browser and desktop operations in bounded scripts. Select a managed browser profile, an authorized Chrome tab, or an application window, with explicit site and app permissions for each task. Screenshots are requested when needed, and the viewer opens on demand. Background operation depends on the target and action; Windows and Safari automation are not included.
 
+Flower supports API keys and official ChatGPT plan sign-in. Account sign-in is available only through a verified local Desktop or local runtime; remote settings keep it disabled. Remote chats can still use the existing Desktop model source. ChatGPT usage never switches automatically to API billing.
+
 <!-- readme-section:security -->
 <a id="security"></a>
 

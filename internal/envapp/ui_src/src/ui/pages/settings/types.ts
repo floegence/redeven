@@ -29,6 +29,8 @@ export type AIProviderWebSearch = Readonly<{
 }>;
 
 export type AIProvider = Readonly<{
+  auth_method?: 'api_key' | 'chatgpt';
+  account_id?: string;
   id: string;
   name?: string;
   type: AIProviderType;
@@ -80,6 +82,8 @@ export type AIRuntimeStatus = Readonly<{
 }>;
 
 export type AgentSettingsResponse = Readonly<{
+  auth_capabilities?: import('../../../../../../flower_ui/src/contracts/flowerSurfaceContracts').FlowerSettingsSnapshot['auth_capabilities'];
+  chatgpt_accounts?: import('../../../../../../flower_ui/src/contracts/flowerSurfaceContracts').FlowerSettingsSnapshot['chatgpt_accounts'];
   config_path: string;
   connection: Readonly<{
     access_point_origin: string;

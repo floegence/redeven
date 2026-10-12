@@ -829,6 +829,27 @@ function createLocalizedFlowerSettingsCopy(i18n: FlowerSurfaceTranslator): Flowe
 function createLocalizedFlowerProviderDialogCopy(i18n: FlowerSurfaceTranslator): FlowerSurfaceCopy['settings']['dialog'] {
   const k = (suffix: string) => `flowerSurface.settings.${suffix}`;
   return {
+    chatGPT: {
+      changeAccount: t(i18n, k('dialogChatGPTChangeAccount')),
+      usageUnavailable: t(i18n, k('dialogChatGPTUsageUnavailable')),
+      authentication: t(i18n, k('dialogChatGPTAuthentication')),
+      account: t(i18n, k('dialogChatGPTAccount')),
+      localOnly: t(i18n, k('dialogChatGPTLocalOnly')),
+      continue: t(i18n, k('dialogChatGPTContinue')),
+      waiting: t(i18n, k('dialogChatGPTWaiting')),
+      reauthorize: t(i18n, k('dialogChatGPTReauthorize')),
+      cancel: t(i18n, k('dialogChatGPTCancel')),
+      planSource: t(i18n, k('dialogChatGPTPlanSource')),
+      planPermission: t(i18n, k('dialogChatGPTPlanPermission')),
+      welcome: t(i18n, k('dialogChatGPTWelcome')),
+      welcomeTitle: t(i18n, k('dialogChatGPTWelcomeTitle')),
+      welcomeConfirm: t(i18n, k('dialogChatGPTWelcomeConfirm')),
+      authorizationRequired: t(i18n, k('dialogChatGPTAuthorizationRequired')),
+      manageUsage: t(i18n, k('dialogChatGPTManageUsage')),
+      signInFailed: t(i18n, k('dialogChatGPTSignInFailed')),
+      signOut: t(i18n, k('dialogChatGPTSignOut')),
+      revocationUnconfirmed: t(i18n, k('dialogChatGPTRevocationUnconfirmed')),
+    },
     catalog: modelCatalogCopy(i18n.locale),
     addTitle: t(i18n, k('dialogAddTitle')),
     editTitle: t(i18n, k('dialogEditTitle')),

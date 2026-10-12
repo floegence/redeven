@@ -341,6 +341,11 @@ describe('Desktop shared i18n dictionaries', () => {
             .replace(/`[^`]+`/g, '');
           expect(value, `${locale}:${row.path}`).not.toMatch(/ZXQ(?:KEEP|SEG|GARDER)|QXZ/);
           for (const term of REDEVEN_I18N_FORBIDDEN_GENERIC_ENGLISH_TERMS) {
+            // The product requirement fixes this exact localized notice, including Runtime.
+            if (locale === 'zh-CN' && row.path === 'flowerSurface.settings.dialogChatGPTLocalOnly' && term === 'Runtime') {
+              expect(value).toBe('ChatGPT 官方登录仅支持本机 Desktop 或本地 Runtime。');
+              continue;
+            }
             expect(value, `${locale}:${row.path}:${term}`).not.toMatch(new RegExp(`\\b${term.replaceAll(' ', '[\\s-]+')}\\b`, 'i'));
           }
         }

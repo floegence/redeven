@@ -1,10 +1,12 @@
 package ai
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
 
+	"github.com/floegence/redeven/internal/chatgpt"
 	"github.com/floegence/redeven/internal/config"
 )
 
@@ -48,7 +50,7 @@ func (s *Service) initResolvedProviderAdapter(resolved resolvedRunModel) (resolv
 		return resolvedProviderAdapter{}, fmt.Errorf("unsupported provider type %q", strings.TrimSpace(resolved.Provider.Type))
 	}
 
-	apiKey, available, err := resolveModelProviderKey(providerType, resolved.ProviderID, s.resolveProviderKey)
+	apiKey, available, err := resolveProviderCredential(context.Background(), resolved.Provider, s.resolveProviderKey, s.chatGPT)
 	if err != nil {
 		return resolvedProviderAdapter{}, fmt.Errorf("resolve provider key failed: %w", err)
 	}
@@ -59,6 +61,7 @@ func (s *Service) initResolvedProviderAdapter(resolved resolvedRunModel) (resolv
 	if err != nil {
 		return resolvedProviderAdapter{}, fmt.Errorf("init provider adapter failed: %w", err)
 	}
+	configureChatGPTAdapter(adapter, resolved.Provider, s.chatGPT)
 	return resolvedProviderAdapter{Adapter: adapter, ProviderType: providerType, ModelName: modelName}, nil
 }
 
@@ -88,4 +91,29 @@ func resolveModelProviderKey(providerType, providerID string, resolve func(strin
 	key, available, err := resolve(providerID)
 	key = strings.TrimSpace(key)
 	return key, optional || (available && key != ""), err
+}
+
+// One authentication decision serves Runtime, Desktop, discovery and execution.
+func resolveProviderCredential(ctx context.Context, p config.AIProvider, resolve func(string) (string, bool, error), accountClient *chatgpt.Client) (string, bool, error) {
+	if p.EffectiveAuthMethod() == config.AIAuthChatGPT {
+		if err := p.ValidateAuthentication(); err != nil {
+			return "", false, err
+		}
+		if accountClient == nil {
+			return "", false, chatgpt.Failure("authorization_required")
+		}
+		token, err := accountClient.AccessToken(ctx, p.AccountID)
+		return token, token != "" && err == nil, err
+	}
+	return resolveModelProviderKey(p.Type, p.ID, resolve)
+}
+func configureChatGPTAdapter(adapter ModelGateway, p config.AIProvider, client *chatgpt.Client) {
+	if p.EffectiveAuthMethod() != config.AIAuthChatGPT {
+		return
+	}
+	if gateway, ok := adapter.(*openAIProvider); ok {
+		gateway.chatGPT = true
+		gateway.requireTerminal = true
+		gateway.chatGPTToken = func(ctx context.Context) (string, error) { return client.AccessToken(ctx, p.AccountID) }
+	}
 }

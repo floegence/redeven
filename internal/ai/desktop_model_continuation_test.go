@@ -25,7 +25,7 @@ import (
 )
 
 func TestDesktopModelContinuationPreservesOpaqueState(t *testing.T) {
-	for _, kind := range []string{"deepseek_responses_v1", providerContinuationKindOpenAIResponses, geminiStateKind} {
+	for _, kind := range []string{"deepseek_responses_v1", providerContinuationKindOpenAIResponses, geminiStateKind, chatGPTStateKind} {
 		t.Run(kind, func(t *testing.T) {
 			gateway := &recordingPreparedGateway{}
 			adapter := newFloretProviderAdapter(gateway, DesktopModelSourceProviderType, "desktop:model_test", ProviderControls{}, TurnBudgets{}, "")

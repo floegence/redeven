@@ -72,6 +72,8 @@ export type FlowerProvider = Readonly<{
   type: FlowerProviderType;
   base_url?: string;
   web_search?: Readonly<{ mode: FlowerWebSearchMode }>;
+  auth_method?: 'api_key' | 'chatgpt';
+  account_id?: string;
   models: readonly FlowerProviderModel[];
   model_selection?: FlowerModelSelection;
   catalog_models?: readonly FlowerProviderModel[];
@@ -79,6 +81,8 @@ export type FlowerProvider = Readonly<{
 }>;
 
 export type FlowerProviderDraft = FlowerProvider & Readonly<{
+  chatgpt_attempt?: Readonly<{ attempt_id: string; scope_id: string }>;
+  chatgpt_account?: FlowerChatGPTAccount;
   provider_api_key?: string | null;
   web_search_api_key?: string | null;
 }>;
@@ -104,6 +108,7 @@ export type FlowerProviderSecretState = Readonly<{
 }>;
 
 export type FlowerModelSourceModel = Readonly<{
+  billing_source?: 'chatgpt_plan';
   alias_group?: string;
   quantization?: string;
   web_search?: FlowerWebSearchAvailability;
@@ -189,6 +194,8 @@ export type FlowerModelSourceRecovery = Readonly<{
 }>;
 
 export type FlowerSettingsSnapshot = Readonly<{
+  auth_capabilities?: Readonly<{ openai_chatgpt: Readonly<{ available: boolean; reason?: string; binding_id?: string }> }>;
+  chatgpt_accounts?: Readonly<Record<string, FlowerChatGPTAccount>>;
   model_directory?: FlowerModelDirectory;
   defaults: Readonly<{
     permission_type: FlowerPermissionType;
@@ -1251,7 +1258,9 @@ export type FlowerSurfaceRuntimeDescriptor = Readonly<{
   subtitle: string;
 }>;
 
-export type FlowerModelCatalogQuery = Readonly<{ provider_id?: string; type: FlowerProviderType; base_url?: string; api_key?: string }>;
+export type FlowerChatGPTAccount = Readonly<{ account_id: string; email: string; state: string; welcome_acknowledged: boolean }>;
+export type FlowerChatGPTAuth = (action: 'start' | 'status' | 'cancel' | 'sign-out' | 'acknowledge', input: Readonly<{ scope_id: string; attempt_id?: string; previous_attempt_id?: string; account_id?: string; reconsent?: boolean }>) => Promise<Readonly<{ id?: string; state?: string; account?: FlowerChatGPTAccount; error_code?: string; revocation_confirmed?: boolean }>>;
+export type FlowerModelCatalogQuery = Readonly<{ provider_id?: string; type: FlowerProviderType; base_url?: string; api_key?: string; auth_method?: 'api_key' | 'chatgpt'; account_id?: string; attempt_id?: string; scope_id?: string }>;
 export type FlowerModelCatalogDiscovery = (input: FlowerModelCatalogQuery) => Promise<Readonly<{ models: readonly FlowerProviderModel[] }>>;
 
 export type FlowerTargetDescriptor = Readonly<{
@@ -1340,6 +1349,7 @@ export type FlowerSurfaceAdapter = Readonly<{
   canMutate?: boolean;
   /** Keep the canonical summary stream connected while the document is hidden. */
   keepLiveWhenHidden?: boolean;
+  chatGPTAuth?: FlowerChatGPTAuth;
   discoverProviderModels?: FlowerModelCatalogDiscovery;
   loadSettings: () => Promise<FlowerSettingsSnapshot>;
   loadModelDirectory?: (refresh?: boolean) => Promise<FlowerModelDirectory>;

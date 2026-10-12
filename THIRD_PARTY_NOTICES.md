@@ -1403,6 +1403,7 @@ SOFTWARE.
 | github.com/bodgit/windows | v1.0.1 | BSD-style | Runtime | https://pkg.go.dev/github.com/bodgit/windows@v1.0.1 | Detected from LICENSE. |
 | github.com/boombuler/barcode | v1.0.1-0.20190219062509-6c824513bacc | MIT | Runtime | https://pkg.go.dev/github.com/boombuler/barcode@v1.0.1-0.20190219062509-6c824513bacc | Detected from LICENSE. |
 | github.com/coder/websocket | v1.8.15 | BSD-style | Runtime | https://pkg.go.dev/github.com/coder/websocket@v1.8.15 | coder/websocket is distributed under a BSD-style license. |
+| github.com/coreos/go-oidc/v3 | v3.21.0 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/coreos/go-oidc/v3@v3.21.0 | Detected from LICENSE. |
 | github.com/creack/pty | v1.1.24 | MIT | Runtime | https://pkg.go.dev/github.com/creack/pty@v1.1.24 | Detected from LICENSE. |
 | github.com/dlclark/regexp2 | v1.12.0 | MIT | Runtime | https://pkg.go.dev/github.com/dlclark/regexp2@v1.12.0 | Detected from LICENSE. |
 | github.com/dsnet/compress | v0.0.2-0.20230904184137-39efe44ab707 | BSD-style | Runtime | https://pkg.go.dev/github.com/dsnet/compress@v0.0.2-0.20230904184137-39efe44ab707 | Detected from LICENSE.md. |
@@ -1411,11 +1412,12 @@ SOFTWARE.
 | github.com/ebitengine/purego | v0.9.1 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/ebitengine/purego@v0.9.1 | Detected from LICENSE. |
 | github.com/floegence/floe-native-apps | v0.22.34 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floe-native-apps@v0.22.34 | Detected from LICENSE. |
 | github.com/floegence/floeterm/terminal-go | v0.19.2 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floeterm/terminal-go@v0.19.2 | Floegence first-party dependency. |
-| github.com/floegence/floret/v7 | v7.29.1 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floret/v7@v7.29.1 | Detected from LICENSE. |
+| github.com/floegence/floret/v7 | v7.29.2 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floret/v7@v7.29.2 | Detected from LICENSE. |
 | github.com/floegence/flowersec/flowersec-go/v5 | v5.11.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/flowersec/flowersec-go/v5@v5.11.0 | Floegence first-party dependency. |
 | github.com/floegence/redeven-service-templates | v0.6.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redeven-service-templates@v0.6.0 | Floegence first-party versioned Managed Service template catalog. |
 | github.com/floegence/redevplugin/v3 | v3.0.35 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redevplugin/v3@v3.0.35 | Floegence first-party dependency. |
 | github.com/flynn/noise | v1.1.0 | BSD-style | Runtime | https://pkg.go.dev/github.com/flynn/noise@v1.1.0 | Detected from LICENSE. |
+| github.com/go-jose/go-jose/v4 | v4.1.4 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/go-jose/go-jose/v4@v4.1.4 | Detected from LICENSE. |
 | github.com/go-ole/go-ole | v1.2.6 | MIT | Runtime | https://pkg.go.dev/github.com/go-ole/go-ole@v1.2.6 | Detected from LICENSE. |
 | github.com/godbus/dbus/v5 | v5.2.2 | BSD-style | Runtime | https://pkg.go.dev/github.com/godbus/dbus/v5@v5.2.2 | Detected from LICENSE. |
 | github.com/google/jsonschema-go | v0.4.3 | MIT | Runtime | https://pkg.go.dev/github.com/google/jsonschema-go@v0.4.3 | Detected from LICENSE. |
@@ -1470,7 +1472,7 @@ SOFTWARE.
 | golang.org/x/image | v0.46.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/image@v0.46.0 | Detected from LICENSE. |
 | golang.org/x/mod | v0.41.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/mod@v0.41.0 | Detected from LICENSE. |
 | golang.org/x/net | v0.60.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/net@v0.60.0 | Detected from LICENSE. |
-| golang.org/x/oauth2 | v0.35.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/oauth2@v0.35.0 | Detected from LICENSE. |
+| golang.org/x/oauth2 | v0.36.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/oauth2@v0.36.0 | Detected from LICENSE. |
 | golang.org/x/sync | v0.23.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/sync@v0.23.0 | Detected from LICENSE. |
 | golang.org/x/sys | v0.48.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/sys@v0.48.0 | Detected from LICENSE. |
 | golang.org/x/term | v0.46.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/term@v0.46.0 | Detected from LICENSE. |

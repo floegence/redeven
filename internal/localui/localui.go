@@ -220,6 +220,7 @@ type localAccessSessionContext struct {
 func (s *Server) handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", s.handleRoot)
+	mux.HandleFunc(localRuntimeBrowserMintPath, s.handleLocalRuntimeBrowserMint)
 	mux.HandleFunc("/cs/", s.handleCodeSpace)
 	mux.HandleFunc("/api/local/codespaces/", s.handleNativeCodeSpace)
 	mux.HandleFunc("/pf/", s.handlePortForward)
@@ -241,7 +242,7 @@ func (s *Server) handler() http.Handler {
 	mux.HandleFunc("/_redevplugin/api/plugins/", s.handlePluginPlatform)
 	// Reuse the existing app server for Env App UI and management APIs.
 	mux.HandleFunc("/_redeven_proxy/", s.handleEnvAppProxy)
-	var handler http.Handler = mux
+	var handler http.Handler = s.withLocalRuntimeBrowserAccess(mux)
 	if s.diag != nil {
 		handler = s.withDiagnostics(handler)
 	}
@@ -304,6 +305,10 @@ func (s *Server) HandlerForDesktopBridge() http.Handler {
 			trustedRequest = s.appServer.WithTessivenDesktopSource(trustedRequest, r.Header.Get("X-Redeven-Tessiven-Source"))
 		}
 		trustedRequest.Header.Del("X-Redeven-Tessiven-Source")
+		if bridgeAuthorized && !portForwardOrigin && r.Header.Get("X-Redeven-Host-Access") == "local_host" {
+			trustedRequest = appserver.WithVerifiedLocalHost(trustedRequest, s.localUIBridgeToken)
+		}
+		trustedRequest.Header.Del("X-Redeven-Host-Access")
 		if portForwardOrigin {
 			if s.appServer == nil {
 				http.NotFound(w, trustedRequest)
@@ -541,6 +546,7 @@ func (s *Server) configureAcceptor() error {
 			// The store remains authorization authority; the private source is
 			// an ephemeral attribution from this exact fresh acquisition only.
 			pending.meta.DesktopSource = livePending.meta.DesktopSource
+			pending.meta.LocalHostAccess = livePending.meta.LocalHostAccess
 			if ready == nil {
 				return nil, errors.New("local session lifecycle is unavailable")
 			}
@@ -2231,8 +2237,12 @@ func (s *Server) handleConnectArtifactWithMeta(w http.ResponseWriter, r *http.Re
 		meta.ChannelID = ""
 	}
 
+	if windowMeta == nil {
+		meta.LocalHostAccess = appserver.VerifiedLocalHost(r)
+	}
 	if windowMeta == nil && privateLoopback && s.appServer != nil {
 		meta.DesktopSource = s.appServer.TessivenDesktopSource(r)
+		meta.LocalHostAccess = appserver.VerifiedLocalHost(r)
 	}
 	traceID := localUITraceID(r)
 	accessSessionID, accessExpiresAt, ok := s.activeLocalAccessSession(r)
@@ -2533,6 +2543,9 @@ func (s *Server) releaseAcceptedSessionAuthorization(channelID string) {
 	}
 	if s.authStore != nil {
 		_ = s.authStore.releaseChannel(id)
+	}
+	if s.appServer != nil {
+		s.appServer.CancelChatGPTForChannel(id)
 	}
 	s.clearAuthorizationCache([]string{id})
 }

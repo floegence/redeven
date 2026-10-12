@@ -118,6 +118,15 @@ section; collapsing it does not destroy its address or connection result.
 Discovery, profile/tab selection, and explicit connection retain their existing
 runtime operations. The shared settings panel stays mounted when returning to chat.
 
+## OpenAI authentication
+
+The shared dialog offers ChatGPT account and API key methods. Verified local
+OpenAI drafts default to ChatGPT; existing drafts retain their method. Remote
+settings keep ChatGPT disabled with persistent guidance and no login panel.
+Verification preserves choices, search and focus until explicit save. Account,
+locality and cancellation rules belong to the
+[local authentication contract](../ai/chatgpt-local-authentication.md).
+
 ## Saving and ownership
 
 The adapter exposes independent `saveDefaultPermission`, `saveModelProfile`, and

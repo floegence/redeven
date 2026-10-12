@@ -1,5 +1,5 @@
 {
-  "checked_at": "2026-10-03",
+  "checked_at": "2026-10-12",
   "exclude_pattern": "realtime|(?:^|-)live(?:-|$)|deep-research|computer-use|safeguard|character",
   "exclude": {
     "openai": [
@@ -212,6 +212,11 @@
       "reasoning": {
         "default_level": "high"
       }
+    },
+    "anthropic/claude-haiku-5-5": {
+      "reasoning": {
+        "default_level": "medium"
+      }
     }
   },
   "web_search": [
@@ -222,6 +227,7 @@
         "claude-fable-5-1",
         "claude-haiku-4-5",
         "claude-haiku-4-5-20251001",
+        "claude-haiku-5-5",
         "claude-opus-4-5",
         "claude-opus-4-5-20251101",
         "claude-opus-4-6",
@@ -241,7 +247,7 @@
         "https://platform.claude.com/docs/en/build-with-claude/adaptive-thinking",
         "https://platform.claude.com/docs/en/build-with-claude/effort"
       ],
-      "source_checked_at": "2026-10-03"
+      "source_checked_at": "2026-10-12"
     },
     {
       "provider": "chatglm",
@@ -252,7 +258,7 @@
       "source_urls": [
         "https://docs.z.ai/guides/overview/migrate-to-glm-new"
       ],
-      "source_checked_at": "2026-09-10",
+      "source_checked_at": "2026-10-12",
       "mode": "glm_web_search_tool"
     },
     {
@@ -283,7 +289,7 @@
         "https://docs.z.ai/guides/vlm/glm-5.3-flash",
         "https://docs.z.ai/guides/vlm/glm-4.6v"
       ],
-      "source_checked_at": "2026-10-03"
+      "source_checked_at": "2026-10-12"
     },
     {
       "provider": "deepseek",
@@ -298,7 +304,7 @@
         "https://api-docs.deepseek.com/guides/responses_api/",
         "https://api-docs.deepseek.com/guides/thinking_mode"
       ],
-      "source_checked_at": "2026-10-03",
+      "source_checked_at": "2026-10-12",
       "source_notes": "Built-in tool types, including web_search, are ignored. Responses format compatibility and replay of historical web_search_call items do not provide hosted search execution."
     },
     {
@@ -323,7 +329,7 @@
       "source_urls": [
         "https://ai.google.dev/gemini-api/docs/openai"
       ],
-      "source_checked_at": "2026-09-10"
+      "source_checked_at": "2026-10-12"
     },
     {
       "provider": "groq",
@@ -337,7 +343,7 @@
       "source_urls": [
         "https://console.groq.com/docs/models"
       ],
-      "source_checked_at": "2026-09-10"
+      "source_checked_at": "2026-10-12"
     },
     {
       "provider": "moonshot",
@@ -348,7 +354,7 @@
       "source_urls": [
         "https://platform.kimi.com/docs/models"
       ],
-      "source_checked_at": "2026-09-10",
+      "source_checked_at": "2026-10-12",
       "mode": "kimi_builtin"
     },
     {
@@ -362,7 +368,7 @@
       "source_urls": [
         "https://platform.kimi.com/docs/models"
       ],
-      "source_checked_at": "2026-09-10"
+      "source_checked_at": "2026-10-12"
     },
     {
       "provider": "openai",
@@ -406,7 +412,7 @@
         "https://developers.openai.com/api/docs/models/gpt-6-luna",
         "https://developers.openai.com/api/docs/models/gpt-6-sol"
       ],
-      "source_checked_at": "2026-10-03",
+      "source_checked_at": "2026-10-12",
       "mode": "openai_responses_builtin"
     },
     {
@@ -421,7 +427,7 @@
       "source_urls": [
         "https://www.alibabacloud.com/help/en/model-studio/models"
       ],
-      "source_checked_at": "2026-09-10",
+      "source_checked_at": "2026-10-12",
       "mode": "qwen_responses_web_search"
     },
     {
@@ -477,7 +483,7 @@
         "https://www.alibabacloud.com/help/en/model-studio/deep-thinking",
         "https://www.alibabacloud.com/help/en/model-studio/qwen3-8-omni-flash"
       ],
-      "source_checked_at": "2026-10-03"
+      "source_checked_at": "2026-10-12"
     },
     {
       "provider": "xai",
@@ -493,7 +499,7 @@
         "https://docs.x.ai/developers/model-capabilities/text/reasoning",
         "https://docs.x.ai/developers/models/grok-4.7"
       ],
-      "source_checked_at": "2026-10-03"
+      "source_checked_at": "2026-10-12"
     }
   ],
   "exclusion_notes": {

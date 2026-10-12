@@ -188,6 +188,27 @@ export type FlowerSettingsCopy = Readonly<{
 }>;
 
 export type FlowerProviderDialogCopy = Readonly<{
+  chatGPT: Readonly<{
+    changeAccount: string;
+    usageUnavailable: string;
+    authentication: string;
+    account: string;
+    localOnly: string;
+    continue: string;
+    waiting: string;
+    reauthorize: string;
+    cancel: string;
+    planSource: string;
+    planPermission: string;
+    welcome: string;
+    welcomeTitle: string;
+    welcomeConfirm: string;
+    authorizationRequired: string;
+    manageUsage: string;
+    signInFailed: string;
+    signOut: string;
+    revocationUnconfirmed: string;
+  }>;
   catalog: ModelCatalogCopy;
   addTitle: string;
   editTitle: string;
@@ -1351,6 +1372,27 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
         ollama: 'Local OpenAI-compatible endpoint',
         openai_compatible: 'Custom endpoint',
       },
+      chatGPT: {
+        changeAccount: 'Use another account',
+        usageUnavailable: "ChatGPT plan usage is unavailable for this request. Manage your usage or try again later.",
+        authentication: "Authentication",
+        account: "ChatGPT account",
+        localOnly: "ChatGPT sign-in is available only on this device’s Desktop or local Runtime.",
+        continue: "Continue with ChatGPT",
+        waiting: "Waiting for authorization",
+        reauthorize: "Authorize again",
+        cancel: "Cancel sign-in",
+        planSource: "Uses your ChatGPT plan allowance.",
+        planPermission: "Allow access to your ChatGPT plan to enable models.",
+        welcome: "Flower uses your ChatGPT plan allowance. Limits and model availability follow your plan. API billing is never enabled automatically.",
+        welcomeTitle: "You’re using your ChatGPT plan",
+        welcomeConfirm: "Got it",
+        authorizationRequired: "Your ChatGPT connection needs authorization. Open provider settings and sign in again.",
+        manageUsage: "Manage usage",
+        signInFailed: "Sign-in could not complete. Try again.",
+        signOut: "Sign out",
+        revocationUnconfirmed: "Signed out on this device. Revocation could not be confirmed; review connected apps in ChatGPT.",
+      },
       connectionTitle: 'Connection',
       connectionDescription: 'Credentials and endpoints are stored with the Local AI Profile.',
       connectionName: 'Connection name',
@@ -1387,7 +1429,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       selected: 'Selected',
       customModelPlaceholder: 'Custom model name',
       curatedPresetsOnly: 'Curated presets only',
-      addCustomModel: 'Add custom model',
+      addCustomModel: 'Add model',
       selectedModelsTitle: 'Selected models',
       selectedModelsDescription: 'These models can be selected as the current Flower model.',
       noSelectedModels: 'No selected models.',

@@ -130,6 +130,8 @@ Flower speichert übermittelte Referenzen und die Geräteauswahl im Gespräch, d
 
 Flower kann semantische Browser- und Desktop-Aktionen in Skripten mit festen Ausführungsgrenzen kombinieren. Wähle ein verwaltetes Browserprofil, einen autorisierten Chrome-Tab oder ein Anwendungsfenster und lege Website- und App-Berechtigungen für jede Aufgabe ausdrücklich fest. Screenshots werden bei Bedarf angefordert, und der Betrachter öffnet sich auf Wunsch. Ob Aktionen im Hintergrund möglich sind, hängt vom Ziel und der Aktion ab; die Automatisierung von Windows und Safari ist nicht enthalten.
 
+Flower unterstützt API-Schlüssel und die offizielle Anmeldung mit einem ChatGPT-Tarif. Die Kontoanmeldung ist nur über einen verifizierten lokalen Desktop oder eine lokale Laufzeit verfügbar; in entfernten Einstellungen bleibt sie deaktiviert. Entfernte Chats können weiterhin die bestehende Desktop-Modellquelle nutzen. Die ChatGPT-Nutzung wechselt niemals automatisch zur API-Abrechnung.
+
 <!-- readme-section:security -->
 <a id="security"></a>
 

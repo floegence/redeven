@@ -60,6 +60,8 @@ func (r *run) prepareFloretHostedAgent(ctx context.Context, req RunRequest, prov
 		}
 	}
 
+	configureChatGPTAdapter(adapter, providerCfg, r.chatGPT)
+
 	webSearchCapability := config.ResolveAIWebSearch(providerCfg, capability.WireModelName, true)
 	if webSearchCapability.Mode == config.AIWebSearchBrave {
 		configured := false
@@ -148,7 +150,7 @@ func (r *run) prepareFloretHostedAgent(ctx context.Context, req RunRequest, prov
 		"turn_id":    strings.TrimSpace(r.turnID),
 		"message_id": strings.TrimSpace(r.messageID),
 	}, Host: initialSurface.HostContext}
-	gatewayIdentity, err := redevenFloretGatewayIdentity(providerCfg.ID, providerType, providerCfg.BaseURL, capability.WireModelName, flProvider.stateCompatibilityRoute())
+	gatewayIdentity, err := redevenFloretGatewayIdentity(providerCfg.ID, providerType, providerCfg.BaseURL, capability.WireModelName, flProvider.stateCompatibilityRoute(), providerCfg.EffectiveAuthMethod(), providerCfg.AccountID)
 	if err != nil {
 		return nil, r.failRun("Failed to initialize Floret model identity", err)
 	}
@@ -233,7 +235,7 @@ func redevenFloretAgentConfig(systemPrompt string, contextPolicy flconfig.Contex
 	}
 }
 
-func redevenFloretGatewayIdentity(providerID string, providerType string, baseURL string, modelName string, route string) (flprovider.Identity, error) {
+func redevenFloretGatewayIdentity(providerID string, providerType string, baseURL string, modelName string, route string, authIdentity ...string) (flprovider.Identity, error) {
 	providerID = strings.TrimSpace(providerID)
 	providerType = strings.ToLower(strings.TrimSpace(providerType))
 	modelName = strings.TrimSpace(modelName)
@@ -245,7 +247,11 @@ func redevenFloretGatewayIdentity(providerID string, providerType string, baseUR
 	if err != nil {
 		return flprovider.Identity{}, err
 	}
-	digest := sha256.Sum256([]byte(strings.Join([]string{providerID, providerType, endpoint, modelName, route}, "\x00")))
+	identity := []string{providerID, providerType, endpoint, modelName, route}
+	if len(authIdentity) > 0 && authIdentity[0] == config.AIAuthChatGPT {
+		identity = append(identity, authIdentity...)
+	}
+	digest := sha256.Sum256([]byte(strings.Join(identity, "\x00")))
 	return flprovider.Identity{
 		Provider:              providerID,
 		Model:                 modelName,

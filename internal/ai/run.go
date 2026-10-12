@@ -25,6 +25,7 @@ import (
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 	"github.com/floegence/redeven/internal/browserinstall"
+	"github.com/floegence/redeven/internal/chatgpt"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/filesystemscope"
 	"github.com/floegence/redeven/internal/logsafe"
@@ -36,6 +37,7 @@ import (
 )
 
 type runOptions struct {
+	ChatGPT               *chatgpt.Client
 	PlatformHTTPTransport func() (http.RoundTripper, error)
 	Log                   *slog.Logger
 	StateDir              string
@@ -109,6 +111,7 @@ type run struct {
 	muPermission       sync.RWMutex
 
 	sessionMeta          *session.Meta
+	chatGPT              *chatgpt.Client
 	resolveProviderKey   func(providerID string) (string, bool, error)
 	resolveWebSearchKey  func(providerID string) (string, bool, error)
 	desktopModelSource   *desktopModelSourceClient
@@ -324,6 +327,7 @@ func newRun(opts runOptions) *run {
 		permissionType:              FlowerPermissionApprovalRequired,
 		sessionMeta:                 runMeta,
 		resolveProviderKey:          opts.ResolveProviderKey,
+		chatGPT:                     opts.ChatGPT,
 		resolveWebSearchKey:         opts.ResolveWebSearchKey,
 		desktopModelSource:          opts.DesktopModelSource,
 		liveMetrics:                 opts.LiveMetrics,
@@ -913,7 +917,7 @@ func (r *run) resolveModelGatewayForModel(modelID string, providerID string, pro
 		providerDisplay = n + " (" + providerID + ")"
 	}
 
-	apiKey, available, err := resolveModelProviderKey(providerCfg.Type, providerID, r.resolveProviderKey)
+	apiKey, available, err := resolveProviderCredential(context.Background(), *providerCfg, r.resolveProviderKey, r.chatGPT)
 	if err != nil {
 		return resolvedRunModelGateway{}, fmt.Errorf("%w: %v", errModelGatewayMissingKey, err)
 	}

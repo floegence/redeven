@@ -22,6 +22,7 @@ import (
 
 	contextadapter "github.com/floegence/redeven/internal/ai/context/adapter"
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
+	"github.com/floegence/redeven/internal/chatgpt"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/logsafe"
 	"github.com/floegence/redeven/internal/runtimeservice"
@@ -98,6 +99,7 @@ type AIRuntimeStatus struct {
 }
 
 type DesktopModelSourceModel struct {
+	BillingSource                 string                        `json:"billing_source,omitempty"`
 	AliasGroup                    string                        `json:"alias_group,omitempty"`
 	Quantization                  string                        `json:"quantization,omitempty"`
 	ID                            string                        `json:"id"`
@@ -1144,7 +1146,7 @@ func (e *desktopModelSourceExecutor) streamTurn(ctx context.Context, frame Deskt
 	if !desktopModelSourceSnapshotHasModel(snapshot, publicModelID) {
 		return ModelGatewayResult{}, errors.New("desktop model is missing its local API key")
 	}
-	apiKey, available, err := resolveModelProviderKey(entry.ProviderCfg.Type, entry.ProviderID, secretStore.GetAIProviderAPIKey)
+	apiKey, available, err := resolveProviderCredential(ctx, entry.ProviderCfg, secretStore.GetAIProviderAPIKey, chatgpt.New(secretStore))
 	if err != nil {
 		return ModelGatewayResult{}, err
 	}
@@ -1155,6 +1157,7 @@ func (e *desktopModelSourceExecutor) streamTurn(ctx context.Context, frame Deskt
 	if err != nil {
 		return ModelGatewayResult{}, err
 	}
+	configureChatGPTAdapter(adapter, entry.ProviderCfg, chatgpt.New(secretStore))
 	req := body.Request
 	req.Model = strings.TrimSpace(entry.WireModelName)
 	result, err := adapter.StreamTurn(ctx, req, func(ev StreamEvent) {
@@ -1239,7 +1242,7 @@ func buildDesktopModelSourceModelSnapshot(cfg *config.AIConfig, secretStore *set
 	if secretStore != nil {
 		resolveKey = secretStore.GetAIProviderAPIKey
 	}
-	resolved, err := resolveModelCatalogs(context.Background(), cfg, resolveKey, "")
+	resolved, err := resolveModelCatalogs(context.Background(), cfg, resolveKey, "", chatgpt.New(secretStore))
 	models, _, _ := configModelViews(resolved)
 	if err != nil && len(models) == 0 {
 		return nil, nil, err
@@ -1273,7 +1276,12 @@ func buildDesktopModelSourceModelSnapshot(cfg *config.AIConfig, secretStore *set
 		keySet := config.AIProviderAPIKeyOptional(p.Type)
 		if secretStore != nil && !keySet {
 			var err error
-			keySet, err = secretStore.HasAIProviderAPIKey(providerID)
+			if p.EffectiveAuthMethod() == config.AIAuthChatGPT {
+				account, ok, e := secretStore.ChatGPTAccount(p.AccountID)
+				keySet, err = ok && account.PlanEnabled(), e
+			} else {
+				keySet, err = secretStore.HasAIProviderAPIKey(providerID)
+			}
 			if err != nil {
 				return nil, nil, err
 			}
@@ -1304,6 +1312,7 @@ func buildDesktopModelSourceModelSnapshot(cfg *config.AIConfig, secretStore *set
 				AliasGroup:                    modelAliasGroup(p, m),
 				Quantization:                  m.Quantization,
 				Label:                         providerName + " / " + firstNonEmpty(m.DisplayName, modelName),
+				BillingSource:                 chatGPTBillingSource(p),
 				Provider:                      providerName,
 				ContextWindow:                 m.ContextWindow,
 				MaxOutputTokens:               m.MaxOutputTokens,
@@ -1368,12 +1377,11 @@ func desktopModelSourceModelCapability(model DesktopModelSourceModel) contextmod
 }
 
 func desktopModelSourcePublicModelID(p config.AIProvider, m config.AIProviderModel) string {
-	sum := sha256.Sum256([]byte(strings.Join([]string{
-		strings.TrimSpace(p.ID),
-		strings.TrimSpace(p.Type),
-		strings.TrimSpace(p.BaseURL),
-		strings.TrimSpace(m.ModelName),
-	}, "\x00")))
+	identity := []string{strings.TrimSpace(p.ID), strings.TrimSpace(p.Type), strings.TrimSpace(p.BaseURL), strings.TrimSpace(m.ModelName)}
+	if p.EffectiveAuthMethod() == config.AIAuthChatGPT {
+		identity = append(identity, config.AIAuthChatGPT, p.AccountID)
+	}
+	sum := sha256.Sum256([]byte(strings.Join(identity, "\x00")))
 	return desktopModelSourceModelIDPrefix + hex.EncodeToString(sum[:])
 }
 
@@ -1581,4 +1589,11 @@ func (s *Service) DisconnectDesktopModelSource() *AIRuntimeStatus {
 		modelSource.Disconnect()
 	}
 	return s.RuntimeStatus(context.Background())
+}
+
+func chatGPTBillingSource(p config.AIProvider) string {
+	if p.EffectiveAuthMethod() == config.AIAuthChatGPT {
+		return "chatgpt_plan"
+	}
+	return ""
 }

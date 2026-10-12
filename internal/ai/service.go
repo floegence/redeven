@@ -18,6 +18,7 @@ import (
 	contextadapter "github.com/floegence/redeven/internal/ai/context/adapter"
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
 	"github.com/floegence/redeven/internal/ai/threadstore"
+	"github.com/floegence/redeven/internal/chatgpt"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/filesystemscope"
 	"github.com/floegence/redeven/internal/logsafe"
@@ -44,6 +45,7 @@ const (
 )
 
 type Options struct {
+	ChatGPT                *chatgpt.Client
 	PlatformHTTPTransport  func() (http.RoundTripper, error)
 	Tessiven               *tessiven.Service
 	TessivenResources      *tessiven.ResourceBackend
@@ -104,6 +106,7 @@ type Options struct {
 }
 
 type Service struct {
+	chatGPT                *chatgpt.Client
 	platformHTTPTransport  func() (http.RoundTripper, error)
 	tessiven               *tessiven.Service
 	tessivenResources      *tessiven.ResourceBackend
@@ -436,6 +439,7 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 		approvalTimeout:                 approvalTO,
 		streamWriteTO:                   streamWTO,
 		resolveProviderKey:              resolveProviderKey,
+		chatGPT:                         opts.ChatGPT,
 		resolveWebSearchKey:             resolveWebSearchKey,
 		toolTargetPolicy:                toolTargetPolicy,
 		targetToolExecutor:              opts.TargetToolExecutor,
@@ -951,7 +955,7 @@ func (s *Service) SetCurrentModelID(modelID string, persist func(next *config.AI
 	s.mu.Lock()
 	cfg := s.cfg
 	s.mu.Unlock()
-	resolved, err := resolveModelCatalogs(context.Background(), cfg, s.resolveProviderKey, modelID)
+	resolved, err := resolveModelCatalogs(context.Background(), cfg, s.resolveProviderKey, modelID, s.chatGPT)
 	if err != nil {
 		return err
 	}
@@ -1108,6 +1112,7 @@ func (s *Service) listModels(cfg *config.AIConfig, sourceSnapshot *DesktopModelS
 				WebSearch:           config.AIWebSearchAvailability{Status: "unavailable", Reason: "not_integrated"},
 				ID:                  modelID,
 				Label:               label,
+				BillingSource:       m.BillingSource,
 				AliasGroup:          m.AliasGroup,
 				Quantization:        m.Quantization,
 				Source:              modelSourceDesktopModelSource,
@@ -1202,6 +1207,7 @@ func configModelView(id string, label string, provider config.AIProvider, m conf
 		WebSearch:                 config.ResolveAIWebSearch(provider, m.EffectiveWireModelName(), false).AIWebSearchAvailability,
 		ID:                        strings.TrimSpace(id),
 		Label:                     strings.TrimSpace(label),
+		BillingSource:             chatGPTBillingSource(provider),
 		Source:                    modelSourceRuntimeConfig,
 		SourceLabel:               modelSourceRuntimeConfigLabel,
 		ContextWindow:             m.EffectiveInputWindowTokens(),
@@ -1520,7 +1526,7 @@ func (s *Service) prepareThreadEffect(meta *session.Meta, executionKey string, r
 		Log:                   s.log, StateDir: s.stateDir, AgentHomeDir: s.agentHomeDir,
 		WorkingDir: workingDir, FilesystemScope: s.scope, Shell: s.shell,
 		HostCapabilities: hostCapabilities, AIConfig: cfg, SessionMeta: metaRef,
-		ResolveProviderKey: s.resolveProviderKey, ResolveWebSearchKey: s.resolveWebSearchKey,
+		ResolveProviderKey: s.resolveProviderKey, ResolveWebSearchKey: s.resolveWebSearchKey, ChatGPT: s.chatGPT,
 		DesktopModelSource: desktopModelSource, ExecutionKey: executionKey,
 		ChannelID: channelID, EndpointID: endpointID, ThreadID: threadID,
 		UserPublicID: strings.TrimSpace(metaRef.UserPublicID), UploadsDir: uploadsDir,
@@ -1631,7 +1637,7 @@ func (s *Service) resolveRunModel(ctx context.Context, cfg *config.AIConfig, req
 		return resolvedRunModel{}, errors.New("missing model")
 	}
 	var catalogErr error
-	cfg, catalogErr = resolveModelCatalogs(ctx, cfg, s.resolveProviderKey, model)
+	cfg, catalogErr = resolveModelCatalogs(ctx, cfg, s.resolveProviderKey, model, s.chatGPT)
 	if catalogErr != nil {
 		return resolvedRunModel{}, catalogErr
 	}

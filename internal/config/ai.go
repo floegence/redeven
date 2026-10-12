@@ -91,6 +91,11 @@ type AIProvider struct {
 	// - "redeven_platform" (global Platform AI Gateway; no local API key)
 	Type string `json:"type"`
 
+	// AuthMethod defaults to API key for existing connections. AccountID is an
+	// opaque local registration reference; credentials never belong to config.
+	AuthMethod string `json:"auth_method,omitempty"`
+	AccountID  string `json:"account_id,omitempty"`
+
 	// BaseURL overrides the provider endpoint (example: "https://api.openai.com/v1").
 	// When empty, provider defaults apply.
 	//
@@ -416,6 +421,9 @@ func (p *AIModelProfile) Validate() error {
 			}
 		}
 
+		if err := provider.ValidateAuthentication(); err != nil {
+			return fmt.Errorf("providers[%d]: %w", i, err)
+		}
 		if err := provider.validateModelSelection(); err != nil {
 			return fmt.Errorf("providers[%d]: %w", i, err)
 		}
@@ -617,4 +625,38 @@ func (c *AIConfig) EffectiveToolRecoveryFailOnRepeatedSignature() bool {
 		return defaultAIToolRecoveryFailOnRepeatedSignature
 	}
 	return *c.ToolRecoveryFailOnRepeatedSignature
+}
+
+const (
+	AIAuthAPIKey  = "api_key"
+	AIAuthChatGPT = "chatgpt"
+)
+
+func (p AIProvider) EffectiveAuthMethod() string {
+	if p.AuthMethod == "" {
+		return AIAuthAPIKey
+	}
+	return p.AuthMethod
+}
+
+func (p AIProvider) ValidateAuthentication() error {
+	switch p.EffectiveAuthMethod() {
+	case AIAuthAPIKey:
+		if p.AccountID != "" {
+			return errors.New("API key connections cannot bind a ChatGPT account")
+		}
+	case AIAuthChatGPT:
+		if p.Type != "openai" || p.BaseURL != "" && p.BaseURL != "https://api.openai.com/v1" {
+			return errors.New("ChatGPT requires the official OpenAI Responses endpoint")
+		}
+		if p.AccountID == "" || strings.ContainsAny(p.AccountID, "/\\\x00\r\n") {
+			return errors.New("missing or invalid ChatGPT account")
+		}
+		if p.ModelSelection == nil || len(p.ModelSelection.CustomModels) != 0 {
+			return errors.New("ChatGPT models must use the reviewed account catalog")
+		}
+	default:
+		return errors.New("unsupported provider authentication method")
+	}
+	return nil
 }

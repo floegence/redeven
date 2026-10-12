@@ -3,7 +3,7 @@ type: Provider Compatibility Review
 title: Provider API and catalog review
 description: Match the shipped model catalog to official APIs, regional endpoints, and released adapter capabilities.
 tags: [ai, models, providers, compatibility]
-timestamp: 2026-10-08T00:00:00Z
+timestamp: 2026-10-12T00:00:00Z
 ---
 
 # Summary
@@ -12,14 +12,14 @@ Redeven owns one model catalog shared by Runtime, Web, Desktop, and the native i
 
 # Reviewed APIs
 
-The 2026-10-03 review covers all existing provider types. Token ceilings describe provider capacity, not a request to increase user budgets. Audio, video, embeddings, and restricted-access specialized models are outside the default Agent directory.
+The 2026-10-12 review covers all existing provider types. Token ceilings describe provider capacity, not a request to increase user budgets. Audio, video, embeddings, and restricted-access specialized models are outside the default Agent directory.
 
 | Provider | Current public Agent models reviewed | Runtime route and constraints |
 | --- | --- | --- |
 | OpenAI | GPT-6 Astra, GPT-6.1 Sol, GPT-6 Sol, GPT-6 Luna | `/v1/responses`; function tools for GPT-6.1 Sol require Responses. Sol/Luna permit `none`; 6.1 Sol and Astra do not. 1,050,000 context and 128,000 output tokens. |
-| Anthropic | Claude Fable 5.1, Opus 5.5, Sonnet 5.5, Haiku 4.5 | `/v1/messages`, API version `2023-06-01`; SDK base is the origin without `/v1`. Opus/Sonnet 5.5 use adaptive thinking with effort, reject manual budgets and `disabled`, and expose 1M context / 128K output. |
+| Anthropic | Claude Fable 5.1, Opus 5.5, Sonnet 5.5, Haiku 5.5 and 4.5 | `/v1/messages`, API version `2023-06-01`; SDK base is the origin without `/v1`. Opus/Sonnet 5.5 use adaptive thinking with effort, reject manual budgets and `disabled`, and expose 1M context / 128K output. |
 | Google | Gemini 3.8 Flash | Supported `/v1beta/openai/chat/completions` with model-specific effort/budget settings and opaque tool thought signatures. Existing directory already includes the current model. |
-| DeepSeek | `deepseek-flash` (V4.1 Flash), `deepseek-v4-pro` | The current published Floret v7.26.0 Responses gateway accepts the new name; the capability was introduced and qualified in v7.19.0. Flash and both official aliases support images, while Pro is text-only. All support off/low/high/max and a 393,216-token output ceiling. Built-in search remains ignored by the provider. |
+| DeepSeek | `deepseek-flash` (V4.1 Flash), `deepseek-v4-pro` | The current published Floret v7.29.2 Responses gateway accepts the new name; the capability was introduced and qualified in v7.19.0. Flash and both official aliases support images, while Pro is text-only. All support off/low/high/max and a 393,216-token output ceiling. Built-in search remains ignored by the provider. |
 | Qwen | Qwen3.8 Max, Flash, Omni Flash | `/compatible-mode/v1/chat/completions`; existing qualified search models use Responses. New Omni Flash is text output with tools and text/image input in Redeven. Qwen3.7 Max/Plus output ceilings rise to 131,072. |
 | Moonshot | Kimi K3, K2.7 Code, K2.6 | `/v1/chat/completions`; K3 requires thinking, supports low/high/max, and accepts `max_completion_tokens` up to 1,048,576 (provider default 131,072). Search for K3 remains unintegrated. |
 | Z.ai | GLM-5.3, GLM-5.3-Flash/FlashX | `/api/paas/v4/chat/completions`; FlashX has 1M context and 128K output, forced thinking with low/high/max. The persisted provider type stays `chatglm`; display branding is Z.ai. |
@@ -33,6 +33,16 @@ The 2026-10-03 review covers all existing provider types. Token ceilings describ
 
 The generated catalog must include only models that have a released adapter, a reviewed endpoint and capability contract, positive provider limits, and a web-search declaration. Catalog metadata is authoritative for selectable model identity and user-visible status. Provider credentials, workspace IDs, regional endpoint choice, and per-thread model selection remain user-owned state. A new supplier model remains unavailable until the released upstream adapter and its replay, tool, image, and reasoning contracts are qualified.
 
+## October catalog refresh
+
+The Floret and Redeven refresh uses the same raw models.dev response, SHA-256
+`a6af79756a8a8efb5fd3144a83bd01f333e503043998d5f26f3c98bf9181d36c`.
+Haiku 5.5 adds 1M context, 128K output, images and adaptive thinking with off
+and a medium default. Both Sonnet 4.5 identifiers use 200K context. Other
+provider capabilities remain unchanged after official-source review.
+[ChatGPT plan authentication](chatgpt-local-authentication.md) discovers the
+account-specific listed inventory and intersects these reviewed capabilities.
+
 ## Endpoint compatibility
 
 Anthropic's SDK appends `v1/messages`. New presets use `https://api.anthropic.com`. The adapter accepts previously saved bases ending in `/v1` or `/v1/` by removing only that terminal version before SDK construction, preserving any proxy path prefix. The original configuration is not rewritten. This prevents `/v1/v1/messages` without changing credential or host selection.
@@ -41,7 +51,7 @@ Qwen now recommends workspace-specific regional domains, for example `https://{W
 
 ## Published-engine adoption
 
-Redeven currently consumes published Floret v7.26.0 with `GOWORK=off`; no sibling
+Redeven currently consumes published Floret v7.29.2 with `GOWORK=off`; no sibling
 dependency or transport copy bypasses the upstream boundary. The DeepSeek catalog
 and alias capability was introduced in Floret v7.19.0 and remains covered by the
 current gateway contract, so that historical release is retained only as adoption
@@ -65,7 +75,7 @@ Runtime owns provider routing and the catalog projection. Floret owns provider-n
 - `redeven:scripts/model-catalog/upstream.json` - Pinned models.dev response projection and original response SHA-256.
 - `redeven:scripts/model-catalog/overrides.json` - Official-source corrections, search declarations, exclusions, and review dates.
 - `redeven:internal/ai/model_gateway.go` - Provider routing and Anthropic base normalization.
-- [Historical Floret v7.19.0](https://github.com/floegence/floret/releases/tag/v7.19.0) - Original DeepSeek catalog and alias capability adoption evidence; current runtime is v7.26.0.
+- [Historical Floret v7.19.0](https://github.com/floegence/floret/releases/tag/v7.19.0) - Original DeepSeek catalog and alias capability adoption evidence; current runtime is v7.29.2.
 - `redeven:internal/ai/model_gateway_deepseek_test.go` - New Flash, aliases, Pro reasoning, image continuation, and historical search replay against the released gateway.
 - `redeven:internal/ai/model_gateway_anthropic_integration_test.go` - Exact Messages path assertion for saved versioned bases.
 - [OpenAI models](https://developers.openai.com/api/docs/models) and [GPT-6.1 Sol](https://developers.openai.com/api/docs/models/gpt-6.1-sol).

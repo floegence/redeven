@@ -174,6 +174,10 @@ func (s *desktopBrowserHandoffStore) mint(loopbackAuthority, forwardID, appPath 
 	if err != nil {
 		return desktopBrowserHandoffMintResponse{}, err
 	}
+	return s.mintAt(authority, cleanForwardID, appURL, cleanPath)
+}
+
+func (s *desktopBrowserHandoffStore) mintAt(authority, cleanForwardID string, appURL *url.URL, cleanPath string) (desktopBrowserHandoffMintResponse, error) {
 	token, err := randomB64u(32)
 	if err != nil {
 		return desktopBrowserHandoffMintResponse{}, fmt.Errorf("generate browser handoff: %w", err)
@@ -253,7 +257,7 @@ func (s *desktopBrowserHandoffStore) authorize(authority, forwardID string, cook
 		return false
 	}
 	for _, cookie := range cookies {
-		if cookie == nil || cookie.Name != appserver.LocalUIPortForwardBrowserSessionCookieName || len(cookie.Value) != len(session.value) {
+		if cookie == nil || cookie.Name != desktopBrowserCookieName(forwardID) || len(cookie.Value) != len(session.value) {
 			continue
 		}
 		if subtle.ConstantTimeCompare([]byte(cookie.Value), []byte(session.value)) == 1 {
@@ -332,7 +336,7 @@ func (s *Server) redeemDesktopBrowserHandoff(w http.ResponseWriter, r *http.Requ
 		return true
 	}
 	http.SetCookie(w, &http.Cookie{
-		Name:     appserver.LocalUIPortForwardBrowserSessionCookieName,
+		Name:     desktopBrowserCookieName(forwardID),
 		Value:    session.value,
 		Path:     "/",
 		Expires:  session.expiresAt,
@@ -343,4 +347,83 @@ func (s *Server) redeemDesktopBrowserHandoff(w http.ResponseWriter, r *http.Requ
 	})
 	http.Redirect(w, r, cleanPath, http.StatusSeeOther)
 	return true
+}
+
+const localRuntimeBrowserMintPath = "/_redeven_desktop/local-runtime-browser-handoff"
+const localRuntimeBrowserCookie = "redeven_local_runtime_host"
+
+func desktopBrowserCookieName(forwardID string) string {
+	if forwardID == "" {
+		return localRuntimeBrowserCookie
+	}
+	return appserver.LocalUIPortForwardBrowserSessionCookieName
+}
+
+// A browser acquires locality only from a one-shot handoff minted by the native
+// owner of this actual local Runtime. Loopback URLs and request headers grant none.
+func (s *Server) handleLocalRuntimeBrowserMint(w http.ResponseWriter, r *http.Request) {
+	if !isTrustedLocalUIBridge(r) || appserver.VerifiedLocalHost(r) == "" {
+		http.Error(w, "verified local host required", http.StatusForbidden)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var body struct {
+		EntryURL string `json:"entry_url"`
+	}
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
+	dec.DisallowUnknownFields()
+	if dec.Decode(&body) != nil || dec.Decode(&struct{}{}) != io.EOF {
+		http.Error(w, "invalid browser entry", 400)
+		return
+	}
+	entry, err := url.Parse(body.EntryURL)
+	if err != nil || entry.User != nil || entry.Fragment != "" || entry.RawQuery != "" || entry.Path != "/" && entry.Path != "/_redeven_proxy/env/" {
+		http.Error(w, "invalid browser entry", 400)
+		return
+	}
+	owned := false
+	for _, address := range s.publicAccessSnapshot().urls {
+		u, e := url.Parse(address)
+		if e == nil && u.Scheme == entry.Scheme && u.Host == entry.Host {
+			owned = true
+		}
+	}
+	if !owned {
+		http.Error(w, "entry does not belong to this Runtime", 400)
+		return
+	}
+	path := entry.EscapedPath()
+	if path == "" {
+		path = "/"
+	}
+	response, err := s.desktopBrowserHandoffs.mintAt(entry.Host, "", entry, path)
+	if err != nil {
+		http.Error(w, "browser entry unavailable", 500)
+		return
+	}
+	// mintAt is shared with HTTP portforward entries; use the actual public scheme.
+	u, _ := url.Parse(response.EntryURL)
+	u.Scheme = entry.Scheme
+	response.EntryURL = u.String()
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+func (s *Server) withLocalRuntimeBrowserAccess(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !isTrustedLocalUIBridge(r) && nativeRuntimeRequest(r) == nil {
+			if s.redeemDesktopBrowserHandoff(w, r, r.Host, "") {
+				return
+			}
+			if s.desktopBrowserHandoffs.authorize(r.Host, "", r.Cookies()) {
+				cookie, _ := r.Cookie(localRuntimeBrowserCookie)
+				r = appserver.WithVerifiedLocalHost(r, cookie.Value)
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
 }

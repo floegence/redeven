@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/floegence/redeven/internal/chatgpt"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 )
@@ -77,7 +78,7 @@ func (s *Service) readModelDirectory(ctx context.Context, meta *session.Meta, ba
 		workers.Add(1)
 		go func() {
 			defer workers.Done()
-			resolved, failures, _ = resolveModelCatalogResults(checkCtx, local, s.resolveProviderKey, "")
+			resolved, failures, _ = resolveModelCatalogResults(checkCtx, local, s.resolveProviderKey, "", s.chatGPT)
 		}()
 		if platformSessionAvailable(meta) {
 			workers.Add(1)
@@ -142,7 +143,7 @@ func (s *Service) projectModelDirectory(cfg *config.AIConfig, out *ModelsRespons
 		}
 		name := firstNonEmpty(p.Name, defaultProviderDisplayName(p), p.ID)
 		source := ModelDirectorySource{ID: p.ID, Kind: modelSourceRuntimeConfig, State: "ready"}
-		dynamic := p.Type == "ollama" || p.Type == "openrouter"
+		dynamic := p.Type == "ollama" || p.Type == "openrouter" || p.EffectiveAuthMethod() == config.AIAuthChatGPT
 		if dynamic && p.ModelSelection != nil && p.ModelSelection.SelectedModels == nil {
 			source.State, source.Reason = "unavailable", "selection_review_required"
 		} else if dynamic && p.ModelSelection != nil && len(p.ModelSelection.SelectedModels) > 0 {
@@ -152,8 +153,18 @@ func (s *Service) projectModelDirectory(cfg *config.AIConfig, out *ModelsRespons
 				source.State, source.Reason = "unavailable", "catalog_unavailable"
 			}
 		}
-		if s.resolveProviderKey != nil {
-			_, ready, keyErr := resolveModelProviderKey(p.Type, p.ID, s.resolveProviderKey)
+		if s.resolveProviderKey != nil || p.EffectiveAuthMethod() == config.AIAuthChatGPT {
+			var ready bool
+			var keyErr error
+			if p.EffectiveAuthMethod() == config.AIAuthChatGPT {
+				if s.chatGPT != nil {
+					var status chatgpt.AccountStatus
+					status, keyErr = s.chatGPT.Status(p.AccountID)
+					ready = status.State == "ready"
+				}
+			} else {
+				_, ready, keyErr = resolveModelProviderKey(p.Type, p.ID, s.resolveProviderKey)
+			}
 			if keyErr != nil {
 				source.State, source.Reason = "unavailable", "credentials_unavailable"
 			} else if !ready {

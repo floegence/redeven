@@ -376,6 +376,7 @@ function mapProvider(provider: NonNullable<AIConfig['providers']>[number]): Flow
     ...(trim(provider.base_url) ? { base_url: trim(provider.base_url) } : {}),
     ...(provider.web_search ? { web_search: { mode: provider.web_search.mode ?? 'disabled' } } : {}),
     model_selection: provider.model_selection,
+    auth_method: provider.auth_method, account_id: provider.account_id,
     models: (provider.models ?? []).map(mapProviderModel).filter(model => model.model_name),
   };
 }
@@ -392,6 +393,8 @@ export function mapRuntimeFlowerSettings(settings: AgentSettingsResponse): Flowe
   const providerSecrets = settings.ai_secrets?.provider_api_key_set ?? {};
   const webSecrets = settings.ai_secrets?.web_search_provider_api_key_set ?? {};
   return {
+    auth_capabilities: settings.auth_capabilities,
+    chatgpt_accounts: settings.chatgpt_accounts,
     defaults: {
       permission_type: normalizePermissionType(ai?.permission_type),
       computer_use_enabled: ai?.computer_use_enabled !== false,
@@ -410,9 +413,11 @@ function draftProviderToAI(provider: FlowerProviderDraft): NonNullable<AIConfig[
 }
 
 export function mapFlowerSettingsDraftToRuntimeBundle(draft: FlowerSettingsDraft): {
+  auth_schema_version: 1;
   model_profile: AIModelProfile;
   provider_api_key_patches: readonly FlowerSecretPatch[];
   web_search_provider_key_patches: readonly FlowerSecretPatch[];
+  chatgpt_attempts: readonly Readonly<{ provider_id: string; attempt_id: string; scope_id: string }>[];
 } {
   const providerAPIKeyPatches: FlowerSecretPatch[] = draft.model_profile.providers.flatMap((provider): FlowerSecretPatch[] => {
     if (provider.provider_api_key === undefined) return [];
@@ -431,10 +436,12 @@ export function mapFlowerSettingsDraftToRuntimeBundle(draft: FlowerSettingsDraft
     return apiKey ? [{ provider_id: providerID, api_key: apiKey }] : [];
   });
   return {
+    auth_schema_version: 1,
     model_profile: {
       current_model_id: trim(draft.model_profile.current_model_id),
       providers: draft.model_profile.providers.map(draftProviderToAI),
     },
+    chatgpt_attempts: draft.model_profile.providers.flatMap(p => p.chatgpt_attempt ? [{ provider_id: p.id, ...p.chatgpt_attempt }] : []),
     provider_api_key_patches: providerAPIKeyPatches,
     web_search_provider_key_patches: webSearchKeyPatches,
   };
@@ -815,6 +822,14 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
     loadSettings,
     loadModelDirectory: resource.loadDirectory,
     subscribeModelDirectory: resource.subscribe,
+    chatGPTAuth: async (action, input) => {
+      const result = await runtimeJSON<Awaited<ReturnType<NonNullable<FlowerSurfaceAdapter['chatGPTAuth']>>>>(bridge, 'POST', `/_redeven_proxy/api/ai/auth/chatgpt/${action}`, input);
+      if (action === 'sign-out') {
+        resource.invalidate();
+        if (options.onSettingsChanged) void Promise.resolve(options.onSettingsChanged()).catch(() => undefined);
+      }
+      return result;
+    },
     discoverProviderModels: (input) => runtimeJSON(bridge, 'POST', '/_redeven_proxy/api/ai/model_catalog', input),
     saveDefaultPermission: async (permissionType) => {
       await runtimeJSON<unknown>(bridge, 'PUT', '/_redeven_proxy/api/ai/default_permission', {

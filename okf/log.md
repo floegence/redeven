@@ -1,5 +1,12 @@
 # Redeven OKF Update Log
 
+## 2026-10-12: Local ChatGPT authentication and catalog refresh
+
+- Add [official ChatGPT authentication](ai/chatgpt-local-authentication.md) to the shared provider dialog with backend-enforced local host admission; remote and unknown settings keep the account option disabled.
+- Share protected rotating credentials between Runtime and Desktop model sources and preserve native Responses history through the published Floret engine.
+- Adopt Floret v7.29.2 and the same pinned models.dev response: add Haiku 5.5 and correct both Sonnet 4.5 context windows to 200K, preserving existing choices.
+- Advance compatibility epoch to 53 and reject old authentication bundle writes.
+
 ## 2026-10-11: Ordered send feedback and direct image reads
 
 - Show unconfirmed delivery in the existing queue dock and dispatch one ordered
