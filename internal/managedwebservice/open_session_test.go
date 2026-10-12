@@ -140,6 +140,7 @@ func TestContainerAndComposeOpenPreserveAppliedNonRootPath(t *testing.T) {
 			if err := manager.waitHealthy(context.Background(), service); err != nil {
 				t.Fatal(err)
 			}
+			manager.prepareSuccessfulOpening(context.Background(), service)
 			spec.Endpoint.Path = "/changed"
 			updateRuntimeResolutionTestTemplate(t, registry, template, spec)
 			session, err := manager.OpenSession(context.Background(), service.ServiceID, OpenSessionRequest{RequestID: "applied-static-opening"})
@@ -162,6 +163,48 @@ func TestContainerAndComposeOpenPreserveAppliedNonRootPath(t *testing.T) {
 			if _, err := manager.OpenSession(context.Background(), service.ServiceID, OpenSessionRequest{RequestID: "corrupt-static-opening"}); managedErrorCode(err) != "SERVICE_OPEN_TARGET_INVALID" {
 				t.Fatalf("corrupt record was replaced from a changed template: %v", err)
 			}
+			// A lifecycle-authorized new launch can replace its unusable cache.
+			manager.prepareSuccessfulOpening(context.Background(), service)
+			session, err = manager.OpenSession(context.Background(), service.ServiceID, OpenSessionRequest{RequestID: "new-launch-after-corrupt-cache"})
+			if err != nil || session.AppPath != "/changed" {
+				t.Fatal("new launch could not recover its private cache", err)
+			}
 		})
+	}
+}
+
+func TestStaticEntranceIsSavedAfterLifecycleIdentityCommit(t *testing.T) {
+	ctx := context.Background()
+	spec := TemplateSpec{SchemaVersion: 7, Kind: DeploymentContainer, Endpoint: WebEndpointSpec{Scheme: "http", Path: "/dashboard?tab=initial#panel", ContainerPort: 3000}, Container: &ContainerTemplateSpec{Image: "example.invalid/app:1"}}
+	manager, registry, service, _ := newRuntimeResolutionTestService(t, spec, ReleaseIdentity{Kind: "oci", Source: "example.invalid/app", Tag: "1", Digest: "sha256:" + strings.Repeat("a", 64)}, "stopped")
+	resolved, err := manager.resolveCurrentRuntime(ctx, service)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secrets, err := manager.serviceSecretDocument(service.ServiceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy := cloneTemplateSpec(resolved.Spec)
+	legacy.SchemaVersion = 6
+	old, err := runtimeSpecDigestDocument(1, legacy, resolved.Configuration, resolved.Release, resolved.Binding, secrets, service)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolved.MatchesApplied = true
+	identity, blank := "verified-instance", old
+	service.RuntimeIdentity, service.RuntimeSpecSHA256 = identity, blank
+	if err := registry.UpdateManagedService(ctx, service.ServiceID, pfregistry.ManagedServicePatch{RuntimeIdentity: &identity, RuntimeSpecSHA256: &blank}); err != nil {
+		t.Fatal(err)
+	}
+	driver := staticOpeningTestDriver{inspectionTestDriver{deploymentDriver: manager.container, inspect: func(context.Context, *pfregistry.ManagedService) (bool, error) { return false, nil }}}
+	manager.container = driver
+	manager.healthCheck = func(context.Context, *pfregistry.ManagedService) error { return nil }
+	if err := manager.runStart(ctx, service, &pfregistry.ManagedOperation{Action: "start"}, driver, resolved); err != nil {
+		t.Fatal(err)
+	}
+	cached, err := manager.readOpeningState(service)
+	if err != nil || cached.AppPath != spec.Endpoint.Path {
+		t.Fatal("healthy launch did not save its applied static entrance", err)
 	}
 }

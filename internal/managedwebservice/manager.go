@@ -1282,7 +1282,11 @@ func (m *Manager) runInstall(ctx context.Context, service *pfregistry.ManagedSer
 	}
 	running, blank := "running", ""
 	service.DesiredState, service.ObservedState = running, running
-	return m.registry.UpdateManagedService(ctx, service.ServiceID, pfregistry.ManagedServicePatch{DesiredState: &running, ObservedState: &running, RuntimeSpecSHA256: &resolved.RuntimeSpecSHA256, LastErrorCode: &blank, LastErrorMessage: &blank})
+	if err := m.registry.UpdateManagedService(ctx, service.ServiceID, pfregistry.ManagedServicePatch{DesiredState: &running, ObservedState: &running, RuntimeSpecSHA256: &resolved.RuntimeSpecSHA256, LastErrorCode: &blank, LastErrorMessage: &blank}); err != nil {
+		return err
+	}
+	m.prepareSuccessfulOpening(ctx, service)
+	return nil
 }
 
 func (m *Manager) runStart(ctx context.Context, service *pfregistry.ManagedService, op *pfregistry.ManagedOperation, driver deploymentDriver, resolved *resolvedRuntime) error {
@@ -1338,7 +1342,12 @@ func (m *Manager) runStart(ctx context.Context, service *pfregistry.ManagedServi
 	}
 	blank := ""
 	service.RuntimeSpecSHA256 = resolved.RuntimeSpecSHA256
-	return m.registry.UpdateManagedService(ctx, service.ServiceID, pfregistry.ManagedServicePatch{ObservedState: &running, RuntimeSpecSHA256: &resolved.RuntimeSpecSHA256, LastErrorCode: &blank, LastErrorMessage: &blank})
+	if err := m.registry.UpdateManagedService(ctx, service.ServiceID, pfregistry.ManagedServicePatch{ObservedState: &running, RuntimeSpecSHA256: &resolved.RuntimeSpecSHA256, LastErrorCode: &blank, LastErrorMessage: &blank}); err != nil {
+		return err
+	}
+	service.ObservedState = running
+	m.prepareSuccessfulOpening(ctx, service)
+	return nil
 }
 
 func (m *Manager) prepareOperationWorkspace(service *pfregistry.ManagedService, op *pfregistry.ManagedOperation) error {
@@ -1766,15 +1775,7 @@ func reserveLoopbackPort() (int, error) {
 	defer listener.Close()
 	return listener.Addr().(*net.TCPAddr).Port, nil
 }
-func (m *Manager) waitHealthy(ctx context.Context, service *pfregistry.ManagedService) (resultErr error) {
-	defer func() {
-		if resultErr == nil {
-			// An entrance failure must never turn a healthy application into a failed start.
-			if launch, err := m.openingLaunch(ctx, service); err == nil {
-				_, _, _ = m.prepareServiceOpening(ctx, service, launch, openingPreparation{NewLaunch: true})
-			}
-		}
-	}()
+func (m *Manager) waitHealthy(ctx context.Context, service *pfregistry.ManagedService) error {
 	if m.healthCheck != nil {
 		return m.healthCheck(ctx, service)
 	}

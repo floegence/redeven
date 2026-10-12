@@ -26,7 +26,7 @@ Current-launch output reads have a 16 MiB total bound and a 64 KiB parser line b
 
 `open-session` observes the applied instance, prepares its entrance through one common owner, checks endpoint availability, and revalidates generation, applied identity, Forward and management state before handoff. Concurrent callers share the work; a cancelled observer does not cancel another caller's hook. An explicit refresh which joined a cached handoff still receives a refreshed result. Closing Runtime cancels outstanding work.
 
-Successful lifecycle health checks attempt the same preparation as a best-effort step. An entrance error remains separate from process health. List and inspection never prepare an entrance or execute opening hooks. Their entrance projection reads only a private result whose generation still verifies.
+After a successful health check and the applied-identity commit, lifecycle owners attempt the same preparation as a best-effort step. An entrance error remains separate from process health. List and inspection never prepare an entrance or execute opening hooks. Their entrance projection reads only a private result whose generation still verifies.
 
 Returned URLs must match the applied protocol, loopback host and actual mapped entrance port, contain no user information, and convert to a valid local path/query. Fixed deep links retain their queries and fragments. Only this relative navigation crosses into the existing authorized proxy; access mode and route admission remain unchanged.
 
