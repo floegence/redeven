@@ -1,5 +1,5 @@
 import type { Accessor, Component } from 'solid-js';
-import { Show, createEffect, createSignal, onCleanup } from 'solid-js';
+import { Show, createEffect, createSignal, on, onCleanup } from 'solid-js';
 import { ChevronDown } from '@floegence/floe-webapp-core/icons';
 
 export type FlowerThinkingDisclosureView = 'preview' | 'expanded' | 'collapsed';
@@ -7,8 +7,9 @@ export type FlowerThinkingDisclosureView = 'preview' | 'expanded' | 'collapsed';
 export type FlowerThinkingDisclosureProps = Readonly<{
   contentID: string;
   content: Accessor<string>;
-  streaming: Accessor<boolean>;
   live: Accessor<boolean>;
+  liveConfirmed: Accessor<boolean>;
+  preserveOnEnd: Accessor<boolean>;
   label: Accessor<string>;
   expandLabel: Accessor<string>;
   collapseLabel: Accessor<string>;
@@ -23,15 +24,18 @@ export const FlowerThinkingDisclosure: Component<FlowerThinkingDisclosureProps> 
   const [view, setView] = createSignal<FlowerThinkingDisclosureView>('collapsed');
   const [overflowing, setOverflowing] = createSignal(false);
   let viewport: HTMLDivElement | undefined;
-  let previousActive = false;
+  let toggleButton: HTMLButtonElement | undefined;
   const contentID = `flower-thinking-content-${safeContentID(props.contentID)}`;
-  const active = () => props.streaming() || props.live();
+  const active = () => props.live() && props.liveConfirmed();
+  const collapse = () => {
+    if (viewport?.contains(document.activeElement)) toggleButton?.focus({ preventScroll: true });
+    setView('collapsed');
+  };
 
-  createEffect(() => {
-    const isActive = active();
-    if (isActive && !previousActive && view() !== 'expanded') setView('preview');
-    previousActive = isActive;
-  });
+  createEffect(on(props.live, (isLive, wasLive) => {
+    if (isLive) setView('preview');
+    else if (wasLive && !props.preserveOnEnd()) collapse();
+  }));
 
   createEffect(() => {
     props.content();
@@ -50,11 +54,12 @@ export const FlowerThinkingDisclosure: Component<FlowerThinkingDisclosureProps> 
   });
 
   const toggle = () => {
-    if (active()) {
+    if (props.live()) {
       setView((current) => current === 'expanded' ? 'preview' : 'expanded');
       return;
     }
-    setView((current) => current === 'expanded' ? 'collapsed' : 'expanded');
+    if (view() === 'expanded') collapse();
+    else setView('expanded');
   };
 
   return (
@@ -65,6 +70,7 @@ export const FlowerThinkingDisclosure: Component<FlowerThinkingDisclosureProps> 
       data-flower-thinking-active={active() ? 'true' : 'false'}
     >
       <button
+        ref={toggleButton}
         type="button"
         class="flower-thinking-toggle"
         aria-controls={contentID}

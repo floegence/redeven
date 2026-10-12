@@ -269,6 +269,7 @@ export const flowerSurfaceEnUS = {
       minute: { one: '{count} minute', other: '{count} minutes' },
       second: { one: '{count} second', other: '{count} seconds' },
     },
+    thinkingLabel: 'Thought process',
     expandThinking: 'Expand full thinking',
     collapseThinking: 'Collapse thinking',
     modelStatusPreparing: 'Preparing model request...',

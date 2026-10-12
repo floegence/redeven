@@ -385,6 +385,7 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
         minute: (count) => i18n.tn(k('chat.turnProcess.minute'), count, { count: new Intl.NumberFormat(i18n.locale).format(count) }),
         second: (count) => i18n.tn(k('chat.turnProcess.second'), count, { count: new Intl.NumberFormat(i18n.locale).format(count) }),
       },
+      thinkingLabel: t(i18n, k('chat.thinkingLabel')),
       expandThinking: t(i18n, k('chat.expandThinking')),
       collapseThinking: t(i18n, k('chat.collapseThinking')),
       toolStatuses: {

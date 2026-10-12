@@ -5362,6 +5362,7 @@
       "stopUnconfirmed": "停止を送信しましたが、状態は未同期です。再同期して確認してください。",
       "syncTimeout": "同期が15秒でタイムアウトしました。再試行してください。",
       "composerErrorTitle": "Flower は送信できませんでした。",
+      "thinkingLabel": "思考過程",
       "expandThinking": "思考をすべて展開",
       "collapseThinking": "思考を折りたたむ",
       "modelStatusPreparing": "モデルリクエストを準備中...",

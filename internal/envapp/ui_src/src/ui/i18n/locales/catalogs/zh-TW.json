@@ -5362,6 +5362,7 @@
       "stopUnconfirmed": "停止已提交，狀態尚未同步。請重新同步以確認。",
       "syncTimeout": "同步在 15 秒後逾時，請重試。",
       "composerErrorTitle": "Flower 傳送失敗。",
+      "thinkingLabel": "思考過程",
       "expandThinking": "展開完整思考",
       "collapseThinking": "收起思考",
       "modelStatusPreparing": "正在準備模型請求...",

@@ -9684,10 +9684,20 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     streaming: Accessor<boolean>,
     failed: Accessor<boolean>,
     copyAction: Accessor<JSX.Element | null>,
+    thread: Accessor<FlowerThreadSnapshot | null | undefined>,
   ) => {
     const markdown = createMemo(() => block().block_type === 'markdown');
     const thinking = createMemo(() => block().block_type === 'thinking');
-    const thinkingLive = createMemo(() => livePresentationConfirmed() && thinking() && message().live === true);
+    const thinkingLive = createMemo(() => thinking() && message().live === true);
+    const thinkingEndsAbnormally = createMemo(() => {
+      const currentThread = thread();
+      const currentMessage = message();
+      if (!currentThread || currentMessage.thread_id !== currentThread.thread_id) return false;
+      const turn = currentThread.turns?.find(candidate => candidate.turn_id === currentMessage.turn_id);
+      if (turn && turn.run_id === currentMessage.run_id && turn.outcome && turn.outcome !== 'completed') return true;
+      const cancellation = currentThread.cancellation;
+      return cancellation != null && cancellation.turn_id === currentMessage.turn_id && cancellation.run_id === currentMessage.run_id;
+    });
     const assistantCopyLayout = createMemo(() => message().role === 'assistant' && block().block_type !== 'thinking');
     const ContentBody: Component = () => (
       <Show
@@ -9749,9 +9759,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         <FlowerThinkingDisclosure
           contentID={block().key}
           content={() => block().content}
-          streaming={streaming}
           live={thinkingLive}
-          label={() => trimString(copy().chat.modelStatus.streaming) || 'Thinking...'}
+          liveConfirmed={livePresentationConfirmed}
+          preserveOnEnd={thinkingEndsAbnormally}
+          label={() => thinkingLive() && livePresentationConfirmed() ? copy().chat.modelStatus.streaming : copy().chat.thinkingLabel}
           expandLabel={() => copy().chat.expandThinking}
           collapseLabel={() => copy().chat.collapseThinking}
           contentBody={ContentBody}
@@ -9907,6 +9918,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     copyText: Accessor<string>,
     assistantCopyBlockKey: Accessor<string>,
     viewportScope: FlowerScrollTailController,
+    thread: Accessor<FlowerThreadSnapshot | null | undefined>,
   ) => {
     const activity = createMemo(() => block().type === 'activity' ? block() as Extract<FlowerRenderableMessageBlock, { type: 'activity' }> : null);
     const content = createMemo(() => block().type === 'content' ? block() as Extract<FlowerRenderableMessageBlock, { type: 'content' }> : null);
@@ -9937,7 +9949,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     : null;
                 };
                 const streaming = () => streamingBlockKey() === contentBlock().key;
-                return messageContentBubble(message, contentBlock, streaming, failed, copyAction);
+                return messageContentBubble(message, contentBlock, streaming, failed, copyAction, thread);
               }}
           </Show>
         )}
@@ -9955,6 +9967,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const messageEntry = (
     entry: Accessor<Extract<FlowerTimelineEntry, { type: 'message' }>>,
     viewportScope: FlowerScrollTailController,
+    thread: Accessor<FlowerThreadSnapshot | null | undefined>,
   ) => {
     const message = createMemo(() => entry().message);
     const activeCursor = createMemo(() => (
@@ -10092,6 +10105,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                           copyText,
                           assistantCopyBlockKey,
                           viewportScope,
+                          thread,
                         )}
                       </Show>
                     );
@@ -10326,12 +10340,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const timelineEntry = (
     entry: Accessor<FlowerTimelineEntry>,
     viewportScope: FlowerScrollTailController,
+    thread: Accessor<FlowerThreadSnapshot | null | undefined>,
   ) => {
     switch (entry().type) {
       case 'message':
         return messageEntry(
           () => entry() as Extract<FlowerTimelineEntry, { type: 'message' }>,
           viewportScope,
+          thread,
         );
       case 'queued_turn':
         return queuedTurnEntry(() => entry() as Extract<FlowerTimelineEntry, { type: 'queued_turn' }>);
@@ -10566,11 +10582,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       error={subagentDetailError()}
       detailAvailable={Boolean(subagentDetailThread())}
       entries={subagentDetailTimelineEntries()}
-      renderEntry={(entry) => timelineEntry(entry, subagentDetailScroll)}
+      renderEntry={(entry) => timelineEntry(entry, subagentDetailScroll, subagentDetailThread)}
       renderTimeline={() => <FlowerTurnTimeline thread={subagentDetailThread()} entries={subagentDetailTimelineEntries()}
         runtimeID={props.adapter.runtime.runtime_id} scope="subagent" choices={turnDisclosureChoices}
         scroll={subagentDetailScroll} reducedMotion={reducedMotionPreferred} copy={copy().chat.turnProcess}
-        renderEntry={(entry) => timelineEntry(entry, subagentDetailScroll)} />}
+        renderEntry={(entry) => timelineEntry(entry, subagentDetailScroll, subagentDetailThread)} />}
       bindScroll={bindSubagentDetailViewport}
       onScroll={subagentDetailScroll.onScroll}
       onWheel={subagentDetailScroll.onWheel}
@@ -12174,7 +12190,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               <FlowerTurnTimeline thread={selectedThread()} entries={visibleTimelineEntries()}
                 runtimeID={props.adapter.runtime.runtime_id} scope="main" choices={turnDisclosureChoices}
                 scroll={transcriptScroll} reducedMotion={reducedMotionPreferred} copy={copy().chat.turnProcess}
-                renderEntry={(entry) => timelineEntry(entry, transcriptScroll)} />
+                renderEntry={(entry) => timelineEntry(entry, transcriptScroll, selectedThread)} />
               {threadLevelApprovalPanel()}
             </Show>
           </div>

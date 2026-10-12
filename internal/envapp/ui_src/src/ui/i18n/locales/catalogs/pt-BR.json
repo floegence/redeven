@@ -5362,6 +5362,7 @@
       "stopUnconfirmed": "A solicitação de parar foi enviada; o estado ainda não foi sincronizado. Sincronize novamente para confirmar.",
       "syncTimeout": "A sincronização excedeu o limite de 15 segundos. Tente novamente.",
       "composerErrorTitle": "O Flower não pôde enviar.",
+      "thinkingLabel": "Raciocínio",
       "expandThinking": "Expandir todo o raciocínio",
       "collapseThinking": "Recolher o raciocínio",
       "modelStatusPreparing": "Preparando solicitação ao modelo...",

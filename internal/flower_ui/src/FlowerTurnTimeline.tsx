@@ -69,7 +69,7 @@ export function FlowerTurnTimeline(props: Readonly<{
       if (!row) return false;
       if (row.contains(document.activeElement) || gestureTarget && row.contains(gestureTarget)) return true;
       if (menuOwner === turnID && document.querySelector('[role="menu"]')) return true;
-      if (row.querySelector('details[open], [data-flower-thinking-view="expanded"]')) return true;
+      if (row.querySelector('details[open]')) return true;
       for (const button of row.querySelectorAll('[aria-expanded="true"]')) {
         if (!button.closest('.flower-thinking-disclosure')) return true;
       }

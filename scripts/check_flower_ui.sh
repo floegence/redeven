@@ -86,6 +86,7 @@ main() {
       src/ui/flower/activityDisclosure.test.ts \
       src/ui/flower/flowerScrollInteraction.test.ts \
       src/ui/flower/SubagentDetailWindow.test.tsx \
+      src/ui/flower/FlowerThinkingDisclosure.test.tsx \
       src/ui/flower/envLocalFlowerSurfaceAdapter.test.ts \
       src/ui/pages/settings/modelSelection.test.ts \
       src/ui/pages/settings/FlowerProviderDialog.test.tsx \
@@ -181,6 +182,7 @@ main() {
         src/ui/FlowerSurface.streamingStability.browser.test.tsx \
         src/ui/FlowerSurface.liveRecovery.browser.test.tsx \
         src/ui/FlowerSurface.turnProcess.browser.test.tsx \
+        src/ui/FlowerSurface.thinkingDisclosure.browser.test.tsx \
         src/ui/FlowerMarkdown.streamingStability.browser.test.tsx \
         src/ui/FlowerMarkdown.highlight.browser.test.tsx \
         src/ui/FlowerStatusAndThreadMenu.browser.test.tsx \
