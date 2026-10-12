@@ -578,13 +578,7 @@
         "searchPlaceholder": "会話を検索...",
         "newConversation": "新しい会話",
         "empty": "一致する会話はありません",
-        "queued": "キュー済み",
-        "groups": {
-          "attention": "対応が必要",
-          "working": "作業中",
-          "pinned": "固定済み",
-          "recent": "最近の会話"
-        }
+        "queued": "キュー済み"
       }
     },
     "commandPalette": {

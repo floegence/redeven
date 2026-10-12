@@ -84,6 +84,7 @@ it('marks the standalone canvas toolbar as the native titlebar drag surface', as
 });
 
 it('creates immediately, delegates edits to Flower, and follows current versions without changing history', async () => {
+  let readPage = (): Readonly<Record<string, unknown>> => ({});
   await page.viewport(1200, 800);
   createHost();
   const ask = vi.fn(canvasFlowerAdapter().launchTurn);
@@ -147,6 +148,7 @@ it('creates immediately, delegates edits to Flower, and follows current versions
         canWrite
         transport={transport}
         renderFlower={surface => <CanvasFlowerTestSurface {...surface} adapter={{ ...canvasFlowerAdapter(), launchTurn: ask }} />}
+        registerPageContext={read => { readPage = read; }}
         onOpenFlower={() => {}}
         onOpenService={() => {}}
       />
@@ -166,6 +168,8 @@ it('creates immediately, delegates edits to Flower, and follows current versions
     )
     .toBeVisible();
   expect(document.querySelector('.tessiven-dialog')).toBeNull();
+  expect(readPage()).toMatchObject({ canvas_id: 'commerce', version: 1 });
+  expect(readPage()).not.toHaveProperty('document');
   expect(
     request.mock.calls.filter(([method]) => method === 'POST'),
   ).toHaveLength(1);

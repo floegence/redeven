@@ -34,6 +34,13 @@ Redeven owns one stable product Portal around exactly one `EnvAIPage`. That owne
 
 ## Contextual Ask Flower
 
+New companion conversations can include the desktop Activity origin page through
+the read-only page reader selected by Shell's current Activity ID. Capture timing,
+frozen chips, removal and strict admission belong to
+[Activity origin page references](flower-page-context.md). This adds no context
+state owner to Shell and does not extend Workbench, mobile, standalone windows or
+the separate Ask Flower launcher.
+
 [Ask Flower window boundaries](ask-flower-window.md) owns Header avoidance,
 constrained resizing, and the launcher's disabled maximization.
 

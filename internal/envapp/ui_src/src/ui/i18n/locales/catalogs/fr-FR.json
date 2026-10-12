@@ -578,13 +578,7 @@
         "searchPlaceholder": "Rechercher des conversations...",
         "newConversation": "Nouvelle conversation",
         "empty": "Aucune conversation correspondante",
-        "queued": "En attente",
-        "groups": {
-          "attention": "Action requise",
-          "working": "En cours",
-          "pinned": "Épinglées",
-          "recent": "Récentes"
-        }
+        "queued": "En attente"
       }
     },
     "commandPalette": {

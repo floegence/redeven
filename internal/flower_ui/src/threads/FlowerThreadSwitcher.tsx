@@ -5,14 +5,7 @@ import { Plus, Search } from '@floegence/floe-webapp-core/icons';
 
 import type { FlowerThreadListCopy } from '../copy';
 import type { FlowerCompanionThreadListItem } from '../flowerCompanionPresence';
-import { filterFlowerThreadItems, flowerThreadIndicator, groupFlowerThreadItems } from './threadListModel';
-
-export type FlowerThreadSwitcherGroupKind = 'attention' | 'working' | 'pinned' | 'recent';
-
-export type FlowerThreadSwitcherGroup = Readonly<{
-  kind: FlowerThreadSwitcherGroupKind;
-  threads: readonly FlowerCompanionThreadListItem[];
-}>;
+import { filterFlowerThreadItems, flowerThreadIndicator, groupFlowerThreadItems, type FlowerThreadGroup } from './threadListModel';
 
 export type FlowerThreadSwitcherCopy = Readonly<{
   label: string;
@@ -20,11 +13,8 @@ export type FlowerThreadSwitcherCopy = Readonly<{
   newConversation: string;
   empty: string;
   queued: string;
-  groups: Readonly<Record<FlowerThreadSwitcherGroupKind, string>>;
   threadList: FlowerThreadListCopy;
 }>;
-
-const GROUP_ORDER: readonly FlowerThreadSwitcherGroupKind[] = ['attention', 'working', 'pinned', 'recent'];
 
 function queuedTurnCount(item: FlowerCompanionThreadListItem): number {
   return Number.isFinite(item.queued_turn_count) ? Math.max(0, Number(item.queued_turn_count)) : 0;
@@ -33,36 +23,8 @@ function queuedTurnCount(item: FlowerCompanionThreadListItem): number {
 export function groupFlowerThreadSwitcherItems(
   items: readonly FlowerCompanionThreadListItem[],
   query: string,
-  copy: FlowerThreadListCopy,
-): FlowerThreadSwitcherGroup[] {
-  const filtered = filterFlowerThreadItems(items, query);
-  const ordered = groupFlowerThreadItems(filtered).flatMap((group) => group.threads);
-  const seen = new Set<string>();
-  const groups: Record<FlowerThreadSwitcherGroupKind, FlowerCompanionThreadListItem[]> = {
-    attention: [],
-    working: [],
-    pinned: [],
-    recent: [],
-  };
-
-  for (const item of ordered) {
-    if (seen.has(item.thread_id)) continue;
-    seen.add(item.thread_id);
-    const indicator = flowerThreadIndicator(item, false, copy);
-    if (indicator.actionRequired) {
-      groups.attention.push(item);
-    } else if (indicator.visual === 'wave' || queuedTurnCount(item) > 0) {
-      groups.working.push(item);
-    } else if (item.pinned) {
-      groups.pinned.push(item);
-    } else {
-      groups.recent.push(item);
-    }
-  }
-
-  return GROUP_ORDER
-    .filter((kind) => groups[kind].length > 0)
-    .map((kind) => ({ kind, threads: groups[kind] }));
+): FlowerThreadGroup[] {
+  return groupFlowerThreadItems(filterFlowerThreadItems(items, query));
 }
 
 function fmtUpdatedTime(ms: number, copy: FlowerThreadListCopy): string {
@@ -97,7 +59,7 @@ export const FlowerThreadSwitcher: Component<FlowerThreadSwitcherProps> = (props
   const listboxID = `flower-thread-switcher-list-${uid}`;
   let searchRef: HTMLInputElement | undefined;
   let mounted = true;
-  const groups = createMemo(() => groupFlowerThreadSwitcherItems(props.items, props.query, props.copy.threadList));
+  const groups = createMemo(() => groupFlowerThreadSwitcherItems(props.items, props.query));
   const threadByID = createMemo(() => new Map(groups().flatMap((group) => group.threads).map((item) => [item.thread_id, item] as const)));
   const optionKeys = createMemo(() => ['new', ...groups().flatMap((group) => group.threads.map((item) => item.thread_id))]);
   const [highlightedKey, setHighlightedKey] = createSignal('new');
@@ -157,7 +119,7 @@ export const FlowerThreadSwitcher: Component<FlowerThreadSwitcherProps> = (props
     }
   };
 
-  const rowMeta = (item: FlowerCompanionThreadListItem, groupKind: FlowerThreadSwitcherGroupKind): string => {
+  const rowMeta = (item: FlowerCompanionThreadListItem, groupKind: FlowerThreadGroup['kind']): string => {
     const indicator = flowerThreadIndicator(item, props.activeThreadID === item.thread_id, props.copy.threadList);
     if (indicator.actionRequired || indicator.visual === 'wave') return indicator.title;
     if (queuedTurnCount(item) > 0) return props.copy.queued;
@@ -223,11 +185,12 @@ export const FlowerThreadSwitcher: Component<FlowerThreadSwitcherProps> = (props
         )}>
           <For each={groups()}>
             {(group) => {
-              const labelID = `flower-thread-switcher-group-${uid}-${group.kind}`;
+              const groupKey = group.kind === 'pinned' ? 'pinned' : group.group;
+              const labelID = `flower-thread-switcher-group-${uid}-${groupKey}`;
               return (
                 <section role="group" aria-labelledby={labelID} class="mt-1.5 first:mt-1">
                   <h3 id={labelID} class="px-2 pb-1 pt-1 text-[10px] font-semibold tracking-normal text-muted-foreground">
-                    {props.copy.groups[group.kind]}
+                    {group.kind === 'pinned' ? props.copy.threadList.pinnedGroup : props.copy.threadList.groups[group.group]}
                   </h3>
                   <For each={group.threads}>
                     {(item) => {
@@ -241,7 +204,7 @@ export const FlowerThreadSwitcher: Component<FlowerThreadSwitcherProps> = (props
                           role="option"
                           aria-selected={props.activeThreadID === item.thread_id ? 'true' : 'false'}
                           data-flower-thread-switcher-thread={item.thread_id}
-                          data-flower-thread-switcher-group={group.kind}
+                          data-flower-thread-switcher-group={groupKey}
                           data-highlighted={highlighted() ? 'true' : 'false'}
                           tabIndex={-1}
                           class={cn(

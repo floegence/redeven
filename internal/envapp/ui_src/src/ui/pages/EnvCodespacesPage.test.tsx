@@ -506,7 +506,8 @@ describe('EnvCodespacesPage', () => {
   });
 
   it('preserves the same card node after a fresh response updates that codespace', async () => {
-    const dispose = render(() => <EnvCodespacesPage />, host);
+    let readPage = (): Readonly<Record<string, unknown>> | undefined => undefined;
+    const dispose = render(() => <EnvCodespacesPage registerPageContext={read => { readPage = read; }} />, host);
     await flushPage();
     const card = host.querySelector('[data-testid="codespace-card"]');
     const original = localApiMocks.fetchLocalApiJSON.getMockImplementation()!;
@@ -518,6 +519,7 @@ describe('EnvCodespacesPage', () => {
     await flushPage();
     expect(controlText(host)).toContain('Renamed Space');
     expect(host.querySelector('[data-testid="codespace-card"]')).toBe(card);
+    expect(readPage()).toEqual({ view: 'codespaces' });
     dispose();
   });
 

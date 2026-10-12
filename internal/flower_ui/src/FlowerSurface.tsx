@@ -208,6 +208,7 @@ import {
   type FlowerComposerDraftSession,
   type FlowerComposerDraftSnapshot,
   type FlowerComposerDraftValue,
+  type FlowerPageContextSnapshot,
 } from './composer/createFlowerComposerDraftCoordinator';
 import {
   createFlowerComposerAutosizeController,
@@ -628,6 +629,8 @@ export type FlowerConversationParts = Readonly<{
 export type FlowerSurfaceProps = Readonly<{
   adapter: FlowerSurfaceAdapter;
   embeddedConversation?: FlowerEmbeddedConversation;
+  /** Read and freeze the current host page for a new draft only. */
+  captureNewConversationContext?: () => FlowerPageContextSnapshot | undefined;
   filesystemScopeKey?: string;
   filesystemScrollViewportProps?: JSX.HTMLAttributes<HTMLDivElement>;
   approvalScrollViewportProps?: Omit<JSX.HTMLAttributes<HTMLDivElement>, 'style'> & { style?: JSX.CSSProperties } & Readonly<Record<`data-${string}`, string>>;
@@ -1820,6 +1823,19 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       controller: attachmentControllerFor(sessionKey),
     };
   };
+  const capturePageContext = (sessionKey = currentComposerSessionKey()) => {
+    if (selectedThreadID() || props.embeddedConversation || !isPendingDraftKey(sessionKey)) return;
+    const session = draftSessionFor(sessionKey);
+    if (session.snapshot().value.page_context_captured) return;
+    const snapshot = props.captureNewConversationContext?.();
+    session.mutate(value => ({
+      ...value,
+      page_context_captured: true,
+      references: snapshot ? [...value.references, {
+        ...snapshot, kind: 'page_context' as const, local_id: secureRandomUUID(),
+      }] : value.references,
+    }));
+  };
   const queueComposerAttachmentIntent = (
     sessionKey: string,
     intent: ComposerAttachmentIntent,
@@ -1830,6 +1846,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       controller: attachmentControllerFor(sessionKey),
     };
     if (draftSubmissionActive(operation.session.snapshot().value)) return;
+    if (intent.kind === 'add' && intent.files.length > 0) capturePageContext(sessionKey);
     batch(() => {
       operation.controller.batch(() => {
         if (intent.kind === 'add') operation.controller.addFiles(intent.files, intent.source);
@@ -5252,7 +5269,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         return;
       }
       const frozenReferences = frozenDraft.references;
-      if (!prompt && attachmentIDs.length === 0 && frozenReferences.length === 0) {
+      if (!prompt && attachmentIDs.length === 0 && !frozenReferences.some(reference => reference.kind !== 'page_context')) {
         notifyComposerError(copy().chat.enterMessageBeforeSending);
         return;
       }
@@ -5272,24 +5289,20 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         }
         if (!submissionCurrent()) return;
         if (!submissionCurrent()) return;
+        const referenceItems: ContextActionEnvelope['context'] = frozenReferences.map(reference => reference.kind === 'page_context'
+          ? { kind: 'text_snapshot', title: reference.title, content: reference.content }
+          : { kind: 'file_path', path: reference.path, is_directory: reference.kind === 'directory' });
         const contextAction: ContextActionEnvelope | undefined = frozenContextAction
-          ? { ...frozenContextAction, context: [...frozenContextAction.context, ...frozenReferences.map(reference => ({
-              kind: 'file_path' as const, path: reference.path, is_directory: reference.kind === 'directory',
-            }))] }
-          : frozenReferences.length > 0 ? {
+          ? { ...frozenContextAction, context: [...frozenContextAction.context, ...referenceItems] }
+          : referenceItems.length > 0 ? {
             schema_version: CONTEXT_ACTION_SCHEMA_VERSION,
             action_id: 'assistant.ask.flower',
             provider: 'flower',
             target: { target_id: 'current', locality: 'auto' },
             source: { surface: 'flower_composer' },
-            context: frozenReferences.map((reference) => ({
-              kind: 'file_path' as const,
-              path: reference.path,
-              is_directory: reference.kind === 'directory',
-            })),
+            context: referenceItems,
             presentation: { label: copy().chat.titleFallback, priority: 100 },
-          }
-          : undefined;
+          } : undefined;
         // Capture only for this explicit submission. Transport retries retain
         // their original generation, so restored data cannot replay old input.
         const storageGeneration = await props.adapter.resolveStorageGeneration?.();
@@ -5477,7 +5490,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
   };
 
-  const startCompose = () => {
+  const resetCompose = () => {
     setThreadNavigationOpen(false);
     const requestID = trimString(props.focusThreadRequest?.request_id);
     if (requestID) props.onFocusThreadRequestConsumed?.(requestID);
@@ -5504,10 +5517,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 		inputDrafts: {},
 		activeInputQuestionID: '',
 	}));
+    draftSessionFor(pendingDraftKey()).mutate(value => ({ ...value, page_context_captured: false }));
 		setThreadLoadError('');
     requestComposerFocus();
     void resolveHandlerDecision();
     returnToChat();
+  };
+
+  const startCompose = () => {
+    resetCompose();
+    capturePageContext();
   };
 
   const retireThreadLocally = (threadID: string) => {
@@ -5531,7 +5550,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     setPendingModelPatch((current) => current?.threadID === tid ? null : current);
 
     if (retiringSelected) {
-      startCompose();
+      resetCompose();
     } else {
       requestComposerFocus();
     }
@@ -6716,6 +6735,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       updateInputText(waitingQuestion, value);
       return;
     }
+    if (value) capturePageContext();
     updateComposerSessionText(currentComposerSessionKey(), value);
   };
 
@@ -7118,6 +7138,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   });
   const composerReferences = createMemo(() => currentComposerSessionDraft().references);
   const composerHasReferences = createMemo(() => composerReferences().length > 0);
+  const composerHasExplicitReferences = createMemo(() => composerReferences().some(reference => reference.kind !== 'page_context'));
+  const [pageContextPreviewID, setPageContextPreviewID] = createSignal('');
+  const pageContextPreview = createMemo(() => composerReferences().find((reference): reference is Extract<FlowerComposerDraftReference, { kind: 'page_context' }> => reference.local_id === pageContextPreviewID() && reference.kind === 'page_context'));
+
   type CompanionEntry = Readonly<{
     kind: 'pending' | 'status' | 'editor' | 'inspect';
     targetThreadID: string;
@@ -7316,9 +7340,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
   };
 
+  const composerReferenceRemovalAllowed = createMemo(() => composerAttachmentEditingAllowed() && !composerTextareaDisabled());
   const composerReferenceEditingAllowed = createMemo(() => (
-    composerAttachmentEditingAllowed()
-    && !composerTextareaDisabled()
+    composerReferenceRemovalAllowed()
     && Boolean(displayedWorkingDirectory())
     && composerReferenceIndex !== null
   ));
@@ -7419,6 +7443,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const commitComposerReference = async (candidate: FlowerComposerReferenceCandidate) => {
     if (!beginComposerReferenceMutation()) return;
     try {
+      capturePageContext();
       const localDraft = currentComposerSessionDraft();
       const selection = composerRef instanceof HTMLTextAreaElement
         ? { start: composerRef.selectionStart, end: composerRef.selectionEnd }
@@ -7446,12 +7471,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const before = operation.session.snapshot();
       if (before.value.text !== localDraft.chatDraft) return;
       const existing = before.value.references.some((reference) => (
-        `${reference.kind}\0${normalizeFlowerComposerReferencePath(reference.path)}` === identity
+        reference.kind !== 'page_context' && `${reference.kind}\0${normalizeFlowerComposerReferencePath(reference.path)}` === identity
       ));
       const result = operation.session.mutate((value) => {
         if (value.text !== localDraft.chatDraft) return value;
         const alreadyExists = value.references.some((reference) => (
-          `${reference.kind}\0${normalizeFlowerComposerReferencePath(reference.path)}` === identity
+          reference.kind !== 'page_context' && `${reference.kind}\0${normalizeFlowerComposerReferencePath(reference.path)}` === identity
         ));
         return {
           ...value,
@@ -7717,7 +7742,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (composerTextOverLimit() && !currentAttachmentSnapshot().capability?.supports_long_text) return true;
     if (selectedThreadCanStop() && !composerTextOverLimit() && !composerHasAttachments() && !composerHasReferences()) return false;
     const hasSendableText = composerTextOverLimit() ? composerChatDraftHasRawText() : Boolean(composerChatDraftText());
-    return !readyForChat() || !handlerAllowsSubmitIntent() || (!hasSendableText && !composerHasReadyAttachments() && !composerHasReferences());
+    return !readyForChat() || !handlerAllowsSubmitIntent() || (!hasSendableText && !composerHasReadyAttachments() && !composerHasExplicitReferences());
   });
   const composerPrimaryActionLoading = createMemo(() => selectedThreadStopPending() || composerSendPreparing());
 
@@ -11642,13 +11667,21 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                         <div
                           class="flower-composer-reference-chip"
                           role="listitem"
-                          title={reference.path}
+                          title={reference.kind === 'page_context' ? reference.title : reference.path}
                           data-reference-kind={reference.kind}
                         >
-                          <span class="flower-composer-reference-chip-icon" aria-hidden="true">
-                            <FileItemIcon size={18} item={{ name: reference.label, type: reference.kind === 'directory' ? 'folder' : 'file' }} class="size-[18px] shrink-0" />
-                          </span>
-                          <span class="flower-composer-reference-chip-label">{reference.label}</span>
+                          <Show when={reference.kind === 'page_context'} fallback={<>
+                            <span class="flower-composer-reference-chip-icon" aria-hidden="true">
+                              <FileItemIcon size={18} item={{ name: reference.label, type: reference.kind === 'directory' ? 'folder' : 'file' }} class="size-[18px] shrink-0" />
+                            </span>
+                            <span class="flower-composer-reference-chip-label">{reference.label}</span>
+                          </>}>
+                            <button type="button" class="flower-composer-reference-chip-preview" title={reference.label}
+                              onClick={() => setPageContextPreviewID(reference.local_id)}>
+                              <FileText class="size-[18px] shrink-0" aria-hidden="true" />
+                              <span class="flower-composer-reference-chip-label">{reference.label}</span>
+                            </button>
+                          </Show>
                           <button
                             ref={(el) => {
                               composerReferenceRemoveButtons.set(reference.local_id, el);
@@ -11656,9 +11689,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                             }}
                             type="button"
                             class="flower-composer-reference-chip-remove"
-                            aria-label={copy().chat.composerReferenceRemove(reference.path)}
-                            title={copy().chat.composerReferenceRemove(reference.path)}
-                            disabled={composerReferenceMutationCount() > 0 || !composerReferenceEditingAllowed()}
+                            aria-label={copy().chat.composerReferenceRemove(reference.kind === 'page_context' ? reference.label : reference.path)}
+                            title={copy().chat.composerReferenceRemove(reference.kind === 'page_context' ? reference.label : reference.path)}
+                            disabled={composerReferenceMutationCount() > 0 || !composerReferenceRemovalAllowed()}
                             onClick={() => void removeComposerReference(reference, index())}
                           >
                             <XCircle class="h-3.5 w-3.5" aria-hidden="true" />
@@ -11957,6 +11990,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         }}
         permissionLabel={composerPermissionCopy()?.label} onEditPermissionMode={() => { queueMicrotask(() => openPermissionMenu()); }}
         threadID={selectedThreadID()} fullAccess={selectedThread()?.permission_type === 'full_access'} adapter={props.adapter} copy={copy().computer} requested={requestedComputerAccess()} />
+      <Dialog class="flower-page-context-preview" open={Boolean(pageContextPreview())} title={pageContextPreview()?.label ?? ''}
+        onOpenChange={open => { if (!open) setPageContextPreviewID(''); }}>
+        <Show when={pageContextPreview()}>{reference => <pre class="whitespace-pre-wrap break-words text-xs">{reference().content}</pre>}</Show>
+      </Dialog>
       <FlowerChatContextPreview
         preview={contextSnapshotPreview()}
         open={contextSnapshotPreview() !== null}

@@ -1,3 +1,4 @@
+import type { FlowerPageContextRegistrar } from '../flower/flowerPageContext';
 import { FeedbackIndicator, type FeedbackIndicatorEntry, StableText, Button, Dropdown, type DropdownItem } from '@floegence/floe-webapp-core/ui';
 import './plugin-center-compact.css';
 import { redevenSegmentedItemClass } from '../utils/redevenSurfaceRoles';
@@ -38,6 +39,7 @@ import { PluginUpdateReviewDialog } from './PluginUpdateReviewDialog';
 import { PluginInstallStatus, PluginInstallSteps } from './PluginInstallStatus';
 
 export type PluginCenterViewProps = {
+  registerPageContext?: FlowerPageContextRegistrar;
   showTitle?: boolean;
   visible?: boolean;
   pluginWidgetCounts?: Readonly<Record<string, number>>;
@@ -436,6 +438,8 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   });
 
   const selectedItem = createMemo(() => allItems().find((item) => item.inventoryKey === selectedInventoryKey()));
+  props.registerPageContext?.(() => ({ tab: activeTab(), query: query(), category: category(), source: sourceFilter(), trust: trustFilter(), lifecycle: lifecycleFilter(),
+    selected_plugin: selectedItem() ? { plugin_id: selectedItem()!.pluginID, name: selectedItem()!.displayName } : undefined }));
 
   createEffect(() => {
     const item = selectedItem();

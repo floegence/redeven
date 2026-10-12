@@ -3,12 +3,12 @@ type: UI Contract
 title: Flower composer references
 description: Show Ask Flower context inside the input and admit exact ordered composer references to Floret.
 tags: [ui, flower, composer, references, floret]
-timestamp: 2026-10-08T00:00:00Z
+timestamp: 2026-10-12T00:00:00Z
 ---
 # Summary
 
 - Authority: Redeven owns reference discovery and unadmitted draft editing; Floret is the sole canonical source after admission.
-- Outcome: Ask Flower shows its exact linked context inside the input; a whitespace-boundary `@` token adds one working-directory file or directory as an editable reference without inserting prompt text or file content.
+- Outcome: Ask Flower shows its exact linked context inside the input; `@` adds a file or directory reference, and a new desktop Activity conversation can include its frozen origin page as a removable reference.
 - Invariants: discovery uses the host's authorized filesystem adapter, all visible placements in one connection share one in-memory scope, and one strict context action preserves the frozen order and directory kind.
 - Failure boundary: stale search generations, malformed wire data, or admission mismatches fail without discarding the connection-local editor, creating a different queued command, or writing canonical Floret state.
 
@@ -53,6 +53,12 @@ The combobox keeps focus in the textarea while Arrow keys move one stable active
 
 The menu is a compact opaque popover projected through the shared surface-aware floating layer. Activity companion and full-page placements expose their retained Flower product root as the floating surface host, so the menu stays in the same stacking and clipping boundary instead of falling behind the product surface. Desktop candidate rows remain 32-34 CSS pixels, directory navigation uses one persistent 28-pixel icon target, and narrow layouts may use 36-pixel rows without changing semantics. The menu measures its rendered height and stays 4-8 pixels from the composer across result and viewport changes. Its one-pixel border falls back to the shared theme border when a Flower-local token is absent. Composer focus preserves the same one-pixel geometry and shadow, changing only to a restrained border color; candidate and directory-action focus-visible states remain explicit.
 
+## New conversation origin page
+
+[Activity origin page references](flower-page-context.md) owns once-only capture,
+authorized page readers, layout scope and removal. The existing draft coordinator
+owns the frozen page chip alongside file references.
+
 ## Bounded discovery
 
 Discovery searches the current thread's immutable working directory or the new-thread working-directory draft. `FlowerSurfaceAdapter.listWorkingDirectoryEntries` is the only search capability: Env App and Desktop implement it through their existing authenticated runtime filesystem bridges. The shared UI does not read a local path directly.
@@ -61,11 +67,20 @@ The index bounds recursion depth, listed directories, entries per directory, tot
 
 ## Draft and admission
 
-The connection-local composer stores ordered file/directory chips with a product-local identity, host-derived label, and opaque normalized path. It is never written to Redeven, Floret, local storage, IndexedDB, or another connection. The first-release product v1 baseline has no server draft, draft migration, or compatibility reader; [Flower storage ownership and migrations](../ai/flower-storage-ownership-and-migrations.md) defines that boundary.
+The connection-local composer stores ordered file/directory and page-context chips with a product-local identity and host-derived label. File paths are opaque normalized paths; page facts are frozen text. This editable draft is never written to Redeven, Floret, local storage, IndexedDB, or another connection. The first-release product v1 baseline has no server draft, draft migration, or compatibility reader; [Flower storage ownership and migrations](../ai/flower-storage-ownership-and-migrations.md) defines that boundary.
 
 Send freezes the ordered references with the text, attachments, model, and stable product request identity. It creates one strict Ask Flower action whose source surface is `flower_composer` for the ordinary chat. An embedded Tessiven conversation preserves its exact `tessiven` selection envelope and appends the frozen file references to that same action; each file context item contains exactly `kind=file_path`, `path`, and `is_directory`. Unknown envelope, target, source, presentation, execution-context, or item fields are invalid. The action never accepts a client-authored root, display label, TurnID, or RunID. The typed Send mapping converts that one frozen action into canonical Floret references whether the runtime accepts an immediate turn or canonical queue input.
 
-The browser transport outbox may retain the original ordinary launch input under its exact `client_request_id` until canonical confirmation. Retry uses that same transport identity; it does not create a Redeven backend command row or use Floret's queue item ID as an idempotency key. After admission, the one-pass mapping defined by [AI tool runtime](../ai/ai-tool-runtime.md) gives Floret the canonical ordered `MessageReference` values and current-turn supplemental context.
+For `flower_composer` only, a page reference maps to exactly
+`kind=text_snapshot`, `title` and `content`, alongside file items in the same
+action. Both TypeScript and Go reject extra fields. Mixed actions retain every
+file's canonical resource authority and permission checks. After successful
+first-turn submission the draft references are consumed; later rounds do not
+automatically repeat the page. Failed submission and same-request retries keep
+the exact frozen snapshot. A page reference supplies facts, never execution
+location, working-directory changes or permissions.
+
+The browser transport outbox may retain the original ordinary launch input under its exact `client_request_id` until canonical confirmation. Retry uses that same transport identity; it does not create a Redeven backend command row or use Floret's queue item ID as an idempotency key. After admission, the one-pass mapping defined by [AI tool runtime](../ai/ai-tool-runtime.md) gives Floret the canonical ordered `MessageReference` values and turn context snapshots.
 
 # Boundaries
 
@@ -88,7 +103,7 @@ Before Send, Redeven does not persist the ordered editable reference snapshot. A
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.composerReferences.browser.test.tsx` - Chromium verifies compact density, measured placement, focus geometry, projected companion containment, and directory action sizing.
 - `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.flowerCompanion.browser.test.tsx` - Chromium verifies the retained Activity Flower product root remains the floating surface host across companion and full-page placement.
 - `redeven:internal/flower_ui/src/contextActionWire.ts` - The shared parser applies strict `flower_composer` envelope and item allowlists.
-- `redeven:internal/ai/context_action.go` - Runtime validation restricts composer context to normalized file-path items without client-authored labels.
+- `redeven:internal/ai/context_action.go` - Runtime validation allows exact composer text snapshots and normalized file items without client-authored resource authority.
 - `redeven:internal/flower_ui/src/contextActionWire.test.ts` - Browser contract tests reject unknown envelope and item fields and preserve file/directory kind.
 - `redeven:internal/ai/context_action_floret_test.go:258` - Host tests map exact context items into typed Floret references.
 - `redeven:internal/ai/context_action_floret_test.go:361` - Canonical turn input retains references without persisting the host action envelope.

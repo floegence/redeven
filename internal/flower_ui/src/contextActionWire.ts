@@ -250,7 +250,7 @@ function surfaceAllowsKind(surface: ContextActionSurface, kind: string): boolean
     case 'monitoring': return kind === 'process_snapshot';
     case 'git_browser':
     case 'desktop_welcome_environment_card': return kind === 'text_snapshot';
-    case 'flower_composer':
+    case 'flower_composer': return kind === 'file_path' || kind === 'text_snapshot';
     case 'file_browser':
     case 'file_preview':
     case 'editor_preview': return kind === 'file_path';
@@ -291,7 +291,12 @@ export function parseAskFlowerContextActionEnvelope(value: unknown): ContextActi
 
   const context: ContextActionContextItem[] = [];
   for (const rawItem of value.context) {
-    if ((value.source.surface === 'flower_composer' || (value.source.surface === 'tessiven' && isRecord(rawItem) && rawItem.kind === 'file_path')) && (!isRecord(rawItem) || !hasOnlyKeys(rawItem, ['kind', 'path', 'is_directory']))) return null;
+    if (value.source.surface === 'flower_composer') {
+      if (!isRecord(rawItem)) return null;
+      const fields = rawItem.kind === 'text_snapshot' ? ['kind', 'title', 'content'] : ['kind', 'path', 'is_directory'];
+      if (!hasOnlyKeys(rawItem, fields)) return null;
+    }
+    if (value.source.surface === 'tessiven' && isRecord(rawItem) && rawItem.kind === 'file_path' && !hasOnlyKeys(rawItem, ['kind', 'path', 'is_directory'])) return null;
     if (value.source.surface === 'terminal' && (!isRecord(rawItem) || !hasOnlyKeys(rawItem, ['kind', 'working_dir', 'selection', 'selection_chars']))) return null;
     const rawKind = isRecord(rawItem) && typeof rawItem.kind === 'string' ? rawItem.kind : '';
     if (!KNOWN_CONTEXT_KINDS.has(rawKind) || !surfaceAllowsKind(value.source.surface, rawKind)) return null;

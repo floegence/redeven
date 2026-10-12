@@ -31,9 +31,16 @@ describe('Flower composer context action wire contract', () => {
   it.each([
     ['terminal', { kind: 'terminal_selection', working_dir: '/workspace', selection: '', selection_chars: 0 }],
     ['process', { kind: 'process_snapshot', pid: 42, name: 'worker', username: 'demo', cpu_percent: 0, memory_bytes: 0, platform: 'linux', captured_at_ms: 1 }],
-    ['text', { kind: 'text_snapshot', title: 'Selection', content: 'body' }],
   ])('rejects %s context', (_name, item) => {
     expect(parseAskFlowerContextActionEnvelope(composerAction([item]))).toBeNull();
+  });
+
+  it('combines a page snapshot with file references and rejects forged snapshot fields', () => {
+    const page = { kind: 'text_snapshot', title: 'Monitor', content: 'Page: Monitor' };
+    const file = { kind: 'file_path', path: '/workspace/main.ts', is_directory: false };
+    expect(parseAskFlowerContextActionEnvelope(composerAction([page, file]))?.context).toEqual([page, file]);
+    expect(parseAskFlowerContextActionEnvelope(composerAction([{ ...page, path: '/forged' }]))).toBeNull();
+    expect(parseAskFlowerContextActionEnvelope(composerAction([{ ...page, detail: 'hidden metadata' }]))).toBeNull();
   });
 
   it('rejects unknown envelope and item fields', () => {

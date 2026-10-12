@@ -1,3 +1,4 @@
+import type { FlowerPageContextRegistrar } from '../flower/flowerPageContext';
 import { Show } from 'solid-js';
 import { AlertTriangle, RefreshIcon } from '@floegence/floe-webapp-core/icons';
 import { Button } from '@floegence/floe-webapp-core/ui';
@@ -9,7 +10,7 @@ import { useTerminalSessionCatalog } from '../services/terminalSessionCatalog';
 import { canLaunchProcess } from '../utils/permission';
 import { TerminalPanel } from '../widgets/TerminalPanel';
 
-export function EnvTerminalPage() {
+export function EnvTerminalPage(props: { registerPageContext?: FlowerPageContextRegistrar } = {}) {
   const env = useEnvContext();
   const i18n = useI18n();
   const terminalCatalog = useTerminalSessionCatalog();
@@ -56,7 +57,7 @@ export function EnvTerminalPage() {
           </div>
         }
       >
-        <TerminalPanel
+        <TerminalPanel registerPageContext={props.registerPageContext}
           variant="panel"
           mobileSessionsOpen={env.terminalSessionsOpen?.()}
           onMobileSessionsOpenChange={env.setTerminalSessionsOpen}

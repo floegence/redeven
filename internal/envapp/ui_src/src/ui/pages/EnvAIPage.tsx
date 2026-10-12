@@ -12,6 +12,7 @@ import type {
   FlowerSurfaceNotification,
   FlowerThreadFocusRequest,
   FlowerThreadSwitcherCopy,
+  FlowerPageContextSnapshot,
 } from '../../../../../flower_ui/src';
 import {
   createLocalizedFlowerSurfaceCopy,
@@ -46,6 +47,7 @@ function createEnvFlowerSurfaceCopy(i18n: I18nHelpers, locale: string) {
 export type EnvAIPageProps = Readonly<{
   draftCoordinator: FlowerComposerDraftCoordinator;
   embeddedConversation?: FlowerEmbeddedConversation;
+  captureNewConversationContext?: () => FlowerPageContextSnapshot | undefined;
   presentation?: 'full' | 'companion';
   engaged?: boolean;
   transcriptVisible?: boolean;
@@ -190,6 +192,7 @@ export function EnvAIPage(props: EnvAIPageProps) {
       focusEnabled={props.engaged ?? true}
       renderContent={() => <FlowerSurface
         embeddedConversation={props.embeddedConversation}
+        captureNewConversationContext={props.captureNewConversationContext}
         adapter={adapter()}
         filesystemScopeKey={filesystemPicker.scopeKey}
         filesystemScrollViewportProps={filesystemPicker.scrollViewportProps}

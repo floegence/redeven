@@ -767,7 +767,8 @@ describe('PluginCenterView', () => {
     expect(mount.querySelectorAll('[data-plugin-permission] [role="switch"]')).toHaveLength(2);
   });
 
-  it('exposes the active Plugin Center view with tab semantics', () => {
+  it('exposes the active Plugin Center view with tab semantics', async () => {
+    let readPage = (): Readonly<Record<string, unknown>> | undefined => undefined;
     const mount = document.createElement('div');
     document.body.append(mount);
     dispose = render(() => (
@@ -778,6 +779,7 @@ describe('PluginCenterView', () => {
         canOpenPluginSurfaces
         onRefresh={() => undefined}
         onCommand={() => undefined}
+        registerPageContext={read => { readPage = read; }}
       />
     ), mount);
 
@@ -786,9 +788,11 @@ describe('PluginCenterView', () => {
     expect(discover?.id).toMatch(/-tab-discover$/);
     expect(panel?.getAttribute('aria-labelledby')).toBe(discover?.id);
     expect(discover?.getAttribute('aria-controls')).toBe(panel?.id);
+    expect(readPage()).toMatchObject({ tab: 'discover', query: '' });
 
     (discover as HTMLButtonElement).dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
     expect(mount.querySelector('[role="tab"][aria-selected="true"]')?.id).toMatch(/-tab-installed$/);
+    await vi.waitFor(() => expect(readPage()).toMatchObject({ tab: 'installed' }));
   });
 
   it('adopts the first installed projection after mounting with an empty inventory', () => {

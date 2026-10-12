@@ -578,13 +578,7 @@
         "searchPlaceholder": "搜索对话...",
         "newConversation": "新建对话",
         "empty": "没有匹配的对话",
-        "queued": "已排队",
-        "groups": {
-          "attention": "需要处理",
-          "working": "正在工作",
-          "pinned": "已置顶",
-          "recent": "最近"
-        }
+        "queued": "已排队"
       }
     },
     "commandPalette": {

@@ -1,3 +1,4 @@
+import type { FlowerPageContextRegistrar } from '../flower/flowerPageContext';
 import {
   FeedbackIndicator,
   Button,
@@ -208,6 +209,7 @@ export function resolveSystemTerminalThemeColors(
 }
 
 export interface TerminalPanelProps {
+  registerPageContext?: FlowerPageContextRegistrar;
   variant?: TerminalPanelVariant;
   mobileSessionsOpen?: boolean;
   onMobileSessionsOpenChange?: (open: boolean) => void;
@@ -2187,6 +2189,11 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     const sid = activeSessionId();
     if (!sid) return null;
     return sessions().find((session) => session.id === sid) ?? null;
+  });
+
+  props.registerPageContext?.(() => {
+    const session = activeSession();
+    return session ? { session: { id: session.id, name: session.name, working_directory: session.workingDir } } : undefined;
   });
 
   const [terminalChromeDeadlineRevision, setTerminalChromeDeadlineRevision] = createSignal(0);

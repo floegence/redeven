@@ -19,7 +19,6 @@ beforeEach(async () => { await page.viewport(1280, 800); });
 const companionCopy = {
   label: 'Switch Flower conversation', searchPlaceholder: 'Search conversations...',
   newConversation: 'New conversation', empty: 'No matching conversations', queued: 'Queued',
-  groups: { attention: 'Needs attention', working: 'Working', pinned: 'Pinned', recent: 'Recent' },
   threadList: DEFAULT_FLOWER_SURFACE_COPY.threadList,
 };
 

@@ -25,17 +25,25 @@ export type FlowerComposerDraftAttachment = Readonly<{
 
 export type FlowerComposerDraftReferenceKind = 'file' | 'directory';
 
+export type FlowerPageContextSnapshot = Readonly<{
+  label: string;
+  title: string;
+  content: string;
+}>;
+
 export type FlowerComposerDraftReference = Readonly<{
   local_id: string;
   kind: FlowerComposerDraftReferenceKind;
   path: string;
   label: string;
-}>;
+}> | (FlowerPageContextSnapshot & Readonly<{ local_id: string; kind: 'page_context' }>);
 
 export type FlowerComposerDraftValue = Readonly<{
   text: string;
   attachments: readonly FlowerComposerDraftAttachment[];
   references: readonly FlowerComposerDraftReference[];
+  /** Capture happens once for a new draft, including when its reference is removed. */
+  page_context_captured?: boolean;
   mode: FlowerComposerDraftMode;
   model_id?: string;
   permission_type_override?: FlowerPermissionType;
@@ -251,6 +259,7 @@ export function createFlowerComposerDraftCoordinator(
         drafts.push({ scope_id: scopeID, files, value: {
           text: value.text, mode: 'ordinary',
           references: value.references.map(reference => ({ ...reference })),
+          page_context_captured: value.page_context_captured,
           attachments: value.attachments.map(attachment => ({
             local_id: attachment.local_id, source: attachment.source,
             name: attachment.name, mime_type: attachment.mime_type, size_bytes: attachment.size_bytes,

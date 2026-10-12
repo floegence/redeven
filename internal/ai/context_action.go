@@ -310,6 +310,9 @@ func normalizeAskFlowerContextActionEnvelope(in *ContextActionEnvelope) (*Contex
 			if !contextActionComposerItemWireShapeAllowed(out.Context[index]) {
 				return nil, ErrInvalidContextAction
 			}
+			if out.Context[index].Kind != contextActionKindFilePath {
+				continue
+			}
 			normalizedPath, err := normalizeCanonicalReferencePath(out.Context[index].Path)
 			if err != nil || normalizedPath != out.Context[index].Path || strings.TrimSpace(out.Context[index].RootLabel) != "" {
 				return nil, ErrInvalidContextAction
@@ -344,6 +347,23 @@ func canonicalReferencePathLabel(value string) string {
 }
 
 func contextActionComposerItemWireShapeAllowed(item ContextActionContextItem) bool {
+	if item.Kind == contextActionKindText {
+		if item.Detail != "" {
+			return false
+		}
+		if item.wireFields == nil {
+			return true
+		}
+		if len(item.wireFields) != 3 {
+			return false
+		}
+		for _, field := range []string{"kind", "title", "content"} {
+			if _, ok := item.wireFields[field]; !ok {
+				return false
+			}
+		}
+		return true
+	}
 	if item.wireFields == nil {
 		return true
 	}
@@ -382,7 +402,9 @@ func contextActionSurfaceAllowsKind(surface string, kind string) bool {
 	switch strings.TrimSpace(surface) {
 	case contextActionSurfaceTessiven:
 		return kind == contextActionKindTessiven || kind == contextActionKindFilePath
-	case contextActionSurfaceComposer, contextActionSurfaceFile:
+	case contextActionSurfaceComposer:
+		return kind == contextActionKindFilePath || kind == contextActionKindText
+	case contextActionSurfaceFile:
 		return kind == contextActionKindFilePath
 	case contextActionSurfacePreview, contextActionSurfaceEditor:
 		return kind == contextActionKindFilePath

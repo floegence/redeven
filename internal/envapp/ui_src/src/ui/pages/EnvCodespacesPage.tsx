@@ -1,3 +1,4 @@
+import type { FlowerPageContextRegistrar } from '../flower/flowerPageContext';
 import { StableText } from '@floegence/floe-webapp-core/ui';
 import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup } from "solid-js";
 import { cn, useNotification, useViewActivation } from "@floegence/floe-webapp-core";
@@ -795,12 +796,13 @@ function BrowserEditorReadinessInlineStatus(props: {
   );
 }
 
-export function EnvCodespacesPage() {
+export function EnvCodespacesPage(props: { registerPageContext?: FlowerPageContextRegistrar } = {}) {
   const notification = useNotification();
   const env = useEnvContext();
   const i18n = useI18n();
   const activation = (() => { try { return useViewActivation(); } catch { return null; } })();
 
+  props.registerPageContext?.(() => ({ view: 'codespaces' }));
   const [createDialogOpen, setCreateDialogOpen] = createSignal(false);
   const [createLoading, setCreateLoading] = createSignal(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = createSignal(false);

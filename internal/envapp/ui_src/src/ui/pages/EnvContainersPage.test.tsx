@@ -847,9 +847,10 @@ describe('native Containers page', () => {
   });
 
   it('applies live resource navigation to an already mounted Activity page', async () => {
+    let readPage = (): Readonly<Record<string, unknown>> | undefined => undefined;
     const host = document.createElement('div');
     document.body.append(host);
-    dispose = render(() => <EnvContainersPage stateScope="activity" variant="activity" />, host);
+    dispose = render(() => <EnvContainersPage registerPageContext={read => { readPage = read; }} stateScope="activity" variant="activity" />, host);
     await settle();
 
     requestContainerResourceNavigation({
@@ -872,6 +873,8 @@ describe('native Containers page', () => {
     });
     expect(harness.storageWrites.some((entry) => entry.key === 'containers:activity' && (entry.value as { version?: number }).version === 2)).toBe(true);
     expect(harness.resourceDetails).toHaveBeenCalledWith('containers', 'container-1', 'docker', 'docker-primary', expect.any(AbortSignal));
+    expect(readPage()).toMatchObject({ view: 'containers', selected_resource: { id: 'container-1', engine: 'docker', endpoint_id: 'docker-primary' }, query: '' });
+    expect(readPage()).not.toHaveProperty('resources');
   });
 
   it('shows the target detail skeleton immediately while live navigation resolves', async () => {
