@@ -21,6 +21,7 @@ export { resolveWebServiceOpenRoute, type WebServiceOpenRoute } from '../service
 import { secureRandomUUID } from '@floegence/floe-webapp-core';
 import { createManagedServiceUpdatePreparation } from './managedServiceUpdatePreparation';
 import { GitTemplateImport } from './GitTemplateImport';
+import type { ManagedWebEntranceContext } from '../../../../../../desktop/src/shared/desktopShellWebServiceWindowIPC';
 import type { ResolvedSource } from '@floegence/redeven-service-templates';
 import { For, Show, createEffect, createMemo, createSignal, createUniqueId, untrack, on, onCleanup, onMount, type JSX } from 'solid-js';
 import { cn, useNotification, useViewActivation } from '@floegence/floe-webapp-core';
@@ -105,6 +106,7 @@ type ForwardSession = Readonly<{
   forward: PortForward;
   app_path: string;
   ephemeral: boolean;
+  managed_entrance?: ManagedWebEntranceContext;
 }>;
 
 type ForwardMetadataTarget = Readonly<
@@ -244,6 +246,7 @@ export type ManagedUpdatePlan = Readonly<{
 }>;
 
 type ManagedOpenSession = Readonly<{
+ managed_entrance?: ManagedWebEntranceContext;
 	state: 'ready' | 'preparing';
 	forward?: PortForward;
 	app_path?: string;
@@ -1661,7 +1664,7 @@ export function ManagedServiceRow(props: { service: ManagedService; selected?: b
             canOpen={Boolean(props.service.actions?.open?.available) && props.canOpen}
             reason={!props.canOpen ? props.openUnavailableReason : !props.service.actions?.open?.available
               ? managedActionUnavailableReason(props.service.actions?.open ?? { available: false, reason_code: 'SERVICE_STATE_UNAVAILABLE' }, i18n)
-              : props.openUnavailableReason || (props.service.opening?.error_code ? managedFailureMessage(props.service.opening.error_code, i18n) : undefined)}
+              : props.openUnavailableReason}
             onOpen={props.onOpen} /></Show>
           <Tooltip content={managedActionUnavailableReason(primaryCapability(), i18n)} placement="top" anchorClass="web-service-manage" disabled={primaryCapability().available}>
             <Button data-testid="managed-service-primary" size="sm" variant="outline" class="web-service-button" aria-label={`${props.service.name}: ${primaryFullLabel()}`} onClick={executePrimary} disabled={!primaryCapability().available || ((primaryAction() === 'start' || primaryAction() === 'stop') && (busy() || !props.canManage))}>
@@ -2333,15 +2336,15 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
 
   const selectedTemplate = createMemo(() => managedTemplates().find((template) => template.template_id === selectedTemplateID()) ?? null);
 
-	const requestManagedOpenSession = async (service: ManagedService) => {
+	const requestManagedOpenSession = async (service: ManagedService, refresh = false) => {
     try { return await fetchLocalApiJSON<ManagedOpenSession>(
 		`/_redeven_proxy/api/managed-web-services/${encodeURIComponent(service.service_id)}/open-session`,
-		{ method: 'POST', body: JSON.stringify({ request_id: managedRequestID() }) },
+		{ method: 'POST', body: JSON.stringify({ request_id: managedRequestID(), refresh }) },
 	); } catch (error) { if (error instanceof LocalApiError) throw new Error(managedFailureMessage(error.code, i18n)); throw error; }
   };
 
-	const resolveManagedForwardSession = async (service: ManagedService): Promise<Pick<ForwardSession, 'forward' | 'app_path'>> => {
-		let result = await requestManagedOpenSession(service);
+	const resolveManagedForwardSession = async (service: ManagedService, refresh = false): Promise<Pick<ForwardSession, 'forward' | 'app_path' | 'managed_entrance'>> => {
+		let result = await requestManagedOpenSession(service, refresh);
 		if (result.state === 'preparing') {
 			if (!result.operation) throw new Error(i18n.t('webServices.managed.openPreparationFailed'));
 			const preparingOperation = result.operation;
@@ -2359,7 +2362,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
 		if (result.state !== 'ready' || !result.forward || !result.app_path) {
 			throw new Error(i18n.t('webServices.managed.openPreparationFailed'));
 		}
-		return { forward: result.forward, app_path: result.app_path };
+		return { forward: result.forward, app_path: result.app_path, managed_entrance:result.managed_entrance };
 	};
 
   const closeTemplateDrawer = () => {
@@ -2504,14 +2507,14 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
     finally { setManagementRestoreBusy(false); }
   };
 
-  const openManaged = async (service: ManagedService) => {
+  const openManaged = async (service: ManagedService, refresh = false) => {
     await runOpenTransaction(
       `managed:${service.service_id}`,
       `redeven_managed_${service.service_id}`,
       i18n.t('webServices.status.opening'),
       async () => {
-        const session = await resolveManagedForwardSession(service);
-        return { forward: session.forward, appPath: session.app_path };
+        const session = await resolveManagedForwardSession(service, refresh);
+        return { forward: session.forward, appPath: session.app_path, managedEntrance:session.managed_entrance };
       },
     );
   };
@@ -3155,6 +3158,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
     useDesktopWindow: boolean,
     win: Window | null,
     setStatus: (status: string) => void,
+    managedEntrance?: ManagedWebEntranceContext,
   ) => {
     const accessMode = f.access_mode || 'unified_proxy';
     if (accessMode === 'desktop_loopback' && !useDesktopWindow) {
@@ -3179,7 +3183,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
       updating: i18n.t('webServices.status.updating'),
       desktopWindowFailed: i18n.t('webServices.errors.desktopWindowFailed'),
       popupBlocked: i18n.t('webServices.errors.popupBlocked'),
-    }, win);
+    }, win, 'browser', undefined, managedEntrance);
     bumpRefresh();
   };
 
@@ -3187,7 +3191,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
     transactionID: string,
     popupName: string,
     initialStatus: string,
-    resolveTarget: () => Promise<Readonly<{ forward: PortForward; appPath: string }>>,
+    resolveTarget: () => Promise<Readonly<{ forward: PortForward; appPath: string; managedEntrance?: ManagedWebEntranceContext }>>,
   ) => {
     if (openBusy(transactionID)) return;
     const setStatus = (status: string) => setOpenRequests((current) => ({ ...current, [transactionID]: status }));
@@ -3205,7 +3209,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
 
     try {
       const target = await resolveTarget();
-      await performOpen(target.forward, target.appPath, useDesktopWindow, win, setStatus);
+      await performOpen(target.forward, target.appPath, useDesktopWindow, win, setStatus, target.managedEntrance);
     } catch (e) {
       try {
         win?.close();
@@ -3254,7 +3258,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
         });
         setRecentSession(session);
         setAddress(new URL(session.app_path, session.forward.target_url).toString());
-        return { forward: session.forward, appPath: session.app_path };
+        return { forward: session.forward, appPath: session.app_path, managedEntrance:session.managed_entrance };
       },
     );
   };
@@ -3562,7 +3566,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
                             canOpen={canExecute() && (service().access_mode !== 'desktop_loopback' || desktopShellWebServiceWindowOpenAvailable())}
                             openUnavailableReason={!canExecute() ? i18n.t('webServices.permission.executeRequired') : (service().access_mode === 'desktop_loopback' && !desktopShellWebServiceWindowOpenAvailable()
                               ? i18n.t('webServices.managed.openUnavailableDesktopLoopback')
-                              : openErrors()[`managed:${serviceID}`])}
+                              : undefined)}
                             canManage={canManageManagedService()}
                             onOpen={() => void openManaged(service())}
                             onRestoreManagement={() => void reviewManagement(service())}
@@ -3575,7 +3579,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
                             onVersions={() => openServiceReleasePicker(service())}
                             onLogs={() => void loadManagedLogs(serviceID)}
                             onUninstall={() => setManagementTarget({ service: service(), action: 'uninstall' })}
-                            onInspect={() => setManagementTarget({ service: service(), action: service().status === 'uninstall_pending' || service().management_state === 'uninstalled' ? 'uninstall' : 'recover' })}
+                            onInspect={() => setManagementTarget({ service: service(), action: 'inspect' })}
                           />
                         )}</Show>
                       )}</For>
@@ -3621,7 +3625,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
 
       <ManagedServiceManagementDrawer
         service={managementTarget() ? managedServicesByID().get(managementTarget()!.service.service_id) ?? managementTarget()!.service : null}
-        initialAction={managementTarget()?.action ?? 'uninstall'}
+        initialAction={managementTarget()?.action ?? 'inspect'}
 		operation={(() => {const operation=managementTarget() ? managedRowOperation(managementTarget()!.service.service_id) : null;return operation && managedOperationActive(operation) ? {label:managedStageLabel(operation.stage,i18n),current:operation.progress_current ?? 0,total:operation.progress_total ?? 7,cancellable:!operation.cancel_requested}:null;})()}
 		onCancelOperation={() => void cancelManagedOperation(managementTarget() ? managedRowOperation(managementTarget()!.service.service_id) : null)}
         administrator={Boolean(ctx.env()?.permissions?.can_admin || ctx.env()?.permissions?.is_owner)}
@@ -3629,6 +3633,10 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
 		onService={(id) => {setManagementTarget(null);setArchiveView('active');const service=managedServiceForID(id);if(service)setSearchQuery(service.name);}}
         onResource={(identity) => openManagedContainerResource({ kind: 'container', engine: 'docker', view: 'containers', identity })}
         onSettings={() => { const target = managementTarget(); if (target) { setManagementTarget(null); setManagedSettingsService(target.service); } }}
+        onOpen={(refresh) => {const target=managementTarget();if(target){setManagementTarget(null);void openManaged(target.service,refresh);}}}
+        onStart={() => {const target=managementTarget();if(target){setManagementTarget(null);void managedAction(target.service.service_id,'start');}}}
+        onRestart={() => {const target=managementTarget();if(target){setManagementTarget(null);void managedAction(target.service.service_id,'restart');}}}
+        onLogs={() => {const target=managementTarget();if(target){setManagementTarget(null);void loadManagedLogs(target.service.service_id);}}}
         canLegacyRestore={managementTarget()?.service.deployment === 'host' && Boolean(managementTarget()?.service.actions?.restore_management?.available)}
         canReinstall={Boolean(managementTarget() && templateByID(managementTarget()!.service.template_id)?.available)}
         onReinstall={() => { const target = managementTarget(); if (!target) return; const template = templateByID(target.service.template_id); if (!template) return; setManagementTarget(null); beginTemplateInstall(template); setTemplateDrawerOpen(true); }}

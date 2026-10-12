@@ -27,6 +27,8 @@ type hostRunState struct {
 	Endpoint           WebEndpointSpec `json:"endpoint"`
 	OutputMode         string          `json:"output_mode"`
 	AfterStartComplete bool            `json:"after_start_complete"`
+	ManagedBootstrap   bool            `json:"managed_bootstrap,omitempty"`
+	OpeningRuleSHA256  string          `json:"opening_rule_sha256,omitempty"`
 	OpenErrorCode      string          `json:"open_error_code,omitempty"`
 	OpenErrorMessage   string          `json:"open_error_message,omitempty"`
 }
@@ -205,15 +207,6 @@ func (d *hostScriptDriver) prepareOpening(ctx context.Context, service *pfregist
 	if err != nil {
 		return "", serviceError("HOST_OPEN_TARGET_UNAVAILABLE", "The service launch information is unavailable.", 409, true, nil)
 	}
-	defer func() {
-		state.OpenErrorCode, state.OpenErrorMessage = "", ""
-		if resultErr != nil {
-			state.OpenErrorCode, state.OpenErrorMessage, _, _ = ErrorDetails(resultErr)
-		}
-		if err := d.writeRunState(service, state); err != nil && resultErr == nil {
-			resultErr = serviceError("HOST_OPEN_TARGET_UNAVAILABLE", "The service opening result could not be saved.", 500, true, nil)
-		}
-	}()
 	if !state.AfterStartComplete {
 		if spec.Host.AfterStartScript != "" {
 			timeout := time.Duration(state.Endpoint.StartupTimeout) * time.Second
@@ -225,6 +218,9 @@ func (d *hostScriptDriver) prepareOpening(ctx context.Context, service *pfregist
 			}
 		}
 		state.AfterStartComplete = true
+		if err := d.writeRunState(service, state); err != nil {
+			return "", err
+		}
 	}
 	appPath := state.Endpoint.Path
 	if appPath == "" {
@@ -235,19 +231,13 @@ func (d *hostScriptDriver) prepareOpening(ctx context.Context, service *pfregist
 		if err != nil {
 			return "", err
 		}
-		appPath, err = parseHostOpenURL(target, state.Endpoint, service.RuntimePort)
+		appPath, err = parseServiceOpeningURL(target, state.Endpoint, service.RuntimePort)
 		if err != nil {
 			return "", err
 		}
 	}
 	if _, ok, err := d.recoverPersistedProcess(service); err != nil || !ok {
 		return "", serviceError("HOST_OPEN_TARGET_UNAVAILABLE", "The service process changed while preparing its opening information.", 409, true, nil)
-	}
-	if err := d.writeOpenSession(service, service.RuntimeIdentity, appPath); err != nil {
-		return "", serviceError("HOST_OPEN_TARGET_UNAVAILABLE", "The service opening information could not be saved.", 500, true, nil)
-	}
-	if state.OutputMode == "private_file" {
-		_ = truncatePrivateOutput(filepath.Join(d.runDirectory(service), "output"), 0)
 	}
 	return appPath, nil
 }

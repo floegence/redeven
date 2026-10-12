@@ -81,7 +81,7 @@ const npmCoordinateLicenseOverrides = new Map([
   ['@tailwindcss/oxide-wasm32-wasi@4.3.1', { license: 'MIT', note: 'License audited from the exact registry package manifest.' }],
   ['@tailwindcss/oxide-win32-arm64-msvc@4.3.1', { license: 'MIT', note: 'License audited from the exact registry package manifest.' }],
   ['@tailwindcss/oxide-win32-x64-msvc@4.3.1', { license: 'MIT', note: 'License audited from the exact registry package manifest.' }],
-  ['@floegence/redeven-service-templates@0.6.0', { license: 'MIT', note: 'Floegence first-party SDK; the catalog module license policy below also covers this SDK from the same v0.6.0 source release. The SDK manifest omits its license field.' }],
+  ['@floegence/redeven-service-templates@0.7.0', { license: 'MIT', note: 'Floegence first-party SDK; the catalog module license policy below also covers this SDK from the same v0.7.0 source release. The SDK manifest omits its license field.' }],
   ['brace-expansion@5.0.9', { license: 'MIT', note: 'License verified from the exact registry package manifest.' }],
   ['http-cache-semantics@4.2.0', { license: 'BSD-2-Clause', note: 'License verified from the exact registry package manifest.' }],
   ['source-map-js@1.2.1', { license: 'BSD-3-Clause', note: 'License verified from the exact registry package manifest.' }],

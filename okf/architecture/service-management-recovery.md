@@ -24,6 +24,8 @@ Stop records stopped intent and converges successfully when the exact instance i
 
 ## Review and execution
 
+`GET /managed-web-services/{id}/inspection` requires read permission, is non-cacheable, and uses the same factual backend projection as the list. Details and diagnostics opens this read-only view first. Healthy services offer Open, logs and settings without recommending recovery. Failed checks retain prior facts and their check time rather than implying absence. Entrance failures offer explicit reprepare; restart first explains retained data and pending settings. Closing stops observation, restores focus and leaves accepted lifecycle operations running.
+
 `POST /managed-web-services/{id}/management-plans` returns current facts, blockers, the proposed path, cleanup choices, and `plan_digest`. Uninstall, detach, restoration, recreation, and hook bypass require that reviewed digest. Ordinary Start and Stop remain single actions. The operation endpoint rechecks permission, instance configuration revision, management state, resource identities, references, and transaction state. Its worker repeats plan verification before effects; changed facts require a refreshed review.
 
 The [Web Services interface contract](web-services-interface.md) owns drawer layout, focus, and refresh presentation. Technical codes and operation identifiers are expandable diagnostics. Data and workspace deletion are independent choices, both off by default; the full workspace path is visible. Preserving blocked resources is an explicit choice that generates a new plan. Reference inspection lists running and stopped containers and links the existing container detail surface without stopping them.
@@ -48,7 +50,7 @@ Detach is a local Registry transaction: archive the Forward description, remove 
 
 # Boundaries
 
-The contiguous `portforward_registry_v2` 3-to-4 migration preserves bindings, configuration, private-file references, operation history, and existing resource locations. It rebuilds constraints atomically and verifies both exact schema shapes. Historical failed uninstall is a request for inspection, not evidence that any specific item was deleted. Failed migration rolls back completely; unknown versions and structural drift remain read-only failures. TemplateSpec remains v6. Desktop/Runtime compatibility epoch 15 covers these management contracts.
+The contiguous `portforward_registry_v2` 3-to-4 migration preserves bindings, configuration, private-file references, operation history, and existing resource locations. It rebuilds constraints atomically and verifies both exact schema shapes. Historical failed uninstall is a request for inspection, not evidence that any specific item was deleted. Failed migration rolls back completely; unknown versions and structural drift remain read-only failures. TemplateSpec v7 opening follows [managed opening](managed-web-service-opening.md). Desktop/Runtime compatibility epoch 15 covers these management contracts.
 
 # Evidence
 

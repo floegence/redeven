@@ -496,6 +496,9 @@ export const enUS = {
     retrying: "Reconnecting…",
   },
   webServiceBrowser: {
+    authenticationTitle: "The service entrance needs authentication",
+    authenticationSummary: "The service responded, but rejected its managed entrance. Prepare the current entrance and try again. The application keeps running.",
+    authenticationRetry: "Prepare entrance and retry",
     title: 'Web Service',
     addressLabel: 'Web Service address',
     addressPlaceholder: 'Enter an address or path',

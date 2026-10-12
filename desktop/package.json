@@ -127,7 +127,7 @@
     "@floegence/floe-webapp-boot": "0.86.24",
     "@floegence/floe-webapp-core": "0.86.24",
     "@floegence/flowersec-core": "5.11.0",
-    "@floegence/redeven-service-templates": "https://github.com/floegence/redeven-service-templates/releases/download/v0.6.0/floegence-redeven-service-templates-0.6.0.tgz",
+    "@floegence/redeven-service-templates": "https://github.com/floegence/redeven-service-templates/releases/download/v0.7.0/floegence-redeven-service-templates-0.7.0.tgz",
     "builder-util-runtime": "^9.7.0",
     "electron-updater": "^6.8.9",
     "qrcode-generator": "^2.0.4",

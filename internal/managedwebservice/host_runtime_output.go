@@ -14,7 +14,7 @@ import (
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 )
 
-func parseHostOpenURL(value string, endpoint WebEndpointSpec, runtimePort int) (string, error) {
+func parseServiceOpeningURL(value string, endpoint WebEndpointSpec, runtimePort int) (string, error) {
 	if value == "" || len(value) > hostOpenResultLimit || value != strings.TrimSpace(value) || strings.ContainsAny(value, "\t\r\n ") {
 		return "", serviceError("HOST_OPEN_TARGET_INVALID", "The Host service emitted an invalid startup URL.", 502, true, nil)
 	}
@@ -84,18 +84,12 @@ func (d *hostScriptDriver) openSessionPath(service *pfregistry.ManagedService) s
 	return filepath.Join(d.instanceRoot(service), "open-session.json")
 }
 
-func (d *hostScriptDriver) writeOpenSession(service *pfregistry.ManagedService, runtimeIdentity, appPath string) error {
-	state := serviceOpenSessionState{SchemaVersion: serviceOpenSessionSchemaVersion, ServiceID: service.ServiceID, RuntimeSpecSHA256: service.RuntimeSpecSHA256, RuntimeIdentity: runtimeIdentity, AppPath: appPath}
-	launch := *service
-	launch.RuntimeIdentity = runtimeIdentity
-	return writePrivateJSON(d.openSessionPath(&launch), state)
-}
-
-func (d *hostScriptDriver) readOpenSession(service *pfregistry.ManagedService, runtimeIdentity string) (string, error) {
+// readLegacyOpenSession is used only by the frozen native identity upgrade.
+func (d *hostScriptDriver) readLegacyOpenSession(service *pfregistry.ManagedService, runtimeIdentity string) (string, error) {
 	launch := *service
 	launch.RuntimeIdentity = runtimeIdentity
 	path := d.openSessionPath(&launch)
-	return readServiceOpening(path, service, runtimeIdentity, "HOST")
+	return readLegacyHostOpening(path, service, runtimeIdentity)
 }
 
 func validHostOpenSessionPath(value string) bool { return validServiceOpeningPath(value, false) }
@@ -113,18 +107,6 @@ func (d *hostScriptDriver) removeOpenSession(service *pfregistry.ManagedService)
 		return
 	}
 	_ = os.Remove(d.openSessionPath(service))
-}
-
-func (d *hostScriptDriver) resolveOpenSession(service *pfregistry.ManagedService) (string, error) {
-	if service == nil || strings.TrimSpace(service.RuntimeIdentity) == "" {
-		return "", serviceError("HOST_OPEN_TARGET_UNAVAILABLE", "The Host service startup URL is unavailable. Retry opening the service.", 409, true, nil)
-	}
-	if _, running, err := d.recoverPersistedProcess(service); err != nil {
-		return "", err
-	} else if !running {
-		return "", serviceError("SERVICE_NOT_RUNNING", "The service process is not running.", 409, true, nil)
-	}
-	return d.readOpenSession(service, service.RuntimeIdentity)
 }
 
 func hostCommandDisplay(phase string) string {

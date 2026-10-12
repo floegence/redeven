@@ -1324,7 +1324,10 @@
     "unavailableServiceCheck": "Stellen Sie sicher, dass der Dienst ausgeführt wird.",
     "unavailablePortCheck": "Prüfen Sie, ob der Dienst auf diesem Port lauscht.",
     "retry": "Erneut versuchen",
-    "retrying": "Erneuter Versuch..."
+    "retrying": "Erneuter Versuch...",
+    "authenticationTitle": "Der Dienstzugang erfordert Authentifizierung",
+    "authenticationSummary": "Der Dienst hat geantwortet, aber seinen verwalteten Zugang abgelehnt. Bereiten Sie den aktuellen Zugang vor und versuchen Sie es erneut. Die Anwendung läuft weiter.",
+    "authenticationRetry": "Zugang vorbereiten und erneut versuchen"
   },
   "language": {
     "systemDefault": "Systemstandard",

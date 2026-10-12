@@ -62,7 +62,7 @@ func TestRegistryUpgradePreservesCustomTemplateAndConvertsLiteralPrefix(t *testi
 			if err := json.Unmarshal([]byte(template.SpecJSON), &converted); err != nil {
 				t.Fatal(err)
 			}
-			if converted.SchemaVersion != 6 || converted.Host.Start != "exec example-server" || strings.Contains(template.SpecJSON, "open_target") {
+			if converted.SchemaVersion != 7 || converted.Host.Start != "exec example-server" || strings.Contains(template.SpecJSON, "open_target") {
 				t.Fatal("template was not mechanically converted")
 			}
 			if prefix == "" {

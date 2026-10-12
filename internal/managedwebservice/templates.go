@@ -18,7 +18,7 @@ import (
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 )
 
-const templateSpecSchemaVersion = 6
+const templateSpecSchemaVersion = templatecontract.SpecVersion
 
 var (
 	templateNamePattern             = regexp.MustCompile(`^[^\x00-\x1f\x7f]{1,80}$`)

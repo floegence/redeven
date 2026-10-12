@@ -508,7 +508,7 @@ func (m *Manager) journaledContainerRuntimeExists(ctx context.Context, service *
 		return false, false, nil
 	}
 	resolved, resolveErr := m.resolveCurrentRuntime(ctx, service)
-	if resolveErr == nil && resolved.RuntimeSpecSHA256 == runtimeSpecSHA256 {
+	if resolveErr == nil && (resolved.RuntimeSpecSHA256 == runtimeSpecSHA256 || (runtimeSpecSHA256 == service.RuntimeSpecSHA256 && sameAppliedRuntime(resolved, service))) {
 		resolved.applyTo(service)
 		if err := driver.VerifyRuntime(ctx, service, resolved.Spec); err != nil {
 			if code, _, _, _ := ErrorDetails(err); code == "CONTAINER_IDENTITY_MISSING" {

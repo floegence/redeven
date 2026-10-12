@@ -146,6 +146,7 @@ type EngineContainer struct {
 	State           ContainerState
 	Health          string
 	CreatedAtUnixMs int64
+	StartedAt       string
 	Runtime         RuntimeInput
 	Ports           []PortSummary
 	GroupKind       string
@@ -656,6 +657,7 @@ func containerInspect(container EngineContainer) ContainerInspect {
 		State:           container.State,
 		Health:          strings.TrimSpace(container.Health),
 		CreatedAtUnixMs: container.CreatedAtUnixMs,
+		StartedAt:       container.StartedAt,
 		Runtime:         runtime,
 		Labels:          runtime.Labels,
 		Ports:           append([]PortSummary(nil), container.Ports...),

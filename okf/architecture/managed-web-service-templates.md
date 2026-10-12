@@ -18,13 +18,13 @@ timestamp: 2026-09-10T00:00:00Z
 
 The template repository publishes a versioned Go module. Each template lives at `templates/<template-id>/redeven-service-template.json`, with locale files under `locales/<locale>.json` and passive assets under `assets/`. Its reproducible schema-v2 bundle includes:
 
-- template and service-family identity, revision, deployment kind, and TemplateSpec v6;
+- template and service-family identity, revision, deployment kind, and TemplateSpec v7;
 - `recommended_version`, npm or OCI source, exact default platform artifact, platform matrix, access mode, and resource requirements;
 - localized name, description, notices, source declaration, and icon metadata for every shipped locale.
 
 `recommended_version` must equal the default npm package version or every platform's default image tag. It means only the version Redeven recommends and installs when the user makes no version choice. It is not a whitelist, minimum, automatic-update target, or authority to replace an installed release. Discovery declarations identify a source only; the bundle cannot block preview, deprecated, special, or non-SemVer releases.
 
-The catalog package exports read-only bundle bytes, module version, manifest, and SHA-256. Its sibling `template` package owns public source schemas, shared types, GitHub acquisition, and pure data adapters. Neither package contains service drivers or database migrations. [Format compatibility](service-template-format-compatibility.md) owns branded source-v3 identity and the historical input matrix; compiled catalog schema v2 is independent of source-document versioning. Service-specific license and provenance statements remain in that repository; Redeven's root notice declares only the module dependency and generic Host runtime it downloads.
+The catalog package exports read-only bundle bytes, module version, manifest, and SHA-256. Its sibling `template` package owns public source schemas, shared types, GitHub acquisition, and pure data adapters. Neither package contains service drivers or database migrations. [Format compatibility](service-template-format-compatibility.md) owns branded source-v4 identity and the historical input matrix; compiled catalog schema v2 is independent of source-document versioning. Service-specific license and provenance statements remain in that repository; Redeven's root notice declares only the module dependency and generic Host runtime it downloads.
 
 ## Redeven mapping
 
@@ -32,7 +32,7 @@ Catalog loading completes before Registry and Manager startup. Validation covers
 
 The mapper does not reinterpret application commands or manufacture service presentation. API responses carry localized bundle content and verified icon resource bytes; they no longer expose `localization_key` or a fixed brand enum. Renderer selects the requested locale with `en-US` fallback inside the already verified bundle and renders SVG only as an image data resource, never as arbitrary HTML.
 
-TemplateSpec v6 defines the generic Host hook contract below. Container and Compose retain their existing launch and opening behavior and acquire no host-script execution permission.
+TemplateSpec v7 declares one entrance source: a fixed path, a Host opening hook, or an exact-prefix startup URL. The released upstream parser owns startup-output text handling. Container and Compose acquire no host-script execution permission. [Managed opening](managed-web-service-opening.md) owns launch preparation, private persistence and recovery.
 
 ## Host hooks and output
 
@@ -42,7 +42,7 @@ Each real launch creates a mode-0700 private directory exposed as `REDEVEN_SERVI
 
 `output_mode` defaults to `discard`, directly connecting application standard streams to `/dev/null`. `private_file` appends stdout and stderr directly to a mode-0600 file whose path is exposed as `REDEVEN_SERVICE_OUTPUT_FILE`. Templates may parse that output to persist private opening information; applications with configuration or state-file support should read those sources directly. Every output prefix and application-specific parsing rule belongs to the template.
 
-Private output is truncated in place after successful opening persistence. While Runtime is online, a 30-second maintenance check truncates files above 8 MiB without replacing their inode or live descriptor. Offline growth is an explicit limitation. These files are startup scratch space, not a log archive; deleting an open filename is not a substitute for truncation. No output collector or additional resident process is introduced.
+Private output for Host hooks is truncated in place after successful common opening persistence. Declarative startup output remains available for explicit reprepare within its bounds. While Runtime is online, a 30-second maintenance check truncates files above 8 MiB without replacing their inode or live descriptor. Offline growth is an explicit limitation. These files are startup scratch space, not a log archive; deleting an open filename is not a substitute for truncation. No output collector or additional resident process is introduced.
 
 Hook results can contain credentials and never enter ordinary logs, operation output, or audit. Diagnostics contain only hook phase, duration, exit code, and safe error codes. The returned URL must use the declared HTTP/HTTPS scheme, a loopback host, the service's exact port, and a valid relative opening path after conversion. Hook code cannot select an external target or bypass the existing Forward authorization and proxy authentication. Hook failure changes opening availability without stopping a running service. Lifecycle and legacy-instance recovery are defined in the [independent Host lifecycle](independent-host-services.md).
 

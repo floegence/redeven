@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const exposeInMainWorld = vi.fn();
 const ipcRendererInvoke = vi.fn();
 const ipcRendererSend = vi.fn();
+const ipcRendererOn = vi.fn();
+const ipcRendererRemoveListener = vi.fn();
 
 vi.mock('electron', () => ({
   contextBridge: {
@@ -11,6 +13,8 @@ vi.mock('electron', () => ({
   ipcRenderer: {
     invoke: ipcRendererInvoke,
     send: ipcRendererSend,
+    on: ipcRendererOn,
+    removeListener: ipcRendererRemoveListener,
   },
 }));
 
@@ -21,6 +25,8 @@ describe('bootstrapDesktopShellBridge', () => {
     ipcRendererInvoke.mockReset();
     ipcRendererInvoke.mockResolvedValue(undefined);
     ipcRendererSend.mockReset();
+    ipcRendererOn.mockReset();
+    ipcRendererRemoveListener.mockReset();
   });
 
   it('forwards desktop shell actions to electron main through the canonical bridge', async () => {
@@ -175,4 +181,24 @@ describe('bootstrapDesktopShellBridge', () => {
       code_space_id: 'demo',
     })).toBeNull();
   });
+});
+
+
+describe('managed entrance IPC observation', () => {
+ it('validates requests and discards late cancelled replies', async () => {
+  const {bootstrapDesktopShellBridge}=await import('./desktopShell');bootstrapDesktopShellBridge();
+  const bridge=exposeInMainWorld.mock.calls.at(-1)![1];
+  let resolve!: (value:unknown)=>void;
+  const listener=vi.fn((request:{cancel?:boolean})=> request.cancel ? Promise.resolve(null) : new Promise(value=>{resolve=value;}));
+  const dispose=bridge.onManagedEntranceRequest(listener);
+  const receive=ipcRendererOn.mock.calls.find(call=>call[0]==='redeven-desktop:managed-entrance-request')![1];
+  const cancel=ipcRendererOn.mock.calls.find(call=>call[0]==='redeven-desktop:managed-entrance-cancel')![1];
+  receive(undefined,{request_id:'invalid',service_id:'mws-one',refresh:true});expect(listener).not.toHaveBeenCalled();
+  const request={request_id:'12345678-1234-1234-1234-123456789abc',service_id:'mws-one',refresh:true};
+  receive(undefined,request);cancel(undefined,request.request_id);resolve({state:'ready',app_path:'/?token=private'});
+  await Promise.resolve();await Promise.resolve();
+  expect(listener).toHaveBeenCalledWith({...request,cancel:true});
+  expect(ipcRendererSend).not.toHaveBeenCalledWith('redeven-desktop:managed-entrance-response',request.request_id,expect.anything());
+  dispose();expect(ipcRendererRemoveListener).toHaveBeenCalledTimes(2);
+ });
 });

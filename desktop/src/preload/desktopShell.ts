@@ -33,6 +33,7 @@ import {
   normalizeDesktopShellOpenCodespaceWindowResponse,
 } from '../shared/desktopShellCodespaceWindowIPC';
 import {
+  MANAGED_ENTRANCE_REQUEST, MANAGED_ENTRANCE_RESPONSE, MANAGED_ENTRANCE_CANCEL, type ManagedEntrancePreparationRequest,
   DESKTOP_SHELL_OPEN_WEB_SERVICE_WINDOW_CHANNEL,
   normalizeDesktopShellOpenWebServiceWindowResponse,
 } from '../shared/desktopShellWebServiceWindowIPC';
@@ -43,6 +44,34 @@ import {
 
 export function bootstrapDesktopShellBridge(): void {
   contextBridge.exposeInMainWorld('redevenDesktopShell', {
+    onManagedEntranceRequest: (listener: (request: ManagedEntrancePreparationRequest) => Promise<unknown>): (() => void) => {
+      const pending = new Map<string, ManagedEntrancePreparationRequest>();
+      const cancel = (_event: unknown, id: unknown) => {
+        if (typeof id !== 'string') return;
+        const request = pending.get(id);
+        if (!request) return;
+        pending.delete(id);
+        void listener({ ...request, cancel: true }).catch(() => {});
+      };
+      const receive = (_event: unknown, request: ManagedEntrancePreparationRequest) => {
+        if (!request || !/^[a-f0-9-]{36}$/u.test(request.request_id) || !/^[a-zA-Z0-9_-]{1,128}$/u.test(request.service_id) || typeof request.refresh !== 'boolean' || pending.has(request.request_id)) return;
+        pending.set(request.request_id, request);
+        void listener(request).then(result => {
+          if (!pending.has(request.request_id)) return;
+          const raw = JSON.stringify(result);
+          ipcRenderer.send(MANAGED_ENTRANCE_RESPONSE, request.request_id, raw && raw.length <= 65536 ? raw : 'null');
+        }).catch(() => {
+          if (pending.has(request.request_id)) ipcRenderer.send(MANAGED_ENTRANCE_RESPONSE, request.request_id, 'null');
+        }).finally(() => pending.delete(request.request_id));
+      };
+      ipcRenderer.on(MANAGED_ENTRANCE_REQUEST, receive);
+      ipcRenderer.on(MANAGED_ENTRANCE_CANCEL, cancel);
+      return () => {
+        for (const id of pending.keys()) cancel(undefined, id);
+        ipcRenderer.removeListener(MANAGED_ENTRANCE_REQUEST, receive);
+        ipcRenderer.removeListener(MANAGED_ENTRANCE_CANCEL, cancel);
+      };
+    },
     remoteDesktopDeployment: async (request: DesktopDeploymentRequest): Promise<DesktopDeploymentResult> => {
       const normalized = parseDesktopDeploymentRequest(request);
       if (!normalized) return { ok: false, code: 'invalid_request' };

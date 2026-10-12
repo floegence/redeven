@@ -262,6 +262,9 @@ func (m *Manager) readSourceTemplate(ctx context.Context, source pfregistry.Mana
 		return nil, nil, serviceError("TEMPLATE_SOURCE_DIGEST_MISMATCH", "The saved template source changed outside its reviewed update. Its original definition must be restored.", 409, false, nil)
 	}
 	result, err := m.sourceTemplate(ctx, source, parsed)
+	if err == nil {
+		result.SourceRuntimeSHA256 = templateRuntimeFilesDigest(files)
+	}
 	return result, files, err
 }
 
@@ -461,4 +464,14 @@ func (m *Manager) cleanupTemplateSourceOrphans(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+func templateRuntimeFilesDigest(files []templatecontract.File) string {
+	parts := []string{"template-runtime-files-v2"}
+	for _, file := range files {
+		if file.Path != templatecontract.Filename {
+			parts = append(parts, file.Path, file.Mode, string(file.Content))
+		}
+	}
+	return requestFingerprint(parts...)
 }

@@ -11,7 +11,7 @@ require (
 	github.com/floegence/floeterm/terminal-go v0.19.2
 	github.com/floegence/floret/v7 v7.29.2
 	github.com/floegence/flowersec/flowersec-go/v5 v5.11.0
-	github.com/floegence/redeven-service-templates v0.6.0
+	github.com/floegence/redeven-service-templates v0.7.0
 	github.com/floegence/redevplugin/v3 v3.0.35
 	github.com/godbus/dbus/v5 v5.2.2
 	github.com/google/uuid v1.6.0

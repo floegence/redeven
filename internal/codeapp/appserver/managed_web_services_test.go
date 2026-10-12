@@ -464,3 +464,32 @@ func TestManagedWebServiceInstallRequiresReviewedLocation(t *testing.T) {
 		t.Fatalf("unreviewed installation reached the driver: status=%d calls=%d body=%s", response.Code, backend.createCalls, response.Body.String())
 	}
 }
+
+func (b *managedBackendStub) Inspect(_ context.Context, id string) (*managedwebservice.ServiceView, error) {
+	return &managedwebservice.ServiceView{ManagedService: pfregistry.ManagedService{ServiceID: id}, Opening: managedwebservice.ServiceOpening{State: "unprepared"}}, nil
+}
+
+func TestManagedInspectionIsReadOnlyAndNeverCached(t *testing.T) {
+	backend := &managedBackendStub{}
+	channel := "ch_managed_inspection"
+	for _, read := range []bool{false, true} {
+		server := &Server{managed: backend, resolveSessionMeta: resolveMetaForTest(channel, session.Meta{CanRead: read})}
+		request := httptest.NewRequest(http.MethodGet, managedServicesAPIBase+"/mws_inspect/inspection", nil)
+		request.Header.Set("Origin", envOriginWithChannel(channel))
+		response := httptest.NewRecorder()
+		server.handleManagedWebServicesAPI(response, request)
+		want := http.StatusForbidden
+		if read {
+			want = http.StatusOK
+		}
+		if response.Code != want {
+			t.Fatalf("inspection status=%d want=%d", response.Code, want)
+		}
+		if read && response.Header().Get("Cache-Control") != "no-store" {
+			t.Fatal("inspection cached")
+		}
+		if backend.operateCalls != 0 || backend.openSessionCalls != 0 {
+			t.Fatal("inspection prepared or mutated service")
+		}
+	}
+}

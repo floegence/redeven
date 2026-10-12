@@ -39,6 +39,7 @@ export type DesktopRuntimeMaintenanceResult = Readonly<{
 export type RuntimeMaintenanceContext = DesktopShellRuntimeMaintenanceContext;
 
 export interface DesktopShellBridge {
+  onManagedEntranceRequest?: (listener: (request: import('../../../../../../desktop/src/shared/desktopShellWebServiceWindowIPC').ManagedEntrancePreparationRequest) => Promise<unknown>) => () => void;
   remoteDesktopDeployment?: (request: DesktopDeploymentRequest) => Promise<DesktopDeploymentResult>;
   onRemoteDesktopDeploymentProgress?: (listener: (value: DesktopDeploymentProgress) => void) => () => void;
   onRemoteDesktopFiles?: (listener: () => void) => () => void;

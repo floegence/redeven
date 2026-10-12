@@ -77,7 +77,7 @@ func (m *Manager) UpdateSettings(ctx context.Context, serviceID string, patch Se
 	if err != nil {
 		return nil, err
 	}
-	if !activeManagement(*service) {
+	if !activeManagement(*service) || pendingUninstall(service) {
 		return nil, serviceError("SERVICE_NOT_ACTIVE", "Restore management before changing the service entry.", 409, true, nil)
 	}
 	name := strings.TrimSpace(patch.Name)
@@ -132,7 +132,7 @@ func (m *Manager) serviceAndForward(ctx context.Context, serviceID string) (*pfr
 	if service == nil {
 		return nil, nil, serviceError("SERVICE_NOT_FOUND", "The managed Web Service was not found.", 404, false, nil)
 	}
-	if !activeManagement(*service) {
+	if !activeManagement(*service) || pendingUninstall(service) {
 		return nil, nil, serviceError("SERVICE_NOT_ACTIVE", "Restore management before opening this service.", 409, false, nil)
 	}
 	forward, err := m.registry.GetForward(ctx, service.ForwardID)

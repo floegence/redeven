@@ -175,7 +175,8 @@ vi.mock('../services/floeproxyContract', () => ({
   FLOE_APP_PORT_FORWARD: 'com.floegence.redeven.portforward',
 }));
 
-vi.mock('../services/localApi', () => ({
+vi.mock('../services/localApi', async original => ({
+  ...(await original<typeof import('../services/localApi')>()),
   fetchLocalApi: localApiMocks.fetchLocalApi,
   fetchLocalApiJSON: localApiMocks.fetchLocalApiJSON,
   LocalApiError: class LocalApiError extends Error {
@@ -688,7 +689,7 @@ describe('web service metadata and template validation', () => {
       expect(controlText(row)).not.toContain('Raw backend message');
       expect(row.querySelector('[data-testid="managed-service-copy-failure"]')).toBeNull();
       expect(Array.from(row.querySelectorAll('button')).find((button) => controlText(button)?.trim() === 'Retry')).toBeUndefined();
-      const review = Array.from(row.querySelectorAll<HTMLButtonElement>('[data-testid="managed-service-actions"] button')).find((button) => controlText(button)?.trim() === 'Review and resolve');
+      const review = Array.from(row.querySelectorAll<HTMLButtonElement>('[data-testid="managed-service-actions"] button')).find((button) => controlText(button)?.trim() === 'Details and diagnostics');
       review?.click(); expect(retry).toHaveBeenCalledOnce();
     } finally {
       dispose();
@@ -723,7 +724,7 @@ describe('web service metadata and template validation', () => {
     ), host);
     try {
       expect(controlText(host)).not.toContain('/private/workspace: no such file or directory');
-      const button = Array.from(host.querySelectorAll<HTMLButtonElement>('[data-testid="managed-service-actions"] button')).find((button) => controlText(button)?.trim() === 'Review and resolve');
+      const button = Array.from(host.querySelectorAll<HTMLButtonElement>('[data-testid="managed-service-actions"] button')).find((button) => controlText(button)?.trim() === 'Details and diagnostics');
       button?.click(); expect(retry).toHaveBeenCalledOnce();
     } finally {
       dispose();
@@ -756,7 +757,7 @@ describe('web service metadata and template validation', () => {
     ), host);
     try {
       expect(controlText(host)).not.toContain('private runtime path detail');
-      expect(Array.from(host.querySelectorAll<HTMLButtonElement>('button')).some((button) => controlText(button)?.trim() === 'Review and resolve')).toBe(true);
+      expect(Array.from(host.querySelectorAll<HTMLButtonElement>('button')).some((button) => controlText(button)?.trim() === 'Details and diagnostics')).toBe(true);
     } finally {
       dispose();
       host.remove();
@@ -3094,6 +3095,10 @@ describe('EnvPortForwardsPage', () => {
 
 let releaseTestTransport: (() => void) | undefined;
 beforeEach(async () => {
-  releaseTestTransport = await bindTestSessionHTTP(localApiMocks.fetchLocalApi);
+  releaseTestTransport = await bindTestSessionHTTP(async (input,init)=>{
+    if(new Headers(init?.headers).get('Accept')==='text/event-stream') return localApiMocks.fetchLocalApi(input,init);
+    const data=await localApiMocks.fetchLocalApiJSON(String(input),{...init,headers:undefined});
+    return new Response(JSON.stringify({ok:true,data}),{status:200});
+  });
 });
 afterEach(() => releaseTestTransport?.());

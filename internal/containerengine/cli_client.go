@@ -576,7 +576,14 @@ func (c *CLIClient) streamOutput(ctx context.Context, engine Engine, args []stri
 	}
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	err := streamer.StreamOutput(runCtx, string(engine), endpointArgs(ctx, engine, args), consume)
+	var err error
+	if logs, ok := runner.(interface {
+		StreamLogOutput(context.Context, string, []string, func(io.Reader) error) error
+	}); ok && len(args) > 0 && args[0] == "logs" {
+		err = logs.StreamLogOutput(runCtx, string(engine), endpointArgs(ctx, engine, args), consume)
+	} else {
+		err = streamer.StreamOutput(runCtx, string(engine), endpointArgs(ctx, engine, args), consume)
+	}
 	if ctxErr := runCtx.Err(); ctxErr != nil {
 		if parentErr := ctx.Err(); parentErr != nil {
 			return parentErr
@@ -766,6 +773,14 @@ func (execRunner) Stream(ctx context.Context, name string, args []string, onStdo
 }
 
 func (execRunner) StreamOutput(ctx context.Context, name string, args []string, consume func(io.Reader) error) error {
+	return streamCommandOutput(ctx, name, args, consume, false)
+}
+
+func (execRunner) StreamLogOutput(ctx context.Context, name string, args []string, consume func(io.Reader) error) error {
+	return streamCommandOutput(ctx, name, args, consume, true)
+}
+
+func streamCommandOutput(ctx context.Context, name string, args []string, consume func(io.Reader) error, combined bool) error {
 	if _, err := exec.LookPath(name); err != nil {
 		return fmt.Errorf("%w: %s", ErrCLIUnavailable, name)
 	}
@@ -784,6 +799,9 @@ func (execRunner) StreamOutput(ctx context.Context, name string, args []string, 
 		return errors.New("container command stdout pipe failed")
 	}
 	cmd.Stderr = &stderr
+	if combined {
+		cmd.Stderr = cmd.Stdout
+	}
 	if err := cmd.Start(); err != nil {
 		if errors.Is(err, os.ErrPermission) {
 			return ErrPermissionDenied
@@ -908,6 +926,7 @@ type inspectConfig struct {
 }
 
 type inspectState struct {
+	StartedAt  string `json:"StartedAt"`
 	Status     string `json:"Status"`
 	Running    bool   `json:"Running"`
 	Paused     bool   `json:"Paused"`
@@ -991,6 +1010,7 @@ func parseContainerInspect(engine Engine, raw []byte) (EngineContainer, error) {
 		State:           normalizeContainerState(doc.State),
 		Health:          inspectHealth(doc.State),
 		CreatedAtUnixMs: parseTimeUnixMs(doc.Created),
+		StartedAt:       doc.State.StartedAt,
 		Runtime: RuntimeInput{
 			Privileged:    doc.HostConfig.Privileged,
 			NetworkMode:   strings.TrimSpace(doc.HostConfig.NetworkMode),

@@ -31,11 +31,11 @@ func TestTemplateSourcesMigrationPreservesV4AndRollsBack(t *testing.T) {
 			}
 			db.Close()
 			spec := registrySchemaSpec()
-			if spec.CurrentVersion != 5 {
-				t.Fatal("source migration must append version 5")
+			if spec.CurrentVersion != 6 {
+				t.Fatal("source and entrance migrations must append versions 5 and 6")
 			}
 			if rollback {
-				spec.Migrations[len(spec.Migrations)-1].Apply = func(tx *sql.Tx) error {
+				spec.Migrations[3].Apply = func(tx *sql.Tx) error {
 					if err := applyTemplateSourcesSchema(tx); err != nil {
 						return err
 					}

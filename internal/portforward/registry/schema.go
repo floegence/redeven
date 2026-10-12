@@ -17,7 +17,7 @@ import (
 
 const (
 	registrySchemaKind           = "portforward_registry_v2"
-	registryCurrentSchemaVersion = 5
+	registryCurrentSchemaVersion = 6
 )
 
 func registrySchemaSpec() sqliteutil.Spec {
@@ -33,8 +33,9 @@ func registrySchemaSpec() sqliteutil.Spec {
 			{FromVersion: 2, ToVersion: 3, Apply: migrateRegistryV2ToV3},
 			{FromVersion: 3, ToVersion: 4, Apply: migrateRegistryV3ToV4},
 			{FromVersion: 4, ToVersion: 5, Apply: migrateRegistryV4ToV5},
+			{FromVersion: 5, ToVersion: 6, Apply: migrateRegistryV5ToV6},
 		},
-		Verify: func(tx *sql.Tx) error { return verifyRegistryVersion(tx, 5) },
+		Verify: func(tx *sql.Tx) error { return verifyRegistryVersion(tx, 6) },
 	}
 }
 
@@ -280,6 +281,9 @@ func verifyRegistryVersion(tx *sql.Tx, version int) error {
 	templateVersion := 5
 	if version >= 3 {
 		templateVersion = 6
+	}
+	if version >= 6 {
+		templateVersion = 7
 	}
 	if err := verifyRegistryShape(tx, version); err != nil {
 		return err

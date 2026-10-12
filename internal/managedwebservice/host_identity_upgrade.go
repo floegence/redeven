@@ -53,7 +53,7 @@ func (d *hostScriptDriver) commitHostIdentityUpgrade(service *pfregistry.Managed
 	endpoint := WebEndpointSpec{Scheme: target.Scheme, Path: target.RequestURI(), HealthPath: forward.HealthPath}
 	state := hostRunState{SchemaVersion: 1, RuntimeIdentity: identity, RuntimeSpecSHA256: service.RuntimeSpecSHA256, Endpoint: endpoint, OutputMode: "discard", AfterStartComplete: true}
 	upgrade := hostIdentityUpgrade{OldIdentity: oldIdentity, NewIdentity: identity, State: state}
-	appPath, sessionErr := d.readOpenSession(service, oldIdentity)
+	appPath, sessionErr := d.readLegacyOpenSession(service, oldIdentity)
 	if sessionErr != nil {
 		if _, fileErr := os.Lstat(d.openSessionPath(service)); !errors.Is(fileErr, os.ErrNotExist) {
 			return sessionErr
@@ -92,7 +92,7 @@ func (d *hostScriptDriver) finishHostIdentityUpgrade(service *pfregistry.Managed
 		return err
 	}
 	if upgrade.Session != nil {
-		if upgrade.Session.SchemaVersion != 1 || upgrade.Session.RuntimeSpecSHA256 != service.RuntimeSpecSHA256 || upgrade.Session.ServiceID != service.ServiceID || upgrade.Session.RuntimeIdentity != upgrade.NewIdentity || !validServiceOpeningPath(upgrade.Session.AppPath, true) {
+		if (upgrade.Session.SchemaVersion != 1 && upgrade.Session.SchemaVersion != serviceOpenSessionSchemaVersion) || upgrade.Session.RuntimeSpecSHA256 != service.RuntimeSpecSHA256 || upgrade.Session.ServiceID != service.ServiceID || upgrade.Session.RuntimeIdentity != upgrade.NewIdentity || !validServiceOpeningPath(upgrade.Session.AppPath, true) {
 			return errors.New("host opening information does not match identity upgrade")
 		}
 	}

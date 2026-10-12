@@ -1,3 +1,4 @@
+import { ManagedWebEntranceNavigation, redactManagedEntranceAddress, applyManagedWebEntrance } from './managedWebEntranceNavigation';
 import { completeTessivenRuntimeHandoff } from './tessivenRuntimeHandoff';
 import { registeredTessivenConnections } from './tessivenRegisteredConnections';
 import { TessivenRuntimes, withExecutionRuntimePath, type TessivenRuntimeInventory, type TessivenRuntimePath, type TessivenRuntimeTarget } from './tessivenRuntimes';
@@ -608,6 +609,7 @@ import {
   type DesktopShellOpenCodespaceWindowResponse,
 } from '../shared/desktopShellCodespaceWindowIPC';
 import {
+  MANAGED_ENTRANCE_REQUEST, MANAGED_ENTRANCE_RESPONSE, MANAGED_ENTRANCE_CANCEL,
   DESKTOP_SHELL_OPEN_WEB_SERVICE_WINDOW_CHANNEL,
   normalizeDesktopShellOpenWebServiceWindowRequest,
   type DesktopShellOpenWebServiceWindowResponse,
@@ -1068,7 +1070,7 @@ type DesktopWebServiceBrowserController = Readonly<{
   accessMode: NormalizedDesktopShellOpenWebServiceWindowRequest['access_mode'];
   presentation: NormalizedDesktopShellOpenWebServiceWindowRequest['presentation'];
   targetURL: string;
-  navigateProtectedRoute: (url: string) => DesktopWebServiceBrowserActionResponse;
+  navigateProtectedRoute: (url: string, entrance?: NormalizedDesktopShellOpenWebServiceWindowRequest['managed_entrance']) => DesktopWebServiceBrowserActionResponse;
 }>;
 const webServiceBrowserByToolbarWebContentsID = new Map<number, DesktopWebServiceBrowserController>();
 const webServiceWindowOpenTasks = new Map<string, Promise<DesktopShellOpenWebServiceWindowResponse>>();
@@ -8575,22 +8577,57 @@ function webServiceBrowserDocumentURL(): string {
   }, desktopThemeState().getSnapshot());
 }
 
-function webServiceUnavailableDocumentURL(targetAddress: string, applicationWindow = false): string {
+function webServiceUnavailableDocumentURL(targetAddress: string, applicationWindow = false, authenticationFailure = false): string {
   const locale = desktopLanguageState().getSnapshot().resolved_locale;
   const i18n = createDesktopI18n(locale);
   return buildWebServiceUnavailableDocumentURL({
     locale,
     documentTitle: i18n.t(applicationWindow ? 'hostApplications.unavailableTitle' : 'webServiceBrowser.unavailableDocumentTitle'),
     eyebrow: i18n.t('webServiceBrowser.unavailableEyebrow'),
-    title: i18n.t(applicationWindow ? 'hostApplications.unavailableTitle' : 'webServiceBrowser.unavailableTitle'),
-    summary: i18n.t(applicationWindow ? 'hostApplications.unavailableSummary' : 'webServiceBrowser.unavailableSummary'),
+    title: i18n.t(authenticationFailure ? 'webServiceBrowser.authenticationTitle' : applicationWindow ? 'hostApplications.unavailableTitle' : 'webServiceBrowser.unavailableTitle'),
+    summary: i18n.t(authenticationFailure ? 'webServiceBrowser.authenticationSummary' : applicationWindow ? 'hostApplications.unavailableSummary' : 'webServiceBrowser.unavailableSummary'),
     targetLabel: i18n.t('webServiceBrowser.unavailableTargetLabel'),
     checksTitle: i18n.t('webServiceBrowser.unavailableChecksTitle'),
     serviceCheck: i18n.t('webServiceBrowser.unavailableServiceCheck'),
     portCheck: i18n.t('webServiceBrowser.unavailablePortCheck'),
-    retryLabel: i18n.t(applicationWindow ? 'hostApplications.retry' : 'webServiceBrowser.retry'),
+    retryLabel: i18n.t(authenticationFailure ? 'webServiceBrowser.authenticationRetry' : applicationWindow ? 'hostApplications.retry' : 'webServiceBrowser.retry'),
     retryingLabel: i18n.t(applicationWindow ? 'hostApplications.retrying' : 'webServiceBrowser.retrying'),
   }, targetAddress, desktopThemeState().getSnapshot(), applicationWindow ? 'application' : 'browser');
+}
+
+async function prepareManagedWebEntrance(
+  owner: DesktopSessionRecord,
+  request: NormalizedDesktopShellOpenWebServiceWindowRequest,
+  refresh: boolean,
+  signal?: AbortSignal,
+): Promise<NormalizedDesktopShellOpenWebServiceWindowRequest> {
+  const context = request.managed_entrance;
+  if (!context) return request;
+  const opening = await new Promise<{state?:string;app_path?:string;managed_entrance?:NormalizedDesktopShellOpenWebServiceWindowRequest['managed_entrance'];forward?:{forward_id?:string;target_url?:string}}>((resolve,reject) => {
+    const requestID = crypto.randomUUID();
+    const contents = owner.root_window.browserWindow.webContents;
+    const cleanup = () => { clearTimeout(timeout); ipcMain.removeListener(MANAGED_ENTRANCE_RESPONSE, receive); contents.removeListener('destroyed', closed); signal?.removeEventListener('abort', closed); };
+    const closed = () => {
+      if (!contents.isDestroyed()) contents.send(MANAGED_ENTRANCE_CANCEL, requestID);
+      cleanup(); reject(new Error('The environment session has closed.'));
+    };
+    const receive = (event: Electron.IpcMainEvent, id: unknown, raw: unknown) => {
+      if (id !== requestID || event.sender !== contents || event.senderFrame !== contents.mainFrame) return;
+      cleanup();
+      try {
+        if (typeof raw !== 'string' || raw.length > 65536 || owner.closing || !isAllowedSessionNavigation(owner.session_key, contents.getURL())) throw new Error('Invalid entrance response.');
+        resolve(JSON.parse(raw));
+      } catch { reject(new Error('The managed entrance is unavailable.')); }
+    };
+    const timeout = setTimeout(closed,610000);
+    ipcMain.on(MANAGED_ENTRANCE_RESPONSE,receive);
+    contents.once('destroyed',closed);
+    signal?.addEventListener('abort',closed,{once:true});
+    if(signal?.aborted) {closed();return;}
+    contents.send(MANAGED_ENTRANCE_REQUEST,{request_id:requestID,service_id:context.service_id,refresh});
+  });
+  return applyManagedWebEntrance(request, opening);
+
 }
 
 function createWebServiceBrowserController(
@@ -8602,6 +8639,9 @@ function createWebServiceBrowserController(
 ): DesktopWebServiceBrowserController {
   let errorMessage = '';
   let pendingExternalURL = '';
+  let authenticationFailure = false;
+  const entranceNavigation = new ManagedWebEntranceNavigation(request.managed_entrance);
+  let entranceRequest = new AbortController();
   const browserEntryURL = loopbackGateway?.entryURL(request.url) ?? request.url;
   let requestedURL = browserEntryURL;
   let unavailableRequestURL = '';
@@ -8611,6 +8651,7 @@ function createWebServiceBrowserController(
   const targetAddress = new URL(request.target_url).origin;
   const applicationWindow = request.presentation !== 'browser';
   const onApplicationClosed = (closedWindow: Readonly<{ webContentsID: number }>) => {
+    entranceRequest.abort();
     webServiceBrowserByToolbarWebContentsID.delete(closedWindow.webContentsID);
     sessionKeyByWebContentsID.delete(closedWindow.webContentsID);
     sessionKeyByWebContentsID.delete(contentViewIdentity.webContentsID);
@@ -8680,7 +8721,7 @@ function createWebServiceBrowserController(
       ?? targetAddress + '/';
     const title = contents.isDestroyed() ? '' : contents.getTitle();
     return {
-      address,
+      address: entranceNavigation.context ? redactManagedEntranceAddress(address) : address,
       title,
       loading: !contents.isDestroyed() && contents.isLoading(),
       can_go_back: !contents.isDestroyed() && contents.navigationHistory.canGoBack(),
@@ -8700,6 +8741,7 @@ function createWebServiceBrowserController(
     win.webContents.send(DESKTOP_WEB_SERVICE_BROWSER_STATE_UPDATED_CHANNEL, snapshot());
   };
   const loadRequestedURL = (targetURL: string): void => {
+    entranceRequest.abort();
     requestedURL = targetURL;
     unavailableRequestURL = '';
     unavailablePageURL = '';
@@ -8724,10 +8766,12 @@ function createWebServiceBrowserController(
     loadRequestedURL(targetURL);
     return { ok: true };
   };
-  const navigateProtectedRoute = (url: string): DesktopWebServiceBrowserActionResponse => {
+  const navigateProtectedRoute = (url: string, entrance?: NormalizedDesktopShellOpenWebServiceWindowRequest['managed_entrance']): DesktopWebServiceBrowserActionResponse => {
     if (!isAllowedWebServiceWindowNavigation(url, sessionRecord.allowed_base_url, request.forward_id)) {
       return { ok: false, message: 'Desktop refused to navigate outside this Web Service route.' };
     }
+    entranceNavigation.begin(entrance);
+    authenticationFailure=false;
     loadRequestedURL(loopbackGateway?.entryURL(url) ?? url);
     return { ok: true };
   };
@@ -8743,7 +8787,7 @@ function createWebServiceBrowserController(
     if (win.isDestroyed()) return;
     refreshHostAppearance();
     if (!unavailablePageURL || contentView.webContents.isDestroyed()) return;
-    unavailablePageURL = webServiceUnavailableDocumentURL(targetAddress, applicationWindow);
+    unavailablePageURL = webServiceUnavailableDocumentURL(targetAddress, applicationWindow, authenticationFailure);
     loadingUnavailablePage = true;
     void contentView.webContents.loadURL(unavailablePageURL);
   };
@@ -8769,7 +8813,12 @@ function createWebServiceBrowserController(
         else contentView.webContents.reload();
         return { ok: true };
       case 'stop':
+        entranceRequest.abort();
         contentView.webContents.stop();
+        if (unavailablePageURL) {
+          loadingUnavailablePage = true;
+          void contentView.webContents.loadURL(unavailablePageURL);
+        }
         publishState();
         return { ok: true };
       case 'toggle_devtools':
@@ -8842,11 +8891,21 @@ function createWebServiceBrowserController(
     loadingUnavailablePage = true;
     void showWebServiceRetryFeedback(contentView.webContents, retryPageURL,
       () => !win.isDestroyed() && unavailablePageURL === retryPageURL,
-    ).then((current) => {
-      if (current) loadRequestedURL(retryRequestURL);
+    ).then(async (current) => {
+      if (!current) return;
+      if(authenticationFailure && entranceNavigation.context) {
+        entranceRequest.abort();
+        entranceRequest = new AbortController();
+        const prepared=await prepareManagedWebEntrance(sessionRecord,{...request,managed_entrance:entranceNavigation.context},true,entranceRequest.signal);
+        if(win.isDestroyed() || contentView.webContents.isDestroyed() || unavailablePageURL!==retryPageURL)return;
+        entranceNavigation.begin(prepared.managed_entrance);
+        authenticationFailure=false;
+        loadRequestedURL(loopbackGateway?.entryURL(prepared.url) ?? prepared.url);
+      } else loadRequestedURL(retryRequestURL);
     }).catch(() => {
       if (unavailablePageURL !== retryPageURL) return;
-      loadingUnavailablePage = false;
+      loadingUnavailablePage = true;
+      void contentView.webContents.loadURL(retryPageURL);
       errorMessage = createDesktopI18n(desktopLanguageState().getSnapshot().resolved_locale).t('webServiceBrowser.loadFailed');
       publishState();
     });
@@ -8946,16 +9005,20 @@ function createWebServiceBrowserController(
   webSession.webRequest.onHeadersReceived((details, callback) => {
     const isTargetDocument = details.webContentsId !== undefined
       && electronWebContents.fromId(details.webContentsId) === contentView.webContents;
-    if (!isTargetDocument || !isMarkedWebServiceUpstreamUnavailable(details)) {
+    const bootstrapDocument = new URL(details.url).pathname.replace(/\/$/u, '') === '/_redeven_boot';
+    const transportFailure = isMarkedWebServiceUpstreamUnavailable(details);
+    const authenticationRejected = isTargetDocument && !bootstrapDocument && !transportFailure && entranceNavigation.observe(details.resourceType,details.statusCode);
+    if (!isTargetDocument || (!authenticationRejected && !isMarkedWebServiceUpstreamUnavailable(details))) {
       callback({});
       return;
     }
+    authenticationFailure = authenticationRejected;
     const failedRequestURL = requestedURL;
     callback({ cancel: true });
     setImmediate(() => {
       if (win.isDestroyed() || contentView.webContents.isDestroyed()) return;
       unavailableRequestURL = failedRequestURL;
-      unavailablePageURL = webServiceUnavailableDocumentURL(targetAddress, applicationWindow);
+      unavailablePageURL = webServiceUnavailableDocumentURL(targetAddress, applicationWindow, authenticationFailure);
       loadingUnavailablePage = true;
       pendingExternalURL = '';
       errorMessage = '';
@@ -8996,13 +9059,15 @@ async function openWebServiceWindowFromShellNow(
     };
   }
 
+  // The Env App already holds the verified Runtime handoff. Only an explicit
+  // authentication retry prepares it again, while the existing window stays closable.
   if (request.preparation_id && (!preparationOwner || !hostApplicationPreparations.get(preparationOwner, request.preparation_id))) return { ok: false, message: 'The application preparation window was closed.' };
   const existing = sessionRecord.web_service_windows.get(request.forward_id);
   const existingWindow = liveTrackedBrowserWindow(existing);
   if (existing && existingWindow) {
     const controller = webServiceBrowserByToolbarWebContentsID.get(existing.webContentsID);
     if (controller?.accessMode === request.access_mode && controller.targetURL === request.target_url && controller.presentation === request.presentation) {
-      const response = controller.navigateProtectedRoute(request.url);
+      const response = controller.navigateProtectedRoute(request.url,request.managed_entrance);
       if (!response.ok) return response;
       if (request.preparation_id && preparationOwner) hostApplicationPreparations.discard(preparationOwner, request.preparation_id);
       presentAppWindow(existingWindow, { stealAppFocus: true });
@@ -9073,7 +9138,7 @@ async function openWebServiceWindowFromShellNow(
     if (controller?.accessMode === request.access_mode && controller.targetURL === request.target_url && controller.presentation === request.presentation) {
       sessionRecord.web_service_loopback_gateways.delete(request.forward_id);
       await loopbackGateway?.close();
-      const response = controller.navigateProtectedRoute(request.url);
+      const response = controller.navigateProtectedRoute(request.url,request.managed_entrance);
       if (!response.ok) return response;
       if (request.preparation_id && preparationOwner) hostApplicationPreparations.discard(preparationOwner, request.preparation_id);
       presentAppWindow(preparedExistingWindow, { stealAppFocus: true });

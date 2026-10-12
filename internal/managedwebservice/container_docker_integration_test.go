@@ -94,6 +94,10 @@ func TestManagedContainerDockerLifecycle(t *testing.T) {
 		t.Fatal("the verified release digest differs from the requested acceptance image")
 	}
 	dockerLifecycleHealthy(t, ctx, m, service)
+	previous, err := m.OpenSession(ctx, serviceID, OpenSessionRequest{RequestID: "qualification-launch"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	resources, err := m.registry.ListManagedServiceResources(ctx, serviceID)
 	if err != nil {
 		t.Fatal(err)
@@ -132,6 +136,15 @@ func TestManagedContainerDockerLifecycle(t *testing.T) {
 			t.Fatal(err)
 		}
 		dockerLifecycleOperation(t, ctx, m, op)
+		if action != ActionStop {
+			service = dockerLifecycleService(t, ctx, m, serviceID)
+			dockerLifecycleHealthy(t, ctx, m, service)
+			current, err := m.OpenSession(ctx, serviceID, OpenSessionRequest{RequestID: "qualification-new-launch"})
+			if err != nil || current.LaunchGeneration == previous.LaunchGeneration || current.AppPath == previous.AppPath {
+				t.Fatal("restart reused old authentication entrance", err)
+			}
+			previous = current
+		}
 	}
 	// Simulate an externally removed runtime while retaining the exact data.
 	service = dockerLifecycleService(t, ctx, m, serviceID)
@@ -297,6 +310,14 @@ func dockerLifecycleHealthy(t *testing.T, ctx context.Context, m *Manager, servi
 	if err != nil || opened.State != "ready" {
 		t.Fatalf("opening: %+v, %v", opened, err)
 	}
+	unauthenticated, err := (&http.Client{Timeout: 10 * time.Second}).Get(fmt.Sprintf("http://127.0.0.1:%d/", service.RuntimePort))
+	if err != nil {
+		t.Fatal(err)
+	}
+	unauthenticated.Body.Close()
+	if opened.ManagedEntrance != nil && unauthenticated.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected unauthenticated 401, got %d", unauthenticated.StatusCode)
+	}
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		t.Fatal(err)
@@ -310,6 +331,7 @@ func dockerLifecycleHealthy(t *testing.T, ctx context.Context, m *Manager, servi
 	if err != nil || response.StatusCode != http.StatusOK || !strings.Contains(strings.ToLower(string(body)), "<html") {
 		t.Errorf("application UI not available through the resolved opening: HTTP %d, %v", response.StatusCode, err)
 	}
+	qualifyManagedOpeningBrowser(t, service.RuntimePort, opened.AppPath)
 }
 
 func dockerLifecycleExec(t *testing.T, ctx context.Context, id string, args ...string) string {

@@ -40,6 +40,8 @@ describe('Managed service recovery drawer', () => {
     ) => Promise<void>,
     scoped = false,
     archived = false,
+    inspect = false,
+    overrides: Partial<Parameters<typeof ManagedServiceManagementDrawer>[0]> = {},
   ) {
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -55,7 +57,7 @@ describe('Managed service recovery drawer', () => {
           service={
             archived ? { ...service, management_state: 'uninstalled' } : service
           }
-          initialAction="uninstall"
+          initialAction={inspect ? "inspect" : "uninstall"}
           administrator
           onClose={() => undefined}
           onExecute={onExecute}
@@ -65,11 +67,54 @@ describe('Managed service recovery drawer', () => {
           onLegacyRestore={() => undefined}
           onReinstall={() => undefined}
           canLegacyRestore={false}
+          {...overrides}
         /></I18nProvider>
       ),
       host,
     );
   }
+  it('inspects a healthy service without a mutation plan or recovery suggestion', async () => {
+    api.fetch.mockResolvedValue({...service,status:'running',actions:{open:{available:true},recover:{available:false}},opening:{state:'unprepared'},facts:{presence:'present',runtime:'running',ownership:'verified',checked_at_unix_ms:Date.now(),resources:[]}});
+    const open=vi.fn(),close=vi.fn();
+    mount(async()=>undefined,false,false,true,{onOpen:open,onClose:close});await settle();
+    expect(api.fetch.mock.calls).toHaveLength(1);
+    expect(api.fetch.mock.calls[0][0]).toContain('/inspection');
+    expect(api.fetch.mock.calls[0][1].method).toBeUndefined();
+    expect(document.body.textContent).not.toContain('Recover service');
+    await userEvent.click(page.getByRole('button',{name:'Open service',exact:true}));
+    expect(open).toHaveBeenCalledWith(false);
+    await userEvent.keyboard('{Escape}');expect(close).toHaveBeenCalled();
+  });
+  it('keeps facts when rechecking fails and lets the user retry', async () => {
+    api.fetch.mockResolvedValueOnce({...service,status:'running',facts:{presence:'present',runtime:'running',ownership:'verified',checked_at_unix_ms:Date.now(),resources:[]}}).mockRejectedValueOnce(new Error('offline')).mockResolvedValue({...service,status:'stopped',facts:{presence:'present',runtime:'stopped',ownership:'verified',checked_at_unix_ms:Date.now(),resources:[]}});
+    mount(async()=>undefined,false,false,true);await settle();
+    const recheck=()=>page.elementLocator(document.querySelector<HTMLButtonElement>('.service-management-section-heading button')!);
+    await userEvent.click(recheck());await settle();
+    expect(document.querySelector('[role="alert"]')).not.toBeNull();
+    expect(document.querySelector('.service-management-conclusion')?.textContent).toBe('Running');
+    await userEvent.click(recheck());await settle();
+    expect(document.querySelector('.service-management-conclusion')?.textContent).toBe('Stopped');
+  });
+  it('keeps the last verified facts when inspection reports unknown engine state',async()=>{
+    const checked=Date.now()-60000;
+    api.fetch.mockResolvedValueOnce({...service,status:'running',facts:{presence:'present',runtime:'running',ownership:'verified',checked_at_unix_ms:checked,resources:[]}}).mockResolvedValueOnce({...service,status:'inspection_unavailable',problem_code:'ENGINE_NOT_RUNNING',facts:{presence:'unknown',runtime:'unknown',ownership:'unknown',checked_at_unix_ms:Date.now(),resources:[]},actions:{recover:{available:false}}});
+    mount(async()=>undefined,false,false,true);await settle();
+    const previous=document.querySelector('.service-management-situation')!.textContent;
+    await userEvent.click(page.elementLocator(document.querySelector<HTMLButtonElement>('.service-management-section-heading button')!));await settle();
+    expect(document.querySelector('.service-management-conclusion')?.textContent).toBe('Running');
+    expect(document.querySelector('.service-management-situation')!.textContent).toBe(previous);
+    expect(document.querySelector('[role="alert"]')).not.toBeNull();
+    expect(document.body.textContent).not.toContain('Recover service');
+  });
+  it('reprepares an entrance explicitly and reviews restart impact before execution',async()=>{
+    const restart=vi.fn(),open=vi.fn();
+    api.fetch.mockResolvedValue({...service,status:'running',opening:{state:'error',error_code:'OPENING_URL_MISSING'},actions:{open:{available:true},restart:{available:true}},facts:{presence:'present',runtime:'running',ownership:'verified',checked_at_unix_ms:Date.now(),resources:[]}});
+    mount(async()=>undefined,false,false,true,{onOpen:open,onRestart:restart});await settle();
+    await userEvent.click(page.elementLocator(document.querySelector<HTMLButtonElement>('.service-management-section:last-child button')!));expect(open).toHaveBeenCalledWith(true);
+    await userEvent.click(page.getByRole('button',{name:'Restart',exact:true}));expect(restart).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain('Pending settings will be applied');
+    await userEvent.click(page.getByRole('button',{name:'Cancel',exact:true}));expect(restart).not.toHaveBeenCalled();
+  });
   it.each(['en-US', 'zh-CN', 'zh-TW', 'ja-JP', 'ko-KR', 'de-DE', 'fr-FR', 'es-ES', 'pt-BR', 'ru-RU'])('keeps %s management actions single-line at 320px', async locale => {
     await page.viewport(320, 800);
     localStorage.setItem(REDEVEN_LANGUAGE_PREFERENCE_STORAGE_KEY, locale);
@@ -86,6 +131,19 @@ describe('Managed service recovery drawer', () => {
     const bounds = panel.getBoundingClientRect();
     for (const button of panel.querySelectorAll('button')) {
       if (!button.checkVisibility()) continue;
+      expect(button.getBoundingClientRect().left).toBeGreaterThanOrEqual(bounds.left);
+      expect(button.getBoundingClientRect().right).toBeLessThanOrEqual(bounds.right);
+    }
+  });
+  it.each(['en-US','zh-CN','zh-TW','ja-JP','ko-KR','de-DE','fr-FR','es-ES','pt-BR','ru-RU'])('keeps %s entrance recovery readable at 320px',async locale=>{
+    await page.viewport(320,800);localStorage.setItem(REDEVEN_LANGUAGE_PREFERENCE_STORAGE_KEY,locale);
+    api.fetch.mockResolvedValue({...service,status:'running',opening:{state:'error',error_code:'OPENING_URL_MISSING'},actions:{open:{available:true},restart:{available:true}},facts:{presence:'present',runtime:'running',ownership:'verified',checked_at_unix_ms:Date.now(),resources:[]}});
+    mount(async()=>undefined,false,true,true);await settle();await document.fonts.ready;
+    const panel=document.querySelector<HTMLElement>('[data-testid="service-management-drawer"]')!;
+    expectSingleLineButtonLabels(panel);expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth);
+    const bounds=panel.getBoundingClientRect();
+    for(const button of panel.querySelectorAll('button')) {
+      if(!button.checkVisibility())continue;
       expect(button.getBoundingClientRect().left).toBeGreaterThanOrEqual(bounds.left);
       expect(button.getBoundingClientRect().right).toBeLessThanOrEqual(bounds.right);
     }
