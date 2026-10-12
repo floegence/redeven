@@ -1,5 +1,6 @@
 {
   "approval_date": {
+    "turns": null,
     "thread_id": "thread-fixture",
     "view_version": 1,
     "activity": "active",
@@ -29,6 +30,7 @@
     ]
   },
   "approval_date_zh": {
+    "turns": null,
     "thread_id": "thread-fixture",
     "view_version": 1,
     "activity": "active",
@@ -58,6 +60,7 @@
     ]
   },
   "approval_multiline": {
+    "turns": null,
     "thread_id": "thread-fixture",
     "view_version": 1,
     "activity": "active",
@@ -87,6 +90,7 @@
     ]
   },
   "ask_long": {
+    "turns": null,
     "thread_id": "thread-fixture",
     "view_version": 1,
     "activity": "active",
@@ -134,6 +138,7 @@
     ]
   },
   "ask_rich": {
+    "turns": null,
     "thread_id": "thread-fixture",
     "view_version": 1,
     "activity": "active",
@@ -184,6 +189,7 @@
     ]
   },
   "ask_sparse": {
+    "turns": null,
     "thread_id": "thread-fixture",
     "view_version": 1,
     "activity": "active",
@@ -231,6 +237,7 @@
     ]
   },
   "ask_zh": {
+    "turns": null,
     "thread_id": "thread-fixture",
     "view_version": 1,
     "activity": "active",

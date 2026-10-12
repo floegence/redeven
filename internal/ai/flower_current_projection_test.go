@@ -13,6 +13,122 @@ import (
 	"github.com/floegence/redeven/internal/ai/threadstore"
 )
 
+func TestFlowerCurrentEnvelopesUseThePublicProjection(t *testing.T) {
+	current := flruntime.ThreadView{
+		ThreadID: "thread-public-envelope", TurnID: "turn-public-envelope", RunID: "run-public-envelope", ViewVersion: 17,
+		Failure: &flruntime.ThreadTurnFailure{Code: flruntime.ThreadTurnFailureEngineContract, Message: "private-provider-failure"},
+		Items: []flruntime.ThreadItem{{
+			ID: "user-public-envelope", TurnID: "turn-public-envelope", RunID: "run-public-envelope", Kind: flruntime.ThreadItemUser,
+			References: []flruntime.MessageReference{{Kind: flruntime.MessageReferenceFile, Label: "file.go", Text: "private-file-content", ResourceRef: "private-file-authority"}},
+		}},
+		Queue: []flruntime.QueuedInput{{
+			ID: "queue-public-envelope", RequestKey: "request-public-envelope",
+			SupplementalContext: []flruntime.TurnSupplementalContextItem{{Text: "private-queued-secret", Sensitive: true}},
+		}},
+		Interactions: []flruntime.ThreadInteraction{{
+			ID: "input-public-envelope", TurnID: "turn-public-envelope", RunID: "run-public-envelope", Kind: flruntime.ThreadInteractionInput,
+			Resolution: &flruntime.InteractionResolution{Redacted: true, Input: map[string]string{"password": "private-input-secret"}},
+		}},
+	}
+	expected, err := flowerCurrentJSON(current)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, value := range map[string]any{
+		"thread detail":   FlowerThreadDetail{Thread: ThreadView{ThreadID: current.ThreadID.String()}, Current: current},
+		"subagent detail": FlowerSubagentDetailResponse{Summary: FlowerSubagentSummary{ThreadID: current.ThreadID.String()}, Current: current},
+		"send":            SendUserTurnResponse{Kind: "queued", QueueID: "queue-public-envelope", Current: current},
+		"input":           SubmitRequestUserInputResponseResponse{Kind: "start", Current: current},
+		"approval":        SubmitFlowerApprovalResponse{OK: true, Current: current},
+		"rpc send":        aiSendUserTurnResp{Kind: "queued", Current: current},
+		"rpc input":       aiSubmitRequestUserInputResponseResp{Kind: "start", Current: current},
+		"live":            FlowerLiveStreamEnvelope{SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamThreadBatch, Current: &current},
+		"live subagent":   FlowerLiveStreamEnvelope{SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamThreadBatch, SubagentCurrent: &current},
+		"live both":       FlowerLiveStreamEnvelope{SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamThreadBatch, Current: &current, SubagentCurrent: &current},
+	} {
+		t.Run(name, func(t *testing.T) {
+			encoded, err := json.Marshal(value)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var root map[string]json.RawMessage
+			if err := json.Unmarshal(encoded, &root); err != nil {
+				t.Fatal(err)
+			}
+			for _, field := range []string{"current", "subagent_current"} {
+				if projected, exists := root[field]; exists && string(projected) != string(expected) {
+					t.Fatalf("%s differs from the public projection: %s", field, projected)
+				}
+			}
+			if len(root["current"]) == 0 && len(root["subagent_current"]) == 0 {
+				t.Fatalf("current projection is missing: %s", encoded)
+			}
+			for _, secret := range []string{"private-provider-failure", "private-file-content", "private-file-authority", "private-queued-secret", "private-input-secret"} {
+				if strings.Contains(string(encoded), secret) {
+					t.Fatalf("private value %q crossed the envelope boundary", secret)
+				}
+			}
+		})
+	}
+	if current.Queue[0].SupplementalContext[0].Text != "private-queued-secret" || current.Interactions[0].Resolution.Input["password"] != "private-input-secret" {
+		t.Fatal("public projection mutated the original runtime view")
+	}
+}
+
+func TestFlowerCurrentEnvelopesPreserveExactIntegerFields(t *testing.T) {
+	const revision = 9_007_199_254_740_993
+	current := flruntime.ThreadView{ThreadID: "thread-exact-revision", ViewVersion: revision}
+	for name, value := range map[string]any{
+		"detail": FlowerThreadDetail{Thread: ThreadView{ThreadID: current.ThreadID.String(), SettingsRevision: revision}, Current: current},
+		"live": FlowerLiveStreamEnvelope{SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamThreadBatch, Current: &current,
+			ComputerFrame: &FlowerComputerFrame{ViewerRevision: revision}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			encoded, err := json.Marshal(value)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var root struct {
+				Current struct {
+					ViewVersion uint64 `json:"view_version"`
+				} `json:"current"`
+				Thread struct {
+					SettingsRevision int64 `json:"settings_revision"`
+				} `json:"thread"`
+				ComputerFrame struct {
+					ViewerRevision uint64 `json:"viewer_revision"`
+				} `json:"computer_frame"`
+			}
+			if err := json.Unmarshal(encoded, &root); err != nil {
+				t.Fatal(err)
+			}
+			if root.Current.ViewVersion != revision || name == "detail" && root.Thread.SettingsRevision != revision || name == "live" && root.ComputerFrame.ViewerRevision != revision {
+				t.Fatalf("integer revision changed during projection: %s", encoded)
+			}
+		})
+	}
+}
+
+func TestFlowerLiveEnvelopeOmitsAbsentCurrentViews(t *testing.T) {
+	encoded, err := json.Marshal(FlowerLiveStreamEnvelope{SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamReady, ObserverID: "observer-public-envelope"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var root map[string]json.RawMessage
+	if err := json.Unmarshal(encoded, &root); err != nil {
+		t.Fatal(err)
+	}
+	if _, exists := root["current"]; exists {
+		t.Fatalf("absent current was serialized: %s", encoded)
+	}
+	if _, exists := root["subagent_current"]; exists {
+		t.Fatalf("absent subagent current was serialized: %s", encoded)
+	}
+	if string(root["observer_id"]) != `"observer-public-envelope"` {
+		t.Fatalf("envelope metadata changed: %s", encoded)
+	}
+}
+
 func mustProjectRuntimeThread(t *testing.T, settings threadstore.ThreadSettings, current flruntime.ThreadView, summary flruntime.ThreadSummary) ThreadView {
 	t.Helper()
 	if settings.PermissionType == "" {

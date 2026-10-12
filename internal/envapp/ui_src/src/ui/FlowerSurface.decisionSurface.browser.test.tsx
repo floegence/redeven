@@ -974,12 +974,22 @@ describe('Flower bottom decision surface', () => {
     };
     const stopResponse = deferred<void>();
     const publishStopped = deferred<void>();
-    const stopThread = vi.fn(() => stopResponse.promise);
+    let stopAccepted = false;
+    const stopThread = vi.fn(async () => {
+      await stopResponse.promise;
+      stopAccepted = true;
+    });
     const submitApproval = vi.fn(async (input) => approvalCommandResult(input.thread_id, input.interaction_id, input.approved, 22));
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [approvalThread]),
-      loadThread: vi.fn(async () => liveBootstrap(approvalThread, 21)),
+      loadThread: vi.fn(async () => {
+        if (stopAccepted) {
+          await publishStopped.promise;
+          return liveBootstrap(stoppedThread, 22);
+        }
+        return liveBootstrap(approvalThread, 21);
+      }),
       stopThread,
       submitApproval,
       connectLiveStream: async function* ({ signal }) {

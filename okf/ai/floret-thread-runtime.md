@@ -14,9 +14,33 @@ Floret v7 `ThreadService` is the sole owner of active and canonical thread lifec
 
 ## Typed runtime
 
+Floret v7.29.1 owns explicit canonical RunID and the permanent domain schema
+13-to-14 migration. Observation metadata never advances execution identity;
+historical tool activities resolve through their canonical invocation. Public
+current views are projected and sanitized before the response is encoded.
+Encoding failures retain the internal cause and safe identity/version diagnostics;
+clients receive the existing synchronization error contract.
+
+The workspace LiveTransport alone owns connection state, retries and manual
+resynchronization. Network interruption, ordinary EOF and rate limits reconnect
+with backoff; protocol, parsing, application and authorization failures remain
+visible until a manual resync. Resync cancels the previous attempt, timers and
+unapplied frames, advances the epoch and starts one connection. A valid applied
+ready refreshes summaries and the selected root and open SubAgent through their
+existing detail loaders. Handshake and detail reads release after 15 seconds;
+provider execution has no such timeout.
+
+Connection errors are separate from detail errors. The workspace notice remains
+visible without a selected thread, in approvals and in Companion; history and
+drafts remain available. Unconfirmed live animations stop without changing the
+canonical lifecycle. Stop submits once, reads canonical confirmation and always
+releases request busy state. Failed confirmation shows an explicit submitted-but-
+unconfirmed notice with resync. Conflicted decisions refresh canonical detail
+and remain user-controlled; effects and unknown outcomes are never replayed.
+
 Independent context compaction uses the optional public capability without widening ThreadService. Floret owns typed control-turn admission, atomic installation, terminal results, replay, and recovery. See [Model context usage and compaction](model-context-usage-and-compaction.md) for command and presentation contracts.
 
-Redeven consumes published Floret v7.29.0, preserving graceful-stop ownership
+Redeven consumes published Floret v7.29.1, preserving graceful-stop ownership
 when a projection write is canceled. The stop owner settles pending approvals,
 tool results, and the terminal together; a canceled write must not enter competing
 failure finalization. Genuine storage and unknown-effect failures retain their
@@ -127,7 +151,7 @@ Turn/Run when Stop overlaps shutdown or another settlement path, preserving
 the original stop source, mode, and timestamp without a duplicate cancel fact.
 Floret owns this atomic settlement.
 
-Published v7.29.0 projects historical per-turn results, explicit accepted final
+Published v7.29.1 projects historical per-turn results, explicit accepted final
 item references and canonical work duration through ThreadView and HistoryPage.
 Optional journal metadata records new response boundaries without a schema reset
 or a Redeven lifecycle table. Legacy boundaries remain unavailable. Flower's
@@ -178,7 +202,7 @@ Redeven never imports Floret internals, reads Floret storage, copies canonical l
 
 # Evidence
 
-- `redeven:go.mod` - Pins the released Floret v7.29.0 typed runtime without local replacement.
+- `redeven:go.mod` - Pins the released Floret v7.29.1 typed runtime without local replacement.
 - `redeven:internal/session/floret_v7_dependency_contract_test.go` - Enforces exact published-v7 adoption and rejects retired imports.
 - `redeven:internal/ai/floret_runtime.go` - Published runtime composition.
 - `redeven:internal/ai/floret_store_maintenance.go` - One bounded pre-open SQLite maintenance policy and sanitized diagnostics.

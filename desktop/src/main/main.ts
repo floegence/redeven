@@ -11441,6 +11441,7 @@ async function runtimeFlowerAccessHeaders(
 function runtimeFlowerBootstrapTimeout(path: string, method: RuntimeFlowerRequest['method']): number | undefined {
   if (method !== 'GET') return undefined;
   const pathname = new URL(path, 'http://runtime-flower.local').pathname;
+  if (/^\/_redeven_proxy\/api\/ai\/threads\/[^/]+(?:\/subagents\/[^/]+\/detail)?$/.test(pathname)) return 15_000;
   return pathname === '/_redeven_proxy/api/settings'
     || pathname === '/_redeven_proxy/api/ai/models'
     || pathname === '/_redeven_proxy/api/ai/threads'

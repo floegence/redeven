@@ -1351,7 +1351,7 @@ describe('FlowerSurface navigation', () => {
     expect(flowerSurfaceNotifications().filter((notification) => notification.tone === 'error')).toEqual([]);
   });
 
-  it('reconciles an unknown send with the same request identity without restoring the draft or reporting failure', async () => {
+  it('reconciles an unknown send after explicit retry with the same request identity', async () => {
     clearFlowerSurfaceNotifications();
     const threadID = 'thread-response-lost';
     const initial = thread({
@@ -1399,6 +1399,10 @@ describe('FlowerSurface navigation', () => {
     await waitFor(() => !(runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).disabled);
     (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
 
+    await waitFor(() => runtime.querySelector('[data-flower-transport-delivery="unknown"]') !== null);
+    expect(launchTurn).toHaveBeenCalledTimes(1);
+    expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('');
+    (runtime.querySelector('[aria-label="Retry send"]') as HTMLButtonElement).click();
     await waitFor(() => launchTurn.mock.calls.length === 2);
     expect(launchTurn.mock.calls[0]?.[0].client_request_id).toBe(launchTurn.mock.calls[1]?.[0].client_request_id);
     await waitFor(() => runtime.querySelectorAll('[data-flower-message-role="user"]').length === 1);
@@ -1408,7 +1412,7 @@ describe('FlowerSurface navigation', () => {
     expect(flowerSurfaceNotifications().filter((notification) => notification.tone === 'error')).toEqual([]);
   });
 
-  it('restores the draft and reports one error when an unresolved send is later rejected', async () => {
+  it('retains an explicitly retried rejection in the outbox without overwriting a newer draft', async () => {
     clearFlowerSurfaceNotifications();
     const threadID = 'thread-retry-rejected';
     const initial = thread({
@@ -1441,17 +1445,25 @@ describe('FlowerSurface navigation', () => {
     await waitFor(() => !(runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).disabled);
     (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
 
+    await waitFor(() => runtime.querySelector('[data-flower-transport-delivery="unknown"]') !== null);
+    expect(launchTurn).toHaveBeenCalledTimes(1);
+    textarea.value = 'New draft after the original send';
+    textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    (runtime.querySelector('[aria-label="Retry send"]') as HTMLButtonElement).click();
     await waitFor(() => launchTurn.mock.calls.length === 2);
     expect(launchTurn.mock.calls[0]?.[0].client_request_id).toBe(launchTurn.mock.calls[1]?.[0].client_request_id);
-    await waitFor(() => (runtime.querySelector('textarea') as HTMLTextAreaElement).value === 'restore after rejection');
-    expect(runtime.querySelector('[data-flower-transport-outbox-id]')).toBeNull();
-    expect(flowerSurfaceNotifications()).toEqual([expect.objectContaining({
-      tone: 'error',
-      message: 'request rejected',
-    })]);
+    await waitFor(() => runtime.querySelector('[data-flower-transport-delivery="failed"]') !== null);
+    const failed = runtime.querySelector('[data-flower-transport-outbox-id]')!;
+    expect(failed.textContent).toContain('restore after rejection');
+    expect(failed.getAttribute('title')).toBe('request rejected');
+    expect(failed.querySelector('[aria-label="Retry send"]')).not.toBeNull();
+    expect((failed.querySelector('[aria-label="Restore to empty editor"]') as HTMLButtonElement).disabled).toBe(true);
+    expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('New draft after the original send');
+    expect((runtime.querySelector('textarea') as HTMLTextAreaElement).disabled).toBe(false);
+    expect(flowerSurfaceNotifications()).toEqual([]);
   });
 
-  it('preserves the draft, restores Stop, and deduplicates active-turn admission errors', async () => {
+  it('retains an active-turn admission failure and refreshes canonical Stop without overwriting a newer draft', async () => {
     clearFlowerSurfaceNotifications();
     const idleThread = thread({
       thread_id: 'thread-active-turn-admission',
@@ -1476,7 +1488,8 @@ describe('FlowerSurface navigation', () => {
       code: 'floret_thread_admission_blocked',
     });
     const launchTurn = vi.fn(async () => { throw admissionError; });
-    const stopThread = vi.fn(async () => undefined);
+    const stopResponse = deferred<void>();
+    const stopThread = vi.fn(() => stopResponse.promise);
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [idleThread]),
@@ -1494,20 +1507,27 @@ describe('FlowerSurface navigation', () => {
     (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
 
     await waitFor(() => launchTurn.mock.calls.length === 1);
-    await waitFor(() => Boolean(runtime.querySelector('.flower-composer-stop-inline')));
-    expect((runtime.querySelector('.flower-composer textarea') as HTMLTextAreaElement).value).toBe('Keep this draft while the previous reply stops');
-    expect(flowerSurfaceNotifications()).toHaveLength(1);
-    expect(flowerSurfaceNotifications()[0]?.message).not.toContain('thread already has an active turn');
+    await waitFor(() => runtime.querySelector('[data-flower-transport-delivery="failed"]') !== null);
+    const rejected = runtime.querySelector('[data-flower-transport-outbox-id]')!;
+    expect(rejected.textContent).toContain('Keep this draft while the previous reply stops');
+    expect(rejected.getAttribute('title')).toBe('thread already has an active turn');
+    expect(rejected.querySelector('[aria-label="Retry send"]')).not.toBeNull();
+    expect((runtime.querySelector('.flower-composer textarea') as HTMLTextAreaElement).value).toBe('');
+    expect(loadThread.mock.calls.length).toBeGreaterThanOrEqual(2);
+    textarea.value = 'New draft while the previous reply stops';
+    textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
     activeDetail.resolve(liveBootstrap(activeThread, 2));
-
-    (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
-    await waitFor(() => launchTurn.mock.calls.length === 2);
-    expect(flowerSurfaceNotifications()).toHaveLength(1);
-
+    await waitFor(() => Boolean(runtime.querySelector('.flower-composer-stop-inline')));
+    expect(launchTurn).toHaveBeenCalledTimes(1);
+    expect(flowerSurfaceNotifications()).toEqual([]);
+    (runtime.querySelector('.flower-composer-stop-inline') as HTMLButtonElement).click();
     (runtime.querySelector('.flower-composer-stop-inline') as HTMLButtonElement).click();
     await waitFor(() => stopThread.mock.calls.length === 1);
     await waitFor(() => (runtime.querySelector('.flower-composer-stop-inline') as HTMLButtonElement).disabled);
-    expect((runtime.querySelector('.flower-composer textarea') as HTMLTextAreaElement).value).toBe('Keep this draft while the previous reply stops');
+    expect((runtime.querySelector('.flower-composer textarea') as HTMLTextAreaElement).value).toBe('New draft while the previous reply stops');
+    stopResponse.resolve();
+    await waitFor(() => !(runtime.querySelector('.flower-composer-stop-inline') as HTMLButtonElement).disabled);
+    expect((runtime.querySelector('.flower-composer textarea') as HTMLTextAreaElement).value).toBe('New draft while the previous reply stops');
   });
 
   it('renders run and message errors as structured error cards', async () => {

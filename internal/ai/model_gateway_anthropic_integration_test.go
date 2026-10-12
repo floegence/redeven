@@ -7,11 +7,13 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	flruntime "github.com/floegence/floret/v7/runtime"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 )
@@ -131,6 +133,51 @@ func (m *anthropicMock) didSeeMessages() bool {
 	v := m.sawMessages
 	m.mu.Unlock()
 	return v
+}
+
+func (m *anthropicMock) messageRequestCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.step
+}
+
+func requireAnthropicContinuationFinalSegments(t *testing.T, ctx context.Context, svc *Service, meta *session.Meta, completed flruntime.ThreadView, want []string) {
+	t.Helper()
+	threadID := completed.ThreadID.String()
+	if got := assistantTimelineTextsForTest(t, ctx, svc, meta, threadID); !slices.Equal(got, want) {
+		t.Fatalf("assistant timeline segments=%q, want exact ordered segments %q", got, want)
+	}
+	detail, err := svc.GetFlowerThreadDetail(ctx, meta, threadID)
+	if err != nil {
+		t.Fatalf("GetFlowerThreadDetail: %v", err)
+	}
+	current := detail.Current
+	if current.Activity != flruntime.ThreadActivityIdle || current.LastOutcome == nil || *current.LastOutcome != flruntime.TurnOutcomeCompleted || current.TurnID != completed.TurnID || current.RunID != completed.RunID {
+		t.Fatalf("continuation did not preserve the completed execution: %+v", current)
+	}
+	var texts, itemIDs []string
+	var lastOrdinal uint64
+	for _, item := range current.Items {
+		if item.Kind != flruntime.ThreadItemAssistant {
+			continue
+		}
+		if item.TurnID != completed.TurnID || item.RunID != completed.RunID || item.Live || item.Ordinal <= lastOrdinal {
+			t.Fatalf("continuation segment lost canonical order or execution identity: %+v", item)
+		}
+		texts = append(texts, item.Text)
+		itemIDs = append(itemIDs, item.ID)
+		lastOrdinal = item.Ordinal
+	}
+	if !slices.Equal(texts, want) {
+		t.Fatalf("current assistant segments=%q, want exact ordered segments %q", texts, want)
+	}
+	if len(current.Turns) != 1 {
+		t.Fatalf("continuation created extra turns: %+v", current.Turns)
+	}
+	turn := current.Turns[0]
+	if turn.TurnID != completed.TurnID || turn.RunID != completed.RunID || turn.Outcome == nil || *turn.Outcome != flruntime.TurnOutcomeCompleted || turn.EndedAt == nil || !turn.FinalBoundaryComplete || !slices.Equal(turn.FinalItemIDs, itemIDs) {
+		t.Fatalf("final boundary must include every continuation segment in order: turn=%+v item_ids=%q", turn, itemIDs)
+	}
 }
 
 func writeAnthropicSSEJSON(w io.Writer, f http.Flusher, v any) {
@@ -273,13 +320,14 @@ func TestIntegration_ModelGateway_Anthropic_LengthContinuationSucceeds(t *testin
 		t.Fatalf("CreateThread: %v", err)
 	}
 
-	runID := "run_test_model_gateway_anthropic_length_1"
-	if _, err := runTypedTurnForTest(t, ctx, svc, &meta, runID, RunStartRequest{
+	requestKey := "run_test_model_gateway_anthropic_length_1"
+	completed, err := runTypedTurnForTest(t, ctx, svc, &meta, requestKey, RunStartRequest{
 		ThreadID: th.ThreadID,
 		Model:    "anthropic/claude-3-5-sonnet-latest",
 		Input:    RunInput{Text: "请用 markdown 写一篇长篇童话故事"},
 		Options:  RunOptions{},
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatalf("typed Send: %v", err)
 	}
 
@@ -291,8 +339,10 @@ func TestIntegration_ModelGateway_Anthropic_LengthContinuationSucceeds(t *testin
 		t.Fatalf("run_status=%q, want %q", got, RunStateSuccess)
 	}
 
-	requireAssistantTimelineText(t, ctx, svc, &meta, th.ThreadID, "PART_1PART_2")
-
+	requireAnthropicContinuationFinalSegments(t, ctx, svc, &meta, completed, []string{"PART_1", "PART_2"})
+	if got := mock.messageRequestCount(); got != 2 {
+		t.Fatalf("Anthropic continuation requests=%d, want exactly 2", got)
+	}
 }
 
 func TestIntegration_ModelGateway_Anthropic_ContentFilterFails(t *testing.T) {
@@ -359,13 +409,14 @@ func TestIntegration_ModelGateway_Anthropic_IdentityLengthContinuationCompletesW
 		t.Fatalf("CreateThread: %v", err)
 	}
 
-	runID := "run_test_model_gateway_anthropic_identity_length_1"
-	if _, err := runTypedTurnForTest(t, ctx, svc, &meta, runID, RunStartRequest{
+	requestKey := "run_test_model_gateway_anthropic_identity_length_1"
+	completed, err := runTypedTurnForTest(t, ctx, svc, &meta, requestKey, RunStartRequest{
 		ThreadID: th.ThreadID,
 		Model:    "anthropic/claude-3-5-sonnet-latest",
 		Input:    RunInput{Text: "你是谁"},
 		Options:  RunOptions{},
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatalf("typed Send: %v", err)
 	}
 
@@ -377,6 +428,8 @@ func TestIntegration_ModelGateway_Anthropic_IdentityLengthContinuationCompletesW
 		t.Fatalf("run_status=%q, want %q", got, RunStateSuccess)
 	}
 
-	requireAssistantTimelineText(t, ctx, svc, &meta, th.ThreadID, "FIRST_PARTSECOND_PART")
-
+	requireAnthropicContinuationFinalSegments(t, ctx, svc, &meta, completed, []string{"FIRST_PART", "SECOND_PART"})
+	if got := mock.messageRequestCount(); got != 2 {
+		t.Fatalf("Anthropic continuation requests=%d, want exactly 2", got)
+	}
 }

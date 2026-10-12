@@ -32,39 +32,68 @@ export function flowerLiveTextAppend(previous: FlowerLiveStreamEnvelope, next: F
 
 /** One transient frame in the live connection; ThreadCache remains the owner. */
 export function createFlowerLiveFrameQueue(options: Readonly<{
-  apply: (envelope: FlowerLiveStreamEnvelope) => void;
+  apply: (envelope: FlowerLiveStreamEnvelope, connectionEpoch: number) => void;
+  connectionEpoch?: () => number;
+  onError?: (error: unknown, connectionEpoch: number) => void;
   validateAppend: (envelope: FlowerLiveStreamEnvelope) => boolean;
   requestFrame: (callback: FrameRequestCallback) => number;
   cancelFrame: (id: number) => void;
 }>) {
-  let previous: FlowerLiveStreamEnvelope | undefined;
-  let pending: FlowerLiveStreamEnvelope | undefined;
+  type Frame = Readonly<{ envelope: FlowerLiveStreamEnvelope; connectionEpoch: number }>;
+  let previous: Frame | undefined;
+  let pending: Frame | undefined;
   let frame: number | undefined;
+  let generation = 0;
+  let disposed = false;
+  const clear = () => {
+    generation++;
+    if (frame !== undefined) options.cancelFrame(frame);
+    frame = undefined;
+    pending = undefined;
+    previous = undefined;
+  };
+  const current = (value: Frame) => !disposed
+    && (!options.connectionEpoch || options.connectionEpoch() === value.connectionEpoch);
+  const reportError = (error: unknown, connectionEpoch: number) => {
+    clear();
+    if (options.onError) options.onError(error, connectionEpoch);
+    else throw error;
+  };
+  const apply = (value: Frame) => {
+    if (current(value)) options.apply(value.envelope, value.connectionEpoch);
+  };
   const flush = () => {
     if (frame !== undefined) options.cancelFrame(frame);
     frame = undefined;
     const value = pending;
     pending = undefined;
-    if (value) options.apply(value);
+    if (value) apply(value);
   };
   return {
-    push(value: FlowerLiveStreamEnvelope) {
-      if (previous && flowerLiveTextAppend(previous, value) && options.validateAppend(value)) {
-        pending = value;
-        previous = value;
-        if (frame === undefined) frame = options.requestFrame(flush);
-        return;
+    push(envelope: FlowerLiveStreamEnvelope, connectionEpoch = options.connectionEpoch?.() ?? 0) {
+      const value = { envelope, connectionEpoch };
+      if (!current(value)) return;
+      if (previous && previous.connectionEpoch !== connectionEpoch) clear();
+      const currentGeneration = generation;
+      try {
+        if (previous && flowerLiveTextAppend(previous.envelope, envelope) && options.validateAppend(envelope)) {
+          pending = value;
+          previous = value;
+          if (frame === undefined) frame = options.requestFrame(() => {
+            if (currentGeneration !== generation || disposed) return;
+            try { flush(); } catch (error) { reportError(error, connectionEpoch); }
+          });
+          return;
+        }
+        flush();
+        if (currentGeneration !== generation || !current(value)) return;
+        apply(value);
+        if (currentGeneration === generation && current(value)) previous = value;
+      } catch (error) {
+        reportError(error, connectionEpoch);
       }
-      flush();
-      options.apply(value);
-      previous = value;
     },
-    boundary() { flush(); previous = undefined; },
-    dispose() {
-      if (frame !== undefined) options.cancelFrame(frame);
-      frame = undefined;
-      pending = undefined;
-      previous = undefined;
-    },
+    boundary: clear,
+    dispose() { disposed = true; clear(); },
   };
 }

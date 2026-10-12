@@ -11215,3 +11215,18 @@ button.flower-attachment-preview-trigger:disabled {
   cursor: pointer;
   color: inherit;
 }
+
+.flower-workspace-sync {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+  padding: 0.625rem 0.875rem;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.flower-workspace-sync > span { flex: 1 1 12rem; min-width: 0; }
+.flower-workspace-sync > button { flex-shrink: 0; }
