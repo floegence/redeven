@@ -1,3 +1,10 @@
+.redeven-environment-settings-dialog, .environment-settings-panel {
+  --environment-settings-surface: var(--card);
+  --environment-settings-border: var(--border);
+  --environment-settings-radius: 14px;
+  --environment-settings-inset: 18px;
+  --environment-settings-control-height: 36px;
+}
 /* Product geometry; Floe owns floating material and modal entry/exit motion. */
 [data-floe-dialog-panel].redeven-environment-settings-dialog {
   --redeven-welcome-dialog-panel-max-height: min(88dvh, var(--redeven-welcome-dialog-available-height));
@@ -7,7 +14,7 @@
   max-height: var(--redeven-welcome-dialog-panel-max-height);
   overflow: hidden;
   border-radius: 14px;
-  background: color-mix(in srgb, var(--foreground) 5%, var(--background));
+  background: var(--popover);
   font-size: var(--floe-type-body);
 }
 .redeven-environment-settings-dialog > div:first-child {
@@ -17,6 +24,7 @@
 }
 .redeven-environment-settings-dialog > div:first-child > div { min-width: 0; }
 .redeven-environment-settings-dialog h2 { font-size: 16px; line-height: 1.3; font-weight: 600; }
+.redeven-environment-settings-dialog > div:first-child button { width: 32px; height: 32px; }
 .redeven-environment-settings-dialog > div:first-child p {
   margin-top: 4px; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere;
 }
@@ -45,8 +53,48 @@
 .environment-settings-indicator { border-radius: 2px 2px 0 0; }
 .environment-settings-tab:not([aria-hidden="true"]) {
   flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
-.environment-settings-panel { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.environment-settings-panel {
+  display: flex; flex-direction: column; min-height: 0; flex: 1;
+}
 .environment-settings-scroll { flex: 1; min-height: 0; overflow: auto; scrollbar-gutter: stable; overflow-anchor: none; padding: 24px 28px; }
+
+/* One theme-owned material for settings groups, facts and workflow cards. */
+.redeven-environment-settings-dialog :is(.environment-access-overview, .access-flow-summary,
+  .ssh-settings-fields.floe-settings-list, .environment-connection-group,
+  .access-flow-password-setting, .two-factor-setting, .environment-certificate-setting,
+  .access-flow-card, .access-flow-review, .two-factor-management, .two-factor-recovery-sheet,
+  .environment-settings-information, .redeven-access-settings__body) {
+  min-width: 0;
+  border: 1px solid var(--environment-settings-border);
+  border-radius: var(--environment-settings-radius);
+  background: var(--environment-settings-surface);
+}
+.environment-settings-icon {
+  display: grid; place-items: center; flex: 0 0 36px; height: 36px;
+  border-radius: 10px; background: var(--muted); color: var(--muted-foreground);
+}
+.environment-settings-information { display: grid; gap: 12px; padding: var(--environment-settings-inset); font-size: 12px; line-height: 1.7; }
+.environment-settings-information > p { color: var(--muted-foreground); }
+.environment-settings-information > code { overflow-wrap: anywhere; }
+.environment-settings-information > button { justify-self: start; }
+.environment-settings-information-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.environment-settings-information button { min-height: 32px; height: auto; white-space: nowrap; }
+.environment-certificate-header { padding: 12px var(--environment-settings-inset) 8px; }
+.environment-certificate-header h4 { font-size: 13px; font-weight: 550; line-height: 1.5; }
+.environment-certificate-body { padding: 0 var(--environment-settings-inset) var(--environment-settings-inset); }
+.environment-certificate-setting button { height: auto; min-height: 32px; white-space: nowrap; }
+.environment-certificate-header > button { width: 32px; height: 32px; }
+.environment-certificate-body > div > span[aria-hidden] { width: 36px; height: 36px; border-radius: 10px; background: var(--muted); }
+.redeven-environment-settings-dialog .two-factor-setting-actions { flex-wrap: wrap; max-width: 100%; }
+.redeven-environment-settings-dialog .two-factor-setting-actions button,
+.redeven-environment-settings-dialog .two-factor-text-action,
+.redeven-environment-settings-dialog .two-factor-manual summary,
+.redeven-environment-settings-dialog .two-factor-manual-key button,
+.redeven-environment-settings-dialog .two-factor-recovery-actions button { min-height: 32px; height: auto; white-space: nowrap; }
+.redeven-environment-settings-dialog .two-factor-manual summary { padding: 6px 8px; border-radius: 6px; }
+.redeven-environment-settings-dialog .two-factor-manual summary:hover { background: var(--muted); }
+.redeven-environment-settings-dialog .two-factor-manual summary:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.access-workflow .two-factor-flow .two-factor-field input:not(.two-factor-code-input) { min-height: var(--environment-settings-control-height); height: var(--environment-settings-control-height); }
 
 /* Native details and Floe-retained sections expand inside the fixed viewport. */
 .redeven-environment-settings-dialog details::details-content,
@@ -82,7 +130,7 @@
 .environment-settings-actions button,
 .environment-access-overview-header > button {
   height: auto;
-  min-height: 1.75rem;
+  min-height: 32px;
   max-width: 100%;
   padding-block: .25rem;
   line-height: 1.4;
@@ -98,8 +146,7 @@
 .environment-access-overview {
   display: flex;
   flex-direction: column;
-  gap: .375rem;
-  padding: .25rem 1.25rem 0;
+  overflow: hidden;
 }
 .environment-access-overview-header,
 .environment-access-overview-heading {
@@ -108,15 +155,19 @@
   flex-wrap: wrap;
   gap: .5rem .75rem;
 }
-.environment-access-overview-header { justify-content: space-between; }
-.environment-access-overview h3 { font-size: 13px; font-weight: 600; }
+.environment-access-overview-header { justify-content: space-between; padding: var(--environment-settings-inset); }
+.environment-access-overview-identity { display: flex; align-items: center; gap: 12px; flex: 1 1 13rem; min-width: 0; }
+.environment-access-overview-heading { flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; }
+.environment-access-overview h3 { font-size: 13px; font-weight: 550; line-height: 1.5; }
 .environment-access-status {
   display: inline-flex;
   align-items: center;
-  gap: .125rem;
+  gap: 6px;
   color: var(--muted-foreground);
-  font-size: 11px;
+  font-size: 12px;
+  line-height: 1.6;
 }
+.environment-access-status::before { content: ''; width: 6px; height: 6px; flex: none; border-radius: 50%; background: currentColor; }
 .environment-access-status[data-status-tone='success'] { color: var(--success); }
 .environment-access-status[data-status-tone='warning'] { color: var(--warning); }
 .environment-access-control { display: flex; justify-content: flex-end; min-width: 0; }
@@ -168,7 +219,6 @@
 
 @container (max-width: 36rem) {
   .environment-access-control { justify-content: flex-start; }
-  .environment-access-overview { padding: .25rem 1rem 0; }
 }
 @media (prefers-reduced-motion: reduce) {
   .environment-access-advanced summary svg { transition: none; }
@@ -181,22 +231,22 @@
 .ssh-settings-form { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
 .ssh-settings-section { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .ssh-settings-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.ssh-settings-section h3 { font-size: 13px; font-weight: 500; color: var(--muted-foreground); }
-.ssh-settings-fields.floe-settings-list { padding: 0 17px; border: 1px solid color-mix(in srgb, var(--foreground) 5%, transparent); border-radius: 14px; background: color-mix(in srgb, var(--foreground) 9%, var(--background)); }
+.ssh-settings-section h3 { font-size: 13px; font-weight: 550; color: var(--foreground); }
+.ssh-settings-fields.floe-settings-list { padding: 0 var(--environment-settings-inset); border: 1px solid var(--environment-settings-border); border-radius: var(--environment-settings-radius); background: var(--environment-settings-surface); }
 .ssh-settings-field, .ssh-settings-probe { display: flex; align-items: center; justify-content: space-between; gap: 28px; min-height: 65px; padding: 14px 0; min-width: 0; }
-.ssh-settings-field + .ssh-settings-field { border-top: 1px solid color-mix(in srgb, var(--foreground) 5%, transparent); }
+.ssh-settings-field + .ssh-settings-field { border-top: 1px solid var(--environment-settings-border); }
 .ssh-settings-field-label, .ssh-settings-probe > div { flex: 1; min-width: 0; }
 .ssh-settings-field-label label, .ssh-settings-field-label > span, .ssh-settings-probe label { font-size: 13px; font-weight: 400; line-height: 1.6; }
 .ssh-settings-field-control { width: 258px; max-width: 56%; display: flex; flex-direction: column; gap: 6px; align-items: stretch; min-width: 0; }
 .ssh-settings-field:has(#ssh-settings-ssh_port) .ssh-settings-field-control { width: 88px; }
-.ssh-settings-form input:not([type='checkbox']), .ssh-settings-form select { width: 100%; min-width: 0; height: 34px; }
+.ssh-settings-form input:not([type='checkbox']), .ssh-settings-form select { width: 100%; min-width: 0; height: var(--environment-settings-control-height); }
 .ssh-settings-form select { padding-right: 24px; }
 .ssh-settings-help { font-size: 12px; line-height: 1.65; color: var(--muted-foreground); overflow-wrap: anywhere; margin-top: 3px; }
 .ssh-settings-help-link { color: var(--muted-foreground); font-size: 12px; text-align: left; width: fit-content; height: auto; min-height: 32px; }
 .ssh-settings-help-link:hover { color: var(--foreground); text-decoration: underline; text-underline-offset: 3px; }
-.ssh-settings-disclosure { display: flex; align-items: center; width: 100%; height: auto; min-height: 32px; gap: 8px; text-align: left; color: var(--muted-foreground); font-size: 12px; }
-.ssh-settings-disclosure > span { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex: 1; min-width: 0; }
-.ssh-settings-summary { margin: 0; text-align: right; font-size: 11px; }
+.ssh-settings-disclosure-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px 16px; min-width: 0; }
+.ssh-settings-disclosure { display: flex; align-items: center; height: auto; min-height: 32px; gap: 8px; text-align: left; color: var(--muted-foreground); font-size: 12px; white-space: nowrap; }
+.ssh-settings-summary { margin: 0; min-width: 0; text-align: right; font-size: 11px; overflow-wrap: anywhere; }
 .ssh-settings-disclosure-title { flex: none; }
 .ssh-settings-chevron { width: 14px; height: 14px; flex: none; transition: transform 160ms ease; }
 .ssh-settings-chevron--open { transform: rotate(90deg); }
@@ -206,52 +256,67 @@
 .ssh-settings-field--invalid { scroll-margin-block: 16px; }
 .ssh-settings-error { color: var(--destructive); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
 .ssh-settings-help-popover { max-width: min(340px, calc(100vw - 32px)); padding: 16px; font-size: 13px; line-height: 1.6; }
-.ssh-settings-form [role='radiogroup'] { align-self: flex-end; width: fit-content; max-width: 100%; border: 0; border-radius: 8px; padding: 3px; background: color-mix(in srgb, var(--foreground) 4%, transparent); }
-.ssh-settings-form [role='radio'] { min-height: 28px; padding: 4px 10px; font-size: 12px; border: 0; box-shadow: none; }
+.ssh-settings-form [role='radiogroup'] { align-self: flex-end; width: fit-content; max-width: 100%; flex-wrap: wrap; border: 0; border-radius: 8px; padding: 3px; background: var(--background); }
+.environment-connection-form [role='radiogroup'] { max-width: 100%; flex-wrap: wrap; }
+.ssh-settings-form [role='radio'] { min-height: 32px; padding: 4px 10px; font-size: 12px; border: 0; box-shadow: none; }
+.environment-connection-form [role='radio'] { min-height: 32px; white-space: nowrap; }
+.ssh-settings-probe > label, .environment-connection-probe > label { min-height: 32px; align-items: center; }
 @media (max-width: 600px) {
   [data-floe-dialog-panel].redeven-environment-settings-dialog { width: calc(100vw - 16px); }
   .environment-settings-scroll { padding: 20px 16px; }
   .ssh-settings-field { align-items: stretch; flex-direction: column; gap: 10px; }
   .ssh-settings-field-control { width: 100%; max-width: 100%; }
   .ssh-settings-form [role='radiogroup'] { align-self: flex-start; }
-  .ssh-settings-disclosure > span { align-items: flex-start; flex-direction: column; gap: 2px; }
+  .ssh-settings-disclosure-heading { align-items: flex-start; flex-direction: column; gap: 2px; }
   .ssh-settings-summary { text-align: start; }
   .environment-settings-actions { padding-inline: 16px; }
 }
 @media (pointer: coarse) {
+  [data-floe-dialog-panel].redeven-environment-settings-dialog, .environment-settings-panel { --environment-settings-control-height: 44px; }
+  .redeven-environment-settings-dialog > div:first-child button { width: 44px; height: 44px; }
+  .environment-settings-actions button, .environment-access-overview-header > button { min-height: 44px; }
+  .environment-settings-information button,
+  .environment-certificate-setting button,
+  .redeven-environment-settings-dialog .two-factor-setting-actions button,
+  .redeven-environment-settings-dialog .two-factor-text-action,
+  .redeven-environment-settings-dialog .two-factor-manual summary,
+  .redeven-environment-settings-dialog .two-factor-manual-key button,
+  .redeven-environment-settings-dialog .two-factor-recovery-actions button { min-height: 44px; }
+  .environment-certificate-header > button { width: 44px; height: 44px; }
   .ssh-settings-form input:not([type='checkbox']), .ssh-settings-form select { min-height: 44px; font-size: 16px; }
   .environment-settings-tabs .environment-settings-tab-trigger,
   .ssh-settings-help-link, .ssh-settings-disclosure,
   .environment-access-advanced summary { min-height: 44px; }
+  .ssh-settings-form [role='radio'], .environment-connection-form [role='radio'],
+  .ssh-settings-probe > label, .environment-connection-probe > label { min-height: 44px; }
 }
 @media (prefers-reduced-motion: reduce) { .ssh-settings-chevron { transition: none; } }
 
-@media (max-height: 850px) {
-  .ssh-settings-form { gap: 18px; }
-  .ssh-settings-section { gap: 8px; }
-  .environment-settings-scroll { padding-block: 20px; }
-}
-
 .environment-connection-form { display: flex; flex-direction: column; gap: 24px; }
-.environment-connection-section-title { font-size: 13px; font-weight: 500; color: var(--muted-foreground); }
-.environment-connection-group { margin-top: 10px; padding: 0 17px; border: 1px solid color-mix(in srgb, var(--foreground) 5%, transparent); border-radius: 14px; background: color-mix(in srgb, var(--foreground) 9%, var(--background)); }
+.environment-connection-section-title { font-size: 13px; font-weight: 550; color: var(--foreground); }
+.environment-connection-group { margin-top: 10px; padding: 0 var(--environment-settings-inset); border: 1px solid var(--environment-settings-border); border-radius: var(--environment-settings-radius); background: var(--environment-settings-surface); }
 .environment-connection-field { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,258px); align-items: center; column-gap: 28px; row-gap: 4px; min-width: 0; min-height: 65px; padding-block: 14px; }
-.environment-connection-field + .environment-connection-field { border-top: 1px solid color-mix(in srgb, var(--foreground) 5%, transparent); }
+.environment-connection-field + .environment-connection-field { border-top: 1px solid var(--environment-settings-border); }
 .environment-connection-field > label { grid-column: 1; grid-row: 1; font-size: 13px; font-weight: 400; }
 .environment-connection-field > :not(label) { grid-column: 2; min-width: 0; }
-.environment-connection-field > input, .environment-connection-field > select, .environment-connection-field > div:has(input) { grid-row: 1 / span 2; width: 100%; height: 34px; font-size: 12px; }
+.environment-connection-field > input, .environment-connection-field > select, .environment-connection-field > div:has(input) { grid-row: 1 / span 2; width: 100%; height: var(--environment-settings-control-height); font-size: 12px; }
 .environment-connection-field > .text-muted-foreground { grid-column: 1; grid-row: 2; font-size: 12px; line-height: 1.65; }
-.environment-connection-group > .space-y-3 { margin-block: 0; }
+.environment-connection-field > .environment-connection-help { grid-column: 1; grid-row: 2; }
+.environment-connection-help, .environment-connection-guidance { font-size: 12px; line-height: 1.65; color: var(--muted-foreground); overflow-wrap: anywhere; }
+.environment-connection-help { margin-top: 3px; }
+.environment-connection-error { font-size: 12px; line-height: 1.6; color: var(--error); overflow-wrap: anywhere; }
+.environment-connection-guidance { padding-block: 14px; border-bottom: 1px solid var(--environment-settings-border); }
+.environment-connection-fields > .environment-connection-fields { border-bottom: 1px solid var(--environment-settings-border); }
+.environment-connection-fields > .environment-connection-fields:last-child { border-bottom: 0; }
+.environment-connection-field > .environment-connection-help + button { justify-self: end; max-width: 100%; white-space: nowrap; }
+.environment-connection-probe { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-block: 14px; }
 .environment-connection-group .environment-connection-field { margin-block: 0; }
-.environment-connection-group > .flex { padding-block: 14px; }
-.environment-connection-form .grid:has(> .environment-connection-field) { display: block; }
-.environment-connection-form .border-dashed { border: 0; background: transparent; padding-inline: 0; }
 .environment-connection-facts { margin: 0; }
 .environment-connection-facts > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 258px); align-items: center; gap: 28px; min-height: 65px; padding-block: 14px; }
-.environment-connection-facts > div + div { border-top: 1px solid color-mix(in srgb, var(--foreground) 5%, transparent); }
+.environment-connection-facts > div + div { border-top: 1px solid var(--environment-settings-border); }
 .environment-connection-facts dt { font-size: 13px; }
 .environment-connection-facts dd { margin: 0; font-size: 12px; text-align: right; overflow-wrap: anywhere; }
-.environment-connection-form .environment-container-picker { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 258px); column-gap: 28px; row-gap: 8px; padding-block: 14px; border-top: 1px solid color-mix(in srgb, var(--foreground) 5%, transparent); }
+.environment-connection-form .environment-container-picker { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 258px); column-gap: 28px; row-gap: 8px; padding-block: 14px; border-top: 1px solid var(--environment-settings-border); }
 .environment-connection-form .environment-container-picker-heading { display: contents; }
 .environment-connection-form .environment-container-picker-heading label { grid-column: 1; grid-row: 1; align-self: center; font-size: 13px; font-weight: 400; }
 .environment-connection-form .environment-container-picker-heading button { grid-column: 2; grid-row: 2; justify-self: end; }
@@ -271,15 +336,17 @@
 /* Access choices live inside the existing connection form, not on the Env card. */
 .redeven-access-settings {
   min-width: 0;
-  margin: 0 0 1rem;
-  padding: 0 0 1rem;
+  margin: 0 0 24px;
+  padding: 0;
   border: 0;
-  border-bottom: 1px solid var(--border);
 }
-.redeven-access-settings legend { font-size: var(--floe-type-control); font-weight: 500; padding: 0; }
-.redeven-access-settings > p { color: var(--muted-foreground); font-size: 0.75rem; line-height: 1.6; margin: 0.5rem 0 0.75rem; }
+.redeven-access-settings legend { font-size: 13px; font-weight: 550; padding: 0; margin-bottom: 10px; }
+.redeven-access-settings__body { padding: var(--environment-settings-inset); }
+.redeven-access-settings__body > p { color: var(--muted-foreground); font-size: 12px; line-height: 1.6; margin-bottom: 12px; }
+.redeven-access-settings__body button { height: auto; min-height: 32px; white-space: nowrap; }
+.environment-connection-form > .redeven-access-settings, .ssh-settings-form > .redeven-access-settings { margin-bottom: 0; }
 .redeven-access-settings__routes { display: grid; gap: 0.5rem; margin-bottom: 0.75rem; }
-.redeven-access-choice { display: flex; align-items: start; gap: 0.625rem; padding: 0.75rem; border: 1px solid var(--border); border-radius: 0.5rem; cursor: pointer; transition: border-color 120ms, background-color 120ms; }
+.redeven-access-choice { display: flex; align-items: start; gap: 0.625rem; padding: 0.75rem; border: 1px solid var(--border); border-radius: 10px; cursor: pointer; transition: border-color 120ms, background-color 120ms; }
 .redeven-access-choice[data-selected="true"] { border-color: color-mix(in srgb, var(--primary) 45%, var(--border)); background: color-mix(in srgb, var(--primary) 4%, var(--background)); }
 .redeven-access-choice input { margin-top: 0.2rem; flex-shrink: 0; accent-color: var(--primary); cursor: pointer; }
 .redeven-access-choice span { min-width: 0; display: grid; gap: 0.25rem; }
@@ -287,3 +354,4 @@
 .redeven-access-choice small { color: var(--muted-foreground); font-size: 0.6875rem; line-height: 1.6; }
 .redeven-access-settings:disabled .redeven-access-choice { cursor: not-allowed; opacity: 0.65; }
 .redeven-access-verification { border-left: 2px solid var(--success); padding: 0.375rem 0.625rem; font-size: 0.75rem; line-height: 1.6; color: var(--muted-foreground); }
+@media (pointer: coarse) { .redeven-access-settings__body button { min-height: 44px; } }

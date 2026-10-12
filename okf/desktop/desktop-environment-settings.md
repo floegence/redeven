@@ -4,7 +4,7 @@ title: Desktop environment settings
 description: Open one target-bound settings session, preserve independent drafts, and save through the registered owner.
 tags: [desktop, environments, settings, interaction]
 quality_exception: One target-bound settings session joins connection drafts, access prerequisites, and restart recovery; keep their cross-domain authority and focus handoff together.
-timestamp: 2026-10-12T05:15:00Z
+timestamp: 2026-10-12T06:30:00Z
 ---
 # Summary
 
@@ -105,109 +105,32 @@ saves, certificate refreshes and connection failures are scoped to opening and
 target identity. Starting a save invalidates older reads; late failure from a
 closed opening is a notification, never an error in the next editor.
 
-## Presentation and recovery
+## Access tasks and recovery
 
-The window uses released Floe Dialog, Tabs and retained TabPanel components.
-Multiple sections expose tabs; a single section omits the tab bar. The responsive
-panel is at most 50rem (800px) wide, respects the Desktop titlebar and viewport, and keeps
-title, tabs and actions fixed while each body scrolls. All settings windows use
-one stable 44.375rem (710px) height capped by the available viewport, including Local and
-other single-section windows. Expanding settings, showing certificates, changing
-tabs or resolving an access read must not resize or recenter the window or move
-its action baseline. Viewport resizing may change the cap. A stable native
-scrollbar gutter prevents horizontal field shifts when content becomes
-scrollable; automatic scroll anchoring cannot move the body during expansion.
-
-Access opens a task overview: current connection, browser access, sign-in
-protection and HTTPS certificate. Choosing a task presents only its relevant
-configuration. Access changes proceed through scope/protocol, required password
-or certificate preparation, and one next-start review. Advanced bind and port
-controls remain available in that task. The same session owns every draft;
-task navigation adds no configuration copy or alternate save path. Connection
-forms group identity, transport, and probing into quiet 14px-radius lists.
-Labels and guidance align left; desktop controls share a 258px right column,
-with 88px port fields. Narrow screens stack labels and controls. Advanced fields
-start collapsed. Fields follow the shared [settings control treatment](../ui/runtime-settings.md#settings-controls-and-identity). The access editor uses a compact Back label with the full destination in its accessible name and tooltip, so enlarged localized text stays within narrow windows. Local and network browser addresses use disclosures in the
-Access overview; remote internal listeners retain their scope explanation.
-Copy, filtering, and opening actions remain available inside each disclosure.
-WSL identity uses three labeled rows for distribution, Linux user and Runtime
-directory. Container selection shares the right control column with the other
-connection fields; its refresh action stays beside the selection and errors span
-the row. Both adapters stack their fields at narrow widths without hiding values.
+Access opens a task overview for current connection, browser access, sign-in
+protection and HTTPS certificate. Choosing a task presents its relevant
+configuration and retains the same access draft. Configuration proceeds through
+scope/protocol, prerequisites and an explicit next-start review. Advanced bind
+and port controls remain available. Navigation does not add a draft or save owner.
 
 A protected HTTP or password change first explains the dependency, verifies
 identity and explicitly commits disabling two-factor, then resumes the original
 task. Recovery-pending protection must be restored before that change. Password
 removal also selects local-only access and reviews both changes together.
-Sign-in protection groups password state, Set or Change password, and Remove
-password in one labeled card before the two-factor card. Both cards share the
-same surface, border, radius and spacing. Password actions retain published
-button affordances, stay adjacent in keyboard order, and reflow as whole controls
-at narrow widths. The removal action references its nearby browser-scope
-consequence; next-start timing stays in the same card. An unset password offers
-Set password without a removal action. Running environments with security
+
+An unset password offers Set password without a removal action. Running environments with security
 management wait for its authoritative status; loading or failed status
 cannot bypass the protected-change prerequisite. The existing error and Retry
 surface owns recovery. Stopped environments retain next-start password editing
 through their existing saved-configuration authority. Entering removal stages only the draft and review;
 explicit saving owns persistence.
+
 Authenticator enrollment, recovery-code confirmation and management use the same
 window body and fixed actions, never a nested dialog. Committed security changes
 are immediate and survive canceling later access edits. Their authoritative
 refresh retains the mounted task and pending draft. HTTPS preparation for
 enrollment preserves the existing restart handoff and requires an explicit
 return and setup action after restart; it never enrolls automatically.
-
-Authenticator entry uses a compact six-position numeric field in both owner
-verification and enrollment, with nearby guidance naming the authenticator app.
-One native text input owns selection, keyboard editing, paste and one-time-code
-autofill; the positions are visual separators, not six independent inputs.
-Input keeps at most six digits, removes pasted separators, and preserves leading
-zeroes. Continue and form submission require all six digits. Recovery-code entry
-remains an ordinary text field; switching methods clears the old code and focuses
-the new field. Floe owns the composite field's single focus border.
-
-The footer stays visible while the task body scrolls. Validation focuses the
-related field; save and security errors appear beside the action. Access footer
-feedback contains status text only; Close or Cancel, discard, prerequisite
-navigation and Review changes share one action group and control height. Review
-is the final primary action in the pending overview. Whole controls reflow at
-narrow widths without placing an action inside the independently sized status
-region. Disabled saves
-have keyboard-accessible contextual explanations. Review contains no password
-value. Password fields have bounded width and ports stay compact. Narrow panels
-stack controls without horizontal scrolling. Theme colors, single-line action labels
-and enlarged text preserve the hierarchy and reachable actions.
-
-Connection and access tabs retain the released Floe trigger's 12px horizontal
-padding and a 40px target height. Product alignment must not remove that padding
-or replace clickable space with margins. Back, SSH help, saved-password removal
-and disclosure actions have padded targets at least 32px high; coarse pointers
-receive at least 44px targets. Shared buttons retain Floe hover and keyboard focus
-behavior, while native disclosures retain keyboard activation with visible focus.
-The target includes its surrounding padding, not just the text.
-
-The released Floe slider provides the active tab's 200ms underline transition.
-Product styling uses a restrained 160ms opacity entrance for section content and
-actions, without translating fields or delaying selection. Retained inactive
-panels remain hidden from pointer, keyboard and accessibility navigation. Rapid
-switching follows the latest selection immediately; animation has no separate
-selection state, timer or request owner. Reduced motion disables the content fade
-and Floe's slider transition. Floe owns modal material, focus trapping, nested
-Escape, focus restoration and exit motion. Retained exit presentation never
-blanks the closing panel.
-
-Advanced settings and certificate disclosures expand and collapse over 180ms,
-animating only content height and opacity inside the body. Native details retain
-browser disclosure ownership; closed content becomes inert immediately while its
-visual exit completes. Conditional SSH and certificate-management sections use
-released Floe presence to retain their exiting DOM, with immediate inert and
-accessibility-hidden state. Rapid reversal follows the existing open state and
-keeps drafts. Reduced motion switches these sections immediately. These visual
-transitions add no settings, certificate, request or save lifecycle owner.
-SSH validation focuses an invalid field immediately and checks its scroll
-position again after expansion, keeping both the field and its error message
-visible in the body.
 
 Access loading and failures remain inside the access section. Failures show their
 structured summary or original diagnostic with Copy and Retry. Control HTTP 401
@@ -218,6 +141,10 @@ The same message projection applies to a save failure delivered after dismissal.
 Retry keeps the current window and connection draft. Missing or invalid
 responses never become fabricated defaults or a generic claim that Runtime is
 preparing.
+
+The [settings presentation contract](desktop-environment-settings-presentation.md)
+owns window geometry, theme material, section hierarchy, responsive controls,
+address disclosures, workflow inputs, focus affordances and visual transitions.
 
 # Boundaries
 

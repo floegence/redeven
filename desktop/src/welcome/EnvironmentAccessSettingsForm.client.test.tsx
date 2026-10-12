@@ -156,6 +156,13 @@ describe('Environment access workflows', () => {
     const summaries = [...document.querySelectorAll<HTMLDetailsElement>('.redeven-address-group--summary')];
     expect(summaries).toHaveLength(2);
     expect(summaries.every(summary => !summary.open)).toBe(true);
+    for (const disclosure of summaries) {
+      expect(disclosure.querySelector('summary button')).toBeNull();
+      const help = disclosure.parentElement?.querySelector<HTMLButtonElement>('.redeven-address-help');
+      expect(help?.getAttribute('aria-describedby')).toBeTruthy();
+      help?.click();
+      expect(disclosure.open).toBe(false);
+    }
     expect(document.querySelectorAll('.access-flow-summary > section')).toHaveLength(3);
   });
 

@@ -22,6 +22,7 @@ import {
   Dialog,
   Input,
   SegmentedControl,
+  Switch,
   Tag,
 } from '@floegence/floe-webapp-core/ui';
 import { handleMenuKeyboardNavigation } from '@floegence/floe-webapp-core/ui';
@@ -270,7 +271,6 @@ import {
   DesktopThemePicker,
   type DesktopThemePickerSnapshot,
 } from './DesktopThemePicker';
-import { RuntimeStatusOrb } from './RuntimeStatusOrb';
 import { desktopControlPlaneKey } from '../shared/cloud';
 import {
   DESKTOP_ACTION_TOAST_LIMIT,
@@ -6561,14 +6561,14 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
                 {accessSettings()}
                 <Show when={connectionDialogError()}><p role="alert" class="text-xs text-destructive">{connectionDialogError()}</p></Show>
                 <Show when={settingsPresentation()?.environment.kind === 'gateway_environment'}>
-                  <p class="text-[length:var(--floe-type-body)] text-muted-foreground">{i18n().t('gatewayMembers.permissionBoundary')}</p>
+                  <div class="environment-settings-information"><p>{i18n().t('gatewayMembers.permissionBoundary')}</p></div>
                 </Show>
                 <Show when={settingsPresentation()?.environment.registration_ref?.kind !== 'local_environment' && settingsPresentation()?.environment.kind !== 'gateway_environment'}>
                 <Show when={settingsPresentation()?.environment.managed_runtime_host_access?.kind === 'wsl_host'} fallback={(
-                  <div class="space-y-4">
-                    <p class="text-[length:var(--floe-type-body)] text-muted-foreground">{i18n().t('settings.cloudManaged')}</p>
-                    <p class="select-text break-all font-mono text-xs">{settingsPresentation()?.environment.cloud_origin}</p>
-                    <Button onClick={() => { const url = settingsPresentation()?.environment.cloud_origin; if (url) void openConnectionInBrowser(url); }}>
+                  <div class="environment-settings-information">
+                    <p>{i18n().t('settings.cloudManaged')}</p>
+                    <code class="select-text font-mono">{settingsPresentation()?.environment.cloud_origin}</code>
+                    <Button size="sm" variant="outline" onClick={() => { const url = settingsPresentation()?.environment.cloud_origin; if (url) void openConnectionInBrowser(url); }}>
                       {i18n().t('settings.manageCloud')}
                     </Button>
                   </div>
@@ -6617,11 +6617,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             const environmentID = settingsPresentation()!.environment.id;
             return <Show when={Boolean(settingsPresentation()?.access)} fallback={(
               <EnvironmentSettingsPanel footer={<Button variant="ghost" onClick={cancelSettings}>{i18n().t('common.close')}</Button>}>
-                <div class="space-y-4" role={settingsPresentation()?.access_state === 'error' ? 'alert' : 'status'}>
+                <div class="environment-settings-information" role={settingsPresentation()?.access_state === 'error' ? 'alert' : 'status'}>
                   <p class="text-[length:var(--floe-type-body)]">{i18n().t(settingsPresentation()?.access_state === 'loading' ? 'settings.loadingAccess' : 'settings.loadAccessFailed')}</p>
                   <Show when={settingsPresentation()?.access_error}>
                     <p class="select-text break-words text-xs text-muted-foreground">{settingsAccessErrorMessage()}</p>
-                    <div class="flex gap-2">
+                    <div class="environment-settings-information-actions">
                       <Button onClick={() => void settingsController.loadAccess()}>{i18n().t('common.retry')}</Button>
                       <Button variant="ghost" onClick={() => void copyEnvironmentValue(settingsAccessDiagnostic(), i18n().t('settings.loadAccessFailed'))}>{i18n().t('common.copy')}</Button>
                       <Show when={settingsPresentation()?.access_error?.code === 'SETTINGS_WSL_STOPPED'}>
@@ -12538,14 +12538,14 @@ export function EnvironmentAccessSettingsForm(props: Readonly<{
   return <EnvironmentAccessWorkflow {...props} connection={configureAddress => (
         <section aria-label={props.i18n.t('settings.currentConnection')} class="environment-access-overview">
           <div class="environment-access-overview-header">
-            <div class="environment-access-overview-heading">
-              <h3>{props.i18n.t('settings.currentConnection')}</h3>
-              <span class="environment-access-status" role="status" data-status-tone={props.runtimeStatusTone}>
-                <span class="relative flex h-5 w-5 items-center justify-center" aria-hidden="true">
-                  <RuntimeStatusOrb running={props.runtimeRunning} dark={props.dark} />
+            <div class="environment-access-overview-identity">
+              <span class="environment-settings-icon" aria-hidden="true"><Link class="h-[18px] w-[18px]" /></span>
+              <div class="environment-access-overview-heading">
+                <h3>{props.i18n.t('settings.currentConnection')}</h3>
+                <span class="environment-access-status" role="status" data-status-tone={props.runtimeStatusTone}>
+                  {props.runtimeStatusLabel}
                 </span>
-                {props.runtimeStatusLabel}
-              </span>
+              </div>
             </div>
             <Button size="sm" variant="outline" onClick={props.openInDesktop} disabled={saving()}>
               {props.desktopOpenLabel}<ChevronRight class="ml-1 h-3.5 w-3.5" aria-hidden="true" />
@@ -13002,8 +13002,8 @@ function ConnectionDialogForm(props: ConnectionDialogProps & { beforeFields?: JS
   return (
     <EnvironmentSettingsPanel
       footer={(
-        <div class="flex justify-end gap-2">
-          <Button size="sm" variant="outline" onClick={() => props.onOpenChange(false)}>
+        <div class="environment-access-actions">
+          <Button size="sm" variant="ghost" onClick={() => props.onOpenChange(false)}>
             {props.i18n.t('common.cancel')}
           </Button>
 
@@ -13042,7 +13042,7 @@ function ConnectionDialogForm(props: ConnectionDialogProps & { beforeFields?: JS
             class={cn('w-full', props.fieldErrors.label && 'border-destructive')}
           />
           <Show when={props.fieldErrors.label}>
-            <div class="text-[11px] text-destructive">{props.fieldErrors.label}</div>
+            <div class="environment-connection-error">{props.fieldErrors.label}</div>
           </Show>
         </div>
 
@@ -13072,7 +13072,7 @@ function ConnectionDialogForm(props: ConnectionDialogProps & { beforeFields?: JS
                   autofocus={props.state?.mode === 'create'}
                 />
                 <Show when={props.fieldErrors.external_local_ui_url}>
-                  <div class="text-[11px] text-destructive">{props.fieldErrors.external_local_ui_url}</div>
+                  <div class="environment-connection-error">{props.fieldErrors.external_local_ui_url}</div>
                 </Show>
               </div>
             </div>
@@ -13085,11 +13085,11 @@ function ConnectionDialogForm(props: ConnectionDialogProps & { beforeFields?: JS
               {props.i18n.t('connectionDialog.sshHostSection')}
             </div>
             <div class="environment-connection-group">
-              <div class="rounded-md border border-dashed border-border/40 bg-muted/10 px-2.5 py-2 text-[11px] leading-5 text-muted-foreground">
+              <div class="environment-connection-guidance">
                 {props.i18n.t('connectionDialog.sshContainerNotice')}
               </div>
-              <div class="mt-3 space-y-3">
-                <div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_7.5rem]">
+              <div class="environment-connection-fields">
+                <div class="environment-connection-fields">
                 <div class="environment-connection-field">
                   <label for="environment-ssh-destination" class="block text-xs font-medium text-foreground">
                     {props.i18n.t('connectionDialog.sshDestination')} <span class="text-destructive">*</span>
@@ -13114,7 +13114,7 @@ function ConnectionDialogForm(props: ConnectionDialogProps & { beforeFields?: JS
                     onRetry={props.refreshSSHConfigHosts}
                   />
                   <Show when={props.fieldErrors.ssh_destination}>
-                    <div class="text-[11px] text-destructive">{props.fieldErrors.ssh_destination}</div>
+                    <div class="environment-connection-error">{props.fieldErrors.ssh_destination}</div>
                   </Show>
                 </div>
                 <div class="environment-connection-field">
@@ -13134,7 +13134,7 @@ function ConnectionDialogForm(props: ConnectionDialogProps & { beforeFields?: JS
                     class={cn('w-full', props.fieldErrors.ssh_port && 'border-destructive')}
                   />
                   <Show when={props.fieldErrors.ssh_port}>
-                    <div class="text-[11px] text-destructive">{props.fieldErrors.ssh_port}</div>
+                    <div class="environment-connection-error">{props.fieldErrors.ssh_port}</div>
                   </Show>
                 </div>
               </div>
@@ -13158,7 +13158,7 @@ function ConnectionDialogForm(props: ConnectionDialogProps & { beforeFields?: JS
                     size="sm"
                   />
                 </Show>
-                <div class="text-[11px] leading-5 text-muted-foreground">
+                <div class="environment-connection-help">
                   {props.i18n.t('connectionDialog.authenticationHelp')}
                 </div>
               </div>
@@ -13175,7 +13175,7 @@ function ConnectionDialogForm(props: ConnectionDialogProps & { beforeFields?: JS
                     size="sm"
                     class="w-full"
                   />
-                  <div class="text-[11px] leading-5 text-muted-foreground">
+                  <div class="environment-connection-help">
                     {props.i18n.t('connectionDialog.localSshPasswordHelp')}
                   </div>
                   <Show when={(props.state as SSHBackedConnectionDialogState | null)?.ssh_password_configured && (props.state as SSHBackedConnectionDialogState | null)?.ssh_password_mode !== 'clear'}>
@@ -13184,7 +13184,7 @@ function ConnectionDialogForm(props: ConnectionDialogProps & { beforeFields?: JS
                     </Button>
                   </Show>
                   <Show when={(props.state as SSHBackedConnectionDialogState | null)?.ssh_password_mode === 'clear'}>
-                    <div class="text-[11px] text-muted-foreground">{props.i18n.t('connectionDialog.storedSshPasswordWillBeRemoved')}</div>
+                    <div class="environment-connection-help">{props.i18n.t('connectionDialog.storedSshPasswordWillBeRemoved')}</div>
                   </Show>
                 </div>
               </Show>
@@ -13199,8 +13199,8 @@ function ConnectionDialogForm(props: ConnectionDialogProps & { beforeFields?: JS
               {props.i18n.t('connectionDialog.container')}
             </div>
             <div class="environment-connection-group">
-              <div class="space-y-3">
-                <div class="grid gap-3 sm:grid-cols-[10rem_minmax(0,1fr)] items-start">
+              <div class="environment-connection-fields">
+                <div class="environment-connection-fields">
                   <div class="environment-connection-field">
                     <label class="block text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.engine')}</label>
                     <SegmentedControl
@@ -13261,13 +13261,13 @@ function ConnectionDialogForm(props: ConnectionDialogProps & { beforeFields?: JS
                   class={cn('w-full', props.fieldErrors.runtime_root && 'border-destructive')}
                   spellcheck={false}
                 />
-                <div class="text-[11px] text-muted-foreground">
+                <div class="environment-connection-help">
                   {connectionKind() === 'ssh_container_runtime'
                     ? props.i18n.t('connectionDialog.runtimeRootHelp', { root: DEFAULT_DESKTOP_SSH_RUNTIME_ROOT_LABEL })
                     : props.i18n.t('connectionDialog.containerRuntimeRootHelp')}
                 </div>
                 <Show when={props.fieldErrors.runtime_root}>
-                  <div class="text-[11px] text-destructive">{props.fieldErrors.runtime_root}</div>
+                  <div class="environment-connection-error">{props.fieldErrors.runtime_root}</div>
                 </Show>
               </div>
             </div>
@@ -13281,14 +13281,14 @@ function ConnectionDialogForm(props: ConnectionDialogProps & { beforeFields?: JS
               {props.i18n.t('connectionDialog.statusDetection')}
             </div>
             <div class="environment-connection-group">
-              <div class="flex items-start justify-between gap-4">
+              <div class="environment-connection-probe">
                 <div class="min-w-0">
                   <div class="text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.autoStatusDetection')}</div>
-                  <div class="mt-1 text-[11px] leading-5 text-muted-foreground">
+                  <div class="environment-connection-help">
                     {props.i18n.t('connectionDialog.autoStatusDetectionHelp')}
                   </div>
                 </div>
-                <Checkbox
+                <Switch
                   checked={connectionDialogAutoRuntimeProbeEnabled(props.state)}
                   onChange={props.toggleAutoRuntimeProbe}
                   label={props.i18n.t('connectionDialog.enabled')}

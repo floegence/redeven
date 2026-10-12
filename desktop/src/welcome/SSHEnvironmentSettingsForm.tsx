@@ -1,6 +1,6 @@
 import { FeedbackIndicator, Button, Input, SegmentedControl, SettingsList, Switch } from '@floegence/floe-webapp-core/ui';
 import { EnvironmentSettingsPanel, EnvironmentSettingsReveal } from './EnvironmentSettingsDialog';
-import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, type JSX } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, type JSX } from 'solid-js';
 import { ChevronRight } from '@floegence/floe-webapp-core/icons';
 import type { DesktopSSHConfigHost } from '../shared/desktopSSHConfig';
 import { DEFAULT_DESKTOP_SSH_CONNECT_TIMEOUT_SECONDS, type DesktopSSHBootstrapStrategy } from '../shared/desktopSSH';
@@ -47,6 +47,7 @@ export type SSHEnvironmentSettingsFormProps = Readonly<{
 }>;
 
 export function SSHEnvironmentSettingsForm(props: SSHEnvironmentSettingsFormProps) {
+  const advancedSummaryID = createUniqueId();
   const baseline = () => props.baseline;
   const [advanced, setAdvanced] = createSignal(false);
   const [helpOpen, setHelpOpen] = createSignal(false);
@@ -330,19 +331,20 @@ export function SSHEnvironmentSettingsForm(props: SSHEnvironmentSettingsFormProp
           // Validation focuses immediately; expanding content can outgrow that first scroll position.
           scrollFocusedErrorIntoView();
         }}>
-          <Button size="sm" variant="ghost"
-            type="button"
-            class="ssh-settings-disclosure"
-            aria-expanded={advanced()}
-            aria-controls="ssh-settings-advanced-fields"
-            onClick={() => setAdvanced(!advanced())}
-          >
-            <ChevronRight class="ssh-settings-chevron" classList={{ 'ssh-settings-chevron--open': advanced() }} />
-            <span>
+          <div class="ssh-settings-disclosure-heading">
+            <Button size="sm" variant="ghost"
+              type="button"
+              class="ssh-settings-disclosure"
+              aria-expanded={advanced()}
+              aria-controls="ssh-settings-advanced-fields"
+              aria-describedby={advancedSummaryID}
+              onClick={() => setAdvanced(!advanced())}
+            >
+              <ChevronRight class="ssh-settings-chevron" classList={{ 'ssh-settings-chevron--open': advanced() }} />
               <span class="ssh-settings-disclosure-title">{t('sshSettings.advanced')}</span>
-              <span class="ssh-settings-help ssh-settings-summary">{summary()}</span>
-            </span>
-          </Button>
+            </Button>
+            <p id={advancedSummaryID} class="ssh-settings-help ssh-settings-summary">{summary()}</p>
+          </div>
           <EnvironmentSettingsReveal open={advanced()}>
             <SettingsList id="ssh-settings-advanced-fields" class="ssh-settings-fields ssh-settings-advanced-fields">
               <Field
