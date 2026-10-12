@@ -26,7 +26,7 @@ const companionCopy = {
 function mountFrame(runtime: HTMLElement): void {
   runtime.className = 'flower-activity-companion floe-bottom-bar-companion';
   runtime.dataset.companionPhase = 'collapsed';
-  Object.assign(runtime.style, { left: '12px', top: '100px', width: '360px', height: '22px' });
+  Object.assign(runtime.style, { left: '12px', top: '100px', width: '360px', height: '32px' });
 }
 
 function expectSingleOutline(runtime: HTMLElement): void {

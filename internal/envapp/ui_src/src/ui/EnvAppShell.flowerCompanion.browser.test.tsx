@@ -871,8 +871,6 @@ vi.mock('./maintenance/createRuntimeUpdatePromptCoordinator', () => ({
 }));
 vi.mock('./maintenance/createAgentVersionModel', () => ({
   createAgentVersionModel: () => ({
-    currentPing: () => null,
-    currentPingLoading: () => false,
     currentProcessStartedAtMs: () => 0,
     runtimeService: () => undefined,
     currentVersion: () => 'v1.0.0',
@@ -994,7 +992,7 @@ type MountedShell = Readonly<{
   product: HTMLElement;
   textarea: HTMLTextAreaElement;
   body: HTMLElement;
-  bottomBar: HTMLElement;
+  viewport: HTMLElement;
 }>;
 
 type MountedMobileShell = Readonly<{
@@ -1035,12 +1033,13 @@ async function mountShell(): Promise<MountedShell> {
   const product = document.querySelector('#redeven-activity-flower-product');
   const textarea = document.querySelector('[data-testid="activity-flower-composer"]');
   const body = document.querySelector('[data-floe-shell-slot="main"]');
-  const bottomBar = document.querySelector('[data-floe-shell-slot="bottom-bar"]');
+  const viewport = document.querySelector('[data-floe-app-viewport]');
+  expect(document.querySelector('[data-floe-shell-slot="bottom-bar"]')).toBeNull();
   if (!(companion instanceof HTMLElement)) throw new Error('Activity Flower companion did not mount.');
   if (!(product instanceof HTMLElement)) throw new Error('Activity Flower product root did not mount.');
   if (!(textarea instanceof HTMLTextAreaElement)) throw new Error('Activity Flower composer did not mount.');
   if (!(body instanceof HTMLElement)) throw new Error('Activity body did not mount.');
-  if (!(bottomBar instanceof HTMLElement)) throw new Error('Activity bottom bar did not mount.');
+  if (!(viewport instanceof HTMLElement)) throw new Error('Application viewport did not mount.');
 
   return {
     host,
@@ -1051,7 +1050,7 @@ async function mountShell(): Promise<MountedShell> {
     product,
     textarea,
     body,
-    bottomBar,
+    viewport,
   };
 }
 
@@ -1176,6 +1175,28 @@ beforeEach(() => {
 });
 
 describe('EnvAppShell Activity Flower browser integration', () => {
+  it('reclaims the entire desktop bottom edge without runtime grants', async () => {
+    await page.viewport(1280, 800);
+    getEnvironmentMock.mockResolvedValue({
+      public_id: 'env_local', name: 'Restricted runtime', status: 'online',
+      permissions: { can_read: false, can_write: false, can_execute: false, can_admin: false, is_owner: false },
+    });
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    disposers.push(render(() => (
+      <FloeConfigProvider config={{ layout: { mobileQuery: '(max-width: 0px)' } }}>
+        <LayoutProvider><CommandProvider><EnvAppShell /></CommandProvider></LayoutProvider>
+      </FloeConfigProvider>
+    ), host));
+    await vi.waitFor(() => expect(protocolSnapshot.state).toBe('connected'));
+    await flushAsync();
+    expect(document.querySelector('[data-floe-shell-slot="bottom-bar"]')).toBeNull();
+    const main = document.querySelector('[data-floe-shell-slot="main"]')!;
+    const viewport = document.querySelector('[data-floe-app-viewport]')!;
+    expect(elementRect(main).bottom).toBeCloseTo(elementRect(viewport).bottom, 0);
+  });
+
   it('reserves mobile space for the active page without a persistent Ask Flower entry', async () => {
     await page.viewport(390, 844);
     const fixture = await mountProductionMobileShell();
@@ -1329,32 +1350,31 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     { width: 767, height: 800 },
     { width: 768, height: 800 },
     { width: 390, height: 844 },
-  ])('keeps the centered bottom grid and fixed overlay collision-free at $width x $height', async ({ width, height }) => {
+  ])('keeps the independent bottom entry centered at $width x $height', async ({ width, height }) => {
     await page.viewport(width, height);
     const fixture = await mountShell();
-    const grid = document.querySelector('.flower-activity-bottom-grid');
-    const start = document.querySelector('.flower-activity-bottom-side-start');
     const quickEntry = document.querySelector('.flower-activity-companion-anchor');
-    const end = document.querySelector('.flower-activity-bottom-side-end');
-    if (!(grid instanceof HTMLElement) || !(start instanceof HTMLElement)
-      || !(quickEntry instanceof HTMLElement) || !(end instanceof HTMLElement)) {
-      throw new Error('Activity Flower bottom grid did not render.');
-    }
+    if (!(quickEntry instanceof HTMLElement)) throw new Error('Flower floating anchor did not render.');
 
     const bodyBefore = {
       clientHeight: fixture.body.clientHeight,
       scrollHeight: fixture.body.scrollHeight,
     };
-    const bottomRect = elementRect(fixture.bottomBar);
+    const viewportRect = elementRect(fixture.viewport);
     const quickRect = elementRect(quickEntry);
-    const startRect = elementRect(start);
-    const endRect = elementRect(end);
-
     expect(Math.abs(
-      (quickRect.left + quickRect.width / 2) - (bottomRect.left + bottomRect.width / 2),
+      (quickRect.left + quickRect.width / 2) - (viewportRect.left + viewportRect.width / 2),
     )).toBeLessThan(1);
-    expect(startRect.right).toBeLessThanOrEqual(quickRect.left + 0.5);
-    expect(quickRect.right).toBeLessThanOrEqual(endRect.left + 0.5);
+    expect(quickRect.height).toBe(32);
+    expect(viewportRect.bottom - quickRect.bottom).toBeCloseTo(12, 0);
+    expect(quickRect.left).toBeGreaterThanOrEqual(viewportRect.left + 12);
+    expect(quickRect.right).toBeLessThanOrEqual(viewportRect.right - 12);
+    expect(elementRect(fixture.body).bottom).toBeCloseTo(viewportRect.bottom, 0);
+    expect(getComputedStyle(quickEntry).position).toBe('absolute');
+    expect(getComputedStyle(quickEntry).pointerEvents).toBe('none');
+    expect(fixture.body.contains(quickEntry)).toBe(false);
+    expect(document.elementFromPoint(viewportRect.left + 12, viewportRect.bottom - 12)
+      ?.closest('[data-activity-flower-overlay-host]')).toBeNull();
     expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(document.documentElement.clientWidth);
 
     await userEvent.click(fixture.input);
@@ -1381,8 +1401,8 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     await page.viewport(1280, 800);
     const fixture = await mountShell();
     const collapsed = elementRect(fixture.panel);
-    expect(elementRect(fixture.bottomBar).height).toBe(28);
-    expect(collapsed.height).toBe(22);
+    expect(collapsed.height).toBe(32);
+    expect(elementRect(fixture.viewport).bottom - collapsed.bottom).toBeCloseTo(12, 0);
     expect(collapsed.width).toBeLessThanOrEqual(360);
     const samples: Array<{ width: number; height: number; bottom: number }> = [];
     fixture.textarea.focus();
@@ -1442,6 +1462,8 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     const hostRect = elementRect(fullPageHost);
     expect(activityBarFlower.getAttribute('aria-pressed')).toBe('true');
     expect(fixture.product.dataset.presentation).toBe('full_page');
+    expect(fixture.companion.getAttribute('aria-hidden')).toBe('true');
+    expect(fixture.companion.hasAttribute('inert')).toBe(true);
     expect(fixture.product.getAttribute('aria-hidden')).toBeNull();
     expect(document.querySelector('[data-testid="env-ai-page"]')).toBe(flowerSurface);
     expect(flowerSurface.dataset.mountId).toBe(mountID);

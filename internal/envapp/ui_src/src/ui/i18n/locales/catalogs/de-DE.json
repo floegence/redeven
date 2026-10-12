@@ -516,13 +516,6 @@
       "envTypeProvider": "Provider",
       "envTypeRemote": "Entfernt"
     },
-    "runtimeStatus": {
-      "triggerLabel": "Umgebungsstatus für {environment}",
-      "runtime": "Laufzeit",
-      "started": "Gestartet",
-      "cpu": "CPU",
-      "memory": "Arbeitsspeicher"
-    },
     "flowerCompanion": {
       "openAria": "Flower-Begleitbereich. {status}",
       "collapse": "Flower einklappen",

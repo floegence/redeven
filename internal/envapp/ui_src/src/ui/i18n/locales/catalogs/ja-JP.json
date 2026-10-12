@@ -516,13 +516,6 @@
       "envTypeProvider": "Provider",
       "envTypeRemote": "リモート"
     },
-    "runtimeStatus": {
-      "triggerLabel": "{environment} の環境ステータス",
-      "runtime": "ランタイム",
-      "started": "起動時刻",
-      "cpu": "CPU",
-      "memory": "メモリ"
-    },
     "flowerCompanion": {
       "openAria": "Flower コンパニオン。{status}",
       "collapse": "Flower を折りたたむ",

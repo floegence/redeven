@@ -54,7 +54,8 @@ describe('createAgentVersionModel', () => {
     pingResult.reject(new Error('RPC transport or response decode error'));
     await flushAsync();
 
-    expect(model.currentPing()).toBeNull();
+    expect(model.currentVersion()).toBe('');
+    expect(model.currentProcessStartedAtMs()).toBeNull();
     expect(getLatestVersionMock).not.toHaveBeenCalled();
   });
 

@@ -516,13 +516,6 @@
       "envTypeProvider": "Provider",
       "envTypeRemote": "Distant"
     },
-    "runtimeStatus": {
-      "triggerLabel": "État de l’environnement {environment}",
-      "runtime": "Environnement d’exécution",
-      "started": "Démarré",
-      "cpu": "CPU",
-      "memory": "Mémoire"
-    },
     "flowerCompanion": {
       "openAria": "Volet Flower. {status}",
       "collapse": "Réduire Flower",

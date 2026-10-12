@@ -516,13 +516,6 @@
       "envTypeProvider": "Provider",
       "envTypeRemote": "遠端"
     },
-    "runtimeStatus": {
-      "triggerLabel": "查看 {environment} 的環境狀態",
-      "runtime": "運行時",
-      "started": "啟動時間",
-      "cpu": "CPU",
-      "memory": "記憶體"
-    },
     "flowerCompanion": {
       "openAria": "Flower 對話面板。{status}",
       "collapse": "收合 Flower",

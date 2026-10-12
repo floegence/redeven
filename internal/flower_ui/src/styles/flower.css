@@ -450,7 +450,7 @@
   min-width: 0;
 }
 
-/* Keep the collapsed bottom-bar title readable without competing with the composer. */
+/* Keep the collapsed companion title readable without competing with the composer. */
 .flower-surface-companion-collapsed .flower-companion-collapsed-thread-switcher {
   display: flex;
   height: 100%;

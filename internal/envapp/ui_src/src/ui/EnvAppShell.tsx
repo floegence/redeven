@@ -55,7 +55,6 @@ import {
   DisplayModePageShell,
   KeepAliveStack,
   Shell,
-  StatusIndicator,
   TopBarIconButton,
   type ActivityBarItem,
   type BarItemContextMenuRequest,
@@ -155,11 +154,6 @@ import { createDebugConsoleController } from './debugConsole/createDebugConsoleC
 import { TopBarBrandButton } from './TopBarBrandButton';
 import { EnvAppThemePicker } from './EnvAppThemePicker';
 import { MobileShellTools, handleMobileToolsEscape, type MobileToolsPage } from './MobileShellTools';
-import {
-  EnvironmentRuntimeStatusTooltip,
-  type EnvSessionIdentity,
-  type EnvSessionSource,
-} from './EnvironmentRuntimeStatusTooltip';
 import { Tooltip } from './primitives/Tooltip';
 import { NotesOverlay } from './notes/NotesOverlay';
 import { resolveNotesOverlayViewportHosts } from './notes/notesOverlayShellViewport';
@@ -3385,97 +3379,9 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     }
     flowerWasVisible = visible;
   });
-  const status = createMemo(() => {
-    if (accessGatePhase() === 'unlock_required') return 'disconnected';
-    if (accessGatePhase() === 'checking' || accessGatePhase() === 'resuming' || accessGatePhase() === 'resume_blocked') {
-      return 'connecting';
-    }
-    if (recoverySnapshot().state === 'failed') return 'error';
-    if (recoverySnapshot().state === 'paused') return 'disconnected';
-    if (recoveryVisible()) return 'connecting';
-    if (manualError()) return 'error';
-	const current = protocol.status();
-	if (current === 'connected') return 'connected';
-	if (current === 'connecting' || current === 'waiting') return 'connecting';
-	if (current === 'failed') return 'error';
-	return 'disconnected';
-  });
-  const statusLabel = createMemo(() => {
-    switch (accessGatePhase()) {
-      case 'checking':
-        return i18n.t('shell.status.checkingAccess');
-      case 'unlock_required':
-        return i18n.t('shell.status.locked');
-      case 'resuming':
-        return i18n.t('shell.status.preparingSecureSession');
-      case 'resume_blocked':
-        return i18n.t('shell.status.secureSessionBlocked');
-      default:
-        break;
-    }
-
-    switch (recoverySnapshot().phase) {
-      case 'desktop_transport': return i18n.t('shell.status.retryingConnection');
-      case 'protocol_connect': return i18n.t('shell.status.reconnecting');
-      case 'secure_session': return i18n.t('shell.status.preparingSecureSession');
-      case 'completed': return i18n.t('shell.framework.connected');
-      case 'failed': return i18n.t('shell.status.connectionFailed');
-      case 'paused': return i18n.t('connectionRecovery.title.paused');
-      default: return undefined;
-    }
-  });
   const connecting = () => !accessGateVisible() && (
     protocol.status() === 'connecting' || recoverySnapshot().state === 'recovering'
   );
-  const reconnectDisabled = createMemo(() => {
-    switch (accessGatePhase()) {
-      case 'checking':
-      case 'unlock_required':
-        return true;
-      case 'resuming':
-      case 'resume_blocked':
-        return accessRecoveryBusy() || accessUnlocking();
-      default:
-        break;
-    }
-
-    if (recoverySnapshot().state === 'failed' || recoverySnapshot().state === 'succeeded') {
-      return true;
-    }
-    if (recoverySnapshot().state === 'recovering') {
-      if (recoverySnapshot().phase === 'desktop_transport') {
-        return !(recoverySnapshot().desktop_transport?.actions.includes('retry_now') ?? false);
-      }
-      return protocol.snapshot().state !== 'waiting';
-    }
-
-    if (recoverySnapshot().state === 'paused') return false;
-    return accessRecoveryBusy() || connecting();
-  });
-  const reconnectLabel = createMemo(() => {
-    switch (accessGatePhase()) {
-      case 'checking':
-        return i18n.t('shell.status.checkingAccess');
-      case 'unlock_required':
-        return i18n.t('shell.status.unlockRequired');
-      case 'resuming':
-      case 'resume_blocked':
-        return accessRecoveryBusy()
-          ? i18n.t('shell.status.preparingSecureSession')
-          : i18n.t('shell.status.retryConnection');
-      default:
-        break;
-    }
-
-    if (recoverySnapshot().state === 'recovering') {
-      return reconnectDisabled()
-        ? i18n.t('shell.status.reconnectingEllipsis')
-        : i18n.t('shell.status.retryNow');
-    }
-    if (recoverySnapshot().state === 'paused') return i18n.t('connectionRecovery.resumeRetry');
-    return connecting() ? i18n.t('shell.status.connectingEllipsis') : i18n.t('shell.status.reconnect');
-  });
-
   const submitAccessUnlock = async (event?: SubmitEvent) => {
     event?.preventDefault();
     if (accessUnlocking()) return;
@@ -4437,41 +4343,14 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     return items;
   };
 
-  const envSessionIdentity = createMemo<EnvSessionIdentity>(() => {
+  const environmentName = createMemo(() => {
     const desktopCtx = readDesktopSessionContextSnapshot();
-    const contextSource = desktopCtx?.session_source;
-    const source: EnvSessionSource =
-      contextSource === 'local_runtime' ||
-      contextSource === 'provider_environment' ||
-      contextSource === 'ssh_environment' ||
-      contextSource === 'external_local_ui' ||
-      contextSource === 'runtime_gateway'
-        ? contextSource
-        : isLocalMode()
-          ? 'local_runtime'
-          : 'region_sandbox';
-    const displayID =
-      source === 'provider_environment'
-        ? (desktopCtx?.env_public_id ?? '').trim() || envId()
-        : source === 'ssh_environment' || source === 'external_local_ui'
-          ? (desktopCtx?.env_public_id ?? '').trim() || (desktopCtx?.local_environment_id ?? '').trim() || envId()
-          : envId() || (isLocalMode() ? localRuntime()?.env_public_id || 'env_local' : '');
-
-    let displayName = (desktopCtx?.label ?? '').trim();
-    if (!displayName && !accessGateVisible() && env.state === 'ready') {
-      displayName = env()?.name || '';
-    }
-    if (!displayName) {
-      displayName = source === 'local_runtime'
-        ? i18n.t('shell.status.localRuntime')
-        : i18n.t('shell.status.environment');
-    }
-
-    return {
-      source,
-      displayName,
-      displayID,
-    };
+    const label = (desktopCtx?.label ?? '').trim();
+    if (label) return label;
+    if (!accessGateVisible() && env.state === 'ready' && env()?.name) return env()!.name;
+    return desktopCtx?.session_source === 'local_runtime' || (!desktopCtx?.session_source && isLocalMode())
+      ? i18n.t('shell.status.localRuntime')
+      : i18n.t('shell.status.environment');
   });
 
   function consoleOrigin(): string {
@@ -4780,7 +4659,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     <EnvironmentAccessGate
       phase={accessGatePhase()}
       local={isLocalMode()}
-      environmentName={envSessionIdentity().displayName}
+      environmentName={environmentName()}
       pending={accessPending()}
       unlocking={accessUnlocking()}
       recoveryBusy={accessRecoveryBusy()}
@@ -5063,6 +4942,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     return (
     <Shell
       fillParent
+      bottomBarMode="hidden"
       hideMobileNavigationWhenKeyboardOpen
       topBarMobileMode="hidden"
       mobileNavigationActions={[{
@@ -5101,7 +4981,6 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       sidebarMinContentWidth={480}
       slotClassNames={{
         sidebar: layout.sidebarVisibilityMotion() === 'instant' ? 'transition-none' : undefined,
-        bottomBarHeight: canUseFlower() ? 'flower-activity-bottom-bar-height' : undefined,
       }}
       resolveSidebarVisibilityMotion={({ currentActiveId, nextActiveId, isMobile }) => (
         resolveEnvSidebarVisibilityMotion({
@@ -5115,55 +4994,6 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       activityItems={activityItems()}
       activityBottomItems={activityBottomItems()}
       topBarActions={<HeaderActions />}
-      bottomBarItems={canUseFlower() ? (
-        <div
-          class="flower-activity-bottom-grid"
-          data-activity-flower-bottom-bar
-        >
-          <div class="flower-activity-bottom-side flower-activity-bottom-side-start">
-            <EnvironmentRuntimeStatusTooltip
-              identity={envSessionIdentity()}
-              connectionStatus={status()}
-              connectionLabel={statusLabel()}
-              runtimeSnapshot={agentVersionModel.currentPing()}
-              runtimeSnapshotLoading={agentVersionModel.currentPingLoading()}
-              canRead={env.state === 'ready' ? Boolean(env()?.permissions?.can_read) : null}
-              mobile={layout.isMobile()}
-            />
-          </div>
-
-          {renderActivityFlowerAnchor()}
-
-          <div class="flower-activity-bottom-side flower-activity-bottom-side-end">
-            <Tooltip content={statusLabel() ?? i18n.t(`shell.framework.${status()}`)} placement="top" delay={180} anchorClass="flower-activity-connection">
-              <StatusIndicator status={status()} label={statusLabel()} />
-            </Tooltip>
-            <Tooltip content={canViewAudit() ? i18n.t('shell.status.auditLog') : i18n.t('shell.status.adminRequired')} placement="top" delay={0}>
-              <button
-                type="button"
-                aria-label={i18n.t('shell.status.auditLog')}
-                disabled={!canViewAudit()}
-                onClick={() => setAuditOpen(true)}
-                class="flower-activity-secondary-action"
-              >
-                <Activity class="h-3.5 w-3.5" aria-hidden="true" />
-              </button>
-            </Tooltip>
-            <Tooltip content={reconnectLabel()} placement="top" delay={0}>
-              <button
-                type="button"
-                aria-label={reconnectLabel()}
-                disabled={reconnectDisabled()}
-                onClick={() => void triggerReconnect()}
-                class="flower-activity-secondary-action"
-                classList={{ 'text-warning': status() !== 'connected' }}
-              >
-                <Refresh class="h-3.5 w-3.5" aria-hidden="true" />
-              </button>
-            </Tooltip>
-          </div>
-        </div>
-      ) : undefined}
     >
       <div class="h-full min-h-0 overflow-hidden flex flex-col">
         <div
@@ -5194,7 +5024,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
               fallback={(
                 <ConnectionRecoveryView
                   snapshot={recoverySnapshot()}
-                  environmentName={envSessionIdentity().displayName}
+                  environmentName={environmentName()}
                   onRetry={() => reconnectController.requestImmediateRetry()}
                   onStop={() => reconnectController.stopRetry()}
                 />
@@ -5204,7 +5034,6 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
             </Show>
           </Show>
         </div>
-        {renderActivityFlowerCompanion()}
       </div>
 
       <Show when={auditOpen()}>
@@ -5264,7 +5093,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
           fallback={(
             <ConnectionRecoveryView
               snapshot={recoverySnapshot()}
-              environmentName={envSessionIdentity().displayName}
+              environmentName={environmentName()}
               onRetry={() => reconnectController.requestImmediateRetry()}
               onStop={() => reconnectController.stopRetry()}
             />
@@ -5292,7 +5121,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
           <Show when={recoveryVisible()} fallback={renderActivityPageLoading(ENV_TESSIVEN_ACTIVITY_ID)}>
             <ConnectionRecoveryView
               snapshot={recoverySnapshot()}
-              environmentName={envSessionIdentity().displayName}
+              environmentName={environmentName()}
               onRetry={() => reconnectController.requestImmediateRetry()}
               onStop={() => reconnectController.stopRetry()}
             />
@@ -5350,6 +5179,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
             ]}
           />
         </div>
+        <Show when={canUseFlower()}>{renderActivityFlowerAnchor()}</Show>
       </AppViewport>
       <div
         ref={setActivityFlowerOverlayHost}
@@ -5359,6 +5189,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
         inert={mobilePluginModalOpen()}
         aria-hidden={mobilePluginModalOpen() ? 'true' : undefined}
       />
+      {renderActivityFlowerCompanion()}
       {renderFlowerProduct()}
       <For each={activityPluginWindows()}>
         {(window, index) => (

@@ -859,8 +859,19 @@ async function verifyBuiltFlowerLifecycle(browser, tls) {
     }
 
     const collapsedBox = await companion.boundingBox();
-    if (!collapsedBox || collapsedBox.width > 360 || collapsedBox.width <= 0 || collapsedBox.height !== 22) {
+    if (!collapsedBox || collapsedBox.width > 360 || collapsedBox.width <= 0 || collapsedBox.height !== 32) {
       throw new Error(`built Flower collapsed companion has invalid geometry: ${JSON.stringify(collapsedBox)}`);
+    }
+    const shellGeometry = await page.evaluate(() => {
+      const viewport = globalThis.document.querySelector('[data-floe-app-viewport]').getBoundingClientRect();
+      const main = globalThis.document.querySelector('[data-floe-shell-slot="main"]').getBoundingClientRect();
+      return { viewportBottom: viewport.bottom, mainBottom: main.bottom,
+        bottomBarCount: globalThis.document.querySelectorAll('[data-floe-shell-slot="bottom-bar"]').length };
+    });
+    if (shellGeometry.bottomBarCount !== 0
+      || Math.abs(shellGeometry.viewportBottom - shellGeometry.mainBottom) > 1
+      || Math.abs(shellGeometry.viewportBottom - collapsedBox.y - collapsedBox.height - 12) > 1) {
+      throw new Error(`built Activity must reclaim the footer and float Flower 12px above its bottom: ${JSON.stringify(shellGeometry)}`);
     }
     const collapsedComposerBox = await composer.boundingBox();
     if (!collapsedComposerBox || collapsedComposerBox.width <= 0 || collapsedComposerBox.height <= 0) {
@@ -1403,7 +1414,17 @@ async function main() {
   }
 
   const distAssetFiles = await readdir(path.join(distDir, 'assets'));
-  const removedBrowserTerminalAssets = distAssetFiles.filter((entry) => entry.endsWith('.wasm'));
+  const graphRouterWasmPath = path.join(path.dirname(fileURLToPath(import.meta.resolve('@floegence/floe-webapp-core/graph'))), 'libavoid.wasm');
+  const graphRouterWasmHash = createHash('sha256').update(await readFile(graphRouterWasmPath)).digest('hex');
+  const removedBrowserTerminalAssets = [];
+  for (const entry of distAssetFiles.filter((entry) => entry.endsWith('.wasm'))) {
+    // Floe's reviewed graph router ships one independently replaceable asset.
+    // Every other WASM renderer remains forbidden in this production directory.
+    const hash = createHash('sha256').update(await readFile(path.join(distDir, 'assets', entry))).digest('hex');
+    if (!/^libavoid-[A-Za-z0-9_-]{8,}\.wasm$/u.test(entry) || hash !== graphRouterWasmHash) {
+      removedBrowserTerminalAssets.push(entry);
+    }
+  }
   if (removedBrowserTerminalAssets.length > 0) {
     throw new Error(`built Env App dist contains removed browser terminal WASM assets: ${removedBrowserTerminalAssets.join(', ')}`);
   }

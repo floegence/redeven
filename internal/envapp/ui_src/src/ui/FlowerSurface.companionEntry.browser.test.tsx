@@ -63,7 +63,7 @@ function mountCompanion(selected: FlowerThreadSnapshot, summary?: FlowerSurfaceP
   } satisfies import('../../../../flower_ui/src/contracts/flowerSurfaceContracts').FlowerSurfaceAdapter;
   const runtime = document.createElement('div');
   const anchor = document.createElement('div');
-  Object.assign(anchor.style, { position: 'fixed', left: '12px', bottom: '3px', width: '360px', height: '22px' });
+  Object.assign(anchor.style, { position: 'fixed', left: '12px', bottom: '12px', width: '360px', height: '32px' });
   const mount = document.createElement('div');
   const outside = document.createElement('button');
   outside.textContent = 'Outside';

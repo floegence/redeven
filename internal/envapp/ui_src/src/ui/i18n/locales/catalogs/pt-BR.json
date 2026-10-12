@@ -516,13 +516,6 @@
       "envTypeProvider": "Provider",
       "envTypeRemote": "Remoto"
     },
-    "runtimeStatus": {
-      "triggerLabel": "Status do ambiente {environment}",
-      "runtime": "Tempo de execução",
-      "started": "Iniciado",
-      "cpu": "CPU",
-      "memory": "Memória"
-    },
     "flowerCompanion": {
       "openAria": "Painel do Flower. {status}",
       "collapse": "Recolher o Flower",
