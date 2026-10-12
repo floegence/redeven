@@ -253,8 +253,8 @@ it('shows only the initial composer on a fresh canvas, then moves it into the re
   await expect.poll(() => runtime.sent.mock.calls.length).toBe(1);
   const output = document.querySelector<HTMLElement>('.tessiven-flower-output')!;
   await expect.poll(() => document.querySelector('.tessiven-flower-output .tessiven-flower-composer textarea')).not.toBeNull();
-  expect(output.classList.contains('tessiven-flower-output--entering')).toBe(true);
-  expect(getComputedStyle(output).animationDuration).toBe('0.26s');
+  expect(getComputedStyle(output).getPropertyValue('--floe-floating-enter-duration')).toBe('260ms');
+  expect(output.dataset.floatingPresence).toMatch(/^(entering|open)$/);
   await media.emulateMediaPreferences({ reducedMotion: 'reduce' });
   expect(getComputedStyle(output).animationName).toBe('none');
   await media.emulateMediaPreferences({ reducedMotion: 'no-preference' });
@@ -264,6 +264,27 @@ it('shows only the initial composer on a fresh canvas, then moves it into the re
   expect(output.getBoundingClientRect().width).toBe(356);
   await page.screenshot({ path: '__screenshots__/tessiven-new-canvas-chat-window.png' });
 });
+
+it('keeps the Flower window mounted while closing and animates the restore entry', async () => {
+  await page.viewport(1200, 800);
+  mount();
+  await expect.element(editor()).toBeVisible();
+  const output = document.querySelector<HTMLElement>('.tessiven-flower-output')!;
+  expect(getComputedStyle(output).getPropertyValue('--floe-floating-exit-duration')).toBe('220ms');
+
+  await page.getByRole('button', { name: 'Hide replies', exact: true }).click();
+  const closing = document.querySelector<HTMLElement>('.tessiven-flower-output')!;
+  expect(closing.dataset.floatingPresence).toBe('exiting');
+  expect(closing.querySelector('textarea')).not.toBeNull();
+  const restore = document.querySelector<HTMLElement>('.tessiven-flower-restore')!;
+  expect(getComputedStyle(restore).animationName).toBe('tessiven-flower-restore-enter');
+  await expect.poll(() => document.querySelector('.tessiven-flower-output')).toBeNull();
+  await expect.element(page.getByRole('button', { name: 'Show replies', exact: true })).toBeVisible();
+  await media.emulateMediaPreferences({ reducedMotion: 'reduce' });
+  expect(getComputedStyle(restore).animationName).toBe('none');
+  await media.emulateMediaPreferences({ reducedMotion: 'no-preference' });
+});
+
 it('keeps a quiet reply titlebar with secondary actions in an accessible menu', async () => {
   await page.viewport(1200, 800);
   const runtime = mount();

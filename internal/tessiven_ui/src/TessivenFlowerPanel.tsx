@@ -38,7 +38,6 @@ export function TessivenFlowerPanel(props: {
     new Set(props.initialComposer && !props.request.flower_thread_id ? [] : [canvasID()]),
   );
   const [repliesOpenByCanvas, setRepliesOpenByCanvas] = createSignal<Record<string, boolean>>({});
-  const [enteringCanvasIDs, setEnteringCanvasIDs] = createSignal<Set<string>>(new Set());
   const repliesOpen = () => repliesOpenByCanvas()[canvasID()] ?? true;
   const setRepliesOpen = (open: boolean) => setRepliesOpenByCanvas(previous => ({
     ...previous,
@@ -74,7 +73,7 @@ export function TessivenFlowerPanel(props: {
             defaultSize={{ width: 356, height: 440 }} minSize={{ width: 300, height: 260 }}
             viewportInsets={{ top: 16, right: 16, bottom: 12, left: 16 }} compactBelow={480}
             title="Flower" titleIcon={<FlowerIcon />}
-            class={`tessiven-flower-output${enteringCanvasIDs().has(canvasID()) ? ' tessiven-flower-output--entering' : ''}`} zIndex={25}
+            class="tessiven-flower-output" zIndex={25}
             labels={{ close: props.t('hideReplies'), maximize: props.t('expandReplies'), restore: props.t('restoreReplies') }}
             headerActions={<>
               <Dropdown align="end" class="tessiven-flower-menu" triggerClass="tessiven-icon-button"
@@ -134,12 +133,6 @@ export function TessivenFlowerPanel(props: {
       const id = canvasID();
       setStartedCanvasIDs(previous => new Set(previous).add(id));
       setRepliesOpenByCanvas(previous => ({ ...previous, [id]: true }));
-      setEnteringCanvasIDs(previous => new Set(previous).add(id));
-      window.setTimeout(() => setEnteringCanvasIDs(previous => {
-        const next = new Set(previous);
-        next.delete(id);
-        return next;
-      }), 320);
     },
     render: renderConversation,
   };
