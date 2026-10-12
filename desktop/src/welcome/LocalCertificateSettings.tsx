@@ -133,8 +133,8 @@ export function LocalCertificateSettings(props: Readonly<{
 
   return (
     <section aria-label={props.i18n.t('settings.certificateSetup')} aria-busy={Boolean(operation())}
-      class="min-w-0 overflow-hidden rounded-lg border border-border/60 bg-muted/15">
-      <header class="flex items-center justify-between gap-3 px-4 py-2.5">
+      class="environment-certificate-setting min-w-0 overflow-hidden">
+      <header class="environment-certificate-header flex items-center justify-between gap-3">
         <h4 class="text-xs font-semibold text-foreground">{props.i18n.t('settings.certificateSetup')}</h4>
         <Button size="icon" variant="ghost" class="h-7 w-7 shrink-0" disabled={Boolean(operation())}
           aria-label={props.i18n.t('settings.certificateRefresh')} title={props.i18n.t('settings.certificateRefresh')}
@@ -142,7 +142,7 @@ export function LocalCertificateSettings(props: Readonly<{
           <Refresh class="h-3.5 w-3.5" classList={{ 'animate-spin': operation() === 'status' }} aria-hidden="true" />
         </Button>
       </header>
-      <div class="space-y-3 px-4 pb-4">
+      <div class="environment-certificate-body space-y-3">
         <div class="flex flex-wrap items-center gap-x-3 gap-y-2" aria-live="polite">
           <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-background text-muted-foreground" aria-hidden="true"><FileText class="h-4 w-4" /></span>
           <div class="min-w-0 flex-1">

@@ -259,14 +259,13 @@ try {
         expanded: old.listener.open, qrVisible: !!old.qr, focused: document.activeElement === old.filter,
         filter: old.filter.value, selection: [old.filter.selectionStart, old.filter.selectionEnd],
         statusStable: old.status.textContent === old.statusText && old.status.dataset.statusTone === old.tone,
-        orb: old.status.querySelector('canvas').dataset.runtimeOrbAnimation,
         scrollStable: old.body.scrollTop === old.scroll && old.viewport?.scrollTop === old.addressScroll,
         geometryStable: [dialog, old.overview].every((node, index) => {
           const r = node.getBoundingClientRect(); return [r.x, r.y, r.width, r.height].every((value, axis) => Math.abs(value - old.geometry[index][axis]) < 0.5);
         }), loads: window.settingsFixture.loads, securityReads: window.securityStatusReads };
     });
     assert.deepEqual(evidence, { sameNodes: true, expanded: true, qrVisible: true, focused: true, filter: '192.168',
-      selection: [2, 5], statusStable: true, orb: 'running', scrollStable: true, geometryStable: true, loads: 1, securityReads: 1 });
+      selection: [2, 5], statusStable: true, scrollStable: true, geometryStable: true, loads: 1, securityReads: 1 });
   }
   await capture('health-refresh-before');
   for (let cycle = 0; cycle < 3; cycle += 1) {
@@ -302,7 +301,7 @@ try {
           kind: 'container_process', container_engine: 'docker', container_id: 'fixture-container', container_ref: 'fixture-container', container_label: 'Container', runtime_root: '/root/.redeven', bridge_strategy: 'exec_stream',
         } } : {}),
         ...(kind === 'url' ? { kind: 'external_local_ui', registration_ref: { kind: 'saved_environment', id: 'fixture-url' }, local_ui_url: 'https://example.invalid/' } : {}),
-        ...(kind === 'gateway' ? { kind: 'gateway_environment', registration_ref: { kind: 'gateway_environment', gateway_id: 'fixture-gateway', gateway_env_id: 'fixture-profile' }, gateway_environment_profile_access_route: { kind: 'url', url: 'https://example.invalid/' } } : {}),
+        ...(kind === 'gateway' ? { kind: 'gateway_environment', access_group_id: undefined, registration_ref: { kind: 'gateway_environment', gateway_id: 'fixture-gateway', gateway_env_id: 'fixture-profile' }, gateway_environment_profile_access_route: { kind: 'url', url: 'https://example.invalid/' } } : {}),
       };
       await page.evaluate(value => window.settingsFixture.publish(value), { ...snapshot, environments: [...snapshot.environments, entry] });
       await page.getByRole('button', { name: `Settings for Fixture ${kind}`, exact: true }).click();

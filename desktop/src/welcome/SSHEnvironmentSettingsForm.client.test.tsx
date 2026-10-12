@@ -132,7 +132,12 @@ describe('SSH environment settings interactions', () => {
     input('label', 'Renamed');
     expect(document.querySelector('[role=dialog] h2')?.textContent).toContain('gzcom');
     expect(button('Save changes').disabled).toBe(false);
-    button('Advanced settingsRemote Download & Install · Custom directory · Custom mirror · 30 s').click();
+    const advanced = button('Advanced settings');
+    expect(document.getElementById(advanced.getAttribute('aria-describedby')!)?.textContent).toBe(
+      'Remote Download & Install · Custom directory · Custom mirror · 30 s',
+    );
+    expect(document.querySelector('.ssh-settings-summary')?.closest('button')).toBeNull();
+    advanced.click();
     await settle();
     expect((document.getElementById('ssh-settings-runtime_root') as HTMLInputElement).value).toBe('/srv/redeven');
     harness.setState((state) => ({ ...state, ssh_password_configured: false }));
@@ -156,7 +161,7 @@ describe('SSH environment settings interactions', () => {
 
   it('starts a fresh editing session when the same environment is reopened', async () => {
     const harness = await mount();
-    button('Advanced settingsAutomatic · Default directory · GitHub Releases · 10 s').click();
+    button('Advanced settings').click();
     input('label', 'Discarded');
     button('Close').click();
     await expect.poll(() => document.querySelector('[data-floe-dialog-panel]'), { timeout: 300, interval: 10 }).toBeNull();

@@ -90,34 +90,38 @@ function ConnectionAddressGroup(props: ConnectionActions & Readonly<{
       </table>
     </div>
   </div>;
-  const title = () => (<div class="redeven-address-title">
+  const help = () => <Show when={props.rows[0].access_scope !== 'environment_only'}>
+    <DesktopTooltip content={props.i18n.t(props.rows[0].detail_key, props.rows[0].detail_params)} placement="top"
+      anchorClass="redeven-address-help-anchor" class="redeven-address-help-tooltip">
+      <Button type="button" size="sm" variant="ghost" class="redeven-address-help"
+        aria-labelledby={`${headingID} ${helpLabelID}`} aria-describedby={helpDescriptionID}
+        onClick={event => event.preventDefault()}>
+        <HelpIcon class="h-3.5 w-3.5" aria-hidden="true" />
+        <span id={helpLabelID} class="sr-only">{props.i18n.t('common.moreInformation')}</span>
+      </Button>
+    </DesktopTooltip>
+    <span id={helpDescriptionID} class="sr-only">{props.i18n.t(props.rows[0].detail_key, props.rows[0].detail_params)}</span>
+    </Show>;
+  const title = (includeHelp = true) => (<div class="redeven-address-title">
     <span id={headingID} class="redeven-card-endpoint-label">{props.i18n.t(props.rows[0].label_key)}</span>
-    <Show when={props.rows[0].access_scope !== 'environment_only'}>
-      <DesktopTooltip content={props.i18n.t(props.rows[0].detail_key, props.rows[0].detail_params)} placement="top"
-        anchorClass="redeven-address-help-anchor" class="redeven-address-help-tooltip">
-        <Button type="button" size="sm" variant="ghost" class="redeven-address-help"
-          aria-labelledby={`${headingID} ${helpLabelID}`} aria-describedby={helpDescriptionID}
-          onClick={event => event.preventDefault()}>
-          <HelpIcon class="h-3.5 w-3.5" aria-hidden="true" />
-          <span id={helpLabelID} class="sr-only">{props.i18n.t('common.moreInformation')}</span>
-        </Button>
-      </DesktopTooltip>
-      <span id={helpDescriptionID} class="sr-only">{props.i18n.t(props.rows[0].detail_key, props.rows[0].detail_params)}</span>
-    </Show>
+    <Show when={includeHelp}>{help()}</Show>
   </div>);
   return <Show when={props.rows[0]}>{first => props.compact && first().access_scope !== 'environment_only' ? (
-    <details class="redeven-address-group redeven-address-group--summary" data-address-scope={first().access_scope}>
-      <summary class="redeven-address-heading redeven-address-summary">
-        {title()}
-        <span class="redeven-address-summary-meta">
-          <span class="redeven-address-count" aria-label={countLabel()}>{term() ? `${props.i18n.formatNumber(visibleIDs().length)} / ${props.i18n.formatNumber(props.rows.length)}` : props.i18n.formatNumber(props.rows.length)}</span>
-          <ChevronRight class="h-3.5 w-3.5 redeven-address-summary-chevron" aria-hidden="true" />
-        </span>
-      </summary>
-      <div class="redeven-address-summary-content">
-        {list}
-      </div>
-    </details>
+    <div class="redeven-address-disclosure">
+      <details class="redeven-address-group redeven-address-group--summary" data-address-scope={first().access_scope}>
+        <summary class="redeven-address-heading redeven-address-summary">
+          {title(false)}
+          <span class="redeven-address-summary-meta">
+            <span class="redeven-address-count" aria-label={countLabel()}>{term() ? `${props.i18n.formatNumber(visibleIDs().length)} / ${props.i18n.formatNumber(props.rows.length)}` : props.i18n.formatNumber(props.rows.length)}</span>
+            <ChevronRight class="h-3.5 w-3.5 redeven-address-summary-chevron" aria-hidden="true" />
+          </span>
+        </summary>
+        <div class="redeven-address-summary-content">
+          {list}
+        </div>
+      </details>
+      {help()}
+    </div>
   ) : (<section class="redeven-address-group" data-address-scope={first().access_scope}>
     <div class="redeven-address-heading">
       {title()}

@@ -144,6 +144,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Desktop session and model source](desktop/desktop-session-model-source.md) - Project session routes, opaque Desktop models, Flower attach, and lifecycle invalidation.
 - [Desktop Environment registration ownership](desktop/desktop-environment-registrations.md) - Keep independent registration owners per action surface, migrate retired SSH records once, and serialize rename, pin, and removal safely.
 - [Desktop environment settings](desktop/desktop-environment-settings.md) - Open one settings window, retain independent drafts, and save through the selected registration’s authority.
+- [Desktop environment settings presentation](desktop/desktop-environment-settings-presentation.md) - Apply one theme-aware visual hierarchy, fixed window geometry and responsive controls across settings tasks.
 - [Desktop SSH environment settings](desktop/desktop-ssh-environment-settings.md) - Edit SSH connection details, reveal custom configuration, and dismiss the editor directly.
 - [Desktop runtime process lifecycle](desktop/desktop-runtime-process-lifecycle.md) - Own Local, WSL, SSH, and container Runtime lifecycle through one process-local Desktop coordinator.
 - [Desktop managed Environment reinstall](desktop/desktop-reinstall-operations.md) - Recover an exact managed Runtime root with a Runtime-only package and minimal Desktop journal.
