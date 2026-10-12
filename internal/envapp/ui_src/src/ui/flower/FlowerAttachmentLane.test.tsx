@@ -31,6 +31,27 @@ function uploadingItem(loadedBytes: number): FlowerAttachmentItem {
 }
 
 describe('FlowerAttachmentLane', () => {
+  it('identifies document attachments and unavailable image thumbnails without changing actions', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const items: FlowerAttachmentItem[] = [
+      { ...uploadingItem(100), local_id: 'pdf', name: 'report.pdf', mime_type: 'application/pdf', status: 'staged_ready', preview_url: 'blob:report' },
+      { ...uploadingItem(100), local_id: 'image', name: 'screen.png', mime_type: 'image/png', status: 'staged_ready', preview_url: 'blob:missing' },
+    ];
+    const onPreview = vi.fn();
+    const dispose = render(() => <FlowerAttachmentLane items={items} copy={copy}
+      onRetry={vi.fn()} onReselect={vi.fn()} onCancel={vi.fn()} onRemove={vi.fn()} onRestore={vi.fn()} onPreview={onPreview} />, host);
+    try {
+      const rows = host.querySelectorAll('[role="listitem"]');
+      expect(rows[0].querySelector('svg[data-file-icon-type="pdf"]')).not.toBeNull();
+      rows[1].querySelector('img')!.dispatchEvent(new Event('error'));
+      expect(rows[1].querySelector('svg[data-file-icon-type="image"]')).not.toBeNull();
+      (rows[0].querySelector('.flower-attachment-preview-trigger') as HTMLButtonElement).click();
+      expect(onPreview).toHaveBeenCalledExactlyOnceWith(items[0]);
+      expect(rows[1].querySelector('button[aria-label="Remove"]')).not.toBeNull();
+    } finally { dispose(); host.remove(); }
+  });
+
   it('shows a ready image as only a thumbnail and remove action while preserving preview and accessible metadata', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

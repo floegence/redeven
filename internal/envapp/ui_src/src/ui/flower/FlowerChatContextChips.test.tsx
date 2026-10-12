@@ -79,6 +79,8 @@ describe('Flower linked context chips', () => {
     expect(chips[1]?.tagName).toBe('DIV');
     expect(chips[1]?.getAttribute('data-flower-chat-context-interactive')).toBe('false');
     expect(chips[1]?.getAttribute('aria-label')).toBe('src, /workspace/src');
+    expect(chips[0]?.querySelector('svg')?.getAttribute('data-file-icon-type')).toBe('ts');
+    expect(chips[1]?.querySelector('svg')?.getAttribute('data-file-icon-kind')).toBe('folder');
   });
 
   it('renders host actions as noninteractive when the host has no capability', () => {
@@ -164,8 +166,13 @@ describe('Flower linked context chips', () => {
 		expect(refreshedChip).toBe(focusedChip);
 		expect(document.activeElement).toBe(focusedChip);
 		expect(refreshedChip.textContent).toContain('renamed-main.ts');
+		expect(refreshedChip.querySelector('svg')?.getAttribute('data-file-icon-type')).toBe('ts');
 		refreshedChip.click();
 		expect(activate).toHaveBeenCalledExactlyOnceWith(refreshedDisplay.chips[0]);
+		setDisplay(parseChatMessageReferences([{ reference_id: 'context:file', kind: 'file', label: 'screen.png' }])!);
+		await Promise.resolve();
+		expect(host.querySelector('button')).toBe(focusedChip);
+		expect(focusedChip.querySelector('svg')?.getAttribute('data-file-icon-type')).toBe('image');
 	});
 
 	it('prevents duplicate activation while pending and restores focus after completion', async () => {

@@ -1,7 +1,8 @@
 import type { Component } from 'solid-js';
 import { For, Show, createContext, createEffect, createMemo, createSignal, onCleanup, onMount, untrack, useContext } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { Activity, AlertTriangle, ArrowUp, FileText, Folder, Paperclip, Terminal } from '@floegence/floe-webapp-core/icons';
+import { Activity, AlertTriangle, ArrowUp, FileText } from '@floegence/floe-webapp-core/icons';
+import { FileItemIcon } from '@floegence/floe-webapp-core/file-browser';
 import { Button, FloatingWindow, resolveFloatingWindowViewport, type FloatingWindowViewport, type FloatingWindowViewportInsets } from '@floegence/floe-webapp-core/ui';
 
 import type {
@@ -9,6 +10,7 @@ import type {
 } from './contracts/flowerSurfaceContracts';
 import { createFlowerClientRequestID } from './flowerRequestIdentity';
 import { FlowerIcon } from './icons/FlowerIcon';
+import { FlowerContextIcon } from './icons/FlowerContextIcon';
 import { flowerTurnAdmissionFailureKind } from './flowerTurnAdmission';
 import { FlowerComposerContextReference, FlowerComposerContextReferences } from './composer/FlowerComposerContextReferences';
 import { removeFlowerTurnLauncherReference } from './composer/removeFlowerTurnLauncherReference';
@@ -171,17 +173,13 @@ function copyValue(
 }
 
 function entryIcon(entry: FlowerTurnLauncherContextChip) {
-  if (entry.tone === 'environment') return <Activity class="size-3.5 shrink-0" />;
-  if (entry.tone === 'directory') return <Folder class="size-3.5 shrink-0" />;
-  if (entry.tone === 'attachment') return <Paperclip class="size-3.5 shrink-0" />;
-  if (entry.tone === 'process') return <Activity class="size-3.5 shrink-0" />;
-  if (entry.tone === 'terminal') return <Terminal class="size-3.5 shrink-0" />;
-  return <FileText class="size-3.5 shrink-0" />;
+  return <FlowerContextIcon tone={entry.tone} name={entry.tone === 'selection' ? entry.detail : entry.label} />;
 }
 
 function actionIcon(action: FlowerTurnLauncherContextAction) {
-  if (action.type === 'open_attachment_snapshot_preview') return <Paperclip class="size-3.5" />;
-  if (action.type === 'open_directory_browser') return <Folder class="size-3.5" />;
+  if (action.type === 'open_attachment_snapshot_preview') return <FileItemIcon size={16} item={{ name: action.file.name, type: 'file' }} class="size-4" />;
+  if (action.type === 'open_directory_browser') return <FileItemIcon size={16} item={{ name: action.path, type: 'folder' }} class="size-4" />;
+  if (action.type === 'open_live_file_preview') return <FileItemIcon size={16} item={{ name: action.path, type: 'file' }} class="size-4" />;
   if (action.type === 'open_process_snapshot_preview') return <Activity class="size-3.5" />;
   return <FileText class="size-3.5" />;
 }
@@ -348,7 +346,7 @@ function FlowerTurnLauncherFooter(props: FlowerTurnLauncherFooterProps) {
     <div class={cn('flower-turn-launcher-footer flex w-full min-w-0 items-center gap-1.5 overflow-hidden', props.footerClass)}>
       <div class="flex min-w-0 flex-1 items-center text-[10px] text-muted-foreground sm:text-[11px]">
         <span class="inline-flex min-w-0 flex-1 items-center gap-1 rounded-full border border-border/60 bg-muted/28 px-2 py-0.5">
-          <Folder class="size-3 shrink-0" />
+          <FileItemIcon size={14} item={{ name: props.controller.suggestedWorkingDir(), type: 'folder' }} class="size-3.5 shrink-0" />
           <span class="shrink-0 font-medium text-foreground/80">{copyValue(props.copy, 'working_dir_label')}</span>
           <span
             class="min-w-0 truncate font-mono text-[10px] sm:text-[11px]"

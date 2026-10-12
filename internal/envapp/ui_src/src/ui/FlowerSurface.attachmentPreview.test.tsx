@@ -95,6 +95,7 @@ describe('Flower message attachment previews', () => {
     (surface.querySelector(`[data-thread-id="${threadID}"] button`) as HTMLButtonElement).click();
     await waitFor(() => Boolean(surface.querySelector('[data-image-fallback="true"]')));
     expect(surface.querySelector('[data-image-fallback="true"]')?.textContent).toContain('暂时无法预览');
+    expect(surface.querySelector('[data-image-fallback="true"] svg')?.getAttribute('data-file-icon-type')).toBe('image');
     expect(surface.querySelector('[data-image-fallback="true"]')?.textContent).not.toContain('当前所选模型无法使用附件');
     expect(loadMessageAttachment).toHaveBeenCalledWith(expect.objectContaining({ url: expect.stringContaining('/image?') }));
 

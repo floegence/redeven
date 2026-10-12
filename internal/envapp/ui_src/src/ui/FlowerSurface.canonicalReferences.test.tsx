@@ -45,6 +45,7 @@ describe('Flower canonical reference navigation', () => {
 		(runtime.querySelector('[data-thread-id="thread-canonical-reference"] button') as HTMLButtonElement).click();
 		await waitFor(() => Boolean(runtime.querySelector('[data-flower-chat-context-chip="true"]')));
 		const chip = runtime.querySelector('[data-flower-chat-context-chip="true"]') as HTMLButtonElement;
+		expect(chip.querySelector('svg')?.getAttribute('data-file-icon-type')).toBe('ts');
 		chip.focus();
 		chip.click();
 		chip.click();

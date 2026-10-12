@@ -1,6 +1,7 @@
+import { FileItemIcon } from '@floegence/floe-webapp-core/file-browser';
 import type { Component } from 'solid-js';
 import { createEffect, createSignal, Index, onCleanup, Show } from 'solid-js';
-import { FileText, FolderOpen, Refresh, X } from '@floegence/floe-webapp-core/icons';
+import { FolderOpen, Refresh, X } from '@floegence/floe-webapp-core/icons';
 
 import type { FlowerAttachmentItem } from './createFlowerAttachmentController';
 import { isFlowerImageMimeType } from './flowerAttachmentPresentation';
@@ -184,11 +185,11 @@ export const FlowerAttachmentLane: Component<FlowerAttachmentLaneProps> = (props
           );
           const attachmentSummary = () => (
             <>
-              <Show when={image()} fallback={<span class="flower-attachment-file-icon" aria-hidden="true"><FileText /></span>}>
+              <Show when={image()} fallback={<span class="flower-attachment-file-icon" aria-hidden="true"><FileItemIcon size={18} item={{ name: item().name, type: 'file' }} /></span>}>
                 <span class="flower-attachment-image-thumb" aria-hidden="true">
                   <Show
                     when={!failedPreviews().has(previewKey()) && item().preview_url}
-                    fallback={<span class="flower-attachment-image-placeholder"><FileText /></span>}
+                    fallback={<span class="flower-attachment-image-placeholder"><FileItemIcon size={18} item={{ name: item().name, type: 'file' }} /></span>}
                   >
                     {(url) => (
                       <img

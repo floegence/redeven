@@ -2686,9 +2686,10 @@
             "path": "ui/file-icon-presentation.md",
             "type": "UI Contract",
             "title": "File icon presentation",
-            "description": "Consume the released Floe file icon catalog consistently across Files and Git.",
+            "description": "Consume the released Floe file icon catalog consistently across Files, Git, Flower, and Ask Flower.",
             "tags": [
               "files",
+              "flower",
               "git",
               "ui",
               "upstream"
@@ -29394,35 +29395,37 @@
       "concept_id": "ui.file-icon-presentation",
       "type": "UI Contract",
       "title": "File icon presentation",
-      "description": "Consume the released Floe file icon catalog consistently across Files and Git.",
+      "description": "Consume the released Floe file icon catalog consistently across Files, Git, Flower, and Ask Flower.",
       "tags": [
         "files",
+        "flower",
         "git",
         "ui",
         "upstream"
       ],
-      "timestamp": "2026-09-20T00:00:00Z",
+      "timestamp": "2026-10-12T00:00:00Z",
       "frontmatter": {
-        "description": "Consume the released Floe file icon catalog consistently across Files and Git.",
+        "description": "Consume the released Floe file icon catalog consistently across Files, Git, Flower, and Ask Flower.",
         "tags": [
           "files",
+          "flower",
           "git",
           "ui",
           "upstream"
         ],
-        "timestamp": "2026-09-20T00:00:00Z",
+        "timestamp": "2026-10-12T00:00:00Z",
         "title": "File icon presentation",
         "type": "UI Contract"
       },
-      "body_length": 2928,
+      "body_length": 5087,
       "summary": "Published Floe Webapp owns file recognition rules, SVG artwork, and product\npalettes. Redeven supplies filenames, directory and link metadata, and rendered\nsizes. JSON, YAML, and TOML remain visually distinct; language, design, office,\nand installer formats retain their reviewed identities. Unknown formats use the\nupstream generic icon. An icon never grants preview, execution, or extraction\ncapabilities; those operations retain their existing permission and format checks.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Files lists, grids, directory trees, pickers, and Git labels consume the same\nreleased `FileItemIcon` contract. Exact names, filename patterns, and longest\nsuffixes are resolved upstream. Directory packages such as `.xcodeproj` keep\ndirectory navigation semantics while receiving their specific artwork. Custom\nicon overrides, open-folder state, symbolic links, and broken links retain the\nupstream precedence rules.\n\nThe approved 156 format families and original product colors are maintained in\nFloe, alongside legacy generic code aliases. Product colors stay recognizable\nacross shell themes; neutral paper and generic accents follow the released\nlight/dark icon tokens. Labels use outlined SVG paths, so system fonts cannot\nchange their shape. Redeven does not copy a catalog, introduce a palette, or\nrecolor branded icons through shell primary colors.\n\nExplicit pixel sizes select the matching level of detail: up to 20 px uses\ncompact geometry; larger icons use detailed geometry. Redeven sidebar and Git\nlabels use 14 px, shared lists and pickers use 16 px, and grids use 40 px within\nthe shared 48 px icon space. The archive action uses 16 px and its dialog uses\n36 px. Filenames provide accessible text; decorative SVGs remain hidden from\nassistive technology.",
-          "char_count": 1269
+          "body": "Files lists, grids, directory trees, pickers, Git labels, Flower, and Ask Flower\nconsume the same released `FileItemIcon` contract. Exact names, filename patterns, and longest\nsuffixes are resolved upstream. Directory packages such as `.xcodeproj` keep\ndirectory navigation semantics while receiving their specific artwork. Custom\nicon overrides, open-folder state, symbolic links, and broken links retain the\nupstream precedence rules.\n\nThe approved 156 format families and original product colors are maintained in\nFloe, alongside legacy generic code aliases. Product colors stay recognizable\nacross shell themes; neutral paper and generic accents follow the released\nlight/dark icon tokens. Labels use outlined SVG paths, so system fonts cannot\nchange their shape. Redeven does not copy a catalog, introduce a palette, or\nrecolor branded icons through shell primary colors.\n\nExplicit pixel sizes select the matching level of detail: up to 20 px uses\ncompact geometry; larger icons use detailed geometry. Redeven sidebar and Git\nlabels use 14 px, shared lists and pickers use 16 px, and grids use 40 px within\nthe shared 48 px icon space. The archive action uses 16 px and its dialog uses\n36 px. Filenames provide accessible text; decorative SVGs remain hidden from\nassistive technology.\n\nFlower's Activity page, companion window, Workbench surface, and Desktop host\nshare the same rendering components. Composer file/directory references,\nreference suggestions, submitted message references, Ask Flower references and\ntheir file actions, working-directory identities, and the Skills file list use\nthe released filename artwork. The shared context icon component keeps terminal,\nprocess, and environment identities distinct from files. Quoted file selections\nuse their source filename rather than the localized selection label. Submitted\nfile and directory chips use a small neutral icon surface inside the blue user\nbubble so product colors remain legible without recoloring the artwork.\n\nAsk Flower and submitted context chips use 16 px compact artwork. Main composer\nreferences, suggestions, attachment files, and unavailable image thumbnails use\n18 px compact artwork. Tool Activity file preview and directory actions use 14 px. Message file cards\nand failed image cards use 24 px\ndetailed artwork; unsupported attachment previews use 40 px. Image thumbnails\nand successfully loaded media remain content previews. Unknown filenames still\nreceive the upstream generic file artwork. Icons never alter canonical reference\nresolution, attachment admission, preview availability, removal, or focus behavior.",
+          "char_count": 2608
         },
         {
           "id": "boundaries",
@@ -29462,6 +29465,31 @@
           "id": "redeven:internal/envapp/ui_src/src/floeWebappDependencyPolicy.test.ts:0:public release and lockfile consistency.",
           "source": "redeven:internal/envapp/ui_src/src/floeWebappDependencyPolicy.test.ts",
           "description": "Public release and lockfile consistency."
+        },
+        {
+          "id": "redeven:internal/flower_ui/src/icons/FlowerContextIcon.tsx:0:one file identity mapping for launcher drafts and submitted context chips.",
+          "source": "redeven:internal/flower_ui/src/icons/FlowerContextIcon.tsx",
+          "description": "One file identity mapping for launcher drafts and submitted context chips."
+        },
+        {
+          "id": "redeven:internal/flower_ui/src/FlowerSurface.tsx:0:shared composer suggestions, file references, and message attachment cards across hosts.",
+          "source": "redeven:internal/flower_ui/src/FlowerSurface.tsx",
+          "description": "Shared composer suggestions, file references, and message attachment cards across hosts."
+        },
+        {
+          "id": "redeven:internal/flower_ui/src/attachments/FlowerAttachmentLane.tsx:0:file identities and unavailable image thumbnail artwork with preserved attachment actions.",
+          "source": "redeven:internal/flower_ui/src/attachments/FlowerAttachmentLane.tsx",
+          "description": "File identities and unavailable image thumbnail artwork with preserved attachment actions."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/flower/FlowerChatContextChips.test.tsx:0:filename recognition, reactive artwork changes, and retained reference controls during snapshots.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/flower/FlowerChatContextChips.test.tsx",
+          "description": "Filename recognition, reactive artwork changes, and retained reference controls during snapshots."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/styles/flower-composer-context.browser.test.tsx:0:ask flower file types, directory packages, compact geometry, themes, and narrow-window interactions.",
+          "source": "redeven:internal/envapp/ui_src/src/styles/flower-composer-context.browser.test.tsx",
+          "description": "Ask Flower file types, directory packages, compact geometry, themes, and narrow-window interactions."
         }
       ],
       "snippet": "Published Floe Webapp owns file recognition rules, SVG artwork, and product palettes. Redeven supplies filenames, directory and link metadata, and rendered sizes. JSON, YAML, and TOML remain visually distinct; language, design, office,",
@@ -36906,5 +36934,5 @@
       ]
     }
   ],
-  "source_sha256": "180c751a3a9f0e5fac2592cde1fd80ebb4a34b39ac1d83e85bd01965529621af"
+  "source_sha256": "4dc26c577abbb6adbf52ed838360dbb9846f57716661ad09fbd98c3003c99c44"
 }

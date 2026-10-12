@@ -99,6 +99,7 @@ describe('Flower composer references', () => {
     const textarea = await typeComposerToken(runtime, '@src');
     await waitFor(() => runtime.querySelector('[data-kind="directory"]') !== null);
     const directoryRow = runtime.querySelector('[data-kind="directory"]') as HTMLButtonElement;
+    expect(directoryRow.querySelector('svg')?.getAttribute('data-file-icon-kind')).toBe('folder');
     const enterButton = directoryRow.querySelector('.flower-composer-reference-enter') as HTMLButtonElement;
     expect(enterButton).toBeTruthy();
     expect(runtime.querySelector('[data-kind="file"] .flower-composer-reference-enter')).toBeNull();
@@ -110,6 +111,7 @@ describe('Flower composer references', () => {
 
     await waitFor(() => textarea.value === '@src/');
     await waitFor(() => runtime.querySelectorAll('[role="option"]').length === 2);
+    expect(runtime.querySelector('[data-kind="file"] svg')?.getAttribute('data-file-icon-type')).toBe('ts');
     expect(document.activeElement).toBe(textarea);
     expect(runtime.querySelector('.flower-composer-reference-chip')).toBeNull();
     expect(Array.from(runtime.querySelectorAll('[role="option"]')).map((option) => option.textContent))
