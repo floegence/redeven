@@ -53,6 +53,8 @@ try {
       await win.loadURL(url);
       assert.ok((await win.webContents.session.cookies.get({url})).length>0,'a fresh reopened partition must authenticate again');
       assert.ok(await win.webContents.executeJavaScript('document.body.innerText.trim().length>0'),'closing and reopening must restore the authenticated page');
+      // Allow the authenticated application's first paint and entrance animation to settle.
+      await new Promise(resolve=>setTimeout(resolve,800));
       if(process.env.REDEVEN_MANAGED_OPENING_SCREENSHOT) {
         const {writeFileSync}=await import('node:fs');writeFileSync(process.env.REDEVEN_MANAGED_OPENING_SCREENSHOT,(await win.webContents.capturePage()).toPNG());
       }

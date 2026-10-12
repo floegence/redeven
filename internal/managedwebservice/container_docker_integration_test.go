@@ -93,6 +93,10 @@ func TestManagedContainerDockerLifecycle(t *testing.T) {
 	if expected := os.Getenv("REDEVEN_MANAGED_CONTAINER_DIGEST"); expected != "" && imageReferenceDigest(service.ArtifactReference) != expected {
 		t.Fatal("the verified release digest differs from the requested acceptance image")
 	}
+	opening, openingErr := m.readOpeningState(service)
+	if openingErr != nil || opening.AppPath == "" {
+		t.Fatal("successful install did not retain its launch entrance", openingErr)
+	}
 	dockerLifecycleHealthy(t, ctx, m, service)
 	previous, err := m.OpenSession(ctx, serviceID, OpenSessionRequest{RequestID: "qualification-launch"})
 	if err != nil {

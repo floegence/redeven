@@ -89,7 +89,7 @@ type openingPreparation struct {
 func (m *Manager) prepareServiceOpening(ctx context.Context, service *pfregistry.ManagedService, launch serviceOpeningLaunch, options openingPreparation) (appPath string, bootstrap bool, resultErr error) {
 	resolved, resolveErr := m.resolveCurrentRuntime(ctx, service)
 	cached, cacheErr := m.readOpeningState(service)
-	if cacheErr != nil && !errors.Is(cacheErr, os.ErrNotExist) {
+	if cacheErr != nil && !errors.Is(cacheErr, os.ErrNotExist) && !options.NewLaunch {
 		return "", false, cacheErr
 	}
 	dynamic := resolveErr == nil && resolved.Spec.StartupURL != nil
@@ -208,4 +208,15 @@ func (m *Manager) verifyOpeningLaunch(ctx context.Context, service *pfregistry.M
 		return serviceError("RESOURCE_PLAN_STALE", "The application restarted while preparing its entrance.", 409, true, nil)
 	}
 	return nil
+}
+
+// Lifecycle owners call this only after committing a verified successful launch.
+// The entrance result has its own failure boundary and cannot fail the lifecycle.
+func (m *Manager) prepareSuccessfulOpening(ctx context.Context, service *pfregistry.ManagedService) {
+	if service.ObservedState != "running" {
+		return
+	}
+	if launch, err := m.openingLaunch(ctx, service); err == nil {
+		_, _, _ = m.prepareServiceOpening(ctx, service, launch, openingPreparation{NewLaunch: true})
+	}
 }

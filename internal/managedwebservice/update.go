@@ -433,6 +433,7 @@ func (m *Manager) commitContainerUpdate(ctx context.Context, service *pfregistry
 	*service = serviceFromUpdateRelease(*service, release)
 	service.RuntimeManifestJSON = emptyManifest
 	service.LastErrorCode, service.LastErrorMessage = "", ""
+	m.prepareSuccessfulOpening(ctx, service)
 	return nil
 }
 
