@@ -29,8 +29,7 @@ export const FlowerThinkingDisclosure: Component<FlowerThinkingDisclosureProps> 
 
   createEffect(() => {
     const isActive = active();
-    if (isActive && !previousActive) setView('preview');
-    if (!isActive && previousActive) setView('collapsed');
+    if (isActive && !previousActive && view() !== 'expanded') setView('preview');
     previousActive = isActive;
   });
 

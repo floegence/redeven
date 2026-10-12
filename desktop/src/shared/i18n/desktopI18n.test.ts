@@ -250,6 +250,23 @@ describe('Desktop shared i18n resolver', () => {
 });
 
 describe('Desktop shared i18n dictionaries', () => {
+  it('provides localized Flower turn duration plurals through the Desktop translator', () => {
+    for (const locale of REDEVEN_SUPPORTED_LOCALES) {
+      const i18n = createDesktopI18n(locale);
+      for (const unit of ['hour', 'minute', 'second'] as const) {
+        for (const count of [1, 2, 5, 21]) {
+          const message = i18n.tn(`flowerSurface.chat.turnProcess.${unit}`, count);
+          expect(message).toContain(i18n.formatNumber(count));
+          expect(message).not.toContain('flowerSurface.');
+          expect(message).not.toContain('{count}');
+        }
+      }
+    }
+    const ru = createDesktopI18n('ru-RU');
+    expect(ru.tn('flowerSurface.chat.turnProcess.minute', 1)).toBe('1 минута');
+    expect(ru.tn('flowerSurface.chat.turnProcess.minute', 2)).toBe('2 минуты');
+    expect(ru.tn('flowerSurface.chat.turnProcess.minute', 5)).toBe('5 минут');
+  });
   it('assembles every non-English locale from an explicit JSON catalog', () => {
     const source = fs.readFileSync(path.resolve(__dirname, 'desktopI18n.ts'), 'utf8');
     for (const locale of REDEVEN_SUPPORTED_LOCALES.filter((candidate) => candidate !== 'en-US')) {

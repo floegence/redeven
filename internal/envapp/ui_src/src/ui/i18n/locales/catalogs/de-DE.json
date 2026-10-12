@@ -5506,7 +5506,30 @@
       "sendWaiting": "Warten auf Versand",
       "attachmentRecoveryDescription": "Anhänge sind nach dem Neustart nicht verfügbar. Stelle Text und Verweise wieder her und wähle die Dateien erneut aus. Aktualisiere, um die Annahme der ursprünglichen Anfrage zu prüfen.",
       "removeRecoveryCopy": "Lokale Wiederherstellungskopie entfernen",
-      "removeRecoveryCopyDescription": "Entfernt diese lokale Wiederherstellungskopie und setzt spätere Nachrichten fort. Die ursprüngliche Serveranfrage wird nicht abgebrochen."
+      "removeRecoveryCopyDescription": "Entfernt diese lokale Wiederherstellungskopie und setzt spätere Nachrichten fort. Die ursprüngliche Serveranfrage wird nicht abgebrochen.",
+      "turnProcess": {
+        "worked": "Arbeitszeit: {duration}",
+        "elapsed": "Gesamtdauer: {duration}",
+        "waiting": "Warten auf Ihre Antwort oder Genehmigung: {duration}",
+        "expand": "Arbeitsverlauf aufklappen",
+        "collapse": "Arbeitsverlauf zuklappen",
+        "lessThanSecond": "weniger als eine Sekunde",
+        "hour": {
+          "one": "{count} Stunde",
+          "other": "{count} Stunden"
+        },
+        "minute": {
+          "one": "{count} Minute",
+          "other": "{count} Minuten"
+        },
+        "second": {
+          "one": "{count} Sekunde",
+          "other": "{count} Sekunden"
+        },
+        "failed": "Flower konnte diesen Durchlauf nicht abschließen.",
+        "cancelled": "Gestoppt",
+        "interrupted": "Dieser Durchlauf wurde unterbrochen."
+      }
     },
     "threadList": {
       "title": "Unterhaltungen",

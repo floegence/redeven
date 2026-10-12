@@ -16,7 +16,7 @@ Floret v7 `ThreadService` is the sole owner of active and canonical thread lifec
 
 Independent context compaction uses the optional public capability without widening ThreadService. Floret owns typed control-turn admission, atomic installation, terminal results, replay, and recovery. See [Model context usage and compaction](model-context-usage-and-compaction.md) for command and presentation contracts.
 
-Redeven consumes published Floret v7.26.0, preserving graceful-stop ownership
+Redeven consumes published Floret v7.29.0, preserving graceful-stop ownership
 when a projection write is canceled. The stop owner settles pending approvals,
 tool results, and the terminal together; a canceled write must not enter competing
 failure finalization. Genuine storage and unknown-effect failures retain their
@@ -127,11 +127,18 @@ Turn/Run when Stop overlaps shutdown or another settlement path, preserving
 the original stop source, mode, and timestamp without a duplicate cancel fact.
 Floret owns this atomic settlement.
 
+Published v7.29.0 projects historical per-turn results, explicit accepted final
+item references and canonical work duration through ThreadView and HistoryPage.
+Optional journal metadata records new response boundaries without a schema reset
+or a Redeven lifecycle table. Legacy boundaries remain unavailable. Flower's
+consumer and recovery rules are defined in [Flower completed turn process
+disclosure](../ui/flower-turn-process-disclosure.md).
+
 Restart hydration restores accepted input, queue items, unresolved interactions,
 logical retry input, and canonical outputs, then resumes provider-safe work
 from the last canonical boundary. Before the Host becomes available, every
 legacy dispatching, retrying, or unknown effect is closed in one terminal failed
-Turn. Floret owns the permanent domain migration lineage from v2 through v12.
+Turn. Floret owns the permanent domain migration lineage from v2 through v13.
 Version 6 stores the manifest, root index, threads, entries, artifacts, and
 supporting records separately, so one child admission writes only affected
 records. Version 7 restores RunID, converges unknown effects, and drops
@@ -171,7 +178,7 @@ Redeven never imports Floret internals, reads Floret storage, copies canonical l
 
 # Evidence
 
-- `redeven:go.mod` - Pins the released Floret v7.26.0 typed runtime without local replacement.
+- `redeven:go.mod` - Pins the released Floret v7.29.0 typed runtime without local replacement.
 - `redeven:internal/session/floret_v7_dependency_contract_test.go` - Enforces exact published-v7 adoption and rejects retired imports.
 - `redeven:internal/ai/floret_runtime.go` - Published runtime composition.
 - `redeven:internal/ai/floret_store_maintenance.go` - One bounded pre-open SQLite maintenance policy and sanitized diagnostics.

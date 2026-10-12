@@ -780,3 +780,41 @@ describe('applyFlowerRuntimeCurrentView', () => {
     expect(JSON.stringify(result.approval_actions)).not.toContain('file:回声之王.md');
   });
 });
+
+describe('canonical turn facts', () => {
+  const current = (): FlowerRuntimeCurrentView => ({
+    thread_id: 'thread-a', view_version: 5, activity: 'idle', turn_id: 'new', run_id: 'new-run', last_outcome: 'completed',
+    items: [
+      { id: 'old-text', turn_id: 'old', run_id: 'old-run', ordinal: 1, kind: 'assistant', text: 'Partial' },
+      { id: 'final-a', turn_id: 'new', run_id: 'new-run', ordinal: 2, kind: 'assistant', text: 'First' },
+      { id: 'final-b', turn_id: 'new', run_id: 'new-run', ordinal: 3, kind: 'assistant', text: 'Second' },
+    ],
+    turns: [
+      { turn_id: 'old', run_id: 'old-run', started_at: '2026-10-11T12:00:00Z', ended_at: '2026-10-11T12:00:05Z', outcome: 'interrupted', elapsed_ms: 5000, waiting_ms: 0, work_duration_ms: 5000, final_item_ids: [], final_boundary_complete: false },
+      { turn_id: 'new', run_id: 'new-run', started_at: '2026-10-11T12:00:10Z', ended_at: '2026-10-11T12:00:20Z', outcome: 'completed', elapsed_ms: 10000, waiting_ms: 2000, work_duration_ms: 8000, final_item_ids: ['final-a', 'final-b'], final_boundary_complete: true },
+    ],
+  });
+  it('preserves historical interruption and all explicit final segments', () => {
+    const source = current();
+    const mapped = applyFlowerRuntimeCurrentView(summary(), source);
+    expect(mapped.turns).toEqual(source.turns);
+    expect(mapped.turns?.[0].outcome).toBe('interrupted');
+    expect(mapped.turns?.[1].final_item_ids).toEqual(['final-a', 'final-b']);
+    expect(mapped.turns).not.toBe(source.turns);
+  });
+  it('rejects an ambiguous final identity rather than hiding the wrong segment', () => {
+    const source = current();
+    expect(() => applyFlowerRuntimeCurrentView(summary(), { ...source, items: [
+      { ...source.items![1], text: 'Intermediate progress' }, ...source.items!,
+    ] })).toThrow(/canonical turn presentation/);
+  });
+  it.each([
+    { final_item_ids: ['old-text'] }, { final_item_ids: ['missing'] },
+    { final_item_ids: ['final-b', 'final-a'] }, { final_item_ids: ['final-a', 'final-a'] },
+    { final_boundary_complete: false }, { waiting_ms: 3000 }, { elapsed_ms: -1 },
+    { outcome: 'interrupted' as const }, { ended_at: undefined },
+  ])('rejects invalid final boundaries or timing without guessing: %o', (change) => {
+    const source = current();
+    expect(() => applyFlowerRuntimeCurrentView(summary(), { ...source, turns: [source.turns![0], { ...source.turns![1], ...change }] })).toThrow(/canonical turn presentation/);
+  });
+});

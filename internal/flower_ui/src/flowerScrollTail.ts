@@ -6,6 +6,9 @@ export const FLOWER_TRANSCRIPT_SCROLL_TO_LATEST_MS = 220;
 export type FlowerScrollTailController = Readonly<{
   bind: (node: HTMLDivElement | undefined) => void;
   nearBottom: Accessor<boolean>;
+  followingLatest: Accessor<boolean>;
+  viewport: () => HTMLDivElement | undefined;
+  preserveLayoutAnchor: (title: HTMLElement) => void;
   showLatest: Accessor<boolean>;
   latestPointerBlocked: Accessor<boolean>;
   onPointerDown: (event: PointerEvent) => void;
@@ -340,6 +343,13 @@ export function createFlowerScrollTailController(
   return {
     bind,
     nearBottom,
+    followingLatest,
+    viewport: () => node,
+    preserveLayoutAnchor: (title) => {
+      if (!node?.contains(title) || followingLatest()) return;
+      anchor = { title, top: title.getBoundingClientRect().top, activated: true };
+      scheduleLayout();
+    },
     showLatest: () => gesture()?.latestVisible ?? (!followingLatest() && !nearBottom()),
     latestPointerBlocked: () => Boolean(gesture() && !gesture()!.latest),
     onPointerDown,

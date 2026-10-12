@@ -606,7 +606,39 @@
       "sendWaiting": "Esperando para enviar",
       "attachmentRecoveryDescription": "Los adjuntos no están disponibles tras reiniciar. Restaura el texto y las referencias y selecciona los archivos de nuevo. Actualiza para comprobar si se aceptó la solicitud original.",
       "removeRecoveryCopy": "Eliminar copia local de recuperación",
-      "removeRecoveryCopyDescription": "Elimina esta copia local de recuperación y reanuda los mensajes posteriores. No cancela la solicitud original del servidor."
+      "removeRecoveryCopyDescription": "Elimina esta copia local de recuperación y reanuda los mensajes posteriores. No cancela la solicitud original del servidor.",
+      "turnProcess": {
+        "worked": "Tiempo de trabajo: {duration}",
+        "elapsed": "Tiempo total: {duration}",
+        "waiting": "Espera de tu respuesta o aprobación: {duration}",
+        "expand": "Expandir el proceso de trabajo",
+        "collapse": "Contraer el proceso de trabajo",
+        "lessThanSecond": "menos de un segundo",
+        "hour": {
+          "kind": "plural",
+          "forms": {
+            "one": "{count} hora",
+            "other": "{count} horas"
+          }
+        },
+        "minute": {
+          "kind": "plural",
+          "forms": {
+            "one": "{count} minuto",
+            "other": "{count} minutos"
+          }
+        },
+        "second": {
+          "kind": "plural",
+          "forms": {
+            "one": "{count} segundo",
+            "other": "{count} segundos"
+          }
+        },
+        "failed": "Flower no pudo completar este turno.",
+        "cancelled": "Detenido",
+        "interrupted": "Este turno se interrumpió."
+      }
     },
     "threadList": {
       "title": "Conversaciones",

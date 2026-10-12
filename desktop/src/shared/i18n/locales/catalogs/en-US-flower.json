@@ -475,7 +475,39 @@
     "sendWaiting": "Waiting to send",
     "attachmentRecoveryDescription": "Attachments are unavailable after restart. Restore text and references, then select the files again. Refresh to check whether the original request was accepted.",
     "removeRecoveryCopy": "Remove local recovery copy",
-    "removeRecoveryCopyDescription": "Remove this local recovery copy and resume later messages. This does not cancel the original server request."
+    "removeRecoveryCopyDescription": "Remove this local recovery copy and resume later messages. This does not cancel the original server request.",
+    "turnProcess": {
+      "worked": "Worked for {duration}",
+      "elapsed": "Total elapsed: {duration}",
+      "waiting": "Waiting for your input or approval: {duration}",
+      "expand": "Expand work process",
+      "collapse": "Collapse work process",
+      "lessThanSecond": "less than a second",
+      "hour": {
+        "kind": "plural",
+        "forms": {
+          "one": "{count} hour",
+          "other": "{count} hours"
+        }
+      },
+      "minute": {
+        "kind": "plural",
+        "forms": {
+          "one": "{count} minute",
+          "other": "{count} minutes"
+        }
+      },
+      "second": {
+        "kind": "plural",
+        "forms": {
+          "one": "{count} second",
+          "other": "{count} seconds"
+        }
+      },
+      "failed": "Flower could not complete this turn.",
+      "cancelled": "Stopped",
+      "interrupted": "This turn was interrupted."
+    }
   },
   "threadList": {
     "title": "Conversations",

@@ -67,6 +67,7 @@ export type FlowerActivityDisclosureMotion = Readonly<{
 
 export type FlowerActivityDisclosureMotionOptions = Readonly<{
   reducedMotion?: Accessor<boolean>;
+  initialOpen?: boolean;
   openDurationMs?: number;
   closeDurationMs?: number;
   onBeforeClose?: () => void;
@@ -110,9 +111,9 @@ export function createFlowerActivityDisclosureMotion(
   const openDurationMs = Math.max(0, options.openDurationMs ?? FLOWER_ACTIVITY_OPEN_DURATION_MS);
   const closeDurationMs = Math.max(0, options.closeDurationMs ?? FLOWER_ACTIVITY_CLOSE_DURATION_MS);
   const platform = options.platform ?? browserMotionPlatform();
-  const [mounted, setMounted] = createSignal(false);
-  const [state, setState] = createSignal<FlowerActivityDisclosureState>('closed');
-  const [height, setHeight] = createSignal('0px');
+  const [mounted, setMounted] = createSignal(options.initialOpen ?? false);
+  const [state, setState] = createSignal<FlowerActivityDisclosureState>(options.initialOpen ? 'open' : 'closed');
+  const [height, setHeight] = createSignal(options.initialOpen ? 'auto' : '0px');
   let viewport: HTMLDivElement | undefined;
   let content: HTMLDivElement | undefined;
   let disconnectResize: (() => void) | undefined;

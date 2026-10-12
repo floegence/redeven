@@ -63,6 +63,10 @@ function mount() {
   document.body.append(host);
   dispose = render(() => <div class="flower-chat-shell" style={{ width: 'min(760px, 100%)', padding: '24px' }}>
     <div class="flower-transcript-stack">
+      <div class="flower-turn-summary">
+        <button class="flower-turn-summary-button" aria-expanded="true"><span data-copy>Worked for 2 minutes 18 seconds</span></button>
+        <div class="flower-turn-timing"><span data-copy>Total elapsed: 2 minutes 38 seconds</span><span data-copy>Waiting for your input or approval: 20 seconds</span></div>
+      </div>
       <div class="flower-message-bubble flower-message-bubble-assistant flower-message-bubble-plain">
         <span data-copy>Review the proposed change.</span>
       </div>
@@ -136,6 +140,10 @@ it.each(['standard', 'soft-neumorphic'])('keeps sent messages and selected text 
     link.focus();
     expect.soft(contrast(rgb(getComputedStyle(link).color), face), `${label} focused link`).toBeGreaterThanOrEqual(4.5);
     await userEvent.unhover(link);
+    const summary = host.querySelector<HTMLButtonElement>('.flower-turn-summary-button')!;
+    await userEvent.hover(summary);
+    expect.soft(contrast(rgb(getComputedStyle(summary).color), background(summary)), `${label} hovered process summary`).toBeGreaterThanOrEqual(4.5);
+    await userEvent.unhover(summary);
   }
 });
 
