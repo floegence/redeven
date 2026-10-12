@@ -103,7 +103,7 @@ export function FlowerTurnTimeline(props: Readonly<{
       if (!threadID) return;
       for (const group of groups.values()) {
         // The protection decision runs once, after final content has committed.
-        props.choices.observe(identity(group.turnID), group.eligible,
+        props.choices.observe(identity(group.turnID), group.disclosure,
           () => inspectionProtected(group.turnID, group.processKeys),
           (expanded) => {
             preserveReadingAnchor(expanded ? [] : group.processKeys);
@@ -126,14 +126,14 @@ export function FlowerTurnTimeline(props: Readonly<{
       return value.type === 'message' ? processes().get(value.message.turn_id ?? '') : undefined;
     });
     const process = createMemo(() => group()?.processKeys.includes(key) ?? false);
-    const expanded = createMemo(() => !process() || props.choices.expanded(identity(group()!.turnID), group()!.eligible));
+    const expanded = createMemo(() => !process() || props.choices.expanded(identity(group()!.turnID), group()!.disclosure));
     const ended = createMemo(() => {
       const current = group();
       const outcome = current?.turn?.outcome;
       return current?.terminalKey === key && outcome && outcome !== 'completed' ? props.copy[outcome] : '';
     });
     // Decide protection and capture the anchor before inserting summary height.
-    const summary = createMemo(() => group()?.eligible && group()?.summaryKey === key
+    const summary = createMemo(() => group()?.disclosure !== 'none' && group()?.summaryKey === key
       && props.choices.settled(identity(group()!.turnID)));
     const finishMotion = () => {
       motions.delete(key);
@@ -154,14 +154,14 @@ export function FlowerTurnTimeline(props: Readonly<{
     });
     const toggle = (button: HTMLButtonElement) => {
       const current = group();
-      if (!current?.eligible) return;
+      if (!current || current.disclosure === 'none') return;
       if (expanded()) {
         const focus = document.activeElement;
         if (current.processKeys.some((id) => focus && nodes.get(id)?.contains(focus))) button.focus({ preventScroll: true });
       }
       layoutAnchor = button;
       props.scroll.activateDisclosure(button);
-      props.choices.toggle(identity(current.turnID), true);
+      props.choices.toggle(identity(current.turnID), current.disclosure);
     };
     onCleanup(() => { nodes.delete(key); motions.delete(key); });
     // Render once per stable row. Entry changes flow through its accessor;
