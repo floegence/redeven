@@ -99,8 +99,12 @@ describe('Flower final thread cache and workspace transport', () => {
     const cancellation = { thread_id: running.thread_id, turn_id: 'turn-stop', run_id: 'run-stop', source: 'user_stop', mode: 'graceful' as const, requested_at: '2026-09-10T03:00:00Z' };
     const stream = controlledWorkspaceStream([{ schema_version: 1, kind: 'ready', summaries: [running, other] }]);
     const stopping = { ...runtimeCurrentView(running, 2), cancellation, turn_id: 'turn-stop', run_id: 'run-stop' };
-    const stopThread = vi.fn(async () => undefined);
-    const runtime = renderSurfaceWithAdapter({ ...adapter(true), listThreads: vi.fn(async () => [running, other]), loadThread: vi.fn(async (id) => liveBootstrap(id === running.thread_id ? running : other)), stopThread, connectLiveStream: vi.fn(stream.connect) });
+    let stopAccepted = false;
+    const stopThread = vi.fn(async () => { stopAccepted = true; });
+    const runtime = renderSurfaceWithAdapter({ ...adapter(true), listThreads: vi.fn(async () => [running, other]),
+      loadThread: vi.fn(async (id) => id === running.thread_id && stopAccepted
+        ? { thread: applyFlowerRuntimeCurrentView(running, stopping), current: stopping }
+        : liveBootstrap(id === running.thread_id ? running : other)), stopThread, connectLiveStream: vi.fn(stream.connect) });
     const select = async (id: string) => {
       await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${id}"] button`)));
       (runtime.querySelector(`[data-thread-id="${id}"] button`) as HTMLButtonElement).click();
@@ -466,7 +470,8 @@ describe('Flower final thread cache and workspace transport', () => {
     }
     await waitFor(() => terminalViewport?.textContent?.includes('stream chunk 301') === true);
     await waitFor(() => runningToolRow.dataset.state === 'open');
-    expect(detail.querySelector('[data-flower-subagent-ledger-kind="activity"]')?.textContent).toContain('2 operations');
+    expect(detail.querySelector('[data-flower-activity-item-id="child-tool-live"]')).toBe(runningToolRow);
+    expect(detail.querySelectorAll('[data-flower-activity-item-id]')).toHaveLength(2);
     expect(childViewport.scrollTop).toBeLessThan(1_180);
     expect(parentViewport.scrollTop).toBe(800);
     expect(terminalViewport?.textContent).toContain('stream chunk 301');
@@ -570,6 +575,8 @@ describe('Flower final thread cache and workspace transport', () => {
     expect(document.body.textContent).toContain('Live child content.');
     expect(document.body.textContent).not.toContain('Invalid child content.');
 
+    await waitFor(() => runtime.querySelector('[data-flower-sync-state="failed"]') !== null);
+    runtime.querySelector<HTMLButtonElement>('.flower-workspace-sync button')!.click();
     stream.push({ schema_version: 1, kind: 'ready', summaries: [parent, peer] });
     await waitFor(() => loadSubagentDetail.mock.calls.length === 2);
     await waitFor(() => document.body.textContent?.includes('Reconnected final child result.') === true);
@@ -1051,7 +1058,7 @@ describe('Flower final thread cache and workspace transport', () => {
 
     expect(stopThread).toHaveBeenCalledTimes(1);
     expect(connectLiveStream).toHaveBeenCalledTimes(1);
-    expect(loadThread).toHaveBeenCalledTimes(1);
+    expect(loadThread).toHaveBeenCalledTimes(2); // Initial detail and canonical Stop confirmation.
   });
 
   it('shows list loading state until an authoritative empty response arrives', async () => {
@@ -1913,7 +1920,7 @@ describe('Flower final thread cache and workspace transport', () => {
       expect(runtime.querySelector('[data-flower-bottom-mode="approval"]')).toBeNull();
       expect(runtime.querySelector('.flower-thread-sync-error')).toBeNull();
     } else {
-      await waitFor(() => runtime.querySelector('.flower-thread-sync-error') !== null);
+      await waitFor(() => runtime.querySelector('[data-flower-sync-state="failed"]') !== null);
       expect(runtime.querySelector('[data-flower-bottom-mode="approval"]')).toBeNull();
       expect(runtime.textContent).toContain('Run the deployment');
       expect(loadThread).toHaveBeenCalledTimes(1);
@@ -1921,10 +1928,15 @@ describe('Flower final thread cache and workspace transport', () => {
         schema_version: 1, kind: 'thread.batch', thread_id: threadID,
         current: runtimeCurrentView(running, 3),
       });
-      await waitFor(() => runtime.querySelector('.flower-thread-sync-error') === null);
+      expect(runtime.querySelector('[data-flower-sync-state="failed"]')).not.toBeNull();
+      expect(runtime.querySelector('.flower-model-status-indicator')).toBeNull();
+      runtime.querySelector<HTMLButtonElement>('.flower-workspace-sync button')!.click();
+      stream.push({ schema_version: 1, kind: 'ready', summaries: [running] });
+      await waitFor(() => runtime.querySelector('.flower-workspace-sync') === null);
+      await waitFor(() => loadThread.mock.calls.length === 2);
       expect(runtime.querySelector('.flower-model-status-indicator')).not.toBeNull();
     }
-    expect(loadThread).toHaveBeenCalledTimes(1);
+    expect(loadThread).toHaveBeenCalledTimes(complete ? 1 : 2);
   });
 
   it('waits for a higher revision after a terminal detail request fails', async () => {

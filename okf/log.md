@@ -1376,3 +1376,10 @@ Adopt published Floret v7.29.1 for canonical execution identity and the permanen
 schema 13-to-14 edge. Consolidate public current encoding and workspace transport
 recovery, with bounded reads, persistent synchronization notices and canonical
 Stop confirmation.
+
+## 2026-10-12 — Independent thinking segment disclosure
+
+Restore normal thinking-segment completion collapse independently of terminal
+turn-process disclosure. Preserve abnormal endings and manual reopening, separate
+canonical live state from connection confirmation, and scope completion facts to
+the root or SubAgent thread that owns the message.

@@ -475,6 +475,7 @@
       "stopUnconfirmed": "중지 요청을 보냈지만 상태가 동기화되지 않았습니다. 다시 동기화하여 확인하세요.",
       "syncTimeout": "15초 후 동기화 시간이 초과되었습니다. 다시 시도하세요.",
       "composerErrorTitle": "Flower가 전송하지 못했습니다.",
+      "thinkingLabel": "사고 과정",
       "expandThinking": "전체 사고 펼치기",
       "collapseThinking": "사고 접기",
       "modelStatusPreparing": "모델 요청을 준비 중...",

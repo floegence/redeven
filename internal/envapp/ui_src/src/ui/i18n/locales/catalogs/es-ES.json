@@ -5362,6 +5362,7 @@
       "stopUnconfirmed": "La solicitud de detener se envió; el estado aún no se ha sincronizado. Vuelve a sincronizar para confirmar.",
       "syncTimeout": "La sincronización agotó el tiempo de espera de 15 segundos. Inténtalo de nuevo.",
       "composerErrorTitle": "Flower no pudo enviar el mensaje.",
+      "thinkingLabel": "Razonamiento",
       "expandThinking": "Expandir todo el razonamiento",
       "collapseThinking": "Contraer el razonamiento",
       "modelStatusPreparing": "Preparando solicitud al modelo...",

@@ -345,6 +345,7 @@
     "stopUnconfirmed": "Stop submitted; status has not synchronized. Resync to confirm.",
     "syncTimeout": "Synchronization timed out after 15 seconds. Try again.",
     "composerErrorTitle": "Flower could not send.",
+    "thinkingLabel": "Thought process",
     "expandThinking": "Expand full thinking",
     "collapseThinking": "Collapse thinking",
     "modelStatusPreparing": "Preparing model request...",

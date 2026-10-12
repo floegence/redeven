@@ -5362,6 +5362,7 @@
       "stopUnconfirmed": "Stopp wurde gesendet; der Status ist noch nicht synchronisiert. Synchronisieren Sie zur Bestätigung erneut.",
       "syncTimeout": "Die Synchronisierung hat nach 15 Sekunden das Zeitlimit erreicht. Versuchen Sie es erneut.",
       "composerErrorTitle": "Flower konnte nicht senden.",
+      "thinkingLabel": "Gedankengang",
       "expandThinking": "Vollständige Überlegungen anzeigen",
       "collapseThinking": "Überlegungen einklappen",
       "modelStatusPreparing": "Modellanfrage wird vorbereitet...",

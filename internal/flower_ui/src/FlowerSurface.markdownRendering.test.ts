@@ -8,7 +8,6 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 const surfacePath = path.join(repoRoot, 'internal', 'flower_ui', 'src', 'FlowerSurface.tsx');
 const scrollTailPath = path.join(repoRoot, 'internal', 'flower_ui', 'src', 'flowerScrollTail.ts');
 const flowerCssPath = path.join(repoRoot, 'internal', 'flower_ui', 'src', 'styles', 'flower.css');
-const thinkingDisclosurePath = path.join(repoRoot, 'internal', 'flower_ui', 'src', 'FlowerThinkingDisclosure.tsx');
 const compactionDividerPath = path.join(repoRoot, 'internal', 'flower_ui', 'src', 'chat', 'FlowerContextCompactionDivider.tsx');
 
 function surfaceSource(): string {
@@ -21,10 +20,6 @@ function scrollTailSource(): string {
 
 function flowerCssSource(): string {
   return fs.readFileSync(flowerCssPath, 'utf8');
-}
-
-function thinkingDisclosureSource(): string {
-  return fs.readFileSync(thinkingDisclosurePath, 'utf8');
 }
 
 function compactionDividerSource(): string {
@@ -57,7 +52,7 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(mountedDisclosure).toBeGreaterThan(detailDispatch);
     expect(detailRender).toBeGreaterThan(mountedDisclosure);
     expect(src).toContain('toolActivityExternalContentNotice');
-    expect(src).toContain('<WebFetchSearchingOrb running={displayStatus() === \'running\'} />');
+    expect(src).toContain('<WebFetchSearchingOrb running={livePresentationConfirmed() && displayStatus() === \'running\'} />');
     expect(src).not.toContain('flower-activity-web-fetch-title-icon');
     expect(src).not.toContain('site_icon_data_url');
   });
@@ -69,15 +64,9 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(src).not.toContain('<span>{block.content}</span>');
   });
 
-  it('bounds live thinking to a tail-following four-line preview', () => {
-    const component = thinkingDisclosureSource();
+  it('defines the four-line thinking preview and overflow mask', () => {
     const css = flowerCssSource();
 
-    expect(component).toContain("export type FlowerThinkingDisclosureView = 'preview' | 'expanded' | 'collapsed'");
-    expect(component).toContain("if (isActive && !previousActive) setView('preview')");
-    expect(component).toContain("if (!isActive && previousActive) setView('collapsed')");
-    expect(component).toContain('viewport.scrollTop = viewport.scrollHeight');
-    expect(component).toContain('data-overflow={overflowing() ? \'true\' : \'false\'}');
     expect(css).toContain('--flower-thinking-visible-lines: 4');
     expect(css).toContain(".flower-thinking-content[data-flower-thinking-view='preview']");
     expect(css).toContain(".flower-thinking-content[data-flower-thinking-view='preview'][data-overflow='true']");
@@ -106,7 +95,7 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(src).toContain("import { WebFetchSearchingOrb } from './WebFetchSearchingOrb';");
     expect(src).toContain("when={webFetchActivity() && displayStatus() !== 'error'}");
     expect(src).toContain('fallback={statusIcon(displayStatus())}');
-    expect(src).toContain('<WebFetchSearchingOrb running={displayStatus() === \'running\'} />');
+    expect(src).toContain('<WebFetchSearchingOrb running={livePresentationConfirmed() && displayStatus() === \'running\'} />');
     expect(src).not.toContain("case 'running':\n        return <Terminal");
   });
 
@@ -122,7 +111,7 @@ describe('FlowerSurface markdown rendering boundary', () => {
 
   it('renders context usage in standard actions and compact companion More outside timeline entries', () => {
     const src = surfaceSource();
-    const timelineListIndex = src.indexOf('<For each={visibleTimelineEntryKeys()}>');
+    const timelineListIndex = src.indexOf('<FlowerTurnTimeline thread={selectedThread()}');
     const headerIndex = src.indexOf('flower-chat-header flower-chat-header');
     const headerRowIndex = src.indexOf('flower-chat-header-row');
     const dockIndex = src.indexOf('flower-chat-bottom-dock-track', src.indexOf('const composerPanel ='));
@@ -148,7 +137,7 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(compactContextIndicatorIndex).toBeGreaterThanOrEqual(0);
     expect(contextIndicatorIndex).toBe(-1);
     expect(submitIndex).toBeGreaterThan(compactContextIndicatorIndex);
-    expect(src).toContain('selectedThreadTerminalSyncing() ? null : flowerRunProgress(selectedThread())');
+    expect(src).toContain('!livePresentationConfirmed() || selectedThreadTerminalSyncing() ? null : flowerRunProgress(selectedThread())');
     expect(src).not.toContain('projectFlowerLiveProgress');
     expect(src).toContain('const selectedThreadHasLiveProgress = createMemo(() => selectedRunProgress() != null)');
     expect(src).toContain('<FlowerProgressIndicator');
@@ -161,7 +150,6 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(src).toContain('copy().chat.modelStatus');
     expect(src).toContain('DEFAULT_FLOWER_SURFACE_COPY.chat.modelStatus');
     expect(src).toContain('const thinking = createMemo(() => block().block_type === \'thinking\')');
-    expect(src).toContain('const thinkingLive = createMemo(() => thinking() && message().live === true)');
     expect(src).toContain('<FlowerThinkingDisclosure');
     expect(src).toContain('expandLabel={() => copy().chat.expandThinking}');
     expect(src).toContain('collapseLabel={() => copy().chat.collapseThinking}');

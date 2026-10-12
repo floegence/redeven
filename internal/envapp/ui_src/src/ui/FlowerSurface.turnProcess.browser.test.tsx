@@ -123,7 +123,7 @@ describe('completed turn process disclosure', () => {
     expect(hidden(root, 'final-a')).toBe(false);
     expect(root.querySelector('.flower-turn-ended')?.textContent).toBeTruthy();
   });
-  it.each(['selection', 'focus', 'thinking', 'tool', 'pointer', 'keyboard', 'menu', 'reading'] as const)('protects %s inspection once at completion', async (protection) => {
+  it.each(['selection', 'focus', 'tool', 'pointer', 'keyboard', 'menu', 'reading'] as const)('protects %s inspection once at completion', async (protection) => {
     const { root, live } = await mount();
     const process = message(root, 'progress');
     let pointer: PointerEvent | undefined;
@@ -134,8 +134,7 @@ describe('completed turn process disclosure', () => {
       expect(document.getSelection()?.toString()).toContain('Intermediate progress report.');
     } else if (protection === 'focus') {
       const button = message(root, 'tool').querySelector<HTMLButtonElement>('button')!; button.focus();
-    } else if (protection === 'thinking') {
-      (root.querySelector('.flower-thinking-toggle') as HTMLButtonElement).click();
+
     } else if (protection === 'tool') {
       message(root, 'tool').querySelector<HTMLButtonElement>('button')!.click();
     } else if (protection === 'pointer') {
@@ -151,7 +150,7 @@ describe('completed turn process disclosure', () => {
     live.push(current(true));
     await waitFor(() => summary(root)?.getAttribute('aria-expanded') === 'true');
     expect(hidden(root, 'progress')).toBe(false);
-    if (protection === 'thinking') expect(root.querySelector('[data-flower-thinking-view="expanded"]')).not.toBeNull();
+    expect(root.querySelector('.flower-thinking-disclosure')?.getAttribute('data-flower-thinking-view')).toBe('collapsed');
     if (protection === 'tool') expect(message(root, 'tool').querySelector('[aria-expanded="true"]')).not.toBeNull();
     if (protection === 'selection') expect(document.getSelection()?.toString()).toContain('Intermediate progress report.');
     if (pointer) document.dispatchEvent(new PointerEvent('pointerup', { pointerId: 42 }));
@@ -160,6 +159,26 @@ describe('completed turn process disclosure', () => {
     live.push(current(true, { view_version: 3 }));
     await new Promise((resolve) => setTimeout(resolve, 180));
     expect(summary(root)?.getAttribute('aria-expanded')).toBe('true');
+  });
+  it('settles outer work independently from a manually expanded thinking segment', async () => {
+    const { root, live } = await mount();
+    root.querySelector<HTMLButtonElement>('.flower-thinking-toggle')!.click();
+    expect(root.querySelector('[data-flower-thinking-view="expanded"]')).not.toBeNull();
+    (document.activeElement as HTMLElement | null)?.blur();
+    live.push(current(true));
+    await waitFor(() => summary(root)?.getAttribute('aria-expanded') === 'false');
+    expect(root.querySelector('.flower-thinking-disclosure')?.getAttribute('data-flower-thinking-view')).toBe('collapsed');
+    summary(root)!.click();
+    await waitFor(() => !hidden(root, 'thinking'));
+    expect(root.querySelector('.flower-thinking-disclosure')?.getAttribute('data-flower-thinking-view')).toBe('collapsed');
+    root.querySelector<HTMLButtonElement>('.flower-thinking-toggle')!.click();
+    expect(root.querySelector('[data-flower-thinking-view="expanded"]')).not.toBeNull();
+    summary(root)!.click();
+    expect(summary(root)?.getAttribute('aria-expanded')).toBe('false');
+    summary(root)!.click();
+    expect(root.querySelector('[data-flower-thinking-view="expanded"]')).not.toBeNull();
+    live.push(current(true, { view_version: 3 }));
+    expect(root.querySelector('[data-flower-thinking-view="expanded"]')).not.toBeNull();
   });
   it('preserves manual disclosure across chat selection and complete detail replacement', async () => {
     const { root, live } = await mount(current(true));

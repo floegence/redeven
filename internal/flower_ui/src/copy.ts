@@ -521,6 +521,7 @@ export type FlowerSurfaceCopy = Readonly<{
     syncTimeout: string;
     composerErrorTitle: string;
     turnProcess: FlowerTurnProcessCopy;
+    thinkingLabel: string;
     expandThinking: string;
     collapseThinking: string;
     modelStatus: Readonly<{
@@ -895,6 +896,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       minute: (count) => `${count} ${count === 1 ? 'minute' : 'minutes'}`,
       second: (count) => `${count} ${count === 1 ? 'second' : 'seconds'}`,
     },
+    thinkingLabel: 'Thought process',
     expandThinking: 'Expand full thinking',
     collapseThinking: 'Collapse thinking',
     modelStatus: {
