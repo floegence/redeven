@@ -609,8 +609,6 @@
       "removeRecoveryCopyDescription": "移除本地恢复副本并继续发送后续消息，不会取消原服务器请求。",
       "turnProcess": {
         "worked": "工作了 {duration}",
-        "elapsed": "总历时：{duration}",
-        "waiting": "等待用户回答或审批：{duration}",
         "expand": "展开工作过程",
         "collapse": "收起工作过程",
         "lessThanSecond": "不足 1 秒",

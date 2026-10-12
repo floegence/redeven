@@ -609,8 +609,6 @@
       "removeRecoveryCopyDescription": "이 로컬 복구 사본을 제거하고 이후 메시지 전송을 재개합니다. 원래 서버 요청은 취소되지 않습니다.",
       "turnProcess": {
         "worked": "{duration} 동안 작업함",
-        "elapsed": "총 경과 시간: {duration}",
-        "waiting": "사용자 응답 또는 승인을 기다린 시간: {duration}",
         "expand": "작업 과정 펼치기",
         "collapse": "작업 과정 접기",
         "lessThanSecond": "1초 미만",

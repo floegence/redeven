@@ -178,12 +178,6 @@ export function FlowerTurnTimeline(props: Readonly<{
               <span>{props.copy.worked(duration(group()!.turn!.work_duration_ms))}</span>
               <ChevronRight class="flower-turn-summary-chevron" aria-hidden="true" />
             </button>
-            <Show when={expanded()}>
-              <div class="flower-turn-timing">
-                <span>{props.copy.elapsed(duration(group()!.turn!.elapsed_ms))}</span>
-                <span>{props.copy.waiting(duration(group()!.turn!.waiting_ms))}</span>
-              </div>
-            </Show>
           </div>
         </Show>
         <div id={contentID(key)} class="flower-turn-row-viewport" ref={motion.bindViewport}

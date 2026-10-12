@@ -17,8 +17,6 @@ export type FlowerTurnProcessCopy = Readonly<{
   cancelled: string;
   interrupted: string;
   worked: (duration: string) => string;
-  elapsed: (duration: string) => string;
-  waiting: (duration: string) => string;
   expand: string;
   collapse: string;
   lessThanSecond: string;
@@ -876,8 +874,6 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     turnProcess: {
       failed: 'Flower could not complete this turn.', cancelled: 'Stopped', interrupted: 'This turn was interrupted.',
       worked: (duration) => `Worked for ${duration}`,
-      elapsed: (duration) => `Total elapsed: ${duration}`,
-      waiting: (duration) => `Waiting for your input or approval: ${duration}`,
       expand: 'Expand work process', collapse: 'Collapse work process', lessThanSecond: 'less than a second',
       hour: (count) => `${count} ${count === 1 ? 'hour' : 'hours'}`,
       minute: (count) => `${count} ${count === 1 ? 'minute' : 'minutes'}`,

@@ -19,9 +19,9 @@ const thinking: MessageEntry = {
 };
 
 describe('canonical turn process presentation', () => {
-  it('offers manual disclosure for legacy terminal work without hiding uncertain assistant content', () => {
+  it('defaults successful legacy process to collapsed without hiding uncertain assistant content', () => {
     const result = projectFlowerTurnProcess([entries[0], thinking, ...entries.slice(1)], [turn({ final_item_ids: [], final_boundary_complete: false })]).get('turn');
-    expect(result?.disclosure).toBe('manual');
+    expect(result?.disclosure).toBe('automatic');
     expect(result?.processKeys).toEqual(['thinking']);
   });
   it.each(['failed', 'cancelled', 'interrupted'] as const)('offers expanded manual disclosure for %s work', (outcome) => {
@@ -46,7 +46,7 @@ describe('canonical turn process presentation', () => {
     const answer = entry('answer', 'user');
     const result = projectFlowerTurnProcess([thinking, image, answer, ...entries], [turn({ final_item_ids: [], final_boundary_complete: false })]).get('turn');
     expect(result?.processKeys).toEqual(['thinking']);
-    expect(result?.disclosure).toBe('manual');
+    expect(result?.disclosure).toBe('automatic');
   });
   it('keeps every explicit final segment and user message outside the process', () => {
     const result = projectFlowerTurnProcess(entries, [turn()]);

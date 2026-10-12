@@ -609,8 +609,6 @@
       "removeRecoveryCopyDescription": "移除本機還原副本並繼續傳送後續訊息，不會取消原伺服器請求。",
       "turnProcess": {
         "worked": "工作了 {duration}",
-        "elapsed": "總經過時間：{duration}",
-        "waiting": "等待使用者回答或核准：{duration}",
         "expand": "展開工作過程",
         "collapse": "收起工作過程",
         "lessThanSecond": "不到 1 秒",

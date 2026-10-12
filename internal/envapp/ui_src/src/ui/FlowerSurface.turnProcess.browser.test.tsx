@@ -70,14 +70,14 @@ const hidden = (root: HTMLElement, id: string) => message(root, id).closest('.fl
 afterEach(async () => { document.getSelection()?.removeAllRanges(); await media.emulateMediaPreferences({ reducedMotion: 'no-preference', forcedColors: 'none' }); });
 
 describe('completed turn process disclosure', () => {
-  it.each(['automatic', 'legacy-manual'] as const)('removes all inter-row spacing from long %s collapsed work', async (policy) => {
+  it.each(['canonical', 'legacy'] as const)('removes all inter-row spacing from long %s collapsed work', async (policy) => {
     const done = current(true);
     const thinking = done.items!.find((item) => item.id === 'thinking')!;
     const items = [done.items![0], ...Array.from({ length: 28 }, (_, index) => ({ ...thinking, id: `thinking-${index}` })),
       done.items!.find((item) => item.id === 'tool')!, ...done.items!.filter((item) => item.id.startsWith('final-'))];
     const { root } = await mount({ ...done, items: items.map((item, index) => ({ ...item, ordinal: index + 1 })),
-      turns: [policy === 'automatic' ? turn() : turn({ final_item_ids: [], final_boundary_complete: false })] });
-    if (policy === 'legacy-manual') summary(root)!.click();
+      turns: [policy === 'canonical' ? turn() : turn({ final_item_ids: [], final_boundary_complete: false })] });
+    expect(summary(root)?.getAttribute('aria-expanded')).toBe('false');
     await waitFor(() => [...root.querySelectorAll('.flower-turn-row-viewport[aria-hidden="true"]')].every((row) => getComputedStyle(row).display === 'none'));
     expect(message(root, 'final-a').getBoundingClientRect().top - summary(root)!.getBoundingClientRect().bottom).toBeLessThanOrEqual(32);
   });
@@ -98,8 +98,8 @@ describe('completed turn process disclosure', () => {
     const top = button.getBoundingClientRect().top;
     await userEvent.click(button);
     await waitFor(() => !hidden(root, 'progress'));
-    expect(root.textContent).toContain('Total elapsed: 2 minutes 38 seconds');
-    expect(root.textContent).toContain('Waiting for your input or approval: 20 seconds');
+    expect(button.parentElement?.children).toHaveLength(1);
+    expect(root.querySelector('.flower-turn-timing')).toBeNull();
     await new Promise((resolve) => setTimeout(resolve, 240));
     expect(Math.abs(button.getBoundingClientRect().top - top)).toBeLessThanOrEqual(1);
     const internal = message(root, 'tool').querySelector<HTMLButtonElement>('button')!;
@@ -214,14 +214,15 @@ describe('completed turn process disclosure', () => {
     expect(message(root, 'answer').textContent).toContain('Scenic');
     expect(message(root, 'user').textContent).toContain('notes.txt');
   });
-  it('uses the shared disclosure in child detail while preserving the parent background entry', async () => {
+  it.each(['canonical', 'legacy'] as const)('defaults %s child work to collapsed while preserving the parent background entry', async (history) => {
     await page.viewport(1280, 900);
     const child = subagentSummary({ parent_thread_id: 'parent', thread_id: 'process', status: 'completed' });
     const parent = thread({ thread_id: 'parent', subagents: [child] });
     const live = liveStream(liveBootstrap(parent).current);
     const root = renderSurfaceWithAdapter({ ...adapter(true), listThreads: vi.fn(async () => [parent]),
       loadThread: vi.fn(async () => liveBootstrap(parent, 1)), connectLiveStream: live.connect,
-      loadSubagentDetail: vi.fn(async () => ({ summary: child, current: current(true) })) });
+      loadSubagentDetail: vi.fn(async () => ({ summary: child, current: current(true, history === 'legacy'
+        ? { turns: [turn({ final_item_ids: [], final_boundary_complete: false })] } : {}) })) });
     root.style.height = '780px';
     await waitFor(() => Boolean(root.querySelector('[data-thread-id="parent"] button')));
     root.querySelector<HTMLButtonElement>('[data-thread-id="parent"] button')!.click();
@@ -234,22 +235,29 @@ describe('completed turn process disclosure', () => {
     await waitFor(() => Boolean(document.querySelector('.flower-subagent-detail-transcript .flower-turn-summary-button')));
     const detail = document.querySelector<HTMLElement>('.flower-subagent-detail-transcript')!;
     expect(summary(detail)?.getAttribute('aria-expanded')).toBe('false');
-    expect(hidden(detail, 'progress')).toBe(true); expect(hidden(detail, 'final-a')).toBe(false);
+    expect(hidden(detail, 'thinking')).toBe(true);
+    expect(hidden(detail, 'progress')).toBe(history === 'canonical'); expect(hidden(detail, 'final-a')).toBe(false);
     const final = message(detail, 'final-a'); summary(detail)!.click();
     expect(message(detail, 'final-a')).toBe(final);
     expect(root.querySelector('button[aria-controls="flower-subagents-dropdown"]')).not.toBeNull();
   });
-  it('loads legacy history expanded and successful history collapsed without an initial animation', async () => {
+  it('loads successful history collapsed without an initial animation', async () => {
     const { root } = await mount(current(true));
     expect(summary(root)?.getAttribute('aria-expanded')).toBe('false');
     expect(message(root, 'progress').closest('.flower-turn-row-viewport')?.getAttribute('data-state')).toBe('closed');
     expect(message(root, 'final-a').closest('.flower-turn-row-viewport')?.getAttribute('data-state')).toBe('open');
   });
-  it('keeps a legacy completion without authoritative final references expanded', async () => {
+  it('collapses typed legacy process while retaining every assistant reply and manual choice', async () => {
     const legacy = current(true, { turns: [turn({ final_item_ids: [], final_boundary_complete: false })] });
     const { root, live } = await mount(legacy);
-    expect(summary(root)?.getAttribute('aria-expanded')).toBe('true');
+    expect(summary(root)?.getAttribute('aria-expanded')).toBe('false');
     expect(hidden(root, 'progress')).toBe(false);
+    expect(hidden(root, 'thinking')).toBe(true);
+    expect(hidden(root, 'tool')).toBe(true);
+    expect(hidden(root, 'final-a')).toBe(false);
+    expect(hidden(root, 'final-b')).toBe(false);
+    summary(root)!.click();
+    await waitFor(() => message(root, 'tool').closest('.flower-turn-row-viewport')?.getAttribute('data-state') === 'open');
     const toolButton = message(root, 'tool').querySelector<HTMLButtonElement>('button')!;
     toolButton.focus(); summary(root)!.click();
     expect(document.activeElement).toBe(summary(root));
@@ -270,7 +278,7 @@ describe('completed turn process disclosure', () => {
     await new Promise((resolve) => setTimeout(resolve, 80));
     expect(message(root, 'final-a')).toBe(reloadedFinal);
   });
-  it('offers independent expanded controls for the legacy stopped and completed turns seen in Desktop', async () => {
+  it('keeps legacy stopped work open while completed work defaults to collapsed in Desktop', async () => {
     const done = current(true);
     const oldItems = done.items!.map((item) => ({ ...item, id: `old-${item.id}`, turn_id: 'old-turn', run_id: 'old-run' }));
     const { root } = await mount({ ...done, items: [...oldItems, ...done.items!], turns: [
@@ -279,7 +287,7 @@ describe('completed turn process disclosure', () => {
       turn({ elapsed_ms: 8541, waiting_ms: 0, work_duration_ms: 8541, ended_at: '2026-10-11T12:00:08.541Z', final_item_ids: [], final_boundary_complete: false }),
     ] });
     const buttons = [...root.querySelectorAll<HTMLButtonElement>('.flower-turn-summary-button')];
-    expect(buttons.map((button) => button.getAttribute('aria-expanded'))).toEqual(['true', 'true']);
+    expect(buttons.map((button) => button.getAttribute('aria-expanded'))).toEqual(['true', 'false']);
     expect(buttons[0].textContent).toContain('1 minute 31 seconds');
     expect(buttons[1].textContent).toContain('8 seconds');
     buttons[0].click();
@@ -288,8 +296,7 @@ describe('completed turn process disclosure', () => {
     expect(hidden(root, 'old-final-a')).toBe(false);
     expect(hidden(root, 'old-final-b')).toBe(false);
     expect(root.querySelector('.flower-turn-ended')?.textContent).toBe('Stopped');
-    expect(buttons[1].getAttribute('aria-expanded')).toBe('true');
-    buttons[1].click();
+    expect(buttons[1].getAttribute('aria-expanded')).toBe('false');
     expect(hidden(root, 'thinking')).toBe(true);
     expect(hidden(root, 'final-a')).toBe(false);
     buttons[0].click();
@@ -382,9 +389,8 @@ describe('completed turn process disclosure', () => {
     button.click();
     await waitFor(() => button.getAttribute('aria-expanded') === 'true');
     expect(button.getAttribute('aria-label')).toContain(copy.chat.turnProcess.collapse);
-    expect(root.querySelector('.flower-turn-timing')?.textContent).toContain(copy.chat.turnProcess.waiting(copy.chat.turnProcess.second(20)));
+    expect(button.parentElement?.children).toHaveLength(1);
     expect(button.scrollWidth).toBeLessThanOrEqual(button.clientWidth + 1);
-    expect(root.querySelector<HTMLElement>('.flower-turn-timing')!.scrollWidth).toBeLessThanOrEqual(root.querySelector<HTMLElement>('.flower-turn-timing')!.clientWidth + 1);
     expect(root.textContent).not.toContain('flowerSurface.chat.turnProcess');
   });
 });
