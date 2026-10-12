@@ -54,9 +54,12 @@ compatibility-window decision removes it.
 
 `compatibility.status` is `complete`, `limited` or `unavailable`.
 `limitations` identifies a code, affected object references and an optional
-feature. Limited mappings preserve accurate browsing and restrict affected
-interactions. Unavailable mappings must not render a misleading relationship
-graph. Native clients keep source, history and navigation recovery available.
+feature. The stable interaction names are `flower` and `resource_actions`;
+these are distinct from optional display capabilities. A limitation without a
+feature restricts every operation on its affected objects. Clients offer only
+known, bundled interactions: an unknown feature name never introduces an action.
+Limited mappings preserve accurate browsing and restrict affected interactions.
+Unavailable mappings must not render a misleading relationship graph. Native clients keep source, history and navigation recovery available.
 The current Runtime's unreadable-source response is `unavailable` with
 `source_unreadable`; it contains only verified source and safe title metadata.
 
@@ -65,7 +68,7 @@ identities do not become operation targets. Presentation mappings and generic
 cards grant no resource authority. Resource requests continue to read the
 original version, check exact bindings and enforce current permissions.
 
-## Client And Release Boundary
+# Boundaries
 
 One normalized snapshot drives graph, object selection, compact summaries,
 details and Flower references. Graph projection, layout and touch behavior use
