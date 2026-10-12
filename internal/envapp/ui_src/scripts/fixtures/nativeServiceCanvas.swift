@@ -24,7 +24,16 @@ final class Bridge: NSObject, WKScriptMessageHandler {
   var web: WKWebView!
   var checked = false
   var selections: [[String]] = []
-  func fail(_ message: String) { print(message); exit(1) }
+  func fail(_ message: String) {
+    print(message)
+    web.takeSnapshot(with: nil) { image, _ in
+      if let tiff = image?.tiffRepresentation, let bitmap = NSBitmapImageRep(data: tiff),
+        let png = bitmap.representation(using: .png, properties: [:]) {
+        try? png.write(to: output.appendingPathComponent("failure.png"))
+      }
+      exit(1)
+    }
+  }
   func snapshotTheme(_ index: Int) {
     let variants = [("light", false, false), ("dark", true, false), ("hc-light", false, true), ("hc-dark", true, true)]
     if index == variants.count { exit(0) }
@@ -34,6 +43,8 @@ final class Bridge: NSObject, WKScriptMessageHandler {
     input.dark = \(dark); input.contrast = \(contrast);
     window.serviceCanvas.update(input);
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    await Promise.all(document.getAnimations().filter(animation => Number.isFinite(animation.effect?.getComputedTiming().endTime))
+      .map(animation => animation.finished.catch(() => {})));
     if (document.querySelector('.tessiven-canvas-tools')) throw Error('Duplicate native toolbar');
     const tools = document.querySelector('.native-canvas-tools').getBoundingClientRect();
     const overview = document.querySelector('.floe-graph__minimap').getBoundingClientRect();
@@ -42,11 +53,26 @@ final class Bridge: NSObject, WKScriptMessageHandler {
       if (box.left < 0 || box.top < 0 || box.right > innerWidth || box.bottom > innerHeight) throw Error('Native control outside viewport');
     }
     if(tools.right > overview.left && tools.bottom > overview.top && overview.bottom > tools.top) throw Error('Native tools overlap overview');
-    return '\(name)';
+    const ask = document.querySelector('.tessiven-ask-flower');
+    let contrastRatio;
+    if (ask) {
+      const context = document.createElement('canvas').getContext('2d');
+      const luminance = color => {
+        context.fillStyle = color; context.fillRect(0, 0, 1, 1);
+        return [...context.getImageData(0, 0, 1, 1).data].slice(0, 3)
+          .map(value => value / 255).map(value => value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4)
+          .reduce((sum, value, index) => sum + value * [.2126, .7152, .0722][index], 0);
+      };
+      const style = getComputedStyle(ask), values = [luminance(style.color), luminance(style.backgroundColor)].sort((a,b) => a-b);
+      contrastRatio = (values[1] + .05) / (values[0] + .05);
+      if (contrastRatio < 4.5) throw Error('Unreadable native Ask Flower action: ' + contrastRatio);
+    }
+    return {theme: '\(name)', contrastRatio};
     """, arguments: [:], in: nil, in: .page) { result in
       switch result {
       case .failure(let error): self.fail(String(describing: error))
-      case .success:
+      case .success(let value):
+        print(value)
         self.web.takeSnapshot(with: nil) { image, error in
           guard let image, let tiff = image.tiffRepresentation,
             let bitmap = NSBitmapImageRep(data: tiff), let png = bitmap.representation(using: .png, properties: [:]) else {

@@ -6,6 +6,7 @@ import { attachTouchViewport } from './touchViewport';
 import type { RenderVersion, Selection } from '../types';
 import { supportedPresentationFormats } from './contract';
 import enUS from '../locales/en-US.json';
+import '@floegence/floe-webapp-core/styles';
 import '../tessiven.css';
 import '../../native/native.css';
 

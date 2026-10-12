@@ -60,6 +60,8 @@ relationship ID. Synthetic summary keys are display identities only, never DSL
 objects or Flower references. No list is silently truncated to 100 references.
 Native hosts use the same summary browser and retain the existing single-object
 selection callback when an exact relationship is selected.
+The native renderer loads the published Floe foundation stylesheet as well as
+graph styles; shared floating layers must retain their positioning utilities.
 
 The shared floating layer owns positioning. An open popup measures only its own
 dimensions so clamping follows pagination and detail height changes. Closed

@@ -28,7 +28,7 @@ describe('bounded pool relation presentation', () => {
   it('shows two counted patterns, one preview, exact evidence and scoped Flower references in every theme', async () => {
     const { ask } = await mount();
     const rows = host.querySelectorAll<HTMLElement>('[data-relation-summary]');
-    expect(rows[0].textContent).toContain('Local · Relations: 4');
+    expect(rows[0].textContent).toContain('Local · 4');
     await userEvent.hover(rows[0]);
     await expect.poll(() => host.querySelectorAll('.tessiven-service-link-preview path[data-relation-id]').length).toBe(1);
     expect(document.querySelector('.tessiven-popup')).toBeNull();
@@ -55,6 +55,10 @@ describe('bounded pool relation presentation', () => {
 
   it('browses the last of 1000 relationships with bounded DOM, filtering and preserved back state', async () => {
     await mount(repeatedCallsVersion(1000));
+    for (const count of host.querySelectorAll<HTMLElement>('.tessiven-relation-summary-count')) {
+      expect(count.textContent).toContain('1000');
+      expect(count.scrollWidth).toBeLessThanOrEqual(count.offsetWidth);
+    }
     await userEvent.click(host.querySelector<HTMLElement>('[data-relation-summary]')!);
     expect(document.querySelectorAll('[data-exact-relation-id]')).toHaveLength(50);
     for (let i = 0; i < 19; i++) await page.getByRole('button', { name: 'Next page', exact: true }).click();

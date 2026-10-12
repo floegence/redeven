@@ -35705,7 +35705,7 @@
         "title": "Tessiven relationship summaries",
         "type": "UI Contract"
       },
-      "body_length": 4990,
+      "body_length": 5146,
       "summary": "The shared Tessiven presentation projection owns group relationship summaries.\nCollapsed groups show at most four call patterns, not every instance call.\nExpanded group headers expose one pool-wide overview. Physical node cards keep\nexact relationship rows. All original endpoints, relationship IDs and evidence\nremain authoritative; summaries never edit documents or manufacture observations.\nFull details remain available through search, node filters and bounded pagination.\nMissing visible endpoints suppress previews rather than connecting substitute rows.",
       "sections": [
         {
@@ -35719,8 +35719,8 @@
           "id": "interaction-and-details",
           "title": "Interaction And Details",
           "level": 1,
-          "body": "Hover and keyboard focus never open a popup. A local summary may draw one service\npattern preview only when both real inventory rows are visible. Logical and\ncross-node summaries emphasize visible endpoints without drawing a local route.\nExact physical-card previews continue to follow the original relationship.\n\nClicking a pattern opens its exact members inside the existing surface-aware\ndetails popup. The complete browser supports node and endpoint search, a node\nfilter, 50-item pages, back navigation and result counts. Returning from an exact\ndetail preserves its prior query and page. Every last-page relationship and its\nevidence remains reachable; the generic 30-object popup limit is not a substitute\nfor this browser. Source and target locate actions use canonical endpoints.\n\nSummary-level Ask Flower references the owning group and canonical endpoints;\nthe all-patterns view references the group. Exact details reference the original\nrelationship ID. Synthetic summary keys are display identities only, never DSL\nobjects or Flower references. No list is silently truncated to 100 references.\nNative hosts use the same summary browser and retain the existing single-object\nselection callback when an exact relationship is selected.\n\nThe shared floating layer owns positioning. An open popup measures only its own\ndimensions so clamping follows pagination and detail height changes. Closed\ndetails allocate no list DOM. Service-row geometry is observed only during an\nactive preview. Canonical endpoint indexes and Set-based deduplication bound\nrepeated-call aggregation without a second persisted graph or local router.",
-          "char_count": 1633
+          "body": "Hover and keyboard focus never open a popup. A local summary may draw one service\npattern preview only when both real inventory rows are visible. Logical and\ncross-node summaries emphasize visible endpoints without drawing a local route.\nExact physical-card previews continue to follow the original relationship.\n\nClicking a pattern opens its exact members inside the existing surface-aware\ndetails popup. The complete browser supports node and endpoint search, a node\nfilter, 50-item pages, back navigation and result counts. Returning from an exact\ndetail preserves its prior query and page. Every last-page relationship and its\nevidence remains reachable; the generic 30-object popup limit is not a substitute\nfor this browser. Source and target locate actions use canonical endpoints.\n\nSummary-level Ask Flower references the owning group and canonical endpoints;\nthe all-patterns view references the group. Exact details reference the original\nrelationship ID. Synthetic summary keys are display identities only, never DSL\nobjects or Flower references. No list is silently truncated to 100 references.\nNative hosts use the same summary browser and retain the existing single-object\nselection callback when an exact relationship is selected.\nThe native renderer loads the published Floe foundation stylesheet as well as\ngraph styles; shared floating layers must retain their positioning utilities.\n\nThe shared floating layer owns positioning. An open popup measures only its own\ndimensions so clamping follows pagination and detail height changes. Closed\ndetails allocate no list DOM. Service-row geometry is observed only during an\nactive preview. Canonical endpoint indexes and Set-based deduplication bound\nrepeated-call aggregation without a second persisted graph or local router.",
+          "char_count": 1789
         }
       ],
       "evidence": [
@@ -36783,5 +36783,5 @@
       ]
     }
   ],
-  "source_sha256": "f470505a9ddb5cbcd38f2ff3fe6e0a4a26b94508bc253cdbacd786cf91ab7829"
+  "source_sha256": "25a06e062374e2ff82e1d0d325ae8ec557b62563726ddac9ddd08debb82b20e6"
 }
