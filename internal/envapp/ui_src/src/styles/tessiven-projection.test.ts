@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { projectCanvas, projectLayoutOptions, projectLayoutLayers, projectPositions } from '../../../../tessiven_ui/src/projection';
+import { compareDocuments, projectCanvas, projectLayoutOptions, projectLayoutLayers, projectPositions } from '../../../../tessiven_ui/src/projection';
 import { toRenderModel, toRenderVersion } from '../../../../tessiven_ui/src/presentation';
 import type { RenderModel, Version } from '../../../../tessiven_ui/src/types';
 import { sharedHostsDocument } from './tessiven-shared-hosts.fixture';
@@ -187,6 +187,7 @@ describe('independent canvas presentation boundary', () => {
 
   it('projects a generic object and its exact relationship without inventing a host', () => {
     const model: RenderModel = toRenderModel(sharedHostsDocument());
+    const before = structuredClone(model);
     model.objects = [{ id: 'queue', name: 'Work queue', kind: 'Queue', facts: [{ label: 'Region', value: 'Local' }], objectRefs: ['queue'] }];
     model.relations!.push({ id: 'queue-call', from: 'node-3', to: 'queue', kind: 'calls', evidenceRefs: [] });
     const original = JSON.stringify(model);
@@ -196,5 +197,11 @@ describe('independent canvas presentation boundary', () => {
     expect(projected.graph.edges.find(value => value.target === 'queue')).toMatchObject({ source: 'node-3', target: 'queue' });
     expect(projected.memberships.has('queue')).toBe(false);
     expect(JSON.stringify(model)).toBe(original);
+    expect(compareDocuments(before, model)).toContainEqual({ id: 'queue', kind: 'objects', change: 'added' });
+    const changed = structuredClone(model);
+    changed.objects![0].facts![0].value = 'Remote';
+    expect(compareDocuments(model, changed)).toEqual([{ id: 'queue', kind: 'objects', change: 'changed' }]);
+    changed.objects = [];
+    expect(compareDocuments(model, changed)).toEqual([{ id: 'queue', kind: 'objects', change: 'removed' }]);
   });
 });

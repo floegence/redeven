@@ -88,6 +88,17 @@ Each DSL release verifies its mapping against the frozen oldest supported
 display schema and a fixed client artifact. Native acceptance records the
 Runtime commit, App commit, renderer provenance and negotiated format, so
 an older Runtime cannot accidentally qualify a newer compatibility claim.
+The existing DSL contract test pins the presentation v1 schema digest; editing
+that schema in place fails qualification. For each DSL release, run the existing
+native WebKit check with `--renderer-dir` pointing to the oldest supported
+App's frozen `RedevenApp/Resources/ServiceCanvasRenderer` artifact. This first
+presentation release freezes the final iOS bundled artifact as that baseline.
+The check verifies its manifest, source commit and complete asset hashes, then
+feeds the current display adapter's sample to it without rebuilding the artifact.
+The default check builds current source for development and cannot substitute
+for this release qualification. Removing a supported display format requires
+an explicit client compatibility-window decision; a DSL release cannot remove
+it incidentally.
 
 # Evidence
 
