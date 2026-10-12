@@ -141,8 +141,16 @@ it.each(['standard', 'soft-neumorphic'])('keeps sent messages and selected text 
     expect.soft(contrast(rgb(getComputedStyle(link).color), face), `${label} focused link`).toBeGreaterThanOrEqual(4.5);
     await userEvent.unhover(link);
     const summary = host.querySelector<HTMLButtonElement>('.flower-turn-summary-button')!;
+    const summaryStyle = getComputedStyle(summary);
+    const width = summary.getBoundingClientRect().width;
+    expect.soft(rgb(summaryStyle.backgroundColor)[3], `${label} summary has no surface fill`).toBe(0);
+    expect.soft(parseFloat(summaryStyle.borderTopWidth), `${label} summary has no button border`).toBe(0);
+    expect.soft(summaryStyle.boxShadow, `${label} summary has no button shadow`).toBe('none');
+    expect.soft(summary.getBoundingClientRect().height, `${label} summary keeps a comfortable target`).toBeGreaterThanOrEqual(32);
     await userEvent.hover(summary);
     expect.soft(contrast(rgb(getComputedStyle(summary).color), background(summary)), `${label} hovered process summary`).toBeGreaterThanOrEqual(4.5);
+    expect.soft(rgb(getComputedStyle(summary).backgroundColor)[3], `${label} hover remains frameless`).toBe(0);
+    expect.soft(summary.getBoundingClientRect().width, `${label} hover preserves geometry`).toBe(width);
     await userEvent.unhover(summary);
   }
 });

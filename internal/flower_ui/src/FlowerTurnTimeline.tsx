@@ -175,8 +175,8 @@ export function FlowerTurnTimeline(props: Readonly<{
               aria-expanded={expanded()} aria-controls={group()!.processKeys.map(contentID).join(' ')}
               aria-label={`${expanded() ? props.copy.collapse : props.copy.expand}: ${props.copy.worked(duration(group()!.turn!.work_duration_ms))}`}
               onClick={(event) => toggle(event.currentTarget)}>
-              <ChevronRight class="flower-turn-summary-chevron" aria-hidden="true" />
               <span>{props.copy.worked(duration(group()!.turn!.work_duration_ms))}</span>
+              <ChevronRight class="flower-turn-summary-chevron" aria-hidden="true" />
             </button>
             <Show when={expanded()}>
               <div class="flower-turn-timing">
@@ -200,9 +200,9 @@ export function FlowerTurnTimeline(props: Readonly<{
       </div>
     );
   };
-  return <For each={keys()}>{(token) => {
+  return <div class="flower-turn-timeline"><For each={keys()}>{(token) => {
     const key = (JSON.parse(token) as [string, string])[1];
     const entry = createMemo(() => entries().get(key)!);
     return row(key, entry);
-  }}</For>;
+  }}</For></div>;
 }
