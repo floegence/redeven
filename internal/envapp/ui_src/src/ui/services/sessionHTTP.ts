@@ -8,7 +8,27 @@ let current: SessionHTTP | undefined;
 
 export function bindSessionHTTP(transport: SessionHTTP): () => void {
   current = transport;
-  return () => { if (current === transport) current = undefined; };
+  // Desktop uses this exact environment lifecycle for both local and E2EE requests.
+  const entranceRequests = new Map<string, AbortController>();
+  const releaseEntrance = typeof window === 'undefined' ? undefined : window.redevenDesktopShell?.onManagedEntranceRequest?.(async request => {
+    if (request.cancel) { entranceRequests.get(request.request_id)?.abort(); return null; }
+    const controller = new AbortController();
+    entranceRequests.set(request.request_id, controller);
+    try {
+      const response = await transport.fetch(`/_redeven_proxy/api/managed-web-services/${encodeURIComponent(request.service_id)}/open-session`, {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({request_id: `desktop-${request.request_id}`, refresh: request.refresh}),
+        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(610000)]),
+      });
+      return (await readApiJSONResponse<unknown>(response)).data;
+    } finally { entranceRequests.delete(request.request_id); }
+  });
+  return () => {
+    releaseEntrance?.();
+    for (const controller of entranceRequests.values()) controller.abort();
+    entranceRequests.clear();
+    if (current === transport) current = undefined;
+  };
 }
 
 function sessionHTTP(): SessionHTTP {

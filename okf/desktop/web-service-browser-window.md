@@ -27,6 +27,8 @@ When the port-forward proxy cannot connect to its upstream, it returns a non-cac
 
 Target navigation and popups may remain in the isolated window only while the exact Environment and forward constraints continue to hold. In unified mode, only the user's explicit Open in browser action may hand a retained external target or Runtime-minted browser entry to the system browser. Mint failure, response mismatch, or URL validation failure leaves the Desktop window in place and opens no URL. The target document never receives the Redeven Desktop bridge, Env App preload, or parent Environment partition.
 
+For declared managed authentication, the first application document chain may reject its entrance with 401/403. The same unavailable document offers explicit reprepare through the existing Environment HTTP lifecycle. It redacts authentication query values from chrome, remains closable, and restores its retry control after preparation failure. [Managed opening](../architecture/managed-web-service-opening.md) owns the response and first-navigation boundary.
+
 # Host application presentation
 
 The semantic forward-window request optionally selects `presentation: application`.

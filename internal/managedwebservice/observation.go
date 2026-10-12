@@ -64,11 +64,7 @@ func (m *Manager) observe(ctx context.Context, service *pfregistry.ManagedServic
 }
 
 func (m *Manager) applyObservation(ctx context.Context, service *pfregistry.ManagedService, facts ServiceFacts, observationErr error) (bool, error) {
-	binding, err := decodeRuntimeBinding(service)
-	if err != nil {
-		return false, err
-	}
-	err = observationErr
+	err := observationErr
 	running := facts.Runtime == "running" && err == nil
 	observed := "stopped"
 	if err != nil {
@@ -85,10 +81,6 @@ func (m *Manager) applyObservation(ctx context.Context, service *pfregistry.Mana
 			return false, updateErr
 		}
 		service.ObservedState = observed
-	}
-	if running && err == nil && activeManagement(*service) && binding.Deployment != DeploymentHost {
-		// Opening preparation must never change the observed business state.
-		_, _ = m.resolveStaticOpening(ctx, service)
 	}
 	return running, err
 }

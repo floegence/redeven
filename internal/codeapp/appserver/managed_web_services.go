@@ -1,6 +1,7 @@
 package appserver
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -310,6 +311,26 @@ func (g *Server) handleManagedServiceRoute(w http.ResponseWriter, r *http.Reques
 		return true
 	}
 	serviceID, action := strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
+	if r.Method == http.MethodGet && action == "inspection" {
+		if _, ok := g.requireLocalAppPermission(w, r, localFloeAppPortForward, requiredPermissionRead); !ok {
+			return true
+		}
+		backend, ok := g.managed.(interface {
+			Inspect(context.Context, string) (*managedwebservice.ServiceView, error)
+		})
+		if !ok {
+			writeJSON(w, http.StatusNotImplemented, apiResp{OK: false, ErrorCode: "MANAGEMENT_UNAVAILABLE"})
+			return true
+		}
+		view, err := backend.Inspect(r.Context(), serviceID)
+		if err != nil {
+			writeManagedWebServiceError(w, err)
+			return true
+		}
+		w.Header().Set("Cache-Control", "no-store")
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: view})
+		return true
+	}
 	if r.Method == http.MethodPost && action == "management-plans" {
 		if _, ok := g.requireLocalAppPermission(w, r, localFloeAppPortForward, requiredPermissionFull); !ok {
 			return true

@@ -298,6 +298,21 @@ func runningInsideContainer() bool {
 }
 
 func (m *Manager) List(ctx context.Context) ([]ServiceView, error) {
+	return m.listServices(ctx, "", false)
+}
+
+func (m *Manager) Inspect(ctx context.Context, serviceID string) (*ServiceView, error) {
+	views, err := m.listServices(ctx, serviceID, true)
+	if err != nil {
+		return nil, err
+	}
+	if len(views) == 0 {
+		return nil, serviceError("SERVICE_NOT_FOUND", "The managed Web Service was not found.", 404, false, nil)
+	}
+	return &views[0], nil
+}
+
+func (m *Manager) listServices(ctx context.Context, serviceID string, resources bool) ([]ServiceView, error) {
 	services, err := m.registry.ListManagedServices(ctx)
 	if err != nil {
 		return nil, err
@@ -312,6 +327,9 @@ func (m *Manager) List(ctx context.Context) ([]ServiceView, error) {
 	}
 	out := make([]ServiceView, 0, len(services))
 	for _, service := range services {
+		if serviceID != "" && service.ServiceID != serviceID {
+			continue
+		}
 		forward, ok := forwardByID[service.ForwardID]
 		if !ok && activeManagement(service) {
 			return nil, serviceError("FORWARD_NOT_FOUND", "The managed Web Service route is unavailable.", 409, false, nil)
@@ -320,7 +338,7 @@ func (m *Manager) List(ctx context.Context) ([]ServiceView, error) {
 		if err != nil {
 			return nil, err
 		}
-		facts, observationErr := m.inspectService(ctx, &service, false)
+		facts, observationErr := m.inspectService(ctx, &service, resources)
 		if active == nil {
 			_, observationErr = m.applyObservation(ctx, &service, facts, observationErr)
 		}
@@ -376,31 +394,29 @@ func (m *Manager) List(ctx context.Context) ([]ServiceView, error) {
 			view.PrimaryAction = "inspect"
 			view.ProblemCode = "CURRENT_TEMPLATE_INVALID"
 		}
-		view.PendingChanges = resolved != nil && service.RuntimeSpecSHA256 != "" && service.RuntimeSpecSHA256 != resolved.RuntimeSpecSHA256
+		view.PendingChanges = resolved != nil && service.RuntimeSpecSHA256 != "" && !sameAppliedRuntime(resolved, &service)
 		view.Opening.State = "unavailable"
-		if service.ObservedState == "running" {
-			view.Opening.State = "ready"
-			if deployment == DeploymentHost {
-				if driver, ok := m.host.(*hostScriptDriver); ok {
-					if state, err := driver.readRunState(&service); err != nil {
-						view.Opening.State, view.Opening.ErrorCode = "unavailable", "HOST_OPEN_TARGET_UNAVAILABLE"
-					} else if state.OpenErrorCode != "" {
-						view.Opening.State, view.Opening.ErrorCode = "error", state.OpenErrorCode
+		if service.ObservedState == "running" && activeManagement(service) {
+			view.Opening.State = "unprepared"
+			if cached, err := m.readOpeningState(&service); err == nil {
+				if launch, launchErr := m.openingLaunch(ctx, &service); launchErr == nil && (cached.LaunchGeneration == launch.Generation || (cached.SchemaVersion == 1 && launch.Generation == service.RuntimeIdentity)) {
+					if cached.ErrorCode != "" {
+						view.Opening.State = "error"
+						view.Opening.ErrorCode = cached.ErrorCode
+						view.Opening.ErrorMessage = cached.ErrorMessage
+					} else if cached.AppPath != "" {
+						view.Opening.State = "prepared"
 					}
 				}
-			} else if _, err := readServiceOpening(m.staticOpeningPath(&service), &service, service.RuntimeIdentity, "SERVICE"); err != nil {
-				view.Opening.State = "unavailable"
-				view.Opening.ErrorCode, _, _, _ = ErrorDetails(err)
+			} else if !errors.Is(err, os.ErrNotExist) {
+				view.Opening.State = "error"
+				view.Opening.ErrorCode = "SERVICE_OPEN_TARGET_INVALID"
 			}
+
 		}
 		if observationErr != nil {
-			view.Opening.ErrorCode, _, _, _ = ErrorDetails(observationErr)
-		}
-		if active == nil && service.ObservedState == "running" {
-			if err := m.checkOpeningEndpoint(ctx, &service); err != nil {
-				view.Opening.State = "unavailable"
-				view.Opening.ErrorCode, _, _, _ = ErrorDetails(err)
-			}
+			view.Opening.State = "unavailable"
+			view.Opening.ErrorCode, view.Opening.ErrorMessage, _, _ = ErrorDetails(observationErr)
 		}
 		identity, identityErr := decodeReleaseIdentity(service.ReleaseIdentityJSON, service.ReleaseIdentitySHA256)
 		if identityErr != nil {
@@ -483,7 +499,7 @@ func (m *Manager) serviceDisplayMetadata(ctx context.Context, service pfregistry
 func serviceActionCapabilities(service pfregistry.ManagedService, runtime *resolvedRuntime, active, _ *pfregistry.ManagedOperation) ServiceActions {
 	no := func(code string) ActionCapability { return ActionCapability{ReasonCode: code} }
 	yes := ActionCapability{Available: true}
-	actions := ServiceActions{Inspect: yes, Uninstall: yes, Detach: yes, Open: no("SERVICE_NOT_RUNNING"), Start: no("SERVICE_STATE_UNAVAILABLE"), Stop: no("SERVICE_STATE_UNAVAILABLE"), Restart: no("SERVICE_STATE_UNAVAILABLE"), Retry: no("REVIEW_REQUIRED"), RestoreManagement: no("RECOVERY_NOT_REQUIRED"), Recover: yes}
+	actions := ServiceActions{Inspect: yes, Uninstall: yes, Detach: yes, Open: no("SERVICE_NOT_RUNNING"), Start: no("SERVICE_STATE_UNAVAILABLE"), Stop: no("SERVICE_STATE_UNAVAILABLE"), Restart: no("SERVICE_STATE_UNAVAILABLE"), Retry: no("REVIEW_REQUIRED"), RestoreManagement: no("RECOVERY_NOT_REQUIRED"), Recover: no("RECOVERY_NOT_REQUIRED")}
 	if active != nil {
 		busy := no("OPERATION_ACTIVE")
 		actions.Uninstall, actions.Detach, actions.Recover, actions.Start, actions.Stop, actions.Restart, actions.Open, actions.RestoreManagement = busy, busy, busy, busy, busy, busy, busy, busy
@@ -494,6 +510,9 @@ func serviceActionCapabilities(service pfregistry.ManagedService, runtime *resol
 		actions.Open = no("SERVICE_NOT_ACTIVE")
 		actions.RestoreManagement = yes
 		return actions
+	}
+	if service.ObservedState == "missing" {
+		actions.Recover = yes
 	}
 	if service.ObservedState == "running" {
 		actions.Open = yes
@@ -1282,7 +1301,7 @@ func (m *Manager) runStart(ctx context.Context, service *pfregistry.ManagedServi
 			return m.registry.UpdateManagedService(ctx, service.ServiceID, pfregistry.ManagedServicePatch{DesiredState: &running, ObservedState: &running})
 		}
 	}
-	if service.RuntimeSpecSHA256 != resolved.RuntimeSpecSHA256 {
+	if !sameAppliedRuntime(resolved, service) {
 		stage := map[Deployment]string{DeploymentHost: "installing", DeploymentContainer: "pulling", DeploymentCompose: "pulling"}[resolved.Template.Deployment]
 		m.progress(op, stage, 2)
 		if service.RuntimeIdentity != "" {
@@ -1747,7 +1766,15 @@ func reserveLoopbackPort() (int, error) {
 	defer listener.Close()
 	return listener.Addr().(*net.TCPAddr).Port, nil
 }
-func (m *Manager) waitHealthy(ctx context.Context, service *pfregistry.ManagedService) error {
+func (m *Manager) waitHealthy(ctx context.Context, service *pfregistry.ManagedService) (resultErr error) {
+	defer func() {
+		if resultErr == nil {
+			// An entrance failure must never turn a healthy application into a failed start.
+			if launch, err := m.openingLaunch(ctx, service); err == nil {
+				_, _, _ = m.prepareServiceOpening(ctx, service, launch, openingPreparation{NewLaunch: true})
+			}
+		}
+	}()
 	if m.healthCheck != nil {
 		return m.healthCheck(ctx, service)
 	}

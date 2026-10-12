@@ -16,13 +16,14 @@ timestamp: 2026-09-10T00:00:00Z
 
 ## Identity and version matrix
 
-Current authors use `redeven-service-template.json` with fixed `kind: "redeven.service-template"`, source `schema_version: 3`, author `template_id`, `service_family_id`, positive `revision`, `default_locale`, and `locales`, followed by the full display and execution declaration. The source document, execution specification, author revision, Git commit, and installed application release are distinct identities.
+Current authors use `redeven-service-template.json` with fixed `kind: "redeven.service-template"`, source `schema_version: 4`, author `template_id`, `service_family_id`, positive `revision`, `default_locale`, and `locales`, followed by the full display and execution declaration. The source document, execution specification, author revision, Git commit, and installed application release are distinct identities.
 
 | Entrypoint | Source document | Execution input | Effective execution |
 | --- | --- | --- | --- |
-| `template.json` | 1 | TemplateSpec 3 | TemplateSpec 6 |
-| `template.json` | 2 | TemplateSpec 4, 5, or 6 | TemplateSpec 6 |
-| `redeven-service-template.json` | 3 | TemplateSpec 6 | TemplateSpec 6 |
+| `template.json` | 1 | TemplateSpec 3 | TemplateSpec 7 |
+| `template.json` | 2 | TemplateSpec 4, 5, or 6 | TemplateSpec 7 |
+| `redeven-service-template.json` | 3 | TemplateSpec 6 | TemplateSpec 7 |
+| `redeven-service-template.json` | 4 | TemplateSpec 7 | TemplateSpec 7 |
 
 The old filename accepts only the published historical shapes. The branded filename requires the branded document. A directory containing both entrypoints is invalid. Auxiliary files remain relative to the selected directory: `locales/<locale>.json`, `assets/`, and `scripts/`.
 
@@ -32,7 +33,7 @@ An external template can declare any supported locale identifier as its only def
 
 The reader strictly decodes the historical document, applies consecutive data transformations, validates current TemplateSpec and passive resources, then returns the current typed definition. Redeven applies current permission, workspace, parameter, runtime-profile, and resource policy before execution. Historical syntax never grants extra privileges.
 
-Document 1-to-2 makes the previous default version an explicit recommendation and applies the published retirement of release-discovery filters. Document 2-to-3 supplies branded identity and the historical language default in memory. TemplateSpec 3-to-4 retains the published removal of tag-prefix filtering; 4-to-5 preserves static opening behavior; 5-to-6 maps valid startup-output URL declarations to generic preparation/opening hooks and private output. Retired fields receive those explicit published semantics, rather than being ignored as unknown fields or read using new defaults.
+Document 1-to-2 makes the previous default version an explicit recommendation and applies the published retirement of release-discovery filters. Document 2-to-3 supplies branded identity and the historical language default in memory. Document 3-to-4 and TemplateSpec 6-to-7 introduce the current entrance declaration without adding fields to historical schemas. TemplateSpec 3-to-4 retains the published removal of tag-prefix filtering; 4-to-5 preserves static opening behavior; 5-to-6 maps valid startup-output URL declarations to generic preparation/opening hooks and private output. Retired fields receive those explicit published semantics, rather than being ignored as unknown fields or read using new defaults.
 
 Upstream owns the frozen historical schemas and immutable released fixtures. Its release gate tests every supported source/Spec pair, consecutive and multi-step adaptation, strict failure cases, file identity, and behavioral equivalence of parameters, defaults, opening, lifecycle, resources, and authorization inputs. Previously published adapters and fixtures remain required release inputs. Runtime-owned SQL migrations are a separate owner and cannot substitute for source readers.
 

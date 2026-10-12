@@ -33,6 +33,8 @@ Each gateway generates an independent random session credential. Electron main i
 
 Another forward uses another port, partition, and credential. The base Local UI, another Environment, another Desktop process, and an ordinary system-browser request gain no authority from the gateway. Window replacement closes the prior listener before changing target or mode. Window close, Environment close, Runtime replacement, and Desktop exit destroy active HTTP and WebSocket connections, close the listener, unregister request hooks, and clear partition storage and cache.
 
+Managed authentication preparation preserves this mode and route. [Managed opening](managed-web-service-opening.md) owns explicit reprepare; authentication failure cannot switch to unified proxy or a direct target.
+
 # Boundaries
 
 The loopback Origin improves application compatibility; it is not direct network access, Remote Browser Isolation, a public listener, a Local UI login, or a substitute for application authentication. A process already executing as the same local user remains inside the ordinary Desktop threat model. The random credential prevents ambient browser requests from using a live gateway but does not turn loopback networking into a cross-user security boundary.

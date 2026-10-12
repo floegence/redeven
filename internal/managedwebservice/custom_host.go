@@ -201,7 +201,7 @@ exec /bin/sh -eu -c "$1"`, "managed-host-launch", spec.Host.StartScript)
 	if service.RuntimeSpecSHA256 == "" {
 		service.RuntimeSpecSHA256 = resolved.RuntimeSpecSHA256
 	}
-	state := hostRunState{SchemaVersion: 1, RuntimeIdentity: identity, RuntimeSpecSHA256: service.RuntimeSpecSHA256, Endpoint: spec.Endpoint, OutputMode: spec.Host.OutputMode}
+	state := hostRunState{SchemaVersion: 1, RuntimeIdentity: identity, RuntimeSpecSHA256: service.RuntimeSpecSHA256, Endpoint: spec.Endpoint, OutputMode: spec.Host.OutputMode, OpeningRuleSHA256: templateSourceRuntimeDigest(openingRuleDigest(spec), resolved.Template.SourceSHA256), ManagedBootstrap: spec.Host.OpenScript != "" || spec.StartupURL != nil}
 	if err := d.writeRunState(service, state); err != nil {
 		_ = gateWrite.Close()
 		_ = cmd.Wait()
@@ -230,9 +230,6 @@ exec /bin/sh -eu -c "$1"`, "managed-host-launch", spec.Host.StartScript)
 		return "", serviceError("START_FAILED", "The Host launch could not be released.", 502, true, nil)
 	}
 	_ = gateWrite.Close()
-	// Opening preparation is independent of business process health. A failed
-	// hook stays visible in the private launch record and can be retried on Open.
-	_, _ = d.prepareOpening(ctx, service, spec)
 	return identity, nil
 }
 

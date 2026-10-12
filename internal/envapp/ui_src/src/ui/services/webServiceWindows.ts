@@ -5,7 +5,7 @@ import { fetchSessionJSON } from './sessionHTTP';
 import { trustedLauncherOriginFromSandboxLocation } from './sandboxOrigins';
 import { registerSandboxWindow } from './sandboxWindowRegistry';
 import { openWebServiceWindowInDesktopShell } from './desktopShellBridge';
-import type { ForwardWindowPresentation } from '../../../../../../desktop/src/shared/desktopShellWebServiceWindowIPC';
+import type { ForwardWindowPresentation, ManagedWebEntranceContext } from '../../../../../../desktop/src/shared/desktopShellWebServiceWindowIPC';
 type WebServiceAccessMode = 'unified_proxy' | 'desktop_loopback';
 
 export class WebServiceWindowOpenError extends Error {}
@@ -139,6 +139,7 @@ export async function openWebServiceRoute(
   win?: Window | null,
   presentation: ForwardWindowPresentation = 'browser',
   preparationID?: string,
+  managedEntrance?: ManagedWebEntranceContext,
 ): Promise<void> {
   let browserTargetURL: string;
   if (route.kind === 'e2ee_tunnel') {
@@ -159,6 +160,7 @@ export async function openWebServiceRoute(
       target_url: serviceTargetURL,
       access_mode: accessMode,
       presentation,
+      ...(managedEntrance ? {managed_entrance: managedEntrance} : {}),
       ...(preparationID ? { preparation_id: preparationID } : {}),
     });
     if (!response?.ok) throw new WebServiceWindowOpenError(response?.message || copy.desktopWindowFailed);

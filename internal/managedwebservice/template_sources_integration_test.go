@@ -84,7 +84,7 @@ func TestSourceModesPreserveHistoricalBytesAcrossRestart(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if preview.SHA256 != fixture.SHA256 || preview.SourceDocumentVersion != 2 || preview.SourceSpecVersion != 5 || preview.Template.Spec.SchemaVersion != 6 {
+			if preview.SHA256 != fixture.SHA256 || preview.SourceDocumentVersion != 2 || preview.SourceSpecVersion != 5 || preview.Template.Spec.SchemaVersion != templateSpecSchemaVersion {
 				t.Fatal("transfer or compatibility changed source identity")
 			}
 			if preview.Template.Spec.Host.OpenScript == "" || preview.Template.Spec.Host.AfterStartScript == "" || preview.Template.Spec.Host.OutputMode != "private_file" {

@@ -68,6 +68,9 @@ func TestIndependentRuntimeProcessHelper(t *testing.T) {
 		panic(err)
 	}
 	service.RuntimeIdentity = identity
+	if os.Getenv("REDEVEN_BOUNDARY_BLOCK_HOOK") == "1" {
+		prepareHostTestEntrance(t, manager, service)
+	}
 	raw, _ := json.Marshal(service)
 	if err := os.WriteFile(filepath.Join(root, "runtime-ready"), raw, 0600); err != nil {
 		panic(err)

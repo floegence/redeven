@@ -372,7 +372,7 @@ func (m *Manager) recoverInterruptedReconfigure(service *pfregistry.ManagedServi
 			return errors.New("reconfigure runtime recovery is unsupported")
 		}
 		resolved, err := m.resolveCurrentRuntime(context.Background(), &target)
-		if err == nil && resolved.RuntimeSpecSHA256 == journal.Target.RuntimeSpecSHA256 {
+		if err == nil && sameAppliedRuntime(resolved, &target) {
 			if err := runtimeDriver.VerifyRuntime(context.Background(), &target, resolved.Spec); err != nil {
 				return err
 			}

@@ -10,19 +10,21 @@ import (
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 )
 
-const runtimeSpecIdentitySchemaVersion = 1
+const runtimeSpecIdentitySchemaVersion = 2
 
 type resolvedRuntime struct {
-	Template            Template
-	BaseSpec            TemplateSpec
-	Spec                TemplateSpec
-	Configuration       serviceConfiguration
-	ConfigurationJSON   string
-	ConfigurationSHA256 string
-	Release             ReleaseIdentity
-	Binding             runtimeBinding
-	Parameters          map[string]string
-	RuntimeSpecSHA256   string
+	Template              Template
+	BaseSpec              TemplateSpec
+	Spec                  TemplateSpec
+	Configuration         serviceConfiguration
+	ConfigurationJSON     string
+	ConfigurationSHA256   string
+	Release               ReleaseIdentity
+	Binding               runtimeBinding
+	Parameters            map[string]string
+	RuntimeSpecSHA256     string
+	MatchesApplied        bool
+	OpeningMatchesApplied bool
 }
 
 func (r resolvedRuntime) applyTo(service *pfregistry.ManagedService) {
@@ -119,11 +121,14 @@ func (m *Manager) resolveCurrentRuntime(ctx context.Context, service *pfregistry
 	if err != nil {
 		return nil, err
 	}
-	return &resolvedRuntime{
+	result := &resolvedRuntime{
 		Template: *template, BaseSpec: materialized, Spec: effective, Configuration: validated, ConfigurationJSON: effectiveConfigurationJSON,
 		ConfigurationSHA256: effectiveConfigurationDigest, Release: *release, Binding: *binding,
-		Parameters: parameters, RuntimeSpecSHA256: templateSourceRuntimeDigest(runtimeDigest, template.SourceSHA256),
-	}, nil
+		Parameters: parameters, RuntimeSpecSHA256: templateSourceRuntimeDigest(runtimeDigest, template.SourceRuntimeSHA256),
+	}
+	result.OpeningMatchesApplied = service.RuntimeSpecSHA256 == result.RuntimeSpecSHA256 || matchesFrozenRuntimeIdentity(result, secrets, service)
+	result.MatchesApplied = result.OpeningMatchesApplied || matchesFrozenHostOpeningRevision(result, secrets, service)
+	return result, nil
 }
 
 func materializeCurrentRelease(base TemplateSpec, release ReleaseIdentity) (TemplateSpec, error) {
@@ -137,6 +142,18 @@ func materializeCurrentRelease(base TemplateSpec, release ReleaseIdentity) (Temp
 }
 
 func currentRuntimeSpecDigest(spec TemplateSpec, configuration serviceConfiguration, release ReleaseIdentity, binding runtimeBinding, secrets serviceSecrets, service *pfregistry.ManagedService) (string, error) {
+	spec = cloneTemplateSpec(spec)
+	spec.SchemaVersion = 6
+	spec.StartupURL = nil
+	spec.Endpoint.Path = ""
+	if spec.Host != nil {
+		spec.Host.OpenScript = ""
+		spec.Host.AfterStartScript = ""
+	}
+	return runtimeSpecDigestDocument(runtimeSpecIdentitySchemaVersion, spec, configuration, release, binding, secrets, service)
+}
+
+func runtimeSpecDigestDocument(version int, spec TemplateSpec, configuration serviceConfiguration, release ReleaseIdentity, binding runtimeBinding, secrets serviceSecrets, service *pfregistry.ManagedService) (string, error) {
 	configuration.AcceptedNoticeRevisions = nil
 	document := struct {
 		SchemaVersion int                  `json:"schema_version"`
@@ -148,7 +165,7 @@ func currentRuntimeSpecDigest(spec TemplateSpec, configuration serviceConfigurat
 		WorkspacePath string               `json:"workspace_path"`
 		RuntimePort   int                  `json:"runtime_port"`
 	}{
-		SchemaVersion: runtimeSpecIdentitySchemaVersion, Spec: spec, Configuration: configuration,
+		SchemaVersion: version, Spec: spec, Configuration: configuration,
 		Release: release, Binding: binding, Secrets: secrets, WorkspacePath: service.WorkspacePath, RuntimePort: service.RuntimePort,
 	}
 	raw, err := json.Marshal(document)

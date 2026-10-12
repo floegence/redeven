@@ -1324,7 +1324,10 @@
     "unavailableServiceCheck": "Asegúrate de que el servicio esté en ejecución.",
     "unavailablePortCheck": "Confirma que el servicio esté escuchando en este puerto.",
     "retry": "Volver a intentarlo",
-    "retrying": "Volviendo a intentarlo..."
+    "retrying": "Volviendo a intentarlo...",
+    "authenticationTitle": "El acceso al servicio requiere autenticación",
+    "authenticationSummary": "El servicio respondió, pero rechazó su acceso gestionado. Prepara el acceso actual y reinténtalo. La aplicación sigue en ejecución.",
+    "authenticationRetry": "Preparar acceso y reintentar"
   },
   "language": {
     "systemDefault": "Predeterminado del sistema",

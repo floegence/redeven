@@ -1,7 +1,14 @@
+export const MANAGED_ENTRANCE_REQUEST = 'redeven-desktop:managed-entrance-request';
+export const MANAGED_ENTRANCE_CANCEL = 'redeven-desktop:managed-entrance-cancel';
+export const MANAGED_ENTRANCE_RESPONSE = 'redeven-desktop:managed-entrance-response';
+export type ManagedEntrancePreparationRequest = Readonly<{ request_id: string; service_id: string; refresh: boolean; cancel?: boolean }>;
+
 export const DESKTOP_SHELL_OPEN_WEB_SERVICE_WINDOW_CHANNEL = 'redeven-desktop:shell-open-web-service-window';
 
 export type WebServiceAccessMode = 'unified_proxy' | 'desktop_loopback';
 export type ForwardWindowPresentation = 'browser' | 'application' | 'desktop';
+
+export type ManagedWebEntranceContext = Readonly<{service_id: string; launch_generation: string}>;
 
 export type DesktopShellOpenWebServiceWindowRequest = Readonly<{
   url: string;
@@ -10,6 +17,7 @@ export type DesktopShellOpenWebServiceWindowRequest = Readonly<{
   access_mode?: WebServiceAccessMode;
   presentation?: ForwardWindowPresentation;
   preparation_id?: string;
+  managed_entrance?: ManagedWebEntranceContext;
 }>;
 
 export type NormalizedDesktopShellOpenWebServiceWindowRequest = Readonly<{
@@ -19,6 +27,7 @@ export type NormalizedDesktopShellOpenWebServiceWindowRequest = Readonly<{
   access_mode: WebServiceAccessMode;
   presentation: ForwardWindowPresentation;
   preparation_id?: string;
+  managed_entrance?: ManagedWebEntranceContext;
 }>;
 
 export type DesktopShellOpenWebServiceWindowResponse = Readonly<{
@@ -61,7 +70,13 @@ export function normalizeDesktopShellOpenWebServiceWindowRequest(value: unknown)
     if (presentation !== 'browser' && presentation !== 'application' && presentation !== 'desktop') return null;
     const preparationID = compact(candidate.preparation_id);
     if (preparationID && (presentation !== 'application' || !/^[a-f0-9-]{36}$/u.test(preparationID))) return null;
-    return { url: url.toString(), forward_id: forwardID, target_url: targetURL.toString(), access_mode: accessMode, presentation, ...(preparationID ? { preparation_id: preparationID } : {}) };
+    let managedEntrance: ManagedWebEntranceContext | undefined;
+    if (candidate.managed_entrance !== undefined) {
+      const entrance = candidate.managed_entrance as Partial<ManagedWebEntranceContext> | null;
+      if (!entrance || !/^[a-zA-Z0-9_-]{1,128}$/u.test(compact(entrance.service_id)) || !compact(entrance.launch_generation) || compact(entrance.launch_generation).length > 512 || /[\r\n\0]/u.test(compact(entrance.launch_generation))) return null;
+      managedEntrance = {service_id: compact(entrance.service_id), launch_generation: compact(entrance.launch_generation)};
+    }
+    return { ...(managedEntrance ? {managed_entrance: managedEntrance} : {}), url: url.toString(), forward_id: forwardID, target_url: targetURL.toString(), access_mode: accessMode, presentation, ...(preparationID ? { preparation_id: preparationID } : {}) };
   } catch {
     return null;
   }

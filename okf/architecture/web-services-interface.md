@@ -39,6 +39,8 @@ The last reviewed identity and facts remain visible during exit, avoiding an emp
 
 The renderer maps existing backend status and capabilities to short localized labels and semantic icons. It does not infer alternate lifecycle actions, change Registry state, bypass confirmation, or create another operation framework. Request submission appears immediately in the owning row; backend progress replaces it after acceptance. A rejected submission stays in the existing operation presentation with a safe localized explanation, without changing observed state or manufacturing a backend operation. Opening transactions are scoped to their target; unrelated service actions and navigation remain available.
 
+Details and diagnostics defaults to read-only inspection. Specific entrance errors remain readable; failed Open never prevents another attempt. Recovery becomes a reviewed mutation only after the user chooses it.
+
 Opening and authorization follow [Web Service browser sessions](web-service-browser-sessions.md). Resource preflight and execution follow [management recovery](service-management-recovery.md); streaming and historical operation ownership follow [operation progress](managed-service-operation-progress.md). Styling stays inside Web Services, reuses published components and theme variables, and adds no animation dependency.
 
 # Evidence

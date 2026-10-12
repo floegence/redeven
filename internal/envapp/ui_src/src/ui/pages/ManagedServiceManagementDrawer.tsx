@@ -16,6 +16,7 @@ import { useI18n, type EnvAppTranslationKey } from '../i18n';
 import { fetchLocalApiJSON, LocalApiError } from '../services/localApi';
 
 export type ManagementAction =
+  | 'inspect'
   | 'uninstall'
   | 'recover'
   | 'restore'
@@ -63,7 +64,10 @@ export type ManagementService = Readonly<{
   workspace_path: string;
   status?: string;
   management_state?: string;
-  actions?: { stop?: { available: boolean } };
+  problem_code?: string;
+  actions?: Partial<Record<'open' | 'start' | 'restart' | 'stop' | 'recover' | 'restore_management', { available: boolean }>>;
+  facts?: ManagementPlan['facts'];
+  opening?: {state: string; error_code?: string; error_message?: string};
   last_failure?: {
     action?: string;
     error_code: string;
@@ -142,6 +146,10 @@ export function ManagedServiceManagementDrawer(props: {
   ) => Promise<void>;
   onResource: (identity: string) => void;
   onSettings: () => void;
+  onOpen?: (refresh: boolean) => void;
+  onStart?: () => void;
+  onRestart?: () => void;
+  onLogs?: () => void;
   onLegacyRestore: () => void;
   onReinstall: () => void;
   canLegacyRestore: boolean;
@@ -163,13 +171,18 @@ export function ManagedServiceManagementDrawer(props: {
     action: 'uninstall',
   });
   const [plan, setPlan] = createSignal<ManagementPlan | null>(null);
+  const [inspection, setInspection] = createSignal<ManagementService | null>(null);
+  const facts = () => plan()?.facts ?? inspection()?.facts;
+  const currentService = () => inspection() ?? displayedService();
+  const inspecting = () => request().action === 'inspect';
   const [loading, setLoading] = createSignal(false);
   const [executing, setExecuting] = createSignal(false);
   const [error, setError] = createSignal('');
   const [revision, setRevision] = createSignal(0);
+  const [restartReview, setRestartReview] = createSignal(false);
   const [pathCopy, setPathCopy] = createSignal<'idle' | 'copied' | 'failed'>('idle');
   const copyPath = async () => {
-    try { await writeTextToClipboard(plan()?.facts.resources?.find((resource) => resource.resource_id === 'workspace')?.identity ?? displayedService()?.workspace_path ?? ''); setPathCopy('copied'); }
+    try { await writeTextToClipboard(facts()?.resources?.find((resource) => resource.resource_id === 'workspace')?.identity ?? displayedService()?.workspace_path ?? ''); setPathCopy('copied'); }
     catch { setPathCopy('failed'); }
   };
   const copyPathButton = () => <Button size="sm" variant="ghost" class="redeven-copy-action" data-icon-only data-copied={pathCopy() === 'copied' || undefined} onClick={() => void copyPath()} aria-label={text('copyPath')} title={text('copyPath')}>
@@ -184,7 +197,9 @@ export function ManagedServiceManagementDrawer(props: {
       () => {
         if (!props.service) { generation++; return; }
         setRequest({ action: props.initialAction });
+        setRestartReview(false);
         setPlan(null);
+        setInspection(props.service);
         setError('');
         setPathCopy('idle');
       },
@@ -199,12 +214,24 @@ export function ManagedServiceManagementDrawer(props: {
     const current = ++generation;
     setLoading(true);
     setError('');
-    void fetchLocalApiJSON<ManagementPlan>(
-      `/_redeven_proxy/api/managed-web-services/${encodeURIComponent(service.service_id)}/management-plans`,
-      { method: 'POST', body: JSON.stringify(body), signal: controller.signal },
+    const readOnly = body.action === 'inspect';
+    const timeout = window.setTimeout(() => { if(current===generation){setError('RESOURCE_INSPECTION_TIMEOUT');controller.abort();} }, 15000);
+    void fetchLocalApiJSON<ManagementPlan | ManagementService>(
+      `/_redeven_proxy/api/managed-web-services/${encodeURIComponent(service.service_id)}/${readOnly ? 'inspection' : 'management-plans'}`,
+      readOnly ? {signal:controller.signal} : { method: 'POST', body: JSON.stringify(body), signal: controller.signal },
     )
       .then((value) => {
-        if (current === generation) setPlan(value);
+        if (current === generation) {
+          if (readOnly) {
+            const latest = value as ManagementService;
+            if (latest.status === 'inspection_unavailable' || latest.facts?.runtime === 'unknown') {
+              const previous = inspection();
+              setInspection({ ...latest, ...(previous?.facts && previous.facts.runtime !== 'unknown' ? {status: previous.status, facts: previous.facts} : {}) });
+              setError(latest.problem_code || latest.opening?.error_code || 'RESOURCE_INSPECTION_UNAVAILABLE');
+            } else setInspection(latest);
+          }
+          else setPlan(value as ManagementPlan);
+        }
       })
       .catch((cause: unknown) => {
         if (current === generation && !controller.signal.aborted)
@@ -215,14 +242,15 @@ export function ManagedServiceManagementDrawer(props: {
           );
       })
       .finally(() => {
+        window.clearTimeout(timeout);
         if (current === generation) setLoading(false);
       });
-    onCleanup(() => controller.abort());
+    onCleanup(() => { window.clearTimeout(timeout); controller.abort(); });
   });
-  const choose = (action: ManagementAction) => setRequest({ action });
+  const choose = (action: ManagementAction) => {setPlan(null);setRequest({ action });};
   const execute = async () => {
     const current = plan();
-    if (!props.service || !current || current.blockers.length || executing() || loading() || error()) return;
+    if (inspecting() || !props.service || !current || current.blockers.length || executing() || loading() || error()) return;
     setExecuting(true);
     setError('');
     try {
@@ -245,7 +273,7 @@ export function ManagedServiceManagementDrawer(props: {
     Boolean(
       request().delete_data ||
         request().delete_workspace ||
-        plan()?.facts.resources?.some(
+        facts()?.resources?.some(
           (item) =>
             item.kind === 'network' &&
             item.presence !== 'absent' &&
@@ -263,6 +291,13 @@ export function ManagedServiceManagementDrawer(props: {
         : text(
             `actions.${plan()?.path === 'restore_management' ? 'restore' : request().action}`,
           );
+  const openingProblem = (code: string) => {
+    if (code === 'OPENING_URL_MISSING') return 'openingMissing';
+    if (code === 'OPENING_OUTPUT_UNAVAILABLE' || code === 'OPENING_OUTPUT_LIMIT' || code === 'OPENING_LINE_LIMIT') return 'openingOutput';
+    if (code === 'HOST_OPEN_TARGET_INVALID' || code === 'OPENING_URL_INVALID') return 'openingInvalid';
+    if (code === 'OPENING_ENTRY_AMBIGUOUS' || code === 'OPENING_ENTRY_UNAVAILABLE' || code === 'OPENING_GENERATION_UNAVAILABLE') return 'openingIdentity';
+    return 'openingUnavailable';
+  };
   const problem = (code: string) => i18n.t(managementProblemKey(code));
   return (
     <EnvAppDrawer
@@ -271,10 +306,12 @@ export function ManagedServiceManagementDrawer(props: {
         if (!open) props.onClose();
       }}
       title={displayedService()?.name ?? text('title')}
-      bodyDescription={text('title')}
+      bodyDescription={text(inspecting() ? 'inspectionDescription' : 'title')}
       class="service-management-panel"
       bodyClass="min-h-0"
       footer={<div class="service-management-footer" data-testid="service-management-footer">
+          <Show when={inspecting()}><Button size="sm" variant="outline" onClick={props.onClose}>{i18n.t('common.actions.close')}</Button></Show>
+          <Show when={!inspecting()}>
           <Button
             size="sm"
             variant={
@@ -300,6 +337,7 @@ export function ManagedServiceManagementDrawer(props: {
           <Show when={request().action === 'uninstall'}>
             <p class="text-xs leading-5 text-muted-foreground">{text('cancelMeaning')}</p>
           </Show>
+          </Show>
       </div>}
     >
       <div class="service-management-body" data-testid="service-management-drawer">
@@ -308,14 +346,14 @@ export function ManagedServiceManagementDrawer(props: {
           <p class="service-management-conclusion">
             {i18n.t(
               managementStatusKey(
-                displayedService()?.status ?? 'inspection_unavailable',
+                currentService()?.status ?? 'inspection_unavailable',
               ),
             )}
           </p>
-          <Show when={plan()?.facts.checked_at_unix_ms}>
+          <Show when={facts()?.checked_at_unix_ms}>
             <p class="text-xs text-muted-foreground">
               {text('checkedAt')}{' '}
-              {i18n.formatDateTime(plan()!.facts.checked_at_unix_ms, {
+              {i18n.formatDateTime(facts()!.checked_at_unix_ms, {
                 dateStyle: 'medium',
                 timeStyle: 'short',
               })}
@@ -352,17 +390,17 @@ export function ManagedServiceManagementDrawer(props: {
         <section class="service-management-section">
           <h3 class="text-sm font-semibold">{text('resources')}</h3>
           {props.ownershipReview}
-          <Show when={plan()}>
+          <Show when={facts()}>
             {(current) => (
               <div class="service-management-resource-summary">
                 <span>{text('runtimeInstance')}</span>
                 <span>
                   {text(
-                    current().facts.presence === 'absent'
+                    current().presence === 'absent'
                       ? 'removed'
-                      : current().facts.presence === 'unknown'
+                      : current().presence === 'unknown'
                         ? 'unknown'
-                        : current().facts.runtime === 'running'
+                        : current().runtime === 'running'
                           ? 'status.running'
                           : 'status.stopped',
                   )}
@@ -370,7 +408,7 @@ export function ManagedServiceManagementDrawer(props: {
               </div>
             )}
           </Show>
-          <For each={plan()?.facts.resources ?? []}>
+          <For each={facts()?.resources ?? []}>
             {(resource) => (
               <div class="service-management-resource">
                 <div class="service-management-resource-summary">
@@ -438,7 +476,7 @@ export function ManagedServiceManagementDrawer(props: {
               </div>
             )}
           </For>
-          <Show when={!plan()?.facts.resources?.some((resource) => resource.resource_id === 'workspace')}><div class="service-management-path">
+          <Show when={!facts()?.resources?.some((resource) => resource.resource_id === 'workspace')}><div class="service-management-path">
             <div class="service-management-section-heading"><span>{text('workspace')}</span>{copyPathButton()}</div>
             <p class="service-management-resource-identity">{displayedService()?.workspace_path}</p>
           </div></Show>
@@ -462,13 +500,31 @@ export function ManagedServiceManagementDrawer(props: {
         </section>
         <section class="service-management-section">
           <h3 class="text-sm font-semibold">{text('nextAction')}</h3>
+          <Show when={inspecting()}>
+            <Show when={currentService()?.opening?.error_code}><p class="text-sm leading-6 text-warning" role="alert">{text(openingProblem(currentService()?.opening?.error_code ?? ''))}</p><Show when={currentService()?.opening?.error_code === 'OPENING_URL_MISSING' || currentService()?.opening?.error_code === 'OPENING_OUTPUT_UNAVAILABLE'}><p class="text-xs leading-5 text-muted-foreground">{text('restartEntranceImpact')}</p></Show></Show>
+            <Show when={error()}><p role="alert" class="text-sm leading-6 text-destructive">{problem(error())}</p></Show>
+            <Show when={restartReview()}><div class="space-y-3 rounded-lg border p-3"><p class="text-sm leading-6">{text('restartReview')}</p><div class="flex flex-wrap gap-2"><Button size="sm" onClick={props.onRestart} disabled={loading() || Boolean(props.operation)}>{i18n.t('webServices.managed.restart')}</Button><Button size="sm" variant="outline" onClick={() => setRestartReview(false)}>{i18n.t('common.actions.cancel')}</Button></div></div></Show>
+            <div class="flex flex-wrap gap-2">
+              <Show when={currentService()?.actions?.open?.available}><Button size="sm" onClick={() => props.onOpen?.(Boolean(currentService()?.opening?.error_code))} disabled={loading() || Boolean(props.operation)}>{text(currentService()?.opening?.error_code ? 'retryOpen' : 'openService')}</Button></Show>
+              <Show when={currentService()?.actions?.start?.available}><Button size="sm" onClick={props.onStart} disabled={loading() || Boolean(props.operation)}>{i18n.t('webServices.managed.start')}</Button></Show>
+              <Show when={currentService()?.actions?.restart?.available && currentService()?.opening?.error_code}><Button size="sm" variant="outline" onClick={() => setRestartReview(true)} disabled={loading() || Boolean(props.operation)}>{i18n.t('webServices.managed.restart')}</Button></Show>
+              <Show when={currentService()?.actions?.recover?.available}><Button size="sm" variant="outline" onClick={() => choose('recover')}>{text('actions.recover')}</Button></Show>
+              <Show when={currentService()?.management_state === 'detached'}><Button size="sm" variant="outline" onClick={() => choose('restore')}>{text('actions.restore')}</Button></Show>
+              <Button size="sm" variant="outline" onClick={props.onLogs}>{i18n.t('webServices.managed.logs')}</Button>
+              <Button size="sm" variant="outline" onClick={props.onSettings}>{text('settings')}</Button>
+              <Button size="sm" variant="ghost" onClick={() => choose('uninstall')}>{text(retainedArchive() ? 'cleanupRetained' : 'actions.uninstall')}</Button>
+            </div>
+          </Show>
+          <Show when={!inspecting()}>
+            <Button size="sm" variant="ghost" onClick={() => choose('inspect')}>{text('title')}</Button>
+
           <div class="service-management-section-heading">
             <span class="text-[length:var(--floe-type-body)] font-medium">{text(`actions.${request().action}`)}</span>
             <Dropdown align="end" triggerAriaLabel={text('otherActions')} disabled={executing()} triggerClass="web-services-menu-trigger"
               items={[
                 { id: 'uninstall', label: text(retainedArchive() ? 'cleanupRetained' : 'actions.uninstall') },
-                { id: 'recover', label: text('actions.recover') },
-                ...(displayedService()?.actions?.stop?.available && plan()?.facts.runtime === 'running' ? [{ id: 'stop', label: text('actions.stop') }] : []),
+                ...(currentService()?.actions?.recover?.available ? [{ id: 'recover', label: text('actions.recover') }] : []),
+                ...(displayedService()?.actions?.stop?.available && facts()?.runtime === 'running' ? [{ id: 'stop', label: text('actions.stop') }] : []),
               ].filter((item) => item.id !== request().action).map((item) => ({ ...item, disabled: executing() }))}
               onSelect={(id) => choose(id as ManagementAction)}
               trigger={<span>{text('otherActions')}<ChevronDown class="ml-1.5 h-3.5 w-3.5" aria-hidden="true" /></span>} />
@@ -586,7 +642,7 @@ export function ManagedServiceManagementDrawer(props: {
               request().action === 'uninstall' &&
               (request().delete_data ||
                 request().delete_workspace ||
-                plan()?.facts.resources?.some(
+                facts()?.resources?.some(
                   (item) =>
                     item.kind === 'network' &&
                     !request().retain_resource_ids?.includes(item.resource_id),
@@ -663,6 +719,7 @@ export function ManagedServiceManagementDrawer(props: {
               </Show>
             </div>
           </details>
+          </Show>
         </section>
       </div>
     </EnvAppDrawer>

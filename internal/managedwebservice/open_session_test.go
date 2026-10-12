@@ -67,6 +67,7 @@ func TestConcurrentOpenSharesOneHook(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = killManagedProcessPID(hostPIDFromIdentity(identity)) })
+	driver.removeOpenSession(service)
 	countPath := filepath.Join(driver.runDirectory(service), "open-count")
 	if err := os.WriteFile(countPath, nil, 0600); err != nil {
 		t.Fatal(err)
@@ -96,6 +97,10 @@ func TestConcurrentOpenSharesOneHook(t *testing.T) {
 }
 
 type staticOpeningTestDriver struct{ inspectionTestDriver }
+
+func (d staticOpeningTestDriver) OpeningLaunch(_ context.Context, s *pfregistry.ManagedService) (serviceOpeningLaunch, error) {
+	return serviceOpeningLaunch{Generation: s.RuntimeIdentity, Port: s.RuntimePort}, nil
+}
 
 func (d staticOpeningTestDriver) Start(_ context.Context, s *pfregistry.ManagedService) (string, error) {
 	return s.RuntimeIdentity, nil
@@ -132,11 +137,24 @@ func TestContainerAndComposeOpenPreserveAppliedNonRootPath(t *testing.T) {
 			if _, err := manager.startRuntime(context.Background(), service, driver); err != nil {
 				t.Fatal(err)
 			}
+			if err := manager.waitHealthy(context.Background(), service); err != nil {
+				t.Fatal(err)
+			}
 			spec.Endpoint.Path = "/changed"
 			updateRuntimeResolutionTestTemplate(t, registry, template, spec)
 			session, err := manager.OpenSession(context.Background(), service.ServiceID, OpenSessionRequest{RequestID: "applied-static-opening"})
 			if err != nil || session.AppPath != "/dashboard?tab=initial#panel" {
 				t.Fatalf("applied path=%+v err=%v", session, err)
+			}
+			session, err = manager.OpenSession(context.Background(), service.ServiceID, OpenSessionRequest{RequestID: "refresh-fixed-opening", Refresh: true})
+			if err != nil || session.AppPath != "/dashboard?tab=initial#panel" {
+				t.Fatal("refresh replaced an applied fixed path", err)
+			}
+			if err := os.Remove(manager.staticOpeningPath(service)); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := manager.OpenSession(context.Background(), service.ServiceID, OpenSessionRequest{RequestID: "lost-fixed-record"}); managedErrorCode(err) != "SERVICE_OPEN_TARGET_UNAVAILABLE" {
+				t.Fatal("missing record reconstructed a changed fixed entrance", err)
 			}
 			if err := os.WriteFile(manager.staticOpeningPath(service), []byte(`{"schema_version":99}`), 0600); err != nil {
 				t.Fatal(err)

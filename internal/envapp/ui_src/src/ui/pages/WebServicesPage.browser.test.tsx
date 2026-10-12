@@ -25,9 +25,9 @@ const base = {
   desired_state: 'running', observed_state: 'running', status: 'running', primary_action: 'stop', management_state: 'active',
   forward_id: 'pf-running', runtime_port: 3000, access_mode: 'desktop_loopback',
   release_status: { schema_version: 2, current_release: { schema_version: 1, kind: 'npm', source: '@example/dashboard', version: '1.0.0' }, check_status: 'pending' },
-  actions: { open: { available: true }, inspect: { available: true }, start: { available: false }, stop: { available: true }, restart: { available: true }, uninstall: { available: true }, retry: { available: false } },
+  actions: { recover: {available:false}, open: { available: true }, inspect: { available: true }, start: { available: false }, stop: { available: true }, restart: { available: true }, uninstall: { available: true }, retry: { available: false } },
 };
-const retained = { ...base, name: 'Example workspace', deployment: 'container', service_id: 'sample-cleanup', status: 'uninstall_pending', primary_action: 'inspect', observed_state: 'missing', problem_code: 'RESOURCE_IN_USE', workspace_path: '/Users/demo/Services/workspace', forward_id: 'pf-cleanup', actions: { ...base.actions, open: { available: false } } };
+const retained = { ...base, name: 'Example workspace', deployment: 'container', service_id: 'sample-cleanup', status: 'uninstall_pending', primary_action: 'inspect', observed_state: 'missing', problem_code: 'RESOURCE_IN_USE', workspace_path: '/Users/demo/Services/workspace', forward_id: 'pf-cleanup', actions: { ...base.actions, open: { available: false }, recover: { available: true } } };
 const saved = { forward_id: 'saved', name: 'Local dashboard', description: '', target_url: 'http://localhost:3002', access_mode: 'desktop_loopback', created_at_unix_ms: 1, updated_at_unix_ms: 1, last_opened_at_unix_ms: Date.now(), health: { status: 'healthy', last_checked_at_unix_ms: Date.now(), latency_ms: 8, last_error: '' } };
 const settle = async () => { await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))); };
 const media = commands as unknown as {
@@ -55,6 +55,7 @@ describe('Web Services product interaction', () => {
       if (url.endsWith('/catalog')) return { templates: [] };
       if (url.endsWith('/managed-web-services')) { if (failRefresh) throw new Error('offline'); return { services: records }; }
       if (url.endsWith('/forwards')) { if (failRefresh) throw new Error('offline'); return { forwards: [saved] }; }
+      if (url.endsWith('/inspection')) { const id=url.split('/').at(-2); return {...records.find(item=>item.service_id===id),facts:{presence:'present',runtime:'running',ownership:'verified',checked_at_unix_ms:Date.now(),resources:[{ resource_id:'data',kind:'volume',identity:'example-volume',presence:'present',ownership:'verified',references:[] }]}}; }
       if (url.endsWith('/management-plans')) {
         const request = JSON.parse(String(options?.body));
         return { plan_digest: 'reviewed-plan', request, path: request.action, blockers: [], facts: { presence: 'absent', runtime: 'stopped', ownership: 'verified', checked_at_unix_ms: Date.now(), resources: [{ resource_id: 'data', kind: 'volume', identity: 'example-volume', presence: 'present', ownership: 'verified', references: [{ container_id: 'other-container', name: 'Other workspace', state: 'running' }] }] } };
@@ -140,9 +141,9 @@ describe('Web Services product interaction', () => {
     records = [{ ...retained, deployment: 'compose', status, problem_code: problem }];
     await mount(360);
     assertLayout();
-    await userEvent.click(page.getByRole('button', { name: 'Example workspace: Review and resolve', exact: true }));
+    await userEvent.click(page.getByRole('button', { name: 'Example workspace: Details and diagnostics', exact: true }));
     await expect.poll(() => document.querySelector('[data-testid="service-management-drawer"]')).toBeTruthy();
-    await expect.poll(() => api.fetch.mock.calls.some(([url]) => String(url).endsWith('/management-plans'))).toBe(true);
+    await expect.poll(() => api.fetch.mock.calls.some(([url]) => String(url).endsWith('/inspection'))).toBe(true);
     expect(document.querySelector('[data-testid="service-management-footer"]')).toBeTruthy();
   });
 
@@ -184,13 +185,14 @@ describe('Web Services product interaction', () => {
 
   it('reviews an exception in the same sidebar, confirms its plan, and focuses the remaining collection', async () => {
     await mount(680);
-    await userEvent.click(page.getByRole('button', { name: 'Example workspace: Review and resolve', exact: true }));
+    await userEvent.click(page.getByRole('button', { name: 'Example workspace: Details and diagnostics', exact: true }));
     await expect.poll(() => document.querySelector('[data-testid="service-management-footer"]')).toBeTruthy();
     expect(host.querySelector('[data-selected="true"]')?.textContent).toContain('Example workspace');
     const footer = document.querySelector<HTMLElement>('[data-testid="service-management-footer"]')!;
     expect(footer.getBoundingClientRect().bottom).toBeLessThanOrEqual(960);
     await new Promise((resolve) => setTimeout(resolve, 260));
     expect((await page.screenshot({ save: false })).length).toBeGreaterThan(1_000);
+    await userEvent.click(page.getByRole('button', { name: 'Uninstall', exact: true }));
     await userEvent.click(page.getByRole('button', { name: 'Keep data and complete uninstall', exact: true }));
     await expect.poll(() => document.querySelector('[data-testid="service-management-drawer"]')).toBeNull();
     await expect.poll(() => host.querySelectorAll('[data-managed-service-id]').length).toBe(1);
@@ -199,7 +201,7 @@ describe('Web Services product interaction', () => {
   });
 
   async function executeRecovery(mode: 'immediate' | 'streamed' | 'stream-error', state = 'succeeded') {
-    records = [{ ...base, status: 'recovery_required', observed_state: 'missing', primary_action: 'inspect', actions: { ...base.actions, open: { available: false } } }];
+    records = [{ ...base, status: 'recovery_required', observed_state: 'missing', primary_action: 'inspect', actions: { ...base.actions, open: { available: false }, recover: { available: true } } }];
     const completed: ManagedOperation = {
       operation_id: 'recovery-operation', service_id: base.service_id, action: 'recover',
       state, stage: state === 'succeeded' ? 'completed' : 'failed', progress_current: 7, progress_total: 7,
@@ -221,8 +223,10 @@ describe('Web Services product interaction', () => {
       return original(url, options);
     });
     await mount(680);
-    await userEvent.click(page.getByRole('button', { name: 'Example dashboard: Review and resolve', exact: true }));
+    await userEvent.click(page.getByRole('button', { name: 'Example dashboard: Details and diagnostics', exact: true }));
     await userEvent.click(page.getByRole('button', { name: 'Recover service', exact: true }));
+    await expect.poll(()=>document.querySelector('.service-management-execute')).toBeTruthy();
+    await userEvent.click(page.elementLocator(document.querySelector<HTMLButtonElement>('.service-management-execute')!));
     if (mode === 'streamed') {
       await expect.poll(() => api.stream.mock.calls.length).toBe(1);
       if (state === 'succeeded') records = [base];
@@ -266,7 +270,7 @@ describe('Web Services product interaction', () => {
     await expect.poll(() => document.querySelector('[data-testid="service-management-drawer"]')).toBeNull();
     await new Promise((resolve) => setTimeout(resolve, 2_200));
     expect(row.querySelector('[data-testid="managed-operation-header"]')?.textContent).toContain('Failed');
-    expect((page.getByRole('button', { name: 'Example dashboard: Review and resolve', exact: true }).element() as HTMLButtonElement).disabled).toBe(false);
+    expect((page.getByRole('button', { name: 'Example dashboard: Details and diagnostics', exact: true }).element() as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('replaces a failed recovery with the next reviewed success and restores opening', async () => {
@@ -282,8 +286,10 @@ describe('Web Services product interaction', () => {
       }
       return original(url, options);
     });
-    await userEvent.click(page.getByRole('button', { name: 'Example dashboard: Review and resolve', exact: true }));
+    await userEvent.click(page.getByRole('button', { name: 'Example dashboard: Details and diagnostics', exact: true }));
     await userEvent.click(page.getByRole('button', { name: 'Recover service', exact: true }));
+    await expect.poll(()=>document.querySelector('.service-management-execute')).toBeTruthy();
+    await userEvent.click(page.elementLocator(document.querySelector<HTMLButtonElement>('.service-management-execute')!));
     await expect.poll(() => document.querySelector('[data-testid="service-management-drawer"]')).toBeNull();
     await expect.poll(() => row.querySelector('[data-testid="managed-service-status"]')?.textContent).toBe('Running');
     await expect.poll(() => row.querySelector('[data-testid="managed-operation-disclosure"]'), { timeout: 4_000 }).toBeNull();
@@ -296,7 +302,7 @@ describe('Web Services product interaction', () => {
     await expect.poll(() => document.querySelector('[data-testid="service-management-drawer"] [role="alert"]')).toBeTruthy();
     await userEvent.keyboard('{Escape}');
     await expect.poll(() => document.querySelector('[data-testid="service-management-drawer"]')).toBeNull();
-    const review = page.getByRole('button', { name: 'Example dashboard: Review and resolve', exact: true });
+    const review = page.getByRole('button', { name: 'Example dashboard: Details and diagnostics', exact: true });
     expect((review.element() as HTMLButtonElement).disabled).toBe(false);
     await userEvent.click(review);
     await expect.poll(() => document.querySelector('[data-testid="service-management-footer"] button:not(:disabled)')).toBeTruthy();
@@ -315,7 +321,7 @@ describe('Web Services product interaction', () => {
     await expect.poll(() => host.querySelector('[data-managed-service-id="sample-running"] [data-testid="managed-service-status"]')?.textContent).toBe('Submitting request…');
     expect((start.element() as HTMLButtonElement).disabled).toBe(true);
     expect(host.querySelector<HTMLButtonElement>('[data-testid="web-services-refresh"]')?.disabled).toBe(false);
-    await userEvent.click(page.getByRole('button', { name: 'Example workspace: Review and resolve', exact: true }));
+    await userEvent.click(page.getByRole('button', { name: 'Example workspace: Details and diagnostics', exact: true }));
     await expect.poll(() => document.querySelector('[data-testid="service-management-drawer"]')).toBeTruthy();
     await userEvent.keyboard('{Escape}');
     records = records.map((item) => item.service_id === base.service_id ? base : item);
@@ -356,7 +362,7 @@ describe('Web Services product interaction', () => {
 
   it('keeps reviewed content intact during the sidebar exit', async () => {
     await mount();
-    await userEvent.click(page.getByRole('button', { name: 'Example workspace: Review and resolve', exact: true }));
+    await userEvent.click(page.getByRole('button', { name: 'Example workspace: Details and diagnostics', exact: true }));
     await expect.poll(() => document.querySelector('[data-testid="service-management-drawer"]')?.textContent).toContain('example-volume');
     await new Promise((resolve) => setTimeout(resolve, 260));
     await userEvent.keyboard('{Escape}');
@@ -383,6 +389,9 @@ describe('Web Services product interaction', () => {
 
 let releaseTestTransport: (() => void) | undefined;
 beforeEach(async () => {
-  releaseTestTransport = await bindTestSessionHTTP(api.stream);
+  releaseTestTransport = await bindTestSessionHTTP(async (input,init)=>{
+ if(new Headers(init?.headers).get('Accept')==='text/event-stream')return api.stream(input,init);
+ return new Response(JSON.stringify({ok:true,data:await api.fetch(String(input),init)}),{status:200});
+});
 });
 afterEach(() => releaseTestTransport?.());

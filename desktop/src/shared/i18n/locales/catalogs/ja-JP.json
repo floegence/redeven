@@ -1324,7 +1324,10 @@
     "unavailableServiceCheck": "サービスが起動していることを確認してください。",
     "unavailablePortCheck": "サービスがこのポートで待ち受けていることを確認してください。",
     "retry": "再試行",
-    "retrying": "再試行しています..."
+    "retrying": "再試行しています...",
+    "authenticationTitle": "サービスの接続先に認証が必要です",
+    "authenticationSummary": "サービスは応答しましたが、管理された接続先の認証を拒否しました。現在の接続先を準備して再試行してください。アプリは実行を続けます。",
+    "authenticationRetry": "接続先を準備して再試行"
   },
   "language": {
     "systemDefault": "システム既定",

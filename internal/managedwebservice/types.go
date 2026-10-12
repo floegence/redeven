@@ -94,6 +94,7 @@ type HostLifecyclePlan struct {
 type Template struct {
 	DefaultLocale         string                            `json:"default_locale,omitempty"`
 	GitSource             *pfregistry.ManagedTemplateSource `json:"git_source,omitempty"`
+	SourceRuntimeSHA256   string                            `json:"-"`
 	SourceSHA256          string                            `json:"source_sha256,omitempty"`
 	SourceDirectory       string                            `json:"-"`
 	TemplateID            string                            `json:"template_id"`
@@ -429,8 +430,9 @@ type ActionCapability struct {
 }
 
 type ServiceOpening struct {
-	State     string `json:"state"`
-	ErrorCode string `json:"error_code,omitempty"`
+	ErrorMessage string `json:"error_message,omitempty"`
+	State        string `json:"state"`
+	ErrorCode    string `json:"error_code,omitempty"`
 }
 
 type ServiceActions struct {
@@ -469,14 +471,22 @@ type LogResult struct {
 }
 
 type OpenSessionRequest struct {
+	Refresh   bool   `json:"refresh,omitempty"`
 	RequestID string `json:"request_id"`
 }
 
+type ManagedEntranceContext struct {
+	ServiceID        string `json:"service_id"`
+	LaunchGeneration string `json:"launch_generation"`
+}
+
 type OpenSession struct {
-	State     string                       `json:"state"`
-	Forward   *pfregistry.Forward          `json:"forward,omitempty"`
-	AppPath   string                       `json:"app_path,omitempty"`
-	Operation *pfregistry.ManagedOperation `json:"operation,omitempty"`
+	LaunchGeneration string                       `json:"launch_generation,omitempty"`
+	ManagedEntrance  *ManagedEntranceContext      `json:"managed_entrance,omitempty"`
+	State            string                       `json:"state"`
+	Forward          *pfregistry.Forward          `json:"forward,omitempty"`
+	AppPath          string                       `json:"app_path,omitempty"`
+	Operation        *pfregistry.ManagedOperation `json:"operation,omitempty"`
 }
 
 type Error struct {

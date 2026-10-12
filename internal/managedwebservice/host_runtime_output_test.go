@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -35,7 +36,7 @@ func TestParseHostStartupTargetAcceptsOnlyExactLoopbackEndpoint(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got, err := parseHostOpenURL(test.value, endpoint, 39191)
+			got, err := parseServiceOpeningURL(test.value, endpoint, 39191)
 			if test.wantCode != "" {
 				if code := managedErrorCode(err); code != test.wantCode {
 					t.Fatalf("parse error = %v, code=%q", err, code)
@@ -73,6 +74,8 @@ func TestHostDynamicOpenTargetPersistsPrivateRedactedSessionAndRecovers(t *testi
 	service.RuntimeIdentity = identity
 	t.Cleanup(func() { _ = killManagedProcessPID(hostPIDFromIdentity(identity)) })
 
+	manager.host = first
+	prepareHostTestEntrance(t, manager, service)
 	appPath, err := first.resolveOpenSession(service)
 	if err != nil || appPath != "/app?token="+token {
 		t.Fatalf("open session = %q, err=%v", appPath, err)
@@ -137,14 +140,16 @@ func TestHostOpeningFailurePreservesApplication(t *testing.T) {
 				t.Fatal(err)
 			}
 			t.Cleanup(func() { _ = killManagedProcessPID(hostPIDFromIdentity(identity)) })
-			state, err := driver.readRunState(service)
-			if err != nil || state.OpenErrorCode != test.code {
+			manager.host = driver
+			prepareHostTestEntrance(t, manager, service)
+			state, err := manager.readOpeningState(service)
+			if err != nil || state.ErrorCode != test.code {
 				t.Fatalf("opening state=%+v, err=%v", state, err)
 			}
 			if !managedProcessRunning(hostPIDFromIdentity(identity)) {
 				t.Fatal("opening failure stopped the application")
 			}
-			if strings.Contains(state.OpenErrorMessage, "secret") {
+			if strings.Contains(state.ErrorMessage, "secret") {
 				t.Fatal("hook output leaked")
 			}
 		})
@@ -183,6 +188,8 @@ func TestHostOpeningFromApplicationConfigurationWithoutOutputCapture(t *testing.
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = killManagedProcessPID(hostPIDFromIdentity(identity)) })
+	manager.host = driver
+	prepareHostTestEntrance(t, manager, service)
 	if path, err := driver.resolveOpenSession(service); err != nil || path != "/settings?key=from-config" {
 		t.Fatalf("configuration opening failed: %v", err)
 	}
@@ -198,4 +205,13 @@ func TestHostOpeningFromApplicationConfigurationWithoutOutputCapture(t *testing.
 	if !managedProcessRunning(hostPIDFromIdentity(identity)) {
 		t.Fatal("corrupt opening record stopped the application")
 	}
+}
+
+func prepareHostTestEntrance(t *testing.T, manager *Manager, service *pfregistry.ManagedService) {
+	t.Helper()
+	launch, err := manager.openingLaunch(context.Background(), service)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, _ = manager.prepareServiceOpening(context.Background(), service, launch, openingPreparation{NewLaunch: true})
 }

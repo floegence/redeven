@@ -43,11 +43,7 @@ Identity upgrade writes a private journal containing old/new identities and vali
 
 ## Opening and presentation
 
-A verified running instance owns its applied endpoint and private opening session. Current template changes remain pending until an explicit apply-and-restart action. No executable template snapshot is stored. Open uses the saved verified entrance when the current template differs, and otherwise runs the current authorized opening hooks. Missing opening information, invalid output, or hook failure is retryable without an implicit Restart.
-
-Container and Compose services retain their static declared path, query, and fragment in the same private opening-record format, bound to the applied resource identity and Runtime digest. New starts save that declaration before running; legacy instances without a record initialize it on first observation through their existing static-template resolver. Later template edits cannot overwrite a saved entrance, and a damaged record fails visibly. This grants no Host script execution to either deployment.
-
-The backend provides `actions.open`, `actions.restore_management`, opening state, and pending changes. Renderer uses those capabilities, presents opening failure separately from Running, and retains historical operation diagnostics without making them the current process state. Concurrent Open requests for one service share one hook execution; cancelling one browser request does not cancel another caller's shared work. The existing browser transaction and Desktop window identity suppress duplicate windows.
+Host supplies verified native launch identity and executes only the applied authorized hooks through the common [managed opening contract](managed-web-service-opening.md). That owner prepares and privately saves results across Host, Container and Compose, separates opening availability from Running, and preserves valid old entrances when the current template changes. The driver stores only launch facts and after-start hook completion, never executable snapshots or a second entrance cache. Preparation follows healthy startup and can be retried without stopping the application.
 
 # Boundaries
 

@@ -1324,7 +1324,10 @@
     "unavailableServiceCheck": "确认服务已经启动。",
     "unavailablePortCheck": "确认服务正在监听此端口。",
     "retry": "重新尝试",
-    "retrying": "正在重新尝试..."
+    "retrying": "正在重新尝试...",
+    "authenticationTitle": "服务入口需要认证",
+    "authenticationSummary": "服务已有响应，但拒绝了托管入口。请重新准备当前入口后重试。应用会继续运行。",
+    "authenticationRetry": "重新准备入口并重试"
   },
   "language": {
     "systemDefault": "跟随系统",

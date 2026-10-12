@@ -385,6 +385,7 @@ type ContainerInspect struct {
 	State           ContainerState  `json:"state"`
 	Health          string          `json:"health,omitempty"`
 	CreatedAtUnixMs int64           `json:"created_at_unix_ms,omitempty"`
+	StartedAt       string          `json:"started_at,omitempty"`
 	Runtime         RuntimeSummary  `json:"runtime"`
 	Labels          LabelSummary    `json:"labels"`
 	Ports           []PortSummary   `json:"ports,omitempty"`

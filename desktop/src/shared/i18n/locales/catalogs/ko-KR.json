@@ -1324,7 +1324,10 @@
     "unavailableServiceCheck": "서비스가 실행 중인지 확인하세요.",
     "unavailablePortCheck": "서비스가 이 포트에서 수신 중인지 확인하세요.",
     "retry": "다시 시도",
-    "retrying": "다시 시도하는 중..."
+    "retrying": "다시 시도하는 중...",
+    "authenticationTitle": "서비스 접속에 인증이 필요합니다",
+    "authenticationSummary": "서비스가 응답했지만 관리형 접속 주소의 인증을 거부했습니다. 현재 접속 주소를 준비한 후 다시 시도하세요. 앱은 계속 실행됩니다.",
+    "authenticationRetry": "접속 주소 준비 후 다시 시도"
   },
   "language": {
     "systemDefault": "시스템 기본값",
