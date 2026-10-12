@@ -10,8 +10,8 @@ timestamp: 2026-10-11T00:00:00Z
 Published Floe owns layout, routing, viewport interaction and route painting.
 Tessiven supplies canonical topology projection, localized view controls and
 palette. Folding, filtering and navigation never rewrite a saved document.
-Complete paths remain inspectable while offscreen geometry cannot expand the
-painted SVG layer. Invalid graph data or actual worker failures stay visible;
+Canonical relationships remain inspectable while only the current connection
+scope is routed and painted. Offscreen geometry cannot expand the SVG layer. Invalid graph data or actual worker failures stay visible;
 view changes retain the last valid scene until the next layout is ready.
 
 # Contract
@@ -41,10 +41,48 @@ without being forced across each other. Automatic endpoint lanes separate
 shared segments without changing explicit port or self-loop constraints.
 Routes avoid intervening cards and unrelated group frames. Explicit port sides,
 relationship identities, and canonical endpoints remain unchanged. Dense
-cross-layer topologies can still require crossings; hover and focus isolate
-related routes without hiding relationships from the saved document.
+cross-layer topologies can still require crossings. The browsing scope below
+limits visible routes without changing saved relationships.
 Positioned objects without relationships still contribute their actual world
 bounds, so fitting a newly mapped or isolated node keeps it inside the viewport.
+
+## Connection scopes
+
+Default browsing shows one directed overview connector per root endpoint pair.
+Grouped endpoints resolve to their root group; ungrouped hosts and external
+resources retain their own endpoints. Counts deduplicate original relation IDs,
+and reverse calls retain an independent arrow. Group-internal relationships
+remain in the canonical pool overview and never create a group self-loop.
+Clicking a connector opens the existing categorized relationship browser; the
+[relationship summary contract](tessiven-relationship-summaries.md) owns complete
+counts, evidence, pagination and canonical Flower references.
+
+Hovering or keyboard-focusing a group shows only its incident overview edges.
+Focusing a physical host shows only its incoming and outgoing relationships,
+including same-pool cross-host calls. Exact visible targets use the appropriate
+host appearance; collapsed or aggregated targets in another pool use its border.
+Hidden targets in the same pool remain accessible through pool details rather
+than a misleading connector to the host's enclosing frame. Service-level
+statements retain logical endpoints and never invent instance combinations.
+Shared hosts keep linked coloring; one target appearance is chosen by exact
+instance membership, then current group, then document group order.
+
+Unrelated paths are absent, including their hit targets and keyboard entries.
+Moving from an object to its displayed connector or open detail panel retains
+that scope. Leaving uses a 120ms buffer; entering another object switches
+immediately. Touch activation uses the same scope. Blank activation, Escape
+and beginning a drag restore the overview. Only newly mounted paths fade in,
+and reduced-motion preferences disable that transition.
+
+Floe places the complete topology with deferred routing, then routes requested
+edges in its published worker against fixed node geometry. Overview paths are
+precomputed; host paths are computed on demand and retained in a 32-entry LRU
+cache for one geometry generation. A new layout clears the cache. Superseded
+requests are cancelled, and late results are rejected by cancellation and
+geometry generation. Hover never triggers layout or changes positions, sizes,
+bounds or viewport. Stable node arrays preserve card and minimap indexing.
+The interactive overview and library thumbnails always paint the root overview,
+even while the main canvas shows a focused host's detailed paths.
 
 ## Controls and rendering
 
@@ -93,8 +131,11 @@ culling to alter the complete inspectable model.
 # Evidence
 
 - `internal/tessiven_ui/src/TessivenGraph.tsx` - Controlled graph projection, view controls and browse state.
+- `internal/tessiven_ui/src/connections.ts` - Canonical root and focused-host edge projections.
 - `internal/tessiven_ui/src/projection.ts` - Canonical identities, visibility and layer mapping.
 - `internal/tessiven_ui/src/TessivenThumbnail.tsx` - Shared library layout projection.
 - `internal/envapp/ui_src/scripts/checkTessivenPan.mjs` - Actual pointer drags at overview and detail zoom with frame, long-task and coordinate-following budgets.
 - `internal/envapp/ui_src/src/styles/tessiven-controls.browser.test.tsx` - Every theme, narrow/short surfaces and projected menu interaction.
 - `internal/envapp/ui_src/src/styles/tessiven-scale.browser.test.tsx` - Complete 100, 500 and 1,000 physical host projection and worker qualification.
+
+- `internal/envapp/ui_src/src/styles/tessiven-connections.browser.test.tsx` - Scope transitions, exact details and stable geometry.

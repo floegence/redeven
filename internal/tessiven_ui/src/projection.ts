@@ -37,6 +37,8 @@ export type Projection = {
   internalRelations: Map<string, InternalRelation[]>;
   groupRelations: Map<string, RelationSummary[]>;
   relationDetails: Map<string, RelationDetail>;
+  nodeRelations: Map<string, RelationDetail[]>;
+  serviceTargets: ReadonlyMap<string, ReadonlySet<string>>;
   appearances: Map<string, string[]>;
   memberships: Map<string, Group[]>;
   instanceMemberships: Map<string, Group[]>;
@@ -325,6 +327,13 @@ export function projectCanvas(
   const groupRelations = new Map(groups.map(group => [group.id, summarizeRelations(
     [...(poolIDs.get(group.id) ?? [])].map(id => relationIndex.details.get(id)!), new Set(group.nodeRefs),
   )]));
+  const nodeRelations = new Map<string, RelationDetail[]>();
+  for (const detail of relationIndex.details.values())
+    for (const nodeId of detail.nodeRefs) {
+      const values = nodeRelations.get(nodeId) ?? [];
+      values.push(detail);
+      nodeRelations.set(nodeId, values);
+    }
   for (const node of nodes) {
     const card = cards.get(node.id);
     if (card?.kind === 'group') {
@@ -354,7 +363,7 @@ export function projectCanvas(
         return rank(a.id) - rank(b.id);
       },
     );
-  return { graph: { nodes, edges }, cards, relations: relationGroups, internalRelations, groupRelations, relationDetails: relationIndex.details, appearances, memberships, instanceMemberships: instanceGroups };
+  return { graph: { nodes, edges }, cards, relations: relationGroups, internalRelations, groupRelations, relationDetails: relationIndex.details, nodeRelations, serviceTargets, appearances, memberships, instanceMemberships: instanceGroups };
 }
 
 export function projectPositions(document: RenderModel, projection: Projection) {

@@ -13,9 +13,12 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { chromium, _electron } from 'playwright';
 import { dump } from 'js-yaml';
 import { builtInShellThemePresets } from '@floegence/floe-webapp-core/themes';
+import qualifyConnections from './fixtures/canvasConnections.mjs';
+import { connectionDocument } from '../src/styles/tessiven-connections.fixture.ts';
 import { repeatedCallsDocument } from '../src/styles/tessiven-relation-summary.fixture.ts';
 
-const [binary, outputArgument, desktopBundle] = process.argv.slice(2);
+const connections = process.argv.includes('--connections');
+const [binary, outputArgument, desktopBundle] = process.argv.slice(2).filter(value => value !== '--connections');
 assert(binary && outputArgument, 'Usage: <Runtime bundle binary> <evidence directory> [Desktop bundle]');
 const root = path.resolve(import.meta.dirname, '../../../..'), output = path.resolve(outputArgument);
 const temp = await mkdtemp(path.join(os.tmpdir(), 'redeven-relation-summary-')), state = path.join(temp, 'state'), marker = randomUUID();
@@ -71,8 +74,7 @@ async function measurePointerPan(count) {
   assert(metric.longTaskMax < 100, 'Pointer drag long-task budget');
   await page.getByRole('button', { name: 'Fit canvas', exact: true }).click();
 }
-async function canvas(count) {
-  const id = `pool-${count}`;
+async function openCanvas(id) {
   if (app) {
     const environment = app.context().pages().find(candidate => candidate.url().includes('/_redeven_proxy/env/') && !new URL(candidate.url()).searchParams.has('canvas'));
     assert(environment, 'Owned Env App session');
@@ -80,6 +82,9 @@ async function canvas(count) {
     page = await until(() => app.context().pages().find(candidate => candidate.url().includes('/_redeven_proxy/env/') && new URL(candidate.url()).searchParams.get('canvas') === id), 'Owned standalone canvas');
   } else await page.goto(new URL(`/_redeven_proxy/env/?surface=tessiven&window=service-canvas&canvas=${id}`, origin).href);
   page.on('pageerror', error => report.errors.push(error.message));
+}
+async function canvas(count) {
+  await openCanvas(`pool-${count}`);
   await ready(count);
   // Flower loads independently of graph readiness. Close its public companion
   // window after it mounts so short-viewport graph controls remain accessible.
@@ -95,10 +100,12 @@ try {
   const db = new DatabaseSync(library);
   try {
     db.exec(await readFile(path.join(root, 'internal/tessiven/testdata/schema_v1.sql'), 'utf8'));
-    for (const count of [4,100,500,1000]) {
-      const source = dump(repeatedCallsDocument(count)), id = `pool-${count}`;
+    const fixtures = connections ? [['connections', connectionDocument()]]
+      : [4,100,500,1000].map(count => [`pool-${count}`, repeatedCallsDocument(count)]);
+    for (const [id, document] of fixtures) {
+      const source = dump(document);
       originals.set(id, source);
-      db.prepare('INSERT INTO canvases VALUES(?,?,?,1,0,100,100)').run(id, `Runtime pool / ${count}`, '');
+      db.prepare('INSERT INTO canvases VALUES(?,?,?,1,0,100,100)').run(id, document.metadata.title, '');
       db.prepare('INSERT INTO versions VALUES(?,1,?,?,100,?,?)').run(id, source, createHash('sha256').update(source).digest('hex'), 'import', 'Repeated local calls');
     }
   } finally { db.close(); }
@@ -130,6 +137,26 @@ try {
     report.runtime = { pid: runtime.pid, origin, state };
     browser = await chromium.launch({ headless: true }); page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   }
+  if (connections) {
+    await openCanvas('connections');
+    await qualifyConnections(page, { report, output,
+      setTheme: async (mode, preset) => {
+        if (welcome) {
+          await welcome.evaluate(async ({mode,preset}) => { await window.redevenDesktopTheme.setShellTheme(mode,preset); await window.redevenDesktopTheme.setSource(mode); }, {mode,preset});
+          await page.waitForFunction(({mode,preset}) => document.documentElement.classList.contains('dark') === (mode === 'dark') && document.documentElement.dataset.floeShellTheme === preset && !document.documentElement.dataset.redevenThemeSwitching, {mode,preset});
+        } else await page.evaluate(({mode,tokens}) => {
+          document.documentElement.classList.toggle('dark', mode === 'dark');
+          for (const [name,value] of Object.entries(tokens)) if (value) document.documentElement.style.setProperty(name,value);
+        }, {mode,tokens: builtInShellThemePresets.find(theme => theme.name === preset).semanticTokens});
+      },
+      setSize: async (width, height) => {
+        if (app) {
+          await app.evaluate(({BrowserWindow}, {url,width,height}) => { const target = BrowserWindow.getAllWindows().find(window => window.webContents.getURL() === url); target.setMinimumSize(600,320); target.setContentSize(width,height); }, {url:page.url(),width,height});
+          await page.waitForFunction(height => innerHeight <= height, height);
+        } else await page.setViewportSize({width,height});
+      },
+    });
+  } else {
   for (const count of [4,100,500,1000]) await canvas(count);
   report.scenarios.push('four-to-thousand-hosts-have-two-bounded-patterns');
   await page.locator('[data-relation-summary]').first().click();
@@ -175,6 +202,7 @@ try {
   await until(async () => page.locator('.tessiven-popup').evaluate(panel => panel.getBoundingClientRect().bottom <= innerHeight), 'Popup inside short viewport');
   await page.screenshot({ path: path.join(output, 'short-window.png'), animations: 'disabled' });
   await page.reload(); await ready(1000); report.scenarios.push('short-window-and-reload');
+  }
   const check = new DatabaseSync(library, { readOnly: true });
   try { for (const [id, source] of originals) assert.equal(check.prepare('SELECT document_yaml FROM versions WHERE canvas_id=? AND number=1').get(id).document_yaml, source); } finally { check.close(); }
   assert.deepEqual(report.errors, []); report.status = 'passed';

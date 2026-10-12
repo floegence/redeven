@@ -6,7 +6,8 @@ import { FlowerIcon } from '../../flower_ui/src/icons/FlowerIcon';
 
 /** Group summaries browse every original relation without growing graph geometry. */
 export function TessivenRelationDetails(props: {
-  groupRef: string;
+  scopeRefs: readonly string[];
+  title?: string;
   summaries: readonly RelationSummary[];
   initialKey?: string;
   details: ReadonlyMap<string, RelationDetail>;
@@ -33,7 +34,7 @@ export function TessivenRelationDetails(props: {
   const count = () => summary() ? relations().length : patterns().length;
   const currentPage = () => Math.min(page(), Math.max(0, Math.ceil(count() / relationPageSize) - 1));
   const start = () => currentPage() * relationPageSize;
-  const selected = () => exact() ? [exact()!] : summaryReferences(props.groupRef, summary());
+  const selected = () => exact() ? [exact()!] : summaryReferences(props.scopeRefs, summary());
   const resetPage = () => { setPage(0); setExact(undefined); };
   const openPattern = (item: RelationSummary) => { setKey(item.key); resetPage(); };
   const back = () => { if (exact()) setExact(undefined); else { setKey(undefined); resetPage(); } };
@@ -44,7 +45,7 @@ export function TessivenRelationDetails(props: {
   return <div class="tessiven-relation-details">
     <div class="tessiven-relation-detail-heading">
       <Show when={summary() || exact()}><button type="button" onClick={back} aria-label={props.t('relationBack')}><ArrowLeft aria-hidden="true" /></button></Show>
-      <strong>{summary() ? `${summary()!.from.label} → ${summary()!.to.label}` : props.t('poolRelations')}</strong>
+      <strong>{summary() ? `${summary()!.from.label} → ${summary()!.to.label}` : props.title ?? props.t('poolRelations')}</strong>
     </div>
     <Show when={!exact()} fallback={<>
       <div class="tessiven-detail-content tessiven-relation-exact">{props.renderDetail(exact()!)}</div>

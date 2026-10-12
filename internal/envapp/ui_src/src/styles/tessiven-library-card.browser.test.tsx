@@ -1,3 +1,4 @@
+import { projectOverviewConnections } from '../../../../tessiven_ui/src/connections';
 import '../index.css';
 import '../../../../tessiven_ui/src/tessiven.css';
 import { render } from 'solid-js/web';
@@ -107,7 +108,7 @@ it('previews every object and relationship in the saved Hadoop canvas with crowd
   expect(host.querySelector('.tessiven-preview-placeholder')).toBeNull();
   const projected = projectCanvas(saved.document, new Set(saved.document.presentation?.initiallyExpanded), {});
   expect([...host.querySelectorAll('[data-preview-edge]')].map(edge => edge.getAttribute('data-preview-edge')).sort())
-    .toEqual(projected.graph.edges.map(edge => edge.id).sort());
+    .toEqual(projectOverviewConnections(projected).edges.map(edge => edge.id).sort());
   await page.screenshot({ element: host, path: '../../.vitest-attachments/redeven-hadoop-thumbnail.png' });
 });
 

@@ -65,11 +65,11 @@ export function TessivenServiceRelations(props: {
     // Instances of one service share a row; their preview is a loop glyph.
     if (item.fromServiceRef === item.toServiceRef) return undefined;
     try {
-      const layout = await props.engine.layout({ nodes, edges: [{
+      const routes = await props.engine.route({ nodes, bounds: { x: 0, y: 0, width: inventory.offsetWidth, height: inventory.offsetHeight } }, [{
         id: item.key, label: '', source: item.fromServiceRef!, target: item.toServiceRef!,
         sourcePort: `service-port:${item.fromServiceRef}`, targetPort: `service-port:${item.toServiceRef}`,
-      }] }, { positions: nodes.map(({ id, x, y }) => ({ nodeId: id, x, y })), positionMode: 'fixed', edgeClearance: 20 });
-      return layout.edges[0];
+      }], { edgeClearance: 20 });
+      return routes[0];
     } catch (cause) {
       props.onError(cause);
       return undefined;
