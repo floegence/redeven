@@ -122,6 +122,8 @@ returns `handoff_required` with its operation key. That state describes a reques
 not an admitted process operation. A native dialog names the exact action and
 target and warns when the Runtime executes the current conversation. Opening
 the dialog does not close a session, stop a process, or report success.
+The action and target appear in the native message even on platforms that omit
+the dialog window title.
 
 After acceptance, Desktop checks that the original request is still pending,
 revalidates the private source against live Runtime policy, and checks target
