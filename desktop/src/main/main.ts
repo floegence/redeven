@@ -10609,6 +10609,9 @@ async function tessivenRuntimeInventory(
         const sourceIdentity = tessivenRuntimeIdentity(source.record.startup);
         const self = source.record.environment_id === saved.id
           || (!!sourceIdentity && sourceIdentity === target.identity);
+        const confirmationTitle = i18n.t('tessivenRuntime.confirmTitle', {
+          action: i18n.t(`tessivenRuntime.${action}`),
+        });
         launcherOperations.create({
           operation_key: operationKey,
           action: kind,
@@ -10618,9 +10621,7 @@ async function tessivenRuntimeInventory(
           environment_label: saved.label,
           status: 'needs_confirmation',
           phase: 'confirmation_required',
-          title: i18n.t('tessivenRuntime.confirmTitle', {
-            action: i18n.t(`tessivenRuntime.${action}`),
-          }),
+          title: confirmationTitle,
           detail: i18n.t(
             self
               ? 'tessivenRuntime.selfDetail'
@@ -10636,10 +10637,8 @@ async function tessivenRuntimeInventory(
             (
               await dialog.showMessageBox({
                 type: 'warning',
-                title: i18n.t('tessivenRuntime.confirmTitle', {
-                  action: i18n.t(`tessivenRuntime.${action}`),
-                }),
-                message: saved.label,
+                title: confirmationTitle,
+                message: `${confirmationTitle}\n${saved.label}`,
                 detail: i18n.t(
                   self
                     ? 'tessivenRuntime.selfDetail'
