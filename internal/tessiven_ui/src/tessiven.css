@@ -828,6 +828,72 @@
   background: color-mix(in srgb, var(--ts-glyph) 13%, var(--card));
   border-color: var(--ts-linked);
 }
+.tessiven-local-relation > .tessiven-relation-summary-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-width: 88px;
+  line-height: 11px;
+}
+.tessiven-relation-summary-meta > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tessiven-relation-summary-meta > span:last-child { color: var(--ts-ink); }
+.tessiven-pool-relations,
+.tessiven-relation-more {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 5px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ts-ink);
+  font-size: 10px;
+  white-space: nowrap;
+}
+.tessiven-pool-relations > svg { width: 11px; height: 11px; }
+.tessiven-pool-relations { height: 14px; padding: 0 2px; }
+.tessiven-pool-relations:hover,
+.tessiven-relation-more:hover { background: color-mix(in srgb, var(--ts-glyph) 12%, transparent); }
+.tessiven-relation-more { width: 100%; }
+.tessiven-relation-details { display: flex; flex-direction: column; min-height: 0; }
+.tessiven-relation-detail-heading { display: flex; align-items: center; gap: 6px; min-width: 0; margin: 5px 0 8px; }
+.tessiven-relation-detail-heading > strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.tessiven-relation-detail-heading button,
+.tessiven-relation-pagination button { display: grid; place-items: center; width: 27px; height: 27px; border: 0; border-radius: 5px; background: transparent; color: var(--ts-ink); flex-shrink: 0; }
+.tessiven-relation-detail-heading svg,
+.tessiven-relation-pagination svg { width: 14px; height: 14px; }
+.tessiven-relation-pagination button:disabled { opacity: .35; cursor: default; }
+.tessiven-relation-coverage { display: flex; flex-wrap: wrap; gap: 5px 10px; margin-bottom: 9px; font-size: 10px; color: var(--ts-muted); }
+.tessiven-relation-filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.tessiven-relation-filters input,
+.tessiven-relation-filters select { min-width: 0; height: 30px; border: 1px solid var(--border); border-radius: 6px; background: var(--background); color: var(--ts-ink); padding: 0 7px; font-size: 11px; }
+.tessiven-relation-filters input { flex: 1 1 165px; }
+.tessiven-relation-filters select { flex: 1 1 110px; max-width: 100%; }
+.tessiven-relation-results { max-height: min(300px, 40dvh); overflow: auto; overscroll-behavior: contain; min-height: 0; }
+.tessiven-relation-detail-row { display: grid; grid-template-columns: minmax(0, 1fr) 16px; gap: 3px 6px; width: 100%; padding: 8px 6px; border: 0; border-radius: 5px; background: transparent; color: var(--ts-ink); text-align: left; }
+.tessiven-relation-detail-row:hover { background: color-mix(in srgb, var(--ts-glyph) 10%, transparent); }
+.tessiven-relation-detail-row strong,
+.tessiven-relation-detail-row small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tessiven-relation-detail-row strong { font-size: 11px; font-weight: 550; }
+.tessiven-relation-detail-row small { font-size: 10px; color: var(--ts-muted); }
+.tessiven-relation-detail-row > svg { grid-column: 2; grid-row: 1 / 3; align-self: center; width: 13px; height: 13px; }
+.tessiven-relation-pagination { display: flex; align-items: center; gap: 4px; margin-top: 6px; font-size: 10px; color: var(--ts-muted); }
+.tessiven-relation-pagination > span { margin-right: auto; }
+.tessiven-relation-locate { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.tessiven-relation-locate button { display: inline-flex; align-items: center; gap: 4px; border: 0; padding: 5px 6px; border-radius: 5px; background: var(--muted); color: var(--ts-ink); font-size: 10px; white-space: nowrap; }
+.tessiven-relation-locate svg { width: 12px; height: 12px; }
+.tessiven-popup[data-relation-browser='true'] { display: flex; flex-direction: column; max-height: calc(100dvh - 24px); overflow: hidden; }
+.tessiven-popup[data-relation-browser='true'] > header { flex-shrink: 0; }
+.tessiven-popup[data-relation-browser='true'] .tessiven-relation-results,
+.tessiven-popup[data-relation-browser='true'] .tessiven-relation-exact { flex: 1 1 auto; }
+.tessiven-relation-detail-heading,
+.tessiven-relation-coverage,
+.tessiven-relation-filters,
+.tessiven-relation-pagination,
+.tessiven-relation-locate,
+.tessiven-relation-details > .tessiven-ask-flower { flex-shrink: 0; }
 .tessiven-node-selector {
   display: flex;
   align-items: center;

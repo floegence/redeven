@@ -147,9 +147,11 @@ Layout, routing, view controls and large-graph rendering follow the
 - Relations between co-located service or instance endpoints appear as compact
   source-to-target rows within the host card, rather than a group self-loop.
   Explicit instance endpoints remain exact; service-level routing stays at the
-  logical aggregate without expanding every host pair. Collapsed groups retain
-  internal relations as inspectable rows. Each row opens the original relation
-  and evidence and references that relation when asking Flower. A repeated host
+  logical aggregate without expanding every host pair. Collapsed groups show
+  bounded relationship patterns; expanded headers open a pool-wide overview.
+  [Relationship summaries](tessiven-relationship-summaries.md) owns aggregation,
+  exact counts, paged drilldown and summary references. Exact physical-card rows
+  open the original relation and evidence and reference that relation when asking Flower. A repeated host
   appearance retains the same complete inventory and local relation rows by default.
   A titled, separated service calls/access section distinguishes relationship
   rows from service inventory. Hover or keyboard focus previews only that row's
@@ -167,7 +169,7 @@ Layout, routing, view controls and large-graph rendering follow the
   neither the node nor its route SVG clips them. Env App, its standalone window,
   and Desktop Welcome pin the same published graph engine; each host must honor
   the preview clearance instead of silently using an older routing contract.
-  Card and group bounds budget every service and relation row, including the
+  Card and group bounds budget the displayed service and relationship rows, including the
   expansion action, so content never spills outside its node or dashed frame.
 - Theme tokens, high contrast, product locale, and accessible names are used
   for every card, edge, menu, and action.

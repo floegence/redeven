@@ -4,8 +4,10 @@ import WebKit
 let root = URL(fileURLWithPath: CommandLine.arguments[1], isDirectory: true)
 let fixture = try Data(contentsOf: URL(fileURLWithPath: CommandLine.arguments[2]))
 let output = URL(fileURLWithPath: CommandLine.arguments[3], isDirectory: true)
+let qualification = CommandLine.arguments.count > 4
+  ? try String(contentsOfFile: CommandLine.arguments[4], encoding: .utf8) : nil
 let application = NSApplication.shared
-application.setActivationPolicy(.accessory)
+application.setActivationPolicy(.regular)
 final class Assets: NSObject, WKURLSchemeHandler {
   func webView(_ webView: WKWebView, start task: WKURLSchemeTask) {
     guard let url = task.request.url, url.host == "bundle", !url.path.contains(".."),
@@ -21,6 +23,7 @@ final class Assets: NSObject, WKURLSchemeHandler {
 final class Bridge: NSObject, WKScriptMessageHandler {
   var web: WKWebView!
   var checked = false
+  var selections: [[String]] = []
   func fail(_ message: String) { print(message); exit(1) }
   func snapshotTheme(_ index: Int) {
     let variants = [("light", false, false), ("dark", true, false), ("hc-light", false, true), ("hc-dark", true, true)]
@@ -58,13 +61,15 @@ final class Bridge: NSObject, WKScriptMessageHandler {
   func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
     guard let body = message.body as? [String:Any], let type = body["type"] as? String else { return }
     if type == "error" { fail("Native canvas reported error") }
+    if type == "selection", let selection = body["selection"] as? [String:Any],
+      let refs = selection["object_refs"] as? [String] { selections.append(refs) }
     if type == "ready" {
       let input = String(data: fixture, encoding: .utf8)!
       web.evaluateJavaScript("window.serviceCanvas.update(\(input))") { _, error in if let error { self.fail(String(describing:error)) } }
     }
     if type == "rendered", !checked {
       checked = true
-      web.callAsyncJavaScript("""
+      web.callAsyncJavaScript(qualification ?? """
       const until = async read => { for(let i=0;i<300;i++){if(read())return;await new Promise(r=>setTimeout(r,50));}throw Error('Native canvas state timed out'); };
       const nodes = () => document.querySelectorAll('.tessiven-node').length;
       const count=nodes(); if(!count) throw Error('No native nodes');
@@ -84,6 +89,9 @@ final class Bridge: NSObject, WKScriptMessageHandler {
         switch result {
         case .failure(let error): self.fail(String(describing:error))
         case .success(let value):
+          if qualification != nil, !self.selections.contains(["host-999-agent-call"]) {
+            self.fail("Native bridge did not receive the exact original relationship")
+          }
           print(value)
           self.snapshotTheme(0)
         }
@@ -96,10 +104,11 @@ config.websiteDataStore = .nonPersistent()
 config.setURLSchemeHandler(Assets(),forURLScheme:"redeven-canvas")
 let bridge=Bridge()
 config.userContentController.add(bridge,name:"canvas")
-let web=WKWebView(frame:NSRect(x:0,y:0,width:480,height:360),configuration:config)
+let web=WKWebView(frame:NSRect(x:0,y:0,width:qualification == nil ? 480 : 800,height:qualification == nil ? 360 : 420),configuration:config)
 bridge.web=web
 let window=NSWindow(contentRect:web.frame,styleMask:[.titled],backing:.buffered,defer:false)
-window.contentView=web; window.orderFront(nil)
+window.contentView=web; window.makeKeyAndOrderFront(nil)
+application.activate(ignoringOtherApps: true)
 web.load(URLRequest(url:URL(string:"redeven-canvas://bundle/index.html#render_id=qualification")!))
-DispatchQueue.main.asyncAfter(deadline:.now()+30){print("Native canvas deadline exceeded");exit(1)}
+DispatchQueue.main.asyncAfter(deadline:.now()+120){print("Native canvas deadline exceeded");exit(1)}
 application.run()
