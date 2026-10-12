@@ -1,3 +1,4 @@
+import type { FlowerPageContextRegistrar } from '../flower/flowerPageContext';
 import { classifyFilesystemPathError } from '../../../../../flower_ui/src/filePicker/filesystemPicker';
 import { useEnvFilesystemPicker } from '../services/filesystemPicker';
 import { Show, batch, createEffect, createMemo, createSignal, on, onCleanup, untrack, type JSX } from 'solid-js';
@@ -438,6 +439,7 @@ const ClipboardIcon = (props: { class?: string }) => (
 );
 
 export interface RemoteFileBrowserProps {
+  registerPageContext?: FlowerPageContextRegistrar;
   widgetId?: string;
   stateScope?: string;
   persistenceTarget?: 'page' | 'workbench';
@@ -757,6 +759,16 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const [selectedGitBranchSnapshot, setSelectedGitBranchSnapshot] = createSignal<GitBranchSummary | null>(null);
   const [gitBranchDetailState, setGitBranchDetailState] = createSignal<GitBranchDetailState>({ kind: 'idle' });
   const [selectedGitBranchSubview, setSelectedGitBranchSubview] = createSignal<GitBranchSubview>('status');
+  let readFilePageState: (() => Readonly<Record<string, unknown>>) | undefined;
+  props.registerPageContext?.(() => ({
+    mode: pageMode(),
+    ...(activeDirectorySnapshotReady() ? { directory: activeDirectoryPath() } : {}),
+    show_hidden: showHidden(),
+    ...(pageMode() === 'git' ? { git_view: gitSubview(), repository: repoInfo()?.repoRootPath,
+      branch: selectedGitBranchName() || undefined, commit: selectedCommitHash() || undefined } : {}),
+    ...(pageMode() === 'files' && activeDirectorySnapshotReady() ? readFilePageState?.() : {}),
+  }));
+
   const [gitCommitMessage, setGitCommitMessage] = createSignal('');
   const [gitMutationScope, setGitMutationScope] = createSignal<GitMutationScope>('');
   const [gitMutationKey, setGitMutationKey] = createSignal('');
@@ -5486,6 +5498,10 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
               prewarmGit={gitSurfacePrewarmed()}
               files={() => (
                     <FileBrowserWorkspace
+                      registerPageStateReader={read => {
+                        readFilePageState = read;
+                        return () => { if (readFilePageState === read) readFilePageState = undefined; };
+                      }}
                       class="h-full"
                       mode={pageModeSelection.visual()}
                       onModeChange={handlePageModeChange}

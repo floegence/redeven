@@ -594,13 +594,7 @@
         "searchPlaceholder": "Поиск диалогов...",
         "newConversation": "Новый диалог",
         "empty": "Подходящих диалогов нет",
-        "queued": "В очереди",
-        "groups": {
-          "attention": "Требуется действие",
-          "working": "В работе",
-          "pinned": "Закреплённые",
-          "recent": "Недавние"
-        }
+        "queued": "В очереди"
       }
     },
     "commandPalette": {

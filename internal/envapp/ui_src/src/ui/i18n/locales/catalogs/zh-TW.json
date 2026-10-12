@@ -578,13 +578,7 @@
         "searchPlaceholder": "搜尋對話...",
         "newConversation": "新增對話",
         "empty": "沒有相符的對話",
-        "queued": "已排入佇列",
-        "groups": {
-          "attention": "需要處理",
-          "working": "正在工作",
-          "pinned": "已釘選",
-          "recent": "最近"
-        }
+        "queued": "已排入佇列"
       }
     },
     "commandPalette": {

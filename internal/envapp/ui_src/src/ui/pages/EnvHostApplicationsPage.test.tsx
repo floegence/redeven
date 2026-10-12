@@ -198,8 +198,13 @@ describe('host application interaction', () => {
     expect(state.launch).toHaveBeenCalledTimes(2);
   });
   it('keeps application identity visible and exposes launch progress on the card', async () => {
+    let readPage = (): Readonly<Record<string, unknown>> | undefined => undefined;
     state.launch.mockReturnValue(new Promise(() => {}));
-    dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
+    dispose = render(() => <EnvHostApplicationsPage registerPageContext={read => { readPage = read; }} />, host); await settle();
+    expect(readPage()).toMatchObject({ query: '', running_only: false });
+    const callsBeforeCapture = state.catalog.mock.calls.length;
+    readPage();
+    expect(state.catalog).toHaveBeenCalledTimes(callsBeforeCapture);
     const launchButton = button('Open in new window · Text Editor');
     launchButton.click(); await settle();
     expect(launchButton.getAttribute('aria-busy')).toBe('true');

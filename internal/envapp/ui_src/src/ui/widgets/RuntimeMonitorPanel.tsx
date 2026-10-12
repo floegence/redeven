@@ -1,3 +1,4 @@
+import type { FlowerPageContextRegistrar } from '../flower/flowerPageContext';
 import { FeedbackIndicator, Button, MonitoringChart } from '@floegence/floe-webapp-core/ui';
 import { writeTextToClipboard } from '../utils/clipboard';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
@@ -30,6 +31,7 @@ import { useI18n } from '../i18n';
 export type RuntimeMonitorPanelVariant = 'page' | 'workbench';
 
 export interface RuntimeMonitorPanelProps {
+  registerPageContext?: FlowerPageContextRegistrar;
   variant?: RuntimeMonitorPanelVariant;
 }
 
@@ -125,6 +127,17 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
   const [sample, setSample] = createSignal<chart_sample | null>(null);
   const [sampleSeq, setSampleSeq] = createSignal(0);
   const [chartToken, setChartToken] = createSignal(0);
+
+  props.registerPageContext?.(() => ({
+    sort: sortBy(), show_internal_sessions: showInternalSessions(),
+    ...(!noRead() && data() ? {
+      readings: { sampled_at_ms: data()!.timestampMs, cpu_percent: data()!.cpuUsage, cpu_cores: data()!.cpuCores,
+        memory_used_bytes: data()!.memoryUsedBytes, memory_total_bytes: data()!.memoryTotalBytes,
+        network_received_bytes_per_second: data()!.networkSpeedReceived, network_sent_bytes_per_second: data()!.networkSpeedSent },
+      selected_process: (() => { const process = data()!.processes.find(item => item.pid === selectedProcessPid());
+        return process ? { pid: process.pid, name: process.name, username: process.username } : undefined; })(),
+    } : {}),
+  }));
 
   // Sort client-side as a safety net in case the runtime-side ordering changes.
   const processes = createMemo<SysMonitorProcessInfo[]>(() => {

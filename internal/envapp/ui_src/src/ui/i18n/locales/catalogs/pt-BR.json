@@ -578,13 +578,7 @@
         "searchPlaceholder": "Buscar conversas...",
         "newConversation": "Nova conversa",
         "empty": "Nenhuma conversa correspondente",
-        "queued": "Na fila",
-        "groups": {
-          "attention": "Requer atenção",
-          "working": "Em andamento",
-          "pinned": "Fixadas",
-          "recent": "Recentes"
-        }
+        "queued": "Na fila"
       }
     },
     "commandPalette": {

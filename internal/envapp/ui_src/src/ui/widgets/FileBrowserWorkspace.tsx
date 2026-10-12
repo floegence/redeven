@@ -43,6 +43,7 @@ export type FileBrowserPathSubmitResult =
   | { status: 'error'; message: string };
 
 export interface FileBrowserWorkspaceProps {
+  registerPageStateReader?: (read: () => Readonly<Record<string, unknown>>) => () => void;
   mode: GitHistoryMode;
   onModeChange: (mode: GitHistoryMode) => void;
   onPreviewGitMode?: () => void;
@@ -262,6 +263,12 @@ function FileWorkspaceStatusBar(props: { initializing?: boolean }) {
 
 function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files' | 'initialPath' | 'persistenceKey' | 'resetKey'>) {
   const browser = useFileBrowser();
+  const unregister = props.registerPageStateReader?.(() => ({
+    view: browser.viewMode(), sort: browser.sortConfig(), filter: browser.filterQueryApplied(),
+    selected_paths: browser.getSelectedItemsList().slice(0, 16).map(item => item.path),
+    selected_count: browser.getSelectedItemsList().length,
+  }));
+  if (unregister) onCleanup(unregister);
   const drag = useFileBrowserDrag();
   const i18n = useI18n();
   const dragEnabled = () => Boolean(drag && props.onDragMove && !props.contentUnavailable);
@@ -597,6 +604,7 @@ export function FileBrowserWorkspace(props: FileBrowserWorkspaceProps) {
         onRevealRequestConsumed={props.onRevealRequestConsumed}
       >
         <FileBrowserWorkspaceInner
+          registerPageStateReader={props.registerPageStateReader}
           mode={props.mode}
           onModeChange={props.onModeChange}
           onPreviewGitMode={props.onPreviewGitMode}

@@ -1,3 +1,4 @@
+import type { FlowerPageContextRegistrar } from '../flower/flowerPageContext';
 import {
   Button,
   DirectoryPicker,
@@ -831,7 +832,7 @@ function DetailLinkRow(props: { label: string; value: string; onClick: () => voi
   );
 }
 
-export function EnvContainersPage(props: { stateScope?: string; variant?: 'activity' | 'workbench' }) {
+export function EnvContainersPage(props: { registerPageContext?: FlowerPageContextRegistrar; stateScope?: string; variant?: 'activity' | 'workbench' }) {
   const i18n = useI18n();
   const notify = useNotification();
   const env = useEnvContext();
@@ -848,6 +849,11 @@ export function EnvContainersPage(props: { stateScope?: string; variant?: 'activ
   const [detailRetry, setDetailRetry] = createSignal(0);
   const [searchQuery, setSearchQuery] = createSignal('');
   const [resourceFilter, setResourceFilter] = createSignal<ResourceFilter>(defaultResourceFilter(restored.view));
+  props.registerPageContext?.(() => {
+    const entry = selectedEntry();
+    return { view: view(), query: searchQuery(), filter: resourceFilter(),
+      selected_resource: entry ? { engine: entry.target.engine, endpoint_id: entry.target.endpoint_id, id: resourceIdentity(view(), entry.item) } : undefined };
+  });
   const [operations, setOperations] = createSignal<ContainerOperation[]>([]);
   const [operationsOpen, setOperationsOpen] = createSignal(false);
   const [selectedOperationID, setSelectedOperationID] = createSignal('');

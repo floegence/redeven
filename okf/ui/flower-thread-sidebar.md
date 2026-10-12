@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower conversation sidebar
 description: Select conversations clearly and reorder endpoint-owned pins without interrupting live interactions.
 tags: [flower, sidebar, navigation, pins, interaction]
-timestamp: 2026-09-26T00:00:00Z
+timestamp: 2026-10-12T00:00:00Z
 ---
 
 # Summary
@@ -109,8 +109,12 @@ response contains changed pin metadata, not transcript data.
 Relative moves never replace server order with the client's first 200 records.
 Existing cursor encodings remain readable and pagination resolves the cursor
 thread's current rank. A removed cursor anchor requires refreshing the list.
-The compact conversation switcher consumes the same comparator within its
-existing attention, working, pinned and recent grouping policy.
+The Activity companion switcher uses the sidebar's exact filtering, pin and date
+grouping model. Pins sort by descending rank; ordinary conversations sort by
+descending creation time, then ascending ThreadID. Reply, approval, running,
+queued and unread indicators stay inline and never promote a conversation.
+Keyboard selection follows the same visible order, including search results and
+the sidebar's short-lived pin presentation overlay.
 
 ## Stable presentation and convergence
 
@@ -145,6 +149,8 @@ owns the broader interaction and runtime boundaries.
 
 # Evidence
 
+- `redeven:internal/flower_ui/src/threads/FlowerThreadSwitcher.test.tsx` - Companion and sidebar order parity, filtering, status independence and keyboard selection.
+- `redeven:internal/flower_ui/src/threads/threadListModel.ts` - One canonical filter, comparator and pin/date grouping model.
 - `redeven:internal/flower_ui/src/threads/FlowerThreadList.tsx` - Shared interaction and menu actions.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerCompactPresentation.browser.test.tsx` - One-line geometry from 180px to 320px, long localized statuses, enlarged text and touch.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerStatusAndThreadMenu.browser.test.tsx` - Pending labels, hover, keyboard actions and touch layout.

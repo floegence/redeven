@@ -578,13 +578,7 @@
         "searchPlaceholder": "대화 검색...",
         "newConversation": "새 대화",
         "empty": "일치하는 대화가 없습니다",
-        "queued": "대기 중",
-        "groups": {
-          "attention": "확인 필요",
-          "working": "작업 중",
-          "pinned": "고정됨",
-          "recent": "최근"
-        }
+        "queued": "대기 중"
       }
     },
     "commandPalette": {

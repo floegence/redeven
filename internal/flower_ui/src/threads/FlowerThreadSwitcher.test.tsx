@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { FlowerThreadListCopy } from '../copy';
 import type { FlowerThreadListItem, FlowerThreadReadStatus, FlowerThreadStatus } from '../contracts/flowerSurfaceContracts';
+import { filterFlowerThreadItems, groupFlowerThreadItems } from './threadListModel';
 import type { FlowerCompanionThreadListItem } from '../flowerCompanionPresence';
 import {
   FlowerThreadSwitcher,
@@ -139,12 +140,6 @@ const copy: FlowerThreadSwitcherCopy = {
   newConversation: 'Start fresh',
   empty: 'Nothing matches',
   queued: 'Queued work',
-  groups: {
-    attention: 'Needs response',
-    working: 'In progress',
-    pinned: 'Saved',
-    recent: 'Latest',
-  },
   threadList: threadListCopy,
 };
 
@@ -174,29 +169,44 @@ describe('groupFlowerThreadSwitcherItems', () => {
 	it('omits legacy empty-title summaries instead of rendering an untitled row', () => {
 		const groups = groupFlowerThreadSwitcherItems([
 			thread({ thread_id: 'legacy-empty', title: '' }),
-		], '', threadListCopy);
+		], '');
 
 		expect(groups).toEqual([]);
 	});
 
-  it('uses one highest-value group per thread and keeps the compact group order', () => {
-    const duplicateAttention = thread({ thread_id: 'attention', title: 'Approval', status: 'waiting_approval', pinned: true });
-    const groups = groupFlowerThreadSwitcherItems([
-      thread({ thread_id: 'recent', title: 'Recent' }),
-      thread({ thread_id: 'pinned', title: 'Pinned', pinned: true }),
-      thread({ thread_id: 'queued', title: 'Queued', queued_turn_count: 1, pinned: true }),
-      thread({ thread_id: 'running', title: 'Running', status: 'running' }),
-      duplicateAttention,
-      duplicateAttention,
-    ], '', threadListCopy);
+  it('matches sidebar ordering across status, unread, pin rank and creation time', () => {
+    const items = [
+      thread({ thread_id: 'old-attention', status: 'waiting_user', created_at_ms: 1, updated_at_ms: 100 }),
+      thread({ thread_id: 'new-idle', created_at_ms: 20 }),
+      thread({ thread_id: 'running', status: 'running', created_at_ms: 10 }),
+      thread({ thread_id: 'pin-low', pinned: true, pin_rank: 1, status: 'waiting_approval' }),
+      thread({ thread_id: 'pin-high', pinned: true, pin_rank: 2 }),
+      thread({ thread_id: 'queued', queued_turn_count: 2, created_at_ms: 5 }),
+    ];
+    const ids = (groups: readonly { threads: readonly FlowerThreadListItem[] }[]) => groups.flatMap(group => group.threads.map(item => item.thread_id));
+    expect(ids(groupFlowerThreadSwitcherItems(items, '')))
+      .toEqual(ids(groupFlowerThreadItems(filterFlowerThreadItems(items, ''))));
+    const expected = ['pin-high', 'pin-low', 'new-idle', 'running', 'queued', 'old-attention'];
+    expect(ids(groupFlowerThreadSwitcherItems(items, ''))).toEqual(expected);
+    const changed = items.map(item => ({ ...item, status: 'waiting_approval' as const,
+      updated_at_ms: 9000, read_status: readStatus(true), queued_turn_count: 3 }));
+    expect(ids(groupFlowerThreadSwitcherItems(changed, ''))).toEqual(expected);
+    expect(ids(groupFlowerThreadSwitcherItems(changed.map(item => item.thread_id === 'pin-low'
+      ? { ...item, pin_rank: 5 } : item), ''))).toEqual(['pin-low', 'pin-high', ...expected.slice(2)]);
+  });
 
-    expect(groups.map((group) => group.kind)).toEqual(['attention', 'working', 'pinned', 'recent']);
-    expect(groups.map((group) => group.threads.map((item) => item.thread_id))).toEqual([
-      ['attention'],
-      ['queued', 'running'],
-      ['pinned'],
-      ['recent'],
-    ]);
+  it('keeps pinned ranks and creation-time ordering independent of status', () => {
+    const groups = groupFlowerThreadSwitcherItems([
+      thread({ thread_id: 'old', created_at_ms: 1, status: 'waiting_user' }),
+      thread({ thread_id: 'new', created_at_ms: 20 }),
+      thread({ thread_id: 'pin-low', pinned: true, pin_rank: 1, queued_turn_count: 1 }),
+      thread({ thread_id: 'pin-high', pinned: true, pin_rank: 2 }),
+      thread({ thread_id: 'tie-b', created_at_ms: 10, status: 'running' }),
+      thread({ thread_id: 'tie-a', created_at_ms: 10 }),
+    ], '');
+    expect(groups.map(group => group.kind)).toEqual(['pinned', 'time']);
+    expect(groups.flatMap(group => group.threads.map(item => item.thread_id)))
+      .toEqual(['pin-high', 'pin-low', 'new', 'tie-a', 'tie-b', 'old']);
   });
 
   it('reuses canonical title, preview, and target-label filtering', () => {
@@ -204,7 +214,7 @@ describe('groupFlowerThreadSwitcherItems', () => {
       thread({ thread_id: 'preview', title: 'One', preview: 'Needle in preview' }),
       thread({ thread_id: 'target', title: 'Two', target_labels: ['Needle target'] }),
       thread({ thread_id: 'hidden', title: 'Other' }),
-    ], 'needle', threadListCopy);
+    ], 'needle');
 
     expect(groups.flatMap((group) => group.threads.map((item) => item.thread_id))).toEqual(['preview', 'target']);
   });
@@ -224,10 +234,8 @@ describe('FlowerThreadSwitcher', () => {
     expect(host.querySelector('input')?.getAttribute('placeholder')).toBe(copy.searchPlaceholder);
     expect(host.querySelector('[data-flower-thread-switcher-new]')?.textContent).toContain(copy.newConversation);
     expect(Array.from(host.querySelectorAll('h3')).map((heading) => heading.textContent?.trim())).toEqual([
-      copy.groups.attention,
-      copy.groups.working,
-      copy.groups.pinned,
-      copy.groups.recent,
+      threadListCopy.pinnedGroup,
+      threadListCopy.groups.older,
     ]);
     expect(host.querySelectorAll('[data-flower-thread-switcher-thread]')).toHaveLength(4);
     expect(host.querySelector('[data-flower-thread-switcher-thread="attention"]')?.textContent).toContain(statuses.waiting_user);
@@ -260,10 +268,10 @@ describe('FlowerThreadSwitcher', () => {
 
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
     await Promise.resolve();
-    expect(host.querySelector('[data-flower-thread-switcher-thread="attention"]')?.getAttribute('data-highlighted')).toBe('true');
+    expect(host.querySelector('[data-flower-thread-switcher-thread="pinned"]')?.getAttribute('data-highlighted')).toBe('true');
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
 
-    expect(onSelect).toHaveBeenCalledWith('attention');
+    expect(onSelect).toHaveBeenCalledWith('pinned');
     expect(document.activeElement).toBe(input);
   });
 
@@ -274,7 +282,7 @@ describe('FlowerThreadSwitcher', () => {
 
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-    expect(onSelect).toHaveBeenCalledWith('recent');
+    expect(onSelect).toHaveBeenCalledWith('running');
 
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     expect(onEscape).toHaveBeenCalledTimes(1);

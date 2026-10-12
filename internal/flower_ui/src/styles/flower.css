@@ -11206,3 +11206,12 @@ button.flower-attachment-preview-trigger:disabled {
 }
 .flower-turn-ended { margin: 0.5rem 0 0.75rem; color: var(--muted-foreground); font-size: 0.75rem; line-height: 1.25rem; }
 @media (forced-colors: active) { .flower-turn-ended { color: CanvasText; } }
+
+.flower-composer-reference-chip-preview {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.25rem;
+  cursor: pointer;
+  color: inherit;
+}

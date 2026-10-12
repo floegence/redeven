@@ -127,6 +127,7 @@ vi.mock('./TerminalSessionRuntime', () => ({
 import { TerminalSessionCatalogProvider } from '../services/terminalSessionCatalog';
 import type { TerminalPanelSessionOperations } from './TerminalPanel';
 import { TerminalPanel } from './TerminalPanel';
+import type { FlowerPageContextRegistrar } from '../flower/flowerPageContext';
 
 let disposeRendered: (() => void) | null = null;
 
@@ -159,7 +160,7 @@ function visibleElements(root: ParentNode, selector: string): Element[] {
   ));
 }
 
-function renderCreateFlow(createSession: TerminalPanelSessionOperations['createSession']) {
+function renderCreateFlow(createSession: TerminalPanelSessionOperations['createSession'], registerPageContext?: FlowerPageContextRegistrar) {
   const host = document.createElement('div');
   Object.assign(host.style, { width: '960px', height: '640px' });
   document.body.append(host);
@@ -167,6 +168,7 @@ function renderCreateFlow(createSession: TerminalPanelSessionOperations['createS
     <TerminalSessionCatalogProvider>
       <TerminalPanel
         variant="panel"
+        registerPageContext={registerPageContext}
         openSessionRequest={{
           requestId: 'create-workspace-terminal',
           workingDir: '/workspace',
@@ -357,9 +359,12 @@ describe('TerminalPanel loading continuity', () => {
 
   it('keeps terminal runtime and session filter while desktop navigation adapts to local width', async () => {
     await page.viewport(1280, 850);
-    const host = renderCreateFlow(vi.fn(async () => createdSession()));
+    let readPage = (): Readonly<Record<string, unknown>> | undefined => undefined;
+    const host = renderCreateFlow(vi.fn(async () => createdSession()), read => { readPage = read; });
     await expect.poll(() => host.querySelector('[data-terminal-runtime-session]')).toBeTruthy();
     const runtime = host.querySelector('[data-terminal-runtime-session]');
+    expect(readPage()).toMatchObject({ session: { id: 'created-session', name: 'Workspace', working_directory: '/workspace' } });
+    expect(readPage()).not.toHaveProperty('output');
     const filter = host.querySelector<HTMLInputElement>('[data-testid="terminal-session-filter"]')!;
     await userEvent.fill(filter, 'Workspace');
     host.style.width = '640px';

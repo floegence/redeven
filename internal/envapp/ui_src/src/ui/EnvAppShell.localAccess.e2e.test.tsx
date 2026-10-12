@@ -1240,7 +1240,10 @@ vi.mock('./workbench/EnvWorkbenchPage', () => ({
   },
 }));
 vi.mock('./pages/EnvTerminalPage', () => ({ EnvTerminalPage: () => <div>activity main</div> }));
-vi.mock('./pages/EnvMonitorPage', () => ({ EnvMonitorPage: () => <div>activity main</div> }));
+vi.mock('./pages/EnvMonitorPage', () => ({ EnvMonitorPage: (props: any) => {
+  props.registerPageContext?.(() => ({ sort: 'cpu', show_internal_sessions: false }));
+  return <div>activity main</div>;
+} }));
 vi.mock('./pages/EnvTessivenPage', () => ({ default: (props: any) => <div data-testid="tessiven-page" data-visible={String(props.visible)} data-standalone={String(Boolean(props.standalone))} /> }));
 vi.mock('./pages/EnvFileBrowserPage', () => ({
   EnvFileBrowserPage: () => {
@@ -1314,6 +1317,7 @@ vi.mock('./pages/EnvAIPage', () => ({
     companionOpen?: boolean;
     companionRegionID?: string;
     onCompanionOpenRequest?: () => void;
+    captureNewConversationContext?: () => unknown;
   }) => {
     const env = useContext(EnvContextMock as any) as {
       openSettings?: (section?: string, options?: { origin?: { kind: 'flower'; returnSurfaceId: string } }) => void;
@@ -1332,6 +1336,9 @@ vi.mock('./pages/EnvAIPage', () => ({
         data-presence-owner={String(Boolean(props.companionPresenceOwner))}
         data-companion-open={String(Boolean(props.companionOpen))}
       >
+        <button type="button" data-testid="mock-capture-page-context" onClick={event => {
+          event.currentTarget.dataset.snapshot = JSON.stringify(props.captureNewConversationContext?.()) ?? '';
+        }}>Capture page context</button>
         <textarea
           data-testid="activity-flower-composer"
           aria-label="Ask Flower"
@@ -3771,6 +3778,15 @@ describe('EnvAppShell environment entry affordances', () => {
       expect(sidebarActiveTabValue).toBe(activityID);
       expect(host.querySelectorAll('[data-activity-plugin-surface-page]')).toHaveLength(1);
 
+      const capture = host.querySelector<HTMLButtonElement>('[data-testid="mock-capture-page-context"]')!;
+      capture.click();
+      const pluginSnapshot = JSON.parse(JSON.parse(capture.dataset.snapshot!).content);
+      expect(pluginSnapshot.page.id).toBe(activityID);
+      expect(pluginSnapshot.environment.id).toBe('env_local');
+      expect(pluginSnapshot.state).toMatchObject({ plugin_id: examplePluginProjection('enabled').items[0].pluginID });
+      expect(pluginSnapshot.state).not.toHaveProperty('sort');
+      expect(pluginSnapshot.state).not.toHaveProperty('document');
+
       const composer = host.querySelector<HTMLTextAreaElement>('[data-testid="activity-flower-composer"]')!;
       composer.focus();
       composer.value = 'Pinned plugin draft';
@@ -3786,6 +3802,11 @@ describe('EnvAppShell environment entry affordances', () => {
 
       (host.querySelector('[data-activity-id="monitor"]') as HTMLButtonElement).click();
       await flushUntil(() => sidebarActiveTabValue === 'monitor');
+      await flushUntil(() => host.querySelector('[data-testid="activity-view-monitor"]')?.textContent?.includes('activity main') === true);
+      capture.click();
+      expect(JSON.parse(JSON.parse(capture.dataset.snapshot!).content)).toMatchObject({
+        page: { id: 'monitor' }, state: { sort: 'cpu', show_internal_sessions: false },
+      });
       expect(host.querySelector('[data-activity-plugin-surface-page]')).toBe(firstPage);
       expect(firstPage.closest('[data-testid^="activity-view-"]')?.getAttribute('style')).toContain('display: none');
 
@@ -3799,6 +3820,8 @@ describe('EnvAppShell environment entry affordances', () => {
         await flushUntil(() => host.querySelector(`[data-testid="display-mode-view-${label.toLowerCase()}"]`)?.getAttribute('style')?.includes('display: block') ?? false, 60);
       };
       await switchMode('Workbench');
+      capture.click();
+      expect(capture.dataset.snapshot).toBe('');
       await pluginPanelState.lastProps.onOpenPluginSurface(examplePluginProjection('enabled').items[0].defaultLaunchTarget);
       expect(activityPluginPageState.closeCalls).toBe(0);
       expect(workbenchPluginSurfaceState.open).toHaveBeenCalledOnce();

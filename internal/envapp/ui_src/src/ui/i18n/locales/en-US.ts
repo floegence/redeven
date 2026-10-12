@@ -1825,12 +1825,6 @@ export const enUS = defineDictionary({
         newConversation: 'New conversation',
         empty: 'No matching conversations',
         queued: 'Queued',
-        groups: {
-          attention: 'Needs attention',
-          working: 'Working',
-          pinned: 'Pinned',
-          recent: 'Recent',
-        },
       },
     },
     commandPalette: {

@@ -1109,7 +1109,8 @@ describe('EnvPortForwardsPage', () => {
   });
 
   it('keeps cards and search state mounted while refreshing web services', async () => {
-    render(() => <EnvPortForwardsPage />, host);
+    let readPage = (): Readonly<Record<string, unknown>> | undefined => undefined;
+    render(() => <EnvPortForwardsPage registerPageContext={read => { readPage = read; }} />, host);
     await flushPage();
 
     const currentCard = host.querySelector('[data-testid="port-forward-row"]');
@@ -1119,6 +1120,8 @@ describe('EnvPortForwardsPage', () => {
       searchInput.value = 'Demo';
       searchInput.dispatchEvent(new InputEvent('input', { bubbles: true, data: 'Demo' }));
     }
+    expect(readPage()).toMatchObject({ view: 'active', query: 'Demo' });
+    expect(readPage()).not.toHaveProperty('forwards');
     const forwardsRequest = deferred<{ forwards: any[] }>();
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
       if (url === '/_redeven_proxy/api/forwards') return forwardsRequest.promise;

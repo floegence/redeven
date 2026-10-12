@@ -205,6 +205,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Plugin Center interaction](ui/plugin-center-interaction.md) - Browse, filter, and manage plugins with retained drawer state and correct modal input.
 - [Plugin surfaces](ui/plugin-surfaces.md) - Review exact plugin inventory and place SDK surfaces in Activity windows or Workbench widgets.
 - [Flower turn launcher](ui/flower-turn-launcher.md) - Use one strict turn endpoint, connection-local composer state, typed admission outcomes, and host handoff responsibilities.
+- [Flower Activity origin page references](ui/flower-page-context.md) - Capture once from the actual Activity page, inspect the frozen reference and remove it without replenishment.
 - [Flower composer references](ui/flower-composer-references.md) - Working-directory @ discovery, editable draft chips, strict composer wire data, and ordered admission into Floret.
 - [Flower input history](ui/flower-input-history.md) - Recall previous user text with arrow keys while preserving drafts, input methods and completion ownership.
 - [Absolute filesystem directory selection](ui/filesystem-picker-navigation.md) - Select runtime-authorized absolute paths with shared navigation and independent product forms.

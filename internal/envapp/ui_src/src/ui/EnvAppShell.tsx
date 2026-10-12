@@ -1,3 +1,4 @@
+import { createFlowerPageContextRegistry, flowerPageContextSnapshot, type FlowerPageContextRegistrar } from './flower/flowerPageContext';
 import { createFlowerModelReadResource, readFlowerModelDirectory } from '../../../../flower_ui/src/modelDirectory';
 import { handleTessivenLink, type TessivenOpenRequest } from '../../../../tessiven_ui/src/navigation';
 import { TessivenIcon } from '../../../../tessiven_ui/src/TessivenIcon';
@@ -279,6 +280,7 @@ const FLOWER_RELATED_SURFACE_SELECTOR = [
   '.flower-turn-launcher-window',
   '.flower-turn-launcher-related-surface',
   '.flower-chat-context-preview-window',
+  '.flower-page-context-preview',
   '.flower-subagent-detail-window',
   '.flower-working-dir-picker',
   '.flower-provider-dialog',
@@ -1148,6 +1150,26 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   };
   const [openTerminalInDirectoryRequestSeq, setOpenTerminalInDirectoryRequestSeq] = createSignal(0);
   const [openTerminalInDirectoryRequest, setOpenTerminalInDirectoryRequest] = createSignal<OpenTerminalInDirectoryRequest | null>(null);
+  const flowerPageContexts = createFlowerPageContextRegistry();
+  const registerPageContext = (pageID: string): FlowerPageContextRegistrar => read => {
+    onCleanup(flowerPageContexts.register(pageID, read));
+  };
+  const captureNewConversationContext = () => {
+    if (standaloneTessiven || viewMode() !== 'activity' || layout.isMobile() || flowerProductPlacement() === 'full_page' || flowerProductPlacement() === 'workbench') return undefined;
+    const pageID = layout.sidebarActiveTab();
+    if (pageID === 'ai') return undefined;
+    const plugin = pinnedActivityPluginTiles().find(tile => pluginActivityComponentID(tile.item.inventoryKey) === pageID);
+    const pluginTarget = plugin ? activityPluginPageRuntimes.get(plugin.item.inventoryKey)?.target() : undefined;
+    const pageName = plugin?.item.displayName ?? components().find(component => component.id === pageID)?.name;
+    if (!pageName) return undefined;
+    return flowerPageContextSnapshot({
+      environmentID: envId(), environmentName: environmentName(), pageID, pageName, capturedAtMs: Date.now(),
+      state: plugin ? { plugin_id: plugin.item.pluginID, plugin_name: plugin.item.displayName,
+        instance_id: pluginTarget?.pluginInstanceID, surface_id: pluginTarget?.surfaceID }
+        : flowerPageContexts.read(pageID),
+    });
+  };
+
   const activeSurface = createMemo<EnvSurfaceId>(() => {
     if (viewMode() === 'activity') {
       const activeTab = layout.sidebarActiveTab();
@@ -3343,12 +3365,6 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     newConversation: i18n.t('shell.flowerCompanion.threadSwitcher.newConversation'),
     empty: i18n.t('shell.flowerCompanion.threadSwitcher.empty'),
     queued: i18n.t('shell.flowerCompanion.threadSwitcher.queued'),
-    groups: {
-      attention: i18n.t('shell.flowerCompanion.threadSwitcher.groups.attention'),
-      working: i18n.t('shell.flowerCompanion.threadSwitcher.groups.working'),
-      pinned: i18n.t('shell.flowerCompanion.threadSwitcher.groups.pinned'),
-      recent: i18n.t('shell.flowerCompanion.threadSwitcher.groups.recent'),
-    },
   });
 
   const activityFlowerCompanionDetailVisible = createMemo(() => (
@@ -3765,6 +3781,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
 
   const renderPluginCenter = (embedded = false) => (
         <PluginCenterView
+          registerPageContext={embedded ? undefined : registerPageContext(PLUGIN_CENTER_ACTIVITY_ID)}
           visible={embedded ? workbenchPluginCenterOpen() && viewMode() === 'workbench' : viewMode() === 'activity' && layout.sidebarActiveTab() === PLUGIN_CENTER_ACTIVITY_ID}
           pluginWidgetCounts={pluginWidgetCounts()}
           projection={pluginInventoryProjection() ?? { items: [] }}
@@ -3795,15 +3812,23 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
         />
   );
 
+  const ActivityTerminalPage = () => <EnvTerminalPage registerPageContext={registerPageContext('terminal')} />;
+  const ActivityMonitorPage = () => <EnvMonitorPage registerPageContext={registerPageContext('monitor')} />;
+  const ActivityFileBrowserPage = () => <EnvFileBrowserPage registerPageContext={registerPageContext('files')} />;
+  const ActivityCodespacesPage = () => <EnvCodespacesPage registerPageContext={registerPageContext('codespaces')} />;
+  const ActivityPortForwardsPage = () => <EnvPortForwardsPage registerPageContext={registerPageContext('ports')} />;
+  const ActivityHostApplicationsPage = () => <EnvHostApplicationsPage registerPageContext={registerPageContext('applications')} />;
+  const ActivityContainersPage = () => <EnvContainersPage registerPageContext={registerPageContext('containers')} />;
+
   const components = createMemo<FloeComponent[]>(() => {
     const list: FloeComponent[] = [
-      { id: 'terminal', name: i18n.t('shell.nav.terminal'), icon: Terminal, component: EnvTerminalPage, sidebar: { order: 1, fullScreen: true } },
-      { id: 'monitor', name: i18n.t('shell.nav.monitoring'), icon: Activity, component: EnvMonitorPage, sidebar: { order: 2, fullScreen: true } },
-      { id: 'files', name: i18n.t('shell.nav.fileBrowser'), icon: Files, component: EnvFileBrowserPage, sidebar: { order: 3, fullScreen: true } },
-      { id: 'codespaces', name: i18n.t('shell.nav.codespaces'), icon: Code, component: EnvCodespacesPage, sidebar: { order: 4, fullScreen: true } },
-      { id: 'ports', name: i18n.t('shell.nav.webServices'), icon: ActivityBarPortsIcon, component: EnvPortForwardsPage, sidebar: { order: 5, fullScreen: true } },
-      { id: 'applications', name: i18n.t('hostApplications.title'), icon: ActivityBarHostApplicationsIcon, component: EnvHostApplicationsPage, sidebar: { order: 5.5, fullScreen: true } },
-      { id: 'containers', name: i18n.t('shell.nav.containers'), icon: Layers, component: EnvContainersPage, sidebar: { order: 6, fullScreen: true } },
+      { id: 'terminal', name: i18n.t('shell.nav.terminal'), icon: Terminal, component: ActivityTerminalPage, sidebar: { order: 1, fullScreen: true } },
+      { id: 'monitor', name: i18n.t('shell.nav.monitoring'), icon: Activity, component: ActivityMonitorPage, sidebar: { order: 2, fullScreen: true } },
+      { id: 'files', name: i18n.t('shell.nav.fileBrowser'), icon: Files, component: ActivityFileBrowserPage, sidebar: { order: 3, fullScreen: true } },
+      { id: 'codespaces', name: i18n.t('shell.nav.codespaces'), icon: Code, component: ActivityCodespacesPage, sidebar: { order: 4, fullScreen: true } },
+      { id: 'ports', name: i18n.t('shell.nav.webServices'), icon: ActivityBarPortsIcon, component: ActivityPortForwardsPage, sidebar: { order: 5, fullScreen: true } },
+      { id: 'applications', name: i18n.t('hostApplications.title'), icon: ActivityBarHostApplicationsIcon, component: ActivityHostApplicationsPage, sidebar: { order: 5.5, fullScreen: true } },
+      { id: 'containers', name: i18n.t('shell.nav.containers'), icon: Layers, component: ActivityContainersPage, sidebar: { order: 6, fullScreen: true } },
     ];
     const ActivityFlowerFullPageHost = () => {
       let host: HTMLDivElement | undefined;
@@ -3832,7 +3857,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       id: ENV_TESSIVEN_ACTIVITY_ID,
       name: i18n.t('shell.tessivenLabel'),
       icon: TessivenNavigationIcon,
-      component: () => <EnvTessivenPage openRequest={tessivenOpenRequest()} visible={tessivenVisible()} />,
+      component: () => <EnvTessivenPage registerPageContext={registerPageContext(ENV_TESSIVEN_ACTIVITY_ID)} openRequest={tessivenOpenRequest()} visible={tessivenVisible()} />,
       sidebar: { order: 97, fullScreen: true },
     });
     list.push({
@@ -4844,6 +4869,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
           >
             <EnvAIPage
               draftCoordinator={flowerDraftCoordinator}
+              captureNewConversationContext={captureNewConversationContext}
               presentation={flowerProductPlacement() === 'full_page' || flowerProductPlacement() === 'workbench' ? 'full' : 'companion'}
               engaged={flowerSurfaceEngaged()}
               transcriptVisible={flowerSurfaceEngaged()}

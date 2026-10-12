@@ -19,7 +19,6 @@ const companionCopy = {
   newConversation: 'New conversation',
   empty: 'No matching conversations',
   queued: 'Queued',
-  groups: { attention: 'Needs attention', working: 'Working', pinned: 'Pinned', recent: 'Recent' },
   threadList: DEFAULT_FLOWER_SURFACE_COPY.threadList,
 };
 

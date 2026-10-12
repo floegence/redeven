@@ -217,6 +217,7 @@ describe('RuntimeMonitorPanel', () => {
   });
 
   it('loads monitoring with read permission and keeps process termination execute-gated', async () => {
+    let readPage = (): Readonly<Record<string, unknown>> | undefined => undefined;
     envContextMocks.permissions = { can_read: true, can_execute: false };
     rpcMocks.monitor.getSysMonitor.mockResolvedValue(
       makeSnapshot(1, [
@@ -224,11 +225,17 @@ describe('RuntimeMonitorPanel', () => {
       ]),
     );
 
-    render(() => <RuntimeMonitorPanel variant="workbench" />, host);
+    render(() => <RuntimeMonitorPanel variant="page" registerPageContext={read => { readPage = read; }} />, host);
     await flushPanel();
 
     expect(rpcMocks.monitor.getSysMonitor).toHaveBeenCalledTimes(1);
     expect(host.textContent).toContain('node');
+    expect(readPage()).toMatchObject({ sort: 'cpu', show_internal_sessions: false,
+      readings: { cpu_percent: 12.5, cpu_cores: 8, sampled_at_ms: 1 } });
+    expect(readPage()).not.toHaveProperty('processes');
+    const callsBeforeCapture = rpcMocks.monitor.getSysMonitor.mock.calls.length;
+    readPage();
+    expect(rpcMocks.monitor.getSysMonitor).toHaveBeenCalledTimes(callsBeforeCapture);
 
     const processRow = host.querySelector('tr[data-monitor-process-selected]') as HTMLTableRowElement | null;
     processRow?.dispatchEvent(new MouseEvent('contextmenu', {

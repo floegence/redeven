@@ -50,6 +50,7 @@ const TessivenRuntimesDialog = lazy(() => import('./TessivenRuntimesDialog').the
 type Library = { canvases: Canvas[]; next_cursor?: string };
 
 export function TessivenPage(props: {
+  registerPageContext?: (read: () => Readonly<Record<string, unknown>>) => void;
   transport: TessivenTransport;
   t: TessivenText;
   locale?: string;
@@ -85,6 +86,7 @@ export function TessivenPage(props: {
   const [busy, setBusy] = createSignal(false);
   const [loading, setLoading] = createSignal(true);
   const [streamError, setStreamError] = createSignal(false);
+  props.registerPageContext?.(() => ({ canvas_id: canvas()?.id, version: version()?.number, query: query(), archived: archived() }));
   let libraryGeneration = 0,
     viewGeneration = 0,
     refreshGeneration = 0,

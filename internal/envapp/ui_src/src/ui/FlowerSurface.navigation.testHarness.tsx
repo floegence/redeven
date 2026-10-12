@@ -294,7 +294,7 @@ vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => {
       onChange={(event) => props.onChange?.((event.currentTarget as HTMLInputElement).checked)}
     />
   ),
-  Dialog: (props: any) => props.presentation ? <Dynamic component={actual.Dialog} {...props} /> : (
+  Dialog: (props: any) => props.presentation || props.class === 'flower-page-context-preview' ? <Dynamic component={actual.Dialog} {...props} /> : (
     <Show when={props.open}>
       <div role="dialog">{props.children}{props.footer}</div>
     </Show>
@@ -1009,6 +1009,7 @@ const mountFlowerSurface = (
   props: Readonly<{
     copy?: FlowerSurfaceProps['copy'];
     embeddedConversation?: FlowerSurfaceProps['embeddedConversation'];
+    captureNewConversationContext?: FlowerSurfaceProps['captureNewConversationContext'];
     focusThreadRequest?: FlowerThreadFocusRequest | null;
     settingsFocusRequest?: number;
     mobileThreadsOpen?: boolean;
@@ -1035,6 +1036,7 @@ const mountFlowerSurface = (
       adapter={surfaceAdapter}
       copy={props.copy}
       embeddedConversation={props.embeddedConversation}
+      captureNewConversationContext={props.captureNewConversationContext}
       notify={(notification) => {
         notifications.push(notification);
       }}
@@ -1101,6 +1103,7 @@ export function renderSurfaceWithAdapterProps(
   props: Readonly<{
     copy?: FlowerSurfaceProps['copy'];
     embeddedConversation?: FlowerSurfaceProps['embeddedConversation'];
+    captureNewConversationContext?: FlowerSurfaceProps['captureNewConversationContext'];
     focusThreadRequest?: FlowerThreadFocusRequest | null;
     settingsFocusRequest?: number;
     mobileThreadsOpen?: boolean;

@@ -2449,6 +2449,7 @@ describe('RemoteFileBrowser persistence', () => {
   });
 
   it('reports committed path changes only after successful directory navigation', async () => {
+    let readPage = (): Readonly<Record<string, unknown>> | undefined => undefined;
     const host = document.createElement('div');
     document.body.appendChild(host);
     widgetStateStore.values['widget-1'] = {
@@ -2483,6 +2484,7 @@ describe('RemoteFileBrowser persistence', () => {
             <RemoteFileBrowser
               widgetId="widget-1"
               openPathRequest={openPathRequest()}
+              registerPageContext={read => { readPage = read; }}
               onOpenPathRequestHandled={onOpenPathRequestHandled}
               onCommittedPathChange={onCommittedPathChange}
             />
@@ -2506,6 +2508,7 @@ describe('RemoteFileBrowser persistence', () => {
       expect(onOpenPathRequestHandled).toHaveBeenCalledWith('open-docs');
       expect(onCommittedPathChange).toHaveBeenCalledTimes(1);
       expect(onCommittedPathChange).toHaveBeenCalledWith('/workspace/repo/docs', 'home');
+      expect(readPage()).toMatchObject({ mode: 'files', directory: '/workspace/repo/docs', show_hidden: false });
 
       setOpenPathRequest({
         requestId: 'reload-docs',

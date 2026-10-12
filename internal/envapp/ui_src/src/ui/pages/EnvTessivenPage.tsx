@@ -1,3 +1,4 @@
+import type { FlowerPageContextRegistrar } from '../flower/flowerPageContext';
 import type { TessivenOpenRequest } from '../../../../../tessiven_ui/src/navigation';
 import { createMemo, onCleanup } from 'solid-js';
 import { createFlowerComposerDraftCoordinator } from '../../../../../flower_ui/src';
@@ -18,6 +19,7 @@ import { desktopShellWebServiceWindowOpenAvailable } from '../services/desktopSh
 
 export default function EnvTessivenPage(props: {
   visible: boolean;
+  registerPageContext?: FlowerPageContextRegistrar;
   standalone?: boolean;
   openRequest?: TessivenOpenRequest | null;
 }) {
@@ -48,7 +50,7 @@ export default function EnvTessivenPage(props: {
       }
     : null;
   return (
-    <TessivenPage
+    <TessivenPage registerPageContext={props.registerPageContext}
       locale={i18n.locale()}
       visible={props.visible}
       standalone={props.standalone}

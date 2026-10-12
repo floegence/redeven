@@ -578,13 +578,7 @@
         "searchPlaceholder": "Unterhaltungen suchen...",
         "newConversation": "Neue Unterhaltung",
         "empty": "Keine passenden Unterhaltungen",
-        "queued": "In Warteschlange",
-        "groups": {
-          "attention": "Aktion erforderlich",
-          "working": "In Arbeit",
-          "pinned": "Angeheftet",
-          "recent": "Zuletzt"
-        }
+        "queued": "In Warteschlange"
       }
     },
     "commandPalette": {

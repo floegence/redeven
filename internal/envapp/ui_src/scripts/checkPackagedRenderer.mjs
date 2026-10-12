@@ -966,6 +966,39 @@ async function verifyBuiltFlowerLifecycle(browser, tls) {
       throw new Error(`built Flower collapsed geometry changed: ${JSON.stringify({ collapsedBox, restoredCollapsedBox })}`);
     }
 
+    await page.getByRole('button', { name: 'Monitoring', exact: true }).click();
+    await page.locator('.runtime-monitor-panel').waitFor({ state: 'visible' });
+    await composer.fill('Explain this origin page');
+    const pageReference = page.locator('[data-reference-kind="page_context"]');
+    await pageReference.waitFor({ state: 'visible' });
+    await pageReference.locator('.flower-composer-reference-chip-preview').click();
+    const preview = page.locator('.flower-page-context-preview');
+    await preview.waitFor({ state: 'visible' });
+    const frozenPageText = await preview.locator('pre').textContent();
+    const frozenPage = JSON.parse(frozenPageText);
+    if (frozenPage.page.id !== 'monitor' || !frozenPage.environment.id || !frozenPage.captured_at
+      || !frozenPage.state.sort) throw new Error('built companion must capture the visible Monitor page');
+    await preview.locator('pre').click();
+    if (await companion.getAttribute('data-companion-phase') !== 'expanded') {
+      throw new Error('page reference preview interaction must remain owned by Flower');
+    }
+    await page.keyboard.press('Escape');
+    await preview.waitFor({ state: 'hidden' });
+    if (await companion.getAttribute('data-companion-phase') !== 'expanded') {
+      throw new Error('Escape must dismiss the page preview before collapsing Flower');
+    }
+    await page.getByRole('button', { name: 'File Browser', exact: true }).click();
+    await composer.click();
+    await pageReference.locator('.flower-composer-reference-chip-preview').click();
+    await preview.waitFor({ state: 'visible' });
+    if (await preview.locator('pre').textContent() !== frozenPageText) throw new Error('page navigation must retain the frozen origin');
+    await page.keyboard.press('Escape');
+    await preview.waitFor({ state: 'hidden' });
+    await pageReference.locator('.flower-composer-reference-chip-remove').click();
+    await pageReference.waitFor({ state: 'detached' });
+    await composer.fill('Continue after removing the page reference');
+    if (await pageReference.count() !== 0) throw new Error('editing must not replenish a removed page reference');
+
     const flowerEntry = page.getByRole('button', { name: 'Flower', exact: true });
     await flowerEntry.click();
     await page.waitForFunction(() => (
@@ -1026,6 +1059,7 @@ async function verifyBuiltFlowerLifecycle(browser, tls) {
       full_page_height: fullPageSurfaceBox.height,
       identity_preserved: true,
       single_collapsed_outline: true,
+      frozen_page_context_verified: true,
     };
   } finally {
     await page.close();

@@ -417,6 +417,7 @@ func TestFloretContextProjectionBuildsCanonicalReferencesAndDurableContextTogeth
 		{name: "file", surface: "file_browser", item: ContextActionContextItem{Kind: "file_path", Path: "/workspace/src/main.ts"}, wantKind: flruntime.MessageReferenceFile, wantLocator: true},
 		{name: "image", surface: "file_browser", item: ContextActionContextItem{Kind: "file_path", Path: "/workspace/changsha.jpg"}, wantKind: flruntime.MessageReferenceFile, wantLocator: true},
 		{name: "directory", surface: "file_browser", item: ContextActionContextItem{Kind: "file_path", Path: "/workspace/src", IsDirectory: true}, wantKind: flruntime.MessageReferenceDirectory, wantLocator: true},
+		{name: "composer page", surface: "flower_composer", item: ContextActionContextItem{Kind: "text_snapshot", Title: "Monitor", Content: "Page: Monitor"}, wantKind: flruntime.MessageReferenceText, wantText: "Page: Monitor"},
 		{name: "composer file", surface: "flower_composer", item: ContextActionContextItem{Kind: "file_path", Path: "/workspace/src/main.ts"}, wantKind: flruntime.MessageReferenceFile, wantLocator: true},
 		{name: "composer directory", surface: "flower_composer", item: ContextActionContextItem{Kind: "file_path", Path: "/workspace/src", IsDirectory: true}, wantKind: flruntime.MessageReferenceDirectory, wantLocator: true},
 		{name: "terminal", surface: "terminal", item: ContextActionContextItem{Kind: "terminal_selection", WorkingDir: "/workspace", Selection: "pnpm test\nPASS", SelectionChars: 14}, wantKind: flruntime.MessageReferenceTerminal, wantText: "pnpm test\nPASS"},
@@ -564,4 +565,73 @@ func contextSnapshotMetadata(t *testing.T, item flruntime.MessageContextItem) ma
 		t.Fatal(err)
 	}
 	return metadata
+}
+
+func TestComposerPageContextWireShape(t *testing.T) {
+	page := ContextActionContextItem{Kind: "text_snapshot", Title: "Monitor", Content: "Page: Monitor"}
+	if !contextActionSurfaceAllowsKind("flower_composer", page.Kind) || !contextActionItemPayloadAllowed(page) {
+		t.Fatal("composer page snapshot must be accepted")
+	}
+	for _, field := range []string{"detail", "path", "root_label", "unknown"} {
+		forged := page
+		forged.wireFields = map[string]json.RawMessage{"kind": json.RawMessage(`"text_snapshot"`), "title": json.RawMessage(`"Monitor"`), "content": json.RawMessage(`"Page: Monitor"`), field: json.RawMessage(`"forged"`)}
+		if contextActionComposerItemWireShapeAllowed(forged) {
+			t.Fatalf("accepted forged field %s", field)
+		}
+	}
+}
+
+func TestComposerPageAndFileAdmissionRetainsResourceAuthority(t *testing.T) {
+	const prefix = `{"schema_version":2,"action_id":"assistant.ask.flower","provider":"flower","target":{"target_id":"current","locality":"auto"},"source":{"surface":"flower_composer"},"presentation":{"label":"Flower","priority":100},"context":[`
+	const page = `{"kind":"text_snapshot","title":"Monitor","content":"Frozen page facts"}`
+	const file = `{"kind":"file_path","path":"/workspace/main.ts","is_directory":false}`
+	for _, test := range []struct {
+		name, items string
+		wantError   bool
+	}{
+		{"page", page, false},
+		{"page and file", page + "," + file, false},
+		{"extra detail", `{"kind":"text_snapshot","title":"Monitor","content":"facts","detail":""}`, true},
+		{"extra path", `{"kind":"text_snapshot","title":"Monitor","content":"facts","path":"/forged"}`, true},
+		{"missing title", `{"kind":"text_snapshot","content":"facts"}`, true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var action ContextActionEnvelope
+			if err := json.Unmarshal([]byte(prefix+test.items+`]}`), &action); err != nil {
+				t.Fatal(err)
+			}
+			_, err := normalizeAskFlowerContextActionEnvelope(&action)
+			if test.wantError {
+				if !errors.Is(err, ErrInvalidContextAction) {
+					t.Fatalf("accepted malformed composer context: %v", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			input := RunInput{Text: "Explain", ContextAction: &action}
+			if test.name == "page" {
+				projection, err := floretContextProjectionForInput(input, nil, nil)
+				if err != nil || len(projection.References) != 1 || projection.References[0].Text != "Frozen page facts" {
+					t.Fatalf("page projection: %#v, %v", projection, err)
+				}
+				return
+			}
+			if _, err := floretContextProjectionForInput(input, nil, nil); !errors.Is(err, ErrInvalidContextAction) {
+				t.Fatalf("mixed references bypassed resource authority: %v", err)
+			}
+			authority, err := resolveFlowerCanonicalReferenceTargetAuthority("env_demo", ToolTargetPolicy{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			projection, err := floretContextProjectionForInput(input, &authority, nil)
+			if err != nil || len(projection.References) != 2 {
+				t.Fatalf("mixed projection: %#v, %v", projection, err)
+			}
+			if projection.References[0].Text != "Frozen page facts" || projection.References[1].Kind != flruntime.MessageReferenceFile {
+				t.Fatalf("reference order changed: %#v", projection.References)
+			}
+		})
+	}
 }
