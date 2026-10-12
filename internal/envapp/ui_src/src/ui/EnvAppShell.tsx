@@ -1772,6 +1772,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
             coordinator={pluginSurfaceCoordinator}
             confirmationQueue={pluginConfirmationQueue}
             target={runtime.target}
+            onInteraction={() => dismissActivityFlowerCompanion('outside-pointer')}
             registerClose={(close) => {
               if (close) {
                 ownedClose = close;

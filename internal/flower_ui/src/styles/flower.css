@@ -319,14 +319,16 @@
 }
 
 .flower-composer[data-flower-companion-compact='true'] {
+  display: flex;
+  flex-direction: column;
   padding: 0.5rem;
 }
 
 .flower-composer[data-flower-companion-compact='true'] .flower-composer-content {
-  display: grid;
+  display: flex;
   min-width: 0;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
+  flex: 1 1 auto;
+  flex-direction: column;
   gap: 0.5rem;
 }
 
@@ -338,7 +340,7 @@
 .flower-composer[data-flower-companion-compact='true'] .flower-composer-footer {
   align-items: flex-end;
   gap: 0.375rem;
-  margin-top: 0;
+  margin-top: auto;
 }
 
 .flower-composer[data-flower-companion-compact='true'] .flower-model-stack {
@@ -8667,12 +8669,6 @@ button.flower-attachment-preview-trigger:disabled {
 
 .flower-composer-over-limit {
   color: color-mix(in srgb, var(--redeven-status-warning) 78%, var(--foreground));
-}
-
-.flower-composer[data-flower-companion-compact='true'] .flower-attachment-lane,
-.flower-composer[data-flower-companion-compact='true'] .flower-composer-reference-lane,
-.flower-composer[data-flower-companion-compact='true'] .flower-composer-over-limit {
-  grid-column: 1 / -1;
 }
 
 .flower-composer input[type='password'] {

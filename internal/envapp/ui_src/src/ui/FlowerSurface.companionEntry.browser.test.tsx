@@ -10,6 +10,7 @@ import { FlowerSurface, createFlowerComposerDraftCoordinator, type FlowerThreadF
 import decisionFixtures from '../../../../flower_ui/src/testdata/decisionCurrentViews.json';
 import { applyFlowerRuntimeCurrentView } from '../../../../flower_ui/src/runtimeCurrentView';
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../../../../flower_ui/src/copy';
+import { withModelDirectoryFixture } from '../../../../flower_ui/testing/modelDirectoryFixture';
 import type { FlowerThreadSnapshot, FlowerLiveStreamEnvelope, FlowerRuntimeCurrentView } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { adapter, inputRequest, liveBootstrap, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 
@@ -45,6 +46,8 @@ function mountCompanion(selected: FlowerThreadSnapshot, summary?: FlowerSurfaceP
   };
   const surfaceAdapter = {
     ...adapter(true),
+    loadSettings: async () => withModelDirectoryFixture(await adapter(true).loadSettings()),
+    loadModelDirectory: async () => withModelDirectoryFixture(await adapter(true).loadSettings()).model_directory!,
     listThreads: vi.fn(async () => threads),
     loadThread: vi.fn(async (id: string) => views.get(id)!),
     connectLiveStream: vi.fn(async function* (input) {
@@ -80,7 +83,7 @@ function mountCompanion(selected: FlowerThreadSnapshot, summary?: FlowerSurfaceP
   });
   const dispose = render(() => (
     <BottomBarCompanion retained visible open={open()} anchor={anchor} mount={mount}
-      id="companion-entry-test" label="Flower" expandedWidth={544} onPhaseChange={setPhase}
+      id="companion-entry-test" label="Flower" class="flower-activity-companion" expandedWidth={544} onPhaseChange={setPhase}
       onDismiss={(reason) => {
         if (reason !== 'escape') outside.focus();
         setOpen(false);
@@ -131,6 +134,79 @@ async function closeWithEscape(fixture: Fixture) {
 }
 
 describe('Flower companion entry with the published shell', () => {
+  it.each(['light', 'dark'])('dissolves retained detail in %s before the final compact layout and reverses without replacing the editor', async theme => {
+    const previousTheme = document.documentElement.className;
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+    onTestFinished(() => { document.documentElement.className = previousTheme; });
+    const fixture = mountCompanion(thread());
+    await waitFor(() => fixture.mount.querySelector('[data-companion-frame-ready="true"]') !== null);
+    fixture.setOpen(true);
+    await waitFor(() => fixture.phase() === 'expanded'
+      && fixture.mount.querySelector<HTMLElement>('[data-flower-selected-thread-loading]')?.dataset.flowerSelectedThreadLoading === 'false');
+    const content = fixture.mount.querySelector<HTMLElement>('.flower-surface')!;
+    const shell = fixture.mount.querySelector<HTMLElement>('[data-floe-bottom-bar-companion]')!;
+    const editor = fixture.mount.querySelector<HTMLTextAreaElement>('.flower-composer textarea')!;
+    await userEvent.fill(editor, 'Retained closing draft');
+    editor.setSelectionRange(2, 7);
+    fixture.outside.focus();
+    fixture.setOpen(false);
+    await waitFor(() => fixture.phase() === 'collapsing');
+    const tail: number[] = [];
+    while (fixture.phase() === 'collapsing') {
+      if (shell.getBoundingClientRect().height < 80) tail.push(Number(getComputedStyle(content).opacity));
+      await new Promise(resolve => requestAnimationFrame(resolve));
+    }
+    expect(tail.length).toBeGreaterThan(0);
+    expect(Math.max(...tail)).toBeLessThan(0.05);
+    expect(Number(getComputedStyle(content).opacity)).toBeLessThan(0.2);
+    await waitFor(() => Number(getComputedStyle(content).opacity) > 0.99);
+    expect(fixture.mount.querySelector('.flower-composer textarea')).toBe(editor);
+    expect(editor.value).toBe('Retained closing draft');
+    expect([editor.selectionStart, editor.selectionEnd]).toEqual([2, 7]);
+    expect(document.activeElement).toBe(fixture.outside);
+
+    fixture.setOpen(true);
+    await waitFor(() => fixture.phase() === 'expanded');
+    fixture.setOpen(false);
+    await waitFor(() => fixture.phase() === 'collapsing' && Number(getComputedStyle(content).opacity) < 0.6);
+    editor.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+    fixture.setOpen(true);
+    await waitFor(() => fixture.phase() === 'expanded' && Number(getComputedStyle(content).opacity) > 0.99);
+    expect(fixture.mount.querySelector('.flower-composer textarea')).toBe(editor);
+    expect(editor.value).toBe('Retained closing draft');
+    editor.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', isComposing: true, bubbles: true }));
+    expect(fixture.surfaceAdapter.launchTurn).not.toHaveBeenCalled();
+    editor.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true }));
+  });
+
+  it.each([1280, 390].flatMap(width => ['idle', 'running'].map(status => ({ width, status }))))(
+    'places short and multiline text above bottom-aligned tools at $width with $status status', async ({ width, status }) => {
+      await page.viewport(width, 800);
+      const fixture = mountCompanion(thread({ status: status as 'idle' | 'running' }));
+      await waitFor(() => fixture.mount.querySelector('[data-companion-frame-ready="true"]') !== null);
+      fixture.setOpen(true);
+      await waitFor(() => fixture.phase() === 'expanded'
+        && Boolean(fixture.mount.querySelector('[data-flower-companion-compact="true"]')));
+      const editor = fixture.mount.querySelector<HTMLTextAreaElement>('.flower-composer textarea')!;
+      const composer = fixture.mount.querySelector<HTMLElement>('.flower-composer')!;
+      const footer = fixture.mount.querySelector<HTMLElement>('.flower-composer-footer')!;
+      for (const text of ['Short input', 'First line\nSecond line\nThird line']) {
+        await userEvent.fill(editor, text);
+        await new Promise(resolve => requestAnimationFrame(resolve));
+        const style = getComputedStyle(composer);
+        const bounds = composer.getBoundingClientRect();
+        const tools = footer.getBoundingClientRect();
+        expect(tools.top).toBeGreaterThanOrEqual(editor.getBoundingClientRect().bottom);
+        expect(bounds.bottom - tools.bottom).toBeCloseTo(parseFloat(style.paddingBottom) + parseFloat(style.borderBottomWidth), 0);
+        expect(composer.scrollWidth).toBeLessThanOrEqual(composer.clientWidth + 1);
+        if (text === 'Short input') {
+          await page.screenshot({ element: fixture.mount.querySelector('[data-floe-bottom-bar-companion]')!, path: `__screenshots__/companion-composer-${width}-${status}.png` });
+        }
+      }
+      expect(fixture.mount.querySelector('.flower-composer textarea')).toBe(editor);
+    },
+  );
+
   it('opens the selected choice request from the collapsed entry without submitting it', async () => {
     await page.viewport(1280, 800);
     const fixture = mountCompanion(choiceThread());
@@ -450,6 +526,8 @@ describe('Flower companion entry with the published shell', () => {
     const fixture = mountCompanion(choiceThread());
     await userEvent.click(await collapsedAction(fixture));
     await waitFor(() => fixture.phase() === 'expanded');
+    expect(getComputedStyle(fixture.mount.querySelector('.flower-surface')!).opacity).toBe('1');
+    expect(getComputedStyle(fixture.mount.querySelector('.flower-surface')!).transitionDuration).toBe('0s');
     fixture.setOpen(false);
     fixture.setOpen(true);
     await waitFor(() => fixture.phase() === 'expanded');

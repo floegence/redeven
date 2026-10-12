@@ -50,7 +50,7 @@ describe('Flower bottom companion visual contract', () => {
 
   it('keeps calm expanded styling through the collapse transition', () => {
     const rules = companionRules(readCompanionCss());
-    const frameRule = findRule(rules, '.flower-activity-companion.floe-bottom-bar-companion');
+    const frameRule = findRule(rules, '.flower-activity-companion.floe-bottom-bar-companion[data-companion-phase=');
 
     expectDrawerPhases(frameRule);
     expect(frameRule.body).toContain('background: var(--flower-companion-surface);');
