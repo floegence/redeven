@@ -1,8 +1,9 @@
+import { toRenderVersion } from '../../../../tessiven_ui/src/presentation';
 import '../index.css';
 import '../../../../tessiven_ui/src/tessiven.css';
 import { render } from 'solid-js/web';
 import { commands, page, userEvent } from 'vitest/browser';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { builtInShellThemePresets } from '@floegence/floe-webapp-core/themes';
 import { TessivenGraph } from '../../../../tessiven_ui/src/TessivenGraph';
 import { tessivenText } from '../../../../tessiven_ui/src/i18n';
@@ -27,7 +28,7 @@ it('keeps canvas controls compact and usable in every theme, small surfaces and 
   host.style.cssText = 'width:1200px;height:720px;position:relative';
   host.setAttribute('data-floe-dialog-surface-host', 'true');
   document.body.append(host);
-  dispose = render(() => <TessivenGraph version={sharedHostsVersion('mixed')} historical={false}
+  dispose = render(() => <TessivenGraph version={toRenderVersion(sharedHostsVersion('mixed'))} historical={false}
     t={tessivenText('zh-CN')} onAsk={() => {}} onInspect={() => {}} />, host);
   await expect.poll(() => host.querySelectorAll('.tessiven-node').length, { timeout: 20000 }).toBeGreaterThan(0);
   await expect.poll(() => host.querySelector('[aria-label="正在整理画布"]'), { timeout: 20000 }).toBeNull();
@@ -80,4 +81,31 @@ it('keeps canvas controls compact and usable in every theme, small surfaces and 
   await frames();
   expect(getComputedStyle(tools).borderTopStyle).toBe('solid');
   await page.screenshot({ element: host, path: '../../.vitest-attachments/canvas-controls-forced-colors.png' });
+});
+
+it.each([{ refs: [], mode: 'display' as const }, { refs: ['exact-queue'], mode: 'display' as const }, { refs: ['exact-queue'], mode: 'source' as const }])('keeps generic selection compact and limits Flower references: %j', async ({ refs, mode }) => {
+  await page.viewport(720, 640);
+  const version = toRenderVersion(sharedHostsVersion());
+  version.view.model = { metadata: { title: 'Queue canvas' }, objects: [{ id: 'queue', name: 'Work queue', kind: 'Queue', description: 'Background jobs', facts: [{ label: 'Region', value: 'Local' }], objectRefs: refs }] };
+  host = document.createElement('div');
+  host.className = 'tessiven';
+  host.style.cssText = 'width:680px;height:580px;position:relative';
+  document.body.append(host);
+  const selection = vi.fn(), ask = vi.fn();
+  dispose = render(() => <TessivenGraph version={version} historical={false} t={tessivenText('en-US')}
+    onAsk={ask} onInspect={() => {}} onSelectionChange={selection} askReferenceMode={mode} />, host);
+  await expect.poll(() => host.querySelectorAll('.tessiven-generic-object').length).toBe(1);
+  await expect.poll(() => host.querySelector('[aria-label="Arranging canvas"]')).toBeNull();
+  const card = host.querySelector<HTMLElement>('.tessiven-generic-object')!;
+  expect(card.textContent).toContain('Work queue');
+  expect(card.textContent).toContain('Region');
+  expect(card.textContent).toContain('Local');
+  await userEvent.click(card.querySelector('strong')!);
+  expect(selection).toHaveBeenLastCalledWith({ canvas_id: version.canvas_id, version_id: version.number, object_refs: ['queue'] });
+  expect(host.querySelector('.tessiven-popup')).toBeNull();
+  expect(ask).not.toHaveBeenCalled();
+  await userEvent.click(card.querySelector('button')!);
+  if (refs.length) expect(ask).toHaveBeenLastCalledWith({ canvas_id: version.canvas_id, version_id: version.number, object_refs: mode === 'display' ? ['queue'] : refs });
+  else expect(ask).not.toHaveBeenCalled();
+  await page.screenshot({ element: host, path: `../../.vitest-attachments/presentation-generic-${refs.length ? 'mapped' : 'readonly'}.png` });
 });

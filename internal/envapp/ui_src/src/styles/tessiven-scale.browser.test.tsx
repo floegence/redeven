@@ -1,3 +1,4 @@
+import { toRenderVersion } from '../../../../tessiven_ui/src/presentation';
 import '../index.css';
 import '../../../../tessiven_ui/src/tessiven.css';
 import { render } from 'solid-js/web';
@@ -39,7 +40,7 @@ describe('Tessiven actual host scale qualification', () => {
       window.document.body.append(host);
       const version: Version = { canvas_id: 'scale', number: 1, document_yaml: '', document, digest: 'fixture', created_at: 0, source: 'example', summary: '' };
       const mounted = performance.now();
-      dispose = render(() => <TessivenGraph version={version} historical={false} t={tessivenText('en-US')}
+      dispose = render(() => <TessivenGraph version={toRenderVersion(version)} historical={false} t={tessivenText('en-US')}
         onAsk={() => {}} onInspect={() => {}} />, host);
       await expect.poll(() => host.querySelectorAll('.tessiven-node').length, { timeout: 60000 }).toBeGreaterThan(0);
       await expect.poll(() => host.querySelector('[aria-label="Arranging canvas"]'), { timeout: 60000 }).toBeNull();

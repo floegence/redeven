@@ -53,7 +53,31 @@ func TestTessivenWorksWithoutAIAndEnforcesPermissions(t *testing.T) {
 	if historical.Code != 200 || !strings.Contains(historical.Body.String(), "Test business") {
 		t.Fatalf("historical read: %s", historical.Body.String())
 	}
+	contract := performWorkbenchLayoutRequest(t, srv, http.MethodGet, tessivenAPIBase+"/presentation-contract", "")
+	if contract.Code != 200 {
+		t.Fatal(contract.Body.String())
+	}
+	presentationPath := tessivenAPIBase + "/canvases/" + value.Canvas.ID + "/versions/1/presentation?format=" + tessiven.PresentationFormat + "&capabilities=group_layouts"
+	response := performWorkbenchLayoutRequest(t, srv, http.MethodGet, presentationPath, "")
+	if response.Code != 200 {
+		t.Fatal(response.Body.String())
+	}
+	presentation := decodeWorkbenchLayoutResponse[tessiven.PresentationSnapshot](t, response)
+	if presentation.Canvas.ID != value.Canvas.ID || presentation.Version.Number != 1 || presentation.Version.View.Format != tessiven.PresentationFormat || presentation.Version.DocumentYAML != value.Version.DocumentYAML || presentation.Version.Digest != value.Version.Digest {
+		t.Fatal("presentation/source identity drift")
+	}
+	for _, query := range []string{"format=future", "format=" + tessiven.PresentationFormat + "&capabilities=group_layouts,group_layouts", "format=" + tessiven.PresentationFormat + "&target=remote"} {
+		response := performWorkbenchLayoutRequest(t, srv, http.MethodGet, tessivenAPIBase+"/canvases/"+value.Canvas.ID+"/versions/1/presentation?"+query, "")
+		if response.Code != 400 && response.Code != 409 {
+			t.Fatal("invalid presentation negotiation was accepted")
+		}
+	}
 	cap.Read = false
+	for _, path := range []string{tessivenAPIBase + "/presentation-contract", presentationPath} {
+		if result := performWorkbenchLayoutRequest(t, srv, http.MethodGet, path, ""); result.Code != 403 {
+			t.Fatal("presentation bypassed read permission")
+		}
+	}
 	denied = performWorkbenchLayoutRequest(t, srv, http.MethodGet, tessivenAPIBase+"/canvases", "")
 	if denied.Code != 403 {
 		t.Fatalf("read permission: %d", denied.Code)

@@ -1,3 +1,4 @@
+import { toRenderVersion } from '../../../../tessiven_ui/src/presentation';
 import '../index.css';
 import '../ui/flower-feature.css';
 import '../../../../tessiven_ui/src/tessiven.css';
@@ -46,7 +47,7 @@ function mount(transformed = false, overrides: Partial<FlowerSurfaceAdapter> = {
   const accepted = vi.fn();
   dispose = render(() => <FloeConfigProvider><LayoutProvider>
     {graph && <TessivenGraph t={tessivenText('en-US')} historical={false} onAsk={() => {}} onInspect={() => {}}
-      version={{ canvas_id: 'commerce', number: 2, created_at: 1, digest: 'fixture', document_yaml: '', source: 'flower', summary: '',
+      version={toRenderVersion({ canvas_id: 'commerce', number: 2, created_at: 1, digest: 'fixture', document_yaml: '', source: 'flower', summary: '',
         document: { apiVersion: 'redeven.io/tessiven/v1.0.0', kind: 'ServiceCanvas', metadata: { title: 'Commerce / Production' },
           nodes: [{ id: 'core', name: 'production-01', runtimeRef: 'local:local' }],
           groups: [{ id: 'app', name: 'Application', nodeRefs: ['core'] }],
@@ -56,7 +57,7 @@ function mount(transformed = false, overrides: Partial<FlowerSurfaceAdapter> = {
           relations: [{ id: 'read', from: 'orders', to: 'db', kind: 'reads', evidenceRefs: ['config'] }, { id: 'route', from: 'cdn', to: 'storefront', kind: 'forwards', evidenceRefs: ['config'] }],
           evidence: [{ id: 'config', source: 'configuration', locator: 'repo://commerce/config.yaml', summary: 'Test configuration' }],
           presentation: { initiallyExpanded: ['app'] },
-        } }} />}
+        } })} />}
     <TessivenFlowerPanel
     request={request()} visible initialComposer={initialComposer} t={tessivenText('en-US')} onOpenConversation={navigate}
     onAccepted={accepted}

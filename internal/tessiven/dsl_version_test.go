@@ -1,16 +1,107 @@
 package tessiven
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
 	tessivenspec "github.com/floegence/redeven/spec/tessiven"
+	presentationspec "github.com/floegence/redeven/spec/tessiven-presentation"
+	"github.com/santhosh-tekuri/jsonschema/v5"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
 )
+
+func TestFrozenPresentationReadsImmutableSourceAcrossDSLVersions(t *testing.T) {
+	store, err := Open(filepath.Join(t.TempDir(), "presentation.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	saved, err := store.Save(t.Context(), SaveRequest{RequestID: "view", DocumentYAML: exampleDocument}, "import")
+	if err != nil {
+		t.Fatal(err)
+	}
+	compiler := jsonschema.NewCompiler()
+	if err := compiler.AddResource("view.json", bytes.NewReader(presentationspec.Schema)); err != nil {
+		t.Fatal(err)
+	}
+	schema, err := compiler.Compile("view.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index, format := range tessivenspec.Formats() {
+		source := strings.Replace(exampleDocument, tessivenspec.CurrentAPIVersion, tessivenspec.Namespace+format.Version, 1)
+		number := index + 2
+		if _, err := store.db.Exec(`INSERT INTO versions(canvas_id,number,document_yaml,digest,created_at,source,summary) VALUES(?,?,?,?,?,?,?)`, saved.Canvas.ID, number, source, digest(source), 1, "import", "historical"); err != nil {
+			t.Fatal(err)
+		}
+		result, err := store.Presentation(t.Context(), saved.Canvas.ID, int64(number), PresentationFormat, []string{GroupLayoutsCapability})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.Version.DocumentYAML != source || result.Version.Digest != digest(source) || result.Version.DSLVersion != format.Version || result.Version.Number != int64(number) || result.Version.View.Compatibility.Status != "complete" {
+			t.Fatal("presentation changed source identity or rejected a supported DSL")
+		}
+		data, err := json.Marshal(result.Version.View)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var value any
+		if err := json.Unmarshal(data, &value); err != nil {
+			t.Fatal(err)
+		}
+		if err := schema.Validate(value); err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(data), "apiVersion") || strings.Contains(string(data), "document_yaml") {
+			t.Fatal("display model leaked DSL or source")
+		}
+	}
+	if _, err := store.Presentation(t.Context(), saved.Canvas.ID, 1, "future", nil); !errors.Is(err, ErrPresentationUnsupported) {
+		t.Fatal("unknown display contract was accepted")
+	}
+	future := strings.Replace(exampleDocument, tessivenspec.CurrentAPIVersion, "redeven.io/tessiven/v99.0.0", 1)
+	if _, err := store.db.Exec(`INSERT INTO versions(canvas_id,number,document_yaml,digest,created_at,source,summary) VALUES(?,?,?,?,?,?,?)`, saved.Canvas.ID, 10, future, digest(future), 1, "import", "future"); err != nil {
+		t.Fatal(err)
+	}
+	view, err := store.Presentation(t.Context(), saved.Canvas.ID, 10, PresentationFormat, nil)
+	if err != nil || view.Version.View.Compatibility.Status != "unavailable" || view.Version.DocumentYAML != future || view.Version.Digest != digest(future) {
+		t.Fatal("unknown source must retain verified source without inventing a graph")
+	}
+	if _, err := store.Version(t.Context(), saved.Canvas.ID, 10); err == nil {
+		t.Fatal("legacy version read was weakened")
+	}
+	if _, err := store.db.Exec(`INSERT INTO versions(canvas_id,number,document_yaml,digest,created_at,source,summary) VALUES(?,?,?,?,?,?,?)`, saved.Canvas.ID, 11, future, "corrupt", 1, "import", "corrupt"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Presentation(t.Context(), saved.Canvas.ID, 11, PresentationFormat, nil); err == nil {
+		t.Fatal("corrupted source must not be exported")
+	}
+	document := Validate(exampleDocument).Document
+	document.Presentation = &Presentation{GroupLayouts: map[string]GroupLayout{"application": {Flow: "row", MaxPerLine: 2}}}
+	without := projectPresentation(document, nil)
+	with := projectPresentation(document, []string{GroupLayoutsCapability})
+	if len(without.Model.Presentation.GroupLayouts) != 0 || with.Model.Presentation.GroupLayouts["application"].MaxPerLine != 2 || len(with.Model.Relations) != len(without.Model.Relations) {
+		t.Fatal("optional layout negotiation changed graph facts")
+	}
+	with.Model.Objects = []ViewObject{{ID: "generic", Name: "Generic object", Kind: "Future object", Facts: []ViewFact{{Label: "Region", Value: "Local"}}, ObjectRefs: []string{"core-01"}}}
+	data, _ := json.Marshal(with)
+	var value any
+	if err := json.Unmarshal(data, &value); err != nil {
+		t.Fatal(err)
+	}
+	if err := schema.Validate(value); err != nil {
+		t.Fatal(err)
+	}
+	document.APIVersion = "redeven.io/tessiven/v99.0.0"
+	if mapped := projectPresentation(document, nil); mapped.Compatibility.Status != "unavailable" || len(mapped.Model.Nodes) != 0 {
+		t.Fatal("unreviewed canonical DSL was automatically granted display support")
+	}
+}
 
 func TestSemanticDSLVersionAndLegacyUpgrade(t *testing.T) {
 	const current = "redeven.io/tessiven/v1.1.0"

@@ -1,3 +1,4 @@
+import { toRenderVersion } from '../../../../tessiven_ui/src/presentation';
 import '../index.css';
 import '../../../../tessiven_ui/src/tessiven.css';
 import { For, createSignal } from 'solid-js';
@@ -169,7 +170,7 @@ it('renders distinct legacy Kubernetes icons in host cards, folded groups and th
   const canvas: Canvas = { id: version.canvas_id, title: version.document.metadata.title, description: '', latest_version: 4, archived: false, created_at: 1, updated_at: 1 };
   mount('width:1320px;height:950px;position:relative');
   dispose = render(() => <>
-    <div style="display:flex;height:740px;position:relative"><TessivenGraph version={version} historical={false} t={t} onAsk={vi.fn()} onInspect={vi.fn()} /></div>
+    <div style="display:flex;height:740px;position:relative"><TessivenGraph version={toRenderVersion(version)} historical={false} t={t} onAsk={vi.fn()} onInspect={vi.fn()} /></div>
     <div style="width:340px;height:210px"><TessivenLibraryCard canvas={canvas} t={t} onOpen={vi.fn()} transport={{ request: vi.fn(async () => version) } as unknown as TessivenTransport} /></div>
   </>, host);
   await expect.poll(() => host.querySelectorAll('.tessiven-service').length).toBe(18);
@@ -228,7 +229,7 @@ it('uses the same responsibility icons in real host inventories and saved librar
   const canvas: Canvas = { id: 'icons', title: 'Platform services', description: '', latest_version: 1, archived: false, created_at: 1, updated_at: 1 };
   mount('width:1320px;height:950px;position:relative');
   dispose = render(() => <>
-    <div style="display:flex;height:740px;position:relative"><TessivenGraph version={version} historical={false} t={t} onAsk={vi.fn()} onInspect={vi.fn()} /></div>
+    <div style="display:flex;height:740px;position:relative"><TessivenGraph version={toRenderVersion(version)} historical={false} t={t} onAsk={vi.fn()} onInspect={vi.fn()} /></div>
     <div style="width:340px;height:210px"><TessivenLibraryCard canvas={canvas} t={t} onOpen={vi.fn()} transport={{ request: vi.fn(async () => version) } as unknown as TessivenTransport} /></div>
   </>, host);
   await expect.poll(() => host.querySelectorAll('.tessiven-service').length).toBe(serviceKinds.length);

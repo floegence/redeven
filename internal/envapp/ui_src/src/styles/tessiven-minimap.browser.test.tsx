@@ -1,3 +1,4 @@
+import { toRenderVersion } from '../../../../tessiven_ui/src/presentation';
 import '../index.css';
 import '../../../../tessiven_ui/src/tessiven.css';
 import { render } from 'solid-js/web';
@@ -37,7 +38,7 @@ it('matches main canvas colors in every theme with bounded paths and visible-onl
   host.className = 'tessiven';
   host.style.cssText = 'width:1320px;height:790px;position:relative';
   document.body.append(host);
-  dispose = render(() => <TessivenGraph version={version} historical={false} t={tessivenText('en-US')} onAsk={() => {}} onInspect={() => {}} />, host);
+  dispose = render(() => <TessivenGraph version={toRenderVersion(version)} historical={false} t={tessivenText('en-US')} onAsk={() => {}} onInspect={() => {}} />, host);
   await expect.poll(() => host.querySelectorAll('.tessiven-group').length, { timeout: 20000 }).toBe(5);
   await expect.poll(() => host.querySelector('[aria-label="Arranging canvas"]'), { timeout: 20000 }).toBeNull();
   const minimap = host.querySelector<SVGSVGElement>('.floe-graph__minimap')!;

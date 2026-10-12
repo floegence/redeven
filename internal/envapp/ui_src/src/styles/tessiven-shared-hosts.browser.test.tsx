@@ -1,3 +1,4 @@
+import { toRenderVersion } from '../../../../tessiven_ui/src/presentation';
 import '../index.css';
 import '../../../../tessiven_ui/src/tessiven.css';
 import { render } from 'solid-js/web';
@@ -21,7 +22,7 @@ function mount(transformed = false, version: Version = sharedHostsVersion(), loc
     host.setAttribute('data-floe-dialog-surface-host','true');
   }
   const ask = vi.fn(), inspect = vi.fn();
-  dispose = render(() => <TessivenGraph version={version} historical={false} t={tessivenText('en-US')} onAsk={ask} onInspect={inspect} locate={locate} />, host);
+  dispose = render(() => <TessivenGraph version={toRenderVersion(version)} historical={false} t={tessivenText('en-US')} onAsk={ask} onInspect={inspect} locate={locate} />, host);
   return { ask, inspect };
 }
 afterEach(() => { dispose?.(); host?.remove(); document.documentElement.removeAttribute('style'); document.documentElement.classList.remove('dark'); });

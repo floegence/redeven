@@ -6,30 +6,30 @@ import {
 } from '@floegence/floe-webapp-core/graph';
 import { projectCanvas, projectLayoutOptions } from './projection';
 import { TessivenIcon } from './TessivenIcon';
-import type { CanvasDocument, TessivenText } from './types';
+import type { RenderModel, TessivenText } from './types';
 
 export function TessivenThumbnail(props: {
-  document: CanvasDocument;
+  model: RenderModel;
   t: TessivenText;
   engine: GraphLayoutEngine;
 }) {
   const arrowID = createUniqueId();
   const projection = createMemo(() =>
     projectCanvas(
-      props.document,
-      new Set(props.document.presentation?.initiallyExpanded ?? []),
+      props.model,
+      new Set(props.model.presentation?.initiallyExpanded ?? []),
       {},
     ),
   );
   const [layout] = createResource(projection, async (projected) => {
     try {
-      return await props.engine.layout(projected.graph, projectLayoutOptions(props.document, projected));
+      return await props.engine.layout(projected.graph, projectLayoutOptions(props.model, projected));
     } catch {
       return undefined;
     }
   });
   const services = createMemo(
-    () => new Map((props.document.services ?? []).map(service => [service.id, service])),
+    () => new Map((props.model.services ?? []).map(service => [service.id, service])),
   );
   const renderObject = (node: GraphLayoutNode) => {
     const card = projection().cards.get(node.id)!;
@@ -64,6 +64,9 @@ export function TessivenThumbnail(props: {
         </div>
       );
     }
+    if (card.kind === 'object') return (
+      <div class="tessiven-thumbnail-resource" data-kind="storage"><TessivenIcon kind="tessiven" /><strong>{card.object.name}</strong><small>{card.object.kind}</small></div>
+    );
     const kind = card.kind === 'resource' ? card.resource.kind : card.service.kind;
     return (
       <div

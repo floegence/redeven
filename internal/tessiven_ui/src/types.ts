@@ -1,4 +1,3 @@
-import type { RenderableAPIVersion } from './native/contract';
 export type Observation = {
   state: 'healthy' | 'degraded' | 'unavailable' | 'unknown';
   observedAt: string;
@@ -58,8 +57,37 @@ export type Evidence = {
   observedAt?: string;
 };
 export type LayoutDirection = 'RIGHT' | 'DOWN' | 'LEFT' | 'UP';
+export type RenderModel = {
+  metadata: { title: string; description?: string };
+  nodes?: CanvasNode[];
+  groups?: Group[];
+  services?: BusinessService[];
+  instances?: Instance[];
+  resources?: Resource[];
+  relations?: Relation[];
+  evidence?: Evidence[];
+  objects?: GenericObject[];
+  presentation?: {
+    groupLayouts?: Record<string, { flow: 'row' | 'column'; maxPerLine?: number }>;
+    initiallyExpanded?: string[];
+    order?: string[];
+    direction?: LayoutDirection;
+    layers?: string[][];
+    positions?: { objectRef: string; x: number; y: number }[];
+  };
+};
+export type GenericObject = {
+  id: string;
+  name: string;
+  kind: string;
+  description?: string;
+  facts?: { label: string; value: string }[];
+  objectRefs?: string[];
+};
+// The editing document remains independent of the display protocol. Shared
+// field shapes describe current semantics, without granting future DSL support.
 export type CanvasDocument = {
-  apiVersion: RenderableAPIVersion;
+  apiVersion: string;
   kind: 'ServiceCanvas';
   metadata: { title: string; description?: string };
   nodes?: CanvasNode[];
@@ -69,14 +97,23 @@ export type CanvasDocument = {
   resources?: Resource[];
   relations?: Relation[];
   evidence?: Evidence[];
-  presentation?: {
-    groupLayouts?: Record<string, { flow: 'row' | 'column'; maxPerLine?: number }>;
-    initiallyExpanded?: string[];
-    order?: string[];
-    direction?: LayoutDirection;
-    layers?: string[][];
-    positions?: { objectRef: string; x: number; y: number }[];
+  presentation?: RenderModel['presentation'];
+};
+export type PresentationLimitation = { code: string; object_refs: string[]; feature?: string };
+export type CanvasPresentation = {
+  format: string;
+  model: RenderModel;
+  capabilities: string[];
+  compatibility: {
+    status: 'complete' | 'limited' | 'unavailable';
+    limitations: PresentationLimitation[];
   };
+};
+export type RenderVersion = {
+  canvas_id: string;
+  number: number;
+  source: string;
+  view: CanvasPresentation;
 };
 export type Canvas = {
   id: string;
