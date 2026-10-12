@@ -3,17 +3,18 @@ type: Qualification Record
 title: Orange remote desktop Viewer follow-up
 description: Record Orange live Viewer, input failures and measured RustDesk comparison boundaries.
 tags: [desktop, ssh, deployment, qualification]
-timestamp: 2026-10-12T03:59:38Z
+timestamp: 2026-10-12T04:18:00Z
 ---
 # Summary
 
 Env App owns permanent desktop service updates and Runtime admission. Orange's
 earlier Runtime and service admission were updated through the real product
 flow, and the controlling Mac opened a live Viewer. The v0.22.35 Runtime upgrade
-succeeds, but service deployment stops at module extraction because the published
-module omits nested MPP assets. Earlier client measurements still show unmatched
-responses, latency tails and motion freezes. An unpublished native fix passes
-real system GTK text and cancellation qualification. RustDesk parity requires
+succeeds, but its service deployment stops at module extraction because that
+published module omits nested MPP assets. Published native `v0.22.36` restores
+service-kit extraction and passes real system GTK text and cancellation checks;
+its release qualification and real Viewer update remain pending. Earlier client
+measurements still show unmatched responses, latency tails and motion freezes. RustDesk parity requires
 three complete paired rounds at equal delivered visual quality; native capture/encoding FPS
 and source checks cannot establish that outcome.
 
@@ -111,7 +112,8 @@ system GTK 3.24.33/IBus 1.5.26 target. The prepared GTK target and the system
 fixture with only its own simple IM context each pass three runs. No host input
 method preference is changed; this evidence does not qualify genuine IME.
 
-Unpublished native commit `064b068c8fa596186538c4df5432d133125afda9` moves the
+Native commit `064b068c8fa596186538c4df5432d133125afda9`, published as immutable
+module tag `v0.22.36`, moves the
 pinned API closure outside `vendor`, preserves header/license bytes and deployed
 names, and checks every embedded desktop asset against Go module archive rules.
 An actual module archive round trip passes service-kit extraction; source binary
@@ -125,8 +127,20 @@ three rounds before the fix and passes three complete rounds afterward, includin
 Unicode, emoji, readonly-target modifier release and cancellation followed by
 acknowledged successor input. This uses the actual user HOME and session bus; it
 does not change host input-method preferences or establish genuine IME behavior.
-The candidate runs only in the task-owned qualification service, pending explicit
-permission to publish a new upstream version.
+The operator authorizes only this upstream commit and version for publication.
+The public Go proxy and checksum database bind `v0.22.36` to that commit with
+module sum `h1:RjJuUSImyjeUy2R+LHKSYrxqa9ic+sSucfL9mMNJEQ8=`. Both the
+public module's focused packing/service-kit checks and Redeven's service-kit CLI
+test pass with `GOWORK=off`. Redeven consumes this published version; activation
+on Orange waits for the owning release gate. The native fix still runs only in
+the task-owned qualification service. Main source checks pass; the first release
+attempt has AMD64 media and private-desktop download failures before activation.
+The ARM64 native application lane also times out on the GTK4 4.0/glibc 2.31
+editing receipt: 41 commits complete, while commit 42's marker is delivered but
+not taken. Its trace is retained for targeted qualification; this release does
+not modify the private-desktop input modules or that fixture. The ARM64 media
+and private-desktop lanes pass. This unresolved failure still blocks the release
+gate and production activation.
 
 A separate Viewer regression couples local Ctrl+V/Command+V to host clipboard
 synchronization, which DRM does not advertise. The product fix routes explicit
