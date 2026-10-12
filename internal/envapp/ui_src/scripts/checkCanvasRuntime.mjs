@@ -440,11 +440,11 @@ async function verifyQueuedSendNow(page) {
     await replies.getByRole('button', { name: 'Send', exact: true }).click();
     await replies.locator('[data-flower-thinking-active="true"]').waitFor();
 
-    for (const text of [guidance, preserved]) {
+    for (const [index, text] of [guidance, preserved].entries()) {
       await replies.locator('.flower-composer textarea').fill(text);
       await replies.getByRole('button', { name: 'Send', exact: true }).click();
+      await until(async () => await replies.locator('[data-flower-queued-turn-dock-id]').count() === index + 1, 'queued follow-up admission');
     }
-    await until(async () => await replies.locator('[data-flower-queued-turn-dock-id]').count() === 2, 'two queued follow-ups');
     const queued = replies.locator('[data-flower-queued-turn-dock-id]');
     assert.equal(await queued.nth(0).locator('.flower-queued-turn-label').innerText(), guidance);
     assert.equal(await queued.nth(1).locator('.flower-queued-turn-label').innerText(), preserved);
@@ -470,6 +470,10 @@ async function verifyQueuedSendNow(page) {
       preserved_prompt: preserved,
     };
     report.scenarios.push('send-now-cancels-active-response-preserves-queued-order');
+    // Remove the verified fixture through the normal queue action so later
+    // qualification scenarios start without unrelated pending work.
+    await queued.first().getByRole('button', { name: 'Delete queued message', exact: true }).click();
+    await until(async () => await queued.count() === 0, 'verified queued fixture cleanup');
   } finally {
     queuedSendProbe.active.release();
     queuedSendProbe = undefined;
