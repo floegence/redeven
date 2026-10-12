@@ -761,6 +761,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const threadDrawerOpen = () => navigationOverlay() && threadNavigationOpen();
   const companionCollapsed = () => presentation() === 'companion' && !(props.companionOpen ?? true);
   const surfaceEngaged = () => props.engaged ?? true;
+  const requestCompanionForEditing = () => {
+    // Closing retains expanded content, but explicit editing restores engagement.
+    if (presentation() === 'companion' && (companionCollapsed() || !surfaceEngaged())) {
+      props.onCompanionOpenRequest?.();
+    }
+  };
   const transcriptVisible = () => props.transcriptVisible ?? true;
   const foregroundEngagementRequested = () => surfaceEngaged() && transcriptVisible() && !threadDrawerPresent() && documentVisible();
   const effectiveEngagement = () => foregroundEngagementRequested() && engagementBootstrapReady();
@@ -6986,7 +6992,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       event.currentTarget.value = composerTextValue();
       return;
     }
-    if (companionCollapsed()) props.onCompanionOpenRequest?.();
+    requestCompanionForEditing();
     const value = event.currentTarget.value;
     if (!inspectFlowerText(value)) {
       event.currentTarget.value = composerTextValue();
@@ -11242,16 +11248,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             setComposerFocused(true);
             const target = event.currentTarget;
             syncComposerSelection(target);
-            if (companionCollapsed() && !restoringCompanionFocus) props.onCompanionOpenRequest?.();
+            if (!restoringCompanionFocus) requestCompanionForEditing();
           }}
           onBlur={() => {
             composerHistory.reset();
             setComposerFocused(false);
           }}
           onPointerDown={() => composerHistory.reset()}
-          onClick={() => {
-            if (companionCollapsed()) props.onCompanionOpenRequest?.();
-          }}
+          onClick={requestCompanionForEditing}
           onInput={handleComposerTextInput}
           onSelect={(event) => syncComposerSelection(event.currentTarget)}
           onKeyUp={(event) => syncComposerSelection(event.currentTarget)}
@@ -11260,7 +11264,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             composerHistory.reset();
             setIsComposing(true);
             composerReferenceIndex?.softAbort();
-            if (companionCollapsed()) props.onCompanionOpenRequest?.();
+            requestCompanionForEditing();
           }}
           onCompositionEnd={(event) => {
             setIsComposing(false);

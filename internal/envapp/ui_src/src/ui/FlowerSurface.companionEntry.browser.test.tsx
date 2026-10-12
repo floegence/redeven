@@ -133,6 +133,31 @@ async function closeWithEscape(fixture: Fixture) {
 }
 
 describe('Flower companion entry with the published shell', () => {
+  it.each(['click', 'input', 'composition'] as const)('reverses closing on explicit editor %s without replacing the draft', async action => {
+    const fixture = mountCompanion(thread());
+    await waitFor(() => fixture.mount.querySelector('[data-companion-frame-ready="true"]') !== null);
+    fixture.setOpen(true);
+    await waitFor(() => fixture.phase() === 'expanded'
+      && fixture.mount.querySelector<HTMLElement>('[data-flower-selected-thread-loading]')?.dataset.flowerSelectedThreadLoading === 'false');
+    const editor = fixture.mount.querySelector<HTMLTextAreaElement>('.flower-composer textarea')!;
+    await userEvent.fill(editor, 'Retained draft');
+    fixture.outside.focus();
+    fixture.setOpen(false);
+    await waitFor(() => fixture.phase() === 'collapsing');
+    // Dispatch during closing instead of letting automation wait for stable geometry.
+    if (action === 'click') editor.click();
+    else if (action === 'input') {
+      editor.value = 'Continue the retained draft';
+      editor.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: 'draft' }));
+    } else editor.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+    expect(fixture.open()).toBe(true);
+    await waitFor(() => fixture.phase() === 'expanded');
+    expect(fixture.mount.querySelector('.flower-composer textarea')).toBe(editor);
+    expect(editor.value).toBe(action === 'input' ? 'Continue the retained draft' : 'Retained draft');
+    if (action === 'composition') editor.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true }));
+    expect(fixture.surfaceAdapter.launchTurn).not.toHaveBeenCalled();
+  });
+
   it.each(['light', 'dark'])('dissolves retained detail in %s before the final compact layout and reverses without replacing the editor', async theme => {
     const previousTheme = document.documentElement.className;
     document.documentElement.classList.toggle('dark', theme === 'dark');
