@@ -3,7 +3,7 @@ type: Qualification Record
 title: Orange remote desktop Viewer follow-up
 description: Record Orange live Viewer, input failures and measured RustDesk comparison boundaries.
 tags: [desktop, ssh, deployment, qualification]
-timestamp: 2026-10-12T04:18:00Z
+timestamp: 2026-10-12T06:45:00Z
 ---
 # Summary
 
@@ -12,8 +12,10 @@ earlier Runtime and service admission were updated through the real product
 flow, and the controlling Mac opened a live Viewer. The v0.22.35 Runtime upgrade
 succeeds, but its service deployment stops at module extraction because that
 published module omits nested MPP assets. Published native `v0.22.36` restores
-service-kit extraction and passes real system GTK text and cancellation checks;
-its release qualification and real Viewer update remain pending. Earlier client
+service-kit extraction and passes real system GTK text and cancellation checks.
+Its release gate fails because Alpine retired the pinned libseccomp archive.
+Published native `v0.22.37` repairs fresh private desktop acquisition and retains
+installed r6 identities; its release qualification and real Viewer update remain pending. Earlier client
 measurements still show unmatched responses, latency tails and motion freezes. RustDesk parity requires
 three complete paired rounds at equal delivered visual quality; native capture/encoding FPS
 and source checks cannot establish that outcome.
@@ -41,7 +43,7 @@ owns service update and admission.
 The latest normal Desktop update installs Runtime `f5428b6eb834`, built
 `2026-10-12T03:39:16Z`, SHA-256
 `869ed2fe36d60a5b4aac13bf68ed917d680f5a1d8a84a665aeaaa79d5f9fc7de`,
-PID `381199`. Desktop PID `53392` uses the matching published-dependency bundle.
+PID `381199`. Earlier Desktop PID `53392` used the matching published-dependency bundle.
 Env App service setup then fails before privilege or installation:
 `desktop-service-kit` fails in both the bundle and its focused CLI test because
 Go module packaging omits nested MPP headers. The old service remains unchanged
@@ -133,14 +135,36 @@ module sum `h1:RjJuUSImyjeUy2R+LHKSYrxqa9ic+sSucfL9mMNJEQ8=`. Both the
 public module's focused packing/service-kit checks and Redeven's service-kit CLI
 test pass with `GOWORK=off`. Redeven consumes this published version; activation
 on Orange waits for the owning release gate. The native fix still runs only in
-the task-owned qualification service. Main source checks pass; the first release
-attempt has AMD64 media and private-desktop download failures before activation.
-The ARM64 native application lane also times out on the GTK4 4.0/glibc 2.31
-editing receipt: 41 commits complete, while commit 42's marker is delivered but
-not taken. Its trace is retained for targeted qualification; this release does
-not modify the private-desktop input modules or that fixture. The ARM64 media
-and private-desktop lanes pass. This unresolved failure still blocks the release
-gate and production activation.
+the task-owned qualification service. Main source checks pass. The first release
+attempt has AMD64 media/private download failures and an ARM64 native GTK4
+4.0/glibc 2.31 editing timeout after 41 successful commits. Their original traces
+remain available. A failed-job rerun passes the AMD64 media and complete ARM64
+native lanes, including GTK4 and system Xpra. Three private AMD64 attempts fail
+acquiring the retired `libseccomp-2.6.0-r1.apk`; the final release gate fails.
+Actual GET requests return 404 at all five reviewed sources on both
+architectures. No immutable tag is rewritten or GitHub Release created.
+
+Native commit `10f2deb5fb6157aa21199e4d972c9d3d1ed10858`, published as module
+tag `v0.22.37`, replaces only that retired private-desktop dependency with
+publisher-signed `libseccomp-2.6.1-r0.apk`, preserves exact installed r6
+identities and recalculates the complete archive budgets. All 198 AMD64 and 199
+ARM64 original archives pass hash and size checks; both updated APKs and signed
+architecture indexes pass publisher verification. The source gate, race tests,
+provenance checks and Go vulnerability scan pass. A disposable native ARM64
+Alpine fixture passes production installation, decoded pixels, Unicode input,
+reconnection and activation as its existing unprivileged `nobody` account.
+A numeric UID without an account fails private-bus authentication; AMD64
+emulation fails resource preparation and is not native qualification evidence.
+These failed local attempts are retained. Neither failure weakens activation
+checks or changes host accounts.
+
+The operator separately authorizes only this upstream commit/version for
+publication. Main equals origin/main and source CI passes. The public proxy and
+checksum database bind `v0.22.37` to this commit with module sum
+`h1:V88v8+sHgrMkyMzlVTNnL9VhCvXanupA2EpXoRiRWGo=`.
+Redeven consumes the published artifact with `GOWORK=off`; native AMD64 and
+complete release qualification remain pending. Production activation waits
+for that release gate.
 
 A separate Viewer regression couples local Ctrl+V/Command+V to host clipboard
 synchronization, which DRM does not advertise. The product fix routes explicit
