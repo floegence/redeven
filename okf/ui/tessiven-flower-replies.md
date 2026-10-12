@@ -66,12 +66,18 @@ reopens it. Hidden conversations never acknowledge unread output. Drafts, exact
 canvas context and in-flight delivery follow the
 [canvas contract](tessiven-canvas.md) and
 [composer reference contract](flower-composer-references.md).
+The window uses Floe's mounted presence lifecycle for both directions: closing
+keeps the same conversation and textarea mounted through the exit transition,
+and reopening reverses an in-flight close without rebuilding Flower state. The
+restore control enters as a compact themed pill and remains the only interactive
+surface in its otherwise pointer-transparent canvas host. Reduced-motion
+preferences remove both window and restore-entry movement while preserving the
+same lifecycle and focus behavior.
 
 An empty new canvas starts with only the canonical Flower composer at the canvas
 bottom. The transcript window appears after the first send, and the same
 conversation surface then owns both transcript and composer. Existing canvases
-open the combined window directly. Reduced-motion settings disable the entry
-motion without changing placement or state.
+open the combined window directly.
 
 # Boundaries
 
