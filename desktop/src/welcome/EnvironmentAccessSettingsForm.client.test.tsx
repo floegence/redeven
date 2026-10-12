@@ -81,6 +81,28 @@ const ready = { status: 'ready', code: '', identity: 'ready', trust: 'untrusted'
 const disabledSecurity: SecurityResult = { https_ready: true, enabled: false, password_configured: true, recovery_pending: false, recovery_codes_remaining: 0, revision: 1 };
 
 describe('Environment access workflows', () => {
+  it('keeps review, close and discard in the footer action group while pending feedback stays text-only', async () => {
+    const test = await mount();
+    test.setDraft(draft => ({ ...draft, local_ui_bind: 'localhost:25000' })); await settle();
+    const reviewAction = button('Review changes');
+    const actions = reviewAction.closest('.environment-access-actions');
+    expect(actions).not.toBeNull();
+    expect([...actions!.querySelectorAll('button')].some(action => controlText(action) === 'Close')).toBe(true);
+    expect(actions?.contains(button('Discard changes'))).toBe(true);
+    expect(document.querySelector('.access-flow-footer-feedback')?.textContent).toContain('Changes not yet applied');
+    expect(document.querySelector('.access-flow-footer-feedback button')).toBeNull();
+    reviewAction.click(); await settle();
+    expect(document.querySelector('[data-flow-heading]')?.textContent).toBe('Review and apply');
+    expect(test.save).not.toHaveBeenCalled();
+    button('Cancel').click(); await settle(); button('Discard changes').click(); await settle();
+    expect(test.draft().local_ui_bind).toBe('localhost:23998');
+    expect(document.querySelector('.environment-access-actions')?.textContent).not.toContain('Review changes');
+  });
+  it('offers review for saved next-start changes without offering to discard a committed setting', async () => {
+    await mount({ pending: true });
+    expect(button('Review changes').closest('.environment-access-actions')).not.toBeNull();
+    expect(document.querySelector('.environment-access-actions')?.textContent).not.toContain('Discard changes');
+  });
   it('opens the requested recovery page directly and does not replay it on address refresh', async () => {
     const test = await mount({ focusAccess: 'certificate', url: 'https://localhost:23998/', protocol: 'https' });
     expect(document.querySelector('[data-flow-heading]')?.textContent).toBe('HTTPS certificate');
@@ -239,7 +261,7 @@ describe('Environment access workflows', () => {
     const manage = vi.fn()
       .mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectStatus = reject; }))
       .mockResolvedValue(disabledSecurity);
-    const test = await mount({ security: manage });
+    const test = await mount({ url: 'http://localhost:23998/', security: manage });
     button('Manage protection').click(); await settle();
     expect(button('Change password').disabled).toBe(true);
     expect(button('Remove password').disabled).toBe(true);
@@ -256,6 +278,15 @@ describe('Environment access workflows', () => {
   it('reviews password removal together with the required local-only access change without saving on entry', async () => {
     const test=await mount();test.setDraft(d=>({...d,local_ui_bind:'0.0.0.0:23998'}));button('Manage protection').click();await settle();button('Remove password').click();await settle();
     expect(test.draft().local_ui_bind).toBe('localhost:23998');expect(test.draft().local_ui_password_mode).toBe('clear');expect(document.body.textContent).toContain('Review both changes');
+    expect(test.save).not.toHaveBeenCalled();
+  });
+  it('keeps next-start password editing available when the Runtime is stopped and live security requires a start', async () => {
+    const test = await mount({ security: async () => { throw new Error('SECURITY_START_REQUIRED'); } });
+    button('Manage protection').click(); await settle();
+    expect(button('Change password').disabled).toBe(false);
+    expect(button('Remove password').disabled).toBe(false);
+    button('Change password').click(); await settle();
+    expect(document.getElementById('local-ui-password')).not.toBeNull();
     expect(test.save).not.toHaveBeenCalled();
   });
   it('verifies identity before staging password removal when two-factor protection is enabled', async () => {

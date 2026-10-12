@@ -145,10 +145,11 @@ same surface, border, radius and spacing. Password actions retain published
 button affordances, stay adjacent in keyboard order, and reflow as whole controls
 at narrow widths. The removal action references its nearby browser-scope
 consequence; next-start timing stays in the same card. An unset password offers
-Set password without a removal action. When security management is available,
-password operations wait for its authoritative status; loading or failed status
+Set password without a removal action. Running environments with security
+management wait for its authoritative status; loading or failed status
 cannot bypass the protected-change prerequisite. The existing error and Retry
-surface owns recovery. Entering removal stages only the draft and review;
+surface owns recovery. Stopped environments retain next-start password editing
+through their existing saved-configuration authority. Entering removal stages only the draft and review;
 explicit saving owns persistence.
 Authenticator enrollment, recovery-code confirmation and management use the same
 window body and fixed actions, never a nested dialog. Committed security changes
@@ -167,7 +168,12 @@ remains an ordinary text field; switching methods clears the old code and focuse
 the new field. Floe owns the composite field's single focus border.
 
 The footer stays visible while the task body scrolls. Validation focuses the
-related field; save and security errors appear beside the action. Disabled saves
+related field; save and security errors appear beside the action. Access footer
+feedback contains status text only; Close or Cancel, discard, prerequisite
+navigation and Review changes share one action group and control height. Review
+is the final primary action in the pending overview. Whole controls reflow at
+narrow widths without placing an action inside the independently sized status
+region. Disabled saves
 have keyboard-accessible contextual explanations. Review contains no password
 value. Password fields have bounded width and ports stay compact. Narrow panels
 stack controls without horizontal scrolling. Theme colors, single-line action labels

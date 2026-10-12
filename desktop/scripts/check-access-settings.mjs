@@ -94,8 +94,23 @@ try {
     if (locale === 'zh-CN' && [1280, 390].includes(width)) {
       await remove.evaluate(el => el.blur()); await capture(`password-${preset}-${locale}-${width}`);
     }
+    await remove.click(); await button('common.cancel').click();
+    await layout(`pending-footer-${preset}-${locale}-${width}`);
+    const actions = footer().locator('.environment-access-actions');
+    const geometry = await actions.getByRole('button').evaluateAll(buttons => buttons.map(el => {
+      const rect = el.getBoundingClientRect(); return { top: rect.y, center: rect.y + rect.height / 2, height: rect.height };
+    }));
+    assert.equal(geometry.length, 3);
+    assert.ok(Math.max(...geometry.map(b => b.height)) - Math.min(...geometry.map(b => b.height)) <= 1, 'all footer actions use the same height');
+    for (const first of geometry) for (const second of geometry) {
+      if (Math.abs(first.top - second.top) <= 1) assert.ok(Math.abs(first.center - second.center) <= 1, 'actions within each reflowed row share a baseline');
+    }
+    if (width === 1280) assert.ok(Math.max(...geometry.map(b => b.center)) - Math.min(...geometry.map(b => b.center)) <= 1);
+    assert.equal(await actions.getByRole('button').last().innerText(), t('accessFlow.checkChanges'));
+    assert.equal(await footer().locator('.access-flow-footer-feedback button').count(), 0);
+    if (locale === 'zh-CN' && [1280, 390].includes(width)) await capture(`overview-pending-${preset}-${locale}-${width}`);
   }
-  report.cases.push('grouped-password-actions-and-matching-security-cards-in-10-locales-2-themes-3-widths');
+  report.cases.push('grouped-password-actions-matching-security-cards-and-aligned-footer-in-10-locales-2-themes-3-widths');
   await page.setViewportSize({ width: 640, height: 900 });
   await open('fr-FR', 'ocean', 'Local Environment', '&password=1');
   await button('accessFlow.manageProtection').click();
@@ -109,7 +124,19 @@ try {
   assert.equal(await page.evaluate(() => window.accessFixture.draft.local_ui_password_mode), 'clear');
   assert.equal(await page.evaluate(() => window.accessFixture.draft.local_ui_bind), 'localhost:23998');
   assert.equal(await page.evaluate(() => window.accessFixture.security.password_configured), true, 'entering review never removes the active password');
-  await button('common.cancel').click(); await button('settings.discardChanges').click();
+  await button('common.cancel').click();
+  const overviewActions = footer().getByRole('button');
+  const overviewGeometry = await overviewActions.evaluateAll(buttons => buttons.map(el => {
+    const rect = el.getBoundingClientRect(); return { center: rect.y + rect.height / 2, height: rect.height };
+  }));
+  assert.equal(overviewGeometry.length, 3);
+  assert.ok(Math.max(...overviewGeometry.map(b => b.center)) - Math.min(...overviewGeometry.map(b => b.center)) <= 1, 'review, close and discard share one vertical baseline');
+  assert.ok(Math.max(...overviewGeometry.map(b => b.height)) - Math.min(...overviewGeometry.map(b => b.height)) <= 1, 'footer actions share one height');
+  const pendingFeedback = await footer().locator('.access-flow-footer-feedback .access-flow-notice').boundingBox();
+  assert.ok(Math.abs(pendingFeedback.y + pendingFeedback.height / 2 - overviewGeometry[0].center) <= 1, 'single-line feedback aligns with the action group');
+  assert.equal(await footer().locator('.access-flow-footer-feedback button').count(), 0, 'feedback never owns a competing action row');
+  await capture('overview-pending-zh-CN');
+  await button('settings.discardChanges').click();
   assert.equal(await page.evaluate(() => window.accessFixture.draft.local_ui_password_mode), 'keep');
   await open('en-US', 'classic-light', 'Local Environment', '&secure=enabled');
   await button('accessFlow.manageProtection').click(); await button('accessFlow.removePassword').click();

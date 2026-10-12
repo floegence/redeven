@@ -67,7 +67,7 @@ export function EnvironmentAccessWorkflow(props: Props) {
   const savedPending = () => props.snapshot.runtime_configuration_pending;
   const saving = createMemo(() => busyStateMatchesAction(props.busyState, 'save_settings'));
   const protectedAccess = () => security.status()?.enabled || security.status()?.recovery_pending;
-  const passwordActionAvailable = () => !saving() && (!props.security || (Boolean(security.status()) && !security.busy()));
+  const passwordActionAvailable = () => !saving() && (!props.security || !props.runtimeRunning || (Boolean(security.status()) && !security.busy()));
   const passwordActionLabel = () => props.baselineSnapshot.local_ui_password_configured ? 'accessFlow.changePassword' : 'accessFlow.setPassword';
   const remote = () => Boolean(props.snapshot.runtime_connection && !runtimeConnectionIsOnThisDevice(props.snapshot.runtime_connection));
   const scope = (network: boolean) => t(network ? 'settings.sharedLocalNetworkLabel' : remote() ? 'settings.environmentOnlyLabel' : 'settings.localOnlyLabel');
@@ -182,15 +182,16 @@ export function EnvironmentAccessWorkflow(props: Props) {
         <Show when={props.settingsError || localError()}><div ref={props.settingsErrorRef} tabindex="-1" id="settings-error" role="alert" data-flow-error class="environment-access-save-error">
           <AlertCircle class="h-4 w-4 shrink-0" aria-hidden="true" /><span>{props.settingsError || localError()}</span>
         </div></Show>
-        <Show when={reviewing() && props.connectionDirty}><div class="environment-settings-draft-notice"><span>{t('settings.resolveConnectionDraft')}</span><Button size="sm" variant="ghost" onClick={props.showConnectionSettings}>{t('settings.goToConnection')}</Button></div></Show>
+        <Show when={reviewing() && props.connectionDirty}><div class="environment-settings-draft-notice"><span>{t('settings.resolveConnectionDraft')}</span></div></Show>
         <Show when={notice()}><p class="access-flow-notice"><Check class="h-4 w-4" aria-hidden="true" />{notice()}</p></Show>
-        <Show when={page() === 'overview' && (pending() || savedPending())}><div class="access-flow-notice"><Clock class="h-4 w-4" aria-hidden="true" /><span>{t('settings.pendingChanges')}</span><Button size="sm" variant="outline" onClick={() => { setTask('access'); go('review'); }}>{t('accessFlow.checkChanges')}</Button></div></Show>
+        <Show when={page() === 'overview' && (pending() || savedPending())}><div class="access-flow-notice"><Clock class="h-4 w-4" aria-hidden="true" /><span>{t('settings.pendingChanges')}</span></div></Show>
         <Show when={!props.settingsError && !localError() && !(reviewing() && props.connectionDirty) && !notice() && !(page() === 'overview' && (pending() || savedPending()))}>
           {t(reviewing() ? (props.runtimeRestartAvailable ? 'accessFlow.restartHandoff' : 'settings.applyNextStartHelp') : 'accessFlow.overviewHelp')}
         </Show>
       </StatusRegion>
       <div class="environment-access-actions">
         <Button size="sm" variant="ghost" class="environment-access-close" disabled={saving()} onClick={() => page() === 'overview' ? props.cancelSettings() : back()}>{t(page() === 'overview' ? 'common.close' : 'common.cancel')}</Button>
+        <Show when={reviewing() && props.connectionDirty}><Button size="sm" variant="outline" disabled={saving()} onClick={props.showConnectionSettings}>{t('settings.goToConnection')}</Button></Show>
         <Show when={page() === 'access'}><Button size="sm" disabled={saving()} onClick={continueAccess}>{t(props.draft.local_ui_protocol === 'http' && protectedAccess() ? 'accessFlow.verifyContinue' : 'accessFlow.checkChanges')}<ChevronRight class="ml-1.5 h-3.5 w-3.5" aria-hidden="true" /></Button></Show>
         <Show when={page() === 'password'}><Button size="sm" type="submit" form="access-password-form">{t('security.continue')}</Button></Show>
         <Show when={page() === 'guard'}><Button size="sm" disabled={security.busy() || !security.status()} onClick={() => beginFactor(security.status()?.recovery_pending ? 'setup' : 'disable')}><StableText reserve={[t('security.setup'), t('accessFlow.verifyContinue')]}>{t(security.status()?.recovery_pending ? 'security.setup' : 'accessFlow.verifyContinue')}</StableText></Button></Show>
@@ -199,7 +200,8 @@ export function EnvironmentAccessWorkflow(props: Props) {
           <SaveAction restart={false} /><Show when={props.runtimeRestartAvailable}><SaveAction restart /></Show>
         </Show>
         <Show when={page() === 'certificate' && savedPending() && props.draft.local_ui_protocol === 'https'}><Button size="sm" onClick={() => go('review')}>{t('accessFlow.checkChanges')}</Button></Show>
-        <Show when={page() === 'overview' && pending() && props.resetAccess}><Button size="sm" variant="ghost" onClick={() => { props.resetAccess?.(); setConfirmation(''); }}>{t('settings.discardChanges')}</Button></Show>
+        <Show when={page() === 'overview' && pending() && props.resetAccess}><Button size="sm" variant="ghost" disabled={saving()} onClick={() => { props.resetAccess?.(); setConfirmation(''); }}>{t('settings.discardChanges')}</Button></Show>
+        <Show when={page() === 'overview' && (pending() || savedPending())}><Button size="sm" disabled={saving()} onClick={() => { setTask('access'); go('review'); }}>{t('accessFlow.checkChanges')}</Button></Show>
       </div>
     </>}>
       <div class="environment-access-form" inert={saving()}>
