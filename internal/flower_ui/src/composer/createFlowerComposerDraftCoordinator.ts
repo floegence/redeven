@@ -42,7 +42,7 @@ export type FlowerComposerDraftValue = Readonly<{
   text: string;
   attachments: readonly FlowerComposerDraftAttachment[];
   references: readonly FlowerComposerDraftReference[];
-  /** Capture happens once for a new draft, including when its reference is removed. */
+  /** Prevent edit-time recapture until an explicit companion opening or New action. */
   page_context_captured?: boolean;
   mode: FlowerComposerDraftMode;
   model_id?: string;

@@ -555,6 +555,22 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
       ].includes(requestURL.pathname)) {
         response.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store' });
         response.write(': connected\n\n');
+        if (requestURL.pathname === '/_redeven_proxy/api/ai/flower/stream') {
+          // Flower becomes interactive only after its fragmented workspace baseline.
+          const baseline = Buffer.from(JSON.stringify({
+            schema_version: 1,
+            kind: 'ready',
+            summaries: [],
+            observer_id: 'built-renderer-observer',
+          }));
+          response.write(`data: ${JSON.stringify({
+            envelope_id: 'built-renderer-ready',
+            fragment_index: 0,
+            fragment_count: 1,
+            total_bytes: baseline.length,
+            data_base64: baseline.toString('base64'),
+          })}\n\n`);
+        }
         const heartbeat = setInterval(() => response.write(': keepalive\n\n'), 10_000);
         request.on('close', () => clearInterval(heartbeat));
         return;
@@ -988,16 +1004,46 @@ async function verifyBuiltFlowerLifecycle(browser, tls) {
       throw new Error('Escape must dismiss the page preview before collapsing Flower');
     }
     await page.getByRole('button', { name: 'File Browser', exact: true }).click();
+    if (!(await pageReference.innerText()).includes('Monitoring')) {
+      throw new Error('page navigation alone must not refresh the origin');
+    }
     await composer.click();
     await pageReference.locator('.flower-composer-reference-chip-preview').click();
     await preview.waitFor({ state: 'visible' });
-    if (await preview.locator('pre').textContent() !== frozenPageText) throw new Error('page navigation must retain the frozen origin');
+    const refreshedPageText = await preview.locator('pre').textContent();
+    if (JSON.parse(refreshedPageText).page.id !== 'files' || refreshedPageText === frozenPageText) {
+      throw new Error('reopening a new conversation must capture the current Files page');
+    }
+    if (await composer.inputValue() !== 'Explain this origin page') throw new Error('reopening must retain the pending text');
     await page.keyboard.press('Escape');
     await preview.waitFor({ state: 'hidden' });
     await pageReference.locator('.flower-composer-reference-chip-remove').click();
     await pageReference.waitFor({ state: 'detached' });
     await composer.fill('Continue after removing the page reference');
     if (await pageReference.count() !== 0) throw new Error('editing must not replenish a removed page reference');
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => (
+      globalThis.document.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-companion-phase') === 'collapsed'
+    ));
+    await composer.click();
+    await pageReference.waitFor({ state: 'visible' });
+    await pageReference.locator('.flower-composer-reference-chip-preview').click();
+    await preview.waitFor({ state: 'visible' });
+    const reopenedPageText = await preview.locator('pre').textContent();
+    if (JSON.parse(reopenedPageText).page.id !== 'files' || reopenedPageText === refreshedPageText) {
+      throw new Error('reopening must replace a removed page reference with a fresh capture');
+    }
+    await page.keyboard.press('Escape');
+    await preview.waitFor({ state: 'hidden' });
+    await page.getByRole('button', { name: 'New chat', exact: true }).click();
+    await pageReference.locator('.flower-composer-reference-chip-preview').click();
+    await preview.waitFor({ state: 'visible' });
+    const newPageText = await preview.locator('pre').textContent();
+    if (JSON.parse(newPageText).page.id !== 'files' || newPageText === reopenedPageText) {
+      throw new Error('each explicit New must refresh the current page reference');
+    }
+    await page.keyboard.press('Escape');
+    await preview.waitFor({ state: 'hidden' });
 
     const flowerEntry = page.getByRole('button', { name: 'Flower', exact: true });
     await flowerEntry.click();
@@ -1679,7 +1725,7 @@ async function main() {
   process.stdout.write(`${JSON.stringify(report)}\n`);
 }
 
-export { createBuiltDistServer, createBuiltDistTLS, trustBuiltDistWebTransport, verifyBuiltMobileFlowerVisibility };
+export { createBuiltDistServer, createBuiltDistTLS, trustBuiltDistWebTransport, verifyBuiltFlowerLifecycle, verifyBuiltMobileFlowerVisibility };
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch(async (error) => {

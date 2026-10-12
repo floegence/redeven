@@ -765,7 +765,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const requestCompanionForEditing = () => {
     // Closing retains expanded content, but explicit editing restores engagement.
     if (presentation() === 'companion' && (companionCollapsed() || !surfaceEngaged())) {
-      props.onCompanionOpenRequest?.();
+      requestCompanionOpen();
     }
   };
   const transcriptVisible = () => props.transcriptVisible ?? true;
@@ -1855,18 +1855,22 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       controller: attachmentControllerFor(sessionKey),
     };
   };
-  const capturePageContext = (sessionKey = currentComposerSessionKey()) => {
+  const capturePageContext = (sessionKey = currentComposerSessionKey(), mode: 'initial' | 'refresh' = 'initial') => {
     if (selectedThreadID() || props.embeddedConversation || !isPendingDraftKey(sessionKey)) return;
     const session = draftSessionFor(sessionKey);
-    if (session.snapshot().value.page_context_captured) return;
+    if (mode === 'initial' && session.snapshot().value.page_context_captured) return;
     const snapshot = props.captureNewConversationContext?.();
     session.mutate(value => ({
       ...value,
       page_context_captured: true,
-      references: snapshot ? [...value.references, {
+      references: [...(snapshot ? [{
         ...snapshot, kind: 'page_context' as const, local_id: secureRandomUUID(),
-      }] : value.references,
+      }] : []), ...value.references.filter(reference => reference.kind !== 'page_context')],
     }));
+  };
+  const requestCompanionOpen = (threadID?: string) => {
+    if (!threadID) capturePageContext(currentComposerSessionKey(), 'refresh');
+    props.onCompanionOpenRequest?.(threadID);
   };
   const queueComposerAttachmentIntent = (
     sessionKey: string,
@@ -5220,6 +5224,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           launchChatTurnInFlight.add(canonicalSessionKey);
           setPreparingSendRevision(revision => revision + 1);
         }
+        // A refreshed origin belongs only to first-turn intent, not to the
+        // newer user edits carried into an accepted conversation.
+        draftSessionFor(launchSessionKey).mutate(value => ({
+          ...value, references: value.references.filter(reference => reference.kind !== 'page_context'),
+        }));
         draftCoordinator.moveScope(launchSessionKey, canonicalSessionKey);
       }
       const stagingScopeID = launchController.snapshot().staging_scope?.staging_scope_id;
@@ -5596,7 +5605,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const startCompose = () => {
     resetCompose();
-    capturePageContext();
+    capturePageContext(currentComposerSessionKey(), 'refresh');
   };
 
   const retireThreadLocally = (threadID: string) => {
@@ -7275,7 +7284,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     // Cancel an earlier editing request before navigation claims focus.
     composerFocusToken += 1;
     setComposerFocusRequest(null);
-    props.onCompanionOpenRequest?.(entry.kind === 'status' ? entry.targetThreadID : undefined);
+    requestCompanionOpen(entry.kind === 'status' ? entry.targetThreadID : undefined);
     queueMicrotask(async () => {
       const stillOwned = () => document.activeElement === owner || document.activeElement === document.body
         || document.activeElement === surfaceRef;
@@ -11280,8 +11289,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         aria-haspopup="listbox"
         aria-expanded={threadSwitcherOpen()}
         onClick={() => {
-          if (companionCollapsed()) {
-            props.onCompanionOpenRequest?.();
+          if (companionCollapsed() || !surfaceEngaged()) {
+            requestCompanionOpen();
             setThreadSwitcherOpen(true);
             return;
           }
