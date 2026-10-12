@@ -3,7 +3,7 @@ type: Qualification Record
 title: Orange remote desktop Viewer follow-up
 description: Record published native deployment, real Viewer recovery and the measured RustDesk acceptance boundary.
 tags: [desktop, ssh, deployment, qualification]
-timestamp: 2026-10-12T07:17:49Z
+timestamp: 2026-10-12T10:32:00Z
 ---
 # Summary
 
@@ -13,9 +13,12 @@ release qualification jobs pass. Real Viewer local paste, mixed Unicode,
 physical lock, wrong-password rejection, correct unlock and successor input
 pass. A scoped native media connection failure recovers automatically and
 accepts successor text. The operator explicitly defers Mac local Pinyin;
-host Pinyin also remains unvalidated. Earlier client measurements show latency
-tails and motion freezes. RustDesk parity remains unqualified until three
-complete paired rounds prove equal or better delivered performance.
+host Pinyin also remains unvalidated. Two current paired rounds show lower matched latency tails and higher delivered
+motion FPS, but seven first-round idle responses are missing and SSH carrier
+recovery fails. A third RustDesk half records severe tails and disconnects.
+The operator moves the comparison to udesk26 after measured Orange LAN loss.
+RustDesk parity remains unqualified until complete paired evidence proves equal
+or better delivered performance at comparable quality and resource cost.
 
 # Contract
 
@@ -76,6 +79,15 @@ Redeven's dependency, service-kit and affected Viewer checks pass with `GOWORK=o
 Subsequent upstream security commit `4b38b897c10b` is unreleased and is outside
 this deployed candidate; later main changes do not alter the immutable tag.
 
+That security change confines media archive extraction through `os.Root`, fixes
+the token-permission fixture and incorporates Dependabot PRs 3/4/5 with their
+authorship preserved. At verification, open PRs, Dependabot, CodeQL, secret
+scanning and repository advisories are zero without dismissing findings. Source,
+vulnerability and CodeQL checks pass. A complete Safari smoke on the reviewed
+commit passes DOMPurify 3.4.16 sanitization, KaTeX 0.18.2 math and untrusted-link
+rejection, and Mermaid mathematics rendered as SVG. Test tabs and the isolated
+HTTP server close afterward.
+
 ## Real Viewer Acceptance
 
 Explicit local paste previously depended on host clipboard synchronization,
@@ -107,38 +119,15 @@ native media socket recovery, not recovery for every transport failure. All
 sampling and fixtures stop before credential entry. Credentials never enter
 evidence, command arguments, environment or diagnostics.
 
-## RustDesk Measurement Boundary
+## RustDesk Comparison Status
 
-The official baseline is RustDesk `1.5.0`, source
-`fada664df7a294d1d1a9ca3e7cd3637069122f17`. ARM64 Linux/macOS artifacts match
-official digests. The operator authorizes a temporary direct-LAN session and
-bounded native observation of only two test windows, without permanent service
-installation or public broker registration.
-
-Three paired alternating rounds must use equal physical output, resolution,
-refresh rate, viewport and delivered detail quality, with one measured Viewer
-at a time. Idle, motion and static workloads compare P50/P95 latency, unique
-presented FPS, gaps/freezes and complete CPU/memory/bandwidth including SSH
-wrappers. Retain codec/hardware/route/network conditions and every unmatched or
-failed sample. Lowering quality cannot satisfy acceptance.
-
-One Mac monotonic clock relates passive test input to its matching sequence in
-client-window pixels. Native command-ID equality, packet arrival and CUA duration
-are insufficient substitutes. Observation excludes physical photons; source age
-requires clock-offset uncertainty and each viewport needs fresh marker calibration.
-
-Earlier candidate idle matches 95/100 at 168.65/1039.40 ms P50/P95. Motion matches
-96/100 at 155.98/255.37 ms, 25.80 presented FPS and eleven freezes above 250 ms.
-RustDesk idle matches 100/100 at 204.19/305.98 ms; repeated motion matches 100/100
-at 120.23/139.27 ms, 40.00 FPS and zero freezes. These preliminary runs predate
-the current candidate; repeated RustDesk motion lacks complete resource evidence.
-No three-round current comparison has completed.
-
-After removing a task-owned CPU-heavy diagnostic, network instability persists.
-A later ten-packet probe receives nine, with RTT min/mean/max
-10.580/568.597/2190.747 ms. Low host load and Wi-Fi observations cannot assign
-product latency tails to the network. Current calibration is interrupted when
-the controlling Mac locks; real UI sampling requires manual Mac unlock.
+The [physical desktop comparison](remote-desktop-rustdesk-comparison-results.md)
+owns its method, measurements and unresolved acceptance boundaries. Orange has
+two current paired rounds and a third RustDesk half. Matched responses improve,
+but missing responses, failed SSH carrier recovery and incomplete resource/quality
+evidence prevent parity. After independent LAN loss and SSH timeouts, the operator
+requests udesk26 for the remaining comparison. Orange results
+remain evidence for Orange only; no hardware-wide parity claim is supported.
 
 # Evidence
 
