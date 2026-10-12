@@ -38,12 +38,30 @@ Linux NVIDIA encoding uses the published component's verified glibc 2.31 worker
 and the installed NVIDIA driver, independently of its musl capture/media stack.
 A synthetic encode probe selects the backend; actual dimensions must then encode
 successfully. No system package, host FFmpeg, privileged operation or library-path
-injection is required. The worker uses private bounded pipes, one outstanding
+injection is required. The worker uses a sealed-size shared pixel slot and private
+bounded control pipes, one outstanding
 picture, zero B frames/lookahead and explicit zero-reorder H.264 SPS restrictions.
 An active encoder failure suspends media; it cannot silently replace a reference
 chain. The portable software encoder remains the explicit capability fallback.
 X11 readback, scaling, IPC and GPU upload still copy pixels. This does not claim
 zero-copy capture or certify hardware decode from a browser preference string.
+
+Rockchip uses the same native encoder owner with the installed
+`librockchip_mpp.so.1`. The verified unprivileged worker consumes limited-range
+BT.709 NV12, declares matching H.264 color metadata and the level required by
+the configured dimensions/frame rate, and allows one synchronous frame without
+reordering. Worker probes establish availability; failure retires the active
+reference chain. No device permissions, driver or system packages are changed.
+
+DRM conversion and both native encoders publish raw pixels through separate
+same-owner memfds sealed against resize and seal changes. Each worker verifies
+regular storage, exact bounded capacity and the required seals before mapping.
+Pipes publish only frame identity/completion and compressed output. The parent
+reuses a slot only after matching completion; capture copies the converter view
+into its existing owned Gst pool before another conversion. Encoder upload still
+copies into its own slot. Shutdown reaps the child before unmapping, and invalid
+replies or deadlines retire the chain. These copies are intentional; this is
+not zero-copy capture.
 
 ## Wayland Capture And Input
 
@@ -85,6 +103,11 @@ unprivileged media worker; that worker can encode and report cursor state but
 cannot inject input or grant frame authority. A separate bounded media channel
 keeps encoding and slow consumers from blocking control or input release. Queue
 overflow or media failure retires the attachment and releases held input.
+For the fixed root-owned, group-writable `/dev/mpp_service` character device,
+the media child may retain the Runtime user's existing device-group membership.
+No membership or ACL is modified, and input, text and power children retain
+their narrower group boundary. GPU libraries are loaded only after dropping
+root and all Linux capabilities.
 
 One persistent system-bus connection observes logind changes. Before admitting
 each input event, the service re-reads the active session, lock state and kernel
@@ -127,7 +150,7 @@ belongs upstream; the host must not add a duplicate implementation.
 
 - Published `floe-native-apps` `host_desktop_media.py`, `host_desktop_pipewire.py` and `host_desktop_portal.py`: capture, refinement admission, cursor metadata and bounded input.
 - Published `floe-native-apps` `host_desktop_drm.py`, `hostdesktop/login_seat_linux.go`, `hostdesktop/login_service_linux.go` and `hostdesktop/login_media_linux.go`: separate DRM cursor capture, live logind/compositor checks, uinput authority ownership and bounded media attachment.
-- Published `floe-native-apps` `host_desktop_player.mjs` and `native/host-desktop/nvenc.c`: player queues and NVIDIA worker.
+- Published `floe-native-apps` `host_desktop_player.mjs`, `host_desktop_encoder.py`, `native/host-desktop/nvenc.c`, `mpp.c` and `native_pixels.h`: player queues, shared-slot ownership and native encoders.
 - Published `floe-native-apps` `native/host-desktop/drm/worker.c`, `scanout_format.h` and `host_desktop_drm_native_test.py`: bounded scanout normalization, conversion errors and descriptor cleanup.
 - `internal/remotedesktop/socket_test.go`: transport preserves current-frame cursor presentation and attachment authority.
 - `internal/envapp/ui_src/scripts/checkRemoteDesktopViewer.mjs`: published-player cursor and input behavior.
