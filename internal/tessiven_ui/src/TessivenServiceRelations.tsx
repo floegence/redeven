@@ -2,13 +2,19 @@ import { For, Show, createEffect, createMemo, createResource, createSignal, crea
 import { graphSectionPath, type GraphLayoutEngine, type GraphLayoutNode } from '@floegence/floe-webapp-core/graph';
 import { ArrowRight, Link, Refresh } from '@floegence/floe-webapp-core/icons';
 import type { InternalRelation } from './projection';
+import { relationPreviewLimit, type RelationSummary } from './relations';
 import type { TessivenText } from './types';
 
 export type ServiceRelationEndpoint = 'source' | 'target' | 'both';
 
 /** Local service rows are fixed geometry; Floe still owns connector routing. */
 export function TessivenServiceRelations(props: {
-  relations: InternalRelation[];
+  relations: readonly InternalRelation[];
+  summaries?: readonly RelationSummary[];
+  onSummaryActivate?: (event: MouseEvent, summary: RelationSummary) => void;
+  onSummaryContextMenu?: (event: MouseEvent, summary: RelationSummary) => void;
+  onSummaryKeyDown?: (event: KeyboardEvent, summary: RelationSummary) => void;
+  onShowAll?: (event: MouseEvent) => void;
   engine: GraphLayoutEngine;
   t: TessivenText;
   group?: boolean;
@@ -23,7 +29,15 @@ export function TessivenServiceRelations(props: {
   const [hovered, setHovered] = createSignal<string>();
   const [focused, setFocused] = createSignal<string>();
   const [rows, setRows] = createSignal<GraphLayoutNode[]>([]);
-  const active = createMemo(() => props.relations.find(item => item.relation.id === (hovered() ?? focused())));
+  const items = createMemo(() => props.summaries
+    ? props.summaries.slice(0, relationPreviewLimit).map(summary => ({
+      key: summary.key, fromLabel: summary.from.label, toLabel: summary.to.label,
+      fromServiceRef: summary.from.serviceRef, toServiceRef: summary.to.serviceRef,
+      kind: summary.kind, protocol: summary.protocol, canRoute: summary.locality === 'local', summary, relation: undefined,
+    }))
+    : props.relations.map(item => ({ ...item, key: item.relation.id, kind: item.relation.kind,
+      protocol: item.relation.protocol, canRoute: true, summary: undefined })));
+  const active = createMemo(() => items().find(item => item.key === (hovered() ?? focused())));
   createEffect(() => {
     // Row geometry is needed only while a local relationship is inspected.
     // Measuring every mounted inventory forces layout during large graph paint.
@@ -39,19 +53,20 @@ export function TessivenServiceRelations(props: {
     measure();
     onCleanup(() => observer.disconnect());
   });
-  const routeInput = createMemo(() => {
+  const activeServices = createMemo(() => {
     const item = active();
     const visible = new Set(rows().map(row => row.id));
     if (!item?.fromServiceRef || !item.toServiceRef
       || !visible.has(item.fromServiceRef) || !visible.has(item.toServiceRef)) return undefined;
     return { item, nodes: rows() };
   });
+  const routeInput = createMemo(() => active()?.canRoute ? activeServices() : undefined);
   const [preview] = createResource(routeInput, async ({ item, nodes }) => {
     // Instances of one service share a row; their preview is a loop glyph.
     if (item.fromServiceRef === item.toServiceRef) return undefined;
     try {
       const layout = await props.engine.layout({ nodes, edges: [{
-        id: item.relation.id, label: '', source: item.fromServiceRef!, target: item.toServiceRef!,
+        id: item.key, label: '', source: item.fromServiceRef!, target: item.toServiceRef!,
         sourcePort: `service-port:${item.fromServiceRef}`, targetPort: `service-port:${item.toServiceRef}`,
       }] }, { positions: nodes.map(({ id, x, y }) => ({ nodeId: id, x, y })), positionMode: 'fixed', edgeClearance: 20 });
       return layout.edges[0];
@@ -66,7 +81,7 @@ export function TessivenServiceRelations(props: {
       ? input?.nodes.find(row => row.id === input.item.fromServiceRef) : undefined;
   });
   const endpoint = (id: string): ServiceRelationEndpoint | undefined => {
-    if (!routeInput()) return undefined;
+    if (!activeServices()) return undefined;
     const item = active()!;
     return item.fromServiceRef === id ? item.toServiceRef === id ? 'both' : 'source'
       : item.toServiceRef === id ? 'target' : undefined;
@@ -77,7 +92,7 @@ export function TessivenServiceRelations(props: {
       {props.renderServices(endpoint)}
       <Show when={singleEndpoint()}>{row => <Refresh class="tessiven-service-self-link"
         style={{ top: `${row().y + row().height / 2 - 8}px` }} aria-hidden="true" />}</Show>
-      <Show when={routeInput() && !preview.loading && preview()?.id === active()?.relation.id && preview()}>
+      <Show when={routeInput() && !preview.loading && preview()?.id === active()?.key && preview()}>
         {edge => <svg class="tessiven-service-link-preview" aria-hidden="true">
           <defs><marker id={marker} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
             <path d="M1 1L9 5L1 9" fill="none" stroke="currentColor" stroke-width="1.6" />
@@ -89,25 +104,34 @@ export function TessivenServiceRelations(props: {
         </svg>}
       </Show>
     </div>
-    <Show when={props.relations.length}>
+    <Show when={items().length}>
       <section class="tessiven-local-relations" aria-label={props.t('serviceRelations')}>
         <h3><Link aria-hidden="true" /><span>{props.t('serviceRelations')}</span></h3>
         <div class="tessiven-local-relation-list">
-          <For each={props.relations}>{item => {
-            const kind = () => item.relation.protocol ?? props.t(`relation.${item.relation.kind}`);
+          <For each={items()}>{item => {
+            const kind = () => item.protocol ?? props.t(`relation.${item.kind}`);
             return <button type="button" class="tessiven-local-relation"
-              data-relation-id={item.relation.id} data-active={active()?.relation.id === item.relation.id}
-              aria-label={`${item.fromLabel} ${kind()} ${item.toLabel}`}
-              onPointerEnter={event => { if (event.pointerType !== 'touch') { setFocused(undefined); setHovered(item.relation.id); } }}
+              data-relation-id={item.relation?.id} data-relation-summary={item.summary?.key}
+              data-active={active()?.key === item.key}
+              aria-label={`${item.fromLabel} ${kind()} ${item.toLabel}${item.summary ? ` · ${props.t('relationCount', { count: item.summary.relationRefs.length })}` : ''}`}
+              onPointerEnter={event => { if (event.pointerType !== 'touch') { setFocused(undefined); setHovered(item.key); } }}
               onPointerLeave={clear}
-              onFocus={event => { if (event.currentTarget.matches(':focus-visible')) setFocused(item.relation.id); }}
+              onFocus={event => { if (event.currentTarget.matches(':focus-visible')) setFocused(item.key); }}
               onBlur={() => setFocused(undefined)}
-              onKeyDown={event => props.onKeyDown(event, item.relation.id)}
-              onClick={event => { clear(); props.onActivate(event, item.relation.id); }}
-              onContextMenu={event => { clear(); props.onContextMenu(event, item.relation.id); }}>
-              <span>{item.fromLabel}</span><ArrowRight aria-hidden="true" /><span>{item.toLabel}</span><small>{kind()}</small>
+              onKeyDown={event => item.summary ? props.onSummaryKeyDown?.(event, item.summary) : props.onKeyDown(event, item.key)}
+              onClick={event => { clear(); if (item.summary) props.onSummaryActivate?.(event, item.summary); else props.onActivate(event, item.key); }}
+              onContextMenu={event => { clear(); if (item.summary) props.onSummaryContextMenu?.(event, item.summary); else props.onContextMenu(event, item.key); }}>
+              <span>{item.fromLabel}</span><ArrowRight aria-hidden="true" /><span>{item.toLabel}</span>
+              <small classList={{ 'tessiven-relation-summary-meta': !!item.summary }}><span>{kind()}</span>
+                <Show when={item.summary}>{summary => <span>{props.t(`relationLocality.${summary().locality}`)} · {props.t('relationCount', { count: summary().relationRefs.length })}</span>}</Show>
+              </small>
             </button>;
           }}</For>
+          <Show when={(props.summaries?.length ?? 0) > relationPreviewLimit}>
+            <button type="button" class="tessiven-relation-more" onClick={props.onShowAll}>
+              {props.t('allRelationPatterns', { count: props.summaries!.length })}
+            </button>
+          </Show>
         </div>
       </section>
     </Show>

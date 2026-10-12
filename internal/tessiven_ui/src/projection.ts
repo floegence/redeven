@@ -4,6 +4,7 @@ import type {
   GraphEdge,
   GraphLayoutOptions,
 } from '@floegence/floe-webapp-core/graph';
+import { createRelationIndex, summarizeRelations, relationPreviewLimit, relationSectionHeight, type RelationDetail, type RelationSummary } from './relations';
 import type {
   RenderModel,
   GenericObject,
@@ -34,6 +35,8 @@ export type Projection = {
   cards: Map<string, Card>;
   relations: Map<string, Relation[]>;
   internalRelations: Map<string, InternalRelation[]>;
+  groupRelations: Map<string, RelationSummary[]>;
+  relationDetails: Map<string, RelationDetail>;
   appearances: Map<string, string[]>;
   memberships: Map<string, Group[]>;
   instanceMemberships: Map<string, Group[]>;
@@ -46,7 +49,6 @@ export type InternalRelation = {
   toServiceRef?: string;
 };
 
-const internalRelationHeight = (count: number) => count ? 36 + count * 30 : 0;
 export type NodeServiceScope = 'all' | 'group';
 
 // Rendering identities are derived from stable business object IDs. Grouping never changes
@@ -237,43 +239,59 @@ export function projectCanvas(
   };
   const edges: GraphEdge[] = [];
   const internalRelations = new Map<string, InternalRelation[]>();
-  const objectNames = new Map<string, string>();
-  for (const item of [...(document.nodes ?? []), ...(document.groups ?? []), ...(document.services ?? []), ...(document.resources ?? []), ...(document.objects ?? [])])
-    objectNames.set(item.id, item.name);
-  const endpointLabel = (id: string) => {
-    const instance = byID.get(id);
-    return objectNames.get(instance?.serviceRef ?? id) ?? id;
+  const relationIndex = createRelationIndex(document);
+  const internalIDs = new Map<string, Set<string>>();
+  const poolIDs = new Map<string, Set<string>>();
+  const visibleServices = new Map([...cards].flatMap(([id, card]) =>
+    card.kind === 'node' || card.kind === 'group'
+      ? [[id, new Set(card.instances.map(instance => instance.serviceRef))] as const] : []));
+  const addPoolRelation = (groupId: string, detail: RelationDetail) => {
+    if (serviceScope === 'group' && [detail.from, detail.to].some(endpoint =>
+      endpoint.serviceRef && !visibleServices.get(groupId)?.has(endpoint.serviceRef))) return;
+    const refs = poolIDs.get(groupId) ?? new Set<string>();
+    refs.add(detail.relation.id);
+    poolIDs.set(groupId, refs);
   };
   const addInternalRelation = (target: string, relation: Relation) => {
-    const serviceRef = (id: string) => byID.get(id)?.serviceRef ?? (byService.has(id) ? id : undefined);
+    const detail = relationIndex.details.get(relation.id)!;
     const card = cards.get(target);
-    if (serviceScope === 'group' && card?.kind === 'node' && card.group) {
-      const visible = new Set(card.instances.map(instance => instance.serviceRef));
-      if ([relation.from, relation.to].some(id => {
-        const service = serviceRef(id);
-        return service && !visible.has(service);
-      })) return;
-    }
+    if (card?.kind === 'group') { addPoolRelation(target, detail); return; }
+    if (serviceScope === 'group' && card?.kind === 'node' && card.group
+      && [detail.from, detail.to].some(endpoint => endpoint.serviceRef && !visibleServices.get(target)?.has(endpoint.serviceRef))) return;
+    const seen = internalIDs.get(target) ?? new Set<string>();
+    if (seen.has(relation.id)) return;
+    seen.add(relation.id);
+    internalIDs.set(target, seen);
     const values = internalRelations.get(target) ?? [];
-    if (!values.some(value => value.relation.id === relation.id)) {
-      values.push({ relation, fromLabel: endpointLabel(relation.from), toLabel: endpointLabel(relation.to),
-        fromServiceRef: serviceRef(relation.from), toServiceRef: serviceRef(relation.to) });
-      internalRelations.set(target, values);
-    }
+    values.push({ relation, fromLabel: detail.from.label, toLabel: detail.to.label,
+      fromServiceRef: detail.from.serviceRef, toServiceRef: detail.to.serviceRef });
+    internalRelations.set(target, values);
   };
-  const endpointInstances = (id: string): Instance[] => {
-    const instance = byID.get(id);
-    return instance ? [instance] : byService.get(id) ?? [];
+  const endpointGroups = new Map<string, Set<string>>();
+  const ownerGroups = (id: string): ReadonlySet<string> => {
+    let result = endpointGroups.get(id);
+    if (!result) {
+      const instance = byID.get(id);
+      const members = instance ? [instance] : byService.get(id) ?? [];
+      result = new Set(members.length
+        ? members.flatMap(member => (instanceGroups.get(member.id) ?? memberships.get(member.nodeRef) ?? []).map(group => group.id))
+        : (memberships.get(id) ?? []).map(group => group.id));
+      if (cards.get(id)?.kind === 'group') result.add(id);
+      endpointGroups.set(id, result);
+    }
+    return result;
   };
   for (const relation of document.relations ?? []) {
     // Service-level relations are intentionally kept at the logical group
     // level for routing. When both endpoints have instances on one host, add
     // the same relation to that host card so a group self-loop is unnecessary.
-    const sourceInstances = endpointInstances(relation.from);
-    const targetHosts = new Set(endpointInstances(relation.to).map(instance => instance.nodeRef));
-    const sharedHosts = new Set(sourceInstances
-      .filter(instance => targetHosts.has(instance.nodeRef))
-      .map(instance => instance.nodeRef));
+    const detail = relationIndex.details.get(relation.id)!;
+    const sharedHosts = relationIndex.sharedHosts(detail);
+    const targetGroups = ownerGroups(relation.to);
+    for (const groupId of ownerGroups(relation.from))
+      if (targetGroups.has(groupId)) addPoolRelation(groupId, detail);
+    for (const nodeId of sharedHosts)
+      for (const group of memberships.get(nodeId) ?? []) addPoolRelation(group.id, detail);
     const localOwners = new Set<string>();
     for (const nodeId of sharedHosts)
       for (const owner of hostTargets(nodeId)) {
@@ -304,7 +322,18 @@ export function projectCanvas(
         relationGroups.get(key)!.push(relation);
       }
   }
-  for (const node of nodes) node.height += internalRelationHeight(internalRelations.get(node.id)?.length ?? 0);
+  const groupRelations = new Map(groups.map(group => [group.id, summarizeRelations(
+    [...(poolIDs.get(group.id) ?? [])].map(id => relationIndex.details.get(id)!), new Set(group.nodeRefs),
+  )]));
+  for (const node of nodes) {
+    const card = cards.get(node.id);
+    if (card?.kind === 'group') {
+      if (!card.expanded) {
+        const count = groupRelations.get(node.id)!.length;
+        node.height += relationSectionHeight(Math.min(count, relationPreviewLimit), count > relationPreviewLimit);
+      }
+    } else node.height += relationSectionHeight(internalRelations.get(node.id)?.length ?? 0);
+  }
   for (const edge of edges) {
     const values = relationGroups.get(edge.id)!;
     edge.label =
@@ -325,7 +354,7 @@ export function projectCanvas(
         return rank(a.id) - rank(b.id);
       },
     );
-  return { graph: { nodes, edges }, cards, relations: relationGroups, internalRelations, appearances, memberships, instanceMemberships: instanceGroups };
+  return { graph: { nodes, edges }, cards, relations: relationGroups, internalRelations, groupRelations, relationDetails: relationIndex.details, appearances, memberships, instanceMemberships: instanceGroups };
 }
 
 export function projectPositions(document: RenderModel, projection: Projection) {
@@ -353,12 +382,6 @@ export function projectLayoutOptions(
   projection: Projection,
   positionMode: GraphLayoutOptions['positionMode'] = 'preferred',
 ): GraphLayoutOptions {
-  const relationRows = [...projection.internalRelations.entries()]
-    .filter(([id]) => {
-      const card = projection.cards.get(id);
-      return card?.kind === 'group' && card.expanded;
-    })
-    .map(([, relations]) => relations.length);
   const visibleGroups = new Set(projection.graph.nodes.filter(node => node.kind === 'group').map(node => node.id));
   return {
     groupLayouts: Object.fromEntries(Object.entries(document.presentation?.groupLayouts ?? {})
@@ -367,7 +390,7 @@ export function projectLayoutOptions(
     layers: projectLayoutLayers(document, projection),
     aspectRatio: 1.6,
     spacing: 32,
-    groupPadding: { top: 108 + internalRelationHeight(Math.max(0, ...relationRows)), right: 20, bottom: 20, left: 20 },
+    groupPadding: { top: 108, right: 20, bottom: 20, left: 20 },
     positions: projectPositions(document, projection),
     positionMode,
   };

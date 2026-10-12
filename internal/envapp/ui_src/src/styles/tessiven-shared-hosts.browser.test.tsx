@@ -136,7 +136,8 @@ describe('shared host canvas interactions', () => {
     await expect.poll(() => host.querySelector('.tessiven-service-link-preview')).toBeNull();
     await page.getByRole('button', { name: 'Collapse group', exact: true }).click();
     await expect.poll(() => host.querySelectorAll('.tessiven-node').length).toBe(0);
-    await preview('nn-zk');
+    await userEvent.hover(host.querySelector<HTMLElement>('[data-relation-summary]')!);
+    await expect.poll(() => host.querySelector('.tessiven-service-link-preview')).not.toBeNull();
     await page.getByRole('button', { name: 'Expand group', exact: true }).click();
     await expect.poll(() => host.querySelectorAll('.tessiven-node').length).toBe(1);
     await expect.poll(() => host.querySelector('.tessiven-service-link-preview')).toBeNull();
@@ -206,6 +207,7 @@ describe('shared host canvas interactions', () => {
     expect(host.querySelector('.tessiven-service-self-link')).toBeNull();
     expect(host.querySelector('[role="alert"]')).toBeNull();
     await userEvent.click(host.querySelector<HTMLElement>('.tessiven-local-relation')!);
+    await userEvent.click(document.querySelector<HTMLElement>('[data-exact-relation-id="call"]')!);
     expect(document.querySelector('.tessiven-detail-object > code')?.textContent).toBe('call');
   });
 

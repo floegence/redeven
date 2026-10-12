@@ -96,8 +96,8 @@ describe('shared physical hosts in logical groups', () => {
     expect(projected.internalRelations.get('zk::node-1')?.map(item => item.relation.id)).toEqual(['nn-zk']);
     const collapsed = projectCanvas(document, new Set(), {});
     expect(collapsed.graph.edges).toEqual([]);
-    expect(collapsed.internalRelations.get('hdfs')?.map(item => item.relation.id)).toEqual(['nn-zk']);
-    expect(collapsed.internalRelations.get('zk')?.map(item => item.relation.id)).toEqual(['nn-zk']);
+    expect(collapsed.groupRelations.get('hdfs')?.flatMap(item => item.relationRefs)).toEqual(['nn-zk']);
+    expect(collapsed.groupRelations.get('zk')?.flatMap(item => item.relationRefs)).toEqual(['nn-zk']);
   });
 
   it('keeps an explicit cross-host call external without inferring co-located replicas', () => {
@@ -129,7 +129,7 @@ describe('shared physical hosts in logical groups', () => {
 
     const collapsed = projectCanvas(document, new Set(), {});
     expect(collapsed.graph.edges).toEqual([]);
-    expect(collapsed.internalRelations.get('runtime')?.map(item => item.relation.id)).toEqual(['local-call']);
+    expect(collapsed.groupRelations.get('runtime')?.flatMap(item => item.relationRefs)).toEqual(['local-call']);
   });
 
   it('routes physical host relationships through visible appearances and collapsed groups', () => {

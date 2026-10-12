@@ -25,6 +25,8 @@ import { ChevronDown, ChevronUp, Link, ExternalLink, Layers, Maximize, Minus, Pl
 import '@floegence/floe-webapp-core/graph.css';
 import { projectCanvas, projectLayoutOptions, type NodeServiceScope, type Projection } from './projection';
 import { TessivenIcon } from './TessivenIcon';
+import { TessivenRelationDetails } from './TessivenRelationDetails';
+import { summaryReferences, type RelationSummary } from './relations';
 import { TessivenServiceRelations, type ServiceRelationEndpoint } from './TessivenServiceRelations';
 import { FlowerIcon } from '../../flower_ui/src/icons/FlowerIcon';
 import type {
@@ -109,6 +111,7 @@ export function TessivenGraph(props: {
     event: GraphObjectEvent;
     refs: string[];
     menu: boolean;
+    summary?: { groupRef: string; key?: string };
   } | null>(null);
   const [error, setError] = createSignal('');
   const engine = createGraphLayoutEngine();
@@ -555,6 +558,13 @@ export function TessivenGraph(props: {
   };
   const serviceInventory = (ownerId: string, instances: Instance[], limit = Infinity, group = false): JSX.Element => (
     <TessivenServiceRelations relations={projection().internalRelations.get(ownerId) ?? []} engine={engine} t={props.t} group={group}
+      summaries={group ? projection().groupRelations.get(ownerId) : undefined}
+      onSummaryActivate={(event, summary) => openSummary(event, ownerId, summary)}
+      onSummaryContextMenu={(event, summary) => openSummary(event, ownerId, summary, true)}
+      onSummaryKeyDown={(event, summary) => {
+        if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) openSummary(event, ownerId, summary, true);
+      }}
+      onShowAll={event => openSummary(event, ownerId)}
       renderServices={endpoint => serviceRows(instances, limit, ownerId, endpoint)}
       onKeyDown={(event, id) => keyboardMenu(event, id, [id])}
       onActivate={(event, id) => { event.stopPropagation(); show(rowEvent(event, id), [id]); }}
@@ -595,7 +605,11 @@ export function TessivenGraph(props: {
             </button>
           </header>
           <div class="tessiven-group-caption">
-            <span>{props.t('logicalGroup')}</span>
+            <Show when={card.expanded && projection().groupRelations.get(node.id)?.length} fallback={<span>{props.t('logicalGroup')}</span>}>
+              <button type="button" class="tessiven-pool-relations" onClick={event => openSummary(event, node.id)}>
+                <Link aria-hidden="true" />{props.t('poolRelationPatterns', { count: projection().groupRelations.get(node.id)!.length })}
+              </button>
+            </Show>
             <span>{props.t('nodeCount', { count: card.nodes.length })}</span>
           </div>
           <Show when={card.expanded && card.aggregated}>
@@ -622,9 +636,6 @@ export function TessivenGraph(props: {
           </Show>
           <Show when={!card.expanded}>
             {serviceInventory(node.id, card.instances, 8, true)}
-          </Show>
-          <Show when={card.expanded && (projection().internalRelations.get(node.id)?.length ?? 0) > 0}>
-            {serviceInventory(node.id, [])}
           </Show>
         </section>
       );
@@ -731,6 +742,199 @@ export function TessivenGraph(props: {
       </section>
     );
   };
+  const renderDetails = (refs: string[], event: GraphObjectEvent): JSX.Element => (
+                <For each={refs.slice(0, 30)}>
+                  {(id) => {
+                    const item = allObjects().get(id) as
+                      | (Record<string, unknown> & { id: string })
+                      | undefined;
+                    const instance = props.version.view.model.instances?.find(
+                      (member) => member.id === id,
+                    );
+                    const title = String(
+                      item?.name ??
+                        (instance
+                          ? services().get(instance.serviceRef)?.name
+                          : undefined) ??
+                        id,
+                    );
+                    const related = (
+                      props.version.view.model.relations ?? []
+                    ).filter(
+                      (relation) =>
+                        relation.id === id ||
+                        relation.from === id ||
+                        relation.to === id ||
+                        (instance &&
+                          (relation.from === instance.serviceRef ||
+                            relation.to === instance.serviceRef)),
+                    );
+                    const evidenceRefs = [
+                      ...new Set([
+                        ...(item && 'source' in item ? [id] : []),
+                        ...((item?.observation as Observation | undefined)
+                          ?.evidenceRefs ?? []),
+                        ...related.flatMap((relation) => relation.evidenceRefs),
+                      ]),
+                    ];
+                    const hosted =
+                      props.version.view.model.instances?.filter(
+                        (member) =>
+                          member.serviceRef === id || member.nodeRef === id,
+                      ) ?? [];
+                    const relatedGroups = instance ? projection().instanceMemberships.get(instance.id) ?? [] : projection().memberships.get(id) ?? [];
+                    const belongsToMultipleGroups = relatedGroups.length > 1;
+                    return (
+                      <section class="tessiven-detail-object">
+                        <strong>{title}</strong>
+                        <code>{id}</code>
+                        <Show when={item && 'facts' in item}>
+                          <dl class="tessiven-object-facts"><For each={item?.facts as { label: string; value: string }[] | undefined}>{fact => <div><dt>{fact.label}</dt><dd>{fact.value}</dd></div>}</For></dl>
+                        </Show>
+                        <Show when={item?.description}>
+                          <p>{String(item?.description)}</p>
+                        </Show>
+                        <Show
+                          when={item?.observation as Observation | undefined}
+                          keyed
+                        >
+                          {(observation) => (
+                            <p>
+                              {props.t(`state.${observation.state}`)} ·{' '}
+                              <time>{observation.observedAt}</time>
+                            </p>
+                          )}
+                        </Show>
+                        <For each={hosted.slice(0, 30)}>
+                          {(member) => (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => show(event, [member.id])}
+                            >
+                              {member.name ??
+                                services().get(member.serviceRef)?.name ??
+                                member.id}{' '}
+                              ·{' '}
+                              {
+                                props.version.view.model.nodes?.find(
+                                  (node) => node.id === member.nodeRef,
+                                )?.name
+                              }{' '}
+                              · {props.t(`role.${member.role}`)}
+                            </Button>
+                          )}
+                        </For>
+                        <Show when={hosted.length > 30}>
+                          <p>
+                            {props.t('moreObjects', {
+                              count: hosted.length - 30,
+                            })}
+                          </p>
+                        </Show>
+                        <Show when={instance}>
+                          <p>
+                            {props.t(`role.${instance?.role}`)} ·{' '}
+                            {
+                              props.version.view.model.nodes?.find(
+                                (node) => node.id === instance?.nodeRef,
+                              )?.name
+                            }
+                            <Show when={instance?.shard}>
+                              {' '}
+                              · {instance?.shard}
+                            </Show>
+                          </p>
+                          <Show when={instance?.binding}><Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              close();
+                              props.onInspect(instance!);
+                            }}
+                          >
+                            {props.t('inspectService')}
+                          </Button></Show>
+                        </Show>
+                        <Show when={item && 'runtimeRef' in item}>
+                          <code>{String(item?.runtimeRef)}</code>
+                        </Show>
+                        <Show when={relatedGroups.length}>
+                          <section class="tessiven-memberships" data-shared={belongsToMultipleGroups}>
+                            <div class="tessiven-detail-heading">
+                              <Show when={belongsToMultipleGroups}>
+                                <Link aria-hidden="true" />
+                              </Show>
+                              <strong>{props.t(belongsToMultipleGroups ? 'belongsToMultipleGroups' : 'groupMemberships')}</strong>
+                              <span class="tessiven-membership-count">{relatedGroups.length}</span>
+                            </div>
+                            <For each={relatedGroups}>
+                              {(group) => <button
+                                aria-label={props.t('locateInGroup', { name: group.name })}
+                                aria-current={projection().cards.get(event.object?.id ?? '')?.kind === 'node' && appearance(instance?.nodeRef ?? id, group.id) === event.object?.id ? 'location' : undefined}
+                                onClick={() => locateNode(instance?.nodeRef ?? id, group.id)}
+                              ><span class="tessiven-membership-mark" aria-hidden="true" /><span>{group.name}</span><ExternalLink aria-hidden="true" /></button>}
+                            </For>
+                          </section>
+                        </Show>
+                        <Show when={item && 'endpoint' in item}>
+                          <code>{String(item?.endpoint)}</code>
+                        </Show>
+                        <Show when={item && 'from' in item}>
+                          <p>
+                            {String(item?.from)} → {String(item?.to)} ·{' '}
+                            {props.t(`relation.${String(item?.kind)}`)}
+                          </p>
+                        </Show>
+                        <For each={evidenceRefs.slice(0, 8)}>
+                          {(ref) => {
+                            const evidence =
+                              props.version.view.model.evidence?.find(
+                                (value) => value.id === ref,
+                              );
+                            return (
+                              <div class="tessiven-evidence">
+                                <small>
+                                  {props.t(`evidence.${evidence?.source}`)}
+                                </small>
+                                <p>{evidence?.summary}</p>
+                                <code>{evidence?.locator}</code>
+                                <Show when={evidence?.observedAt}>
+                                  <time>{evidence?.observedAt}</time>
+                                </Show>
+                              </div>
+                            );
+                          }}
+                        </For>
+                        <Show when={!evidenceRefs.length}>
+                          <p class="tessiven-muted">{props.t('noEvidence')}</p>
+                        </Show>
+                      </section>
+                    );
+                  }}
+                </For>
+  );
+  const openSummary = (event: MouseEvent | KeyboardEvent, groupRef: string, summary?: RelationSummary, menu = false) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const refs = summaryReferences(groupRef, summary);
+    const origin = rowEvent(event, groupRef);
+    if (menu) { show(origin, refs, true); return; }
+    select(origin.object, refs);
+    setPopup({ event: origin, refs, menu: false, summary: { groupRef, key: summary?.key } });
+  };
+  const locateEndpoint = (ref: string) => {
+    const endpoint = [...projection().relationDetails.values()].find(detail => detail.from.ref === ref || detail.to.ref === ref);
+    const detail = endpoint?.from.ref === ref ? endpoint.from : endpoint?.to;
+    const nodeId = detail?.nodeRefs[0] ?? ref;
+    const group = projection().memberships.get(nodeId)?.[0];
+    if (group) {
+      setExpanded(previous => new Set([...previous, group.id]));
+      setSelectedNodes(previous => ({ ...previous, [group.id]: nodeId }));
+    }
+    const id = appearance(nodeId, group?.id) ?? nodeId;
+    close(); select({ kind: 'node', id }, [ref]); pendingLocate = id; centerSelection();
+  };
   return (
     <div
       class="tessiven-canvas"
@@ -809,8 +1013,9 @@ export function TessivenGraph(props: {
             onClose={close}
             t={props.t}
             menu={value.menu}
+            relationBrowser={!!value.summary}
           >
-            <Show when={!value.menu}>
+            <Show when={!value.menu && !value.summary}>
               <div class="tessiven-detail-content">
                 <Show when={!value.refs.length}>
                   <strong>{props.version.view.model.metadata.title}</strong>
@@ -828,176 +1033,7 @@ export function TessivenGraph(props: {
                     )}
                   </For>
                 </Show>
-                <For each={value.refs.slice(0, 30)}>
-                  {(id) => {
-                    const item = allObjects().get(id) as
-                      | (Record<string, unknown> & { id: string })
-                      | undefined;
-                    const instance = props.version.view.model.instances?.find(
-                      (member) => member.id === id,
-                    );
-                    const title = String(
-                      item?.name ??
-                        (instance
-                          ? services().get(instance.serviceRef)?.name
-                          : undefined) ??
-                        id,
-                    );
-                    const related = (
-                      props.version.view.model.relations ?? []
-                    ).filter(
-                      (relation) =>
-                        relation.id === id ||
-                        relation.from === id ||
-                        relation.to === id ||
-                        (instance &&
-                          (relation.from === instance.serviceRef ||
-                            relation.to === instance.serviceRef)),
-                    );
-                    const evidenceRefs = [
-                      ...new Set([
-                        ...(item && 'source' in item ? [id] : []),
-                        ...((item?.observation as Observation | undefined)
-                          ?.evidenceRefs ?? []),
-                        ...related.flatMap((relation) => relation.evidenceRefs),
-                      ]),
-                    ];
-                    const hosted =
-                      props.version.view.model.instances?.filter(
-                        (member) =>
-                          member.serviceRef === id || member.nodeRef === id,
-                      ) ?? [];
-                    const relatedGroups = instance ? projection().instanceMemberships.get(instance.id) ?? [] : projection().memberships.get(id) ?? [];
-                    const belongsToMultipleGroups = relatedGroups.length > 1;
-                    return (
-                      <section class="tessiven-detail-object">
-                        <strong>{title}</strong>
-                        <code>{id}</code>
-                        <Show when={item && 'facts' in item}>
-                          <dl class="tessiven-object-facts"><For each={item?.facts as { label: string; value: string }[] | undefined}>{fact => <div><dt>{fact.label}</dt><dd>{fact.value}</dd></div>}</For></dl>
-                        </Show>
-                        <Show when={item?.description}>
-                          <p>{String(item?.description)}</p>
-                        </Show>
-                        <Show
-                          when={item?.observation as Observation | undefined}
-                          keyed
-                        >
-                          {(observation) => (
-                            <p>
-                              {props.t(`state.${observation.state}`)} ·{' '}
-                              <time>{observation.observedAt}</time>
-                            </p>
-                          )}
-                        </Show>
-                        <For each={hosted.slice(0, 30)}>
-                          {(member) => (
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => show(value.event, [member.id])}
-                            >
-                              {member.name ??
-                                services().get(member.serviceRef)?.name ??
-                                member.id}{' '}
-                              ·{' '}
-                              {
-                                props.version.view.model.nodes?.find(
-                                  (node) => node.id === member.nodeRef,
-                                )?.name
-                              }{' '}
-                              · {props.t(`role.${member.role}`)}
-                            </Button>
-                          )}
-                        </For>
-                        <Show when={hosted.length > 30}>
-                          <p>
-                            {props.t('moreObjects', {
-                              count: hosted.length - 30,
-                            })}
-                          </p>
-                        </Show>
-                        <Show when={instance}>
-                          <p>
-                            {props.t(`role.${instance?.role}`)} ·{' '}
-                            {
-                              props.version.view.model.nodes?.find(
-                                (node) => node.id === instance?.nodeRef,
-                              )?.name
-                            }
-                            <Show when={instance?.shard}>
-                              {' '}
-                              · {instance?.shard}
-                            </Show>
-                          </p>
-                          <Show when={instance?.binding}><Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              close();
-                              props.onInspect(instance!);
-                            }}
-                          >
-                            {props.t('inspectService')}
-                          </Button></Show>
-                        </Show>
-                        <Show when={item && 'runtimeRef' in item}>
-                          <code>{String(item?.runtimeRef)}</code>
-                        </Show>
-                        <Show when={relatedGroups.length}>
-                          <section class="tessiven-memberships" data-shared={belongsToMultipleGroups}>
-                            <div class="tessiven-detail-heading">
-                              <Show when={belongsToMultipleGroups}>
-                                <Link aria-hidden="true" />
-                              </Show>
-                              <strong>{props.t(belongsToMultipleGroups ? 'belongsToMultipleGroups' : 'groupMemberships')}</strong>
-                              <span class="tessiven-membership-count">{relatedGroups.length}</span>
-                            </div>
-                            <For each={relatedGroups}>
-                              {(group) => <button
-                                aria-label={props.t('locateInGroup', { name: group.name })}
-                                aria-current={projection().cards.get(value.event.object?.id ?? '')?.kind === 'node' && appearance(instance?.nodeRef ?? id, group.id) === value.event.object?.id ? 'location' : undefined}
-                                onClick={() => locateNode(instance?.nodeRef ?? id, group.id)}
-                              ><span class="tessiven-membership-mark" aria-hidden="true" /><span>{group.name}</span><ExternalLink aria-hidden="true" /></button>}
-                            </For>
-                          </section>
-                        </Show>
-                        <Show when={item && 'endpoint' in item}>
-                          <code>{String(item?.endpoint)}</code>
-                        </Show>
-                        <Show when={item && 'from' in item}>
-                          <p>
-                            {String(item?.from)} → {String(item?.to)} ·{' '}
-                            {props.t(`relation.${String(item?.kind)}`)}
-                          </p>
-                        </Show>
-                        <For each={evidenceRefs.slice(0, 8)}>
-                          {(ref) => {
-                            const evidence =
-                              props.version.view.model.evidence?.find(
-                                (value) => value.id === ref,
-                              );
-                            return (
-                              <div class="tessiven-evidence">
-                                <small>
-                                  {props.t(`evidence.${evidence?.source}`)}
-                                </small>
-                                <p>{evidence?.summary}</p>
-                                <code>{evidence?.locator}</code>
-                                <Show when={evidence?.observedAt}>
-                                  <time>{evidence?.observedAt}</time>
-                                </Show>
-                              </div>
-                            );
-                          }}
-                        </For>
-                        <Show when={!evidenceRefs.length}>
-                          <p class="tessiven-muted">{props.t('noEvidence')}</p>
-                        </Show>
-                      </section>
-                    );
-                  }}
-                </For>
+                {renderDetails(value.refs, value.event)}
                 <Show when={value.refs.length > 30}>
                   <p>
                     {props.t('moreObjects', { count: value.refs.length - 30 })}
@@ -1005,6 +1041,17 @@ export function TessivenGraph(props: {
                 </Show>
               </div>
             </Show>
+            <Show when={!value.menu && value.summary}>{scope => <TessivenRelationDetails
+              groupRef={scope().groupRef} initialKey={scope().key}
+              summaries={projection().groupRelations.get(scope().groupRef) ?? []}
+              details={projection().relationDetails} nodes={props.version.view.model.nodes ?? []} t={props.t}
+              renderDetail={id => renderDetails([id], value.event)} canAsk={canAsk} onAsk={ask} onLocate={locateEndpoint}
+              onInspect={(event, id) => {
+                select(rowEvent(event, id).object, [id]);
+                if (props.onSelectionChange) { close(); return true; }
+                return false;
+              }} />}</Show>
+            <Show when={!value.summary}>
             <Button
               class="tessiven-ask-flower"
               role={value.menu ? 'menuitem' : undefined}
@@ -1016,6 +1063,7 @@ export function TessivenGraph(props: {
               <span class="tessiven-ask-flower-mark" aria-hidden="true"><FlowerIcon /></span>
               {props.t('askFlower')}
             </Button>
+            </Show>
           </TessivenObjectPopup>
         )}
       </Show>
@@ -1028,10 +1076,18 @@ function TessivenObjectPopup(props: {
   onClose: (restore?: boolean) => void;
   t: TessivenText;
   menu: boolean;
+  relationBrowser?: boolean;
   children: JSX.Element;
 }) {
   let panel: HTMLDivElement | undefined;
+  const [size, setSize] = createSignal({ width: props.menu ? 210 : 360, height: props.menu ? 62 : 430 });
   onMount(() => {
+    // The shared layer owns coordinates; actual content dimensions keep its
+    // clamp correct when filters, pagination, or exact details change height.
+    const measure = () => { if (panel) setSize({ width: panel.offsetWidth, height: panel.offsetHeight }); };
+    const observer = new ResizeObserver(measure);
+    if (panel) observer.observe(panel);
+    measure();
     panel?.querySelector<HTMLElement>('button')?.focus({ preventScroll: true });
     const focus = (event: FocusEvent) => {
       if (event.target instanceof Node && !panel?.contains(event.target))
@@ -1058,6 +1114,7 @@ function TessivenObjectPopup(props: {
     document.addEventListener('pointerdown', pointer);
     document.addEventListener('keydown', key);
     onCleanup(() => {
+      observer.disconnect();
       document.removeEventListener('focusin', focus);
       document.removeEventListener('pointerdown', pointer);
       document.removeEventListener('keydown', key);
@@ -1067,15 +1124,13 @@ function TessivenObjectPopup(props: {
     <SurfaceFloatingLayer
       owner={props.event.owner}
       position={props.event.position}
-      estimatedSize={{
-        width: props.menu ? 210 : 360,
-        height: props.menu ? 62 : 430,
-      }}
+      estimatedSize={size()}
       class="tessiven-popup-layer"
     >
       <div
         ref={panel}
         class="tessiven-popup"
+        data-relation-browser={props.relationBrowser || undefined}
         role={props.menu ? 'menu' : 'dialog'}
         aria-label={props.t(props.menu ? 'objectMenu' : 'details')}
         style={{ width: props.menu ? '210px' : '360px' }}
