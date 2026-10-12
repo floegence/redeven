@@ -71,9 +71,8 @@ collapsed. Controls retain the published
 
 WSL exposes labeled distribution, Linux user and Runtime directory facts.
 Container selection shares the right control column; refresh stays beside the
-selection and errors span its row. Cloud origin and Redeven Cloud management,
-Gateway permission guidance, and settings load/retry information use the same
-surface treatment. Default connection radio choices remain a distinct persisted
+selection and errors span its row. Cloud, Gateway and load/retry information use
+matching surfaces. Default connection radio choices remain a distinct persisted
 operation with their own save action, grouped in a matching surface.
 Narrow forms stack labels and controls without hiding values. Text, diagnostics,
 paths and addresses remain selectable and wrap within their owner.
@@ -96,13 +95,12 @@ keep their existing immediate persistence boundary and confirmation owner.
 Authenticator verification, enrollment, recovery-code acknowledgement and
 management also use the window body and fixed footer, never a nested dialog.
 
-Authenticator entry uses six visual positions and one native numeric text input
-for selection, keyboard editing, paste and one-time-code autofill. Preserve the
-OTP geometry, leading zeroes and six-digit validation; the positions are not
-independent fields. Guidance names the authenticator app. Recovery-code entry
-remains a normal text field. Changing methods clears the old code and focuses the
-new field. Floe owns the composite input's single visible focus boundary. QR
-pairing and recovery-code grids retain their specialized geometry.
+Authenticator entry preserves six visual positions backed by one native numeric
+input, including editing, paste, autofill and leading zeroes. Guidance names the
+authenticator app. Method changes clear and focus the new code field. Floe owns
+its single visible focus boundary. QR pairing and recovery-code grids retain
+their specialized geometry; verification and recovery semantics belong to the
+settings session contract.
 
 ## Actions, responsive layout and focus
 
@@ -122,20 +120,18 @@ locale and request state. Groups reflow whole controls; explanatory paragraphs
 stay outside buttons. Narrow layouts and enlarged text must not produce horizontal
 scrolling, clipped actions or unreachable feedback.
 
-Tabs retain Floe trigger padding of 12px on each side and a 40px target height
-(44px for coarse pointers). Back uses a compact visible label, with the full
-destination in its accessible name and tooltip. SSH help and disclosures retain
-padded targets. Native summaries expose pointer, hover and keyboard focus
-affordances. Floe owns modal focus trapping, nested Escape, focus restoration,
-input focus, control variants and forced-colors behavior.
+Tabs retain 12px Floe trigger padding and 40px height (44px for coarse pointers).
+Back uses a compact label and the full destination in its accessible name and
+tooltip. Help and native summaries retain padded targets, hover and keyboard
+focus. Floe owns focus trapping, nested Escape, restoration, control variants
+and forced-colors behavior.
 
 ## Motion within the fixed viewport
 
-Floe owns modal material and entry/exit motion. Its slider supplies the active
-tab's 200ms underline transition. Product styling uses a restrained 160ms
-opacity entrance without translating fields or delaying selection. Rapid tab
-switching follows the latest selection immediately and adds no timer, selection
-state or request owner. Retained exit presentation cannot blank the closing panel.
+Floe owns modal entry/exit and the active tab's 200ms underline. Product body
+entrance uses 160ms opacity without translating fields or delaying selection.
+Rapid switches follow the latest selection without adding state, timers or request
+owners. Retained exit cannot blank the closing panel.
 
 Advanced and certificate disclosures expand over 180ms using content height and
 opacity inside the body. Closed native details become inert immediately while
@@ -145,6 +141,14 @@ state. Rapid reversal follows the existing open state and preserves drafts.
 SSH validation focuses invalid input immediately, then checks the field and error
 scroll position after expansion. Reduced motion disables these transitions and
 tab/content animation. Visual transitions add no lifecycle owner.
+
+# Boundaries
+
+The [settings session contract](desktop-environment-settings.md) owns registration
+authority, secret handling, prerequisites and recovery. Presentation preserves
+its drafts and operation boundaries. Released Floe owns theme material, modal
+presence and focus; Redeven owns composition and responsive geometry. Styling
+adds no modal, focus manager or persistence path.
 
 # Evidence
 
