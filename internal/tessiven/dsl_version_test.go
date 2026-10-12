@@ -16,6 +16,9 @@ import (
 )
 
 func TestFrozenPresentationReadsImmutableSourceAcrossDSLVersions(t *testing.T) {
+	if fmt.Sprintf("%x", sha256.Sum256(presentationspec.Schema)) != "ea3dc170f488797df84b5bfb31a06fe1b0abb3dfa07f0d23e2112076229a78ff" {
+		t.Fatal("the published presentation v1 schema must never be edited")
+	}
 	store, err := Open(filepath.Join(t.TempDir(), "presentation.sqlite"))
 	if err != nil {
 		t.Fatal(err)

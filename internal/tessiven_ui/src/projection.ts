@@ -391,6 +391,7 @@ export function compareDocuments(
     'resources',
     'relations',
     'evidence',
+    'objects',
   ] as const) {
     const old = new Map((before[kind] ?? []).map((value) => [value.id, value]));
     const next = new Map((after[kind] ?? []).map((value) => [value.id, value]));
