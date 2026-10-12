@@ -158,6 +158,7 @@ const pluginSurfaceFrameState = vi.hoisted(() => ({
 const activityPluginPageState = vi.hoisted(() => ({
   closeCalls: 0,
   failClose: false,
+  interact: undefined as (() => void) | undefined,
 }));
 const pluginLayoutMocks = vi.hoisted(() => ({
   getWorkbenchLayoutSnapshot: vi.fn(async () => ({ widget_states: [] })),
@@ -948,6 +949,7 @@ vi.mock('./plugins/PluginSurfaceFrame', () => ({
 }));
 vi.mock('./plugins/ActivityPluginSurfacePage', () => ({
   ActivityPluginSurfacePage: (props: any) => {
+    activityPluginPageState.interact = () => props.onInteraction?.({ kind: 'activation' });
     const requestClose = async () => {
       activityPluginPageState.closeCalls += 1;
       return !activityPluginPageState.failClose;
@@ -1633,6 +1635,7 @@ beforeEach(async () => {
   pluginSurfaceFrameState.closeOverrides.clear();
   activityPluginPageState.closeCalls = 0;
   activityPluginPageState.failClose = false;
+  activityPluginPageState.interact = undefined;
   pluginLayoutMocks.getWorkbenchLayoutSnapshot.mockClear();
   pluginLayoutMocks.removeWorkbenchPluginWidgets.mockReset();
   pluginLayoutMocks.removeWorkbenchPluginWidgets.mockResolvedValue({ widget_states: [] });
@@ -3767,6 +3770,19 @@ describe('EnvAppShell environment entry affordances', () => {
       expect(host.querySelector('[data-floe-shell-slot="main"]')?.contains(firstPage)).toBe(true);
       expect(sidebarActiveTabValue).toBe(activityID);
       expect(host.querySelectorAll('[data-activity-plugin-surface-page]')).toHaveLength(1);
+
+      const composer = host.querySelector<HTMLTextAreaElement>('[data-testid="activity-flower-composer"]')!;
+      composer.focus();
+      composer.value = 'Pinned plugin draft';
+      composer.dispatchEvent(new InputEvent('input', { bubbles: true }));
+      await flushUntil(() => host.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-companion-phase') === 'expanded');
+      activityPluginPageState.interact?.();
+      await flushUntil(() => host.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-companion-phase') === 'collapsed');
+      expect(host.querySelector('[data-testid="activity-flower-composer"]')).toBe(composer);
+      expect(composer.value).toBe('Pinned plugin draft');
+      expect(document.activeElement).not.toBe(composer);
+      expect(sidebarActiveTabValue).toBe(activityID);
+      expect(activityPluginPageState.closeCalls).toBe(0);
 
       (host.querySelector('[data-activity-id="monitor"]') as HTMLButtonElement).click();
       await flushUntil(() => sidebarActiveTabValue === 'monitor');

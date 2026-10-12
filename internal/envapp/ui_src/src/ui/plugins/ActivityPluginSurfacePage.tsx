@@ -2,7 +2,7 @@ import { useViewActivation } from '@floegence/floe-webapp-core';
 import { Show, type Accessor, type JSX } from 'solid-js';
 
 import type { PluginConfirmationQueue } from './PluginConfirmationQueue';
-import type { PluginSurfacePlacementCoordinator } from './pluginPlatform';
+import type { PluginSurfaceInteractionEvent, PluginSurfacePlacementCoordinator } from './pluginPlatform';
 import type { PluginSurfaceLaunchTarget } from './pluginTypes';
 import { PluginSurfaceContainer, type PluginSurfaceResolver } from './PluginSurfaceContainer';
 
@@ -13,6 +13,7 @@ export type ActivityPluginSurfacePageProps = Readonly<{
   target: Accessor<PluginSurfaceLaunchTarget | null>;
   registerClose: (close: (() => Promise<boolean>) | null) => void;
   onRetirementError: (error: unknown) => void;
+  onInteraction?: (event: PluginSurfaceInteractionEvent) => void;
 }>;
 
 export function ActivityPluginSurfacePage(props: ActivityPluginSurfacePageProps): JSX.Element {
@@ -28,6 +29,11 @@ export function ActivityPluginSurfacePage(props: ActivityPluginSurfacePageProps)
             target={target}
             visible={activation.active()}
             registerClose={props.registerClose}
+            onInteraction={(event) => {
+              if (activation.active() && (event.kind === 'activation' || event.kind === 'focus' || event.kind === 'action')) {
+                props.onInteraction?.(event);
+              }
+            }}
             onRetirementError={props.onRetirementError}
           />
         )}

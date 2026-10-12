@@ -41,6 +41,16 @@
   --flower-companion-border: var(--redeven-stroke-overlay);
 }
 
+/* Keep the retained detail-to-entry layout change inside the content dissolve. */
+.flower-activity-companion .flower-surface-companion {
+  opacity: 1;
+  transition: opacity 120ms ease-out;
+}
+
+.flower-activity-companion[data-companion-phase='collapsing'] .flower-surface-companion {
+  opacity: 0;
+}
+
 .flower-activity-companion.floe-bottom-bar-companion {
   border-color: var(--flower-companion-border);
   background: var(--flower-companion-surface);
@@ -153,6 +163,11 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .flower-activity-companion[data-companion-phase] .flower-surface-companion {
+    opacity: 1;
+    transition: none;
+  }
+
   .flower-activity-companion-icon-button {
     transition: none;
   }
