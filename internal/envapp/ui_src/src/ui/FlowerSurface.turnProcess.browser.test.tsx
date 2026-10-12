@@ -1,5 +1,6 @@
 import '../index.css';
 import './flower-feature.css';
+import { builtInShellThemePresets } from '@floegence/floe-webapp-core/themes';
 import { commands, page, userEvent } from 'vitest/browser';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { FlowerLiveStreamEnvelope, FlowerRuntimeCurrentView, FlowerRuntimeTurn } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
@@ -69,6 +70,17 @@ const hidden = (root: HTMLElement, id: string) => message(root, id).closest('.fl
 afterEach(async () => { document.getSelection()?.removeAllRanges(); await media.emulateMediaPreferences({ reducedMotion: 'no-preference', forcedColors: 'none' }); });
 
 describe('completed turn process disclosure', () => {
+  it.each(['automatic', 'legacy-manual'] as const)('removes all inter-row spacing from long %s collapsed work', async (policy) => {
+    const done = current(true);
+    const thinking = done.items!.find((item) => item.id === 'thinking')!;
+    const items = [done.items![0], ...Array.from({ length: 28 }, (_, index) => ({ ...thinking, id: `thinking-${index}` })),
+      done.items!.find((item) => item.id === 'tool')!, ...done.items!.filter((item) => item.id.startsWith('final-'))];
+    const { root } = await mount({ ...done, items: items.map((item, index) => ({ ...item, ordinal: index + 1 })),
+      turns: [policy === 'automatic' ? turn() : turn({ final_item_ids: [], final_boundary_complete: false })] });
+    if (policy === 'legacy-manual') summary(root)!.click();
+    await waitFor(() => [...root.querySelectorAll('.flower-turn-row-viewport[aria-hidden="true"]')].every((row) => getComputedStyle(row).display === 'none'));
+    expect(message(root, 'final-a').getBoundingClientRect().top - summary(root)!.getBoundingClientRect().bottom).toBeLessThanOrEqual(32);
+  });
   it('collapses successful work despite a tool failure, retaining final DOM and both final segments', async () => {
     const { root, live } = await mount();
     expect(summary(root)).toBeNull();
@@ -294,6 +306,70 @@ describe('completed turn process disclosure', () => {
     button.click();
     await waitFor(() => message(root, 'progress').closest('.flower-turn-row-viewport')?.getAttribute('data-state') === 'closed');
     expect(message(root, 'progress').closest('[inert]')).not.toBeNull();
+  });
+  it('uses a quiet inline label and trailing chevron with native keyboard disclosure', async () => {
+    const { root } = await mount(current(true));
+    const button = summary(root)!;
+    const label = button.querySelector('span')!;
+    const chevron = button.querySelector('.flower-turn-summary-chevron')!;
+    expect(chevron.querySelector('path')).not.toBeNull();
+    expect(chevron.getBoundingClientRect().left).toBeGreaterThanOrEqual(label.getBoundingClientRect().right);
+    expect(getComputedStyle(button).backgroundColor).toBe('rgba(0, 0, 0, 0)');
+    expect(parseFloat(getComputedStyle(button).borderTopWidth)).toBe(0);
+    expect(getComputedStyle(button).boxShadow).toBe('none');
+    expect(button.getBoundingClientRect().height).toBeGreaterThanOrEqual(32);
+    const final = message(root, 'final-a');
+    button.focus();
+    await userEvent.keyboard('{Enter}');
+    expect(button.getAttribute('aria-expanded')).toBe('true');
+    expect(getComputedStyle(button).outlineStyle).toBe('solid');
+    expect(parseFloat(getComputedStyle(button).outlineWidth)).toBeGreaterThanOrEqual(2);
+    await userEvent.keyboard(' ');
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+    expect(message(root, 'final-a')).toBe(final);
+  });
+  it('keeps the disclosure aligned and compact in representative themed layouts', async () => {
+    const copy = createLocalizedFlowerSurfaceCopy(createTestI18nHelpers('zh-CN') as unknown as FlowerSurfaceTranslator);
+    const { root } = await mount(current(true), copy);
+    const themeRoot = document.documentElement;
+    const previousStyle = themeRoot.getAttribute('style');
+    const previousClass = themeRoot.getAttribute('class');
+    const previousTheme = themeRoot.getAttribute('data-floe-shell-theme');
+    const previousMaterial = themeRoot.getAttribute('data-floe-surface-style');
+    try {
+      for (const [name, material, width] of [
+        ['paper', 'standard', 1280],
+        ['porcelain-dark', 'standard', 1280],
+        ['porcelain-light', 'soft-neumorphic', 1280],
+        ['graphite', 'soft-neumorphic', 1280],
+        ['hc-light', 'standard', 420],
+      ] as const) {
+        const preset = builtInShellThemePresets.find((preset) => preset.name === name)!;
+        themeRoot.removeAttribute('style');
+        themeRoot.classList.toggle('dark', preset.mode === 'dark');
+        themeRoot.classList.toggle('light', preset.mode === 'light');
+        themeRoot.dataset.floeShellTheme = name;
+        themeRoot.dataset.floeSurfaceStyle = material;
+        for (const [token, value] of Object.entries(preset.semanticTokens ?? {})) {
+          if (value) themeRoot.style.setProperty(token, value);
+        }
+        await page.viewport(width, 900);
+        const button = summary(root)!;
+        const final = message(root, 'final-a');
+        for (const expanded of [false, true]) {
+          if (button.getAttribute('aria-expanded') !== String(expanded)) button.click();
+          await waitFor(() => message(root, 'progress').closest('.flower-turn-row-viewport')?.getAttribute('data-state') === (expanded ? 'open' : 'closed'));
+          expect(Math.abs(button.getBoundingClientRect().left - final.getBoundingClientRect().left)).toBeLessThanOrEqual(1);
+          expect(button.scrollWidth).toBeLessThanOrEqual(button.clientWidth + 1);
+          expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth + 1);
+          await page.screenshot({ element: root, path: `__screenshots__/flower-process-${name}-${material}-${expanded ? 'expanded' : 'collapsed'}.png` });
+        }
+      }
+    } finally {
+      for (const [name, value] of [['style', previousStyle], ['class', previousClass], ['data-floe-shell-theme', previousTheme], ['data-floe-surface-style', previousMaterial]]) {
+        if (value === null) themeRoot.removeAttribute(name!); else themeRoot.setAttribute(name!, value!);
+      }
+    }
   });
   it.each(SUPPORTED_LOCALES)('renders localized durations and accessible controls at narrow width in %s', async (locale) => {
     const copy = createLocalizedFlowerSurfaceCopy(createTestI18nHelpers(locale) as unknown as FlowerSurfaceTranslator);
