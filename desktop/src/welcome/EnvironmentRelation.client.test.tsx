@@ -56,6 +56,35 @@ async function mount(initialSnapshot?: DesktopWelcomeSnapshot) {
 afterEach(() => { for (const dispose of disposers.splice(0)) dispose(); document.body.replaceChildren(); vi.restoreAllMocks(); vi.unstubAllGlobals(); Reflect.deleteProperty(HTMLElement.prototype, 'animate'); });
 
 describe('linked environment owner interactions', () => {
+  it.each(['local_environment', 'ssh_environment'] as const)(
+    'shows Cloud connection status only in the Cloud perspective of a linked %s card',
+    async kind => {
+      const fixture = runtimeConnectionFixture({ kind });
+      const runtime = fixture.snapshot.environments.find(entry => entry.kind === kind)!;
+      const h = await mount(fixture.snapshot);
+      const card = document.querySelector(`[data-environment-group="${runtime.id}"]`)!;
+      const panels = [...card.querySelectorAll<HTMLElement>('[role="tabpanel"]')];
+      expect(panels).toHaveLength(3);
+      expect(panels.map(panel => panel.querySelectorAll('[data-cloud-connection-status]').length)).toEqual([0, 1, 0]);
+      const cloudStatus = panels[1].querySelector('[data-cloud-connection-status]')!;
+      for (const index of [0, 1, 2, 1, 0]) {
+        await selectTab(card, index);
+        const visiblePanel = panels.find(panel => panel.getAttribute('aria-hidden') !== 'true')!;
+        expect(visiblePanel.querySelector('[data-cloud-connection-status]')).toBe(index === 1 ? cloudStatus : null);
+        if (index === 1) {
+          cloudStatus.querySelector<HTMLButtonElement>('[aria-haspopup="dialog"]')!.click(); await settle();
+          expect(document.querySelector('[data-cloud-connection-details]')).not.toBeNull();
+        } else {
+          await vi.waitFor(() => expect(document.querySelector('[data-cloud-connection-details]')).toBeNull());
+        }
+        h.publish(structuredClone(fixture.snapshot)); await settle();
+        expect(panels[1].querySelector('[data-cloud-connection-status]')).toBe(cloudStatus);
+        expect(visiblePanel.getAttribute('aria-hidden')).not.toBe('true');
+      }
+      expect(h.performAction).not.toHaveBeenCalled();
+    },
+  );
+
   it.each(['typed', 'local suggestion'] as const)('retains Gateway %s drafts across launcher snapshots', async method => {
     const fixture = mixedEnvironmentFixture();
     const original = fixture.snapshot.environments.find(entry => entry.kind === 'local_environment')!;
@@ -223,8 +252,7 @@ describe('linked environment owner interactions', () => {
     button(details, 'Open locally').click(); await settle();
     expect(h.performAction).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'open_local_environment', environment_id: runtime.id }));
     await h.select('runtime');
-    const runtimeStatus = h.owner('runtime').querySelector('[data-cloud-connection-status]')!;
-    expect(runtimeStatus.textContent).toContain('Waiting');
+    expect(h.owner('runtime').querySelector('[data-cloud-connection-status]')).toBeNull();
     await h.select('cloud');
     button(h.owner('cloud').querySelector('[data-cloud-connection-status]')!, 'Restore').click(); await settle();
     // No Cloud card acquires management authority: the existing Runtime review owns the action.

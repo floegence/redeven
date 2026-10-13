@@ -965,7 +965,7 @@ function EnvironmentOwnerSurface(
           endpointPopoverOpen={props.endpointPopoverOpen} onEndpointPopoverOpenChange={props.onEndpointPopoverOpenChange}
           selectedEndpointID={props.selectedEndpointID} selectEndpointForQRCode={props.selectEndpointForQRCode}
         />
-        <Show when={props.paired}>{props.connectionStatus()}</Show>
+        <Show when={props.paired && props.relationshipRole === 'cloud'}>{props.connectionStatus()}</Show>
         <Show when={runtime().kind !== 'provider_environment' && runtime().runtime_service?.capabilities?.runtime_gateway?.supported && runtime().provider_runtime_link_target}>
           <RuntimeGatewayJoinPanel gateways={props.gateways} targetLabel={runtime().provider_runtime_link_target?.label ?? runtime().label} focusOwner={() => ownerElement?.focus()} targetID={runtime().provider_runtime_link_target!.id} i18n={props.i18n} purpose={gatewayJoinPurpose()} address={gatewayJoinAddress()} openRequest={gatewayJoinOpenRequest()} hideTrigger onClose={()=>void props.refreshEnvironmentRuntime(runtime(),'connect')} />
           <RuntimeGatewayConnectionsDialog targetID={runtime().provider_runtime_link_target!.id} mode={gatewayMode()}

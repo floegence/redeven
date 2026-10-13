@@ -44,10 +44,10 @@ try {
     }, { snapshot, locale });
     await page.goto(new URL('environment-settings.html', server.resolvedUrls.local[0]).href);
     const pair = page.locator('[data-environment-group]').filter({ has: page.locator('[role="tablist"]') });
-    const status = (role = 'cloud') => pair.locator(`[data-owner-role="${role}"] [data-cloud-connection-status]`);
+    const status = () => pair.locator('[data-owner-role="cloud"] [data-cloud-connection-status]');
     const details = page.locator('[data-cloud-connection-details]');
-    const openDetails = async (role = 'cloud') => {
-      await status(role).locator('[aria-haspopup="dialog"]').click();
+    const openDetails = async () => {
+      await status().locator('[aria-haspopup="dialog"]').click();
       await details.waitFor();
     };
     const publish = async next => {
@@ -66,11 +66,11 @@ try {
     };
     await pair.waitFor();
     await page.evaluate(() => document.fonts.ready);
+    assert.equal(await pair.locator('[data-owner-role="runtime"] [data-cloud-connection-status]').count(), 0,
+      'Runtime perspective has no Cloud connection row');
     const healthyGeometry = await geometry();
     await publish(failedSnapshot());
-    await status('runtime').getByText(i18n.t('providerRecovery.waitingShort'), { exact: true }).waitFor();
     sameGeometry(healthyGeometry, await geometry(), 'failure preserves the grid');
-    assert.ok((await status('runtime').boundingBox()).height <= 32, 'Cloud recovery occupies one compact fact row');
     const cloudTab = pair.getByRole('tab').nth(1);
     assert.ok(await cloudTab.evaluate(tab => {
       const dot = tab.querySelector('.redeven-owner-tab-status').getBoundingClientRect();
@@ -79,6 +79,8 @@ try {
       return dot.right <= label.left && dot.bottom <= icon.top + icon.height / 2;
     }), 'warning dot occupies the icon corner without covering the Cloud label');
     await cloudTab.click();
+    await status().getByText(i18n.t('providerRecovery.waitingShort'), { exact: true }).waitFor();
+    assert.ok((await status().boundingBox()).height <= 32, 'Cloud recovery occupies one compact fact row');
     sameGeometry(healthyGeometry, await geometry(), 'perspective switch preserves the grid');
     await openDetails();
     sameGeometry(healthyGeometry, await geometry(), 'details do not expand cards');
@@ -117,12 +119,14 @@ try {
       if (locale === 'en-US' || locale === 'zh-CN') await page.screenshot({ path: `${output}/${locale}-${theme}-grid.png`, fullPage: true });
     }
     await publish(failedSnapshot('authorization_required', 'CONTROL_CREDENTIALS_EXPIRED'));
-    await status('runtime').getByText(i18n.t('providerRecovery.expired'), { exact: true }).waitFor();
-    assert.equal(await status('runtime').locator('.redeven-cloud-connection-action').count(), 1);
+    assert.equal(await pair.locator('[data-owner-role="runtime"] [data-cloud-connection-status]').count(), 0);
+    await cloudTab.click();
+    await status().getByText(i18n.t('providerRecovery.expired'), { exact: true }).waitFor();
+    assert.equal(await status().locator('.redeven-cloud-connection-action').count(), 1);
     sameGeometry(healthyGeometry, await geometry(), 'expired credentials preserve the grid');
     if (locale === 'en-US' || locale === 'zh-CN') {
       await page.screenshot({ path: `${output}/${locale}-expired-grid.png`, fullPage: true });
-      await openDetails('runtime');
+      await openDetails();
       await details.locator('summary').click();
       await page.screenshot({ path: `${output}/${locale}-expired-details.png`, fullPage: true });
       await page.keyboard.press('Escape'); await details.waitFor({ state: 'detached' });
