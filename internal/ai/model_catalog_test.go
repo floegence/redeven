@@ -41,7 +41,7 @@ func TestModelCatalogOpenRouterUsesServingContextAndSkipsOneIncompleteEntry(t *t
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"data":[
-      {"id":"fallback","name":"Fallback","context_length":0,"supported_parameters":["tools"],"architecture":{"output_modalities":["text"]},"top_provider":{"context_length":131072,"max_completion_tokens":65536}},
+      {"id":"fallback","name":"Fallback","context_length":0,"supported_parameters":["tools"],"architecture":{"output_modalities":["text"]},"top_provider":{"context_length":131072,"max_completion_tokens":262144}},
       {"id":"incomplete","name":"Incomplete","context_length":0,"supported_parameters":["tools"],"architecture":{"output_modalities":["text"]},"top_provider":{"context_length":0}},
       {"id":"direct","name":"Direct","context_length":65536,"supported_parameters":["tools"],"architecture":{"output_modalities":["text"]}}
     ]}`))
@@ -54,10 +54,12 @@ func TestModelCatalogOpenRouterUsesServingContextAndSkipsOneIncompleteEntry(t *t
 	if len(models) != 2 {
 		t.Fatalf("models = %+v", models)
 	}
+	validated := make([]config.AIProviderModel, 0, len(models))
 	for _, model := range models {
+		validated = append(validated, model)
 		switch model.WireModelName {
 		case "fallback":
-			if model.ContextWindow != 131072 || model.MaxOutputTokens != 65536 {
+			if model.ContextWindow != 131072 || model.MaxOutputTokens != 131072 {
 				t.Fatalf("serving capacity was not used: %+v", model)
 			}
 		case "direct":
@@ -67,6 +69,9 @@ func TestModelCatalogOpenRouterUsesServingContextAndSkipsOneIncompleteEntry(t *t
 		default:
 			t.Fatalf("incomplete model was not skipped: %+v", model)
 		}
+	}
+	if err := config.ValidateModelCatalogSnapshot(validated); err != nil {
+		t.Fatalf("normalized OpenRouter catalog failed snapshot validation: %v", err)
 	}
 }
 
