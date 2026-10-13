@@ -937,6 +937,7 @@
       "dialogConnectionName": "连接名称",
       "dialogAPIKey": "API 密钥",
       "dialogStoredKeyKept": "将保留存储的密钥",
+      "dialogReplaceStoredKeyHint": "保存后将替换现有密钥",
       "dialogRequiredBeforeUse": "使用前必填",
       "dialogPasteAPIKey": "粘贴 API 密钥",
       "dialogRequired": "必填",

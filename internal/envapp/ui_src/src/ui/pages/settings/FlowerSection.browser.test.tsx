@@ -17,7 +17,7 @@ let dispose: (() => void) | undefined;
 let host: HTMLDivElement;
 afterEach(() => { dispose?.(); host?.remove(); request.mockReset(); });
 
-async function mount(width = 1000, canAdmin = true, locale: RedevenLocale = 'en-US', account = false) {
+async function mount(width = 1000, canAdmin = true, locale: RedevenLocale = 'en-US', account = false, brave = false) {
   await page.viewport(1280, 960);
   writeStoredLanguagePreference(locale);
   const [settings, setSettings] = createSignal<AgentSettingsResponse>({
@@ -25,11 +25,11 @@ async function mount(width = 1000, canAdmin = true, locale: RedevenLocale = 'en-
     logging: { log_format: 'plain', log_level: 'info' }, codespaces: { code_server_port_min: 0, code_server_port_max: 0 }, permission_policy: null,
     runtime: { agent_home_dir: '/workspace', shell: '/bin/sh' },
     ai: { current_model_id: 'deepseek/deepseek-v4-flash-vision-exp', providers: [
-      { id: 'deepseek', type: 'deepseek', base_url: 'https://api.deepseek.com', models: [{ model_name: 'deepseek-v4-flash-vision-exp', display_name: 'DeepSeek V4 Flash Vision Exp', context_window: 1_000_000, max_output_tokens: 384_000, input_modalities: ['text', 'image'], reasoning_capability: { kind: 'effort', supported_levels: ['high', 'max'], default_level: 'high' } }] },
+      { id: 'deepseek', type: brave ? 'openai_compatible' : 'deepseek', base_url: 'https://api.deepseek.com', ...(brave ? { name: 'DeepSeek', web_search: { mode: 'brave' as const } } : {}), models: [{ model_name: 'deepseek-v4-flash-vision-exp', display_name: 'DeepSeek V4 Flash Vision Exp', context_window: 1_000_000, max_output_tokens: 384_000, input_modalities: ['text', 'image'], reasoning_capability: { kind: 'effort', supported_levels: ['high', 'max'], default_level: 'high' } }] },
       { id: 'local', type: 'openai_compatible', name: 'Local model', base_url: 'http://localhost:1234/v1', models: [{ model_name: 'agent', context_window: 32768 }] },
       ...(account ? [{ id: 'account', type: 'openai' as const, auth_method: 'chatgpt' as const, account_id: 'saved-account', models: [{ model_name: 'gpt-5.5', context_window: 400000 }] }] : []),
     ] },
-    ai_secrets: { provider_api_key_set: { deepseek: true }, web_search_provider_api_key_set: {} },
+    ai_secrets: { provider_api_key_set: { deepseek: true }, web_search_provider_api_key_set: brave ? { deepseek: true } : {} },
     chatgpt_accounts: { account: { account_id: 'saved-account', email: 'person@example.com', state: 'ready', welcome_acknowledged: true } },
   });
   let failNextSave = false;
@@ -162,4 +162,49 @@ it('uses one searchable model list in the polished global Env provider dialog', 
   expect(dialog.scrollWidth).toBe(dialog.clientWidth);
   await userEvent.fill(search, '');
   if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: dialog, path: '__screenshots__/flower-env-provider-models.png' });
+});
+
+it('shows a saved key as dots and preserves it when a replacement draft is cleared', async () => {
+  const { settings, bundles } = await mount(1000, true, 'zh-CN', false, true);
+  const handleRequests = request.getMockImplementation()!;
+  request.mockImplementation((url: string, init?: RequestInit) => url.endsWith('/ai/model_catalog')
+    ? Promise.resolve({ models: settings().ai?.providers?.[0]?.models ?? [] }) : handleRequests(url, init));
+  const openConnection = async () => {
+    await userEvent.click(host.querySelector<HTMLButtonElement>('.flower-settings-provider-actions button:not([role="switch"])')!);
+    await expect.element(page.getByRole('dialog')).toBeVisible();
+    const dialog = document.querySelector<HTMLElement>('.redeven-provider-dialog')!;
+    await userEvent.click(dialog.querySelector<HTMLButtonElement>('[data-provider-dialog-step="connection"]')!);
+    await expect.poll(() => dialog.getAnimations({ subtree: true }).every(animation => animation.playState !== 'running')).toBe(true);
+    return dialog;
+  };
+  const dialog = await openConnection();
+  const keys = [...dialog.querySelectorAll<HTMLInputElement>('input[type=password]')];
+  expect(keys).toHaveLength(2);
+  for (const key of keys) {
+    expect(key.placeholder).toBe('••••••••');
+    expect(key.value).toBe('');
+    await userEvent.click(key);
+    expect(key.matches(':placeholder-shown')).toBe(true);
+    await userEvent.fill(key, 'replacement-key');
+    expect(key.getAttribute('aria-description')).toBe('保存后将替换现有密钥');
+    expect(key.matches(':placeholder-shown')).toBe(false);
+    await userEvent.fill(key, '');
+    expect(key.getAttribute('aria-description')).toBe('保存的密钥将保留');
+    expect(key.matches(':placeholder-shown')).toBe(true);
+  }
+  if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: dialog, path: '__screenshots__/flower-saved-key-global-env.png' });
+  await userEvent.click(page.getByRole('button', { name: '保存模型提供商', exact: true }));
+  await expect.poll(() => bundles.length).toBe(1);
+  expect(bundles[0].provider_api_key_patches).toEqual([]);
+  expect(bundles[0].web_search_provider_key_patches).toEqual([]);
+  await expect.poll(() => document.querySelector('.redeven-provider-dialog')).toBeNull();
+  const reopened = await openConnection();
+  const replacements = [...reopened.querySelectorAll<HTMLInputElement>('input[type=password]')];
+  await userEvent.fill(replacements[0], 'replacement-api-key');
+  await userEvent.fill(replacements[1], 'replacement-brave-key');
+  if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: reopened, path: '__screenshots__/flower-replacement-key-global-env.png' });
+  await userEvent.click(page.getByRole('button', { name: '保存模型提供商', exact: true }));
+  await expect.poll(() => bundles.length).toBe(2);
+  expect(bundles[1].provider_api_key_patches).toEqual([{ provider_id: 'deepseek', api_key: 'replacement-api-key' }]);
+  expect(bundles[1].web_search_provider_key_patches).toEqual([{ provider_id: 'deepseek', api_key: 'replacement-brave-key' }]);
 });

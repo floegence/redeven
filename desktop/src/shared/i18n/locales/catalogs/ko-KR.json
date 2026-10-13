@@ -937,6 +937,7 @@
       "dialogConnectionName": "연결 이름",
       "dialogAPIKey": "API 키",
       "dialogStoredKeyKept": "저장된 키는 유지됩니다",
+      "dialogReplaceStoredKeyHint": "저장하면 기존 키가 교체됩니다",
       "dialogRequiredBeforeUse": "사용 전 필수",
       "dialogPasteAPIKey": "API 키 붙여넣기",
       "dialogRequired": "필수",

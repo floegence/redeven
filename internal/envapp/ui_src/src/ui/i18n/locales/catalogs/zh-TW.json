@@ -5826,6 +5826,7 @@
       "dialogConnectionName": "連線名稱",
       "dialogAPIKey": "API 金鑰",
       "dialogStoredKeyKept": "將保留儲存的金鑰",
+      "dialogReplaceStoredKeyHint": "儲存後將取代現有金鑰",
       "dialogRequiredBeforeUse": "使用前必填",
       "dialogPasteAPIKey": "貼上 API 金鑰",
       "dialogRequired": "必填",

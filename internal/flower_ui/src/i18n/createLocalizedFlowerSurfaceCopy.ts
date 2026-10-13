@@ -897,6 +897,7 @@ function createLocalizedFlowerProviderDialogCopy(i18n: FlowerSurfaceTranslator):
     connectionName: t(i18n, k('dialogConnectionName')),
     apiKey: t(i18n, k('dialogAPIKey')),
     storedKeyKept: t(i18n, k('dialogStoredKeyKept')),
+    replaceStoredKeyHint: t(i18n, k('dialogReplaceStoredKeyHint')),
     requiredBeforeUse: t(i18n, k('dialogRequiredBeforeUse')),
     pasteAPIKey: t(i18n, k('dialogPasteAPIKey')),
     required: t(i18n, k('dialogRequired')),

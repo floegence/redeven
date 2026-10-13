@@ -241,6 +241,7 @@ export type FlowerProviderDialogCopy = Readonly<{
   connectionName: string;
   apiKey: string;
   storedKeyKept: string;
+  replaceStoredKeyHint: string;
   requiredBeforeUse: string;
   pasteAPIKey: string;
   required: string;
@@ -1430,6 +1431,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       connectionName: 'Connection name',
       apiKey: 'API key',
       storedKeyKept: 'Stored key will be kept',
+      replaceStoredKeyHint: 'Replaces the saved key on save',
       requiredBeforeUse: 'Required before use',
       pasteAPIKey: 'Paste API key',
       required: 'Required',
