@@ -37,6 +37,11 @@ change selection. It is not a model tool or a second browser-opening path.
 
 ## Managed profiles
 
+Both Flower carriers use the shared browser installation controller at
+`/_redeven_proxy/api/browser/installation`. Desktop admits only its declared
+GET, PUT and POST methods, with no query or child routes. Installation still
+requires the visible consent action before acquiring browser bytes.
+
 The Runtime owns one persistent headless Chromium process per profile. A new tab
 uses that process, shares its login state, and receives its own target identity.
 Different profiles use separate data directories. The default profile creates
