@@ -105,3 +105,18 @@ func TestProviderDiagnosticProjectionRejectsUntrustedFields(t *testing.T) {
 		t.Fatal("historical empty failure remained blank")
 	}
 }
+
+func TestProviderDiagnosticPreservesSafeTokenRelatedCodes(t *testing.T) {
+	for _, code := range []string{"max_output_tokens_exceeded", "invalid_token", "token_expired"} {
+		d := diagnosticFromBody(providerFailureDiagnostic{Provider: "chatgpt", Status: 400}, []byte(fmt.Sprintf(`{"error":{"code":%q}}`, code)))
+		if d.Code != code {
+			t.Errorf("safe machine code %q was discarded: %+v", code, d)
+		}
+	}
+	for _, code := range []string{"sk_private_credential", "Bearer private_token", "private.token.value"} {
+		d := (providerFailureDiagnostic{Code: code}).sanitized()
+		if d.Code != "" {
+			t.Errorf("credential-shaped code %q was retained", code)
+		}
+	}
+}

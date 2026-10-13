@@ -50,7 +50,7 @@ func (d providerFailureDiagnostic) sanitized() providerFailureDiagnostic {
 	if d.Status < 100 || d.Status > 599 {
 		d.Status = 0
 	}
-	if !diagnosticCodePattern.MatchString(d.Code) || (strings.Contains(d.Code, "token") && chatgpt.Failure(d.Code).Action != "sign_in") || strings.HasPrefix(d.Code, "sk_") {
+	if !diagnosticCodePattern.MatchString(d.Code) || strings.HasPrefix(d.Code, "sk_") {
 		d.Code = ""
 	}
 	if !diagnosticParamPattern.MatchString(d.Param) {
