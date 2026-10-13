@@ -103,7 +103,7 @@ export const FlowerModelSettings: Component<FlowerModelSettingsProps> = (props) 
                   </div>
                 </div>
                 <div class="flower-settings-provider-status"><span class={cn('flower-settings-dot-pill', enabled() && ready() && 'flower-settings-dot-pill-active')}>
-                  {enabled() ? ready() ? copy().ready : copy().providerNeedsSetup : copy().providerDisabled}
+                  {enabled() ? ready() ? copy().ready : props.providerReady(provider()) && provider().models.length === 0 ? copy().dialog.catalog.configuredWithoutSelection : copy().providerNeedsSetup : copy().providerDisabled}
                 </span></div>
                 <div class="flower-settings-provider-actions">
                   <button type="button" class="flower-settings-provider-toggle" role="switch" aria-checked={enabled()} aria-label={toggleLabel()} title={toggleLabel()}

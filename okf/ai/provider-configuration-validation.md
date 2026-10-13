@@ -18,6 +18,8 @@ The shared Flower composer follows the same credential contract as provider exec
 
 Both provider editors block saving missing required credentials and identify the missing key. The provider-bundle API validates the resulting credential state before changing configuration or secrets, including retained credentials, replacements, explicit deletion, and the last update when a key appears more than once. Blank editor inputs preserve stored keys. Required keys cannot be removed while saving an enabled provider; an optional endpoint key can be removed. A missing Brave key blocks saving a provider with Brave search enabled, but does not disable ordinary chat for a previously saved profile. Invalid structural fields also reject the bundle before writes. These checks validate configuration completeness, not remote service reachability or credential validity.
 
+A valid connection may be saved without selected models or a current default. This is a configured connection awaiting explicit model selection; saving does not fabricate a default or contact a supplier. Unknown discovered models require explicit capabilities before they become runnable.
+
 ## Field requirements
 
 | Field | Required value or omission behavior |
@@ -26,7 +28,7 @@ Both provider editors block saving missing required credentials and identify the
 | Base URL | OpenAI, Anthropic, and Gemini may use their adapter default. Other provider types require an explicit HTTP(S) URL. |
 | Provider display name | Optional; the UI derives a name from the provider type or identity. |
 | Models | Explicit lists require named models; catalog providers save explicit `selected_models`, including an empty selection after deselecting all models. Unresolved legacy exclusion profiles require selection review; unavailable selected identities retain their metadata without requiring invented capacity. |
-| Context and output limits | Published catalog or adapter defaults may supply omitted limits. Explicit compatible, OpenRouter, xAI, Groq, and Ollama model entries require context capacity. Custom catalog models also require it. Output limits remain optional. |
+| Context and output limits | Published catalog or adapter defaults may supply omitted limits. Explicit compatible, OpenRouter, xAI, Groq, and Ollama model entries require context capacity. Custom catalog models also require it. Reviewed models retain their established optional output limits; unknown discovered models require explicit context, output, and tools capability. |
 | Brave API key | Required only when Brave search is enabled; existing stored credentials satisfy the requirement. |
 
 # Boundaries

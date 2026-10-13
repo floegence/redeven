@@ -50,6 +50,7 @@ type platformGatewayProvider struct {
 	entitlementVersion int64
 	httpClient         *http.Client
 	modelID            string
+	protocol           string
 	mu                 sync.Mutex
 }
 
@@ -171,25 +172,11 @@ func (p *platformGatewayProvider) prepareTurn(ctx context.Context, req ModelGate
 	return provider.prepareTurn(ctx, req)
 }
 
-func (p *platformGatewayProvider) modelProtocol(ctx context.Context) (string, error) {
-	catalog, err := p.catalog(ctx)
-	if err != nil {
-		return "", err
+func (p *platformGatewayProvider) modelProtocol(_ context.Context) (string, error) {
+	if p.protocol != "" {
+		return p.protocol, nil
 	}
-	for _, model := range catalog.Models {
-		if model.ModelID != p.modelID || !model.Available {
-			continue
-		}
-		for _, capability := range model.Capabilities {
-			switch capability {
-			case "chat":
-				return "openai-chat-completions", nil
-			case "responses":
-				return "openai-responses", nil
-			}
-		}
-	}
-	return "", errors.New("platform model unavailable")
+	return "", errors.New("platform model protocol is not configured")
 }
 
 type platformModelCatalog struct {
@@ -205,6 +192,20 @@ type platformCatalogModel struct {
 	MaxOutputTokens       int      `json:"max_output_tokens"`
 	ReasoningLevels       []string `json:"reasoning_levels"`
 	ReasoningDefaultLevel string   `json:"reasoning_default_level"`
+}
+
+func (m *platformCatalogModel) UnmarshalJSON(raw []byte) error {
+	type wireModel platformCatalogModel
+	var decoded struct {
+		wireModel
+		Available *bool `json:"available"`
+	}
+	if err := json.Unmarshal(raw, &decoded); err != nil || decoded.Available == nil {
+		return errors.New("incomplete authorized model availability")
+	}
+	*m = platformCatalogModel(decoded.wireModel)
+	m.Available = *decoded.Available
+	return nil
 }
 
 func (p *platformGatewayProvider) catalog(ctx context.Context) (platformModelCatalog, error) {
@@ -224,7 +225,8 @@ func (p *platformGatewayProvider) catalog(ctx context.Context) (platformModelCat
 	}
 	defer func() { _ = response.Body.Close() }()
 	var catalog platformModelCatalog
-	if response.StatusCode != http.StatusOK || json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(&catalog) != nil {
+	raw, err := io.ReadAll(io.LimitReader(response.Body, 1<<20+1))
+	if response.StatusCode != http.StatusOK || err != nil || len(raw) > 1<<20 || json.Unmarshal(raw, &catalog) != nil {
 		return platformModelCatalog{}, errors.New("platform model catalog unavailable")
 	}
 	return catalog, nil

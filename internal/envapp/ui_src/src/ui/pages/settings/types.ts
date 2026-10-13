@@ -146,6 +146,7 @@ export type SettingsUpdateRequest = Readonly<{
 export type PermissionRow = { key: string; read: boolean; write: boolean; execute: boolean };
 
 export type AIProviderModelRow = {
+  supports_tools?: boolean;
   model_digest?: string;
   quantization?: string;
   unavailable?: boolean;

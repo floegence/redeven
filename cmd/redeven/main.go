@@ -18,7 +18,6 @@ import (
 	flowersec "github.com/floegence/flowersec/flowersec-go/v5"
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/agent"
-	"github.com/floegence/redeven/internal/ai"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/localui"
 	"github.com/floegence/redeven/internal/lockfile"
@@ -659,7 +658,7 @@ func (c *cli) runCmd(args []string) int {
 		if err != nil {
 			return nil, err
 		}
-		return ai.DiscoverProviderModels(context.Background(), provider, key)
+		return config.ReadModelCatalogSnapshot(filepath.Join(stateLayout.StateDir, "runtime", "model-catalog"), config.ModelCatalogIdentity(provider, key))
 	})
 	if err != nil {
 		// Local mode must be able to start from a clean Local Environment (no bootstrap yet).

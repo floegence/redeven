@@ -308,6 +308,18 @@ func TestApplyAnthropicReasoningSonnetBudgetAndEffort(t *testing.T) {
 	}
 }
 
+func TestApplyAnthropicManualThinkingBudgetDoesNotSendToggleAsEffort(t *testing.T) {
+	capability := config.AIReasoningCapability{Kind: "budget", WireShape: "anthropic_thinking_budget_tokens", BudgetShape: "anthropic_thinking_budget_tokens", SupportedLevels: []string{"on"}, DisableSupported: true, MinBudgetTokens: 1024}
+	params := anthropic.MessageNewParams{MaxTokens: 4096}
+	if err := applyAnthropicReasoning(&params, ProviderControls{ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelOn, BudgetTokens: 1024}, ReasoningCapability: capability}); err != nil {
+		t.Fatal(err)
+	}
+	payload := mustMarshalPayload(t, params)
+	if !strings.Contains(payload, `"budget_tokens":1024`) || strings.Contains(payload, `"effort":"on"`) {
+		t.Fatalf("invalid manual reasoning payload: %s", payload)
+	}
+}
+
 func TestApplyAnthropicReasoningRejectsOpusBudget(t *testing.T) {
 	t.Parallel()
 

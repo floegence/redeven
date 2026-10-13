@@ -107,6 +107,7 @@ func TestOllamaAutomaticTitleUsesCapabilityAndSurvivesRestart(t *testing.T) {
 			}
 			svc := open()
 			defer func() { svc.Close() }()
+			syncConfiguredCatalogForTest(t, svc, svc.cfg.Providers[0])
 			created, err := svc.CreateThread(t.Context(), meta, "", "local/local-alias", "", "")
 			if err != nil {
 				t.Fatal(err)

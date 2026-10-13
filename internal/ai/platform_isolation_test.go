@@ -34,7 +34,7 @@ func TestPlatformOutagePreservesLocalModels(t *testing.T) {
 	meta.PlatformAIEntitlementVersion = 1
 	after, err := svc.ListModelsForSession(t.Context(), meta)
 	t.Logf("local model catalog before platform metadata: %d models; with unavailable platform: models=%v error=%v", len(before.Models), after, err)
-	if err != nil || after == nil || len(after.Models) != 1 || after.Runtime.PlatformError == "" {
+	if err != nil || after == nil || len(after.Models) != 1 || after.Runtime.PlatformError != "" {
 		t.Fatalf("local catalog unavailable: %+v %v", after, err)
 	}
 	_, err = svc.resolveRunModel(t.Context(), cfg, "local/local-model", "", &run{cfg: cfg, sessionMeta: meta})
@@ -64,13 +64,25 @@ func TestPlatformPreferenceCannotOverrideExplicitLocalSelection(t *testing.T) {
 	cfg := &config.AIConfig{CurrentModelID: "local/local-model", Providers: []config.AIProvider{{ID: "local", Type: "openai_compatible", BaseURL: "http://127.0.0.1:19001/v1", Models: []config.AIProviderModel{{ModelName: "local-model", ContextWindow: 32000, MaxOutputTokens: 1024}}}}}
 	svc := &Service{cfg: cfg}
 	meta := &session.Meta{EndpointID: "env", UserPublicID: "user", PlatformAIGrant: "grant", PlatformAIGatewayURL: edge.URL, PlatformAIEntitlementVersion: 1}
+	if _, err := svc.refreshPlatformCatalog(t.Context(), meta); err != nil {
+		t.Fatal(err)
+	}
 	if err := svc.SetCurrentModelForSession(t.Context(), meta, "platform/test", nil); err != nil {
 		t.Fatal(err)
 	}
 	revoked.Store(true)
-	if _, err := svc.resolveRunModel(t.Context(), cfg, "", "", &run{cfg: cfg, sessionMeta: meta}); err == nil {
-		t.Fatal("platform default silently fell back to a local model")
+	resolved, err := svc.resolveRunModel(t.Context(), cfg, "", "", &run{cfg: cfg, sessionMeta: meta})
+	if err != nil || resolved.ID != "platform/test" {
+		t.Fatal("cached selection silently changed source")
 	}
+	gateway, err := newPlatformGatewayProvider(edge.URL, meta.PlatformAIGrant, "test", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = gateway.(*platformGatewayProvider).renew(t.Context()); err == nil {
+		t.Fatal("cached metadata bypassed revocation")
+	}
+
 	if err := svc.SetCurrentModelForSession(t.Context(), meta, "local/local-model", func(*config.AIConfig) error { return nil }); err != nil {
 		t.Fatal(err)
 	}
@@ -191,7 +203,7 @@ func TestRemovedPlatformSelectionRequiresExplicitReplacement(t *testing.T) {
 						_ = json.NewEncoder(w).Encode(platformGatewayLease{Token: "token", RenewalToken: "renewal", ExpiresAtUnix: time.Now().Add(time.Minute).Unix(), EntitlementVersion: 1})
 						return
 					}
-					catalog := platformModelCatalog{}
+					catalog := platformModelCatalog{Models: []platformCatalogModel{}}
 					aliases := []string{"selected"}
 					if removed.Load() {
 						aliases = nil
@@ -212,6 +224,9 @@ func TestRemovedPlatformSelectionRequiresExplicitReplacement(t *testing.T) {
 				svc := newTestService(t, cfg)
 				meta := testSendTurnMeta()
 				meta.PlatformAIGrant, meta.PlatformAIGatewayURL, meta.PlatformAIEntitlementVersion = "grant", edge.URL, 1
+				if _, err := svc.refreshPlatformCatalog(t.Context(), meta); err != nil {
+					t.Fatal(err)
+				}
 				if err := svc.SetCurrentModelForSession(t.Context(), meta, "platform/selected", nil); err != nil {
 					t.Fatal(err)
 				}
@@ -220,8 +235,11 @@ func TestRemovedPlatformSelectionRequiresExplicitReplacement(t *testing.T) {
 					t.Fatalf("create baseline: %+v %v", thread, err)
 				}
 				removed.Store(true)
+				if _, err := svc.refreshPlatformCatalog(t.Context(), meta); err != nil {
+					t.Fatal(err)
+				}
 				listed, err := svc.ListModelsForSession(t.Context(), meta)
-				if err != nil || listed.CurrentModel != "platform/selected" || listed.Runtime.PlatformError == "" {
+				if err != nil || listed.CurrentModel != "platform/selected" || !slices.ContainsFunc(listed.Directory.Models, func(m ModelDirectoryModel) bool { return m.ID == "platform/selected" && m.State == "unavailable" }) {
 					t.Fatalf("unavailable selection was lost: %+v %v", listed, err)
 				}
 				if replacement && !slices.ContainsFunc(listed.Models, func(m Model) bool { return m.ID == "platform/replacement" }) {
@@ -270,7 +288,7 @@ func TestPlatformPreferenceTakesPrecedenceOverDesktopDefault(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(platformGatewayLease{Token: "token", RenewalToken: "renewal", ExpiresAtUnix: time.Now().Add(time.Minute).Unix(), EntitlementVersion: 1})
 			return
 		}
-		catalog := platformModelCatalog{}
+		catalog := platformModelCatalog{Models: []platformCatalogModel{}}
 		if !removed.Load() {
 			catalog.Models = []platformCatalogModel{{ModelID: "selected", Available: true, Capabilities: []string{"text", "chat"}, ContextWindow: 32000, MaxOutputTokens: 1024}}
 		}
@@ -287,6 +305,9 @@ func TestPlatformPreferenceTakesPrecedenceOverDesktopDefault(t *testing.T) {
 	t.Cleanup(cleanup)
 	source.SetCurrentModelID(desktopID)
 	svc.desktopModelSource = source
+	if _, err := svc.refreshPlatformCatalog(t.Context(), meta); err != nil {
+		t.Fatal(err)
+	}
 	if err := svc.SetCurrentModelForSession(t.Context(), meta, "platform/selected", nil); err != nil {
 		t.Fatal(err)
 	}
@@ -298,6 +319,9 @@ func TestPlatformPreferenceTakesPrecedenceOverDesktopDefault(t *testing.T) {
 		t.Fatalf("desktop overrode platform run: %+v %v", got, err)
 	}
 	removed.Store(true)
+	if _, err := svc.refreshPlatformCatalog(t.Context(), meta); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := svc.CreateThread(t.Context(), meta, "Unavailable preference", "", "", ""); err == nil {
 		t.Fatal("unavailable platform selection silently switched to Desktop")
 	}

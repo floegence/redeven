@@ -1,3 +1,5 @@
+import { ManualModelCapabilities } from '../../../../../../flower_ui/src/settings/ManualModelCapabilities';
+import { flowerModelNeedsConfiguration } from '../../../../../../flower_ui/src/providerModelProjection';
 import { ModelCatalogControls } from '../../../../../../flower_ui/src/settings/ModelCatalogControls';
 import { flowerProviderAPIKeyOptional, missingFlowerProviderCredential } from '../../../../../../flower_ui/src/providerCredentials';
 import { filterFlowerModels } from '../../../../../../flower_ui/src/settings/modelSelection';
@@ -63,6 +65,7 @@ export type AIProviderDialogProps = {
   onAddSelectedPreset: (modelName?: string) => void;
   onAddCustomModel: (modelName: string) => void;
   onRemoveRecommendedPreset: (modelName: string) => void;
+  onChangeModelCapabilities?: (index: number, patch: Partial<import('../../../../../../flower_ui/src/contracts/flowerSurfaceContracts').FlowerProviderModel>) => void;
   onChangeModelName: (index: number, value: string) => void;
   onChangeModelNumber: (index: number, key: 'context_window' | 'max_output_tokens' | 'effective_context_window_percent', rawValue: string) => void;
   onChangeModelImageInput: (index: number, enabled: boolean) => void;
@@ -86,7 +89,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
   const catalogCopy = () => modelCatalogCopy(i18n.locale());
   const [customModelName, setCustomModelName] = createSignal('');
   const saving = createMemo(() => props.aiSaving || props.keySaving || props.webSearchKeySaving);
-  const providerHasModels = createMemo(() => Array.isArray(props.provider?.models) && (props.provider?.models.length ?? 0) > 0);
+  const incompleteModel = () => props.provider?.models.some(flowerModelNeedsConfiguration) ?? false;
 
   createEffect(() => {
     if (!props.open) {
@@ -136,15 +139,16 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
               {missingCredential() === 'provider' ? i18n.t('flowerSettings.needsKey') : i18n.t('flowerSurface.settings.needsBraveKey')}
             </span>
           </Show>
+          <Show when={incompleteModel()}><span role="status" class="mr-auto text-sm text-muted-foreground">{catalogCopy().needsConfiguration}</span></Show>
           <Button size="sm" variant="outline" onClick={() => props.onOpenChange(false)}>
             {i18n.t('flowerProviderDialog.discard')}
           </Button>
           <Button
             size="sm"
             variant="default"
-            onClick={() => { if (!missingCredential()) props.onConfirm(); }}
+            onClick={() => { if (!missingCredential() && !incompleteModel()) props.onConfirm(); }}
             loading={saving()}
-            disabled={!props.canInteract || saving() || Boolean(missingCredential()) || Boolean(props.provider?.model_selection && !props.provider.model_selection.selected_models) || !providerHasModels() && (props.mode === 'create' || !props.provider?.model_selection)}
+            disabled={!props.canInteract || saving() || Boolean(missingCredential()) || incompleteModel() || Boolean(props.provider?.model_selection && !props.provider.model_selection.selected_models)}
           >
             {i18n.t('flowerProviderDialog.saveProvider')}
           </Button>
@@ -356,7 +360,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                                 <div class="flower-provider-model-row px-3 py-3">
                                   <div class="flex items-start justify-between gap-3">
                                     <div class="min-w-0">
-                                      <div class="break-all font-mono text-[length:var(--floe-type-body)] font-semibold text-foreground">{preset().display_name || preset().model_name} <Show when={preset().unavailable}><SettingsPill>{catalogCopy().unavailableModel}</SettingsPill></Show><Show when={preset().quantization}><SettingsPill>{preset().quantization}</SettingsPill></Show> <Show when={preset().status}><SettingsPill>{preset().status === 'experimental' ? catalogCopy().experimental : catalogCopy().preview}</SettingsPill></Show></div>
+                                      <div class="break-all font-mono text-[length:var(--floe-type-body)] font-semibold text-foreground">{preset().display_name || preset().model_name} <Show when={preset().unavailable}><SettingsPill>{catalogCopy().unavailableModel}</SettingsPill></Show><Show when={preset().quantization}><SettingsPill>{preset().quantization}</SettingsPill></Show> <Show when={preset().status}><SettingsPill>{preset().status === 'needs_configuration' ? catalogCopy().needsConfiguration : preset().status === 'unsupported' ? catalogCopy().unavailableModel : preset().status === 'experimental' ? catalogCopy().experimental : catalogCopy().preview}</SettingsPill></Show></div>
                                       <Show when={preset().model_digest && props.recommendedModels.some((other) => other.model_name !== preset().model_name && other.model_digest === preset().model_digest)}><p class="text-xs text-muted-foreground">{catalogCopy().aliases}: {props.recommendedModels.filter((other) => other.model_name !== preset().model_name && other.model_digest === preset().model_digest).map((other) => other.wire_model_name || other.model_name).join(', ')}</p></Show>
                                       <div class="mt-1 text-xs text-muted-foreground">
                                         {i18n.t('flowerProviderDialog.contextTokens', { count: formatTokenCount(preset().context_window) })}
@@ -482,6 +486,9 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                                     disabled={!props.canInteract}
                                   />
                                 </div>
+                                <Show when={model.status === 'needs_configuration' || model.reasoning_capability?.fixture === 'manual_provider_capability'}>
+                                  <ManualModelCapabilities model={model} type={provider().type} baseURL={provider().base_url || defaultBaseURLForProviderType(provider().type)} copy={catalogCopy()} disabled={!props.canInteract} onChange={patch => props.onChangeModelCapabilities?.(index(), patch)} />
+                                </Show>
                                 <div class="md:col-span-3">
                                   <Checkbox
                                     checked={modelSupportsImageInput(model.input_modalities)}

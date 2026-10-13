@@ -355,7 +355,7 @@ function normalizePermissionType(raw: unknown): FlowerPermissionType {
 
 function mapProviderModel(model: NonNullable<NonNullable<AIConfig['providers']>[number]['models']>[number]): FlowerProviderModel {
   return {
-    model_name: trim(model.model_name),
+    model_name: trim(model.model_name), supports_tools: model.supports_tools,
     display_name: model.display_name, status: model.status,
     model_digest: model.model_digest, quantization: model.quantization, unavailable: model.unavailable,
     ...(trim(model.wire_model_name) ? { wire_model_name: trim(model.wire_model_name) } : {}),
@@ -384,7 +384,7 @@ function mapProvider(provider: NonNullable<AIConfig['providers']>[number]): Flow
 
 export function mapRuntimeFlowerSettings(settings: AgentSettingsResponse): FlowerSettingsSnapshot {
   const ai = settings.ai;
-  const modelProfile = ai && (ai.providers ?? []).length > 0 && trim(ai.current_model_id)
+  const modelProfile = ai && (ai.providers ?? []).length > 0
     ? {
         schema_version: 1 as const,
         current_model_id: trim(ai.current_model_id),
@@ -820,7 +820,8 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
     mapperOptions: localEnvironmentLiveMapperOptions(),
     extensions: flowerExtensionsAdapter((method, path, body) => runtimeJSON(bridge, method, path, body, undefined, options.runtimeEnvironmentID), { canInteract: () => true, canAdmin: () => true }),
     loadSettings,
-    loadModelDirectory: refresh => resource.loadDirectory(refresh, () => bridge.retryDesktopModels?.() ?? Promise.resolve()),
+    loadModelDirectory: refresh => resource.loadDirectory(refresh),
+    recoverModelSource: async () => { await bridge.retryDesktopModels?.(); },
     subscribeModelDirectory: resource.subscribe,
     chatGPTAuth: async (action, input) => {
       const result = await runtimeJSON<Awaited<ReturnType<NonNullable<FlowerSurfaceAdapter['chatGPTAuth']>>>>(bridge, 'POST', `/_redeven_proxy/api/ai/auth/chatgpt/${action}`, input);

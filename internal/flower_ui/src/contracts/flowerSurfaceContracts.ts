@@ -43,6 +43,7 @@ export type FlowerReasoningCapability = Readonly<{
 export type FlowerWebSearchAvailability = Readonly<{ status: 'available' | 'unavailable'; reason: string }>;
 
 export type FlowerProviderModel = Readonly<{
+  supports_tools?: boolean;
   model_digest?: string;
   quantization?: string;
   unavailable?: boolean;
@@ -133,6 +134,7 @@ export type FlowerModelDirectoryModel = FlowerModelSourceModel & Readonly<{
 }>;
 
 export type FlowerModelDirectory = Readonly<{
+  provider_catalogs?: Readonly<Record<string, readonly FlowerProviderModel[]>>;
   current_model_id: string;
   models: readonly FlowerModelDirectoryModel[];
   sources: readonly Readonly<{
@@ -838,7 +840,7 @@ export type FlowerThreadView = Readonly<{
 
 export type FlowerLiveStreamEnvelope = Readonly<{
   schema_version: number;
-  kind: 'ready' | 'summary.batch' | 'thread.batch' | 'viewer.read_state' | 'computer.frame' | 'computer.status';
+  kind: 'ready' | 'summary.batch' | 'thread.batch' | 'viewer.read_state' | 'computer.frame' | 'computer.status' | 'model_directory.changed';
   observer_id?: string;
   thread_id?: string;
   summaries?: readonly FlowerThreadSnapshot[];
@@ -1416,6 +1418,7 @@ export type FlowerSurfaceAdapter = Readonly<{
   workingDirectoryActionAvailability?: () => FlowerWorkingDirectoryActionAvailability;
   openLinkedDirectoryBrowser?: (request: FlowerLinkedContextPathOpenRequest) => Promise<void>;
   modelSourceRecovery?: FlowerModelSourceRecovery;
+  recoverModelSource?: () => Promise<void>;
 }>;
 
 export type FlowerComputerFrameSource = Readonly<{ thread_id: string; target_id: string }> & (

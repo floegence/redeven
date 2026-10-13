@@ -2,6 +2,9 @@ package ai
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"slices"
 	"strings"
@@ -14,6 +17,143 @@ import (
 type platformModelPreference struct {
 	model string
 	used  time.Time
+}
+
+type platformCatalogSnapshot struct {
+	meta       session.Meta
+	provider   config.AIProvider
+	used, next time.Time
+	syncing    bool
+	failures   int
+}
+
+func platformCatalogScope(meta *session.Meta) string {
+	raw, _ := json.Marshal([]any{platformPreferenceScope(meta), meta.PlatformAIGatewayURL, meta.PlatformAIEntitlementVersion, meta.PlatformAIGrant})
+	digest := sha256.Sum256(raw)
+	return hex.EncodeToString(digest[:])
+}
+
+func (s *Service) ensurePlatformCatalog(meta *session.Meta, touch bool) {
+	if !platformSessionAvailable(meta) {
+		return
+	}
+	scope := platformCatalogScope(meta)
+	s.mu.Lock()
+	if s.platformCatalogs == nil {
+		s.platformCatalogs = map[string]*platformCatalogSnapshot{}
+	}
+	cached := s.platformCatalogs[scope]
+	if cached == nil {
+		for key, value := range s.platformCatalogs {
+			if time.Since(value.used) >= 24*time.Hour && !value.syncing {
+				delete(s.platformCatalogs, key)
+			}
+		}
+		if len(s.platformCatalogs) >= 1024 {
+			s.mu.Unlock()
+			return
+		}
+		cached = &platformCatalogSnapshot{meta: *meta}
+		s.platformCatalogs[scope] = cached
+	}
+	if touch {
+		cached.used = time.Now()
+	}
+	if cached.syncing || cached.next.After(time.Now()) || s.serviceClosing {
+		s.mu.Unlock()
+		return
+	}
+	cached.syncing = true
+	s.serviceWorkers.Add(1)
+	s.mu.Unlock()
+	copyMeta := *meta
+	go func() {
+		defer s.serviceWorkers.Done()
+		ctx := s.lifecycleCtx
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		_, _ = s.refreshPlatformCatalog(ctx, &copyMeta)
+	}()
+}
+
+func (s *Service) refreshPlatformCatalog(ctx context.Context, meta *session.Meta) (config.AIProvider, error) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	var err error
+	if s.modelCatalogs != nil {
+		select {
+		case s.modelCatalogs.slots <- struct{}{}:
+			defer func() { <-s.modelCatalogs.slots }()
+		case <-ctx.Done():
+			err = ctx.Err()
+		}
+	}
+	var gateway ModelGateway
+	if err == nil {
+		gateway, err = platformGatewayWithTransport(s.platformHTTPTransport, meta.PlatformAIGatewayURL, meta.PlatformAIGrant, "catalog", meta.PlatformAIEntitlementVersion)
+	}
+	var provider config.AIProvider
+	if err == nil {
+		p := gateway.(*platformGatewayProvider)
+		if err = p.renew(ctx); err == nil {
+			var catalog platformModelCatalog
+			catalog, err = p.catalog(ctx)
+			if err == nil {
+				provider, err = projectPlatformModelCatalog(catalog, p.baseURL)
+			}
+		}
+	}
+	scope := platformCatalogScope(meta)
+	s.mu.Lock()
+	if s.platformCatalogs == nil {
+		s.platformCatalogs = map[string]*platformCatalogSnapshot{}
+	}
+	cached := s.platformCatalogs[scope]
+	if cached == nil {
+		cached = &platformCatalogSnapshot{meta: *meta, used: time.Now()}
+		s.platformCatalogs[scope] = cached
+	}
+	changed := false
+	if err == nil {
+		before, _ := json.Marshal(cached.provider)
+		after, _ := json.Marshal(provider)
+		changed = string(before) != string(after)
+		cached.provider, cached.failures, cached.next = provider, 0, time.Now().Add(15*time.Minute)
+	} else {
+		delays := []time.Duration{time.Minute, 5 * time.Minute, 15 * time.Minute}
+		cached.next = time.Now().Add(delays[min(cached.failures, len(delays)-1)])
+		cached.failures++
+	}
+	cached.syncing = false
+	s.mu.Unlock()
+	if changed {
+		s.publishModelDirectoryChanged()
+	}
+	return provider, err
+}
+
+func (s *Service) runPlatformModelCatalogs(ctx context.Context) {
+	timer := time.NewTicker(time.Minute)
+	defer timer.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-timer.C:
+		}
+		s.mu.Lock()
+		scopes := []session.Meta{}
+		for _, cached := range s.platformCatalogs {
+			if time.Since(cached.used) < 24*time.Hour {
+				scopes = append(scopes, cached.meta)
+			}
+		}
+		s.mu.Unlock()
+		for _, meta := range scopes {
+			s.ensurePlatformCatalog(&meta, false)
+		}
+	}
 }
 
 func platformSessionAvailable(meta *session.Meta) bool {
@@ -85,78 +225,79 @@ func (s *Service) sessionConfigForModel(ctx context.Context, meta *session.Meta,
 	return projected, nil
 }
 
-// sessionModelConfig projects the live entitlement catalog into a request-local
-// profile. It never stores grants, provider credentials, or catalog authority in
-// the environment configuration or another user's model list.
+// Cloud metadata is scoped to trusted session identity and entitlement version.
+// It is never persisted and never substitutes for invocation lease renewal.
 func (s *Service) sessionModelConfig(ctx context.Context, meta *session.Meta, cfg *config.AIConfig) (*config.AIConfig, error) {
-	if !platformSessionAvailable(meta) {
-		return cfg, nil
-	}
-	gateway, err := platformGatewayWithTransport(s.platformHTTPTransport, meta.PlatformAIGatewayURL, meta.PlatformAIGrant, "catalog", meta.PlatformAIEntitlementVersion)
-	if err != nil {
-		return nil, err
-	}
-	p := gateway.(*platformGatewayProvider)
-	if err = p.renew(ctx); err != nil {
-		return nil, err
-	}
-	catalog, err := p.catalog(ctx)
-	if err != nil {
-		return nil, err
-	}
 	next, err := localModelConfig(cfg)
-	if err != nil {
-		return nil, err
+	if err != nil || !platformSessionAvailable(meta) {
+		return next, err
+	}
+	scope := platformCatalogScope(meta)
+	s.ensurePlatformCatalog(meta, true)
+	s.mu.Lock()
+	cached := s.platformCatalogs[scope]
+	var provider config.AIProvider
+	if cached != nil {
+		provider = cached.provider
+	}
+	selected := s.platformModelPreferences[platformPreferenceScope(meta)]
+	s.mu.Unlock()
+	if provider.ID != "" {
+		next.Providers = append(next.Providers, provider)
+	}
+	if time.Since(selected.used) < 24*time.Hour && selected.model != "" {
+		next.CurrentModelID = selected.model
+	}
+	if next.CurrentModelID == "" && len(provider.Models) > 0 {
+		next.CurrentModelID = "platform/" + provider.Models[0].ModelName
+	}
+	return next, nil
+}
+
+func projectPlatformModelCatalog(catalog platformModelCatalog, baseURL string) (config.AIProvider, error) {
+	if catalog.Models == nil {
+		return config.AIProvider{}, errors.New("incomplete authorized model catalog")
 	}
 	provider := config.AIProvider{ID: "platform", Name: "Redeven AI", Type: platformGatewayProviderType}
 	seen := map[string]bool{}
 	for _, entry := range catalog.Models {
+		if !validPlatformModelAlias(entry.ModelID) || seen[entry.ModelID] {
+			return config.AIProvider{}, errors.New("invalid authorized model catalog identity")
+		}
+		seen[entry.ModelID] = true
 		if !entry.Available {
 			continue
 		}
-		if !validPlatformModelAlias(entry.ModelID) || seen[entry.ModelID] || entry.ContextWindow <= 0 || entry.ContextWindow > 2_000_000 || entry.MaxOutputTokens <= 0 || entry.MaxOutputTokens > 200_000 || slices.Contains(entry.Capabilities, "chat") == slices.Contains(entry.Capabilities, "responses") {
-			return nil, errors.New("invalid authorized model catalog")
+		if entry.ContextWindow <= 0 || entry.ContextWindow > 2_000_000 || entry.MaxOutputTokens <= 0 || entry.MaxOutputTokens > 200_000 || slices.Contains(entry.Capabilities, "chat") == slices.Contains(entry.Capabilities, "responses") {
+			return config.AIProvider{}, errors.New("invalid authorized model catalog")
 		}
-		seen[entry.ModelID] = true
 		model := config.AIProviderModel{ModelName: config.AIModelLocalName(entry.ModelID), WireModelName: entry.ModelID, DisplayName: entry.DisplayName, ContextWindow: entry.ContextWindow, MaxOutputTokens: entry.MaxOutputTokens, InputModalities: []string{"text"}}
+		if slices.Contains(entry.Capabilities, "responses") {
+			model.PlatformProtocol = "openai-responses"
+		} else {
+			model.PlatformProtocol = "openai-chat-completions"
+		}
 		model.HostedWebSearch = slices.Contains(entry.Capabilities, "web_search") && slices.Contains(entry.Capabilities, "responses")
 		if slices.Contains(entry.Capabilities, "image_input") {
 			model.InputModalities = append(model.InputModalities, "image")
 		}
 		if len(entry.ReasoningLevels) > 0 {
 			if !slices.Contains(entry.Capabilities, "reasoning") {
-				return nil, errors.New("invalid authorized reasoning capability")
+				return config.AIProvider{}, errors.New("invalid authorized reasoning capability")
 			}
 			wireShape := "openai_chat_reasoning_effort"
 			if slices.Contains(entry.Capabilities, "responses") {
 				wireShape = "openai_responses_reasoning_effort"
 			}
-			model.ReasoningCapability = config.AIReasoningCapability{Kind: "effort", WireShape: wireShape, SupportedLevels: entry.ReasoningLevels, DefaultLevel: entry.ReasoningDefaultLevel, SourceURLs: []string{p.baseURL + "/api/ai/v1/catalog"}, SourceCheckedAt: time.Now().UTC().Format("2006-01-02"), Fixture: "platform_catalog"}
+			model.ReasoningCapability = config.AIReasoningCapability{Kind: "effort", WireShape: wireShape, SupportedLevels: entry.ReasoningLevels, DefaultLevel: entry.ReasoningDefaultLevel, SourceURLs: []string{baseURL + "/api/ai/v1/catalog"}, SourceCheckedAt: time.Now().UTC().Format("2006-01-02"), Fixture: "platform_catalog"}
 			if err := model.ReasoningCapability.Validate(); err != nil {
-				return nil, errors.New("invalid authorized reasoning capability")
+				return config.AIProvider{}, errors.New("invalid authorized reasoning capability")
 			}
 		}
 		provider.Models = append(provider.Models, model)
 	}
-	if len(provider.Models) > 0 {
-		next.Providers = append(next.Providers, provider)
-	}
-	s.mu.Lock()
-	selected := s.platformModelPreferences[platformPreferenceScope(meta)]
-	s.mu.Unlock()
-	if time.Since(selected.used) < 24*time.Hour && next.IsAllowedModelID(selected.model) {
-		next.CurrentModelID = selected.model
-	}
-	if !next.IsAllowedModelID(next.CurrentModelID) {
-		next.CurrentModelID = ""
-		for _, p := range next.Providers {
-			if models := p.EffectiveModels(); len(models) > 0 {
-				next.CurrentModelID = p.ID + "/" + models[0].ModelName
-				break
-			}
-		}
-	}
-	return next, nil
+
+	return provider, nil
 }
 
 func (s *Service) ListModelsForSession(ctx context.Context, meta *session.Meta) (*ModelsResponse, error) {

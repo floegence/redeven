@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type {
   FlowerTurnLaunchInput,
@@ -31,6 +31,16 @@ import {
   wait,
   waitFor,
 } from './FlowerSurface.navigation.testHarness';
+
+const nativeBounds = HTMLElement.prototype.getBoundingClientRect;
+beforeEach(() => {
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+    // Navigation fixtures use a desktop viewport; jsdom does not perform layout.
+    return this.classList.contains('flower-composer-controls-viewport')
+      ? new DOMRect(0, 0, 800, 32) : nativeBounds.call(this);
+  });
+});
+afterEach(() => vi.restoreAllMocks());
 
 function attachTranscriptScrollMetrics(transcript: HTMLElement, metrics: {
   clientHeight: number;
@@ -818,7 +828,7 @@ describe('FlowerSurface navigation', () => {
     expect(runtime.querySelector('.flower-setup-inline')).toBeTruthy();
   });
 
-  it('shows a recoverable platform directory failure without hiding the composer', async () => {
+  it('keeps automatic platform directory failures silent and the composer available', async () => {
     const snapshot: FlowerSettingsSnapshot = {
       ...settingsSnapshot(false), model_profile: null,
       model_directory: {
@@ -829,7 +839,7 @@ describe('FlowerSurface navigation', () => {
     };
     const runtime = renderSurfaceWithAdapter({ ...adapter(false), loadSettings: vi.fn(async () => snapshot) });
     await flush();
-    expect(runtime.querySelector('.flower-handler-error-card')?.textContent).toContain('This model is unavailable.');
+    expect(runtime.querySelector('.flower-handler-error-card')).toBeNull();
     expect(runtime.querySelector('textarea')).toBeTruthy();
     expect(runtime.querySelector('.flower-model-reasoning-model-trigger')).toBeTruthy();
   });

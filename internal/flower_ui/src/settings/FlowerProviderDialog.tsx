@@ -1,3 +1,5 @@
+import { ManualModelCapabilities } from './ManualModelCapabilities';
+import { applyModelOverride, flowerModelNeedsConfiguration } from '../providerModelProjection';
 import { WebSearchCapabilityBadge } from '../WebSearchCapabilityBadge';
 import { flowerProviderAPIKeyOptional, missingFlowerProviderCredential } from '../providerCredentials';
 import { FlowerProviderBrandIcon } from './FlowerProviderBrandIcon';
@@ -5,7 +7,7 @@ import { ModelCatalogControls } from './ModelCatalogControls';
 import { applyFlowerModelDiscovery, cloneFlowerModel, filterFlowerModels, flowerProviderModelChoices, setFlowerModelsEnabled } from './modelSelection';
 import { flowerModelSupportsImage, formatFlowerTokenCount } from '../flowerModelLabel';
 import type { FlowerChatGPTAuth, FlowerChatGPTAccount, FlowerModelCatalogDiscovery } from '../contracts/flowerSurfaceContracts';
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, untrack } from 'solid-js';
 import { createStore, reconcile } from 'solid-js/store';
 import { cn } from '@floegence/floe-webapp-core';
 import { Check, Pencil } from '@floegence/floe-webapp-core/icons';
@@ -18,7 +20,7 @@ import type { FlowerProviderDraft, FlowerProviderModel, FlowerProviderType, Flow
 import {
   FLOWER_PROVIDER_TYPES,
   defaultBaseURLForFlowerProviderType,
-  defaultFlowerContextWindowForProviderType,
+  recommendedModelsForFlowerProviderType,
   flowerProviderNeedsWebSearchConfig,
   flowerProviderSupportsCustomModels,
   flowerProviderTypeRequiresBaseURL,
@@ -40,6 +42,7 @@ export type FlowerProviderDialogProps = Readonly<{
   open: boolean;
   mode: FlowerProviderDialogMode;
   provider: FlowerProviderDraft | null;
+  catalogModels?: readonly FlowerProviderModel[];
   copy?: FlowerProviderDialogCopy;
   keyConfigured: boolean;
   webSearchKeyConfigured: boolean;
@@ -162,37 +165,37 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
     currentAuth = auth; currentBinding = binding;
   });
   const providerID = () => String(store.draft?.id ?? '').trim();
-  const providerHasModels = () => (store.draft?.models.length ?? 0) > 0;
   const missingCredential = () => store.draft
     ? missingFlowerProviderCredential(store.draft, props.keyConfigured, props.webSearchKeyConfigured)
     : null;
+  const incompleteModel = () => store.draft?.models.some(flowerModelNeedsConfiguration) ?? false;
   const providerTypeLabel = (type: FlowerProviderType): string => copy().providerTypeLabels[type] ?? type;
 
-  createEffect(() => {
+  createEffect(on(() => [props.open, props.provider?.id] as const, () => {
     if (props.open) {
       cancelAuthorization();
       const initial = untrack(() => props.provider ? { ...props.provider, chatgpt_account: props.chatGPTAccount } : null);
       if (initial && props.mode === 'create' && initial.type === 'openai' && !initial.auth_method) initial.auth_method = untrack(chatGPTEnabled) ? 'chatgpt' : 'api_key';
       setStore('draft', reconcile(initial));
       setAuthError('');
-      setCustomModelName(''); setQuery(''); setDiscoveryError(props.provider?.catalog_error ?? '');
+      setCustomModelName(''); setQuery(''); setDiscoveryError('');
       setEditingModelName('');
-      setExpandedProviderType(props.mode === 'edit' && props.provider ? props.provider.type : null);
+      setExpandedProviderType(props.mode === 'edit' && initial ? initial.type : null);
     }
-  });
+  }));
 
-  const automaticDiscoveryIdentity = createMemo(() => {
-    if (!props.open || !store.draft || !props.onDiscoverModels) return '';
-    const draft = store.draft;
-    if (draft.enabled === false) return '';
-    if (draft.auth_method === 'chatgpt' && (!chatGPTEnabled() || draft.chatgpt_account?.state !== 'ready')) return '';
-    if (draft.type === 'openrouter' || draft.type === 'ollama' || draft.type === 'openai_compatible') return '';
-    return discoveryIdentity(draft);
-  });
+
   createEffect(() => {
-    if (!automaticDiscoveryIdentity()) return;
-    const timer = setTimeout(() => { void untrack(discover); }, 200);
-    onCleanup(() => clearTimeout(timer));
+    const catalog = props.catalogModels;
+    if (!props.open || !catalog) return;
+    untrack(() => {
+      const draft = store.draft;
+      if (draft && draft.id === props.provider?.id && draft.type === props.provider.type && draft.base_url === props.provider.base_url
+        && draft.auth_method === props.provider.auth_method && draft.account_id === props.provider.account_id
+        && draft.provider_api_key === undefined) {
+        setStore('draft', reconcile(applyFlowerModelDiscovery(draft, catalog)));
+      }
+    });
   });
 
   const updateProvider = (patch: Partial<FlowerProviderDraft>) => {
@@ -249,20 +252,30 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
       ...store.draft.models,
       {
         model_name: name,
-        context_window: defaultFlowerContextWindowForProviderType(store.draft.type) ?? 128000,
+        status: 'needs_configuration',
         input_modalities: ['text'],
       },
     ]);
+    setEditingModelName(name);
     setCustomModelName('');
   };
 
   const updateModel = (index: number, patch: Partial<FlowerProviderModel>) => {
     if (!store.draft) return;
-    setModels(store.draft.models.map((model, modelIndex) => (modelIndex === index ? { ...model, ...patch } : model)));
+    setModels(store.draft.models.map((model, modelIndex) => {
+      if (modelIndex !== index) return model;
+      const edited = { ...model, ...patch };
+      const listed = store.draft?.catalog_models?.find((entry) => (entry.wire_model_name || entry.model_name) === (edited.wire_model_name || edited.model_name));
+      return applyModelOverride(listed ?? { model_name: edited.model_name }, edited);
+    }));
   };
 
   const resetModelToPreset = (index: number, preset: FlowerProviderModel) => {
-    updateModel(index, cloneModel(preset));
+    if (!store.draft) return;
+    const rawCatalog = store.draft.catalog_models ?? (chatGPTSelected() ? [] : recommendedModelsForFlowerProviderType(store.draft.type));
+    const raw = rawCatalog.find(entry => entry.model_name === preset.model_name || (entry.wire_model_name || entry.model_name) === (preset.wire_model_name || preset.model_name)) ?? preset;
+    const selected = store.draft.models[index];
+    setModels(store.draft.models.map((model, modelIndex) => modelIndex === index ? cloneModel({ ...raw, model_name: selected.model_name, wire_model_name: selected.wire_model_name || raw.wire_model_name }) : model));
   };
 
   return (
@@ -279,6 +292,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
               {missingCredential() === 'provider' ? chatGPTSelected() ? copy().chatGPT.planPermission : copy().needsKey : copy().needsBraveKey}
             </span>
           </Show>
+          <Show when={incompleteModel()}><span role="status" class="mr-auto text-sm text-muted-foreground">{copy().catalog.needsConfiguration}</span></Show>
           <Button size="sm" variant="outline" onClick={() => props.onOpenChange(false)}>
             {copy().discard}
           </Button>
@@ -286,8 +300,8 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
             size="sm"
             variant="default"
             loading={props.saving}
-            disabled={props.saving || Boolean(missingCredential()) || Boolean(store.draft?.model_selection && !store.draft.model_selection.selected_models) || !providerHasModels() && (props.mode === 'create' || !store.draft?.model_selection)}
-            onClick={() => { if (store.draft && !missingCredential()) void props.onConfirm(store.draft); }}
+            disabled={props.saving || Boolean(missingCredential()) || incompleteModel() || Boolean(store.draft?.model_selection && !store.draft.model_selection.selected_models)}
+            onClick={() => { if (store.draft && !missingCredential() && !incompleteModel()) void props.onConfirm(store.draft); }}
           >
             {copy().saveProvider}
           </Button>
@@ -453,7 +467,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                     <h3>{copy().recommendedModelsTitle}</h3>
                   </div>
                   <Show when={store.draft?.model_selection && !store.draft.model_selection.selected_models}><p role="status" class="flower-body-copy text-muted-foreground">{copy().catalog.selectionReview}</p></Show>
-                  <ModelCatalogControls hasContent={catalog().length > 0} copy={copy().catalog} query={query()} count={store.draft!.models.length} onQuery={setQuery} onSelectAll={addAllPresets} onClear={() => setEnabled(store.draft?.models ?? [], false)} loading={loading()} error={discoveryError()} onRefresh={props.onDiscoverModels && store.draft?.type !== 'openai_compatible' ? discover : undefined} />
+                  <ModelCatalogControls hasContent={catalog().length > 0} copy={copy().catalog} query={query()} count={store.draft!.models.length} onQuery={setQuery} onSelectAll={addAllPresets} onClear={() => setEnabled(store.draft?.models ?? [], false)} loading={loading()} error={discoveryError()} onRefresh={props.onDiscoverModels ? discover : undefined} />
                   <Show
                     when={visibleModelNames().length > 0}
                     fallback={<div class="flower-provider-model-empty" role="status">{loading() ? copy().catalog.loading : !query() && chatGPTSelected() && account()?.state !== 'ready' ? copy().chatGPT.planPermission : copy().catalog.empty}</div>}
@@ -489,7 +503,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                                     <WebSearchCapabilityBadge availability={model().web_search} copy={copy().catalog} />
                                     <Show when={preset().unavailable}><FlowerSettingsPill>{copy().catalog.unavailableModel}</FlowerSettingsPill></Show>
                                     <Show when={preset().quantization}><FlowerSettingsPill>{preset().quantization}</FlowerSettingsPill></Show>
-                                    <Show when={preset().status}><FlowerSettingsPill>{preset().status === 'experimental' ? copy().catalog.experimental : copy().catalog.preview}</FlowerSettingsPill></Show>
+                                    <Show when={model().status}><FlowerSettingsPill>{model().status === 'needs_configuration' ? copy().catalog.needsConfiguration : model().status === 'unsupported' ? copy().catalog.unavailableModel : model().status === 'experimental' ? copy().catalog.experimental : copy().catalog.preview}</FlowerSettingsPill></Show>
                                     <Show when={preset().wire_model_name}>
                                       <span class="font-mono text-[11px] text-muted-foreground">{preset().wire_model_name!}</span>
                                     </Show>
@@ -535,7 +549,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                                     </div>
                                     <div class="md:col-span-2">
                                       <FlowerFieldLabel>{copy().providerModelID}</FlowerFieldLabel>
-                                      <Input value={model().wire_model_name ?? ''} onInput={(event) => { if (modelIndex() >= 0) updateModel(modelIndex(), { wire_model_name: event.currentTarget.value || undefined }); }} placeholder={modelName()} size="sm" class="w-full font-mono" />
+                                      <Input disabled={chatGPTSelected() || store.draft?.type === 'ollama'} value={model().wire_model_name ?? ''} onInput={(event) => { if (modelIndex() >= 0) updateModel(modelIndex(), { wire_model_name: event.currentTarget.value || undefined }); }} placeholder={modelName()} size="sm" class="w-full font-mono" />
                                     </div>
                                     <div>
                                       <FlowerFieldLabel>{copy().contextWindow}</FlowerFieldLabel>
@@ -549,6 +563,9 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                                       <FlowerFieldLabel>{copy().effectiveContextPercent}</FlowerFieldLabel>
                                       <Input type="number" value={model().effective_context_window_percent ?? ''} onInput={(event) => { if (modelIndex() >= 0) updateModel(modelIndex(), { effective_context_window_percent: Number(event.currentTarget.value) || undefined }); }} placeholder="95" size="sm" class="w-full font-mono" />
                                     </div>
+                                    <Show when={preset().status === 'needs_configuration' || model().status === 'needs_configuration' || model().supports_tools !== undefined || model().reasoning_capability?.fixture === 'manual_provider_capability'}>
+                                      <ManualModelCapabilities model={model()} type={store.draft!.type} baseURL={store.draft!.base_url || defaultBaseURLForFlowerProviderType(store.draft!.type)} copy={copy().catalog} onChange={patch => { if (modelIndex() >= 0) updateModel(modelIndex(), patch); }} />
+                                    </Show>
                                     <div class="md:col-span-3">
                                       <Checkbox checked={flowerModelSupportsImage(model().input_modalities)} onChange={(enabled) => { if (modelIndex() >= 0) updateModel(modelIndex(), { input_modalities: enabled ? ['text', 'image'] : ['text'] }); }} label={copy().imageInput} size="sm" />
                                     </div>

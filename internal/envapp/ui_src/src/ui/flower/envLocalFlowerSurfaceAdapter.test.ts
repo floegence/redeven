@@ -76,7 +76,7 @@ it('loads authorized platform models without exposing editable provider credenti
   expect(fetchMock.mock.calls.some(([url]) => url === '/_redeven_proxy/api/ai/current_model')).toBe(true);
 });
 
-it('retries a platform outage immediately instead of reusing the cached error', async () => {
+it('keeps platform synchronization failures silent and refreshes the current snapshot', async () => {
   let recovered = false;
   let modelReads = 0;
   fetchMock.mockImplementation(async (url: string) => {
@@ -88,9 +88,9 @@ it('retries a platform outage immediately instead of reusing the cached error', 
     throw new Error(`Unexpected request: ${url}`);
   });
   const adapter = createEnvLocalFlowerSurfaceAdapter({ envPublicID: 'env', envLabel: 'Environment', rpc: { ai: {} } as any });
-  expect((await adapter.loadSettings()).platform_model_source?.error).toBe('Redeven AI is currently unavailable. Select another model or try again.');
+  expect((await adapter.loadSettings()).platform_model_source?.error).toBeUndefined();
   recovered = true;
-  expect((await adapter.loadSettings()).platform_model_source?.error).toBe('Redeven AI is currently unavailable. Select another model or try again.');
+  expect((await adapter.loadSettings()).platform_model_source?.error).toBeUndefined();
   await adapter.loadModelDirectory?.();
   const previousReads = modelReads;
   await adapter.loadModelDirectory?.(true);
@@ -109,7 +109,7 @@ it.each([false, true])('preserves an unavailable selection with replacement plat
   });
   const adapter = createEnvLocalFlowerSurfaceAdapter({ envPublicID: 'env', envLabel: 'Environment', rpc: { ai: {} } as any });
   const snapshot = await adapter.loadSettings();
-  expect(snapshot.platform_model_source).toMatchObject({ current_model_id: 'platform/selected', models, error: 'Redeven AI is currently unavailable. Select another model or try again.' });
+  expect(snapshot.platform_model_source).toMatchObject({ current_model_id: 'platform/selected', models });
 });
 
 function stagingScope(targetID: string): FlowerAttachmentStagingScope {
@@ -622,7 +622,8 @@ describe('Env local Flower surface adapter', () => {
       desktopSessionTargetRoute: 'remote_desktop',
     });
 
-    expect((await adapter.loadSettings()).model_directory?.error).toBe('directory_unavailable');
+    expect((await adapter.loadSettings()).model_directory).toBeUndefined();
+    await expect(adapter.loadModelDirectory!()).rejects.toThrow();
   });
 
   it('rejects a Desktop catalog entry with an invalid opaque id', async () => {
@@ -651,7 +652,8 @@ describe('Env local Flower surface adapter', () => {
       desktopSessionTargetRoute: 'remote_desktop',
     });
 
-    expect((await adapter.loadSettings()).model_directory?.error).toBe('directory_unavailable');
+    expect((await adapter.loadSettings()).model_directory).toBeUndefined();
+    await expect(adapter.loadModelDirectory!()).rejects.toThrow();
   });
 
   it('reports model catalog request failures as Desktop source errors', async () => {
@@ -678,7 +680,8 @@ describe('Env local Flower surface adapter', () => {
       desktopSessionTargetRoute: 'remote_desktop',
     });
 
-    expect((await adapter.loadSettings()).model_directory?.error).toBe('directory_unavailable');
+    expect((await adapter.loadSettings()).model_directory).toBeUndefined();
+    await expect(adapter.loadModelDirectory!()).rejects.toThrow();
   });
 
   it('rejects a malformed Desktop model catalog response', async () => {
@@ -705,7 +708,8 @@ describe('Env local Flower surface adapter', () => {
       desktopSessionTargetRoute: 'remote_desktop',
     });
 
-    expect((await adapter.loadSettings()).model_directory?.error).toBe('directory_unavailable');
+    expect((await adapter.loadSettings()).model_directory).toBeUndefined();
+    await expect(adapter.loadModelDirectory!()).rejects.toThrow();
   });
 
   it('loads permission-only settings independently of a failed directory read', async () => {
@@ -728,7 +732,7 @@ describe('Env local Flower surface adapter', () => {
 
     expect(snapshot.defaults.permission_type).toBe('readonly');
     expect(snapshot.model_profile).toBeNull();
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock).toHaveBeenCalledWith('/_redeven_proxy/api/ai/models?mode=baseline', expect.anything());
   });
 

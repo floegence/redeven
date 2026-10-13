@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createStore } from 'solid-js/store';
-import { hydrateFlowerProviderCatalog, cloneFlowerModel, applyFlowerModelDiscovery, defaultFlowerProviderModels, filterFlowerModels, flowerProviderModelChoices, resolveFlowerProviderModels, serializeFlowerProvider, setFlowerModelsEnabled } from '../../../../../../flower_ui/src/settings/modelSelection';
+import { cloneFlowerModel, applyFlowerModelDiscovery, defaultFlowerProviderModels, filterFlowerModels, flowerProviderModelChoices, resolveFlowerProviderModels, serializeFlowerProvider, setFlowerModelsEnabled } from '../../../../../../flower_ui/src/settings/modelSelection';
 import * as catalog from '../../../../../../flower_ui/src/settings/providerCatalog';
 import type { FlowerProviderDraft, FlowerProviderModel } from '../../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 
@@ -171,21 +171,20 @@ it('keeps explicitly entered OpenRouter models distinct from discovered inventor
   const manual = { ...model('private-agent'), wire_model_name: 'vendor/private-agent' };
   const saved = serializeFlowerProvider({ id: 'router', type: 'openrouter', models: [manual], catalog_models: [] });
   expect(saved.model_selection?.custom_models).toEqual([manual]);
-  expect(resolveFlowerProviderModels(saved, [])).toEqual([manual]);
+  expect(resolveFlowerProviderModels(saved, [])).toEqual([{ ...manual, unavailable: true }]);
   const cleared = serializeFlowerProvider(setFlowerModelsEnabled({ ...saved, models: [manual] }, [manual], false));
   expect(cleared.model_selection?.custom_models).toEqual([manual]);
   expect(resolveFlowerProviderModels(cleared, [])).toEqual([]);
 });
 
-it('persists provider enablement separately from selected models and skips disabled discovery', async () => {
-  const provider: FlowerProviderDraft = { id: 'local', type: 'ollama', enabled: false, models: [model('agent')] };
-  const saved = serializeFlowerProvider(provider);
-  expect(saved.enabled).toBe(false);
-  expect(saved.model_selection?.selected_models).toEqual(['agent']);
-  const discover = vi.fn(async () => ({ models: [model('agent')] }));
-  const restored = await hydrateFlowerProviderCatalog(saved, discover);
-  expect(discover).not.toHaveBeenCalled();
-  expect(restored.models.map(model => model.model_name)).toEqual(['agent']);
-  await hydrateFlowerProviderCatalog({ ...saved, enabled: true }, discover);
-  expect(discover).toHaveBeenCalledTimes(1);
+it('reopens configured unknown models without absorbing capabilities into the catalog baseline', () => {
+  const raw: FlowerProviderModel = { model_name: 'wire', status: 'needs_configuration' };
+  const configured: FlowerProviderModel = { model_name: 'alias', wire_model_name: 'wire', context_window: 8192, max_output_tokens: 1024, supports_tools: true };
+  const saved = { id: 'brand', type: 'deepseek' as const, models: [], model_selection: { selected_models: ['alias'], model_overrides: [configured] } };
+  const opened = applyFlowerModelDiscovery(saved, [raw]);
+  const choices = flowerProviderModelChoices(opened);
+  expect(choices.find(model => model.model_name === 'wire')?.status).toBe('needs_configuration');
+  expect(choices.find(model => model.model_name === 'alias')).toEqual(expect.objectContaining({ ...configured, status: undefined }));
+  expect(serializeFlowerProvider(opened).model_selection?.model_overrides).toEqual([configured]);
+  expect(opened.catalog_models).toEqual([raw]);
 });

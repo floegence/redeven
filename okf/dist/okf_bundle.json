@@ -3313,14 +3313,14 @@
             "path": "ai/model-directory-and-selection.md",
             "type": "AI Configuration Contract",
             "title": "Model directory and selection",
-            "description": "Maintain an offline Agent catalog, model-specific capabilities, and user selection preferences without duplicate inventories.",
+            "description": "Read local model metadata immediately and synchronize complete inventories silently without changing user intent.",
             "tags": [
               "ai",
               "models",
               "providers",
               "settings"
             ],
-            "summary": "Redeven owns model discovery, explicit user selection, and atomic configuration upgrades. Catalog refreshes never select new models or change a conversation's saved model. Both settings surfaces preserve unavailable selections and parameter edits; chat shows a bounded searchable menu. Discovery failure cannot substitute another model. Floret remains the released execution engine and owns provider transport and opaque state.",
+            "summary": "The Runtime owns model synchronization and atomic metadata snapshots. Directory reads, model selection, attachment checks, and send preflight consume existing metadata without waiting for supplier inventory. Automatic synchronization is silent. Only the explicit Provider settings action shows progress or errors. Floret remains the released execution engine; its public API and opaque session data are unchanged.",
             "section_count": 2
           },
           {
@@ -8315,12 +8315,6 @@
       ],
       "backlinks": [
         {
-          "label": "Model directory and selection",
-          "path": "ai/model-directory-and-selection.md",
-          "concept_id": "ai.model-directory-and-selection",
-          "title": "Model directory and selection"
-        },
-        {
           "label": "Redeven OKF Bundle",
           "path": "index.md",
           "title": "Redeven OKF Bundle"
@@ -10057,134 +10051,113 @@
       "concept_id": "ai.model-directory-and-selection",
       "type": "AI Configuration Contract",
       "title": "Model directory and selection",
-      "description": "Maintain an offline Agent catalog, model-specific capabilities, and user selection preferences without duplicate inventories.",
+      "description": "Read local model metadata immediately and synchronize complete inventories silently without changing user intent.",
       "tags": [
         "ai",
         "models",
         "providers",
         "settings"
       ],
-      "timestamp": "2026-10-08T00:00:00Z",
+      "timestamp": "2026-10-13T00:00:00Z",
       "frontmatter": {
-        "description": "Maintain an offline Agent catalog, model-specific capabilities, and user selection preferences without duplicate inventories.",
+        "description": "Read local model metadata immediately and synchronize complete inventories silently without changing user intent.",
         "tags": [
           "ai",
           "models",
           "providers",
           "settings"
         ],
-        "timestamp": "2026-10-08T00:00:00Z",
+        "timestamp": "2026-10-13T00:00:00Z",
         "title": "Model directory and selection",
         "type": "AI Configuration Contract"
       },
-      "body_length": 13980,
-      "summary": "Redeven owns model discovery, explicit user selection, and atomic configuration upgrades. Catalog refreshes never select new models or change a conversation's saved model. Both settings surfaces preserve unavailable selections and parameter edits; chat shows a bounded searchable menu. Discovery failure cannot substitute another model. Floret remains the released execution engine and owns provider transport and opaque state.",
+      "body_length": 8735,
+      "summary": "The Runtime owns model synchronization and atomic metadata snapshots. Directory reads, model selection, attachment checks, and send preflight consume existing metadata without waiting for supplier inventory. Automatic synchronization is silent. Only the explicit Provider settings action shows progress or errors. Floret remains the released execution engine; its public API and opaque session data are unchanged.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Selection and discovery\n\nOpenAI, Anthropic, Gemini (`google`), Moonshot, GLM (`chatglm`), DeepSeek, Qwen, xAI, and Groq use the same generated catalog in Go and both settings surfaces. Groq exposes hosted Agent models; brand providers expose their own models. These providers, Ollama, and OpenRouter persist `model_selection.selected_models`, custom definitions where supported, and sparse parameter overrides. An explicit empty selection disables every model without deleting the provider. New providers start with no selections. Custom OpenAI-compatible endpoints retain manual `models` entries.\n\nResolution combines current availability with saved intent in memory. New catalog entries stay unselected. Select all applies only to current candidates. Search, collapse, refresh, removal, and reopening never derive selection from visible rows. Missing selections remain visible as unavailable in settings; their identities and overrides survive save and recovery. Clearing a selection retains its parameter edits and custom definitions. Inherited output capacity is capped by a smaller context override; explicit output limits remain validated as entered.\n\nOpenRouter queries its configured `/models` endpoint with tool filtering. Refresh updates selected metadata without enabling additions. Wire IDs, including vendor paths, stay separate from local route identities. Explicitly entered OpenRouter custom definitions remain user-managed and do not claim discovered availability. Legacy local aliases continue resolving through their exact wire ID only while that ID is available.\n\nOllama queries `/api/tags`, `/api/ps`, and `/api/show`; only installed local models advertising tools qualify. Loaded context capacity takes precedence over `num_ctx`; otherwise use the conservative 4,096-token serving default capped by the model limit. Inventory, digest, quantization, and availability are transient metadata, never persisted as user intent. Discovery errors leave preferences intact and other providers usable. The settings refresh action retries discovery; selected models must resolve against current inventory before execution.\n\nProvider `enabled` defaults to true when omitted. Disabling retains identities,\nselected models, overrides, credentials, and the saved default. Disabled providers\nare excluded from new-run admission, model choices, automatic discovery, credential\nchecks, and Desktop model export. Directory entries remain unavailable with reason\n`provider_disabled`. Disabling needs no valid credentials; enabling validates them.\nAdmitted runs retain their captured profile. No substitute default is selected.\n\n## Settings interaction\n\nRuntime exposes two reads for the same directory projection. The baseline read\nreturns static configuration, the saved current identity, and pending dynamic\nsources without contacting providers, Desktop, or the platform gateway. Flower\nuses it together with settings and thread history during initialization. The\ncomplete read refreshes dynamic sources concurrently under one five-second\nbudget, limits provider work to four concurrent requests, and settles every\nsource as ready or unavailable before returning. A source failure never clears\nselection intent or blocks history, drafts, canvas navigation, or an already\nusable static model.\n\nThe directory is scoped to the Runtime route, instance, authorization session,\nand settings revision. Env Shell and Desktop App own one in-memory read resource\nper scope; Tessiven and full Flower share only when those scope facts match.\nLate responses are discarded after a scope or settings change, duplicate\nrefreshes share one request, and unmounting releases the subscription. The\ndirectory is an observation, not a second persistence ledger or an execution\nauthorization.\n\nThe shared read resource owns a ten-second total availability deadline across\nbaseline, explicit Desktop recovery, and discovery. Pending sources start their\nbackground check as soon as the baseline arrives, independently of a stalled\nsettings read. Flower observes both settings revision and connection authorization\ngeneration, so confirmation or replacement of a connection restarts its reads\ninstead of leaving the previous pending projection visible. Web transports\nreceive the owner's abort signal; Desktop IPC\nlate replies cannot publish after timeout. Transport cancellation is a settled\nfailure unless the owning scope changed. Failed pending rows become unavailable,\nknown ready models and selection identities remain intact, and explicit refresh\nstarts a new bounded attempt. Only the model popup displays checking and timeout\nfeedback; the composer keeps its current model label and never spins for an\navailability check. Static-only baselines need no background provider request.\n\nAutomatic model-list discovery has a five-second total catalog budget, shorter\nthan Desktop's bootstrap request deadline. A slow or disconnected dynamic\nprovider cannot prevent unrelated configured models from being listed. This\nread-only budget neither changes selected identities nor authorizes missing\nmodels. Explicit catalog discovery retains its own request deadline, and send\npreflight still resolves the exact selected model against current inventory.\n\nCandidate rows in both provider dialogs use model identity independently of metadata object allocation. Selection changes preserve the existing checkbox or action button, keyboard focus, and scroll position. Selection controls reserve their layout space; shared dialog actions move as a group below model details on narrow screens. Metadata refresh updates surviving rows without retaining obsolete labels or availability. Parameter edits remain reactive without rebuilding the candidate row.\n\n## Chat presentation\n\nExplicit new-thread reasoning choices survive remounting while the model\ndirectory is loading. Only a loaded model capability can clear an incompatible\nchoice; a temporary thread-snapshot placeholder cannot change the draft.\n\nThe composer initially shows at most eight selected models, prioritized by the current identity and recent thread models, grouped by provider/source. Search covers the complete selected set, including aliases. Users explicitly expand all selected models or open model management. Keyboard opening focuses search; arrows navigate enabled rows, Home/End navigate the list, and Escape returns focus to the trigger. The scrollable list keeps search and management controls visible on narrow screens.\n\nOllama aliases fold only when digest, provider connection, and effective parameters agree. The current alias is the representative when selected. Quantization and other aliases remain visible; different quantizations or overrides remain separate choices. Folding is presentation only: saved defaults, wire names, and thread model identities are never rewritten. An unavailable current model remains identifiable and disabled, with a request to choose another model.\n\nThe generated directory stays outside the initial Env App bundle. Settings load on first use and remain mounted to preserve drafts. The lightweight composer menu helper does not import catalog data. Image input is resolved per model, including DeepSeek Vision, and participates in attachment capability revision; actual admission also requires a supported adapter route and authorized staged bytes.\n\n[Provider configuration validation](provider-configuration-validation.md) owns required fields and credentials. Compatibility epoch 36 prevents older Desktop clients from reinterpreting explicit selections as exclusions. Existing epochs 9 through 35 retain their declared upgrade paths.\n\nModel search capability follows [Model web search](model-web-search.md); selection alone never enables a search protocol.\n\n## Configuration ownership\n\n`LoadForStartup` freezes legacy selection once before services start. Old explicit brand, Ollama, and OpenRouter lists preserve only their listed identities. Known old preset values inherit current metadata; user differences become overrides. Custom definitions and retired model identities survive without admitting retired catalog entries. Custom compatible profiles remain manual.\n\nLegacy brand exclusion profiles freeze the current catalog minus exclusions. Legacy Ollama exclusion profiles require a successful authenticated inventory query; startup preserves the original profile if discovery fails, and that provider remains unavailable pending review. The user can retry startup discovery or explicitly review/select models in settings. Merely opening, refreshing, or saving unrelated settings must not convert an unresolved profile to an empty selection. Bundle saves reject unresolved exclusion shapes. Explicit selection actions replace the legacy policy and preserve parameter overrides.\n\nThe owner atomically persists a completed conversion before publishing it. Write failure leaves the original file intact and fails startup. Read-only `Load` never migrates; current profiles never rediscover or rewrite during migration. Discovery and runtime resolution create no catalog database or Floret migration.\n\n## Directory maintenance\n\nRun `python3 scripts/model-catalog/generate.py --update` only for an intentional online update. Review `upstream.json`, official-source corrections in `overrides.json`, and the resulting `internal/config/model_catalog.generated.json` diff together. Normal generation and `--check` use only committed inputs, including in CI and startup. The snapshot records the original models.dev response SHA-256. The [provider compatibility review](provider-api-catalog-review.md) records current official APIs and released-engine constraints; a newer supplier catalog does not imply support in Floret's independent catalog. Explicit official status overrides take precedence over experimental-name inference. models.dev attribution is included in the distributed third-party notices.\n\nInclude publicly callable Preview and Experimental models when the adapter supports their Agent protocol; mark their status explicitly. Exclude deprecated, non-tool, and specialized audio, video, embedding, or non-text-output models. Review regional endpoints, token limits, image modalities, reasoning wire controls, response fields, and tool-result replay against official documentation. A newly introduced reasoning option or model search capability must fail generation until reviewed. Run `python3 -B scripts/model-catalog/test_generate.py` and `python3 scripts/model-catalog/generate.py --check` before committing catalog changes. `model_catalog_legacy.json` exists solely to recognize the one-time configuration source; it is never a live model source.",
-          "char_count": 10655
+          "body": "## One metadata owner\n\nThe Runtime reads snapshots from the configuration root's `runtime/model-catalog` directory at initialization. Each scope hashes provider identity, type, endpoint, authentication method, account, and credential fingerprint; credentials are never written to snapshots. The generated catalog supplies reviewed capabilities before a successful inventory exists. Saved manual capabilities remain available offline. Desktop model-source processes only read these snapshots and configured preferences; they never discover suppliers themselves.\n\nSynchronization starts asynchronously at startup and repeats every 15 minutes. Failures retry after 1, 5, and 15 minutes. Each provider has one in-flight operation, with at most four supplier operations globally and a 30-second overall deadline including queueing. Explicit `POST /api/ai/model_catalog` shares this owner and operation. Successful draft synchronization writes the same scoped snapshot, so saving the connection can immediately use the returned metadata.\n\nOpenAI-compatible lists, Anthropic's native list, and Google's native list use their respective authentication and pagination. OpenRouter uses tool-filtered inventory. Ollama reads installed tags, running context, and complete model details. Providers without a supported inventory endpoint retain reviewed or manual metadata. Invalid, partial, repeated-page, timed-out, rate-limited, or unauthorized responses never replace a snapshot. Disk publication failure also retains the previous in-memory directory. Complete successful empty inventory is authoritative.\n\nCloud metadata remains in bounded memory, isolated by trusted user, namespace, environment, gateway, grant, and entitlement version. Cached metadata is not invocation authorization: actual requests still renew the lease and validate current route authority. Cloud execution consumes its catalog protocol rather than fetching inventory during dispatch.\n\n## Selection and availability\n\nUser selection, sparse overrides, custom definitions, and the default identity remain in the provider profile, separately from metadata. The settings catalog retains original inventory identities and capabilities; editors merge saved parameters into choices without changing that serialization baseline. New providers and new discoveries stay unselected. A connection can be saved with no models and an empty default. Search, collapse, synchronization, and metadata allocation never derive selection from visible rows.\n\nOnly complete successful inventory can confirm absence or unsupported capability. Missing selections remain visible as unavailable, retaining identity, parameters, drafts, history, and the default. The next send requires an explicit model choice; synchronization does not cancel admitted work or silently substitute another model. Reappearance with valid capabilities restores availability under the same selection.\n\nUnknown listed identities display “Needs capability configuration.” The existing editor accepts explicit context/output limits, text/image input, tools, and reasoning declarations supported by the selected adapter. Hand-entered capabilities cannot revive a missing model, override confirmed unsupported tools, or grant account access. Custom compatible endpoints retain manual `models`; their exact wire identity is still constrained after authoritative synchronization.\n\nOllama serving context prefers loaded capacity, then an explicit `num_ctx`, then its documented conservative 4,096-token default capped by model capacity. Alias folding requires matching digest, connection, and effective parameters. It changes presentation only, never stored identities or wire routing.\n\n## Shared reads and settings\n\nBoth existing `GET /api/ai/models` modes return the same current projection, including `provider_catalogs` before user selection filtering for settings. They perform no supplier inventory calls. A `model_directory.changed` notification travels on the existing Flower workspace live stream; it carries no provider/account data. Each observer rereads its authorized projection. Metadata notification does not invalidate settings, reinitialize chat, or alter an active run.\n\nDesktop and Env App own a shared settings/directory read resource per Runtime route, instance, and authorization scope. Duplicate reads coalesce. Same-scope invalidation reacquires the latest result; connection changes fence old responses. Every read settles on success, failure, cancellation, or its ten-second local-read deadline. Failed refreshes retain known metadata. Flower reacquires the current settings generation before publishing, preventing permanent loading from a discarded coalesced request.\n\nOpening Provider settings never initiates discovery. “Sync model list” displays progress only for that explicit action, reports failure within the current dialog, and leaves old rows and edits usable. Background metadata merges preserve unsaved connection fields and capability overrides. Stable model identities preserve focus and scroll position. The chat composer shows no automatic synchronization progress or failure notification. With no usable model, configuration remains reachable and the input draft remains editable.\n\n## Configuration and generated capabilities\n\n`LoadForStartup` freezes supported legacy selections before services start. Old explicit lists preserve their exact identities and overrides. Legacy dynamic exclusion conversion reads a usable local snapshot; without one, the original profile remains for explicit selection review. Startup never waits for provider discovery. Current profiles are neither rediscovered nor rewritten by migration.\n\nThe generated catalog remains outside the initial Env App bundle. Intentional upstream updates use `python3 scripts/model-catalog/generate.py --update` with review of source inputs and adapter compatibility. Ordinary generation and `--check` are offline. [Provider API catalog review](provider-api-catalog-review.md) owns reviewed API combinations; [Provider configuration validation](provider-configuration-validation.md) owns credentials and structural fields; [Model web search](model-web-search.md) owns search capability.\n\nCompatibility epoch 54 identifies the directory notification, capability metadata, and configured-without-selection profile contract. No Floret schema migration is added.",
+          "char_count": 6374
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Gemini uses the supported OpenAI-compatible endpoint with model-specific effort or budget controls. Its tool thought signatures stay in the existing opaque provider state, bound to exact tool identity and arguments, and are pruned with projected history. DeepSeek uses published Floret v7.26.0, including current Flash/alias capabilities and prepared-image support, as described in [DeepSeek Responses](deepseek-responses.md). No public Floret catalog API, host credential contract, or domain schema is added by this change.",
-          "char_count": 524
+          "body": "The Runtime owns local provider inventory, snapshots, and authorized projections. Desktop and Env App consume those projections through the existing Flower adapters. Provider credentials, account authorization, active-run state, and user selection remain owned by their existing configuration and execution boundaries. This contract does not add a Floret dependency or a second conversation store.",
+          "char_count": 397
         }
       ],
       "evidence": [
         {
-          "id": "redeven:internal/ai/service_models_test.go:0:unresponsive catalogs stay within the automatic inventory deadline without losing configured alternatives or preferences.",
-          "source": "redeven:internal/ai/service_models_test.go",
-          "description": "Unresponsive catalogs stay within the automatic inventory deadline without losing configured alternatives or preferences."
+          "id": "redeven:internal/ai/model_catalog_manager.go:0:single synchronization owner, scheduler, flights, deadlines, and publication.",
+          "source": "redeven:internal/ai/model_catalog_manager.go",
+          "description": "Single synchronization owner, scheduler, flights, deadlines, and publication."
         },
         {
-          "id": "redeven:internal/config/ai_model_catalog.go:0:catalog and preference resolution.",
-          "source": "redeven:internal/config/ai_model_catalog.go",
-          "description": "Catalog and preference resolution."
+          "id": "redeven:internal/config/ai_model_snapshot.go:0:credential-scoped atomic snapshots and read-only desktop projection.",
+          "source": "redeven:internal/config/ai_model_snapshot.go",
+          "description": "Credential-scoped atomic snapshots and read-only Desktop projection."
         },
         {
-          "id": "redeven:internal/config/ai_model_migration.go:0:atomic startup conversion.",
-          "source": "redeven:internal/config/ai_model_migration.go",
-          "description": "Atomic startup conversion."
+          "id": "redeven:internal/ai/provider_inventory.go:0:native authentication and complete pagination.",
+          "source": "redeven:internal/ai/provider_inventory.go",
+          "description": "Native authentication and complete pagination."
         },
         {
-          "id": "redeven:internal/config/ai_model_selection_upgrade_test.go:0:offline freeze, alias identity, rollback, restart, and unavailable selections.",
-          "source": "redeven:internal/config/ai_model_selection_upgrade_test.go",
-          "description": "Offline freeze, alias identity, rollback, restart, and unavailable selections."
-        },
-        {
-          "id": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.modelMenu.browser.test.tsx:0:search, alias presentation, keyboard, bounded menus, and narrow-screen geometry.",
-          "source": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.modelMenu.browser.test.tsx",
-          "description": "Search, alias presentation, keyboard, bounded menus, and narrow-screen geometry."
-        },
-        {
-          "id": "redeven:internal/ai/model_catalog.go:0:read-only openrouter and ollama queries.",
-          "source": "redeven:internal/ai/model_catalog.go",
-          "description": "Read-only OpenRouter and Ollama queries."
-        },
-        {
-          "id": "redeven:internal/ai/model_directory.go:0:baseline and bounded complete directory projection.",
+          "id": "redeven:internal/ai/model_directory.go:0:immediate authorized projection.",
           "source": "redeven:internal/ai/model_directory.go",
-          "description": "Baseline and bounded complete directory projection."
+          "description": "Immediate authorized projection."
         },
         {
-          "id": "redeven:internal/codeapp/appserver/server_model_catalog_test.go:0:admin authorization, input limits, and unchanged configuration.",
-          "source": "redeven:internal/codeapp/appserver/server_model_catalog_test.go",
-          "description": "Admin authorization, input limits, and unchanged configuration."
+          "id": "redeven:internal/ai/platform_catalog.go:0:cloud scope isolation and silent refresh.",
+          "source": "redeven:internal/ai/platform_catalog.go",
+          "description": "Cloud scope isolation and silent refresh."
         },
         {
-          "id": "redeven:internal/envapp/ui_src/src/ui/flower/modelDirectory.test.ts:0:scoped single-flight reads, late-result fencing, and failure settlement.",
+          "id": "redeven:internal/ai/model_catalog_manager_test.go:0:offline restart, failed writes, late responses, removal/recovery, concurrency, and draft-save scope.",
+          "source": "redeven:internal/ai/model_catalog_manager_test.go",
+          "description": "Offline restart, failed writes, late responses, removal/recovery, concurrency, and draft-save scope."
+        },
+        {
+          "id": "redeven:internal/ai/provider_inventory_test.go:0:pagination, authentication, partial failures, and empty success.",
+          "source": "redeven:internal/ai/provider_inventory_test.go",
+          "description": "Pagination, authentication, partial failures, and empty success."
+        },
+        {
+          "id": "redeven:internal/config/ai_model_snapshot_test.go:0:manual override authority and snapshot isolation.",
+          "source": "redeven:internal/config/ai_model_snapshot_test.go",
+          "description": "Manual override authority and snapshot isolation."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/flower/modelDirectory.test.ts:0:coalescing, invalidation races, late scope responses, and bounded reads.",
           "source": "redeven:internal/envapp/ui_src/src/ui/flower/modelDirectory.test.ts",
-          "description": "Scoped single-flight reads, late-result fencing, and failure settlement."
+          "description": "Coalescing, invalidation races, late scope responses, and bounded reads."
         },
         {
-          "id": "redeven:internal/flower_ui/src/settings/modelSelection.ts:0:shared ui selection owner.",
+          "id": "redeven:internal/flower_ui/src/settings/modelSelection.ts:0:shared user intent and metadata merge.",
           "source": "redeven:internal/flower_ui/src/settings/modelSelection.ts",
-          "description": "Shared UI selection owner."
+          "description": "Shared user intent and metadata merge."
         },
         {
-          "id": "redeven:internal/envapp/ui_src/src/ui/FlowerProviderDialog.selection.browser.test.tsx:0:real published dialogs, scroll and focus continuity, narrow layouts, catalog refresh, and parameter editing.",
-          "source": "redeven:internal/envapp/ui_src/src/ui/FlowerProviderDialog.selection.browser.test.tsx",
-          "description": "Real published dialogs, scroll and focus continuity, narrow layouts, catalog refresh, and parameter editing."
-        },
-        {
-          "id": "redeven:internal/envapp/ui_src/src/ui/pages/settings/FlowerProviderDialog.test.tsx:0:real dialog search, collapse, switch, and reopen behavior.",
+          "id": "redeven:internal/envapp/ui_src/src/ui/pages/settings/FlowerProviderDialog.test.tsx:0:explicit synchronization and retained dialog edits.",
           "source": "redeven:internal/envapp/ui_src/src/ui/pages/settings/FlowerProviderDialog.test.tsx",
-          "description": "Real dialog search, collapse, switch, and reopen behavior."
+          "description": "Explicit synchronization and retained dialog edits."
         },
         {
-          "id": "redeven:internal/ai/attachment_capabilities_test.go:0:per-model vision across provider types.",
-          "source": "redeven:internal/ai/attachment_capabilities_test.go",
-          "description": "Per-model vision across provider types."
+          "id": "redeven:internal/ai/desktop_model_source.go:0:disk-only catalog publication and separate metadata notification.",
+          "source": "redeven:internal/ai/desktop_model_source.go",
+          "description": "Disk-only catalog publication and separate metadata notification."
         },
         {
-          "id": "redeven:internal/ai/model_gateway_gemini_test.go:0:streamed signatures, image input, and tool results.",
-          "source": "redeven:internal/ai/model_gateway_gemini_test.go",
-          "description": "Streamed signatures, image input, and tool results."
-        },
-        {
-          "id": "redeven:internal/ai/provider_enabled_test.go:0:disabled discovery, directory retention, new-run rejection, desktop export, and re-enable.",
-          "source": "redeven:internal/ai/provider_enabled_test.go",
-          "description": "Disabled discovery, directory retention, new-run rejection, Desktop export, and re-enable."
-        },
-        {
-          "id": "redeven:internal/codeapp/appserver/server_provider_credentials_test.go:0:atomic credential validation and disabled-provider saves.",
-          "source": "redeven:internal/codeapp/appserver/server_provider_credentials_test.go",
-          "description": "Atomic credential validation and disabled-provider saves."
+          "id": "redeven:internal/runtimeservice/compatibility_contract.json:0:protocol compatibility decision.",
+          "source": "redeven:internal/runtimeservice/compatibility_contract.json",
+          "description": "Protocol compatibility decision."
         }
       ],
-      "snippet": "Redeven owns model discovery, explicit user selection, and atomic configuration upgrades. Catalog refreshes never select new models or change a conversation's saved model. Both settings surfaces preserve unavailable selections and parameter",
+      "snippet": "The Runtime owns model synchronization and atomic metadata snapshots. Directory reads, model selection, attachment checks, and send preflight consume existing metadata without waiting for supplier inventory. Automatic synchronization is sil",
       "links": [
-        {
-          "label": "DeepSeek Responses",
-          "path": "ai/deepseek-responses.md",
-          "concept_id": "ai.deepseek-responses",
-          "title": "DeepSeek Responses"
-        },
         {
           "label": "Model web search",
           "path": "ai/model-web-search.md",
@@ -10192,7 +10165,7 @@
           "title": "Model web search"
         },
         {
-          "label": "provider compatibility review",
+          "label": "Provider API catalog review",
           "path": "ai/provider-api-catalog-review.md",
           "concept_id": "ai.provider-api-catalog-review",
           "title": "Provider API and catalog review"
@@ -10216,6 +10189,12 @@
           "path": "ai/model-web-search.md",
           "concept_id": "ai.model-web-search",
           "title": "Model web search"
+        },
+        {
+          "label": "Provider API and catalog review",
+          "path": "ai/provider-api-catalog-review.md",
+          "concept_id": "ai.provider-api-catalog-review",
+          "title": "Provider API and catalog review"
         },
         {
           "label": "Provider configuration validation",
@@ -10896,7 +10875,7 @@
         "title": "Provider API and catalog review",
         "type": "Provider Compatibility Review"
       },
-      "body_length": 9551,
+      "body_length": 10133,
       "summary": "Redeven owns one model catalog shared by Runtime, Web, Desktop, and the native iOS client through the authenticated catalog API. Official provider documentation establishes model identities, API contracts, and capability corrections; the pinned models.dev snapshot supplies reproducible inventory metadata. A model must be supported by the released adapter before it becomes selectable. Catalog refreshes preserve user selections and never replace a conversation's stored model. Unsupported engine capabilities remain explicit integration blockers.",
       "sections": [
         {
@@ -10917,8 +10896,8 @@
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Runtime owns provider routing and the catalog projection. Floret owns provider-native request construction, opaque continuation state, and released model capability definitions. The iOS client consumes the authenticated projection and links to official configuration documentation; it does not embed a second supplier inventory or implement provider transports. `models.dev` is a reproducible directory input, not an authority to bypass official docs or released adapter support.",
-          "char_count": 479
+          "body": "Runtime owns provider routing and the catalog projection. Floret owns provider-native request construction, opaque continuation state, and released model capability definitions. The iOS client consumes the authenticated projection and links to official configuration documentation; it does not embed a second supplier inventory or implement provider transports. `models.dev` is a reproducible directory input, not an authority to bypass official docs or released adapter support.\n\n## Runtime inventory synchronization\n\nThe Runtime uses native Anthropic and Google list authentication/pagination and OpenAI-compatible inventories for supported brands. Unsupported list endpoints keep reviewed or manual metadata. Unknown identities require explicit adapter-supported capability configuration. Successful complete inventory is separate from user selection and actual invocation authorization; supplier and cache failures retain previous metadata. See [Model directory and selection](model-directory-and-selection.md) for ownership, deadlines, and scope isolation.",
+          "char_count": 1061
         }
       ],
       "evidence": [
@@ -10955,6 +10934,12 @@
           "path": "ai/chatgpt-local-authentication.md",
           "concept_id": "ai.chatgpt-local-authentication",
           "title": "Local ChatGPT plan authentication"
+        },
+        {
+          "label": "Model directory and selection",
+          "path": "ai/model-directory-and-selection.md",
+          "concept_id": "ai.model-directory-and-selection",
+          "title": "Model directory and selection"
         }
       ],
       "backlinks": [
@@ -10996,15 +10981,15 @@
         "title": "Provider configuration validation",
         "type": "AI Configuration Contract"
       },
-      "body_length": 5441,
+      "body_length": 5847,
       "summary": "Redeven owns provider configuration, credential requirements, and Flower readiness. Ollama and custom OpenAI-compatible endpoints can send without a stored key; other local-profile providers require one. Both editors and the provider-bundle API enforce configuration completeness without inventing stored secrets. Invalid saves leave configuration and credentials unchanged; network or authentication failures remain execution errors. Floret's published thread-runtime contract is unchanged.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Readiness and saving\n\nThe shared Flower composer follows the same credential contract as provider execution: a selected Ollama inventory model or configured OpenAI-compatible model can start or continue a conversation without a stored API key. Other local-profile provider types require their configured key. Credential snapshots report actual secret presence; readiness must not manufacture a configured secret or bypass catalog membership. Explicit optional credentials still apply to discovery and execution. Without a key, these endpoints receive no Authorization header and never inherit the host process OpenAI API key. An endpoint that requires authentication still needs its real credential; rejection by that endpoint remains an execution error.\n\nBoth provider editors block saving missing required credentials and identify the missing key. The provider-bundle API validates the resulting credential state before changing configuration or secrets, including retained credentials, replacements, explicit deletion, and the last update when a key appears more than once. Blank editor inputs preserve stored keys. Required keys cannot be removed while saving an enabled provider; an optional endpoint key can be removed. A missing Brave key blocks saving a provider with Brave search enabled, but does not disable ordinary chat for a previously saved profile. Invalid structural fields also reject the bundle before writes. These checks validate configuration completeness, not remote service reachability or credential validity.\n\n## Field requirements\n\n| Field | Required value or omission behavior |\n| --- | --- |\n| Provider API key | Optional for Ollama and custom OpenAI-compatible endpoints; all other local-profile provider types require a new or stored key. Desktop and Redeven AI model sources retain their separate session authority. |\n| Base URL | OpenAI, Anthropic, and Gemini may use their adapter default. Other provider types require an explicit HTTP(S) URL. |\n| Provider display name | Optional; the UI derives a name from the provider type or identity. |\n| Models | Explicit lists require named models; catalog providers save explicit `selected_models`, including an empty selection after deselecting all models. Unresolved legacy exclusion profiles require selection review; unavailable selected identities retain their metadata without requiring invented capacity. |\n| Context and output limits | Published catalog or adapter defaults may supply omitted limits. Explicit compatible, OpenRouter, xAI, Groq, and Ollama model entries require context capacity. Custom catalog models also require it. Output limits remain optional. |\n| Brave API key | Required only when Brave search is enabled; existing stored credentials satisfy the requirement. |",
-          "char_count": 2771
+          "body": "## Readiness and saving\n\nThe shared Flower composer follows the same credential contract as provider execution: a selected Ollama inventory model or configured OpenAI-compatible model can start or continue a conversation without a stored API key. Other local-profile provider types require their configured key. Credential snapshots report actual secret presence; readiness must not manufacture a configured secret or bypass catalog membership. Explicit optional credentials still apply to discovery and execution. Without a key, these endpoints receive no Authorization header and never inherit the host process OpenAI API key. An endpoint that requires authentication still needs its real credential; rejection by that endpoint remains an execution error.\n\nBoth provider editors block saving missing required credentials and identify the missing key. The provider-bundle API validates the resulting credential state before changing configuration or secrets, including retained credentials, replacements, explicit deletion, and the last update when a key appears more than once. Blank editor inputs preserve stored keys. Required keys cannot be removed while saving an enabled provider; an optional endpoint key can be removed. A missing Brave key blocks saving a provider with Brave search enabled, but does not disable ordinary chat for a previously saved profile. Invalid structural fields also reject the bundle before writes. These checks validate configuration completeness, not remote service reachability or credential validity.\n\nA valid connection may be saved without selected models or a current default. This is a configured connection awaiting explicit model selection; saving does not fabricate a default or contact a supplier. Unknown discovered models require explicit capabilities before they become runnable.\n\n## Field requirements\n\n| Field | Required value or omission behavior |\n| --- | --- |\n| Provider API key | Optional for Ollama and custom OpenAI-compatible endpoints; all other local-profile provider types require a new or stored key. Desktop and Redeven AI model sources retain their separate session authority. |\n| Base URL | OpenAI, Anthropic, and Gemini may use their adapter default. Other provider types require an explicit HTTP(S) URL. |\n| Provider display name | Optional; the UI derives a name from the provider type or identity. |\n| Models | Explicit lists require named models; catalog providers save explicit `selected_models`, including an empty selection after deselecting all models. Unresolved legacy exclusion profiles require selection review; unavailable selected identities retain their metadata without requiring invented capacity. |\n| Context and output limits | Published catalog or adapter defaults may supply omitted limits. Explicit compatible, OpenRouter, xAI, Groq, and Ollama model entries require context capacity. Custom catalog models also require it. Reviewed models retain their established optional output limits; unknown discovered models require explicit context, output, and tools capability. |\n| Brave API key | Required only when Brave search is enabled; existing stored credentials satisfy the requirement. |",
+          "char_count": 3177
         },
         {
           "id": "boundaries",
@@ -23434,22 +23419,22 @@
         "title": "Desktop session and model source",
         "type": "Desktop Contract"
       },
-      "body_length": 12686,
+      "body_length": 12810,
       "summary": "Desktop session context publishes an explicit target route and owns the current Environment session identity. Runtime Stop, Restart, and Update invalidate attached sessions at accepted lifecycle boundaries. Desktop owns one model-source process handle per Environment session without delaying Env App presentation; the process owns connection recovery while provider credentials remain local. Flower history remains available from persisted state when that live model source is unavailable.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Mechanism\n\nDesktop main owns the complete session-context route contract. Every `DesktopSessionContextSnapshot` carries a required `target_route`: Local Environment targets publish their declared `local_host` or `remote_desktop` route, while SSH, Gateway, and External Local UI targets always publish `remote_desktop`. Preload and Env App accept only `local_host` or `remote_desktop` and reject an incomplete or invalid snapshot instead of inferring route from target kind, URL, SSH metadata, or browser placement. Env App therefore exposes the Desktop Flower model source only from the explicit `remote_desktop` route. The Desktop shell also owns the internal `flower_settings` navigation action, which opens or focuses Welcome Flower and advances an explicit settings-focus revision so the local Flower provider editor is focused without duplicating settings UI in Env App.\n\nDesktop model-source RPC v1 publishes opaque `desktop:model_\u003chash\u003e` identifiers plus an optional sanitized capability descriptor. Desktop resolves the real provider profile locally, then replaces provider and model identity in the descriptor with the opaque Desktop identity while retaining operational limits, modality support, tool-schema behavior, and reasoning controls. The runtime uses that descriptor consistently for UI model listing and execution. A runtime receiving an older v1 descriptor derives a compatibility capability from the existing model fields rather than guessing from the opaque hash. Provider ids, base URLs, API keys, and secret locations remain local to Desktop.\n\nThe Runtime status projection also publishes `configured`, the authoritative fact that Desktop has a Flower provider profile. A bound, connected source with `configured:false` is an intentional unconfigured state rather than a bridge failure; an empty catalog or missing provider keys are separate availability states. Connection, protocol, catalog, and runtime failures retain diagnostics and are the only states that use connection recovery. Remote Runtime and Desktop provider profiles remain independent and are never copied or used as an implicit fallback.\n\nDesktop stores the model-source process handle immediately after spawn and opens the Env App without awaiting its startup report. There is no fixed eight-second kill boundary. One loop inside the model-source process owns both initial connection and later reconnection, uses capped backoff for transient network, timeout, rate-limit, and server failures, and stops immediately for authentication, configuration, or protocol failures. Desktop does not add a second retry owner. Session close cancels the connector, closes an in-progress WebSocket dial or read, and stops the exact process. On the Runtime side, cancellation of an AI service generation closes that generation’s RPC socket even during an idle read. The canceled handler releases its service lease before shutdown waits for the generation to drain; an open Desktop connection cannot hold Runtime restart indefinitely. A normal WebSocket close is reconnectable and never replaces a previously observed actionable failure with close code 1000.\n\nThread inventory and detail reads project persisted model id, reasoning selection, permissions, and working directory without consulting the live Desktop model catalog. Model capability remains live catalog state. Creating a thread, changing its model or reasoning selection, and accepting a new send still validate the selected Desktop model against the current source and fail closed while it is disconnected. The send preflight runs after idempotency lookup, so retrying an already accepted request returns its canonical result without admitting new work. Draft editing and persisted history remain usable during connection recovery; Redeven adds no cached model directory, read-only mode, queued-send fallback, or second retry loop.\n\nThe same RPC carries final model results under one complete ToolCall contract: every final call has a non-empty id and canonical name plus a present JSON argument object. An empty argument object is encoded as `args:{}` rather than omitted, while missing or `null` arguments fail at the shared model-gateway result validator before any call enters Floret. Streaming start and delta events remain partial observations and do not weaken the final-result contract. Desktop validates before writing the result frame and the runtime validates the decoded result again as a transport boundary; neither side repairs a malformed call or substitutes empty arguments.\n\nDesktop Welcome has one Local Environment Flower readiness path for settings, thread inventory, and stream requests. It attaches immediately when Runtime Service is openable. A cold Runtime starts through the existing Desktop lifecycle coordinator, and concurrent first requests coalesce on one in-memory target-resolution promise and the same Start. Target resolution has a bounded Flower request deadline; a timed-out caller receives a retryable readiness error while the lifecycle owner continues and the in-flight promise is released when it settles. An active Start, Restart, or Update is joined, marked with the explicit `flower_warmup` presentation context, and awaited before Desktop revalidates Runtime Service, invalidates the stale local access session, and attaches again. An active Stop or Reinstall fails immediately and never triggers a replacement Start. Open or Refresh ownership permits only an already-openable attach; otherwise the existing lifecycle conflict is returned. Lifecycle failure remains structured and terminal for that request: Flower adds no retry, polling, cache, or second startup path. The Flower surface renders coordinated Start, Restart, and Update progress as warmup instead of treating the surface as stalled.\n\nModel directory reads are separate from that lifecycle. Desktop and Env Shell\nrequest a baseline directory alongside settings and begin thread history and\ncanvas-bound Flower loading independently. The baseline never waits for the\nDesktop model-source catalog; a later complete read refreshes the same scoped\nresource and settles failures without replacing the selected opaque identity.\nFull Flower and Tessiven share the resource only for the same Runtime route,\nsession, instance, and settings revision. Runtime restart, connection changes,\nor settings writes fence old responses and release subscriptions, while drafts,\nthread references, and persisted history remain owned by their canvas surface.\n\nRuntime event streams belong to the renderer document that opened them. Full\nnavigation, reload, renderer crash, and destruction cancel its active requests\nand release their bridge leases and stream slots. In-page navigation preserves\nthe connection. Settling a request removes its ownership listeners, and a late\nresponse cannot revive a canceled document's stream.\n\nDesktop Welcome uses the same Flower adapter contract as Env App for thread operations and split settings writes. Sending a turn posts through the runtime Flower IPC proxy, stop posts to the thread cancel route, and `/compact` posts to `/_redeven_proxy/api/ai/threads/{thread}/context/compact` before reloading the canonical live bootstrap. Default permission writes use the exact `PUT /_redeven_proxy/api/ai/default_permission` route, provider profile writes use `PUT /_redeven_proxy/api/ai/provider_bundle`, and composer model selection writes the future new-thread default through `PUT /_redeven_proxy/api/ai/current_model`. The Desktop bridge also exposes the Flower working-directory picker through exact read-only runtime FS paths: `GET /_redeven_proxy/api/fs/path_context` and `POST /_redeven_proxy/api/fs/list`. The bridge allowlist is a single route table that admits only declared paths, methods, and query shapes, so the permission route is PUT-only and path selection data travels in the POST body instead of opening arbitrary query-path proxying. The Desktop bridge treats compaction as a thread action, not as a transcript message or a local UI-only marker, so Desktop and Env App receive the same live timeline decorations and read-state patches from the runtime.",
-          "char_count": 8139
+          "body": "## Mechanism\n\nDesktop main owns the complete session-context route contract. Every `DesktopSessionContextSnapshot` carries a required `target_route`: Local Environment targets publish their declared `local_host` or `remote_desktop` route, while SSH, Gateway, and External Local UI targets always publish `remote_desktop`. Preload and Env App accept only `local_host` or `remote_desktop` and reject an incomplete or invalid snapshot instead of inferring route from target kind, URL, SSH metadata, or browser placement. Env App therefore exposes the Desktop Flower model source only from the explicit `remote_desktop` route. The Desktop shell also owns the internal `flower_settings` navigation action, which opens or focuses Welcome Flower and advances an explicit settings-focus revision so the local Flower provider editor is focused without duplicating settings UI in Env App.\n\nDesktop model-source RPC v1 publishes opaque `desktop:model_\u003chash\u003e` identifiers plus an optional sanitized capability descriptor. Desktop reads the local provider profile and Runtime-owned atomic model snapshots without supplier discovery, then replaces provider and model identity in the descriptor with the opaque Desktop identity while retaining operational limits, modality support, tool-schema behavior, and reasoning controls. The runtime uses that descriptor consistently for UI model listing and execution. A runtime receiving an older v1 descriptor derives a compatibility capability from the existing model fields rather than guessing from the opaque hash. Provider ids, base URLs, API keys, and secret locations remain local to Desktop.\n\nThe Runtime status projection also publishes `configured`, the authoritative fact that Desktop has a Flower provider profile. A bound, connected source with `configured:false` is an intentional unconfigured state rather than a bridge failure; an empty catalog or missing provider keys are separate availability states. Connection, protocol, catalog, and runtime failures retain diagnostics and are the only states that use connection recovery. Remote Runtime and Desktop provider profiles remain independent and are never copied or used as an implicit fallback.\n\nDesktop stores the model-source process handle immediately after spawn and opens the Env App without awaiting its startup report. There is no fixed eight-second kill boundary. One loop inside the model-source process owns both initial connection and later reconnection, uses capped backoff for transient network, timeout, rate-limit, and server failures, and stops immediately for authentication, configuration, or protocol failures. Desktop does not add a second retry owner. Session close cancels the connector, closes an in-progress WebSocket dial or read, and stops the exact process. On the Runtime side, cancellation of an AI service generation closes that generation’s RPC socket even during an idle read. The canceled handler releases its service lease before shutdown waits for the generation to drain; an open Desktop connection cannot hold Runtime restart indefinitely. A normal WebSocket close is reconnectable and never replaces a previously observed actionable failure with close code 1000.\n\nThread inventory and detail reads project persisted model id, reasoning selection, permissions, and working directory without consulting the live Desktop model catalog. Model capability remains live catalog state. Creating a thread, changing its model or reasoning selection, and accepting a new send still validate the selected Desktop model against the current source and fail closed while it is disconnected. The send preflight runs after idempotency lookup, so retrying an already accepted request returns its canonical result without admitting new work. Draft editing and persisted history remain usable during connection recovery; Redeven adds no cached model directory, read-only mode, queued-send fallback, or second retry loop.\n\nThe same RPC carries final model results under one complete ToolCall contract: every final call has a non-empty id and canonical name plus a present JSON argument object. An empty argument object is encoded as `args:{}` rather than omitted, while missing or `null` arguments fail at the shared model-gateway result validator before any call enters Floret. Streaming start and delta events remain partial observations and do not weaken the final-result contract. Desktop validates before writing the result frame and the runtime validates the decoded result again as a transport boundary; neither side repairs a malformed call or substitutes empty arguments.\n\nDesktop Welcome has one Local Environment Flower readiness path for settings, thread inventory, and stream requests. It attaches immediately when Runtime Service is openable. A cold Runtime starts through the existing Desktop lifecycle coordinator, and concurrent first requests coalesce on one in-memory target-resolution promise and the same Start. Target resolution has a bounded Flower request deadline; a timed-out caller receives a retryable readiness error while the lifecycle owner continues and the in-flight promise is released when it settles. An active Start, Restart, or Update is joined, marked with the explicit `flower_warmup` presentation context, and awaited before Desktop revalidates Runtime Service, invalidates the stale local access session, and attaches again. An active Stop or Reinstall fails immediately and never triggers a replacement Start. Open or Refresh ownership permits only an already-openable attach; otherwise the existing lifecycle conflict is returned. Lifecycle failure remains structured and terminal for that request: Flower adds no retry, polling, cache, or second startup path. The Flower surface renders coordinated Start, Restart, and Update progress as warmup instead of treating the surface as stalled.\n\nModel directory reads are separate from that lifecycle. Desktop and Env Shell\nread the current directory alongside settings and begin thread history and\ncanvas-bound Flower loading independently. Both model-directory read modes consume the current snapshot immediately. The Runtime owns supplier synchronization; the Desktop source reads the atomic snapshot and publishes metadata changes independently of connection status.\nFull Flower and Tessiven share the resource only for the same Runtime route,\nsession, instance, and settings revision. Runtime restart, connection changes,\nor settings writes fence old responses and release subscriptions, while drafts,\nthread references, and persisted history remain owned by their canvas surface.\n\nRuntime event streams belong to the renderer document that opened them. Full\nnavigation, reload, renderer crash, and destruction cancel its active requests\nand release their bridge leases and stream slots. In-page navigation preserves\nthe connection. Settling a request removes its ownership listeners, and a late\nresponse cannot revive a canceled document's stream.\n\nDesktop Welcome uses the same Flower adapter contract as Env App for thread operations and split settings writes. Sending a turn posts through the runtime Flower IPC proxy, stop posts to the thread cancel route, and `/compact` posts to `/_redeven_proxy/api/ai/threads/{thread}/context/compact` before reloading the canonical live bootstrap. Default permission writes use the exact `PUT /_redeven_proxy/api/ai/default_permission` route, provider profile writes use `PUT /_redeven_proxy/api/ai/provider_bundle`, and composer model selection writes the future new-thread default through `PUT /_redeven_proxy/api/ai/current_model`. The Desktop bridge also exposes the Flower working-directory picker through exact read-only runtime FS paths: `GET /_redeven_proxy/api/fs/path_context` and `POST /_redeven_proxy/api/fs/list`. The bridge allowlist is a single route table that admits only declared paths, methods, and query shapes, so the permission route is PUT-only and path selection data travels in the POST body instead of opening arbitrary query-path proxying. The Desktop bridge treats compaction as a thread action, not as a transcript message or a local UI-only marker, so Desktop and Env App receive the same live timeline decorations and read-state patches from the runtime.",
+          "char_count": 8235
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Welcome's full Flower page and embedded Tessiven conversation use the same\nRuntime compatibility and AI readiness boundary. The embedded conversation\ndoes not issue AI requests until the published state is `ready` or `degraded`.\nPreparation and update recovery occupy a compact bottom surface; the canvas\nremains browsable. A transition back to preparation disposes stale Flower\ninitialization, while the parent-owned ComposerDraftStore preserves drafts for\nthe next ready instance. Neither placement retries startup independently.\n\nThe model-list catalog deadline is owned by\n[Model directory and selection](../ai/model-directory-and-selection.md).\n\nRuntime-control is also not a plugin grant, plugin management, or plugin capability plane. Its token and routes are reserved for Desktop-to-Runtime coordination such as provider-link, code-workspace-engine import, and Desktop model source binding. Plugin workers and sandbox surfaces must not receive runtime-control endpoint data, use runtime-control bearer tokens, or treat runtime-control routes as plugin capabilities; plugin access to Redeven resources must go through released ReDevPlugin brokers and Redeven-registered adapters.",
-          "char_count": 1186
+          "body": "Welcome's full Flower page and embedded Tessiven conversation use the same\nRuntime compatibility and AI readiness boundary. The embedded conversation\ndoes not issue AI requests until the published state is `ready` or `degraded`.\nPreparation and update recovery occupy a compact bottom surface; the canvas\nremains browsable. A transition back to preparation disposes stale Flower\ninitialization, while the parent-owned ComposerDraftStore preserves drafts for\nthe next ready instance. Neither placement retries startup independently.\n\nThe local metadata read and silent synchronization contract is owned by\n[Model directory and selection](../ai/model-directory-and-selection.md).\n\nRuntime-control is also not a plugin grant, plugin management, or plugin capability plane. Its token and routes are reserved for Desktop-to-Runtime coordination such as provider-link, code-workspace-engine import, and Desktop model source binding. Plugin workers and sandbox surfaces must not receive runtime-control endpoint data, use runtime-control bearer tokens, or treat runtime-control routes as plugin capabilities; plugin access to Redeven resources must go through released ReDevPlugin brokers and Redeven-registered adapters.",
+          "char_count": 1214
         }
       ],
       "evidence": [
@@ -38265,5 +38250,5 @@
       ]
     }
   ],
-  "source_sha256": "2adaf961de9d831e1c641ddd230b6af1e908e320e9828f41ce7bc701dcacf278"
+  "source_sha256": "2e33c9414480332e3f418dfe624dffdf16afa31940e1b10c80c265525195850b"
 }

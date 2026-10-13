@@ -55,6 +55,7 @@ func TestPlatformGatewayNativeStreamingAndLease(t *testing.T) {
 			calls, renewals := 0, 0
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if r.URL.Path == "/api/ai/v1/catalog" {
+					t.Error("dispatch fetched catalog")
 					mode := "responses"
 					if protocol != "" {
 						mode = "chat"
@@ -112,8 +113,12 @@ func TestPlatformGatewayNativeStreamingAndLease(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			gateway.(*platformGatewayProvider).protocol = "openai-responses"
 			req := platformTestRequest()
 			req.Protocol = protocol
+			if protocol != "" {
+				gateway.(*platformGatewayProvider).protocol = protocol
+			}
 			var events []StreamEvent
 			result, err := gateway.StreamTurn(context.Background(), req, func(ev StreamEvent) { events = append(events, ev) })
 			if err != nil {
@@ -152,6 +157,7 @@ func TestPlatformGatewayNoAutomaticRetryOrSecretError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	gateway.(*platformGatewayProvider).protocol = "openai-responses"
 	_, err = gateway.StreamTurn(t.Context(), platformTestRequest(), nil)
 	if err == nil || calls != 1 || strings.Contains(err.Error(), "secret-") {
 		t.Fatalf("invalid retry/error boundary: calls=%d err=%v", calls, err)
@@ -166,6 +172,7 @@ func TestPlatformGatewayRequiresStableAdmittedIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	gateway.(*platformGatewayProvider).protocol = "openai-responses"
 	req := platformTestRequest()
 	req.AttemptID = ""
 	if _, err = gateway.StreamTurn(t.Context(), req, nil); err == nil || calls != 0 {

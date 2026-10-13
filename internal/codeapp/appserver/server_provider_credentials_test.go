@@ -49,7 +49,7 @@ func TestServer_AIProviderBundleCredentialRequirements(t *testing.T) {
 		{name: "Gemini accepts default URL and optional limits", kind: "google", savedKey: "stored-key", invalidField: "optional limits"},
 		{name: "missing required URL", kind: "ollama", invalidField: "base_url", wantError: "base_url"},
 		{name: "invalid URL", kind: "ollama", invalidField: "url scheme", wantError: "base_url"},
-		{name: "missing models", kind: "ollama", invalidField: "models", wantError: "missing models"},
+		{name: "configured without model selection", kind: "ollama", invalidField: "models"},
 		{name: "missing model name", kind: "ollama", invalidField: "model_name", wantError: "model_name"},
 		{name: "missing serving context", kind: "ollama", invalidField: "context_window", wantError: "context_window"},
 		{name: "missing custom context", kind: "openai_compatible", savedKey: "stored-key", invalidField: "context_window", wantError: "context_window"},
@@ -121,8 +121,12 @@ func TestServer_AIProviderBundleCredentialRequirements(t *testing.T) {
 				}
 				return out
 			}
+			currentModel := "provider/agent"
+			if tc.invalidField == "models" {
+				currentModel = ""
+			}
 			body, err := json.Marshal(map[string]any{
-				"model_profile":            config.AIModelProfile{CurrentModelID: "provider/agent", Providers: []config.AIProvider{provider}},
+				"model_profile":            config.AIModelProfile{CurrentModelID: currentModel, Providers: []config.AIProvider{provider}},
 				"provider_api_key_patches": patches(tc.keyPatch), "web_search_provider_key_patches": patches(tc.webPatch),
 			})
 			if err != nil {
@@ -148,7 +152,7 @@ func TestServer_AIProviderBundleCredentialRequirements(t *testing.T) {
 					t.Fatalf("saved web credential does not match the bundle: %v", err)
 				}
 				saved, err := config.Load(cfgPath)
-				if err != nil || saved.AI.CurrentModelID != "provider/agent" || saved.AI.Providers[0].Type != tc.kind || saved.AI.Providers[0].IsEnabled() == tc.disabled {
+				if err != nil || saved.AI.CurrentModelID != currentModel || saved.AI.Providers[0].Type != tc.kind || saved.AI.Providers[0].IsEnabled() == tc.disabled {
 					t.Fatalf("saved profile does not match the bundle: %v", err)
 				}
 				if tc.disabled {

@@ -907,6 +907,9 @@ func (r *run) resolveModelGatewayForModel(modelID string, providerID string, pro
 		if err != nil {
 			return resolvedRunModelGateway{}, err
 		}
+		if _, model, ok := r.cfg.ProviderModelByID(modelID); ok && model.PlatformProtocol != "" {
+			adapter.(*platformGatewayProvider).protocol = model.PlatformProtocol
+		}
 		provider := *providerCfg
 		provider.BaseURL = gatewayURL
 		return resolvedRunModelGateway{provider: provider, providerType: platformGatewayProviderType, modelName: modelName, adapterOverride: adapter}, nil

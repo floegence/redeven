@@ -401,10 +401,7 @@ func (s *Service) threadReasoningDefaults(ctx context.Context, meta *session.Met
 	if catalogErr != nil {
 		return config.AIReasoningCapability{}, config.AIReasoningSelection{}, false, catalogErr
 	}
-	cfg, catalogErr = resolveModelCatalogs(ctx, cfg, s.resolveProviderKey, modelID)
-	if catalogErr != nil {
-		return config.AIReasoningCapability{}, config.AIReasoningSelection{}, false, catalogErr
-	}
+	cfg = s.modelCatalogs.resolve(cfg)
 	if capability, selection, ok := modelReasoningDefaultsFromConfig(cfg, modelID); ok {
 		return capability, selection, true, nil
 	}
@@ -637,10 +634,7 @@ func (s *Service) buildThreadCreateSettings(ctx context.Context, meta *session.M
 			modelID = candidate
 		}
 	}
-	cfg, err = resolveModelCatalogs(ctx, cfg, s.resolveProviderKey, modelID)
-	if err != nil {
-		return threadstore.ThreadSettings{}, err
-	}
+	cfg = s.modelCatalogs.resolve(cfg)
 
 	if modelID != "" {
 		if _, _, ok := strings.Cut(modelID, "/"); !ok && !isDesktopModelSourceModelID(modelID) {
@@ -1060,10 +1054,7 @@ func (s *Service) SetThreadModel(ctx context.Context, meta *session.Meta, thread
 	if catalogErr != nil {
 		return catalogErr
 	}
-	cfg, catalogErr = resolveModelCatalogs(ctx, cfg, s.resolveProviderKey, modelID)
-	if catalogErr != nil {
-		return catalogErr
-	}
+	cfg = s.modelCatalogs.resolve(cfg)
 	if !cfg.HasModelProfile() && !isDesktopModelSourceModelID(modelID) {
 		return ErrNotConfigured
 	}

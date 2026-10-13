@@ -87,6 +87,9 @@ func TestPlatformAutomaticTitleAndManualCompaction(t *testing.T) {
 	}
 	defer svc.Close()
 	meta := &session.Meta{EndpointID: "env", ChannelID: "channel", UserPublicID: "user", NamespacePublicID: "namespace", CanRead: true, CanWrite: true, CanExecute: true, PlatformAIGrant: "lease", PlatformAIGatewayURL: edge.URL, PlatformAIEntitlementVersion: 1}
+	if _, err := svc.refreshPlatformCatalog(t.Context(), meta); err != nil {
+		t.Fatal(err)
+	}
 	thread, err := svc.CreateThread(t.Context(), meta, "", "platform/test-model", "", "")
 	if err != nil {
 		t.Fatal(err)

@@ -187,6 +187,7 @@ func TestOllamaReasoningOnSurvivesRestartAndProviderDispatch(t *testing.T) {
 	}
 	svc := open()
 	defer func() { _ = svc.Close() }()
+	syncConfiguredCatalogForTest(t, svc, svc.cfg.Providers[0])
 	created, err := svc.CreateThread(t.Context(), meta, "", "local/renamed-model", "", "")
 	if err != nil {
 		t.Fatal(err)

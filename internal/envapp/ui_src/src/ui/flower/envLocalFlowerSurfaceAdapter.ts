@@ -357,7 +357,7 @@ function normalizePermissionType(raw: unknown): FlowerPermissionType {
 
 function mapProviderModel(model: NonNullable<NonNullable<AIConfig['providers']>[number]['models']>[number]): FlowerProviderModel {
   return {
-    model_name: trim(model.model_name),
+    model_name: trim(model.model_name), supports_tools: model.supports_tools,
     display_name: model.display_name, status: model.status,
     model_digest: model.model_digest, quantization: model.quantization, unavailable: model.unavailable,
     ...(trim(model.wire_model_name) ? { wire_model_name: trim(model.wire_model_name) } : {}),
@@ -386,7 +386,7 @@ function mapProvider(provider: NonNullable<AIConfig['providers']>[number]): Flow
 
 export function mapEnvFlowerSettings(settings: AgentSettingsResponse): FlowerSettingsSnapshot {
   const ai = settings.ai;
-  const modelProfile = ai && (ai.providers ?? []).length > 0 && trim(ai.current_model_id)
+  const modelProfile = ai && (ai.providers ?? []).length > 0
     ? {
         schema_version: 1 as const,
         current_model_id: trim(ai.current_model_id),
@@ -529,7 +529,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
   const loadSettings = async () => {
     const snapshot = await resource.loadSettings();
     if (options.isAvailable?.() === false) throw new DOMException('Flower settings load cancelled.', 'AbortError');
-    return withFlowerModelDirectory(snapshot, directoryForSurface(snapshot.model_directory!));
+    return snapshot.model_directory ? withFlowerModelDirectory(snapshot, directoryForSurface(snapshot.model_directory)) : snapshot;
   };
 
   return createRuntimeFlowerSurfaceAdapter({
@@ -609,7 +609,8 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
     mapperOptions: envLiveMapperOptions(options),
     extensions: flowerExtensionsAdapter((method, path, body) => fetchLocalApiJSON(path, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }), { canInteract: () => options.isAvailable?.() ?? true, canAdmin: () => options.canManageExtensions?.() ?? false }),
     loadSettings,
-    loadModelDirectory: async refresh => directoryForSurface(await resource.loadDirectory(refresh, options.retryModelSource)),
+    loadModelDirectory: async refresh => directoryForSurface(await resource.loadDirectory(refresh)),
+    recoverModelSource: options.retryModelSource,
     subscribeModelDirectory: listener => resource.subscribe(directory => listener(directoryForSurface(directory))),
     chatGPTAuth: async (action, input) => {
       const result = await fetchLocalApiJSON<Awaited<ReturnType<NonNullable<FlowerSurfaceAdapter['chatGPTAuth']>>>>(`/_redeven_proxy/api/ai/auth/chatgpt/${action}`, { method: 'POST', body: JSON.stringify(input) });

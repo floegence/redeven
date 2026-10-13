@@ -156,10 +156,7 @@ func (service *Service) AdoptOrphanCanonicalRoot(ctx context.Context, req AdoptO
 	if cfg == nil {
 		return 0, errors.New("orphan adoption requires an active model profile")
 	}
-	resolvedConfig, catalogErr := resolveModelCatalogs(ctx, cfg, service.resolveProviderKey, req.ModelID)
-	if catalogErr != nil {
-		return 0, catalogErr
-	}
+	resolvedConfig := service.modelCatalogs.resolve(cfg)
 	if _, _, ok := resolvedConfig.ProviderModelByID(req.ModelID); !ok {
 		return 0, errors.New("orphan adoption model is not configured")
 	}

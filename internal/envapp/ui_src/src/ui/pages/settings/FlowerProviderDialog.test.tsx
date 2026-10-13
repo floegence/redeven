@@ -15,7 +15,7 @@ vi.mock('@floegence/floe-webapp-core/ui', async (original) => ({
     state: () => (options.open() ? 'entered' : 'exited'),
   }),
   Button: (props: any) => (
-    <button type="button" disabled={props.disabled} onClick={props.onClick}>
+    <button type="button" aria-label={props['aria-label']} disabled={props.disabled} onClick={props.onClick}>
       {props.children}
     </button>
   ),
@@ -67,11 +67,12 @@ afterEach(() => { document.body.innerHTML = ''; });
 function mountDialog(mode: 'create' | 'edit' = 'create', discover?: FlowerModelCatalogDiscovery, keyConfigured = true) {
   const host = document.createElement('div'); document.body.append(host);
   const [open, setOpen] = createSignal(true);
-  const [provider, setProvider] = createSignal<FlowerProviderDraft>({ id: 'brand', type: 'openai', models: [] });
+  const [provider, setProvider] = createSignal<FlowerProviderDraft>({ id: 'initial', type: 'openai', models: [] });
+  const [catalog, setCatalog] = createSignal<FlowerProviderDraft['catalog_models']>();
   let confirmed: FlowerProviderDraft | undefined;
-  const dispose = render(() => <FlowerProviderDialog onDiscoverModels={discover} open={open()} mode={mode} provider={provider()} keyConfigured={keyConfigured} webSearchKeyConfigured={false} onOpenChange={setOpen} onConfirm={(draft) => { confirmed = JSON.parse(JSON.stringify(draft)); }}/>, host);
+  const dispose = render(() => <FlowerProviderDialog catalogModels={catalog()} onDiscoverModels={discover} open={open()} mode={mode} provider={provider()} keyConfigured={keyConfigured} webSearchKeyConfigured={false} onOpenChange={setOpen} onConfirm={(draft) => { confirmed = JSON.parse(JSON.stringify(draft)); }}/>, host);
   const button = (text: string) => {
-    const el = [...host.querySelectorAll('button')].find((element) => element.textContent?.trim() === text);
+    const el = [...host.querySelectorAll('button')].find(element => element.textContent?.includes(text) || element.getAttribute('aria-label') === text);
     if (!el) throw new Error(`Missing button: ${text}`);
     return el;
   };
@@ -81,7 +82,7 @@ function mountDialog(mode: 'create' | 'edit' = 'create', discover?: FlowerModelC
     const el = host.querySelector('input[placeholder="Search models"]') as HTMLInputElement;
     el.value = value; el.dispatchEvent(new Event('input', { bubbles: true }));
   };
-  return { host, dispose, button, type, selected, search, setOpen, setProvider, confirmed: () => confirmed! };
+  return { host, dispose, button, type, selected, search, setOpen, setProvider, setCatalog, confirmed: () => confirmed! };
 }
 
 describe('shared Flower provider dialog', () => {
@@ -120,10 +121,12 @@ describe('shared Flower provider dialog', () => {
     try {
       dialog.setProvider({ id: 'brand', type: 'openai', models: recommendedModelsForFlowerProviderType('openai').map(cloneFlowerModel) });
       expect(dialog.host.textContent).not.toContain('OpenAI built-in web search');
+      expect(discover).not.toHaveBeenCalled();
+      dialog.button('Sync model list').click();
       await vi.advanceTimersByTimeAsync(1000);
       expect(dialog.host.querySelectorAll('[data-web-search="available"]')).toHaveLength(models.length);
       expect(discover).toHaveBeenCalledTimes(1);
-      dialog.setProvider({ id: 'brand', type: 'openai', models: [models[0], { ...models[1], web_search: { status: 'unavailable', reason: 'not_integrated' } }] });
+      dialog.setCatalog([models[0], { ...models[1], web_search: { status: 'unavailable', reason: 'not_integrated' } }]);
       await vi.advanceTimersByTimeAsync(1000);
       expect(discover).toHaveBeenCalledTimes(1);
       expect(dialog.host.querySelector('[data-web-search="available"]')?.textContent).toBe('Web search');
@@ -139,6 +142,8 @@ describe('shared Flower provider dialog', () => {
     const dialog = mountDialog('edit', discover);
     try {
       dialog.setProvider({ id: 'brand', type: 'deepseek', models: recommendedModelsForFlowerProviderType('deepseek').map(cloneFlowerModel) });
+      expect(discover).not.toHaveBeenCalled();
+      dialog.button('Sync model list').click();
       await vi.advanceTimersByTimeAsync(1000);
       expect(dialog.host.querySelector('[data-web-search="available"]')).toBeNull();
       expect(dialog.host.querySelectorAll('[data-web-search="unavailable"]')).toHaveLength(models.length);
@@ -178,12 +183,38 @@ describe('shared Flower provider dialog', () => {
       }
       dialog.type('deepseek');
       expect(dialog.host.textContent).toContain('Vision');
-      expect(dialog.button('Save provider').disabled).toBe(true);
+      expect(dialog.button('Save provider').disabled).toBe(false);
       dialog.button('Select all').click();
       dialog.button('Save provider').click();
       expect(dialog.confirmed().models.some((model) => model.input_modalities?.includes('image'))).toBe(true);
       dialog.type('openrouter');
       expect(dialog.selected()).toBe(0);
+    } finally { dialog.dispose(); }
+  });
+
+  it('requires explicit capabilities for a new unknown model before saving', () => {
+    const dialog = mountDialog();
+    try {
+      dialog.type('openai_compatible');
+      const name = dialog.host.querySelector<HTMLInputElement>('input[placeholder="Custom model name"]')!;
+      name.value = 'unknown-agent'; name.dispatchEvent(new Event('input', { bubbles: true }));
+      dialog.button('Add model').click();
+      expect(dialog.host.textContent).toContain('Needs capability configuration');
+      const context = dialog.host.querySelector<HTMLInputElement>('input[placeholder="128000"]')!;
+      const output = dialog.host.querySelector<HTMLInputElement>('input[placeholder="4096"]')!;
+      expect(context.value).toBe(''); expect(output.value).toBe('');
+      expect(dialog.button('Save provider').disabled).toBe(true);
+      context.value = '32768'; context.dispatchEvent(new Event('input', { bubbles: true }));
+      output.value = '4096'; output.dispatchEvent(new Event('input', { bubbles: true }));
+      expect(dialog.button('Save provider').disabled).toBe(true);
+      const toolsLabel = [...dialog.host.querySelectorAll('label')].find(label => label.textContent?.includes('Tool calls'))!;
+      const tools = toolsLabel.querySelector<HTMLInputElement>('input')!;
+      tools.click();
+      expect(dialog.button('Save provider').disabled).toBe(false);
+      tools.click();
+      tools.click();
+      dialog.button('Save provider').click();
+      expect(dialog.confirmed().models).toEqual([expect.objectContaining({ model_name: 'unknown-agent', context_window: 32768, max_output_tokens: 4096, supports_tools: true })]);
     } finally { dialog.dispose(); }
   });
 
@@ -248,4 +279,32 @@ describe('ChatGPT local authentication boundary', () => {
     await vi.waitFor(() => expect(auth).toHaveBeenCalledWith('cancel', expect.objectContaining({ attempt_id: 'late-attempt' })));
     expect(dialog.host.textContent).not.toContain('Waiting for authorization'); dialog.dispose();
   });
+});
+
+it('saves a configured connection without selecting or discovering a model', () => {
+ const discover=vi.fn(async()=>({models:[]}));const dialog=mountDialog('edit',discover);
+ try {dialog.setProvider({id:'empty',type:'openai',models:[]});dialog.button('Save provider').click();expect(dialog.confirmed().models).toEqual([]);expect(discover).not.toHaveBeenCalled();} finally{dialog.dispose();}
+});
+
+it('keeps prior models and local capability edits after a manual synchronization failure', async () => {
+ const discover=vi.fn(async()=>{throw new Error('Model list unavailable');});const dialog=mountDialog('edit',discover);
+ try {
+  dialog.setProvider({id:'local',type:'openai_compatible',base_url:'https://example.com/v1',models:[{model_name:'agent',context_window:8192,max_output_tokens:1024}]});
+  dialog.button('Sync model list').click();await Promise.resolve();await Promise.resolve();
+  expect(discover).toHaveBeenCalledTimes(1);expect(dialog.host.textContent).toContain('agent');
+  dialog.button('Save provider').click();expect(dialog.confirmed().models[0].context_window).toBe(8192);
+ }finally{dialog.dispose();}
+});
+
+it('merges background metadata without replacing an unsaved endpoint or selection', () => {
+ const dialog=mountDialog('edit');
+ try {
+  dialog.setProvider({id:'local',type:'openai_compatible',base_url:'https://original.example/v1',models:[{model_name:'agent',context_window:8192,max_output_tokens:1024}]});
+  const endpoint=dialog.host.querySelector('input[placeholder="https://your-provider.example.com/v1"]') as HTMLInputElement | null;
+  const input=endpoint ?? [...dialog.host.querySelectorAll('input')].find(input=>input.value==='https://original.example/v1')!;
+  input.value='https://draft.example/v1';input.dispatchEvent(new Event('input',{bubbles:true}));
+  dialog.setCatalog([{model_name:'new-model',context_window:32768}]);
+  expect(input.value).toBe('https://draft.example/v1');dialog.button('Save provider').click();
+  expect(dialog.confirmed().base_url).toBe('https://draft.example/v1');expect(dialog.confirmed().models.map(model=>model.model_name)).toEqual(['agent']);
+ }finally{dialog.dispose();}
 });

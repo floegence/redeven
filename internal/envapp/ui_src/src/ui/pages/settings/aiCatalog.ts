@@ -230,7 +230,8 @@ export function cloneAIProviderRow(row: AIProviderRow): AIProviderRow {
       max_output_tokens: normalizePositiveInteger(m?.max_output_tokens),
       effective_context_window_percent: normalizeEffectiveContextPercent(m?.effective_context_window_percent),
       input_modalities: normalizeInputModalities(m?.input_modalities),
-      reasoning_capability: normalizeFlowerReasoningCapability(m?.reasoning_capability),
+      supports_tools: m?.supports_tools,
+    reasoning_capability: normalizeFlowerReasoningCapability(m?.reasoning_capability),
       default_reasoning_selection: serializeFlowerReasoningSelection(m?.default_reasoning_selection),
     })),
   };
@@ -248,6 +249,7 @@ export function normalizeAIProviderRowDraft(row: AIProviderRow): AIProviderRow {
     max_output_tokens: normalizePositiveInteger(m?.max_output_tokens),
     effective_context_window_percent: normalizeEffectiveContextPercent(m?.effective_context_window_percent),
     input_modalities: normalizeInputModalities(m?.input_modalities),
+    supports_tools: m?.supports_tools,
     reasoning_capability: normalizeFlowerReasoningCapability(m?.reasoning_capability),
     default_reasoning_selection: serializeFlowerReasoningSelection(m?.default_reasoning_selection),
   }));

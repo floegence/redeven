@@ -319,6 +319,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		Tessiven:              tessivenSvc, TessivenResources: tessivenResources,
 		Logger:            logger,
 		StateDir:          stateAbs,
+		ModelCatalogDir:   filepath.Join(filepath.Dir(opts.ConfigPath), "runtime", "model-catalog"),
 		AgentHomeDir:      agentHomeDir,
 		FilesystemScope:   scope,
 		Shell:             strings.TrimSpace(opts.Shell),

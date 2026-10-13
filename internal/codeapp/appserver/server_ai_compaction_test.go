@@ -21,7 +21,9 @@ func TestServerAIContextCompactionAdmissionBoundary(t *testing.T) {
 	entered, release := make(chan struct{}), make(chan struct{})
 	var once sync.Once
 	var calls atomic.Int32
+	var blockInvocation atomic.Bool
 	svc, err := ai.NewService(ai.Options{Logger: logger, StateDir: state, AgentHomeDir: state, Shell: "/bin/sh", Config: appserverTestAIConfig(), ResolveProviderAPIKey: func(string) (string, bool, error) {
+		if !blockInvocation.Load() { return "sk-test", true, nil }
 		calls.Add(1)
 		once.Do(func() { close(entered) })
 		<-release
@@ -37,6 +39,7 @@ func TestServerAIContextCompactionAdmissionBoundary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	blockInvocation.Store(true)
 	const channel = "ch_compaction"
 	server, err := New(Options{Logger: logger, Backend: &stubBackend{}, DistFS: fstest.MapFS{"env/index.html": {Data: []byte("<html>env</html>")}, "inject.js": {Data: []byte(" ")}}, ListenAddr: "127.0.0.1:0", ConfigPath: writeTestConfigWithAI(t), ResolveSessionMeta: resolveMetaForTest(channel, meta), AIServiceProvider: newStaticAIServiceProvider(svc)})
 	if err != nil {

@@ -595,27 +595,23 @@ export function registerEnvAIPageSendTests() {
       document.body.innerHTML = '';
     });
 
-    it('rechecks pending models when the connection authorization generation changes', async () => {
+    it('rereads the local directory when the connection authorization generation changes', async () => {
       const original = mocks.fetchLocalApiJSONMock.getMockImplementation()!;
       const oldRead = deferred<Awaited<ReturnType<typeof original>>>();
-      let fullReads = 0;
+      let directoryReads = 0;
       mocks.fetchLocalApiJSONMock.mockImplementation(async (url, init) => {
         const response = await original(url, init);
         if (!url.includes('/api/ai/models')) return response;
-        if (!url.includes('mode=baseline') && ++fullReads === 1) return oldRead.promise;
-        if (url.includes('mode=baseline')) {
-          const value = response as Extract<Awaited<ReturnType<typeof original>>, { directory: unknown }>;
-          return { ...value, directory: { models: value.directory.models.map(model => ({ ...model, state: 'pending' })), sources: value.directory.sources.map(source => ({ ...source, state: 'pending' })) } };
-        }
+        if (++directoryReads === 1) return oldRead.promise;
         return response;
       });
       const { host, dispose } = await renderPage(false);
       try {
-        for (let attempt = 0; attempt < 30 && fullReads === 0; attempt++) await flush();
-        expect(fullReads).toBe(1);
+        for (let attempt = 0; attempt < 30 && directoryReads === 0; attempt++) await flush();
+        expect(directoryReads).toBe(1);
         mocks.state.setResourceGeneration(1);
-        for (let attempt = 0; attempt < 30 && fullReads < 2; attempt++) await flush();
-        expect(fullReads).toBe(2);
+        for (let attempt = 0; attempt < 30 && directoryReads < 2; attempt++) await flush();
+        expect(directoryReads).toBeGreaterThanOrEqual(2);
         oldRead.resolve(await original('/_redeven_proxy/api/ai/models'));
         await flush();
         expect(host.querySelector('.flower-model-reasoning-model-label')?.textContent).toContain('gpt-5.2');

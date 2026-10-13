@@ -1277,3 +1277,21 @@ func TestComputerViewerRejectsAnotherObserverOwner(t *testing.T) {
 		t.Fatal("another user changed observer")
 	}
 }
+
+func TestModelDirectoryNotificationContainsNoScopedMetadata(t *testing.T) {
+	svc := newFlowerLiveMemoryTestService()
+	for i := uint64(1); i <= 2; i++ {
+		svc.flowerLiveSubscribers[i] = &flowerLiveSubscriber{id: i, endpointID: fmt.Sprint(i), queue: make(chan *flowerLiveEncodedBatch, flowerLiveSubscriberBatchLimit)}
+	}
+	svc.publishModelDirectoryChanged()
+	for _, subscriber := range svc.flowerLiveSubscribers {
+		batch := <-subscriber.queue
+		var decoded map[string]any
+		if err := json.Unmarshal(batch.data, &decoded); err != nil {
+			t.Fatal(err)
+		}
+		if len(decoded) != 2 || decoded["kind"] != "model_directory.changed" || decoded["schema_version"] != float64(1) {
+			t.Fatalf("scoped metadata leaked: %+v", decoded)
+		}
+	}
+}

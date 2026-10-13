@@ -59,6 +59,14 @@ type AIModelSelection struct {
 func cloneAIModels(models []AIProviderModel) []AIProviderModel {
 	out := slices.Clone(models)
 	for i := range out {
+		if out[i].SupportsTools != nil {
+			value := *out[i].SupportsTools
+			out[i].SupportsTools = &value
+		}
+		if out[i].ReasoningCapability.DefaultEnabled != nil {
+			value := *out[i].ReasoningCapability.DefaultEnabled
+			out[i].ReasoningCapability.DefaultEnabled = &value
+		}
 		out[i].InputModalities = slices.Clone(out[i].InputModalities)
 		out[i].ReasoningCapability.ResponseReasoningFields = slices.Clone(out[i].ReasoningCapability.ResponseReasoningFields)
 		out[i].ReasoningCapability.HistoryReplayRequirements = slices.Clone(out[i].ReasoningCapability.HistoryReplayRequirements)
@@ -71,11 +79,38 @@ func cloneAIModels(models []AIProviderModel) []AIProviderModel {
 // EffectiveModels resolves an in-memory view; the result is never persisted.
 func (p AIProvider) EffectiveModels() []AIProviderModel {
 	if p.ModelSelection == nil {
-		return cloneAIModels(p.Models)
+		models := cloneAIModels(p.Models)
+		if p.catalogResolved {
+			resolved := []AIProviderModel{}
+			for _, model := range models {
+				for _, listed := range p.discoveredModels {
+					if listed.EffectiveWireModelName() == model.EffectiveWireModelName() && listed.Status != "unsupported" {
+						merged := applyAIModelOverride(listed, model)
+						merged.ModelName = model.ModelName
+						if merged.Status != "needs_configuration" && (merged.SupportsTools == nil || *merged.SupportsTools) {
+							resolved = append(resolved, merged)
+						}
+						break
+					}
+				}
+			}
+			return resolved
+		}
+		return slices.DeleteFunc(models, func(m AIProviderModel) bool {
+			return m.Status == "needs_configuration" || m.Status == "unsupported" || m.SupportsTools != nil && !*m.SupportsTools
+		})
 	}
 	models := AIProviderCatalog(p.Type)
-	if p.Type == "ollama" || p.Type == "openrouter" || p.EffectiveAuthMethod() == AIAuthChatGPT {
+	if p.catalogResolved || p.Type == "ollama" || p.Type == "openrouter" || p.EffectiveAuthMethod() == AIAuthChatGPT {
 		models = cloneAIModels(p.discoveredModels)
+		if !p.catalogResolved && p.EffectiveAuthMethod() != AIAuthChatGPT {
+			// Explicit saved metadata remains usable before the first successful sync.
+			for _, m := range p.ModelSelection.ModelOverrides {
+				if m.ContextWindow > 0 {
+					models = append(models, m)
+				}
+			}
+		}
 	}
 	// A selected local alias may have a different name from its provider wire ID.
 	for _, override := range p.ModelSelection.ModelOverrides {
@@ -108,6 +143,7 @@ func (p AIProvider) EffectiveModels() []AIProviderModel {
 		}
 	}
 	for _, custom := range cloneAIModels(p.ModelSelection.CustomModels) {
+		custom = applyAIModelOverride(custom, custom)
 		found := false
 		for i := range models {
 			if models[i].ModelName == custom.ModelName {
@@ -120,13 +156,16 @@ func (p AIProvider) EffectiveModels() []AIProviderModel {
 			models = append(models, custom)
 		}
 	}
-	if p.EffectiveAuthMethod() == AIAuthChatGPT {
+	if p.catalogResolved || p.EffectiveAuthMethod() == AIAuthChatGPT {
 		models = slices.DeleteFunc(models, func(model AIProviderModel) bool {
 			return !slices.ContainsFunc(p.discoveredModels, func(available AIProviderModel) bool {
 				return available.EffectiveWireModelName() == model.EffectiveWireModelName()
 			})
 		})
 	}
+	models = slices.DeleteFunc(models, func(m AIProviderModel) bool {
+		return m.Status == "needs_configuration" || m.Status == "unsupported" || m.SupportsTools != nil && !*m.SupportsTools
+	})
 	if p.ModelSelection.SelectedModels == nil {
 		// Legacy dynamic preferences are unavailable until their selection is frozen.
 		if p.Type == "ollama" || p.Type == "openrouter" || p.EffectiveAuthMethod() == AIAuthChatGPT {
@@ -137,15 +176,34 @@ func (p AIProvider) EffectiveModels() []AIProviderModel {
 	return slices.DeleteFunc(models, func(m AIProviderModel) bool { return !slices.Contains(p.ModelSelection.SelectedModels, m.ModelName) })
 }
 
+// CatalogModels exposes discovered identities without enabling them. It is a
+// detached settings projection, never a persisted preference list.
+func (p AIProvider) CatalogModels() []AIProviderModel {
+	if p.catalogResolved {
+		return cloneAIModels(p.discoveredModels)
+	}
+	if p.ModelSelection == nil {
+		if p.Models == nil {
+			return []AIProviderModel{}
+		}
+		return cloneAIModels(p.Models)
+	}
+	return AIProviderCatalog(p.Type)
+}
+
 // WithDiscoveredModels binds the current remote inventory only to this value.
 func (p AIProvider) WithDiscoveredModels(models []AIProviderModel) AIProvider {
 	p.discoveredModels = cloneAIModels(models)
+	p.catalogResolved = true
 	return p
 }
 
 func applyAIModelOverride(model, override AIProviderModel) AIProviderModel {
 	if override.WireModelName != "" {
 		model.WireModelName = override.WireModelName
+	}
+	if override.SupportsTools != nil && (model.SupportsTools == nil || *model.SupportsTools) {
+		model.SupportsTools = override.SupportsTools
 	}
 	if override.ContextWindow != 0 {
 		model.ContextWindow = override.ContextWindow
@@ -167,7 +225,10 @@ func applyAIModelOverride(model, override AIProviderModel) AIProviderModel {
 	if !override.DefaultReasoningSelection.IsZero() {
 		model.DefaultReasoningSelection = override.DefaultReasoningSelection
 	}
-	return model
+	if model.Status == "needs_configuration" && model.ContextWindow > 0 && model.MaxOutputTokens > 0 && model.SupportsTools != nil && *model.SupportsTools {
+		model.Status = ""
+	}
+	return cloneAIModels([]AIProviderModel{model})[0]
 }
 
 func (p AIProvider) validateModelSelection() error {
@@ -205,6 +266,9 @@ func (p AIProvider) validateModelSelection() error {
 	for _, m := range p.ModelSelection.CustomModels {
 		if m.ContextWindow <= 0 {
 			return fmt.Errorf("custom model %q requires context_window", m.ModelName)
+		}
+		if m.SupportsTools != nil && m.MaxOutputTokens <= 0 {
+			return fmt.Errorf("custom model %q requires max_output_tokens", m.ModelName)
 		}
 	}
 	return nil

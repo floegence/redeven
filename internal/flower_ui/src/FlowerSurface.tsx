@@ -1,3 +1,4 @@
+import { withFlowerModelDirectory } from './modelDirectory';
 import { FileItemIcon } from '@floegence/floe-webapp-core/file-browser';
 import { flowerMenuModels } from './modelMenu';
 import { flowerDirectoryDesktopStatus } from './modelDirectory';
@@ -2879,7 +2880,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const readyForChat = createMemo(() => modelOptionReady(selectedModelOption()));
   const anyModelReady = createMemo(() => catalogModelOptions().some((option) => modelOptionReady(option)));
   const selectedModelNeedsAttention = createMemo(() => !readyForChat() && !modelDirectory()?.models.some(model => model.id === selectedComposerModelID() && model.state === 'pending'));
-  const platformCatalogErrorVisible = createMemo(() => Boolean(modelDirectory()?.sources.some(source => source.kind === 'platform' && source.state === 'unavailable') && (selectedComposerModelID().startsWith('platform/') || (!selectedComposerModelID() && catalogModelOptions().length === 0))));
   const unavailableModelSource = createMemo<UnavailableFlowerModelSourceStatus | null>(() => {
     const source = modelSource();
     if (source && (source.state === 'not_configured' || source.state === 'empty') && snapshot()?.model_profile) return null;
@@ -2940,7 +2940,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const needsSetup = createMemo(() => !!snapshot() && !anyModelReady());
   const showSetupWelcome = createMemo(() => {
     const source = unavailableModelSource();
-    return needsSetup() && !platformCatalogErrorVisible() && !selectedThreadID() && !snapshot()?.model_profile?.providers.length
+    return needsSetup() && !selectedThreadID() && !snapshot()?.model_profile?.providers.length
       && (!source || source.state === 'not_configured' || source.state === 'empty');
   });
   const companionCompactComposer = createMemo(() => (
@@ -4292,26 +4292,31 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
   let settingsRefreshRequest: Promise<void> | null = null;
   let settingsRefreshGeneration = 0;
-  const refreshSettingsForRevision = (invalidateInFlight = false) => {
-    if (invalidateInFlight) settingsRefreshGeneration += 1;
+  const refreshSettingsForRevision = (invalidateInFlight = false): Promise<void> => {
+    if (invalidateInFlight) { settingsRefreshGeneration += 1; settingsRefreshRequest = null; }
     if (settingsRefreshRequest) return settingsRefreshRequest;
-    const generation = ++settingsRefreshGeneration;
-    const request = props.adapter.loadSettings().then((next) => {
-      if (generation !== settingsRefreshGeneration || surfaceDisposed) return;
-      setSnapshot(next);
-      if (next.model_directory) setModelDirectory(next.model_directory);
-      setLoadError('');
-    }).catch((error) => {
-      if (generation === settingsRefreshGeneration && !surfaceDisposed) setLoadError(getErrorMessage(error));
-      throw error;
-    }).finally(() => {
-      if (settingsRefreshRequest === request) settingsRefreshRequest = null;
-    });
+    const request = (async () => {
+      if (surfaceDisposed) return;
+      const generation = settingsRefreshGeneration;
+      try {
+        const next = await props.adapter.loadSettings();
+        if (surfaceDisposed) return;
+        if (generation !== settingsRefreshGeneration) return refreshSettingsForRevision();
+        setSnapshot(next);
+        if (next.model_directory) setModelDirectory(next.model_directory);
+        setLoadError('');
+      } catch (error) {
+        if (surfaceDisposed) return;
+        if (generation !== settingsRefreshGeneration) return refreshSettingsForRevision();
+        setLoadError(getErrorMessage(error));
+        throw error;
+      }
+    })().finally(() => { if (settingsRefreshRequest === request) settingsRefreshRequest = null; });
     settingsRefreshRequest = request;
     return request;
   };
 
-  const refreshDirectory = () => props.adapter.loadModelDirectory?.().then(directory => { if (!surfaceDisposed) setModelDirectory(directory); }).catch(() => undefined);
+  const refreshDirectory = () => props.adapter.loadModelDirectory?.(true).then(directory => { if (!surfaceDisposed) { setModelDirectory(directory); setSnapshot(previous => previous ? withFlowerModelDirectory(previous, directory) : previous); } }).catch(() => undefined);
   const loadSurface = async () => {
     void refreshThreads();
     void resolveHandlerDecision().catch(() => undefined);
@@ -4325,19 +4330,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     () => props.settingsRevision?.() ?? 0,
     (revision, previousRevision) => {
       if (revision === previousRevision) return;
-      const hadInFlightRefresh = settingsRefreshRequest !== null;
-      void refreshSettingsForRevision(true).then(() => refreshDirectory()).catch(() => undefined).finally(() => {
-        if (!surfaceDisposed && (hadInFlightRefresh || (props.settingsRevision?.() ?? 0) !== revision)) {
-          void refreshSettingsForRevision(true).then(() => refreshDirectory()).catch(() => undefined);
-        }
-      });
+      void refreshSettingsForRevision(true).then(() => refreshDirectory()).catch(() => undefined);
     },
     { defer: true },
   ));
 
   onMount(() => {
     setThreadRailWidth(loadThreadRailWidth());
-    const unsubscribe = props.adapter.subscribeModelDirectory?.(directory => { if (!surfaceDisposed) setModelDirectory(directory); });
+    const unsubscribe = props.adapter.subscribeModelDirectory?.(directory => { if (!surfaceDisposed) { setModelDirectory(directory); setSnapshot(previous => previous ? withFlowerModelDirectory(previous, directory) : previous); } });
     onCleanup(() => unsubscribe?.());
     void loadSurface();
   });
@@ -4685,6 +4685,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   });
 
   const applyFlowerLiveStreamEnvelope = (envelope: FlowerLiveStreamEnvelope): void => {
+    if (envelope.kind === 'model_directory.changed') { void refreshDirectory(); return; }
     if (envelope.kind === 'computer.frame') {
       const frame = envelope.computer_frame;
       if (envelope.thread_id !== selectedThreadID() || !frame || frame.session_id !== computerObserverID()
@@ -4933,6 +4934,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (modelSourceRefreshing()) return;
     setModelSourceRefreshing(true);
     try {
+      await props.adapter.recoverModelSource?.();
       const [directory] = await Promise.all([
         props.adapter.loadModelDirectory?.(true),
         loadError() ? refreshSettingsForRevision() : undefined,
@@ -10957,7 +10959,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     </Show>
   );
 
-  const composerModelLoading = () => !surfaceWarmupActive() && (settingsLoading() || Boolean(modelDirectory()?.models.some(model => model.id === selectedComposerModelID() && model.state === 'pending')));
+  const composerModelLoading = () => !surfaceWarmupActive() && settingsLoading();
   const composerNotices = () => (
     <Show when={bottomActionMode() === 'chat' && !companionCollapsed()}>
       <div class="flower-composer-notices">
@@ -11899,21 +11901,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     onPreview={props.adapter.loadStagedAttachmentPreview || props.adapter.previewStagedAttachment ? previewStagedAttachment : undefined}
                     onFocusFallback={() => attachmentPickerButtonRef?.focus()}
                   />
-                </Show>
-                <Show when={platformCatalogErrorVisible()}>
-                  <div class="flower-handler-error-card" role="alert">
-                    <div class="flower-handler-error-icon"><AlertTriangle class="h-3.5 w-3.5" /></div>
-                    <div class="flower-handler-error-copy">{copy().chat.modelsUnavailable}</div>
-                    <button
-                      type="button"
-                      class="flower-handler-retry cursor-pointer disabled:cursor-not-allowed"
-                      disabled={modelSourceRefreshing()}
-                      aria-busy={modelSourceRefreshing()}
-                      onClick={() => void refreshModelSource()}
-                    >
-                      {copy().chat.handlerRetry}
-                    </button>
-                  </div>
                 </Show>
                 <Show when={composerTextOverLimit()}>
                   <div class="flower-composer-over-limit" role="status">

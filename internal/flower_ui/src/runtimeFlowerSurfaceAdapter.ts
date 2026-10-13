@@ -132,6 +132,7 @@ export type RuntimeFlowerSurfaceAdapterOptions = Readonly<{
   discoverProviderModels?: FlowerModelCatalogDiscovery;
   loadSettings: () => Promise<FlowerSettingsSnapshot>;
   loadModelDirectory?: FlowerSurfaceAdapter['loadModelDirectory'];
+  recoverModelSource?: FlowerSurfaceAdapter['recoverModelSource'];
   subscribeModelDirectory?: FlowerSurfaceAdapter['subscribeModelDirectory'];
   saveDefaultPermission: (permissionType: FlowerPermissionType) => Promise<FlowerSettingsSnapshot>;
   saveComputerUseEnabled?: (enabled: boolean) => Promise<FlowerSettingsSnapshot>;
@@ -220,8 +221,14 @@ function mapRuntimeLiveStreamEnvelope(raw: unknown, options: RuntimeFlowerSurfac
   const value = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
   const kind = trim(value.kind);
   if (value.schema_version !== 1) throw new Error('Flower live stream returned an unsupported schema version.');
-  if (kind !== 'ready' && kind !== 'summary.batch' && kind !== 'thread.batch' && kind !== 'viewer.read_state' && kind !== 'computer.frame' && kind !== 'computer.status') {
+  if (kind !== 'ready' && kind !== 'summary.batch' && kind !== 'thread.batch' && kind !== 'viewer.read_state' && kind !== 'computer.frame' && kind !== 'computer.status' && kind !== 'model_directory.changed') {
     throw new Error('Flower live stream returned an unsupported envelope.');
+  }
+  if (kind === 'model_directory.changed') {
+    if (Object.keys(value).some(key => key !== 'kind' && key !== 'schema_version' && key !== 'observer_id')) {
+      throw new Error('Flower model directory notification is invalid.');
+    }
+    return { schema_version: 1, kind };
   }
   const summaries = Array.isArray(value.summaries)
     ? value.summaries
@@ -326,6 +333,7 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
     keepLiveWhenHidden: Boolean(options.transport.connectLiveStream),
     loadSettings: options.loadSettings,
     loadModelDirectory: options.loadModelDirectory,
+    recoverModelSource: options.recoverModelSource,
     subscribeModelDirectory: options.subscribeModelDirectory,
     chatGPTAuth: options.chatGPTAuth,
     discoverProviderModels: options.discoverProviderModels,

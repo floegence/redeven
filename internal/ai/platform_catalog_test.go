@@ -14,6 +14,30 @@ import (
 	"github.com/floegence/redeven/internal/session"
 )
 
+func TestPlatformCatalogRejectsIncompleteAvailabilityAndIdentity(t *testing.T) {
+	for _, raw := range []string{
+		`{"models":[{"model_id":"agent","context_window":32000,"max_output_tokens":2048,"capabilities":["responses"]}]}`,
+		`{"models":[{"model_id":"agent","available":null}]}`,
+		`{"models":[{"model_id":"","available":false}]}`,
+		`{"models":[{"model_id":"agent","available":false},{"model_id":"agent","available":false}]}`,
+	} {
+		var catalog platformModelCatalog
+		if err := json.Unmarshal([]byte(raw), &catalog); err != nil {
+			continue
+		}
+		if _, err := projectPlatformModelCatalog(catalog, "https://gateway.example"); err == nil {
+			t.Fatalf("incomplete catalog accepted: %s", raw)
+		}
+	}
+	var empty platformModelCatalog
+	if err := json.Unmarshal([]byte(`{"models":[]}`), &empty); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := projectPlatformModelCatalog(empty, "https://gateway.example"); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestPlatformCatalogIsSessionScopedWithoutLocalConfiguration(t *testing.T) {
 	var revoked atomic.Bool
 	edge := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -38,6 +62,9 @@ func TestPlatformCatalogIsSessionScopedWithoutLocalConfiguration(t *testing.T) {
 	if !svc.EnabledForSession(meta) || svc.Enabled() {
 		t.Fatal("session availability changed global state")
 	}
+	if _, err := svc.refreshPlatformCatalog(t.Context(), meta); err != nil {
+		t.Fatal(err)
+	}
 	first, err := svc.ListModelsForSession(t.Context(), meta)
 	if err != nil {
 		t.Fatal(err)
@@ -53,6 +80,9 @@ func TestPlatformCatalogIsSessionScopedWithoutLocalConfiguration(t *testing.T) {
 	}
 	other := *meta
 	other.UserPublicID, other.PlatformAIGrant = "b", "model-b"
+	if _, err := svc.refreshPlatformCatalog(t.Context(), &other); err != nil {
+		t.Fatal(err)
+	}
 	second, err := svc.ListModelsForSession(t.Context(), &other)
 	if err != nil || len(second.Models) != 1 || second.CurrentModel != "platform/model-b" {
 		t.Fatalf("cross-user catalog leak: %+v %v", second, err)
@@ -63,13 +93,16 @@ func TestPlatformCatalogIsSessionScopedWithoutLocalConfiguration(t *testing.T) {
 	if svc.cfg != nil {
 		t.Fatal("catalog mutated configuration")
 	}
-	if _, err := svc.ListModels(); err == nil {
+	if unscoped, err := svc.ListModels(); err != nil || len(unscoped.Models) != 0 {
 		t.Fatal("unscoped request inherited a platform catalog")
 	}
 	revoked.Store(true)
+	if _, err := svc.refreshPlatformCatalog(t.Context(), meta); err == nil {
+		t.Fatal("revoked lease accepted")
+	}
 	blocked, err := svc.ListModelsForSession(t.Context(), meta)
-	if err != nil || len(blocked.Models) != 0 || blocked.Runtime.PlatformError == "" || blocked.CurrentModel != first.CurrentModel {
-		t.Fatalf("revoked catalog must preserve selection without authorizing models: %+v %v", blocked, err)
+	if err != nil || len(blocked.Models) != 1 || blocked.Runtime.PlatformError != "" || blocked.CurrentModel != first.CurrentModel {
+		t.Fatalf("failed silent synchronization must preserve metadata and selection: %+v %v", blocked, err)
 	}
 }
 
@@ -90,13 +123,14 @@ func TestPlatformCatalogModelAliasBoundary(t *testing.T) {
 			t.Cleanup(edge.Close)
 			meta := &session.Meta{EndpointID: "env", UserPublicID: "user", PlatformAIGrant: "grant", PlatformAIGatewayURL: edge.URL, PlatformAIEntitlementVersion: 1}
 			svc := &Service{}
+			_, syncErr := svc.refreshPlatformCatalog(t.Context(), meta)
 			listed, err := svc.ListModelsForSession(t.Context(), meta)
 			valid := len(alias) > 0 && len(alias) <= 255 && !strings.ContainsAny(alias, " %")
 			if err != nil {
 				t.Fatal(err)
 			}
 			if !valid {
-				if listed.Runtime.PlatformError == "" {
+				if syncErr == nil {
 					t.Fatal("invalid alias accepted")
 				}
 				return

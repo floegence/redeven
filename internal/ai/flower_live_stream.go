@@ -52,13 +52,25 @@ const (
 type FlowerLiveStreamKind string
 
 const (
-	FlowerLiveStreamReady           FlowerLiveStreamKind = "ready"
-	FlowerLiveStreamSummaryBatch    FlowerLiveStreamKind = "summary.batch"
-	FlowerLiveStreamThreadBatch     FlowerLiveStreamKind = "thread.batch"
-	FlowerLiveStreamViewerReadState FlowerLiveStreamKind = "viewer.read_state"
-	FlowerLiveStreamComputerFrame   FlowerLiveStreamKind = "computer.frame"
-	FlowerLiveStreamComputerStatus  FlowerLiveStreamKind = "computer.status"
+	FlowerLiveStreamReady                 FlowerLiveStreamKind = "ready"
+	FlowerLiveStreamSummaryBatch          FlowerLiveStreamKind = "summary.batch"
+	FlowerLiveStreamThreadBatch           FlowerLiveStreamKind = "thread.batch"
+	FlowerLiveStreamViewerReadState       FlowerLiveStreamKind = "viewer.read_state"
+	FlowerLiveStreamComputerFrame         FlowerLiveStreamKind = "computer.frame"
+	FlowerLiveStreamComputerStatus        FlowerLiveStreamKind = "computer.status"
+	FlowerLiveStreamModelDirectoryChanged FlowerLiveStreamKind = "model_directory.changed"
 )
+
+// Metadata invalidation carries no provider/account data. Each observer reads
+// its own authorized projection over the existing workspace transport.
+func (s *Service) publishModelDirectoryChanged() {
+	batch := newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamModelDirectoryChanged})
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, subscriber := range s.flowerLiveSubscribers {
+		enqueueFlowerLiveSubscriberLocked(s, subscriber, batch)
+	}
+}
 
 type FlowerLiveStreamRequest struct{}
 

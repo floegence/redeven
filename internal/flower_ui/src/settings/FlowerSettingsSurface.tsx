@@ -4,7 +4,7 @@ import { secureRandomUUID } from '@floegence/floe-webapp-core';
 import { FlowerIcon } from '../icons/FlowerIcon';
 import type { FlowerModelCatalogDiscovery } from '../contracts/flowerSurfaceContracts';
 import type { Component, JSX } from 'solid-js';
-import { For, Show, createEffect, createMemo, createSignal, createUniqueId, onCleanup } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, createUniqueId, onCleanup, untrack } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { Check, ChevronDown, ChevronLeft } from '@floegence/floe-webapp-core/icons';
 
@@ -31,7 +31,7 @@ import {
   normalizeFlowerInputModalities,
   normalizeFlowerPositiveInteger,
 } from './providerCatalog';
-import { defaultFlowerProviderModels, resolveFlowerProviderModels } from './modelSelection';
+import { applyFlowerModelDiscovery, defaultFlowerProviderModels, resolveFlowerProviderModels } from './modelSelection';
 import { FlowerModelSettings } from './FlowerModelSettings';
 import { FlowerProviderDialog, type FlowerProviderDialogMode } from './FlowerProviderDialog';
 import { FlowerAutoSaveIndicator, FlowerSubSectionHeader } from './FlowerSettingsPrimitives';
@@ -121,7 +121,8 @@ function normalizeProviderForSave(provider: FlowerProviderDraft): FlowerProvider
       unavailable: model.unavailable,
       model_name: trim(model.model_name),
       wire_model_name: model.wire_model_name, display_name: model.display_name, status: model.status,
-      ...(normalizeFlowerPositiveInteger(model.context_window) ?? defaultFlowerContextWindowForProviderType(provider.type) ? { context_window: normalizeFlowerPositiveInteger(model.context_window) ?? defaultFlowerContextWindowForProviderType(provider.type) } : {}),
+      supports_tools: model.supports_tools,
+      ...(normalizeFlowerPositiveInteger(model.context_window) ? { context_window: normalizeFlowerPositiveInteger(model.context_window) } : {}),
       ...(normalizeFlowerPositiveInteger(model.max_output_tokens) ? { max_output_tokens: normalizeFlowerPositiveInteger(model.max_output_tokens) } : {}),
       ...(normalizeFlowerEffectiveContextPercent(model.effective_context_window_percent) ? { effective_context_window_percent: normalizeFlowerEffectiveContextPercent(model.effective_context_window_percent) } : {}),
       input_modalities: normalizeFlowerInputModalities(model.input_modalities),
@@ -177,14 +178,20 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
     const snapshot = props.snapshot;
     if (!snapshot) return;
     const rows = (snapshot.model_profile?.providers ?? []).map(provider => ({ ...cloneProviderForForm(provider), chatgpt_account: snapshot.chatgpt_accounts?.[provider.id] }));
-    setProviders(rows);
-    setCurrentModelID(trim(snapshot.model_profile?.current_model_id));
+    if (!untrack(dirty)) {
+      setProviders(rows);
+      setCurrentModelID(trim(snapshot.model_profile?.current_model_id));
+    } else {
+      setProviders(previous => previous.map(provider => {
+        const catalog = rows.find(row => row.id === provider.id)?.catalog_models;
+        return catalog ? applyFlowerModelDiscovery(provider, catalog) : provider;
+      }));
+    }
     const savedPermission = snapshot.defaults.permission_type ?? 'approval_required';
     setConfirmedPermissionType(savedPermission);
     if (!permissionDirty() && !permissionSaving()) setPermissionType(savedPermission);
     if (!computerUseSaving()) setComputerUseEnabled(snapshot.defaults.computer_use_enabled !== false);
-    setLocalError('');
-    setDirty(false);
+    if (!untrack(dirty)) setLocalError('');
   });
 
   const normalizedProviders = createMemo(() => providers().map(normalizeProviderForSave));
@@ -317,9 +324,6 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
           return { ok: false, error: copy().validation.providerBaseURLProtocol(providerDisplayName(provider, copy().providerTypeLabels)) };
         }
       }
-      if (provider.models.length === 0 && !provider.model_selection) {
-        return { ok: false, error: copy().validation.providerNeedsModel(providerDisplayName(provider, copy().providerTypeLabels)) };
-      }
       const modelNames = new Set<string>();
       for (const model of provider.models) {
         const modelName = trim(model.model_name);
@@ -340,9 +344,6 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
       }
     }
     const current = trim(sourceCurrentModelID);
-    if (cleanProviders.length > 0 && !current) {
-      return { ok: false, error: copy().validation.selectCurrentModel };
-    }
     if (current && !availableModelIDs.has(current) && !cleanProviders.some((provider) => provider.model_selection && current.startsWith(`${provider.id}/`))) {
       return { ok: false, error: copy().validation.currentModelUnavailable(current) };
     }
@@ -641,6 +642,7 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
         error={providerDialogError()}
         saving={props.saving}
         onOpenChange={(open) => setProviderDialogOpen(open)}
+        catalogModels={props.snapshot?.model_profile?.providers.find(provider => provider.id === providerDialogProvider()?.id)?.catalog_models}
         onConfirm={(draft) => void confirmProviderDialog(draft)}
       />
     </>
