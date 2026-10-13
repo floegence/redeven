@@ -187,7 +187,7 @@ vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => {
   RadioOption: actual.RadioOption,
   DialogPlacementProvider: actual.DialogPlacementProvider,
   Button: (props: any) => {
-    if (props.class?.includes('flower-composer-approval-decision') || props.class?.includes('flower-composer-submit') || props['data-computer-control-action']) return <Dynamic component={actual.Button} {...props} />;
+    if (props.class?.includes('flower-composer-approval-decision') || props.class?.includes('flower-composer-submit') || props.class?.startsWith('flower-model-menu-') || props['data-computer-control-action']) return <Dynamic component={actual.Button} {...props} />;
     return (
       <button
         type={props.type ?? "button"}
@@ -314,7 +314,7 @@ vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => {
     </Show>
   ),
   DirectoryPicker: actual.DirectoryPicker,
-  Input: (props: any) => (
+  Input: (props: any) => props.class === 'flower-model-menu-search' ? <Dynamic component={actual.Input} {...props} /> : (
     <input
       ref={props.ref}
       aria-label={props['aria-label']}

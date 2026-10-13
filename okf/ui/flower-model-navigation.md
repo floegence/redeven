@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower model and navigation presentation
 description: Model-source controls, notifications, thread selection, and staged content ownership.
 tags: [ai, flower, models, navigation]
-timestamp: 2026-10-08T00:00:00Z
+timestamp: 2026-10-12T00:00:00Z
 ---
 # Summary
 
@@ -70,6 +70,14 @@ portal placement, clamping, and nested Escape ownership. Its list scrolls while
 search and recovery actions remain visible. Escape closes only the model menu
 and restores trigger focus; it does not close a Tessiven chat window or the
 composer More panel.
+
+The picker uses caption typography for search and footer actions, with quieter
+model metadata and capability badges. Its opaque theme surface keeps chat content
+from showing through. Only real loading or unavailable feedback occupies a
+status row; a ready selection leaves no empty status space. Catalog expansion
+sits above the separate refresh and management footer. Action labels stay on one
+line, while whole actions can reflow on narrow surfaces. Disabled model names
+remain readable and keyboard selection has an explicit focus outline.
 
 Thread inventory has independent `loading`, `ready`, and `error` states. Failure
 leaves the sidebar usable and replaces its skeleton with a localized retry
