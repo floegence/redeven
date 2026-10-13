@@ -753,7 +753,7 @@ function createLocalizedFlowerSettingsCopy(i18n: FlowerSurfaceTranslator): Flowe
     description: t(i18n, k('description')),
     currentModel: t(i18n, k('currentModel')),
     changeModel: t(i18n, k('changeModel')),
-    finishModelEdit: t(i18n, k('finishModelEdit')),
+    closeModelSelection: t(i18n, k('closeModelSelection')),
     inputCapabilities: t(i18n, k('inputCapabilities')),
     providerDisabled: t(i18n, k('providerDisabled')),
     providerNeedsSetup: t(i18n, k('providerNeedsSetup')),

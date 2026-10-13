@@ -69,7 +69,7 @@ async function mount(width = 1000, canAdmin = true, locale: RedevenLocale = 'en-
 it('uses the shared compact model and provider presentation in global Env settings', async () => {
   await mount(1000, true, 'zh-CN');
   await expect.poll(() => host.textContent).toContain('输入能力');
-  expect(host.querySelector('.flower-settings-model-select')).toBeNull();
+  expect(document.querySelector('.flower-model-selection-dialog')).toBeNull();
   expect(host.querySelectorAll('.flower-settings-model-stat')).toHaveLength(4);
   expect([...host.querySelectorAll('.flower-settings-provider-status')].every(status => status.textContent === '就绪')).toBe(true);
   expect(host.querySelectorAll('.flower-settings-provider-toggle')).toHaveLength(2);
@@ -110,15 +110,19 @@ it('saves a changed model from the edit action and restores the previous choice 
   const { settings, bundles, failSave } = await mount();
   const chooseLocal = async () => {
     await userEvent.click(host.querySelector<HTMLButtonElement>('.flower-settings-model-edit')!);
-    await userEvent.click(host.querySelector<HTMLButtonElement>('.flower-settings-model-select')!);
-    await userEvent.click(page.getByRole('menuitem', { name: 'Local model / agent', exact: true }));
+    await expect.element(page.getByRole('dialog')).toBeVisible();
+    await expect.poll(() => document.activeElement).toBe(document.querySelector('.flower-model-selection-search input'));
+    const search = document.querySelector<HTMLInputElement>('.flower-model-selection-search input')!;
+    await userEvent.fill(search, 'Local');
+    await userEvent.click(page.getByRole('option', { name: 'Local model / agent', exact: true }));
+    await expect.poll(() => document.querySelector('.flower-model-selection-dialog')).toBeNull();
   };
   failSave();
   await chooseLocal();
   await expect.poll(() => host.querySelector('.flower-settings-model-name')?.textContent).toBe('DeepSeek V4 Flash Vision Exp');
   await chooseLocal();
   await expect.poll(() => settings().ai?.current_model_id).toBe('local/agent');
-  expect(host.querySelector('.flower-settings-model-select')).toBeNull();
+  expect(document.querySelector('.flower-model-selection-dialog')).toBeNull();
   expect(host.querySelector('.flower-settings-model-name')?.textContent).toBe('agent');
   expect(bundles).toHaveLength(0);
 });

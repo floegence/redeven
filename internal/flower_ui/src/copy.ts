@@ -130,7 +130,7 @@ export type FlowerSettingsCopy = Readonly<{
   description: string;
   currentModel: string;
   changeModel: string;
-  finishModelEdit: string;
+  closeModelSelection: string;
   inputCapabilities: string;
   providerDisabled: string;
   providerNeedsSetup: string;
@@ -1286,7 +1286,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     description: 'Configure models and the default Flower permission for the Local AI Profile.',
     currentModel: 'Current model',
     changeModel: 'Change model',
-    finishModelEdit: 'Done',
+    closeModelSelection: 'Close model selection',
     inputCapabilities: 'Input',
     providerDisabled: 'Disabled',
     providerNeedsSetup: 'Needs setup',

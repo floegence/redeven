@@ -873,7 +873,7 @@
       "description": "Настройте модели и разрешение Flower по умолчанию для локального профиля ИИ.",
       "currentModel": "Текущая модель",
       "changeModel": "Изменить модель",
-      "finishModelEdit": "Готово",
+      "closeModelSelection": "Закрыть выбор модели",
       "noModelSelected": "Модель не выбрана",
       "text": "Текст",
       "imageInput": "Ввод изображения",

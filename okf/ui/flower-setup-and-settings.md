@@ -91,8 +91,15 @@ Desktop Flower, embedded Env Flower, and Env App global settings share
 `FlowerModelSettings`; hosts retain persistence and authorization ownership.
 The model group presents identity above evenly sized columns for inputs, context,
 output, and default reasoning. Columns use the full width and become two columns
-on narrow screens. The edit action reveals model selection; choosing a model or
-finishing restores the summary and edit-action focus.
+on narrow screens. The edit action opens a searchable Floe dialog, grouped by enabled provider.
+Each choice shows its model identifier, inputs and declared token limits, with the
+current default marked explicitly. Search matches provider identity, model names
+and wire identifiers; an empty result preserves the search and offers no choice.
+The list scrolls independently of the search field. Arrow keys, Home and End
+move between choices; Enter selects a focused choice or a sole search result.
+Selection retains the host save behavior. Escape, the close control and backdrop
+dismiss without saving, clear search, and restore edit-action focus. Unavailable
+models remain excluded and reselecting the current default does not save.
 
 Provider rows place identity and model count left, useful availability status
 right, and an enable switch with edit/remove actions at the trailing edge.

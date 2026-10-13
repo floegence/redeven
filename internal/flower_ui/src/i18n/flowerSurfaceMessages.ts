@@ -600,7 +600,7 @@ export const flowerSurfaceEnUS = {
     description: 'Configure models and the default Flower permission for the Local AI Profile.',
     currentModel: 'Current model',
     changeModel: 'Change model',
-    finishModelEdit: 'Done',
+    closeModelSelection: 'Close model selection',
     inputCapabilities: 'Input',
     providerDisabled: 'Disabled',
     providerNeedsSetup: 'Needs setup',
