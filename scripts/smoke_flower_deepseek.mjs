@@ -80,7 +80,7 @@ export function findDeepSeekProvider(config, secrets, { model = SMOKE_MODEL, req
   // Use the production catalog, including image and reasoning capabilities.
   // Never invent a reduced model entry or inherit user capability overrides.
   delete selectedProvider.models;
-  selectedProvider.model_selection = {};
+  selectedProvider.model_selection = { selected_models: [model] };
   return { provider: selectedProvider, apiKey, currentModelID: `${providerID}/${model}` };
 }
 

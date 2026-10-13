@@ -136,7 +136,7 @@ test('Vision qualification normalizes only its isolated provider copy', () => {
     const original = structuredClone(config);
     const result = findDeepSeekProvider(config, { ai: { provider_api_keys: { ds: 'test-only-secret' } } });
     assert.deepEqual(config, original);
-    assert.deepEqual(result.provider.model_selection, {});
+    assert.deepEqual(result.provider.model_selection, { selected_models: ['deepseek-v4-flash-vision-exp'] });
     assert.equal(result.provider.models, undefined);
   }
 });
@@ -449,4 +449,16 @@ test('secret leak scan reports only paths and never secret content', async () =>
   assert.match(leaks[0], /leak\.log$/u);
   assert.doesNotMatch(JSON.stringify(leaks), /smoke-test-secret/u);
   await rm(root, { recursive: true, force: true });
+});
+
+
+test('Computer acceptance requires current Flash and preserves the source configuration', () => {
+  const config = { ai: { current_model_id: 'ds/deepseek-v4-flash', providers: [{ id: 'ds', type: 'deepseek', base_url: 'https://api.deepseek.com' }] } };
+  const original = structuredClone(config);
+  const secrets = { ai: { provider_api_keys: { ds: 'test-only-secret' } } };
+  const selected = findDeepSeekProvider(config, secrets, { model: 'deepseek-v4-flash', requireCurrent: true });
+  assert.deepEqual(selected.provider.model_selection.selected_models, ['deepseek-v4-flash']);
+  assert.deepEqual(config, original);
+  config.ai.current_model_id = 'ds/deepseek-v4-flash-vision-exp';
+  assert.throws(() => findDeepSeekProvider(config, secrets, { model: 'deepseek-v4-flash', requireCurrent: true }), /configured current/u);
 });

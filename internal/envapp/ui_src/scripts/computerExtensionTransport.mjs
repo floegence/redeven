@@ -79,7 +79,7 @@ export class ExtensionTransport extends EventEmitter {
     const request = this.pending.get(message.id);
     if (!request) throw new Error('BROWSER_EXTENSION_REPLY_INVALID');
     this.pending.delete(message.id); clearTimeout(request.timer);
-    if (message.error) request.reject(new Error(['TARGET_PERMISSION_REQUIRED', 'TARGET_CAPABILITY_UNAVAILABLE'].includes(message.error) ? message.error : 'BROWSER_EXTENSION_COMMAND_FAILED'));
+    if (message.error) request.reject(Object.assign(new Error(['TARGET_PERMISSION_REQUIRED', 'TARGET_CAPABILITY_UNAVAILABLE'].includes(message.error) ? message.error : 'BROWSER_EXTENSION_COMMAND_FAILED'), message.error === 'TARGET_PERMISSION_REQUIRED' ? { permissionReason: 'extension_file_access' } : {}));
     else request.resolve(message.result ?? {});
     if (message.sequence) this.write({ ack: message.sequence });
   }

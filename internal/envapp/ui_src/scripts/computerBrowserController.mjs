@@ -155,7 +155,7 @@ export class BrowserComputerController {
         action_executed: dispatched(), execution_mode: 'background', ...(page.downloads.size ? { downloads: [...page.downloads.values()] } : {}) }, safety: captured, ...(frame ? { screenshot: frame } : {}) };
     } catch (error) {
       if (page.uncertainEffect) return { error: 'EFFECT_OUTCOME_UNKNOWN' };
-      if (page.guardFailure) return { error: 'TARGET_CONNECTION_REQUIRED' };
+      if (page.guardFailure) return { error: 'TARGET_CONNECTION_REQUIRED', result: { action_executed: dispatched(), needs_observation: dispatched() } };
       if (page.requiredURL) return { error: 'TARGET_PERMISSION_REQUIRED', result: { action_executed: dispatched(), required_navigation_url: page.requiredURL, needs_observation: true } };
       if (page.requiredOrigin || page.stopped) return this.pause({ level: 'takeover', reason_codes: [page.requiredOrigin ? 'site_permission' : 'user_control'],
         safe_to_capture: false, safe_to_send_to_model: false, ...(page.requiredOrigin ? { required_origin: page.requiredOrigin } : {}) }, dispatched());
@@ -170,7 +170,7 @@ export class BrowserComputerController {
       };
       if (error instanceof BrowserNavigationError) return { error: error.message, result: error.result };
       return { error: rejections.has(error.message) ? error.message : dispatched() ? 'EFFECT_OUTCOME_UNKNOWN' : 'TARGET_ACTION_FAILED',
-        result: { action_executed: dispatched(), needs_observation: dispatched() } };
+        result: { action_executed: dispatched(), needs_observation: dispatched(), ...(error.permissionReason === 'extension_file_access' ? { permission_reason: 'extension_file_access', ...(args.url ? { required_navigation_url: redactedNavigationURL(args.url) } : {}) } : {}) } };
     }
   }
 }

@@ -2,11 +2,30 @@ package ai
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 )
+
+func TestComputerClosedFailureFactsDoNotBecomeUnknownEffects(t *testing.T) {
+	call := TargetToolCall{ToolName: "browser.navigate", TargetID: "browser-main"}
+	for _, code := range []string{"TARGET_ACTION_FAILED", "TARGET_CONNECTION_REQUIRED", "TARGET_CAPABILITY_UNAVAILABLE"} {
+		result, err, valid := computerBrowserFailure(call, false, code, map[string]any{"action_executed": false}, "local")
+		if !valid || errors.Is(err, errComputerEffectUnknown) || result.Result.(map[string]any)["action_executed"] != false {
+			t.Fatalf("closed %s became uncertain: %+v %v", code, result, err)
+		}
+	}
+	_, err, _ := computerBrowserFailure(call, false, "unexpected private exception", map[string]any{"action_executed": false}, "local")
+	if !errors.Is(err, errComputerEffectUnknown) {
+		t.Fatal("unsupported failure vocabulary established a false outcome")
+	}
+	_, err, _ = computerBrowserFailure(call, false, "TARGET_PERMISSION_REQUIRED", map[string]any{"action_executed": false, "permission_reason": "extension_file_access"}, "local")
+	if !strings.Contains(err.Error(), "Allow access to file URLs") {
+		t.Fatalf("missing Chrome permission diagnosis: %v", err)
+	}
+}
 
 type failingComputerExecutor struct{ code string }
 

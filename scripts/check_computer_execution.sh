@@ -9,10 +9,13 @@ trap 'rm -rf -- "$temporary"' EXIT
 # These fixtures use disposable browser profiles and private input channels.
 # They never attach to a daily browser or inject input into the host desktop.
 GOWORK=off go build -o "$temporary/redeven" ./cmd/redeven
-REDEVEN_BROWSER_BRIDGE_BINARY="$temporary/redeven" node --test \
+REDEVEN_BROWSER_BRIDGE_BINARY="$temporary/redeven" node --test --test-concurrency=1 \
   internal/envapp/ui_src/scripts/computerScript.node-test.mjs \
   internal/envapp/ui_src/scripts/computerBrowser.node-test.mjs \
   internal/envapp/ui_src/scripts/computerNavigation.node-test.mjs \
+  internal/envapp/ui_src/scripts/computerNativeURL.node-test.mjs \
+  internal/envapp/ui_src/scripts/computerFileAcceptance.node-test.mjs \
+  internal/envapp/ui_src/scripts/computerExtensionDirectory.node-test.mjs \
   internal/envapp/ui_src/scripts/computerManagedSandbox.node-test.mjs \
   internal/envapp/ui_src/scripts/computerPopup.node-test.mjs \
   internal/envapp/ui_src/scripts/computerExtensionLifecycle.node-test.mjs \

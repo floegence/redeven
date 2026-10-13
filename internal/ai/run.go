@@ -3455,6 +3455,9 @@ func (e *targetToolPolicyError) Error() string {
 	case "target_setup_required":
 		return "computer use is not ready on this environment"
 	case "target_permission_required":
+		if e.repairAction == "enable_extension_file_access" {
+			return "Enable Allow access to file URLs for the Redeven Chrome extension before opening this file page."
+		}
 		return "computer use requires target permissions"
 	case "target_connection_required":
 		return "The selected page is disconnected. Use computer.targets to find current pages or create an eligible new task page. Preserve any requested browser or account; do not ask a remote user to reopen the desktop."
