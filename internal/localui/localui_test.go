@@ -28,6 +28,7 @@ import (
 	"github.com/floegence/redeven/internal/diagnostics"
 	"github.com/floegence/redeven/internal/lockfile"
 	"github.com/floegence/redeven/internal/redevpluginintegration"
+	"github.com/floegence/redeven/internal/runtimemanagement"
 	"github.com/floegence/redeven/internal/runtimeservice"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/sessionhop"
@@ -532,6 +533,7 @@ func TestServer_handleRuntimeHealth_reportsOnlineWithoutUnlock(t *testing.T) {
 			DesktopManaged   bool     `json:"desktop_managed"`
 			DesktopOwnerID   string   `json:"desktop_owner_id"`
 			StartedAtUnixMS  int64    `json:"started_at_unix_ms"`
+			RuntimePlatform  string   `json:"runtime_platform"`
 			RuntimeService   struct {
 				OpenReadiness struct {
 					State string `json:"state"`
@@ -560,6 +562,9 @@ func TestServer_handleRuntimeHealth_reportsOnlineWithoutUnlock(t *testing.T) {
 	}
 	if payload.Data.DesktopManaged || payload.Data.DesktopOwnerID != "" {
 		t.Fatalf("unexpected desktop ownership metadata: %#v", payload.Data)
+	}
+	if payload.Data.RuntimePlatform != runtimemanagement.RuntimePlatform() {
+		t.Fatalf("runtime_platform = %q", payload.Data.RuntimePlatform)
 	}
 	if payload.Data.StartedAtUnixMS <= 0 {
 		t.Fatalf("started_at_unix_ms = %d, want positive runtime start time", payload.Data.StartedAtUnixMS)

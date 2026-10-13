@@ -23,3 +23,14 @@ describe('Gateway environment projection', () => {
     expect(entry?.runtime_operations.start.menu_visibility).toBe('hidden');
   });
 });
+
+it.each([['darwin', 'macos'], ['linux', 'linux'], ['win32', 'windows'], ['unknown', undefined], ['', undefined]])(
+  'uses Gateway member OS %s without inferring from architecture or Gateway host', (os, expected) => {
+    const [entry] = buildGatewayEnvironmentEntries({ gatewaySources: [{
+      gateway_id: 'os-gateway', display_name: 'Windows gateway', local_enabled: true, connection_kind: 'url',
+      management_capability: 'access_only', capabilities: ['member_access'], status: 'online', created_at_ms: 1, updated_at_ms: 1,
+      environments: [{ ...memberFixture, metadata: { ...memberFixture.metadata, os, arch: 'darwin' } }],
+    }] });
+    expect(entry.runtime_platform).toBe(expected);
+  },
+);

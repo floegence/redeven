@@ -30,6 +30,7 @@ import type { RuntimeServiceProviderConnectionState, RuntimeServiceSnapshot } fr
 import type { DesktopTranslationKey } from './i18n/desktopI18n';
 import type { DesktopComponentTaskProgress } from './desktopComponentTaskProgress';
 import type { DesktopPlatformCapabilities } from './desktopPlatformCapabilities';
+import type { DesktopRuntimePlatform } from './desktopRuntimePlatform';
 import type { DesktopWSLDiscoverySnapshot } from './desktopWSL';
 import type {
   DesktopEnvironmentSource,
@@ -448,6 +449,7 @@ export type DesktopEnvironmentEntry = Readonly<{
   runtime_health: DesktopRuntimeHealth;
   runtime_service?: RuntimeServiceSnapshot;
   runtime_started_at_unix_ms?: number;
+  runtime_platform?: DesktopRuntimePlatform;
   runtime_maintenance?: DesktopRuntimeMaintenanceRequirement;
   runtime_operations: DesktopRuntimeOperationPlans;
   auto_runtime_probe_enabled?: boolean;

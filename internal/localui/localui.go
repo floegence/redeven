@@ -874,7 +874,8 @@ func (s *Server) RuntimeAttachStatus() runtimemanagement.RuntimeAttachStatus {
 	runtimeService := s.runtimeServiceSnapshot()
 	access := s.publicAccessSnapshot()
 	return runtimemanagement.RuntimeAttachStatus{
-		State: runtimemanagement.AttachStateReady,
+		RuntimePlatform: runtimemanagement.RuntimePlatform(),
+		State:           runtimemanagement.AttachStateReady,
 		Identity: runtimemanagement.RuntimeInstanceIdentity{
 			InstanceID:      s.a.InstanceID(),
 			StateRoot:       s.stateRoot,
@@ -1020,6 +1021,7 @@ type accessStatusResp struct {
 }
 
 type runtimeHealthResp struct {
+	RuntimePlatform      string                                  `json:"runtime_platform,omitempty"`
 	AccessIdentity       *runtimeidentity.AccessIdentityProof    `json:"access_identity,omitempty"`
 	Status               string                                  `json:"status"`
 	LocalUIURL           string                                  `json:"local_ui_url,omitempty"`
@@ -1612,6 +1614,7 @@ func (s *Server) handleRuntimeHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	access := s.publicAccessSnapshot()
 	writeJSON(w, http.StatusOK, apiResp{OK: true, Data: runtimeHealthResp{
+		RuntimePlatform:      runtimemanagement.RuntimePlatform(),
 		Status:               "online",
 		AccessIdentity:       proof,
 		LocalUIURL:           firstNonEmptyString(access.urls),

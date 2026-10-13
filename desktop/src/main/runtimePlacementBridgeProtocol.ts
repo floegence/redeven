@@ -7,6 +7,7 @@ import {
   normalizeRuntimeServiceSnapshot,
   type RuntimeServiceSnapshot,
 } from '../shared/runtimeService';
+import { normalizeDesktopRuntimePlatform, type DesktopRuntimePlatform } from '../shared/desktopRuntimePlatform';
 
 export const RUNTIME_PLACEMENT_BRIDGE_PROTOCOL_VERSION = 'redeven-desktop-placement-h2/1';
 export const RUNTIME_PLACEMENT_BRIDGE_AUTHORITY = 'redeven-placement';
@@ -28,6 +29,7 @@ export type RuntimePlacementBridgeHello = Readonly<{
   runtime_version: string;
   runtime_commit?: string;
   started_at_unix_ms?: number;
+  runtime_platform?: DesktopRuntimePlatform;
   local_ui: Readonly<{
     available: boolean;
     base_path: string;
@@ -107,6 +109,7 @@ export function parseRuntimePlacementBridgeHello(payload: Buffer): RuntimePlacem
     runtime_version: compact(parsed.runtime_version),
     runtime_commit: compact(parsed.runtime_commit) || undefined,
     started_at_unix_ms: normalizePositiveInteger(parsed.started_at_unix_ms),
+    runtime_platform: normalizeDesktopRuntimePlatform(parsed.runtime_platform),
     local_ui: {
       available: localUIAvailable,
       base_path: compact(localUI.base_path) || '/',

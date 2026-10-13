@@ -32,6 +32,7 @@ func TestWriteDesktopLaunchReportReady(t *testing.T) {
 	reportPath := filepath.Join(t.TempDir(), "startup", "report.json")
 	err := writeDesktopLaunchReport(reportPath, desktopLaunchReport{
 		Status:             desktopLaunchStatusReady,
+		RuntimePlatform:    runtimemanagement.RuntimePlatform(),
 		LocalUIURL:         "http://127.0.0.1:43210/",
 		LocalUIURLs:        []string{"http://127.0.0.1:43210/", "", "http://127.0.0.1:43210/"},
 		LocalUIBridgeURL:   "http://127.0.0.1:43211/",
@@ -67,6 +68,9 @@ func TestWriteDesktopLaunchReportReady(t *testing.T) {
 	var report desktopLaunchReport
 	if err := json.Unmarshal(body, &report); err != nil {
 		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	if report.RuntimePlatform != runtimemanagement.RuntimePlatform() {
+		t.Fatalf("RuntimePlatform = %q", report.RuntimePlatform)
 	}
 	if report.Status != desktopLaunchStatusReady {
 		t.Fatalf("Status = %q", report.Status)

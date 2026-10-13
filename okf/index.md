@@ -139,6 +139,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Desktop Welcome navigation](desktop/desktop-welcome-navigation.md) - Switch Environments and Flower immediately while retaining page state and honoring explicit host requests.
 - [Desktop Environment connections](desktop/desktop-environment-connections.md) - Identify each connection's host and apply one address scope and sharing policy across cards and settings.
 - [Desktop runtime readiness](desktop/desktop-runtime-readiness.md) - Separate direct Runtime health and recovery from access-only Gateway, Provider, and URL readiness.
+- [Runtime platform facts and icons](desktop/desktop-runtime-platform.md) - Identify Runtime operating systems from trusted reports and preserve Env card geometry with pinned local marks.
 - [Desktop transport recovery](desktop/desktop-transport-recovery.md) - Preserve bridge identity, recovery generations, and terminal session disposal.
 - [Desktop SSH runtime operations](desktop/desktop-ssh-runtime-operations.md) - Execute SSH-host and SSH-container lifecycle actions through one direct Desktop owner.
 - [Desktop WSL runtime operations](desktop/desktop-wsl-runtime-operations.md) - Register exact WSL 2 distributions and manage Linux Runtime lifecycle through a private Windows Desktop Bridge.

@@ -5,6 +5,7 @@ import type { DesktopCloudEnvironmentRecord } from './desktopCloudEnvironment';
 import { normalizeRuntimeServiceSnapshot, type RuntimeServiceSnapshot } from './runtimeService';
 import type { DesktopRuntimeControlEndpoint } from './runtimeControl';
 import type { LocalUIExposure } from './localUIExposure';
+import { normalizeDesktopRuntimePlatform, type DesktopRuntimePlatform } from './desktopRuntimePlatform';
 
 export type DesktopLocalEnvironmentAccess = Readonly<{
   local_ui_bind: string;
@@ -29,6 +30,7 @@ export type DesktopLocalEnvironmentRuntimeState = Readonly<{
   diagnostics_enabled: boolean;
   pid: number;
   started_at_unix_ms?: number;
+  runtime_platform?: DesktopRuntimePlatform;
   runtime_control?: DesktopRuntimeControlEndpoint;
   runtime_service?: RuntimeServiceSnapshot;
 }>;
@@ -132,6 +134,7 @@ function normalizeRuntimeState(
     diagnostics_enabled: value.diagnostics_enabled === true,
     pid: Number.isInteger(pid) && pid > 0 ? pid : 0,
     started_at_unix_ms: Number.isInteger(startedAtUnixMS) && startedAtUnixMS > 0 ? startedAtUnixMS : undefined,
+    runtime_platform: normalizeDesktopRuntimePlatform(value.runtime_platform),
     runtime_control: value.runtime_control,
     runtime_service: normalizeRuntimeServiceSnapshot(value.runtime_service ?? {}, {
       effectiveRunMode: value.effective_run_mode,

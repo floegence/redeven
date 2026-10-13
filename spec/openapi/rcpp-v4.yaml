@@ -933,6 +933,13 @@ components:
           enum:
             - online
             - offline
+        runtime_platform:
+          type: string
+          description: Optional operating system reported by the Runtime itself; never inferred from Cloud identity or region.
+          enum:
+            - macos
+            - linux
+            - windows
         observed_at_unix_ms:
           type: integer
           format: int64

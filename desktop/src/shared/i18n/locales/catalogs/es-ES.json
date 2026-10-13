@@ -1736,6 +1736,7 @@
     "technicalDetails": "Detalles técnicos"
   },
   "environmentCenter": {
+    "runtimePlatform": "Sistema operativo del entorno de ejecución: {platform}",
     "title": "Entornos",
     "description": "Administrar entornos locales y remotos. Conecte Redeven Cloud, abra espacios de trabajo y vuelva a vincular este perfil de entorno local cuando sea necesario.",
     "environmentsTitle": "Entornos",

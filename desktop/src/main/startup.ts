@@ -4,6 +4,7 @@ import { parseLocalUIExposure, type LocalUIExposure } from '../shared/localUIExp
 import { normalizeLocalUIBridgeURL } from './localUIURL';
 import { normalizeDesktopPrivateBridgeToken } from './desktopPrivateBridge';
 import { parseLocalUIAddressIssues, type LocalUIAddressIssue } from '../shared/localUIAddressIssues';
+import { normalizeDesktopRuntimePlatform, type DesktopRuntimePlatform } from '../shared/desktopRuntimePlatform';
 
 export type StartupReport = Readonly<{
   // Set only by Desktop after a live challenge proof; never decoded from startup JSON.
@@ -26,6 +27,7 @@ export type StartupReport = Readonly<{
   diagnostics_enabled?: boolean;
   pid?: number;
   started_at_unix_ms?: number;
+  runtime_platform?: DesktopRuntimePlatform;
   runtime_service?: RuntimeServiceSnapshot;
 }>;
 
@@ -89,6 +91,7 @@ export function parseStartupReport(raw: string): StartupReport {
     diagnostics_enabled: typeof parsed.diagnostics_enabled === 'boolean' ? parsed.diagnostics_enabled : undefined,
     pid: normalizePositiveInteger(parsed.pid),
     started_at_unix_ms: normalizePositiveInteger(parsed.started_at_unix_ms),
+    runtime_platform: normalizeDesktopRuntimePlatform(parsed.runtime_platform),
     ...(parsed.runtime_service ? { runtime_service: normalizeRuntimeServiceSnapshot(parsed.runtime_service, {
       effectiveRunMode: String(parsed.effective_run_mode ?? '').trim(),
       remoteEnabled: typeof parsed.remote_enabled === 'boolean' ? parsed.remote_enabled : undefined,

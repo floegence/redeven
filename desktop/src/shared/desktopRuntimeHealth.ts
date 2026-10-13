@@ -4,6 +4,7 @@ import {
   type RuntimeServiceSnapshot,
   type RuntimeServiceWorkload,
 } from './runtimeService';
+import type { DesktopRuntimePlatform } from './desktopRuntimePlatform';
 
 export type DesktopRuntimeStatus = 'online' | 'offline';
 export type DesktopRuntimeHealthFreshness =
@@ -76,6 +77,7 @@ export type DesktopRuntimeHealth = Readonly<{
   local_ui_address_issues?: readonly LocalUIAddressIssue[];
   runtime_pid?: number;
   started_at_unix_ms?: number;
+  runtime_platform?: DesktopRuntimePlatform;
   runtime_service?: RuntimeServiceSnapshot;
   runtime_maintenance?: DesktopRuntimeMaintenanceRequirement;
   offline_reason_code?: DesktopRuntimeOfflineReasonCode;

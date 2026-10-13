@@ -108,6 +108,8 @@ subtree while the shell-owned draft coordinator retains unsent content. Ordinary
 navigation and stable ready/degraded updates keep the same Flower instance.
 There is no renderer readiness poller, API-error retry loop, or inferred repair.
 
+The additive Runtime OS observation follows [Runtime platform facts and icons](desktop-runtime-platform.md). Missing platform fields do not change readiness or compatibility admission.
+
 # Evidence
 
 - `redeven:desktop/src/main/desktopBundle.ts:1` - Runtime-only bundle identity and file validation.

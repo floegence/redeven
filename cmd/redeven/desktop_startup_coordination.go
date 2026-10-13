@@ -66,10 +66,12 @@ func writeDesktopReadyLaunchReport(reportPath string, startup runtimeStartupRepo
 		PID:                      startup.PID,
 		StartedAtUnixMS:          startup.StartedAtUnixMS,
 		RuntimeService:           startup.RuntimeService,
+		RuntimePlatform:          startup.RuntimePlatform,
 	})
 }
 
 type runtimeStartupReport struct {
+	RuntimePlatform          string
 	LocalUIURL               string
 	LocalUIURLs              []string
 	LocalUIAddressIssues     []runtimemanagement.LocalUIAddressIssue
@@ -98,6 +100,7 @@ func buildRuntimeStartupReport(status runtimemanagement.RuntimeAttachStatus) run
 		endpoint = &runtimemanagement.RuntimeAttachEndpoint{}
 	}
 	return runtimeStartupReport{
+		RuntimePlatform:      status.RuntimePlatform,
 		LocalUIURL:           endpoint.LocalUIURL,
 		LocalUIURLs:          slices.Clone(endpoint.LocalUIURLs),
 		LocalUIAddressIssues: endpoint.LocalUIAddressIssues,

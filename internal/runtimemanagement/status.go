@@ -77,12 +77,13 @@ type RuntimeAttachDiagnostics struct {
 }
 
 type RuntimeAttachStatus struct {
-	State          AttachState              `json:"state"`
-	Identity       RuntimeInstanceIdentity  `json:"identity,omitempty"`
-	Endpoint       *RuntimeAttachEndpoint   `json:"endpoint,omitempty"`
-	RuntimeService runtimeservice.Snapshot  `json:"runtime_service,omitempty"`
-	Diagnostics    RuntimeAttachDiagnostics `json:"diagnostics,omitempty"`
-	Message        string                   `json:"message,omitempty"`
+	RuntimePlatform string                   `json:"runtime_platform,omitempty"`
+	State           AttachState              `json:"state"`
+	Identity        RuntimeInstanceIdentity  `json:"identity,omitempty"`
+	Endpoint        *RuntimeAttachEndpoint   `json:"endpoint,omitempty"`
+	RuntimeService  runtimeservice.Snapshot  `json:"runtime_service,omitempty"`
+	Diagnostics     RuntimeAttachDiagnostics `json:"diagnostics,omitempty"`
+	Message         string                   `json:"message,omitempty"`
 }
 
 func NormalizeLocalUIBridgeURL(raw string) (string, error) {

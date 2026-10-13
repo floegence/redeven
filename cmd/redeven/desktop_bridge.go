@@ -66,6 +66,7 @@ func (c *cli) desktopBridgeCmd(args []string) int {
 	bridge := desktopbridge.Server{
 		DialSurface: dialSurface,
 		Hello: desktopbridge.Hello{
+			RuntimePlatform: state.RuntimePlatform,
 			RuntimeVersion:  Version,
 			RuntimeCommit:   Commit,
 			StartedAtUnixMS: state.Identity.StartedAtUnixMS,
