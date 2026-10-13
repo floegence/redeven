@@ -448,7 +448,14 @@ func (c *computerExtensionClient) call(ctx context.Context, kind string, argumen
 	}
 	if result.Error != "" {
 		if result.Error == "TARGET_PERMISSION_REQUIRED" || result.Error == "TARGET_CAPABILITY_UNAVAILABLE" {
-			return nil, computerTargetFailure(TargetToolCall{}, result.Error)
+			failure := computerTargetFailure(TargetToolCall{}, result.Error)
+			if result.Error == "TARGET_PERMISSION_REQUIRED" {
+				var policy *targetToolPolicyError
+				if errors.As(failure, &policy) {
+					policy.repairAction = "enable_extension_file_access"
+				}
+			}
+			return nil, failure
 		}
 		return nil, errors.New("extension command rejected")
 	}

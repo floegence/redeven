@@ -80,14 +80,22 @@ func computerBrowserFailure(call TargetToolCall, private bool, code string, payl
 		return result, err, true
 	}
 	err := computerTargetFailure(call, code)
-	if !computerKnownRejection(err) {
+	_, confirmed := payload["action_executed"].(bool)
+	known := computerKnownRejection(err) || code == "TARGET_ACTION_FAILED" && confirmed || code == "TARGET_CONNECTION_REQUIRED" && confirmed
+	if !known {
 		err = computerBrowserExchangeFailure(call, private, err)
 	}
 	result := TargetToolResult{TargetID: call.TargetID, ExecutionLocation: location}
-	if computerKnownRejection(err) && payload != nil {
+	if known && payload != nil {
 		executed, _ := payload["action_executed"].(bool)
 		result.Result = map[string]any{"action_executed": executed, "needs_observation": executed}
 		if code == "TARGET_PERMISSION_REQUIRED" {
+			if payload["permission_reason"] == "extension_file_access" {
+				var failure *targetToolPolicyError
+				if errors.As(err, &failure) {
+					failure.repairAction, failure.targetState = "enable_extension_file_access", ""
+				}
+			}
 			if parsed, parseErr := parseComputerNavigationURL(anyToString(payload["required_navigation_url"])); parseErr == nil {
 				result.Result.(map[string]any)["required_navigation_url"] = normalizedComputerNavigationURL(parsed)
 				var failure *targetToolPolicyError
