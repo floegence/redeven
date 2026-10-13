@@ -37,14 +37,15 @@ The manifest contains real enrolled Runtime config paths. Enroll separate test m
       "name": "environment_query",
       "method": "GET",
       "url": "https://region.example/api/srv/v1/environments",
-      "headers": {"Cookie": "actual test-session cookie"},
+      "cookie_file": "/private/refreshed-cookie.txt",
       "rps": 500
     },
     {
       "name": "session_init",
       "method": "POST",
       "url": "https://region.example/v1/channel/init?endpoint_id=actual-env-id",
-      "headers": {"Cookie": "actual test-session cookie", "Origin": "https://region.example", "Content-Type": "application/json"},
+      "cookie_file": "/private/refreshed-cookie.txt",
+      "headers": {"Origin": "https://region.example", "Content-Type": "application/json"},
       "body": {"endpoint_id":"actual-env-id","floe_app":"com.floegence.redeven.agent"},
       "rps": 50
     }
@@ -52,7 +53,7 @@ The manifest contains real enrolled Runtime config paths. Enroll separate test m
 }
 ```
 
-The illustrative single config must be replaced with at least 10,000 distinct configs. Use the real route and request body required by the current session-init contract. Rotate test login sessions through normal authentication when necessary; a stale cookie is a workload error, never a reason to bypass authentication. Optional `gateways` entries contain `cloud_origin`, `namespace_public_id`, `gateway_public_id`, and a private Gateway signing key (`private_key_b64u`) for separately measured signed Gateway status calls. Do not count those requests twice when real Gateway processes already generate them.
+The illustrative single config must be replaced with at least 10,000 distinct configs. Use the real route and request body required by the current session-init contract. Rotate test login sessions through normal authentication when necessary; a stale cookie is a workload error, never a reason to bypass authentication. The optional `cookie_file` contains the current Cookie header value and is read for every request. The fixture owner refreshes credentials through normal Auth and atomically replaces this private file. Relative paths resolve against the manifest directory. Optional `gateways` entries contain `cloud_origin`, `namespace_public_id`, `gateway_public_id`, and a private Gateway signing key (`private_key_b64u`) for separately measured signed Gateway status calls. Do not count those requests twice when real Gateway processes already generate them.
 
 `samples.jsonl` records online count, distinct registered clients, observed disconnects, and cumulative operation histograms every second after ramp-up. Startup has a 300-second registration budget; the full requested steady-state duration starts only once every client is online. `steady_baseline` separates startup measurements from steady-state measurements. The production Gateway observer handles credential exhaustion and generation renewal. `report.json` records actual environment metadata, registration, heartbeat, pool maintenance, signed observation, and HTTP results without credentials or payloads. Latency buckets resolve one millisecond up to two seconds; the final bucket is overflow. The `steady/` histograms include only completions during the steady-state window. The steady scenario rejects observed disconnects, service error rates of at least 0.1%, and latency limits exceeded by heartbeat/query/issuance. The script requires the 500/50 HTTP workloads. Use `scenario: recovery` for separately timestamped fault exercises; its report remains pending incident evidence rather than inferring a healthy-service SLO during a deliberate outage. Collect independent CPU, RSS, Nginx admission, database wait, queue, and challenge-backlog samples on server hosts; client success alone cannot certify server resources.
 

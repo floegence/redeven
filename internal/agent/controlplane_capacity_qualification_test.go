@@ -44,12 +44,13 @@ type capacityGateway struct {
 	PrivateKey  string `json:"private_key_b64u"`
 }
 type capacityHTTP struct {
-	Name    string            `json:"name"`
-	URL     string            `json:"url"`
-	Method  string            `json:"method"`
-	Headers map[string]string `json:"headers"`
-	Body    json.RawMessage   `json:"body,omitempty"`
-	RPS     int               `json:"rps"`
+	Name       string            `json:"name"`
+	URL        string            `json:"url"`
+	Method     string            `json:"method"`
+	Headers    map[string]string `json:"headers"`
+	CookieFile string            `json:"cookie_file,omitempty"`
+	Body       json.RawMessage   `json:"body,omitempty"`
+	RPS        int               `json:"rps"`
 }
 type capacityHistogram struct {
 	Count      atomic.Uint64
@@ -235,6 +236,9 @@ func TestControlplaneCapacityQualification(t *testing.T) {
 	for _, entry := range manifest.HTTP {
 		if entry.RPS < 1 || entry.Name == "" {
 			t.Fatal("invalid HTTP workload")
+		}
+		if entry.CookieFile != "" && !filepath.IsAbs(entry.CookieFile) {
+			entry.CookieFile = filepath.Join(filepath.Dir(manifestPath), entry.CookieFile)
 		}
 		wg.Add(1)
 		go func() { defer wg.Done(); capacityHTTPWorkload(ctx, entry, roots, metrics) }()
@@ -466,6 +470,20 @@ func capacityHTTPWorkload(ctx context.Context, entry capacityHTTP, roots *x509.C
 					for key, value := range entry.Headers {
 						request.Header.Set(key, value)
 					}
+					// The fixture owner refreshes credentials through the real Auth
+					// endpoint and atomically replaces this private Cookie header file.
+					if entry.CookieFile != "" {
+						var cookie []byte
+						cookie, err = os.ReadFile(entry.CookieFile)
+						if err == nil && (len(cookie) == 0 || len(cookie) > 32768) {
+							err = errors.New("invalid workload cookie file")
+						}
+						if err == nil {
+							request.Header.Set("Cookie", strings.TrimSpace(string(cookie)))
+						}
+					}
+				}
+				if err == nil {
 					var response *http.Response
 					response, err = client.Do(request)
 					if err == nil {
