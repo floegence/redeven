@@ -933,6 +933,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [threadListError, setThreadListError] = createSignal('');
   const [historyFilter, setHistoryFilter] = createSignal('');
   const [sidePanel, setSidePanel] = createSignal<FlowerSurfacePanel>('chat');
+  const visiblePanel = () => companionCollapsed() ? 'chat' : sidePanel();
+  createEffect(on(companionCollapsed, (collapsed) => {
+    // Shell keeps companionOpen true through closing; reset only at its final phase.
+    if (collapsed) setSidePanel('chat');
+  }));
   const [settingsOpened, setSettingsOpened] = createSignal(false);
   const [extensionsOpened, setExtensionsOpened] = createSignal(false);
   let consumedSettingsFocusRequest = 0;
@@ -1873,6 +1878,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }));
   };
   const requestCompanionOpen = (threadID?: string) => {
+    setSidePanel('chat');
     if (!threadID) capturePageContext(currentComposerSessionKey(), 'refresh');
     props.onCompanionOpenRequest?.(threadID);
   };
@@ -12088,7 +12094,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               </Match>
             </Switch></Show>}</For>
             {subagentDropdown()}
-            {props.headerTrailingActions}
+            <Show when={visiblePanel() === 'chat'}>{props.headerTrailingActions}</Show>
           </div>
   );
 
@@ -12294,13 +12300,19 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const conversationPanel = () => (
       <section class="flower-component-main" inert={threadDrawerPresent()}
         aria-hidden={threadDrawerPresent() ? 'true' : undefined}>
-        <Show when={sidePanel() === 'chat'}>{chatPanel()}</Show>
-        <div class={cn('h-full min-h-0', sidePanel() !== 'extensions' && 'hidden')} aria-hidden={sidePanel() !== 'extensions'} inert={sidePanel() !== 'extensions'}>
+        <div class="h-full min-h-0" data-flower-panel="chat" hidden={visiblePanel() !== 'chat'}
+          aria-hidden={visiblePanel() !== 'chat'} inert={visiblePanel() !== 'chat'}>
+          {chatPanel()}
+        </div>
+        <div class="h-full min-h-0" data-flower-panel="extensions" hidden={visiblePanel() !== 'extensions'}
+          aria-hidden={visiblePanel() !== 'extensions'} inert={visiblePanel() !== 'extensions'}>
           <Show when={extensionsOpened() && props.adapter.extensions}>{adapter => <Suspense fallback={<div class="p-6" role="status">{copy().extensions.t('loading')}</div>}>
-            <FlowerExtensionsSurface adapter={adapter()} i18n={copy().extensions} onBack={returnToChat} />
+            <FlowerExtensionsSurface adapter={adapter()} i18n={copy().extensions} onBack={returnToChat}
+              headerTrailingActions={visiblePanel() === 'extensions' ? props.headerTrailingActions : undefined} />
           </Suspense>}</Show>
         </div>
-        <div class={cn('h-full min-h-0', sidePanel() !== 'settings' && 'hidden')} aria-hidden={sidePanel() !== 'settings'}>
+        <div class="h-full min-h-0" data-flower-panel="settings" hidden={visiblePanel() !== 'settings'}
+          aria-hidden={visiblePanel() !== 'settings'} inert={visiblePanel() !== 'settings'}>
           <Show when={settingsOpened()}>
             <Suspense fallback={<div class="p-4 flower-body-copy text-muted-foreground" role="status">{copy().chat.loadingSettings}</div>}>
               <FlowerSettingsSurface
@@ -12317,6 +12329,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 savedAt={savedAt()}
                 saving={settingsSaving()}
                 onBackToChat={returnToChat}
+                headerTrailingActions={visiblePanel() === 'settings' ? props.headerTrailingActions : undefined}
               />
             </Suspense>
           </Show>

@@ -1,4 +1,4 @@
-import { For, Show, createSignal, createUniqueId } from 'solid-js';
+import { For, Show, createSignal, createUniqueId, type JSX } from 'solid-js';
 import { Button } from '@floegence/floe-webapp-core/ui';
 import { ChevronLeft, Wand, Workflow } from '@floegence/floe-webapp-core/icons';
 import { FlowerExtensionsContext, type ExtensionI18n } from './context';
@@ -7,7 +7,7 @@ import { MCPPanel } from './MCPPanel';
 import type { FlowerExtensionsAdapter } from './types';
 import './extensions.css';
 
-export function FlowerExtensionsSurface(props: { adapter: FlowerExtensionsAdapter; i18n: ExtensionI18n; onBack: () => void }) {
+export function FlowerExtensionsSurface(props: { adapter: FlowerExtensionsAdapter; i18n: ExtensionI18n; onBack: () => void; headerTrailingActions?: JSX.Element }) {
   const [tab, setTab] = createSignal<'skills' | 'mcp'>('skills');
   const [mcpVisited, setMCPVisited] = createSignal(false);
   const id = createUniqueId();
@@ -23,6 +23,7 @@ export function FlowerExtensionsSurface(props: { adapter: FlowerExtensionsAdapte
             <Show when={value === 'skills'} fallback={<Workflow class="h-4 w-4" aria-hidden="true" />}><Wand class="h-4 w-4" aria-hidden="true" /></Show><span>{props.i18n.t(value)}</span>
           </button>}</For>
         </div>
+        <Show when={props.headerTrailingActions}><div class="flower-extensions-header-actions">{props.headerTrailingActions}</div></Show>
       </header>
       <div class="flower-extensions-content">
         <div role="tabpanel" id={`${id}-skills-panel`} aria-labelledby={`${id}-skills-tab`} hidden={tab() !== 'skills'} inert={tab() !== 'skills'}><SkillsSection /></div>

@@ -820,7 +820,7 @@ vi.mock('./pages/EnvAIPage', () => ({
           <button
             type="button"
             class="flower-context-preview-window flower-turn-launcher-related-surface"
-            style={{ position: 'fixed', top: '60px', 'z-index': 200 }} data-testid="activity-flower-context-preview"
+            style={{ position: 'fixed', top: '60px', left: '120px', width: '180px', height: '32px', 'z-index': 200 }} data-testid="activity-flower-context-preview"
           >
             Flower context preview
           </button>
