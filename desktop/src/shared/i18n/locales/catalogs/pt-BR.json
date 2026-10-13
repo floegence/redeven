@@ -1002,7 +1002,13 @@
       "dialogChatGPTSignOut": "Sair",
       "dialogChatGPTRevocationUnconfirmed": "Você saiu neste dispositivo. Não foi possível confirmar a revogação; confira os aplicativos conectados no ChatGPT.",
       "dialogChatGPTUsageUnavailable": "O uso do plano do ChatGPT está indisponível para esta solicitação. Gerencie seu uso ou tente novamente mais tarde.",
-      "dialogChatGPTChangeAccount": "Usar outra conta"
+      "dialogChatGPTChangeAccount": "Usar outra conta",
+      "inputCapabilities": "Entrada",
+      "providerDisabled": "Desativado",
+      "providerNeedsSetup": "Requer configuração",
+      "currentProviderDisabled": "O provedor do modelo atual está desativado. Ative-o ou escolha outro modelo.",
+      "enableProvider": "Ativar {provider}",
+      "disableProvider": "Desativar {provider}"
     },
     "reasoningControl": {
       "default": "Padrão",

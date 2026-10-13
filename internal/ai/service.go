@@ -1038,7 +1038,7 @@ func (s *Service) listModels(cfg *config.AIConfig, sourceSnapshot *DesktopModelS
 	}
 	if cfg != nil {
 		for _, provider := range cfg.Providers {
-			if config.ResolveAIWebSearch(provider, "", false).Mode != config.AIWebSearchBrave {
+			if !provider.IsEnabled() || config.ResolveAIWebSearch(provider, "", false).Mode != config.AIWebSearchBrave {
 				continue
 			}
 			configured := false
@@ -1159,7 +1159,7 @@ func configModelViews(cfg *config.AIConfig) ([]Model, string, error) {
 	seenModel := make(map[string]struct{}, 16)
 	for _, p := range cfg.Providers {
 		providerID := strings.TrimSpace(p.ID)
-		if providerID == "" {
+		if !p.IsEnabled() || providerID == "" {
 			continue
 		}
 		pn := strings.TrimSpace(providerNameByID[providerID])
@@ -1185,14 +1185,14 @@ func configModelViews(cfg *config.AIConfig) ([]Model, string, error) {
 	}
 
 	if !cfg.IsAllowedModelID(currentModelID) {
-		catalogOwned := false
+		configured := false
 		for _, p := range cfg.Providers {
-			if strings.HasPrefix(currentModelID, p.ID+"/") && p.ModelSelection != nil {
-				catalogOwned = true
+			if strings.HasPrefix(currentModelID, p.ID+"/") && (p.ModelSelection != nil || !p.IsEnabled()) {
+				configured = true
 				break
 			}
 		}
-		if !catalogOwned {
+		if !configured {
 			return models, "", fmt.Errorf("invalid ai config: current_model_id is not in providers[].models[]: %s", currentModelID)
 		}
 	}

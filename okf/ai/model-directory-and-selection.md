@@ -22,6 +22,13 @@ OpenRouter queries its configured `/models` endpoint with tool filtering. Refres
 
 Ollama queries `/api/tags`, `/api/ps`, and `/api/show`; only installed local models advertising tools qualify. Loaded context capacity takes precedence over `num_ctx`; otherwise use the conservative 4,096-token serving default capped by the model limit. Inventory, digest, quantization, and availability are transient metadata, never persisted as user intent. Discovery errors leave preferences intact and other providers usable. The settings refresh action retries discovery; selected models must resolve against current inventory before execution.
 
+Provider `enabled` defaults to true when omitted. Disabling retains identities,
+selected models, overrides, credentials, and the saved default. Disabled providers
+are excluded from new-run admission, model choices, automatic discovery, credential
+checks, and Desktop model export. Directory entries remain unavailable with reason
+`provider_disabled`. Disabling needs no valid credentials; enabling validates them.
+Admitted runs retain their captured profile. No substitute default is selected.
+
 ## Settings interaction
 
 Runtime exposes two reads for the same directory projection. The baseline read
@@ -105,3 +112,5 @@ Gemini uses the supported OpenAI-compatible endpoint with model-specific effort 
 - [models.dev](https://models.dev/) - Reviewed upstream directory.
 - [Gemini OpenAI compatibility](https://ai.google.dev/gemini-api/docs/openai) - Supported request protocol.
 - [Ollama OpenAI compatibility](https://docs.ollama.com/api/openai-compatibility) - Serving context configuration.
+- `redeven:internal/ai/provider_enabled_test.go` - Disabled discovery, directory retention, new-run rejection, Desktop export, and re-enable.
+- `redeven:internal/codeapp/appserver/server_provider_credentials_test.go` - Atomic credential validation and disabled-provider saves.

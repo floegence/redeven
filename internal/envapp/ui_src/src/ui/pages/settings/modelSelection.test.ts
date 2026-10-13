@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createStore } from 'solid-js/store';
-import { cloneFlowerModel, applyFlowerModelDiscovery, defaultFlowerProviderModels, filterFlowerModels, flowerProviderModelChoices, resolveFlowerProviderModels, serializeFlowerProvider, setFlowerModelsEnabled } from '../../../../../../flower_ui/src/settings/modelSelection';
+import { hydrateFlowerProviderCatalog, cloneFlowerModel, applyFlowerModelDiscovery, defaultFlowerProviderModels, filterFlowerModels, flowerProviderModelChoices, resolveFlowerProviderModels, serializeFlowerProvider, setFlowerModelsEnabled } from '../../../../../../flower_ui/src/settings/modelSelection';
 import * as catalog from '../../../../../../flower_ui/src/settings/providerCatalog';
 import type { FlowerProviderDraft, FlowerProviderModel } from '../../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 
@@ -175,4 +175,17 @@ it('keeps explicitly entered OpenRouter models distinct from discovered inventor
   const cleared = serializeFlowerProvider(setFlowerModelsEnabled({ ...saved, models: [manual] }, [manual], false));
   expect(cleared.model_selection?.custom_models).toEqual([manual]);
   expect(resolveFlowerProviderModels(cleared, [])).toEqual([]);
+});
+
+it('persists provider enablement separately from selected models and skips disabled discovery', async () => {
+  const provider: FlowerProviderDraft = { id: 'local', type: 'ollama', enabled: false, models: [model('agent')] };
+  const saved = serializeFlowerProvider(provider);
+  expect(saved.enabled).toBe(false);
+  expect(saved.model_selection?.selected_models).toEqual(['agent']);
+  const discover = vi.fn(async () => ({ models: [model('agent')] }));
+  const restored = await hydrateFlowerProviderCatalog(saved, discover);
+  expect(discover).not.toHaveBeenCalled();
+  expect(restored.models.map(model => model.model_name)).toEqual(['agent']);
+  await hydrateFlowerProviderCatalog({ ...saved, enabled: true }, discover);
+  expect(discover).toHaveBeenCalledTimes(1);
 });

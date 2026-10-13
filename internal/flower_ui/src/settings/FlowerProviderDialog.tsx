@@ -185,6 +185,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
   const automaticDiscoveryIdentity = createMemo(() => {
     if (!props.open || !store.draft || !props.onDiscoverModels) return '';
     const draft = store.draft;
+    if (draft.enabled === false) return '';
     if (draft.auth_method === 'chatgpt' && (!chatGPTEnabled() || draft.chatgpt_account?.state !== 'ready')) return '';
     if (draft.type === 'openrouter' || draft.type === 'ollama' || draft.type === 'openai_compatible') return '';
     return discoveryIdentity(draft);

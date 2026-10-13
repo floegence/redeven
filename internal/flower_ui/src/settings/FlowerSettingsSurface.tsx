@@ -1,16 +1,12 @@
 import { computerUseEnUS, type FlowerComputerCopy } from '../computerUseCopy';
 import { flowerProviderAPIKeyOptional, missingFlowerProviderCredential } from '../providerCredentials';
 import { secureRandomUUID } from '@floegence/floe-webapp-core';
-import { flowerProviderSearchSummary } from '../webSearchCapability';
 import { FlowerIcon } from '../icons/FlowerIcon';
-import { FlowerProviderBrandIcon } from './FlowerProviderBrandIcon';
-import { flowerModelSupportsImage, formatFlowerTokenCount } from '../flowerModelLabel';
 import type { FlowerModelCatalogDiscovery } from '../contracts/flowerSurfaceContracts';
 import type { Component } from 'solid-js';
 import { For, Show, createEffect, createMemo, createSignal, createUniqueId, onCleanup } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { Check, ChevronDown, ChevronLeft, Pencil, Plus, Trash } from '@floegence/floe-webapp-core/icons';
-import { Button, Select } from '@floegence/floe-webapp-core/ui';
+import { Check, ChevronDown, ChevronLeft } from '@floegence/floe-webapp-core/icons';
 
 import type { FlowerSettingsCopy } from '../copy';
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../copy';
@@ -36,22 +32,10 @@ import {
   normalizeFlowerPositiveInteger,
 } from './providerCatalog';
 import { defaultFlowerProviderModels, resolveFlowerProviderModels } from './modelSelection';
+import { FlowerModelSettings } from './FlowerModelSettings';
 import { FlowerProviderDialog, type FlowerProviderDialogMode } from './FlowerProviderDialog';
 import { FlowerAutoSaveIndicator, FlowerSubSectionHeader } from './FlowerSettingsPrimitives';
 import type { FlowerProviderTypeLabels } from './providerTypeLabels';
-import { FlowerReasoningControl } from '../ReasoningControl';
-import { reasoningCapabilitySupportsControl } from '../reasoning';
-
-type FlowerModelOption = Readonly<{
-  id: string;
-  label: string;
-  modelName: string;
-  providerName: string;
-  supportsImageInput: boolean;
-  contextWindow?: number;
-  maxOutputTokens?: number;
-  provider_type: FlowerProviderDraft['type'];
-}>;
 
 type FlowerSettingsDraftBuildResult =
   | Readonly<{ ok: true; draft: FlowerSettingsDraft; current_model_id: string; providers: readonly FlowerProviderDraft[] }>
@@ -101,28 +85,6 @@ function providerDisplayName(
   return labels?.[provider.type] || flowerProviderTypeLabel(provider.type);
 }
 
-function collectModelOptions(providers: readonly FlowerProviderDraft[], labels?: FlowerProviderTypeLabels): readonly FlowerModelOption[] {
-  return providers.flatMap((provider) => provider.models.filter((model) => !model.unavailable)
-    .map((model) => {
-      const modelName = trim(model.model_name);
-      const providerID = trim(provider.id);
-      if (!providerID || !modelName) return null;
-      const displayName = model.display_name || model.wire_model_name || modelName;
-      const providerName = providerDisplayName(provider, labels);
-      return {
-        id: flowerModelID(providerID, modelName),
-        label: `${providerName} / ${displayName}`,
-        modelName: displayName,
-        providerName,
-        supportsImageInput: flowerModelSupportsImage(model.input_modalities),
-        ...(model.context_window != null ? { contextWindow: model.context_window } : {}),
-        ...(model.max_output_tokens != null ? { maxOutputTokens: model.max_output_tokens } : {}),
-        provider_type: provider.type,
-      };
-    })
-    .filter((item): item is FlowerModelOption => Boolean(item)));
-}
-
 function providerSecretConfigured(snapshot: FlowerSettingsSnapshot | null, providerID: string): boolean {
   return snapshot?.provider_secrets.some((secret) => secret.provider_id === providerID && secret.provider_api_key_configured) ?? false;
 }
@@ -141,10 +103,9 @@ function normalizeSecretPatch(value: string | null | undefined): string | null |
 function normalizeProviderForSave(provider: FlowerProviderDraft): FlowerProviderDraft {
   const webSearchMode = (provider.web_search?.mode ?? 'disabled') as FlowerWebSearchMode;
   const providerKey = normalizeSecretPatch(provider.provider_api_key);
-  const webSearchKey = webSearchMode === 'brave'
-    ? normalizeSecretPatch(provider.web_search_api_key)
-    : null;
+  const webSearchKey = normalizeSecretPatch(provider.web_search_api_key);
   return {
+    enabled: provider.enabled,
     auth_method: provider.auth_method, account_id: provider.account_id,
     chatgpt_attempt: provider.chatgpt_attempt, chatgpt_account: provider.chatgpt_account,
     model_selection: provider.model_selection,
@@ -190,10 +151,7 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
   const copy = () => props.copy ?? DEFAULT_FLOWER_SURFACE_COPY.settings;
   const [providers, setProviders] = createSignal<readonly FlowerProviderDraft[]>([]);
   const [currentModelID, setCurrentModelID] = createSignal('');
-  const [modelEditing, setModelEditing] = createSignal(false);
-  const modelEditorID = createUniqueId();
-  let modelEditButton: HTMLButtonElement | undefined;
-  let modelEditor: HTMLDivElement | undefined;
+  const [providerToggleSaving, setProviderToggleSaving] = createSignal(false);
   const [permissionType, setPermissionType] = createSignal<FlowerPermissionType>('approval_required');
   const [confirmedPermissionType, setConfirmedPermissionType] = createSignal<FlowerPermissionType>('approval_required');
   const [permissionDirty, setPermissionDirty] = createSignal(false);
@@ -228,27 +186,8 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
     setDirty(false);
   });
 
-  const modelOptions = createMemo(() => collectModelOptions(providers(), copy().providerTypeLabels));
-  const activeModelOption = createMemo(() => modelOptions().find((option) => option.id === currentModelID()) ?? null);
-  const modelSelectOptions = createMemo(() => modelOptions().map((o) => ({ value: o.id, label: o.label })));
-  const activeProviderModel = createMemo(() => {
-    const current = trim(currentModelID());
-    const [providerID, ...modelParts] = current.split('/');
-    const modelName = modelParts.join('/');
-    if (!providerID || !modelName) return null;
-    const provider = providers().find((item) => trim(item.id) === providerID);
-    return provider?.models.find((model) => trim(model.model_name) === modelName) ?? null;
-  });
   const normalizedProviders = createMemo(() => providers().map(normalizeProviderForSave));
   const markDirty = () => setDirty(true);
-  const finishModelEdit = () => {
-    setModelEditing(false);
-    queueMicrotask(() => modelEditButton?.focus());
-  };
-  const openModelEditor = () => {
-    setModelEditing(true);
-    queueMicrotask(() => modelEditor?.querySelector<HTMLElement>('[data-floe-dropdown-trigger]')?.focus());
-  };
   const focusPermissionType = (kind: FlowerPermissionType) => {
     queueMicrotask(() => permissionButtonRefs.get(kind)?.focus());
   };
@@ -465,6 +404,27 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
     updateProviders(next);
   };
 
+  const toggleProvider = async (index: number, enabled: boolean) => {
+    if (props.saving || providerToggleSaving()) return;
+    const previous = providers();
+    const previousDirty = dirty();
+    const next = previous.map((provider, i) => i === index ? { ...provider, enabled } : provider);
+    const result = buildSettingsDraft(next);
+    if (!result.ok) { setLocalError(result.error); return; }
+    setProviderToggleSaving(true);
+    setProviders(next);
+    try {
+      const saved = await saveBuiltDraft(result);
+      if (saved) setProviders((saved.model_profile?.providers ?? []).map(provider => ({ ...cloneProviderForForm(provider), chatgpt_account: saved.chatgpt_accounts?.[provider.id] })));
+    } catch (error) {
+      setProviders(previous);
+      setDirty(previousDirty);
+      setLocalError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setProviderToggleSaving(false);
+    }
+  };
+
   const autosaveFingerprint = createMemo(() => JSON.stringify({
     current_model_id: currentModelID(),
     providers: normalizedProviders(),
@@ -477,7 +437,7 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
   };
   createEffect(() => {
     autosaveFingerprint();
-    if (!dirty() || props.saving || providerDialogOpen()) {
+    if (!dirty() || props.saving || providerToggleSaving() || providerDialogOpen()) {
       clearAutosaveTimer();
       return;
     }
@@ -578,145 +538,24 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
               <FlowerAutoSaveIndicator
                 dirty={dirty() || permissionDirty()}
                 copy={copy().autoSave}
-                saving={props.saving || permissionSaving()}
+                saving={props.saving || providerToggleSaving() || permissionSaving()}
                 error={localError() || permissionError() || props.saveError}
                 savedAt={Math.max(props.savedAt ?? 0, permissionSavedAt() ?? 0) || null}
               />
             </div>
           </header>
 
-          <section class="flower-settings-section flower-settings-current-model" aria-label={copy().currentModel}>
-            <FlowerSubSectionHeader title={copy().models} />
-            <div class="flower-settings-section-content flower-settings-model-group">
-              <Show when={currentModelID() && !activeModelOption()}>
-                <p role="alert" class="mb-3 flower-body-copy text-destructive">{copy().dialog.catalog.unavailable}</p>
-              </Show>
-              <Show when={modelOptions().length > 0} fallback={<p class="flower-body-copy text-muted-foreground">{copy().noModelSelected}</p>}>
-                <div class="flower-settings-model-field">
-                  <div class="flower-settings-provider-brand"><Show when={activeModelOption()}>{option => <FlowerProviderBrandIcon type={option().provider_type} class="h-6 w-6" />}</Show></div>
-                  <div class="flower-settings-model-identity">
-                    <Show when={modelEditing()} fallback={
-                      <div class="flower-settings-model-name">{activeModelOption()?.modelName || currentModelID() || copy().noModelSelected}</div>
-                    }>
-                      <div ref={modelEditor} id={modelEditorID} class="flower-settings-model-editor" onKeyDown={event => { if (event.key === 'Escape') finishModelEdit(); }}>
-                        <Select
-                          value={currentModelID()}
-                          options={modelSelectOptions()}
-                          onChange={(value) => { setCurrentModelID(trim(value)); markDirty(); finishModelEdit(); }}
-                          placeholder={copy().selectModelPlaceholder}
-                          disabled={props.saving}
-                          class="flower-settings-model-select w-full"
-                        />
-                      </div>
-                    </Show>
-                    <div class="flower-settings-model-provider">{activeModelOption()?.providerName}</div>
-                  </div>
-                  <Button ref={modelEditButton} size="sm" variant="ghost" icon={modelEditing() ? Check : Pencil}
-                    class="flower-settings-model-edit" aria-expanded={modelEditing()} aria-controls={modelEditing() ? modelEditorID : undefined}
-                    aria-label={modelEditing() ? copy().finishModelEdit : copy().changeModel}
-                    title={modelEditing() ? copy().finishModelEdit : copy().changeModel}
-                    disabled={props.saving}
-                    onClick={() => modelEditing() ? finishModelEdit() : openModelEditor()}>
-                    <span class="flower-settings-model-edit-label">{modelEditing() ? copy().finishModelEdit : copy().changeModel}</span>
-                  </Button>
-                </div>
-                <Show when={activeModelOption()}>
-                  <div class="flower-settings-model-metadata">
-                    <div class="flower-settings-model-capabilities">
-                      <span>{copy().text}</span>
-                      <Show when={activeModelOption()?.supportsImageInput}><span>{copy().imageInput}</span></Show>
-                    </div>
-                    <dl class="flower-settings-model-limits">
-                      <Show when={activeModelOption()?.contextWindow}>
-                        <div><dt>{copy().dialog.contextWindow}</dt><dd>{formatFlowerTokenCount(activeModelOption()?.contextWindow)}</dd></div>
-                      </Show>
-                      <Show when={activeModelOption()?.maxOutputTokens}>
-                        <div><dt>{copy().dialog.maxOutput}</dt><dd>{formatFlowerTokenCount(activeModelOption()?.maxOutputTokens)}</dd></div>
-                      </Show>
-                    </dl>
-                    <Show when={activeProviderModel()?.reasoning_capability && reasoningCapabilitySupportsControl(activeProviderModel()?.reasoning_capability)}>
-                      <div class="flower-settings-reasoning">
-                        <span>{copy().reasoningControl.defaultLabel}</span>
-                        <FlowerReasoningControl
-                          variant="badge"
-                          copy={copy().reasoningControl}
-                          capability={activeProviderModel()?.reasoning_capability}
-                          selection={activeProviderModel()?.default_reasoning_selection}
-                          label={copy().reasoningControl.defaultLabel}
-                          onChange={updateCurrentModelReasoning}
-                        />
-                      </div>
-                    </Show>
-                  </div>
-                </Show>
-              </Show>
-            </div>
-          </section>
-
-          <section class="flower-settings-section flower-settings-providers-section" aria-label={copy().providersTitle}>
-            <FlowerSubSectionHeader title={copy().providersTitle} description={copy().providersDescription}
-              actions={<Button size="sm" variant="ghost" icon={Plus} class="flower-settings-provider-add" onClick={openAddProviderDialog}>{copy().addProvider}</Button>} />
-            <div class="flower-settings-section-content">
-              <div class="flower-settings-provider-gallery">
-                <For each={providers()} fallback={<div class="flower-settings-provider-empty">{copy().noProviders}</div>}>
-                  {(provider, index) => {
-                    const providerID = () => trim(provider.id);
-                    const modelNames = () => provider.models.map((model) => trim(model.model_name)).filter(Boolean);
-                    const hasImageInput = () => provider.models.some((model) => flowerModelSupportsImage(model.input_modalities));
-                    const isDefault = () => currentModelID().startsWith(`${providerID()}/`);
-                    const isChatGPT = () => provider.auth_method === 'chatgpt';
-                    const keyReady = () => isChatGPT() ? provider.chatgpt_account?.state === 'ready' : providerSecretConfigured(props.snapshot, provider.id) || !!trim(provider.provider_api_key);
-                    const webSearch = () => flowerProviderSearchSummary(provider.models, copy().dialog.catalog);
-                    return (
-                      <div class="flower-settings-provider-card">
-                        <div class="flower-settings-provider-brand"><FlowerProviderBrandIcon type={provider.type} class="h-6 w-6" /></div>
-                        <div class="flower-settings-provider-body">
-                          <div class="flower-settings-provider-title">
-                            <span class="truncate flower-body-copy font-semibold text-foreground" title={providerDisplayName(provider, copy().providerTypeLabels)}>{providerDisplayName(provider, copy().providerTypeLabels)}</span>
-                            <Show when={providerDisplayName(provider, copy().providerTypeLabels) !== copy().providerTypeLabels[provider.type]}>
-                              <span class="text-xs text-muted-foreground">{copy().providerTypeLabels[provider.type]}</span>
-                            </Show>
-                            <Show when={isDefault()}><span class="flower-settings-provider-default">{copy().defaultProvider}</span></Show>
-                          </div>
-                          <details class="flower-settings-provider-details">
-                            <summary><span>{copy().models}</span><span class="flower-settings-provider-count">{modelNames().length}</span><ChevronDown class="h-3.5 w-3.5" aria-hidden="true" /></summary>
-                            <div class="flower-settings-provider-detail-body">
-                              <ul class="flower-settings-provider-models">
-                                <For each={modelNames()}>{name => <li><code>{name}</code></li>}</For>
-                              </ul>
-                              <div class="flower-settings-provider-fact">
-                                <span class="flower-settings-provider-fact-label">{copy().web}</span>
-                                <span>{webSearch().label}</span>
-                              </div>
-                              <Show when={hasImageInput()}>
-                                <div class="flower-settings-provider-fact">
-                                  <span class="flower-settings-provider-fact-label">{copy().vision}</span><span>{copy().imageInput}</span>
-                                </div>
-                              </Show>
-                            </div>
-                          </details>
-                        </div>
-                        <div class="flower-settings-provider-status">
-                          <span class={cn('flower-settings-dot-pill', keyReady() && 'flower-settings-dot-pill-active')}>
-                            {keyReady() ? copy().ready : isChatGPT() ? copy().dialog.chatGPT.reauthorize : flowerProviderAPIKeyOptional(provider.type) ? copy().dialog.catalog.optionalKey : copy().needsKey}
-                          </span>
-                          <span>{isChatGPT() ? copy().dialog.chatGPT.account : copy().apiKey}</span>
-                        </div>
-                        <div class="flower-settings-provider-actions">
-                          <Button size="icon" variant="ghost" class="h-8 w-8 text-muted-foreground hover:text-foreground" onClick={() => openEditProviderDialog(index())} aria-label={copy().editProvider}>
-                            <Pencil class="h-3.5 w-3.5" />
-                          </Button>
-                          <Button size="icon" variant="ghost" class="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => removeProvider(index())} disabled={providers().length <= 1} aria-label={copy().removeProvider}>
-                            <Trash class="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      </div>
-                    );
-                  }}
-                </For>
-              </div>
-            </div>
-          </section>
+          <FlowerModelSettings copy={copy()} providers={providers()} currentModelID={currentModelID()}
+            disabled={props.saving || providerToggleSaving()}
+            providerReady={provider => provider.auth_method === 'chatgpt'
+              ? props.snapshot?.chatgpt_accounts?.[provider.id]?.state === 'ready'
+              : (flowerProviderAPIKeyOptional(provider.type) || providerSecretConfigured(props.snapshot, provider.id)) && (provider.web_search?.mode !== 'brave' || providerWebSearchSecretConfigured(props.snapshot, provider.id))}
+            onChooseModel={id => { setCurrentModelID(id); markDirty(); }} onChangeReasoning={updateCurrentModelReasoning}
+            onAddProvider={openAddProviderDialog} onEditProvider={openEditProviderDialog} onRemoveProvider={removeProvider}
+            onToggleProvider={toggleProvider} />
+          <Show when={localError() || props.saveError}>
+            <p role="alert" class="flower-settings-model-notice text-destructive">{localError() || props.saveError}</p>
+          </Show>
 
           <section class="flower-settings-section flower-settings-policy-section" aria-label={copy().defaultPermissionTitle}>
             <FlowerSubSectionHeader

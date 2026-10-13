@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi, afterEach } from 'vitest';
 
 import { modelDirectoryWireFixture } from '../../test/modelDirectoryWireFixture';
 import type { AgentSettingsResponse } from '../pages/settings/types';
-import { createEnvLocalFlowerSurfaceAdapter } from './envLocalFlowerSurfaceAdapter';
+import { createEnvLocalFlowerSurfaceAdapter, mapEnvFlowerSettings } from './envLocalFlowerSurfaceAdapter';
 import { flowerLiveWireFixture } from '../../../../../flower_ui/src/test/flowerLiveWireFixture';
 import type {
   FlowerAttachmentStagingScope,
@@ -2185,4 +2185,10 @@ it('uses the dedicated compact route with only operation identity and preserves 
   await expect(adapter.compactThreadContext!('thread-compact', { storage_generation: 'generation', client_request_id: 'compact-key' })).rejects.toMatchObject({ admission_kind: 'unknown' });
   fetchMock.mockResolvedValueOnce(errorResponse('context_compaction_busy', null));
   await expect(adapter.compactThreadContext!('thread-compact', { storage_generation: 'generation', client_request_id: 'compact-key' })).rejects.toMatchObject({ admission_kind: 'rejected', code: 'context_compaction_busy' });
+});
+
+it('maps a disabled provider without replacing its saved default', () => {
+  const snapshot = mapEnvFlowerSettings({ ai: { current_model_id: 'local/agent', providers: [{ id: 'local', type: 'openai_compatible', enabled: false, base_url: 'http://localhost:1234/v1', models: [{ model_name: 'agent' }] }] } } as AgentSettingsResponse);
+  expect(snapshot.model_profile?.providers[0].enabled).toBe(false);
+  expect(snapshot.model_profile?.current_model_id).toBe('local/agent');
 });

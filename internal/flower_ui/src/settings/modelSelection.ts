@@ -68,6 +68,7 @@ function serializeFlowerModel(model: FlowerProviderModel): FlowerProviderModel {
 // Serialize only intent. Filtering and collapsing the UI never enter this path.
 export function serializeFlowerProvider(provider: FlowerProviderDraft): FlowerProvider {
   const out: FlowerProvider = {
+    enabled: provider.enabled,
     id: provider.id, name: provider.name, type: provider.type, base_url: provider.base_url,
     auth_method: provider.auth_method, account_id: provider.account_id,
     web_search: provider.web_search, models: provider.models.map(serializeFlowerModel),
@@ -129,6 +130,7 @@ export function applyFlowerModelDiscovery(provider: FlowerProviderDraft, catalog
 }
 
 export async function hydrateFlowerProviderCatalog(provider: FlowerProvider, discover: FlowerModelCatalogDiscovery): Promise<FlowerProvider> {
+  if (provider.enabled === false) return { ...provider, models: resolveFlowerProviderModels(provider, provider.catalog_models) };
   if (provider.type !== 'ollama' && provider.type !== 'openrouter') return { ...provider, models: resolveFlowerProviderModels(provider) };
   try {
     const result = await discover({ provider_id: provider.id, type: provider.type, base_url: provider.base_url });

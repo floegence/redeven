@@ -69,6 +69,9 @@ type AIModelProfile struct {
 }
 
 type AIProvider struct {
+	// Enabled defaults to true. Disabling preserves configuration and credentials.
+	Enabled *bool `json:"enabled,omitempty"`
+
 	// ID is a stable internal id (primary key). It must not change once used for secrets/model routing.
 	ID string `json:"id"`
 
@@ -533,6 +536,10 @@ func (p *AIModelProfile) Validate() error {
 	return nil
 }
 
+func (p AIProvider) IsEnabled() bool {
+	return p.Enabled == nil || *p.Enabled
+}
+
 func (c *AIConfig) ProviderModelByID(modelID string) (AIProvider, AIProviderModel, bool) {
 	if c == nil {
 		return AIProvider{}, AIProviderModel{}, false
@@ -545,7 +552,7 @@ func (c *AIConfig) ProviderModelByID(modelID string) (AIProvider, AIProviderMode
 		return AIProvider{}, AIProviderModel{}, false
 	}
 	for _, p := range c.Providers {
-		if strings.TrimSpace(p.ID) != pid {
+		if !p.IsEnabled() || strings.TrimSpace(p.ID) != pid {
 			continue
 		}
 		for _, m := range p.EffectiveModels() {
@@ -558,30 +565,10 @@ func (c *AIConfig) ProviderModelByID(modelID string) (AIProvider, AIProviderMode
 	return AIProvider{}, AIProviderModel{}, false
 }
 
-// IsAllowedModelID reports whether the given model wire id (<provider_id>/<model_name>) exists in the config allow-list.
+// IsAllowedModelID reports whether the model belongs to an enabled provider.
 func (c *AIConfig) IsAllowedModelID(modelID string) bool {
-	if c == nil {
-		return false
-	}
-	raw := strings.TrimSpace(modelID)
-	pid, mn, ok := strings.Cut(raw, "/")
-	pid = strings.TrimSpace(pid)
-	mn = strings.TrimSpace(mn)
-	if !ok || pid == "" || mn == "" {
-		return false
-	}
-	for _, p := range c.Providers {
-		if strings.TrimSpace(p.ID) != pid {
-			continue
-		}
-		for _, m := range p.EffectiveModels() {
-			if strings.TrimSpace(m.ModelName) == mn {
-				return true
-			}
-		}
-		return false
-	}
-	return false
+	_, _, found := c.ProviderModelByID(modelID)
+	return found
 }
 
 func (c *AIConfig) EffectivePermissionType() string {

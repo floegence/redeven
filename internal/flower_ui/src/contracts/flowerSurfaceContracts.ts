@@ -67,6 +67,7 @@ export type FlowerModelSelection = Readonly<{
 }>;
 
 export type FlowerProvider = Readonly<{
+  enabled?: boolean;
   id: string;
   name?: string;
   type: FlowerProviderType;

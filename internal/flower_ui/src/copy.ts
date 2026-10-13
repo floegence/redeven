@@ -131,6 +131,12 @@ export type FlowerSettingsCopy = Readonly<{
   currentModel: string;
   changeModel: string;
   finishModelEdit: string;
+  inputCapabilities: string;
+  providerDisabled: string;
+  providerNeedsSetup: string;
+  currentProviderDisabled: string;
+  enableProvider: (provider: string) => string;
+  disableProvider: (provider: string) => string;
   noModelSelected: string;
   text: string;
   imageInput: string;
@@ -1277,6 +1283,12 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     currentModel: 'Current model',
     changeModel: 'Change model',
     finishModelEdit: 'Done',
+    inputCapabilities: 'Input',
+    providerDisabled: 'Disabled',
+    providerNeedsSetup: 'Needs setup',
+    currentProviderDisabled: 'The current model’s provider is disabled. Enable it or choose another model.',
+    enableProvider: (provider) => `Enable ${provider}`,
+    disableProvider: (provider) => `Disable ${provider}`,
     noModelSelected: 'No model selected',
     text: 'Text',
     imageInput: 'Image input',

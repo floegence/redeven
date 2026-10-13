@@ -291,7 +291,7 @@ func resolveModelCatalogResults(ctx context.Context, cfg *config.AIConfig, resol
 	slots := make(chan struct{}, 4)
 	var workers sync.WaitGroup
 	for i, p := range next.Providers {
-		if (p.Type != "ollama" && p.Type != "openrouter" && p.EffectiveAuthMethod() != config.AIAuthChatGPT) || p.ModelSelection == nil || (modelID != "" && !strings.HasPrefix(modelID, p.ID+"/")) {
+		if !p.IsEnabled() || (p.Type != "ollama" && p.Type != "openrouter" && p.EffectiveAuthMethod() != config.AIAuthChatGPT) || p.ModelSelection == nil || (modelID != "" && !strings.HasPrefix(modelID, p.ID+"/")) {
 			continue
 		}
 		if p.ModelSelection.SelectedModels == nil {

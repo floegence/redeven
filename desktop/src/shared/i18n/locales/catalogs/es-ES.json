@@ -1002,7 +1002,13 @@
       "dialogChatGPTSignOut": "Cerrar sesión",
       "dialogChatGPTRevocationUnconfirmed": "Has cerrado sesión en este dispositivo. No se pudo confirmar la revocación; revisa las aplicaciones conectadas en ChatGPT.",
       "dialogChatGPTUsageUnavailable": "El uso del plan de ChatGPT no está disponible para esta solicitud. Gestiona tu uso o inténtalo de nuevo más tarde.",
-      "dialogChatGPTChangeAccount": "Usar otra cuenta"
+      "dialogChatGPTChangeAccount": "Usar otra cuenta",
+      "inputCapabilities": "Entrada",
+      "providerDisabled": "Desactivado",
+      "providerNeedsSetup": "Requiere configuración",
+      "currentProviderDisabled": "El proveedor del modelo actual está desactivado. Actívalo o elige otro modelo.",
+      "enableProvider": "Activar {provider}",
+      "disableProvider": "Desactivar {provider}"
     },
     "reasoningControl": {
       "default": "Predeterminado",

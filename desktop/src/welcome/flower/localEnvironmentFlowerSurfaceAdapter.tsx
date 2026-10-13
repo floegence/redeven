@@ -370,6 +370,7 @@ function mapProviderModel(model: NonNullable<NonNullable<AIConfig['providers']>[
 
 function mapProvider(provider: NonNullable<AIConfig['providers']>[number]): FlowerProvider {
   return {
+    enabled: provider.enabled,
     id: trim(provider.id),
     ...(trim(provider.name) ? { name: trim(provider.name) } : {}),
     type: provider.type,
