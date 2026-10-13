@@ -84,6 +84,13 @@ try {
               getComputedStyle(grid).gridTemplateColumns.split(' ').length), 5, `${label}: five columns`);
           }
           const bounds = await pair.boundingBox();
+          for (const index of [0, 1, tabCount - 1]) {
+            await tabs.nth(index).click();
+            await pair.locator('[data-cloud-connection-status]').waitFor({ state: index === 1 ? 'visible' : 'hidden' });
+            assert.equal(await pair.getByRole('tabpanel').locator('[data-cloud-connection-status]:visible').count(),
+              index === 1 ? 1 : 0, `${label}: only the Cloud perspective shows connection status`);
+            assert.ok(Math.abs((await pair.boundingBox()).height - bounds.height) < 1, `${label}: stable card height`);
+          }
           await tabs.first().click({ clickCount: 2 });
           assert.equal(await page.evaluate(() => getSelection().toString()), '', `${label}: double click selects no text`);
           const start = await tabs.first().boundingBox();
