@@ -4040,6 +4040,7 @@
       "templateInstalled": "Ein Dienst aus dieser Vorlage ist in dieser Umgebung installiert.",
       "openUnavailableOperation": "Ein Dienstvorgang wird ausgeführt.",
       "openUnavailableNotRunning": "Der Dienst wird nicht ausgeführt.",
+      "openUnavailableStartRequired": "Starten Sie den Dienst, bevor Sie ihn öffnen.",
       "openUnavailableDesktopLoopback": "Dieser Dienst ist für den lokalen Kompatibilitätsmodus konfiguriert und kann nur in Redeven Desktop verwendet werden. Um im Browser darauf zuzugreifen, öffnen Sie die Diensteinstellungen, wählen Sie unter „Allgemein“ für „Zugriffsmodus“ die Option „Sicherer Redeven-Proxy“ und speichern Sie die Änderung.",
       "installed": "Installiert",
       "duplicate": "Duplizieren",

@@ -310,13 +310,23 @@ describe('Web Services product interaction', () => {
   });
 
   it('shows request acceptance and completion without blocking other services or repeating a start', async () => {
-    records = records.map((item) => item.service_id === base.service_id ? { ...item, status: 'stopped', observed_state: 'stopped', primary_action: 'start', actions: { ...item.actions, start: { available: true } } } : item);
+    records = records.map((item) => item.service_id === base.service_id ? { ...item, status: 'stopped', observed_state: 'stopped', primary_action: 'start', actions: { ...item.actions, open: { available: false }, start: { available: true } } } : item);
     const original = api.fetch.getMockImplementation()!;
     let accept!: (value: unknown) => void;
     const pending = new Promise((resolve) => { accept = resolve; });
     api.fetch.mockImplementation((url: string, options?: RequestInit) => url.endsWith('/operations') ? pending : original(url, options));
     await mount();
     const start = page.getByRole('button', { name: 'Example dashboard: Start', exact: true });
+    const row = host.querySelector<HTMLElement>('[data-managed-service-id="sample-running"]')!;
+    const open = row.querySelector<HTMLButtonElement>('.web-service-open button')!;
+    const availableOpen = host.querySelector<HTMLButtonElement>('[data-testid="port-forward-row"] .web-service-open button')!;
+    const primaryColor = getComputedStyle(availableOpen).backgroundColor;
+    expect(getComputedStyle(start.element()).backgroundColor).toBe(primaryColor);
+    expect(getComputedStyle(open).backgroundColor).not.toBe(primaryColor);
+    expect(open.getAttribute('aria-disabled')).toBe('true');
+    expect(document.getElementById(open.getAttribute('aria-describedby')!)?.textContent).toBe('Start the service before opening it.');
+    await userEvent.click(open, { force: true });
+    expect(api.open).not.toHaveBeenCalled();
     await userEvent.click(start);
     await expect.poll(() => host.querySelector('[data-managed-service-id="sample-running"] [data-testid="managed-service-status"]')?.textContent).toBe('Submitting request…');
     expect((start.element() as HTMLButtonElement).disabled).toBe(true);
@@ -327,6 +337,8 @@ describe('Web Services product interaction', () => {
     records = records.map((item) => item.service_id === base.service_id ? base : item);
     accept({ operation_id: 'started', service_id: base.service_id, action: 'start', state: 'succeeded', stage: 'completed', progress_current: 3, progress_total: 3 });
     await expect.poll(() => host.querySelector('[data-managed-service-id="sample-running"] [data-testid="managed-service-status"]')?.textContent).toBe('Running');
+    await expect.poll(() => getComputedStyle(row.querySelector('.web-service-open button')!).backgroundColor).toBe(primaryColor);
+    await expect.poll(() => getComputedStyle(row.querySelector('[data-testid="managed-service-primary"]')!).backgroundColor).not.toBe(primaryColor);
     expect(api.fetch.mock.calls.filter(([url]) => String(url).endsWith('/operations'))).toHaveLength(1);
   });
 
