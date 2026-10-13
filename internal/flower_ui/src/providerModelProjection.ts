@@ -24,7 +24,12 @@ export function projectFlowerProviderModels(provider: FlowerProvider, discovered
   const selection = provider.model_selection;
   const catalog = discovered ?? [];
   const overrides = new Map((selection.model_overrides ?? []).map((model) => [model.model_name, model]));
-  const models = new Map(catalog.map((model) => [model.model_name, applyModelOverride(model, overrides.get(model.model_name))]));
+  const models = new Map(catalog.map((model) => {
+    const override = overrides.get(model.model_name);
+    const target = override?.wire_model_name && override.wire_model_name !== (model.wire_model_name || model.model_name)
+      ? catalog.find(entry => (entry.wire_model_name || entry.model_name) === override.wire_model_name) : model;
+    return [model.model_name, applyModelOverride(target ? { ...target, model_name: model.model_name } : { ...model, unavailable: authoritative }, override)] as const;
+  }));
   for (const override of overrides.values()) {
     if (!models.has(override.model_name) && override.wire_model_name) {
       const entry = catalog.find((model) => (model.wire_model_name || model.model_name) === override.wire_model_name);

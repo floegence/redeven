@@ -128,7 +128,7 @@ func (p AIProvider) EffectiveModels() []AIProviderModel {
 	for i := range models {
 		for _, override := range p.ModelSelection.ModelOverrides {
 			if override.ModelName == models[i].ModelName {
-				if p.EffectiveAuthMethod() == AIAuthChatGPT && override.WireModelName != "" && override.WireModelName != models[i].EffectiveWireModelName() {
+				if (p.catalogResolved || p.EffectiveAuthMethod() == AIAuthChatGPT) && override.WireModelName != "" && override.WireModelName != models[i].EffectiveWireModelName() {
 					for _, target := range cloneAIModels(p.discoveredModels) {
 						if target.EffectiveWireModelName() == override.WireModelName {
 							target.ModelName = models[i].ModelName

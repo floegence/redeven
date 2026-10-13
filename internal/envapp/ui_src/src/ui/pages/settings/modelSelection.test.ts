@@ -188,3 +188,9 @@ it('reopens configured unknown models without absorbing capabilities into the ca
   expect(serializeFlowerProvider(opened).model_selection?.model_overrides).toEqual([configured]);
   expect(opened.catalog_models).toEqual([raw]);
 });
+
+it('uses actual target capabilities when a saved wire override points to an unknown model', () => {
+  const inventory: FlowerProviderModel[] = [{ model_name: 'known', context_window: 32768, max_output_tokens: 4096, supports_tools: true }, { model_name: 'target', status: 'needs_configuration' }];
+  const provider = { id: 'brand', type: 'deepseek' as const, models: [], model_selection: { selected_models: ['known'], model_overrides: [{ model_name: 'known', wire_model_name: 'target' }] } };
+  expect(resolveFlowerProviderModels(provider, inventory)).toEqual([expect.objectContaining({ model_name: 'known', wire_model_name: 'target', status: 'needs_configuration' })]);
+});
