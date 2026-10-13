@@ -65,9 +65,9 @@ describe('linked environment owner interactions', () => {
     const title = card.querySelector<HTMLElement>('.redeven-environment-title')!;
     const slot = title.previousElementSibling!;
     expect(slot.hasAttribute('data-runtime-platform-slot')).toBe(true);
-    const initialGraphic = slot.querySelector('[role="img"]')!;
+    const initialGraphic = slot.querySelector('img')!;
     expect(initialGraphic?.getAttribute('data-runtime-platform')).toBe('unknown');
-    expect(initialGraphic?.getAttribute('aria-label')).toBe('Runtime operating system unknown');
+    expect(initialGraphic?.alt).toBe('Runtime operating system unknown');
     expect(title.classList.contains('truncate')).toBe(true);
     expect(title.classList.contains('select-text')).toBe(true);
     await selectTab(card, 1);
@@ -82,15 +82,16 @@ describe('linked environment owner interactions', () => {
       expect(title.previousElementSibling).toBe(slot);
       expect(tab.getAttribute('aria-selected')).toBe('true');
       expect(document.activeElement).toBe(tab);
-      const graphic = slot.querySelector<HTMLElement>('[role="img"]');
+      const graphic = slot.querySelector('img');
       expect(graphic).toBe(initialGraphic);
-      expect(graphic?.style.getPropertyValue('mask-image')).toMatch(/^url\(/);
+      expect(graphic?.getAttribute('src')).toMatch(/^(data:image\/svg\+xml[;,]|.*\.svg$)/);
+      expect(graphic?.draggable).toBe(false);
       if (runtime_platform) {
         expect(graphic?.dataset.runtimePlatform).toBe(runtime_platform);
-        expect(graphic?.getAttribute('aria-label')).toContain('Runtime operating system:');
+        expect(graphic?.alt).toContain('Runtime operating system:');
       } else {
         expect(graphic?.dataset.runtimePlatform).toBe('unknown');
-        expect(graphic?.getAttribute('aria-label')).toBe('Runtime operating system unknown');
+        expect(graphic?.alt).toBe('Runtime operating system unknown');
       }
     }
   });

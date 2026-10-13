@@ -4688,12 +4688,12 @@ pre,
 }
 
 .redeven-environment-platform-icon {
+  display: block;
   width: .875rem;
   height: .875rem;
-  background-color: var(--redeven-welcome-icon);
-  mask-size: contain;
-  mask-repeat: no-repeat;
-  mask-position: center;
+  flex: none;
+  object-fit: contain;
+  user-select: none;
 }
 
 .redeven-environment-title {

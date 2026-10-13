@@ -34,11 +34,11 @@ try {
       await page.emulateMedia({ colorScheme: dark ? 'dark' : 'light' });
       await page.waitForFunction(expected => document.documentElement.classList.contains('dark') === expected, dark);
       await page.evaluate(fontSize => { document.documentElement.style.fontSize = `${fontSize}px`; }, fontSize);
-      const result = await page.evaluate(async ({ snapshot, runtimeID }) => {
+      const result = await page.evaluate(async ({ snapshot, runtimeID, dark }) => {
         const card = document.querySelector(`[data-environment-group="${CSS.escape(runtimeID)}"]`);
         const title = card.querySelector('.redeven-environment-title');
         const slot = title.previousElementSibling;
-        const originalGraphic = slot.querySelector('[role="img"]');
+        const originalGraphic = slot.querySelector('img');
         const tab = card.querySelectorAll('[role="tab"]')[1];
         tab.click();
         await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
@@ -52,7 +52,7 @@ try {
           if (document.querySelector(`[data-environment-group="${CSS.escape(runtimeID)}"]`) !== card
             || card.querySelector('.redeven-environment-title') !== title || title.previousElementSibling !== slot) throw new Error('OS refresh replaced card or title');
           if (document.activeElement !== tab || tab.getAttribute('aria-selected') !== 'true') throw new Error(`OS refresh changed access perspective or focus: ${JSON.stringify({ platform, selected: tab.getAttribute('aria-selected'), active: document.activeElement?.outerHTML, connected: tab.isConnected })}`);
-          const graphic = slot.querySelector('[role="img"]');
+          const graphic = slot.querySelector('img');
           if (!graphic || graphic !== originalGraphic) throw new Error('OS refresh replaced or removed the graphic');
           const cap = document.createElement('span');
           cap.style.cssText = 'display:inline-block;width:0;height:1cap;vertical-align:baseline';
@@ -63,16 +63,26 @@ try {
           const alignmentOffset = Math.abs(graphicRect.top + graphicRect.height / 2 - capRect.top - capRect.height / 2);
           if (alignmentOffset > .3) throw new Error(`OS graphic is not aligned to the title cap height: ${alignmentOffset}px`);
           if (platform) {
-            if (graphic.dataset.runtimePlatform !== platform || !graphic.getAttribute('aria-label')) throw new Error('OS graphic or accessible label missing');
+            if (graphic.dataset.runtimePlatform !== platform || !graphic.alt) throw new Error('OS graphic or accessible label missing');
           } else {
-            if (graphic.dataset.runtimePlatform !== 'unknown' || !graphic.getAttribute('aria-label')) throw new Error('Unknown OS device graphic or accessible label missing');
+            if (graphic.dataset.runtimePlatform !== 'unknown' || !graphic.alt) throw new Error('Unknown OS device graphic or accessible label missing');
           }
           const style = getComputedStyle(graphic);
-          if (style.maskImage === 'none' || style.backgroundColor === 'rgba(0, 0, 0, 0)') throw new Error('OS graphic theme mask is missing');
-          const url = style.maskImage.match(/^url\("?(.*?)"?\)$/)?.[1];
-          const image = new Image(); image.src = url;
-          await image.decode();
+          if (style.maskImage !== 'none' || style.filter !== 'none' || style.opacity !== '1') throw new Error('OS graphic overrides the original brand colors');
+          await graphic.decode();
+          const url = graphic.currentSrc;
           if (!url.startsWith('data:') && new URL(url).origin !== location.origin) throw new Error('OS asset has a remote network dependency');
+          const canvas = document.createElement('canvas');
+          canvas.width = canvas.height = 64;
+          const context = canvas.getContext('2d');
+          context.drawImage(graphic, 0, 0, 64, 64);
+          const pixels = context.getImageData(0, 0, 64, 64).data;
+          const colors = [];
+          for (let i = 0; i < pixels.length; i += 4) if (pixels[i + 3] > 240) colors.push([pixels[i], pixels[i + 1], pixels[i + 2]]);
+          const brandColorPresent = colors.some(([r, g, b]) => platform === 'macos'
+            ? dark ? r > 245 && g > 245 && b > 245 : r < 10 && g < 10 && b < 10
+            : platform === 'linux' ? r > 190 && g > 100 && b < 80 : b > 150 && b > r + 50);
+          if (!brandColorPresent) throw new Error(`Original brand color missing: ${platform ?? 'unknown'} / ${dark ? 'dark' : 'light'}`);
           const after = card.getBoundingClientRect();
           if (Math.abs(before.height - after.height) > .5 || Math.abs(before.width - after.width) > .5) throw new Error('OS refresh changed card dimensions');
           if (getComputedStyle(title).userSelect !== 'text' || getComputedStyle(title).textOverflow !== 'ellipsis') throw new Error('Title selection or truncation is missing');
@@ -80,7 +90,7 @@ try {
           dimensions.push({ platform: platform ?? 'unknown', height: after.height, slotWidth: slot.getBoundingClientRect().width, alignmentOffset });
         }
         return dimensions;
-      }, { snapshot, runtimeID: runtime.id });
+      }, { snapshot, runtimeID: runtime.id, dark });
       report.cases.push({ locale, width, dark, fontSize, platforms: result });
       if (locale === 'zh-CN' && width === 1280) {
         await page.evaluate(({ snapshot, runtimeID }) => window.settingsFixture.publish({ ...snapshot,

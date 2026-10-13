@@ -8,7 +8,7 @@ import { environmentAccessPresentation } from './environmentAccessPresentation';
 import { RuntimeGatewayPublicationStatus } from './RuntimeGatewayPublicationStatus';
 import type { AddressRecoveryTarget } from '../shared/desktopEnvironmentConnection';
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, type JSX } from 'solid-js';
-import { cn } from '@floegence/floe-webapp-core';
+import { cn, useTheme } from '@floegence/floe-webapp-core';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, Tag, Tabs, TabPanel } from '@floegence/floe-webapp-core/ui';
 import { Clock, Cloud, MonitorPointer, Pin, Refresh, Search, Settings, Terminal, Trash, Link } from '@floegence/floe-webapp-core/icons';
 import { FlowerSoftAuraIcon, type FlowerTurnLauncherAnchor } from '../../../internal/flower_ui/src';
@@ -34,15 +34,21 @@ import { abandonEnvironmentLifecycleDisclosureAttempt, beginEnvironmentLifecycle
   reconcileEnvironmentLifecycleDisclosure, reopenEnvironmentLifecycleDisclosure, visibleEnvironmentLifecycleProgress, type EnvironmentLifecycleDisclosureIntent,
   type EnvironmentLifecycleDisclosureState, type EnvironmentLifecycleAttempt, type EnvironmentSettingsRestartSource } from './environmentLifecycleDisclosure';
 
-const environmentPlatformAssets: Record<DesktopRuntimePlatform, { url: string; name: string }> = {
-  macos: { url: new URL('./assets/environment-platform-icons/apple.svg', import.meta.url).href, name: 'macOS' },
+const environmentPlatformAssets: Record<DesktopRuntimePlatform, { url: string; darkUrl?: string; name: string }> = {
+  macos: { url: new URL('./assets/environment-platform-icons/apple.svg', import.meta.url).href,
+    darkUrl: new URL('./assets/environment-platform-icons/apple-dark.svg', import.meta.url).href, name: 'macOS' },
   linux: { url: new URL('./assets/environment-platform-icons/linux.svg', import.meta.url).href, name: 'Linux' },
   windows: { url: new URL('./assets/environment-platform-icons/windows.svg', import.meta.url).href, name: 'Windows' },
 };
 const defaultEnvironmentDeviceIcon = new URL('./assets/environment-platform-icons/default-device.svg', import.meta.url).href;
 
 export function EnvironmentPlatformIcon(props: Readonly<{ platform?: DesktopRuntimePlatform; i18n: DesktopI18n }>) {
+  const theme = useTheme();
   const asset = () => props.platform ? environmentPlatformAssets[props.platform] : undefined;
+  const url = () => {
+    const current = asset();
+    return theme.resolvedTheme() === 'dark' && current?.darkUrl ? current.darkUrl : current?.url ?? defaultEnvironmentDeviceIcon;
+  };
   const label = () => {
     const current = asset();
     return current ? props.i18n.t('environmentCenter.runtimePlatform', { platform: current.name })
@@ -50,8 +56,8 @@ export function EnvironmentPlatformIcon(props: Readonly<{ platform?: DesktopRunt
   };
   return (
     <span class="redeven-environment-platform-slot" data-runtime-platform-slot>
-      <span class="redeven-environment-platform-icon" role="img" aria-label={label()} title={label()}
-        data-runtime-platform={props.platform ?? 'unknown'} style={{ 'mask-image': `url("${asset()?.url ?? defaultEnvironmentDeviceIcon}")` }} />
+      <img class="redeven-environment-platform-icon" src={url()} alt={label()} title={label()} draggable={false}
+        data-runtime-platform={props.platform ?? 'unknown'} />
     </span>
   );
 }
