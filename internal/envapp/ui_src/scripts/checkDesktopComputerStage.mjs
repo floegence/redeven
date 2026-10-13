@@ -346,6 +346,17 @@ try {
       <button onclick="document.querySelector('circle').style.animationPlayState='paused';document.querySelector('output').textContent='Animation paused';document.querySelector('output').setAttribute('aria-label','Animation paused');this.textContent='Resume animation';this.onclick=()=>{document.querySelector('circle').style.animationPlayState='running';document.querySelector('output').textContent='Animation running';document.querySelector('output').setAttribute('aria-label','Animation running');this.textContent='Pause animation'}">Pause animation</button>
       <output role="status" aria-label="Animation running" aria-live="polite">Animation running</output>`);
     threadID = await createComputerTask({ page, request, ownedThreads });
+    // The isolated Runtime starts without browser state. Prepare it through
+    // the product's visible consent path before asking the real model to act.
+    await page.getByRole('button', { name: 'Browser and desktop', exact: true }).click();
+    await page.getByRole('dialog', { name: 'Browser and desktop', exact: true }).getByRole('button', { name: 'Browser settings', exact: true }).click();
+    const browserSetup = page.getByRole('dialog', { name: 'Built-in headless browser', exact: true });
+    const install = browserSetup.getByRole('button', { name: 'Download and install', exact: true });
+    await Promise.race([install.waitFor(), browserSetup.getByText('Ready for web tasks. Website sign-ins are saved separately.', { exact: true }).waitFor()]);
+    if (await install.isVisible()) await install.click();
+    await browserSetup.getByText('Ready for web tasks. Website sign-ins are saved separately.', { exact: true }).waitFor({ timeout: 240000 });
+    await browserSetup.getByLabel('Close', { exact: true }).click();
+    console.log('Isolated browser prepared through the built-in installation consent UI.');
     const composer = page.locator('.flower-surface textarea').first();
     for (const [index, prompt] of [
       `Open the local HTML ${fileURL} directly with browser.navigate using file://. Use only computer/browser tools. Do not start a server or proxy. Observe the SVG image with canonical role image and its actual name. Pause the animation, read the status to verify Animation paused, then emit a full ui.observe and ui.screenshot in the same computer.exec script. Use ui.assert on the read status. Report completion only after the structured result proves the paused state. Leave it paused.`,

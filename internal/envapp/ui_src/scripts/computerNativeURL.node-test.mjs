@@ -12,7 +12,7 @@ import { BrowserComputerPage, navigationURL, redactedNavigationURL } from './com
 
 test('URL validation accepts native schemes and never treats null as an origin grant', () => {
   const page = new BrowserComputerPage({}, { allowedOrigins: ['null'] });
-  for (const url of ['file:///tmp/test.html', 'data:text/html,hello', 'about:blank', 'chrome://version/', 'chrome-extension://id/page.html', 'custom:resource']) {
+  for (const url of ['file:///tmp/test.html', 'file:///tmp/animation preview.html', 'data:text/html,hello world', 'about:blank', 'chrome://version/', 'chrome-extension://id/page.html', 'custom:resource']) {
     assert(navigationURL(url).protocol);
     assert.equal(page.allowsURL(url), false);
     page.fullAccess = true; assert.equal(page.allowsURL(url), true); page.fullAccess = false;

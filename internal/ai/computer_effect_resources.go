@@ -84,7 +84,7 @@ func parseComputerNavigationURL(raw string) (*url.URL, error) {
 		return nil, errors.New("empty or oversized URL")
 	}
 	for _, r := range value {
-		if unicode.IsSpace(r) || unicode.IsControl(r) {
+		if unicode.IsControl(r) {
 			return nil, errors.New("URL contains control characters")
 		}
 	}

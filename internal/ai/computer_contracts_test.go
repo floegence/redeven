@@ -9,7 +9,7 @@ import (
 )
 
 func TestComputerNavigationNativeURLs(t *testing.T) {
-	for _, value := range []string{"file:///tmp/animation.html", "data:text/html,<h1>Animation</h1>", "about:blank", "chrome://version/", "chrome-extension://abcdef/page.html", "custom-browser:document", "https://user:secret@example.test/path"} {
+	for _, value := range []string{"file:///tmp/animation.html", "file:///tmp/animation preview.html", "data:text/html,Hello world", "data:text/html,<h1>Animation</h1>", "about:blank", "chrome://version/", "chrome-extension://abcdef/page.html", "custom-browser:document", "https://user:secret@example.test/path"} {
 		parsed, err := parseComputerNavigationURL(value)
 		if err != nil {
 			t.Fatalf("native URL rejected: %s: %v", value, err)
