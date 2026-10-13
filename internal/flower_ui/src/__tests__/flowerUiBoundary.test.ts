@@ -220,7 +220,7 @@ describe('shared Flower UI boundary', () => {
 		expect(surfaceSrc).toContain('props.adapter.setThreadReasoningSelection(threadID, normalized)');
 		expect(surfaceSrc).toContain('const frozenReasoningSelection = serializeFlowerReasoningSelection(composerLaunchReasoningSelection())');
 		expect(surfaceSrc).toContain('const draftReasoningSelection = !selectedID ? frozenReasoningSelection : undefined');
-		expect(surfaceSrc).toContain('...(!selectedID && draftReasoningSelection ? { reasoning_selection: draftReasoningSelection } : {})');
+		expect(surfaceSrc).toContain('...(!admittedThreadID && draftReasoningSelection ? { reasoning_selection: draftReasoningSelection } : {})');
 		const submitInputStart = surfaceSrc.indexOf('await props.adapter.submitInput({');
 		const submitInputEnd = surfaceSrc.indexOf('});', submitInputStart);
 		expect(submitInputStart).toBeGreaterThanOrEqual(0);
@@ -317,10 +317,12 @@ describe('shared Flower UI boundary', () => {
     const settingsSrc = readText(path.join(flowerRoot, 'settings', 'FlowerSettingsSurface.tsx'));
     const cssSrc = readText(path.join(flowerRoot, 'styles', 'flower.css'));
 
-    expect(settingsSrc).toContain('flower-settings-current-model');
+    const modelSettingsSrc = readText(path.join(flowerRoot, 'settings', 'FlowerModelSettings.tsx'));
+    expect(settingsSrc).toContain('FlowerModelSettings');
+    expect(modelSettingsSrc).toContain('flower-settings-current-model');
     expect(settingsSrc).toContain('flower-settings-policy-section');
-    expect(settingsSrc).toContain('flower-settings-provider-gallery');
-    expect(settingsSrc).toContain('FlowerProviderBrandIcon');
+    expect(modelSettingsSrc).toContain('flower-settings-provider-gallery');
+    expect(modelSettingsSrc).toContain('FlowerProviderBrandIcon');
     expect(settingsSrc).toContain('FlowerAutoSaveIndicator');
     expect(settingsSrc).toContain('aria-label={copy().backToChat}');
     expect(settingsSrc).toContain('onBackToChat');

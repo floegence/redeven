@@ -15,12 +15,13 @@ function hasCredential(patch: string | null | undefined, stored: boolean): boole
 }
 
 export function missingFlowerProviderCredential(
-  provider: Pick<FlowerProviderDraft, 'type' | 'auth_method' | 'account_id' | 'chatgpt_account' | 'provider_api_key' | 'web_search_api_key'> & {
+  provider: Pick<FlowerProviderDraft, 'enabled' | 'type' | 'auth_method' | 'account_id' | 'chatgpt_account' | 'provider_api_key' | 'web_search_api_key'> & {
     web_search?: { mode?: string };
   },
   storedKey: boolean,
   storedWebSearchKey: boolean,
 ): 'provider' | 'web_search' | null {
+  if (provider.enabled === false) return null;
   if (provider.auth_method === 'chatgpt' ? !provider.account_id || provider.chatgpt_account?.state !== 'ready' : !flowerProviderCredentialsReady(provider.type, hasCredential(provider.provider_api_key, storedKey))) return 'provider';
   if (provider.web_search?.mode === 'brave' && !hasCredential(provider.web_search_api_key, storedWebSearchKey)) return 'web_search';
   return null;

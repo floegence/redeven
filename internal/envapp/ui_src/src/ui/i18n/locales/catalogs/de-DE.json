@@ -5891,7 +5891,13 @@
       "dialogChatGPTSignOut": "Abmelden",
       "dialogChatGPTRevocationUnconfirmed": "Auf diesem Gerät abgemeldet. Der Widerruf konnte nicht bestätigt werden. Prüfe die verbundenen Apps in ChatGPT.",
       "dialogChatGPTUsageUnavailable": "Für diese Anfrage ist die Nutzung über den ChatGPT-Tarif nicht verfügbar. Verwalten Sie Ihre Nutzung oder versuchen Sie es später erneut.",
-      "dialogChatGPTChangeAccount": "Anderes Konto verwenden"
+      "dialogChatGPTChangeAccount": "Anderes Konto verwenden",
+      "inputCapabilities": "Eingabe",
+      "providerDisabled": "Deaktiviert",
+      "providerNeedsSetup": "Einrichtung erforderlich",
+      "currentProviderDisabled": "Der Anbieter des aktuellen Modells ist deaktiviert. Aktivieren Sie ihn oder wählen Sie ein anderes Modell.",
+      "enableProvider": "{provider} aktivieren",
+      "disableProvider": "{provider} deaktivieren"
     },
     "computer": {
       "title": "Browser und Desktop",

@@ -82,37 +82,32 @@ The compact companion continues to omit the task grid as specified by the
 
 ## Settings composition
 
-The settings surface edits the environment profile even when a Desktop model
-source is available. The current model and provider list come first, followed by
-default permission and computer/browser controls. Model limits use localized
-labels. Provider rows avoid repeating the provider type when it already matches
-the display name, and model identifiers remain fully readable when expanded.
+Settings edit the environment profile even with a Desktop model source.
+Four accessible peer sections present model, providers, permission, and computer
+controls; localized headings and descriptions precede each group. The centered
+frame is at most 860px, with a 25px title and 40px side padding that contracts to
+16px below 760 CSS pixels. Provider rows share a 14px-radius divided group.
 
-Four peer sections share one page background: current model, providers, default
-permission, and computer/browser use. Each has a localized accessible name and a
-heading and description above its controls, with consistent vertical spacing.
-The centered frame is at most 860px including 40px side padding and uses a 25px
-primary heading. Provider rows share one quiet 14px-radius group with internal
-dividers. At 760 CSS pixels or below page padding contracts to 16px while
-preserving the reading order.
+Desktop Flower, embedded Env Flower, and Env App global settings share
+`FlowerModelSettings`; hosts retain persistence and authorization ownership.
+The model group presents identity above evenly sized columns for inputs, context,
+output, and default reasoning. Columns use the full width and become two columns
+on narrow screens. The edit action reveals model selection; choosing a model or
+finishing restores the summary and edit-action focus.
 
-The model group presents brand, model name, and provider above one wrapping row
-of input capabilities, capacity label/value pairs, and a compact default-reasoning
-control. The localized edit action reveals the selector. A selection restores
-the summary and edit-action focus, then uses profile autosave; the finish action
-closes without changes. Narrow layouts use a labeled edit icon and contain the selector.
-
-Provider rows align brand and name left, credential readiness toward the right,
-and edit/remove actions at the trailing edge. Below the name, a keyboard-operable
-count expands all model identifiers and web/image details; identifiers wrap.
-Narrow layouts move readiness below identity and keep actions visible. Adding a
-provider stays in the section heading.
+Provider rows place identity and model count left, useful availability status
+right, and an enable switch with edit/remove actions at the trailing edge.
+Authentication-method and optional-key labels do not appear in the list. The
+count expands complete model identifiers and web/image details. Narrow layouts
+move status below identity; adding a provider stays in the heading. Switch saves
+are immediate, block duplicate edits, and restore the previous state on failure.
+Disabled defaults remain visible with guidance to enable or choose a replacement;
+only enabled providers contribute model choices. Retention and admission rules
+belong to [model selection](../ai/model-directory-and-selection.md).
 
 Permission choices remain visible as one divided vertical radio group, with a
 check indicator and no additional selection border. Long translations must wrap
-without covering adjacent values. Buttons, switches, and disclosure summaries
-retain keyboard focus and pointer affordances. Input boundaries use the published
-Floe focus contract.
+without covering adjacent values. Controls retain keyboard focus and pointer affordances under the published Floe focus contract.
 
 Computer use remains a separately saved switch with a visible thumb in both
 themes. Its management destination shares the same group as a full-width action
@@ -133,8 +128,8 @@ locality and cancellation rules belong to the
 ## Saving and ownership
 
 The adapter exposes independent `saveDefaultPermission`, `saveModelProfile`, and
-`persistDefaultModel` operations. Provider dialogs save directly; model choices
-and default permissions retain their existing autosave behavior. Default
+`persistDefaultModel` operations. Provider dialogs and provider switches save directly; model choices
+and default permissions retain their host save behavior. Default
 permission uses a serialized 700 ms controller that coalesces rapid changes,
 protects newer choices from older responses, and restores the last confirmed
 value on failure. It applies to new conversations only. Existing-thread defaults
@@ -155,7 +150,9 @@ Settings fields follow the shared [product field treatment](runtime-settings.md#
 - `redeven:internal/envapp/ui_src/src/ui/FlowerWorkingDirectory.browser.test.tsx` - One-shot welcome rotation, overshoot, stable draft edits, and reduced motion.
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx:2846` - First-time setup eligibility and retained composer ownership.
 - `redeven:internal/flower_ui/src/chat/FlowerSetupWelcome.tsx:7` - Setup destinations and model refresh presentation.
-- `redeven:internal/flower_ui/src/settings/FlowerSettingsSurface.tsx:174` - Shared settings actions and save controllers.
+- `redeven:internal/flower_ui/src/settings/FlowerSettingsSurface.tsx` - Shared settings actions and save controllers.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.setupGuide.browser.test.tsx:20` - Narrow setup actions and transition back to the existing draft.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSettingsSurface.presentation.browser.test.tsx:63` - Real controls, localized container layouts, themes, and keyboard saving.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.settings.browser.test.tsx:24` - Browser discovery, explicit connection, and retained failed-connection input.
+- `redeven:internal/flower_ui/src/settings/FlowerModelSettings.tsx` - Shared model/provider presentation and transient edit ownership.
+- `redeven:internal/envapp/ui_src/src/ui/pages/settings/FlowerSection.browser.test.tsx` - Global Env layout, provider persistence, rollback, account retention, and reader controls.

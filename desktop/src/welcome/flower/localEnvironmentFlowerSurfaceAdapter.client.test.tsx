@@ -1485,3 +1485,14 @@ it('admits compaction through the dedicated runtime route without a conversation
   const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge);
   expect(await adapter.compactThreadContext!('thread-compact', { storage_generation: 'generation', client_request_id: 'compact-key' })).toEqual(current);
 });
+
+it('round-trips disabled providers without discarding their default or secret references', () => {
+  const settings = settingsResponse();
+  const disabled = { ...settings, ai: { ...settings.ai, providers: settings.ai!.providers!.map(provider => ({ ...provider, enabled: false })) } };
+  const snapshot = mapRuntimeFlowerSettings(disabled);
+  expect(snapshot.model_profile?.providers[0].enabled).toBe(false);
+  const bundle = mapFlowerSettingsDraftToRuntimeBundle({ model_profile: snapshot.model_profile! });
+  expect(bundle.model_profile.providers[0].enabled).toBe(false);
+  expect(bundle.model_profile.current_model_id).toBe(settings.ai?.current_model_id);
+  expect(bundle.provider_api_key_patches).toEqual([]);
+});

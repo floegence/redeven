@@ -207,6 +207,10 @@ export function providerSupportsCustomModelNames(providerType: AIProviderType): 
 
 export function cloneAIProviderRow(row: AIProviderRow): AIProviderRow {
   return {
+    enabled: row.enabled,
+    auth_method: row.auth_method,
+    account_id: row.account_id,
+    chatgpt_account: row.chatgpt_account,
     model_selection: row.model_selection,
     catalog_models: row.catalog_models,
     catalog_error: row.catalog_error,

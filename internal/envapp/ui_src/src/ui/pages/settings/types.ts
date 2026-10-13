@@ -29,6 +29,7 @@ export type AIProviderWebSearch = Readonly<{
 }>;
 
 export type AIProvider = Readonly<{
+  enabled?: boolean;
   auth_method?: 'api_key' | 'chatgpt';
   account_id?: string;
   id: string;
@@ -162,6 +163,10 @@ export type AIProviderModelRow = {
 };
 
 export type AIProviderRow = {
+  enabled?: boolean;
+  auth_method?: 'api_key' | 'chatgpt';
+  account_id?: string;
+  chatgpt_account?: import('../../../../../../flower_ui/src/contracts/flowerSurfaceContracts').FlowerChatGPTAccount;
   id: string;
   name: string;
   type: AIProviderType;

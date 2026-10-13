@@ -5891,7 +5891,13 @@
       "dialogChatGPTSignOut": "ログアウト",
       "dialogChatGPTRevocationUnconfirmed": "このデバイスからログアウトしました。認証の取り消しを確認できませんでした。ChatGPT で接続済みアプリを確認してください。",
       "dialogChatGPTUsageUnavailable": "このリクエストでは ChatGPT プランの利用枠を使用できません。使用量を確認するか、後でもう一度お試しください。",
-      "dialogChatGPTChangeAccount": "別のアカウントを使用"
+      "dialogChatGPTChangeAccount": "別のアカウントを使用",
+      "inputCapabilities": "入力",
+      "providerDisabled": "無効",
+      "providerNeedsSetup": "設定が必要",
+      "currentProviderDisabled": "現在のモデルのプロバイダーは無効です。有効にするか、別のモデルを選択してください。",
+      "enableProvider": "{provider} を有効にする",
+      "disableProvider": "{provider} を無効にする"
     },
     "computer": {
       "title": "ブラウザーとデスクトップ",

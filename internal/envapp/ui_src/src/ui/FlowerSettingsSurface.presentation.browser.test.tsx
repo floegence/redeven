@@ -35,14 +35,14 @@ function settings(): FlowerSettingsSnapshot {
   };
 }
 
-async function mount(locale: RedevenLocale = 'en-US', width = 1000, dark = false) {
+async function mount(locale: RedevenLocale = 'en-US', width = 1000, dark = false, initial = settings()) {
   await page.viewport(1280, 960);
   const i18n = createI18nHelpers(locale, await loadEnvAppDictionary(locale));
   const copy = createLocalizedFlowerSurfaceCopy({ locale,
     t: (key, params) => i18n.t(key as EnvAppTranslationKey, params),
     tn: (key, count, params) => i18n.tn(key as EnvAppTranslationKey, count, params),
   });
-  const [snapshot, setSnapshot] = createSignal(settings());
+  const [snapshot, setSnapshot] = createSignal(initial);
   const savePermission = vi.fn(async (permission_type: FlowerSettingsSnapshot['defaults']['permission_type']) => {
     const next = { ...snapshot(), defaults: { ...snapshot().defaults, permission_type } };
     setSnapshot(next); return next;
@@ -157,8 +157,11 @@ for (const [locale, dark, width] of [
       const identity = modelField.querySelector<HTMLElement>('.flower-settings-model-identity')!;
       const edit = modelField.querySelector<HTMLElement>('.flower-settings-model-edit')!;
       expect(edit.getBoundingClientRect().left).toBeGreaterThan(identity.getBoundingClientRect().right);
-      const limits = [...currentModel.querySelectorAll<HTMLElement>('.flower-settings-model-limits > div')];
-      expect(Math.abs(limits[0].getBoundingClientRect().top - limits[1].getBoundingClientRect().top)).toBeLessThan(2);
+      const stats = [...currentModel.querySelectorAll<HTMLElement>('.flower-settings-model-stat')];
+      expect(stats).toHaveLength(4);
+      const widths = stats.map(stat => stat.getBoundingClientRect().width);
+      expect(Math.max(...widths) - Math.min(...widths)).toBeLessThan(2);
+      expect(Math.abs(stats[3].getBoundingClientRect().right - currentModel.querySelector('.flower-settings-model-metadata')!.getBoundingClientRect().right)).toBeLessThan(2);
     }
     expect(currentModel.textContent).toContain(copy.settings.dialog.contextWindow);
     expect(currentModel.textContent).toContain(copy.settings.dialog.maxOutput);
@@ -230,7 +233,7 @@ it('saves permission by keyboard and restores the computer switch after a failed
   await expect.poll(() => savePermission.mock.calls.length).toBe(1);
   expect(savePermission).toHaveBeenCalledWith('readonly');
   expect(document.activeElement?.getAttribute('aria-checked')).toBe('true');
-  const toggle = host.querySelector<HTMLButtonElement>('[role="switch"]')!;
+  const toggle = host.querySelector<HTMLButtonElement>('.flower-settings-computer-group [role="switch"]')!;
   saveComputer.mockRejectedValueOnce(new Error('Unable to save computer preference'));
   toggle.focus();
   await userEvent.keyboard('{Enter}');
@@ -254,4 +257,54 @@ it('keeps the independently portaled provider dialog on the Flower reading scale
     expect(getComputedStyle(copy).fontSize).toBe('12px');
   }
   expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth);
+});
+
+it('persists provider switches, preserves the disabled default, and excludes its models from editing', async () => {
+  const { copy, saveModel } = await mount();
+  const toggle = () => host.querySelector<HTMLButtonElement>('.flower-settings-provider-toggle')!;
+  toggle().focus();
+  await userEvent.keyboard('{Enter}');
+  await expect.poll(() => toggle().getAttribute('aria-checked')).toBe('false');
+  expect(document.activeElement).toBe(toggle());
+  expect(saveModel.mock.calls[0][0].model_profile?.providers[0].enabled).toBe(false);
+  expect(saveModel.mock.calls[0][0].model_profile?.current_model_id).toBe('deepseek/deepseek-v4-flash-vision-exp');
+  expect(host.querySelector('.flower-settings-model-name')?.textContent).toBe('DeepSeek V4 Flash Vision Exp');
+  expect(host.textContent).toContain(copy.settings.currentProviderDisabled);
+  const statuses = [...host.querySelectorAll('.flower-settings-provider-status')];
+  expect(statuses[0].textContent).toBe(copy.settings.providerDisabled);
+  expect(statuses[1].textContent).toBe(copy.settings.ready);
+  expect(statuses.some(status => status.textContent?.includes(copy.settings.apiKey))).toBe(false);
+  await userEvent.click(host.querySelector<HTMLButtonElement>('.flower-settings-model-edit')!);
+  await userEvent.click(host.querySelector<HTMLButtonElement>('.flower-settings-model-select')!);
+  await expect.element(page.getByRole('menuitem', { name: 'DeepSeek / deepseek-v4-pro', exact: true })).not.toBeInTheDocument();
+  await expect.element(page.getByRole('menuitem', { name: 'Ollama Qwen 3.8 27B / qwen3.8:27b', exact: true })).toBeVisible();
+  await userEvent.keyboard('{Escape}{Escape}');
+  await userEvent.click(toggle());
+  await expect.poll(() => toggle().getAttribute('aria-checked')).toBe('true');
+  expect(saveModel.mock.lastCall?.[0].model_profile?.providers[0].enabled).toBe(true);
+  expect(host.textContent).not.toContain(copy.settings.currentProviderDisabled);
+});
+
+it('rolls back a failed provider switch and permits retry without changing credentials', async () => {
+  const { saveModel } = await mount();
+  saveModel.mockRejectedValueOnce(new Error('Unable to save provider state'));
+  await userEvent.click(host.querySelector<HTMLButtonElement>('.flower-settings-provider-toggle')!);
+  await expect.poll(() => host.textContent).toContain('Unable to save provider state');
+  expect(host.querySelector('.flower-settings-provider-toggle')?.getAttribute('aria-checked')).toBe('true');
+  await userEvent.click(host.querySelector<HTMLButtonElement>('.flower-settings-provider-toggle')!);
+  await expect.poll(() => host.querySelector('.flower-settings-provider-toggle')?.getAttribute('aria-checked')).toBe('false');
+  expect(saveModel.mock.lastCall?.[0].model_profile?.providers[0].provider_api_key).toBeUndefined();
+  expect(saveModel.mock.lastCall?.[0].model_profile?.providers[0].web_search_api_key).toBeUndefined();
+});
+
+it('keeps an all-disabled profile visible and requires credentials before re-enabling', async () => {
+  const initial = settings();
+  const disabled = { ...initial, provider_secrets: [], model_profile: { ...initial.model_profile!, providers: initial.model_profile!.providers.map(provider => ({ ...provider, enabled: false })) } };
+  const { copy, saveModel } = await mount('en-US', 1000, false, disabled);
+  expect(host.querySelector('.flower-settings-model-name')?.textContent).toBe('DeepSeek V4 Flash Vision Exp');
+  expect(host.querySelector<HTMLButtonElement>('.flower-settings-model-edit')?.disabled).toBe(true);
+  await userEvent.click(host.querySelector<HTMLButtonElement>('.flower-settings-provider-toggle')!);
+  await expect.poll(() => host.textContent).toContain(copy.settings.needsKey);
+  expect(saveModel).not.toHaveBeenCalled();
+  expect(host.querySelector('.flower-settings-provider-toggle')?.getAttribute('aria-checked')).toBe('false');
 });

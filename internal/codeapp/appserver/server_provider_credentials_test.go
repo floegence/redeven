@@ -18,11 +18,17 @@ func TestServer_AIProviderBundleCredentialRequirements(t *testing.T) {
 	for _, tc := range []struct {
 		name, kind, savedKey, savedWebKey string
 		keyPatch, webPatch                []any
-		brave                             bool
+		brave, disabled                   bool
 		wantError                         string
 		invalidField                      string
 	}{
 		{name: "legacy exclusion save rejected", kind: "ollama", invalidField: "legacy selection", keyPatch: []any{"new-key"}, wantError: "selected_models"},
+		{name: "disabled provider needs no key", kind: "openai", disabled: true},
+		{name: "disabled provider retains credentials", kind: "openai", savedKey: "stored-key", disabled: true},
+		{name: "disabled Brave retains both credentials", kind: "openai_compatible", savedKey: "stored-key", savedWebKey: "stored-web-key", brave: true, disabled: true},
+		{name: "disabled Brave needs no key", kind: "openai_compatible", brave: true, disabled: true},
+		{name: "disabled provider still requires valid structure", kind: "ollama", disabled: true, invalidField: "base_url", wantError: "base_url"},
+		{name: "disabled provider still requires explicit selection", kind: "ollama", disabled: true, invalidField: "legacy selection", wantError: "selected_models"},
 		{name: "required key missing", kind: "openai", wantError: "api key"},
 		{name: "stored key retained", kind: "openai", savedKey: "stored-key"},
 		{name: "new key supplied", kind: "openai", keyPatch: []any{"new-key"}},
@@ -83,6 +89,10 @@ func TestServer_AIProviderBundleCredentialRequirements(t *testing.T) {
 				t.Fatal(err)
 			}
 			provider := config.AIProvider{ID: "provider", Type: tc.kind, Models: []config.AIProviderModel{{ModelName: "agent", ContextWindow: 32768}}}
+			if tc.disabled {
+				enabled := false
+				provider.Enabled = &enabled
+			}
 			if tc.kind != "openai" && tc.kind != "anthropic" && tc.kind != "google" {
 				provider.BaseURL = "http://127.0.0.1:11434/v1"
 			}
@@ -138,8 +148,25 @@ func TestServer_AIProviderBundleCredentialRequirements(t *testing.T) {
 					t.Fatalf("saved web credential does not match the bundle: %v", err)
 				}
 				saved, err := config.Load(cfgPath)
-				if err != nil || saved.AI.CurrentModelID != "provider/agent" || saved.AI.Providers[0].Type != tc.kind {
+				if err != nil || saved.AI.CurrentModelID != "provider/agent" || saved.AI.Providers[0].Type != tc.kind || saved.AI.Providers[0].IsEnabled() == tc.disabled {
 					t.Fatalf("saved profile does not match the bundle: %v", err)
+				}
+				if tc.disabled {
+					enabled := true
+					provider.Enabled = &enabled
+					body, err := json.Marshal(map[string]any{"model_profile": config.AIModelProfile{CurrentModelID: "provider/agent", Providers: []config.AIProvider{provider}}})
+					if err != nil {
+						t.Fatal(err)
+					}
+					rr := performServerRequest(srv, http.MethodPut, "/_redeven_proxy/api/ai/provider_bundle", envOriginWithChannel(channel), string(body))
+					wantReady := (config.AIProviderAPIKeyOptional(tc.kind) || tc.savedKey != "") && (!tc.brave || tc.savedWebKey != "")
+					if wantReady && rr.Code != http.StatusOK || !wantReady && rr.Code != http.StatusBadRequest {
+						t.Fatalf("re-enable credential validation: %d %s", rr.Code, rr.Body.String())
+					}
+					reloaded, err := config.Load(cfgPath)
+					if err != nil || reloaded.AI.Providers[0].IsEnabled() != wantReady || reloaded.AI.CurrentModelID != "provider/agent" {
+						t.Fatalf("re-enable changed saved intent: %v", err)
+					}
 				}
 				return
 			}

@@ -1270,7 +1270,7 @@ func buildDesktopModelSourceModelSnapshot(cfg *config.AIConfig, secretStore *set
 	capabilityResolver := contextadapter.NewResolver()
 	for _, p := range cfg.Providers {
 		providerID := strings.TrimSpace(p.ID)
-		if providerID == "" {
+		if !p.IsEnabled() || providerID == "" {
 			continue
 		}
 		keySet := config.AIProviderAPIKeyOptional(p.Type)

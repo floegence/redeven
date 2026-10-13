@@ -144,7 +144,9 @@ func (s *Service) projectModelDirectory(cfg *config.AIConfig, out *ModelsRespons
 		name := firstNonEmpty(p.Name, defaultProviderDisplayName(p), p.ID)
 		source := ModelDirectorySource{ID: p.ID, Kind: modelSourceRuntimeConfig, State: "ready"}
 		dynamic := p.Type == "ollama" || p.Type == "openrouter" || p.EffectiveAuthMethod() == config.AIAuthChatGPT
-		if dynamic && p.ModelSelection != nil && p.ModelSelection.SelectedModels == nil {
+		if !p.IsEnabled() {
+			source.State, source.Reason = "unavailable", "provider_disabled"
+		} else if dynamic && p.ModelSelection != nil && p.ModelSelection.SelectedModels == nil {
 			source.State, source.Reason = "unavailable", "selection_review_required"
 		} else if dynamic && p.ModelSelection != nil && len(p.ModelSelection.SelectedModels) > 0 {
 			if baseline {
@@ -153,7 +155,7 @@ func (s *Service) projectModelDirectory(cfg *config.AIConfig, out *ModelsRespons
 				source.State, source.Reason = "unavailable", "catalog_unavailable"
 			}
 		}
-		if s.resolveProviderKey != nil || p.EffectiveAuthMethod() == config.AIAuthChatGPT {
+		if p.IsEnabled() && (s.resolveProviderKey != nil || p.EffectiveAuthMethod() == config.AIAuthChatGPT) {
 			var ready bool
 			var keyErr error
 			if p.EffectiveAuthMethod() == config.AIAuthChatGPT {

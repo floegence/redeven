@@ -5891,7 +5891,13 @@
       "dialogChatGPTSignOut": "Se déconnecter",
       "dialogChatGPTRevocationUnconfirmed": "Déconnexion effectuée sur cet appareil. La révocation n’a pas pu être confirmée. Vérifiez les applications connectées dans ChatGPT.",
       "dialogChatGPTUsageUnavailable": "L’utilisation du forfait ChatGPT est indisponible pour cette requête. Gérez votre utilisation ou réessayez plus tard.",
-      "dialogChatGPTChangeAccount": "Utiliser un autre compte"
+      "dialogChatGPTChangeAccount": "Utiliser un autre compte",
+      "inputCapabilities": "Entrée",
+      "providerDisabled": "Désactivé",
+      "providerNeedsSetup": "Configuration requise",
+      "currentProviderDisabled": "Le fournisseur du modèle actuel est désactivé. Activez-le ou choisissez un autre modèle.",
+      "enableProvider": "Activer {provider}",
+      "disableProvider": "Désactiver {provider}"
     },
     "computer": {
       "title": "Navigateur et bureau",

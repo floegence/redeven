@@ -29,6 +29,9 @@ func validateAIProviderBundleCredentials(profile config.AIModelProfile, store *s
 		if provider.ModelSelection != nil && provider.ModelSelection.SelectedModels == nil {
 			return fmt.Errorf("provider %q requires explicit selected_models", id)
 		}
+		if !provider.IsEnabled() {
+			continue
+		}
 		if provider.EffectiveAuthMethod() == config.AIAuthChatGPT {
 			account, ok, err := store.ChatGPTAccount(provider.AccountID)
 			if err != nil {
