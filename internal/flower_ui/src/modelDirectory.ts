@@ -163,10 +163,12 @@ export function flowerDirectoryDesktopStatus(directory: FlowerModelDirectory): F
 }
 
 export function withFlowerModelDirectory(snapshot: FlowerSettingsSnapshot, directory: FlowerModelDirectory): FlowerSettingsSnapshot {
+  const runtimeModels = new Map(directory.models.filter(model => model.source === 'runtime_config').map(model => [model.id, model]));
   return { ...snapshot, model_directory: directory,
     model_profile: snapshot.model_profile ? { ...snapshot.model_profile, providers: snapshot.model_profile.providers.map(provider => {
       const catalog = directory.provider_catalogs?.[provider.id];
-      return catalog ? { ...provider, catalog_models: catalog, models: projectFlowerProviderModels(provider, catalog) } : provider;
+      const resolved = catalog ? { ...provider, catalog_models: catalog, models: projectFlowerProviderModels(provider, catalog) } : provider;
+      return { ...resolved, models: resolved.models.map(model => ({ ...model, web_search: runtimeModels.get(`${provider.id}/${model.model_name}`)?.web_search ?? model.web_search })) };
     }) } : null,
     model_source: flowerDirectoryDesktopStatus(directory),
     platform_model_source: directory.sources.some(source => source.kind === 'platform') ? {

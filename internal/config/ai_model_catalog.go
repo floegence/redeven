@@ -182,6 +182,9 @@ func (p AIProvider) CatalogModels() []AIProviderModel {
 	if p.catalogResolved {
 		return cloneAIModels(p.discoveredModels)
 	}
+	if p.EffectiveAuthMethod() == AIAuthChatGPT {
+		return []AIProviderModel{}
+	}
 	if p.ModelSelection == nil {
 		if p.Models == nil {
 			return []AIProviderModel{}
@@ -194,8 +197,67 @@ func (p AIProvider) CatalogModels() []AIProviderModel {
 // WithDiscoveredModels binds the current remote inventory only to this value.
 func (p AIProvider) WithDiscoveredModels(models []AIProviderModel) AIProvider {
 	p.discoveredModels = cloneAIModels(models)
+	for i, discovered := range p.discoveredModels {
+		reviewed, known := AIModelCatalogEntry(p.Type, discovered.EffectiveWireModelName())
+		if !known {
+			if AIProviderUsesCatalog(p.Type) && discovered.Status != "unsupported" && (discovered.SupportsTools == nil || *discovered.SupportsTools) {
+				p.discoveredModels[i].Status = "needs_configuration"
+				p.discoveredModels[i].SupportsTools = nil
+			}
+			continue
+		}
+		// Inventories own availability. The shipped catalog owns reviewed
+		// defaults, so an older snapshot cannot pin missing or stale capabilities.
+		reviewed.ModelName = discovered.ModelName
+		if discovered.DisplayName != "" {
+			reviewed.DisplayName = discovered.DisplayName
+		}
+		if p.Type == "google" {
+			// Google's native inventory publishes actual serving limits.
+			if discovered.ContextWindow > 0 {
+				reviewed.ContextWindow = discovered.ContextWindow
+			}
+			if discovered.MaxOutputTokens > 0 {
+				reviewed.MaxOutputTokens = discovered.MaxOutputTokens
+			}
+		}
+		if discovered.Status == "unsupported" || discovered.SupportsTools != nil && !*discovered.SupportsTools {
+			reviewed.Status, reviewed.SupportsTools = "unsupported", discovered.SupportsTools
+		}
+		p.discoveredModels[i] = reviewed
+	}
 	p.catalogResolved = true
 	return p
+}
+
+// ModelMetadata resolves settings information even for an unavailable model.
+// It never admits the model to EffectiveModels or substitutes a wire identity.
+func (p AIProvider) ModelMetadata(name string) AIProviderModel {
+	override := AIProviderModel{ModelName: name}
+	for _, m := range p.Models {
+		if m.ModelName == name {
+			override = m
+		}
+	}
+	if p.ModelSelection != nil {
+		for _, models := range [][]AIProviderModel{p.ModelSelection.ModelOverrides, p.ModelSelection.CustomModels} {
+			for _, m := range models {
+				if m.ModelName == name {
+					override = m
+				}
+			}
+		}
+	}
+	wire := override.EffectiveWireModelName()
+	metadata, _ := AIModelCatalogEntry(p.Type, wire)
+	for _, m := range p.CatalogModels() {
+		if m.EffectiveWireModelName() == wire {
+			metadata = m
+			break
+		}
+	}
+	metadata.ModelName = name
+	return applyAIModelOverride(metadata, override)
 }
 
 func applyAIModelOverride(model, override AIProviderModel) AIProviderModel {

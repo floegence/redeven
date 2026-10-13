@@ -132,7 +132,8 @@ func TestCatalogWriteFailureRetainsSelectionAndRecovery(t *testing.T) {
 	syncCatalog(false)
 	resolved := m.resolve(cfg)
 	_, model, ok := resolved.ProviderModelByID(cfg.CurrentModelID)
-	if !ok || model.ContextWindow != 16384 || resolved.IsAllowedModelID("p/new-model") {
+	reviewed, _ := config.AIModelCatalogEntry(p.Type, "gpt-5-mini")
+	if !ok || model.ContextWindow != reviewed.ContextWindow || resolved.IsAllowedModelID("p/new-model") {
 		t.Fatal("reappearance or new-model selection violated intent")
 	}
 }

@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createFlowerModelReadResource, readFlowerModelDirectory } from '../../../../../flower_ui/src/modelDirectory';
+import { createFlowerModelReadResource, readFlowerModelDirectory, withFlowerModelDirectory } from '../../../../../flower_ui/src/modelDirectory';
+import { resolveFlowerProviderModels } from '../../../../../flower_ui/src/settings/modelSelection';
+import { recommendedModelsForFlowerProviderType } from '../../../../../flower_ui/src/settings/providerCatalog';
+import { cloneFlowerModel } from '../../../../../flower_ui/src/providerModelProjection';
 import type { FlowerModelDirectory, FlowerSettingsSnapshot } from '../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 
 const configuration: FlowerSettingsSnapshot = { defaults: { permission_type: 'approval_required' as const }, model_profile: null, provider_secrets: [] };
@@ -8,6 +11,24 @@ const directory: FlowerModelDirectory = {
   models: [{ id: 'static/agent', label: 'Agent', source: 'runtime_config', state: 'ready', provider_id: 'static', model_name: 'agent' }],
   sources: [{ id: 'static', kind: 'runtime_config', state: 'ready' }],
 };
+
+it('carries search policy and complete defaults into settings without borrowing account availability', () => {
+  const reviewed = cloneFlowerModel(recommendedModelsForFlowerProviderType('openai')[0]);
+  const provider = { id: 'account', type: 'openai' as const, auth_method: 'chatgpt' as const, account_id: 'account', models: [], model_selection: { selected_models: [reviewed.model_name] } };
+  const search = { status: 'available' as const, reason: '' };
+  for (const available of [true, false]) {
+    const projected = withFlowerModelDirectory({ ...configuration, model_profile: { schema_version: 1, providers: [provider], current_model_id: `account/${reviewed.model_name}` } }, {
+      current_model_id: `account/${reviewed.model_name}`,
+      models: [{ id: `account/${reviewed.model_name}`, model_name: reviewed.model_name, provider_id: 'account', label: 'Account model', source: 'runtime_config', state: available ? 'ready' : 'unavailable', web_search: search }],
+      sources: [{ id: 'account', kind: 'runtime_config', state: available ? 'ready' : 'unavailable' }],
+      provider_catalogs: { account: available ? [{ ...reviewed, web_search: search }] : [] },
+    });
+    const savedProvider = projected.model_profile!.providers[0];
+    const reopened = resolveFlowerProviderModels(savedProvider, savedProvider.catalog_models);
+    expect(reopened[0]).toEqual(expect.objectContaining({ ...reviewed, web_search: search }));
+    expect(reopened[0].unavailable === true).toBe(!available);
+  }
+});
 
 describe('connection-owned local model reads', () => {
   afterEach(() => vi.useRealTimers());
