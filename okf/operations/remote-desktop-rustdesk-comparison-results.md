@@ -7,14 +7,14 @@ timestamp: 2026-10-13T09:04:00Z
 ---
 # Summary
 
-The primary qualification task owns this comparison. Published native
-`v0.22.40` improves udesk26 dynamic presentation to approximately 51 FPS, but
-complete RustDesk parity remains unaccepted. Host CPU, idle work and whole-client
-memory remain higher, and equal application window sizes do not establish equal
-content viewports. Three complete alternating latency rounds and exact moving
-source-frame quality receipts are retained. Lower quality, omitted SSH costs or
-failed samples cannot satisfy acceptance; each successor needs published-artifact
-validation and a fresh real-window comparison.
+The primary qualification task owns this comparison contract. Complete RustDesk
+parity remains unaccepted. The current published hardware AV1 candidate and
+its remaining latency/resource failures are recorded in the
+[v0.22.42 diagnostics](remote-desktop-rustdesk-v42-results.md). The software VP9
+`v0.22.40` rounds below remain historical comparison evidence. Equal application
+window sizes do not establish equal content viewports. Lower quality, omitted
+SSH costs or failed samples cannot satisfy acceptance; each successor needs
+published-artifact validation and a fresh real-window comparison.
 
 # Contract
 
