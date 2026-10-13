@@ -4331,7 +4331,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const binding = snapshot()?.auth_capabilities?.openai_chatgpt.binding_id;
     const request = props.adapter.loadChatGPTAccounts().then(result => {
       if (!surfaceDisposed && binding === snapshot()?.auth_capabilities?.openai_chatgpt.binding_id) {
-        setSnapshot(previous => previous ? { ...previous, chatgpt_accounts: result.accounts, account_sign_outs: result.account_sign_outs } : previous);
+        setSnapshot(previous => previous ? { ...previous, chatgpt_accounts: result.accounts, saved_chatgpt_accounts: result.saved_accounts, account_sign_outs: result.account_sign_outs } : previous);
       }
     }).catch(() => undefined).finally(() => { if (accountRefresh === request) accountRefresh = null; });
     accountRefresh = request;
@@ -12330,6 +12330,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               <FlowerSettingsSurface
                 onDiscoverModels={props.adapter.discoverProviderModels}
                 chatGPTAuth={props.adapter.chatGPTAuth ? accountAction : undefined}
+                loadChatGPTAccounts={props.adapter.loadChatGPTAccounts}
                 snapshot={snapshot()}
                 copy={copy().settings}
                 onSaveDefaultPermission={saveDefaultPermission}

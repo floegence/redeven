@@ -420,7 +420,6 @@ export function mapFlowerSettingsDraftToRuntimeBundle(draft: FlowerSettingsDraft
   model_profile: AIModelProfile;
   provider_api_key_patches: readonly FlowerSecretPatch[];
   web_search_provider_key_patches: readonly FlowerSecretPatch[];
-  chatgpt_attempts: readonly Readonly<{ provider_id: string; attempt_id: string; scope_id: string }>[];
 } {
   const providerAPIKeyPatches: FlowerSecretPatch[] = draft.model_profile.providers.flatMap((provider): FlowerSecretPatch[] => {
     if (provider.provider_api_key === undefined) return [];
@@ -444,7 +443,6 @@ export function mapFlowerSettingsDraftToRuntimeBundle(draft: FlowerSettingsDraft
       current_model_id: trim(draft.model_profile.current_model_id),
       providers: draft.model_profile.providers.map(draftProviderToAI),
     },
-    chatgpt_attempts: draft.model_profile.providers.flatMap(p => p.chatgpt_attempt ? [{ provider_id: p.id, ...p.chatgpt_attempt }] : []),
     provider_api_key_patches: providerAPIKeyPatches,
     web_search_provider_key_patches: webSearchKeyPatches,
   };

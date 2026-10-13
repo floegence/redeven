@@ -483,21 +483,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	svc.aiReady = aiReady
 	svc.pluginIntegration = pluginIntegration
 	svc.terminalLayoutCleanup = terminalLayoutCleanup
-	svc.stopAccountMaintenance = chatGPT.Maintain(context.Background(), func() ([]string, error) {
-		cfg, err := config.Load(opts.ConfigPath)
-		if err != nil {
-			return nil, err
-		}
-		var ids []string
-		if cfg.AI != nil {
-			for _, p := range cfg.AI.Providers {
-				if p.EffectiveAuthMethod() == config.AIAuthChatGPT {
-					ids = append(ids, p.AccountID)
-				}
-			}
-		}
-		return ids, nil
-	})
+	svc.stopAccountMaintenance = chatGPT.Maintain(context.Background())
 	aiReady.Start()
 	managedSvc.Start(context.Background())
 	containerResourcesOwned = false

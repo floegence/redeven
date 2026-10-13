@@ -1650,9 +1650,8 @@ func (g *Server) saveAIProviderBundle(
 	aiKeyPatches []settings.AIProviderAPIKeyPatch,
 	webSearchKeyPatches []settings.WebSearchProviderAPIKeyPatch,
 	allowChatGPTAuthentication bool,
-	accounts ...settings.ChatGPTAccount,
 ) (*config.Config, error) {
-	if err := validateAIProviderBundleCredentials(modelProfile, g.secrets, aiKeyPatches, webSearchKeyPatches, accounts...); err != nil {
+	if err := validateAIProviderBundleCredentials(modelProfile, g.secrets, aiKeyPatches, webSearchKeyPatches); err != nil {
 		return nil, aiProviderBundleSaveError{status: http.StatusBadRequest, err: err}
 	}
 	prevConfig, err := g.loadConfigLocked()
@@ -1708,9 +1707,6 @@ func (g *Server) saveAIProviderBundle(
 			return nil, aiProviderBundleSaveError{status: http.StatusInternalServerError, err: errors.Join(err, restoreErr)}
 		}
 		return nil, aiProviderBundleSaveError{status: http.StatusBadRequest, err: err}
-	}
-	if err := g.chatGPT.InstallAccounts(context.Background(), accounts); err != nil {
-		return nil, aiProviderBundleSaveError{status: http.StatusInternalServerError, err: errors.Join(err, restore())}
 	}
 	aiSvc.RefreshModelCatalogConnections()
 	return updated, nil
@@ -4013,11 +4009,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		type reqBody struct {
 			AuthSchemaVersion int                   `json:"auth_schema_version,omitempty"`
 			ModelProfile      config.AIModelProfile `json:"model_profile"`
-			ChatGPTAttempts   []struct {
-				ProviderID string `json:"provider_id"`
-				AttemptID  string `json:"attempt_id"`
-				ScopeID    string `json:"scope_id"`
-			} `json:"chatgpt_attempts,omitempty"`
+
 			ProviderAPIKeyPatches       []keyPatch `json:"provider_api_key_patches,omitempty"`
 			WebSearchProviderKeyPatches []keyPatch `json:"web_search_provider_key_patches,omitempty"`
 		}
@@ -4131,34 +4123,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			"ai_active_run_count":  activeRunCount,
 		}
 
-		bindings := make([]chatgpt.Binding, 0, len(body.ChatGPTAttempts))
-		for _, attempt := range body.ChatGPTAttempts {
-			var accountID string
-			for _, p := range modelProfile.Providers {
-				if p.ID == attempt.ProviderID && p.EffectiveAuthMethod() == config.AIAuthChatGPT {
-					accountID = p.AccountID
-				}
-			}
-			if !localAuthCapabilities(meta).OpenAIChatGPT.Available || accountID == "" || attempt.ScopeID == "" {
-				writeJSON(w, 403, apiResp{OK: false, Error: "invalid local ChatGPT binding"})
-				return
-			}
-			bindings = append(bindings, chatgpt.Binding{Owner: meta.LocalHostAccess + ":" + meta.ChannelID + ":" + attempt.ScopeID, AttemptID: attempt.AttemptID, AccountID: accountID})
-		}
-		var updated *config.Config
-		saveErr := g.chatGPT.UseAttempts(bindings, func(accounts []settings.ChatGPTAccount) error {
-			for _, account := range accounts {
-				if !account.PlanEnabled() {
-					return chatgpt.Failure("plan_permission_required")
-				}
-			}
-			for i := range accounts {
-				accounts[i].WelcomeAcknowledged = true
-			}
-			var err error
-			updated, err = g.saveAIProviderBundle(aiSvc, modelProfile, aiKeyPatches, webSearchKeyPatches, localAuthCapabilities(meta).OpenAIChatGPT.Available, accounts...)
-			return err
-		})
+		updated, saveErr := g.saveAIProviderBundle(aiSvc, modelProfile, aiKeyPatches, webSearchKeyPatches, localAuthCapabilities(meta).OpenAIChatGPT.Available)
 		if saveErr != nil {
 			status := http.StatusBadRequest
 			var bundleErr aiProviderBundleSaveError
@@ -4731,9 +4696,6 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			if body.Type != "openai" || body.APIKey != "" || body.BaseURL != "" && strings.TrimRight(body.BaseURL, "/") != "https://api.openai.com/v1" {
 				writeJSON(w, 400, apiResp{OK: false, Error: "ChatGPT requires the public OpenAI Responses endpoint."})
 				return
-			}
-			if body.AttemptID != "" {
-				body.ScopeID = meta.LocalHostAccess + ":" + meta.ChannelID + ":" + body.ScopeID
 			}
 		}
 		out, err := aiSvc.DiscoverModelCatalog(r.Context(), body)

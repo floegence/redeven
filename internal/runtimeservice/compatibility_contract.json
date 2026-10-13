@@ -4,10 +4,11 @@
     "release_version": "v0.13.12",
     "previous_release": "v0.13.11",
     "reviewed_at": "2026-10-13",
-    "review_id": "flower-account-lifecycle-v1",
-    "summary": "Epoch 55 adds Runtime-owned OpenAI account renewal, canonical credential states, local-only account reads, independent sign-out cleanup and revocation results, and Desktop execution credential observation.",
+    "review_id": "chatgpt-saved-account-lifecycle-v2",
+    "summary": "Epoch 56 separates verified ChatGPT sign-in persistence from connection saves, retains issued registration on code-exchange retry, and adds saved local account selection.",
     "same_window_rationale": "",
     "checked_surfaces": [
+      "Epoch 56: Runtime commits verified OAuth accounts before connection editing, identity-only grants remain saved, failed code exchanges reuse the issued client ID with fresh PKCE, canceled exchanges revoke minted credentials, and local account selection includes signed-out unbound registrations. Desktop and Env App remove draft credential receipts and discover models through the canonical account resolver. Runtime renewal includes every saved sign-in. Desktop attach/start, Local UI health, startup reports, sys.ping, Env App maintenance and SSH bootstrap consume the canonical epoch. Protected secrets schema, Runtime protocol and Floret API remain unchanged.",
       "Epoch 55: local admin account state, shared Flower state and sign-out results, configuration orphan cleanup, protected secrets schema 2-to-3, Runtime maintenance independent of AI readiness, Desktop current account facts and immediate canonical cancellation. Runtime Service protocol, Floret API and domain schema are unchanged. Desktop attach/start, Local UI health, startup reports, sys.ping, Env App maintenance and SSH bootstrap use the same canonical epoch.",
       "Epoch 54: Desktop, Env App and embedded Flower directory reads, local snapshot model source, explicit provider sync, unknown capability configuration, authenticated platform scope and invocation lease enforcement.",
       "Epoch 53: native local Desktop admission, one-shot local Runtime browser handoff, SSH/Gateway/remote/unknown denial, renderer header stripping, provider bundle authentication schema, Runtime and Desktop source resolution, rotating token storage, full Responses history and native namespace replay. Domain schema and Floret public API remain unchanged.",
@@ -101,7 +102,7 @@
     ]
   },
   "runtime_protocol_version": "redeven-runtime-v2",
-  "compatibility_epoch": 55,
+  "compatibility_epoch": 56,
   "upgrade_from_runtime_epochs": [
     9,
     10,
@@ -148,7 +149,8 @@
     51,
     52,
     53,
-    54
+    54,
+    55
   ],
   "minimum_desktop_version": "v0.13.0",
   "minimum_runtime_version": "v0.13.0"

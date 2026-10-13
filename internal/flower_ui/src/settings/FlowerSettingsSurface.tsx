@@ -107,7 +107,7 @@ function normalizeProviderForSave(provider: FlowerProviderDraft): FlowerProvider
   return {
     enabled: provider.enabled,
     auth_method: provider.auth_method, account_id: provider.account_id,
-    chatgpt_attempt: provider.chatgpt_attempt, chatgpt_account: provider.chatgpt_account,
+    chatgpt_account: provider.chatgpt_account,
     model_selection: provider.model_selection,
     catalog_models: provider.catalog_models,
     model_defaults: provider.model_defaults,
@@ -135,6 +135,7 @@ function normalizeProviderForSave(provider: FlowerProviderDraft): FlowerProvider
 
 export type FlowerSettingsSurfaceProps = Readonly<{
   chatGPTAuth?: import('../contracts/flowerSurfaceContracts').FlowerChatGPTAuth;
+  loadChatGPTAccounts?: import('../contracts/flowerSurfaceContracts').FlowerSurfaceAdapter['loadChatGPTAccounts'];
   onDiscoverModels?: FlowerModelCatalogDiscovery;
   snapshot: FlowerSettingsSnapshot | null;
   onSaveDefaultPermission: (permissionType: FlowerPermissionType) => Promise<FlowerSettingsSnapshot>;
@@ -194,7 +195,7 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
         const catalog = rows.find(row => row.id === provider.id)?.catalog_models;
         const account = snapshot.chatgpt_accounts?.[provider.id];
         const updated = catalog ? applyFlowerModelDiscovery(provider, catalog) : provider;
-        return account && account.account_id === provider.account_id && !provider.chatgpt_attempt ? { ...updated, chatgpt_account: account } : updated;
+        return account && account.account_id === provider.account_id ? { ...updated, chatgpt_account: account } : updated;
       }));
     }
     const savedPermission = snapshot.defaults.permission_type ?? 'approval_required';
@@ -703,6 +704,8 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
         providerDefaults={props.snapshot?.model_directory?.provider_defaults}
         onDiscoverModels={props.onDiscoverModels}
         chatGPTAuth={props.chatGPTAuth}
+        loadChatGPTAccounts={props.loadChatGPTAccounts}
+        chatGPTAccounts={props.snapshot?.saved_chatgpt_accounts}
         chatGPTAvailable={props.snapshot?.auth_capabilities?.openai_chatgpt.available === true}
         chatGPTBindingID={props.snapshot?.auth_capabilities?.openai_chatgpt.binding_id}
         chatGPTAccount={props.snapshot?.chatgpt_accounts?.[providerDialogProvider()?.id ?? '']}

@@ -245,7 +245,7 @@ func TestChatGPTAccountProjectionDoesNotExposeCredentialsAndRequiresAdmin(t *tes
 }
 
 func TestChatGPTRemovedBindingSignsOutOnlyAfterSuccessfulSave(t *testing.T) {
-	for _, scenario := range []string{"shared", "disabled", "remove-last", "remove-all", "api-key", "failed-save", "stale-new-login"} {
+	for _, scenario := range []string{"shared", "disabled", "remove-last", "remove-all", "api-key", "failed-save"} {
 		t.Run(scenario, func(t *testing.T) {
 			path := writeTestConfigWithAI(t)
 			cfg, err := config.Load(path)
@@ -287,20 +287,14 @@ func TestChatGPTRemovedBindingSignsOutOnlyAfterSuccessfulSave(t *testing.T) {
 			case "api-key", "failed-save":
 				next.Providers = []config.AIProvider{{ID: "one", Type: "openai", Models: []config.AIProviderModel{{ModelName: "gpt-5-mini"}}}}
 				next.CurrentModelID = "one/gpt-5-mini"
-			case "stale-new-login":
-				next.Providers = append([]config.AIProvider(nil), old.Providers...)
 			}
 			var patches []settings.AIProviderAPIKeyPatch
 			if scenario == "api-key" {
 				key := "api-key"
 				patches = []settings.AIProviderAPIKeyPatch{{ProviderID: "one", APIKey: &key}}
 			}
-			var drafts []settings.ChatGPTAccount
-			if scenario == "stale-new-login" {
-				drafts = []settings.ChatGPTAccount{a}
-			} // Revision zero is stale; install must roll back the config.
-			updated, saveErr := srv.saveAIProviderBundle(svc, next, patches, nil, true, drafts...)
-			if scenario == "failed-save" || scenario == "stale-new-login" {
+			updated, saveErr := srv.saveAIProviderBundle(svc, next, patches, nil, true)
+			if scenario == "failed-save" {
 				if saveErr == nil {
 					t.Fatal("invalid save accepted")
 				}

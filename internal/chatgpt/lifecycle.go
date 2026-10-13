@@ -6,7 +6,6 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
-	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -544,39 +543,6 @@ func safeEvidence(value string) string {
 	return value
 }
 
-// InstallAccount rejects a draft that predates logout or another login.
-func (c *Client) InstallAccount(ctx context.Context, next settings.ChatGPTAccount) error {
-	return c.InstallAccounts(ctx, []settings.ChatGPTAccount{next})
-}
-func (c *Client) InstallAccounts(ctx context.Context, accounts []settings.ChatGPTAccount) error {
-	ids := make([]string, 0, len(accounts))
-	for _, a := range accounts {
-		ids = append(ids, a.ID())
-	}
-	slices.Sort(ids)
-	ids = slices.Compact(ids)
-	var unlocks []func()
-	defer func() {
-		for _, unlock := range unlocks {
-			unlock()
-		}
-	}()
-	for _, id := range ids {
-		unlock, err := c.Store.LockChatGPTAccountOperation(ctx, id)
-		if err != nil {
-			return err
-		}
-		unlocks = append(unlocks, unlock)
-	}
-	if err := c.Store.InstallChatGPTAccounts(ctx, accounts); err != nil {
-		return err
-	}
-	for _, id := range ids {
-		c.resetMemory(id)
-	}
-	return nil
-}
-
 func (c *Client) SignOut(ctx context.Context, id string) (bool, error) {
 	result, err := c.SignOutAccount(ctx, id)
 	return result.RevocationConfirmed, err
@@ -717,8 +683,9 @@ func retryAfter(value string, now time.Time) time.Time {
 }
 
 // Maintain owns no credentials or execution state; it schedules the shared
-// resolver while the Runtime is alive, including disabled bound connections.
-func (c *Client) Maintain(ctx context.Context, bindings func() ([]string, error)) func() {
+// resolver for every saved sign-in while the Runtime is alive, including accounts
+// not yet bound to a connection and grants without plan permission.
+func (c *Client) Maintain(ctx context.Context) func() {
 	ctx, cancel := context.WithCancel(ctx)
 	done := make(chan struct{})
 	go func() {
@@ -735,24 +702,11 @@ func (c *Client) Maintain(ctx context.Context, bindings func() ([]string, error)
 		var workers sync.WaitGroup
 		defer workers.Wait()
 		scan := func() {
-			ids, err := bindings()
-			if err != nil {
-				return
-			}
 			accounts, err := c.Store.ChatGPTAccounts(ctx)
 			if err != nil {
 				return
 			}
-			seen := map[string]bool{}
-			for _, id := range ids {
-				if seen[id] {
-					continue
-				}
-				seen[id] = true
-				a, ok := accounts[id]
-				if !ok {
-					continue
-				}
+			for id, a := range accounts {
 				state := c.accountStatus(a).State
 				if previous, observed := observedStates[id]; !observed || previous != state {
 					observedStates[id] = state

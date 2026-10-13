@@ -133,25 +133,48 @@ func (g *Server) handleChatGPTAuth(w http.ResponseWriter, r *http.Request) {
 			}
 			cancel()
 		}
+		saved := []chatgpt.AccountStatus{}
 		var signOuts []chatgpt.SignOutResult
 		accounts, readErr := g.secrets.ChatGPTAccounts(r.Context())
-		if readErr == nil {
-			for id, account := range accounts {
-				if counts[id] != 0 || account.Lifecycle != "signing_out" && account.Lifecycle != "signed_out" {
-					continue
-				}
-				confirmed := account.RevocationConfirmed != nil && *account.RevocationConfirmed
-				complete := account.Lifecycle == "signed_out"
-				if !complete || !confirmed {
-					signOuts = append(signOuts, chatgpt.SignOutResult{AccountID: id, LocalCleanupComplete: complete, RevocationConfirmed: confirmed, ErrorCode: account.ErrorCode})
+		if readErr != nil {
+			writeJSON(w, 503, apiResp{OK: false, ErrorCode: "storage_unavailable", Error: "Account status is unavailable."})
+			return
+		}
+		for id, account := range accounts {
+			status, err := g.chatGPT.Status(id)
+			if err != nil {
+				writeJSON(w, 503, apiResp{OK: false, ErrorCode: "storage_unavailable", Error: "Account status is unavailable."})
+				return
+			}
+			status.BindingCount = counts[id]
+			for _, bound := range out {
+				if bound.AccountID == id {
+					status.ActiveTaskCount = bound.ActiveTaskCount
+					break
 				}
 			}
+			saved = append(saved, status)
+			if counts[id] != 0 || account.Lifecycle != "signing_out" && account.Lifecycle != "signed_out" {
+				continue
+			}
+			confirmed := account.RevocationConfirmed != nil && *account.RevocationConfirmed
+			complete := account.Lifecycle == "signed_out"
+			if !complete || !confirmed {
+				signOuts = append(signOuts, chatgpt.SignOutResult{AccountID: id, LocalCleanupComplete: complete, RevocationConfirmed: confirmed, ErrorCode: account.ErrorCode})
+			}
 		}
+		sort.Slice(saved, func(i, j int) bool {
+			if saved[i].Email != saved[j].Email {
+				return saved[i].Email < saved[j].Email
+			}
+			return saved[i].AccountID < saved[j].AccountID
+		})
 		sort.Slice(signOuts, func(i, j int) bool { return signOuts[i].AccountID < signOuts[j].AccountID })
 		writeJSON(w, 200, apiResp{OK: true, Data: struct {
-			Accounts map[string]chatgpt.AccountStatus `json:"accounts"`
-			SignOuts []chatgpt.SignOutResult          `json:"account_sign_outs"`
-		}{out, signOuts}})
+			SavedAccounts []chatgpt.AccountStatus          `json:"saved_accounts"`
+			Accounts      map[string]chatgpt.AccountStatus `json:"accounts"`
+			SignOuts      []chatgpt.SignOutResult          `json:"account_sign_outs"`
+		}{saved, out, signOuts}})
 		return
 	}
 	var body struct {
@@ -176,31 +199,22 @@ func (g *Server) handleChatGPTAuth(w http.ResponseWriter, r *http.Request) {
 	var err error
 	switch r.URL.Path {
 	case "/_redeven_proxy/api/ai/auth/chatgpt/start":
-		out, err = g.chatGPT.StartWithDraft(owner, body.AccountID, body.Reconsent, body.PreviousAttemptID)
+		out, err = g.chatGPT.StartRetry(owner, body.AccountID, body.Reconsent, body.PreviousAttemptID)
 	case "/_redeven_proxy/api/ai/auth/chatgpt/status":
 		out, err = g.chatGPT.Poll(owner, body.AttemptID)
 	case "/_redeven_proxy/api/ai/auth/chatgpt/cancel":
 		g.chatGPT.Cancel(owner, body.AttemptID)
 		out = struct{}{}
 	case "/_redeven_proxy/api/ai/auth/chatgpt/sign-out", "/_redeven_proxy/api/ai/auth/chatgpt/acknowledge", "/_redeven_proxy/api/ai/auth/chatgpt/retry":
-		// Account actions are restricted to a currently configured binding.
-		cfg, e := g.loadConfigLocked()
-		if e != nil {
-			err = e
+		// Account actions belong to the canonical local registry, independently
+		// of connection configuration or its current availability.
+		_, exists, readErr := g.secrets.ChatGPTAccount(body.AccountID)
+		if readErr != nil {
+			err = chatgpt.Failure("storage_unavailable")
 			break
 		}
-		bound := false
-		if cfg.AI != nil {
-			for _, p := range cfg.AI.Providers {
-				bound = bound || p.EffectiveAuthMethod() == config.AIAuthChatGPT && p.AccountID == body.AccountID
-			}
-		}
-		if !bound && strings.HasSuffix(r.URL.Path, "sign-out") {
-			account, exists, _ := g.secrets.ChatGPTAccount(body.AccountID)
-			bound = exists && (account.Lifecycle == "signing_out" || account.Lifecycle == "signed_out")
-		}
-		if !bound {
-			err = errors.New("ChatGPT account is not bound to this configuration")
+		if !exists {
+			err = chatgpt.Failure("authorization_required")
 			break
 		}
 		if strings.HasSuffix(r.URL.Path, "sign-out") {
