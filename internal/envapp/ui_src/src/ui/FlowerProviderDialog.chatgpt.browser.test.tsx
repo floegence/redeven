@@ -17,7 +17,7 @@ let dispose: (() => void) | undefined;
 let host: HTMLDivElement;
 afterEach(() => { dispose?.(); host?.remove(); document.documentElement.classList.remove('dark'); });
 
-async function mount(local: boolean, locale: RedevenLocale, width: number, dark: boolean, provider?: FlowerProviderDraft, auth?: FlowerChatGPTAuth) {
+async function mount(local: boolean, locale: RedevenLocale, width: number, dark: boolean, provider?: FlowerProviderDraft, auth?: FlowerChatGPTAuth, mode?: 'create' | 'edit') {
   await page.viewport(width, 900);
   const i18n = createI18nHelpers(locale, await loadEnvAppDictionary(locale));
   const copy = createLocalizedFlowerSurfaceCopy({ locale,
@@ -29,13 +29,13 @@ async function mount(local: boolean, locale: RedevenLocale, width: number, dark:
   host = document.createElement('div'); host.className = 'flower-surface'; document.body.append(host);
   function Theme() { const theme = useTheme(); onMount(() => theme.selectShellTheme(dark ? 'dark' : 'light', dark ? 'porcelain-dark' : 'porcelain-light')); return null; }
   dispose = render(() => <FloeProvider config={{ theme: { shellPresets: builtInShellThemePresets } }}><Theme /><FlowerProviderDialog
-    open={open()} mode={provider ? 'edit' : 'create'} provider={provider ?? { id: 'openai', type: 'openai', models: [] }}
+    open={open()} mode={mode ?? (provider ? 'edit' : 'create')} provider={provider ?? { id: 'openai', type: 'openai', models: [] }}
     copy={copy} chatGPTAvailable={local} chatGPTBindingID={binding()} chatGPTAccount={provider?.chatgpt_account}
     chatGPTAuth={auth ?? vi.fn(async () => ({ id: 'attempt', state: 'waiting' }))}
-    onDiscoverModels={async () => ({ models: [{ model_name: 'gpt-6.1-sol', context_window: 1050000, input_modalities: ['text', 'image'] }] })}
+    onDiscoverModels={async () => ({ models: provider?.catalog_models ?? [{ model_name: 'gpt-6.1-sol', context_window: 1050000, input_modalities: ['text', 'image'] }] })}
     keyConfigured={false} webSearchKeyConfigured={false} onOpenChange={setOpen} onConfirm={vi.fn()} /></FloeProvider>, host);
   await expect.element(page.getByRole('dialog')).toBeVisible();
-  if (!provider) await userEvent.click(document.querySelector<HTMLButtonElement>('[aria-controls=flower-provider-type-openai]')!);
+  if (!provider || mode === 'create') await userEvent.click(document.querySelector<HTMLButtonElement>('[aria-controls=flower-provider-type-openai]')!);
   await expect.poll(() => document.querySelector('[role=dialog]')!.getAnimations({ subtree: true }).every(animation => animation.playState !== 'running')).toBe(true);
   return { copy, setOpen, setBinding, open };
 }
@@ -108,3 +108,36 @@ it('closes the old environment draft and cancels authorization when its trusted 
   finish({ id: 'old-attempt', state: 'ready', account: { account_id: 'old', email: 'stale@example.com', state: 'ready', welcome_acknowledged: false } });
   expect(document.body.textContent).not.toContain('stale@example.com');
 });
+
+for (const dark of [false, true]) {
+  it(`keeps the provider picker independent of a populated catalog and preserves selection through authentication and search (${dark ? 'dark' : 'light'})`, async () => {
+    const models = [
+      { model_name: 'gpt-6.1-sol', display_name: 'GPT-6.1 Sol', context_window: 1050000, max_output_tokens: 128000, input_modalities: ['text', 'image'], web_search: { status: 'available', reason: 'catalog_supported' } as const },
+      { model_name: 'gpt-6-sol', display_name: 'GPT-6 Sol', context_window: 1050000, max_output_tokens: 128000, input_modalities: ['text', 'image'] },
+      { model_name: 'gpt-6-luna', display_name: 'GPT-6 Luna', context_window: 1050000, max_output_tokens: 128000, input_modalities: ['text', 'image'] },
+    ];
+    const draft: FlowerProviderDraft = { id: 'openai', type: 'openai', auth_method: 'chatgpt', account_id: 'saved',
+      chatgpt_account: { account_id: 'saved', email: 'person@example.com', state: 'ready', welcome_acknowledged: true },
+      models: [models[0]], catalog_models: models, model_selection: { selected_models: [models[0].model_name] } };
+    const { copy } = await mount(true, 'zh-CN', 1280, dark, draft, undefined, 'create');
+    await expect.element(page.getByRole('checkbox', { name: 'GPT-6.1 Sol', exact: true })).toBeChecked();
+    const dialog = document.querySelector<HTMLElement>('.flower-provider-dialog')!;
+    const picker = dialog.querySelector<HTMLElement>('.flower-provider-picker')!;
+    const editor = dialog.querySelector<HTMLElement>('.flower-provider-editor')!;
+    expect(picker.getBoundingClientRect().right).toBeLessThanOrEqual(editor.getBoundingClientRect().left);
+    expect(dialog.scrollWidth).toBe(dialog.clientWidth);
+    if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: dialog, path: `__screenshots__/flower-provider-connected-${dark ? 'dark' : 'light'}.png` });
+    await userEvent.click(page.getByRole('button', { name: copy.apiKey, exact: true }));
+    await userEvent.fill(page.getByPlaceholder(copy.pasteAPIKey), 'test-provider-key');
+    const search = page.getByRole('textbox', { name: copy.catalog.search, exact: true });
+    await userEvent.fill(search, 'gpt-6.1');
+    await expect.element(page.getByRole('checkbox', { name: 'GPT-6.1 Sol', exact: true })).toBeChecked();
+    const pickerRect = picker.getBoundingClientRect();
+    await userEvent.fill(search, 'no-matching-model');
+    await expect.element(page.getByText(copy.catalog.empty, { exact: true })).toBeVisible();
+    await expect.element(page.getByRole('button', { name: copy.saveProvider, exact: true })).toBeEnabled();
+    expect(picker.getBoundingClientRect().top).toBe(pickerRect.top);
+    await userEvent.fill(search, '');
+    if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: dialog, path: `__screenshots__/flower-provider-api-${dark ? 'dark' : 'light'}.png` });
+  });
+}

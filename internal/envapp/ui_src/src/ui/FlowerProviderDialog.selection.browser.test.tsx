@@ -49,10 +49,11 @@ for (const [count, width, initiallySelected] of [[4, 1280, false], [40, 1280, fa
     await settledDialog();
     const input = document.querySelector<HTMLInputElement>('input[aria-label="agent-2"]')!;
     const panel = document.getElementById('flower-provider-type-ollama')!;
+    const scroller = width < 760 ? panel.closest<HTMLElement>('[data-floe-dialog-body]')! : panel;
     input.closest('label')!.scrollIntoView({ block: 'center' });
     await frame();
-    expect(panel.scrollTop).toBeGreaterThan(0);
-    const initialTop = panel.scrollTop;
+    expect(scroller.scrollTop).toBeGreaterThan(0);
+    const initialTop = scroller.scrollTop;
     const rect = input.closest('label')!.getBoundingClientRect();
     const modelRows = [...input.closest('label')!.parentElement!.parentElement!.parentElement!.children] as HTMLElement[];
     const rowHeights = modelRows.map(row => row.getBoundingClientRect().height);
@@ -60,7 +61,7 @@ for (const [count, width, initiallySelected] of [[4, 1280, false], [40, 1280, fa
       if (index < 2) await userEvent.click(input.closest('label')!);
       else await userEvent.keyboard(' ');
       await frame();
-      expect.soft(panel.scrollTop, 'selection must not move the scroller').toBeCloseTo(initialTop, 0);
+      expect.soft(scroller.scrollTop, 'selection must not move the scroller').toBeCloseTo(initialTop, 0);
       expect(document.querySelector('input[aria-label="agent-2"]') === input, 'selection must reuse its checkbox').toBe(true);
       expect.soft(document.activeElement === input, 'selection must retain keyboard focus').toBe(true);
       expect.soft(input.closest('label')!.getBoundingClientRect().top, 'selection must retain the clicked row position').toBeCloseTo(rect.top, 0);
@@ -89,7 +90,7 @@ for (const width of [1280, 390]) {
     await userEvent.click(document.querySelector<HTMLButtonElement>('[data-provider-dialog-step="models"]')!);
     await settledDialog();
     await frame();
-    const row = [...document.querySelectorAll<HTMLElement>('.redeven-settings-choice')].find((node) => node.textContent?.startsWith('agent-12'))!;
+    const row = [...document.querySelectorAll<HTMLElement>('.flower-provider-model-row')].find((node) => node.textContent?.startsWith('agent-12'))!;
     const button = row.querySelector<HTMLButtonElement>('button')!;
     button.scrollIntoView({ block: 'center' });
     await frame();

@@ -95,7 +95,10 @@ describe('provider save credentials', () => {
     try {
       const save = [...document.querySelectorAll('button')].find(button => button.textContent?.trim() === 'Save Provider')!;
       expect(save.disabled).toBe(blocked);
-      if (type === 'ollama' || type === 'openai_compatible') expect(host.textContent).toContain('API key optional');
+      if (type === 'ollama' || type === 'openai_compatible') {
+        clickStep(host, 'connection');
+        expect(host.textContent).toContain('API key optional');
+      }
       save.click();
       expect(props.onConfirm).toHaveBeenCalledTimes(blocked ? 0 : 1);
     } finally { dispose(); }

@@ -22,7 +22,6 @@ import {
 } from './aiCatalog';
 import { useI18n } from '../../i18n';
 import { WebSearchCapabilityBadge } from '../../../../../../flower_ui/src/WebSearchCapabilityBadge';
-import { flowerProviderSearchSummary } from '../../../../../../flower_ui/src/webSearchCapability';
 import { ProviderBrandIcon } from './ProviderBrandIcon';
 import {
   CapabilityTag,
@@ -112,11 +111,6 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
     setActiveStep('connection');
   };
 
-  const modalitySummary = (raw: unknown): string => (
-    modelSupportsImageInput(raw)
-      ? i18n.t('flowerProviderDialog.textAndImageModalities')
-      : i18n.t('flowerProviderDialog.textOnlyModality')
-  );
   const providerTypeDescription = (providerType: AIProviderType): string => (
     providerUsesCustomConnectionName(providerType)
       ? i18n.t('flowerProviderDialog.customEndpointDescription')
@@ -133,8 +127,8 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
       open={props.open}
       onOpenChange={props.onOpenChange}
       title={props.title}
-      class="redeven-provider-dialog w-[min(68rem,96vw)] max-w-[96vw]"
-      contentClass="min-h-0"
+      class="redeven-provider-dialog flower-provider-dialog w-[min(68rem,96vw)] max-w-[96vw]"
+      contentClass="flower-provider-dialog-body"
       footer={
         <div class="flex flex-wrap items-center justify-end gap-2">
           <Show when={missingCredential()}>
@@ -166,82 +160,46 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
           const recommendedModelSelected = (modelName: string) => selectedModelNames().has(normalizeModelName(modelName));
           const supportedCustomModelNames = () => providerSupportsCustomModelNames(provider().type);
           const hasSelectedModels = () => models().length > 0;
-          const stepItems = createMemo<ReadonlyArray<{ id: ProviderDialogStep; label: string; description: string; icon: StepIconComponent }>>(() => [
-            {
-              id: 'type',
-              label: i18n.t('flowerProviderDialog.providerTypeTitle'),
-              description: providerTypeDisplayLabel(provider().type),
-              icon: Bot,
-            },
-            {
-              id: 'connection',
-              label: i18n.t('flowerProviderDialog.connectionTitle'),
-              description: flowerProviderAPIKeyOptional(provider().type) ? catalogCopy().optionalKey : props.keySet || String(props.keyDraft ?? '').trim()
-                ? i18n.t('flowerProviderDialog.keyReady')
-                : i18n.t('flowerSettings.needsKey'),
-              icon: Key,
-            },
-            {
-              id: 'models',
-              label: i18n.t('flowerProviderDialog.recommendedModelsTitle'),
-              description: hasSelectedModels()
-                ? i18n.t('flowerProviderDialog.selectedModelsTitle')
-                : i18n.t('flowerProviderDialog.noSelectedModels'),
-              icon: Sparkles,
-            },
-            {
-              id: 'advanced',
-              label: i18n.t('flowerProviderDialog.advancedTitle'),
-              description: modelID(providerID(), normalizeModelName(models()[0]?.model_name)) || i18n.t('flowerProviderDialog.providerIdPending'),
-              icon: Settings,
-            },
-          ]);
+          const stepItems: ReadonlyArray<{ id: ProviderDialogStep; label: () => string; icon: StepIconComponent }> = [
+            { id: 'type', label: () => i18n.t('flowerProviderDialog.providerTypeTitle'), icon: Bot },
+            { id: 'connection', label: () => i18n.t('flowerProviderDialog.connectionTitle'), icon: Key },
+            { id: 'models', label: () => i18n.t('flowerProviderDialog.recommendedModelsTitle'), icon: Sparkles },
+            { id: 'advanced', label: () => i18n.t('flowerProviderDialog.advancedTitle'), icon: Settings },
+          ];
 
           return (
-            <div class="redeven-settings-dialog grid min-h-0 grid-cols-1 gap-5 lg:h-[min(34rem,65dvh)] lg:grid-cols-[13rem_minmax(0,1fr)] lg:overflow-hidden">
-              <aside class="redeven-settings-inset rounded-lg border p-2">
-                <div class="redeven-settings-choice mb-2 hidden rounded-md border p-3 lg:block">
+            <div class="redeven-settings-dialog flower-provider-workspace">
+              <aside class="flower-provider-picker">
+                <div class="mb-4 px-2">
                   <div class="flex items-center gap-2">
                     <span class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md bg-muted">
                       <ProviderBrandIcon type={provider().type} class="h-5 w-5" />
                     </span>
                     <div class="min-w-0">
                       <div class="truncate text-[length:var(--floe-type-body)] font-semibold text-foreground">{providerTypeDisplayLabel(provider().type)}</div>
-                      <div class="truncate text-[11px] text-muted-foreground">{providerID() || i18n.t('flowerProviderDialog.providerIdPending')}</div>
                     </div>
                   </div>
-                  <div class="mt-3 flex flex-wrap gap-1.5">
-                    <SettingsPill tone={props.keySet || String(props.keyDraft ?? '').trim() ? 'success' : 'default'}>
-                      {flowerProviderAPIKeyOptional(provider().type) ? catalogCopy().optionalKey : props.keySet || String(props.keyDraft ?? '').trim() ? i18n.t('flowerProviderDialog.keyReady') : i18n.t('flowerSettings.needsKey')}
-                    </SettingsPill>
-                    <SettingsPill tone={flowerProviderSearchSummary(models(), catalogCopy()).enabled ? 'success' : 'default'}>{flowerProviderSearchSummary(models(), catalogCopy()).label}</SettingsPill>
-                  </div>
                 </div>
-                <nav class="grid grid-cols-2 gap-1 lg:block lg:space-y-1" aria-label={props.title}>
-                  <For each={stepItems()}>
+                <nav class="flower-provider-step-options" aria-label={props.title}>
+                  <For each={stepItems}>
                     {(step) => {
                       const active = () => activeStep() === step.id;
                       const StepIcon = step.icon;
                       return (
                         <button
                           type="button"
-                          class={cn(
-                            'flex w-full cursor-pointer items-start gap-2 rounded-md border px-3 py-2.5 text-left transition disabled:cursor-not-allowed disabled:opacity-60',
-                            active()
-                              ? 'redeven-settings-choice redeven-settings-choice--selected text-[var(--redeven-settings-selection-fg)]'
-                              : 'border-transparent text-muted-foreground hover:bg-[var(--redeven-settings-row-hover-bg)] hover:text-foreground',
-                          )}
+                          class="flower-provider-choice"
+                          classList={{ 'flower-provider-choice--active': active() }}
                           onClick={() => setActiveStep(step.id)}
                           disabled={!props.canInteract && step.id !== activeStep()}
                           aria-current={active() ? 'step' : undefined}
                           data-provider-dialog-step={step.id}
                         >
-                          <span class={cn('mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md', active() ? 'bg-[var(--redeven-settings-selection-indicator)] text-[var(--redeven-settings-header-bg)]' : 'bg-muted text-muted-foreground')}>
+                          <span class="flex h-6 w-6 shrink-0 items-center justify-center">
                             <StepIcon class="h-3.5 w-3.5" />
                           </span>
                           <span class="min-w-0">
-                            <span class="block text-xs font-semibold">{step.label}</span>
-                            <span class="mt-0.5 hidden truncate text-[11px] opacity-75 lg:block">{step.description}</span>
+                            <span class="block text-xs font-semibold">{step.label()}</span>
                           </span>
                         </button>
                       );
@@ -250,12 +208,12 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                 </nav>
               </aside>
 
-              <div class="min-w-0 lg:overflow-y-auto lg:pr-2">
+              <div class="flower-provider-editor">
                 <Show when={activeStep() === 'type'}>
                   <section class="space-y-3">
                     <SubSectionHeader
                       title={i18n.t('flowerProviderDialog.providerTypeTitle')}
-                      description={i18n.t('flowerProviderDialog.providerTypeDescription')}
+                      description={i18n.t('flowerSurface.settings.dialogProviderTypeDescription')}
                     />
                     <div class="grid grid-cols-1 gap-2 md:grid-cols-2">
                       <For each={AI_PROVIDER_TYPE_OPTIONS}>
@@ -265,8 +223,8 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                             <button
                               type="button"
                               class={cn(
-                                'redeven-settings-choice rounded-lg border p-3 text-left disabled:cursor-not-allowed disabled:opacity-60',
-                                active() && 'redeven-settings-choice--selected',
+                                'flower-provider-choice text-left disabled:cursor-not-allowed disabled:opacity-60',
+                                active() && 'flower-provider-choice--active',
                               )}
                               onClick={() => chooseProviderType(item.value)}
                               disabled={!props.canInteract}
@@ -300,7 +258,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                       title={i18n.t('flowerProviderDialog.connectionTitle')}
                       description={i18n.t('flowerProviderDialog.connectionDescription')}
                     />
-                    <div class={cn('grid grid-cols-1 gap-3', providerUsesCustomConnectionName(provider().type) ? 'md:grid-cols-2' : '')}>
+                    <div class="flower-provider-connection-fields">
                       <Show when={providerUsesCustomConnectionName(provider().type)}>
                         <div>
                           <FieldLabel>{i18n.t('flowerProviderDialog.connectionName')}</FieldLabel>
@@ -374,13 +332,6 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                         </div>
                       </Show>
                     </div>
-                    <div class="redeven-settings-inset flex flex-wrap gap-2 rounded-lg border p-3">
-                      <SettingsPill tone={props.keySet || String(props.keyDraft ?? '').trim() ? 'success' : 'default'}>
-                        {flowerProviderAPIKeyOptional(provider().type) ? catalogCopy().optionalKey : props.keySet || String(props.keyDraft ?? '').trim() ? i18n.t('flowerProviderDialog.keyReady') : i18n.t('flowerSettings.needsKey')}
-                      </SettingsPill>
-                      <SettingsPill>{providerTypeDisplayLabel(provider().type)}</SettingsPill>
-                      <SettingsPill tone={flowerProviderSearchSummary(models(), catalogCopy()).enabled ? 'success' : 'default'}>{flowerProviderSearchSummary(models(), catalogCopy()).label}</SettingsPill>
-                    </div>
                   </section>
                 </Show>
 
@@ -389,21 +340,20 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                     <section class="space-y-3">
                       <SubSectionHeader
                         title={i18n.t('flowerProviderDialog.recommendedModelsTitle')}
-                        description={i18n.t('flowerProviderDialog.recommendedModelsDescription')}
                       />
                       <Show when={provider().model_selection && !provider().model_selection?.selected_models}><p role="status" class="text-xs text-muted-foreground">{catalogCopy().selectionReview}</p></Show>
                       <ModelCatalogControls hasContent={props.recommendedModels.length > 0} copy={catalogCopy()} query={query()} count={props.provider?.models.length ?? 0} onQuery={setQuery} onSelectAll={props.onApplyAllPresets} onClear={props.onClearModels} onRefresh={props.onDiscoverModels} loading={props.discoveringModels} error={props.discoveryError} disabled={!props.canInteract} />
                       <Show
                         when={visibleModelNames().length > 0}
-                        fallback={<div class="rounded-lg border border-dashed p-4 text-[length:var(--floe-type-body)] text-muted-foreground">{catalogCopy().empty}</div>}
+                        fallback={<div class="flower-provider-model-empty" role="status">{props.discoveringModels ? catalogCopy().loading : catalogCopy().empty}</div>}
                       >
-                        <div class="grid grid-cols-1 gap-2 xl:grid-cols-2">
+                        <div class="flower-provider-model-list">
                           <For each={visibleModelNames()}>
                             {(name) => {
                               const preset = () => catalogByName().get(name)!;
                               const selected = () => recommendedModelSelected(preset().model_name);
                               return (
-                                <div class={cn('redeven-settings-choice rounded-lg border p-3', selected() && 'redeven-settings-choice--selected')}>
+                                <div class="flower-provider-model-row px-3 py-3">
                                   <div class="flex items-start justify-between gap-3">
                                     <div class="min-w-0">
                                       <div class="break-all font-mono text-[length:var(--floe-type-body)] font-semibold text-foreground">{preset().display_name || preset().model_name} <Show when={preset().unavailable}><SettingsPill>{catalogCopy().unavailableModel}</SettingsPill></Show><Show when={preset().quantization}><SettingsPill>{preset().quantization}</SettingsPill></Show> <Show when={preset().status}><SettingsPill>{preset().status === 'experimental' ? catalogCopy().experimental : catalogCopy().preview}</SettingsPill></Show></div>
@@ -443,7 +393,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                         </div>
                       </Show>
 
-                      <div class="redeven-settings-inset grid grid-cols-1 gap-2 rounded-lg border p-3 md:grid-cols-[minmax(0,1fr)_auto]">
+                      <div class="flower-provider-custom-model">
                         <Input
                           value={customModelName()}
                           onInput={(event) => setCustomModelName(event.currentTarget.value)}
@@ -458,49 +408,6 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                       </div>
                     </section>
 
-                    <section class="space-y-3">
-                      <SubSectionHeader
-                        title={i18n.t('flowerProviderDialog.selectedModelsTitle')}
-                        description={i18n.t('flowerProviderDialog.selectedModelsDescription')}
-                      />
-                      <Show
-                        when={hasSelectedModels()}
-                        fallback={<div class="rounded-lg border border-dashed p-4 text-[length:var(--floe-type-body)] text-muted-foreground">{i18n.t('flowerProviderDialog.noSelectedModels')}</div>}
-                      >
-                        <div class="grid grid-cols-1 gap-2 xl:grid-cols-2">
-                          <For each={filterFlowerModels(models(), query())}>
-                            {(model) => (
-                              <div class="redeven-settings-inset rounded-lg border p-3">
-                                <div class="flex items-start justify-between gap-3">
-                                  <div class="min-w-0">
-                                    <div class="break-all font-mono text-[length:var(--floe-type-body)] font-semibold text-foreground">{normalizeModelName(model.model_name) || i18n.t('flowerProviderDialog.unnamedModel')}</div>
-                                    <div class="mt-1 text-xs text-muted-foreground">
-                                      {modalitySummary(model.input_modalities)} · {i18n.t('flowerProviderDialog.contextTokens', { count: formatTokenCount(Number(model.context_window ?? 0)) })}
-                                    </div>
-                                  </div>
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    class="text-muted-foreground hover:text-destructive"
-                                    onClick={() => props.onRemoveModel(models().findIndex((item) => item.model_name === model.model_name))}
-                                    disabled={!props.canInteract || models().length <= 1}
-                                  >
-                                    {i18n.t('flowerProviderDialog.removeModel')}
-                                  </Button>
-                                </div>
-                                <div class="mt-2 flex flex-wrap gap-1.5">
-                                  <CapabilityTag active>{i18n.t('flowerSettings.textCapability')}</CapabilityTag>
-                                  <CapabilityTag active={modelSupportsImageInput(model.input_modalities)}>{i18n.t('flowerSettings.imageInputCapability')}</CapabilityTag>
-                                </div>
-                                <div class="mt-2 text-[11px] text-muted-foreground">
-                                  {modelID(providerID(), normalizeModelName(model.model_name)) || i18n.t('flowerProviderDialog.noWireModelId')}
-                                </div>
-                              </div>
-                            )}
-                          </For>
-                        </div>
-                      </Show>
-                    </section>
                   </div>
                 </Show>
 

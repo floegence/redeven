@@ -139,3 +139,25 @@ it('saves a changed model from the edit action and restores the previous choice 
   expect(host.querySelector('.flower-settings-model-name')?.textContent).toBe('agent');
   expect(bundles).toHaveLength(0);
 });
+
+it('uses one searchable model list in the polished global Env provider dialog', async () => {
+  const { settings } = await mount(1000, true, 'zh-CN');
+  const handleRequests = request.getMockImplementation()!;
+  request.mockImplementation((url: string, init?: RequestInit) => url.endsWith('/ai/model_catalog')
+    ? Promise.resolve({ models: settings().ai?.providers?.[0]?.models ?? [] })
+    : handleRequests(url, init));
+  await userEvent.click(host.querySelector<HTMLButtonElement>('.flower-settings-provider-actions button:not([role="switch"])')!);
+  await expect.element(page.getByRole('dialog')).toBeVisible();
+  const dialog = document.querySelector<HTMLElement>('.redeven-provider-dialog')!;
+  await userEvent.click(dialog.querySelector<HTMLButtonElement>('[data-provider-dialog-step="connection"]')!);
+  await expect.poll(() => dialog.getAnimations({ subtree: true }).every(animation => animation.playState !== 'running')).toBe(true);
+  expect(dialog.scrollWidth).toBe(dialog.clientWidth);
+  if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: dialog, path: '__screenshots__/flower-env-provider-connection.png' });
+  await userEvent.click(dialog.querySelector<HTMLButtonElement>('[data-provider-dialog-step="models"]')!);
+  const search = page.getByRole('textbox', { name: '搜索模型', exact: true });
+  await userEvent.fill(search, 'deepseek-v4-flash-vision-exp');
+  await expect.poll(() => dialog.querySelectorAll('.flower-provider-model-row').length).toBe(1);
+  expect(dialog.scrollWidth).toBe(dialog.clientWidth);
+  await userEvent.fill(search, '');
+  if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: dialog, path: '__screenshots__/flower-env-provider-models.png' });
+});
