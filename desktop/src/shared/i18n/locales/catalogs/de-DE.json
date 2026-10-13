@@ -3223,6 +3223,8 @@
     "connecting": "Verbindung wird hergestellt…",
     "connectFailed": "Die Verbindung zu dieser Umgebung ist fehlgeschlagen. Versuchen Sie es erneut oder prüfen Sie die Verbindungseinstellungen.",
     "back": "Zurück",
+    "restoreConnection": "Verbindung wiederherstellen",
+    "operationInProgress": "Ein anderer Vorgang verwendet diese Laufzeitumgebung. Warten Sie, bis er abgeschlossen ist.",
 
     "title": "Gateway-Zugang hinzufügen",
     "menuAction": "Gateway-Zugang hinzufügen",

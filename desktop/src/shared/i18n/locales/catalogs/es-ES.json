@@ -3224,6 +3224,8 @@
     "connecting": "Conectando…",
     "connectFailed": "No se pudo conectar a este entorno. Reintente o revise sus ajustes de conexión.",
     "back": "Atrás",
+    "restoreConnection": "Restablecer conexión",
+    "operationInProgress": "Otra operación está usando este entorno de ejecución. Espere a que termine.",
 
     "title": "Añadir acceso mediante Gateway",
     "menuAction": "Añadir acceso mediante Gateway",

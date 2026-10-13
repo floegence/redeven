@@ -933,6 +933,17 @@
   font-size: .8125rem;
 }
 
+.redeven-gateway-connection-notice {
+  display: grid;
+  gap: .625rem;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  border-radius: .5rem;
+  background: color-mix(in srgb, var(--muted) 24%, var(--background));
+  padding: .75rem;
+}
+
+.redeven-gateway-connection-notice > button { justify-self: start; }
+
 .redeven-gateway-join-address {
   display: grid;
   gap: .5rem;

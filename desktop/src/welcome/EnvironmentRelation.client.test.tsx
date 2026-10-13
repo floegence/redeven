@@ -1,5 +1,6 @@
 import { runtimeConnectionFixture } from '../testSupport/runtimeConnectionFixture';
 import { runtimeGatewayAccessFixture } from '../testSupport/runtimeGatewayAccessFixture';
+import { runtimeGatewayBackgroundProbeFixture } from '../testSupport/runtimeGatewayBackgroundProbeFixture';
 import { buildDesktopWelcomeSnapshot } from '../main/desktopWelcomeState';
 import { mixedEnvironmentFixture } from '../testSupport/mixedEnvironmentFixture';
 import { controlText } from '../testSupport/controlText';
@@ -54,7 +55,145 @@ async function mount(initialSnapshot?: DesktopWelcomeSnapshot) {
   };
   return { ...fixture, owner, select, settings, performAction, publish: (value: DesktopWelcomeSnapshot) => { snapshot = value; receive?.(value); } };
 }
-afterEach(() => { for (const dispose of disposers.splice(0)) dispose(); document.body.replaceChildren(); vi.restoreAllMocks(); vi.unstubAllGlobals(); Reflect.deleteProperty(HTMLElement.prototype, 'animate'); });
+afterEach(() => { for (const dispose of disposers.splice(0)) dispose(); document.body.replaceChildren(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); Reflect.deleteProperty(HTMLElement.prototype, 'animate'); });
+
+it.each(['local', 'ssh', 'wsl', 'local_container', 'ssh_container'] as const)('keeps all %s enrollment steps and controls stable through the production background observer', async kind => {
+  const f = await runtimeGatewayBackgroundProbeFixture(kind);
+  const h = await mount(f.snapshot());
+  const perform = vi.fn(async (request: DesktopLauncherActionRequest) => request.kind === 'manage_runtime_gateway' && request.operation === 'preview'
+    ? { ok: true, gateway_preview: { preview_id: 'a'.repeat(43), purpose: 'join', gateway_id: 'office', gateway_name: 'Office', target_runtime_id: 'runtime', expires_at_unix_ms: Date.now() + 300000 } }
+    : { ok: true, gateway_membership: { joined: false, phase: 'not_joined' } });
+  vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
+  const card = document.querySelector(`[data-environment-group="${f.environment.id}"]`)!;
+  button(card, 'Actions').click(); await settle();
+  button(document.querySelector('[role="menu"]')!, 'Add Gateway access').click(); await settle();
+  const dialog = document.querySelector('[role="dialog"]')!;
+  for (const stage of [0, 1, 2]) {
+    if (stage === 1) {
+      button(dialog, 'Connect and continue').click(); await settle();
+      const inputs = dialog.querySelectorAll<HTMLInputElement>('input');
+      for (const [index, value] of ['https://office.example:7443', 'retained-code'].entries()) {
+        inputs[index].value = value; inputs[index].dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    }
+    if (stage === 2) { button(dialog, 'Verify').click(); await settle(); }
+    const action = button(dialog, ['Connect and continue', 'Verify', 'Confirm and enable'][stage]);
+    const focus = stage === 1 ? dialog.querySelector<HTMLInputElement>('input')! : action;
+    focus.focus(); if (focus instanceof HTMLInputElement) focus.setSelectionRange(1, 3);
+    const scroll = dialog.querySelector<HTMLElement>('.redeven-gateway-join-scroll')!;
+    scroll.scrollTop = 36;
+    const calls = perform.mock.calls.length;
+    for (let cycle = 0; cycle < 3; cycle++) {
+      const check = f.beginProbe(); h.publish(check.checking); await settle();
+      expect(dialog.querySelector('[data-gateway-step]')?.getAttribute('data-gateway-step')).toBe(String(stage));
+      expect(button(dialog, ['Connect and continue', 'Verify', 'Confirm and enable'][stage])).toBe(action);
+      expect(document.activeElement).toBe(focus); expect(scroll.scrollTop).toBe(36);
+      expect(dialog.querySelector('[data-gateway-preparation]')).toBeNull();
+      h.publish(await check.finish()); await settle();
+      expect(document.activeElement).toBe(focus);
+      if (focus instanceof HTMLInputElement) expect([focus.selectionStart, focus.selectionEnd]).toEqual([1, 3]);
+    }
+    expect(perform).toHaveBeenCalledTimes(calls);
+  }
+  expect(h.performAction).not.toHaveBeenCalled();
+});
+
+it('retains invitation focus across scheduled five-second production probes for thirty seconds', async () => {
+  const f = await runtimeGatewayBackgroundProbeFixture('ssh');
+  const h = await mount(f.snapshot());
+  const perform = vi.fn(async () => ({ ok: true, gateway_membership: { joined: false, phase: 'not_joined' } }));
+  vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
+  const card = document.querySelector(`[data-environment-group="${f.environment.id}"]`)!;
+  button(card, 'Actions').click(); await settle(); button(document.querySelector('[role="menu"]')!, 'Add Gateway access').click(); await settle();
+  const dialog = document.querySelector('[role="dialog"]')!;
+  button(dialog, 'Connect and continue').click(); await settle();
+  const input = dialog.querySelector<HTMLInputElement>('input')!;
+  input.value = 'https://office.example'; input.dispatchEvent(new Event('input', { bubbles: true }));
+  input.focus(); input.setSelectionRange(2, 5);
+  const verify = button(dialog, 'Verify');
+  vi.useFakeTimers();
+  const timer = setInterval(() => {
+    const pending = f.poller.poll(); h.publish(f.snapshot());
+    void pending.then(() => h.publish(f.snapshot()));
+  }, 5000);
+  try {
+    for (let cycle = 0; cycle < 6; cycle++) {
+      const finish = f.holdNextProbe();
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(f.snapshot().environments[0].runtime_health.freshness).toBe('checking');
+      expect(f.snapshot().environments[0].provider_runtime_link_target?.runtime_control_status.state).not.toBe('available');
+      expect(button(dialog, 'Verify')).toBe(verify); expect(document.activeElement).toBe(input);
+      expect([input.selectionStart, input.selectionEnd]).toEqual([2, 5]);
+      expect(dialog.querySelector('[data-gateway-step]')?.getAttribute('data-gateway-step')).toBe('1');
+      finish(); await vi.advanceTimersByTimeAsync(0);
+      expect(f.snapshot().environments[0].runtime_health.freshness).toBe('fresh');
+      expect(document.activeElement).toBe(input);
+    }
+    expect(perform).toHaveBeenCalledOnce(); expect(h.performAction).not.toHaveBeenCalled();
+  } finally { clearInterval(timer); vi.useRealTimers(); }
+});
+
+it.each([['status', false, false], ['preview', false, false], ['join', false, false], ['status', true, false], ['preview', true, false], ['join', true, false], ['join', true, true]] as const)('settles pending %s exactly once across the production observer (completed fault: %s, request failure: %s)', async (operation, completedFailure, requestFailure) => {
+  const f = await runtimeGatewayBackgroundProbeFixture('ssh');
+  const h = await mount(f.snapshot());
+  let complete!: (value: object) => void;
+  const preview = { preview_id: 'a'.repeat(43), purpose: 'join', gateway_id: 'office', gateway_name: 'Office', target_runtime_id: 'runtime', expires_at_unix_ms: Date.now() + 300000 };
+  const resultFor = (operation: string) => operation === 'preview' ? { ok: true, gateway_preview: preview } : { ok: true, gateway_membership: { joined: operation === 'join', phase: operation === 'join' ? 'joined' : 'not_joined' } };
+  const perform = vi.fn(async (request: DesktopLauncherActionRequest) => request.kind === 'manage_runtime_gateway'
+    ? request.operation === operation ? new Promise<object>(done => { complete = done; }) : resultFor(request.operation) : { ok: false });
+  vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
+  const card = document.querySelector(`[data-environment-group="${f.environment.id}"]`)!;
+  button(card, 'Actions').click(); await settle(); button(document.querySelector('[role="menu"]')!, 'Add Gateway access').click(); await settle();
+  const dialog = document.querySelector('[role="dialog"]')!;
+  button(dialog, 'Connect and continue').click(); await settle();
+  if (operation !== 'status') {
+    const inputs = dialog.querySelectorAll<HTMLInputElement>('input');
+    for (const [index, value] of ['https://office.example:7443', 'retained-code'].entries()) {
+      inputs[index].value = value; inputs[index].dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    button(dialog, 'Verify').click(); await settle();
+    if (operation === 'join') { button(dialog, 'Confirm and enable').click(); await settle(); }
+  }
+  const check = f.beginProbe(); h.publish(check.checking); await settle();
+  if (completedFailure) { h.publish(await check.fail()); await settle(); }
+  complete(requestFailure ? { ok: false, gateway_error_code: 'RUNTIME_CONTROL_UNREACHABLE' } : resultFor(operation)); await settle();
+  if (requestFailure) {
+    expect(dialog.textContent).toContain('The Runtime could not reach or verify this Gateway. Check its network connection and address, then retry.');
+    expect(button(dialog, 'Confirm and enable').disabled).toBe(true);
+  } else if (operation === 'join') expect(dialog.querySelector('[data-gateway-step]')).toBeNull();
+  else expect(dialog.querySelector('[data-gateway-step]')?.getAttribute('data-gateway-step')).toBe(operation === 'status' ? '1' : '2');
+  if (!completedFailure) { h.publish(await check.finish()); await settle(); }
+  expect(perform.mock.calls.filter(([request]) => request.kind === 'manage_runtime_gateway' && request.operation === operation)).toHaveLength(1);
+});
+
+it.each(['stopped', 'management_unavailable', 'update_required', 'failed'] as const)('keeps the confirmed step and drafts when a background probe completes as %s', async state => {
+  const f = await runtimeGatewayBackgroundProbeFixture('ssh');
+  const h = await mount(f.snapshot());
+  vi.stubGlobal('redevenDesktopLauncher', { performAction: vi.fn(async (request: { operation: string }) => request.operation === 'preview'
+    ? { ok: true, gateway_preview: { preview_id: 'a'.repeat(43), purpose: 'join', gateway_id: 'office', gateway_name: 'Office', target_runtime_id: 'runtime', expires_at_unix_ms: Date.now() + 300000 } }
+    : { ok: true, gateway_membership: { joined: false, phase: 'not_joined' } }) });
+  const card = document.querySelector(`[data-environment-group="${f.environment.id}"]`)!;
+  button(card, 'Actions').click(); await settle(); button(document.querySelector('[role="menu"]')!, 'Add Gateway access').click(); await settle();
+  const dialog = document.querySelector('[role="dialog"]')!;
+  button(dialog, 'Connect and continue').click(); await settle();
+  const inputs = [...dialog.querySelectorAll<HTMLInputElement>('input')];
+  for (const [index, value] of ['https://office.example:7443', 'retained-code'].entries()) {
+    inputs[index].value = value; inputs[index].dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  button(dialog, 'Verify').click(); await settle();
+  const confirm = button(dialog, 'Confirm and enable');
+  const check = f.beginProbe(); h.publish(check.checking); await settle();
+  h.publish(state === 'failed' ? await check.fail() : await check.finish(state)); await settle();
+  expect(dialog.querySelector('[data-gateway-step]')?.getAttribute('data-gateway-step')).toBe('2');
+  expect(button(dialog, 'Confirm and enable')).toBe(confirm); expect(confirm.disabled).toBe(true);
+  expect(dialog.querySelector('[data-gateway-connection-blocked]')).not.toBeNull();
+  expect(inputs.map(input => input.value)).toEqual(['https://office.example:7443', 'retained-code']);
+  expect(dialog.textContent).toContain('Office');
+  expect(h.performAction).not.toHaveBeenCalled();
+  button(dialog, 'Restore connection').click(); await settle();
+  expect(dialog.querySelector('[data-gateway-step]')?.getAttribute('data-gateway-step')).toBe('0');
+  expect(inputs.map(input => input.value)).toEqual(['https://office.example:7443', 'retained-code']);
+});
 
 describe('linked environment owner interactions', () => {
   it('updates the OS graphic in place while retaining title selection, card and access focus', async () => {

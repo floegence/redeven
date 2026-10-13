@@ -3218,6 +3218,8 @@
     "connecting": "正在连接…",
     "connectFailed": "无法连接此环境。请重试或检查环境的连接设置。",
     "back": "上一步",
+    "restoreConnection": "恢复连接",
+    "operationInProgress": "其他操作正在使用此运行时，请等待操作完成。",
 
     "title": "添加 Gateway 访问",
     "menuAction": "添加 Gateway 访问",

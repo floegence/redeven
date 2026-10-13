@@ -3224,6 +3224,8 @@
     "connecting": "Connexion en cours…",
     "connectFailed": "Impossible de se connecter à cet environnement. Réessayez ou vérifiez ses paramètres de connexion.",
     "back": "Retour",
+    "restoreConnection": "Rétablir la connexion",
+    "operationInProgress": "Une autre opération utilise cet environnement d’exécution. Attendez qu’elle se termine.",
 
     "title": "Ajouter un accès via Gateway",
     "menuAction": "Ajouter un accès via Gateway",

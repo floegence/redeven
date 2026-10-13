@@ -82,6 +82,8 @@ export const enUS = {
     connecting: "Connecting…",
     connectFailed: "Could not connect to this environment. Retry or check its connection settings.",
     back: "Back",
+    restoreConnection: "Restore connection",
+    operationInProgress: "Another operation is using this Runtime. Wait for it to finish.",
 
     checkHelp: "Check this Runtime’s status before adding Gateway access.",
     controlHelp: "Restart this Runtime through Desktop to prepare its management connection.",

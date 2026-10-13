@@ -211,7 +211,11 @@ it('keeps drafts and verified consent across a failed management retry', async (
   }
   button('gatewayJoin.verify').click(); await settle();
   setCurrent({ ...readyEnvironment, provider_runtime_link_target: { ...target, runtime_control_status: { state: 'missing', reason_code: 'auth_required', message: 'Credentials required' } } });
-  await settle(); button('common.retry').click(); await settle();
+  await settle();
+  expect(document.querySelector('[data-gateway-step]')?.getAttribute('data-gateway-step')).toBe('2');
+  expect(button('gatewayJoin.confirmEnable').hasAttribute('disabled')).toBe(true);
+  button('gatewayJoin.restoreConnection').click(); await settle();
+  button('common.retry').click(); await settle();
   expect(document.querySelector('[role="alert"]')?.textContent).toBe(i18n.t('gatewayJoin.checkFailed'));
   expect(inputs.map(input => input.value)).toEqual(['https://office.example:7443', 'draft-code']);
   expect(document.body.textContent).toContain('Office');
@@ -241,13 +245,18 @@ it.each(['restart', 'update'] as const)('retains the enrollment session across f
     : { ...readyEnvironment, runtime_operations: { ...readyEnvironment.runtime_operations,
       update: { ...readyEnvironment.runtime_operations.update, reason_code: 'runtime_update_required' } } };
   setCurrent(blocked); await settle();
-  expect(inputs.every(input => input.disabled)).toBe(true);
+  expect(inputs.every(input => !input.disabled)).toBe(true);
+  expect(document.querySelector('[data-gateway-step]')?.getAttribute('data-gateway-step')).toBe('2');
+  expect(button('gatewayJoin.confirmEnable').hasAttribute('disabled')).toBe(true);
+  button('gatewayJoin.restoreConnection').click(); await settle();
   button(operation === 'restart' ? 'environmentAction.restartRuntime' : 'environmentAction.updateRuntime').click(); await settle();
   expect(document.querySelector('[role="alert"]')?.textContent).toBe(i18n.t('gatewayJoin.recoveryFailed'));
   expect(inputs.map(input => input.value)).toEqual(['https://office.example:7443', 'draft-code']);
   expect(document.body.textContent).toContain('Office');
   button(operation === 'restart' ? 'environmentAction.restartRuntime' : 'environmentAction.updateRuntime').click(); await settle();
   expect(document.querySelector('input')).toBe(inputs[0]);
+  expect(document.querySelector('[data-gateway-step]')?.getAttribute('data-gateway-step')).toBe('1');
+  button('gatewayJoin.verify').click(); await settle();
   expect(controlText(button('gatewayJoin.confirmEnable'))).toBe(i18n.t('gatewayJoin.confirmEnable'));
   expect(recover).toHaveBeenNthCalledWith(1, blocked, operation);
   expect(recover).toHaveBeenNthCalledWith(2, blocked, operation);
@@ -277,4 +286,74 @@ it('reports failed management checks with Retry and ignores a response after clo
   button('common.retry').click(); await settle(); button('common.cancel').click(); await settle();
   resolve!(false); await settle();
   expect(current()).toBeUndefined(); expect(document.querySelector('[role="alert"]')).toBeNull();
+});
+
+
+it.each(['preview', 'join', 'join_rejection'] as const)('invalidates replaced Runtime consent without swallowing a pending %s result', async operation => {
+  const source = runtimeGatewayAccessFixture('ssh').environment;
+  const [current, setCurrent] = createSignal(source);
+  let complete!: (value: object) => void, reject!: (error: Error) => void;
+  const requestedOperation = operation === 'join_rejection' ? 'join' : operation;
+  const preview = { preview_id: 'a'.repeat(43), purpose: 'join', gateway_id: 'office', gateway_name: 'Office', target_runtime_id: 'runtime', expires_at_unix_ms: Date.now() + 300000 };
+  const perform = vi.fn(async (request: { operation: string }) => request.operation === requestedOperation
+    ? new Promise<object>((done, failed) => { complete = done; reject = failed; }) : request.operation === 'preview'
+      ? { ok: true, gateway_preview: preview } : { ok: true, gateway_membership: { joined: false, phase: 'not_joined' } });
+  vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
+  const root = document.createElement('div'); document.body.append(root);
+  dispose = render(() => <RuntimeGatewaySetupDialog environment={current()} i18n={i18n} refresh={refresh} recover={vi.fn()} edit={() => {}} close={() => {}} />, root);
+  await settle(); button('gatewayJoin.connectAndContinue').click(); await settle();
+  const inputs = [...document.querySelectorAll<HTMLInputElement>('input')];
+  for (const [index, value] of ['https://office.example', 'retained-code'].entries()) {
+    inputs[index].value = value; inputs[index].dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  button('gatewayJoin.verify').click(); await settle();
+  if (requestedOperation === 'join') { button('gatewayJoin.confirmEnable').click(); await settle(); }
+  setCurrent({ ...source, runtime_started_at_unix_ms: source.runtime_started_at_unix_ms! + 1000 }); await settle();
+  if (operation === 'join_rejection') reject(new Error('Connection closed after Runtime replacement'));
+  else complete(operation === 'preview' ? { ok: true, gateway_preview: preview } : { ok: false, gateway_error_code: 'GATEWAY_MEMBERSHIP_CONFLICT' });
+  await settle();
+  expect(document.querySelector('.redeven-gateway-join-summary')).toBeNull();
+  expect(document.querySelector('[data-gateway-step]')?.getAttribute('data-gateway-step')).toBe('1');
+  expect(document.body.textContent).toContain(i18n.t(operation === 'join_rejection' ? 'gatewayJoin.failed' : 'gatewayJoin.changed'));
+  expect(inputs.map(input => input.value)).toEqual(['https://office.example', 'retained-code']);
+  expect(perform.mock.calls.filter(([request]) => request.operation === requestedOperation)).toHaveLength(1);
+});
+
+it('returns expired consent to invitation verification after explicit reconnection', async () => {
+  const [current, setCurrent] = createSignal(readyEnvironment);
+  const perform = vi.fn(async (request: { operation: string }) => request.operation === 'preview'
+    ? { ok: true, gateway_preview: { preview_id: 'a'.repeat(43), purpose: 'join', gateway_id: 'office', gateway_name: 'Office', target_runtime_id: 'runtime', expires_at_unix_ms: Date.now() + 30000 } }
+    : { ok: true, gateway_membership: { joined: false, phase: 'not_joined' } });
+  vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
+  const root = document.createElement('div'); document.body.append(root);
+  dispose = render(() => <RuntimeGatewaySetupDialog environment={current()} i18n={i18n} refresh={async () => { setCurrent(readyEnvironment); return true; }} recover={vi.fn()} edit={() => {}} close={() => {}} />, root);
+  await settle(); button('gatewayJoin.connectAndContinue').click(); await settle();
+  const inputs = [...document.querySelectorAll<HTMLInputElement>('input')];
+  for (const [index, value] of ['https://office.example', 'retained-code'].entries()) {
+    inputs[index].value = value; inputs[index].dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  button('gatewayJoin.verify').click(); await settle();
+  setCurrent({ ...readyEnvironment, runtime_health: { ...readyEnvironment.runtime_health, status: 'offline', offline_reason_code: 'auth_required' } }); await settle();
+  button('gatewayJoin.restoreConnection').click(); await settle();
+  vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 60000);
+  button('common.retry').click(); await settle();
+  expect(document.querySelector('[data-gateway-step]')?.getAttribute('data-gateway-step')).toBe('1');
+  expect(document.querySelector('.redeven-gateway-join-summary')).toBeNull();
+  expect(document.body.textContent).toContain(i18n.t('gatewayJoin.expired'));
+  expect(inputs[1].value).toBe('retained-code');
+});
+
+it('fences recovery completion when the same registration changes management coordinates', async () => {
+  const [current, setCurrent] = createSignal(environment);
+  let finish!: (value: boolean) => void;
+  const recover = vi.fn(() => new Promise<boolean>(resolve => { finish = resolve; }));
+  const refresh = vi.fn(async () => true), perform = vi.fn();
+  vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
+  const root = document.createElement('div'); document.body.append(root);
+  dispose = render(() => <RuntimeGatewaySetupDialog environment={current()} i18n={i18n} refresh={refresh} recover={recover} edit={() => {}} close={() => {}} />, root);
+  await settle(); button('gatewayJoin.startAndContinue').click(); await settle();
+  setCurrent({ ...readyEnvironment, managed_runtime_placement: { kind: 'host_process', runtime_root: '/changed', bootstrap_strategy: 'auto', release_base_url: '' } }); await settle();
+  refresh.mockClear(); finish(true); await settle();
+  expect(refresh).not.toHaveBeenCalled(); expect(perform).not.toHaveBeenCalled();
+  expect(document.querySelector('[data-gateway-step]')?.getAttribute('data-gateway-step')).toBe('0');
 });
