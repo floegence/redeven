@@ -22,7 +22,8 @@ it.each([
   ['macos', 'macos'], ['linux', 'linux'], ['windows', 'windows'], ['darwin', 'macos'], ['win32', 'windows'],
   ['freebsd', undefined], [undefined, undefined],
 ])('reads optional Runtime platform %s without breaking startup', (raw, expected) => {
-  const report = parseStartupReport(JSON.stringify({ local_ui_url: 'http://127.0.0.1:23998/', runtime_platform: raw }));
+  const report = parseStartupReport(JSON.stringify({ local_ui_url: 'http://127.0.0.1:23998/', runtime_platform: raw, runtime_linux_distribution: 'Ubuntu' }));
   expect(report.runtime_platform).toBe(expected);
+  expect(report.runtime_linux_distribution).toBe(expected === 'linux' ? 'ubuntu' : undefined);
   expect(report.local_ui_url).toBe('http://127.0.0.1:23998/');
 });

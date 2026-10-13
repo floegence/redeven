@@ -4,6 +4,17 @@ import { describe, expect, it } from 'vitest';
 import { buildGatewayEnvironmentEntries } from './environmentAggregator';
 
 describe('Gateway environment projection', () => {
+  it('consumes an opened member Runtime distribution without changing catalog identity or authority', () => {
+    const input = { gatewaySources: [{ gateway_id: 'observed-gateway', display_name: 'Gateway', local_enabled: true,
+      connection_kind: 'url' as const, management_capability: 'access_only' as const, capabilities: ['member_access' as const],
+      status: 'online' as const, created_at_ms: 1, updated_at_ms: 1, environments: [memberFixture] }] };
+    const catalog = buildGatewayEnvironmentEntries(input)[0];
+    const session = { ...catalog, label: 'Untrusted session label', open_session_key: 'window', runtime_platform: 'linux' as const,
+      runtime_linux_distribution: 'debian', can_edit: true, can_delete: true };
+    const [entry] = buildGatewayEnvironmentEntries({ ...input, openSessions: [session] });
+    expect(entry).toMatchObject({ runtime_platform: 'linux', runtime_linux_distribution: 'debian',
+      label: catalog.label, can_edit: false, can_delete: false, gateway_member: memberFixture });
+  });
   it('projects catalog entries as access-only environments', () => {
     const [entry] = buildGatewayEnvironmentEntries({
       gatewaySources: [{

@@ -29,16 +29,17 @@ const (
 )
 
 type Hello struct {
-	RuntimePlatform string          `json:"runtime_platform,omitempty"`
-	ProtocolVersion string          `json:"protocol_version"`
-	RuntimeVersion  string          `json:"runtime_version"`
-	RuntimeCommit   string          `json:"runtime_commit,omitempty"`
-	StartedAtUnixMS int64           `json:"started_at_unix_ms,omitempty"`
-	LocalUI         HelloLocalUI    `json:"local_ui"`
-	RuntimeControl  RuntimeControl  `json:"runtime_control"`
-	RuntimeService  any             `json:"runtime_service"`
-	GatewayProtocol GatewayProtocol `json:"gateway_protocol,omitempty"`
-	GatewayService  *GatewayService `json:"gateway_service,omitempty"`
+	RuntimePlatform          string          `json:"runtime_platform,omitempty"`
+	RuntimeLinuxDistribution string          `json:"runtime_linux_distribution,omitempty"`
+	ProtocolVersion          string          `json:"protocol_version"`
+	RuntimeVersion           string          `json:"runtime_version"`
+	RuntimeCommit            string          `json:"runtime_commit,omitempty"`
+	StartedAtUnixMS          int64           `json:"started_at_unix_ms,omitempty"`
+	LocalUI                  HelloLocalUI    `json:"local_ui"`
+	RuntimeControl           RuntimeControl  `json:"runtime_control"`
+	RuntimeService           any             `json:"runtime_service"`
+	GatewayProtocol          GatewayProtocol `json:"gateway_protocol,omitempty"`
+	GatewayService           *GatewayService `json:"gateway_service,omitempty"`
 }
 
 type HelloLocalUI struct {

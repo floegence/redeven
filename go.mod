@@ -3,6 +3,7 @@ module github.com/floegence/redeven
 go 1.27.2
 
 require (
+	github.com/acobaugh/osrelease v0.1.0
 	github.com/anthropics/anthropic-sdk-go v1.22.1
 	github.com/bodgit/sevenzip v1.6.1
 	github.com/coreos/go-oidc/v3 v3.21.0

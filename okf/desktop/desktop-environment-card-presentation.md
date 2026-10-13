@@ -11,7 +11,7 @@ The shared Environment card renders independent access perspectives with its exi
 
 # Contract
 
-Runtime OS marks follow the [Runtime platform facts and icons](desktop-runtime-platform.md) contract. The reserved title slot and retained card subtree preserve layout and focus while the platform observation changes.
+Runtime OS and distribution marks follow the [Runtime platform facts and icons](desktop-runtime-platform.md) contract. The reserved title slot and retained card subtree preserve layout and focus while the platform or distribution observation changes. Recognized Linux distributions use their original brand marks; missing or unsupported IDs retain Tux.
 
 ## Perspectives and owner actions
 

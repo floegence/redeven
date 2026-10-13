@@ -526,15 +526,16 @@ func TestServer_handleRuntimeHealth_reportsOnlineWithoutUnlock(t *testing.T) {
 	var payload struct {
 		OK   bool `json:"ok"`
 		Data struct {
-			Status           string   `json:"status"`
-			LocalUIURL       string   `json:"local_ui_url"`
-			LocalUIURLs      []string `json:"local_ui_urls"`
-			PasswordRequired bool     `json:"password_required"`
-			DesktopManaged   bool     `json:"desktop_managed"`
-			DesktopOwnerID   string   `json:"desktop_owner_id"`
-			StartedAtUnixMS  int64    `json:"started_at_unix_ms"`
-			RuntimePlatform  string   `json:"runtime_platform"`
-			RuntimeService   struct {
+			Status                   string   `json:"status"`
+			LocalUIURL               string   `json:"local_ui_url"`
+			LocalUIURLs              []string `json:"local_ui_urls"`
+			PasswordRequired         bool     `json:"password_required"`
+			DesktopManaged           bool     `json:"desktop_managed"`
+			DesktopOwnerID           string   `json:"desktop_owner_id"`
+			StartedAtUnixMS          int64    `json:"started_at_unix_ms"`
+			RuntimePlatform          string   `json:"runtime_platform"`
+			RuntimeLinuxDistribution string   `json:"runtime_linux_distribution"`
+			RuntimeService           struct {
 				OpenReadiness struct {
 					State string `json:"state"`
 				} `json:"open_readiness"`
@@ -562,6 +563,9 @@ func TestServer_handleRuntimeHealth_reportsOnlineWithoutUnlock(t *testing.T) {
 	}
 	if payload.Data.DesktopManaged || payload.Data.DesktopOwnerID != "" {
 		t.Fatalf("unexpected desktop ownership metadata: %#v", payload.Data)
+	}
+	if payload.Data.RuntimeLinuxDistribution != runtimemanagement.RuntimeLinuxDistribution() {
+		t.Fatalf("runtime_linux_distribution = %q", payload.Data.RuntimeLinuxDistribution)
 	}
 	if payload.Data.RuntimePlatform != runtimemanagement.RuntimePlatform() {
 		t.Fatalf("runtime_platform = %q", payload.Data.RuntimePlatform)

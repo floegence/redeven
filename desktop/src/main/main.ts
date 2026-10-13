@@ -1,3 +1,4 @@
+import { retainDesktopRuntimePlatformFacts } from './desktopRuntimePlatformFacts';
 import { ManagedWebEntranceNavigation, redactManagedEntranceAddress, applyManagedWebEntrance } from './managedWebEntranceNavigation';
 import { completeTessivenRuntimeHandoff } from './tessivenRuntimeHandoff';
 import { registeredTessivenConnections } from './tessivenRegisteredConnections';
@@ -2245,6 +2246,7 @@ function managedRuntimePresence(args: Readonly<{
   localUIAddressIssues?: StartupReport['local_ui_address_issues'];
   startedAtUnixMS?: number;
   runtimePlatform?: StartupReport['runtime_platform'];
+  runtimeLinuxDistribution?: StartupReport['runtime_linux_distribution'];
   openConnectionRequired?: boolean;
   runtimeService?: RuntimeServiceSnapshot;
   runtimeControlStatus: DesktopRuntimeControlStatus;
@@ -2271,6 +2273,7 @@ function managedRuntimePresence(args: Readonly<{
     local_ui_address_issues: args.running ? args.localUIAddressIssues : undefined,
     ...(Number.isInteger(startedAtUnixMS) && startedAtUnixMS > 0 ? { started_at_unix_ms: startedAtUnixMS } : {}),
     ...(args.runtimePlatform ? { runtime_platform: args.runtimePlatform } : {}),
+    ...(args.runtimeLinuxDistribution ? { runtime_linux_distribution: args.runtimeLinuxDistribution } : {}),
     openable,
     ...(openConnectionRequired ? { open_connection_required: true } : {}),
     ...(runtimePackageState ? { runtime_package_state: runtimePackageState } : {}),
@@ -4558,6 +4561,7 @@ async function localEnvironmentPresenceFromRecord(
     localUIAddressIssues: record.startup.local_ui_address_issues,
     startedAtUnixMS: record.startup.started_at_unix_ms,
     runtimePlatform: record.startup.runtime_platform,
+    runtimeLinuxDistribution: record.startup.runtime_linux_distribution,
     runtimeService: record.startup.runtime_service,
     runtimeControlStatus: await runtimeControlStatusForStartup(record.startup),
   });
@@ -4724,6 +4728,7 @@ function runtimeTargetHealthFromState(
       local_ui_address_issues: state.startup?.local_ui_address_issues,
       verified_runtime_identity: state.startup?.verified_runtime_identity,
       runtime_platform: state.startup?.runtime_platform,
+      runtime_linux_distribution: state.startup?.runtime_linux_distribution,
       runtime_service: state.runtime_service,
       pid: state.startup?.pid,
       started_at_unix_ms: state.startup?.started_at_unix_ms,
@@ -4760,6 +4765,7 @@ function runtimeTargetPresenceFromState(
     localUIAddressIssues: state.startup?.local_ui_address_issues,
     startedAtUnixMS: state.startup?.started_at_unix_ms,
     runtimePlatform: state.startup?.runtime_platform,
+    runtimeLinuxDistribution: state.startup?.runtime_linux_distribution,
     openConnectionRequired: state.open_connection_required === true,
     runtimeService: state.runtime_service,
     runtimeControlStatus: state.runtime_control_status,
@@ -5311,7 +5317,7 @@ async function buildCurrentDesktopWelcomeSnapshot(
   });
   return {
     ...snapshot,
-    environments: snapshot.environments.map((entry) => {
+    environments: retainDesktopRuntimePlatformFacts(snapshot.environments, desktopStateStore()).map((entry) => {
       const target = entry.provider_runtime_link_target;
       const environment = target ? { ...entry, provider_runtime_link_target: { ...target,
         credential_recovery: cloudCredentialRecovery.state(target.id, target.cloud_link_binding?.binding_generation ?? 0),
@@ -10502,6 +10508,7 @@ async function tessivenRuntimeInventory(
         running: !!record,
         localUIURL: record?.startup.local_ui_url ?? '',
         runtimePlatform: record?.startup.runtime_platform,
+        runtimeLinuxDistribution: record?.startup.runtime_linux_distribution,
         runtimeService: record?.startup.runtime_service,
         runtimeControlStatus: record?.startup.runtime_control
           ? desktopRuntimeControlStatusAvailable()

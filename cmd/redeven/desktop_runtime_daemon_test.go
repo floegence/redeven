@@ -139,8 +139,9 @@ func TestStoppedRuntimeStatusErrorRequiresConfirmedNotRunning(t *testing.T) {
 
 func TestDesktopLaunchReportFromRuntimeStatusIncludesStartTime(t *testing.T) {
 	report := desktopLaunchReportFromRuntimeStatus(runtimemanagement.RuntimeAttachStatus{
-		State:           runtimemanagement.AttachStateReady,
-		RuntimePlatform: "linux",
+		State:                    runtimemanagement.AttachStateReady,
+		RuntimePlatform:          "linux",
+		RuntimeLinuxDistribution: "ubuntu",
 		Identity: runtimemanagement.RuntimeInstanceIdentity{
 			PID:             4242,
 			StartedAtUnixMS: 1778751234567,
@@ -158,6 +159,9 @@ func TestDesktopLaunchReportFromRuntimeStatusIncludesStartTime(t *testing.T) {
 		}),
 	}, desktopLaunchStatusReady)
 
+	if report.RuntimeLinuxDistribution != "ubuntu" {
+		t.Fatalf("RuntimeLinuxDistribution = %q", report.RuntimeLinuxDistribution)
+	}
 	if report.RuntimePlatform != "linux" {
 		t.Fatalf("RuntimePlatform = %q, want observed linux", report.RuntimePlatform)
 	}

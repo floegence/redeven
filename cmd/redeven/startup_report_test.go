@@ -31,17 +31,18 @@ func TestDesktopLaunchDiagnosticFailureCode(t *testing.T) {
 func TestWriteDesktopLaunchReportReady(t *testing.T) {
 	reportPath := filepath.Join(t.TempDir(), "startup", "report.json")
 	err := writeDesktopLaunchReport(reportPath, desktopLaunchReport{
-		Status:             desktopLaunchStatusReady,
-		RuntimePlatform:    runtimemanagement.RuntimePlatform(),
-		LocalUIURL:         "http://127.0.0.1:43210/",
-		LocalUIURLs:        []string{"http://127.0.0.1:43210/", "", "http://127.0.0.1:43210/"},
-		LocalUIBridgeURL:   "http://127.0.0.1:43211/",
-		LocalUIBridgeToken: testLocalUIBridgeToken,
-		PasswordRequired:   true,
-		Exposure:           runtimemanagement.NewLocalUIExposure("https", false, true),
-		EffectiveRunMode:   "hybrid",
-		RemoteEnabled:      true,
-		StartedAtUnixMS:    1778751234567,
+		Status:                   desktopLaunchStatusReady,
+		RuntimePlatform:          runtimemanagement.RuntimePlatform(),
+		RuntimeLinuxDistribution: runtimemanagement.RuntimeLinuxDistribution(),
+		LocalUIURL:               "http://127.0.0.1:43210/",
+		LocalUIURLs:              []string{"http://127.0.0.1:43210/", "", "http://127.0.0.1:43210/"},
+		LocalUIBridgeURL:         "http://127.0.0.1:43211/",
+		LocalUIBridgeToken:       testLocalUIBridgeToken,
+		PasswordRequired:         true,
+		Exposure:                 runtimemanagement.NewLocalUIExposure("https", false, true),
+		EffectiveRunMode:         "hybrid",
+		RemoteEnabled:            true,
+		StartedAtUnixMS:          1778751234567,
 		RuntimeService: runtimeservice.Snapshot{
 			RuntimeVersion:   "v1.2.3",
 			ProtocolVersion:  runtimeservice.ProtocolVersion,
@@ -68,6 +69,9 @@ func TestWriteDesktopLaunchReportReady(t *testing.T) {
 	var report desktopLaunchReport
 	if err := json.Unmarshal(body, &report); err != nil {
 		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	if report.RuntimeLinuxDistribution != runtimemanagement.RuntimeLinuxDistribution() {
+		t.Fatalf("RuntimeLinuxDistribution = %q", report.RuntimeLinuxDistribution)
 	}
 	if report.RuntimePlatform != runtimemanagement.RuntimePlatform() {
 		t.Fatalf("RuntimePlatform = %q", report.RuntimePlatform)

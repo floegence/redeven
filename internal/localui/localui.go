@@ -874,8 +874,9 @@ func (s *Server) RuntimeAttachStatus() runtimemanagement.RuntimeAttachStatus {
 	runtimeService := s.runtimeServiceSnapshot()
 	access := s.publicAccessSnapshot()
 	return runtimemanagement.RuntimeAttachStatus{
-		RuntimePlatform: runtimemanagement.RuntimePlatform(),
-		State:           runtimemanagement.AttachStateReady,
+		RuntimePlatform:          runtimemanagement.RuntimePlatform(),
+		RuntimeLinuxDistribution: runtimemanagement.RuntimeLinuxDistribution(),
+		State:                    runtimemanagement.AttachStateReady,
 		Identity: runtimemanagement.RuntimeInstanceIdentity{
 			InstanceID:      s.a.InstanceID(),
 			StateRoot:       s.stateRoot,
@@ -1021,16 +1022,17 @@ type accessStatusResp struct {
 }
 
 type runtimeHealthResp struct {
-	RuntimePlatform      string                                  `json:"runtime_platform,omitempty"`
-	AccessIdentity       *runtimeidentity.AccessIdentityProof    `json:"access_identity,omitempty"`
-	Status               string                                  `json:"status"`
-	LocalUIURL           string                                  `json:"local_ui_url,omitempty"`
-	LocalUIURLs          []string                                `json:"local_ui_urls"`
-	LocalUIAddressIssues []runtimemanagement.LocalUIAddressIssue `json:"local_ui_address_issues,omitempty"`
-	PasswordRequired     bool                                    `json:"password_required"`
-	Exposure             runtimemanagement.LocalUIExposure       `json:"exposure"`
-	StartedAtUnixMS      int64                                   `json:"started_at_unix_ms,omitempty"`
-	RuntimeService       runtimeservice.Snapshot                 `json:"runtime_service"`
+	RuntimePlatform          string                                  `json:"runtime_platform,omitempty"`
+	RuntimeLinuxDistribution string                                  `json:"runtime_linux_distribution,omitempty"`
+	AccessIdentity           *runtimeidentity.AccessIdentityProof    `json:"access_identity,omitempty"`
+	Status                   string                                  `json:"status"`
+	LocalUIURL               string                                  `json:"local_ui_url,omitempty"`
+	LocalUIURLs              []string                                `json:"local_ui_urls"`
+	LocalUIAddressIssues     []runtimemanagement.LocalUIAddressIssue `json:"local_ui_address_issues,omitempty"`
+	PasswordRequired         bool                                    `json:"password_required"`
+	Exposure                 runtimemanagement.LocalUIExposure       `json:"exposure"`
+	StartedAtUnixMS          int64                                   `json:"started_at_unix_ms,omitempty"`
+	RuntimeService           runtimeservice.Snapshot                 `json:"runtime_service"`
 }
 
 type accessUnlockReq = accessgate.AuthenticationRequest
@@ -1614,16 +1616,17 @@ func (s *Server) handleRuntimeHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	access := s.publicAccessSnapshot()
 	writeJSON(w, http.StatusOK, apiResp{OK: true, Data: runtimeHealthResp{
-		RuntimePlatform:      runtimemanagement.RuntimePlatform(),
-		Status:               "online",
-		AccessIdentity:       proof,
-		LocalUIURL:           firstNonEmptyString(access.urls),
-		LocalUIURLs:          access.publicURLs(),
-		LocalUIAddressIssues: access.issues,
-		PasswordRequired:     s.accessEnabled(),
-		Exposure:             s.LocalUIExposure(),
-		StartedAtUnixMS:      s.a.ProcessStartedAtUnixMS(),
-		RuntimeService:       s.runtimeServiceSnapshot(),
+		RuntimePlatform:          runtimemanagement.RuntimePlatform(),
+		RuntimeLinuxDistribution: runtimemanagement.RuntimeLinuxDistribution(),
+		Status:                   "online",
+		AccessIdentity:           proof,
+		LocalUIURL:               firstNonEmptyString(access.urls),
+		LocalUIURLs:              access.publicURLs(),
+		LocalUIAddressIssues:     access.issues,
+		PasswordRequired:         s.accessEnabled(),
+		Exposure:                 s.LocalUIExposure(),
+		StartedAtUnixMS:          s.a.ProcessStartedAtUnixMS(),
+		RuntimeService:           s.runtimeServiceSnapshot(),
 	}})
 }
 

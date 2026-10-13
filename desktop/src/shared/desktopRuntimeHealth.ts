@@ -81,6 +81,7 @@ export type DesktopRuntimeHealth = Readonly<{
   runtime_pid?: number;
   started_at_unix_ms?: number;
   runtime_platform?: DesktopRuntimePlatform;
+  runtime_linux_distribution?: string;
   runtime_service?: RuntimeServiceSnapshot;
   runtime_maintenance?: DesktopRuntimeMaintenanceRequirement;
   offline_reason_code?: DesktopRuntimeOfflineReasonCode;

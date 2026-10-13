@@ -1,5 +1,13 @@
 import { expect, it } from 'vitest';
-import { normalizeDesktopRuntimePlatform } from './desktopRuntimePlatform';
+import { normalizeDesktopRuntimeLinuxDistribution, normalizeDesktopRuntimePlatform } from './desktopRuntimePlatform';
+
+it.each([
+  ['Ubuntu', 'linux', 'ubuntu'], ['opensuse-tumbleweed', 'linux', 'opensuse-tumbleweed'],
+  ['custom-linux', 'linux', 'custom-linux'], ['ubuntu', 'macos', undefined], ['debian', undefined, undefined],
+  ['Ubuntu 24.04', 'linux', undefined], ['$(echo ubuntu)', 'linux', undefined], [42, 'linux', undefined],
+])('normalizes only a Linux Runtime distribution ID %s on %s', (id, platform, expected) => {
+  expect(normalizeDesktopRuntimeLinuxDistribution(id, platform)).toBe(expected);
+});
 
 it.each([
   ['darwin', 'macos'], ['mac', 'macos'], ['macos', 'macos'], ['osx', 'macos'],

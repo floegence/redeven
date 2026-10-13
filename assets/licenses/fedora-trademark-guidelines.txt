@@ -1,0 +1,115 @@
+Fedora Trademark Guidelines
+Source: https://docs.fedoraproject.org/en-US/legal/trademarks/
+Retrieved: 2026-10-13
+
+Fedora trademark guidelines
+Subject of the Guidelines
+The Fedora Trademark Guidelines (“Guidelines”) cover all registered and unregistered trademarks related to the Fedora Project, including Fedora®, the Fedora logo, Fedora Remix, and the Fedora Remix logo, Fedora Ready and the Fedora Ready logo, either separately or in combination, (the "Fedora Trademarks"). Red Hat retains and reserves all rights to the Fedora Trademarks and their use, including the right to modify these guidelines.
+The overarching principle for these Guidelines is that you may not use the Fedora Trademarks or any confusingly similar mark in a manner that might cause confusion or mislead anyone, either directly or by omission. If your use seems to be permitted, but there is nevertheless the possibility that someone will mistake what your relationship is to the Fedora Project or Red Hat, you cannot use the Fedora Trademark in that way. In these Guidelines, we are not trying to limit the lawful use of the Fedora Trademarks, including their “fair use,” but rather describe for you what we consider the parameters of lawful use to be.
+Nothing in these Guidelines is meant to limit your rights under the terms of a free and open source software license. Trademarks and copyright are different rights, so regardless of what rights or permissions you may or may not have to use the Fedora Trademarks, you always have all your rights under any applicable free and open source software licenses.
+Use by Red Hat
+Red Hat protects the Fedora Trademarks on behalf of the entire Fedora community. The law obligates trademark owners to police their marks and prevent the use of confusingly similar names by third parties. As the trademark owner, Red Hat uses the Fedora Trademarks under the same guidelines as the rest of the community.
+The Fedora Council
+Red Hat enlists the assistance of the Fedora Council ( "Council") to oversee the Guidelines to ensure compliance by the community. The Council may grant permission for uses as explained below. The Council serves as the first line of mediation when questions of use arise.
+Usage That Requires Permission
+Without separate permission from the Council you cannot:
+Use the Fedora Trademarks in a way that expresses or implies sponsorship or endorsement by, or affiliation or a relationship with the Fedora Project or Red Hat when one does not exist.
+Use Fedora Trademarks on any merchandise, swag, or non-software goods.
+Use terminology that states or implies that the Fedora Project or Red Hat assumes any responsibility for the performance of your products or services.
+Use or register, in whole or in part, the Fedora Trademarks, or any phonetic equivalent, foreign language equivalent, takeoff, or abbreviation as part of your own trademark, service mark, company name, trade name, product name, service name, or domain name.
+Use the Fedora Trademarks in a disparaging or inappropriate manner or in any manner that violates any federal, state, or international law or regulation.
+Imitate or copy the Fedora Project’s distinctive trade dress.
+Usage That Does Not Require Permission
+Below is some guidance on uses we are commonly asked about. In all cases, use is permitted only provided that:
+the use is only in connection with promoting the Fedora Project or Fedora code, documentation, content, fonts, and firmware (“Fedora Materials”);
+the use is not disparaging to Red Hat, the Fedora Project or their products;
+the use is appropriate for the mark used, for example, "Fedora Remix" is used only for remix products and no other Fedora Trademarks are used for remix products;
+the use does not imply sponsorship or endorsement by the Fedora Project or Red Hat; proper trademark symbols are used in connection with the Fedora Trademarks and the trademark attribution statement must appear as explained in Proper Trademark Use; and
+the Fedora brand standards are strictly observed.
+Community sites and accounts
+Fedora defines community sites and accounts as sites or accounts related to the Fedora Project, but not officially maintained by Marketing team members or Social Media administrators. They may be region or country specific and are usually run by an individual contributor or group of contributors. These sites are non-commercial in nature (they are not selling a product).
+Examples of these pages include (but are not limited to):
+placing the Fedora Trademarks on a personal website or blog to support the Fedora Project;
+making or running a group or account on a social networking web service to support the Fedora Project; or
+linking to the Fedora Project from a website to provide information or show support for the Fedora Project.
+It is permissible to use the Fedora Trademarks on community sites and accounts to show your support for the Fedora Project, provided that:
+use of any Fedora logo hyperlinks to the Fedora Project website, https://fedoraproject.org/, or if that is not possible, the site includes a prominent link to the Fedora Project website at https://fedoraproject.org/.
+the site indicates clearly that it is not affiliated with or endorsed by the Fedora Project; in addition:
+the site must include the text "This site is not affiliated with or endorsed by the Fedora Project" prominently on any page that includes the Fedora Trademarks;
+if the Fedora Trademarks appear in a page header or any area that is designed to be presented on more than one page, the notice must also be designed to be presented on all of those pages as well. (i.e., if the Fedora Trademarks appear in a site-wide header, the informational text must appear in that header or an identically site-wide footer.); and
+the site does not use the Fedora Project’s trade dress (i.e. the look and feel of the Fedora Project).
+While these online community sites and accounts are not officially endorsed by the Fedora Project or Red Hat, because they are part of the Fedora Community (and use the Fedora trademarks to identify themselves), their site owners, moderators, administrators, and users are required to comply with the Fedora Code of Conduct. Community sites and accounts which are unable to meet this standard of conduct will be required to cease use of the Fedora Trademarks.
+Business websites
+It is permissible to use the Fedora Trademarks on business websites, provided that:
+the website has non-Fedora primary branding;
+use of any Fedora logo hyperlinks to the Fedora Project website, https://fedoraproject.org/, or if that is not possible, the site includes a prominent link to the Fedora Project website at https://fedoraproject.org/;
+no Fedora Trademarks are used as part of the domain name;
+the use does not imply sponsorship or endorsement by Red Hat or the Fedora Project; and
+the site does not use the Fedora Project’s trade dress.
+Provided these guidelines are observed, it is permissible to use the Fedora Trademarks to sell Fedora Materials, and to advertise services for Fedora-based systems (installation, configuration, troubleshooting, etc.).
+Business cards
+It is permissible to use the Fedora Trademarks without prior permission on business cards to accurately identify one’s affiliation with the Fedora Project.
+Promotional events
+It is permissible to use the Fedora Trademarks without prior permission to promote free and open source software events where individuals of the Fedora Project appear as Fedora representatives, distribute Fedora Materials, or otherwise represent the Fedora Project, provided the Fedora Code of Conduct and the general guidelines above are followed. If you would like to make some merchandise or swag to give away at the event and don’t already have a license to do so, please contact the Fedora Council.
+Publications
+It is permissible to use the Fedora Trademarks in the title and content of a publication, provided that:
+the use is clearly in reference to the Fedora Project or Fedora Materials;
+the use does not suggest that the Fedora Project has published, endorsed, sponsored, or agrees with your work;
+the use does not purport to represent Fedora Project contributors as a group without permission from the Council; and
+proper trademark symbols are used in connection with the Fedora Trademarks and the trademark attribution statement must appear as explained in Proper Trademark Use below.
+Distributing Fedora Materials
+Copies of unmodified Fedora Materials
+It is permissible to use the Fedora Trademarks without prior permission to label unmodified Fedora Materials, provided proper trademark symbols are used in connection with the Fedora Trademarks and the trademark attribution statement appears as explained in Proper Trademark Use below.
+Distributing combinations of Fedora Materials with non-Fedora or modified Fedora Materials
+Community members may use the Fedora Remix Trademarks on and in conjunction with software that commingles unmodified Fedora Materials with other software or content that is not provided officially by the Fedora Project, or that provides modified Fedora Materials, provided that:
+the fedora-logos, fedora-release, and fedora-release-notes RPM packages are removed, although you may replace these with packages of your own devising not containing the Fedora Trademarks; and
+a notice is prominently displayed indicating that:
+the software provided is not provided or supported by the Fedora Project; and
+official Fedora Materials are available through the Fedora Project website, and linking to the Fedora Project website at https://fedoraproject.org/.
+OEM pre-loads of unmodified Fedora Materials
+It is permissible to use the Fedora Trademarks without prior permission in connection with the provision and sale of computer systems pre-loaded with Fedora Materials, provided that:
+any website advertising such systems follows the guidelines herein pertaining to Business websites;
+the use does not imply sponsorship or endorsement by the Fedora Project or Red Hat;
+it is clear to the consumer of the computer system that there is no support available from the Fedora community other than that which is offered to all users;
+the use of the Fedora Trademarks does not imply an association with or endorsement of any non-Fedora goods or services;
+any non-Fedora Materials included as part of the install image must reside entirely within a single folder under /opt (e.g. /opt/VENDORNAME). Please note that this exception only applies to content and documentation, not code, fonts or firmware;
+proper trademark symbols are used in connection with the Fedora Trademarks and the trademark attribution statement must appear as explained in Proper Trademark Use below; and
+the Fedora brand standards are strictly observed.
+Virtual images or appliances with unmodified Fedora Materials
+It is permissible to use the Fedora Trademarks without prior permission in connection with the provision and sale of virtual images or appliance distributions pre-loaded with Fedora Materials, provided that:
+any website advertising such systems follows the guidelines herein pertaining to Business websites;
+the use does not imply sponsorship or endorsement by Red Hat or the Fedora Project;
+it is clear to the consumer of the computer system that there is no support available from the Fedora community other than that which is offered to all users;
+the use of the Fedora Trademarks does not imply an association with or endorsement of any non-Fedora goods or services;
+no non-Fedora Materials are pre-installed in the virtual image or appliance files in which the Fedora operating system is pre-loaded, but instead are provided by separate distribution. This requirement does not include minor, nonmaterial changes necessary to run in the particular hosting environment;
+proper trademark symbols are used in connection with the Fedora Trademarks and the trademark attribution statement must appear as explained in Proper Trademark Use below; and the Fedora brand standards are strictly observed.
+Secondary Marks
+Fedora Remix
+Downstream distributors may use the Fedora Remix word mark and the Fedora Remix logo (“Fedora Remix Trademarks”) to indicate their work includes or is derived from Fedora Materials, and thereby drive more interest in the Fedora Project itself, so long as:
+a statement is included in a prominent location stating that end users are receiving modified Fedora Materials, and informing them where they can get unmodified Fedora Materials;
+your name or company name and brand is more prominently featured than the Fedora Remix Trademarks; use does not express or imply sponsorship or endorsement by, or affiliation or a relationship with the Fedora Project; and
+the Fedora brand standards are strictly observed.
+Other uses that do not properly indicate the work contains modified Fedora Material or non-Fedora material are not permitted. Other uses of any Fedora Trademarks to refer to work that includes or is derived from Fedora Materials are not permitted.
+Fedora Ready
+Fedora Ready word mark and the Fedora Ready logo (“Fedora Ready Trademarks”) allow approved, current members of the Fedora Ready program to promote and advertise their participation in the program.
+Approved, current members of the Fedora Ready program may use the Fedora Ready Trademarks in marketing, websites and social media so long as:
+your name or company name and brand is more prominently featured than the Fedora Remix Trademarks;
+use does not express or imply sponsorship or endorsement by, or affiliation or a relationship with the Fedora Project;
+you are a member in good standing of the Fedora Ready program and in compliance with all Fedora Ready program requirements; and
+the Fedora brand standards are strictly observed.
+Permanently affixing the Fedora Ready trademark to hardware or using the Fedora Ready trademarks on merchandise or other promotional items requires permission from the Council.
+Proper Trademark Use
+Always use a trademark as an adjective modifying a noun. Don’t use a trademark as a verb. Don’t use "a" or "the" to refer to an instance of the trademark.
+Always use trademarks in their exact form with the correct spelling and never abbreviate, hyphenate, or combine trademarks with any other words or designs.
+Always distinguish trademarks from the surrounding text, either by capitalizing, bolding, italicizing, or underlining the trademark.
+Don’t pluralize a trademark. Don’t use a trademark as a possessive.
+Don’t create acronyms using the Fedora Trademarks.
+Don’t alter, modify, abbreviate, or make variations of the Fedora Trademarks.
+Put the following notice in the footer of the page where you have used a Fedora Trademark Mark (or, if in a book, on the credits page), on any packaging or labeling, and on advertising or marketing materials: "[List of marks] is/are [a] trademark[s] or registered trademark[s] of Red Hat, Inc., or its subsidiaries in the United States and other countries."
+In the case of a registered trademark, the first or most prominent mention of the Fedora Trademark on a web page, document, packaging, or documentation must be accompanied by a symbol indicating the Fedora Trademark is registered ("®").
+Logo Usage Guidelines
+For more information about the requirements for logo size, appearance, placement, and other considerations, refer to the Fedora brand standards.
+Questions?
+If you have any questions about these Guidelines or you would like to speak to someone about the use of the Fedora Trademarks in ways not described in these Guidelines, please contact the Fedora Council.
+These Guidelines are based in part on the Model Trademark Guidelines, available at http://www.modeltrademarkguidelines.org. Both these Guidelines and the Model Trademark Guidelines are licensed under the Creative Commons Attribution 4.0 International license.
+Want to help? Learn how to contribute to Fedora Docs ›

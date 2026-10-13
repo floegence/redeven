@@ -94,7 +94,7 @@ import {
   resolveDesktopPlatformCapabilities,
   type DesktopPlatformCapabilities,
 } from '../shared/desktopPlatformCapabilities';
-import { normalizeDesktopRuntimePlatform, type DesktopRuntimePlatform } from '../shared/desktopRuntimePlatform';
+import { normalizeDesktopRuntimeLinuxDistribution, normalizeDesktopRuntimePlatform, type DesktopRuntimePlatform } from '../shared/desktopRuntimePlatform';
 import type { DesktopWSLDiscoverySnapshot } from '../shared/desktopWSL';
 import {
   isRedevenCloudOrigin,
@@ -974,6 +974,14 @@ function runtimePlatformFromObservation(
   return normalizeDesktopRuntimePlatform(observation?.runtime_platform);
 }
 
+function runtimeLinuxDistributionFromObservation(
+  observation: Readonly<{ runtime_platform?: unknown; runtime_linux_distribution?: unknown }> | null | undefined,
+  platform = runtimePlatformFromObservation(observation),
+): string | undefined {
+  if (platform !== 'linux') return undefined;
+  return normalizeDesktopRuntimeLinuxDistribution(observation?.runtime_linux_distribution, observation?.runtime_platform);
+}
+
 function runtimeMaintenanceFromHealth(
   health: DesktopRuntimeHealth | null | undefined,
 ): DesktopEnvironmentEntry['runtime_maintenance'] {
@@ -1036,6 +1044,7 @@ function runtimeHealthFromPresence(
       status: 'offline',
       ...(presence.started_at_unix_ms ? { started_at_unix_ms: presence.started_at_unix_ms } : {}),
       ...(presence.runtime_platform ? { runtime_platform: presence.runtime_platform } : {}),
+      ...(presence.runtime_linux_distribution ? { runtime_linux_distribution: presence.runtime_linux_distribution } : {}),
       checked_at_unix_ms: presence.checked_at_unix_ms,
       source,
       freshness: fallback.freshness === 'unknown' ? undefined : fallback.freshness,
@@ -1062,6 +1071,7 @@ function runtimeHealthFromPresence(
     local_ui_address_issues: presence.local_ui_address_issues,
     ...(presence.started_at_unix_ms ? { started_at_unix_ms: presence.started_at_unix_ms } : {}),
     ...(presence.runtime_platform ? { runtime_platform: presence.runtime_platform } : {}),
+    ...(presence.runtime_linux_distribution ? { runtime_linux_distribution: presence.runtime_linux_distribution } : {}),
     runtime_service: presenceRuntimeService,
     runtime_maintenance: presenceMaintenance,
   };
@@ -1086,6 +1096,7 @@ function providerEnvironmentRuntimeHealth(
       source: 'provider_batch_probe',
       local_ui_url: compact(environment.environment_url) || undefined,
       runtime_platform: runtimePlatformFromObservation(providerHealth),
+      runtime_linux_distribution: runtimeLinuxDistributionFromObservation(providerHealth),
     };
   }
   return {
@@ -1093,6 +1104,7 @@ function providerEnvironmentRuntimeHealth(
     checked_at_unix_ms: providerHealth?.observed_at_unix_ms || Date.now(),
     source: 'provider_batch_probe',
     runtime_platform: runtimePlatformFromObservation(providerHealth),
+    runtime_linux_distribution: runtimeLinuxDistributionFromObservation(providerHealth),
     offline_reason_code: normalizeProviderRuntimeOfflineReasonCode(providerHealth?.offline_reason_code),
     offline_reason: providerHealth?.offline_reason || 'The runtime offline / unavailable',
   };
@@ -1355,6 +1367,7 @@ function buildLocalEnvironmentEntry(
     is_opening: isOpening,
     runtime_health: runtimeHealth,
     runtime_platform: runtimePlatform,
+    runtime_linux_distribution: runtimeLinuxDistributionFromObservation(runtimeObservation, runtimePlatform),
     runtime_service: runtimeService,
     runtime_started_at_unix_ms: startedAtUnixMS,
     runtime_maintenance: runtimeMaintenance,
@@ -1535,6 +1548,7 @@ function buildCloudEnvironmentEntry(
     is_opening: effectiveWindowState === 'opening',
     runtime_health: runtimeHealth,
     runtime_platform: runtimePlatformFromObservation(runtimeHealth),
+    runtime_linux_distribution: runtimeLinuxDistributionFromObservation(runtimeHealth),
     runtime_service: undefined,
     runtime_started_at_unix_ms: startedAtUnixMS,
     runtime_operations: providerRuntimeOperations(effectiveWindowState === 'open' || routeDetails.remoteRouteState === 'ready'),
@@ -1638,6 +1652,8 @@ function buildEnvironmentEntries(
           session.startup?.runtime_service,
         ),
         runtime_service: session.startup?.runtime_service,
+        runtime_platform: runtimePlatformFromObservation(session.startup),
+        runtime_linux_distribution: runtimeLinuxDistributionFromObservation(session.startup),
         runtime_operations: gatewayRuntimeOperations(true),
         open_session_key: session.session_key,
         open_session_lifecycle: sessionLifecycle(session),
@@ -1676,6 +1692,7 @@ function buildSavedEnvironmentEntry(
   const runtimeHealth = sessionRuntimeHealth
     ?? savedRuntimeHealth
     ?? unknownRuntimeHealth('external_local_ui_probe');
+  const runtimeObservation = runtimePlatformFromObservation(openSession?.startup) ? openSession?.startup : savedRuntimeHealth;
   const startedAtUnixMS = runtimeStartedAtUnixMS(
     openSession?.startup?.started_at_unix_ms,
     savedRuntimeHealth?.started_at_unix_ms,
@@ -1697,7 +1714,8 @@ function buildSavedEnvironmentEntry(
     is_open: isOpen,
     is_opening: isOpening,
     runtime_health: runtimeHealth,
-    runtime_platform: runtimePlatformFromObservation(openSession?.startup) ?? runtimePlatformFromObservation(runtimeHealth),
+    runtime_platform: runtimePlatformFromObservation(runtimeObservation),
+    runtime_linux_distribution: runtimeLinuxDistributionFromObservation(runtimeObservation),
     runtime_service: preferredRuntimeService(openSession?.startup?.runtime_service, savedRuntimeHealth),
     runtime_started_at_unix_ms: startedAtUnixMS,
     runtime_maintenance: runtimeMaintenanceFromHealth(runtimeHealth),
@@ -1832,6 +1850,7 @@ function buildSavedRuntimeTargetEntry(
     is_opening: isOpening,
     runtime_health: runtimeHealth,
     runtime_platform: target.host_access.kind === 'wsl_host' ? 'linux' : runtimePlatformFromObservation(runtimeObservation),
+    runtime_linux_distribution: runtimeLinuxDistributionFromObservation(runtimeObservation, target.host_access.kind === 'wsl_host' ? 'linux' : runtimePlatformFromObservation(runtimeObservation)),
     runtime_service: runtimeService,
     runtime_started_at_unix_ms: startedAtUnixMS,
     runtime_maintenance: runtimeMaintenance,
