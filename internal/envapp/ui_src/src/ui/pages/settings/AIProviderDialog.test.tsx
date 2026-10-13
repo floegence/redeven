@@ -95,6 +95,12 @@ describe('provider save credentials', () => {
     try {
       const save = [...document.querySelectorAll('button')].find(button => button.textContent?.trim() === 'Save Provider')!;
       expect(save.disabled).toBe(blocked);
+      const modelsStep = host.querySelector<HTMLButtonElement>('[data-provider-dialog-step="models"]')!;
+      expect(modelsStep.disabled).toBe(blocked);
+      if (blocked) {
+        modelsStep.click();
+        expect(host.querySelector('.flower-model-catalog-controls')).toBeNull();
+      }
       if (type === 'ollama' || type === 'openai_compatible') {
         clickStep(host, 'connection');
         expect(host.textContent).toContain('API key optional');

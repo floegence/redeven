@@ -63,6 +63,7 @@ for (const [local, locale, width, dark] of [
     }
     const dialog = document.querySelector<HTMLElement>('.flower-provider-dialog')!;
     const panel = document.getElementById('flower-provider-type-openai')!;
+    expect(panel.querySelector('.flower-provider-models')).toBeNull();
     expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth);
     const overflowing = [...panel.querySelectorAll<HTMLElement>('*')].filter(element => element.getBoundingClientRect().right > panel.getBoundingClientRect().right).map(element => [element.tagName, element.className, element.textContent?.slice(0, 70)]);
     expect(panel.scrollWidth, JSON.stringify(overflowing)).toBeLessThanOrEqual(panel.clientWidth);

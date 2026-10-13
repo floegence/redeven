@@ -124,6 +124,11 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
   const missingCredential = () => props.provider
     ? missingFlowerProviderCredential({ ...props.provider, provider_api_key: props.keyDraft, web_search_api_key: props.webSearchKeyDraft }, props.keySet, props.webSearchKeySet)
     : null;
+  const connectionReady = () => Boolean(props.provider
+    && !missingFlowerProviderCredential({ ...props.provider, enabled: true, provider_api_key: props.keyDraft, web_search_api_key: props.webSearchKeyDraft }, props.keySet, props.webSearchKeySet)
+    && (!providerTypeRequiresBaseURL(props.provider.type) || props.provider.base_url?.trim() || defaultBaseURLForProviderType(props.provider.type)));
+
+  createEffect(() => { if (!connectionReady() && activeStep() === 'models') setActiveStep('connection'); });
 
   return (
     <Dialog
@@ -195,14 +200,14 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                           class="flower-provider-choice"
                           classList={{ 'flower-provider-choice--active': active() }}
                           onClick={() => setActiveStep(step.id)}
-                          disabled={!props.canInteract && step.id !== activeStep()}
+                          disabled={(!props.canInteract && step.id !== activeStep()) || (step.id === 'models' && !connectionReady())}
                           aria-current={active() ? 'step' : undefined}
                           data-provider-dialog-step={step.id}
                         >
-                          <span class="flex h-6 w-6 shrink-0 items-center justify-center">
+                          <span class="flower-provider-choice-icon">
                             <StepIcon class="h-3.5 w-3.5" />
                           </span>
-                          <span class="min-w-0">
+                          <span class="flower-provider-choice-label">
                             <span class="block text-xs font-semibold">{step.label()}</span>
                           </span>
                         </button>
@@ -339,7 +344,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                   </section>
                 </Show>
 
-                <Show when={activeStep() === 'models'}>
+                <Show when={activeStep() === 'models' && connectionReady()}>
                   <div class="space-y-5">
                     <section class="space-y-3">
                       <SubSectionHeader

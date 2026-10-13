@@ -84,7 +84,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
   };
   const [customModelName, setCustomModelName] = createSignal('');
   const [editingModelName, setEditingModelName] = createSignal('');
-  const [expandedProviderType, setExpandedProviderType] = createSignal<FlowerProviderType | null>(null);
+  const [selectedProviderType, setSelectedProviderType] = createSignal<FlowerProviderType | null>(null);
   const [store, setStore] = createStore<{ draft: FlowerProviderDraft | null }>({ draft: null });
   const catalog = createMemo(() => store.draft ? flowerProviderModelChoices(store.draft) : []);
   const catalogByName = createMemo(() => new Map(catalog().map((model) => [model.model_name, model])));
@@ -128,6 +128,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
             setAuthorizing(false);
             updateProvider({ account_id: result.account.account_id, chatgpt_account: result.account, chatgpt_attempt: { attempt_id: id, scope_id: scope } });
             if (result.account.state !== 'ready') setAuthError(copy().chatGPT.planPermission);
+            else void discover();
             return;
           }
           if (result.state === 'failed') { setAuthorizing(false); setAuthError(copy().chatGPT.signInFailed); return; }
@@ -145,6 +146,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
     if ((store.draft?.auth_method ?? 'api_key') === method) return;
     if (method === 'chatgpt' && !chatGPTEnabled()) return;
     cancelAuthorization(); setAuthError('');
+    discoverySequence++; setLoading(false); setDiscoveryError('');
     updateProvider({ auth_method: method, account_id: undefined, chatgpt_account: undefined, chatgpt_attempt: undefined, catalog_models: undefined });
   };
   let currentAuth: FlowerChatGPTAuth | undefined;
@@ -168,6 +170,9 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
   const missingCredential = () => store.draft
     ? missingFlowerProviderCredential(store.draft, props.keyConfigured, props.webSearchKeyConfigured)
     : null;
+  const connectionReady = () => Boolean(store.draft
+    && !missingFlowerProviderCredential({ ...store.draft, enabled: true }, props.keyConfigured, props.webSearchKeyConfigured)
+    && (!flowerProviderTypeRequiresBaseURL(store.draft.type) || store.draft.base_url?.trim() || defaultBaseURLForFlowerProviderType(store.draft.type)));
   const incompleteModel = () => store.draft?.models.some(flowerModelNeedsConfiguration) ?? false;
   const providerTypeLabel = (type: FlowerProviderType): string => copy().providerTypeLabels[type] ?? type;
 
@@ -180,7 +185,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
       setAuthError('');
       setCustomModelName(''); setQuery(''); setDiscoveryError('');
       setEditingModelName('');
-      setExpandedProviderType(props.mode === 'edit' && initial ? initial.type : null);
+      setSelectedProviderType(props.mode === 'edit' && initial ? initial.type : null);
     }
   }));
 
@@ -213,6 +218,8 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
   const changeProviderType = (type: FlowerProviderType) => {
     if (!store.draft) return;
     cancelAuthorization();
+    discoverySequence++; setLoading(false); setDiscoveryError(''); setAuthError('');
+    setQuery(''); setCustomModelName(''); setEditingModelName('');
     const nextModels = defaultFlowerProviderModels(type);
     updateProvider({
       type,
@@ -222,15 +229,16 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
       base_url: defaultBaseURLForFlowerProviderType(type),
       web_search: flowerProviderNeedsWebSearchConfig(type) ? { mode: 'disabled' } : undefined,
       web_search_api_key: null,
+      provider_api_key: undefined,
       models: nextModels,
       model_selection: undefined,
       catalog_models: undefined,
     });
   };
 
-  const toggleProviderType = (type: FlowerProviderType) => {
+  const selectProviderType = (type: FlowerProviderType) => {
     if (props.mode === 'edit') return;
-    setExpandedProviderType((current) => (current === type ? null : type));
+    setSelectedProviderType(type);
     if (store.draft?.type !== type) changeProviderType(type);
   };
 
@@ -287,9 +295,9 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
       contentClass="flower-provider-dialog-body"
       footer={(
         <div class="flex flex-wrap items-center justify-end gap-2">
-          <Show when={missingCredential()}>
+          <Show when={selectedProviderType() && missingCredential() && !chatGPTSelected()}>
             <span role="status" class="mr-auto text-sm text-muted-foreground">
-              {missingCredential() === 'provider' ? chatGPTSelected() ? copy().chatGPT.planPermission : copy().needsKey : copy().needsBraveKey}
+              {missingCredential() === 'provider' ? copy().needsKey : copy().needsBraveKey}
             </span>
           </Show>
           <Show when={incompleteModel()}><span role="status" class="mr-auto text-sm text-muted-foreground">{copy().catalog.needsConfiguration}</span></Show>
@@ -300,8 +308,8 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
             size="sm"
             variant="default"
             loading={props.saving}
-            disabled={props.saving || Boolean(missingCredential()) || incompleteModel() || Boolean(store.draft?.model_selection && !store.draft.model_selection.selected_models)}
-            onClick={() => { if (store.draft && !missingCredential() && !incompleteModel()) void props.onConfirm(store.draft); }}
+            disabled={!selectedProviderType() || props.saving || Boolean(missingCredential()) || incompleteModel() || Boolean(store.draft?.model_selection && !store.draft.model_selection.selected_models)}
+            onClick={() => { if (selectedProviderType() && store.draft && !missingCredential() && !incompleteModel()) void props.onConfirm(store.draft); }}
           >
             {copy().saveProvider}
           </Button>
@@ -318,22 +326,22 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                   <button
                     type="button"
                     class="flower-provider-choice"
-                    classList={{ 'flower-provider-choice--active': expandedProviderType() === item.value }}
-                    onClick={() => toggleProviderType(item.value)}
-                    aria-expanded={expandedProviderType() === item.value}
+                    classList={{ 'flower-provider-choice--active': selectedProviderType() === item.value }}
+                    onClick={() => selectProviderType(item.value)}
+                    aria-current={selectedProviderType() === item.value ? 'true' : undefined}
                     aria-controls={`flower-provider-type-${item.value}`}
                     title={copy().providerTypeHints[item.value] ?? item.hint}
                   >
-                    <FlowerProviderBrandIcon type={item.value} class="h-5 w-5 shrink-0" />
-                    <span>{providerTypeLabel(item.value)}</span>
-                    <Show when={expandedProviderType() === item.value}><Check class="flower-provider-choice-check h-3.5 w-3.5" aria-hidden="true" /></Show>
+                    <span class="flower-provider-choice-icon"><FlowerProviderBrandIcon type={item.value} class="h-5 w-5" /></span>
+                    <span class="flower-provider-choice-label">{providerTypeLabel(item.value)}</span>
+                    <span class="flower-provider-choice-check" aria-hidden="true"><Show when={selectedProviderType() === item.value}><Check class="h-3.5 w-3.5" /></Show></span>
                   </button>
                 )}
               </For>
             </div>
           </nav>
           <div class="flower-provider-detail">
-            <Show when={expandedProviderType()} fallback={<div class="flower-provider-introduction"><p>{copy().providerTypeDescription}</p></div>}>
+            <Show when={selectedProviderType()} fallback={<div class="flower-provider-introduction"><p>{copy().providerTypeDescription}</p></div>}>
               <div id={`flower-provider-type-${store.draft!.type}`} class="flower-provider-editor">
                 <div class="flower-provider-identity">
                   <FlowerProviderBrandIcon type={store.draft!.type} class="h-6 w-6 shrink-0" />
@@ -342,16 +350,17 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                 <section class="flower-provider-connection">
                   <div class="flower-provider-section-heading"><h3>{copy().connectionTitle}</h3></div>
                   <Show when={store.draft!.type === 'openai'}>
-                    <div class="space-y-2">
+                    <div class="flower-provider-authentication">
                       <div role="group" aria-label={copy().chatGPT.authentication} class="flower-provider-auth-method">
-                        <Button size="sm" variant={chatGPTSelected() ? 'secondary' : 'ghost'} class="whitespace-nowrap" disabled={!chatGPTEnabled()} aria-pressed={chatGPTSelected()} onClick={() => changeAuthentication('chatgpt')}>{copy().chatGPT.account}</Button>
-                        <Button size="sm" variant={!chatGPTSelected() ? 'secondary' : 'ghost'} class="whitespace-nowrap" aria-pressed={!chatGPTSelected()} onClick={() => changeAuthentication('api_key')}>{copy().apiKey}</Button>
+                        <button type="button" disabled={!chatGPTEnabled()} aria-pressed={chatGPTSelected()} onClick={() => changeAuthentication('chatgpt')}>{copy().chatGPT.account}</button>
+                        <button type="button" aria-pressed={!chatGPTSelected()} onClick={() => changeAuthentication('api_key')}>{copy().apiKey}</button>
                       </div>
                       <Show when={!chatGPTEnabled()}><p class="flower-body-copy text-muted-foreground">{copy().chatGPT.localOnly}</p></Show>
                     </div>
                   </Show>
                   <Show when={chatGPTSelected() && chatGPTEnabled()}>
                     <div class="flower-provider-account">
+                      <Show when={!account()}><p class="flower-body-copy text-muted-foreground">{copy().chatGPT.planPermission}</p></Show>
                       <Show when={account()}>{(current) => <div class="min-w-0"><p class="break-words text-sm font-medium">{current().email}</p><p class="mt-1 text-xs text-muted-foreground">{current().state === 'ready' ? copy().chatGPT.planSource : copy().chatGPT.planPermission}</p></div>}</Show>
                       <Show when={account()?.state === 'ready' && !account()!.welcome_acknowledged}>
                         <div class="space-y-2 rounded-md border border-border bg-background/60 p-3">
@@ -361,9 +370,9 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                         </div>
                       </Show>
                       <div class="flex flex-wrap items-center gap-2">
-                        <Button size="sm" class="whitespace-nowrap" disabled={authorizing()} onClick={() => void startAuthorization()}><StableText reserve={[copy().chatGPT.waiting, copy().chatGPT.reauthorize, copy().chatGPT.continue]}>{authorizing() ? copy().chatGPT.waiting : account() ? copy().chatGPT.reauthorize : copy().chatGPT.continue}</StableText></Button>
+                        <Button size="sm" variant={account()?.state === 'ready' ? 'outline' : 'default'} class="whitespace-nowrap" disabled={authorizing()} onClick={() => void startAuthorization()}><StableText reserve={[copy().chatGPT.waiting, copy().chatGPT.reauthorize, copy().chatGPT.continue]}>{authorizing() ? copy().chatGPT.waiting : account() ? copy().chatGPT.reauthorize : copy().chatGPT.continue}</StableText></Button>
                         <Show when={authorizing()}><Button size="sm" variant="ghost" class="whitespace-nowrap" onClick={cancelAuthorization}>{copy().chatGPT.cancel}</Button></Show>
-                        <a href="https://chatgpt.com/settings/usage" target="_blank" rel="noopener noreferrer" class="cursor-pointer text-xs font-medium text-primary underline-offset-4 hover:underline">{copy().chatGPT.manageUsage}</a>
+                        <Show when={account()?.state === 'ready'}><a href="https://chatgpt.com/settings/usage" target="_blank" rel="noopener noreferrer" class="cursor-pointer text-xs font-medium text-primary underline-offset-4 hover:underline">{copy().chatGPT.manageUsage}</a></Show>
                         <Show when={account() && !authorizing()}><Button size="sm" variant="ghost" class="whitespace-nowrap" onClick={() => void startAuthorization(true)}>{copy().chatGPT.changeAccount}</Button></Show>
                         <Show when={account() && !store.draft?.chatgpt_attempt}>
                           <Button size="sm" variant="ghost" class="whitespace-nowrap" onClick={async () => {
@@ -462,7 +471,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                   </div>
                 </section>
 
-                <section class="flower-provider-models">
+                <Show when={connectionReady()}><section class="flower-provider-models">
                   <div class="flower-provider-section-heading">
                     <h3>{copy().recommendedModelsTitle}</h3>
                   </div>
@@ -474,8 +483,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                   >
                     <div class="flower-provider-model-list">
                       <For each={visibleModelNames()}>
-                        {(name) => {
-                          const preset = () => catalogByName().get(name)!;
+                        {(name) => <Show when={catalogByName().get(name)}>{(preset) => {
                           const modelName = () => cleanModelName(name);
                           const enabled = () => modelSelected(store.draft!, modelName());
                           const activeModel = () => store.draft!.models.find((m) => cleanModelName(m.model_name) === modelName());
@@ -574,7 +582,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                               </Show>
                             </div>
                           );
-                        }}
+                        }}</Show>}
                       </For>
                     </div>
                   </Show>
@@ -597,7 +605,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                       {copy().addCustomModel}
                     </Button>
                   </div></Show>
-                </section>
+                </section></Show>
                 <Show when={props.error}>
                   {(error) => <div role="alert" class="rounded-md border border-destructive/30 bg-destructive/10 p-3 flower-body-copy text-destructive">{error()}</div>}
                 </Show>

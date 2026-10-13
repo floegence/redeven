@@ -98,6 +98,7 @@ describe('shared Flower provider dialog', () => {
       dialog.setProvider({ id: 'provider', type, base_url: 'http://localhost:11434/v1', provider_api_key: draftKey,
         models: [{ model_name: 'agent', context_window: 32768 }] });
       expect(dialog.button('Save provider').disabled).toBe(blocked);
+      expect(dialog.host.querySelector('.flower-provider-models') === null).toBe(blocked);
       if (type === 'ollama' || type === 'openai_compatible') expect(dialog.host.textContent).toContain('API key optional');
       dialog.button('Save provider').click();
       expect(Boolean(dialog.confirmed())).toBe(!blocked);
@@ -218,7 +219,7 @@ describe('shared Flower provider dialog', () => {
     } finally { dialog.dispose(); }
   });
 
-  it('preserves explicit selection through search, collapse, save and reopen', () => {
+  it('preserves explicit selection through search, repeated provider selection, save and reopen', () => {
     const dialog = mountDialog();
     try {
       dialog.type('openai');

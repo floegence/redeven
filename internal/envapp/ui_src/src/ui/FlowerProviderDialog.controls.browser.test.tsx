@@ -1,0 +1,152 @@
+import desktopCSS from '../../../../../desktop/src/welcome/index.css?inline';
+import envCSS from '../index.css?inline';
+import flowerCSS from './flower-feature.css?inline';
+import { FloeProvider, builtInShellThemePresets, useTheme } from '@floegence/floe-webapp-core';
+import { onMount } from 'solid-js';
+import { render } from 'solid-js/web';
+import { afterEach, expect, it, vi } from 'vitest';
+import { page, userEvent } from 'vitest/browser';
+import { FlowerProviderDialog } from '../../../../flower_ui/src/settings/FlowerProviderDialog';
+import type { FlowerChatGPTAuth } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import { DEFAULT_FLOWER_SURFACE_COPY } from '../../../../flower_ui/src/copy';
+import { createLocalizedFlowerSurfaceCopy } from '../../../../flower_ui/src/i18n/createLocalizedFlowerSurfaceCopy';
+import { createI18nHelpers } from './i18n/createI18n';
+import { loadEnvAppDictionary, type EnvAppTranslationKey } from './i18n/locales';
+import type { RedevenLocale } from './i18n/localeMeta';
+
+const copy = DEFAULT_FLOWER_SURFACE_COPY.settings.dialog;
+let dispose: (() => void) | undefined;
+let host: HTMLElement;
+let style: HTMLStyleElement;
+afterEach(() => { dispose?.(); host?.remove(); style?.remove(); localStorage.clear(); });
+
+async function mount(surface: 'desktop' | 'env', theme = 'porcelain-light', auth?: FlowerChatGPTAuth, width = 1280, locale: RedevenLocale = 'en-US') {
+  await page.viewport(width, 900);
+  const i18n = createI18nHelpers(locale, await loadEnvAppDictionary(locale));
+  const localizedCopy = createLocalizedFlowerSurfaceCopy({ locale,
+    t: (key, params) => i18n.t(key as EnvAppTranslationKey, params),
+    tn: (key, count, params) => i18n.tn(key as EnvAppTranslationKey, count, params),
+  }).settings.dialog;
+  style = document.createElement('style');
+  style.textContent = surface === 'desktop' ? desktopCSS : envCSS + flowerCSS;
+  document.head.append(style);
+  host = document.createElement('div'); document.body.append(host);
+  function Theme() {
+    const themeContext = useTheme();
+    onMount(() => themeContext.selectShellTheme(theme.includes('dark') ? 'dark' : 'light', theme));
+    return null;
+  }
+  const discover = vi.fn(async () => ({ models: [
+    { model_name: 'gpt-6.1-sol', display_name: 'GPT-6.1 Sol', context_window: 1050000, max_output_tokens: 128000, input_modalities: ['text', 'image'] },
+    { model_name: 'gpt-6-sol', display_name: 'GPT-6 Sol', context_window: 1050000, max_output_tokens: 128000, input_modalities: ['text', 'image'] },
+    { model_name: 'gpt-6-luna', display_name: 'GPT-6 Luna', context_window: 1050000, max_output_tokens: 128000, input_modalities: ['text', 'image'] },
+  ] }));
+  dispose = render(() => <FloeProvider config={{ theme: { shellPresets: builtInShellThemePresets, defaultSurfaceStyle: 'soft-neumorphic' } }}><Theme /><FlowerProviderDialog
+    open mode="create" copy={localizedCopy} provider={{ id: 'openai', type: 'openai', models: [] }} chatGPTAvailable chatGPTBindingID="local"
+    chatGPTAuth={auth ?? vi.fn(async () => ({ id: 'attempt', state: 'waiting' }))} onDiscoverModels={discover}
+    keyConfigured={false} webSearchKeyConfigured={false} onOpenChange={vi.fn()} onConfirm={vi.fn()} /></FloeProvider>, host);
+  await expect.element(page.getByRole('dialog')).toBeVisible();
+  await userEvent.click(document.querySelector<HTMLButtonElement>('[aria-controls=flower-provider-type-openai]')!);
+  await expect.poll(() => document.querySelector('[role=dialog]')!.getAnimations({ subtree: true }).every(animation => animation.playState !== 'running')).toBe(true);
+  return { discover, copy: localizedCopy, dialog: document.querySelector<HTMLElement>('.flower-provider-dialog')! };
+}
+
+function color(value: string) {
+  const context = document.createElement('canvas').getContext('2d')!;
+  context.fillStyle = value; context.fillRect(0, 0, 1, 1);
+  return [...context.getImageData(0, 0, 1, 1).data].slice(0, 3).map(channel => channel / 255);
+}
+function contrast(left: string, right: string) {
+  const luminance = (value: string) => color(value).reduce((sum, channel, index) => sum + (channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4) * [0.2126, 0.7152, 0.0722][index], 0);
+  const a = luminance(left), b = luminance(right);
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+}
+
+for (const surface of ['desktop', 'env'] as const) {
+  it(`aligns every brand and provider label in ${surface}, including span-based SVG brands`, async () => {
+    await mount(surface);
+    const rows = [...document.querySelectorAll<HTMLButtonElement>('.flower-provider-picker-options > button')];
+    const labels = rows.map(row => [...row.children].find(child => child.tagName === 'SPAN' && !child.hasAttribute('data-flower-provider-brand') && !child.querySelector('[data-flower-provider-brand]') && child.textContent!.trim())!);
+    const lefts = labels.map(label => label.getBoundingClientRect().left);
+    expect(Math.max(...lefts) - Math.min(...lefts)).toBeLessThan(1);
+    for (const row of rows) {
+      const brand = row.querySelector('[data-flower-provider-brand]')!.getBoundingClientRect();
+      expect(brand.width).toBeCloseTo(20, 0);
+      expect(brand.height).toBeCloseTo(20, 0);
+    }
+  });
+
+  for (const theme of surface === 'desktop' ? ['porcelain-light', 'porcelain-dark', 'hc-light', 'hc-dark'] : ['porcelain-light', 'porcelain-dark']) {
+    it(`makes authentication selection unmistakable in ${surface} ${theme}`, async () => {
+      const { dialog } = await mount(surface, theme);
+      const account = page.getByRole('button', { name: copy.chatGPT.account, exact: true }).element() as HTMLButtonElement;
+      const key = page.getByRole('button', { name: copy.apiKey, exact: true }).element() as HTMLButtonElement;
+      const selected = getComputedStyle(account), unselected = getComputedStyle(key);
+      expect(contrast(selected.color, selected.backgroundColor)).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(selected.backgroundColor, unselected.backgroundColor)).toBeGreaterThanOrEqual(3);
+      await userEvent.click(key);
+      await expect.poll(() => key.getAttribute('aria-pressed')).toBe('true');
+      await expect.poll(() => contrast(getComputedStyle(key).backgroundColor, getComputedStyle(account).backgroundColor)).toBeGreaterThanOrEqual(3);
+      expect(document.activeElement).toBe(key);
+      await expect.poll(() => dialog.getAnimations({ subtree: true }).every(animation => animation.playState !== 'running')).toBe(true);
+      if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: dialog, path: `__screenshots__/flower-controls-${surface}-${theme}.png` });
+    });
+  }
+
+  it(`reveals the catalog only after authorization is ready and keeps repeated selection stable in ${surface}`, async () => {
+    let finish!: (result: Awaited<ReturnType<FlowerChatGPTAuth>>) => void;
+    const auth = vi.fn<FlowerChatGPTAuth>(async action => action === 'start' ? { id: 'attempt', state: 'waiting' } : action === 'status' ? new Promise(resolve => { finish = resolve; }) : {});
+    const { dialog, discover } = await mount(surface, 'porcelain-light', auth);
+    expect(dialog.querySelector('.flower-provider-models')).toBeNull();
+    const provider = document.querySelector<HTMLButtonElement>('[aria-controls=flower-provider-type-openai]')!;
+    const editor = dialog.querySelector('.flower-provider-editor');
+    await userEvent.click(provider);
+    expect(dialog.querySelector('.flower-provider-editor')).toBe(editor);
+    await expect.element(page.getByRole('button', { name: copy.chatGPT.continue, exact: true })).toBeVisible();
+    await userEvent.click(page.getByRole('button', { name: copy.chatGPT.continue, exact: true }));
+    await expect.poll(() => typeof finish).toBe('function');
+    expect(dialog.querySelector('.flower-provider-models')).toBeNull();
+    expect(discover).not.toHaveBeenCalled();
+    if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: dialog, path: `__screenshots__/flower-controls-${surface}-waiting.png` });
+    finish({ id: 'attempt', state: 'ready', account: { account_id: 'account', email: 'person@example.com', state: 'ready', welcome_acknowledged: true } });
+    await expect.element(page.getByRole('checkbox', { name: 'GPT-6.1 Sol', exact: true })).toBeVisible();
+    expect(discover).toHaveBeenCalledTimes(1);
+    const checkbox = document.querySelector('input[type=checkbox]');
+    await userEvent.click(checkbox!.closest('label')!);
+    await userEvent.click(page.getByRole('button', { name: copy.chatGPT.account, exact: true }));
+    expect(dialog.querySelector('input[type=checkbox]')).toBe(checkbox);
+    expect(auth.mock.calls.some(([action]) => action === 'cancel')).toBe(false);
+    await expect.poll(() => dialog.getAnimations({ subtree: true }).every(animation => animation.playState !== 'running')).toBe(true);
+    if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: dialog, path: `__screenshots__/flower-controls-${surface}-ready.png` });
+  });
+}
+
+for (const [surface, width, theme] of [['desktop', 1280, 'porcelain-light'], ['desktop', 390, 'porcelain-dark'], ['env', 390, 'porcelain-light']] as const) {
+  it(`guides API credential entry and retains deliberate selection in ${surface} at ${width}px`, async () => {
+    const { dialog, copy: localized } = await mount(surface, theme, undefined, width, 'zh-CN');
+    const key = page.getByRole('button', { name: localized.apiKey, exact: true });
+    await userEvent.click(key);
+    expect(dialog.querySelector('.flower-provider-models')).toBeNull();
+    await userEvent.fill(page.getByPlaceholder(localized.pasteAPIKey), 'test-key');
+    const checkbox = dialog.querySelector<HTMLInputElement>('input[type=checkbox]')!;
+    await userEvent.click(checkbox.closest('label')!);
+    const picker = dialog.querySelector<HTMLElement>('.flower-provider-picker')!;
+    const rect = picker.getBoundingClientRect();
+    await userEvent.click(key);
+    expect(dialog.querySelector('input[type=checkbox]')).toBe(checkbox);
+    expect(checkbox.checked).toBe(true);
+    expect(picker.getBoundingClientRect().top).toBe(rect.top);
+    expect(dialog.scrollWidth).toBe(dialog.clientWidth);
+    const editor = dialog.querySelector<HTMLElement>('.flower-provider-editor')!;
+    expect(editor.scrollWidth).toBe(editor.clientWidth);
+    await expect.poll(() => dialog.getAnimations({ subtree: true }).every(animation => animation.playState !== 'running')).toBe(true);
+    if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: dialog, path: `__screenshots__/flower-controls-${surface}-${width}-zh-CN.png` });
+    await userEvent.fill(page.getByPlaceholder(localized.pasteAPIKey), '');
+    expect(dialog.querySelector('.flower-provider-models')).toBeNull();
+    await userEvent.fill(page.getByPlaceholder(localized.pasteAPIKey), 'test-key');
+    expect(dialog.querySelector<HTMLInputElement>('input[type=checkbox]')!.checked).toBe(true);
+    await userEvent.click(dialog.querySelector<HTMLButtonElement>('[aria-controls=flower-provider-type-anthropic]')!);
+    expect(dialog.querySelector<HTMLInputElement>('input[type=password]')!.value).toBe('');
+    expect(dialog.querySelector('.flower-provider-models')).toBeNull();
+  });
+}
