@@ -44,6 +44,10 @@ Only the first declared managed application document chain recognizes 401/403 as
 
 Browser-only handoff cannot reliably observe a cross-origin page and therefore does not report authenticated success. Diagnostic interaction and resource confirmation follow [management recovery](service-management-recovery.md). Per-service progress follows [Web Services interface](web-services-interface.md).
 
+# Boundaries
+
+Entrance preparation operates within the existing [Managed Web Service contract](managed-web-services.md) and [Desktop protected-route contract](web-service-desktop-loopback.md). It does not change execution, access-mode or Forward authorization ownership.
+
 ## Qualification ownership
 
 `scripts/qualify_managed_web_opening.sh` is the dedicated real-service lane. It uses released dependencies with `GOWORK=off`, isolated owned processes/state, exact Docker digests, Host and Compose launch changes, authenticated Electron redirects/Cookies, painted content, refresh and window reopening in a fresh isolated partition. The protected-route case exercises OpenSession, authentication through the actual Forward proxy, and uninstall revocation. Ordinary CI and push gates do not duplicate this suite. A failed Electron runtime preflight is an explicit environment failure; qualification cannot alter macOS trust or sign dependencies.
