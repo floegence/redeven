@@ -2,7 +2,6 @@ import type { JSX } from 'solid-js';
 import { secureRandomUUID } from '@floegence/floe-webapp-core';
 import {
   For,
-  lazy,
   Show,
   createEffect,
   createMemo,
@@ -33,6 +32,7 @@ import { TessivenIcon } from './TessivenIcon';
 import { TessivenLibraryCard } from './TessivenLibraryCard';
 import { compareDocuments, type Difference } from './projection';
 import { TessivenResourceDialog } from './TessivenResourceDialog';
+import { TessivenRuntimesDialog } from './TessivenRuntimesDialog';
 import type {
   Canvas,
   Instance,
@@ -44,8 +44,6 @@ import type {
   VersionSummary,
 } from './types';
 import './tessiven.css';
-
-const TessivenRuntimesDialog = lazy(() => import('./TessivenRuntimesDialog').then(module => ({default:module.TessivenRuntimesDialog})));
 
 type Library = { canvases: Canvas[]; next_cursor?: string };
 
@@ -874,7 +872,15 @@ export function TessivenPage(props: {
           </Show>
         </div>
       </Dialog>
-      <Show when={props.visible !== false && runtimesOpen()}><TessivenRuntimesDialog transport={props.transport} t={props.t} canWrite={props.canWrite} runtimeRef={runtimeRef()} onClose={()=>setRuntimesOpen(false)}/></Show>
+      <Show when={props.visible !== false && runtimesOpen()}>
+        <TessivenRuntimesDialog
+          transport={props.transport}
+          t={props.t}
+          canWrite={props.canWrite}
+          runtimeRef={runtimeRef()}
+          onClose={() => setRuntimesOpen(false)}
+        />
+      </Show>
       <Show when={props.visible !== false && instance()} keyed>
         {(value) => (
           <TessivenResourceDialog
