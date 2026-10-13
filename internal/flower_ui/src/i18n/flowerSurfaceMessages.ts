@@ -597,6 +597,8 @@ export const flowerSurfaceEnUS = {
     backToChat: 'Back to chat',
     description: 'Configure models and the default Flower permission for the Local AI Profile.',
     currentModel: 'Current model',
+    changeModel: 'Change model',
+    finishModelEdit: 'Done',
     noModelSelected: 'No model selected',
     text: 'Text',
     imageInput: 'Image input',

@@ -5744,6 +5744,8 @@
       "backToChat": "채팅으로 돌아가기",
       "description": "로컬 AI 프로필에 대한 모델 및 기본 Flower 권한을 구성합니다.",
       "currentModel": "현재 모델",
+      "changeModel": "모델 변경",
+      "finishModelEdit": "완료",
       "noModelSelected": "선택한 모델 없음",
       "text": "텍스트",
       "imageInput": "이미지 입력",

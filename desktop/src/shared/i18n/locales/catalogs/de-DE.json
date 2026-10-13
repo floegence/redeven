@@ -855,6 +855,8 @@
       "backToChat": "Zurück zum Chat",
       "description": "Konfigurieren Sie Modelle und die Standardberechtigung für Flower im lokalen KI-Profil.",
       "currentModel": "Aktuelles Modell",
+      "changeModel": "Modell ändern",
+      "finishModelEdit": "Fertig",
       "noModelSelected": "Kein Modell ausgewählt",
       "text": "Textmodus",
       "imageInput": "Bildeingabe",

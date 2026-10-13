@@ -855,6 +855,8 @@
       "backToChat": "返回聊天",
       "description": "設定本機 AI 設定檔中的模型與 Flower 預設權限。",
       "currentModel": "目前模型",
+      "changeModel": "變更模型",
+      "finishModelEdit": "完成",
       "noModelSelected": "未選擇模型",
       "text": "文字",
       "imageInput": "圖片輸入",

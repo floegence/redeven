@@ -7,7 +7,7 @@ import { render } from 'solid-js/web';
 import { page, userEvent } from 'vitest/browser';
 import { afterEach, expect, it, vi } from 'vitest';
 import { FlowerSettingsSurface } from '../../../../flower_ui/src/settings/FlowerSettingsSurface';
-import type { FlowerSettingsSnapshot } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import type { FlowerSettingsDraft, FlowerSettingsSnapshot } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { createLocalizedFlowerSurfaceCopy } from '../../../../flower_ui/src/i18n/createLocalizedFlowerSurfaceCopy';
 import { createI18nHelpers } from './i18n/createI18n';
 import { loadEnvAppDictionary, type EnvAppTranslationKey } from './i18n/locales';
@@ -23,10 +23,12 @@ function settings(): FlowerSettingsSnapshot {
     model_profile: {
       schema_version: 1,
       current_model_id: 'deepseek/deepseek-v4-flash-vision-exp',
-      providers: [{ id: 'deepseek', type: 'deepseek', models: [
+      providers: [{ id: 'deepseek', type: 'deepseek', base_url: 'https://api.deepseek.com', models: [
         { model_name: 'deepseek-v4-flash-vision-exp', display_name: 'DeepSeek V4 Flash Vision Exp', context_window: 1_000_000, max_output_tokens: 384_000, input_modalities: ['text', 'image'], reasoning_capability: { kind: 'effort', supported_levels: ['low', 'high', 'max'], default_level: 'high', disable_supported: true } },
         { model_name: 'deepseek-v4-pro', input_modalities: ['text'] },
         { model_name: 'deepseek-v4-flash', input_modalities: ['text'] },
+      ] }, { id: 'local', type: 'ollama', name: 'Ollama Qwen 3.8 27B', base_url: 'http://127.0.0.1:11434/v1', models: [
+        { model_name: 'qwen3.8:27b', context_window: 128_000, input_modalities: ['text'] },
       ] }],
     },
     provider_secrets: [{ provider_id: 'deepseek', provider_api_key_configured: true, web_search_api_key_configured: false }],
@@ -53,6 +55,9 @@ async function mount(locale: RedevenLocale = 'en-US', width = 1000, dark = false
   Object.assign(host.style, { width: `${width}px`, height: '940px' });
   document.body.append(host);
   const openComputerSettings = vi.fn();
+  const saveModel = vi.fn(async (draft: FlowerSettingsDraft) => {
+    const next = { ...snapshot(), ...draft }; setSnapshot(next); return next;
+  });
   function SettingsTheme() {
     const theme = useTheme();
     onMount(() => theme.selectShellTheme(dark ? 'dark' : 'light', dark ? 'porcelain-dark' : 'porcelain-light'));
@@ -60,11 +65,62 @@ async function mount(locale: RedevenLocale = 'en-US', width = 1000, dark = false
   }
   dispose = render(() => <FloeProvider config={{ theme: { shellPresets: builtInShellThemePresets } }}><SettingsTheme /><FlowerSettingsSurface snapshot={snapshot()} copy={copy.settings} computerCopy={copy.computer}
     onSaveDefaultPermission={savePermission} onSaveComputerUseEnabled={saveComputer}
-    onSaveModelProfile={async draft => { const next = { ...snapshot(), ...draft }; setSnapshot(next); return next; }}
+    onSaveModelProfile={saveModel}
     onOpenComputerSettings={openComputerSettings}
   /></FloeProvider>, host);
-  return { copy, savePermission, saveComputer, openComputerSettings };
+  return { copy, savePermission, saveComputer, saveModel, openComputerSettings };
 }
+
+it('shows a compact model summary and opens model selection only from its edit action', async () => {
+  const { saveModel } = await mount();
+  const currentModel = host.querySelector<HTMLElement>('.flower-settings-current-model')!;
+  expect(currentModel.querySelector('.flower-settings-model-select')).toBeNull();
+  expect(currentModel.textContent).toContain('DeepSeek V4 Flash Vision Exp');
+  expect(currentModel.querySelector('.flower-settings-model-group')!.getBoundingClientRect().height).toBeLessThan(150);
+  const edit = currentModel.querySelector<HTMLButtonElement>('.flower-settings-model-edit')!;
+  await userEvent.click(edit);
+  const select = currentModel.querySelector<HTMLButtonElement>('.flower-settings-model-select')!;
+  expect(select).not.toBeNull();
+  await userEvent.click(select);
+  await userEvent.click(page.getByRole('menuitem', { name: 'DeepSeek / deepseek-v4-pro', exact: true }));
+  await expect.poll(() => saveModel.mock.calls.length).toBe(1);
+  expect(saveModel.mock.calls[0][0].model_profile?.current_model_id).toBe('deepseek/deepseek-v4-pro');
+  expect(currentModel.querySelector('.flower-settings-model-select')).toBeNull();
+  expect(currentModel.textContent).toContain('deepseek-v4-pro');
+  expect(document.activeElement).toBe(edit);
+});
+
+it('balances provider identity, readiness, and actions across a compact row', async () => {
+  await mount();
+  const row = host.querySelector<HTMLElement>('.flower-settings-provider-card')!;
+  const identity = row.querySelector<HTMLElement>('.flower-settings-provider-body')!;
+  const status = row.querySelector<HTMLElement>('.flower-settings-provider-status')!;
+  const actions = row.querySelector<HTMLElement>('.flower-settings-provider-actions')!;
+  expect(row.getBoundingClientRect().height).toBeLessThan(100);
+  expect(status.getBoundingClientRect().left).toBeGreaterThan(identity.getBoundingClientRect().right);
+  expect(actions.getBoundingClientRect().left).toBeGreaterThan(status.getBoundingClientRect().right);
+  expect(Math.abs(status.getBoundingClientRect().top - identity.getBoundingClientRect().top)).toBeLessThan(20);
+  const statuses = [...host.querySelectorAll<HTMLElement>('.flower-settings-provider-status')];
+  expect(new Set(statuses.map(item => item.getBoundingClientRect().left)).size).toBe(1);
+});
+
+it('closes model editing by keyboard without saving and keeps default reasoning editable', async () => {
+  const { copy, saveModel } = await mount();
+  const edit = host.querySelector<HTMLButtonElement>('.flower-settings-model-edit')!;
+  edit.focus();
+  await userEvent.keyboard('{Enter}');
+  expect(host.querySelector('.flower-settings-model-select')).not.toBeNull();
+  await userEvent.keyboard('{Escape}');
+  expect(host.querySelector('.flower-settings-model-select')).toBeNull();
+  expect(document.activeElement).toBe(edit);
+  expect(saveModel).not.toHaveBeenCalled();
+  await userEvent.click(host.querySelector<HTMLButtonElement>('.flower-settings-reasoning button')!);
+  await userEvent.click(page.getByRole('menuitemradio', { name: copy.settings.reasoningControl.max, exact: true }));
+  await expect.poll(() => saveModel.mock.calls.length).toBe(1);
+  const profile = saveModel.mock.calls[0][0].model_profile!;
+  expect(profile.current_model_id).toBe('deepseek/deepseek-v4-flash-vision-exp');
+  expect(profile.providers[0].models[0].default_reasoning_selection).toEqual({ level: 'max' });
+});
 
 for (const [locale, dark, width] of [
   ['en-US', false, 1000], ['zh-CN', false, 1000], ['zh-CN', true, 1200],
@@ -77,7 +133,7 @@ for (const [locale, dark, width] of [
     expect(getComputedStyle(frame.querySelector('.flower-settings-title')!).fontSize).toBe('25px');
     expect(getComputedStyle(frame.querySelector('.flower-settings-title')!).fontWeight).toBe('600');
     expect(getComputedStyle(frame.querySelector('.flower-settings-subsection-description')!).fontSize).toBe('12px');
-    expect(getComputedStyle(frame.querySelector('.flower-settings-model-select')!).fontSize).toBe('12px');
+    expect(frame.querySelector('.flower-settings-model-select')).toBeNull();
     const sections = [...frame.querySelectorAll<HTMLElement>(':scope > section')];
     expect(sections).toHaveLength(4);
     for (let index = 0; index < sections.length; index++) {
@@ -98,11 +154,11 @@ for (const [locale, dark, width] of [
     const modelField = currentModel.querySelector<HTMLElement>('.flower-settings-model-field')!;
     expect(modelField.scrollWidth).toBeLessThanOrEqual(modelField.clientWidth);
     if (width >= 1000) {
-      const label = modelField.querySelector<HTMLElement>('.flower-settings-model-label');
-      expect(label).not.toBeNull();
-      const select = modelField.querySelector<HTMLElement>('.flower-settings-model-select')!;
-      expect(select.getBoundingClientRect().left).toBeGreaterThan(label!.getBoundingClientRect().right);
-      expect(Math.abs(select.getBoundingClientRect().top - label!.getBoundingClientRect().top)).toBeLessThan(24);
+      const identity = modelField.querySelector<HTMLElement>('.flower-settings-model-identity')!;
+      const edit = modelField.querySelector<HTMLElement>('.flower-settings-model-edit')!;
+      expect(edit.getBoundingClientRect().left).toBeGreaterThan(identity.getBoundingClientRect().right);
+      const limits = [...currentModel.querySelectorAll<HTMLElement>('.flower-settings-model-limits > div')];
+      expect(Math.abs(limits[0].getBoundingClientRect().top - limits[1].getBoundingClientRect().top)).toBeLessThan(2);
     }
     expect(currentModel.textContent).toContain(copy.settings.dialog.contextWindow);
     expect(currentModel.textContent).toContain(copy.settings.dialog.maxOutput);
@@ -127,6 +183,14 @@ for (const [locale, dark, width] of [
       surface.scrollTop = surface.scrollHeight;
       await page.screenshot({ element: surface, path: `__screenshots__/flower-settings-bottom-${locale}-${width}.png` });
     }
+    const edit = currentModel.querySelector<HTMLButtonElement>('.flower-settings-model-edit')!;
+    await userEvent.click(edit);
+    const selector = currentModel.querySelector<HTMLElement>('.flower-settings-model-select')!;
+    expect(getComputedStyle(selector).fontSize).toBe('12px');
+    expect(modelField.scrollWidth).toBeLessThanOrEqual(modelField.clientWidth);
+    expect(document.activeElement).toBe(selector);
+    await userEvent.click(edit);
+    expect(currentModel.querySelector('.flower-settings-model-select')).toBeNull();
   });
 }
 

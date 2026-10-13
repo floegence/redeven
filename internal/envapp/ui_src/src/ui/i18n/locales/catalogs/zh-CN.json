@@ -5744,6 +5744,8 @@
       "backToChat": "返回聊天",
       "description": "配置本地 AI 配置文件中的模型和 Flower 默认权限。",
       "currentModel": "当前模型",
+      "changeModel": "更改模型",
+      "finishModelEdit": "完成",
       "noModelSelected": "未选择模型",
       "text": "文本",
       "imageInput": "图片输入",

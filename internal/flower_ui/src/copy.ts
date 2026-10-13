@@ -129,6 +129,8 @@ export type FlowerSettingsCopy = Readonly<{
   backToChat: string;
   description: string;
   currentModel: string;
+  changeModel: string;
+  finishModelEdit: string;
   noModelSelected: string;
   text: string;
   imageInput: string;
@@ -1273,6 +1275,8 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     backToChat: 'Back to chat',
     description: 'Configure models and the default Flower permission for the Local AI Profile.',
     currentModel: 'Current model',
+    changeModel: 'Change model',
+    finishModelEdit: 'Done',
     noModelSelected: 'No model selected',
     text: 'Text',
     imageInput: 'Image input',
