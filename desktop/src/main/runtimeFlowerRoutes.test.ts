@@ -39,6 +39,15 @@ describe('Flower model directory routes', () => {
 });
 
 describe('Desktop computer management routes', () => {
+  it('bounds browser installation to declared methods without queries or child routes', () => {
+    const path = '/_redeven_proxy/api/browser/installation';
+    expect(runtimeFlowerPath(path)).toBe(path);
+    for (const method of ['GET', 'PUT', 'POST', 'PATCH', 'DELETE'] as const) {
+      expect(runtimeFlowerMethodAllowed(path, method)).toBe(['GET', 'PUT', 'POST'].includes(method));
+    }
+    for (const suffix of ['?source=upload', '/chunk', '#fragment']) expect(() => runtimeFlowerPath(path + suffix)).toThrow();
+  });
+
   it('allows bounded file previews with exactly one path and the inert preview flag', () => {
     const path = '/_redeven_proxy/api/fs/file?path=%2Fproject%2Freport.html&preview=1';
     expect(runtimeFlowerPath(path)).toBe(path);

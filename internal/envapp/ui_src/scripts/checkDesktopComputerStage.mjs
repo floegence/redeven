@@ -351,9 +351,12 @@ try {
     await page.getByRole('button', { name: 'Browser and desktop', exact: true }).click();
     await page.getByRole('dialog', { name: 'Browser and desktop', exact: true }).getByRole('button', { name: 'Browser settings', exact: true }).click();
     const browserSetup = page.getByRole('dialog', { name: 'Built-in headless browser', exact: true });
+    // Read-only preflight exposes transport failures before waiting on UI copy.
+    await request('GET', '/_redeven_proxy/api/browser/installation');
+    const download = browserSetup.getByRole('radio', { name: /^Download in environment/u });
     const install = browserSetup.getByRole('button', { name: 'Download and install', exact: true });
-    await Promise.race([install.waitFor(), browserSetup.getByText('Ready for web tasks. Website sign-ins are saved separately.', { exact: true }).waitFor()]);
-    if (await install.isVisible()) await install.click();
+    await Promise.race([download.waitFor(), browserSetup.getByText('Ready for web tasks. Website sign-ins are saved separately.', { exact: true }).waitFor()]);
+    if (await download.isVisible()) { await download.check(); await install.click(); }
     await browserSetup.getByText('Ready for web tasks. Website sign-ins are saved separately.', { exact: true }).waitFor({ timeout: 240000 });
     await browserSetup.getByLabel('Close', { exact: true }).click();
     console.log('Isolated browser prepared through the built-in installation consent UI.');
