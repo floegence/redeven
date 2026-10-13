@@ -66,10 +66,11 @@ func (c *cli) desktopBridgeCmd(args []string) int {
 	bridge := desktopbridge.Server{
 		DialSurface: dialSurface,
 		Hello: desktopbridge.Hello{
-			RuntimePlatform: state.RuntimePlatform,
-			RuntimeVersion:  Version,
-			RuntimeCommit:   Commit,
-			StartedAtUnixMS: state.Identity.StartedAtUnixMS,
+			RuntimePlatform:          state.RuntimePlatform,
+			RuntimeLinuxDistribution: state.RuntimeLinuxDistribution,
+			RuntimeVersion:           Version,
+			RuntimeCommit:            Commit,
+			StartedAtUnixMS:          state.Identity.StartedAtUnixMS,
 			LocalUI: desktopbridge.HelloLocalUI{
 				URLs:             append([]string{}, state.Endpoint.LocalUIURLs...),
 				AddressIssues:    state.Endpoint.LocalUIAddressIssues,

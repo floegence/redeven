@@ -212,9 +212,13 @@ describe('linked environment owner interactions', () => {
     await selectTab(card, 1);
     const tab = card.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')!;
     tab.focus();
-    for (const runtime_platform of ['macos', 'linux', 'windows', undefined] as const) {
+    for (const [runtime_platform, runtime_linux_distribution, brand] of [
+      ['linux', 'ubuntu', 'Ubuntu'], ['linux', 'debian', 'Debian'], ['linux', 'fedora', 'Fedora'],
+      ['linux', 'unrecognized-derivative', 'Linux'], ['macos', 'ubuntu', 'macOS'],
+      ['linux', undefined, 'Linux'], ['windows', undefined, 'Windows'], [undefined, undefined, undefined],
+    ] as const) {
       h.publish({ ...structuredClone(fixture.snapshot), environments: fixture.snapshot.environments.map(entry =>
-        entry.id === runtime.id ? { ...entry, runtime_platform } : entry) });
+        entry.id === runtime.id ? { ...entry, runtime_platform, runtime_linux_distribution } : entry) });
       await settle();
       expect(document.querySelector(`[data-environment-group="${runtime.id}"]`)).toBe(card);
       expect(card.querySelector('.redeven-environment-title')).toBe(title);
@@ -228,6 +232,7 @@ describe('linked environment owner interactions', () => {
       if (runtime_platform) {
         expect(graphic?.dataset.runtimePlatform).toBe(runtime_platform);
         expect(graphic?.alt).toContain('Runtime operating system:');
+        expect(graphic?.alt).toContain(brand);
       } else {
         expect(graphic?.dataset.runtimePlatform).toBe('unknown');
         expect(graphic?.alt).toBe('Runtime operating system unknown');

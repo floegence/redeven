@@ -80,11 +80,13 @@ describe('runtimeState', () => {
       const server = http.createServer((_request, response) => {
         const payload = JSON.parse(openableHealthPayload(123));
         payload.data.runtime_platform = raw;
+        payload.data.runtime_linux_distribution = 'Ubuntu';
         response.writeHead(200, { 'Content-Type': 'application/json' }); response.end(JSON.stringify(payload));
       });
       const baseURL = await listenOnLoopback(server);
       try {
         expect(expectProbeSuccess(await probeExternalLocalUIHealth(baseURL)).runtime_platform).toBe(expected);
+        expect(expectProbeSuccess(await probeExternalLocalUIHealth(baseURL)).runtime_linux_distribution).toBe(expected === 'linux' ? 'ubuntu' : undefined);
         const startup: StartupReport = { local_ui_url: '', local_ui_urls: [], local_ui_bridge_url: baseURL,
           local_ui_bridge_token: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' };
         expect(expectProbeSuccess(await probeLocalRuntimeBridgeHealth(startup)).runtime_platform).toBe(expected);

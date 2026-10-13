@@ -7,10 +7,12 @@ import { fileURLToPath } from 'node:url';
 import { collectEnvironmentPlatformIconAssets } from './environment_platform_icon_integrity.mjs';
 const root = fileURLToPath(new URL('..', import.meta.url));
 
-test('validates the pinned local OS and default device assets and both license notices', () => {
+test('validates the pinned OS, distribution and default device assets and all license notices', () => {
   const result = collectEnvironmentPlatformIconAssets(root);
-  assert.deepEqual(result.rows.map(row => row.license), ['CC0-1.0', 'CC0-1.0', 'CC0-1.0', 'MIT', 'MIT']);
-  assert.equal(result.licenseNotices.length, 2);
+  assert.equal(result.rows.length, 23);
+  assert.equal(result.rows.find(row => row.label === 'Debian').license, 'CC-BY-SA-3.0');
+  assert.equal(result.rows.find(row => row.label === 'Fedora').license, 'Custom');
+  assert.equal(result.licenseNotices.length, 6);
 });
 for (const [name, mutate, failure] of [
   ['asset bytes', dir => fs.appendFileSync(path.join(dir, 'desktop/src/welcome/assets/environment-platform-icons/apple.svg'), '\n'), /hash mismatch/],
@@ -23,8 +25,8 @@ for (const [name, mutate, failure] of [
 ]) test(`rejects changed ${name}`, () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'redeven-platform-icons-'));
   try {
-    for (const file of ['assets/environment_platform_icons.json', 'assets/licenses/CC0-1.0.txt', 'assets/licenses/thesvg-MIT.txt',
-      ...['apple.svg', 'apple-dark.svg', 'linux.svg', 'windows.svg', 'default-device.svg'].map(file => `desktop/src/welcome/assets/environment-platform-icons/${file}`)]) {
+    for (const file of ['assets/environment_platform_icons.json', 'assets/licenses/CC0-1.0.txt', 'assets/licenses/thesvg-MIT.txt', 'assets/licenses/CC-BY-SA-2.5.txt', 'assets/licenses/CC-BY-SA-3.0.txt', 'assets/licenses/CC-BY-SA-4.0.txt', 'assets/licenses/fedora-trademark-guidelines.txt',
+      ...JSON.parse(fs.readFileSync(path.join(root, 'assets/environment_platform_icons.json'), 'utf8')).assets.map(asset => `desktop/src/welcome/assets/environment-platform-icons/${asset.file}`)]) {
       fs.mkdirSync(path.dirname(path.join(dir, file)), { recursive: true });
       fs.copyFileSync(path.join(root, file), path.join(dir, file));
     }

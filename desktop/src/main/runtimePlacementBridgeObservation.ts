@@ -81,6 +81,7 @@ export async function observeRuntimePlacementBridge(
             ?? record.startup.started_at_unix_ms,
           runtime_platform: startup.runtime_platform
             ?? record.startup.runtime_platform,
+          runtime_linux_distribution: startup.runtime_linux_distribution,
           runtime_service: startup.runtime_service ?? record.startup.runtime_service,
         },
       }),

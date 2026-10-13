@@ -14,7 +14,7 @@ import {
   type RuntimeServiceSnapshot,
 } from '../shared/runtimeService';
 import { parseLocalUIExposure, type LocalUIExposure } from '../shared/localUIExposure';
-import { normalizeDesktopRuntimePlatform } from '../shared/desktopRuntimePlatform';
+import { normalizeDesktopRuntimeLinuxDistribution, normalizeDesktopRuntimePlatform } from '../shared/desktopRuntimePlatform';
 import {
   DESKTOP_PRIVATE_BRIDGE_TOKEN_HEADER,
   normalizeDesktopPrivateBridgeToken,
@@ -70,6 +70,7 @@ type RuntimeProbeStatus = Readonly<{
   pid?: number;
   started_at_unix_ms?: number;
   runtime_platform?: StartupReport['runtime_platform'];
+  runtime_linux_distribution?: StartupReport['runtime_linux_distribution'];
   runtime_service?: RuntimeServiceSnapshot;
 }>;
 
@@ -221,6 +222,7 @@ function parseLocalRuntimeHealthResponse(raw: string): RuntimeProbeStatus | null
         return startedAtUnixMS ? { started_at_unix_ms: startedAtUnixMS } : {};
       })(),
       runtime_platform: normalizeDesktopRuntimePlatform(data.runtime_platform),
+      runtime_linux_distribution: normalizeDesktopRuntimeLinuxDistribution(data.runtime_linux_distribution, data.runtime_platform),
       ...(data.runtime_service ? { runtime_service: normalizeRuntimeServiceSnapshot(data.runtime_service) } : {}),
     };
   } catch {
@@ -451,6 +453,7 @@ function startupReportFromProbeStatus(baseURL: string, status: RuntimeProbeStatu
     ...(status.pid ? { pid: status.pid } : {}),
     ...(status.started_at_unix_ms ? { started_at_unix_ms: status.started_at_unix_ms } : {}),
     ...(status.runtime_platform ? { runtime_platform: status.runtime_platform } : {}),
+    ...(status.runtime_linux_distribution ? { runtime_linux_distribution: status.runtime_linux_distribution } : {}),
     ...(status.runtime_service ? { runtime_service: status.runtime_service } : {}),
   };
 }
@@ -465,6 +468,7 @@ function probeStatusFromStartup(startup: StartupReport): RuntimeProbeStatus {
     ...(startup.pid ? { pid: startup.pid } : {}),
     ...(startup.started_at_unix_ms ? { started_at_unix_ms: startup.started_at_unix_ms } : {}),
     ...(startup.runtime_platform ? { runtime_platform: startup.runtime_platform } : {}),
+    ...(startup.runtime_linux_distribution ? { runtime_linux_distribution: startup.runtime_linux_distribution } : {}),
     ...(startup.runtime_service ? { runtime_service: startup.runtime_service } : {}),
   };
 }

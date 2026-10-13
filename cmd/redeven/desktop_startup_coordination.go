@@ -67,11 +67,13 @@ func writeDesktopReadyLaunchReport(reportPath string, startup runtimeStartupRepo
 		StartedAtUnixMS:          startup.StartedAtUnixMS,
 		RuntimeService:           startup.RuntimeService,
 		RuntimePlatform:          startup.RuntimePlatform,
+		RuntimeLinuxDistribution: startup.RuntimeLinuxDistribution,
 	})
 }
 
 type runtimeStartupReport struct {
 	RuntimePlatform          string
+	RuntimeLinuxDistribution string
 	LocalUIURL               string
 	LocalUIURLs              []string
 	LocalUIAddressIssues     []runtimemanagement.LocalUIAddressIssue
@@ -100,12 +102,13 @@ func buildRuntimeStartupReport(status runtimemanagement.RuntimeAttachStatus) run
 		endpoint = &runtimemanagement.RuntimeAttachEndpoint{}
 	}
 	return runtimeStartupReport{
-		RuntimePlatform:      status.RuntimePlatform,
-		LocalUIURL:           endpoint.LocalUIURL,
-		LocalUIURLs:          slices.Clone(endpoint.LocalUIURLs),
-		LocalUIAddressIssues: endpoint.LocalUIAddressIssues,
-		LocalUIBridgeURL:     endpoint.LocalUIBridgeURL,
-		LocalUIBridgeToken:   endpoint.LocalUIBridgeToken,
+		RuntimePlatform:          status.RuntimePlatform,
+		RuntimeLinuxDistribution: status.RuntimeLinuxDistribution,
+		LocalUIURL:               endpoint.LocalUIURL,
+		LocalUIURLs:              slices.Clone(endpoint.LocalUIURLs),
+		LocalUIAddressIssues:     endpoint.LocalUIAddressIssues,
+		LocalUIBridgeURL:         endpoint.LocalUIBridgeURL,
+		LocalUIBridgeToken:       endpoint.LocalUIBridgeToken,
 		RuntimeControl: func() *runtimeControlEndpoint {
 			if endpoint.RuntimeControl == nil {
 				return nil

@@ -13,7 +13,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle, Tag, Tabs, TabPan
 import { Clock, Cloud, MonitorPointer, Pin, Refresh, Search, Settings, Terminal, Trash, Link } from '@floegence/floe-webapp-core/icons';
 import { FlowerSoftAuraIcon, type FlowerTurnLauncherAnchor } from '../../../internal/flower_ui/src';
 import type { DesktopGatewaySource } from '../shared/desktopGateway';
-import type { DesktopRuntimePlatform } from '../shared/desktopRuntimePlatform';
+import { normalizeDesktopRuntimeLinuxDistribution, type DesktopRuntimePlatform } from '../shared/desktopRuntimePlatform';
 import type { DesktopI18n } from '../shared/i18n';
 import type { DesktopEnvironmentEntry, DesktopLauncherActionProgress } from '../shared/desktopLauncherIPC';
 import type { EnvironmentCardFactsBlock, EnvironmentSplitActionButton, EnvironmentProgressPanel } from './App';
@@ -42,9 +42,44 @@ const environmentPlatformAssets: Record<DesktopRuntimePlatform, { url: string; d
 };
 const defaultEnvironmentDeviceIcon = new URL('./assets/environment-platform-icons/default-device.svg', import.meta.url).href;
 
-export function EnvironmentPlatformIcon(props: Readonly<{ platform?: DesktopRuntimePlatform; i18n: DesktopI18n }>) {
+// Original theSVG colors and exact os-release identities; never match ID_LIKE.
+const distributionAssets: Record<string, { url: string; name: string }> = {
+  ubuntu: { url: new URL('./assets/environment-platform-icons/ubuntu.svg', import.meta.url).href, name: 'Ubuntu' },
+  debian: { url: new URL('./assets/environment-platform-icons/debian.svg', import.meta.url).href, name: 'Debian' },
+  fedora: { url: new URL('./assets/environment-platform-icons/fedora.svg', import.meta.url).href, name: 'Fedora' },
+  arch: { url: new URL('./assets/environment-platform-icons/arch-linux.svg', import.meta.url).href, name: 'Arch Linux' },
+  alpine: { url: new URL('./assets/environment-platform-icons/alpine-linux.svg', import.meta.url).href, name: 'Alpine Linux' },
+  centos: { url: new URL('./assets/environment-platform-icons/centos.svg', import.meta.url).href, name: 'CentOS' },
+  almalinux: { url: new URL('./assets/environment-platform-icons/almalinux.svg', import.meta.url).href, name: 'AlmaLinux' },
+  rocky: { url: new URL('./assets/environment-platform-icons/rocky-linux.svg', import.meta.url).href, name: 'Rocky Linux' },
+  rhel: { url: new URL('./assets/environment-platform-icons/red-hat.svg', import.meta.url).href, name: 'Red Hat Enterprise Linux' },
+  linuxmint: { url: new URL('./assets/environment-platform-icons/linux-mint.svg', import.meta.url).href, name: 'Linux Mint' },
+  manjaro: { url: new URL('./assets/environment-platform-icons/manjaro.svg', import.meta.url).href, name: 'Manjaro' },
+  nixos: { url: new URL('./assets/environment-platform-icons/nixos.svg', import.meta.url).href, name: 'NixOS' },
+  opensuse: { url: new URL('./assets/environment-platform-icons/opensuse.svg', import.meta.url).href, name: 'openSUSE' },
+  sles: { url: new URL('./assets/environment-platform-icons/suse.svg', import.meta.url).href, name: 'SUSE Linux Enterprise' },
+  kali: { url: new URL('./assets/environment-platform-icons/kali-linux.svg', import.meta.url).href, name: 'Kali Linux' },
+  gentoo: { url: new URL('./assets/environment-platform-icons/gentoo.svg', import.meta.url).href, name: 'Gentoo' },
+  pop: { url: new URL('./assets/environment-platform-icons/pop-os.svg', import.meta.url).href, name: 'Pop!_OS' },
+  raspbian: { url: new URL('./assets/environment-platform-icons/raspberry-pi.svg', import.meta.url).href, name: 'Raspberry Pi OS' },
+};
+const distributionAliases: Record<string, string> = {
+  'opensuse-leap': 'opensuse', 'opensuse-tumbleweed': 'opensuse', sled: 'sles',
+};
+
+function environmentLinuxDistributionAsset(id: string | undefined) {
+  if (!id) return undefined;
+  const key = Object.hasOwn(distributionAliases, id) ? distributionAliases[id] : id;
+  return Object.hasOwn(distributionAssets, key) ? distributionAssets[key] : undefined;
+}
+
+export function EnvironmentPlatformIcon(props: Readonly<{ platform?: DesktopRuntimePlatform; linuxDistribution?: string; i18n: DesktopI18n }>) {
   const theme = useTheme();
-  const asset = () => props.platform ? environmentPlatformAssets[props.platform] : undefined;
+  const distribution = () => normalizeDesktopRuntimeLinuxDistribution(props.linuxDistribution, props.platform);
+  const asset = (): { url: string; darkUrl?: string; name: string } | undefined => {
+    const linux = environmentLinuxDistributionAsset(distribution());
+    return linux ?? (props.platform ? environmentPlatformAssets[props.platform] : undefined);
+  };
   const url = () => {
     const current = asset();
     return theme.resolvedTheme() === 'dark' && current?.darkUrl ? current.darkUrl : current?.url ?? defaultEnvironmentDeviceIcon;
@@ -57,7 +92,7 @@ export function EnvironmentPlatformIcon(props: Readonly<{ platform?: DesktopRunt
   return (
     <span class="redeven-environment-platform-slot" data-runtime-platform-slot>
       <img class="redeven-environment-platform-icon" src={url()} alt={label()} title={label()} draggable={false}
-        data-runtime-platform={props.platform ?? 'unknown'} />
+        data-runtime-platform={props.platform ?? 'unknown'} data-runtime-linux-distribution={distribution()} />
     </span>
   );
 }
@@ -910,7 +945,7 @@ function EnvironmentOwnerSurface(
         <div class="flex items-start justify-between gap-2">
           <div class="min-w-0 flex-1">
             <div class="redeven-environment-title-row">
-              <EnvironmentPlatformIcon platform={runtime().runtime_platform} i18n={props.i18n} />
+              <EnvironmentPlatformIcon platform={runtime().runtime_platform} linuxDistribution={runtime().runtime_linux_distribution} i18n={props.i18n} />
               <CardTitle
                 class="redeven-environment-title truncate select-text text-[length:var(--floe-type-control)] font-medium leading-5"
                 title={runtime().label}

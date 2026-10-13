@@ -940,6 +940,11 @@ components:
             - macos
             - linux
             - windows
+        runtime_linux_distribution:
+          type: string
+          description: Optional os-release ID reported by a Linux Runtime; absent for other operating systems. ID_LIKE and Cloud identity are not distribution identity.
+          maxLength: 64
+          pattern: '^[a-z0-9._-]+$'
         observed_at_unix_ms:
           type: integer
           format: int64

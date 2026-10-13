@@ -450,6 +450,7 @@ export type DesktopEnvironmentEntry = Readonly<{
   runtime_service?: RuntimeServiceSnapshot;
   runtime_started_at_unix_ms?: number;
   runtime_platform?: DesktopRuntimePlatform;
+  runtime_linux_distribution?: string;
   runtime_maintenance?: DesktopRuntimeMaintenanceRequirement;
   runtime_operations: DesktopRuntimeOperationPlans;
   auto_runtime_probe_enabled?: boolean;

@@ -15,7 +15,7 @@ import {
   providerEnvironmentSource,
 } from './environmentSourceRegistry';
 import type { DesktopControlPlaneSummary } from '../shared/cloud';
-import { normalizeDesktopRuntimePlatform } from '../shared/desktopRuntimePlatform';
+import { normalizeDesktopRuntimeLinuxDistribution, normalizeDesktopRuntimePlatform } from '../shared/desktopRuntimePlatform';
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
@@ -113,10 +113,12 @@ export function buildGatewayEnvironmentEntries(
   const byID = new Map(entries.map(entry => [entry.id, entry]));
   for (const session of openSessionEntries) {
     const catalog = byID.get(session.id);
-    // Sessions contribute window state, never catalog identity or access authority.
+    // Sessions contribute window state and observed Runtime OS facts, never catalog identity or access authority.
     byID.set(session.id, catalog ? {
       ...catalog,
       local_ui_url: session.local_ui_url,
+      runtime_platform: session.runtime_platform ?? catalog.runtime_platform,
+      runtime_linux_distribution: normalizeDesktopRuntimeLinuxDistribution(session.runtime_linux_distribution, session.runtime_platform ?? catalog.runtime_platform),
       window_state: session.window_state,
       is_open: session.is_open,
       is_opening: session.is_opening,

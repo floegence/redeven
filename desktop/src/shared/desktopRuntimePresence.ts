@@ -44,6 +44,7 @@ export type DesktopRuntimePresence = Readonly<{
   local_ui_address_issues?: readonly LocalUIAddressIssue[];
   started_at_unix_ms?: number;
   runtime_platform?: DesktopRuntimePlatform;
+  runtime_linux_distribution?: string;
   openable: boolean;
   open_connection_required?: boolean;
   runtime_package_state?: DesktopRuntimePackageState;

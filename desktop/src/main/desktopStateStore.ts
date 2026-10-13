@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { normalizeDesktopRuntimePlatformFactsMap, type DesktopRuntimePlatformFactsMap } from '../shared/desktopRuntimePlatform';
 
 export type DesktopWindowState = Readonly<{
   x: number;
@@ -12,6 +13,7 @@ export type DesktopWindowState = Readonly<{
 
 type DesktopStateFile = Readonly<{
   version?: number;
+  runtime_platform_facts?: unknown;
   renderer_storage?: Readonly<Record<string, string>>;
   windows?: Readonly<Record<string, DesktopWindowState>>;
   updater?: Readonly<{
@@ -22,6 +24,7 @@ type DesktopStateFile = Readonly<{
 
 type DesktopStateSnapshot = {
   version: 1;
+  runtime_platform_facts: DesktopRuntimePlatformFactsMap;
   renderer_storage: Record<string, string>;
   windows: Record<string, DesktopWindowState>;
   updater: {
@@ -66,6 +69,7 @@ function normalizeDesktopWindowState(value: unknown): DesktopWindowState | null 
 function normalizeSnapshot(value: unknown): DesktopStateSnapshot {
   const snapshot: DesktopStateSnapshot = {
     version: 1,
+    runtime_platform_facts: {},
     renderer_storage: {},
     windows: {},
     updater: {
@@ -79,6 +83,7 @@ function normalizeSnapshot(value: unknown): DesktopStateSnapshot {
   }
 
   const candidate = value as DesktopStateFile;
+  snapshot.runtime_platform_facts = normalizeDesktopRuntimePlatformFactsMap(candidate.runtime_platform_facts);
   if (candidate.renderer_storage && typeof candidate.renderer_storage === 'object') {
     for (const [rawKey, rawValue] of Object.entries(candidate.renderer_storage)) {
       const key = compact(rawKey);
@@ -119,6 +124,15 @@ export class DesktopStateStore {
   private snapshot: DesktopStateSnapshot | null = null;
 
   constructor(private readonly filePath: string) {}
+
+  runtimePlatformFacts(): DesktopRuntimePlatformFactsMap {
+    return this.ensureLoaded().runtime_platform_facts;
+  }
+
+  setRuntimePlatformFacts(facts: DesktopRuntimePlatformFactsMap): void {
+    this.ensureLoaded().runtime_platform_facts = normalizeDesktopRuntimePlatformFactsMap(facts);
+    this.persist();
+  }
 
   private ensureLoaded(): DesktopStateSnapshot {
     if (this.snapshot) {

@@ -2,7 +2,7 @@ import type {
   DesktopControlPlaneSyncState,
   DesktopProviderCatalogFreshness,
 } from './providerEnvironmentState';
-import { normalizeDesktopRuntimePlatform, type DesktopRuntimePlatform } from './desktopRuntimePlatform';
+import { normalizeDesktopRuntimeLinuxDistribution, normalizeDesktopRuntimePlatform, type DesktopRuntimePlatform } from './desktopRuntimePlatform';
 
 export type DesktopCloudProtocolVersion = 'rcpp-v4';
 
@@ -53,6 +53,7 @@ export type DesktopCloudEnvironmentRuntimeHealth = Readonly<{
   offline_reason_code: string;
   offline_reason: string;
   runtime_platform?: DesktopRuntimePlatform;
+  runtime_linux_distribution?: string;
 }>;
 
 export type DesktopCloudEnvironment = Readonly<{
@@ -222,6 +223,7 @@ export function normalizeDesktopCloudEnvironmentRuntimeHealth(
     offline_reason_code: compact(candidate.offline_reason_code),
     offline_reason: compact(candidate.offline_reason),
     runtime_platform: normalizeDesktopRuntimePlatform(candidate.runtime_platform),
+    runtime_linux_distribution: normalizeDesktopRuntimeLinuxDistribution(candidate.runtime_linux_distribution, candidate.runtime_platform),
   };
 }
 

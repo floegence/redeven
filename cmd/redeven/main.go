@@ -933,11 +933,12 @@ func (c *cli) runCmd(args []string) int {
 		}
 		if reportPath := strings.TrimSpace(*startupReportFile); reportPath != "" {
 			if err := writeDesktopReadyLaunchReport(reportPath, runtimeStartupReport{
-				RuntimePlatform:    runtimemanagement.RuntimePlatform(),
-				LocalUIURL:         firstNonEmptyString(localUIURLs),
-				LocalUIURLs:        append([]string(nil), localUIURLs...),
-				LocalUIBridgeURL:   srv.LocalUIBridgeURLForDesktop(),
-				LocalUIBridgeToken: srv.LocalUIBridgeTokenForDesktop(),
+				RuntimePlatform:          runtimemanagement.RuntimePlatform(),
+				RuntimeLinuxDistribution: runtimemanagement.RuntimeLinuxDistribution(),
+				LocalUIURL:               firstNonEmptyString(localUIURLs),
+				LocalUIURLs:              append([]string(nil), localUIURLs...),
+				LocalUIBridgeURL:         srv.LocalUIBridgeURLForDesktop(),
+				LocalUIBridgeToken:       srv.LocalUIBridgeTokenForDesktop(),
 				RuntimeControl: func() *runtimeControlEndpoint {
 					endpoint := srv.RuntimeControlEndpointForDesktopBridge()
 					if endpoint == nil {

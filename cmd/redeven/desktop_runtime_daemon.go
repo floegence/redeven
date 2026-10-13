@@ -389,6 +389,7 @@ func desktopLaunchReportFromRuntimeStatus(state runtimemanagement.RuntimeAttachS
 		StartedAtUnixMS:          state.Identity.StartedAtUnixMS,
 		RuntimeService:           state.RuntimeService,
 		RuntimePlatform:          state.RuntimePlatform,
+		RuntimeLinuxDistribution: state.RuntimeLinuxDistribution,
 	}
 }
 
