@@ -8,7 +8,7 @@ require (
 	github.com/bodgit/sevenzip v1.6.1
 	github.com/coreos/go-oidc/v3 v3.21.0
 	github.com/creack/pty v1.1.24
-	github.com/floegence/floe-native-apps v0.22.37
+	github.com/floegence/floe-native-apps v0.22.40
 	github.com/floegence/floeterm/terminal-go v0.19.2
 	github.com/floegence/floret/v7 v7.30.0
 	github.com/floegence/flowersec/flowersec-go/v5 v5.11.0
@@ -31,7 +31,7 @@ require (
 	golang.org/x/mod v0.41.0
 	golang.org/x/net v0.60.0
 	golang.org/x/sync v0.23.0
-	golang.org/x/sys v0.48.0
+	golang.org/x/sys v0.49.0
 	golang.org/x/term v0.46.0
 	golang.org/x/text v0.42.0
 	gopkg.in/yaml.v3 v3.0.1

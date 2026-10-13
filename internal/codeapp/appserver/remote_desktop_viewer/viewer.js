@@ -15,6 +15,7 @@ let original = false, quality = 'smooth', audio = false, volume = .7, pinned = f
 let textInput = 'host';
 let awaitingMedia = [], reconnectAttempts = 0, noticeTimer, awaitingState = false;
 let nativeFullscreen = false, pendingFullscreen;
+let videoCodecs = ['h264'];
 let audioRequest, disconnectBusy = false, panelTrigger, recoveryTimer;
 const windowBridge = window.redevenHostApplicationWindow;
 const displayOptions = $('display-options');
@@ -139,7 +140,8 @@ function waitForPicture() {
     status('disconnected', 'failure'); $('reconnect').hidden = false; updateTransitionControls();
   }, 10000);
 }
-function picture() { return { mode: quality, max_dimension: quality === 'data' ? 1920 : 2560, frame_rate: quality === 'data' ? 30 : 60, audio, native_pixels: original }; }
+function picture() { return { mode: quality, max_dimension: quality === 'data' ? 1920 : 2560, frame_rate: quality === 'data' ? 30 : 60, audio, native_pixels: original,
+  ...(['x11', 'wayland', 'linux-drm-kms'].includes(backend) ? { codecs: videoCodecs } : {}) }; }
 function configure() { if (state !== 'active') return; changeDesktop('configure', { picture: picture() }); }
 async function setAudio(enabled) {
   if (audioRequest || awaitingState || state !== 'active') return;
@@ -254,6 +256,9 @@ async function connect() {
   if (!HostDesktopPlayer.supported()) { showUnavailable(); return; }
   waitForPicture();
   try {
+    const codecs = await HostDesktopPlayer.supportedCodecs(4096);
+    if (current !== epoch || stopped) return;
+    videoCodecs = codecs;
     const response = await windowTransport.fetch(base + 'ticket', { method: 'POST', credentials: 'same-origin', cache: 'no-store', signal: AbortSignal.timeout(10000) });
     if (!response.ok) {
       if (current !== epoch || stopped) return;

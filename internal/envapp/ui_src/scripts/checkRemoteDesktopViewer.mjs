@@ -1,4 +1,4 @@
-/* global document, window, innerWidth, CompositionEvent, KeyboardEvent, MouseEvent, getComputedStyle */
+/* global document, window, innerWidth, CompositionEvent, KeyboardEvent, MouseEvent, VideoDecoder, getComputedStyle */
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { readFileSync } from 'node:fs';
@@ -17,7 +17,9 @@ const assets = path.join(root, 'internal/codeapp/appserver/remote_desktop_viewer
 const shared = path.join(root, 'internal/codeapp/appserver/host_application_viewer');
 const native = JSON.parse(execFileSync('go', ['list', '-m', '-json', 'github.com/floegence/floe-native-apps'], { cwd: root, env: { ...process.env, GOWORK: 'off' }, encoding: 'utf8' })).Dir;
 const token = 'qualification-private-ticket';
-const backend = process.argv.includes('--macos') ? 'macos' : process.argv.includes('--wayland') ? 'wayland' : 'x11';
+const backend = process.argv.includes('--macos') ? 'macos' : process.argv.includes('--wayland') ? 'wayland' : process.argv.includes('--linux-service') ? 'linux-drm-kms' : 'x11';
+const noVP9 = process.argv.includes('--no-vp9');
+const codecOnly = process.argv.includes('--codec-only');
 const separateCursor = backend !== 'macos' && !process.argv.includes('--embedded-cursor');
 const controlCursor = separateCursor ? 'default' : 'none';
 const unsupportedReason = process.argv.includes('--unsupported-gpu') ? 'GPU_SCANOUT_UNSUPPORTED' : '';
@@ -175,7 +177,12 @@ try {
     page = await popup;
   }
   const errors = []; page.on('pageerror', error => { errors.push(error.message); console.error('Viewer error:', error.stack); });
-  await page.addInitScript(() => {
+  await page.addInitScript(({ noVP9, codecOnly }) => {
+    if (codecOnly || noVP9) {
+      const supported = VideoDecoder.isConfigSupported.bind(VideoDecoder);
+      VideoDecoder.isConfigSupported = async config => config.codec.startsWith('vp09.')
+        ? { supported: !noVP9, config } : supported(config);
+    }
     window.qualificationAudioSamples = [];
     const Context = window.AudioContext;
     window.AudioContext = class extends Context {
@@ -194,7 +201,7 @@ try {
     };
     const denied = async () => { throw new DOMException('Fixture clipboard permission denied', 'NotAllowedError'); };
     Object.defineProperty(navigator, 'clipboard', { value: { readText: denied, writeText: denied } });
-  });
+  }, { noVP9, codecOnly });
   await page.goto(`http://127.0.0.1:${server.address().port}/_redeven_desktop/`);
   if (unsupportedReason) {
     await page.waitForFunction(() => document.querySelector('#status').textContent === 'Desktop unavailable');
@@ -216,6 +223,38 @@ try {
     assert.equal(connectionCount, unsupportedTickets, 'unsupported graphics triggered an automatic reconnect loop');
     assert.deepEqual(errors, []);
     console.log(JSON.stringify({ passed: true, backend: 'linux-drm-kms', checks: ['unsupported scanout reason', 'input disabled', 'unlock hidden', 'no misleading retry', 'no connect command'] }));
+  } else if (codecOnly) {
+    await page.waitForFunction(() => document.querySelector('#connection').hidden);
+    const expected = backend === 'macos' ? undefined : noVP9 ? ['h264'] : ['vp9', 'h264'];
+    const checkOffer = method => assert.deepEqual(messages.findLast(item => item.command.method === method)?.command.picture.codecs,
+      expected, `${backend} ${method} must offer only client-supported codecs`);
+    checkOffer('connect');
+    paint();
+    await page.waitForFunction(() => !document.querySelector('.floe-remote-input').disabled);
+    await page.locator('#settings').click();
+    await page.locator('#quality').selectOption('clarity');
+    await page.waitForFunction(() => !document.querySelector('#quality').disabled);
+    checkOffer('configure');
+    await page.keyboard.press('Escape');
+    const before = connectionCount;
+    control.close();
+    for (let attempt = 0; connectionCount === before && attempt < 100; attempt++) await page.waitForTimeout(20);
+    await page.waitForFunction(() => document.querySelector('#connection').hidden);
+    assert(connectionCount > before, 'codec negotiation prevented reconnect');
+    checkOffer('connect');
+    // A pending decoder probe must not obtain a ticket after explicit disconnect.
+    await page.evaluate(() => { VideoDecoder.isConfigSupported = () => new Promise(resolve => { window.finishCodecProbe = resolve; }); });
+    control.close();
+    await page.waitForFunction(() => typeof window.finishCodecProbe === 'function');
+    const tickets = connectionCount;
+    failDisconnect = false;
+    await page.locator('#disconnect').click();
+    await page.waitForFunction(() => window.transportEvents.includes('disposed'));
+    await page.evaluate(() => window.finishCodecProbe({ supported: true }));
+    await page.waitForTimeout(100);
+    assert.equal(connectionCount, tickets, 'retired codec probe acquired a new attachment ticket');
+    assert.deepEqual(errors, []);
+    console.log(JSON.stringify({ passed: true, backend, noVP9, checks: ['client codec offer', 'configuration offer', 'reconnect offer', 'retired asynchronous probe'] }));
   } else {
   await page.waitForFunction(() => document.querySelector('#connection').hidden);
   const canvasCursor = () => page.locator('#desktop').evaluate(element => getComputedStyle(element).cursor);
