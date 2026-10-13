@@ -1,11 +1,45 @@
 package ai
 
 import (
+	"encoding/json"
 	"reflect"
 	"testing"
 
 	"github.com/floegence/redeven/internal/config"
 )
+
+func TestModelDirectoryPublishesBackendDefaultsWithoutConfiguredProviders(t *testing.T) {
+	s := &Service{}
+	directory := s.projectModelDirectory(&config.AIConfig{}, &ModelsResponse{Runtime: &AIRuntimeStatus{}}, nil)
+	raw, err := json.Marshal(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var response struct {
+		Defaults map[string][]ModelCatalogModel `json:"provider_defaults"`
+	}
+	if err := json.Unmarshal(raw, &response); err != nil {
+		t.Fatal(err)
+	}
+	count := 0
+	for _, kind := range []string{"openai", "anthropic", "google", "moonshot", "chatglm", "deepseek", "qwen", "xai", "groq"} {
+		want := config.AIProviderCatalog(kind)
+		got := response.Defaults[kind]
+		if len(want) == 0 || len(got) != len(want) {
+			t.Fatalf("%s defaults: got %d, want %d", kind, len(got), len(want))
+		}
+		for i, model := range got {
+			want[i].EffectiveContextWindowPercent = want[i].EffectiveContextWindowPercentValue()
+			if !reflect.DeepEqual(model.AIProviderModel, want[i]) || model.WebSearch.Status == "" {
+				t.Fatalf("%s/%s defaults differ from backend catalog", kind, model.ModelName)
+			}
+		}
+		count += len(got)
+	}
+	if count != 140 || len(directory.Models) != 0 || len(directory.Sources) != 0 {
+		t.Fatalf("defaults must describe 140 models without configuring a source: %d, %+v", count, directory)
+	}
+}
 
 func TestModelDirectoryRetainsReviewedMetadataForUnavailableSelections(t *testing.T) {
 	for _, providerType := range []string{"openai", "anthropic", "google", "moonshot", "chatglm", "deepseek", "qwen", "xai", "groq"} {

@@ -6,7 +6,7 @@ import { FlowerModelSettings } from '../../../../../../../flower_ui/src/settings
 import { createLocalizedFlowerSurfaceCopy } from '../../../../../../../flower_ui/src/i18n/createLocalizedFlowerSurfaceCopy';
 import { applyFlowerModelDiscovery, flowerProviderModelChoices, setFlowerModelsEnabled, defaultFlowerProviderModels, resolveFlowerProviderModels, serializeFlowerProvider } from '../../../../../../../flower_ui/src/settings/modelSelection';
 import type { FlowerProvider, FlowerProviderDraft } from '../../../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
-import { For, Show, createMemo, createSignal, createEffect, onCleanup, untrack } from 'solid-js';
+import { For, Show, createMemo, createSignal, on, createEffect, onCleanup, untrack } from 'solid-js';
 import { Bot } from '@floegence/floe-webapp-core/icons';
 import { FeedbackIndicator, Button, Tabs } from '@floegence/floe-webapp-core/ui';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
@@ -172,6 +172,7 @@ export function FlowerSection() {
   const [permissionSavedAt, setPermissionSavedAt] = createSignal<number | null>(null);
   const [currentModelID, setCurrentModelID] = createSignal('');
   const [providers, setProviders] = createSignal<AIProviderRow[]>([]);
+  const [providerDefaults, setProviderDefaults] = createSignal<import('../../../../../../../flower_ui/src/contracts/flowerSurfaceContracts').FlowerModelDirectory['provider_defaults']>();
   const providerKeySet = createMemo(() => ctx.settings()?.ai_secrets?.provider_api_key_set ?? {});
   const [providerKeyDraft, setProviderKeyDraft] = createSignal<Record<string, string>>({});
   const [providerKeySaving] = createSignal<Record<string, boolean>>({});
@@ -189,6 +190,13 @@ export function FlowerSection() {
   const [providerDialogProvider, setProviderDialogProvider] = createSignal<AIProviderRow | null>(null);
   const [providerDialogMode, setProviderDialogMode] = createSignal<AIProviderDialogMode>('create');
 
+  createEffect(on(() => [providerDefaults(), providerDialogOpen(), providerDialogProvider()?.type] as const, () => {
+    untrack(() => {
+      const draft = providerDialogProvider();
+      if (providerDialogOpen() && draft) setProviderDialogProvider({ ...draft, model_defaults: providerDefaults()?.[draft.type] });
+    });
+  }));
+
   createEffect(() => {
     const s = ctx.settings();
     if (!s) return;
@@ -200,8 +208,10 @@ export function FlowerSection() {
       const resource = ctx.env.flowerModelReadResource;
       const load = resource ? resource.loadDirectory(true) : fetchLocalApiJSON('/_redeven_proxy/api/ai/models', { method: 'GET' }).then(readFlowerModelDirectory);
       void load.then(directory => {
+        if (ctx.settings() !== s) return;
+        setProviderDefaults(directory.provider_defaults);
         if (ctx.settings() === s && !dirty()) {
-          setProviders(configured.map(provider => normalizeAIProviderRowDraft({ ...provider, catalog_models: directory.provider_catalogs?.[provider.id], models: resolveFlowerProviderModels(provider as FlowerProvider, directory.provider_catalogs?.[provider.id]), chatgpt_account: s.chatgpt_accounts?.[provider.id] } as AIProviderRow)));
+          setProviders(configured.map(provider => normalizeAIProviderRowDraft({ ...provider, model_defaults: directory.provider_defaults?.[provider.type], catalog_models: directory.provider_catalogs?.[provider.id], models: resolveFlowerProviderModels({ ...provider, model_defaults: directory.provider_defaults?.[provider.type] } as FlowerProvider, directory.provider_catalogs?.[provider.id]), chatgpt_account: s.chatgpt_accounts?.[provider.id] } as AIProviderRow)));
         }
       }).catch(() => undefined);
     }
@@ -214,7 +224,8 @@ export function FlowerSection() {
     const resource = ctx.env.flowerModelReadResource;
     if (!resource) return;
     const unsubscribe = resource.subscribe(directory => {
-      setProviders(rows => rows.map(provider => applyFlowerModelDiscovery(provider as FlowerProviderDraft, directory.provider_catalogs?.[provider.id] ?? provider.catalog_models ?? []) as AIProviderRow));
+      setProviderDefaults(directory.provider_defaults);
+      setProviders(rows => rows.map(provider => applyFlowerModelDiscovery({ ...provider, model_defaults: directory.provider_defaults?.[provider.type] } as FlowerProviderDraft, directory.provider_catalogs?.[provider.id] ?? provider.catalog_models ?? []) as AIProviderRow));
       const draft = untrack(providerDialogProvider);
       const saved = untrack(providers).find(provider => provider.id === draft?.id);
       if (draft && saved && draft.type === saved.type && draft.base_url === saved.base_url
@@ -305,7 +316,7 @@ export function FlowerSection() {
     } finally { setSaving(false); }
   };
 
-  const addAIProviderAndOpenDialog = () => { const d = newAIProviderDraft(); setProviderDialogProvider(d); setProviderDialogIndex(null); setProviderDialogMode('create'); setProviderDialogOpen(true); };
+  const addAIProviderAndOpenDialog = () => { const d = { ...newAIProviderDraft(), model_defaults: providerDefaults()?.openai }; setProviderDialogProvider(d); setProviderDialogIndex(null); setProviderDialogMode('create'); setProviderDialogOpen(true); };
   const openAIProviderDialog = (i: number) => { const p = providers()[i]; if (!p) return; setDiscoveryError(''); setProviderDialogProvider(cloneAIProviderRow(p)); setProviderDialogIndex(i); setProviderDialogMode('edit'); setProviderDialogOpen(true); };
   const closeAIProviderDialog = () => { setProviderDialogOpen(false); setProviderDialogProvider(null); setProviderDialogIndex(null); };
   const confirmAIProviderDialog = () => { const d = providerDialogProvider(); if (!d) return; const idx = providerDialogIndex(); let nps: AIProviderRow[]; if (idx != null) nps = normalizeAIProviders(providers().map((p, i) => (i === idx ? normalizeAIProviderRowDraft(d) : p))); else nps = normalizeAIProviders([...providers(), normalizeAIProviderRowDraft(d)]); const current = String(currentModelID() ?? '').trim(); const nid = current || collectAIModelOptions(nps)[0]?.id || ''; void saveAIProviderBundle(nps, nid, d.id).then((s) => { if (s) closeAIProviderDialog(); }); };
@@ -503,7 +514,7 @@ export function FlowerSection() {
         webSearchKeySet={!!webSearchKeySet()?.[String(providerDialogProvider()?.id ?? '').trim()]} webSearchKeyDraft={webSearchKeyDraft()?.[String(providerDialogProvider()?.id ?? '').trim()] ?? ''} webSearchKeySaving={!!webSearchKeySaving()?.[String(providerDialogProvider()?.id ?? '').trim()]}
         recommendedModels={providerDialogRecommendedModels() as readonly import('../types').AIProviderModelPreset[]} onClearModels={() => updateAIProviderDialogDraft((current) => setFlowerModelsEnabled(current as FlowerProviderDraft, current.models, false) as AIProviderRow)} onDiscoverModels={discoverDialogModels} discoveringModels={discoveringModels()} discoveryError={discoveryError()} onConfirm={confirmAIProviderDialog}
         onChangeName={(v) => updateAIProviderDialogDraft((c) => ({ ...c, name: v }))}
-        onChangeType={(nt) => { const np = providerPresetForType(nt); const npm = defaultFlowerProviderModels(nt).map((model) => modelRowFromPreset(model as AIProviderModel)); updateAIProviderDialogDraft((c) => c.type === nt ? c : { ...c, auth_method: undefined, account_id: undefined, chatgpt_account: undefined, name: providerUsesCustomConnectionName(nt) ? np.name : providerTypeLabel(nt), type: nt, base_url: defaultBaseURLForProviderType(nt), web_search: normalizeAIProviderWebSearchForType(nt, np.web_search), models: npm, model_selection: undefined, catalog_models: undefined }); }}
+        onChangeType={(nt) => { const np = providerPresetForType(nt); const npm = defaultFlowerProviderModels(nt).map((model) => modelRowFromPreset(model as AIProviderModel)); updateAIProviderDialogDraft((c) => c.type === nt ? c : { ...c, auth_method: undefined, account_id: undefined, chatgpt_account: undefined, name: providerUsesCustomConnectionName(nt) ? np.name : providerTypeLabel(nt), type: nt, base_url: defaultBaseURLForProviderType(nt), web_search: normalizeAIProviderWebSearchForType(nt, np.web_search), models: npm, model_selection: undefined, catalog_models: undefined, model_defaults: providerDefaults()?.[nt] }); }}
         onChangeBaseURL={(v) => updateAIProviderDialogDraft((c) => ({ ...c, base_url: v, models: c.models.map((model) => ({ ...model, web_search: undefined })), catalog_models: undefined }))}
         onChangeKeyDraft={(v) => { const id = String(providerDialogProvider()?.id ?? '').trim(); if (id) setProviderKeyDraft((p) => ({ ...p, [id]: v })); }}
         onChangeWebSearchMode={(m) => { updateAIProviderDialogDraft((c) => ({ ...c, web_search: normalizeAIProviderWebSearchForType(c.type, m), models: c.models.map((model) => ({ ...model, web_search: undefined })), catalog_models: undefined })); }}

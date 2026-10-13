@@ -31,6 +31,7 @@ type ModelDirectorySource struct {
 }
 
 type ModelDirectory struct {
+	ProviderDefaults map[string][]ModelCatalogModel `json:"provider_defaults"`
 	ProviderCatalogs map[string][]ModelCatalogModel `json:"provider_catalogs"`
 	Models           []ModelDirectoryModel          `json:"models"`
 	Sources          []ModelDirectorySource         `json:"sources"`
@@ -108,6 +109,14 @@ func (s *Service) readModelDirectory(ctx context.Context, meta *session.Meta, _ 
 
 func (s *Service) projectModelDirectory(cfg *config.AIConfig, out *ModelsResponse, desktopSnapshot *DesktopModelSourceModelSnapshot) ModelDirectory {
 	directory := ModelDirectory{ProviderCatalogs: map[string][]ModelCatalogModel{}, Models: []ModelDirectoryModel{}, Sources: []ModelDirectorySource{}}
+	directory.ProviderDefaults = make(map[string][]ModelCatalogModel)
+	for kind, models := range config.AIProviderCatalogs() {
+		defaults := make([]ModelCatalogModel, 0, len(models))
+		for _, model := range models {
+			defaults = append(defaults, modelCatalogView(config.AIProvider{Type: kind}, model))
+		}
+		directory.ProviderDefaults[kind] = defaults
+	}
 	available := map[string]Model{}
 	for _, m := range out.Models {
 		available[m.ID] = m
@@ -119,7 +128,7 @@ func (s *Service) projectModelDirectory(cfg *config.AIConfig, out *ModelsRespons
 		}
 		directory.ProviderCatalogs[p.ID] = []ModelCatalogModel{}
 		for _, m := range p.CatalogModels() {
-			directory.ProviderCatalogs[p.ID] = append(directory.ProviderCatalogs[p.ID], ModelCatalogModel{AIProviderModel: m, WebSearch: config.ResolveAIWebSearch(p, m.EffectiveWireModelName(), false).AIWebSearchAvailability})
+			directory.ProviderCatalogs[p.ID] = append(directory.ProviderCatalogs[p.ID], modelCatalogView(p, m))
 		}
 		name := firstNonEmpty(p.Name, defaultProviderDisplayName(p), p.ID)
 		source := ModelDirectorySource{ID: p.ID, Kind: modelSourceRuntimeConfig, State: "ready"}

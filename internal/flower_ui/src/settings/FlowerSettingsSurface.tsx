@@ -20,7 +20,6 @@ import type {
 } from '../contracts/flowerSurfaceContracts';
 import {
   defaultBaseURLForFlowerProviderType,
-  defaultFlowerContextWindowForProviderType,
   flowerModelID,
   flowerProviderNeedsWebSearchConfig,
   flowerProviderPresetForType,
@@ -110,6 +109,7 @@ function normalizeProviderForSave(provider: FlowerProviderDraft): FlowerProvider
     chatgpt_attempt: provider.chatgpt_attempt, chatgpt_account: provider.chatgpt_account,
     model_selection: provider.model_selection,
     catalog_models: provider.catalog_models,
+    model_defaults: provider.model_defaults,
     id: trim(provider.id),
     name: flowerProviderUsesCustomName(provider.type) ? trim(provider.name) : flowerProviderTypeLabel(provider.type),
     type: provider.type,
@@ -336,7 +336,7 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
         if (modelNames.has(modelName)) {
           return { ok: false, error: copy().validation.duplicateModel(providerDisplayName(provider, copy().providerTypeLabels), modelName) };
         }
-        if (!model.unavailable && (provider.type === 'openai_compatible' || provider.type === 'openrouter' || provider.type === 'xai' || provider.type === 'groq' || provider.type === 'ollama') && !model.context_window && !defaultFlowerContextWindowForProviderType(provider.type)) {
+        if (!model.unavailable && (provider.type === 'openai_compatible' || provider.type === 'openrouter' || provider.type === 'xai' || provider.type === 'groq' || provider.type === 'ollama') && !model.context_window) {
           return { ok: false, error: copy().validation.modelNeedsContextWindow(model.model_name) };
         }
         modelNames.add(modelName);
@@ -628,6 +628,7 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
       </div>
 
       <FlowerProviderDialog
+        providerDefaults={props.snapshot?.model_directory?.provider_defaults}
         onDiscoverModels={props.onDiscoverModels}
         chatGPTAuth={props.chatGPTAuth}
         chatGPTAvailable={props.snapshot?.auth_capabilities?.openai_chatgpt.available === true}

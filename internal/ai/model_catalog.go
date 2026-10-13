@@ -36,6 +36,11 @@ type ModelCatalogModel struct {
 	WebSearch config.AIWebSearchAvailability `json:"web_search"`
 }
 
+func modelCatalogView(provider config.AIProvider, model config.AIProviderModel) ModelCatalogModel {
+	model.EffectiveContextWindowPercent = model.EffectiveContextWindowPercentValue()
+	return ModelCatalogModel{AIProviderModel: model, WebSearch: config.ResolveAIWebSearch(provider, model.EffectiveWireModelName(), false).AIWebSearchAvailability}
+}
+
 type ModelCatalogResponse struct {
 	Models []ModelCatalogModel `json:"models"`
 }
@@ -91,7 +96,7 @@ func (s *Service) discoverProviderCatalog(ctx context.Context, in ModelCatalogRe
 	provider := config.AIProvider{ID: in.ProviderID, Type: in.Type, BaseURL: in.BaseURL}
 	out := make([]ModelCatalogModel, 0, len(models))
 	for _, model := range models {
-		out = append(out, ModelCatalogModel{AIProviderModel: model, WebSearch: config.ResolveAIWebSearch(provider, model.EffectiveWireModelName(), false).AIWebSearchAvailability})
+		out = append(out, modelCatalogView(provider, model))
 	}
 	return ModelCatalogResponse{Models: out}, nil
 }
@@ -342,7 +347,7 @@ func reviewedChatGPTCatalog(models []chatgpt.Model) ModelCatalogResponse {
 			reviewed = config.AIProviderModel{ModelName: config.AIModelLocalName(accountModel.Slug), WireModelName: accountModel.Slug, Status: "needs_configuration"}
 		}
 		reviewed.DisplayName = accountModel.DisplayName
-		out.Models = append(out.Models, ModelCatalogModel{AIProviderModel: reviewed, WebSearch: config.ResolveAIWebSearch(config.AIProvider{Type: "openai"}, accountModel.Slug, false).AIWebSearchAvailability})
+		out.Models = append(out.Models, modelCatalogView(config.AIProvider{Type: "openai"}, reviewed))
 	}
 	return out
 }

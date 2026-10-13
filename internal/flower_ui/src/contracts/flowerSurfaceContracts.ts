@@ -78,6 +78,8 @@ export type FlowerProvider = Readonly<{
   account_id?: string;
   models: readonly FlowerProviderModel[];
   model_selection?: FlowerModelSelection;
+  // Read-only Runtime defaults; configuration serialization excludes this field.
+  model_defaults?: readonly FlowerProviderModel[];
   catalog_models?: readonly FlowerProviderModel[];
   catalog_error?: string;
 }>;
@@ -134,6 +136,7 @@ export type FlowerModelDirectoryModel = FlowerModelSourceModel & Readonly<{
 }>;
 
 export type FlowerModelDirectory = Readonly<{
+  provider_defaults?: Readonly<Partial<Record<FlowerProviderType, readonly FlowerProviderModel[]>>>;
   provider_catalogs?: Readonly<Record<string, readonly FlowerProviderModel[]>>;
   current_model_id: string;
   models: readonly FlowerModelDirectoryModel[];

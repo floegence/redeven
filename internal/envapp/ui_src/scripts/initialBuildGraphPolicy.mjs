@@ -21,7 +21,6 @@ function isForbiddenInitialModule(moduleId) {
   if (moduleId.startsWith('@floegence/floebrowser/dist/viewer/')) return true;
   if (['FlowerSurface.tsx', 'FlowerInputChoices.tsx', 'SubagentDetailWindow.tsx', 'FlowerComputerStage.tsx', 'settings/FlowerSettingsSurface.tsx']
     .some((panel) => moduleId.endsWith(`/internal/flower_ui/src/${panel}`))) return true;
-  if (moduleId.endsWith('/internal/config/model_catalog.generated.json')) return true;
   if (moduleId === '@floegence/floe-webapp-boot'
       || moduleId.startsWith('@floegence/floe-webapp-boot/')) {
     return true;
@@ -69,6 +68,14 @@ export function analyzeInitialBuildGraph(manifest, chunkModules, entryKey = 'ind
   const javascriptAssets = new Set();
   const cssAssets = new Set();
   const forbiddenModules = [];
+  // Provider defaults belong to the Runtime, including for lazy settings panels.
+  for (const [asset, chunk] of Object.entries(chunkModules.chunks ?? {})) {
+    for (const moduleId of chunk.modules ?? []) {
+      if (/(?:^|\/)internal\/config\/model_catalog\.(generated|legacy)\.json$/u.test(moduleId)) {
+        forbiddenModules.push({ asset, moduleId, path: [asset] });
+      }
+    }
+  }
   for (const key of visited) {
     const item = manifest[key];
     javascriptAssets.add(item.file);

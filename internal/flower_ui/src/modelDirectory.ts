@@ -13,14 +13,13 @@ export function readFlowerModelDirectory(value: unknown): FlowerModelDirectory {
   const directory = response?.directory;
   const states = ['ready', 'pending', 'unavailable'];
   const kinds = ['runtime_config', 'desktop_model_source', 'platform'];
-  const catalogs = directory?.provider_catalogs;
-  const invalidCatalogs = catalogs !== undefined && (!catalogs || typeof catalogs !== 'object' || Array.isArray(catalogs)
+  const invalidCatalogs = [directory?.provider_defaults, directory?.provider_catalogs].some(catalogs => catalogs !== undefined && (!catalogs || typeof catalogs !== 'object' || Array.isArray(catalogs)
     || Object.entries(catalogs).some(([providerID, models]) => !providerID.trim() || !Array.isArray(models)
       || new Set(models.map(model => model?.model_name)).size !== models.length
       || models.some(model => !model || typeof model.model_name !== 'string' || !model.model_name.trim() || model.model_name.includes(String.fromCharCode(0)) || /[\r\n/]/u.test(model.model_name)
         || (model.wire_model_name !== undefined && (typeof model.wire_model_name !== 'string' || model.wire_model_name.includes(String.fromCharCode(0)) || /[\r\n]/u.test(model.wire_model_name)))
         || (model.supports_tools !== undefined && typeof model.supports_tools !== 'boolean')
-        || [model.context_window, model.max_output_tokens].some(limit => limit !== undefined && (!Number.isSafeInteger(limit) || limit < 0)))));
+        || [model.context_window, model.max_output_tokens].some(limit => limit !== undefined && (!Number.isSafeInteger(limit) || limit < 0))))));
   if (!directory || !Array.isArray(directory.models) || !Array.isArray(directory.sources)
     || invalidCatalogs
     || typeof response?.current_model !== 'string'
@@ -37,7 +36,7 @@ export function readFlowerModelDirectory(value: unknown): FlowerModelDirectory {
       || (model.source === 'runtime_config' && model.id !== `${model.provider_id}/${model.model_name}`))) {
     throw new Error('Flower model directory response is invalid.');
   }
-  return { current_model_id: response.current_model, models: directory.models, sources: directory.sources, provider_catalogs: directory.provider_catalogs };
+  return { current_model_id: response.current_model, models: directory.models, sources: directory.sources, provider_catalogs: directory.provider_catalogs, provider_defaults: directory.provider_defaults };
 }
 
 const MODEL_READ_DEADLINE_MS = 10_000;
@@ -166,6 +165,7 @@ export function withFlowerModelDirectory(snapshot: FlowerSettingsSnapshot, direc
   const runtimeModels = new Map(directory.models.filter(model => model.source === 'runtime_config').map(model => [model.id, model]));
   return { ...snapshot, model_directory: directory,
     model_profile: snapshot.model_profile ? { ...snapshot.model_profile, providers: snapshot.model_profile.providers.map(provider => {
+      provider = { ...provider, model_defaults: directory.provider_defaults?.[provider.type] };
       const catalog = directory.provider_catalogs?.[provider.id];
       const resolved = catalog ? { ...provider, catalog_models: catalog, models: projectFlowerProviderModels(provider, catalog) } : provider;
       return { ...resolved, models: resolved.models.map(model => ({ ...model, web_search: runtimeModels.get(`${provider.id}/${model.model_name}`)?.web_search ?? model.web_search })) };

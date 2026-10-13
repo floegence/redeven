@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { recommendedModelsForFlowerProviderType } from '../../../../../../flower_ui/src/settings/providerCatalog';
+import { backendModelsForProviderType, providerDefaultsFixture } from '../../../../../../flower_ui/testing/providerCatalogFixture';
 import { Show, createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -69,8 +69,9 @@ function mountDialog(mode: 'create' | 'edit' = 'create', discover?: FlowerModelC
   const [open, setOpen] = createSignal(true);
   const [provider, setProvider] = createSignal<FlowerProviderDraft>({ id: 'initial', type: 'openai', models: [] });
   const [catalog, setCatalog] = createSignal<FlowerProviderDraft['catalog_models']>();
+  const [defaults, setDefaults] = createSignal(providerDefaultsFixture);
   let confirmed: FlowerProviderDraft | undefined;
-  const dispose = render(() => <FlowerProviderDialog catalogModels={catalog()} onDiscoverModels={discover} open={open()} mode={mode} provider={provider()} keyConfigured={keyConfigured} webSearchKeyConfigured={false} onOpenChange={setOpen} onConfirm={(draft) => { confirmed = JSON.parse(JSON.stringify(draft)); }}/>, host);
+  const dispose = render(() => <FlowerProviderDialog providerDefaults={defaults()} catalogModels={catalog()} onDiscoverModels={discover} open={open()} mode={mode} provider={provider()} keyConfigured={keyConfigured} webSearchKeyConfigured={false} onOpenChange={setOpen} onConfirm={(draft) => { confirmed = JSON.parse(JSON.stringify(draft)); }}/>, host);
   const button = (text: string) => {
     const el = [...host.querySelectorAll('button')].find(element => element.textContent?.includes(text) || element.getAttribute('aria-label') === text);
     if (!el) throw new Error(`Missing button: ${text}`);
@@ -82,10 +83,27 @@ function mountDialog(mode: 'create' | 'edit' = 'create', discover?: FlowerModelC
     const el = host.querySelector('input[placeholder="Search models"]') as HTMLInputElement;
     el.value = value; el.dispatchEvent(new Event('input', { bubbles: true }));
   };
-  return { host, dispose, button, type, selected, search, setOpen, setProvider, setCatalog, confirmed: () => confirmed! };
+  return { host, dispose, button, type, selected, search, setOpen, setProvider, setCatalog, setDefaults, confirmed: () => confirmed! };
 }
 
 describe('shared Flower provider dialog', () => {
+  it('uses backend defaults for a new connection and never persists them as user configuration', () => {
+    const dialog = mountDialog();
+    const backendModel = { model_name: 'server-only-model', context_window: 543210, max_output_tokens: 12345, effective_context_window_percent: 87, input_modalities: ['text', 'image'], supports_tools: true };
+    try {
+      dialog.setDefaults({ openai: [backendModel] });
+      dialog.type('openai');
+      expect(dialog.host.textContent).toContain(backendModel.model_name);
+      expect(dialog.host.textContent).not.toContain('gpt-6.1-sol');
+      expect(dialog.selected()).toBe(0);
+      dialog.button('Select all').click();
+      dialog.button('Save provider').click();
+      expect(dialog.confirmed().models).toEqual([backendModel]);
+      const saved = serializeFlowerProvider(dialog.confirmed());
+      expect(saved).not.toHaveProperty('model_defaults');
+      expect(saved.model_selection?.model_overrides).toEqual([]);
+    } finally { dialog.dispose(); }
+  });
   it.each([
     { type: 'openai', keyConfigured: false, draftKey: '', blocked: true },
     { type: 'openai', keyConfigured: true, draftKey: '', blocked: false },
@@ -116,11 +134,11 @@ describe('shared Flower provider dialog', () => {
   });
   it('refreshes native capabilities from the server and shows mixed support without brand inference', async () => {
     vi.useFakeTimers();
-    const models = recommendedModelsForFlowerProviderType('openai').map(cloneFlowerModel).map((model) => ({ ...model, web_search: { status: 'available', reason: 'catalog_supported' } as const }));
+    const models = backendModelsForProviderType('openai').map(cloneFlowerModel).map((model) => ({ ...model, web_search: { status: 'available', reason: 'catalog_supported' } as const }));
     const discover = vi.fn(async () => ({ models }));
     const dialog = mountDialog('edit', discover);
     try {
-      dialog.setProvider({ id: 'brand', type: 'openai', models: recommendedModelsForFlowerProviderType('openai').map(cloneFlowerModel) });
+      dialog.setProvider({ id: 'brand', type: 'openai', models: backendModelsForProviderType('openai').map(cloneFlowerModel) });
       expect(dialog.host.textContent).not.toContain('OpenAI built-in web search');
       expect(discover).not.toHaveBeenCalled();
       dialog.button('Sync model list').click();
@@ -138,11 +156,11 @@ describe('shared Flower provider dialog', () => {
 
   it('shows DeepSeek as unsupported while keeping the provider usable', async () => {
     vi.useFakeTimers();
-    const models = recommendedModelsForFlowerProviderType('deepseek').map(cloneFlowerModel).map((model) => ({ ...model, web_search: { status: 'unavailable', reason: 'unsupported' } as const }));
+    const models = backendModelsForProviderType('deepseek').map(cloneFlowerModel).map((model) => ({ ...model, web_search: { status: 'unavailable', reason: 'unsupported' } as const }));
     const discover = vi.fn(async () => ({ models }));
     const dialog = mountDialog('edit', discover);
     try {
-      dialog.setProvider({ id: 'brand', type: 'deepseek', models: recommendedModelsForFlowerProviderType('deepseek').map(cloneFlowerModel) });
+      dialog.setProvider({ id: 'brand', type: 'deepseek', models: backendModelsForProviderType('deepseek').map(cloneFlowerModel) });
       expect(discover).not.toHaveBeenCalled();
       dialog.button('Sync model list').click();
       await vi.advanceTimersByTimeAsync(1000);
@@ -157,14 +175,14 @@ describe('shared Flower provider dialog', () => {
     const dialog = mountDialog('edit');
     try {
       const custom = { model_name: 'custom-vision', context_window: 32000, input_modalities: ['text', 'image'] };
-      dialog.setProvider({ id: 'brand', type: 'deepseek', models: [...recommendedModelsForFlowerProviderType('deepseek').map(cloneFlowerModel), custom] });
+      dialog.setProvider({ id: 'brand', type: 'deepseek', models: [...backendModelsForProviderType('deepseek').map(cloneFlowerModel), custom] });
       dialog.button('Clear selection').click();
       expect(dialog.selected()).toBe(0);
       expect(dialog.host.textContent).toContain(custom.model_name);
       dialog.button('Save provider').click();
       const saved = serializeFlowerProvider(dialog.confirmed());
       dialog.setOpen(false);
-      dialog.setProvider({ ...saved, models: resolveFlowerProviderModels(saved) });
+      dialog.setProvider({ ...saved, models: resolveFlowerProviderModels({ ...saved, model_defaults: providerDefaultsFixture[saved.type] }) });
       dialog.setOpen(true);
       expect(dialog.host.textContent).toContain(custom.model_name);
       dialog.button('Select all').click();
@@ -201,8 +219,8 @@ describe('shared Flower provider dialog', () => {
       name.value = 'unknown-agent'; name.dispatchEvent(new Event('input', { bubbles: true }));
       dialog.button('Add model').click();
       expect(dialog.host.textContent).toContain('Needs capability configuration');
-      const context = dialog.host.querySelector<HTMLInputElement>('input[placeholder="128000"]')!;
-      const output = dialog.host.querySelector<HTMLInputElement>('input[placeholder="4096"]')!;
+      const context = dialog.host.querySelector<HTMLInputElement>('input[type="number"]')!;
+      const output = dialog.host.querySelectorAll<HTMLInputElement>('input[type="number"]')[1]!;
       expect(context.value).toBe(''); expect(output.value).toBe('');
       expect(dialog.button('Save provider').disabled).toBe(true);
       context.value = '32768'; context.dispatchEvent(new Event('input', { bubbles: true }));
@@ -223,7 +241,7 @@ describe('shared Flower provider dialog', () => {
     const dialog = mountDialog();
     try {
       dialog.type('openai');
-      const total = recommendedModelsForFlowerProviderType('openai').map(cloneFlowerModel).length;
+      const total = backendModelsForProviderType('openai').map(cloneFlowerModel).length;
       dialog.button('Select all').click();
       const checkbox = dialog.host.querySelector('input[type="checkbox"]') as HTMLInputElement;
       checkbox.click();
@@ -238,7 +256,7 @@ describe('shared Flower provider dialog', () => {
       const saved = serializeFlowerProvider(dialog.confirmed());
       expect(saved.model_selection?.selected_models).toHaveLength(total - 1);
       dialog.setOpen(false);
-      dialog.setProvider({ ...saved, models: resolveFlowerProviderModels(saved) });
+      dialog.setProvider({ ...saved, models: resolveFlowerProviderModels({ ...saved, model_defaults: providerDefaultsFixture[saved.type] }) });
       dialog.setOpen(true); dialog.type('openai');
       expect(dialog.selected()).toBe(total - 1);
       dialog.button('Select all').click(); expect(dialog.selected()).toBe(total);
@@ -252,7 +270,7 @@ describe('ChatGPT local authentication boundary', () => {
     const host = document.createElement('div'); document.body.append(host);
     const [open, setOpen] = createSignal(true), [local, setLocal] = createSignal(available), [binding, setBinding] = createSignal('local-connection');
     const provider = { id: 'openai', type: 'openai' as const, models: [] };
-    const dispose = render(() => <FlowerProviderDialog open={open()} mode="create" provider={provider} chatGPTAvailable={local()} chatGPTBindingID={binding()} chatGPTAuth={auth} keyConfigured={false} webSearchKeyConfigured={false} onOpenChange={setOpen} onConfirm={vi.fn()} />, host);
+    const dispose = render(() => <FlowerProviderDialog providerDefaults={providerDefaultsFixture} open={open()} mode="create" provider={provider} chatGPTAvailable={local()} chatGPTBindingID={binding()} chatGPTAuth={auth} keyConfigured={false} webSearchKeyConfigured={false} onOpenChange={setOpen} onConfirm={vi.fn()} />, host);
     const button = (text: string) => [...host.querySelectorAll('button')].find(el => {
       const visible = el.cloneNode(true) as HTMLElement;
       visible.querySelectorAll('[aria-hidden=true]').forEach(node => node.remove());

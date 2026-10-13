@@ -175,6 +175,7 @@ export type AIProviderRow = {
   web_search?: AIProviderWebSearch;
   models: AIProviderModelRow[];
   model_selection?: FlowerModelSelection;
+  model_defaults?: readonly import('../../../../../../flower_ui/src/contracts/flowerSurfaceContracts').FlowerProviderModel[];
   catalog_error?: string;
   catalog_models?: readonly import('../../../../../../flower_ui/src/contracts/flowerSurfaceContracts').FlowerProviderModel[];
 };

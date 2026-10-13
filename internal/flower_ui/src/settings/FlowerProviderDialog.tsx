@@ -1,5 +1,5 @@
 import { ManualModelCapabilities } from './ManualModelCapabilities';
-import { applyModelOverride, flowerModelNeedsConfiguration } from '../providerModelProjection';
+import { applyModelOverride, flowerModelNeedsConfiguration, flowerProviderModelCatalog } from '../providerModelProjection';
 import { WebSearchCapabilityBadge } from '../WebSearchCapabilityBadge';
 import { flowerProviderAPIKeyOptional, missingFlowerProviderCredential } from '../providerCredentials';
 import { FlowerProviderBrandIcon } from './FlowerProviderBrandIcon';
@@ -21,7 +21,6 @@ import type { FlowerProviderDraft, FlowerProviderModel, FlowerProviderType, Flow
 import {
   FLOWER_PROVIDER_TYPES,
   defaultBaseURLForFlowerProviderType,
-  recommendedModelsForFlowerProviderType,
   flowerProviderNeedsWebSearchConfig,
   flowerProviderSupportsCustomModels,
   flowerProviderTypeRequiresBaseURL,
@@ -45,6 +44,7 @@ export type FlowerProviderDialogProps = Readonly<{
   mode: FlowerProviderDialogMode;
   provider: FlowerProviderDraft | null;
   catalogModels?: readonly FlowerProviderModel[];
+  providerDefaults?: Readonly<Partial<Record<FlowerProviderType, readonly FlowerProviderModel[]>>>;
   copy?: FlowerProviderDialogCopy;
   keyConfigured: boolean;
   webSearchKeyConfigured: boolean;
@@ -209,7 +209,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
   createEffect(on(() => [props.open, props.provider?.id] as const, () => {
     if (props.open) {
       cancelAuthorization();
-      const initial = untrack(() => props.provider ? { ...props.provider, chatgpt_account: props.chatGPTAccount } : null);
+      const initial = untrack(() => props.provider ? { ...props.provider, model_defaults: props.providerDefaults?.[props.provider.type] ?? props.provider.model_defaults, chatgpt_account: props.chatGPTAccount } : null);
       if (initial && props.mode === 'create' && initial.type === 'openai' && !initial.auth_method) initial.auth_method = untrack(chatGPTEnabled) ? 'chatgpt' : 'api_key';
       setStore('draft', reconcile(initial));
       setAuthError('');
@@ -232,6 +232,13 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
       }
     });
   });
+
+  createEffect(on(() => [props.open, props.providerDefaults, store.draft?.id, store.draft?.type] as const, () => {
+    untrack(() => {
+      const defaults = props.providerDefaults?.[store.draft?.type ?? 'openai'];
+      if (props.open && store.draft && defaults) setStore('draft', draft => draft ? { ...draft, model_defaults: defaults } : draft);
+    });
+  }));
 
   const updateProvider = (patch: Partial<FlowerProviderDraft>) => {
     setStore('draft', (draft) => {
@@ -263,6 +270,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
       models: nextModels,
       model_selection: undefined,
       catalog_models: undefined,
+      model_defaults: props.providerDefaults?.[type],
     });
   };
 
@@ -310,7 +318,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
 
   const resetModelToPreset = (index: number, preset: FlowerProviderModel) => {
     if (!store.draft) return;
-    const rawCatalog = store.draft.catalog_models ?? (chatGPTSelected() ? [] : recommendedModelsForFlowerProviderType(store.draft.type));
+    const rawCatalog = flowerProviderModelCatalog(store.draft);
     const raw = rawCatalog.find(entry => entry.model_name === preset.model_name || (entry.wire_model_name || entry.model_name) === (preset.wire_model_name || preset.model_name)) ?? preset;
     const selected = store.draft.models[index];
     setModels(store.draft.models.map((model, modelIndex) => modelIndex === index ? cloneModel({ ...raw, model_name: selected.model_name, wire_model_name: selected.wire_model_name || raw.wire_model_name }) : model));
@@ -624,15 +632,15 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                                     </div>
                                     <div>
                                       <FlowerFieldLabel>{copy().contextWindow}</FlowerFieldLabel>
-                                      <Input type="number" value={model().context_window ?? ''} onInput={(event) => { if (modelIndex() >= 0) updateModel(modelIndex(), { context_window: Number(event.currentTarget.value) || undefined }); }} placeholder="128000" size="sm" class="w-full font-mono" />
+                                      <Input type="number" value={model().context_window ?? ''} onInput={(event) => { if (modelIndex() >= 0) updateModel(modelIndex(), { context_window: Number(event.currentTarget.value) || undefined }); }} placeholder="—" size="sm" class="w-full font-mono" />
                                     </div>
                                     <div>
                                       <FlowerFieldLabel>{copy().maxOutput}</FlowerFieldLabel>
-                                      <Input type="number" value={model().max_output_tokens ?? ''} onInput={(event) => { if (modelIndex() >= 0) updateModel(modelIndex(), { max_output_tokens: Number(event.currentTarget.value) || undefined }); }} placeholder="4096" size="sm" class="w-full font-mono" />
+                                      <Input type="number" value={model().max_output_tokens ?? ''} onInput={(event) => { if (modelIndex() >= 0) updateModel(modelIndex(), { max_output_tokens: Number(event.currentTarget.value) || undefined }); }} placeholder="—" size="sm" class="w-full font-mono" />
                                     </div>
                                     <div>
                                       <FlowerFieldLabel>{copy().effectiveContextPercent}</FlowerFieldLabel>
-                                      <Input type="number" value={model().effective_context_window_percent ?? ''} onInput={(event) => { if (modelIndex() >= 0) updateModel(modelIndex(), { effective_context_window_percent: Number(event.currentTarget.value) || undefined }); }} placeholder="95" size="sm" class="w-full font-mono" />
+                                      <Input type="number" value={model().effective_context_window_percent ?? ''} onInput={(event) => { if (modelIndex() >= 0) updateModel(modelIndex(), { effective_context_window_percent: Number(event.currentTarget.value) || undefined }); }} placeholder="—" size="sm" class="w-full font-mono" />
                                     </div>
                                     <Show when={preset().status === 'needs_configuration' || model().status === 'needs_configuration' || model().supports_tools !== undefined || model().reasoning_capability?.fixture === 'manual_provider_capability'}>
                                       <ManualModelCapabilities model={model()} type={store.draft!.type} baseURL={store.draft!.base_url || defaultBaseURLForFlowerProviderType(store.draft!.type)} copy={copy().catalog} onChange={patch => { if (modelIndex() >= 0) updateModel(modelIndex(), patch); }} />

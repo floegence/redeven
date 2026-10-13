@@ -1,18 +1,13 @@
-import { cloneFlowerModel, applyModelOverride, projectFlowerProviderModels } from '../providerModelProjection';
+import { cloneFlowerModel, applyModelOverride, projectFlowerProviderModels, flowerProviderModelCatalog } from '../providerModelProjection';
 export { cloneFlowerModel } from '../providerModelProjection';
 import type { FlowerProvider, FlowerProviderDraft, FlowerProviderModel, FlowerProviderType } from '../contracts/flowerSurfaceContracts';
-import { recommendedModelsForFlowerProviderType } from './providerCatalog';
-
-export function flowerProviderUsesCatalog(type: FlowerProviderType): boolean {
-  return type !== 'openrouter' && type !== 'ollama' && type !== 'openai_compatible';
-}
 
 export function defaultFlowerProviderModels(_type: FlowerProviderType): FlowerProviderModel[] {
   return [];
 }
 
 export function flowerProviderModelChoices(provider: FlowerProviderDraft): FlowerProviderModel[] {
-  const catalog = provider.catalog_models ?? (provider.auth_method === 'chatgpt' ? [] : recommendedModelsForFlowerProviderType(provider.type));
+  const catalog = flowerProviderModelCatalog(provider);
   const choices = new Map(catalog.map((model) => [model.model_name, model]));
   for (const model of [...provider.model_selection?.model_overrides ?? [], ...provider.model_selection?.custom_models ?? [], ...provider.models]) {
     const entry = catalog.find(listed => (listed.wire_model_name || listed.model_name) === (model.wire_model_name || model.model_name));
@@ -23,7 +18,7 @@ export function flowerProviderModelChoices(provider: FlowerProviderDraft): Flowe
 
 export function resolveFlowerProviderModels(provider: FlowerProvider, discovered?: readonly FlowerProviderModel[]): FlowerProviderModel[] {
   if (!provider.model_selection && discovered === undefined) return projectFlowerProviderModels(provider);
-  const catalog = discovered ?? (provider.auth_method !== 'chatgpt' && flowerProviderUsesCatalog(provider.type) ? recommendedModelsForFlowerProviderType(provider.type) : undefined);
+  const catalog = discovered ?? flowerProviderModelCatalog(provider);
   return projectFlowerProviderModels(provider, catalog, discovered !== undefined).map(model => ({ ...model,
     web_search: model.web_search ?? provider.models.find(selected => selected.model_name === model.model_name && (selected.wire_model_name || selected.model_name) === (model.wire_model_name || model.model_name))?.web_search,
   }));
@@ -54,7 +49,7 @@ export function serializeFlowerProvider(provider: FlowerProviderDraft): FlowerPr
   if (provider.type === 'openai_compatible') return out;
   // Offline legacy preferences require an explicit selection action before saving.
   if (provider.model_selection && provider.model_selection.selected_models == null) return { ...out, models: [], model_selection: provider.model_selection };
-  const catalog = provider.catalog_models ?? (provider.auth_method !== 'chatgpt' && flowerProviderUsesCatalog(provider.type) ? recommendedModelsForFlowerProviderType(provider.type) : []);
+  const catalog = flowerProviderModelCatalog(provider);
   const catalogByName = new Map(catalog.map((model) => [model.model_name, model]));
   const selected = provider.models.map((model) => model.model_name);
   const customModels = new Map((provider.model_selection?.custom_models ?? []).map((model) => [model.model_name, serializeFlowerModel(model)]));
@@ -72,7 +67,7 @@ export function serializeFlowerProvider(provider: FlowerProviderDraft): FlowerPr
       const value = model[key];
       if (key === 'wire_model_name' && value && model.model_name !== preset.model_name) return [[key, value]];
       if (key === 'max_output_tokens' && model.context_window && value === model.context_window && (preset.max_output_tokens ?? 0) > model.context_window) return [];
-      if (value == null || equalValue(value, preset[key]) || (key === 'effective_context_window_percent' && value === 95)) return [];
+      if (value == null || equalValue(value, preset[key])) return [];
       return [[key, value]];
     }));
     overrides.delete(model.model_name);

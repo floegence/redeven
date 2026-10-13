@@ -478,7 +478,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                                     type="number"
                                     value={model.context_window ?? ''}
                                     onInput={(event) => props.onChangeModelNumber(index(), 'context_window', event.currentTarget.value)}
-                                    placeholder="128000"
+                                    placeholder="—"
                                     size="sm"
                                     class="w-full font-mono"
                                     disabled={!props.canInteract}
@@ -490,7 +490,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                                     type="number"
                                     value={model.max_output_tokens ?? ''}
                                     onInput={(event) => props.onChangeModelNumber(index(), 'max_output_tokens', event.currentTarget.value)}
-                                    placeholder="4096"
+                                    placeholder="—"
                                     size="sm"
                                     class="w-full font-mono"
                                     disabled={!props.canInteract}
@@ -502,7 +502,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                                     type="number"
                                     value={model.effective_context_window_percent ?? ''}
                                     onInput={(event) => props.onChangeModelNumber(index(), 'effective_context_window_percent', event.currentTarget.value)}
-                                    placeholder="95"
+                                    placeholder="—"
                                     size="sm"
                                     class="w-full font-mono"
                                     disabled={!props.canInteract}

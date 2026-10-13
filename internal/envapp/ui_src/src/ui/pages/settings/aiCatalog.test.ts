@@ -11,33 +11,11 @@ import {
   providerSupportsCustomModelNames,
   providerTypeLabel,
   providerUsesCustomConnectionName,
-  recommendedModelsForProviderType,
 } from './aiCatalog';
-import type { AIProviderType } from './types';
-
-function modelNames(providerType: AIProviderType): string[] {
-  return recommendedModelsForProviderType(providerType).map((model) => model.model_name);
-}
 
 describe('AI provider preset catalog', () => {
-  it('includes current native models and reserves dynamic catalogs for discovery', () => {
-    expect(modelNames('openai')).toContain('gpt-6-astra');
-    expect(modelNames('anthropic')).toContain('claude-fable-5-1');
-    expect(modelNames('google')).toContain('gemini-3.8-flash');
-    expect(modelNames('moonshot')).toContain('kimi-k3');
-    expect(modelNames('chatglm')).toContain('glm-5.3');
-    expect(modelNames('deepseek')).toContain('deepseek-v4-flash-vision-exp');
-    expect(modelNames('qwen')).toContain('qwen3.8-max');
-    expect(modelNames('groq')).toContain('qwen%2Fqwen3.8-27b');
-    expect(modelNames('openrouter')).toEqual([]);
-    expect(modelNames('ollama')).toEqual([]);
-  });
-
-  it('omits retired IDs and dedicated non-Agent models', () => {
-    const names = Object.values(AI_PROVIDER_PRESET_CATALOG).flatMap((preset) => preset.models.map((model) => model.model_name));
-    for (const retired of ['kimi-k2.5', 'deepseek-chat', 'deepseek-reasoner', 'llama-3.3-70b-versatile']) expect(names).not.toContain(retired);
-    expect(modelNames('groq')).not.toContain('qwen3-32b');
-    expect(names.some((name) => /embedding|realtime|transcribe|tts/.test(name))).toBe(false);
+  it('keeps provider model defaults out of the frontend preset catalog', () => {
+    for (const preset of Object.values(AI_PROVIDER_PRESET_CATALOG)) expect(preset.models).toEqual([]);
   });
 
   it('uses the current Z.AI OpenAI-compatible endpoint for new ChatGLM providers', () => {

@@ -1,6 +1,10 @@
 import type { FlowerProvider, FlowerProviderModel } from './contracts/flowerSurfaceContracts';
 import { normalizeFlowerReasoningCapability, normalizeFlowerReasoningSelection } from './reasoning';
-import { recommendedModelsForFlowerProviderType } from './settings/providerCatalog';
+
+// Defaults and account inventory are read-only backend data, never bundled tables.
+export function flowerProviderModelCatalog(provider: FlowerProvider): readonly FlowerProviderModel[] {
+  return provider.catalog_models ?? (provider.auth_method === 'chatgpt' ? [] : provider.model_defaults ?? []);
+}
 
 export function cloneFlowerModel(model: FlowerProviderModel): FlowerProviderModel {
   const { supports_tools, model_digest, quantization, unavailable, web_search, model_name, display_name, status, wire_model_name, context_window, max_output_tokens, effective_context_window_percent, input_modalities, reasoning_capability, default_reasoning_selection } = model;
@@ -31,7 +35,8 @@ export function applyModelOverride(model: FlowerProviderModel, override?: Flower
 
 function unavailableModelMetadata(provider: FlowerProvider, name: string, override?: FlowerProviderModel): FlowerProviderModel {
   const wire = override?.wire_model_name || name;
-  const reviewed = recommendedModelsForFlowerProviderType(provider.type).find(m => m.model_name === wire || (m.wire_model_name || m.model_name) === wire);
+  const matches = (m: FlowerProviderModel) => m.model_name === wire || (m.wire_model_name || m.model_name) === wire;
+  const reviewed = provider.model_defaults?.find(matches) ?? provider.models.find(matches);
   return applyModelOverride({ ...reviewed, model_name: name, unavailable: true }, override);
 }
 
