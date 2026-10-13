@@ -20,10 +20,14 @@ func TestFlowerToolsFromFloretRejectsNullRequired(t *testing.T) {
 func TestFlowerToolsFromFloretAcceptsEmptyRequiredArray(t *testing.T) {
 	tools, err := flowerToolsFromFloret([]fltools.ToolDefinition{{
 		Name:        "valid",
+		Strict:      true,
 		InputSchema: map[string]any{"type": "object", "required": []string{}},
 	}})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if !tools[0].Strict {
+		t.Fatal("Floret strict intent was lost")
 	}
 	var schema map[string]any
 	if err := json.Unmarshal(tools[0].InputSchema, &schema); err != nil {

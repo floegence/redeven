@@ -809,6 +809,7 @@ func builtInToolDefinitions() []ToolDef {
 	defs = append(defs, builtInComputerToolDefinitions()...)
 	defs = append(defs, floretNativeToolDefinitions()...)
 	for i := range defs {
+		defs[i].Strict = true
 		defs[i].Presentation = aitools.MustPresentationSpec(defs[i].Name)
 	}
 	return defs
@@ -839,6 +840,7 @@ func builtInControlSignalDefinitions() []ToolDef {
 		})
 	}
 	for i := range defs {
+		defs[i].Strict = true
 		defs[i].Presentation = aitools.MustPresentationSpec(defs[i].Name)
 	}
 	return defs

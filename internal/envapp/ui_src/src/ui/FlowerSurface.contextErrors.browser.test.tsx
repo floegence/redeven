@@ -35,3 +35,23 @@ it.each([['zh-CN', 390], ['en-US', 1100]] as const)('keeps %s context diagnostic
   }
   await page.screenshot({ element: surface, path: `__screenshots__/redeven-context-errors-${locale}.png` });
 });
+
+it.each([['zh-CN', 390, 'light'], ['en-US', 1100, 'dark']] as const)('keeps %s provider diagnostics accessible at %s px in %s theme', async (locale, width, theme) => {
+  await page.viewport(width, 900);
+  document.documentElement.classList.toggle('dark', theme === 'dark');
+  const i18n = createTestI18nHelpers(locale);
+  const copy = createLocalizedFlowerSurfaceCopy({ locale, t: (key, params) => i18n.t(key as EnvAppTranslationKey, params), tn: (key, count, params) => i18n.tn(key as EnvAppTranslationKey, count, params) });
+  const failed = thread({ status: 'failed', error: { code: 'provider_request_invalid', message: 'private provider text', detail: '{"provider":"chatgpt","http_status":400,"request_id":"req-fixture","response_shape":"detail"}' } });
+  const surface = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: vi.fn(async () => [failed]), loadThread: vi.fn(async () => liveBootstrap(failed)) }, { copy, focusThreadRequest: { request_id: 'provider-layout', thread_id: failed.thread_id } });
+  surface.style.cssText = `width:${width}px;height:850px;position:relative;`;
+  await waitFor(() => Boolean(surface.querySelector('.flower-error-card')));
+  const card = surface.querySelector<HTMLElement>('.flower-error-card')!;
+  expect(card.querySelector('.flower-error-message')?.textContent).toBe(copy.chat.runErrors.providerRequestInvalid);
+  const disclosure = card.querySelector<HTMLDetailsElement>('details')!;
+  disclosure.querySelector('summary')!.focus();
+  await userEvent.keyboard('{Enter}');
+  expect(disclosure.open).toBe(true);
+  expect(card.scrollWidth).toBeLessThanOrEqual(card.clientWidth + 1);
+  for (const button of card.querySelectorAll('button')) expect(button.getBoundingClientRect().right).toBeLessThanOrEqual(card.getBoundingClientRect().right + 1);
+  await page.screenshot({ element: surface, path: `__screenshots__/redeven-provider-errors-${locale}.png` });
+});

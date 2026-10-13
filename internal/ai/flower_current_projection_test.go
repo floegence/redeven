@@ -548,7 +548,7 @@ func TestContextBudgetDiagnosticMatchesCurrentAndSummary(t *testing.T) {
 	}
 	view := ThreadView{}
 	applyFlowerThreadRuntimeProjection(&view, flowerThreadRuntimeProjection{LastOutcome: &outcome, Failure: failure})
-	if decoded["run_error_code"] != view.RunErrorCode || decoded["run_error_detail"] != view.RunErrorDetail || view.RunErrorDetail != contextBudgetFailureDetail(failure) {
+	if decoded["run_error_code"] != view.RunErrorCode || decoded["run_error_detail"] != view.RunErrorDetail || view.RunErrorDetail != canonicalFailureDetail(failure) {
 		t.Fatalf("current=%s summary=%#v", raw, view)
 	}
 	applyFlowerThreadRuntimeProjection(&view, flowerThreadRuntimeProjection{Activity: flruntime.ThreadActivityActive})

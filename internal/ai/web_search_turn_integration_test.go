@@ -305,12 +305,12 @@ func testNativeSearchLifecycle(t *testing.T, failure string) {
 		t.Fatal(err)
 	}
 	failed := waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(view *ThreadView) bool { return view.RunStatus == "failed" })
-	wantFailure := "400"
 	if failure == "misrouted" {
-		wantFailure = "provider returned a local function call for hosted tool"
-	}
-	if !strings.Contains(failed.RunError, wantFailure) {
-		t.Fatalf("upstream failure was replaced: %s", failed.RunError)
+		if !strings.Contains(failed.RunError, "provider returned a local function call for hosted tool") {
+			t.Fatalf("hosted tool contract failure was replaced: %s", failed.RunError)
+		}
+	} else if failed.RunErrorCode != runErrorCodeProviderRequestInvalid || !strings.Contains(failed.RunErrorDetail, `"http_status": 400`) || !strings.Contains(failed.RunErrorDetail, `"code": "search_unavailable"`) {
+		t.Fatalf("upstream failure lost safe evidence: code=%s detail=%s", failed.RunErrorCode, failed.RunErrorDetail)
 	}
 	if _, err := svc.RetryThreadContinuation(t.Context(), meta, thread.ThreadID); err != nil {
 		t.Fatal(err)

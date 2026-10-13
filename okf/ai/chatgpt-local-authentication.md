@@ -77,10 +77,36 @@ their previous hash. No separate conversation store or domain migration is added
 Only a completed response commits provider state; incomplete responses, stream
 errors and disconnects fail explicitly.
 
-The composer/model selector identifies ChatGPT plan usage and links to
-[Manage usage](https://chatgpt.com/settings/usage). The initial account confirmation
-explains eligible plan usage once before enablement. Usage errors expose Manage
-usage and later retry without assuming a whole-plan limit or reset time. The
+Per-tool `Strict` intent survives the internal Runtime/Desktop model-source DTO.
+The OpenAI adapter copies canonical schemas before freezing the request, makes
+all object properties required, and gives originally optional non-nullable
+fields a null alternative. Objects and array elements are recursive; enum and
+existing nullable restrictions remain intact. Open objects, references and
+unsupported composition keywords fail preparation explicitly, without switching
+strict mode off or acquiring remote schemas. Configured non-strict policies stay
+explicit.
+
+Each frozen request owns its argument-restoration rules. Streaming completion and
+final tool calls remove only synthetic nulls, before Floret canonical validation.
+Original null, false, zero and empty strings remain values. Malformed argument
+JSON fails the model-source contract. Native output retains original provider
+bytes, while canonical tool arguments and replay fingerprints use restored
+values; restart, continuation and compaction retain one canonical meaning.
+
+HTTP and stream errors become a bounded `redeven_provider_failure_v1` envelope
+before entering Floret's existing failure record. It retains sanitized status,
+code, parameter path, request ID and response shape, never upstream prose,
+credentials, request payloads or response bodies. Standard API errors, detail
+objects, empty/non-JSON bodies and SDK stream errors share this boundary. One
+product projection reads canonical failures after live updates or restart,
+classifies recovery actions and publishes collapsed, copyable diagnostics. Old
+uncoded failures receive controlled guidance without fabricated evidence.
+
+The composer has no permanent plan-allowance notice. Provider settings retain
+[Manage usage](https://chatgpt.com/settings/usage), and the initial account
+confirmation explains eligible plan usage once before enablement. Explicit usage
+limit errors expose Manage usage; temporary usage/service failures offer deliberate
+later retry without assuming a whole-plan limit or reset time. The
 first-use confirmation stays in the existing provider modal with a Got it action.
 Missing permission and expired credentials direct users to provider settings. No error
 silently switches authentication or API billing.
@@ -91,7 +117,7 @@ Floret owns canonical conversation, engine execution and opaque provider state.
 Redeven owns local account admission, credentials and product configuration;
 account fields never become engine domain records or a remote credential source.
 
-Runtime/Desktop compatibility epoch 56 and provider-bundle
+Runtime/Desktop compatibility epoch 57 and provider-bundle
 `auth_schema_version: 1` prevent an old client from erasing a saved account method.
 Old API-key-only saves remain supported.
 
@@ -99,6 +125,8 @@ Old API-key-only saves remain supported.
 
 - `redeven:internal/codeapp/appserver/chatgpt_auth.go` - Trusted local admission for account access and management.
 - `redeven:internal/localui/local_runtime_browser_test.go` - Native handoff, public spoof rejection and exact authority.
+- `redeven:internal/ai/model_gateway_strict_test.go` - Real Flower strict wire contract, optional argument restoration and frozen-request rules.
+- `redeven:internal/ai/provider_failure_test.go` - HTTP/stream evidence, bounded diagnostics and credential-leak rejection.
 - `redeven:internal/ai/model_gateway_chatgpt.go` - Responses namespace and canonical native replay.
 - `redeven:internal/ai/model_gateway_chatgpt_floret_test.go` - Published-engine tool history, restart and compaction.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerProviderDialog.chatgpt.browser.test.tsx` - Shared local UI, translations, cancellation and preserved selection/focus.

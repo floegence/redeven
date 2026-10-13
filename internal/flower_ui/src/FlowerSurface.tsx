@@ -2419,6 +2419,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         return copy().chat.runErrors.providerUnreachable;
       case 'provider_stream_interrupted':
         return copy().chat.runErrors.providerStreamInterrupted;
+      case 'provider_request_invalid': return copy().chat.runErrors.providerRequestInvalid;
+      case 'provider_request_rejected': return copy().chat.runErrors.providerRequestRejected;
       case 'provider_model_unavailable':
         return copy().chat.runErrors.providerModelUnavailable;
       case 'model_gateway_contract_failed':
@@ -6329,6 +6331,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         return copy().chat.runErrorActions.updateAPIKey;
       case 'provider_missing_key':
         return copy().chat.runErrorActions.addAPIKey;
+      case 'provider_request_invalid': return copy().chat.runErrors.providerRequestInvalid;
+      case 'provider_request_rejected': return copy().chat.runErrors.providerRequestRejected;
       case 'provider_model_unavailable':
       case 'model_gateway_contract_failed':
         return copy().chat.runErrorActions.switchModel;
@@ -6596,7 +6600,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         flowerTimelineHasUserRejectedTool(selectedTimelineEntries())
         && (code === 'provider_unreachable' || code === 'provider_stream_interrupted')
       )
-      || code === 'provider_request_invalid'
     ));
     const actionable = code === 'chatgpt_review_required' || code === 'chatgpt_storage_unavailable' || code === 'chatgpt_authorization_required' || code === 'chatgpt_plan_permission_required' || code === 'provider_auth_failed'
       || code === 'provider_missing_key'
@@ -6623,7 +6626,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         setRetryPending(false);
       }
     };
-    const diagnostics = () => contextFailure && trimString(error?.detail) ? (
+    const providerFailure = code.startsWith('provider_') || code.startsWith('chatgpt_');
+    const diagnostics = () => (contextFailure || providerFailure) && trimString(error?.detail) ? (
       <details class="flower-error-details">
         <summary>{copy().chat.runErrorDetails}</summary>
         <pre>{trimString(error?.detail)}</pre>
@@ -6634,6 +6638,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     ) : undefined;
     const action = () => code === 'chatgpt_usage_unavailable' ? (
       <a href="https://chatgpt.com/settings/usage" target="_blank" rel="noopener noreferrer" class="cursor-pointer whitespace-nowrap text-sm font-medium text-primary hover:underline">{copy().settings.dialog.chatGPT.manageUsage}</a>
+    ) : code === 'chatgpt_temporarily_unavailable' || code === 'provider_rate_limited' || code === 'provider_request_invalid' || code === 'provider_request_rejected' ? (
+      <Button size="sm" variant="outline" icon={Refresh} disabled={retryPending()} onClick={() => void retryContinuation()}>{copy().chat.retryReply}</Button>
     ) : contextFailure ? (
       <>
         <Button size="sm" variant="outline" icon={Settings} onClick={openSettings}>{copy().chat.runErrorActions.openSettings}</Button>
@@ -6667,6 +6673,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           presentRunError(error),
           action(),
           'flower-continuation-error',
+          diagnostics(),
         )}
       </Show>
     );
@@ -10995,12 +11002,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const composerNotices = () => (
     <Show when={bottomActionMode() === 'chat' && !companionCollapsed()}>
       <div class="flower-composer-notices">
-        <Show when={selectedModelOption()?.billingSource === 'chatgpt_plan'}>
-          <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
-            <span>{copy().settings.dialog.chatGPT.planSource}</span>
-            <a href="https://chatgpt.com/settings/usage" target="_blank" rel="noopener noreferrer" class="cursor-pointer whitespace-nowrap font-medium text-primary hover:underline">{copy().settings.dialog.chatGPT.manageUsage}</a>
-          </div>
-        </Show>
         <Show when={(needsSetup() || selectedModelNeedsAttention()) && !composerModelLoading() && (presentation() !== 'companion' || !unavailableModelSource())}>
           <div class="flower-setup-inline" role="status">{modelAvailabilityChecking() ? copy().chat.modelsChecking : selectedModelNeedsAttention() ? selectedModelAvailabilityMessage() : selectedComposerModelID() ? copy().chat.modelsUnavailable : copy().chat.configureProviderBeforeChat}</div>
         </Show>

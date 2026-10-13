@@ -10,6 +10,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -610,6 +611,9 @@ func (e *RequestError) Error() string {
 		case http.StatusForbidden:
 			return Failure("review_required").Error()
 		}
+	}
+	if e.Code == "" {
+		return fmt.Sprintf("ChatGPT request failed (HTTP %d)", e.Status)
 	}
 	return "ChatGPT: " + e.Code
 }

@@ -608,6 +608,9 @@ func TestDesktopModelSourceProviderStreamsAndMapsErrors(t *testing.T) {
 			if err := json.Unmarshal(frame.Params, &body); err != nil {
 				return testDesktopModelSourceError(frame.ID, "DECODE_FAILED", err.Error())
 			}
+			if len(body.Request.Tools) != 1 || !body.Request.Tools[0].Strict || string(body.Request.Tools[0].InputSchema) != string(strictFixtureTool().InputSchema) {
+				t.Fatal("Desktop model source lost strict tool intent or canonical schema")
+			}
 			if body.Request.Model != modelID {
 				return testDesktopModelSourceError(frame.ID, "MODEL_MISMATCH", "unexpected model")
 			}
@@ -622,6 +625,7 @@ func TestDesktopModelSourceProviderStreamsAndMapsErrors(t *testing.T) {
 	var events []StreamEvent
 	result, err := gateway.StreamTurn(context.Background(), ModelGatewayRequest{
 		Model: modelID,
+		Tools: []ToolDef{strictFixtureTool()},
 	}, func(ev StreamEvent) {
 		events = append(events, ev)
 	})

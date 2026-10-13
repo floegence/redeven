@@ -248,6 +248,7 @@ func (p *floretProviderAdapter) streamPreparedTurn(ctx context.Context, provider
 		}
 		result, err := execute(requestContext, onEvent)
 		if err != nil {
+			err = canonicalProviderFailure(err)
 			sendFloretProviderEvent(ctx, out, flprovider.Event{Type: flprovider.EventError, Err: err, Reason: err.Error()})
 			return
 		}
@@ -632,6 +633,7 @@ func flowerToolsFromFloret(defs []fltools.ToolDefinition) ([]ToolDef, error) {
 		}
 		out = append(out, ToolDef{
 			Name:        name,
+			Strict:      def.Strict,
 			Description: strings.TrimSpace(def.Description),
 			InputSchema: b,
 		})

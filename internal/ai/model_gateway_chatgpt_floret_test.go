@@ -37,7 +37,7 @@ func TestChatGPTFloretToolHistoryRestartAndCompaction(t *testing.T) {
 		}
 		output := `[{"type":"message","id":"answer","role":"assistant","status":"completed","content":[{"type":"output_text","text":"The target was inspected once. The conversation then continued with complete historical context.","annotations":[]}]}]`
 		if n == 1 {
-			output = `[{"type":"reasoning","id":"reasoning","summary":[],"encrypted_content":"opaque-history"},{"type":"function_call","id":"inspect-item","call_id":"inspect-call","name":"inspect","namespace":"redeven","arguments":"{}","status":"completed"}]`
+			output = `[{"type":"reasoning","id":"reasoning","summary":[],"encrypted_content":"opaque-history"},{"type":"function_call","id":"inspect-item","call_id":"inspect-call","name":"inspect","namespace":"redeven","arguments":"{\"hint\":null}","status":"completed"}]`
 		}
 		w.Header().Set("Content-Type", "text/event-stream")
 		fmt.Fprintf(w, "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"response-%d\",\"model\":\"gpt-6.1-sol\",\"status\":\"completed\",\"output\":%s}}\n\n", n, output)
@@ -49,6 +49,7 @@ func TestChatGPTFloretToolHistoryRestartAndCompaction(t *testing.T) {
 	}
 	provider := raw.(*openAIProvider)
 	provider.chatGPT = true
+	provider.strictToolSchema = true
 	provider.requireTerminal = true
 	provider.chatGPTToken = func(context.Context) (string, error) { return "fixture", nil }
 	gateway := newFloretProviderAdapter(provider, "openai", "gpt-6.1-sol", ProviderControls{}, TurnBudgets{}, "")
@@ -56,7 +57,10 @@ func TestChatGPTFloretToolHistoryRestartAndCompaction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tool := fltools.Define[struct{}](fltools.Definition{Name: "inspect", InputSchema: fltools.StrictObject(nil, nil), ReadOnly: true, Permission: fltools.PermissionSpec{Mode: fltools.PermissionAllow}}, nil, nil, func(context.Context, fltools.Invocation[struct{}]) (fltools.Result, error) {
+	tool := fltools.Define[map[string]any](fltools.Definition{Name: "inspect", InputSchema: fltools.StrictObject(map[string]any{"hint": map[string]any{"type": "string"}}, []string{}), ReadOnly: true, Permission: fltools.PermissionSpec{Mode: fltools.PermissionAllow}}, nil, nil, func(_ context.Context, invocation fltools.Invocation[map[string]any]) (fltools.Result, error) {
+		if _, exists := invocation.Args["hint"]; exists {
+			t.Error("synthetic null reached canonical tool execution")
+		}
 		effects.Add(1)
 		return fltools.Result{Text: "Observed once."}, nil
 	})
@@ -132,5 +136,69 @@ func TestChatGPTCompatibilityIdentityIncludesAuthentication(t *testing.T) {
 	two, _ := redevenFloretGatewayIdentity("openai", "openai", "", "gpt-6.1-sol", "responses", "chatgpt", "two")
 	if api.StateCompatibilityKey != explicit.StateCompatibilityKey || api.StateCompatibilityKey == one.StateCompatibilityKey || one.StateCompatibilityKey == two.StateCompatibilityKey {
 		t.Fatal("authentication identity reused incompatible state or changed API-key history")
+	}
+}
+
+func TestChatGPTFloretFailureDiagnosticsSurviveRestart(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("x-request-id", "req-restart-fixture")
+		w.WriteHeader(400)
+		fmt.Fprint(w, `{"error":{"message":"private prompt Bearer sk-secret","code":null,"param":"tools[0].parameters"}}`)
+	}))
+	defer server.Close()
+	raw, _ := newProviderAdapter("openai", server.URL, "fixture", nil)
+	provider := raw.(*openAIProvider)
+	provider.chatGPT = true
+	gateway := newFloretProviderAdapter(provider, "openai", "gpt-6.1-sol", ProviderControls{}, TurnBudgets{}, "")
+	gateway.identity, _ = redevenFloretGatewayIdentity("openai", "openai", server.URL, "gpt-6.1-sol", "responses", "chatgpt", "fixture")
+	agent, err := flruntime.NewAgent(flconfig.AgentConfig{Profile: flconfig.AgentProfile{ID: "test", Name: "Test"}, SystemPrompt: "Reply briefly.", Context: flconfig.ContextPolicy{ContextWindowTokens: 128000, CompactedContextTargetTokens: 2000, RecentTailTokens: 100, RecentUserTokens: 100, ReservedSummaryTokens: 1000}}, gateway)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "threads.sqlite")
+	open := func() (*flruntime.Host, flruntime.ThreadService) {
+		host, err := flruntime.Open(t.Context(), flruntime.Options{Storage: flstorage.SQLite(path)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		service, err := host.ThreadService(flruntime.AgentFactoryFunc(func(context.Context, flruntime.AgentRequest) (*flruntime.Agent, error) { return agent, nil }))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return host, service
+	}
+	host, service := open()
+	created, err := service.Create(t.Context(), flruntime.CreateThreadInput{RequestKey: "create"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = service.Send(t.Context(), flruntime.SendInput{ThreadID: created.ThreadID, RequestKey: "send", Input: flruntime.UserInput{Text: "hi"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := waitDesktopContinuation(t, service, created.ThreadID)
+	if first.Failure == nil {
+		t.Fatal("provider failure missing")
+	}
+	code, message := projectFloretTurnFailure(first.Failure, runErrorCodeFloretEngineFailed)
+	detail := canonicalFailureDetail(first.Failure)
+	if code != runErrorCodeProviderRequestInvalid || !strings.Contains(detail, "req-restart-fixture") || !strings.Contains(detail, "tools[0].parameters") {
+		t.Fatalf("failure=%+v code=%s detail=%s", first.Failure, code, detail)
+	}
+	if strings.Contains(first.Failure.Message+message+detail, "sk-secret") || strings.Contains(first.Failure.Message, "private prompt") {
+		t.Fatal("canonical failure leaked upstream text")
+	}
+	if err := host.Shutdown(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	host, service = open()
+	defer host.Shutdown(context.Background())
+	restored, err := service.View(t.Context(), created.ThreadID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if restored.Failure == nil || restored.Failure.Message != first.Failure.Message || canonicalFailureDetail(restored.Failure) != detail {
+		t.Fatal("restart lost failure diagnostic")
 	}
 }
