@@ -16,7 +16,7 @@ func TestModelDirectoryResolvesAPIKeyByProviderIdentity(t *testing.T) {
 		return "test-api-key", true, nil
 	}}
 	out := ModelsResponse{Models: []Model{{ID: "my-openai/gpt-5-mini"}}, Runtime: &AIRuntimeStatus{}}
-	out.Directory = s.projectModelDirectory(&config.AIConfig{Providers: []config.AIProvider{provider}}, &out, false, nil, nil, nil, nil)
+	out.Directory = s.projectModelDirectory(&config.AIConfig{Providers: []config.AIProvider{provider}}, &out, nil)
 	if len(out.Directory.Sources) != 1 || out.Directory.Sources[0].State != "ready" {
 		t.Fatalf("configured API-key source was unavailable: %+v", out.Directory)
 	}

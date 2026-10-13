@@ -225,3 +225,42 @@ func normalizeStringList(in []string) []string {
 	}
 	return out
 }
+
+// ValidateAIProviderReasoningCapability checks the adapter wire contract, including
+// manually configured unknown models. A capability declaration cannot add an adapter.
+func ValidateAIProviderReasoningCapability(providerType string, c AIReasoningCapability) error {
+	if c.IsZero() {
+		return nil
+	}
+	budgetShapes := map[string]string{
+		"anthropic_output_config_effort":   "anthropic_thinking_budget_tokens",
+		"anthropic_thinking_budget_tokens": "anthropic_thinking_budget_tokens",
+		"gemini_openai_thinking_budget":    "gemini_thinking_budget",
+		"qwen_enable_thinking":             "qwen_thinking_budget",
+		"qwen_reasoning_effort":            "qwen_thinking_budget",
+	}
+	if c.SupportsBudget() && (budgetShapes[c.WireShape] == "" || c.BudgetShape != budgetShapes[c.WireShape]) {
+		return fmt.Errorf("reasoning budget shape %q is unsupported for %s", c.BudgetShape, c.WireShape)
+	}
+	allowed := map[string][]string{
+		"openai":            {"openai_chat_reasoning_effort", "openai_responses_reasoning_effort"},
+		"openai_compatible": {"openai_chat_reasoning_effort", "openai_responses_reasoning_effort"},
+		"anthropic":         {"anthropic_output_config_effort", "anthropic_thinking_budget_tokens"},
+		"google":            {"openai_chat_reasoning_effort", "gemini_thinking_level", "gemini_openai_thinking_budget"},
+		"moonshot":          {"kimi_reasoning_effort", "kimi_thinking_type"},
+		"chatglm":           {"glm_reasoning_effort", "glm_thinking_type"},
+		"deepseek":          {"deepseek_responses_reasoning_effort"},
+		"qwen":              {"qwen_enable_thinking", "qwen_reasoning_effort"},
+		"openrouter":        {"openrouter_reasoning_metadata"},
+		"xai":               {"openai_chat_reasoning_effort", "xai_reasoning_effort"},
+		"groq":              {"openai_chat_reasoning_effort", "groq_qwen_reasoning_effort", "groq_gpt_oss_reasoning_effort"},
+		"ollama":            {"ollama_model_family_think"},
+		"redeven_platform":  {"openai_chat_reasoning_effort", "openai_responses_reasoning_effort"},
+	}
+	for _, shape := range allowed[providerType] {
+		if shape == c.WireShape {
+			return nil
+		}
+	}
+	return fmt.Errorf("reasoning wire shape %q is unsupported for %s", c.WireShape, providerType)
+}

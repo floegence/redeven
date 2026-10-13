@@ -83,6 +83,10 @@ func TestModelDirectoryBaselineDoesNotContactDynamicProvider(t *testing.T) {
 }
 
 func TestModelCatalogEndpointRequiresAdminAndLeavesConfigurationUnchanged(t *testing.T) {
+	inventory := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"data":[{"id":"deepseek-v4-flash-vision-exp"}]}`))
+	}))
+	defer inventory.Close()
 	cfgPath := writeTestConfigWithAI(t)
 	before, err := os.ReadFile(cfgPath)
 	if err != nil {
@@ -99,7 +103,7 @@ func TestModelCatalogEndpointRequiresAdminAndLeavesConfigurationUnchanged(t *tes
 		body  string
 		want  int
 	}{
-		{"admin offline catalog before AI configured", true, `{"type":"deepseek"}`, http.StatusOK},
+		{"admin synchronizes catalog before AI configured", true, `{"type":"deepseek","base_url":"` + inventory.URL + `"}`, http.StatusOK},
 		{"reader", false, `{"type":"deepseek"}`, http.StatusForbidden},
 		{"unknown field", true, `{"type":"deepseek","unexpected":true}`, http.StatusBadRequest},
 		{"trailing body", true, `{"type":"deepseek"} {}`, http.StatusBadRequest},

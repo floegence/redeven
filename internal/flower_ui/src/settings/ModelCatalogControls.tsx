@@ -23,8 +23,8 @@ export function ModelCatalogControls(props: Readonly<{
     </div>
     <div class="flower-model-catalog-selection flex flex-wrap items-center gap-1">
       <span class="mr-auto text-xs tabular-nums text-muted-foreground" aria-live="polite">{props.copy.selected.replace('{count}', String(props.count))}</span>
-      <Button size="sm" variant="ghost" disabled={props.disabled || props.loading || !props.hasContent} onClick={props.onSelectAll}>{props.copy.selectAll}</Button>
-      <Button size="sm" variant="ghost" disabled={props.disabled || props.loading || props.count === 0} onClick={props.onClear}>{props.copy.clearAll}</Button>
+      <Button size="sm" variant="ghost" disabled={props.disabled || !props.hasContent} onClick={props.onSelectAll}>{props.copy.selectAll}</Button>
+      <Button size="sm" variant="ghost" disabled={props.disabled || props.count === 0} onClick={props.onClear}>{props.copy.clearAll}</Button>
     </div>
     <Show when={!props.hasContent && props.error}><p role="alert" class="mt-2 flower-body-copy text-destructive">{props.error}</p></Show>
   </div>;

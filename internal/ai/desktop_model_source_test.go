@@ -368,6 +368,9 @@ func TestServiceListModelsUsesDesktopModelSourceWithoutRemoteConfig(t *testing.T
 				}
 			})
 			defer cleanup()
+			if _, err := modelSource.ListModels(t.Context()); err != nil {
+				t.Fatal(err)
+			}
 
 			svc := &Service{
 				cfg:                &config.AIConfig{PermissionType: config.AIPermissionReadonly},
@@ -480,6 +483,9 @@ func TestServiceListModelsDoesNotFallbackToFirstDesktopModel(t *testing.T) {
 		}
 	})
 	defer cleanup()
+	if _, err := modelSource.ListModels(t.Context()); err != nil {
+		t.Fatal(err)
+	}
 
 	svc := &Service{desktopModelSource: modelSource}
 	out, err := svc.ListModels()
@@ -518,6 +524,9 @@ func TestServiceListModelsWithDesktopModelSourceEmptyListUsesEmptyModelsArray(t 
 		}
 	})
 	defer cleanup()
+	if _, err := modelSource.ListModels(t.Context()); err != nil {
+		t.Fatal(err)
+	}
 
 	svc := &Service{desktopModelSource: modelSource}
 	out, err := svc.ListModels()
@@ -858,6 +867,16 @@ func TestDesktopModelSourceExecutesCatalogWireNameWithOptionalEndpointKey(t *tes
 			secretPath := filepath.Join(t.TempDir(), "secrets.json")
 			if kind == "openrouter" {
 				if err := settings.NewSecretsStore(secretPath).SetAIProviderAPIKey("provider", "test-key"); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			if kind == "ollama" {
+				models, err := discoverModelCatalog(t.Context(), providerCatalogRequest(p, ""), server.Client())
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := config.WriteModelCatalogSnapshot(filepath.Join(filepath.Dir(path), "runtime", "model-catalog"), config.ModelCatalogIdentity(p, ""), models); err != nil {
 					t.Fatal(err)
 				}
 			}

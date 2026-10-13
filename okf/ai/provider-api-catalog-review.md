@@ -70,6 +70,10 @@ Daybreak Blue/Red require separate OpenAI approval and provisioning and therefor
 
 Runtime owns provider routing and the catalog projection. Floret owns provider-native request construction, opaque continuation state, and released model capability definitions. The iOS client consumes the authenticated projection and links to official configuration documentation; it does not embed a second supplier inventory or implement provider transports. `models.dev` is a reproducible directory input, not an authority to bypass official docs or released adapter support.
 
+## Runtime inventory synchronization
+
+The Runtime uses native Anthropic and Google list authentication/pagination and OpenAI-compatible inventories for supported brands. Unsupported list endpoints keep reviewed or manual metadata. Unknown identities require explicit adapter-supported capability configuration. Successful complete inventory is separate from user selection and actual invocation authorization; supplier and cache failures retain previous metadata. See [Model directory and selection](model-directory-and-selection.md) for ownership, deadlines, and scope isolation.
+
 # Evidence
 
 - `redeven:scripts/model-catalog/upstream.json` - Pinned models.dev response projection and original response SHA-256.

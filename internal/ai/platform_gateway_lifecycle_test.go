@@ -71,6 +71,9 @@ func TestPlatformGatewayRunSurvivesCallerDisconnectAndHistoryRestart(t *testing.
 	}
 	svc := open()
 	t.Cleanup(func() { _ = svc.Close() })
+	if _, err := svc.refreshPlatformCatalog(t.Context(), meta); err != nil {
+		t.Fatal(err)
+	}
 	thread, err := svc.CreateThread(t.Context(), meta, "Platform background task", "platform/test-model", "", "")
 	if err != nil {
 		t.Fatal(err)

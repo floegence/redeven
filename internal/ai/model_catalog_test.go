@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -87,6 +88,31 @@ func TestModelCatalogDoesNotForwardCredentialsOnRedirect(t *testing.T) {
 	}
 }
 
+func TestDynamicInventoryRejectsIncompleteOrDuplicateEntries(t *testing.T) {
+	for _, tc := range []struct {
+		name, kind, response string
+	}{
+		{"missing running list", "ollama", `{}`},
+		{"missing tool model capacity", "openrouter", `{"data":[{"id":"agent","supported_parameters":["tools"],"architecture":{"output_modalities":["text"]}}]}`},
+		{"duplicate unsupported identity", "openrouter", `{"data":[{"id":"other","supported_parameters":[],"architecture":{"output_modalities":["text"]}},{"id":"other","supported_parameters":[],"architecture":{"output_modalities":["text"]}}]}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				if r.URL.Path == "/api/tags" {
+					_, _ = w.Write([]byte(`{"models":[]}`))
+					return
+				}
+				_, _ = w.Write([]byte(tc.response))
+			}))
+			defer server.Close()
+			if _, err := discoverModelCatalog(t.Context(), ModelCatalogRequest{Type: tc.kind, BaseURL: server.URL}, server.Client()); err == nil {
+				t.Fatal("incomplete inventory could replace a complete snapshot")
+			}
+		})
+	}
+}
+
 func TestOllamaCatalogUsesServedContextCapacity(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
@@ -139,7 +165,8 @@ func TestOfflineOllamaDoesNotDisableOtherProviders(t *testing.T) {
 	if len(out.Models) == 0 || out.CurrentModel != cfg.CurrentModelID {
 		t.Fatal("offline discovery hid other models or changed the current model")
 	}
-	resolved, err := resolveModelCatalogs(context.Background(), cfg, nil, "brand/gpt-6-astra")
+	resolved := newModelCatalogManager(t.TempDir(), nil, nil, nil).resolve(cfg)
+	err = nil
 	if err != nil || !resolved.IsAllowedModelID("brand/gpt-6-astra") {
 		t.Fatalf("unrelated offline instance blocked resolution: %v", err)
 	}
@@ -204,7 +231,25 @@ func TestAutomaticCatalogRefreshDoesNotStarveLaterProviders(t *testing.T) {
 	}}
 	ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
 	defer cancel()
-	resolved, err := resolveModelCatalogs(ctx, cfg, nil, "")
+	manager := newModelCatalogManager(t.TempDir(), nil, (&Service{}).discoverProviderCatalog, nil)
+	manager.configure(cfg)
+	var workers sync.WaitGroup
+	failures := make(chan error, len(cfg.Providers))
+	for _, p := range cfg.Providers {
+		workers.Add(1)
+		go func(p config.AIProvider) {
+			defer workers.Done()
+			_, e := manager.sync(ctx, providerCatalogRequest(p, ""))
+			failures <- e
+		}(p)
+	}
+	workers.Wait()
+	close(failures)
+	var err error
+	for e := range failures {
+		err = errors.Join(err, e)
+	}
+	resolved := manager.resolve(cfg)
 	if err == nil {
 		t.Fatal("expected the slow catalog to time out")
 	}
@@ -237,6 +282,7 @@ func TestInstalledOllamaModelCanCreateThreadAndResolveImageCapability(t *testing
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = svc.Close() })
+	syncConfiguredCatalogForTest(t, svc, cfg.Providers[0])
 	th, err := svc.buildThreadCreateSettings(context.Background(), &session.Meta{EndpointID: "test", NamespacePublicID: "test"}, CreateThreadRequest{ModelID: cfg.CurrentModelID})
 	if err != nil || th.ModelID != cfg.CurrentModelID {
 		t.Fatalf("thread settings: %+v, %v", th, err)
@@ -245,7 +291,7 @@ func TestInstalledOllamaModelCanCreateThreadAndResolveImageCapability(t *testing
 	if got := attachmentRouteForTest(t, capability, "image/png"); got != "native_full_content" {
 		t.Fatalf("image route: %s", got)
 	}
-	if snapshot, _, err := buildDesktopModelSourceModelSnapshot(cfg, nil); err != nil || len(snapshot.Models) != 1 || !snapshot.Models[0].SupportsImageInput {
+	if snapshot, _, err := buildDesktopModelSourceModelSnapshot(cfg, nil, svc.modelCatalogs.root); err != nil || len(snapshot.Models) != 1 || !snapshot.Models[0].SupportsImageInput {
 		t.Fatalf("Ollama requires no API key: %+v, %v", snapshot, err)
 	}
 	if len(cfg.Providers[0].EffectiveModels()) != 0 {

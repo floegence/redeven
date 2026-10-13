@@ -1,5 +1,10 @@
 # Redeven OKF Update Log
 
+## 2026-10-13
+
+- Documented immediate model reads, silent Runtime-owned synchronization, atomic provider snapshots, cloud scope isolation, and explicit Provider synchronization feedback.
+- Updated Desktop source and configuration boundaries for saved connections without selected models and manual unknown-model capabilities.
+
 ## 2026-10-12: Bounded model availability checks
 
 - Give the shared [model directory](ai/model-directory-and-selection.md) one

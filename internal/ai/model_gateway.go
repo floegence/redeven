@@ -1405,7 +1405,7 @@ func applyAnthropicReasoning(params *anthropic.MessageNewParams, controls Provid
 		adaptive := anthropic.NewThinkingConfigAdaptiveParam()
 		params.Thinking = anthropic.ThinkingConfigParamUnion{OfAdaptive: &adaptive}
 	}
-	if selection.Level != "" && selection.Level != config.AIReasoningLevelDefault {
+	if selection.Level != "" && selection.Level != config.AIReasoningLevelDefault && selection.Level != config.AIReasoningLevelOn {
 		params.OutputConfig = anthropic.OutputConfigParam{Effort: anthropic.OutputConfigEffort(selection.Level)}
 	}
 	return nil

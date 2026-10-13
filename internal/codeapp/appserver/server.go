@@ -1706,6 +1706,7 @@ func (g *Server) saveAIProviderBundle(
 		}
 		return nil, aiProviderBundleSaveError{status: http.StatusBadRequest, err: err}
 	}
+	aiSvc.RefreshModelCatalogConnections()
 	return updated, nil
 }
 
@@ -4216,6 +4217,10 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
 			return
 		}
+		acquireAI()
+		if aiSvc != nil {
+			aiSvc.RefreshModelCatalogConnections()
+		}
 
 		set, err := g.secrets.GetAIProviderAPIKeySet(touched)
 		if err != nil {
@@ -4683,13 +4688,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if body.AttemptID != "" {
-				models, err := g.chatGPT.AttemptModels(r.Context(), meta.LocalHostAccess+":"+meta.ChannelID+":"+body.ScopeID, body.AttemptID)
-				if err != nil {
-					writeJSON(w, 400, apiResp{OK: false, Error: "ChatGPT models are unavailable.", ErrorCode: "chatgpt_models_unavailable"})
-					return
-				}
-				writeJSON(w, 200, apiResp{OK: true, Data: ai.ReviewedChatGPTCatalog(models)})
-				return
+				body.ScopeID = meta.LocalHostAccess + ":" + meta.ChannelID + ":" + body.ScopeID
 			}
 		}
 		out, err := aiSvc.DiscoverModelCatalog(r.Context(), body)
@@ -4712,10 +4711,6 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		baseline := query.Get("mode") == "baseline"
 		if r.URL.RawQuery != "" && (!baseline || len(query) != 1 || len(query["mode"]) != 1 || r.URL.RawQuery != "mode=baseline") {
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid model directory mode"})
-			return
-		}
-		if !baseline && !aiSvc.EnabledForSession(meta) {
-			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai not configured"})
 			return
 		}
 		var models *ai.ModelsResponse

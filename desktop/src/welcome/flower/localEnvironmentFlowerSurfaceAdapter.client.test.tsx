@@ -142,19 +142,21 @@ describe('Local Environment Flower surface adapter', () => {
     vi.useFakeTimers();
     try {
       let finish!: (value: unknown) => void;
+      let hang = false;
       const bridge = bridgeFor(request => {
         if (request.path === '/_redeven_proxy/api/settings') return settingsResponse();
-        if (request.path.endsWith('?mode=baseline')) return { current_model: 'default/agent', directory: {
-          models: [{ id: 'default/agent', label: 'Agent', source: 'runtime_config', provider_id: 'default', model_name: 'agent', state: 'pending' }],
-          sources: [{ id: 'default', kind: 'runtime_config', state: 'pending' }],
+        if (!hang) return { current_model: 'default/agent', directory: {
+          models: [{ id: 'default/agent', label: 'Agent', source: 'runtime_config', provider_id: 'default', model_name: 'agent', state: 'ready' }],
+          sources: [{ id: 'default', kind: 'runtime_config', state: 'ready' }],
         } };
         return new Promise(resolve => { finish = resolve; });
       });
       const surfaceAdapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge);
       await surfaceAdapter.loadSettings();
-      const read = surfaceAdapter.loadModelDirectory!();
+      hang = true;
+      const read = surfaceAdapter.loadModelDirectory!(true);
       await vi.advanceTimersByTimeAsync(10_000);
-      expect(await read).toMatchObject({ checking: false, error: 'directory_timeout', models: [{ id: 'default/agent', state: 'unavailable' }] });
+      expect(await read).toMatchObject({ checking: false, models: [{ id: 'default/agent', state: 'ready' }] });
       finish({ current_model: 'late/model', directory: { models: [], sources: [] } });
       await vi.advanceTimersByTimeAsync(0);
       expect((await surfaceAdapter.loadSettings()).model_directory?.current_model_id).toBe('default/agent');
@@ -187,17 +189,16 @@ describe('Local Environment Flower surface adapter', () => {
       const bridge = bridgeFor((request) => {
         if (request.path === '/_redeven_proxy/api/settings') return settings;
         if (request.path.startsWith('/_redeven_proxy/api/ai/models')) {
-          const pending = request.path.endsWith('?mode=baseline');
           return { current_model: 'dynamic/agent', directory: { models: [{
             id: 'dynamic/agent', label: 'Agent', source: 'runtime_config', provider_id: 'dynamic', provider_type: type, model_name: 'agent',
-            state: pending ? 'pending' : available ? 'ready' : 'unavailable', quantization: 'Q8_0', alias_group: 'digest',
-          }], sources: [{ id: 'dynamic', kind: 'runtime_config', state: pending ? 'pending' : 'ready' }] } };
+            state: available ? 'ready' : 'unavailable', quantization: 'Q8_0', alias_group: 'digest',
+          }], sources: [{ id: 'dynamic', kind: 'runtime_config', state: 'ready' }] } };
         }
         throw new Error(`Unexpected request ${request.path}`);
       });
       const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge);
       const initial = await adapter.loadSettings();
-      expect(initial.model_directory?.models[0].state).toBe('pending');
+      expect(initial.model_directory?.models[0].state).toBe('ready');
       expect((await adapter.loadModelDirectory!()).models).toEqual([expect.objectContaining({ model_name: 'agent', alias_group: 'digest', quantization: 'Q8_0', state: 'ready' })]);
       available = false;
       expect((await adapter.loadModelDirectory!(true)).models[0].state).toBe('unavailable');
@@ -813,7 +814,7 @@ describe('Local Environment Flower surface adapter', () => {
           return { ok: true as const, data: settingsResponse() };
         }
         if (request.path === '/_redeven_proxy/api/ai/models?mode=baseline') {
-          return { ok: true as const, data: { current_model: 'default/gpt-4.1' } };
+          return { ok: true as const, data: modelDirectoryWireFixture(settingsResponse(), { current_model: 'default/gpt-4.1' }) };
         }
         if (request.path === '/_redeven_proxy/api/ai/turns') {
           return {
@@ -863,6 +864,7 @@ describe('Local Environment Flower surface adapter', () => {
     const onSettingsChanged = vi.fn();
     const bridge = bridgeFor((request) => {
       calls.push(request);
+      if (request.path.startsWith('/_redeven_proxy/api/ai/models')) return { current_model: 'default/gpt-5.4' };
       if (request.path === '/_redeven_proxy/api/ai/current_model') {
         return { current_model: 'default/gpt-5.4', models: [{ id: 'default/gpt-5.4' }] };
       }
@@ -897,7 +899,6 @@ describe('Local Environment Flower surface adapter', () => {
       },
       { method: 'GET', path: '/_redeven_proxy/api/settings' },
       { method: 'GET', path: '/_redeven_proxy/api/ai/models?mode=baseline' },
-      { method: 'GET', path: '/_redeven_proxy/api/ai/models' },
     ]);
     expect(snapshot.model_profile?.current_model_id).toBe('default/gpt-5.4');
     expect(onSettingsChanged).toHaveBeenCalledTimes(1);

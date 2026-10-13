@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -51,6 +52,7 @@ type Options struct {
 	TessivenResources      *tessiven.ResourceBackend
 	Logger                 *slog.Logger
 	StateDir               string
+	ModelCatalogDir        string
 	BuildVersion           string
 	DeferExecution         bool
 	skipStorageMaintenance bool
@@ -131,9 +133,11 @@ type Service struct {
 	scope        *filesystemscope.Registry
 	shell        string
 
+	modelCatalogs            *modelCatalogManager
 	cfg                      *config.AIConfig
 	desktopModelSource       *desktopModelSourceClient
 	platformModelPreferences map[string]platformModelPreference
+	platformCatalogs         map[string]*platformCatalogSnapshot
 
 	persistOpTO time.Duration
 
@@ -468,6 +472,18 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 		lifecycleCtx:                    lifecycleCtx,
 		lifecycleCancel:                 lifecycleCancel,
 	}
+	catalogRoot := strings.TrimSpace(opts.ModelCatalogDir)
+	if catalogRoot == "" {
+		catalogRoot = filepath.Join(opts.StateDir, "runtime", "model-catalog")
+	}
+	svc.modelCatalogs = newModelCatalogManager(catalogRoot, resolveProviderKey, svc.discoverProviderCatalog, svc.publishModelDirectoryChanged)
+	svc.modelCatalogs.configure(opts.Config)
+	if opts.ModelCatalogDir != "" {
+		svc.serviceWorkers.Add(1)
+		go func() { defer svc.serviceWorkers.Done(); svc.modelCatalogs.run(lifecycleCtx) }()
+		svc.serviceWorkers.Add(1)
+		go func() { defer svc.serviceWorkers.Done(); svc.runPlatformModelCatalogs(lifecycleCtx) }()
+	}
 	svc.skillManager.mcpManager = mcpManager
 	if computer, ok := opts.TargetToolExecutor.(*ComputerUseRuntime); ok {
 		svc.toolMedia = computer.media
@@ -787,7 +803,20 @@ func (s *Service) UpdateConfig(next *config.AIConfig, persist func() error) erro
 
 	s.cfg = next
 	s.mu.Unlock()
+	s.modelCatalogs.configure(next)
 	return nil
+}
+
+// RefreshModelCatalogConnections follows a committed credential update.
+func (s *Service) RefreshModelCatalogConnections() {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	cfg := s.cfg
+	s.mu.Unlock()
+	s.modelCatalogs.configure(cfg)
+	s.publishModelDirectoryChanged()
 }
 
 // SetDefaultPermissionType updates the default permission for future Flower
@@ -897,6 +926,7 @@ func (s *Service) SetModelProfile(profile *config.AIModelProfile, persist func(n
 		s.desktopModelSource.SetCurrentModelID("")
 	}
 	s.mu.Unlock()
+	s.modelCatalogs.configure(&next)
 	return nil
 }
 
@@ -955,23 +985,19 @@ func (s *Service) SetCurrentModelID(modelID string, persist func(next *config.AI
 	s.mu.Lock()
 	cfg := s.cfg
 	s.mu.Unlock()
-	resolved, err := resolveModelCatalogs(context.Background(), cfg, s.resolveProviderKey, modelID, s.chatGPT)
-	if err != nil {
-		return err
-	}
+	resolved := s.modelCatalogs.resolve(cfg)
 	s.mu.Lock()
 	if s.cfg != cfg {
 		s.mu.Unlock()
 		return errors.New("model configuration changed; select the model again")
 	}
-	cfg = resolved
 
 	modelSource := s.desktopModelSource
 	if !cfg.HasModelProfile() && (modelSource == nil || !modelSource.hasBinding()) {
 		s.mu.Unlock()
 		return ErrNotConfigured
 	}
-	if cfg.HasModelProfile() && cfg.IsAllowedModelID(modelID) {
+	if cfg.HasModelProfile() && resolved.IsAllowedModelID(modelID) {
 		next := *cfg
 		next.CurrentModelID = modelID
 		if err := next.Validate(); err != nil {
@@ -1181,13 +1207,13 @@ func configModelViews(cfg *config.AIConfig) ([]Model, string, error) {
 	}
 	currentModelID := strings.TrimSpace(cfg.CurrentModelID)
 	if currentModelID == "" {
-		return models, "", errors.New("invalid ai config: missing current model")
+		return models, "", nil
 	}
 
 	if !cfg.IsAllowedModelID(currentModelID) {
 		configured := false
 		for _, p := range cfg.Providers {
-			if strings.HasPrefix(currentModelID, p.ID+"/") && (p.ModelSelection != nil || !p.IsEnabled()) {
+			if strings.HasPrefix(currentModelID, p.ID+"/") && (p.ModelSelection != nil || !p.IsEnabled() || p.Type == platformGatewayProviderType || slices.ContainsFunc(p.Models, func(m config.AIProviderModel) bool { return currentModelID == p.ID+"/"+m.ModelName })) {
 				configured = true
 				break
 			}
@@ -1237,19 +1263,7 @@ func (s *Service) desktopModelSourceModel(ctx context.Context, modelID string) (
 	if modelSource == nil {
 		return DesktopModelSourceModel{}, false, nil
 	}
-	checkCtx := ctx
-	cancel := func() {}
-	if checkCtx == nil {
-		checkCtx = context.Background()
-	}
-	if _, ok := checkCtx.Deadline(); !ok {
-		checkCtx, cancel = context.WithTimeout(checkCtx, 3*time.Second)
-	}
-	defer cancel()
-	snapshot, err := modelSource.ListModels(checkCtx)
-	if err != nil {
-		return DesktopModelSourceModel{}, false, err
-	}
+	snapshot := modelSource.Snapshot()
 	model, ok := desktopModelSourceSnapshotModel(snapshot, modelID)
 	return model, ok, nil
 }
@@ -1636,11 +1650,7 @@ func (s *Service) resolveRunModel(ctx context.Context, cfg *config.AIConfig, req
 	if model == "" {
 		return resolvedRunModel{}, errors.New("missing model")
 	}
-	var catalogErr error
-	cfg, catalogErr = resolveModelCatalogs(ctx, cfg, s.resolveProviderKey, model, s.chatGPT)
-	if catalogErr != nil {
-		return resolvedRunModel{}, catalogErr
-	}
+	cfg = s.modelCatalogs.resolve(cfg)
 	if r != nil {
 		r.cfg = cfg
 	}
@@ -1731,17 +1741,8 @@ func (s *Service) resolvedDesktopModelSourceOverrideModel(ctx context.Context) (
 	if current == "" {
 		return "", false
 	}
-	checkCtx := ctx
-	cancel := func() {}
-	if checkCtx == nil {
-		checkCtx = context.Background()
-	}
-	if _, ok := checkCtx.Deadline(); !ok {
-		checkCtx, cancel = context.WithTimeout(checkCtx, 3*time.Second)
-	}
-	defer cancel()
-	snapshot, err := modelSource.ListModels(checkCtx)
-	if err != nil || snapshot == nil {
+	snapshot := modelSource.Snapshot()
+	if snapshot == nil {
 		return "", false
 	}
 	if desktopModelSourceSnapshotHasModel(snapshot, current) {
@@ -1764,17 +1765,8 @@ func (s *Service) resolvedDesktopModelSourceDefaultModel(ctx context.Context) (s
 	if modelSource == nil {
 		return "", false
 	}
-	checkCtx := ctx
-	cancel := func() {}
-	if checkCtx == nil {
-		checkCtx = context.Background()
-	}
-	if _, ok := checkCtx.Deadline(); !ok {
-		checkCtx, cancel = context.WithTimeout(checkCtx, 3*time.Second)
-	}
-	defer cancel()
-	snapshot, err := modelSource.ListModels(checkCtx)
-	if err != nil || snapshot == nil {
+	snapshot := modelSource.Snapshot()
+	if snapshot == nil {
 		return "", false
 	}
 	if current != "" && desktopModelSourceSnapshotHasModel(snapshot, current) {

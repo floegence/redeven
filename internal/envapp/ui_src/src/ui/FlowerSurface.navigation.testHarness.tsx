@@ -1013,6 +1013,7 @@ const mountFlowerSurface = (
     renderContextSnapshotPreview?: FlowerSurfaceProps['renderContextSnapshotPreview'];
     focusThreadRequest?: FlowerThreadFocusRequest | null;
     settingsFocusRequest?: number;
+    settingsRevision?: FlowerSurfaceProps['settingsRevision'];
     mobileThreadsOpen?: boolean;
     onMobileThreadsOpenChange?: (open: boolean) => void;
     presentation?: 'full' | 'companion';
@@ -1044,6 +1045,7 @@ const mountFlowerSurface = (
       }}
       focusThreadRequest={props.focusThreadRequest}
       settingsFocusRequest={props.settingsFocusRequest}
+      settingsRevision={props.settingsRevision}
       mobileThreadsOpen={props.mobileThreadsOpen}
       onMobileThreadsOpenChange={props.onMobileThreadsOpenChange}
       presentation={props.presentation}
@@ -1109,6 +1111,7 @@ export function renderSurfaceWithAdapterProps(
     renderContextSnapshotPreview?: FlowerSurfaceProps['renderContextSnapshotPreview'];
     focusThreadRequest?: FlowerThreadFocusRequest | null;
     settingsFocusRequest?: number;
+    settingsRevision?: FlowerSurfaceProps['settingsRevision'];
     mobileThreadsOpen?: boolean;
     onMobileThreadsOpenChange?: (open: boolean) => void;
     presentation?: 'full' | 'companion';

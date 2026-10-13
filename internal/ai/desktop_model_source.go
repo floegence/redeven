@@ -280,7 +280,7 @@ func (c *desktopModelSourceClient) Prepare(session DesktopModelSourceSession) (*
 	return status, nil
 }
 
-func (c *desktopModelSourceClient) ServeRPC(ctx context.Context, session DesktopModelSourceSession, ws *websocket.Conn, onChange func()) error {
+func (c *desktopModelSourceClient) ServeRPC(ctx context.Context, session DesktopModelSourceSession, ws *websocket.Conn, onChange func(), catalogChanged ...func()) error {
 	if c == nil {
 		return errors.New("nil desktop model source")
 	}
@@ -321,6 +321,37 @@ func (c *desktopModelSourceClient) ServeRPC(ctx context.Context, session Desktop
 		onChange()
 	}
 
+	observeCtx, cancelObserve := context.WithCancel(ctx)
+	observed := make(chan struct{})
+	defer func() { cancelObserve(); <-observed }()
+	go func() {
+		defer close(observed)
+		timer := time.NewTimer(0)
+		defer timer.Stop()
+		for {
+			select {
+			case <-observeCtx.Done():
+				return
+			case <-timer.C:
+			}
+			before := c.Snapshot()
+			checkCtx, cancel := context.WithTimeout(observeCtx, 3*time.Second)
+			after, listErr := c.ListModels(checkCtx)
+			cancel()
+			if listErr == nil {
+				a, _ := json.Marshal(before)
+				b, _ := json.Marshal(after)
+				if string(a) != string(b) {
+					for _, callback := range catalogChanged {
+						if callback != nil {
+							callback()
+						}
+					}
+				}
+			}
+			timer.Reset(5 * time.Second)
+		}
+	}()
 	err = runtimeConn.readLoop(ctx)
 	runtimeConn.Close()
 
@@ -445,6 +476,21 @@ func (c *desktopModelSourceClient) CurrentModelID() string {
 	return strings.TrimSpace(c.currentModelID)
 }
 
+func (c *desktopModelSourceClient) Snapshot() *DesktopModelSourceModelSnapshot {
+	if c == nil {
+		return nil
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.lastSnapshot == nil {
+		return nil
+	}
+	cp := *c.lastSnapshot
+	cp.Models = append([]DesktopModelSourceModel(nil), cp.Models...)
+	cp.MissingKeyProviderIDs = append([]string(nil), cp.MissingKeyProviderIDs...)
+	return &cp
+}
+
 func (c *desktopModelSourceClient) ListModels(ctx context.Context) (*DesktopModelSourceModelSnapshot, error) {
 	if c == nil {
 		return nil, ErrNotConfigured
@@ -473,6 +519,10 @@ func (c *desktopModelSourceClient) ListModels(ctx context.Context) (*DesktopMode
 	}
 	sort.Strings(out.MissingKeyProviderIDs)
 	c.mu.Lock()
+	if c.conn != conn {
+		c.mu.Unlock()
+		return nil, errors.New("desktop model source connection changed")
+	}
 	c.lastErr = ""
 	cp := out
 	cp.Models = append([]DesktopModelSourceModel(nil), out.Models...)
@@ -1197,7 +1247,7 @@ func (e *desktopModelSourceExecutor) snapshot() (*DesktopModelSourceModelSnapsho
 		}
 		return nil, nil, nil, nil, err
 	}
-	snapshot, registry, err := buildDesktopModelSourceModelSnapshot(cfg.AI, secretStore)
+	snapshot, registry, err := buildDesktopModelSourceModelSnapshot(cfg.AI, secretStore, filepath.Join(filepath.Dir(cfgPath), "runtime", "model-catalog"))
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
@@ -1232,7 +1282,7 @@ func (e *desktopModelSourceExecutor) writeStartupReport(reportFile string) error
 	return json.NewEncoder(f).Encode(report)
 }
 
-func buildDesktopModelSourceModelSnapshot(cfg *config.AIConfig, secretStore *settings.SecretsStore) (*DesktopModelSourceModelSnapshot, map[string]desktopModelSourceRegistryEntry, error) {
+func buildDesktopModelSourceModelSnapshot(cfg *config.AIConfig, secretStore *settings.SecretsStore, catalogRoots ...string) (*DesktopModelSourceModelSnapshot, map[string]desktopModelSourceRegistryEntry, error) {
 	out := &DesktopModelSourceModelSnapshot{Configured: cfg.HasModelProfile()}
 	registry := map[string]desktopModelSourceRegistryEntry{}
 	if !cfg.HasModelProfile() {
@@ -1242,12 +1292,9 @@ func buildDesktopModelSourceModelSnapshot(cfg *config.AIConfig, secretStore *set
 	if secretStore != nil {
 		resolveKey = secretStore.GetAIProviderAPIKey
 	}
-	resolved, err := resolveModelCatalogs(context.Background(), cfg, resolveKey, "", chatgpt.New(secretStore))
-	models, _, _ := configModelViews(resolved)
-	if err != nil && len(models) == 0 {
-		return nil, nil, err
+	if len(catalogRoots) > 0 {
+		cfg = config.WithLocalModelCatalogs(cfg, catalogRoots[0], resolveKey)
 	}
-	cfg = resolved
 
 	providerNameByID := map[string]string{}
 	for _, p := range cfg.Providers {
@@ -1571,11 +1618,12 @@ func (s *Service) ServeDesktopModelSourceRPC(ctx context.Context, session Deskto
 	}
 	s.mu.Unlock()
 	wrappedOnChange := func() {
+		s.publishModelDirectoryChanged()
 		if onChange != nil {
 			onChange()
 		}
 	}
-	return modelSource.ServeRPC(ctx, session, ws, wrappedOnChange)
+	return modelSource.ServeRPC(ctx, session, ws, wrappedOnChange, s.publishModelDirectoryChanged)
 }
 
 func (s *Service) DisconnectDesktopModelSource() *AIRuntimeStatus {

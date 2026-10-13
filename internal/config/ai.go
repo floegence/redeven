@@ -133,6 +133,7 @@ type AIProvider struct {
 	Models           []AIProviderModel `json:"models,omitempty"`
 	ModelSelection   *AIModelSelection `json:"model_selection,omitempty"`
 	discoveredModels []AIProviderModel
+	catalogResolved  bool
 }
 
 type AIProviderWebSearch struct {
@@ -146,6 +147,8 @@ type AIProviderWebSearch struct {
 }
 
 type AIProviderModel struct {
+	PlatformProtocol string `json:"-"`
+	SupportsTools    *bool  `json:"supports_tools,omitempty"`
 	// Discovery metadata is presentation-only and is never selection authority.
 	ModelDigest                   string                `json:"model_digest,omitempty"`
 	Quantization                  string                `json:"quantization,omitempty"`
@@ -337,7 +340,7 @@ func (c *AIConfig) ModelProfile() AIModelProfile {
 }
 
 func (c *AIConfig) HasModelProfile() bool {
-	return c != nil && len(c.Providers) > 0 && strings.TrimSpace(c.CurrentModelID) != ""
+	return c != nil && len(c.Providers) > 0
 }
 
 func (c *AIConfig) Validate() error {
@@ -433,9 +436,6 @@ func (p *AIModelProfile) Validate() error {
 		// Validate both active models and retained overrides/custom entries.
 		provider.Models = provider.modelsForValidation()
 		// Validate models (provider-owned list).
-		if len(provider.Models) == 0 && provider.ModelSelection == nil {
-			return fmt.Errorf("providers[%d]: missing models", i)
-		}
 		modelNames := make(map[string]struct{}, len(provider.Models))
 		for j := range provider.Models {
 			m := provider.Models[j]
@@ -495,6 +495,9 @@ func (p *AIModelProfile) Validate() error {
 				return fmt.Errorf("providers[%d].models[%d]: invalid input_modalities: %w", i, j, err)
 			}
 			reasoningCapability := m.EffectiveReasoningCapability(t)
+			if err := ValidateAIProviderReasoningCapability(t, reasoningCapability); err != nil {
+				return fmt.Errorf("providers[%d].models[%d]: %w", i, j, err)
+			}
 			if err := reasoningCapability.Validate(); err != nil {
 				return fmt.Errorf("providers[%d].models[%d]: invalid reasoning_capability: %w", i, j, err)
 			}
@@ -506,7 +509,7 @@ func (p *AIModelProfile) Validate() error {
 
 	currentModelID := strings.TrimSpace(p.CurrentModelID)
 	if currentModelID == "" {
-		return errors.New("missing current model (current_model_id)")
+		return nil
 	}
 	pid, name, ok := strings.Cut(currentModelID, "/")
 	if !ok || pid == "" || name == "" || strings.Contains(name, "/") {

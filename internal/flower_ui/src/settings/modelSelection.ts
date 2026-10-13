@@ -1,10 +1,7 @@
-import type { FlowerProvider, FlowerProviderDraft, FlowerProviderModel, FlowerProviderType, FlowerModelCatalogDiscovery } from '../contracts/flowerSurfaceContracts';
+import { cloneFlowerModel, applyModelOverride, projectFlowerProviderModels } from '../providerModelProjection';
+export { cloneFlowerModel } from '../providerModelProjection';
+import type { FlowerProvider, FlowerProviderDraft, FlowerProviderModel, FlowerProviderType } from '../contracts/flowerSurfaceContracts';
 import { recommendedModelsForFlowerProviderType } from './providerCatalog';
-
-export function cloneFlowerModel(model: FlowerProviderModel): FlowerProviderModel {
-  const { model_digest, quantization, unavailable, web_search, model_name, display_name, status, wire_model_name, context_window, max_output_tokens, effective_context_window_percent, input_modalities, reasoning_capability, default_reasoning_selection } = model;
-  return JSON.parse(JSON.stringify({ model_digest, quantization, unavailable, web_search, model_name, display_name, status, wire_model_name, context_window, max_output_tokens, effective_context_window_percent, input_modalities, reasoning_capability, default_reasoning_selection }));
-}
 
 export function flowerProviderUsesCatalog(type: FlowerProviderType): boolean {
   return type !== 'openrouter' && type !== 'ollama' && type !== 'openai_compatible';
@@ -16,39 +13,18 @@ export function defaultFlowerProviderModels(_type: FlowerProviderType): FlowerPr
 
 export function flowerProviderModelChoices(provider: FlowerProviderDraft): FlowerProviderModel[] {
   const choices = new Map((provider.catalog_models ?? (provider.auth_method === 'chatgpt' ? [] : recommendedModelsForFlowerProviderType(provider.type))).map((model) => [model.model_name, model]));
-  for (const model of provider.model_selection?.custom_models ?? []) choices.set(model.model_name, applyModelOverride(choices.get(model.model_name) ?? { model_name: model.model_name }, model));
-  for (const model of provider.models) {
-    if (!choices.has(model.model_name)) choices.set(model.model_name, model);
+  for (const model of [...provider.model_selection?.model_overrides ?? [], ...provider.model_selection?.custom_models ?? [], ...provider.models]) {
+    const entry = choices.get(model.model_name) ?? (model.wire_model_name
+      ? provider.catalog_models?.find((listed) => (listed.wire_model_name || listed.model_name) === model.wire_model_name) : undefined);
+    choices.set(model.model_name, applyModelOverride(entry ?? { model_name: model.model_name }, model));
   }
   return [...choices.values()].map((model) => ({ ...model, web_search: provider.models.find((selected) => selected.model_name === model.model_name)?.web_search ?? model.web_search }));
 }
 
-function applyModelOverride(model: FlowerProviderModel, override?: FlowerProviderModel): FlowerProviderModel {
-  const merged = { ...model, ...override };
-  if (!override?.max_output_tokens && merged.context_window && (merged.max_output_tokens ?? 0) > merged.context_window) merged.max_output_tokens = merged.context_window;
-  return merged;
-}
-
 export function resolveFlowerProviderModels(provider: FlowerProvider, discovered?: readonly FlowerProviderModel[]): FlowerProviderModel[] {
-  if (!provider.model_selection) return (provider.models ?? []).map(cloneFlowerModel);
-  const selection = provider.model_selection;
-  const catalog = discovered ?? (provider.auth_method !== 'chatgpt' && flowerProviderUsesCatalog(provider.type) ? recommendedModelsForFlowerProviderType(provider.type) : []);
-  const overrides = new Map((selection.model_overrides ?? []).map((model) => [model.model_name, model]));
-  const models = new Map(catalog.map((model) => [model.model_name, applyModelOverride(model, overrides.get(model.model_name))]));
-  for (const override of overrides.values()) {
-    if (!models.has(override.model_name) && override.wire_model_name) {
-      const entry = catalog.find((model) => (model.wire_model_name || model.model_name) === override.wire_model_name);
-      if (entry) models.set(override.model_name, applyModelOverride(entry, override));
-    }
-  }
-  for (const custom of selection.custom_models ?? []) {
-    const catalogModel = models.get(custom.model_name) ?? catalog.find((entry) => (entry.wire_model_name || entry.model_name) === custom.wire_model_name);
-    models.set(custom.model_name, applyModelOverride(catalogModel ?? { model_name: custom.model_name }, custom));
-  }
-  // Legacy profiles must be frozen by the configuration owner, never expanded in chat.
-  return (selection.selected_models ?? []).map((name) => cloneFlowerModel(models.get(name) ?? {
-    ...overrides.get(name), model_name: name, unavailable: true,
-  }));
+  if (!provider.model_selection && discovered === undefined) return projectFlowerProviderModels(provider);
+  const catalog = discovered ?? (provider.auth_method !== 'chatgpt' && flowerProviderUsesCatalog(provider.type) ? recommendedModelsForFlowerProviderType(provider.type) : undefined);
+  return projectFlowerProviderModels(provider, catalog, discovered !== undefined);
 }
 
 function equalValue(a: unknown, b: unknown): boolean {
@@ -58,10 +34,10 @@ function equalValue(a: unknown, b: unknown): boolean {
   return encode(a) === encode(b);
 }
 
-const overrideKeys = ['wire_model_name', 'context_window', 'max_output_tokens', 'effective_context_window_percent', 'input_modalities', 'reasoning_capability', 'default_reasoning_selection'] as const;
+const overrideKeys = ['supports_tools', 'wire_model_name', 'context_window', 'max_output_tokens', 'effective_context_window_percent', 'input_modalities', 'reasoning_capability', 'default_reasoning_selection'] as const;
 
 function serializeFlowerModel(model: FlowerProviderModel): FlowerProviderModel {
-  const { model_digest: _digest, quantization: _quantization, unavailable: _unavailable, web_search: _search, ...intent } = cloneFlowerModel(model);
+  const { model_digest: _digest, quantization: _quantization, status: _status, unavailable: _unavailable, web_search: _search, ...intent } = cloneFlowerModel(model);
   return intent;
 }
 
@@ -76,7 +52,7 @@ export function serializeFlowerProvider(provider: FlowerProviderDraft): FlowerPr
   if (provider.type === 'openai_compatible') return out;
   // Offline legacy preferences require an explicit selection action before saving.
   if (provider.model_selection && provider.model_selection.selected_models == null) return { ...out, models: [], model_selection: provider.model_selection };
-  const catalog = provider.auth_method !== 'chatgpt' && flowerProviderUsesCatalog(provider.type) ? recommendedModelsForFlowerProviderType(provider.type) : (provider.catalog_models ?? []);
+  const catalog = provider.catalog_models ?? (provider.auth_method !== 'chatgpt' && flowerProviderUsesCatalog(provider.type) ? recommendedModelsForFlowerProviderType(provider.type) : []);
   const catalogByName = new Map(catalog.map((model) => [model.model_name, model]));
   const selected = provider.models.map((model) => model.model_name);
   const customModels = new Map((provider.model_selection?.custom_models ?? []).map((model) => [model.model_name, serializeFlowerModel(model)]));
@@ -127,15 +103,4 @@ export function applyFlowerModelDiscovery(provider: FlowerProviderDraft, catalog
   const persisted = !provider.catalog_models && provider.model_selection ? provider : serializeFlowerProvider(provider);
   return { ...provider, model_selection: persisted.model_selection, catalog_models: catalog,
     models: resolveFlowerProviderModels(persisted, catalog), catalog_error: undefined };
-}
-
-export async function hydrateFlowerProviderCatalog(provider: FlowerProvider, discover: FlowerModelCatalogDiscovery): Promise<FlowerProvider> {
-  if (provider.enabled === false) return { ...provider, models: resolveFlowerProviderModels(provider, provider.catalog_models) };
-  if (provider.type !== 'ollama' && provider.type !== 'openrouter') return { ...provider, models: resolveFlowerProviderModels(provider) };
-  try {
-    const result = await discover({ provider_id: provider.id, type: provider.type, base_url: provider.base_url });
-    return { ...provider, catalog_models: result.models, models: resolveFlowerProviderModels(provider, result.models), catalog_error: undefined };
-  } catch (error) {
-    return { ...provider, models: resolveFlowerProviderModels(provider, []).map((model) => ({ ...model, unavailable: true })), catalog_error: error instanceof Error ? error.message : String(error) };
-  }
 }

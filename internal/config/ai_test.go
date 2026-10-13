@@ -54,9 +54,6 @@ func TestAIConfigValidate_RejectsPartialModelProfiles(t *testing.T) {
 		cfg  AIConfig
 	}{
 		{name: "current_model_only", cfg: AIConfig{CurrentModelID: "openai/gpt-5-mini"}},
-		{name: "providers_only", cfg: AIConfig{Providers: []AIProvider{{
-			ID: "openai", Type: "openai", Models: []AIProviderModel{{ModelName: "gpt-5-mini"}},
-		}}}},
 	}
 	for _, tt := range tests {
 		tt := tt
@@ -72,7 +69,7 @@ func TestAIConfigValidate_RejectsPartialModelProfiles(t *testing.T) {
 	}
 }
 
-func TestAIConfigValidate_RequiresProviderModels(t *testing.T) {
+func TestAIConfigValidate_AllowsConnectionWithoutModels(t *testing.T) {
 	t.Parallel()
 
 	cfg := &AIConfig{
@@ -81,12 +78,15 @@ func TestAIConfigValidate_RequiresProviderModels(t *testing.T) {
 		},
 	}
 
-	if err := cfg.Validate(); err == nil {
-		t.Fatalf("expected validation error for missing providers[].models[]")
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("saved provider connection without a model: %v", err)
+	}
+	if !cfg.HasModelProfile() || cfg.CurrentModelID != "" {
+		t.Fatal("configured connection was not retained independently of selection")
 	}
 }
 
-func TestAIConfigValidate_RequiresCurrentModel(t *testing.T) {
+func TestAIConfigValidate_AllowsNoSelectedModel(t *testing.T) {
 	t.Parallel()
 
 	cfg := &AIConfig{
@@ -101,8 +101,8 @@ func TestAIConfigValidate_RequiresCurrentModel(t *testing.T) {
 		},
 	}
 
-	if err := cfg.Validate(); err == nil {
-		t.Fatalf("expected validation error for missing current model")
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("configured provider without a selection: %v", err)
 	}
 }
 

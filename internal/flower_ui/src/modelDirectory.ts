@@ -1,3 +1,4 @@
+import { projectFlowerProviderModels } from './providerModelProjection';
 import type { FlowerModelDirectory, FlowerModelSourceStatus, FlowerSettingsSnapshot } from './contracts/flowerSurfaceContracts';
 
 export type FlowerModelReadResource = Readonly<{
@@ -12,7 +13,16 @@ export function readFlowerModelDirectory(value: unknown): FlowerModelDirectory {
   const directory = response?.directory;
   const states = ['ready', 'pending', 'unavailable'];
   const kinds = ['runtime_config', 'desktop_model_source', 'platform'];
+  const catalogs = directory?.provider_catalogs;
+  const invalidCatalogs = catalogs !== undefined && (!catalogs || typeof catalogs !== 'object' || Array.isArray(catalogs)
+    || Object.entries(catalogs).some(([providerID, models]) => !providerID.trim() || !Array.isArray(models)
+      || new Set(models.map(model => model?.model_name)).size !== models.length
+      || models.some(model => !model || typeof model.model_name !== 'string' || !model.model_name.trim() || model.model_name.includes(String.fromCharCode(0)) || /[\r\n/]/u.test(model.model_name)
+        || (model.wire_model_name !== undefined && (typeof model.wire_model_name !== 'string' || model.wire_model_name.includes(String.fromCharCode(0)) || /[\r\n]/u.test(model.wire_model_name)))
+        || (model.supports_tools !== undefined && typeof model.supports_tools !== 'boolean')
+        || [model.context_window, model.max_output_tokens].some(limit => limit !== undefined && (!Number.isSafeInteger(limit) || limit < 0)))));
   if (!directory || !Array.isArray(directory.models) || !Array.isArray(directory.sources)
+    || invalidCatalogs
     || typeof response?.current_model !== 'string'
     || new Set(directory.models.map(model => model?.id)).size !== directory.models.length
     || new Set(directory.sources.map(source => source?.id)).size !== directory.sources.length
@@ -27,20 +37,11 @@ export function readFlowerModelDirectory(value: unknown): FlowerModelDirectory {
       || (model.source === 'runtime_config' && model.id !== `${model.provider_id}/${model.model_name}`))) {
     throw new Error('Flower model directory response is invalid.');
   }
-  return { current_model_id: response.current_model, models: directory.models, sources: directory.sources };
+  return { current_model_id: response.current_model, models: directory.models, sources: directory.sources, provider_catalogs: directory.provider_catalogs };
 }
-
-const emptyDirectory = (): FlowerModelDirectory => ({ current_model_id: '', models: [], sources: [] });
-const failedDirectory = (previous: FlowerModelDirectory, timedOut = false): FlowerModelDirectory => ({
-  ...previous, checking: false, error: timedOut ? 'directory_timeout' : 'directory_unavailable',
-  models: previous.models.map(model => model.state === 'pending' ? { ...model, state: 'unavailable', reason: 'catalog_unavailable' } : model),
-  sources: previous.sources.map(source => source.state === 'pending' ? { ...source, state: 'unavailable', reason: 'catalog_unavailable' } : source),
-});
 
 const MODEL_READ_DEADLINE_MS = 10_000;
 
-// Desktop IPC may not support cancellation. Settle the owning read on abort and
-// consume its late result without allowing it to publish into the directory.
 function readWithSignal<T>(signal: AbortSignal, read: () => Promise<T>): Promise<T> {
   return new Promise((resolve, reject) => {
     const abort = () => reject(signal.reason);
@@ -50,8 +51,8 @@ function readWithSignal<T>(signal: AbortSignal, read: () => Promise<T>): Promise
   });
 }
 
-// This resource coalesces product reads within one owning connection. It never
-// discovers models, authorizes execution, opens a transport, or retains secrets.
+// A connection owns one settings read and one local directory read. Supplier
+// synchronization never enters this resource or invalidates configuration.
 export function createFlowerModelReadResource(options: Readonly<{
   scope: () => string;
   loadConfiguration: (signal: AbortSignal) => Promise<FlowerSettingsSnapshot>;
@@ -61,97 +62,91 @@ export function createFlowerModelReadResource(options: Readonly<{
   let generation = 0;
   let configuration: FlowerSettingsSnapshot | null = null;
   let settingsRequest: Promise<FlowerSettingsSnapshot> | null = null;
-  let activeCheck: Readonly<{ baseline: Promise<FlowerModelDirectory>; full: Promise<FlowerModelDirectory> }> | null = null;
+  let directoryRequest: Promise<FlowerModelDirectory> | null = null;
+  let directoryRead: { again: boolean } | null = null;
   let directory: FlowerModelDirectory | null = null;
-  let complete = false;
   const listeners = new Set<(directory: FlowerModelDirectory) => void>();
   const controllers = new Set<AbortController>();
-  const deadline = () => {
-    const controller = new AbortController();
-    controllers.add(controller);
-    const timer = setTimeout(() => controller.abort(new DOMException('Flower model read timed out.', 'TimeoutError')), MODEL_READ_DEADLINE_MS);
-    return { signal: controller.signal, dispose: () => { clearTimeout(timer); controllers.delete(controller); } };
-  };
   const invalidate = () => {
     generation += 1;
     for (const controller of controllers) controller.abort(new DOMException('Flower model read cancelled.', 'AbortError'));
     controllers.clear();
-    configuration = null; directory = null; complete = false;
-    settingsRequest = null; activeCheck = null;
+    configuration = null; directory = null;
+    settingsRequest = null; directoryRequest = null; directoryRead = null;
   };
   const checkScope = () => {
     const next = options.scope();
     if (next !== scope) { scope = next; invalidate(); }
   };
-  const publish = (value: FlowerModelDirectory) => {
-    directory = value;
-    for (const listener of listeners) listener(value);
-    return value;
+  const read = async <T,>(operation: (signal: AbortSignal) => Promise<T>): Promise<T> => {
+    const controller = new AbortController(); controllers.add(controller);
+    const timer = setTimeout(() => controller.abort(new DOMException('Flower model read timed out.', 'TimeoutError')), MODEL_READ_DEADLINE_MS);
+    try { return await readWithSignal(controller.signal, () => operation(controller.signal)); }
+    finally { clearTimeout(timer); controllers.delete(controller); }
   };
-  const assertCurrent = (revision: number) => {
+  const loadDirectory = (refresh = false, prepare?: () => Promise<unknown>): Promise<FlowerModelDirectory> => {
     checkScope();
-    if (revision !== generation) throw new DOMException('Flower model read cancelled.', 'AbortError');
-  };
-  const startCheck = (refresh = false, prepare?: () => Promise<unknown>) => {
-    checkScope();
-    if (activeCheck) return activeCheck;
-    if (!refresh && complete && directory) return { baseline: Promise.resolve(directory), full: Promise.resolve(directory) };
+    if (directoryRequest) {
+      if (refresh && directoryRead) directoryRead.again = true;
+      return directoryRequest;
+    }
+    if (directory && !refresh) return Promise.resolve(directory);
     const revision = generation;
-    const check = deadline();
-    const baseline = directory ? Promise.resolve(directory) : readWithSignal(check.signal, () => options.loadDirectory(true, check.signal)).then(value => {
-      assertCurrent(revision);
-      return publish({ ...value, checking: true });
-    }).catch(error => {
-      assertCurrent(revision);
-      return publish(failedDirectory(emptyDirectory(), (error as Error)?.name === 'TimeoutError'));
-    });
-    const full = baseline.then(async () => {
-      assertCurrent(revision);
-      const previous = directory ?? emptyDirectory();
-      try {
-        if (!refresh && !previous.error && !previous.models.some(model => model.state === 'pending') && !previous.sources.some(source => source.state === 'pending')) {
-          complete = true;
-          return publish({ ...previous, checking: false });
-        }
-        publish({ ...previous, checking: true, error: refresh ? undefined : previous.error });
-        if (refresh && prepare) await readWithSignal(check.signal, prepare);
-        const value = await readWithSignal(check.signal, () => options.loadDirectory(false, check.signal));
-        assertCurrent(revision);
-        if (value.models.some(model => model.state === 'pending') || value.sources.some(source => source.state === 'pending')) throw new Error('Flower model directory did not finish checking.');
-        complete = true;
-        return publish({ ...value, checking: false });
-      } catch (error) {
-        assertCurrent(revision);
-        complete = true;
-        return publish(failedDirectory(directory ?? previous, (error as Error)?.name === 'TimeoutError'));
+    const requestScope = scope;
+    const readState = { again: false };
+    directoryRead = readState;
+    const request = (async () => {
+      if (refresh && prepare) await read(signal => readWithSignal(signal, prepare));
+      while (true) {
+        readState.again = false;
+        const value = await read(signal => options.loadDirectory(true, signal));
+        checkScope();
+        if (revision !== generation || !readState.again) return value;
       }
-    }).finally(() => { check.dispose(); if (activeCheck?.full === full) activeCheck = null; });
-    // Settings consume the baseline while discovery continues independently.
-    // Scope cancellation can reject a background check without a full reader.
-    void full.catch(() => undefined);
-    activeCheck = { baseline, full };
-    return activeCheck;
-  };
-  return {
-    invalidate,
-    subscribe: listener => { listeners.add(listener); checkScope(); if (directory) listener(directory); return () => { listeners.delete(listener); }; },
-    loadSettings: () => {
+    })().then(value => {
       checkScope();
-      if (configuration && directory) return Promise.resolve({ ...configuration, model_directory: directory });
-      if (settingsRequest) return settingsRequest;
-      const revision = generation;
-      const settingsDeadline = deadline();
-      const configurationRead = readWithSignal(settingsDeadline.signal, () => options.loadConfiguration(settingsDeadline.signal));
-      const check = startCheck();
-      const request = Promise.all([configurationRead, check.baseline]).then(([value, models]) => {
-        assertCurrent(revision);
-        configuration = value;
-        return { ...value, model_directory: directory ?? models };
-      }).finally(() => { settingsDeadline.dispose(); if (settingsRequest === request) settingsRequest = null; });
-      settingsRequest = request;
-      return request;
-    },
-    loadDirectory: (refresh = false, prepare) => startCheck(refresh, prepare).full,
+      if (revision !== generation) {
+        if (requestScope !== scope) throw new DOMException('Flower connection changed.', 'AbortError');
+        return loadDirectory();
+      }
+      directory = { ...value, checking: false };
+      for (const listener of listeners) listener(directory);
+      return directory;
+    }).catch(error => {
+      checkScope();
+      if (revision !== generation && requestScope === scope) return loadDirectory();
+      // A transport failure is not evidence that a known model disappeared.
+      if (revision === generation && directory) return directory;
+      throw error;
+    }).finally(() => { if (directoryRequest === request) { directoryRequest = null; directoryRead = null; } });
+    directoryRequest = request;
+    return request;
+  };
+  const loadSettings = (): Promise<FlowerSettingsSnapshot> => {
+    checkScope();
+    if (configuration) return Promise.resolve(directory ? withFlowerModelDirectory(configuration, directory) : configuration);
+    if (settingsRequest) return settingsRequest;
+    const revision = generation;
+    const requestScope = scope;
+    const request = Promise.all([read(options.loadConfiguration), loadDirectory().catch(() => null)]).then(([value, models]) => {
+      checkScope();
+      if (revision !== generation) {
+        if (requestScope !== scope) throw new DOMException('Flower connection changed.', 'AbortError');
+        return loadSettings();
+      }
+      configuration = value;
+      const currentDirectory = directory ?? models;
+      return currentDirectory ? withFlowerModelDirectory(value, currentDirectory) : value;
+    }).catch(error => {
+      checkScope();
+      if (revision !== generation && requestScope === scope) return loadSettings();
+      throw error;
+    }).finally(() => { if (settingsRequest === request) settingsRequest = null; });
+    settingsRequest = request;
+    return request;
+  };
+  return { invalidate, loadSettings, loadDirectory,
+    subscribe: listener => { listeners.add(listener); checkScope(); if (directory) listener(directory); return () => { listeners.delete(listener); }; },
   };
 }
 
@@ -169,11 +164,14 @@ export function flowerDirectoryDesktopStatus(directory: FlowerModelDirectory): F
 
 export function withFlowerModelDirectory(snapshot: FlowerSettingsSnapshot, directory: FlowerModelDirectory): FlowerSettingsSnapshot {
   return { ...snapshot, model_directory: directory,
+    model_profile: snapshot.model_profile ? { ...snapshot.model_profile, providers: snapshot.model_profile.providers.map(provider => {
+      const catalog = directory.provider_catalogs?.[provider.id];
+      return catalog ? { ...provider, catalog_models: catalog, models: projectFlowerProviderModels(provider, catalog) } : provider;
+    }) } : null,
     model_source: flowerDirectoryDesktopStatus(directory),
     platform_model_source: directory.sources.some(source => source.kind === 'platform') ? {
       models: directory.models.filter(model => model.source === 'platform' && model.state === 'ready'),
       current_model_id: directory.current_model_id.startsWith('platform/') ? directory.current_model_id : undefined,
-      error: directory.sources.some(source => source.kind === 'platform' && source.state === 'unavailable') ? 'Redeven AI is currently unavailable. Select another model or try again.' : undefined,
     } : undefined,
   };
 }

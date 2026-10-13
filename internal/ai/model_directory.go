@@ -5,7 +5,6 @@ import (
 	"errors"
 	"slices"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/floegence/redeven/internal/chatgpt"
@@ -32,8 +31,9 @@ type ModelDirectorySource struct {
 }
 
 type ModelDirectory struct {
-	Models  []ModelDirectoryModel  `json:"models"`
-	Sources []ModelDirectorySource `json:"sources"`
+	ProviderCatalogs map[string][]config.AIProviderModel `json:"provider_catalogs"`
+	Models           []ModelDirectoryModel               `json:"models"`
+	Sources          []ModelDirectorySource              `json:"sources"`
 }
 
 // RuntimeStatusSnapshot reads local observation only. Settings and baseline
@@ -54,7 +54,7 @@ func (s *Service) RuntimeStatusSnapshot() *AIRuntimeStatus {
 	return out
 }
 
-func (s *Service) readModelDirectory(ctx context.Context, meta *session.Meta, baseline bool) (*ModelsResponse, error) {
+func (s *Service) readModelDirectory(ctx context.Context, meta *session.Meta, _ bool) (*ModelsResponse, error) {
 	if s == nil {
 		return nil, ErrNotConfigured
 	}
@@ -65,46 +65,26 @@ func (s *Service) readModelDirectory(ctx context.Context, meta *session.Meta, ba
 	if err != nil {
 		return nil, err
 	}
-	resolved := local
-	var platform *config.AIConfig
-	var platformErr, desktopErr error
+	resolved := s.modelCatalogs.resolve(local)
 	var snapshot *DesktopModelSourceModelSnapshot
-	failures := map[string]error{}
-	if !baseline {
-		// One deadline covers every optional source, including platform renewal.
-		checkCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		defer cancel()
-		var workers sync.WaitGroup
-		workers.Add(1)
-		go func() {
-			defer workers.Done()
-			resolved, failures, _ = resolveModelCatalogResults(checkCtx, local, s.resolveProviderKey, "", s.chatGPT)
-		}()
-		if platformSessionAvailable(meta) {
-			workers.Add(1)
-			go func() { defer workers.Done(); platform, platformErr = s.sessionModelConfig(checkCtx, meta, local) }()
+	if platformSessionAvailable(meta) {
+		platform, err := s.sessionModelConfig(ctx, meta, resolved)
+		if err != nil {
+			return nil, err
 		}
-		if desktop != nil && desktop.hasBinding() {
-			workers.Add(1)
-			go func() { defer workers.Done(); snapshot, desktopErr = desktop.ListModels(checkCtx) }()
-		}
-		workers.Wait()
 		if platform != nil {
-			for _, p := range platform.Providers {
-				if p.Type == platformGatewayProviderType {
-					resolved.Providers = append(resolved.Providers, p)
-				}
-			}
-			if resolved.CurrentModelID == "" {
-				resolved.CurrentModelID = platform.CurrentModelID
-			}
+			resolved = platform
 		}
 	}
+	if desktop != nil {
+		snapshot = desktop.Snapshot()
+	}
+
 	status := s.RuntimeStatusSnapshot()
 	status.PlatformAvailable = platformSessionAvailable(meta)
 	out, err := s.listModels(resolved, snapshot, status)
 	selected := s.sessionSelectedModel(meta, cfg)
-	if errors.Is(err, ErrNotConfigured) && (baseline || platformSessionAvailable(meta) || strings.HasPrefix(selected, "platform/")) {
+	if errors.Is(err, ErrNotConfigured) {
 		out, err = NewModelsResponse(status), nil
 	}
 	if err != nil {
@@ -116,12 +96,8 @@ func (s *Service) readModelDirectory(ctx context.Context, meta *session.Meta, ba
 	if !strings.HasPrefix(selected, "platform/") && desktop != nil && desktop.CurrentModelID() != "" {
 		out.CurrentModel = desktop.CurrentModelID()
 	}
-	if platformErr != nil {
-		out.Runtime.PlatformError = "Redeven AI is currently unavailable. Select another model or try again."
-	} else if !baseline && strings.HasPrefix(selected, "platform/") && !slices.ContainsFunc(out.Models, func(m Model) bool { return m.ID == selected }) {
-		out.Runtime.PlatformError = "The selected Redeven AI model is no longer available. Select another model or try again."
-	}
-	out.Directory = s.projectModelDirectory(resolved, out, baseline, failures, platformErr, desktopErr, snapshot)
+
+	out.Directory = s.projectModelDirectory(resolved, out, snapshot)
 	ready := make(map[string]bool, len(out.Directory.Models))
 	for _, model := range out.Directory.Models {
 		ready[model.ID] = model.State == "ready"
@@ -130,8 +106,8 @@ func (s *Service) readModelDirectory(ctx context.Context, meta *session.Meta, ba
 	return out, nil
 }
 
-func (s *Service) projectModelDirectory(cfg *config.AIConfig, out *ModelsResponse, baseline bool, failures map[string]error, platformErr, desktopErr error, desktopSnapshot *DesktopModelSourceModelSnapshot) ModelDirectory {
-	directory := ModelDirectory{Models: []ModelDirectoryModel{}, Sources: []ModelDirectorySource{}}
+func (s *Service) projectModelDirectory(cfg *config.AIConfig, out *ModelsResponse, desktopSnapshot *DesktopModelSourceModelSnapshot) ModelDirectory {
+	directory := ModelDirectory{ProviderCatalogs: map[string][]config.AIProviderModel{}, Models: []ModelDirectoryModel{}, Sources: []ModelDirectorySource{}}
 	available := map[string]Model{}
 	for _, m := range out.Models {
 		available[m.ID] = m
@@ -141,6 +117,7 @@ func (s *Service) projectModelDirectory(cfg *config.AIConfig, out *ModelsRespons
 		if p.Type == platformGatewayProviderType {
 			continue
 		}
+		directory.ProviderCatalogs[p.ID] = p.CatalogModels()
 		name := firstNonEmpty(p.Name, defaultProviderDisplayName(p), p.ID)
 		source := ModelDirectorySource{ID: p.ID, Kind: modelSourceRuntimeConfig, State: "ready"}
 		dynamic := p.Type == "ollama" || p.Type == "openrouter" || p.EffectiveAuthMethod() == config.AIAuthChatGPT
@@ -148,13 +125,9 @@ func (s *Service) projectModelDirectory(cfg *config.AIConfig, out *ModelsRespons
 			source.State, source.Reason = "unavailable", "provider_disabled"
 		} else if dynamic && p.ModelSelection != nil && p.ModelSelection.SelectedModels == nil {
 			source.State, source.Reason = "unavailable", "selection_review_required"
-		} else if dynamic && p.ModelSelection != nil && len(p.ModelSelection.SelectedModels) > 0 {
-			if baseline {
-				source.State, source.Reason = "pending", "catalog_check"
-			} else if failures[p.ID] != nil {
-				source.State, source.Reason = "unavailable", "catalog_unavailable"
-			}
+
 		}
+
 		if p.IsEnabled() && (s.resolveProviderKey != nil || p.EffectiveAuthMethod() == config.AIAuthChatGPT) {
 			var ready bool
 			var keyErr error
@@ -194,6 +167,12 @@ func (s *Service) projectModelDirectory(cfg *config.AIConfig, out *ModelsRespons
 			entry := ModelDirectoryModel{Model: view, State: source.State, Reason: source.Reason, ProviderID: p.ID, ProviderName: name, ProviderType: p.Type, ModelName: m.ModelName}
 			if !exists && entry.State == "ready" {
 				entry.State, entry.Reason = "unavailable", "model_missing"
+				for _, metadata := range p.CatalogModels() {
+					if metadata.ModelName == m.ModelName && metadata.Status == "needs_configuration" {
+						entry.Reason = "needs_configuration"
+						break
+					}
+				}
 			}
 			if !seen[id] {
 				directory.Models = append(directory.Models, entry)
@@ -203,9 +182,7 @@ func (s *Service) projectModelDirectory(cfg *config.AIConfig, out *ModelsRespons
 	}
 	if out.Runtime.PlatformAvailable || strings.HasPrefix(out.CurrentModel, "platform/") {
 		source := ModelDirectorySource{ID: "platform", Kind: "platform", State: "ready"}
-		if baseline && out.Runtime.PlatformAvailable {
-			source.State, source.Reason = "pending", "catalog_check"
-		} else if platformErr != nil || !out.Runtime.PlatformAvailable {
+		if !out.Runtime.PlatformAvailable {
 			source.State, source.Reason = "unavailable", "catalog_unavailable"
 		}
 		count := 0
@@ -228,10 +205,6 @@ func (s *Service) projectModelDirectory(cfg *config.AIConfig, out *ModelsRespons
 			switch {
 			case !status.Connected:
 				source.Reason = "disconnected"
-			case baseline:
-				source.State, source.Reason = "pending", "catalog_check"
-			case desktopErr != nil:
-				source.Reason = "catalog_unavailable"
 			case desktopSnapshot != nil && len(desktopSnapshot.Models) > 0:
 				source.State, source.Reason = "ready", ""
 			case len(status.MissingKeyProviderIDs) > 0:

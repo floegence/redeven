@@ -59,6 +59,7 @@ func testPlatformHostedSearch(t *testing.T, incremental bool) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	gateway.(*platformGatewayProvider).protocol = "openai-responses"
 	capability := config.AIReasoningCapabilityForModel("openai", "gpt-5-mini")
 	adapter := newFloretProviderAdapter(gateway, platformGatewayProviderType, "test-model", ProviderControls{ReasoningCapability: capability}, TurnBudgets{MaxOutputToken: 2048}, config.AIWebSearchOpenAI)
 	stream, err := adapter.Stream(t.Context(), flprovider.Request{ThreadID: "thread", RunID: "run", TurnID: "turn", PromptScopeID: "scope", LogicalRequestID: "logical", AttemptID: "attempt", AttemptEpoch: 1, Reasoning: config.AIReasoningSelection{Level: config.AIReasoningLevelLow}, Messages: []flprovider.Message{{Role: flprovider.RoleUser, Text: "Find reference"}}, HostedTools: []flprovider.HostedToolDefinition{{Name: "web_search", Type: "web_search"}}})
@@ -135,6 +136,7 @@ func TestPlatformGatewayRequiresTerminalEvidence(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			gateway.(*platformGatewayProvider).protocol = "openai-responses"
 			result, err := gateway.StreamTurn(t.Context(), platformTestRequest(), nil)
 			if (err != nil) != tc.wantError || calls != 1 {
 				t.Fatalf("terminal/retry boundary: calls=%d err=%v", calls, err)

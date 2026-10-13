@@ -37,7 +37,7 @@ func TestService_ListModels_BoundsUnresponsiveCatalogWithoutLosingConfiguredMode
 	if err != nil {
 		t.Fatal(err)
 	}
-	if elapsed := time.Since(start); elapsed > 5500*time.Millisecond {
+	if elapsed := time.Since(start); elapsed > 100*time.Millisecond {
 		t.Fatalf("unresponsive catalog blocked configured models for %s", elapsed)
 	}
 	if out.CurrentModel != cfg.CurrentModelID || len(out.Models) != 1 || out.Models[0].ID != cfg.CurrentModelID {
@@ -47,8 +47,8 @@ func TestService_ListModels_BoundsUnresponsiveCatalogWithoutLosingConfiguredMode
 		t.Fatal("catalog failure changed provider preferences")
 	}
 	for _, source := range out.Directory.Sources {
-		if strings.HasPrefix(source.ID, "offline-") && (source.State != "unavailable" || source.Reason != "catalog_unavailable") {
-			t.Fatalf("catalog did not settle after the shared deadline: %+v", source)
+		if strings.HasPrefix(source.ID, "offline-") && (source.State == "pending" || source.Reason == "catalog_unavailable") {
+			t.Fatalf("local read incorrectly depended on catalog synchronization: %+v", source)
 		}
 	}
 }
