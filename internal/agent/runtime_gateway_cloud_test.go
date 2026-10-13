@@ -53,7 +53,12 @@ func TestCloudCardAcceptanceFixture(t *testing.T) {
 	if err := os.MkdirAll(output, 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := config.Save(filepath.Join(output, "cloud-config.json"), a.remoteConfigSnapshot()); err != nil {
+	cfg := a.remoteConfigSnapshot()
+	// The native codeapp uses the normal Region domain relationship. The
+	// controlled exchange server remains reachable only inside this fixture.
+	cfg.AccessPointOrigin = "https://dev.redeven.test"
+	cfg.CloudAssociation.RegionOrigin = cfg.AccessPointOrigin
+	if err := config.Save(filepath.Join(output, "cloud-config.json"), cfg); err != nil {
 		t.Fatal(err)
 	}
 }
