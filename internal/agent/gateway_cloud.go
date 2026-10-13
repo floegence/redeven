@@ -50,7 +50,7 @@ func (a *Agent) recoverGatewayCredentials(ctx context.Context) error {
 			return err
 		}
 		r.DeliveryRequestID = id
-		if err := config.Save(a.configPath, &next); err != nil {
+		if err := config.SaveConnection(a.configPath, &next); err != nil {
 			a.mu.Unlock()
 			return err
 		}
@@ -72,7 +72,7 @@ func (a *Agent) recoverGatewayCredentials(ctx context.Context) error {
 			updated := *a.cfg
 			r.PendingGenerationRenewal = true
 			updated.GatewayPublication = &r
-			if saveErr := config.Save(a.configPath, &updated); saveErr != nil {
+			if saveErr := config.SaveConnection(a.configPath, &updated); saveErr != nil {
 				a.mu.Unlock()
 				return saveErr
 			}
@@ -88,7 +88,7 @@ func (a *Agent) recoverGatewayCredentials(ctx context.Context) error {
 			}
 			updated := *a.cfg
 			updated.GatewayPublication = &r
-			if saveErr := config.Save(a.configPath, &updated); saveErr != nil {
+			if saveErr := config.SaveConnection(a.configPath, &updated); saveErr != nil {
 				return saveErr
 			}
 			a.setRemoteConfigLocked(&updated)
@@ -104,7 +104,7 @@ func (a *Agent) recoverGatewayCredentials(ctx context.Context) error {
 	if err := updated.ApplyGatewayDelivery(delivery); err != nil {
 		return err
 	}
-	if err := config.Save(a.configPath, &updated); err != nil {
+	if err := config.SaveConnection(a.configPath, &updated); err != nil {
 		return err
 	}
 	a.setRemoteConfigLocked(&updated)
@@ -160,7 +160,7 @@ func (a *Agent) observeGatewayCloud(ctx context.Context) {
 					clean := *a.cfg.GatewayPublication
 					clean.PreviousBinding = nil
 					next.GatewayPublication = &clean
-					if config.Save(a.configPath, &next) == nil {
+					if config.SaveConnection(a.configPath, &next) == nil {
 						a.setRemoteConfigLocked(&next)
 					}
 				}
@@ -200,7 +200,7 @@ func (a *Agent) observeGatewayCloud(ctx context.Context) {
 						a.closeGatewaySessions(closure.BindingPublicID, closure.Generation)
 						continue
 					}
-					saveErr := config.Save(a.configPath, &next)
+					saveErr := config.SaveConnection(a.configPath, &next)
 					a.setRemoteConfigLocked(&next)
 					a.controlBusinessRejected = true
 					a.mu.Unlock()
@@ -294,7 +294,7 @@ func (a *Agent) adoptGatewayReapproval(status *gc.RuntimeStatus) error {
 	route := *current
 	route.Binding, route.Revoked, route.PendingGenerationRenewal, route.DeliveryRequestID = b, false, false, ""
 	updated.GatewayPublication, updated.BindingGeneration, updated.ControlArtifactPool, updated.Direct = &route, b.Generation, nil, nil
-	if err := config.Save(a.configPath, &updated); err != nil {
+	if err := config.SaveConnection(a.configPath, &updated); err != nil {
 		return err
 	}
 	a.setRemoteConfigLocked(&updated)
@@ -332,7 +332,7 @@ func (a *Agent) rotateGatewayIdentity(ctx context.Context) error {
 		updated := *a.cfg
 		identity := *next
 		updated.GatewayPublication = &identity
-		if err := config.Save(a.configPath, &updated); err != nil {
+		if err := config.SaveConnection(a.configPath, &updated); err != nil {
 			return err
 		}
 		a.setRemoteConfigLocked(&updated)
@@ -356,7 +356,7 @@ func (a *Agent) finishGatewayGenerationRenewal(ctx context.Context, r *gatewaycl
 	next := *r
 	next.Binding, next.DeliveryRequestID, next.PendingGenerationRenewal = binding, "", false
 	updated.GatewayPublication, updated.BindingGeneration, updated.ControlArtifactPool, updated.Direct = &next, binding.Generation, nil, nil
-	if err := config.Save(a.configPath, &updated); err != nil {
+	if err := config.SaveConnection(a.configPath, &updated); err != nil {
 		return err
 	}
 	a.setRemoteConfigLocked(&updated)

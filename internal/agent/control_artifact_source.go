@@ -161,7 +161,7 @@ func (a *Agent) acquireControlArtifactEntry() (config.ControlArtifactEntry, int6
 		next := *a.cfg
 		next.ControlArtifactPool = pool
 		next.Direct = nil
-		if err := config.Save(a.configPath, &next); err != nil {
+		if err := config.SaveConnection(a.configPath, &next); err != nil {
 			return config.ControlArtifactEntry{}, 0, fmt.Errorf("migrate control artifact pool: %w", err)
 		}
 		a.setRemoteConfigLocked(&next)
@@ -184,7 +184,7 @@ func (a *Agent) acquireControlArtifactEntry() (config.ControlArtifactEntry, int6
 	if changed {
 		next := *a.cfg
 		next.ControlArtifactPool = poolCopy
-		if err := config.Save(a.configPath, &next); err != nil {
+		if err := config.SaveConnection(a.configPath, &next); err != nil {
 			return config.ControlArtifactEntry{}, 0, fmt.Errorf("persist normalized control artifact pool: %w", err)
 		}
 		a.setRemoteConfigLocked(&next)
@@ -208,7 +208,7 @@ func (a *Agent) acquireControlArtifactEntry() (config.ControlArtifactEntry, int6
 		nextPool := cloneControlArtifactPool(pool)
 		nextPool.RecoveryState = config.ControlArtifactRecoveryExhausted
 		next.ControlArtifactPool = nextPool
-		if err := config.Save(a.configPath, &next); err != nil {
+		if err := config.SaveConnection(a.configPath, &next); err != nil {
 			return config.ControlArtifactEntry{}, pool.BindingGeneration, fmt.Errorf("persist exhausted control artifact pool: %w", err)
 		}
 		a.setRemoteConfigLocked(&next)
@@ -264,7 +264,7 @@ func (a *Agent) commitControlArtifactPoolSpend(_ context.Context, bindingGenerat
 		directCopy.Spent = true
 		next.Direct = &directCopy
 	}
-	if err := config.Save(a.configPath, &next); err != nil {
+	if err := config.SaveConnection(a.configPath, &next); err != nil {
 		// The durable spend ledger already burned this artifact. Keep the
 		// process-local pool from selecting it again even though config save failed.
 		for index := range a.cfg.ControlArtifactPool.Entries {

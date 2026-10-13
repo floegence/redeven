@@ -39,6 +39,13 @@ func TestDirectCloudChangesPreserveGatewayMembers(t *testing.T) {
 		t.Fatal(err)
 	}
 	a := newCloudLinkTestAgent(t, cfgPath, cfg)
+	savedAI := &config.AIConfig{Providers: []config.AIProvider{{
+		ID: "openai", Type: "openai", AuthMethod: config.AIAuthChatGPT, AccountID: "saved-account",
+		ModelSelection: &config.AIModelSelection{SelectedModels: []string{"gpt-6.1-sol"}},
+	}}}
+	if _, err := config.Update(cfgPath, func(current *config.Config) error { current.AI = savedAI; return nil }); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := a.DisconnectCloud(t.Context()); err != nil {
 		t.Fatal(err)
 	}
@@ -46,14 +53,23 @@ func TestDirectCloudChangesPreserveGatewayMembers(t *testing.T) {
 	if detached.LocalEnvironmentPublicID != member.RuntimePublicID || !reflect.DeepEqual(detached.Gateways, cfg.Gateways) {
 		t.Fatal("disconnect changed paired Runtime identity")
 	}
+	if !reflect.DeepEqual(detached.AI, savedAI) {
+		t.Fatal("disconnect overwrote the saved ChatGPT binding")
+	}
 	server := cloudLinkTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if _, err := config.Update(cfgPath, func(current *config.Config) error {
+			current.Shell = "/bin/zsh"
+			return nil
+		}); err != nil {
+			t.Error(err)
+		}
 		// An independent reconnect may rotate credentials during the Cloud exchange.
 		a.mu.Lock()
 		next := *a.cfg
 		rotated := next.GatewayMember(member.GatewayID).Clone()
 		rotated.Revision++
 		next.SetGatewayMember(member.GatewayID, rotated)
-		if err := config.Save(cfgPath, &next); err != nil {
+		if err := config.SaveConnection(cfgPath, &next); err != nil {
 			t.Error(err)
 		}
 		a.cfg = &next
@@ -70,6 +86,9 @@ func TestDirectCloudChangesPreserveGatewayMembers(t *testing.T) {
 	}
 	if len(saved.Gateways) != 1 || saved.Gateways[0].MemberID != member.MemberID || saved.Gateways[0].Revision != member.Revision+1 {
 		t.Fatal("Cloud connection overwrote concurrent Gateway progress")
+	}
+	if !reflect.DeepEqual(saved.AI, savedAI) || saved.Shell != "/bin/zsh" {
+		t.Fatal("Cloud exchange overwrote local settings saved while the exchange was in flight")
 	}
 }
 

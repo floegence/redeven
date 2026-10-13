@@ -42,7 +42,8 @@ func gatewayStatusClientKey(route *gatewaycloud.RuntimeConfig, member *gatewayme
 }
 
 // setRemoteConfigLocked cancels an obsolete observer before exposing its new
-// configuration. All config mutations already serialize on Agent.mu.
+// configuration. Connection mutations serialize on Agent.mu; persistence
+// shares config's per-path lock with local settings mutations.
 func (a *Agent) setRemoteConfigLocked(next *config.Config) {
 	if cached := a.gatewayStatusClient; cached != nil {
 		var key [32]byte

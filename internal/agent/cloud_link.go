@@ -388,7 +388,7 @@ func (a *Agent) ConnectCloud(ctx context.Context, req CloudLinkRequest) (*CloudL
 		cfg.Gateways = a.cfg.CloneGateways()
 		cfg.GatewayRemovalOutbox = append([]gatewaymembership.RemovalDelivery(nil), a.cfg.GatewayRemovalOutbox...)
 	}
-	if err := config.SaveCloudLinkConfig(a.configPath, cfg); err != nil {
+	if err := config.SaveCloudLinkConnectionConfig(a.configPath, cfg); err != nil {
 		a.mu.Unlock()
 		return nil, &CloudLinkError{
 			Code:    CloudLinkErrorExchangeFailed,
@@ -464,7 +464,7 @@ func (a *Agent) clearCloudLinkBindingLocked(snapshot providerDisconnectSnapshot)
 			Err:     err,
 		}
 	}
-	if err := config.Save(a.configPath, &next); err != nil {
+	if err := config.SaveConnection(a.configPath, &next); err != nil {
 		return runtimeservice.CloudLinkBinding{}, &CloudLinkError{
 			Code:    CloudLinkErrorDisconnectFailed,
 			Message: fmt.Sprintf("Persist provider disconnect failed: %v", err),

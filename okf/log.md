@@ -2,6 +2,10 @@
 
 ## 2026-10-13
 
+- Preserve saved Flower accounts and local settings across Gateway and Cloud
+  maintenance through [one configuration transaction boundary](ui/runtime-settings.md#configuration-editing);
+  cover concurrent saves, account removal, storage failures, and restart.
+
 - Keep provider model defaults exclusively in the Runtime. Directory responses publish read-only defaults for new connections; frontend source and bundle checks reject embedded catalogs, and settings retain explicit overrides without numeric substitutes.
 - Audited all 140 shipped model defaults and documented current-default resolution, account-only ChatGPT snapshot scope, sparse override parity, and metadata retention for unavailable settings rows.
 - Documented Runtime-owned [OpenAI account lifecycle](ai/chatgpt-local-authentication.md), protected credentials schema 3, independent local cleanup and remote revocation results, and Desktop account fact observation at compatibility epoch 55.

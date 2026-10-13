@@ -256,7 +256,7 @@ type Server struct {
 	stateDir              string
 	localPermissionPolicy *config.PermissionPolicy
 	localPermissionCap    *config.PermissionSet
-	configMu              sync.Mutex
+	configUpdateMu        sync.Mutex // Orders settings commits and live AI option publication.
 	secrets               *settings.SecretsStore
 	chatGPT               *chatgpt.Client
 	pluginPlatform        http.Handler
@@ -2111,8 +2111,6 @@ func (g *Server) loadConfigLocked() (*config.Config, error) {
 	if path == "" {
 		return nil, errors.New("missing config path")
 	}
-	g.configMu.Lock()
-	defer g.configMu.Unlock()
 	return config.Load(path)
 }
 
@@ -2124,19 +2122,15 @@ func (g *Server) updateConfigLocked(mut func(cfg *config.Config) error) (*config
 	if path == "" {
 		return nil, errors.New("missing config path")
 	}
-	g.configMu.Lock()
-	defer g.configMu.Unlock()
-
-	cfg, err := config.Load(path)
-	if err != nil {
-		return nil, err
-	}
-	if mut != nil {
-		if err := mut(cfg); err != nil {
-			return nil, err
+	g.configUpdateMu.Lock()
+	defer g.configUpdateMu.Unlock()
+	cfg, err := config.Update(path, func(cfg *config.Config) error {
+		if mut != nil {
+			return mut(cfg)
 		}
-	}
-	if err := config.Save(path, cfg); err != nil {
+		return nil
+	})
+	if err != nil {
 		return nil, err
 	}
 	g.updateAIServiceStartupOptions(cfg)

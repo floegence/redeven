@@ -28,6 +28,8 @@ type ModelCatalogResolver func(AIProvider) ([]AIProviderModel, error)
 // LoadForStartup upgrades model preferences before the runtime becomes available.
 // Read-only consumers continue to use Load.
 func LoadForStartup(path string, discover ...ModelCatalogResolver) (*Config, error) {
+	unlock := lockConfig(path)
+	defer unlock()
 	return loadConfigForStartup(path, defaultConfigPersistence(), discover...)
 }
 

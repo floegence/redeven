@@ -174,7 +174,7 @@ func (a *Agent) prepareControlArtifactTopUp() (*config.ControlArtifactPendingTop
 		} else {
 			next.ControlArtifactPool = pool
 			if changed {
-				if err := config.Save(a.configPath, &next); err != nil {
+				if err := config.SaveConnection(a.configPath, &next); err != nil {
 					return nil, nil, err
 				}
 				a.setRemoteConfigLocked(&next)
@@ -190,7 +190,7 @@ func (a *Agent) prepareControlArtifactTopUp() (*config.ControlArtifactPendingTop
 		}
 		next.ControlArtifactPool = pool
 		if changed {
-			if err := config.Save(a.configPath, &next); err != nil {
+			if err := config.SaveConnection(a.configPath, &next); err != nil {
 				return nil, nil, err
 			}
 			a.setRemoteConfigLocked(&next)
@@ -208,7 +208,7 @@ func (a *Agent) prepareControlArtifactTopUp() (*config.ControlArtifactPendingTop
 	}
 	pool.RecoveryState = config.ControlArtifactRecoveryDegraded
 	next.ControlArtifactPool = pool
-	if err := config.Save(a.configPath, &next); err != nil {
+	if err := config.SaveConnection(a.configPath, &next); err != nil {
 		return nil, nil, err
 	}
 	a.setRemoteConfigLocked(&next)
@@ -351,7 +351,7 @@ func (a *Agent) applyControlArtifactTopUp(pending *config.ControlArtifactPending
 	next := *a.cfg
 	next.ControlArtifactPool = pool
 	next.Direct = nil
-	if err := config.Save(a.configPath, &next); err != nil {
+	if err := config.SaveConnection(a.configPath, &next); err != nil {
 		return fmt.Errorf("persist applied control artifact pool: %w", err)
 	}
 	a.setRemoteConfigLocked(&next)
@@ -377,7 +377,7 @@ func (a *Agent) markControlArtifactTopUpAcknowledged(expected *config.ControlArt
 	pool := cloneControlArtifactPool(a.cfg.ControlArtifactPool)
 	pool.PendingTopUp.State = config.ControlArtifactTopUpAcked
 	next.ControlArtifactPool = pool
-	if err := config.Save(a.configPath, &next); err != nil {
+	if err := config.SaveConnection(a.configPath, &next); err != nil {
 		return fmt.Errorf("persist control artifact pool acknowledgement: %w", err)
 	}
 	a.setRemoteConfigLocked(&next)
@@ -401,7 +401,7 @@ func (a *Agent) clearAcknowledgedControlArtifactTopUp(expected *config.ControlAr
 	pool := cloneControlArtifactPool(a.cfg.ControlArtifactPool)
 	pool.PendingTopUp = nil
 	next.ControlArtifactPool = pool
-	if err := config.Save(a.configPath, &next); err != nil {
+	if err := config.SaveConnection(a.configPath, &next); err != nil {
 		return fmt.Errorf("clear acknowledged control artifact top-up: %w", err)
 	}
 	a.setRemoteConfigLocked(&next)
@@ -419,7 +419,7 @@ func (a *Agent) markControlArtifactTopUpTerminal(expected *config.ControlArtifac
 	pool.PendingTopUp.State = config.ControlArtifactTopUpTerminal
 	pool.RecoveryState = config.ControlArtifactRecoveryRelink
 	next.ControlArtifactPool = pool
-	if err := config.Save(a.configPath, &next); err != nil {
+	if err := config.SaveConnection(a.configPath, &next); err != nil {
 		return err
 	}
 	a.setRemoteConfigLocked(&next)
@@ -460,7 +460,7 @@ func (a *Agent) recordExpiredControlArtifactTopUp(expected *config.ControlArtifa
 		pool.RecoveryState = config.ControlArtifactRecoveryDegraded
 	}
 	next.ControlArtifactPool = pool
-	if err := config.Save(a.configPath, &next); err != nil {
+	if err := config.SaveConnection(a.configPath, &next); err != nil {
 		return err
 	}
 	a.setRemoteConfigLocked(&next)
