@@ -106,6 +106,34 @@ export default mergeConfig(viteConfig, defineConfig({
         ? { port: configuredBrowserPort }
         : undefined,
       commands: {
+        compareSemanticPresentation: async ({ page }, selector: string) => {
+          const frame = await frameForSelector(page, selector);
+          const surface = frame.locator(selector).first();
+          const metadata = await surface.evaluate(element => {
+            const nodes = [element, ...element.querySelectorAll('*')];
+            const attributes = ['aria-label', 'aria-describedby', 'aria-controls', 'aria-busy'];
+            return nodes.map(node => attributes.map(name => [name, node.getAttribute(name)] as const));
+          });
+          const geometry = () => surface.evaluate(element => [element, ...element.querySelectorAll('*')].map(node => {
+            const bounds = node.getBoundingClientRect();
+            const style = getComputedStyle(node);
+            return { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height,
+              color: style.color, background: style.backgroundColor, padding: style.padding,
+              margin: style.margin, border: style.border, font: style.font, transform: style.transform };
+          }));
+          const before = { geometry: await geometry(), pixels: createHash('sha256').update(await surface.screenshot({ animations: 'disabled', caret: 'hide' })).digest('hex') };
+          try {
+            await surface.evaluate((element, records) => {
+              [element, ...element.querySelectorAll('*')].forEach((node, index) => records[index].forEach(([name]) => node.removeAttribute(name)));
+            }, metadata);
+            const after = { geometry: await geometry(), pixels: createHash('sha256').update(await surface.screenshot({ animations: 'disabled', caret: 'hide' })).digest('hex') };
+            return { before, after };
+          } finally {
+            await surface.evaluate((element, records) => {
+              [element, ...element.querySelectorAll('*')].forEach((node, index) => records[index].forEach(([name, value]) => { if (value !== null) node.setAttribute(name, value); }));
+            }, metadata);
+          }
+        },
         recordCanvasScale: async (_context, metric: { count: number; grouped: boolean; [key: string]: unknown }) => {
           if (![100, 500, 1000].includes(metric.count)) throw new Error('Unknown canvas scale fixture');
           const output = path.resolve(__dirname, '.vitest-attachments');

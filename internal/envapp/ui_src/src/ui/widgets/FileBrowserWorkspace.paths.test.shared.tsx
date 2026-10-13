@@ -70,6 +70,8 @@ describe('Files absolute path input', () => {
     f.enter(input);
     expect(f.submit).not.toHaveBeenCalled();
     expect(f.input.getAttribute('aria-invalid')).toBe('true');
+    const description = document.getElementById(f.input.getAttribute('aria-describedby')!);
+    expect(description?.textContent).toContain('Enter an absolute path, ~, or a path starting with ~/');
     expect(f.host.textContent).toContain('Enter an absolute path, ~, or a path starting with ~/');
     expect(f.input.value).toBe(input);
   });

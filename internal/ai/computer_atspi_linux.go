@@ -167,7 +167,7 @@ func (c *atspiClient) state(ctx context.Context, object atspiObject) (map[string
 	}
 	states := make(map[string]bool)
 	// AT-SPI 2 state values are the public bit-set contract, not GTK ordinals.
-	for key, bit := range map[string]uint{"checked": 4, "defunct": 6, "editable": 7, "enabled": 8, "expanded": 10, "focused": 12, "selected": 23, "showing": 25, "visible": 30, "required": 33, "readonly": 43} {
+	for key, bit := range map[string]uint{"busy": 3, "invalid": 36, "focusable": 11, "multiline": 17, "modal": 16, "checked": 4, "indeterminate": 32, "defunct": 6, "editable": 7, "enabled": 8, "expanded": 10, "focused": 12, "selected": 23, "showing": 25, "visible": 30, "required": 33, "readonly": 43} {
 		states[key] = int(bit/32) < len(bits) && bits[bit/32]&(1<<(bit%32)) != 0
 	}
 	return states, nil
@@ -256,7 +256,25 @@ func (c *atspiClient) describe(ctx context.Context, object atspiObject) (map[str
 	if slices.Contains(interfaces, "org.a11y.atspi.EditableText") && state["editable"] && !state["readonly"] && role != "password text" {
 		actions = append(actions, "fill")
 	}
-	output := map[string]any{"ref": ref, "role": role, "platform_role": role, "name": name, "states": state, "actions": actions}
+	state["disabled"] = !state["enabled"]
+	semanticStates := map[string]any{}
+	for key, value := range state {
+		if key != "indeterminate" {
+			semanticStates[key] = value
+		}
+	}
+	if state["indeterminate"] {
+		semanticStates["checked"] = "mixed"
+	}
+	output := map[string]any{"ref": ref, "child_refs": []string{}, "role": role, "platform_role": role, "name": name, "states": semanticStates, "actions": actions}
+	var description dbus.Variant
+	if err := c.call(ctx, object, "org.freedesktop.DBus.Properties.Get", atspiAccessible, "Description").Store(&description); err != nil {
+		if !atspiUnsupportedProperty(err) {
+			return nil, err
+		}
+	} else if text, ok := description.Value().(string); ok && text != "" {
+		output["description"] = truncateATSPITerm(text, 2000)
+	}
 	if slices.Contains(interfaces, "org.a11y.atspi.Component") {
 		var rect struct{ X, Y, Width, Height int32 }
 		if err := c.call(ctx, object, "org.a11y.atspi.Component.GetExtents", uint32(0)).Store(&rect); err == nil {
@@ -282,6 +300,7 @@ func (c *atspiClient) describe(ctx context.Context, object atspiObject) (map[str
 }
 
 func (c *atspiClient) observe(ctx context.Context, args map[string]any) (map[string]any, error) {
+	revision := c.revision.Load()
 	limit := 200
 	if raw, exists := args["limit"]; exists {
 		value, ok := raw.(float64)
@@ -298,31 +317,87 @@ func (c *atspiClient) observe(ctx context.Context, args map[string]any) (map[str
 		}
 		root = resolved.object
 	}
-	queue := []atspiObject{root}
+	type queuedNode struct {
+		object atspiObject
+		parent string
+	}
+	queue := []queuedNode{{object: root}}
 	seen := make(map[atspiObject]bool)
 	nodes := []map[string]any{}
+	indices := make(map[string]int)
+	objects := make(map[atspiObject]string)
+	ordered := []atspiObject{}
 	for len(queue) > 0 && len(nodes) < limit {
-		node := queue[0]
+		entry := queue[0]
 		queue = queue[1:]
-		if seen[node] {
+		if seen[entry.object] {
 			continue
 		}
-		seen[node] = true
-		item, err := c.describe(ctx, node)
+		seen[entry.object] = true
+		item, err := c.describe(ctx, entry.object)
 		if err != nil {
 			return nil, err
 		}
+		ref := item["ref"].(string)
+		if entry.parent != "" {
+			item["parent_ref"] = entry.parent
+			parent := nodes[indices[entry.parent]]
+			parent["child_refs"] = append(parent["child_refs"].([]string), ref)
+		}
+		indices[ref] = len(nodes)
+		objects[entry.object] = ref
 		nodes = append(nodes, item)
-		children, err := c.children(ctx, node)
+		ordered = append(ordered, entry.object)
+		children, err := c.children(ctx, entry.object)
 		if err != nil {
 			return nil, err
 		}
-		queue = append(queue, children...)
+		for _, child := range children {
+			queue = append(queue, queuedNode{child, ref})
+		}
 		if len(queue) > 10000 {
 			break
 		}
 	}
-	return map[string]any{"document_id": fmt.Sprintf("%s:%d", c.prefix, c.revision.Load()), "nodes": nodes, "truncated": len(queue) > 0, "execution_mode": "background"}, nil
+	for index, object := range ordered {
+		var relations []struct {
+			Kind    uint32
+			Targets []atspiObject
+		}
+		if err := c.call(ctx, object, atspiAccessible+".GetRelationSet").Store(&relations); err != nil {
+			if atspiUnsupportedProperty(err) {
+				continue
+			}
+			return nil, err
+		}
+		projected := map[string][]string{}
+		for _, relation := range relations {
+			key := map[uint32]string{2: "labelled_by", 3: "controls", 18: "described_by", 19: "details", 21: "error_message"}[relation.Kind]
+			if key == "" {
+				continue
+			}
+			for _, target := range relation.Targets {
+				if ref := objects[target]; ref != "" && !slices.Contains(projected[key], ref) && len(projected[key]) < 64 {
+					projected[key] = append(projected[key], ref)
+				}
+			}
+		}
+		if len(projected) > 0 {
+			nodes[index]["relations"] = projected
+		}
+	}
+	if revision != c.revision.Load() {
+		return nil, errors.New("OBSERVATION_INVALIDATED")
+	}
+	return map[string]any{"semantic_schema_version": computerSemanticSchemaVersion, "document_id": fmt.Sprintf("%s:%d", c.prefix, revision), "nodes": nodes, "truncated": len(queue) > 0, "execution_mode": "background"}, nil
+}
+
+func atspiUnsupportedProperty(err error) bool {
+	var busError dbus.Error
+	if errors.As(err, &busError) {
+		return slices.Contains([]string{"org.freedesktop.DBus.Error.UnknownProperty", "org.freedesktop.DBus.Error.UnknownMethod", "org.freedesktop.DBus.Error.NotSupported"}, busError.Name)
+	}
+	return false
 }
 
 func (c *atspiClient) resolve(ctx context.Context, selector map[string]any) (atspiReference, error) {
@@ -339,12 +414,28 @@ func (c *atspiClient) resolve(ctx context.Context, selector map[string]any) (ats
 		}
 		return entry, nil
 	}
-	role, roleOK := selector["role"].(string)
+	roles := []string{}
+	if role, ok := selector["role"].(string); ok {
+		roles = append(roles, role)
+	}
+	if values, ok := selector["roles"].([]any); ok {
+		for _, value := range values {
+			role, ok := value.(string)
+			if !ok {
+				return atspiReference{}, errors.New("INVALID_REQUEST")
+			}
+			roles = append(roles, role)
+		}
+	}
 	name, nameOK := selector["name"].(string)
-	if !roleOK || !nameOK {
+	if len(roles) == 0 || !nameOK {
 		return atspiReference{}, errors.New("INVALID_REQUEST")
 	}
-	observed, err := c.observe(ctx, map[string]any{"limit": float64(1000)})
+	observeArgs := map[string]any{"limit": float64(1000)}
+	if root, exists := selector["root_ref"]; exists {
+		observeArgs["root_ref"] = root
+	}
+	observed, err := c.observe(ctx, observeArgs)
 	if err != nil {
 		return atspiReference{}, err
 	}
@@ -353,7 +444,7 @@ func (c *atspiClient) resolve(ctx context.Context, selector map[string]any) (ats
 	}
 	var matches []atspiReference
 	for _, node := range observed["nodes"].([]map[string]any) {
-		if node["role"] == role && node["name"] == name {
+		if slices.Contains(roles, node["role"].(string)) && node["name"] == name {
 			matches = append(matches, c.references[node["ref"].(string)])
 		}
 	}
@@ -378,7 +469,7 @@ func (c *atspiClient) action(ctx context.Context, args map[string]any) (map[stri
 	switch args["action"] {
 	case "read":
 		node, err := c.describe(ctx, entry.object)
-		return map[string]any{"node": node}, err
+		return map[string]any{"semantic_schema_version": computerSemanticSchemaVersion, "node": node}, err
 	case "click":
 		var countValue dbus.Variant
 		if err := c.call(ctx, entry.object, "org.freedesktop.DBus.Properties.Get", "org.a11y.atspi.Action", "NActions").Store(&countValue); err != nil {
@@ -487,5 +578,5 @@ func atspiWaitInvalidated(err error) bool {
 		return false
 	}
 	var busError dbus.Error
-	return err.Error() == "STALE_REFERENCE" || (errors.As(err, &busError) && busError.Name == "org.freedesktop.DBus.Error.UnknownObject")
+	return err.Error() == "STALE_REFERENCE" || err.Error() == "OBSERVATION_INVALIDATED" || (errors.As(err, &busError) && busError.Name == "org.freedesktop.DBus.Error.UnknownObject")
 }

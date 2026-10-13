@@ -1,4 +1,5 @@
 import '../../../index.css';
+import axe from 'axe-core';
 import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, expect, it } from 'vitest';
@@ -119,4 +120,13 @@ it('saves direct edits and emoji through the localized product surface in the ow
   expect(tools?.closest('.workbench-surface')).toBeTruthy();
   expect(tools?.getAttribute('data-floe-surface-floating-layer')).toBe('true');
   if (import.meta.env.VITE_WORKBENCH_SCREENSHOTS === '1') await page.screenshot();
+});
+
+it('exposes only the owning composition controls to accessibility', async () => {
+  await page.viewport(1280, 800);
+  const { host } = mountComposition();
+  await expect.poll(() => host.querySelector('.workbench-widget')).toBeTruthy();
+  expect(host.querySelector('.workbench-widget')?.closest('[inert]')).toBeTruthy();
+  const audit = await axe.run(host, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa'] } });
+  expect(audit.violations.map(issue => `${issue.id}: ${issue.nodes.map(node => node.target.join(' ')).join(', ')}`)).toEqual([]);
 });

@@ -319,39 +319,77 @@ export class BrowserComputerPage {
       const allowed = root ? new Set() : undefined;
       const include = (id) => { if (allowed.has(id)) return; allowed.add(id); for (const child of source.get(id)?.childIds || []) include(child); };
       if (root) include(root.axNodeId);
-      for (const node of snapshot.nodes) {
+      const represented = new Map();
+      const backendRefs = new Map();
+      const frameNodes = [];
+      // AX order is not guaranteed to be parent-first. Traverse explicitly so
+      // a bounded snapshot always contains every represented parent.
+      const seen = new Set();
+      const pending = snapshot.nodes.filter(node => root ? node.nodeId === root.axNodeId : !source.has(node.parentId)).map(node => node.nodeId);
+      for (let index = 0; index < pending.length; index++) {
+        const node = source.get(pending[index]);
+        if (!node || seen.has(node.nodeId)) continue;
+        seen.add(node.nodeId);
+        pending.push(...(node.childIds || []));
         if (node.ignored || !node.backendDOMNodeId || (allowed && !allowed.has(node.nodeId))) continue;
         const role = node.role?.value || 'unknown';
-        if (['generic', 'none', 'InlineTextBox'].includes(role)) continue;
+        if (['none', 'InlineTextBox'].includes(role)) continue;
         total++;
         if (nodes.length >= limit) continue;
-        const states = Object.fromEntries((node.properties || []).filter(prop => ['disabled', 'focused', 'checked', 'selected', 'expanded', 'readonly', 'required'].includes(prop.name)).map(prop => [prop.name, prop.value?.value]));
+        const states = {};
+        for (const property of node.properties || []) {
+          if (!['disabled', 'focused', 'checked', 'selected', 'expanded', 'readonly', 'required', 'invalid', 'busy', 'focusable', 'multiline', 'modal'].includes(property.name)) continue;
+          const value = property.value?.value;
+          if (['mixed', 'grammar', 'spelling'].includes(value)) states[property.name] = value;
+          else if ([true, false, 0, 1, 'true', 'false'].includes(value)) states[property.name] = value === true || value === 1 || value === 'true';
+        }
         const ref = `${this.prefix}:${this.revision}:${frame.frame.id}:${node.backendDOMNodeId}`;
-        const entry = { ref, frame, backendNodeId: node.backendDOMNodeId, axNodeId: node.nodeId, role, name: (node.name?.value || '').slice(0, 2000), revision: this.revision };
+        const entry = { ref, frame, backendNodeId: node.backendDOMNodeId, axNodeId: node.nodeId, role, name: Array.from(node.name?.value || '').slice(0, 2000).join(''), revision: this.revision };
         if (this.references.size >= 2000 && !this.references.has(ref)) this.references.delete(this.references.keys().next().value);
         this.references.set(ref, entry);
         const actions = ['read'];
-        if (!states.disabled) actions.push('click');
+        if (!states.disabled && (states.focusable || ['button','link','checkbox','radio','switch','tab','menuitem','menuitemcheckbox','menuitemradio','treeitem','slider','scrollbar','canvas'].includes(role))) actions.push('click');
         if (['textbox', 'searchbox', 'combobox'].includes(role) && !states.readonly && !states.disabled) actions.push('fill');
-        const output = { ref, role, platform_role: role, frame_id: frame.frame.id, name: entry.name, states, actions };
-        if (node.value?.value !== undefined) output.value = String(node.value.value).slice(0, 2000);
+        const output = { ref, child_refs: [], role, platform_role: role, frame_id: frame.frame.id, name: entry.name, states, actions };
+        if (node.description?.value) output.description = Array.from(node.description.value).slice(0, 2000).join('');
+        if (node.value?.value !== undefined) output.value = Array.from(String(node.value.value)).slice(0, 2000).join('');
         if (boundsByNode.has(node.backendDOMNodeId)) output.bounds = boundsByNode.get(node.backendDOMNodeId);
+        represented.set(node.nodeId, output);
+        backendRefs.set(node.backendDOMNodeId, ref);
+        frameNodes.push(node);
         nodes.push(output);
       }
+      for (const node of frameNodes) {
+        const output = represented.get(node.nodeId);
+        let parent = source.get(node.parentId);
+        const ancestors = new Set();
+        while (parent && !represented.has(parent.nodeId) && !ancestors.has(parent.nodeId)) { ancestors.add(parent.nodeId); parent = source.get(parent.parentId); }
+        const parentOutput = parent && represented.get(parent.nodeId);
+        if (parentOutput) { output.parent_ref = parentOutput.ref; parentOutput.child_refs.push(output.ref); }
+        const relations = {};
+        for (const property of node.properties || []) {
+          const name = { labelledby: 'labelled_by', describedby: 'described_by', controls: 'controls', details: 'details', errormessage: 'error_message', activedescendant: 'active_descendant' }[property.name];
+          if (!name) continue;
+          const refs = [...new Set((property.value?.relatedNodes || []).map(related => backendRefs.get(related.backendDOMNodeId)).filter(Boolean))].slice(0, 64);
+          if (refs.length) relations[name] = refs;
+        }
+        if (Object.keys(relations).length) output.relations = relations;
+      }
     }
-    return { document_id: `${this.prefix}:${this.revision}`, nodes, truncated: total > nodes.length, total, execution_mode: 'background' };
+    return { semantic_schema_version: 2, document_id: `${this.prefix}:${this.revision}`, nodes, truncated: total > nodes.length, total, execution_mode: 'background' };
   }
 
   async resolve(selector) {
-    if (!selector || typeof selector !== 'object' || Object.keys(selector).some(key => !['ref', 'role', 'name'].includes(key))) throw new Error('INVALID_REQUEST');
+    if (!selector || typeof selector !== 'object' || Object.keys(selector).some(key => !['ref', 'role', 'roles', 'name', 'root_ref'].includes(key))) throw new Error('INVALID_REQUEST');
     let entry;
     if (typeof selector.ref === 'string') {
       entry = this.references.get(selector.ref);
       if (!entry || entry.revision !== this.revision) throw new Error('STALE_REFERENCE');
     } else {
-      if (typeof selector.role !== 'string' || typeof selector.name !== 'string') throw new Error('INVALID_REQUEST');
-      const observed = await this.observe({ limit: 1000 });
-      const matches = observed.nodes.filter(node => node.role === selector.role && node.name === selector.name);
+      const roles = selector.roles || [selector.role];
+      if (!Array.isArray(roles) || !roles.length || roles.some(role => typeof role !== 'string') || typeof selector.name !== 'string') throw new Error('INVALID_REQUEST');
+      const observed = await this.observe({ limit: 1000, root_ref: selector.root_ref });
+      const matches = observed.nodes.filter(node => roles.includes(node.role) && node.name === selector.name);
       if (matches.length !== 1 || observed.truncated) throw new Error(matches.length > 1 || observed.truncated ? 'AMBIGUOUS_ELEMENT' : 'ELEMENT_NOT_FOUND');
       entry = this.references.get(matches[0].ref);
     }
@@ -360,7 +398,7 @@ export class BrowserComputerPage {
       if (!node || !node.nodeName) throw new Error('missing');
       const { nodes } = await entry.frame.session.send('Accessibility.getPartialAXTree', { backendNodeId: entry.backendNodeId, fetchRelatives: false });
       const current = nodes.find(node => node.backendDOMNodeId === entry.backendNodeId);
-      if (!current || current.ignored || current.role?.value !== entry.role || (current.name?.value || '').slice(0, 2000) !== entry.name) throw new Error('changed');
+      if (!current || current.ignored || current.role?.value !== entry.role || Array.from(current.name?.value || '').slice(0, 2000).join('') !== entry.name) throw new Error('changed');
     } catch { this.references.delete(entry.ref); throw new Error('STALE_REFERENCE'); }
     return entry;
   }
@@ -511,7 +549,7 @@ export class BrowserComputerPage {
     const element = args.selector ? await this.resolve(args.selector) : undefined;
     if (args.action === 'read') {
       const observed = await this.observe({ root_ref: element.ref, limit: 1 });
-      return { node: observed.nodes[0] };
+      return { semantic_schema_version: 2, node: observed.nodes[0] };
     }
     if (['click', 'fill'].includes(args.action) && !element) throw new Error('INVALID_REQUEST');
     if (args.action === 'fill') {

@@ -359,6 +359,13 @@ func (r *ComputerUseRuntime) executeComputerToolLocked(ctx context.Context, call
 	if err := r.authorizeComputerCall(ctx, &call); err != nil {
 		return TargetToolResult{}, err
 	}
+	if call.ToolName == "computer.action" {
+		resolved, err := resolveComputerCanonicalSelector(call)
+		if err != nil {
+			return TargetToolResult{}, err
+		}
+		call = resolved
+	}
 	if call.recoveryObservation {
 		control.mu.Lock()
 		safety := control.pause
@@ -429,6 +436,17 @@ func (r *ComputerUseRuntime) executeComputerToolLocked(ctx context.Context, call
 			}
 		}
 		result.Attachments, result.frameBytes = nil, nil
+	}
+	if err == nil && (result.Safety == nil || result.Safety.SafeToSendToModel) {
+		if semanticErr := normalizeComputerSemanticResult(&result); semanticErr != nil {
+			for _, attachment := range result.Attachments {
+				if release, ok := executor.(interface{ releaseTargetFrame(string) }); ok {
+					release.releaseTargetFrame(attachment.ResourceRef)
+				}
+			}
+			payload, _ := result.Result.(map[string]any)
+			return computerObservationFailure(call, map[string]any{"action_executed": payload["action_executed"] == true, "observation_stage": "semantic_read"}, result.ExecutionLocation)
+		}
 	}
 	if err == nil && len(result.Attachments) > 0 {
 		for _, attachment := range result.Attachments {

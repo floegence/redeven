@@ -47,6 +47,13 @@ final class Delegate: NSObject, NSApplicationDelegate {
         let label = NSTextField(labelWithString: "Background target content")
         label.frame = NSRect(x: 20, y: 20, width: 400, height: 30)
         target.contentView!.addSubview(label)
+        let choice = NSButton(checkboxWithTitle: "Include archived", target: nil, action: nil)
+        choice.frame = NSRect(x: 20, y: 60, width: 200, height: 24)
+        choice.allowsMixedState = true
+        choice.state = .mixed
+        choice.isEnabled = false
+        choice.setAccessibilityHelp("Read-only mixed selection")
+        target.contentView!.addSubview(choice)
         target.orderBack(nil)
         cover = NSWindow(contentRect: target.frame.insetBy(dx: -15, dy: -15),
                          styleMask: [.borderless], backing: .buffered, defer: false)

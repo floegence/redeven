@@ -3,7 +3,7 @@ type: Execution Contract
 title: Computer script execution and semantic observations
 description: Execute bounded JavaScript against one authorized target without exposing host capabilities or replaying partial effects.
 tags: [ai, computer-use, scripts, accessibility]
-timestamp: 2026-09-26T00:00:00Z
+timestamp: 2026-10-13T00:00:00Z
 ---
 # Summary
 
@@ -31,9 +31,9 @@ Browser targets additionally expose `browser.navigate`, `back`, `reload` and
 `waitForDownload`. Desktop guests do not receive a browser namespace. `log`
 returns bounded JSON facts, not a stream of intermediate screenshots.
 
-`ui.observe()` returns `{observation: {document_id, nodes, truncated}}` with a
+`ui.observe()` returns `{observation: {semantic_schema_version: 2, document_id, roots, nodes, truncated}}` with a
 browser node count in `total`; a locator's
-`read()` returns `{node}`. For example, check
+`read()` returns `{semantic_schema_version: 2, node}`. For example, check
 `ui.assert((await field.read()).node.value === expected)`. `waitFor` accepts
 `state` (`visible`, `hidden` or `enabled`) and `timeout_ms`; its returned `state`
 must be checked for `timeout`. These are restricted APIs, not Playwright objects.
@@ -58,12 +58,15 @@ control authority. The Runtime admits at most eight active script namespaces.
 
 ## Observation and references
 
-Semantic nodes carry an opaque reference, role, original platform role, name,
-non-sensitive value, states, supported actions and available bounds. Browser
-frames retain their identity. A tree contains at most 200 nodes by default or
-1,000 on an explicit query, and reports truncation. `root_ref` requests a local
-subtree. A truncated name search or duplicate names fail as ambiguous rather
-than selecting an arbitrary match.
+The [semantic snapshot contract](computer-use-semantics.md) owns schema v2,
+role normalization, tree validation, states, relationships and privacy projection.
+`ui.getByRole(role, {name, root_ref?})` uses a canonical role and exact name.
+Runtime projects its aliases into native selectors before platform dispatch, so
+platform event waits still work for controls that appear later. Explicit native
+`{role, name}` and opaque references retain their distinct native meanings.
+A tree contains at most 200 nodes by default or 1,000 on an explicit query, and
+reports truncation. `root_ref` requests a local subtree. A truncated name search
+or duplicate names fail as ambiguous rather than selecting an arbitrary match.
 
 Scripts always receive full observations for local inspection. Use
 `ui.observe({emit:false})` to read and filter a tree without automatically

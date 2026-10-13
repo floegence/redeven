@@ -81,6 +81,17 @@ try:
     assert observed['type'] == 'result' and observed['safety']['level'] == 'routine', observed
     assert any(n.get('value') == 'Background target content' or n.get('name') == 'Background target content' for n in observed['payload']['observation']['nodes'])
     assert 'screenshot_base64' not in observed['payload'], 'AX observation unexpectedly captured pixels'
+    tree = observed['payload']['observation']
+    assert tree['semantic_schema_version'] == 2
+    nodes = {n['ref']: n for n in tree['nodes']}
+    choice = next(n for n in nodes.values() if n['name'] == 'Include archived')
+    assert choice['role'] == 'AXCheckBox' and choice['states']['checked'] == 'mixed'
+    assert choice['states']['disabled'] is True and choice['description'] == 'Read-only mixed selection'
+    for node in nodes.values():
+        assert node['platform_role'] == node['role']
+        if node.get('parent_ref'): assert node['ref'] in nodes[node['parent_ref']]['child_refs']
+        for child in node['child_refs']: assert nodes[child]['parent_ref'] == node['ref']
+
     captured = action(helper, 'computer.screenshot', target)
     assert captured['type'] == 'result' and captured['safety']['level'] == 'routine', {k:v for k,v in captured.items() if k != 'payload'}
     payload = captured['payload']

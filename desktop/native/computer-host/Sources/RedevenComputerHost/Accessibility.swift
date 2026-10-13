@@ -11,6 +11,11 @@ func axString(_ element: AXUIElement, _ attribute: String) -> String {
     (axValue(element, attribute) as? String) ?? ""
 }
 
+// Match Runtime's Unicode code-point budget, including combining characters.
+func boundedAXText(_ text: String) -> String {
+    String(String.UnicodeScalarView(text.unicodeScalars.prefix(2000)))
+}
+
 func axRect(_ element: AXUIElement) -> CGRect? {
     guard let position = axValue(element, kAXPositionAttribute), CFGetTypeID(position) == AXValueGetTypeID(),
           let size = axValue(element, kAXSizeAttribute), CFGetTypeID(size) == AXValueGetTypeID() else { return nil }
@@ -127,7 +132,7 @@ final class NativeWindow {
     func name(_ node: AXUIElement) -> String {
         for attribute in [kAXTitleAttribute, kAXDescriptionAttribute, kAXHelpAttribute] {
             let text = axString(node, attribute)
-            if !text.isEmpty { return String(text.prefix(2000)) }
+            if !text.isEmpty { return boundedAXText(text) }
         }
         return ""
     }
@@ -154,12 +159,25 @@ final class NativeWindow {
         if supported.contains(kAXPressAction) { operations.append("click") }
         if writable.boolValue { operations.append("fill") }
         var states: [String: Any] = [:]
-        for (key, attribute) in [("enabled", kAXEnabledAttribute), ("focused", kAXFocusedAttribute), ("selected", kAXSelectedAttribute), ("expanded", kAXExpandedAttribute)] {
+        for (key, attribute) in [("enabled", kAXEnabledAttribute), ("focused", kAXFocusedAttribute), ("selected", kAXSelectedAttribute), ("expanded", kAXExpandedAttribute), ("required", "AXRequired"), ("invalid", "AXInvalid"), ("busy", "AXElementBusy")] {
             if let value = axValue(node, attribute) as? NSNumber { states[key] = value.boolValue }
         }
-        var output: [String: Any] = ["ref": ref, "role": role, "platform_role": role, "name": name(node), "states": states, "actions": operations, "platform_actions": supported]
-        if axString(node, kAXSubroleAttribute) != kAXSecureTextFieldSubrole {
-            if let value = axValue(node, kAXValueAttribute) as? String { output["value"] = String(value.prefix(2000)) }
+        if let enabled = states["enabled"] as? Bool { states["disabled"] = !enabled }
+        if [kAXCheckBoxRole, kAXRadioButtonRole].contains(role), let value = axValue(node, kAXValueAttribute) as? NSNumber {
+            states["checked"] = value.intValue == 2 ? "mixed" : value.boolValue as Any
+        }
+        if [kAXTextFieldRole, kAXTextAreaRole].contains(role) {
+            var settable = DarwinBoolean(false)
+            if AXUIElementIsAttributeSettable(node, kAXValueAttribute as CFString, &settable) == .success { states["readonly"] = !settable.boolValue }
+        }
+        var output: [String: Any] = ["ref": ref, "child_refs": [String](), "role": role, "platform_role": role, "name": name(node), "states": states, "actions": operations, "platform_actions": supported]
+        let subrole = axString(node, kAXSubroleAttribute)
+        if !subrole.isEmpty { output["platform_subrole"] = subrole }
+        let help = axString(node, kAXHelpAttribute)
+        let description = help.isEmpty ? axString(node, kAXDescriptionAttribute) : help
+        if !description.isEmpty && description != name(node) { output["description"] = boundedAXText(description) }
+        if subrole != kAXSecureTextFieldSubrole {
+            if let value = axValue(node, kAXValueAttribute) as? String { output["value"] = boundedAXText(value) }
             else if let value = axValue(node, kAXValueAttribute) as? NSNumber { output["value"] = value }
         }
         if let bounds = axRect(node), let window = axRect(element) {
@@ -172,13 +190,33 @@ final class NativeWindow {
         let limit = args["limit"] as? Int ?? 200
         guard limit > 0 && limit <= 1000 else { throw NativeInput.invalid("Observation limit must be between 1 and 1000.") }
         let root = try (args["root_ref"] as? String).map { try resolve(["ref": $0]) } ?? element
-        var queue = [root], nodes: [[String: Any]] = [], visited = 0
-        while !queue.isEmpty && nodes.count < limit && visited < 5000 {
-            let node = queue.removeFirst(); visited += 1
-            if !axString(node, kAXRoleAttribute).isEmpty { nodes.append(describe(node)) }
-            if let children = axValue(node, kAXChildrenAttribute) as? [AXUIElement] { queue.append(contentsOf: children.prefix(1001)) }
+        var queue: [(AXUIElement, String?)] = [(root, nil)], nodes: [[String: Any]] = [], elements: [AXUIElement] = [], visited: [AXUIElement] = []
+        var indices: [String: Int] = [:]
+        while !queue.isEmpty && nodes.count < limit && visited.count < 5000 {
+            let (node, parentRef) = queue.removeFirst()
+            if visited.contains(where: { CFEqual($0, node) }) { continue }
+            visited.append(node)
+            var childParent = parentRef
+            if !axString(node, kAXRoleAttribute).isEmpty {
+                var output = describe(node)
+                let ref = output["ref"] as! String
+                if let parentRef, let index = indices[parentRef] {
+                    output["parent_ref"] = parentRef
+                    var children = nodes[index]["child_refs"] as! [String]
+                    children.append(ref); nodes[index]["child_refs"] = children
+                }
+                indices[ref] = nodes.count
+                nodes.append(output); elements.append(node); childParent = ref
+            }
+            if let children = axValue(node, kAXChildrenAttribute) as? [AXUIElement] { queue.append(contentsOf: children.prefix(1001).map { ($0, childParent) }) }
         }
-        return ["document_id": "\(id):\(revision)", "nodes": nodes, "truncated": !queue.isEmpty, "execution_mode": "background"]
+        for (index, node) in elements.enumerated() {
+            if let title = axValue(node, kAXTitleUIElementAttribute), CFGetTypeID(title) == AXUIElementGetTypeID(),
+               let related = elements.firstIndex(where: { CFEqual($0, title) }) {
+                nodes[index]["relations"] = ["labelled_by": [nodes[related]["ref"] as! String]]
+            }
+        }
+        return ["semantic_schema_version": 2, "document_id": "\(id):\(revision)", "nodes": nodes, "truncated": !queue.isEmpty, "execution_mode": "background"]
     }
 
     func resolve(_ selector: [String: Any]) throws -> AXUIElement {
@@ -187,11 +225,13 @@ final class NativeWindow {
             guard let reference = references[ref], contains(reference.element), reference.role == axString(reference.element, kAXRoleAttribute), reference.name == name(reference.element) else { throw HostFailure(code: "STALE_REFERENCE", message: "Observe the window again.") }
             return reference.element
         }
-        guard let role = selector["role"] as? String, let name = selector["name"] as? String else { throw NativeInput.invalid("A reference or role and name is required.") }
-        var queue = [element], matches: [AXUIElement] = [], visited = 0
+        let roles = (selector["roles"] as? [String]) ?? (selector["role"] as? String).map { [$0] } ?? []
+        guard !roles.isEmpty, let name = selector["name"] as? String else { throw NativeInput.invalid("A reference or roles and name is required.") }
+        let root = try (selector["root_ref"] as? String).map { try resolve(["ref": $0]) } ?? element
+        var queue = [root], matches: [AXUIElement] = [], visited = 0
         while let node = queue.popLast(), visited < 5000 {
             visited += 1
-            if axString(node, kAXRoleAttribute) == role && self.name(node) == name { matches.append(node) }
+            if roles.contains(axString(node, kAXRoleAttribute)) && self.name(node) == name { matches.append(node) }
             if matches.count > 1 { break }
             if let children = axValue(node, kAXChildrenAttribute) as? [AXUIElement] { queue.append(contentsOf: children.prefix(5001)) }
             if queue.count > 10000 { break }
@@ -209,7 +249,7 @@ final class NativeWindow {
         if action == "wait" { return try wait(selector, args) }
         let node = try resolve(selector)
         switch action {
-        case "read": return ["node": describe(node)]
+        case "read": return ["semantic_schema_version": 2, "node": describe(node)]
         case "click":
             var actions: CFArray?
             AXUIElementCopyActionNames(node, &actions)

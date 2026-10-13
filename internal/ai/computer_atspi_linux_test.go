@@ -144,6 +144,7 @@ box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
 window.add(box)
 entry = Gtk.Entry()
 entry.get_accessible().set_name('Query')
+entry.get_accessible().set_description('Enter the search query')
 box.pack_start(entry, False, False, 0)
 result = Gtk.Label(label='Empty')
 result.get_accessible().set_name('Result')
@@ -151,6 +152,10 @@ box.pack_start(result, False, False, 0)
 apply = Gtk.Button(label='Apply')
 apply.connect('clicked', lambda _: result.set_text(entry.get_text()))
 box.pack_start(apply, False, False, 0)
+choice = Gtk.CheckButton(label='Include archived')
+choice.set_inconsistent(True)
+choice.set_sensitive(False)
+box.pack_start(choice, False, False, 0)
 for i in range(2): box.pack_start(Gtk.Button(label='Duplicate'), False, False, 0)
 def ready():
     global entry
@@ -198,6 +203,28 @@ Gtk.main()
 		t.Fatalf("observation: %+v %v", observed, err)
 	}
 	payload := observed.Result.(map[string]any)["observation"].(map[string]any)
+	normalized, err := normalizeComputerObservation(payload)
+	if err != nil {
+		t.Fatalf("native tree normalization: %v", err)
+	}
+	if normalized["semantic_schema_version"] != float64(2) || len(normalized["roots"].([]any)) == 0 {
+		t.Fatal("native tree roots missing")
+	}
+	var mixedFound, descriptionFound bool
+	for _, raw := range normalized["nodes"].([]any) {
+		node := raw.(map[string]any)
+		if node["name"] == "Query" {
+			descriptionFound = node["description"] == "Enter the search query" && node["canonical_role"] == "textbox"
+		}
+		if node["name"] == "Include archived" {
+			states := node["states"].(map[string]any)
+			mixedFound = node["canonical_role"] == "checkbox" && states["checked"] == "mixed" && states["disabled"] == true
+		}
+	}
+	if !mixedFound || !descriptionFound {
+		t.Fatal("native mixed state or description missing")
+	}
+
 	var inputRef string
 	for _, node := range payload["nodes"].([]map[string]any) {
 		if node["name"] == "Query" {

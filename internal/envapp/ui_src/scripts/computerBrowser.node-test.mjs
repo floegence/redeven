@@ -15,9 +15,10 @@ test('semantic browser reads, fills, waits and rejects stale or ambiguous nodes 
     if (req.url === '/redirect') { res.writeHead(302, { location: 'https://unapproved.invalid/landing' }); res.end(); return; }
     res.setHeader('content-type', 'text/html');
     res.end(req.url === '/next' ? '<h1>Next document</h1>' : `<!doctype html><title>Semantic fixture</title>
-      <label>Search<input aria-label="Search"></label>
+      <label>Search<input aria-label="Search" aria-invalid="spelling" aria-busy="true" required aria-describedby="search-help" aria-controls="result"></label>
+      <p id="search-help">Enter a search term</p>
       <button onclick="document.querySelector('output').textContent=document.querySelector('input').value">Apply</button>
-      <output aria-label="Result"></output><button>Duplicate</button><button>Duplicate</button>
+      <output id="result" aria-label="Result"></output><button>Duplicate</button><button>Duplicate</button>
       <div style="position:absolute;top:100px;left:100px;width:200px;height:100px;overflow:auto" onscroll="document.querySelector('output').setAttribute('aria-label','Scrolled region')"><div style="height:1000px">Scroll region</div></div>
       <button onclick="setTimeout(()=>{const b=document.createElement('button');b.textContent='Ready';document.body.append(b)},100)">Load</button>`);
   });
@@ -55,6 +56,23 @@ test('semantic browser reads, fills, waits and rejects stale or ambiguous nodes 
     assert.equal(observed.screenshot, undefined);
     const input = observed.result.observation.nodes.find(node => node.role === 'textbox' && node.name === 'Search');
     assert.ok(input, JSON.stringify(observed));
+    const tree = observed.result.observation;
+    assert.equal(tree.semantic_schema_version, 2);
+    const byRef = new Map(tree.nodes.map(node => [node.ref, node]));
+    for (const node of tree.nodes) {
+      assert.equal(node.platform_role, node.role);
+      if (node.parent_ref) assert.ok(byRef.get(node.parent_ref).child_refs.includes(node.ref));
+      for (const child of node.child_refs) assert.equal(byRef.get(child).parent_ref, node.ref);
+    }
+    assert.equal(input.states.invalid, true); // Chromium currently projects spelling as invalid=true.
+    assert.equal(input.states.busy, true);
+    assert.equal(input.states.required, true);
+    assert.equal(input.description, 'Enter a search term');
+    assert.ok(input.relations.controls.some(ref => byRef.get(ref).name === 'Result'));
+    const bounded = (await send('computer.observe', { limit: 2 })).result.observation;
+    assert.equal(bounded.truncated, true);
+    assert.equal(bounded.nodes.length, 2);
+    assert.ok(bounded.nodes[0].child_refs.includes(bounded.nodes[1].ref));
     const perform = async (args) => send('computer.action', args, { script_operation: true });
     const filled = await perform({ action: 'fill', selector: { ref: input.ref }, text: 'Completed' });
     assert.equal(filled.error, undefined, JSON.stringify(filled));
@@ -70,7 +88,7 @@ test('semantic browser reads, fills, waits and rejects stale or ambiguous nodes 
     const scrollResult = await perform({ action: 'wait', selector: { role: 'status', name: 'Scrolled region' }, timeout_ms: 3000 });
     assert.equal(scrollResult.error, undefined, JSON.stringify(scrollResult));
     await perform({ action: 'click', selector: { role: 'button', name: 'Load' } });
-    const waited = await perform({ action: 'wait', selector: { role: 'button', name: 'Ready' }, timeout_ms: 3000 });
+    const waited = await perform({ action: 'wait', selector: { roles: ['button', 'push button', 'AXButton'], name: 'Ready' }, timeout_ms: 3000 });
     assert.equal(waited.error, undefined, JSON.stringify(waited));
     await send('browser.navigate', { url: origin + '/next' });
     const stale = await perform({ action: 'click', selector: { ref: input.ref } });

@@ -3,7 +3,7 @@ type: Performance Qualification
 title: Computer use paired model measurements
 description: Compare visual primitives and semantic scripts through the production Service and report incomplete or failed evidence explicitly.
 tags: [ai, computer-use, browser-use, performance]
-timestamp: 2026-09-17T00:00:00Z
+timestamp: 2026-10-13T00:00:00Z
 ---
 # Summary
 
@@ -33,6 +33,13 @@ Canonical fixture history is saved beside each sample for diagnosis. Credentials
 are passed only to the child environment and upstream authorization header, never
 to reports or logs.
 
+The benchmark measures the private browser-host transport without replacing
+Runtime-owned concrete adapters. Adapter identity remains authoritative for
+script resources, source ownership, recovery and grants. Initialization uses the
+installed catalog browser and occurs before timing in both variants. The proxy
+lets its upstream HTTP transport decode gzip before measuring SSE usage;
+compressed bytes must not silently produce zero provider-token measurements.
+
 Run explicitly with an existing configuration and an absolute evidence directory:
 
 ```sh
@@ -54,6 +61,27 @@ and zero reported foreground operations. A failed sample remains in the report;
 reruns after implementation changes use a new evidence directory.
 
 # Boundaries
+
+## Schema version 2 qualification
+
+On 2026-10-13, the final measured schema-v2 pair retained 18 samples with actual
+provider usage. Semantic tasks succeeded 9/9 and visual tasks 8/9. Requests fell
+43.9%, image bytes 91.9%, and median duration 34.6%, with zero reported foreground
+operations. The failed visual dynamic-form sample timed out while clicking Save
+and stopped with `floret_effect_outcome_unknown`; its action was never replayed.
+Although the efficiency thresholds passed and semantic success did not fall,
+the report correctly remains incomplete because acceptance requires every sample
+to succeed. This is a measured limitation, not complete performance acceptance.
+
+Earlier diagnostic runs are retained separately: a wrapper removed concrete
+adapter identity and disabled scripts; transport measurement restored scripts;
+the dispatched canonical-selector regression then exposed an unreachable
+Runtime conversion branch. Its focused failing test now verifies the actual
+script-to-adapter path. The subsequent successful-task pair still lacked usage
+because the proxy inspected compressed SSE bytes. Those runs cannot support
+performance claims. Historical September results below do not qualify schema v2.
+
+## Earlier qualification
 
 Five complete three-repetition runs on 2026-09-17 retained the following results:
 
@@ -95,3 +123,4 @@ speed or reliability across applications, models or network conditions.
 - `redeven:scripts/run_computer_benchmark.mjs` - explicit credentialed runner and evidence output.
 - `redeven:scripts/computer_benchmark_report.mjs` - paired completeness and threshold evaluation.
 - `redeven:scripts/computer_benchmark_report.test.mjs` - failed, missing, duplicate and unmeasured samples.
+- `redeven:scripts/fixtures/computer-semantic-v2-benchmark.json` - retained schema-v2 measurements and incomplete acceptance report, with no provider credentials or private request content.

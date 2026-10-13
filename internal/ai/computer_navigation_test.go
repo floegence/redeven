@@ -26,7 +26,7 @@ func TestComputerScriptNavigationFailurePreservesPrefixAndTarget(t *testing.T) {
 					result, err, _ := computerBrowserFailure(call, false, code, payload, "fixture")
 					return result, err
 				}
-				return TargetToolResult{Result: map[string]any{"action_executed": computerCallMutates(call), "observation": map[string]any{"nodes": []any{map[string]any{"name": "current page"}}}}}, nil
+				return TargetToolResult{Result: map[string]any{"action_executed": computerCallMutates(call), "observation": semanticFixtureText("current page")}}, nil
 			})
 			target, _ := runtime.registry.ResolveTarget(t.Context(), call.TargetID)
 			target.Kind, target.Ready, target.State = "browser.connected", true, "ready"
