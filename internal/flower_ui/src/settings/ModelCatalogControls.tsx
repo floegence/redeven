@@ -1,4 +1,5 @@
-import { FeedbackIndicator, StableText, Button, Input } from '@floegence/floe-webapp-core/ui';
+import { FeedbackIndicator, Button, Input } from '@floegence/floe-webapp-core/ui';
+import { Refresh } from '@floegence/floe-webapp-core/icons';
 import { Show } from 'solid-js';
 import type { ModelCatalogCopy } from './modelCatalogCopy';
 
@@ -7,15 +8,23 @@ export function ModelCatalogControls(props: Readonly<{
   onQuery: (query: string) => void; onSelectAll: () => void; onClear: () => void; onRefresh?: () => void;
 }>) {
   let search: HTMLInputElement | undefined;
-  return <div>
+  return <div class="flower-model-catalog-controls">
     <p class="mb-2 text-xs text-muted-foreground">{props.copy.selectionHint}</p>
-    <div class="flex flex-wrap items-center gap-2">
-      <Input ref={search} value={props.query} onInput={(event) => props.onQuery(event.currentTarget.value)} placeholder={props.copy.search} aria-label={props.copy.search} size="sm" class="min-w-40 flex-1" />
-      <FeedbackIndicator label={props.copy.refresh} closeLabel={props.copy.feedbackClose} restoreFocus={() => search} entries={props.hasContent && props.error ? [{ id: 'catalog', severity: 'error', summary: props.error, actions: <Show when={props.onRefresh}><Button size="sm" variant="outline" disabled={props.disabled || props.loading} onClick={props.onRefresh}>{props.copy.refresh}</Button></Show> }] : []} />
-      <span class="text-xs tabular-nums text-muted-foreground" aria-live="polite">{props.copy.selected.replace('{count}', String(props.count))}</span>
-      <Button size="sm" variant="outline" disabled={props.disabled || props.loading} onClick={props.onSelectAll}>{props.copy.selectAll}</Button>
+    <div class="flex min-w-0 items-center gap-2">
+      <div class="min-w-0 flex-1"><Input ref={search} value={props.query} onInput={(event) => props.onQuery(event.currentTarget.value)} placeholder={props.copy.search} aria-label={props.copy.search} size="sm" class="min-w-0 w-full" /></div>
+      <Show when={props.hasContent && props.error}>
+        <FeedbackIndicator label={props.copy.refresh} closeLabel={props.copy.feedbackClose} restoreFocus={() => search} entries={[{ id: 'catalog', severity: 'error', summary: props.error!, actions: <Show when={props.onRefresh}><Button size="sm" variant="outline" disabled={props.disabled || props.loading} onClick={props.onRefresh}>{props.copy.refresh}</Button></Show> }]} />
+      </Show>
+      <Show when={props.onRefresh}>
+        <Button class="h-8 w-8 shrink-0 p-0" size="sm" variant="ghost" aria-label={props.copy.refresh} title={props.loading ? props.copy.loading : props.copy.refresh} disabled={props.disabled || props.loading} loading={props.loading} onClick={() => props.onRefresh?.()}>
+          <Show when={!props.loading}><Refresh class="h-4 w-4" aria-hidden="true" /></Show>
+        </Button>
+      </Show>
+    </div>
+    <div class="flower-model-catalog-selection flex flex-wrap items-center gap-1">
+      <span class="mr-auto text-xs tabular-nums text-muted-foreground" aria-live="polite">{props.copy.selected.replace('{count}', String(props.count))}</span>
+      <Button size="sm" variant="ghost" disabled={props.disabled || props.loading || !props.hasContent} onClick={props.onSelectAll}>{props.copy.selectAll}</Button>
       <Button size="sm" variant="ghost" disabled={props.disabled || props.loading || props.count === 0} onClick={props.onClear}>{props.copy.clearAll}</Button>
-      <Show when={props.onRefresh}><Button size="sm" variant="outline" disabled={props.disabled || props.loading} loading={props.loading} onClick={() => props.onRefresh?.()}><StableText reserve={[props.copy.loading, props.copy.refresh]}>{props.loading ? props.copy.loading : props.copy.refresh}</StableText></Button></Show>
     </div>
     <Show when={!props.hasContent && props.error}><p role="alert" class="mt-2 flower-body-copy text-destructive">{props.error}</p></Show>
   </div>;

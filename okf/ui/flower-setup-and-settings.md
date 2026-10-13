@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower setup and settings
 description: First-time model setup, actionable starter tasks, and shared provider, permission, and computer settings.
 tags: [ai, flower, settings, onboarding]
-timestamp: 2026-10-13T03:06:33Z
+timestamp: 2026-10-13T05:08:00Z
 ---
 # Summary
 
@@ -128,6 +128,29 @@ section; collapsing it does not destroy its address or connection result.
 Discovery, profile/tab selection, and explicit connection retain their existing
 runtime operations. The shared settings panel stays mounted when returning to chat.
 
+## Provider connection dialogs
+
+Provider creation in the shared Flower dialog places a compact provider picker
+beside one configuration pane. Selecting a provider reveals its identity,
+connection controls, and searchable model catalog without pushing other provider
+choices below a long expanded form. Existing-provider edits retain their type.
+Narrow screens move the picker above the form and use the dialog body as the only
+vertical scroller; wide layouts scroll the picker and configuration independently.
+
+Authentication methods use an intrinsic-width segmented control. Account actions
+and endpoint fields remain flat; redundant provider, credential, and aggregate
+search badges are omitted. Required credentials, authorization guidance, and save
+errors remain actionable. Model rows use thin horizontal rules and stable controls,
+with metadata editing revealed explicitly. Search, refresh, and selection preserve
+surviving row identity and focus; loading, authorization, errors, and empty search
+results have distinct visible feedback. Provider changes retain the existing
+authentication cancellation and discovery identity boundaries.
+
+Global Env settings retain their type, connection, models, and advanced sections,
+with the same flat picker and catalog treatment. The catalog includes selected
+custom models and is the single model-selection list; it does not repeat selected
+models in another section. Host permission checks and persistence remain unchanged.
+
 ## OpenAI authentication
 
 The shared dialog offers ChatGPT account and API key methods. Verified local
@@ -181,6 +204,8 @@ Settings fields follow the shared [product field treatment](runtime-settings.md#
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.setupGuide.browser.test.tsx:20` - Narrow setup actions and transition back to the existing draft.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSettingsSurface.presentation.browser.test.tsx:63` - Real controls, localized container layouts, themes, and keyboard saving.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.settings.browser.test.tsx` - Browser discovery, explicit connection, and retained failed-connection input.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerProviderDialog.chatgpt.browser.test.tsx` - Local and remote authorization, localized responsive layouts, and provider-picker stability through authentication and catalog search.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerProviderDialog.selection.browser.test.tsx` - Stable scroll, model row identity, focus, discovery metadata, and parameter editing.
 - `redeven:internal/flower_ui/src/settings/FlowerModelSettings.tsx` - Shared model/provider presentation and transient edit ownership.
 - `redeven:internal/envapp/ui_src/src/ui/pages/settings/FlowerSection.browser.test.tsx` - Global Env layout, provider persistence, rollback, account retention, and reader controls.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.companionPanels.browser.test.tsx` - Retained settings and extensions, editor identity, focus exclusion, save outcomes, and published companion phases.

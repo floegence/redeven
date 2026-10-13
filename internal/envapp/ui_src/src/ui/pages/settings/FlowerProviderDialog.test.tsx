@@ -126,7 +126,7 @@ describe('shared Flower provider dialog', () => {
       dialog.setProvider({ id: 'brand', type: 'openai', models: [models[0], { ...models[1], web_search: { status: 'unavailable', reason: 'not_integrated' } }] });
       await vi.advanceTimersByTimeAsync(1000);
       expect(discover).toHaveBeenCalledTimes(1);
-      expect(dialog.host.textContent).toContain('Web search available for some models');
+      expect(dialog.host.querySelector('[data-web-search="available"]')?.textContent).toBe('Web search');
       expect(dialog.host.querySelector('[data-web-search="unavailable"]')?.textContent).toBe('Web search not integrated');
       expect(dialog.button('Save provider').disabled).toBe(false);
     } finally { dialog.dispose(); vi.useRealTimers(); }
