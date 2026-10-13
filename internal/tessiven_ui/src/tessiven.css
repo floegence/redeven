@@ -1812,7 +1812,7 @@
   pointer-events: auto;
   color: var(--foreground);
   background: color-mix(in srgb, var(--card) 94%, var(--background));
-  border: 1px solid color-mix(in srgb, var(--border) 76%, var(--foreground));
+  border: 1px solid transparent;
   border-radius: 999px;
   padding: 6px 11px 6px 8px;
   font-size: 12px;
@@ -1825,12 +1825,11 @@
   transform-origin: 50% 100%;
   animation: tessiven-flower-restore-enter 220ms cubic-bezier(.2, .75, .25, 1) both;
   transition: transform 160ms cubic-bezier(.2, .75, .25, 1),
-    background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+    background-color 160ms ease, box-shadow 160ms ease;
 }
 .tessiven-flower-restore svg { width: 20px; height: 20px; flex: 0 0 20px; }
 .tessiven-flower-restore:hover {
   background: color-mix(in srgb, var(--accent) 72%, var(--card));
-  border-color: color-mix(in srgb, var(--ring) 42%, var(--border));
   box-shadow: 0 8px 20px -9px color-mix(in srgb, var(--redeven-shadow-color) 74%, transparent),
     0 2px 5px color-mix(in srgb, var(--redeven-shadow-color) 22%, transparent);
   transform: translateY(-1px);

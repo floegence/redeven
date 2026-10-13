@@ -69,8 +69,11 @@ canvas context and in-flight delivery follow the
 The window uses Floe's mounted presence lifecycle for both directions: closing
 keeps the same conversation and textarea mounted through the exit transition,
 and reopening reverses an in-flight close without rebuilding Flower state. The
-restore control enters as a compact themed pill and remains the only interactive
-surface in its otherwise pointer-transparent canvas host. Reduced-motion
+restore control enters as a compact themed pill, distinguished by its surface
+color and soft shadow without a visible border in normal or hovered states.
+Keyboard focus and forced-colors mode retain their explicit indicators. It
+remains the only interactive surface in its otherwise pointer-transparent
+canvas host. Reduced-motion
 preferences remove both window and restore-entry movement while preserving the
 same lifecycle and focus behavior.
 
