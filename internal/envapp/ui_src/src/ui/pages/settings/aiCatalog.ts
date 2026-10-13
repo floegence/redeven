@@ -1,5 +1,6 @@
 import type {
   AIInputModality,
+  AIProvider,
   AIProviderPreset,
   AIProviderRow,
   AIProviderType,
@@ -169,7 +170,7 @@ export function providerSupportsCustomModelNames(providerType: AIProviderType): 
   return flowerProviderSupportsCustomModels(providerType);
 }
 
-export function cloneAIProviderRow(row: AIProviderRow): AIProviderRow {
+export function cloneAIProviderRow(row: AIProvider & Partial<Omit<AIProviderRow, 'models'>>): AIProviderRow {
   return {
     enabled: row.enabled,
     auth_method: row.auth_method,
@@ -202,7 +203,7 @@ export function cloneAIProviderRow(row: AIProviderRow): AIProviderRow {
   };
 }
 
-export function normalizeAIProviderRowDraft(row: AIProviderRow): AIProviderRow {
+export function normalizeAIProviderRowDraft(row: AIProvider & Partial<Omit<AIProviderRow, 'models'>>): AIProviderRow {
   const out = cloneAIProviderRow(row);
   const models = Array.isArray(out.models) ? out.models : [];
   out.models = models.map((m) => ({

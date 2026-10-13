@@ -5,7 +5,7 @@ import '../../../flower-feature.css';
 import { FlowerModelSettings } from '../../../../../../../flower_ui/src/settings/FlowerModelSettings';
 import { createLocalizedFlowerSurfaceCopy } from '../../../../../../../flower_ui/src/i18n/createLocalizedFlowerSurfaceCopy';
 import { applyFlowerModelDiscovery, flowerProviderModelChoices, setFlowerModelsEnabled, defaultFlowerProviderModels, resolveFlowerProviderModels, serializeFlowerProvider } from '../../../../../../../flower_ui/src/settings/modelSelection';
-import type { FlowerProvider, FlowerProviderDraft } from '../../../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import type { FlowerModelDirectory, FlowerProvider, FlowerProviderDraft } from '../../../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { For, Show, createMemo, createSignal, on, createEffect, onCleanup, untrack } from 'solid-js';
 import { Bot } from '@floegence/floe-webapp-core/icons';
 import { FeedbackIndicator, Button, Tabs } from '@floegence/floe-webapp-core/ui';
@@ -190,7 +190,8 @@ export function FlowerSection() {
   const [providerDialogProvider, setProviderDialogProvider] = createSignal<AIProviderRow | null>(null);
   const [providerDialogMode, setProviderDialogMode] = createSignal<AIProviderDialogMode>('create');
 
-  createEffect(on(() => [providerDefaults(), providerDialogOpen(), providerDialogProvider()?.type] as const, () => {
+  const providerDialogType = createMemo(() => providerDialogProvider()?.type);
+  createEffect(on(() => [providerDefaults(), providerDialogOpen(), providerDialogType()] as const, () => {
     untrack(() => {
       const draft = providerDialogProvider();
       if (providerDialogOpen() && draft) setProviderDialogProvider({ ...draft, model_defaults: providerDefaults()?.[draft.type] });
@@ -203,15 +204,21 @@ export function FlowerSection() {
     const ai = s.ai;
     if (!dirty()) {
       setCurrentModelID(ai?.current_model_id ?? '');
-      const configured = ai?.providers ?? [];
-      setProviders(configured.map((provider) => normalizeAIProviderRowDraft({ ...provider, chatgpt_account: s.chatgpt_accounts?.[provider.id], models: resolveFlowerProviderModels(provider as FlowerProvider) } as AIProviderRow)));
+      const configured = (ai?.providers ?? []).map(provider => normalizeAIProviderRowDraft({
+        ...provider, chatgpt_account: s.chatgpt_accounts?.[provider.id],
+      }));
+      const projectProviders = (directory?: FlowerModelDirectory) => configured.map(provider => {
+        const row = { ...provider, model_defaults: directory?.provider_defaults?.[provider.type], catalog_models: directory?.provider_catalogs?.[provider.id] };
+        return normalizeAIProviderRowDraft({ ...row, models: resolveFlowerProviderModels(row as FlowerProvider, row.catalog_models) } as AIProviderRow);
+      });
+      setProviders(projectProviders());
       const resource = ctx.env.flowerModelReadResource;
       const load = resource ? resource.loadDirectory(true) : fetchLocalApiJSON('/_redeven_proxy/api/ai/models', { method: 'GET' }).then(readFlowerModelDirectory);
       void load.then(directory => {
         if (ctx.settings() !== s) return;
         setProviderDefaults(directory.provider_defaults);
         if (ctx.settings() === s && !dirty()) {
-          setProviders(configured.map(provider => normalizeAIProviderRowDraft({ ...provider, model_defaults: directory.provider_defaults?.[provider.type], catalog_models: directory.provider_catalogs?.[provider.id], models: resolveFlowerProviderModels({ ...provider, model_defaults: directory.provider_defaults?.[provider.type] } as FlowerProvider, directory.provider_catalogs?.[provider.id]), chatgpt_account: s.chatgpt_accounts?.[provider.id] } as AIProviderRow)));
+          setProviders(projectProviders(directory));
         }
       }).catch(() => undefined);
     }
