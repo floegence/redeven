@@ -1011,6 +1011,7 @@
       "dialogChatGPTAuthorizationRequired": "ChatGPT 接続の認証が必要です。モデル提供元の設定を開き、もう一度ログインしてください。",
       "dialogChatGPTManageUsage": "使用量を管理",
       "dialogChatGPTSignInFailed": "ログインを完了できませんでした。もう一度お試しください。",
+      "dialogChatGPTSignInCleanupUnconfirmed": "ログインは完了していません。新しいセッションの解除を確認できなかったため、ChatGPT の設定で接続済みアプリを確認してください。",
       "dialogChatGPTSignOut": "ログアウト",
       "dialogChatGPTRevocationUnconfirmed": "このデバイスからログアウトしました。認証の取り消しを確認できませんでした。ChatGPT で接続済みアプリを確認してください。",
       "dialogChatGPTUsageUnavailable": "このリクエストでは ChatGPT プランの利用枠を使用できません。使用量を確認するか、後でもう一度お試しください。",

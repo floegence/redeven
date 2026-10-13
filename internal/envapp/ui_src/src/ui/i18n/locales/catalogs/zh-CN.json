@@ -5900,6 +5900,7 @@
       "dialogChatGPTAuthorizationRequired": "ChatGPT 连接需要重新授权。请打开模型提供商设置并重新登录。",
       "dialogChatGPTManageUsage": "管理用量",
       "dialogChatGPTSignInFailed": "登录未能完成，请重试。",
+      "dialogChatGPTSignInCleanupUnconfirmed": "登录未完成，且无法确认新会话是否已清理。请在 ChatGPT 设置中检查已连接的应用。",
       "dialogChatGPTSignOut": "退出登录",
       "dialogChatGPTRevocationUnconfirmed": "已在本机退出登录，但未能确认授权撤销。请在 ChatGPT 中检查已连接的应用。",
       "dialogChatGPTUsageUnavailable": "本次请求暂时无法使用 ChatGPT 套餐额度。请管理用量，或稍后重试。",

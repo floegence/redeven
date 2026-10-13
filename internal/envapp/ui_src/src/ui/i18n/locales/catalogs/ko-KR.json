@@ -5900,6 +5900,7 @@
       "dialogChatGPTAuthorizationRequired": "ChatGPT 연결에 인증이 필요합니다. 제공업체 설정을 열고 다시 로그인하세요.",
       "dialogChatGPTManageUsage": "사용량 관리",
       "dialogChatGPTSignInFailed": "로그인을 완료하지 못했습니다. 다시 시도하세요.",
+      "dialogChatGPTSignInCleanupUnconfirmed": "로그인이 완료되지 않았습니다. 새 세션이 정리되었는지 확인할 수 없으므로 ChatGPT 설정에서 연결된 앱을 확인하세요.",
       "dialogChatGPTSignOut": "로그아웃",
       "dialogChatGPTRevocationUnconfirmed": "이 기기에서 로그아웃했습니다. 승인 취소를 확인하지 못했으니 ChatGPT에서 연결된 앱을 확인하세요.",
       "dialogChatGPTUsageUnavailable": "이 요청에 ChatGPT 요금제 사용량을 이용할 수 없습니다. 사용량을 관리하거나 나중에 다시 시도하세요.",

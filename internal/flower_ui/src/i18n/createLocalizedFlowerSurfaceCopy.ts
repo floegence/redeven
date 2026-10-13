@@ -873,6 +873,7 @@ function createLocalizedFlowerProviderDialogCopy(i18n: FlowerSurfaceTranslator):
       authorizationRequired: t(i18n, k('dialogChatGPTAuthorizationRequired')),
       manageUsage: t(i18n, k('dialogChatGPTManageUsage')),
       signInFailed: t(i18n, k('dialogChatGPTSignInFailed')),
+      signInCleanupUnconfirmed: t(i18n, k('dialogChatGPTSignInCleanupUnconfirmed')),
       signOut: t(i18n, k('dialogChatGPTSignOut')),
       revocationUnconfirmed: t(i18n, k('dialogChatGPTRevocationUnconfirmed')),
       renewing: t(i18n, k('dialogChatGPTRenewing')),

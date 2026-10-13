@@ -227,6 +227,7 @@ export type FlowerProviderDialogCopy = Readonly<{
     authorizationRequired: string;
     manageUsage: string;
     signInFailed: string;
+    signInCleanupUnconfirmed: string;
     signOut: string;
     revocationUnconfirmed: string;
     renewing: string;
@@ -1461,6 +1462,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
         authorizationRequired: "Your ChatGPT connection needs authorization. Open provider settings and sign in again.",
         manageUsage: "Manage usage",
         signInFailed: "Sign-in could not complete. Try again.",
+        signInCleanupUnconfirmed: "Sign-in did not complete. Cleanup of the new session could not be confirmed; review connected apps in ChatGPT.",
         signOut: "Sign out",
         revocationUnconfirmed: "Signed out on this device. Revocation could not be confirmed; review connected apps in ChatGPT.",
         renewing: "Renewing your ChatGPT connection…",

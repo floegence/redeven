@@ -723,6 +723,7 @@ export const flowerSurfaceEnUS = {
     dialogChatGPTAuthorizationRequired: "Your ChatGPT connection needs authorization. Open provider settings and sign in again.",
     dialogChatGPTManageUsage: "Manage usage",
     dialogChatGPTSignInFailed: "Sign-in could not complete. Try again.",
+    dialogChatGPTSignInCleanupUnconfirmed: "Sign-in did not complete. Cleanup of the new session could not be confirmed; review connected apps in ChatGPT.",
     dialogChatGPTSignOut: "Sign out",
     dialogChatGPTRevocationUnconfirmed: "Signed out on this device. Revocation could not be confirmed; review connected apps in ChatGPT.",
     dialogChatGPTRenewing: "Renewing your ChatGPT connection…",

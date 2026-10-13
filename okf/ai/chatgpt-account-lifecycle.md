@@ -51,7 +51,8 @@ durable signing_out journal, so startup can finish interrupted cleanup; it is
 never installed as usable. Cleared registration records retain remote revocation
 confirmation for local review. Existing sessions are not overwritten by cleanup.
 Late callbacks cannot install usable credentials after cancellation or
-restore a newer logout. Failed revocation is reported independently of sign-in.
+restore a newer logout. Failed revocation is reported independently of sign-in; failed new-session
+cleanup never claims that an existing account has been signed out.
 Changing the trusted binding closes the old editor and invalidates its pending
 account-list and model-discovery results. UI responses never contain tokens,
 client IDs, token hints, PKCE secrets, subjects or authorization URLs.
@@ -126,6 +127,14 @@ The local account API enforces the
 [verified-host admission contract](chatgpt-local-authentication.md#local-host-admission).
 Compatibility epoch 56 covers the additive shared UI and private Desktop source
 contracts; Floret's public API and domain migration remain unchanged.
+
+# Boundaries
+
+This concept owns local registration and credential lifecycle. Verified host
+admission and inference contracts remain with the linked authentication owner.
+Connection configuration stores only account bindings; it cannot commit or roll
+back OAuth tokens. Cancellation cleanup may retain a verified signed-out
+registration, and remote revocation failure never becomes confirmed success.
 
 # Evidence
 

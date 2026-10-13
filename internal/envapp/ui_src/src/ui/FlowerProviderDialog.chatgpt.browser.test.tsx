@@ -240,3 +240,15 @@ it('observes canonical renewal and logout of a newly saved unbound account witho
   const panel = document.getElementById('flower-provider-type-openai')!;
   expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth);
 });
+
+it('reports unconfirmed cleanup of a failed new sign-in without claiming the existing account was signed out', async () => {
+  const auth = vi.fn<FlowerChatGPTAuth>(async action => action === 'start' ? { id: 'rejected', state: 'waiting' } : action === 'status' ? { state: 'failed', error_code: 'revocation_unconfirmed' } : {});
+  const draft: FlowerProviderDraft = { id: 'openai', type: 'openai', auth_method: 'chatgpt', account_id: 'existing', chatgpt_account: { account_id: 'existing', email: 'existing@example.com', state: 'ready', welcome_acknowledged: true }, models: [{ model_name: 'gpt-6.1-sol', context_window: 1050000 }] };
+  const { copy } = await mount(true, 'en-US', 1280, false, draft, auth);
+  await userEvent.click(page.getByRole('button', { name: copy.chatGPT.account, exact: true }));
+  await userEvent.click(page.getByRole('button', { name: copy.chatGPT.changeAccount, exact: true }));
+  await expect.element(page.getByRole('alert')).toHaveTextContent(copy.chatGPT.signInCleanupUnconfirmed);
+  await expect.element(page.getByRole('link', { name: copy.chatGPT.disconnectApps })).toBeVisible();
+  await expect.element(page.getByText(copy.chatGPT.connected, { exact: true })).toBeVisible();
+  expect(document.body.textContent).not.toContain(copy.chatGPT.revocationUnconfirmed);
+});

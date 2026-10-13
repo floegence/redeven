@@ -5900,6 +5900,7 @@
       "dialogChatGPTAuthorizationRequired": "Deine ChatGPT-Verbindung muss autorisiert werden. Öffne die Anbietereinstellungen und melde dich erneut an.",
       "dialogChatGPTManageUsage": "Nutzung verwalten",
       "dialogChatGPTSignInFailed": "Die Anmeldung konnte nicht abgeschlossen werden. Versuche es erneut.",
+      "dialogChatGPTSignInCleanupUnconfirmed": "Die Anmeldung wurde nicht abgeschlossen. Die Bereinigung der neuen Sitzung konnte nicht bestätigt werden. Prüfen Sie die verbundenen Apps in ChatGPT.",
       "dialogChatGPTSignOut": "Abmelden",
       "dialogChatGPTRevocationUnconfirmed": "Auf diesem Gerät abgemeldet. Der Widerruf konnte nicht bestätigt werden. Prüfe die verbundenen Apps in ChatGPT.",
       "dialogChatGPTUsageUnavailable": "Für diese Anfrage ist die Nutzung über den ChatGPT-Tarif nicht verfügbar. Verwalten Sie Ihre Nutzung oder versuchen Sie es später erneut.",
