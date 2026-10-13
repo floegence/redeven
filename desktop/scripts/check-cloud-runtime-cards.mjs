@@ -114,7 +114,7 @@ try{
   const card=page.locator('[data-environment-group="local"]');
   assert.deepEqual(await card.getByRole('tab').allTextContents(),expectedGateways?['Local','Cloud','Gateway']:['Local','Cloud']);
   await card.getByRole('tab').nth(1).click();
-  await card.getByRole('tabpanel',{name:'Redeven Cloud',exact:true}).waitFor();
+  await card.getByRole('tabpanel',{name:'Cloud',exact:true}).waitFor();
   return card;
  };
  await page.getByRole('button',{name:'Environments',exact:true}).first().click();
