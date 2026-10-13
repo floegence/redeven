@@ -79,6 +79,8 @@ export async function observeRuntimePlacementBridge(
           password_required: startup.password_required,
           started_at_unix_ms: startup.started_at_unix_ms
             ?? record.startup.started_at_unix_ms,
+          runtime_platform: startup.runtime_platform
+            ?? record.startup.runtime_platform,
           runtime_service: startup.runtime_service ?? record.startup.runtime_service,
         },
       }),

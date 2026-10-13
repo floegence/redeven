@@ -1736,6 +1736,7 @@
     "technicalDetails": "技術詳細"
   },
   "environmentCenter": {
+    "runtimePlatform": "ランタイムの OS: {platform}",
     "title": "環境",
     "description": "ローカル環境とリモート環境を管理します。Redeven Cloudに接続し、ワークスペースを開き、必要に応じてこのローカル環境プロファイルを再バインドします。",
     "environmentsTitle": "環境",

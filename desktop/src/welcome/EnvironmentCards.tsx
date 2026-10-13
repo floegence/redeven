@@ -13,6 +13,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle, Tag, Tabs, TabPan
 import { Clock, Cloud, MonitorPointer, Pin, Refresh, Search, Settings, Terminal, Trash, Link } from '@floegence/floe-webapp-core/icons';
 import { FlowerSoftAuraIcon, type FlowerTurnLauncherAnchor } from '../../../internal/flower_ui/src';
 import type { DesktopGatewaySource } from '../shared/desktopGateway';
+import type { DesktopRuntimePlatform } from '../shared/desktopRuntimePlatform';
 import type { DesktopI18n } from '../shared/i18n';
 import type { DesktopEnvironmentEntry, DesktopLauncherActionProgress } from '../shared/desktopLauncherIPC';
 import type { EnvironmentCardFactsBlock, EnvironmentSplitActionButton, EnvironmentProgressPanel } from './App';
@@ -32,6 +33,25 @@ import { abandonEnvironmentLifecycleDisclosureAttempt, beginEnvironmentLifecycle
   isEnvironmentLifecycleDisclosureIntent, createEnvironmentLifecycleAttempt, environmentActionStartsLifecycleDisclosure, environmentLifecycleDisclosureHasPendingRequest, focusEnvironmentLifecycleDisclosure,
   reconcileEnvironmentLifecycleDisclosure, reopenEnvironmentLifecycleDisclosure, visibleEnvironmentLifecycleProgress, type EnvironmentLifecycleDisclosureIntent,
   type EnvironmentLifecycleDisclosureState, type EnvironmentLifecycleAttempt, type EnvironmentSettingsRestartSource } from './environmentLifecycleDisclosure';
+
+const environmentPlatformAssets: Record<DesktopRuntimePlatform, { url: string; name: string }> = {
+  macos: { url: new URL('./assets/environment-platform-icons/apple.svg', import.meta.url).href, name: 'macOS' },
+  linux: { url: new URL('./assets/environment-platform-icons/linux.svg', import.meta.url).href, name: 'Linux' },
+  windows: { url: new URL('./assets/environment-platform-icons/windows.svg', import.meta.url).href, name: 'Windows' },
+};
+
+export function EnvironmentPlatformIcon(props: Readonly<{ platform?: DesktopRuntimePlatform; i18n: DesktopI18n }>) {
+  const asset = () => props.platform ? environmentPlatformAssets[props.platform] : undefined;
+  const label = () => props.i18n.t('environmentCenter.runtimePlatform', { platform: asset()?.name ?? '' });
+  return (
+    <span class="redeven-environment-platform-slot" data-runtime-platform-slot>
+      <Show when={asset()}>
+        {(current) => <span class="redeven-environment-platform-icon" role="img" aria-label={label()} title={label()}
+          data-runtime-platform={props.platform} style={{ 'mask-image': `url("${current().url}")` }} />}
+      </Show>
+    </span>
+  );
+}
 
 export type EnvironmentGuidanceActionResolution = Readonly<{ close_panel: boolean; next_session: EnvironmentGuidanceSessionState }>;
 
@@ -880,12 +900,15 @@ function EnvironmentOwnerSurface(
       <CardHeader class="redeven-environment-owner-heading">
         <div class="flex items-start justify-between gap-2">
           <div class="min-w-0 flex-1">
-            <CardTitle
-              class="truncate pt-1 text-[length:var(--floe-type-control)] font-medium leading-5"
-              title={runtime().label}
-            >
-              {runtime().label}
-            </CardTitle>
+            <div class="redeven-environment-title-row">
+              <EnvironmentPlatformIcon platform={runtime().runtime_platform} i18n={props.i18n} />
+              <CardTitle
+                class="redeven-environment-title truncate select-text text-[length:var(--floe-type-control)] font-medium leading-5"
+                title={runtime().label}
+              >
+                {runtime().label}
+              </CardTitle>
+            </div>
           </div>
           <DesktopTooltip content={refreshLabel()} placement="top">
             <span>

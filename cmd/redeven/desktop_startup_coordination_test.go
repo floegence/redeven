@@ -27,7 +27,8 @@ func TestHandleDesktopLockConflictWritesAttachedReportWhenRuntimeIsAvailable(t *
 	reportPath := filepath.Join(t.TempDir(), "startup-report.json")
 	statusServer, err := runtimemanagement.NewServer(layout.RuntimeControlSocketPath, func(context.Context) (runtimemanagement.RuntimeAttachStatus, error) {
 		return runtimemanagement.RuntimeAttachStatus{
-			State: runtimemanagement.AttachStateReady,
+			State:           runtimemanagement.AttachStateReady,
+			RuntimePlatform: "linux",
 			Identity: runtimemanagement.RuntimeInstanceIdentity{
 				StateDir:        layout.StateDir,
 				PID:             os.Getpid(),
@@ -87,6 +88,9 @@ func TestHandleDesktopLockConflictWritesAttachedReportWhenRuntimeIsAvailable(t *
 	}
 	if report.StateDir != filepath.Dir(cfgPath) {
 		t.Fatalf("unexpected diagnostics report: %#v", report)
+	}
+	if report.RuntimePlatform != "linux" {
+		t.Fatalf("RuntimePlatform = %q, want observed linux", report.RuntimePlatform)
 	}
 	if report.StartedAtUnixMS != 1778751234567 {
 		t.Fatalf("StartedAtUnixMS = %d", report.StartedAtUnixMS)

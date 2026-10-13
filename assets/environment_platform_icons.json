@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "source": {
+    "label": "theSVG",
+    "repository": "https://github.com/glincker/thesvg",
+    "revision": "8731f4b62fea303b022e4aa0125783aeb42c3ea5",
+    "license_file": "assets/licenses/thesvg-MIT.txt",
+    "license_metadata_path": "src/data/icons.json",
+    "license_metadata_url": "https://github.com/glincker/thesvg/blob/8731f4b62fea303b022e4aa0125783aeb42c3ea5/src/data/icons.json"
+  },
+  "assets": [
+    {
+      "identity": "macos",
+      "label": "Apple",
+      "file": "apple.svg",
+      "source_path": "public/icons/apple/mono.svg",
+      "license": "CC0-1.0",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "license_file": "assets/licenses/CC0-1.0.txt",
+      "sha256": "2a1509dccd25e6d2bc7a11a8e52941077e1a48555e192ce638699b9f083c2a7c",
+      "upstream_sha256": "2a1509dccd25e6d2bc7a11a8e52941077e1a48555e192ce638699b9f083c2a7c",
+      "modified": false
+    },
+    {
+      "identity": "linux",
+      "label": "Linux",
+      "file": "linux.svg",
+      "source_path": "public/icons/linux/mono.svg",
+      "license": "CC0-1.0",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "license_file": "assets/licenses/CC0-1.0.txt",
+      "sha256": "7e55f2779ae11a83c9dad2d0414a65d8ca7867d0716ce58bfe41ed299ae1447f",
+      "upstream_sha256": "7e55f2779ae11a83c9dad2d0414a65d8ca7867d0716ce58bfe41ed299ae1447f",
+      "modified": false
+    },
+    {
+      "identity": "windows",
+      "label": "Windows",
+      "file": "windows.svg",
+      "source_path": "public/icons/windows/default.svg",
+      "license": "MIT",
+      "license_url": "https://opensource.org/license/mit",
+      "license_file": "assets/licenses/thesvg-MIT.txt",
+      "sha256": "449a3893f905fd5a3206ff6cd7ca9cb4b26f64f23d480bec2e335ccb5a395b96",
+      "upstream_sha256": "449a3893f905fd5a3206ff6cd7ca9cb4b26f64f23d480bec2e335ccb5a395b96",
+      "modified": false
+    }
+  ]
+}

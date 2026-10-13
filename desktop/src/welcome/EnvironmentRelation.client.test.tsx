@@ -57,6 +57,37 @@ async function mount(initialSnapshot?: DesktopWelcomeSnapshot) {
 afterEach(() => { for (const dispose of disposers.splice(0)) dispose(); document.body.replaceChildren(); vi.restoreAllMocks(); vi.unstubAllGlobals(); Reflect.deleteProperty(HTMLElement.prototype, 'animate'); });
 
 describe('linked environment owner interactions', () => {
+  it('updates the OS graphic in place while retaining title selection, card and access focus', async () => {
+    const fixture = runtimeConnectionFixture({ kind: 'ssh_environment' });
+    const runtime = fixture.snapshot.environments.find(entry => entry.kind === 'ssh_environment')!;
+    const h = await mount(fixture.snapshot);
+    const card = document.querySelector(`[data-environment-group="${runtime.id}"]`)!;
+    const title = card.querySelector<HTMLElement>('.redeven-environment-title')!;
+    const slot = title.previousElementSibling!;
+    expect(slot.hasAttribute('data-runtime-platform-slot')).toBe(true);
+    expect(slot.querySelector('[role="img"]')).toBeNull();
+    expect(title.classList.contains('truncate')).toBe(true);
+    expect(title.classList.contains('select-text')).toBe(true);
+    await selectTab(card, 1);
+    const tab = card.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')!;
+    tab.focus();
+    for (const runtime_platform of ['macos', 'linux', 'windows', undefined] as const) {
+      h.publish({ ...structuredClone(fixture.snapshot), environments: fixture.snapshot.environments.map(entry =>
+        entry.id === runtime.id ? { ...entry, runtime_platform } : entry) });
+      await settle();
+      expect(document.querySelector(`[data-environment-group="${runtime.id}"]`)).toBe(card);
+      expect(card.querySelector('.redeven-environment-title')).toBe(title);
+      expect(title.previousElementSibling).toBe(slot);
+      expect(tab.getAttribute('aria-selected')).toBe('true');
+      expect(document.activeElement).toBe(tab);
+      const graphic = slot.querySelector<HTMLElement>('[role="img"]');
+      if (runtime_platform) {
+        expect(graphic?.dataset.runtimePlatform).toBe(runtime_platform);
+        expect(graphic?.getAttribute('aria-label')).toContain('Runtime operating system:');
+        expect(graphic?.style.getPropertyValue('mask-image')).toMatch(/^url\(/);
+      } else expect(graphic).toBeNull();
+    }
+  });
   it.each(['local', 'ssh', 'wsl', 'local_container', 'ssh_container'] as const)('offers Gateway access for an unchecked %s Runtime without starting it', async kind => {
     const { environment: runtime, snapshot } = runtimeGatewayAccessFixture(kind, 'unknown');
     const h = await mount(snapshot);

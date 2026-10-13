@@ -9,6 +9,7 @@ import type {
 } from './desktopRuntimePlacement';
 import type { DesktopCloudRuntimeLinkTargetID } from './providerRuntimeLinkTarget';
 import type { RuntimeServiceSnapshot } from './runtimeService';
+import type { DesktopRuntimePlatform } from './desktopRuntimePlatform';
 
 export type DesktopRuntimeControlStatus =
   | Readonly<{
@@ -42,6 +43,7 @@ export type DesktopRuntimePresence = Readonly<{
   local_ui_urls?: readonly string[];
   local_ui_address_issues?: readonly LocalUIAddressIssue[];
   started_at_unix_ms?: number;
+  runtime_platform?: DesktopRuntimePlatform;
   openable: boolean;
   open_connection_required?: boolean;
   runtime_package_state?: DesktopRuntimePackageState;

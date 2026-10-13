@@ -77,7 +77,8 @@ func TestDesktopBridgeKeepsStdoutProtocolPure(t *testing.T) {
 	defer controlServer.Close()
 	statusServer, err := runtimemanagement.NewServer(layout.RuntimeControlSocketPath, func(context.Context) (runtimemanagement.RuntimeAttachStatus, error) {
 		return runtimemanagement.RuntimeAttachStatus{
-			State: runtimemanagement.AttachStateReady,
+			State:           runtimemanagement.AttachStateReady,
+			RuntimePlatform: "linux",
 			Identity: runtimemanagement.RuntimeInstanceIdentity{
 				StateDir:        layout.StateDir,
 				StartedAtUnixMS: 1778751234567,
@@ -147,6 +148,9 @@ func TestDesktopBridgeKeepsStdoutProtocolPure(t *testing.T) {
 	_ = helloResponse.Body.Close()
 	if hello.ProtocolVersion != desktopbridge.ProtocolVersion {
 		t.Fatalf("hello protocol = %q, want %q", hello.ProtocolVersion, desktopbridge.ProtocolVersion)
+	}
+	if hello.RuntimePlatform != "linux" {
+		t.Fatalf("RuntimePlatform = %q, want observed linux", hello.RuntimePlatform)
 	}
 	if hello.StartedAtUnixMS != 1778751234567 {
 		t.Fatalf("hello StartedAtUnixMS = %d", hello.StartedAtUnixMS)

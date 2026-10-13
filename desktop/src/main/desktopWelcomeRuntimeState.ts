@@ -44,6 +44,7 @@ function runtimeStateFromStartup(
     diagnostics_enabled: startup.diagnostics_enabled === true,
     pid: Number.isInteger(pid) && pid > 0 ? pid : 0,
     started_at_unix_ms: Number.isInteger(startedAtUnixMS) && startedAtUnixMS > 0 ? startedAtUnixMS : undefined,
+    runtime_platform: startup.runtime_platform,
     runtime_control: startup.runtime_control,
     runtime_service: runtimeService,
   };
@@ -138,6 +139,7 @@ function withCurrentRuntime(
     && (existingRuntime?.diagnostics_enabled ?? false) === (currentRuntime?.diagnostics_enabled ?? false)
     && (existingRuntime?.pid ?? 0) === (currentRuntime?.pid ?? 0)
     && (existingRuntime?.started_at_unix_ms ?? 0) === (currentRuntime?.started_at_unix_ms ?? 0)
+    && (existingRuntime?.runtime_platform ?? '') === (currentRuntime?.runtime_platform ?? '')
     && JSON.stringify(existingRuntime?.runtime_control ?? null) === JSON.stringify(currentRuntime?.runtime_control ?? null)
     && JSON.stringify(existingRuntime?.runtime_service ?? null) === JSON.stringify(currentRuntime?.runtime_service ?? null)
   ) {

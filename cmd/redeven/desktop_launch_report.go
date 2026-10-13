@@ -59,9 +59,10 @@ type desktopLaunchDiagnostics struct {
 }
 
 type desktopLaunchReport struct {
-	Status  desktopLaunchStatus `json:"status,omitempty"`
-	Code    string              `json:"code,omitempty"`
-	Message string              `json:"message,omitempty"`
+	RuntimePlatform string              `json:"runtime_platform,omitempty"`
+	Status          desktopLaunchStatus `json:"status,omitempty"`
+	Code            string              `json:"code,omitempty"`
+	Message         string              `json:"message,omitempty"`
 
 	LocalUIURL               string                                  `json:"local_ui_url,omitempty"`
 	LocalUIURLs              []string                                `json:"local_ui_urls"`

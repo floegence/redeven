@@ -30,6 +30,13 @@ const validHello = {
 };
 
 describe('runtimePlacementBridgeProtocol', () => {
+  it.each([['darwin', 'macos'], ['win32', 'windows'], ['linux', 'linux'], ['unknown', undefined], [undefined, undefined]])(
+    'reads optional platform %s from the Runtime bridge hello', (raw, expected) => {
+      const hello = parseRuntimePlacementBridgeHello(Buffer.from(JSON.stringify({ ...validHello, runtime_platform: raw })));
+      expect(hello.runtime_platform).toBe(expected);
+      expect(hello.local_ui.available).toBe(true);
+    },
+  );
   it('requires the current Gateway host-authority epoch before admitting a host bridge', () => {
     const gatewayHello = {
       ...validHello,

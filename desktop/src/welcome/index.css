@@ -4618,3 +4618,35 @@ pre,
   grid-row: 3;
   justify-self: start;
 }
+
+.redeven-environment-title-row {
+  display: flex;
+  align-items: center;
+  gap: .375rem;
+  min-width: 0;
+  padding-top: .25rem;
+}
+
+.redeven-environment-platform-slot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1.25rem;
+  flex: none;
+}
+
+.redeven-environment-platform-icon {
+  width: .9375rem;
+  height: .9375rem;
+  background-color: var(--redeven-welcome-icon);
+  mask-size: contain;
+  mask-repeat: no-repeat;
+  mask-position: center;
+}
+
+.redeven-environment-title {
+  min-width: 0;
+  flex: 1;
+  user-select: text;
+}

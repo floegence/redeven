@@ -29,6 +29,7 @@ const (
 )
 
 type Hello struct {
+	RuntimePlatform string          `json:"runtime_platform,omitempty"`
 	ProtocolVersion string          `json:"protocol_version"`
 	RuntimeVersion  string          `json:"runtime_version"`
 	RuntimeCommit   string          `json:"runtime_commit,omitempty"`

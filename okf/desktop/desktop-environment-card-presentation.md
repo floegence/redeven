@@ -7,9 +7,11 @@ timestamp: 2026-10-12T00:00:00Z
 ---
 # Summary
 
-The shared Environment card renders independent access perspectives with its existing tabs, facts and split footer. Perspective changes select an explicit route and never grant authority or fall back after failure. Snapshot refresh preserves nodes, selection, drafts and focus; removing an owner closes only its surfaces. Long translations and narrow layouts retain single-line controls and stable card geometry.
+The shared Environment card renders independent access perspectives with its existing tabs, facts and split footer. Perspective changes select an explicit route and never grant authority or fall back after failure. Snapshot refresh preserves nodes, selection, drafts and focus; removing an owner closes only its surfaces. Long translations and narrow layouts retain single-line controls and stable card geometry. A locally bundled OS mark beside the Runtime name displays a trusted platform fact; unknown platforms keep an empty fixed slot.
 
 # Contract
+
+Runtime OS marks follow the [Runtime platform facts and icons](desktop-runtime-platform.md) contract. The reserved title slot and retained card subtree preserve layout and focus while the platform observation changes.
 
 ## Perspectives and owner actions
 

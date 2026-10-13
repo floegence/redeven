@@ -75,6 +75,22 @@ async function closeServer(server: http.Server): Promise<void> {
 }
 
 describe('runtimeState', () => {
+  it.each([['darwin', 'macos'], ['linux', 'linux'], ['win32', 'windows'], ['unknown', undefined], [undefined, undefined]])(
+    'propagates optional OS %s from live Runtime health', async (raw, expected) => {
+      const server = http.createServer((_request, response) => {
+        const payload = JSON.parse(openableHealthPayload(123));
+        payload.data.runtime_platform = raw;
+        response.writeHead(200, { 'Content-Type': 'application/json' }); response.end(JSON.stringify(payload));
+      });
+      const baseURL = await listenOnLoopback(server);
+      try {
+        expect(expectProbeSuccess(await probeExternalLocalUIHealth(baseURL)).runtime_platform).toBe(expected);
+        const startup: StartupReport = { local_ui_url: '', local_ui_urls: [], local_ui_bridge_url: baseURL,
+          local_ui_bridge_token: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' };
+        expect(expectProbeSuccess(await probeLocalRuntimeBridgeHealth(startup)).runtime_platform).toBe(expected);
+      } finally { await closeServer(server); }
+    },
+  );
   it('does not turn a saved probe entry into a current public address', async () => {
     const server = http.createServer((_request, response) => {
       response.setHeader('Content-Type', 'application/json');

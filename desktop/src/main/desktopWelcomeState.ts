@@ -94,6 +94,7 @@ import {
   resolveDesktopPlatformCapabilities,
   type DesktopPlatformCapabilities,
 } from '../shared/desktopPlatformCapabilities';
+import { normalizeDesktopRuntimePlatform, type DesktopRuntimePlatform } from '../shared/desktopRuntimePlatform';
 import type { DesktopWSLDiscoverySnapshot } from '../shared/desktopWSL';
 import {
   isRedevenCloudOrigin,
@@ -967,6 +968,12 @@ function runtimeServiceFromPresence(presence: DesktopRuntimePresence | undefined
   return presence?.runtime_service ? normalizeRuntimeServiceSnapshot(presence.runtime_service) : undefined;
 }
 
+function runtimePlatformFromObservation(
+  observation: Readonly<{ runtime_platform?: unknown }> | null | undefined,
+): DesktopRuntimePlatform | undefined {
+  return normalizeDesktopRuntimePlatform(observation?.runtime_platform);
+}
+
 function runtimeMaintenanceFromHealth(
   health: DesktopRuntimeHealth | null | undefined,
 ): DesktopEnvironmentEntry['runtime_maintenance'] {
@@ -1028,6 +1035,7 @@ function runtimeHealthFromPresence(
       ...fallback,
       status: 'offline',
       ...(presence.started_at_unix_ms ? { started_at_unix_ms: presence.started_at_unix_ms } : {}),
+      ...(presence.runtime_platform ? { runtime_platform: presence.runtime_platform } : {}),
       checked_at_unix_ms: presence.checked_at_unix_ms,
       source,
       freshness: fallback.freshness === 'unknown' ? undefined : fallback.freshness,
@@ -1053,6 +1061,7 @@ function runtimeHealthFromPresence(
     local_ui_urls: presence.local_ui_urls,
     local_ui_address_issues: presence.local_ui_address_issues,
     ...(presence.started_at_unix_ms ? { started_at_unix_ms: presence.started_at_unix_ms } : {}),
+    ...(presence.runtime_platform ? { runtime_platform: presence.runtime_platform } : {}),
     runtime_service: presenceRuntimeService,
     runtime_maintenance: presenceMaintenance,
   };
@@ -1076,12 +1085,14 @@ function providerEnvironmentRuntimeHealth(
       checked_at_unix_ms: providerHealth.observed_at_unix_ms || Date.now(),
       source: 'provider_batch_probe',
       local_ui_url: compact(environment.environment_url) || undefined,
+      runtime_platform: runtimePlatformFromObservation(providerHealth),
     };
   }
   return {
     status: 'offline',
     checked_at_unix_ms: providerHealth?.observed_at_unix_ms || Date.now(),
     source: 'provider_batch_probe',
+    runtime_platform: runtimePlatformFromObservation(providerHealth),
     offline_reason_code: normalizeProviderRuntimeOfflineReasonCode(providerHealth?.offline_reason_code),
     offline_reason: providerHealth?.offline_reason || 'The runtime offline / unavailable',
   };
@@ -1196,6 +1207,7 @@ function buildLocalEnvironmentEntry(
   controlPlanes: readonly DesktopControlPlaneSummary[],
   cachedRuntimeHealth: DesktopRuntimeHealth | undefined,
   presence: DesktopRuntimePresence | undefined,
+  platformCapabilities: DesktopPlatformCapabilities,
   redevenCloudOriginPolicy: RedevenCloudOriginPolicy,
 ): DesktopEnvironmentEntry {
   const localSession = openSessions.local_host ?? null;
@@ -1213,6 +1225,7 @@ function buildLocalEnvironmentEntry(
     );
   const runtimeRunning = resolvedLocalRuntimeState === 'running';
   const runtimeObservation = presence ?? cachedRuntimeHealth ?? localSession?.startup ?? environment.local_hosting.current_runtime;
+  const runtimePlatform = platformCapabilities.native_local_environment ? platformCapabilities.platform : undefined;
   const resolvedLocalRuntimeURLs = runtimeRunning ? reportedRuntimeURLs(runtimeObservation) : [];
   const resolvedLocalRuntimeURL = resolvedLocalRuntimeURLs[0] ?? '';
   const startedAtUnixMS = runtimeStartedAtUnixMS(runtimeObservation?.started_at_unix_ms);
@@ -1341,6 +1354,7 @@ function buildLocalEnvironmentEntry(
     is_open: isOpen,
     is_opening: isOpening,
     runtime_health: runtimeHealth,
+    runtime_platform: runtimePlatform,
     runtime_service: runtimeService,
     runtime_started_at_unix_ms: startedAtUnixMS,
     runtime_maintenance: runtimeMaintenance,
@@ -1520,6 +1534,7 @@ function buildCloudEnvironmentEntry(
     is_open: effectiveWindowState === 'open',
     is_opening: effectiveWindowState === 'opening',
     runtime_health: runtimeHealth,
+    runtime_platform: runtimePlatformFromObservation(runtimeHealth),
     runtime_service: undefined,
     runtime_started_at_unix_ms: startedAtUnixMS,
     runtime_operations: providerRuntimeOperations(effectiveWindowState === 'open' || routeDetails.remoteRouteState === 'ready'),
@@ -1560,6 +1575,7 @@ function buildEnvironmentEntries(
       controlPlanes,
       localRuntimeHealth[environment.id],
       managedRuntimePresenceByTargetID[desktopCloudRuntimeLinkTargetID('local_environment', environment.id)],
+      platformCapabilities,
       redevenCloudOriginPolicy,
     )),
     ...visibleSavedRuntimeTargets.map(target => buildSavedRuntimeTargetEntry(
@@ -1681,6 +1697,7 @@ function buildSavedEnvironmentEntry(
     is_open: isOpen,
     is_opening: isOpening,
     runtime_health: runtimeHealth,
+    runtime_platform: runtimePlatformFromObservation(openSession?.startup) ?? runtimePlatformFromObservation(runtimeHealth),
     runtime_service: preferredRuntimeService(openSession?.startup?.runtime_service, savedRuntimeHealth),
     runtime_started_at_unix_ms: startedAtUnixMS,
     runtime_maintenance: runtimeMaintenanceFromHealth(runtimeHealth),
@@ -1814,6 +1831,7 @@ function buildSavedRuntimeTargetEntry(
     is_open: isOpen,
     is_opening: isOpening,
     runtime_health: runtimeHealth,
+    runtime_platform: target.host_access.kind === 'wsl_host' ? 'linux' : runtimePlatformFromObservation(runtimeObservation),
     runtime_service: runtimeService,
     runtime_started_at_unix_ms: startedAtUnixMS,
     runtime_maintenance: runtimeMaintenance,

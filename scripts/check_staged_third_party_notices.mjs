@@ -18,8 +18,11 @@ const noticeInputs = new Set([
   'scripts/model-catalog/models-dev.LICENSE',
   'assets/terminal_agent_icons.json',
   'assets/container_service_icons.json',
+  'assets/environment_platform_icons.json',
+  'scripts/environment_platform_icon_integrity.mjs',
 ]);
 const assetRoots = [
+  'desktop/src/welcome/assets/environment-platform-icons/',
   'assets/licenses/',
   'internal/envapp/ui_src/public/agent-cli-icons/',
   'internal/envapp/ui_src/public/container-service-icons/',

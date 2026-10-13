@@ -7,7 +7,7 @@ import type { StartupReport } from './startup';
 /** Keep observed startup identity and addresses while live presence is revalidated. */
 export function desktopWelcomeOnlineRuntimeHealth(
   source: DesktopRuntimeHealth['source'],
-  startup: Pick<StartupReport, 'local_ui_url' | 'runtime_service' | 'started_at_unix_ms' | 'pid'>
+  startup: Pick<StartupReport, 'local_ui_url' | 'runtime_service' | 'started_at_unix_ms' | 'pid' | 'runtime_platform'>
     & Pick<StartupReport, 'local_ui_address_issues' | 'verified_runtime_identity'> & Readonly<{ local_ui_urls?: readonly string[] }>,
   maintenance?: DesktopRuntimeMaintenanceRequirement,
 ): DesktopRuntimeHealth {
@@ -23,6 +23,7 @@ export function desktopWelcomeOnlineRuntimeHealth(
     ...(startup.local_ui_address_issues ? { local_ui_address_issues: startup.local_ui_address_issues } : {}),
     ...(startup.pid ? { runtime_pid: startup.pid } : {}),
     ...(startup.started_at_unix_ms ? { started_at_unix_ms: startup.started_at_unix_ms } : {}),
+    ...(startup.runtime_platform ? { runtime_platform: startup.runtime_platform } : {}),
     ...(runtimeService ? { runtime_service: runtimeService } : {}),
     ...(effectiveMaintenance ? { runtime_maintenance: effectiveMaintenance } : {}),
   };

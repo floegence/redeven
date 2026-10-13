@@ -944,6 +944,7 @@ export const enUS = {
     technicalDetails: 'Technical details',
   },
   environmentCenter: {
+    runtimePlatform: "Runtime operating system: {platform}",
     cloudAwaitingSyncDetail: "Refresh to load your Redeven Cloud environments.",
     cloudAwaitingSync: "Not synced yet",
     title: 'Environments',

@@ -388,6 +388,7 @@ func desktopLaunchReportFromRuntimeStatus(state runtimemanagement.RuntimeAttachS
 		PID:                      state.Identity.PID,
 		StartedAtUnixMS:          state.Identity.StartedAtUnixMS,
 		RuntimeService:           state.RuntimeService,
+		RuntimePlatform:          state.RuntimePlatform,
 	}
 }
 

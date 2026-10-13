@@ -2244,6 +2244,7 @@ function managedRuntimePresence(args: Readonly<{
   localUIURLs?: readonly string[];
   localUIAddressIssues?: StartupReport['local_ui_address_issues'];
   startedAtUnixMS?: number;
+  runtimePlatform?: StartupReport['runtime_platform'];
   openConnectionRequired?: boolean;
   runtimeService?: RuntimeServiceSnapshot;
   runtimeControlStatus: DesktopRuntimeControlStatus;
@@ -2269,6 +2270,7 @@ function managedRuntimePresence(args: Readonly<{
     local_ui_urls: args.running ? args.localUIURLs ?? (args.localUIURL ? [args.localUIURL] : []) : [],
     local_ui_address_issues: args.running ? args.localUIAddressIssues : undefined,
     ...(Number.isInteger(startedAtUnixMS) && startedAtUnixMS > 0 ? { started_at_unix_ms: startedAtUnixMS } : {}),
+    ...(args.runtimePlatform ? { runtime_platform: args.runtimePlatform } : {}),
     openable,
     ...(openConnectionRequired ? { open_connection_required: true } : {}),
     ...(runtimePackageState ? { runtime_package_state: runtimePackageState } : {}),
@@ -4554,6 +4556,7 @@ async function localEnvironmentPresenceFromRecord(
     localUIURLs: record.startup.local_ui_urls,
     localUIAddressIssues: record.startup.local_ui_address_issues,
     startedAtUnixMS: record.startup.started_at_unix_ms,
+    runtimePlatform: record.startup.runtime_platform,
     runtimeService: record.startup.runtime_service,
     runtimeControlStatus: await runtimeControlStatusForStartup(record.startup),
   });
@@ -4719,6 +4722,7 @@ function runtimeTargetHealthFromState(
       local_ui_urls: state.startup?.local_ui_urls,
       local_ui_address_issues: state.startup?.local_ui_address_issues,
       verified_runtime_identity: state.startup?.verified_runtime_identity,
+      runtime_platform: state.startup?.runtime_platform,
       runtime_service: state.runtime_service,
       pid: state.startup?.pid,
       started_at_unix_ms: state.startup?.started_at_unix_ms,
@@ -4754,6 +4758,7 @@ function runtimeTargetPresenceFromState(
     localUIURLs: state.startup?.local_ui_urls,
     localUIAddressIssues: state.startup?.local_ui_address_issues,
     startedAtUnixMS: state.startup?.started_at_unix_ms,
+    runtimePlatform: state.startup?.runtime_platform,
     openConnectionRequired: state.open_connection_required === true,
     runtimeService: state.runtime_service,
     runtimeControlStatus: state.runtime_control_status,
@@ -10490,6 +10495,7 @@ async function tessivenRuntimeInventory(
         placement: saved.placement,
         running: !!record,
         localUIURL: record?.startup.local_ui_url ?? '',
+        runtimePlatform: record?.startup.runtime_platform,
         runtimeService: record?.startup.runtime_service,
         runtimeControlStatus: record?.startup.runtime_control
           ? desktopRuntimeControlStatusAvailable()

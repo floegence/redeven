@@ -1736,6 +1736,7 @@
     "technicalDetails": "技术详情"
   },
   "environmentCenter": {
+    "runtimePlatform": "运行时操作系统：{platform}",
     "title": "环境",
     "description": "管理本地和远程环境。连接 Redeven Cloud、打开工作区并在需要时重新绑定此本地环境配置文件。",
     "environmentsTitle": "环境",

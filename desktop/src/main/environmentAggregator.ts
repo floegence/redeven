@@ -15,6 +15,7 @@ import {
   providerEnvironmentSource,
 } from './environmentSourceRegistry';
 import type { DesktopControlPlaneSummary } from '../shared/cloud';
+import { normalizeDesktopRuntimePlatform } from '../shared/desktopRuntimePlatform';
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
@@ -167,6 +168,7 @@ function buildGatewayEnvironmentEntry(
     gateway_status_message: gateway.status_message,
     gateway_endpoint_label: gateway.endpoint_label,
     gateway_member: environment,
+    runtime_platform: normalizeDesktopRuntimePlatform(environment.metadata.os),
     gateway_access_result: environment.last_access_result,
     gateway_sync_state: gateway.sync_state,
     environment_source: source,

@@ -1158,6 +1158,7 @@ export async function startRuntimePlacementBridgeSession(
     effective_run_mode: runtimeService?.effective_run_mode,
     remote_enabled: runtimeService?.remote_enabled,
     started_at_unix_ms: hello.started_at_unix_ms,
+    runtime_platform: hello.runtime_platform,
     runtime_service: runtimeService,
   };
 
