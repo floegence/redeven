@@ -24,6 +24,7 @@ func TestBuildOpenAITools_RespectsStrictFlag(t *testing.T) {
 	defs := []ToolDef{
 		{
 			Name:        "ask_user",
+			Strict:      true,
 			InputSchema: json.RawMessage(`{"type":"object","properties":{"question":{"type":"string"}},"required":["question"],"additionalProperties":false}`),
 		},
 	}

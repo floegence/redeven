@@ -69,9 +69,9 @@ func userFacingRunError(code string, fallback string) string {
 	case runErrorCodeProviderModelUnavailable:
 		return "The selected model is not available from this provider. Choose another model in the Local AI Profile."
 	case runErrorCodeProviderRequestInvalid:
-		return "DeepSeek rejected Flower's tool request format. Update Redeven and retry; no browser action was run."
+		return "The selected AI provider rejected Flower's request format. Update Redeven and retry."
 	case runErrorCodeProviderRequestRejected:
-		return "The selected AI provider rejected Flower's request. Check the provider details and retry; no browser action was run."
+		return "The selected AI provider rejected Flower's request. Check the diagnostic details and try again later."
 	case runErrorCodeModelGatewayContract:
 		return "The model source returned an incomplete tool call. No tool was run. Try again or choose another model."
 	case runErrorCodeContextBudgetInvalid:
@@ -101,6 +101,9 @@ func userFacingRunError(code string, fallback string) string {
 func classifyRunFailureCode(err error, fallback string) string {
 	if err == nil {
 		return strings.TrimSpace(fallback)
+	}
+	if diagnostic, ok := parseProviderFailure(err.Error()); ok {
+		return providerDiagnosticRunCode(diagnostic)
 	}
 	var accountError *chatgpt.Error
 	if errors.As(err, &accountError) {
@@ -202,6 +205,12 @@ func classifyRunFailureCode(err error, fallback string) string {
 func projectRunFailure(raw string, fallbackCode string) (string, string) {
 	raw = strings.TrimSpace(raw)
 	code := classifyRunFailureCode(errors.New(raw), fallbackCode)
+	if _, ok := parseProviderFailure(raw); ok || strings.EqualFold(raw, "ChatGPT:") {
+		if code == fallbackCode {
+			code = runErrorCodeProviderRequestRejected
+		}
+		return code, userFacingRunError(code, "")
+	}
 	return code, userFacingRunError(code, raw)
 }
 
@@ -244,6 +253,8 @@ func projectFloretTurnFailure(failure *flruntime.ThreadTurnFailure, fallbackCode
 
 func providerHTTPStatusRunErrorCode(status int) string {
 	switch status {
+	case http.StatusBadRequest, http.StatusUnprocessableEntity:
+		return runErrorCodeProviderRequestInvalid
 	case http.StatusUnauthorized, http.StatusForbidden:
 		return runErrorCodeProviderAuthFailed
 	case http.StatusTooManyRequests:
@@ -253,6 +264,9 @@ func providerHTTPStatusRunErrorCode(status int) string {
 	default:
 		if status >= 500 && status <= 599 {
 			return runErrorCodeProviderUnreachable
+		}
+		if status >= 400 && status <= 499 {
+			return runErrorCodeProviderRequestRejected
 		}
 		return ""
 	}
@@ -297,13 +311,15 @@ func providerHTTPStatusFromSDKError(text string) (int, bool) {
 	return status, true
 }
 
-// Only Floret's typed budget failures have a numeric, prompt-free diagnostic
-// contract. Arbitrary provider and engine errors remain private.
-func contextBudgetFailureDetail(failure *flruntime.ThreadTurnFailure) string {
+// Only validated provider envelopes and typed numeric budget failures cross
+// the diagnostic presentation boundary. Arbitrary upstream prose stays private.
+func canonicalFailureDetail(failure *flruntime.ThreadTurnFailure) string {
 	if failure == nil {
 		return ""
 	}
 	switch failure.Code {
+	case flruntime.ThreadTurnFailureProvider:
+		return providerFailureDetail(failure.Message)
 	case flruntime.ThreadTurnFailureContextBudgetInvalid,
 		flruntime.ThreadTurnFailureContextFixedOverhead,
 		flruntime.ThreadTurnFailureContextCompactionLimit:
@@ -335,7 +351,9 @@ func contextBudgetFailureDetail(failure *flruntime.ThreadTurnFailure) string {
 
 func chatGPTRunFailureCode(code string) string {
 	switch code {
-	case "subscription_sharing_usage_limit_exceeded", "subscription_sharing_usage_unavailable":
+	case "subscription_sharing_usage_unavailable":
+		return runErrorCodeChatGPTTemporary
+	case "subscription_sharing_usage_limit_exceeded":
 		return runErrorCodeChatGPTUsage
 	case "plan_permission_required", "chatpass_v2_scope_not_authorized":
 		return runErrorCodeChatGPTPermission

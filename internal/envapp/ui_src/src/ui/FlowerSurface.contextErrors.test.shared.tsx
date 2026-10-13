@@ -52,3 +52,44 @@ describe('Flower context failure recovery', () => {
     expect(card.querySelector('button')).toBeNull();
   });
 });
+
+const providerDetail = '{"provider":"chatgpt","http_status":400,"param":"tools[0].parameters","request_id":"req-fixture","response_shape":"standard_error"}';
+
+describe('Flower provider failure recovery', () => {
+  it.each([
+    ['provider_request_invalid', 'request format', 'Retry reply'],
+    ['provider_request_rejected', 'diagnostic details', 'Retry reply'],
+    ['chatgpt_review_required', 'connection', 'Open settings'],
+    ['chatgpt_usage_unavailable', 'usage', 'Manage usage'],
+    ['chatgpt_temporarily_unavailable', 'temporarily', 'Retry reply'],
+  ])('shows concise %s guidance and copyable diagnostics', async (code, guidance, action) => {
+    const failed = thread({ status: 'failed', error: { code, message: 'raw provider text must stay private', detail: providerDetail } });
+    const retryThread = vi.fn(async () => liveBootstrap(thread({ status: 'idle', error: undefined }), 2));
+    const writeText = vi.fn(async () => undefined);
+    const originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    try {
+      const surface = renderSurfaceWithAdapter({ ...adapter(true), listThreads: vi.fn(async () => [failed]), loadThread: vi.fn(async () => liveBootstrap(failed)), retryThread });
+      await waitFor(() => Boolean(surface.querySelector('[data-thread-id="thread-1"] button')));
+      surface.querySelector<HTMLButtonElement>('[data-thread-id="thread-1"] button')!.click();
+      await waitFor(() => Boolean(surface.querySelector('.flower-error-card')));
+      const card = surface.querySelector<HTMLElement>('.flower-error-card')!;
+      expect(card.querySelector('.flower-error-message')?.textContent?.toLowerCase()).toContain(guidance);
+      expect(card.textContent).not.toContain('raw provider text');
+      expect(card.querySelector('.flower-error-actions')?.textContent).toContain(action);
+      expect(card.querySelector('a[href="https://chatgpt.com/settings/usage"]') !== null).toBe(code === 'chatgpt_usage_unavailable');
+      expect(retryThread).not.toHaveBeenCalled();
+      const disclosure = card.querySelector<HTMLDetailsElement>('details')!;
+      expect(disclosure.open).toBe(false);
+      disclosure.querySelector('summary')!.click();
+      expect(disclosure.open).toBe(true);
+      expect(disclosure.querySelector('pre')?.textContent).toBe(providerDetail);
+      disclosure.querySelector<HTMLButtonElement>('button')!.click();
+      await waitFor(() => writeText.mock.calls.length === 1);
+      expect(writeText).toHaveBeenCalledWith(providerDetail);
+    } finally {
+      if (originalClipboard) Object.defineProperty(navigator, 'clipboard', originalClipboard);
+      else Reflect.deleteProperty(navigator, 'clipboard');
+    }
+  });
+});

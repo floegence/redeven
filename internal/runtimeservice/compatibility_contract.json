@@ -4,10 +4,11 @@
     "release_version": "v0.13.12",
     "previous_release": "v0.13.11",
     "reviewed_at": "2026-10-13",
-    "review_id": "chatgpt-saved-account-lifecycle-v2",
-    "summary": "Epoch 56 separates verified ChatGPT sign-in persistence from connection saves, retains issued registration on code-exchange retry, and adds saved local account selection.",
+    "review_id": "flower-strict-request-contract-v1",
+    "summary": "Epoch 57 carries per-tool Strict intent through Desktop model-source requests and preserves sanitized provider failure diagnostics in canonical Flower failures.",
     "same_window_rationale": "",
     "checked_surfaces": [
+      "Epoch 57: Runtime and Desktop model-source tool DTOs preserve strict intent. OpenAI Responses, Chat Completions and ChatGPT namespaces compile strict schemas and restore synthetic nulls with request-owned rules. Desktop, Env App and companion share concise provider errors with sanitized diagnostics and no permanent plan notice. Runtime Service protocol, Floret API, domain schema and canonical tool validation are unchanged. Desktop attach/start, Local UI health, startup reports, sys.ping, Env App maintenance and SSH bootstrap require the canonical epoch.",
       "Epoch 56: Runtime commits verified OAuth accounts before connection editing, identity-only grants remain saved, failed code exchanges reuse the issued client ID with fresh PKCE, canceled exchanges revoke minted credentials, and local account selection includes signed-out unbound registrations. Desktop and Env App remove draft credential receipts and discover models through the canonical account resolver. Runtime renewal includes every saved sign-in. Desktop attach/start, Local UI health, startup reports, sys.ping, Env App maintenance and SSH bootstrap consume the canonical epoch. Protected secrets schema, Runtime protocol and Floret API remain unchanged.",
       "Epoch 55: local admin account state, shared Flower state and sign-out results, configuration orphan cleanup, protected secrets schema 2-to-3, Runtime maintenance independent of AI readiness, Desktop current account facts and immediate canonical cancellation. Runtime Service protocol, Floret API and domain schema are unchanged. Desktop attach/start, Local UI health, startup reports, sys.ping, Env App maintenance and SSH bootstrap use the same canonical epoch.",
       "Epoch 54: Desktop, Env App and embedded Flower directory reads, local snapshot model source, explicit provider sync, unknown capability configuration, authenticated platform scope and invocation lease enforcement.",
@@ -102,7 +103,7 @@
     ]
   },
   "runtime_protocol_version": "redeven-runtime-v2",
-  "compatibility_epoch": 56,
+  "compatibility_epoch": 57,
   "upgrade_from_runtime_epochs": [
     9,
     10,
@@ -150,7 +151,8 @@
     52,
     53,
     54,
-    55
+    55,
+    56
   ],
   "minimum_desktop_version": "v0.13.0",
   "minimum_runtime_version": "v0.13.0"

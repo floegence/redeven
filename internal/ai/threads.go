@@ -188,7 +188,7 @@ func applyFlowerThreadRuntimeProjection(view *ThreadView, projection flowerThrea
 	lifecycle := projectFlowerThreadLifecycle(projection.Activity, projection.Attention, projection.LastOutcome, projection.Failure)
 	view.RunStatus, view.RunErrorCode, view.RunError = lifecycle.RunStatus, lifecycle.RunErrorCode, lifecycle.RunError
 	if view.RunErrorCode != "" {
-		view.RunErrorDetail = contextBudgetFailureDetail(projection.Failure)
+		view.RunErrorDetail = canonicalFailureDetail(projection.Failure)
 	}
 	if projection.Activity == flruntime.ThreadActivityActive && projection.RunID != "" {
 		view.ActiveRunID = projection.RunID.String()

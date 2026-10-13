@@ -195,6 +195,7 @@ type directModelGateway interface {
 }
 
 type ToolDef struct {
+	Strict           bool                         `json:"strict"`
 	Name             string                       `json:"name"`
 	Description      string                       `json:"description,omitempty"`
 	InputSchema      json.RawMessage              `json:"input_schema,omitempty"`

@@ -90,8 +90,8 @@ func TestChatGPTStreamTerminalAndLateUsageFailures(t *testing.T) {
 				t.Fatal("noncompleted response committed state")
 			}
 			if terminal == "response.failed" {
-				var e *chatgpt.Error
-				if !errors.As(err, &e) || e.Action != "manage_usage" || classifyRunFailureCode(err, "") != runErrorCodeChatGPTUsage {
+				var e *chatgpt.RequestError
+				if !errors.As(err, &e) || chatgpt.Failure(e.Code).Action != "manage_usage" || classifyRunFailureCode(err, "") != runErrorCodeChatGPTUsage {
 					t.Fatalf("wrong recovery: %v", err)
 				}
 			}

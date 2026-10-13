@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"sort"
 	"strings"
@@ -14,7 +15,6 @@ import (
 	anthropic "github.com/anthropics/anthropic-sdk-go"
 	aoption "github.com/anthropics/anthropic-sdk-go/option"
 	flprovider "github.com/floegence/floret/v7/provider"
-	"github.com/floegence/redeven/internal/chatgpt"
 	"github.com/floegence/redeven/internal/config"
 	openai "github.com/openai/openai-go/v3"
 	ooption "github.com/openai/openai-go/v3/option"
@@ -194,7 +194,7 @@ func (p *openAIProvider) prepareTurn(ctx context.Context, req ModelGatewayReques
 		// json_schema requires an explicit schema. Avoid implicit downgrade here and let upper layers drive structured output.
 	}
 
-	aliases, err := newOpenAIProviderToolAliases(req.Tools)
+	wireDefs, aliases, err := prepareOpenAIToolSchemas(req.Tools, p.strictToolSchema)
 	if err != nil {
 		return nil, err
 	}
@@ -209,7 +209,7 @@ func (p *openAIProvider) prepareTurn(ctx context.Context, req ModelGatewayReques
 	if strings.TrimSpace(instructions) != "" {
 		params.Instructions = openai.String(strings.TrimSpace(instructions))
 	}
-	tools := buildOpenAITools(req.Tools, p.strictToolSchema, aliases)
+	tools := buildOpenAITools(wireDefs, p.strictToolSchema, aliases)
 	if err := applyResponsesReasoning(&params, req.ProviderControls); err != nil {
 		return nil, err
 	}
@@ -262,7 +262,8 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 			p.chatGPTFailure(context.WithoutCancel(ctx), bearer, resultErr)
 		}
 	}()
-	options := []ooption.RequestOption{ooption.WithRequestBody("application/json", payload)}
+	var httpResponse *http.Response
+	options := []ooption.RequestOption{ooption.WithRequestBody("application/json", payload), ooption.WithResponseInto(&httpResponse)}
 	if p.chatGPTToken != nil {
 		token, err := p.chatGPTToken(ctx)
 		if err != nil {
@@ -337,7 +338,7 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 		if name == "" {
 			return
 		}
-		emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallDelta, ToolCall: &PartialToolCall{ID: strings.TrimSpace(pc.CallID), Name: name, ArgumentsJSON: raw, Arguments: cloneAnyMap(args)}})
+		emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallDelta, ToolCall: &PartialToolCall{ID: strings.TrimSpace(pc.CallID), Name: name, ArgumentsJSON: raw, Arguments: cloneProviderToolArguments(args)}})
 	}
 	emitEnd := func(pc *partialCall, rawArgs string) {
 		if pc == nil || pc.Ended {
@@ -349,13 +350,11 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 		}
 		pc.Ended = true
 		rawArgs = strings.TrimSpace(rawArgs)
-		args := map[string]any{}
-		if rawArgs != "" {
-			_ = json.Unmarshal([]byte(rawArgs), &args)
-		}
+		args := parseProviderToolArguments(rawArgs)
+		args = aliases.restoreArguments(name, args)
 		pc.Args = args
 		emitStart(pc)
-		emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallEnd, ToolCall: &PartialToolCall{ID: strings.TrimSpace(pc.CallID), Name: name, Arguments: cloneAnyMap(args)}})
+		emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallEnd, ToolCall: &PartialToolCall{ID: strings.TrimSpace(pc.CallID), Name: name, Arguments: cloneProviderToolArguments(args)}})
 	}
 
 	getPartial := func(itemID string) *partialCall {
@@ -465,7 +464,7 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 
 		case "response.incomplete":
 			if p.chatGPT {
-				return ModelGatewayResult{}, errors.New("ChatGPT response is incomplete")
+				return ModelGatewayResult{}, providerStreamFailure(event.RawJSON(), httpResponse, true)
 			}
 			completed = event.Response
 			gotCompleted = true
@@ -479,20 +478,11 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 				hosted.item(item)
 			}
 		case "response.failed", "error":
-			if p.chatGPT {
-				return ModelGatewayResult{}, chatGPTStreamError(event)
-			}
-			return ModelGatewayResult{}, errors.New("provider response failed")
+			return ModelGatewayResult{}, providerStreamFailure(event.RawJSON(), httpResponse, p.chatGPT)
 		}
 	}
 	if err := stream.Err(); err != nil {
-		if p.chatGPT {
-			var upstream *openai.Error
-			if errors.As(err, &upstream) {
-				return ModelGatewayResult{}, &chatgpt.RequestError{Status: upstream.StatusCode, Code: upstream.Code, RequestID: upstream.Response.Header.Get("x-request-id"), Body: json.RawMessage(upstream.RawJSON())}
-			}
-		}
-		return ModelGatewayResult{}, err
+		return ModelGatewayResult{}, providerRequestFailure(err, httpResponse, p.chatGPT)
 	}
 	if p.requireTerminal && !gotCompleted {
 		return ModelGatewayResult{}, errors.New("provider stream closed without terminal response")
@@ -570,7 +560,7 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 		seen[id] = struct{}{}
 		ordered = append(ordered, orderedToolCall{
 			OutputIndex: pc.OutputIndex,
-			Call:        ToolCall{ID: id, Name: canonicalProviderToolName(pc.Name, aliases), Args: cloneAnyMap(pc.Args)},
+			Call:        ToolCall{ID: id, Name: canonicalProviderToolName(pc.Name, aliases), Args: cloneProviderToolArguments(pc.Args)},
 		})
 	}
 	sort.SliceStable(ordered, func(i, j int) bool {
@@ -609,15 +599,13 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 			}
 			toolName := canonicalProviderToolName(item.Name, aliases)
 			rawArgs := strings.TrimSpace(item.Arguments.OfString)
-			args := map[string]any{}
-			if rawArgs != "" {
-				_ = json.Unmarshal([]byte(rawArgs), &args)
-			}
+			args := parseProviderToolArguments(rawArgs)
+			args = aliases.restoreArguments(toolName, args)
 			call := ToolCall{ID: callID, Name: toolName, Args: args}
 			result.ToolCalls = append(result.ToolCalls, call)
 			emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallStart, ToolCall: &PartialToolCall{ID: call.ID, Name: call.Name}})
-			emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallDelta, ToolCall: &PartialToolCall{ID: call.ID, Name: call.Name, ArgumentsJSON: rawArgs, Arguments: cloneAnyMap(call.Args)}})
-			emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallEnd, ToolCall: &PartialToolCall{ID: call.ID, Name: call.Name, Arguments: cloneAnyMap(call.Args)}})
+			emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallDelta, ToolCall: &PartialToolCall{ID: call.ID, Name: call.Name, ArgumentsJSON: rawArgs, Arguments: cloneProviderToolArguments(call.Args)}})
+			emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallEnd, ToolCall: &PartialToolCall{ID: call.ID, Name: call.Name, Arguments: cloneProviderToolArguments(call.Args)}})
 		}
 	}
 	if len(result.ToolCalls) > 0 {
@@ -644,7 +632,7 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 			return ModelGatewayResult{}, stateErr
 		}
 	}
-	return result, nil
+	return result, validateModelGatewayResult(result)
 }
 
 func (p *openAIProvider) prepareChatTurn(ctx context.Context, req ModelGatewayRequest) (preparedModelGatewayTurn, error) {
@@ -658,7 +646,7 @@ func (p *openAIProvider) prepareChatTurn(ctx context.Context, req ModelGatewayRe
 		return nil, errors.New("missing model")
 	}
 
-	aliases, err := newOpenAIProviderToolAliases(req.Tools)
+	wireDefs, aliases, err := prepareOpenAIToolSchemas(req.Tools, p.strictToolSchema)
 	if err != nil {
 		return nil, err
 	}
@@ -703,7 +691,7 @@ func (p *openAIProvider) prepareChatTurn(ctx context.Context, req ModelGatewayRe
 		params.ResponseFormat = openai.ChatCompletionNewParamsResponseFormatUnion{OfJSONObject: &obj}
 	}
 
-	tools := buildOpenAIChatTools(req.Tools, p.strictToolSchema, aliases)
+	tools := buildOpenAIChatTools(wireDefs, p.strictToolSchema, aliases)
 	if err := applyChatReasoning(&params, req.ProviderControls); err != nil {
 		return nil, err
 	}
@@ -719,7 +707,8 @@ func (p *openAIProvider) prepareChatTurn(ctx context.Context, req ModelGatewayRe
 }
 
 func (p *openAIProvider) streamPreparedChatTurn(ctx context.Context, model string, capability config.AIReasoningCapability, aliases providerToolAliases, signatures map[string]geminiToolSignature, payload []byte, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
-	stream := p.client.Chat.Completions.NewStreaming(ctx, openai.ChatCompletionNewParams{}, ooption.WithRequestBody("application/json", payload))
+	var httpResponse *http.Response
+	stream := p.client.Chat.Completions.NewStreaming(ctx, openai.ChatCompletionNewParams{}, ooption.WithRequestBody("application/json", payload), ooption.WithResponseInto(&httpResponse))
 	defer func() { _ = stream.Close() }()
 	var textBuf strings.Builder
 	var reasoningBuf strings.Builder
@@ -779,12 +768,9 @@ func (p *openAIProvider) streamPreparedChatTurn(ctx context.Context, model strin
 			return
 		}
 		raw := strings.TrimSpace(pc.ArgsRaw.String())
-		args := map[string]any{}
-		if raw != "" {
-			_ = json.Unmarshal([]byte(raw), &args)
-		}
+		args := parseProviderToolArguments(raw)
 		emitStart(pc)
-		emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallDelta, ToolCall: &PartialToolCall{ID: callID, Name: name, ArgumentsJSON: raw, Arguments: cloneAnyMap(args)}})
+		emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallDelta, ToolCall: &PartialToolCall{ID: callID, Name: name, ArgumentsJSON: raw, Arguments: cloneProviderToolArguments(args)}})
 	}
 	emitEnd := func(pc *partialCall) {
 		if pc == nil || pc.Ended {
@@ -796,14 +782,12 @@ func (p *openAIProvider) streamPreparedChatTurn(ctx context.Context, model strin
 			return
 		}
 		raw := strings.TrimSpace(pc.ArgsRaw.String())
-		args := map[string]any{}
-		if raw != "" {
-			_ = json.Unmarshal([]byte(raw), &args)
-		}
+		args := parseProviderToolArguments(raw)
+		args = aliases.restoreArguments(name, args)
 		pc.Args = args
 		pc.Ended = true
 		emitStart(pc)
-		emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallEnd, ToolCall: &PartialToolCall{ID: callID, Name: name, Arguments: cloneAnyMap(args)}})
+		emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallEnd, ToolCall: &PartialToolCall{ID: callID, Name: name, Arguments: cloneProviderToolArguments(args)}})
 	}
 
 	for stream.Next() {
@@ -861,7 +845,7 @@ func (p *openAIProvider) streamPreparedChatTurn(ctx context.Context, model strin
 		}
 	}
 	if err := stream.Err(); err != nil {
-		return ModelGatewayResult{}, err
+		return ModelGatewayResult{}, providerRequestFailure(err, httpResponse, false)
 	}
 
 	sort.SliceStable(order, func(i, j int) bool { return order[i] < order[j] })
@@ -880,7 +864,7 @@ func (p *openAIProvider) streamPreparedChatTurn(ctx context.Context, model strin
 		if p.gemini && pc.Signature != "" {
 			signatures[ensureCallID(pc)] = geminiToolSignature{Signature: pc.Signature, Name: providerHistoryToolWireName(pc.Name, aliases), Arguments: geminiArguments(pc.ArgsRaw.String())}
 		}
-		result.ToolCalls = append(result.ToolCalls, ToolCall{ID: ensureCallID(pc), Name: canonicalProviderToolName(pc.Name, aliases), Args: cloneAnyMap(pc.Args)})
+		result.ToolCalls = append(result.ToolCalls, ToolCall{ID: ensureCallID(pc), Name: canonicalProviderToolName(pc.Name, aliases), Args: cloneProviderToolArguments(pc.Args)})
 	}
 	result.Text = strings.TrimSpace(textBuf.String())
 	result.Reasoning = reasoningBuf.String()
@@ -902,7 +886,7 @@ func (p *openAIProvider) streamPreparedChatTurn(ctx context.Context, model strin
 		}
 		result.ProviderState = &ModelGatewayState{Kind: geminiStateKind, ID: model, Attributes: map[string]string{"tool_signatures": string(raw)}}
 	}
-	return result, nil
+	return result, validateModelGatewayResult(result)
 }
 
 type moonshotProvider struct {
@@ -930,7 +914,7 @@ func (p *moonshotProvider) prepareTurn(ctx context.Context, req ModelGatewayRequ
 		return nil, errors.New("missing model")
 	}
 
-	aliases, err := newOpenAIProviderToolAliases(req.Tools)
+	wireDefs, aliases, err := prepareOpenAIToolSchemas(req.Tools, p.strictToolSchema)
 	if err != nil {
 		return nil, err
 	}
@@ -973,7 +957,7 @@ func (p *moonshotProvider) prepareTurn(ctx context.Context, req ModelGatewayRequ
 		// json_schema requires an explicit schema; leave unset and let upper layers decide.
 	}
 
-	tools := buildOpenAIChatTools(req.Tools, p.strictToolSchema, aliases)
+	tools := buildOpenAIChatTools(wireDefs, p.strictToolSchema, aliases)
 	if err := applyChatReasoning(&params, req.ProviderControls); err != nil {
 		return nil, err
 	}
@@ -988,7 +972,8 @@ func (p *moonshotProvider) prepareTurn(ctx context.Context, req ModelGatewayRequ
 }
 
 func (p *moonshotProvider) streamPreparedTurn(ctx context.Context, aliases providerToolAliases, payload []byte, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
-	stream := p.client.Chat.Completions.NewStreaming(ctx, openai.ChatCompletionNewParams{}, ooption.WithRequestBody("application/json", payload))
+	var httpResponse *http.Response
+	stream := p.client.Chat.Completions.NewStreaming(ctx, openai.ChatCompletionNewParams{}, ooption.WithRequestBody("application/json", payload), ooption.WithResponseInto(&httpResponse))
 	defer func() { _ = stream.Close() }()
 	var textBuf strings.Builder
 	var reasoningBuf strings.Builder
@@ -1055,10 +1040,7 @@ func (p *moonshotProvider) streamPreparedTurn(ctx context.Context, aliases provi
 			return
 		}
 		raw := strings.TrimSpace(pc.ArgsRaw.String())
-		args := map[string]any{}
-		if raw != "" {
-			_ = json.Unmarshal([]byte(raw), &args)
-		}
+		args := parseProviderToolArguments(raw)
 		emitStart(pc)
 		emitProviderEvent(onEvent, StreamEvent{
 			Type: StreamEventToolCallDelta,
@@ -1066,7 +1048,7 @@ func (p *moonshotProvider) streamPreparedTurn(ctx context.Context, aliases provi
 				ID:            callID,
 				Name:          name,
 				ArgumentsJSON: raw,
-				Arguments:     cloneAnyMap(args),
+				Arguments:     cloneProviderToolArguments(args),
 			},
 		})
 	}
@@ -1080,10 +1062,8 @@ func (p *moonshotProvider) streamPreparedTurn(ctx context.Context, aliases provi
 			return
 		}
 		raw := strings.TrimSpace(pc.ArgsRaw.String())
-		args := map[string]any{}
-		if raw != "" {
-			_ = json.Unmarshal([]byte(raw), &args)
-		}
+		args := parseProviderToolArguments(raw)
+		args = aliases.restoreArguments(name, args)
 		pc.Args = args
 		pc.Ended = true
 		emitStart(pc)
@@ -1092,7 +1072,7 @@ func (p *moonshotProvider) streamPreparedTurn(ctx context.Context, aliases provi
 			ToolCall: &PartialToolCall{
 				ID:        callID,
 				Name:      name,
-				Arguments: cloneAnyMap(args),
+				Arguments: cloneProviderToolArguments(args),
 			},
 		})
 	}
@@ -1143,7 +1123,7 @@ func (p *moonshotProvider) streamPreparedTurn(ctx context.Context, aliases provi
 		}
 	}
 	if err := stream.Err(); err != nil {
-		return ModelGatewayResult{}, err
+		return ModelGatewayResult{}, providerRequestFailure(err, httpResponse, false)
 	}
 
 	sort.SliceStable(order, func(i, j int) bool { return order[i] < order[j] })
@@ -1159,7 +1139,7 @@ func (p *moonshotProvider) streamPreparedTurn(ctx context.Context, aliases provi
 		result.ToolCalls = append(result.ToolCalls, ToolCall{
 			ID:   ensureCallID(pc),
 			Name: canonicalProviderToolName(pc.Name, aliases),
-			Args: cloneAnyMap(pc.Args),
+			Args: cloneProviderToolArguments(pc.Args),
 		})
 	}
 
@@ -1176,7 +1156,7 @@ func (p *moonshotProvider) streamPreparedTurn(ctx context.Context, aliases provi
 	}
 	emitProviderEvent(onEvent, StreamEvent{Type: StreamEventUsage, Usage: partialUsageFromTurnUsage(result.Usage)})
 	emitProviderEvent(onEvent, StreamEvent{Type: StreamEventFinishReason, FinishHint: result.FinishReason})
-	return result, nil
+	return result, validateModelGatewayResult(result)
 }
 
 func (p *moonshotProvider) Turn(ctx context.Context, req ModelGatewayRequest) (ModelGatewayResult, error) {
@@ -1187,7 +1167,7 @@ func (p *moonshotProvider) Turn(ctx context.Context, req ModelGatewayRequest) (M
 		return ModelGatewayResult{}, errors.New("missing model")
 	}
 
-	aliases, err := newOpenAIProviderToolAliases(req.Tools)
+	wireDefs, aliases, err := prepareOpenAIToolSchemas(req.Tools, p.strictToolSchema)
 	if err != nil {
 		return ModelGatewayResult{}, err
 	}
@@ -1226,7 +1206,7 @@ func (p *moonshotProvider) Turn(ctx context.Context, req ModelGatewayRequest) (M
 		obj := oshared.NewResponseFormatJSONObjectParam()
 		params.ResponseFormat = openai.ChatCompletionNewParamsResponseFormatUnion{OfJSONObject: &obj}
 	}
-	tools := buildOpenAIChatTools(req.Tools, p.strictToolSchema, aliases)
+	tools := buildOpenAIChatTools(wireDefs, p.strictToolSchema, aliases)
 	if err := applyChatReasoning(&params, req.ProviderControls); err != nil {
 		return ModelGatewayResult{}, err
 	}
@@ -1235,9 +1215,10 @@ func (p *moonshotProvider) Turn(ctx context.Context, req ModelGatewayRequest) (M
 		params.Tools = tools
 	}
 
-	completion, err := p.client.Chat.Completions.New(ctx, params)
+	var httpResponse *http.Response
+	completion, err := p.client.Chat.Completions.New(ctx, params, ooption.WithResponseInto(&httpResponse))
 	if err != nil {
-		return ModelGatewayResult{}, err
+		return ModelGatewayResult{}, providerRequestFailure(err, httpResponse, false)
 	}
 	usage, err := turnUsageFromOpenAICompletion(completion.Usage)
 	if err != nil {
@@ -1257,15 +1238,13 @@ func (p *moonshotProvider) Turn(ctx context.Context, req ModelGatewayRequest) (M
 	result.Reasoning = strings.TrimSpace(extractMoonshotReasoningJSON(choice.Message.RawJSON()))
 	for _, tc := range choice.Message.ToolCalls {
 		name := canonicalProviderToolName(tc.Function.Name, aliases)
-		args := map[string]any{}
 		rawArgs := strings.TrimSpace(tc.Function.Arguments)
-		if rawArgs != "" {
-			_ = json.Unmarshal([]byte(rawArgs), &args)
-		}
+		args := parseProviderToolArguments(rawArgs)
+		args = aliases.restoreArguments(name, args)
 		result.ToolCalls = append(result.ToolCalls, ToolCall{
 			ID:   strings.TrimSpace(tc.ID),
 			Name: name,
-			Args: cloneAnyMap(args),
+			Args: cloneProviderToolArguments(args),
 		})
 	}
 	if len(result.ToolCalls) > 0 {
@@ -1277,7 +1256,7 @@ func (p *moonshotProvider) Turn(ctx context.Context, req ModelGatewayRequest) (M
 	if result.Text == "" && result.Reasoning == "" && len(result.ToolCalls) == 0 {
 		return ModelGatewayResult{}, errors.New("missing completion content")
 	}
-	return result, nil
+	return result, validateModelGatewayResult(result)
 }
 
 func buildOpenAIChatTools(defs []ToolDef, strict bool, aliases providerToolAliases) []openai.ChatCompletionToolUnionParam {
@@ -1295,7 +1274,7 @@ func buildOpenAIChatTools(defs []ToolDef, strict bool, aliases providerToolAlias
 		fn := oshared.FunctionDefinitionParam{
 			Name:        alias,
 			Description: openai.String(strings.TrimSpace(def.Description)),
-			Strict:      openai.Bool(strict),
+			Strict:      openai.Bool(strict && def.Strict),
 		}
 		if len(schema) > 0 {
 			fn.Parameters = oshared.FunctionParameters(schema)
@@ -1791,7 +1770,7 @@ func buildOpenAITools(defs []ToolDef, strict bool, aliases providerToolAliases) 
 			_ = json.Unmarshal(def.InputSchema, &schema)
 		}
 		alias := aliases.wireName(def.Name)
-		out = append(out, oresponses.ToolParamOfFunction(alias, schema, strict))
+		out = append(out, oresponses.ToolParamOfFunction(alias, schema, strict && def.Strict))
 	}
 	return out
 }
@@ -2270,8 +2249,8 @@ func (p *anthropicProvider) streamPreparedTurn(ctx context.Context, payload []by
 				raw = string(variant.Input)
 			}
 			emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallStart, ToolCall: &PartialToolCall{ID: call.ID, Name: call.Name}})
-			emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallDelta, ToolCall: &PartialToolCall{ID: call.ID, Name: call.Name, ArgumentsJSON: raw, Arguments: cloneAnyMap(call.Args)}})
-			emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallEnd, ToolCall: &PartialToolCall{ID: call.ID, Name: call.Name, Arguments: cloneAnyMap(call.Args)}})
+			emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallDelta, ToolCall: &PartialToolCall{ID: call.ID, Name: call.Name, ArgumentsJSON: raw, Arguments: cloneProviderToolArguments(call.Args)}})
+			emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallEnd, ToolCall: &PartialToolCall{ID: call.ID, Name: call.Name, Arguments: cloneProviderToolArguments(call.Args)}})
 		}
 	}
 	if len(result.ToolCalls) > 0 {
@@ -3304,6 +3283,7 @@ func mapAnthropicStopReason(reason anthropic.StopReason) string {
 type providerToolAliases struct {
 	canonicalToWire map[string]string
 	wireToCanonical map[string]string
+	argumentRules   map[string]*strictArgumentRule
 }
 
 func newOpenAIProviderToolAliases(defs []ToolDef) (providerToolAliases, error) {

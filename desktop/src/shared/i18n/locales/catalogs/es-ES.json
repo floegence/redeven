@@ -445,6 +445,8 @@
       "runErrorProviderUnreachable": "No se pudo contactar con el proveedor de modelos seleccionado. Revisa el punto de conexión del proveedor y la conexión de red.",
       "runErrorProviderStreamInterrupted": "El proveedor de modelos seleccionado interrumpió inesperadamente el flujo de respuesta. Inténtalo de nuevo; si el problema continúa, revisa el punto de conexión del proveedor.",
       "runErrorProviderModelUnavailable": "El modelo seleccionado no está disponible en este proveedor de modelos. Elige otro modelo en el perfil de IA local.",
+      "runErrorProviderRequestInvalid": "El proveedor de IA seleccionado rechazó el formato de la solicitud de Flower. Actualiza Redeven y vuelve a intentarlo.",
+      "runErrorProviderRequestRejected": "El proveedor de IA seleccionado rechazó la solicitud de Flower. Revisa los detalles del diagnóstico e inténtalo más tarde.",
       "runErrorModelGatewayContractFailed": "La fuente del modelo devolvió una llamada de herramienta incompleta. No se ejecutó ninguna herramienta. Inténtalo de nuevo o elige otro modelo.",
       "runErrorFloretEngineFailed": "Flower no pudo finalizar este turno porque falló el motor de orquestación.",
       "runErrorFloretControlContractFailed": "Flower no pudo generar una pregunta válida. La respuesta generada se ha conservado. Vuelve a intentarlo para continuar.",

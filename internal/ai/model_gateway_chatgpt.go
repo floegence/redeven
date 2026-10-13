@@ -181,16 +181,6 @@ func chatGPTState(req ModelGatewayRequest, result ModelGatewayResult, completed 
 	}
 	return &ModelGatewayState{Kind: chatGPTStateKind, ID: req.Model, Attributes: map[string]string{"native_output": string(raw)}}, nil
 }
-func chatGPTStreamError(event oresponses.ResponseStreamEventUnion) error {
-	code := string(event.Response.Error.Code)
-	if code == "" {
-		code = event.Code
-	}
-	if code == "" {
-		code = "response_failed"
-	}
-	return chatgpt.Failure(code)
-}
 
 type chatGPTStreamContext struct {
 	Request   ModelGatewayRequest

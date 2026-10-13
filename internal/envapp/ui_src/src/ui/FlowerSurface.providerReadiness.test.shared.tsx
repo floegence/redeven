@@ -7,6 +7,7 @@ import {
   liveBootstrap,
   launchReceipt,
   renderSurfaceWithAdapter,
+  renderSurfaceWithAdapterProps,
   settingsSnapshot,
   thread,
   waitFor,
@@ -104,4 +105,15 @@ describe('Flower provider credential readiness', () => {
     await waitFor(() => launches.length === 1);
     expect(launches[0]).toEqual(expect.objectContaining({ model_id: 'local/agent' }));
   });
+});
+
+it.each(['full', 'companion'] as const)('omits permanent ChatGPT allowance notices in %s presentation', async (presentation) => {
+  const snapshot = settingsSnapshot();
+  const directory = { current_model_id: 'openai/gpt-5.2', sources: [{ id: 'openai', kind: 'runtime_config' as const, state: 'ready' as const }], models: [{ id: 'openai/gpt-5.2', label: 'OpenAI / GPT-5.2', model_name: 'gpt-5.2', provider_id: 'openai', provider_type: 'openai' as const, source: 'runtime_config' as const, state: 'ready' as const, billing_source: 'chatgpt_plan' as const }] };
+  const surface = renderSurfaceWithAdapterProps({ ...adapter(true), loadSettings: async () => ({ ...snapshot, model_directory: directory }), listThreads: async () => [] }, { presentation, companionOpen: true, engaged: true });
+  await waitFor(() => surface.querySelector('.flower-model-reasoning-model-label')?.textContent?.includes('GPT-5.2') === true);
+  const notices = surface.querySelector<HTMLElement>('.flower-composer-notices');
+  expect(notices?.textContent).not.toContain('Uses your ChatGPT plan allowance');
+  expect(notices?.querySelector('a[href="https://chatgpt.com/settings/usage"]')).toBeNull();
+  expect(notices?.children.length).toBe(0);
 });
