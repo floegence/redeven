@@ -1,0 +1,2505 @@
+openapi: 3.1.0
+info:
+  title: Redeven Cloud Protocol
+  version: rcpp-v5
+  summary: Cloud authority and assigned Access Point contract for Redeven clients.
+servers:
+- url: https://redeven.com
+  description: Redeven Cloud authority
+tags:
+- name: CloudAuthority
+- name: AccessPoint
+- name: MobileOAuth
+- name: RuntimeCloud
+- name: GatewayCloud
+paths:
+  /api/rcpp/v5/environments/{envId}/native/connect:
+    post:
+      tags:
+      - AccessPoint
+      operationId: connectNativeEnvironment
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: envId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+              - protocol_version
+              - env_public_id
+              properties:
+                protocol_version:
+                  const: rcpp-v5
+                env_public_id:
+                  type: string
+      responses:
+        '200':
+          description: Authorized single-use native environment lease; see the RCPP
+            native connection specification.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - protocol_version
+                - env_public_id
+                - access_point_id
+                - access_point_origin
+                - access
+                - connection
+                properties:
+                  protocol_version:
+                    const: rcpp-v5
+                  env_public_id:
+                    type: string
+                  access_point_id:
+                    type: string
+                  access_point_origin:
+                    type: string
+                    format: uri
+                  access:
+                    $ref: '#/components/schemas/CloudEnvironmentAccess'
+                  connection:
+                    type: object
+                    required:
+                    - v
+                    - connect_artifact
+                    - critical_scope_projection_json
+                    - spend_scope
+                    properties:
+                      v:
+                        const: 1
+                      connect_artifact:
+                        type: string
+                      critical_scope_projection_json:
+                        type: string
+                      spend_scope:
+                        type: object
+  /api/rcpp/v5/native/artifact/spend:
+    post:
+      tags:
+      - AccessPoint
+      operationId: spendNativeEnvironmentArtifact
+      description: Receipt Bearer authorization and exact Access Point Origin are
+        required; uses the shared v1 spend CAS contract.
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: Origin
+        in: header
+        required: true
+        schema:
+          type: string
+          format: uri
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+              - v
+              - attempt_id
+              - artifact_digest_b64u
+              - projection_digest_b64u
+              - runtime_origin
+              - app_origin
+              - consumer
+              - target_binding
+              - expires_at
+              properties:
+                v:
+                  const: 1
+                attempt_id:
+                  type: string
+                artifact_digest_b64u:
+                  type: string
+                projection_digest_b64u:
+                  type: string
+                runtime_origin:
+                  type: string
+                  format: uri
+                app_origin:
+                  type: string
+                  format: uri
+                consumer:
+                  const: trusted
+                target_binding:
+                  type: object
+                  additionalProperties: false
+                  required:
+                  - v
+                  - kind
+                  - env_public_id
+                  - floe_app
+                  - launcher_kind
+                  - launcher_id
+                  properties:
+                    v:
+                      const: 1
+                    kind:
+                      const: env
+                    env_public_id:
+                      type: string
+                    floe_app:
+                      const: com.floegence.redeven.agent
+                    launcher_kind:
+                      const: env
+                    launcher_id:
+                      type: string
+                expires_at:
+                  type: string
+                  format: date-time
+      responses:
+        '204':
+          description: Single-use receipt committed; no credentials returned.
+  /.well-known/redeven-cloud.json:
+    get:
+      tags:
+      - CloudAuthority
+      operationId: getProviderDiscovery
+      responses:
+        '200':
+          description: Cloud discovery.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiscoveryResponse'
+  /api/rcpp/v5/desktop/authorize:
+    post:
+      tags:
+      - CloudAuthority
+      operationId: createDesktopAuthorizationCode
+      description: Called from the same-origin /desktop/connect bridge with a signed-in
+        browser session. Native clients must use the authorization-code exchange;
+        a Desktop bearer token cannot replace browser sign-in.
+      security:
+      - browserSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DesktopAuthorizationRequest'
+      responses:
+        '200':
+          description: Authorization code.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DesktopAuthorizationResponse'
+        default:
+          $ref: '#/components/responses/ErrorEnvelope'
+  /api/rcpp/v5/mobile/oauth/config:
+    get:
+      tags:
+      - MobileOAuth
+      operationId: getMobileOAuthConfig
+      responses:
+        '200':
+          description: Public provider login capabilities for native iOS.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileOAuthConfigEnvelope'
+        default:
+          $ref: '#/components/responses/ErrorEnvelope'
+  /api/rcpp/v5/mobile/oauth/sessions:
+    post:
+      tags:
+      - MobileOAuth
+      operationId: createMobileOAuthSession
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMobileOAuthSessionRequest'
+      responses:
+        '200':
+          description: Native provider authorization URL and opaque mobile state.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateMobileOAuthSessionEnvelope'
+        default:
+          $ref: '#/components/responses/ErrorEnvelope'
+  /api/rcpp/v5/mobile/oauth/exchange:
+    post:
+      tags:
+      - MobileOAuth
+      operationId: exchangeMobileOAuthCredential
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExchangeMobileOAuthCredentialRequest'
+      responses:
+        '200':
+          description: Provider authorization material for native iOS.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExchangeMobileOAuthCredentialEnvelope'
+        default:
+          $ref: '#/components/responses/ErrorEnvelope'
+  /api/rcpp/v5/mobile/token/refresh:
+    post:
+      tags:
+      - MobileOAuth
+      operationId: refreshMobileAccessToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CloudTokenRefreshRequest'
+      responses:
+        '200':
+          description: Refreshed mobile access token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CloudTokenRefreshResponse'
+        default:
+          $ref: '#/components/responses/ErrorEnvelope'
+  /api/rcpp/v5/mobile/token/revoke:
+    post:
+      tags:
+      - MobileOAuth
+      operationId: revokeMobileAuthorization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CloudTokenRevokeRequest'
+      responses:
+        '204':
+          description: Mobile authorization revoked.
+        default:
+          $ref: '#/components/responses/ErrorEnvelope'
+  /api/rcpp/v5/desktop/connect/exchange:
+    post:
+      tags:
+      - CloudAuthority
+      operationId: exchangeDesktopAuthorizationCode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DesktopConnectExchangeRequest'
+      responses:
+        '200':
+          description: Desktop authorization material.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DesktopConnectExchangeResponse'
+        default:
+          $ref: '#/components/responses/ErrorEnvelope'
+  /api/rcpp/v5/desktop/token/refresh:
+    post:
+      tags:
+      - CloudAuthority
+      operationId: refreshDesktopAccessToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CloudTokenRefreshRequest'
+      responses:
+        '200':
+          description: Refreshed desktop access token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CloudTokenRefreshResponse'
+        default:
+          $ref: '#/components/responses/ErrorEnvelope'
+  /api/rcpp/v5/desktop/token/revoke:
+    post:
+      tags:
+      - CloudAuthority
+      operationId: revokeDesktopAuthorization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CloudTokenRevokeRequest'
+      responses:
+        '204':
+          description: Authorization revoked.
+        default:
+          $ref: '#/components/responses/ErrorEnvelope'
+  /api/rcpp/v5/me:
+    get:
+      tags:
+      - CloudAuthority
+      operationId: getProviderAccount
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: Provider account.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CloudMeResponse'
+        default:
+          $ref: '#/components/responses/ErrorEnvelope'
+  /api/rcpp/v5/environments:
+    servers:
+    - url: '{access_point_origin}'
+      description: Use the access_point_origin returned by Cloud discovery or Runtime-link
+        resolution.
+      variables:
+        access_point_origin:
+          default: https://sg.redeven.example
+          description: The exact HTTPS origin assigned to this environment.
+    get:
+      tags:
+      - AccessPoint
+      operationId: listCloudEnvironments
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: Environments visible at this access point.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CloudEnvironmentListResponse'
+        default:
+          $ref: '#/components/responses/ErrorEnvelope'
+  /api/rcpp/v5/environments/runtime-health/query:
+    servers:
+    - url: '{access_point_origin}'
+      description: Use the access_point_origin returned by Cloud discovery or Runtime-link
+        resolution.
+      variables:
+        access_point_origin:
+          default: https://sg.redeven.example
+          description: The exact HTTPS origin assigned to this environment.
+    post:
+      tags:
+      - AccessPoint
+      operationId: queryCloudEnvironmentRuntimeHealth
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CloudEnvironmentRuntimeHealthQueryRequest'
+      responses:
+        '200':
+          description: Runtime health snapshots.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CloudEnvironmentRuntimeHealthQueryResponse'
+        default:
+          $ref: '#/components/responses/ErrorEnvelope'
+  /api/rcpp/v5/environments/{envId}/desktop/open-session:
+    servers:
+    - url: '{access_point_origin}'
+      description: Use the access_point_origin returned by Cloud discovery or Runtime-link
+        resolution.
+      variables:
+        access_point_origin:
+          default: https://sg.redeven.example
+          description: The exact HTTPS origin assigned to this environment.
+    post:
+      tags:
+      - AccessPoint
+      operationId: createDesktopOpenSession
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: envId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Desktop open-session materials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DesktopOpenSessionResponse'
+        default:
+          $ref: '#/components/responses/ErrorEnvelope'
+  /api/rcpp/v5/environments/{envId}/runtime-link/authorizations:
+    servers:
+    - url: '{access_point_origin}'
+      description: Use the access_point_origin returned by Cloud discovery or Runtime-link
+        resolution.
+      variables:
+        access_point_origin:
+          default: https://sg.redeven.example
+          description: The exact HTTPS origin assigned to this environment.
+    post:
+      tags:
+      - AccessPoint
+      operationId: createRuntimeLinkAuthorization
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: envId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RuntimeLinkAuthorizationRequest'
+      responses:
+        '200':
+          description: Short-lived Runtime-link ticket bound to the user, provider,
+            access point, and Environment.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeLinkAuthorizationResponse'
+        default:
+          $ref: '#/components/responses/ErrorEnvelope'
+  /api/rcpp/v5/runtime-link/resolve:
+    post:
+      tags:
+      - CloudAuthority
+      operationId: resolveRuntimeLinkAccessPoint
+      description: Validate the link ticket and return its authoritative assignment
+        without consuming it. Credentials never follow cross-origin redirects.
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RuntimeLinkResolveRequest'
+      responses:
+        '200':
+          description: 'Assigned Access Point. Cache-Control: no-store.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeLinkResolveResponse'
+        default:
+          $ref: '#/components/responses/ErrorEnvelope'
+  /api/console/v1/runtime-cloud/v5/challenges:
+    post:
+      tags:
+      - RuntimeCloud
+      operationId: runtimeCloudChallenges
+      security: []
+      description: Independent Runtime machine proof. Console selects the authoritative
+        Cell and Region; redirects and client-selected credential targets are forbidden.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RuntimeCloudChallengeRequest'
+      responses:
+        '200':
+          description: 'Exact approval or credential result. Cache-Control: no-store.'
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                - success
+                - data
+                properties:
+                  success:
+                    const: true
+                  data:
+                    $ref: '#/components/schemas/RuntimeCloudChallengeResponse'
+        default:
+          $ref: '#/components/responses/ErrorEnvelope'
+  /api/console/v1/runtime-cloud/v5/enroll:
+    post:
+      tags:
+      - RuntimeCloud
+      operationId: runtimeCloudEnroll
+      security: []
+      description: Independent Runtime machine proof. Console selects the authoritative
+        Cell and Region; redirects and client-selected credential targets are forbidden.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RuntimeCloudSignedRequest'
+      responses:
+        '200':
+          description: 'Exact approval or credential result. Cache-Control: no-store.'
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                - success
+                - data
+                properties:
+                  success:
+                    const: true
+                  data:
+                    $ref: '#/components/schemas/RuntimeCloudRecoverResponse'
+        default:
+          $ref: '#/components/responses/ErrorEnvelope'
+  /api/console/v1/runtime-cloud/v5/recover:
+    post:
+      tags:
+      - RuntimeCloud
+      operationId: runtimeCloudRecover
+      security: []
+      description: Independent Runtime machine proof. Console selects the authoritative
+        Cell and Region; redirects and client-selected credential targets are forbidden.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RuntimeCloudSignedRequest'
+      responses:
+        '200':
+          description: 'Exact approval or credential result. Cache-Control: no-store.'
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                - success
+                - data
+                properties:
+                  success:
+                    const: true
+                  data:
+                    $ref: '#/components/schemas/RuntimeCloudRecoverResponse'
+        default:
+          $ref: '#/components/responses/ErrorEnvelope'
+  /api/console/v1/runtime-cloud/v5/closure-ack:
+    post:
+      tags:
+      - RuntimeCloud
+      operationId: runtimeCloudClosureAck
+      security: []
+      description: Independent Runtime machine proof. Console selects the authoritative
+        Cell and Region; redirects and client-selected credential targets are forbidden.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RuntimeCloudSignedRequest'
+      responses:
+        '200':
+          description: 'Exact approval or credential result. Cache-Control: no-store.'
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                - success
+                - data
+                properties:
+                  success:
+                    const: true
+                  data:
+                    $ref: '#/components/schemas/RuntimeCloudClosure'
+        default:
+          $ref: '#/components/responses/ErrorEnvelope'
+  /api/console/v1/namespaces/{namespaceId}/runtime-cloud-bindings/by-environment/{envId}:
+    get:
+      tags:
+      - RuntimeCloud
+      operationId: runtimeCloudBindingByEnvironment
+      security:
+      - bearerAuth: []
+      description: Current independently authorized binding. Gateway directory and
+        selected network route do not grant access. Personal bindings require the
+        owner actor.
+      parameters:
+      - name: namespaceId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: envId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Binding metadata, or null when not enrolled.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - success
+                - data
+                properties:
+                  success:
+                    const: true
+                  data:
+                    $ref: '#/components/schemas/RuntimeCloudBindingLookup'
+        default:
+          $ref: '#/components/responses/ErrorEnvelope'
+  /api/console/v1/gateway-cloud/v3/notifications:
+    post:
+      tags:
+      - GatewayCloud
+      operationId: gatewayManagementNotifications
+      security: []
+      description: One machine-signed HTTPS stream. Initial snapshot, monotonic sequence,
+        bounded consumers, 15-second transport keepalive and 60-second version calibration.
+        It grants no Runtime Cloud authorization. No transaction is held while waiting.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GatewayCloudSignedRequest'
+      responses:
+        '200':
+          description: 'Newline-delimited JSON; each line is a Notification. Cache-Control:
+            no-store and X-Accel-Buffering: no. Slow consumers or identity expiry
+            close the stream; reconnect obtains a new snapshot.'
+          content:
+            application/x-ndjson:
+              schema:
+                type: string
+              x-record-schema:
+                $ref: '#/components/schemas/GatewayCloudNotification'
+        default:
+          $ref: '#/components/responses/ErrorEnvelope'
+components:
+  securitySchemes:
+    browserSession:
+      type: apiKey
+      in: cookie
+      name: redeven-session-id
+      description: Signed-in Redeven Cloud browser session, established by the normal
+        browser sign-in flow.
+    bearerAuth:
+      type: http
+      scheme: bearer
+  responses:
+    RuntimeLinkConflict:
+      description: Runtime-link delivery or binding conflict. An expired delivery
+        is terminal for that delivery ID; the caller must request a fresh ticket and
+        rotate the ID.
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required:
+            - success
+            - error
+            properties:
+              success:
+                type: boolean
+                const: false
+              error:
+                type: object
+                additionalProperties: false
+                required:
+                - code
+                - message
+                properties:
+                  code:
+                    type: string
+                    enum:
+                    - RUNTIME_LINK_DELIVERY_EXPIRED
+                    - RUNTIME_LINK_BINDING_STALE
+                    - CONTROL_POOL_RELINK_REQUIRED
+                    - ENVIRONMENT_BINDING_OCCUPIED
+                  message:
+                    type: string
+    ErrorEnvelope:
+      description: Standard error envelope.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                const: false
+              error:
+                type: object
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+  schemas:
+    DiscoveryResponse:
+      type: object
+      required:
+      - protocol_version
+      - cloud_id
+      - display_name
+      - cloud_origin
+      - documentation_url
+      - access_points
+      properties:
+        protocol_version:
+          type: string
+          const: rcpp-v5
+        cloud_id:
+          type: string
+        display_name:
+          type: string
+        cloud_origin:
+          type: string
+          format: uri
+        documentation_url:
+          type: string
+        access_points:
+          type: array
+          items:
+            $ref: '#/components/schemas/CloudAccessPoint'
+    CloudAccessPoint:
+      type: object
+      required:
+      - access_point_id
+      - region
+      - display_name
+      - access_point_origin
+      - status
+      properties:
+        access_point_id:
+          type: string
+        region:
+          type: string
+        display_name:
+          type: string
+        description:
+          type: string
+        access_point_origin:
+          type: string
+          format: uri
+        country_code:
+          type: string
+        city:
+          type: string
+        status:
+          type: string
+        health_status:
+          type: string
+    DesktopAuthorizationRequest:
+      type: object
+      required:
+      - code_challenge
+      - code_challenge_method
+      properties:
+        code_challenge:
+          type: string
+        code_challenge_method:
+          type: string
+          const: S256
+    DesktopAuthorizationResponse:
+      type: object
+      required:
+      - authorization_code
+      - expires_at_unix_ms
+      properties:
+        authorization_code:
+          type: string
+        expires_at_unix_ms:
+          type: integer
+          format: int64
+    MobileOAuthConfigResponse:
+      type: object
+      required:
+      - cloud_origin
+      - oauth_providers
+      properties:
+        cloud_origin:
+          type: string
+          format: uri
+        oauth_providers:
+          type: array
+          items:
+            $ref: '#/components/schemas/MobileOAuthSummary'
+    MobileOAuthConfigEnvelope:
+      type: object
+      required:
+      - success
+      - data
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/MobileOAuthConfigResponse'
+    MobileOAuthSummary:
+      type: object
+      required:
+      - oauth_provider
+      - display_name
+      - scopes
+      - code_challenge_methods_supported
+      - redirect_uri
+      properties:
+        oauth_provider:
+          type: string
+          enum:
+          - apple
+          - google
+          - github
+        display_name:
+          type: string
+        scopes:
+          type: array
+          items:
+            type: string
+        code_challenge_methods_supported:
+          type: array
+          items:
+            type: string
+        redirect_uri:
+          type: string
+          pattern: ^(|com\.floegence\.redeven:/oauth/(google|github))$
+          description: Empty for Apple native Sign in with Apple; provider callback
+            URI for Google and GitHub.
+          example: com.floegence.redeven:/oauth/google
+    CreateMobileOAuthSessionRequest:
+      type: object
+      required:
+      - oauth_provider
+      - cloud_origin
+      - client_state
+      - code_challenge
+      - code_challenge_method
+      - redirect_uri
+      - app_instance_id
+      properties:
+        oauth_provider:
+          type: string
+          enum:
+          - apple
+          - google
+          - github
+        cloud_origin:
+          type: string
+          format: uri
+        client_state:
+          type: string
+          minLength: 1
+          maxLength: 256
+        code_challenge:
+          type: string
+          minLength: 43
+          maxLength: 128
+        code_challenge_method:
+          type: string
+          const: S256
+        redirect_uri:
+          type: string
+          pattern: ^(|com\.floegence\.redeven:/oauth/(google|github))$
+          description: Empty for Apple native Sign in with Apple; provider callback
+            URI for Google and GitHub.
+          example: com.floegence.redeven:/oauth/google
+        app_instance_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+    CreateMobileOAuthSessionResponse:
+      type: object
+      required:
+      - oauth_provider
+      - cloud_origin
+      - authorization_url
+      - mobile_oauth_state
+      - expires_at_unix_ms
+      properties:
+        oauth_provider:
+          type: string
+          enum:
+          - apple
+          - google
+          - github
+        cloud_origin:
+          type: string
+          format: uri
+        authorization_url:
+          type: string
+          description: Empty for Apple native Sign in with Apple; absolute provider
+            authorization URL for Google and GitHub.
+        mobile_oauth_state:
+          type: string
+          description: Opaque one-time mobile provider state handle.
+        expires_at_unix_ms:
+          type: integer
+          format: int64
+    CreateMobileOAuthSessionEnvelope:
+      type: object
+      required:
+      - success
+      - data
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/CreateMobileOAuthSessionResponse'
+    ExchangeMobileOAuthCredentialRequest:
+      oneOf:
+      - $ref: '#/components/schemas/ExchangeAppleMobileOAuthCredentialRequest'
+      - $ref: '#/components/schemas/ExchangeGoogleMobileOAuthCredentialRequest'
+      - $ref: '#/components/schemas/ExchangeGitHubMobileOAuthCredentialRequest'
+    ExchangeMobileOAuthCredentialBase:
+      type: object
+      required:
+      - oauth_provider
+      - cloud_origin
+      - code_verifier
+      - redirect_uri
+      - mobile_oauth_state
+      - client_state
+      - app_instance_id
+      properties:
+        cloud_origin:
+          type: string
+          format: uri
+        code_verifier:
+          type: string
+          minLength: 43
+          maxLength: 128
+        mobile_oauth_state:
+          type: string
+          minLength: 1
+          description: Opaque one-time mobile provider state handle returned by the
+            session endpoint.
+        client_state:
+          type: string
+          minLength: 1
+          maxLength: 256
+        app_instance_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+    ExchangeAppleMobileOAuthCredentialRequest:
+      allOf:
+      - $ref: '#/components/schemas/ExchangeMobileOAuthCredentialBase'
+      - type: object
+        required:
+        - oauth_provider
+        - identity_token
+        properties:
+          oauth_provider:
+            type: string
+            const: apple
+          redirect_uri:
+            type: string
+            const: ''
+          identity_token:
+            type: string
+            minLength: 1
+            description: Auth verifies JWS signature, issuer, audience, expiry, verified
+              email, and nonce bound to the PKCE S256 challenge.
+    ExchangeGoogleMobileOAuthCredentialRequest:
+      allOf:
+      - $ref: '#/components/schemas/ExchangeMobileOAuthCredentialBase'
+      - type: object
+        required:
+        - oauth_provider
+        - code
+        properties:
+          oauth_provider:
+            type: string
+            const: google
+          code:
+            type: string
+            minLength: 1
+          redirect_uri:
+            type: string
+            const: com.floegence.redeven:/oauth/google
+    ExchangeGitHubMobileOAuthCredentialRequest:
+      allOf:
+      - $ref: '#/components/schemas/ExchangeMobileOAuthCredentialBase'
+      - type: object
+        required:
+        - oauth_provider
+        - code
+        properties:
+          oauth_provider:
+            type: string
+            const: github
+          code:
+            type: string
+            minLength: 1
+          redirect_uri:
+            type: string
+            const: com.floegence.redeven:/oauth/github
+    ExchangeMobileOAuthCredentialResponse:
+      type: object
+      required:
+      - access_token
+      - access_expires_at_unix_ms
+      - refresh_token
+      - authorization_expires_at_unix_ms
+      - cloud_id
+      - cloud_origin
+      - account
+      - access_points
+      properties:
+        access_token:
+          type: string
+        access_expires_at_unix_ms:
+          type: integer
+          format: int64
+        refresh_token:
+          type: string
+        authorization_expires_at_unix_ms:
+          type: integer
+          format: int64
+        cloud_id:
+          type: string
+        cloud_origin:
+          type: string
+          format: uri
+        account:
+          $ref: '#/components/schemas/CloudMeResponse'
+        access_points:
+          type: array
+          items:
+            $ref: '#/components/schemas/CloudAccessPoint'
+    ExchangeMobileOAuthCredentialEnvelope:
+      type: object
+      required:
+      - success
+      - data
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/ExchangeMobileOAuthCredentialResponse'
+    DesktopConnectExchangeRequest:
+      type: object
+      required:
+      - authorization_code
+      - code_verifier
+      properties:
+        authorization_code:
+          type: string
+        code_verifier:
+          type: string
+    DesktopConnectExchangeResponse:
+      type: object
+      required:
+      - access_token
+      - access_expires_at_unix_ms
+      - refresh_token
+      - authorization_expires_at_unix_ms
+      - cloud_id
+      - cloud_origin
+      - account
+      - access_points
+      properties:
+        access_token:
+          type: string
+        access_expires_at_unix_ms:
+          type: integer
+          format: int64
+        refresh_token:
+          type: string
+        authorization_expires_at_unix_ms:
+          type: integer
+          format: int64
+        cloud_id:
+          type: string
+        cloud_origin:
+          type: string
+          format: uri
+        account:
+          $ref: '#/components/schemas/CloudMeResponse'
+        access_points:
+          type: array
+          items:
+            $ref: '#/components/schemas/CloudAccessPoint'
+    CloudTokenRefreshRequest:
+      type: object
+      required:
+      - refresh_token
+      properties:
+        refresh_token:
+          type: string
+    CloudTokenRefreshResponse:
+      type: object
+      required:
+      - access_token
+      - access_expires_at_unix_ms
+      - authorization_expires_at_unix_ms
+      properties:
+        access_token:
+          type: string
+        access_expires_at_unix_ms:
+          type: integer
+          format: int64
+        authorization_expires_at_unix_ms:
+          type: integer
+          format: int64
+    CloudTokenRevokeRequest:
+      type: object
+      required:
+      - refresh_token
+      properties:
+        refresh_token:
+          type: string
+    CloudMeResponse:
+      type: object
+      required:
+      - user_public_id
+      - user_display_name
+      - authorization_expires_at_unix_ms
+      properties:
+        user_public_id:
+          type: string
+        user_display_name:
+          type: string
+        user_email:
+          type: string
+          description: Account email, when available.
+        authorization_expires_at_unix_ms:
+          type: integer
+          format: int64
+    CloudEnvironmentListResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - protocol_version
+      - environments
+      properties:
+        protocol_version:
+          type: string
+          const: rcpp-v5
+        environments:
+          type: array
+          items:
+            $ref: '#/components/schemas/CloudEnvironmentSummary'
+    CloudEnvironmentSummary:
+      type: object
+      required:
+      - env_public_id
+      - name
+      - region
+      - access_point_id
+      - access_point_origin
+      - access
+      properties:
+        env_public_id:
+          type: string
+        name:
+          type: string
+        region:
+          type: string
+        access_point_id:
+          type: string
+        access_point_origin:
+          type: string
+          format: uri
+        environment_url:
+          type: string
+        description:
+          type: string
+        namespace_public_id:
+          type: string
+        namespace_name:
+          type: string
+        status:
+          type: string
+        lifecycle_status:
+          type: string
+        last_seen_at_unix_ms:
+          type: integer
+          format: int64
+        runtime_health:
+          $ref: '#/components/schemas/CloudEnvironmentRuntimeHealth'
+        access:
+          $ref: '#/components/schemas/CloudEnvironmentAccess'
+    CloudEnvironmentAccess:
+      type: object
+      additionalProperties: false
+      required:
+      - can_connect
+      - workspace_read
+      - workspace_write
+      - workspace_execute
+      properties:
+        can_connect:
+          type: boolean
+        workspace_read:
+          type: boolean
+        workspace_write:
+          type: boolean
+        workspace_execute:
+          type: boolean
+    CloudEnvironmentRuntimeHealthQueryRequest:
+      type: object
+      required:
+      - env_public_ids
+      properties:
+        env_public_ids:
+          type: array
+          items:
+            type: string
+    CloudEnvironmentRuntimeHealthQueryResponse:
+      type: object
+      required:
+      - environments
+      properties:
+        environments:
+          type: array
+          items:
+            $ref: '#/components/schemas/CloudEnvironmentRuntimeHealth'
+    CloudEnvironmentRuntimeHealth:
+      type: object
+      required:
+      - env_public_id
+      - runtime_status
+      - observed_at_unix_ms
+      properties:
+        env_public_id:
+          type: string
+        runtime_status:
+          type: string
+          enum:
+          - online
+          - offline
+        observed_at_unix_ms:
+          type: integer
+          format: int64
+        last_seen_at_unix_ms:
+          type: integer
+          format: int64
+        offline_reason_code:
+          type: string
+        offline_reason:
+          type: string
+    DesktopOpenSessionResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - access_point_origin
+      - expires_at_unix_ms
+      properties:
+        remote_session_url:
+          type: string
+        access_point_origin:
+          type: string
+          format: uri
+        expires_at_unix_ms:
+          type: integer
+          format: int64
+    RuntimeLinkAuthorizationRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - protocol_version
+      - env_public_id
+      properties:
+        protocol_version:
+          type: string
+          const: rcpp-v5
+        env_public_id:
+          type: string
+          minLength: 1
+    RuntimeLinkAuthorizationResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - protocol_version
+      - runtime_link_ticket
+      - expires_at_unix_ms
+      properties:
+        protocol_version:
+          type: string
+          const: rcpp-v5
+        runtime_link_ticket:
+          type: string
+          minLength: 1
+        expires_at_unix_ms:
+          type: integer
+          format: int64
+          minimum: 1
+    RuntimeControlArtifactPoolV2:
+      type: object
+      additionalProperties: false
+      required:
+      - version
+      - logical_cloud_binding_id
+      - binding_generation
+      - target_waterline
+      - refresh_horizon_seconds
+      - server_highest_artifact_sequence
+      - entries
+      - response_digest_b64u
+      properties:
+        version:
+          type: string
+          const: control_artifact_pool_v2
+        logical_cloud_binding_id:
+          type: string
+          minLength: 1
+        binding_generation:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 9223372036854776000
+        target_waterline:
+          type: integer
+          const: 2
+        refresh_horizon_seconds:
+          type: integer
+          const: 60
+        server_highest_artifact_sequence:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 9223372036854776000
+          description: Authenticated durable server high-watermark after this exact
+            delivery. Top-up entries are internally contiguous but may start after
+            an expired, undelivered sequence range.
+        entries:
+          type: array
+          maxItems: 8
+          items:
+            $ref: '#/components/schemas/RuntimeControlArtifactPoolEntry'
+        response_digest_b64u:
+          type: string
+          pattern: ^[A-Za-z0-9_-]{43}$
+          description: For bootstrap, SHA-256 of the canonical pool JSON with this
+            field empty. For top-up, SHA-256 of the canonical outer response with
+            this field empty, including top_up_request_id_b64u.
+    RuntimeControlArtifactPoolTopUpRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - env_public_id
+      - local_environment_public_id
+      - binding_generation
+      - top_up_request_id_b64u
+      properties:
+        env_public_id:
+          type: string
+          minLength: 1
+        local_environment_public_id:
+          type: string
+          minLength: 1
+        binding_generation:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 9223372036854776000
+        top_up_request_id_b64u:
+          type: string
+          pattern: ^[A-Za-z0-9_-]{43}$
+          description: Canonical base64url encoding of a fresh 32-byte idempotency
+            ID persisted before RPC type 41006. Existing IDs are replayed before capacity
+            enforcement; a new ID after 65,536 accepted bootstrap and top-up delivery
+            IDs in the exact binding generation receives 409/control_pool_relink_required
+            and requires relinking.
+    RuntimeControlArtifactPoolTopUpResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - top_up_request_id_b64u
+      - pool
+      properties:
+        top_up_request_id_b64u:
+          type: string
+          pattern: ^[A-Za-z0-9_-]{43}$
+          description: Exact ID echoed from the persisted pending request and covered
+            by response_digest_b64u.
+        pool:
+          allOf:
+          - $ref: '#/components/schemas/RuntimeControlArtifactPoolV2'
+          - type: object
+            properties:
+              entries:
+                type: array
+                maxItems: 4
+                items:
+                  $ref: '#/components/schemas/RuntimeControlArtifactPoolEntry'
+      description: Flowersec RPC type 41006 response; exact serialized JSON is limited
+        to 524,288 bytes. The same request ID replays the same outbox bytes until
+        its replay horizon. Entries are internally contiguous, but their first sequence
+        may be above the Runtime's local high-watermark when an older undelivered
+        outbox expired; server_highest_artifact_sequence authenticates that forward
+        gap.
+    RuntimeControlArtifactPoolAck:
+      type: object
+      additionalProperties: false
+      required:
+      - env_public_id
+      - binding_generation
+      - top_up_request_id_b64u
+      - response_digest_b64u
+      - highest_artifact_sequence
+      properties:
+        env_public_id:
+          type: string
+          minLength: 1
+        binding_generation:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 9223372036854776000
+        top_up_request_id_b64u:
+          type: string
+          pattern: ^[A-Za-z0-9_-]{43}$
+        response_digest_b64u:
+          type: string
+          pattern: ^[A-Za-z0-9_-]{43}$
+        highest_artifact_sequence:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 9223372036854776000
+    RuntimeControlArtifactPoolAckResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - ok
+      properties:
+        ok:
+          type: boolean
+          const: true
+      description: Exact Flowersec RPC type 41007 response. Repeating an ACK for the
+        same outbox is idempotent; an expired tombstone returns top_up_request_expired
+        and never issues replacement artifacts for that ID.
+    RuntimeControlArtifactPoolEntry:
+      type: object
+      additionalProperties: false
+      required:
+      - artifact_json
+      - artifact_channel_id
+      - binding_generation
+      - artifact_sequence
+      - expires_at_unix_s
+      properties:
+        artifact_json:
+          type: object
+          description: Opaque Flowersec 5 artifact JSON; its exact serialized form
+            is limited to 65,536 bytes and consumers must pass it only to the published
+            SDK parser.
+        artifact_channel_id:
+          type: string
+          minLength: 1
+        binding_generation:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 9223372036854776000
+        artifact_sequence:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 9223372036854776000
+        expires_at_unix_s:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 9223372036854776000
+    RuntimeLinkInitialControlArtifactPoolV2:
+      allOf:
+      - $ref: '#/components/schemas/RuntimeControlArtifactPoolV2'
+      - type: object
+        properties:
+          entries:
+            type: array
+            minItems: 2
+            maxItems: 2
+            items:
+              $ref: '#/components/schemas/RuntimeControlArtifactPoolEntry'
+    RuntimeLinkResolveRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - protocol_version
+      - env_public_id
+      properties:
+        protocol_version:
+          const: rcpp-v5
+        env_public_id:
+          type: string
+          minLength: 1
+    RuntimeLinkResolveResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - protocol_version
+      - cloud_id
+      - cloud_origin
+      - env_public_id
+      - access_point_id
+      - access_point_origin
+      - expires_at_unix_ms
+      - namespace_public_id
+      properties:
+        protocol_version:
+          const: rcpp-v5
+        cloud_id:
+          type: string
+          minLength: 1
+        cloud_origin:
+          type: string
+          format: uri
+        env_public_id:
+          type: string
+          minLength: 1
+        access_point_id:
+          type: string
+          minLength: 1
+        access_point_origin:
+          type: string
+          format: uri
+        expires_at_unix_ms:
+          type: integer
+          format: int64
+        namespace_public_id:
+          type: string
+          minLength: 1
+    ControlArtifactPoolEntry:
+      additionalProperties: false
+      properties:
+        artifact_channel_id:
+          type: string
+        artifact_json:
+          type: object
+        artifact_sequence:
+          format: int64
+          type: integer
+        binding_generation:
+          format: int64
+          type: integer
+        expires_at_unix_s:
+          format: int64
+          type: integer
+      required:
+      - artifact_json
+      - artifact_channel_id
+      - binding_generation
+      - artifact_sequence
+      - expires_at_unix_s
+      type: object
+    ControlArtifactPoolV2:
+      additionalProperties: false
+      properties:
+        binding_generation:
+          format: int64
+          type: integer
+        entries:
+          items:
+            $ref: '#/components/schemas/ControlArtifactPoolEntry'
+          type: array
+        logical_cloud_binding_id:
+          type: string
+        refresh_horizon_seconds:
+          format: int64
+          type: integer
+        response_digest_b64u:
+          type: string
+        server_highest_artifact_sequence:
+          format: int64
+          type: integer
+        target_waterline:
+          format: int64
+          type: integer
+        version:
+          type: string
+      required:
+      - version
+      - logical_cloud_binding_id
+      - binding_generation
+      - target_waterline
+      - refresh_horizon_seconds
+      - server_highest_artifact_sequence
+      - entries
+      - response_digest_b64u
+      type: object
+    GatewayCloudDirectoryMember:
+      additionalProperties: false
+      properties:
+        cloud_permission:
+          type: string
+        delegation:
+          $ref: '#/components/schemas/GatewayCloudMemberDelegation'
+        hook_allowed:
+          type: boolean
+        member_id:
+          type: string
+        member_version:
+          format: int64
+          type: integer
+        metadata:
+          $ref: '#/components/schemas/GatewayCloudRuntimeMetadata'
+        reachable:
+          type: boolean
+        state:
+          type: string
+      required:
+      - member_id
+      - member_version
+      - delegation
+      - state
+      - cloud_permission
+      - hook_allowed
+      - reachable
+      - metadata
+      type: object
+    GatewayCloudDirectorySync:
+      additionalProperties: false
+      properties:
+        base_revision:
+          format: int64
+          type: integer
+        full:
+          type: boolean
+        listener_url:
+          type: string
+        members:
+          items:
+            $ref: '#/components/schemas/GatewayCloudDirectoryMember'
+          type: array
+        policy:
+          $ref: '#/components/schemas/GatewayCloudGatewayPolicy'
+        revision:
+          format: int64
+          type: integer
+      required:
+      - policy
+      - base_revision
+      - revision
+      - full
+      - members
+      type: object
+    GatewayCloudEgressMember:
+      additionalProperties: false
+      properties:
+        destinations:
+          items:
+            type: string
+          type: array
+        generation:
+          format: int64
+          type: integer
+        member_id:
+          type: string
+        member_version:
+          format: int64
+          type: integer
+        request_public_id:
+          type: string
+        runtime_public_id:
+          type: string
+        state:
+          type: string
+      required:
+      - state
+      - member_id
+      - member_version
+      - request_public_id
+      - runtime_public_id
+      - generation
+      - destinations
+      type: object
+    GatewayCloudGateway:
+      additionalProperties: false
+      properties:
+        authorization_revision:
+          format: int64
+          type: integer
+        automatic_publication_authorized:
+          type: boolean
+        directory_revision:
+          format: int64
+          type: integer
+        directory_synced_at_unix_ms:
+          format: int64
+          type: integer
+        gateway_id:
+          type: string
+        identity_expires_at_unix_ms:
+          format: int64
+          type: integer
+        last_seen_at_unix_ms:
+          format: int64
+          type: integer
+        listener_url:
+          type: string
+        name:
+          type: string
+        namespace_public_id:
+          type: string
+        policy:
+          $ref: '#/components/schemas/GatewayCloudGatewayPolicy'
+        public_id:
+          type: string
+        public_key_sha256:
+          type: string
+        region:
+          type: string
+        state:
+          type: string
+        tls_root_pem:
+          type: string
+        version:
+          type: string
+      required:
+      - gateway_id
+      - policy
+      - automatic_publication_authorized
+      - authorization_revision
+      - directory_synced_at_unix_ms
+      - identity_expires_at_unix_ms
+      - public_id
+      - namespace_public_id
+      - region
+      - name
+      - state
+      - public_key_sha256
+      - listener_url
+      - tls_root_pem
+      - version
+      - directory_revision
+      - last_seen_at_unix_ms
+      type: object
+    GatewayCloudGatewayCommand:
+      additionalProperties: false
+      properties:
+        actor_public_id:
+          type: string
+        created_at_unix_ms:
+          format: int64
+          type: integer
+        expires_at_unix_ms:
+          format: int64
+          type: integer
+        kind:
+          type: string
+        member_id:
+          type: string
+        member_version:
+          format: int64
+          type: integer
+        public_id:
+          type: string
+      required:
+      - public_id
+      - kind
+      - actor_public_id
+      - created_at_unix_ms
+      - expires_at_unix_ms
+      type: object
+    GatewayCloudGatewayMachineIdentity:
+      additionalProperties: false
+      properties:
+        gateway_id:
+          type: string
+        public_key_b64u:
+          type: string
+        signature:
+          type: string
+      required:
+      - gateway_id
+      - public_key_b64u
+      - signature
+      type: object
+    GatewayCloudGatewayPolicy:
+      additionalProperties: false
+      properties:
+        default_cloud_allowed:
+          type: boolean
+        publication_mode:
+          type: string
+        revision:
+          format: int64
+          type: integer
+      required:
+      - revision
+      - default_cloud_allowed
+      - publication_mode
+      type: object
+    GatewayCloudGatewayRegistration:
+      additionalProperties: false
+      properties:
+        identity:
+          $ref: '#/components/schemas/GatewayCloudGatewayMachineIdentity'
+        listener_url:
+          type: string
+        public_key_b64u:
+          type: string
+        tls_root_pem:
+          type: string
+        version:
+          type: string
+      required:
+      - identity
+      - public_key_b64u
+      - listener_url
+      - tls_root_pem
+      - version
+      type: object
+    GatewayCloudGatewayStatus:
+      additionalProperties: false
+      properties:
+        admission_destinations:
+          items:
+            type: string
+          type: array
+        commands:
+          items:
+            $ref: '#/components/schemas/GatewayCloudGatewayCommand'
+          type: array
+        gateway:
+          $ref: '#/components/schemas/GatewayCloudGateway'
+        members:
+          items:
+            $ref: '#/components/schemas/GatewayCloudEgressMember'
+          type: array
+        region_origin:
+          type: string
+      required:
+      - gateway
+      - region_origin
+      - commands
+      - admission_destinations
+      - members
+      type: object
+    GatewayCloudMemberDelegation:
+      additionalProperties: false
+      properties:
+        consented_at_unix_ms:
+          format: int64
+          type: integer
+        gateway_id:
+          type: string
+        invitation_id:
+          type: string
+        manage_access:
+          type: boolean
+        manage_cloud_publication:
+          type: boolean
+        member_id:
+          type: string
+        protocol_version:
+          type: string
+        public_key_b64u:
+          type: string
+        runtime_public_id:
+          type: string
+        signature:
+          type: string
+      required:
+      - protocol_version
+      - gateway_id
+      - member_id
+      - runtime_public_id
+      - public_key_b64u
+      - invitation_id
+      - consented_at_unix_ms
+      - manage_access
+      - manage_cloud_publication
+      - signature
+      type: object
+    GatewayCloudNotification:
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+        protocol_version:
+          format: int64
+          type: integer
+        sequence:
+          format: int64
+          type: integer
+        snapshot:
+          $ref: '#/components/schemas/GatewayCloudGatewayStatus'
+        stream_id:
+          type: string
+      required:
+      - protocol_version
+      - stream_id
+      - sequence
+      - kind
+      type: object
+    GatewayCloudRuntimeMetadata:
+      additionalProperties: false
+      properties:
+        arch:
+          type: string
+        hostname:
+          type: string
+        os:
+          type: string
+        version:
+          type: string
+      required:
+      - hostname
+      - os
+      - arch
+      - version
+      type: object
+    RuntimeCloudBinding:
+      additionalProperties: false
+      properties:
+        cloud_id:
+          type: string
+        env_public_id:
+          type: string
+        generation:
+          format: int64
+          type: integer
+        identity_expires_at_unix_ms:
+          format: int64
+          type: integer
+        namespace_public_id:
+          type: string
+        owner_kind:
+          type: string
+        owner_public_id:
+          type: string
+        public_id:
+          type: string
+        public_key_b64u:
+          type: string
+        region:
+          type: string
+        runtime_public_id:
+          type: string
+        state:
+          type: string
+      required:
+      - public_id
+      - cloud_id
+      - runtime_public_id
+      - env_public_id
+      - namespace_public_id
+      - owner_kind
+      - owner_public_id
+      - generation
+      - region
+      - state
+      - public_key_b64u
+      - identity_expires_at_unix_ms
+      type: object
+    RuntimeCloudBindingFence:
+      additionalProperties: false
+      properties:
+        cloud_id:
+          type: string
+        env_public_id:
+          type: string
+        generation:
+          format: int64
+          type: integer
+        namespace_public_id:
+          type: string
+        owner_kind:
+          type: string
+        owner_public_id:
+          type: string
+        public_id:
+          type: string
+        runtime_public_id:
+          type: string
+      required:
+      - public_id
+      - cloud_id
+      - runtime_public_id
+      - env_public_id
+      - namespace_public_id
+      - owner_kind
+      - owner_public_id
+      - generation
+      type: object
+    RuntimeCloudChallengeRequest:
+      additionalProperties: false
+      properties:
+        binding_public_id:
+          type: string
+        namespace_public_id:
+          type: string
+        protocol_version:
+          type: string
+        purpose:
+          type: string
+        runtime_public_id:
+          type: string
+      required:
+      - protocol_version
+      - namespace_public_id
+      - purpose
+      - runtime_public_id
+      type: object
+    RuntimeCloudChallengeResponse:
+      additionalProperties: false
+      properties:
+        proof:
+          $ref: '#/components/schemas/RuntimeCloudProof'
+      required:
+      - proof
+      type: object
+    RuntimeCloudClosure:
+      additionalProperties: false
+      properties:
+        binding_public_id:
+          type: string
+        generation:
+          format: int64
+          type: integer
+        public_id:
+          type: string
+        reason:
+          type: string
+        runtime_closed:
+          type: boolean
+        runtime_public_id:
+          type: string
+      required:
+      - public_id
+      - binding_public_id
+      - runtime_public_id
+      - generation
+      - reason
+      - runtime_closed
+      type: object
+    RuntimeCloudClosureAck:
+      additionalProperties: false
+      properties:
+        binding_public_id:
+          type: string
+        closure_public_id:
+          type: string
+        generation:
+          format: int64
+          type: integer
+      required:
+      - closure_public_id
+      - binding_public_id
+      - generation
+      type: object
+    RuntimeCloudCredentialDelivery:
+      additionalProperties: false
+      properties:
+        binding:
+          $ref: '#/components/schemas/RuntimeCloudBinding'
+        cloud_origin:
+          type: string
+        control_artifact_pool:
+          $ref: '#/components/schemas/ControlArtifactPoolV2'
+        delivery_request_id:
+          type: string
+        protocol_version:
+          type: string
+        region_origin:
+          type: string
+      required:
+      - protocol_version
+      - cloud_origin
+      - region_origin
+      - binding
+      - delivery_request_id
+      - control_artifact_pool
+      type: object
+    RuntimeCloudEnrollRequest:
+      additionalProperties: false
+      properties:
+        authorization:
+          $ref: '#/components/schemas/RuntimeCloudEnrollmentAuthorization'
+        metadata:
+          $ref: '#/components/schemas/RuntimeCloudMetadata'
+        operation_id:
+          type: string
+        public_key_b64u:
+          type: string
+        runtime_public_id:
+          type: string
+      required:
+      - operation_id
+      - runtime_public_id
+      - public_key_b64u
+      - authorization
+      - metadata
+      type: object
+    RuntimeCloudEnrollmentAuthorization:
+      additionalProperties: false
+      properties:
+        delegation:
+          type: object
+        env_public_id:
+          type: string
+        gateway_public_id:
+          type: string
+        member_authorization:
+          type: string
+        member_id:
+          type: string
+        member_version:
+          format: int64
+          type: integer
+        runtime_link_ticket:
+          type: string
+      required: []
+      type: object
+    RuntimeCloudMetadata:
+      additionalProperties: false
+      properties:
+        arch:
+          type: string
+        hostname:
+          type: string
+        os:
+          type: string
+        version:
+          type: string
+      required:
+      - hostname
+      - os
+      - arch
+      - version
+      type: object
+    RuntimeCloudProof:
+      additionalProperties: false
+      properties:
+        binding_public_id:
+          type: string
+        body_sha256:
+          type: string
+        challenge_id:
+          type: string
+        cloud_origin:
+          type: string
+        expires_at_unix_ms:
+          format: int64
+          type: integer
+        namespace_public_id:
+          type: string
+        nonce_b64u:
+          type: string
+        protocol_version:
+          type: string
+          const: rcpp-v5
+        purpose:
+          type: string
+        runtime_public_id:
+          type: string
+        signature:
+          type: string
+      required:
+      - protocol_version
+      - cloud_origin
+      - namespace_public_id
+      - purpose
+      - challenge_id
+      - nonce_b64u
+      - runtime_public_id
+      - expires_at_unix_ms
+      - body_sha256
+      - signature
+      type: object
+    RuntimeCloudRecoverRequest:
+      additionalProperties: false
+      properties:
+        binding_public_id:
+          type: string
+        closure_after:
+          type: string
+        delivery_request_id:
+          type: string
+        enrollment_operation_id:
+          type: string
+        runtime_public_id:
+          type: string
+      required:
+      - runtime_public_id
+      - delivery_request_id
+      type: object
+    RuntimeCloudRecoverResponse:
+      additionalProperties: false
+      properties:
+        binding:
+          $ref: '#/components/schemas/RuntimeCloudBinding'
+        closures:
+          items:
+            $ref: '#/components/schemas/RuntimeCloudClosure'
+          type: array
+        delivery:
+          $ref: '#/components/schemas/RuntimeCloudCredentialDelivery'
+        next_closure_cursor:
+          type: string
+        pending_closure_count:
+          format: int64
+          type: integer
+        protocol_version:
+          type: string
+        reason_code:
+          type: string
+        retry_after_ms:
+          format: int64
+          type: integer
+        state:
+          type: string
+      required:
+      - protocol_version
+      - state
+      - retry_after_ms
+      - closures
+      - pending_closure_count
+      type: object
+    RuntimeCloudRetryRequest:
+      additionalProperties: false
+      properties:
+        expected_association_revision:
+          format: int64
+          type: integer
+      required:
+      - expected_association_revision
+      type: object
+    RuntimeCloudRouteCommitRequest:
+      additionalProperties: false
+      properties:
+        confirmed:
+          type: boolean
+        operation_id:
+          type: string
+      required:
+      - operation_id
+      - confirmed
+      type: object
+    RuntimeCloudRouteOperation:
+      additionalProperties: false
+      properties:
+        association_revision:
+          format: int64
+          type: integer
+        committed_route_revision:
+          format: int64
+          type: integer
+        expected_route_revision:
+          format: int64
+          type: integer
+        expires_at_unix_ms:
+          format: int64
+          type: integer
+        operation_id:
+          type: string
+        reason_code:
+          type: string
+        route_fingerprint:
+          type: string
+        selection:
+          $ref: '#/components/schemas/RuntimeCloudRouteSelection'
+        state:
+          type: string
+      required:
+      - route_fingerprint
+      - operation_id
+      - expected_route_revision
+      - association_revision
+      - selection
+      - state
+      - expires_at_unix_ms
+      type: object
+    RuntimeCloudRoutePreflightRequest:
+      additionalProperties: false
+      properties:
+        expected_route_revision:
+          format: int64
+          type: integer
+        operation_id:
+          type: string
+        selection:
+          $ref: '#/components/schemas/RuntimeCloudRouteSelection'
+      required:
+      - operation_id
+      - expected_route_revision
+      - selection
+      type: object
+    RuntimeCloudRouteSelection:
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+        member_id:
+          type: string
+      required:
+      - kind
+      type: object
+    RuntimeCloudSignedRequest:
+      additionalProperties: false
+      properties:
+        payload:
+          type: object
+        proof:
+          $ref: '#/components/schemas/RuntimeCloudProof'
+      required:
+      - proof
+      - payload
+      type: object
+    RuntimeCloudStatus:
+      additionalProperties: false
+      properties:
+        approval_state:
+          type: string
+        association_revision:
+          format: int64
+          type: integer
+        connection_state:
+          type: string
+        enabled:
+          type: boolean
+        next_attempt_at_unix_ms:
+          format: int64
+          type: integer
+        reason_code:
+          type: string
+        route:
+          $ref: '#/components/schemas/RuntimeCloudRouteSelection'
+        route_revision:
+          format: int64
+          type: integer
+      required:
+      - association_revision
+      - enabled
+      - approval_state
+      - connection_state
+      - route
+      - route_revision
+      type: object
+    GatewayCloudChallengeRequest:
+      additionalProperties: false
+      properties:
+        binding_public_id:
+          type: string
+        gateway_public_id:
+          type: string
+        purpose:
+          type: string
+        runtime_public_id:
+          type: string
+      required:
+      - purpose
+      - gateway_public_id
+      type: object
+    GatewayCloudChallengeResponse:
+      additionalProperties: false
+      properties:
+        proof:
+          $ref: '#/components/schemas/GatewayCloudProof'
+      required:
+      - proof
+      type: object
+    GatewayCloudProof:
+      additionalProperties: false
+      properties:
+        binding_generation:
+          format: int64
+          type: integer
+        binding_public_id:
+          type: string
+        body_sha256:
+          type: string
+        challenge_b64u:
+          type: string
+        challenge_id:
+          type: string
+        cloud_origin:
+          type: string
+        expires_at_unix_ms:
+          format: int64
+          type: integer
+        gateway_public_id:
+          type: string
+        namespace_public_id:
+          type: string
+        protocol_version:
+          format: int64
+          type: integer
+          const: 3
+        purpose:
+          type: string
+        runtime_public_id:
+          type: string
+        signature_b64u:
+          type: string
+      required:
+      - protocol_version
+      - purpose
+      - cloud_origin
+      - namespace_public_id
+      - gateway_public_id
+      - runtime_public_id
+      - binding_public_id
+      - binding_generation
+      - challenge_id
+      - challenge_b64u
+      - expires_at_unix_ms
+      - body_sha256
+      - signature_b64u
+      type: object
+    GatewayCloudSignedRequest:
+      additionalProperties: false
+      properties:
+        payload:
+          type: object
+        proof:
+          $ref: '#/components/schemas/GatewayCloudProof'
+      required:
+      - proof
+      - payload
+      type: object
+    RuntimeCloudBindingLookup:
+      additionalProperties: false
+      properties:
+        binding:
+          $ref: '#/components/schemas/RuntimeCloudBinding'
+      required:
+      - binding
+      type: object
+    RuntimeCloudClosureList:
+      additionalProperties: false
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/RuntimeCloudClosure'
+          type: array
+        next_cursor:
+          type: string
+      required:
+      - items
+      type: object

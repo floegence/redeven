@@ -19,17 +19,9 @@ func (c *Config) GatewayMember(id string) *gatewaymembership.RuntimeConfig {
 	return nil
 }
 
-// CloudGateway resolves the separately selected publication owner.
+// CloudGateway returns only the explicitly selected transport member.
 func (c *Config) CloudGateway() *gatewaymembership.RuntimeConfig {
-	if c == nil {
-		return nil
-	}
-	for _, member := range c.Gateways {
-		if member != nil && (member.MemberID == c.GatewayCloudMemberID || c.GatewayPublication != nil && member.MemberID == c.GatewayPublication.MemberID) {
-			return member
-		}
-	}
-	return nil
+	return c.CloudRouteMember()
 }
 
 func (c *Config) CloneGateways() []*gatewaymembership.RuntimeConfig {

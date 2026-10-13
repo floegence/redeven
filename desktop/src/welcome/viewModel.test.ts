@@ -133,12 +133,12 @@ describe('provider credential recovery actions', () => {
     expect(actions.find((item) => item.id === 'disconnect_cloud_runtime')?.action.enabled).toBe(true);
     expect(buildEnvironmentCardFactsModel(local!).find(fact => fact.id === 'cloud-connection')?.value_key).toBe('providerRecovery.expired');
     for (const [state, key] of [
-      ['sign_in_required', 'environmentCenter.cloudSignInRequired'],
-      ['permission_required', 'providerRecovery.permissionRevoked'],
-      ['binding_changed', 'providerRecovery.attention'],
+      ['authorization_required', 'providerRecovery.expired'],
+      ['error', 'providerRecovery.attention'],
+      ['disabled', 'providerRecovery.disabled'],
     ] as const) {
       const recovering = { ...local!, provider_runtime_link_target: {
-        ...local!.provider_runtime_link_target!, credential_recovery: state,
+        ...local!.provider_runtime_link_target!, provider_connection_state: state,
       } };
       expect(buildEnvironmentCardFactsModel(recovering).find(fact => fact.id === 'cloud-connection')?.value_key).toBe(key);
       expect(buildProviderBackedEnvironmentActionModel(recovering).action_presentation.menu_actions
@@ -328,7 +328,7 @@ describe('environment open flow decisions', () => {
         presentation_state: 'allowed' as const,
         target: { lifecycle_target_id: 'rlt_local', target_generation: 1 },
         compatibility: {
-          gateway_protocol: 'redeven-gateway-v5',
+          gateway_protocol: 'redeven-gateway-v6',
           runtime_platform: 'darwin' as const,
           runtime_architecture: 'arm64' as const,
           runtime_service_protocol: 'redeven-runtime-v2',
@@ -405,7 +405,7 @@ describe('environment open flow decisions', () => {
 
 function buildProvider(cloudOrigin = 'https://redeven.test') {
   return {
-    protocol_version: 'rcpp-v4' as const,
+    protocol_version: 'rcpp-v5' as const,
     cloud_id: 'example_control_plane',
     display_name: 'Example Control Plane',
     cloud_origin: cloudOrigin,

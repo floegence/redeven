@@ -9,8 +9,8 @@ import (
 	"time"
 )
 
-func TestProofV2SharedFixture(t *testing.T) {
-	raw, err := os.ReadFile("testdata/proof-v2.json")
+func TestProofV3SharedFixture(t *testing.T) {
+	raw, err := os.ReadFile("testdata/proof-v3.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +43,7 @@ func TestProofV2SharedFixture(t *testing.T) {
 	}
 	changes := map[string]func(*Proof){
 		"version":    func(p *Proof) { p.ProtocolVersion++ },
-		"purpose":    func(p *Proof) { p.Purpose = PurposeRuntimeJoin },
+		"purpose":    func(p *Proof) { p.Purpose = PurposeGatewayStatus },
 		"cloud":      func(p *Proof) { p.CloudOrigin = "https://other.example" },
 		"namespace":  func(p *Proof) { p.NamespacePublicID += "other" },
 		"gateway":    func(p *Proof) { p.GatewayPublicID += "other" },

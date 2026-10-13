@@ -14,10 +14,10 @@ import (
 
 const directArtifactFixture = `{"correlation":{"tags":[],"v":3},"path":{"candidates":[{"carrier":"websocket","id":"issuer-ws","tls":{"mode":"ca"},"url":"wss://issuer.example/flowersec/v3/direct","wire_profile":"flowersec-direct/3"}],"kind":"direct","listener_audience":"issuer-audience","rendezvous_group_id":"issuer-group","routing_token":"QkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkI"},"profile":"flowersec/3","scoped":[],"session":{"allowed_suites":[1,2],"channel_id":"issuer-shared","contract_hash_b64u":"81XXUykAE_J_K1LvRqkr_B7H3CCCcSRF7E7CIbmfwCU","default_suite":1,"e2ee_psk_b64u":"QkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkI","establish_timeout_seconds":30,"idle_timeout_seconds":60,"init_expire_at_unix_s":2000000000,"max_inbound_streams":32,"rekey_completion_timeout_seconds":30,"rekey_prepare_timeout_seconds":10,"selected_features":0},"v":3}`
 
-func TestSaveAndLoadPreserveOpaqueDirectArtifactAcrossRestart(t *testing.T) {
+func TestSaveAndLoadPreserveOpaquePoolArtifactAcrossRestart(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.json")
 	wantArtifact := json.RawMessage(directArtifactFixture)
-	cfg := configWithDirectArtifact(wantArtifact, false)
+	cfg := configWithPoolArtifact(wantArtifact, false)
 
 	if err := Save(path, cfg); err != nil {
 		t.Fatalf("Save() error = %v", err)
@@ -26,29 +26,30 @@ func TestSaveAndLoadPreserveOpaqueDirectArtifactAcrossRestart(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if restarted.Direct == nil {
+	if restarted.ControlArtifactPool == nil {
 		t.Fatal("Load() direct = nil")
 	}
-	if !jsonEqual(restarted.Direct.ArtifactJSON, wantArtifact) {
-		t.Fatalf("Load() artifact = %s, want %s", restarted.Direct.ArtifactJSON, wantArtifact)
+	if !jsonEqual(restarted.ControlArtifactPool.Entries[0].ArtifactJSON, wantArtifact) {
+		t.Fatalf("Load() artifact = %s, want %s", restarted.ControlArtifactPool.Entries[0].ArtifactJSON, wantArtifact)
 	}
-	if restarted.Direct.ExpiresAtUnixS != 4102444800 {
-		t.Fatalf("Load() expires_at_unix_s = %d, want 4102444800", restarted.Direct.ExpiresAtUnixS)
+	if restarted.ControlArtifactPool.Entries[0].ExpiresAtUnixS != 4102444800 {
+		t.Fatalf("Load() expires_at_unix_s = %d, want 4102444800", restarted.ControlArtifactPool.Entries[0].ExpiresAtUnixS)
 	}
-	if restarted.Direct.Spent {
+	if restarted.ControlArtifactPool.Entries[0].Spent {
 		t.Fatal("Load() spent = true, want false")
 	}
 	assertDirectEnvelopeFields(t, path)
 }
 
-func TestSaveAndLoadPreserveDirectArtifactSpentState(t *testing.T) {
+func TestSaveAndLoadPreservePoolArtifactSpentState(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.json")
-	cfg := configWithDirectArtifact(json.RawMessage(directArtifactFixture), false)
+	cfg := configWithPoolArtifact(json.RawMessage(directArtifactFixture), false)
 	if err := Save(path, cfg); err != nil {
 		t.Fatalf("Save() error = %v", err)
 	}
 
-	cfg.Direct.Spent = true
+	cfg.ControlArtifactPool.Entries[0].Spent = true
+	cfg.ControlArtifactPool.Entries[0].ArtifactJSON = nil
 	if err := Save(path, cfg); err != nil {
 		t.Fatalf("Save(spent) error = %v", err)
 	}
@@ -56,8 +57,8 @@ func TestSaveAndLoadPreserveDirectArtifactSpentState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if restarted.Direct == nil || !restarted.Direct.Spent {
-		t.Fatalf("Load() direct = %#v, want spent artifact", restarted.Direct)
+	if restarted.ControlArtifactPool == nil || !restarted.ControlArtifactPool.Entries[0].Spent {
+		t.Fatalf("Load() direct = %#v, want spent artifact", restarted.ControlArtifactPool.Entries[0])
 	}
 }
 
@@ -68,8 +69,8 @@ func TestSaveAndLoadPreserveControlArtifactDigestAcrossRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	digest := sha256.Sum256(artifact)
-	cfg := configWithDirectArtifact(nil, false)
-	cfg.Direct = nil
+	cfg := configWithPoolArtifact(nil, false)
+
 	cfg.ControlArtifactPool = NewControlArtifactPool(1)
 	cfg.ControlArtifactPool.LogicalBindingID = "redeven:user-1:local-1"
 	cfg.ControlArtifactPool.RecoveryState = ControlArtifactRecoveryReady
@@ -92,7 +93,7 @@ func TestSaveAndLoadPreserveControlArtifactDigestAcrossRestart(t *testing.T) {
 		t.Fatalf("Load() control artifact pool = %#v", restarted.ControlArtifactPool)
 	}
 	entry := restarted.ControlArtifactPool.Entries[0]
-	if !bytes.Equal(entry.ArtifactJSON, artifact) || entry.ArtifactDigest != base64.RawURLEncoding.EncodeToString(digest[:]) {
+	if !jsonEqual(entry.ArtifactJSON, artifact) || entry.ArtifactDigest != base64.RawURLEncoding.EncodeToString(digest[:]) {
 		t.Fatalf("Load() control artifact entry = %#v", entry)
 	}
 }
@@ -100,7 +101,7 @@ func TestSaveAndLoadPreserveControlArtifactDigestAcrossRestart(t *testing.T) {
 func TestSaveArtifactWriteFailurePreservesPreviousRestartArtifact(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.json")
 	oldArtifact := json.RawMessage(directArtifactFixture)
-	oldConfig := configWithDirectArtifact(oldArtifact, false)
+	oldConfig := configWithPoolArtifact(oldArtifact, false)
 	if err := Save(path, oldConfig); err != nil {
 		t.Fatalf("Save(old) error = %v", err)
 	}
@@ -110,10 +111,13 @@ func TestSaveArtifactWriteFailurePreservesPreviousRestartArtifact(t *testing.T) 
 	}
 
 	next := *oldConfig
-	nextDirect := *oldConfig.Direct
+	nextPool := *oldConfig.ControlArtifactPool
+	nextPool.Entries = append([]ControlArtifactEntry(nil), nextPool.Entries...)
+	nextDirect := nextPool.Entries[0]
 	nextDirect.ArtifactJSON = json.RawMessage(strings.Replace(directArtifactFixture, "channel-1", "channel-2", 1))
 	nextDirect.ExpiresAtUnixS = 4102444900
-	next.Direct = &nextDirect
+	nextPool.Entries[0] = nextDirect
+	next.ControlArtifactPool = &nextPool
 	persistence := defaultConfigPersistence()
 	persistence.writeConfig = func(string, *Config) error { return errors.New("rename denied") }
 	if err := saveConfig(path, &next, persistence); err == nil || !strings.Contains(err.Error(), "rename denied") {
@@ -130,50 +134,44 @@ func TestSaveArtifactWriteFailurePreservesPreviousRestartArtifact(t *testing.T) 
 	if err != nil {
 		t.Fatalf("Load() after failed save error = %v", err)
 	}
-	if restarted.Direct == nil || !jsonEqual(restarted.Direct.ArtifactJSON, oldArtifact) {
-		t.Fatalf("restart did not retain old artifact: %#v", restarted.Direct)
+	if restarted.ControlArtifactPool == nil || !jsonEqual(restarted.ControlArtifactPool.Entries[0].ArtifactJSON, oldArtifact) {
+		t.Fatalf("restart did not retain old artifact: %#v", restarted.ControlArtifactPool.Entries[0])
 	}
 }
 
-func configWithDirectArtifact(artifact json.RawMessage, spent bool) *Config {
-	return &Config{
-		CloudOrigin:              "https://redeven.test",
-		AccessPointOrigin:        "https://dev.redeven.test",
-		EnvironmentID:            "env-1",
-		LocalEnvironmentPublicID: "local-1",
-		BindingGeneration:        1,
-		AgentInstanceID:          "agent-1",
-		Direct: &DirectConnectInfo{
-			ArtifactJSON:   append(json.RawMessage(nil), artifact...),
-			ExpiresAtUnixS: 4102444800,
-			Spent:          spent,
-		},
+func configWithPoolArtifact(artifact json.RawMessage, spent bool) *Config {
+	association := testCloudAssociation()
+	association.RuntimePublicID = "local-1"
+	association.Binding.RuntimePublicID = "local-1"
+	association.Binding.EnvPublicID = "env-1"
+	association.Binding.Generation = 1
+	pool := NewControlArtifactPool(1)
+	pool.LogicalBindingID = "runtime-cloud-v5:binding"
+	pool.RecoveryState = ControlArtifactRecoveryReady
+	digest := sha256.Sum256(artifact)
+	if spent {
+		artifact = nil
 	}
+	pool.Entries = []ControlArtifactEntry{{Sequence: 1, ArtifactJSON: artifact, ArtifactDigest: base64.RawURLEncoding.EncodeToString(digest[:]), ChannelID: "channel-1", ExpiresAtUnixS: 4102444800, Spent: spent}}
+	association.Binding.IdentityExpiresAtUnixMS = 4102444800000
+	return &Config{CloudOrigin: association.CloudOrigin, AccessPointOrigin: association.RegionOrigin, CloudID: association.CloudID, EnvironmentID: "env-1", LocalEnvironmentPublicID: "local-1", BindingGeneration: 1, AgentInstanceID: "agent-1", CloudAssociation: association, CloudRoute: &CloudRoute{Kind: CloudRouteDirect, Revision: 1}, ControlArtifactPool: pool}
 }
 
 func assertDirectEnvelopeFields(t *testing.T, path string) {
 	t.Helper()
-	body, err := os.ReadFile(path)
+	raw, err := os.ReadFile(path)
 	if err != nil {
-		t.Fatalf("ReadFile() error = %v", err)
+		t.Fatal(err)
 	}
 	var document map[string]json.RawMessage
-	if err := json.Unmarshal(body, &document); err != nil {
-		t.Fatalf("Unmarshal(config) error = %v", err)
+	if json.Unmarshal(raw, &document) != nil {
+		t.Fatal("invalid JSON")
 	}
-	var direct map[string]json.RawMessage
-	if err := json.Unmarshal(document["direct"], &direct); err != nil {
-		t.Fatalf("Unmarshal(direct) error = %v", err)
+	if _, exists := document["direct"]; exists {
+		t.Fatal("retired direct envelope persisted")
 	}
-	for _, field := range []string{"ws_url", "channel_id", "e2ee_psk_b64u", "e2ee_psk_set", "channel_init_expire_at_unix_s", "default_suite"} {
-		if _, ok := direct[field]; ok {
-			t.Fatalf("legacy direct field %q persisted in envelope: %s", field, document["direct"])
-		}
-	}
-	for _, field := range []string{"artifact_json", "expires_at_unix_s", "spent"} {
-		if _, ok := direct[field]; !ok {
-			t.Fatalf("direct envelope missing %q: %s", field, document["direct"])
-		}
+	if len(document["control_artifact_pool"]) == 0 {
+		t.Fatal("missing opaque reserve")
 	}
 }
 

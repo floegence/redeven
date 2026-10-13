@@ -1,3 +1,4 @@
+import {RuntimeCloudConnections} from './RuntimeCloudConnections';
 import { RuntimeGatewaySetupDialog } from './RuntimeGatewaySetupDialog';
 import { runtimeGatewayAccessPresentation } from '../shared/runtimeGatewayAccessPresentation';
 import { RuntimeGatewayConnectionsDialog } from './RuntimeGatewayConnectionsDialog';
@@ -1016,7 +1017,7 @@ function EnvironmentOwnerSurface(
               <Clock aria-hidden="true" />
               <span>{card().runtime_started_label}</span>
             </span>
-            <Show when={!props.paired && (!props.gatewayPerspective || props.gatewayMember?.cloud_publication) && environmentControlPlaneLabel(props.environment)}>
+            <Show when={!props.paired && (!props.gatewayPerspective || !!props.environment.runtime_service?.bindings?.cloud_link.cloud) && environmentControlPlaneLabel(props.environment)}>
               {(label) => (
                 <span class="redeven-card-cloud-affiliation" title={label()}>
                   <Cloud aria-hidden="true" />
@@ -1038,7 +1039,12 @@ function EnvironmentOwnerSurface(
           endpointPopoverOpen={props.endpointPopoverOpen} onEndpointPopoverOpenChange={props.onEndpointPopoverOpenChange}
           selectedEndpointID={props.selectedEndpointID} selectEndpointForQRCode={props.selectEndpointForQRCode}
         />
-        <Show when={props.paired && props.relationshipRole === 'cloud'}>{props.connectionStatus()}</Show>
+        <Show when={props.paired && props.relationshipRole === 'cloud' && !runtime().runtime_service?.bindings?.cloud_link.cloud}>{props.connectionStatus()}</Show>
+        <Show when={runtime().provider_runtime_link_target && runtime().runtime_service?.bindings?.cloud_link.cloud}>
+          <RuntimeCloudConnections targetID={runtime().provider_runtime_link_target!.id} binding={runtime().runtime_service!.bindings!.cloud_link}
+            memberships={runtime().runtime_service?.gateway_memberships ?? []} i18n={props.i18n} openInBrowser={props.openInBrowser}
+            onChanged={async () => { if (!await props.refreshEnvironmentRuntime(runtime(), 'connect')) throw new Error('Runtime status could not be refreshed'); }} />
+        </Show>
         <Show when={runtime().kind !== 'provider_environment' && runtime().runtime_service?.capabilities?.runtime_gateway?.supported && runtime().provider_runtime_link_target}>
           <RuntimeGatewayJoinPanel gateways={props.gateways} targetLabel={runtime().provider_runtime_link_target?.label ?? runtime().label} focusOwner={() => ownerElement?.focus()} targetID={runtime().provider_runtime_link_target!.id} i18n={props.i18n} purpose={gatewayJoinPurpose()} address={gatewayJoinAddress()} openRequest={gatewayJoinOpenRequest()} hideTrigger onClose={()=>void props.refreshEnvironmentRuntime(runtime(),'connect')} />
           <RuntimeGatewayConnectionsDialog targetID={runtime().provider_runtime_link_target!.id} mode={gatewayMode()}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -16,6 +17,23 @@ import (
 )
 
 const controlArtifactFixture = `{"correlation":{"tags":[],"v":3},"path":{"candidates":[{"carrier":"websocket","id":"issuer-ws","tls":{"mode":"ca"},"url":"wss://issuer.example/flowersec/v3/direct","wire_profile":"flowersec-direct/3"}],"kind":"direct","listener_audience":"issuer-audience","rendezvous_group_id":"issuer-group","routing_token":"QkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkI"},"profile":"flowersec/3","scoped":[],"session":{"allowed_suites":[1,2],"channel_id":"issuer-shared","contract_hash_b64u":"81XXUykAE_J_K1LvRqkr_B7H3CCCcSRF7E7CIbmfwCU","default_suite":1,"e2ee_psk_b64u":"QkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkI","establish_timeout_seconds":30,"idle_timeout_seconds":60,"init_expire_at_unix_s":2000000000,"max_inbound_streams":32,"rekey_completion_timeout_seconds":30,"rekey_prepare_timeout_seconds":10,"selected_features":0},"v":3}`
+
+func TestCloudRecoveryPhasesOnlyTheFirstRetry(t *testing.T) {
+	source := &controlArtifactSource{}
+	cause := errors.New("pending approval")
+	before := time.Now()
+	first := source.retryRecovery(cause, 30*time.Second)
+	firstAt := time.UnixMilli(first.RetryDisposition().RetryAtUnixMilliseconds)
+	if !errors.Is(first, cause) || !firstAt.After(before.Add(-time.Millisecond)) || firstAt.After(time.Now().Add(30*time.Second)) {
+		t.Fatal("first recovery retry did not keep a bounded phase")
+	}
+	before = time.Now()
+	second := source.retryRecovery(cause, 30*time.Second)
+	secondAt := time.UnixMilli(second.RetryDisposition().RetryAtUnixMilliseconds)
+	if secondAt.Before(before.Add(30*time.Second-time.Millisecond)) || secondAt.After(time.Now().Add(30*time.Second)) {
+		t.Fatal("later recovery retry did not preserve the server interval")
+	}
+}
 
 func TestControlArtifactSourceUsesPublishedFlowersecLeaseAndPersistsSpend(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.json")
@@ -38,10 +56,21 @@ func TestControlArtifactSourceUsesPublishedFlowersecLeaseAndPersistsSpend(t *tes
 			}},
 		},
 	}
+	cfg.CloudOrigin = "https://redeven.test"
+	cfg.AccessPointOrigin = "https://dev.redeven.test"
+	cfg.EnvironmentID = "env"
+	cfg.LocalEnvironmentPublicID = "local"
+	attachTestCloudAssociation(cfg)
 	if err := config.Save(path, cfg); err != nil {
 		t.Fatalf("Save() error = %v", err)
 	}
-	a := &Agent{cfg: cfg, configPath: path}
+	// Exercise the real save/restart boundary before the published SDK parses
+	// the reserve; JSON indentation must not invalidate the opaque artifact.
+	reloaded, loadErr := config.Load(path)
+	if loadErr != nil {
+		t.Fatal(loadErr)
+	}
+	a := &Agent{cfg: reloaded, configPath: path}
 	savedAI := &config.AIConfig{Providers: []config.AIProvider{{
 		ID: "openai", Type: "openai", AuthMethod: config.AIAuthChatGPT, AccountID: "saved-account",
 		ModelSelection: &config.AIModelSelection{SelectedModels: []string{"gpt-6.1-sol"}},
@@ -71,9 +100,8 @@ func TestControlArtifactSourceUsesPublishedFlowersecLeaseAndPersistsSpend(t *tes
 	if !reflect.DeepEqual(restarted.AI, savedAI) {
 		t.Fatal("control artifact spend overwrote the saved ChatGPT binding")
 	}
-	if _, sourceErr := source.Acquire(context.Background()); sourceErr == nil ||
-		sourceErr.RetryDisposition().Kind != flowersec.RetryDispositionTerminal {
-		t.Fatalf("Acquire() spent artifact error = %v, want terminal", sourceErr)
+	if _, _, err := a.acquireControlArtifactEntry(); err != errControlArtifactPoolEmpty {
+		t.Fatalf("spent reserve was reused: %v", err)
 	}
 }
 
@@ -216,31 +244,5 @@ func TestArtifactSpendLedgerPrunesOnlyPastRetention(t *testing.T) {
 	}
 	if len(entries) != 1 || entries[0].Name() != fmt.Sprintf("%x.spent", liveDigest) {
 		t.Fatalf("spend ledger entries = %#v, want only live digest", entries)
-	}
-}
-
-func TestControlArtifactSourceRevokesLegacyDirectAndRequiresRelink(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "config.json")
-	cfg := &config.Config{
-		BindingGeneration: 7,
-		Direct:            &config.DirectConnectInfo{ArtifactJSON: []byte(controlArtifactFixture), ExpiresAtUnixS: 4102444800},
-	}
-	if err := config.Save(path, cfg); err != nil {
-		t.Fatal(err)
-	}
-	a := &Agent{cfg: cfg, configPath: path}
-	source := &controlArtifactSource{agent: a}
-	if _, sourceErr := source.Acquire(context.Background()); sourceErr == nil || sourceErr.RetryDisposition().Kind != flowersec.RetryDispositionTerminal {
-		t.Fatalf("legacy Direct Acquire() error = %v, want terminal relink", sourceErr)
-	}
-	restarted, err := config.Load(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if restarted.Direct != nil || restarted.ControlArtifactPool == nil || restarted.ControlArtifactPool.RecoveryState != config.ControlArtifactRecoveryRelink {
-		t.Fatalf("legacy Direct was not converted to relink pool: %#v", restarted)
-	}
-	if len(restarted.ControlArtifactPool.Entries) != 1 || !restarted.ControlArtifactPool.Entries[0].Revoked || restarted.ControlArtifactPool.Entries[0].ArtifactJSON != nil {
-		t.Fatalf("legacy Direct tombstone = %#v", restarted.ControlArtifactPool.Entries)
 	}
 }

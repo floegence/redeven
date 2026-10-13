@@ -14,7 +14,7 @@ import (
 	gp "github.com/floegence/redeven/internal/runtimegateway/protocol"
 )
 
-const InvitationExchangePath = "/v5/member/invitation-exchange"
+const InvitationExchangePath = "/v6/member/invitation-exchange"
 const invitationExchangePurpose = "redeven.gateway.enrollment.v1"
 
 var (

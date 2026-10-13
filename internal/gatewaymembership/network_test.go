@@ -45,7 +45,7 @@ func TestNetworkSettingsPreserveAuthorityAndRecoverAfterRestart(t *testing.T) {
 
 func TestAllowedHostsMatchRequestAuthorityWithoutTrustingForwardedHeaders(t *testing.T) {
 	s, _ := membershipStore(t)
-	request := httptest.NewRequest("GET", "https://arbitrary.example:7443/v5/member/invitation-exchange", nil)
+	request := httptest.NewRequest("GET", "https://arbitrary.example:7443/v6/member/invitation-exchange", nil)
 	if !s.AllowsHost(request) {
 		t.Fatal("default must allow all Hosts")
 	}
@@ -92,59 +92,13 @@ func TestNetworkSettingsRejectInvalidAndFailedWritesAtomically(t *testing.T) {
 	}
 }
 
-func TestNetworkSettingsMigrationRetainsExistingState(t *testing.T) {
+func TestCurrentNetworkSettingsPreserveHostnameBindingsAndRejectDrift(t *testing.T) {
 	s, identity := membershipStore(t)
-	if err := s.SetCloudNamespace(t.Context(), "namespace_network"); err != nil {
-		t.Fatal(err)
-	}
-	consumed, err := s.Invite("admin")
-	if err != nil {
-		t.Fatal(err)
-	}
-	request, _ := memberRequest(t, consumed, "runtime_migration")
-	if _, err := s.Join(t.Context(), request); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.Invite("admin"); err != nil {
-		t.Fatal(err)
-	}
 	old := s.clone()
-	old.SchemaVersion = 3
-	old.Endpoint.AllowedHosts = nil
-	if err := gatewaystate.Write(s.path, old); err != nil {
-		t.Fatal(err)
-	}
-	reopened, err := NewStore(s.path, identity, "", "", s.hooks)
-	if err != nil {
-		t.Fatal(err)
-	}
-	expected := old
-	expected.SchemaVersion = 4
-	expected.Endpoint.AllowedHosts = []string{}
-	if !reflect.DeepEqual(reopened.clone(), expected) {
-		t.Fatal("migration changed existing member, invitation, identity, policy or Cloud state")
-	}
 	old.SchemaVersion = 5
-	if err := gatewaystate.Write(s.path, old); err != nil {
-		t.Fatal(err)
-	}
-	before, _ := os.ReadFile(s.path)
-	if _, err := NewStore(s.path, identity, "", "", s.hooks); err == nil {
-		t.Fatal("accepted future schema")
-	}
-	after, _ := os.ReadFile(s.path)
-	if string(before) != string(after) {
-		t.Fatal("future schema was modified")
-	}
-}
-
-func TestNetworkSettingsMigrationPreservesHostnameBindingsAndRejectsCurrentDrift(t *testing.T) {
-	s, identity := membershipStore(t)
-	old := s.clone()
-	old.SchemaVersion = 3
 	old.Endpoint.ListenAddress = "localhost:7443"
 	old.Endpoint.ListenAddresses = []string{"localhost:7443"}
-	old.Endpoint.AllowedHosts = nil
+	old.Endpoint.AllowedHosts = []string{}
 	if err := gatewaystate.Write(s.path, old); err != nil {
 		t.Fatal(err)
 	}
@@ -153,7 +107,7 @@ func TestNetworkSettingsMigrationPreservesHostnameBindingsAndRejectsCurrentDrift
 		t.Fatal(err)
 	}
 	if reopened.NetworkSettings().ListenAddresses[0] != "localhost:7443" {
-		t.Fatal("migration changed existing hostname binding")
+		t.Fatal("restart changed existing hostname binding")
 	}
 	drift := reopened.clone()
 	drift.Endpoint.AllowedHosts = nil

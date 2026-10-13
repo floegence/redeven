@@ -20,16 +20,15 @@ function productionBoundary(name: string, context: object) {
 function fixture() {
   const targets = new Set<string>();
   const versions = new Map([['ssh:runtime', 7]]);
-  const recovery = { settled: vi.fn(async () => undefined), forget: vi.fn() };
   const release = vi.fn(async () => undefined);
   const manage = vi.fn(async () => ({ joined: false, phase: 'not_joined' }));
-  const context = { explicitCloudLinkTargets: targets, cloudLinkIntentVersions: versions, cloudCredentialRecovery: recovery,
+  const context = { explicitCloudLinkTargets: targets, cloudLinkIntentVersions: versions,
     resolveCloudRuntimeLinkTarget: vi.fn(async () => ({ record: { startup: { runtime_control: { token: 'private' } } }, bridge_lease: { release } })),
     loadDesktopPreferencesCached: vi.fn(async () => ({})), manageRuntimeGateway: manage, providerRuntimeTargetIsCurrent: () => true,
     RuntimeControlError,
     launcherActionSuccess: (outcome: string) => ({ ok: true, outcome }), launcherActionFailure: () => ({ ok: false }) };
   const run = productionBoundary('manageRuntimeGatewayFromLauncher', context) as (request: DesktopLauncherActionRequest) => Promise<DesktopLauncherActionResult>;
-  return { run, targets, versions, recovery, release, manage, resolve: context.resolveCloudRuntimeLinkTarget };
+  return { run, targets, versions, release, manage, resolve: context.resolveCloudRuntimeLinkTarget };
 }
 
 describe('Runtime Gateway launcher ownership', () => {
@@ -76,7 +75,6 @@ describe('Runtime Gateway launcher ownership', () => {
     expect((await f.run({ kind: 'manage_runtime_gateway', runtime_target_id, operation: 'status' })).ok).toBe(true);
     expect(f.resolve).toHaveBeenCalledExactlyOnceWith({}, runtime_target_id);
     expect(f.manage).toHaveBeenCalledOnce(); expect(f.release).toHaveBeenCalledOnce();
-    expect(f.recovery.forget).not.toHaveBeenCalled();
   });
   it.each([
     [new Error('Connection ended'), 'GATEWAY_UNREACHABLE'],
@@ -87,10 +85,10 @@ describe('Runtime Gateway launcher ownership', () => {
     expect(await f.run({ kind: 'manage_runtime_gateway', runtime_target_id: 'ssh:runtime', operation: 'status' })).toMatchObject({ ok: false, gateway_error_code: code });
     expect(f.release).toHaveBeenCalledOnce();
   });
-  it.each(['join','retry','update-endpoints','leave'] as const)('preserves Cloud recovery during %s', async operation => {
+  it.each(['join','retry','update-endpoints','leave'] as const)('preserves independent Cloud intent during %s', async operation => {
    const f=fixture();f.targets.add('ssh:runtime');
    expect((await f.run({kind:'manage_runtime_gateway',runtime_target_id:'ssh:runtime',operation, ...(['join','update-endpoints'].includes(operation)?{preview_id:'a'.repeat(43)}:{gateway_id:'gateway'})})).ok).toBe(true);
-   expect(f.recovery.forget).not.toHaveBeenCalled();expect(f.versions.get('ssh:runtime')).toBe(7);expect(f.targets.has('ssh:runtime')).toBe(true);
+   expect(f.versions.get('ssh:runtime')).toBe(7);expect(f.targets.has('ssh:runtime')).toBe(true);
   });
   it.each([false, true])('reads status without acquiring or releasing a Cloud operation owner (already owned: %s)', async owned => {
     const f = fixture();
@@ -98,16 +96,12 @@ describe('Runtime Gateway launcher ownership', () => {
     expect((await f.run({ kind: 'manage_runtime_gateway', runtime_target_id: 'ssh:runtime', operation: 'status' })).ok).toBe(true);
     expect(f.versions.get('ssh:runtime')).toBe(7);
     expect(f.targets.has('ssh:runtime')).toBe(owned);
-    expect(f.recovery.settled).not.toHaveBeenCalled();
-    expect(f.recovery.forget).not.toHaveBeenCalled();
     expect(f.release).toHaveBeenCalledOnce();
   });
-  it('fences recovery for an acknowledged Cloud interruption and releases its owner', async () => {
+  it('serializes an acknowledged route interruption and releases its operation owner', async () => {
     const f = fixture();
-    expect((await f.run({ kind: 'manage_runtime_gateway', runtime_target_id: 'ssh:runtime', operation: 'leave', cloud_impact_acknowledged:true })).ok).toBe(true);
+    expect((await f.run({ kind: 'manage_runtime_gateway', runtime_target_id: 'ssh:runtime', operation: 'leave', route_impact_acknowledged:true })).ok).toBe(true);
     expect(f.versions.get('ssh:runtime')).toBe(8);
-    expect(f.recovery.settled).toHaveBeenCalledWith('ssh:runtime');
-    expect(f.recovery.forget).toHaveBeenCalledWith('ssh:runtime');
     expect(f.targets.size).toBe(0);
     expect(f.release).toHaveBeenCalledOnce();
   });

@@ -56,12 +56,12 @@ describe('sys codec', () => {
             session_id: 'desktop-session',
             connected_at_unix_ms: 1778750000000,
             model_count: 2,
-            missing_key_provider_ids: ['openai', 'anthropic', 'openai'],
+            missing_key_cloud_ids: ['openai', 'anthropic', 'openai'],
           },
           cloud_link: {
             state: 'linked',
             cloud_origin: ' https://redeven.test ',
-            provider_id: ' dev_redeven ',
+            cloud_id: ' dev_redeven ',
             env_public_id: ' env_demo ',
             access_point_origin: ' https://dev.redeven.test ',
             local_environment_public_id: ' le_demo ',
@@ -128,7 +128,7 @@ describe('sys codec', () => {
           cloudLink: {
             state: 'linked',
             cloudOrigin: 'https://redeven.test',
-            providerId: 'dev_redeven',
+            cloudId: 'dev_redeven',
             envPublicId: 'env_demo',
             accessPointOrigin: 'https://dev.redeven.test',
             localEnvironmentPublicId: 'le_demo',
@@ -211,7 +211,7 @@ describe('sys codec', () => {
         cloudLink: {
           state: 'unsupported',
           cloudOrigin: undefined,
-          providerId: undefined,
+          cloudId: undefined,
           envPublicId: undefined,
           localEnvironmentPublicId: undefined,
           bindingGeneration: undefined,

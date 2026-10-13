@@ -1,47 +1,37 @@
 package config
 
 import (
-	"crypto/ed25519"
-	"crypto/rand"
-	"encoding/base64"
-	"github.com/floegence/redeven/internal/gatewaymembership"
-	"github.com/floegence/redeven/internal/testutil/gatewayfixture"
 	"testing"
 
-	"github.com/floegence/redeven/internal/gatewaycloud"
-	gc "github.com/floegence/redeven/internal/gatewaycloud/protocol"
+	"github.com/floegence/redeven/internal/gatewaymembership"
+	rc "github.com/floegence/redeven/internal/runtimecloud/protocol"
+	"github.com/floegence/redeven/internal/testutil/gatewayfixture"
 )
 
-func TestGatewayManagementCanRestartWithoutAuthorizingControl(t *testing.T) {
-	_, key, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
+func TestGatewayManagementCanRestartWithoutCloudAuthorization(t *testing.T) {
 	store, _ := gatewayfixture.New(t, "https://gateway.internal:7443", "127.0.0.1:7443")
 	member := gatewayfixture.Enroll(t, store, "runtime")
-	path := &gatewaycloud.RuntimeConfig{MemberID: member.MemberID, MemberVersion: member.MemberVersion, ProtocolVersion: gc.ProtocolVersion, CloudOrigin: "https://cloud.example", RegionOrigin: "https://sg.cloud.example", GatewayPublicID: "gateway", NamespacePublicID: "namespace", RuntimePublicID: "runtime", RequestPublicID: gc.CandidateID("gateway", member.MemberID), PrivateKeyB64u: base64.RawURLEncoding.EncodeToString(key), Binding: &gc.Binding{MemberID: member.MemberID, MemberVersion: member.MemberVersion, PublicID: "binding", EnvPublicID: "env", Region: "sg", GatewayPublicID: "gateway", NamespacePublicID: "namespace", RuntimePublicID: "runtime", Generation: 2, State: "active"}}
-	cfg := &Config{Gateways: []*gatewaymembership.RuntimeConfig{member}, GatewayPublication: path, CloudOrigin: path.CloudOrigin, AccessPointOrigin: path.RegionOrigin, CloudID: "redeven", EnvironmentID: "env", LocalEnvironmentPublicID: "runtime", AgentInstanceID: "instance", BindingGeneration: 2}
-	for _, revoked := range []bool{false, true} {
-		path.Revoked = revoked
-		if err := cfg.ValidateGatewayManagement(); err != nil {
-			t.Fatal("a configured path cannot start its authenticated recovery observer", err)
-		}
-		if cfg.ValidateRemoteStrict() == nil {
-			t.Fatal("missing credentials or revoked access authorized the control channel")
-		}
+	cfg := &Config{Gateways: []*gatewaymembership.RuntimeConfig{member}, LocalEnvironmentPublicID: "runtime", AgentInstanceID: "instance"}
+	if err := cfg.ValidateGatewayManagement(); err != nil {
+		t.Fatal(err)
 	}
-	for _, mutate := range []func(*Config){
-		func(c *Config) { c.CloudOrigin = "https://other.example" },
-		func(c *Config) { c.AccessPointOrigin = "https://other-region.example" },
-		func(c *Config) { c.EnvironmentID = "another-env" },
-		func(c *Config) { c.LocalEnvironmentPublicID = "another-runtime" },
-		func(c *Config) { c.BindingGeneration++ },
-		func(c *Config) { c.CloudID = "another-provider" },
-	} {
-		changed := *cfg
-		mutate(&changed)
-		if changed.ValidateGatewayManagement() == nil {
-			t.Fatal("inconsistent configuration entered recovery")
-		}
+	if cfg.ValidateRemoteStrict() == nil {
+		t.Fatal("local membership granted Cloud access")
+	}
+	cfg.CloudAssociation = testCloudAssociation()
+	cfg.CloudAssociation.ApprovalState = rc.ApprovalRevoked
+	cfg.CloudRoute = &CloudRoute{Kind: CloudRouteGateway, MemberID: member.MemberID, Revision: 1}
+	if err := cfg.ValidateRemoteStrict(); err != nil {
+		t.Fatal("revoked intent must be able to run the sole recovery controller", err)
+	}
+	cfg.CloudAssociation.Enabled = false
+	if cfg.ValidateRemoteStrict() == nil {
+		t.Fatal("disabled intent started recovery")
+	}
+	if err := cfg.ValidateGatewayManagement(); err != nil {
+		t.Fatal("Cloud intent disabled independent local membership", err)
+	}
+	if (*Config)(nil).ValidateRemoteStrict() == nil {
+		t.Fatal("nil configuration accepted")
 	}
 }

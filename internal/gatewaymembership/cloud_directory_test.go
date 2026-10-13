@@ -8,15 +8,12 @@ import (
 	gp "github.com/floegence/redeven/internal/runtimegateway/protocol"
 )
 
-func TestCloudDenialSurvivesAllowRestartAndStaleAcknowledgement(t *testing.T) {
+func TestLocalEgressIntentIsIndependentOfCloudAcknowledgement(t *testing.T) {
 	store, identity := membershipStore(t)
 	if err := store.SetCloudNamespace(t.Context(), "namespace"); err != nil {
 		t.Fatal(err)
 	}
-	invite, err := store.Invite("admin")
-	if err != nil {
-		t.Fatal(err)
-	}
+	invite, _ := store.Invite("admin")
 	request, _ := memberRequest(t, invite, "runtime")
 	response, err := store.Join(t.Context(), request)
 	if err != nil {
@@ -29,37 +26,30 @@ func TestCloudDenialSurvivesAllowRestartAndStaleAcknowledgement(t *testing.T) {
 		}
 	}
 	set(gp.CloudAllow)
-	oldAllow, policy, _ := store.Snapshot()
+	old, policy, _ := store.Snapshot()
 	set(gp.CloudDeny)
+	if err := store.AcknowledgeCloudDirectory("namespace", policy.Revision, old); err != nil {
+		t.Fatal(err)
+	}
+	denied, current, _ := store.Snapshot()
+	if EffectiveCloudAllowed(denied[0], current) {
+		t.Fatal("Cloud acknowledgement overrode local denial")
+	}
 	set(gp.CloudAllow)
-	store, err = NewStore(store.path, identity, "", "", store.hooks)
+	reopened, err := NewStore(store.path, identity, "", "", store.hooks)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.AcknowledgeCloudDirectory("namespace", policy.Revision, oldAllow); err != nil {
+	allowed, current, _ := reopened.Snapshot()
+	if !EffectiveCloudAllowed(allowed[0], current) {
+		t.Fatal("Cloud synchronization blocked explicit local allow after restart")
+	}
+	if err := reopened.AcknowledgeCloudDirectory("namespace", policy.Revision, denied); err != nil {
 		t.Fatal(err)
 	}
-	pending, policy, _ := store.Snapshot()
-	if !pending[0].Member.CloudRevocationPending || EffectiveCloudAllowed(pending[0], policy) {
-		t.Fatal("an unsent denial was overwritten by a later allow or stale acknowledgement")
-	}
-	// A second denial must not be acknowledged by the first denial's delivery,
-	// even when the final desired permission has returned to the same value.
-	set(gp.CloudDeny)
-	set(gp.CloudAllow)
-	if err := store.AcknowledgeCloudDirectory("namespace", policy.Revision, pending); err != nil {
-		t.Fatal(err)
-	}
-	latest, policy, _ := store.Snapshot()
-	if !latest[0].Member.CloudRevocationPending || EffectiveCloudAllowed(latest[0], policy) {
-		t.Fatal("old denial receipt erased newer intent")
-	}
-	if err := store.AcknowledgeCloudDirectory("namespace", policy.Revision, latest); err != nil {
-		t.Fatal(err)
-	}
-	current, policy, _ := store.Snapshot()
-	if current[0].Member.CloudRevocationPending || !EffectiveCloudAllowed(current[0], policy) {
-		t.Fatal("confirmed denial did not release the desired policy")
+	allowed, current, _ = reopened.Snapshot()
+	if !EffectiveCloudAllowed(allowed[0], current) {
+		t.Fatal("old denial acknowledgement changed current local intent")
 	}
 }
 
@@ -89,7 +79,7 @@ func TestCloudHookIsReevaluatedBeforeReopenedStoreCanAuthorize(t *testing.T) {
 		t.Fatal(err)
 	}
 	members, policy, _ := store.Snapshot()
-	if EffectiveCloudAllowed(members[0], policy) || members[0].HookCloudAllowed || !members[0].Member.CloudRevocationPending {
+	if EffectiveCloudAllowed(members[0], policy) || members[0].HookCloudAllowed {
 		t.Fatal("restart installed a persisted grant without evaluating the current hook")
 	}
 }
@@ -118,7 +108,7 @@ func TestNewMemberEvaluatesCurrentCloudPolicy(t *testing.T) {
 	}
 }
 
-func TestCloudDirectoryAcknowledgementCannotClearANewerRevocation(t *testing.T) {
+func TestCloudDirectoryAcknowledgementCannotChangeLocalPolicyOrReviveRemovedMember(t *testing.T) {
 	store, _ := membershipStore(t)
 	if err := store.SetCloudNamespace(t.Context(), "namespace"); err != nil {
 		t.Fatal(err)
@@ -144,16 +134,16 @@ func TestCloudDirectoryAcknowledgementCannotClearANewerRevocation(t *testing.T) 
 	if err := store.AcknowledgeCloudDirectory("namespace", policy.Revision, observed); err != nil {
 		t.Fatal(err)
 	}
-	current, _, _ := store.Snapshot()
-	if !current[0].Member.CloudRevocationPending {
+	current, currentPolicy, _ := store.Snapshot()
+	if EffectiveCloudAllowed(current[0], currentPolicy) {
 		t.Fatal("stale sync acknowledged an unsent local denial")
 	}
 	if err := store.AcknowledgeCloudDirectory("namespace", policy.Revision, current); err != nil {
 		t.Fatal(err)
 	}
-	current, _, _ = store.Snapshot()
-	if current[0].Member.CloudRevocationPending {
-		t.Fatal("committed Cloud revocation remains pending")
+	current, currentPolicy, _ = store.Snapshot()
+	if EffectiveCloudAllowed(current[0], currentPolicy) {
+		t.Fatal("Cloud readback overrode local denial")
 	}
 	if err := store.Remove(response.MemberID, 1); err != nil {
 		t.Fatal(err)

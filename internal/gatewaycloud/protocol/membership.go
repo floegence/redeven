@@ -10,17 +10,25 @@ import (
 	"time"
 
 	flowersec "github.com/floegence/flowersec/flowersec-go/v5"
-	gp "github.com/floegence/redeven/internal/runtimegateway/protocol"
 )
 
-const MemberProtocolVersion = "redeven-gateway-v5"
+const MemberProtocolVersion = "redeven-gateway-v6"
 
-const legacyMemberProtocolVersion = "redeven-gateway-v4"
+type GatewayEndpointScope string
 
-type GatewayEndpoint = gp.GatewayEndpoint
+const (
+	GatewayEndpointLAN     GatewayEndpointScope = "lan"
+	GatewayEndpointOverlay GatewayEndpointScope = "overlay"
+	GatewayEndpointPublic  GatewayEndpointScope = "public"
+)
 
-// MemberDelegation keeps existing v4 member identities verifiable while new
-// invitations and members use the v5 endpoint contract.
+type GatewayEndpoint struct {
+	EndpointID string               `json:"endpoint_id"`
+	Address    string               `json:"address"`
+	Scope      GatewayEndpointScope `json:"scope"`
+	Priority   int                  `json:"priority"`
+}
+
 type MemberDelegation struct {
 	ProtocolVersion        string `json:"protocol_version"`
 	GatewayID              string `json:"gateway_id"`
@@ -102,7 +110,6 @@ func (m DirectoryMember) CloudAllowed(p GatewayPolicy) bool {
 	return m.State == "active" && m.HookAllowed && (m.CloudPermission == "allow" || (m.CloudPermission == "inherit" && p.DefaultCloudAllowed))
 }
 
-// GatewayMachineIdentity binds the stable Gateway to its rotating Cloud key.
 type GatewayMachineIdentity struct {
 	GatewayID     string `json:"gateway_id"`
 	PublicKeyB64u string `json:"public_key_b64u"`
@@ -114,7 +121,6 @@ type AutomaticPublicationApproval struct {
 	Authorized       bool  `json:"authorized"`
 }
 
-// GatewayCommand permits fixed administrative actions, never programs or arbitrary URLs.
 type GatewayCommand struct {
 	PublicID        string `json:"public_id"`
 	Kind            string `json:"kind"`
@@ -159,12 +165,7 @@ func ValidMemberID(value string) bool {
 }
 
 func MemberID(invitationID, key string) string {
-	digest := sha256.Sum256([]byte("redeven.gateway.member.v5\x00" + invitationID + "\x00" + key))
-	return "member_" + hex.EncodeToString(digest[:24])
-}
-
-func legacyMemberID(invitationID, key string) string {
-	digest := sha256.Sum256([]byte("redeven.gateway.member.v4\x00" + invitationID + "\x00" + key))
+	digest := sha256.Sum256([]byte("redeven.gateway.member.v6\x00" + invitationID + "\x00" + key))
 	return "member_" + hex.EncodeToString(digest[:24])
 }
 
@@ -209,12 +210,8 @@ func verifyValue(domain string, value any, publicKey, signature string) error {
 }
 
 func (d MemberDelegation) Verify() error {
-	domain, expectedMemberID := "redeven.gateway.delegation.v5", MemberID(d.InvitationID, d.PublicKeyB64u)
-	switch d.ProtocolVersion {
-	case legacyMemberProtocolVersion:
-		domain, expectedMemberID = "redeven.gateway.delegation.v4", legacyMemberID(d.InvitationID, d.PublicKeyB64u)
-	case MemberProtocolVersion:
-	default:
+	domain, expectedMemberID := "redeven.gateway.delegation.v6", MemberID(d.InvitationID, d.PublicKeyB64u)
+	if d.ProtocolVersion != MemberProtocolVersion {
 		return ErrInvalidProof
 	}
 	if !ValidMemberID(d.GatewayID) || !ValidMemberID(d.InvitationID) || !ValidMemberID(d.RuntimePublicID) || d.MemberID != expectedMemberID || d.ConsentedAtUnixMS <= 0 || !d.ManageAccess || !d.ManageCloudPublication {
@@ -225,36 +222,9 @@ func (d MemberDelegation) Verify() error {
 	return verifyValue(domain, d, d.PublicKeyB64u, signature)
 }
 
-// proofContext retains challenge and identity while avoiding a circular payload hash.
 func proofContext(proof Proof) Proof {
 	proof.BodySHA256, proof.SignatureB64u = "", ""
 	return proof
-}
-
-func runtimeJoinStatement(proof Proof, request RuntimeJoin) any {
-	request.MemberAuthorization = ""
-	return struct {
-		Proof   Proof       `json:"proof"`
-		Request RuntimeJoin `json:"request"`
-	}{proofContext(proof), request}
-}
-
-func SignRuntimeMembership(proof Proof, request *RuntimeJoin, memberKey ed25519.PrivateKey) error {
-	if request == nil || proof.Purpose != PurposeRuntimeJoin {
-		return ErrInvalidProof
-	}
-	signature, err := signValue("redeven.gateway-cloud.member-authorization.v2", runtimeJoinStatement(proof, *request), memberKey)
-	if err == nil {
-		request.MemberAuthorization = signature
-	}
-	return err
-}
-
-func VerifyRuntimeMembership(proof Proof, request RuntimeJoin, gatewayID string, now time.Time) error {
-	if proof.ProtocolVersion != ProtocolVersion || proof.Purpose != PurposeRuntimeJoin || request.MemberVersion < 1 || request.Delegation.Verify() != nil || request.Delegation.GatewayID != gatewayID || request.Delegation.RuntimePublicID != proof.RuntimePublicID || request.Delegation.ConsentedAtUnixMS > now.Add(time.Minute).UnixMilli() || proof.ExpiresAtUnixMS <= now.UnixMilli() {
-		return ErrInvalidProof
-	}
-	return verifyValue("redeven.gateway-cloud.member-authorization.v2", runtimeJoinStatement(proof, request), request.Delegation.PublicKeyB64u, request.MemberAuthorization)
 }
 
 func gatewayIdentityStatement(proof Proof, request GatewayRegistration) any {

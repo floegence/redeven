@@ -33,7 +33,6 @@ import (
 	"github.com/floegence/redeven/internal/diagnostics"
 	"github.com/floegence/redeven/internal/filesystemscope"
 	"github.com/floegence/redeven/internal/fs"
-	gc "github.com/floegence/redeven/internal/gatewaycloud/protocol"
 	"github.com/floegence/redeven/internal/gitrepo"
 	"github.com/floegence/redeven/internal/gitruntime"
 	"github.com/floegence/redeven/internal/logsafe"
@@ -42,6 +41,8 @@ import (
 	"github.com/floegence/redeven/internal/portforward"
 	"github.com/floegence/redeven/internal/redevpluginintegration"
 	"github.com/floegence/redeven/internal/rpcutil"
+	"github.com/floegence/redeven/internal/runtimecloud"
+	rc "github.com/floegence/redeven/internal/runtimecloud/protocol"
 	"github.com/floegence/redeven/internal/runtimeidentity"
 	"github.com/floegence/redeven/internal/runtimeproxy"
 	"github.com/floegence/redeven/internal/runtimeservice"
@@ -53,11 +54,9 @@ import (
 )
 
 const (
-	controlRPCTypeRegister          uint32 = 41001
-	controlRPCTypeHeartbeat         uint32 = 41002
-	controlRPCTypeGrantServer       uint32 = 41003 // notify
-	controlRPCTypeRuntimeDisconnect uint32 = 41005
-	controlRPCTypeGatewayMigration  uint32 = 41008
+	controlRPCTypeRegister    uint32 = 41001
+	controlRPCTypeHeartbeat   uint32 = 41002
+	controlRPCTypeGrantServer uint32 = 41003 // notify
 )
 
 func computerUseRuntime(stateDir string) (ai.TargetToolExecutor, ai.TargetResolver) {
@@ -245,14 +244,9 @@ type Options struct {
 }
 
 type Agent struct {
-	gatewayMember        gatewayMemberOwner
-	gatewayRecoveryMu    sync.Mutex
-	gatewayObserverOnce  sync.Once
-	gatewayCloudError    string
-	gatewayCloudState    string
-	gatewayCloudMemberID string
-	cfg                  *config.Config
-	log                  *slog.Logger
+	gatewayMember gatewayMemberOwner
+	cfg           *config.Config
+	log           *slog.Logger
 
 	audit *auditlog.Store
 	diag  *diagnostics.Store
@@ -315,11 +309,9 @@ type Agent struct {
 	controlRPCCallMu              sync.Mutex
 	controlArtifact               controlArtifactSessionBinding
 	// Optional diagnostics observe completed calls without changing authority or retries.
-	controlGrantObserver  func(context.Context, json.RawMessage)
-	controlRPCObserver    func(uint32, time.Duration, error)
-	gatewayStatusObserver func(time.Duration, error)
-	controlTrustRoots     *x509.CertPool
-	gatewayStatusClient   *gatewayStatusClient
+	controlGrantObserver func(context.Context, json.RawMessage)
+	controlRPCObserver   func(uint32, time.Duration, error)
+	controlTrustRoots    *x509.CertPool
 
 	localUIEnabled          bool
 	controlChannelEnabled   bool
@@ -336,15 +328,16 @@ type Agent struct {
 //
 // NOTE: This is an in-memory registry used for UI/auditing; it must not be used for authorization decisions.
 type activeSession struct {
-	gatewayBindingPublicID   string
-	gatewayBindingGeneration int64
-	cancel                   context.CancelFunc
-	meta                     session.Meta
-	grantDigest              [sha256.Size]byte
-	grantExpiresAt           int64
-	connectedAtUnixMs        int64 // set after the Flowersec connection succeeds
-	pluginGeneration         PluginSessionGeneration
-	runtimeLease             *runtimeservice.WorkloadLease
+	cloudBindingPublicID   string
+	cloudBindingGeneration int64
+	cloudRouteRevision     int64
+	cancel                 context.CancelFunc
+	meta                   session.Meta
+	grantDigest            [sha256.Size]byte
+	grantExpiresAt         int64
+	connectedAtUnixMs      int64 // set after the Flowersec connection succeeds
+	pluginGeneration       PluginSessionGeneration
+	runtimeLease           *runtimeservice.WorkloadLease
 }
 
 func New(opts Options) (*Agent, error) {
@@ -621,7 +614,6 @@ func (a *Agent) Run(ctx context.Context) error {
 	a.mu.Lock()
 	a.runCtx = ctx
 	a.mu.Unlock()
-	a.startGatewayCloudObserver()
 	if a.controlChannelEnabled {
 		a.startControlChannel(ctx)
 	} else {
@@ -752,18 +744,30 @@ func (a *Agent) runControlLoop(ctx context.Context) {
 			a.controlGrantObserver(handlerCtx, payload)
 			return nil
 		}
-		a.handleGrantNotifyForConfig(handlerCtx, payload, cfg)
+		current := a.remoteConfigSnapshot()
+		if !sameCloudOwner(cfg, current) {
+			return nil
+		}
+		a.handleGrantNotifyForConfig(handlerCtx, payload, current)
 		return nil
 	}); err != nil {
 		a.log.Error("control channel not started: register grant handler", "error", err)
 		return
+	}
+	if cfg.CloudAssociation != nil {
+		if err := a.registerCloudClosureHandler(handlers, cfg); err != nil {
+			a.log.Error("control channel not started: register closure handler", "error", err)
+			return
+		}
 	}
 	proxy, err := gatewayProxy(cfg)
 	if err != nil {
 		a.log.Warn("Gateway path unavailable")
 		return
 	}
-	controller, err := flowersec.NewConnectionController(&controlArtifactSource{agent: a, expectedConfig: cfg}, flowersec.ConnectionControllerOptions{
+	source := &controlArtifactSource{agent: a, expectedConfig: cfg}
+	defer source.Close()
+	controller, err := flowersec.NewConnectionController(source, flowersec.ConnectionControllerOptions{
 		Connector: flowersec.ConnectorOptions{
 			HTTPSProxy: proxy,
 			// Nil selects platform trust, including macOS Keychain roots.
@@ -915,7 +919,7 @@ func (a *Agent) runControlSession(ctx context.Context, current flowersec.Session
 
 	// Register is the Portal-side active-owner fence for this exact artifact.
 	registered, err := callControlJSON[registerReq, registerResp](ctx, a, rpcC, controlRPCTypeRegister, &registerReq{
-		NamespaceBinding: gatewayFence(cfg), EnvPublicID: cfg.EnvironmentID,
+		Binding: cloudBinding(cfg), EnvPublicID: cfg.EnvironmentID,
 		LocalEnvironmentPublicID: cfg.LocalEnvironmentPublicID,
 		BindingGeneration:        cfg.BindingGeneration,
 		ControlArtifactSequence:  artifactBinding.Sequence,
@@ -958,6 +962,14 @@ func (a *Agent) runControlSession(ctx context.Context, current flowersec.Session
 		}
 	})
 
+	var closureClient *runtimecloud.Client
+	defer func() {
+		if closureClient != nil {
+			closureClient.Close()
+		}
+	}()
+	a.maintainCloudClosureOutbox(ctx, cfg, &closureClient)
+
 	// Heartbeat loop.
 	t := time.NewTimer(periodic.InitialDelay(policy.interval()))
 	defer t.Stop()
@@ -983,6 +995,7 @@ func (a *Agent) runControlSession(ctx context.Context, current flowersec.Session
 				return err
 			}
 			t.Reset(policy.interval())
+			a.maintainCloudClosureOutbox(ctx, cfg, &closureClient)
 			if err := a.maintainControlArtifactPool(ctx, rpcC); err != nil {
 				a.log.Warn("control recovery reserve remains degraded", "error", err)
 			}
@@ -1009,14 +1022,12 @@ func (a *Agent) remoteConfigSnapshot() *config.Config {
 		return nil
 	}
 	cfg := *a.cfg
-	cfg.Gateways = a.cfg.CloneGateways()
-	cfg.GatewayPublication = a.cfg.GatewayPublication.Clone()
-	cfg.GatewayMigrationEvidence = a.cfg.GatewayMigrationEvidence.Clone()
-	if a.cfg.Direct != nil {
-		direct := *a.cfg.Direct
-		direct.ArtifactJSON = append([]byte(nil), a.cfg.Direct.ArtifactJSON...)
-		cfg.Direct = &direct
+	cfg.CloudAssociation = a.cfg.CloudAssociation.Clone()
+	if a.cfg.CloudRoute != nil {
+		route := *a.cfg.CloudRoute
+		cfg.CloudRoute = &route
 	}
+	cfg.Gateways = a.cfg.CloneGateways()
 	if a.cfg.ControlArtifactPool != nil {
 		pool := *a.cfg.ControlArtifactPool
 		if a.cfg.ControlArtifactPool.PendingTopUp != nil {
@@ -1057,15 +1068,6 @@ func (a *Agent) clearCurrentControlRPC(serial uint64) {
 	}
 }
 
-func (a *Agent) currentControlRPC() rpcutil.Caller {
-	if a == nil {
-		return nil
-	}
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	return a.controlRPC
-}
-
 func callControlJSON[TReq any, TResp any](ctx context.Context, a *Agent, caller rpcutil.Caller, typeID uint32, req *TReq) (result *TResp, callErr error) {
 	start := time.Now()
 	defer func() {
@@ -1081,46 +1083,6 @@ func callControlJSON[TReq any, TResp any](ctx context.Context, a *Agent, caller 
 		defer a.controlRPCCallMu.Unlock()
 	}
 	return rpcutil.CallJSON[TReq, TResp](ctx, caller, typeID, req)
-}
-
-func (a *Agent) sendRuntimeDisconnect(ctx context.Context, snapshot providerDisconnectSnapshot, reasonCode string) error {
-	if a == nil {
-		return errors.New("nil agent")
-	}
-	caller := a.currentControlRPC()
-	if caller == nil {
-		return errProviderControlChannelNotConnected
-	}
-	a.controlRPCCallMu.Lock()
-	defer a.controlRPCCallMu.Unlock()
-	return sendRuntimeDisconnectWithCaller(ctx, caller, snapshot, reasonCode)
-}
-
-func sendRuntimeDisconnectWithCaller(ctx context.Context, caller rpcutil.Caller, snapshot providerDisconnectSnapshot, reasonCode string) error {
-	if caller == nil {
-		return errProviderControlChannelNotConnected
-	}
-	resp, err := rpcutil.CallJSON[runtimeDisconnectReq, runtimeDisconnectResp](ctx, caller, controlRPCTypeRuntimeDisconnect, &runtimeDisconnectReq{
-		EnvPublicID:              snapshot.EnvPublicID,
-		CloudOrigin:              snapshot.CloudOrigin,
-		CloudID:                  snapshot.CloudID,
-		AccessPointOrigin:        snapshot.AccessPointOrigin,
-		LocalEnvironmentPublicID: snapshot.LocalEnvironmentPublicID,
-		BindingGeneration:        snapshot.BindingGeneration,
-		AgentInstanceID:          snapshot.AgentInstanceID,
-		ReasonCode:               strings.TrimSpace(reasonCode),
-		NowUnixMs:                time.Now().UnixMilli(),
-	})
-	if err != nil {
-		return fmt.Errorf("runtime disconnect rpc: %w", err)
-	}
-	if resp == nil {
-		return errors.New("runtime disconnect rpc: empty response")
-	}
-	if !resp.OK || !resp.Cleared || strings.TrimSpace(resp.State) != "disconnected" {
-		return fmt.Errorf("runtime disconnect rpc: rejected state=%q cleared=%t", resp.State, resp.Cleared)
-	}
-	return nil
 }
 
 func requireJSONEOF(decoder *json.Decoder) error {
@@ -1270,7 +1232,7 @@ func (a *Agent) handleGrantNotifyForConfig(ctx context.Context, payload json.Raw
 	}
 	grantDigest := sha256.Sum256(n.GrantServer.ArtifactJSON)
 	a.mu.Lock()
-	if a.sessionStopping || a.cfg.EnvironmentID != cfg.EnvironmentID || a.cfg.BindingGeneration != cfg.BindingGeneration || (a.cfg.GatewayPublication != nil && a.cfg.GatewayPublication.Revoked) {
+	if a.sessionStopping || a.controlBusinessRejected || (cfg.CloudAssociation != nil && (!sameCloudOwner(cfg, a.cfg) || a.cfg.CloudAssociation.ApprovalState != rc.ApprovalApproved)) || a.cfg.EnvironmentID != cfg.EnvironmentID || a.cfg.BindingGeneration != cfg.BindingGeneration {
 		a.mu.Unlock()
 		runtimeLease.Release()
 		return
@@ -1299,9 +1261,12 @@ func (a *Agent) handleGrantNotifyForConfig(ctx context.Context, payload json.Raw
 		grantExpiresAt: n.GrantServer.ArtifactExpiresAtUnixS,
 		runtimeLease:   runtimeLease,
 	}
-	if fence := gatewayFence(cfg); fence != nil {
-		a.sessions[channelID].gatewayBindingPublicID = fence.PublicID
-		a.sessions[channelID].gatewayBindingGeneration = fence.Generation
+	if fence := cloudBinding(cfg); fence.Valid() {
+		a.sessions[channelID].cloudBindingPublicID = fence.PublicID
+		a.sessions[channelID].cloudBindingGeneration = fence.Generation
+		if cfg.CloudRoute != nil {
+			a.sessions[channelID].cloudRouteRevision = cfg.CloudRoute.Revision
+		}
 	}
 	a.sessionWG.Add(1)
 	a.mu.Unlock()
@@ -2030,19 +1995,19 @@ func hostnameBestEffort() string {
 // --- control channel types (wire JSON) ---
 
 type registerReq struct {
-	NamespaceBinding         *gc.BindingFence `json:"namespace_binding,omitempty"`
-	EnvPublicID              string           `json:"env_public_id,omitempty"`
-	LocalEnvironmentPublicID string           `json:"local_environment_public_id,omitempty"`
-	BindingGeneration        int64            `json:"binding_generation,omitempty"`
-	ControlArtifactSequence  uint64           `json:"control_artifact_sequence"`
-	ControlArtifactChannelID string           `json:"control_artifact_channel_id"`
-	AgentInstanceID          string           `json:"agent_instance_id,omitempty"`
-	Version                  string           `json:"version,omitempty"`
-	OS                       string           `json:"os,omitempty"`
-	Arch                     string           `json:"arch,omitempty"`
-	Hostname                 string           `json:"hostname,omitempty"`
-	EffectiveRunMode         string           `json:"effective_run_mode,omitempty"`
-	RemoteEnabled            bool             `json:"remote_enabled,omitempty"`
+	Binding                  rc.BindingFence `json:"binding"`
+	EnvPublicID              string          `json:"env_public_id,omitempty"`
+	LocalEnvironmentPublicID string          `json:"local_environment_public_id,omitempty"`
+	BindingGeneration        int64           `json:"binding_generation,omitempty"`
+	ControlArtifactSequence  uint64          `json:"control_artifact_sequence"`
+	ControlArtifactChannelID string          `json:"control_artifact_channel_id"`
+	AgentInstanceID          string          `json:"agent_instance_id,omitempty"`
+	Version                  string          `json:"version,omitempty"`
+	OS                       string          `json:"os,omitempty"`
+	Arch                     string          `json:"arch,omitempty"`
+	Hostname                 string          `json:"hostname,omitempty"`
+	EffectiveRunMode         string          `json:"effective_run_mode,omitempty"`
+	RemoteEnabled            bool            `json:"remote_enabled,omitempty"`
 }
 
 type registerResp struct {
@@ -2057,25 +2022,6 @@ type heartbeatReq struct {
 type heartbeatResp struct {
 	OK              bool            `json:"ok"`
 	HeartbeatPolicy heartbeatPolicy `json:"heartbeat_policy"`
-}
-
-type runtimeDisconnectReq struct {
-	EnvPublicID              string `json:"env_public_id,omitempty"`
-	CloudOrigin              string `json:"cloud_origin"`
-	CloudID                  string `json:"cloud_id"`
-	AccessPointOrigin        string `json:"access_point_origin"`
-	LocalEnvironmentPublicID string `json:"local_environment_public_id"`
-	BindingGeneration        int64  `json:"binding_generation"`
-	AgentInstanceID          string `json:"agent_instance_id,omitempty"`
-	ReasonCode               string `json:"reason_code"`
-	NowUnixMs                int64  `json:"now_unix_ms,omitempty"`
-}
-
-type runtimeDisconnectResp struct {
-	OK         bool   `json:"ok"`
-	Cleared    bool   `json:"cleared"`
-	State      string `json:"state"`
-	ReasonCode string `json:"reason_code,omitempty"`
 }
 
 func normalizeEffectiveRunMode(raw string) string {

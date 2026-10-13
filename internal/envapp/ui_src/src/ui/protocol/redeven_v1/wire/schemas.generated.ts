@@ -4025,7 +4025,7 @@ export const redevenWireSchemas = {
                   "model_count": {
                     "kind": "number"
                   },
-                  "missing_key_provider_ids": {
+                  "missing_key_cloud_ids": {
                     "kind": "array",
                     "item": {
                       "kind": "string"
@@ -4040,6 +4040,86 @@ export const redevenWireSchemas = {
               "cloud_link": {
                 "kind": "object",
                 "properties": {
+                  "cloud": {
+                    "kind": "object",
+                    "properties": {
+                      "association_revision": {
+                        "kind": "number"
+                      },
+                      "enabled": {
+                        "kind": "boolean"
+                      },
+                      "approval_state": {
+                        "kind": "union",
+                        "options": [
+                          {
+                            "kind": "literal",
+                            "value": "approved"
+                          },
+                          {
+                            "kind": "literal",
+                            "value": "pending"
+                          },
+                          {
+                            "kind": "literal",
+                            "value": "revoked"
+                          },
+                          {
+                            "kind": "literal",
+                            "value": "identity_required"
+                          },
+                          {
+                            "kind": "literal",
+                            "value": "action_required"
+                          }
+                        ]
+                      },
+                      "reason_code": {
+                        "kind": "string"
+                      },
+                      "connection_state": {
+                        "kind": "string"
+                      },
+                      "route": {
+                        "kind": "object",
+                        "properties": {
+                          "kind": {
+                            "kind": "union",
+                            "options": [
+                              {
+                                "kind": "literal",
+                                "value": "direct"
+                              },
+                              {
+                                "kind": "literal",
+                                "value": "gateway"
+                              }
+                            ]
+                          },
+                          "member_id": {
+                            "kind": "string"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ]
+                      },
+                      "route_revision": {
+                        "kind": "number"
+                      },
+                      "next_attempt_at_unix_ms": {
+                        "kind": "number"
+                      }
+                    },
+                    "required": [
+                      "approval_state",
+                      "association_revision",
+                      "connection_state",
+                      "enabled",
+                      "route",
+                      "route_revision"
+                    ]
+                  },
                   "state": {
                     "kind": "string"
                   },
@@ -4049,7 +4129,7 @@ export const redevenWireSchemas = {
                   "cloud_origin": {
                     "kind": "string"
                   },
-                  "provider_id": {
+                  "cloud_id": {
                     "kind": "string"
                   },
                   "env_public_id": {

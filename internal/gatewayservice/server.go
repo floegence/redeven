@@ -10,7 +10,6 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"github.com/floegence/redeven/internal/gatewaycloud"
 	"io"
 	"log/slog"
 	"net"
@@ -21,6 +20,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/floegence/redeven/internal/gatewaycloud"
 
 	"github.com/floegence/redeven/internal/gatewayflow"
 	"github.com/floegence/redeven/internal/gatewaymembership"
@@ -57,8 +58,6 @@ type Server struct {
 	connections       *gatewaymembership.Connections
 	memberListener    *gatewaymembership.Listener
 	hooks             *gatewaymembership.PolicyHooks
-	migrationMu       sync.Mutex
-	rebuildRequired   bool
 	listenerMu        sync.Mutex
 	listenerAddresses []string
 	activeBindings    []string
@@ -155,8 +154,12 @@ func New(options Options) (*Server, error) {
 		return nil, err
 	}
 	server := &Server{cloud: cloud, version: options.Version, stateRoot: root, hostAdminToken: options.HostAdminToken, trust: trust, auth: gatewayauth.NewVerifier(trust), members: members, connections: connections, memberListener: listener, hooks: hooks}
-	if err := server.migrateProfiles(); err != nil {
-		return nil, err
+	for _, name := range []string{"environments.json", "membership-migration.json"} {
+		if _, err := os.Lstat(filepath.Join(root, name)); err == nil {
+			return nil, errors.New("retired Gateway configuration; create a new state root and register again; existing files were not changed")
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return nil, err
+		}
 	}
 	return server, nil
 }
@@ -173,46 +176,6 @@ func (s *Server) ReloadHooks() error {
 	return s.members.RefreshHooks(configuration)
 }
 
-// Retired URL profiles are deleted once. Only a dismissible rebuild notice is
-// retained; no target address can be imported into the active member store.
-type membershipMigration struct {
-	Version         int  `json:"version"`
-	RebuildRequired bool `json:"rebuild_required"`
-}
-
-func (s *Server) migrateProfiles() error {
-	marker := filepath.Join(s.stateRoot, "membership-migration.json")
-	var state membershipMigration
-	if err := gatewaystate.Read(marker, &state); err == nil {
-		if state.Version != 1 {
-			return errors.New("unsupported Gateway membership migration")
-		}
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return err
-	}
-	path := filepath.Join(s.stateRoot, "environments.json")
-	if _, err := os.Lstat(path); err == nil {
-		state.RebuildRequired = true
-		state.Version = 1
-		// Persist the notice before deletion so an interrupted migration cannot
-		// erase the only evidence that the administrator must rebuild members.
-		if err := gatewaystate.Write(marker, state); err != nil {
-			return err
-		}
-		if err := os.Remove(path); err != nil {
-			return err
-		}
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return err
-	}
-	state.Version = 1
-	if err := gatewaystate.Write(marker, state); err != nil {
-		return err
-	}
-	s.rebuildRequired = state.RebuildRequired
-	return nil
-}
-
 func defaultStateRoot() string {
 	if env := strings.TrimSpace(os.Getenv("REDEVEN_STATE_ROOT")); env != "" {
 		return env
@@ -226,25 +189,24 @@ func defaultStateRoot() string {
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /gateway/v5/pairing/challenge", s.handlePairingChallenge)
-	mux.HandleFunc("POST /gateway/v5/pairing/complete", s.handlePairingComplete)
-	mux.HandleFunc("POST /gateway/v5/catalog", s.handleCatalog)
-	mux.HandleFunc("POST /gateway/v5/clients/access-codes", s.handleClientAccessCode)
-	mux.HandleFunc("POST /gateway/v5/clients/list", s.handleClientList)
-	mux.HandleFunc("POST /gateway/v5/clients/revoke", s.handleClientRevoke)
-	mux.HandleFunc("POST /gateway/v5/identity", s.handleIdentity)
-	mux.HandleFunc("POST /gateway/v5/cloud/configure", s.handleConfigureCloud)
-	mux.HandleFunc("POST /gateway/v5/cloud/status", s.handleCloudStatus)
-	mux.HandleFunc("POST /gateway/v5/members/reevaluate", s.handleReevaluate)
-	mux.HandleFunc("POST /gateway/v5/invitation-codes", s.handleInvitation)
-	mux.HandleFunc("POST /gateway/v5/endpoints", s.handleEndpoints)
-	mux.HandleFunc("POST /gateway/v5/network-settings", s.handleNetworkSettings)
-	mux.HandleFunc("POST /gateway/v5/members/remove", s.handleRemove)
-	mux.HandleFunc("POST /gateway/v5/members/policy", s.handleMemberPolicy)
-	mux.HandleFunc("POST /gateway/v5/policy", s.handlePolicy)
-	mux.HandleFunc("POST /gateway/v5/access/open", s.handleOpen)
-	mux.HandleFunc("POST /gateway/v5/access/service", s.handleServiceIdentity)
-	mux.HandleFunc("POST /gateway/v5/migration/dismiss", s.handleDismissMigration)
+	mux.HandleFunc("POST /gateway/v6/pairing/challenge", s.handlePairingChallenge)
+	mux.HandleFunc("POST /gateway/v6/pairing/complete", s.handlePairingComplete)
+	mux.HandleFunc("POST /gateway/v6/catalog", s.handleCatalog)
+	mux.HandleFunc("POST /gateway/v6/clients/access-codes", s.handleClientAccessCode)
+	mux.HandleFunc("POST /gateway/v6/clients/list", s.handleClientList)
+	mux.HandleFunc("POST /gateway/v6/clients/revoke", s.handleClientRevoke)
+	mux.HandleFunc("POST /gateway/v6/identity", s.handleIdentity)
+	mux.HandleFunc("POST /gateway/v6/cloud/configure", s.handleConfigureCloud)
+	mux.HandleFunc("POST /gateway/v6/cloud/status", s.handleCloudStatus)
+	mux.HandleFunc("POST /gateway/v6/members/reevaluate", s.handleReevaluate)
+	mux.HandleFunc("POST /gateway/v6/invitation-codes", s.handleInvitation)
+	mux.HandleFunc("POST /gateway/v6/endpoints", s.handleEndpoints)
+	mux.HandleFunc("POST /gateway/v6/network-settings", s.handleNetworkSettings)
+	mux.HandleFunc("POST /gateway/v6/members/remove", s.handleRemove)
+	mux.HandleFunc("POST /gateway/v6/members/policy", s.handleMemberPolicy)
+	mux.HandleFunc("POST /gateway/v6/policy", s.handlePolicy)
+	mux.HandleFunc("POST /gateway/v6/access/open", s.handleOpen)
+	mux.HandleFunc("POST /gateway/v6/access/service", s.handleServiceIdentity)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// This API is a signed native-client surface, never a browser endpoint.
 		if r.Header.Get("Origin") != "" {
@@ -469,10 +431,7 @@ func (s *Server) handleCatalog(w http.ResponseWriter, r *http.Request) {
 		member.CloudState = s.cloud.MemberContext(record).State
 		members = append(members, member)
 	}
-	s.migrationMu.Lock()
-	rebuildRequired := s.rebuildRequired
-	s.migrationMu.Unlock()
-	writeResult(w, gp.CatalogResponse{ProtocolVersion: gp.Version, Gateway: metadata, Members: members, Policy: policy, Revision: revision, RebuildRequired: rebuildRequired, HookStatus: s.hooks.Status()}, nil)
+	writeResult(w, gp.CatalogResponse{ProtocolVersion: gp.Version, Gateway: metadata, Members: members, Policy: policy, Revision: revision, HookStatus: s.hooks.Status()}, nil)
 }
 
 func (s *Server) handleNetworkSettings(w http.ResponseWriter, r *http.Request) {
@@ -513,24 +472,6 @@ func (s *Server) handleEndpoints(w http.ResponseWriter, r *http.Request) {
 	writeResult(w, gp.EndpointUpdateResponse{ProtocolVersion: gp.Version, Endpoints: s.members.Endpoints()}, nil)
 }
 
-func (s *Server) handleDismissMigration(w http.ResponseWriter, r *http.Request) {
-	var request gp.CatalogRequest
-	client, ok := s.authenticated(w, r, &request)
-	if !ok {
-		return
-	}
-	if !client.Permissions.ManageMembers {
-		writeError(w, http.StatusForbidden, "MEMBER_MANAGEMENT_REQUIRED")
-		return
-	}
-	s.migrationMu.Lock()
-	defer s.migrationMu.Unlock()
-	err := gatewaystate.Write(filepath.Join(s.stateRoot, "membership-migration.json"), membershipMigration{Version: 1})
-	if err == nil {
-		s.rebuildRequired = false
-	}
-	writeResult(w, struct{}{}, err)
-}
 func (s *Server) handleInvitation(w http.ResponseWriter, r *http.Request) {
 	var request gp.InvitationRequest
 	client, ok := s.authenticated(w, r, &request)

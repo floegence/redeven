@@ -12,9 +12,12 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"time"
+
+	"github.com/floegence/redeven/internal/periodic"
+	"github.com/floegence/redeven/internal/runtimecloud"
+	rc "github.com/floegence/redeven/internal/runtimecloud/protocol"
 
 	flowersec "github.com/floegence/flowersec/flowersec-go/v5"
 	"github.com/floegence/redeven/internal/config"
@@ -23,28 +26,18 @@ import (
 type controlArtifactSource struct {
 	agent          *Agent
 	expectedConfig *config.Config
+	cloudClient    *runtimecloud.Client
+	recoveryPhased bool
 }
 
 func sameControlBinding(expected, current *config.Config) bool {
-	if expected == nil || current == nil || expected.EnvironmentID != current.EnvironmentID || expected.BindingGeneration != current.BindingGeneration || expected.AccessPointOrigin != current.AccessPointOrigin {
+	if expected == nil || current == nil {
 		return false
 	}
-	if expected.GatewayRejoinRequired != current.GatewayRejoinRequired || expected.GatewayCloudMemberID != current.GatewayCloudMemberID {
-		return false
+	if expected.CloudAssociation == nil && current.CloudAssociation == nil {
+		return true
 	}
-	if (expected.GatewayPublication != nil || current.GatewayPublication != nil) && (expected.CloudGateway() == nil) != (current.CloudGateway() == nil) {
-		return false
-	}
-	if current.GatewayPublication != nil && current.CloudGateway() != nil && (current.CloudGateway().Leaving || expected.CloudGateway().MemberID != current.CloudGateway().MemberID || expected.CloudGateway().MemberVersion != current.CloudGateway().MemberVersion || expected.CloudGateway().GatewayID != current.CloudGateway().GatewayID ||
-		!slices.Equal(expected.CloudGateway().ConnectionEndpoints(), current.CloudGateway().ConnectionEndpoints()) || expected.CloudGateway().GatewayTLSRootPEM != current.CloudGateway().GatewayTLSRootPEM ||
-		expected.CloudGateway().ClientCertificatePEM != current.CloudGateway().ClientCertificatePEM || expected.CloudGateway().ClientPrivateKeyPEM != current.CloudGateway().ClientPrivateKeyPEM) {
-		return false
-	}
-	left, right := gatewayFence(expected), gatewayFence(current)
-	if left == nil || right == nil {
-		return left == nil && right == nil
-	}
-	return *left == *right && !current.GatewayPublication.Revoked
+	return sameCloudRouteOwner(expected, current) && cloudBinding(expected) == cloudBinding(current)
 }
 
 type controlArtifactSessionBinding struct {
@@ -73,30 +66,48 @@ func (source *controlArtifactSource) Acquire(ctx context.Context) (flowersec.Art
 	if err := ctx.Err(); err != nil {
 		return flowersec.ArtifactLease{}, flowersec.NewTerminalArtifactSourceError(err)
 	}
-	if source.expectedConfig != nil && !sameControlBinding(source.expectedConfig, source.agent.remoteConfigSnapshot()) {
+	if source.expectedConfig != nil && !source.sameOwner(source.agent.remoteConfigSnapshot()) {
 		return flowersec.ArtifactLease{}, flowersec.NewTerminalArtifactSourceError(errors.New("control binding changed"))
 	}
 	entry, generation, err := source.agent.acquireControlArtifactEntry()
 	if errors.Is(err, errControlArtifactPoolEmpty) || errors.Is(err, errControlArtifactPoolRelinkRequired) {
 		cfg := source.agent.remoteConfigSnapshot()
-		if cfg != nil && cfg.GatewayPublication != nil && !cfg.GatewayPublication.Revoked {
-			if recoveryErr := source.agent.recoverGatewayCredentials(ctx); recoveryErr != nil {
-				return flowersec.ArtifactLease{}, flowersec.NewRetryableArtifactSourceError(recoveryErr)
+		if cfg != nil && cfg.CloudAssociation != nil {
+			if source.cloudClient == nil {
+				client, clientErr := runtimeCloudHTTPClient(cfg, source.agent.controlTrustRoots)
+				if clientErr != nil {
+					return flowersec.ArtifactLease{}, flowersec.NewTerminalArtifactSourceError(clientErr)
+				}
+				source.cloudClient = client
 			}
-			if source.expectedConfig != nil && !sameControlBinding(source.expectedConfig, source.agent.remoteConfigSnapshot()) {
-				return flowersec.ArtifactLease{}, flowersec.NewTerminalArtifactSourceError(errors.New("control binding changed during recovery"))
+			result, recoveryErr := source.agent.recoverRuntimeCloud(ctx, source.expectedConfig, source.cloudClient)
+			if recoveryErr != nil {
+				if runtimecloud.Terminal(recoveryErr) || ctx.Err() != nil {
+					if ctx.Err() == nil {
+						source.agent.recordCloudTerminal(source.expectedConfig, recoveryErr)
+					}
+					return flowersec.ArtifactLease{}, flowersec.NewTerminalArtifactSourceError(recoveryErr)
+				}
+				return flowersec.ArtifactLease{}, source.retryRecovery(recoveryErr, 30*time.Second)
+			}
+			if !source.sameOwner(source.agent.remoteConfigSnapshot()) {
+				return flowersec.ArtifactLease{}, flowersec.NewTerminalArtifactSourceError(errors.New("cloud connection owner changed during recovery"))
+			}
+			if result.State != rc.ApprovalApproved {
+				if result.RetryAfterMS == 0 {
+					return flowersec.ArtifactLease{}, flowersec.NewTerminalArtifactSourceError(errors.New(result.ReasonCode))
+				}
+				return flowersec.ArtifactLease{}, source.retryRecovery(errors.New(result.ReasonCode), time.Duration(result.RetryAfterMS)*time.Millisecond)
 			}
 			entry, generation, err = source.agent.acquireControlArtifactEntry()
-			if errors.Is(err, errControlArtifactPoolEmpty) {
-				return flowersec.ArtifactLease{}, flowersec.NewRetryableArtifactSourceError(err)
-			}
 		}
+
 	}
 	if err != nil {
 		source.agent.mu.Lock()
 		source.agent.controlCredentialsUnavailable = errors.Is(err, errControlArtifactPoolEmpty) || errors.Is(err, errControlArtifactPoolRelinkRequired)
 		source.agent.mu.Unlock()
-		return flowersec.ArtifactLease{}, classifyControlArtifactSourceError(err)
+		return flowersec.ArtifactLease{}, flowersec.NewTerminalArtifactSourceError(err)
 	}
 	artifact, err := flowersec.ParseArtifact(entry.ArtifactJSON)
 	if err != nil {
@@ -111,16 +122,24 @@ func (source *controlArtifactSource) Acquire(ctx context.Context) (flowersec.Art
 	return lease, nil
 }
 
-func classifyControlArtifactSourceError(err error) *flowersec.ArtifactSourceError {
-	if err == nil {
-		return flowersec.NewTerminalArtifactSourceError(errors.New("control artifact unavailable"))
+func (source *controlArtifactSource) sameOwner(current *config.Config) bool {
+	return sameCloudOwner(source.expectedConfig, current)
+}
+func (source *controlArtifactSource) Close() {
+	if source.cloudClient != nil {
+		source.cloudClient.Close()
 	}
-	// Exhausted/expired pools are terminal until the authenticated control
-	// session performs a bounded top-up; retrying a fixed empty pool is noise.
-	if errors.Is(err, errControlArtifactPoolDegraded) || errors.Is(err, errControlArtifactPoolEmpty) {
-		return flowersec.NewTerminalArtifactSourceError(err)
+}
+
+func (source *controlArtifactSource) retryRecovery(err error, interval time.Duration) *flowersec.ArtifactSourceError {
+	// The startup check is immediate. Spread its first retry across the normal
+	// period; subsequent checks keep the server's interval under the SDK owner.
+	if !source.recoveryPhased {
+		source.recoveryPhased = true
+		interval = max(time.Millisecond, periodic.InitialDelay(interval))
 	}
-	return flowersec.NewTerminalArtifactSourceError(err)
+	failure, _ := flowersec.NewRetryAfterArtifactSourceError(err, time.Now().Add(interval).UnixMilli())
+	return failure
 }
 
 var (
@@ -143,30 +162,9 @@ func (a *Agent) acquireControlArtifactEntry() (config.ControlArtifactEntry, int6
 		return config.ControlArtifactEntry{}, 0, errControlArtifactPoolRelinkRequired
 	}
 	if a.cfg.ControlArtifactPool == nil {
-		if a.cfg.Direct == nil || len(a.cfg.Direct.ArtifactJSON) == 0 {
-			return config.ControlArtifactEntry{}, 0, errControlArtifactPoolEmpty
-		}
-		// Legacy Direct envelopes have no Portal-side durable sequence/channel
-		// authority. Preserve only a revoked digest tombstone and require relink.
-		pool := config.NewControlArtifactPool(a.cfg.BindingGeneration)
-		digest := sha256.Sum256(a.cfg.Direct.ArtifactJSON)
-		pool.LogicalBindingID = "legacy-untrusted"
-		pool.RecoveryState = config.ControlArtifactRecoveryRelink
-		pool.Entries = append(pool.Entries, config.ControlArtifactEntry{
-			Sequence:       1,
-			ArtifactDigest: base64.RawURLEncoding.EncodeToString(digest[:]),
-			ExpiresAtUnixS: a.cfg.Direct.ExpiresAtUnixS,
-			Revoked:        true,
-		})
-		next := *a.cfg
-		next.ControlArtifactPool = pool
-		next.Direct = nil
-		if err := config.SaveConnection(a.configPath, &next); err != nil {
-			return config.ControlArtifactEntry{}, 0, fmt.Errorf("migrate control artifact pool: %w", err)
-		}
-		a.setRemoteConfigLocked(&next)
-		return config.ControlArtifactEntry{}, pool.BindingGeneration, errControlArtifactPoolEmpty
+		return config.ControlArtifactEntry{}, 0, errControlArtifactPoolEmpty
 	}
+
 	pool := a.cfg.ControlArtifactPool
 	if pool.BindingGeneration != a.cfg.BindingGeneration {
 		return config.ControlArtifactEntry{}, 0, errors.New("control artifact pool binding generation mismatch")
@@ -257,13 +255,6 @@ func (a *Agent) commitControlArtifactPoolSpend(_ context.Context, bindingGenerat
 		return errors.New("control artifact entry changed before spend commit")
 	}
 	next.ControlArtifactPool = &pool
-	// Keep the retired Direct record as a spent tombstone for one release so
-	// an interrupted config migration cannot make the old shape appear unused.
-	if next.Direct != nil && bytesEqual(next.Direct.ArtifactJSON, artifactJSON) {
-		directCopy := *next.Direct
-		directCopy.Spent = true
-		next.Direct = &directCopy
-	}
 	if err := config.SaveConnection(a.configPath, &next); err != nil {
 		// The durable spend ledger already burned this artifact. Keep the
 		// process-local pool from selecting it again even though config save failed.

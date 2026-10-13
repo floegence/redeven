@@ -399,10 +399,10 @@ describe('linked environment owner interactions', () => {
     const dialog = document.querySelector('[role="dialog"]')!;
     expect(dialog.querySelector('select')).toBeNull();
     expect(dialog.textContent).toContain('Lab');
-    expect(dialog.textContent).toContain('Redeven Cloud');
+    expect(dialog.textContent).toContain('Other connections stay available.');
     expect(perform).toHaveBeenCalledOnce();
     button(dialog, 'Cancel pairing').click(); await settle();
-    expect(perform.mock.calls.at(-1)?.[0]).toMatchObject({ operation: 'leave', gateway_id: 'service-1', cloud_impact_acknowledged: true });
+    expect(perform.mock.calls.at(-1)?.[0]).toMatchObject({ operation: 'leave', gateway_id: 'service-1', route_impact_acknowledged: false });
     const remainingMemberships = [fixture.memberships[0]!];
     const remainingInputs = {
       ...fixture.inputs,
@@ -468,7 +468,7 @@ describe('linked environment owner interactions', () => {
     const f = linkedEnvironmentFixture();
     const runtime = { ...f.runtime, provider_runtime_link_target: { ...f.runtime.provider_runtime_link_target!,
       provider_connection_state: 'authorization_required' as const, can_connect_cloud: true,
-      credential_recovery: 'waiting_for_service' as const,
+
       cloud_link_binding: { state: 'linked' as const, connection_state: 'authorization_required' as const,
         remote_enabled: true, last_error_code: 'CONTROL_CREDENTIALS_EXPIRED' },
     } };
@@ -477,9 +477,9 @@ describe('linked environment owner interactions', () => {
     await h.select('cloud');
     const status = h.owner('cloud').querySelector('[data-cloud-connection-status]')!;
     expect(status).not.toBeNull();
-    expect(status.textContent).toContain('Waiting');
+    expect(status.textContent).toContain('Credentials expired');
     expect(status.closest('[aria-hidden="true"]')).toBeNull();
-    button(status, 'Connection details: Waiting for Redeven Cloud').click(); await settle();
+    button(status, 'Connection details: Credentials expired').click(); await settle();
     const details = document.querySelector('[data-cloud-connection-details]')!;
     expect(details.textContent).toContain('Available on this device');
     button(details, 'Open locally').click(); await settle();
@@ -498,13 +498,13 @@ describe('linked environment owner interactions', () => {
     const originalCloud = f.snapshot.environments.find(environment => environment.env_public_id === 'env_0_0')!;
     const target = originalRuntime.provider_runtime_link_target!;
     const binding = { ...target.cloud_link_binding!, connection_state: 'authorization_required' as const,
-      last_error_code: 'CONTROL_CREDENTIALS_EXPIRED',
+      last_error_code: 'provider_tls_untrusted',
     };
     const service = { ...target.runtime_service!, bindings: { ...target.runtime_service!.bindings!, cloud_link: binding } };
     const runtime = { ...originalRuntime, runtime_service: service, provider_runtime_link_target: { ...target,
       provider_connection_state: 'authorization_required' as const, can_connect_cloud: true,
-      credential_recovery: 'attention' as const,
-      credential_recovery_details: { last_error_code: 'provider_tls_untrusted', last_attempt_at_unix_ms: Date.now(), attempt_count: 1 },
+
+
       cloud_link_binding: binding, runtime_service: service,
     } };
     const cloud = { ...originalCloud, remote_route_state: 'provider_unreachable' as const };

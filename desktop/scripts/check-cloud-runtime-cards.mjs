@@ -15,6 +15,7 @@ await mkdir(output,{recursive:true});
 execFileSync(path.join(desktop,'../scripts/check_desktop_electron_test_runtime.sh'),[desktop],{stdio:'inherit'});
 const bundle=path.join(output,'bundle');
 const gatewayBinary=path.join(bundle,'redeven-gateway');
+const compatibility=JSON.parse(await readFile(path.join(desktop,'../internal/runtimeservice/compatibility_contract.json'),'utf8'));
 const sourceCommit=execFileSync('git',['rev-parse','HEAD'],{cwd:desktop,encoding:'utf8'}).trim();
 const sourceDirty=Boolean(execFileSync('git',['status','--porcelain'],{cwd:desktop,encoding:'utf8'}).trim());
 const binaryIdentity=binary=>{
@@ -35,7 +36,7 @@ const prefs=require(path.join(desktop,'dist/main/desktopPreferences.js'));
 const cloud=require(path.join(desktop,'dist/shared/desktopCloudEnvironment.js'));
 const preferences=prefs.defaultDesktopPreferences();
 const cloudModule=require(path.join(desktop,'dist/shared/cloud.js'));
-const cloudSource=cloudModule.normalizeDesktopCloud({protocol_version:'rcpp-v4',cloud_id:fixture.cloud_id,
+const cloudSource=cloudModule.normalizeDesktopCloud({protocol_version:'rcpp-v5',cloud_id:fixture.cloud_id,
  display_name:'Redeven Cloud',cloud_origin:fixture.cloud_origin,documentation_url:`${fixture.cloud_origin}/help`,access_points:[{
  access_point_id:'dev',region:'dev',display_name:'Development',description:'',access_point_origin:fixture.access_point_origin,
  country_code:'SG',city:'Singapore',status:'active',health_status:'healthy',
@@ -94,8 +95,8 @@ try{
  const started=await action({kind:'start_environment_runtime',environment_id:local.id});
  if(!started.ok)report.failedRuntimeStart=started;
  assert.equal(started.ok,true);
- await page.waitForFunction(async()=>{const snapshot=await window.redevenDesktopLauncher.getSnapshot();return snapshot.environments.find(entry=>entry.kind==='local_environment')?.runtime_service?.compatibility_epoch===49},null,{timeout:60000});
- report.cases.push('production Desktop and live Runtime report compatibility epoch 49');
+ await page.waitForFunction(async epoch=>{const snapshot=await window.redevenDesktopLauncher.getSnapshot();return snapshot.environments.find(entry=>entry.kind==='local_environment')?.runtime_service?.compatibility_epoch===epoch},compatibility.compatibility_epoch,{timeout:60000});
+ report.cases.push(`production Desktop and live Runtime report compatibility epoch ${compatibility.compatibility_epoch}`);
  const cloudID=preferences.cloud_environments[0].id;
  const assertCloudCard=async expectedGateways=>{
   await page.waitForFunction(({cloudID,expectedGateways})=>{
@@ -161,18 +162,17 @@ try{
  assert.equal((await action({kind:'stop_environment_runtime',environment_id:local.id})).ok,true);
  const configPath=path.join(state,'local-environment/config.json');
  const legacy=JSON.parse(await readFile(configPath,'utf8'));
- const member=legacy.gateways[0];assert.ok(member);
+ assert.ok(legacy.gateways[0]);
+ const saved=await readFile(configPath,'utf8');
  legacy.gateway_membership_schema_version=2;
- legacy.gateway_cloud_member_id=member.member_id;legacy.gateway_environment_choice='preserve';
  await writeFile(configPath,JSON.stringify(legacy)+'\n',{mode:0o600});
+ const rejected=await action({kind:'start_environment_runtime',environment_id:local.id});
+ assert.equal(rejected.ok,false);
+ assert.equal(await readFile(configPath,'utf8'),JSON.stringify(legacy)+'\n');
+ await writeFile(configPath,saved,{mode:0o600});
  assert.equal((await action({kind:'start_environment_runtime',environment_id:local.id})).ok,true);
  await assertCloudCard(2);
- const migrated=JSON.parse(await readFile(configPath,'utf8'));
- assert.equal(migrated.gateway_membership_schema_version,3);
- assert.equal(migrated.gateway_cloud_member_id,undefined);assert.equal(migrated.gateway_environment_choice,undefined);
- assert.equal(migrated.environment_id,fixture.environment_id);
- assert.deepEqual(migrated.gateways.map(member=>member.member_id),legacy.gateways.map(member=>member.member_id));
- report.cases.push('production Runtime restarts from schema v2 implicit publication and atomically preserves direct Cloud plus both members');
+ report.cases.push('retired Runtime configuration fails read-only; restoring the current configuration resumes both independent members');
  const card=await assertCloudCard(2);await card.getByRole('tab').last().click();
  await page.waitForFunction(async()=>{const snapshot=await window.redevenDesktopLauncher.getSnapshot();const members=snapshot.environments.find(entry=>entry.kind==='local_environment')?.runtime_service?.gateway_memberships??[];return members.length===2&&members.every(member=>member.phase==='joined')},null,{timeout:60000});
  report.cases.push('both live Gateway member connections reach joined state');

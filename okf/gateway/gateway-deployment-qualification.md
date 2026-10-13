@@ -21,7 +21,7 @@ Qualification must prove Runtime-to-Gateway connection direction and real applic
 
 `scripts/check_gateway_cloud_isolation.sh` provides a Docker network in which Runtime cannot reach Cloud IPs, public IPs or public DNS. Only the Gateway member endpoint is reachable. Runtime must still join, prove itself, recover and exchange protected traffic. Explicit network-denial probes must precede a passing claim.
 
-Portal's task-owned compose Gateway smoke tests cover Namespace publication, environment opening, migration, custom Tunnel, password and MFA with real MySQL and browser sessions. Directory freshness, policy fencing and both closure receipts require independent assertions. A control-only outage must not be mistaken for data-session closure. Automatic publication and manual unpublication must preserve their different approval semantics.
+Portal's task-owned compose Gateway smoke tests cover Namespace publication, environment opening, explicit route switching, custom Tunnel, password and MFA with real MySQL and browser sessions. Directory freshness, route isolation and Runtime closure receipts require independent assertions. A control-only outage must not be mistaken for data-session closure. Automatic publication and manual unpublication must preserve their different approval semantics.
 
 ## Product and release boundaries
 

@@ -2,76 +2,52 @@ package gatewaycloud
 
 import (
 	"encoding/json"
-	"net"
 	"net/http"
-	"net/url"
 	"time"
 
-	gc "github.com/floegence/redeven/internal/gatewaycloud/protocol"
 	"github.com/floegence/redeven/internal/gatewayegress"
 	"github.com/floegence/redeven/internal/gatewaymembership"
 	gp "github.com/floegence/redeven/internal/runtimegateway/protocol"
 )
 
-func cloudAuthority(origin string) string {
-	u, err := url.Parse(origin)
-	if err != nil || !gc.ValidOrigin(origin) {
-		return ""
-	}
-	port := u.Port()
-	if port == "" {
-		port = "443"
-	}
-	return net.JoinHostPort(u.Hostname(), port)
-}
-
-// applyPolicyLocked intersects Cloud's verified projection with the current
-// local member authority. Local denial closes business flows before syncing.
+// applyPolicyLocked intersects only local member admission with trusted Cloud
+// destinations. Runtime Cloud authorization is enforced end to end by Cloud.
 func (g *Gateway) applyPolicyLocked() error {
+	if g.admissionTimer != nil {
+		g.admissionTimer.Stop()
+		g.admissionTimer = nil
+	}
 	permitted := []gatewayegress.Member{}
-	if g.status == nil {
+	now := time.Now().UnixMilli()
+	deadline := int64(0)
+	if g.status == nil || g.status.Gateway.State != "active" || g.status.Gateway.IdentityExpiresAtUnixMS <= time.Now().UnixMilli() {
 		return g.egress.ReplaceMembers(permitted)
-	}
-	remoteByID := make(map[string]gc.EgressMember)
-	management := make(map[string]bool)
-	for _, remote := range g.status.Members {
-		remoteByID[remote.MemberID] = remote
-	}
-	for _, remote := range g.status.ManagementMembers {
-		remoteByID[remote.MemberID] = remote
-		management[remote.MemberID] = true
 	}
 	for _, local := range g.records {
 		member := local.Member
-		if member.State != "active" {
+		if member.State != "active" || local.ClientExpiresAtUnixMS <= now || !gatewaymembership.EffectiveCloudAllowed(local, g.policy) {
 			continue
 		}
-		remote, observed := remoteByID[member.MemberID]
-		if observed && (remote.MemberVersion != member.MemberVersion || remote.RuntimePublicID != member.RuntimePublicID || remote.RequestPublicID != gc.CandidateID(g.config.GatewayPublicID, member.MemberID)) {
+		if len(g.status.AdmissionDestinations) == 0 {
 			continue
 		}
-		var targets []string
-		generation := int64(1)
-		allowed := gatewaymembership.EffectiveCloudAllowed(local, g.policy)
-		if observed {
-			generation = remote.Generation
-			if management[member.MemberID] {
-				targets = remote.Destinations
-			} else if allowed && g.status.Gateway.State == "active" {
-				targets = remote.Destinations
-			} else {
-				generation++
-				targets = []string{cloudAuthority(g.config.CloudOrigin)}
-			}
-		} else if allowed && g.status.Gateway.State == "active" {
-			targets = g.status.AdmissionDestinations
+		expires := min(local.ClientExpiresAtUnixMS, g.status.Gateway.IdentityExpiresAtUnixMS)
+		if deadline == 0 || expires < deadline {
+			deadline = expires
 		}
-		if len(targets) == 0 || generation < 1 {
-			continue
-		}
-		permitted = append(permitted, gatewayegress.Member{ID: member.MemberID, MemberVersion: uint64(member.MemberVersion), Generation: uint64(generation), CertificateSHA256: local.ClientCertificateSHA256, AdmissionExpiresAtUnixMS: max(1, min(local.ClientExpiresAtUnixMS, g.status.Gateway.IdentityExpiresAtUnixMS)), Destinations: targets})
+		permitted = append(permitted, gatewayegress.Member{ID: member.MemberID, MemberVersion: uint64(member.MemberVersion), Generation: uint64(member.MemberVersion), CertificateSHA256: local.ClientCertificateSHA256, AdmissionExpiresAtUnixMS: min(local.ClientExpiresAtUnixMS, g.status.Gateway.IdentityExpiresAtUnixMS), Destinations: append([]string(nil), g.status.AdmissionDestinations...)})
 	}
-	return g.egress.ReplaceMembers(permitted)
+	err := g.egress.ReplaceMembers(permitted)
+	if err == nil && deadline > now {
+		// One Gateway-owned timer closes expired admissions even if its Cloud
+		// management stream is unavailable. It performs no network or DB work.
+		g.admissionTimer = time.AfterFunc(time.Until(time.UnixMilli(deadline)), func() {
+			g.mu.Lock()
+			defer g.mu.Unlock()
+			_ = g.applyPolicyLocked()
+		})
+	}
+	return err
 }
 
 func (g *Gateway) MemberContext(record gatewaymembership.MemberRecord) gp.MemberCloudContext {
@@ -101,12 +77,6 @@ func (g *Gateway) MemberContext(record gatewaymembership.MemberRecord) gp.Member
 		return out
 	}
 	out.Allowed, out.State = true, "awaiting_cloud_approval"
-	for _, remote := range g.status.ManagementMembers {
-		if remote.MemberID == member.MemberID {
-			out.Allowed, out.State = false, "unpublished"
-			return out
-		}
-	}
 	for _, remote := range g.status.Members {
 		if remote.MemberID == member.MemberID && remote.MemberVersion == member.MemberVersion && remote.State == "published" {
 			out.State = "published"
@@ -117,16 +87,12 @@ func (g *Gateway) MemberContext(record gatewaymembership.MemberRecord) gp.Member
 }
 
 func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path == "/v5/member/cloud-closure" {
-		g.relayClosure(w, r)
-		return
-	}
 	if r.Method == http.MethodConnect {
 		g.egress.ServeHTTP(w, r)
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
-	if r.Method != http.MethodPost || r.URL.Path != "/v5/member/cloud" {
+	if r.Method != http.MethodPost || r.URL.Path != "/v6/member/cloud" {
 		http.NotFound(w, r)
 		return
 	}

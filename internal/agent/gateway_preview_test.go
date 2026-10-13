@@ -146,7 +146,9 @@ func TestGatewayPreviewSelfSignedExchangeAndExplicitConsent(t *testing.T) {
 	store, address, delivery := previewGatewayServer(t)
 	control, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	cfg := &config.Config{LocalEnvironmentPublicID: "runtime", EnvironmentID: "existing"}
+	cfg := routeAgentFixture(t).remoteConfigSnapshot()
+	cfg.LocalEnvironmentPublicID, cfg.EnvironmentID = "runtime", "existing"
+	cfg.CloudAssociation.Binding.EnvPublicID = "existing"
 	a := &Agent{configPath: filepath.Join(t.TempDir(), "config.json"), cfg: cfg, controlCancel: cancel}
 	if err := config.Save(a.configPath, cfg); err != nil {
 		t.Fatal(err)
@@ -202,7 +204,9 @@ func TestGatewayPreviewRejectsChangedContextAndSaveFailure(t *testing.T) {
 		t.Run(change, func(t *testing.T) {
 			control, cancel := context.WithCancel(t.Context())
 			defer cancel()
-			cfg := &config.Config{LocalEnvironmentPublicID: "runtime", EnvironmentID: "existing"}
+			cfg := routeAgentFixture(t).remoteConfigSnapshot()
+			cfg.LocalEnvironmentPublicID, cfg.EnvironmentID = "runtime", "existing"
+			cfg.CloudAssociation.Binding.EnvPublicID = "existing"
 			a := &Agent{configPath: filepath.Join(t.TempDir(), "config.json"), cfg: cfg, controlCancel: cancel}
 			preview, err := a.PreviewGateway(t.Context(), address, delivery.Code, "join")
 			if err != nil {

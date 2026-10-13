@@ -25,15 +25,13 @@ import (
 // RuntimeConfig owns one independent Gateway membership. Optional Cloud binding
 // state refers to a selected member instead of carrying a second Gateway route.
 type RuntimeConfig struct {
-	Revision         uint64               `json:"revision"`
-	Leaving          bool                 `json:"leaving"`
-	ProtocolVersion  string               `json:"protocol_version"`
-	GatewayID        string               `json:"gateway_id"`
-	GatewayName      string               `json:"gateway_name,omitempty"`
-	GatewayEndpoints []gp.GatewayEndpoint `json:"gateway_endpoints,omitempty"`
-	LastEndpointID   string               `json:"last_endpoint_id,omitempty"`
-	// GatewayURL is read only during one-time v4 state migration.
-	GatewayURL            string                          `json:"gateway_url,omitempty"`
+	Revision              uint64                          `json:"revision"`
+	Leaving               bool                            `json:"leaving"`
+	ProtocolVersion       string                          `json:"protocol_version"`
+	GatewayID             string                          `json:"gateway_id"`
+	GatewayName           string                          `json:"gateway_name,omitempty"`
+	GatewayEndpoints      []gp.GatewayEndpoint            `json:"gateway_endpoints,omitempty"`
+	LastEndpointID        string                          `json:"last_endpoint_id,omitempty"`
 	GatewayPublicKey      string                          `json:"gateway_public_key"`
 	GatewayTLSRootPEM     string                          `json:"gateway_tls_root_pem"`
 	MemberID              string                          `json:"member_id"`
@@ -136,29 +134,6 @@ func PrepareRuntime(invitation gp.EnrollmentDescriptor, runtimeID string, metada
 		return nil, err
 	}
 	return &RuntimeConfig{Revision: 1, ProtocolVersion: gp.Version, GatewayID: invitation.GatewayID, GatewayName: invitation.GatewayName, GatewayEndpoints: append([]gp.GatewayEndpoint(nil), invitation.Endpoints...), GatewayPublicKey: invitation.GatewayPublicKey, GatewayTLSRootPEM: invitation.GatewayTLSRootPEM, MemberID: memberID, RuntimePublicID: runtimeID, PrivateKeyB64u: base64.RawURLEncoding.EncodeToString(key), ClientPrivateKeyPEM: clientKey, Service: service, ServicePrivateKeyPEM: serviceKey, Delegation: delegation, PendingJoin: &request}, nil
-}
-
-// MigrateLegacyState converts one persisted v4 route into the v5 endpoint
-// model without changing Gateway or Runtime identity. It runs only while
-// loading durable Runtime configuration; new state never writes GatewayURL.
-func (r *RuntimeConfig) MigrateLegacyState() bool {
-	if r == nil {
-		return false
-	}
-	changed := false
-	if r.ProtocolVersion == "redeven-gateway-v4" {
-		r.ProtocolVersion = gp.Version
-		changed = true
-	}
-	if len(r.GatewayEndpoints) == 0 && validOrigin(r.GatewayURL) {
-		r.GatewayEndpoints = []gp.GatewayEndpoint{{EndpointID: "endpoint_legacy", Address: r.GatewayURL, Scope: gp.GatewayEndpointLAN, Priority: 0}}
-		changed = true
-	}
-	if r.GatewayURL != "" {
-		r.GatewayURL = ""
-		changed = true
-	}
-	return changed
 }
 
 func (r *RuntimeConfig) connectionEndpoints() []gp.GatewayEndpoint {
@@ -358,7 +333,7 @@ func (r *RuntimeConfig) Enroll(ctx context.Context, persist func(*RuntimeConfig)
 		return err
 	}
 	var response gp.MemberJoinResponse
-	if err := r.Request(ctx, "/v5/member/join", r.PendingJoin, &response, false); err != nil {
+	if err := r.Request(ctx, "/v6/member/join", r.PendingJoin, &response, false); err != nil {
 		return err
 	}
 	if response.ProtocolVersion != gp.Version || response.GatewayID != r.GatewayID || response.MemberID != r.MemberID || response.MemberVersion != 1 || response.DeliveryID != r.PendingJoin.DeliveryID {
@@ -385,10 +360,10 @@ func (r *RuntimeConfig) Leave(ctx context.Context) error {
 	// signed request can cancel that delivery without enrolling again.
 	if r.PendingJoin != nil {
 		var response gp.CatalogRequest
-		return r.Request(ctx, "/v5/member/cancel-join", r.PendingJoin, &response, false)
+		return r.Request(ctx, "/v6/member/cancel-join", r.PendingJoin, &response, false)
 	}
 	var response gp.CatalogRequest
-	return r.Request(ctx, "/v5/member/leave", gp.RemoveMemberRequest{ProtocolVersion: gp.Version, MemberID: r.MemberID, ExpectedMemberVersion: r.MemberVersion}, &response, true)
+	return r.Request(ctx, "/v6/member/leave", gp.RemoveMemberRequest{ProtocolVersion: gp.Version, MemberID: r.MemberID, ExpectedMemberVersion: r.MemberVersion}, &response, true)
 }
 
 func (r *RuntimeConfig) validateClient() error {
@@ -447,7 +422,7 @@ func (r *RuntimeConfig) Rotate(ctx context.Context, persist func(*RuntimeConfig)
 		*r = *next
 	}
 	var response gp.MemberRotateResponse
-	if err := r.Request(ctx, "/v5/member/rotate", r.PendingRotation.Request, &response, true); err != nil {
+	if err := r.Request(ctx, "/v6/member/rotate", r.PendingRotation.Request, &response, true); err != nil {
 		return err
 	}
 	if response.ProtocolVersion != gp.Version || response.MemberID != r.MemberID || response.MemberVersion != r.MemberVersion || response.DeliveryID != r.PendingRotation.Request.DeliveryID {

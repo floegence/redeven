@@ -134,7 +134,7 @@ function testControlPlaneSummary(
   const accessPoint = testCloudAccessPoint(cloudOrigin);
   return {
     cloud: {
-      protocol_version: 'rcpp-v4' as const,
+      protocol_version: 'rcpp-v5' as const,
       cloud_id: 'example_control_plane',
       display_name: 'Example Control Plane',
       cloud_origin: cloudOrigin,

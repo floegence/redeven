@@ -16,7 +16,6 @@ export function RuntimeGatewayConnectionsDialog(props: Readonly<{
 }>) {
   const [status, setStatus] = createSignal<GatewayMembershipStatus>();
   const [selected, setSelected] = createSignal('');
-  const [choice, setChoice] = createSignal<'preserve' | 'new'>();
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal('');
   const [displayMode, setDisplayMode] = createSignal<'leave' | 'publish'>(props.mode ?? 'leave');
@@ -42,7 +41,6 @@ export function RuntimeGatewayConnectionsDialog(props: Readonly<{
     const current = ++generation;
     if (!operation) return;
     setDisplayMode(operation);
-    setChoice(undefined);
     setError('');
     setStatus(undefined);
     setSelected('');
@@ -79,13 +77,11 @@ export function RuntimeGatewayConnectionsDialog(props: Readonly<{
       const result = await window.redevenDesktopLauncher?.performAction({
         kind: 'manage_runtime_gateway', runtime_target_id: targetID(), operation,
         gateway_id: target.gateway_id,
-        ...(operation === 'leave'
-          ? { cloud_impact_acknowledged: target.cloud_publication === true }
-          : choice() ? { environment_choice: choice() } : {}),
+        ...(operation === 'leave' ? { route_impact_acknowledged: target.route_selected === true } : {}),
       });
       if (current !== generation) return;
       if (!result?.ok) {
-        setError(text(result?.gateway_error_code === 'GATEWAY_CLOUD_IMPACT_REQUIRED'
+        setError(text(result?.gateway_error_code === 'GATEWAY_ROUTE_IMPACT_REQUIRED'
           ? 'gatewayConnections.cloudChanged' : 'gatewayJoin.failed'));
         return;
       }
@@ -99,8 +95,7 @@ export function RuntimeGatewayConnectionsDialog(props: Readonly<{
   }
 
   const submitDisabled = () => !mode() || busy() || !member() || member()?.phase === 'removal_pending'
-    || mode() === 'publish' && (member()?.cloud_publication === true
-      || Boolean(status()?.existing_environment_id && !choice()));
+    || mode() === 'publish' && Boolean(status()?.existing_environment_id) && !status()?.cloud_enrollment_required;
 
   return (
     <Dialog open={!!mode()} onOpenChange={value => { if (!value) close(); }}
@@ -113,8 +108,7 @@ export function RuntimeGatewayConnectionsDialog(props: Readonly<{
             <select ref={select} class="w-full cursor-pointer rounded-md border border-border bg-background px-3 py-2.5"
               value={selected()} disabled={busy()} onChange={event => {
                 setSelected(event.currentTarget.value);
-                setChoice(undefined);
-                setError('');
+                            setError('');
               }}>
               <option value="" disabled>{text('gatewayConnections.select')}</option>
               <For each={members()}>{item => <option value={item.gateway_id}>{item.gateway_name || item.gateway_id}</option>}</For>
@@ -126,23 +120,13 @@ export function RuntimeGatewayConnectionsDialog(props: Readonly<{
             <p class="truncate font-medium" title={item().gateway_name || item().gateway_id}>{item().gateway_name || item().gateway_id}</p>
             <p class="break-all text-xs text-muted-foreground">{item().endpoints?.[0]?.address}</p>
             <p class="text-sm text-muted-foreground">{text(displayMode() === 'publish' ? 'gatewayConnections.publishHelp' : 'gatewayConnections.unpairImpact')}</p>
-            <Show when={displayMode() === 'leave' && item().cloud_publication}>
+            <Show when={displayMode() === 'leave' && item().route_selected}>
               <p role="alert" class="text-sm text-warning">{text('gatewayConnections.cloudImpact')}</p>
             </Show>
           </div>
         )}</Show>
         <Show when={displayMode() === 'publish' && status()?.existing_environment_id}>
-          <fieldset class="space-y-3" disabled={busy()}>
-            <legend class="mb-2 text-sm font-medium">{text('gatewayJoin.existingEnvironment')}</legend>
-            <For each={['preserve', 'new'] as const}>{value => (
-              <label class="flex cursor-pointer gap-3 text-sm">
-                <input type="radio" name="gateway-publication-choice" class="cursor-pointer" checked={choice() === value} onChange={() => setChoice(value)} />
-                <span>{text(value === 'preserve' ? 'gatewayJoin.preserve' : 'gatewayJoin.createNew')}
-                  <p class="mt-1 text-xs text-muted-foreground">{text(value === 'preserve' ? 'gatewayJoin.preserveHelp' : 'gatewayJoin.newHelp')}</p>
-                </span>
-              </label>
-            )}</For>
-          </fieldset>
+          <p role="status" class="text-sm text-muted-foreground">{text('gatewayConnections.useRouteChange')}</p>
         </Show>
         <Show when={status() && !members().length}>
           <p class="text-sm text-muted-foreground">{text('gatewayConnections.empty')}</p>
@@ -152,7 +136,7 @@ export function RuntimeGatewayConnectionsDialog(props: Readonly<{
         </Show>
         <Show when={error()}><p role="alert" class="text-sm text-error">{error()}</p></Show>
         <div class="flex flex-wrap justify-end gap-2">
-          <Button variant="ghost" class="cursor-pointer whitespace-nowrap" disabled={busy()} onClick={close}>{text('common.cancel')}</Button>
+          <Button variant="ghost" class="cursor-pointer whitespace-nowrap" onClick={close}>{text('common.cancel')}</Button>
           <Button ref={confirm} variant={displayMode() === 'leave' ? 'destructive' : 'default'} class="cursor-pointer whitespace-nowrap"
             disabled={submitDisabled()} onClick={() => void submit()}>
             <StableText reserve={[text('gatewayConnections.unpair'), text('gatewayConnections.publish')]}>

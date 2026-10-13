@@ -36,7 +36,7 @@ func TestPolicyUpdatePreservesOverridesWithoutTransientRevocation(t *testing.T) 
 	// invalidation that would close existing explicitly allowed Cloud sessions.
 	store.SetCommitHandler(func(members []MemberRecord, policy gp.GatewayPolicy) {
 		for _, member := range members {
-			if member.Member.MemberID == ids[gp.CloudAllow] && (!EffectiveCloudAllowed(member, policy) || member.Member.CloudRevocationPending) {
+			if member.Member.MemberID == ids[gp.CloudAllow] && !EffectiveCloudAllowed(member, policy) {
 				t.Error("default edit revoked an explicitly allowed member")
 			}
 			if member.Member.MemberID == ids[gp.CloudDeny] && EffectiveCloudAllowed(member, policy) {
@@ -52,7 +52,7 @@ func TestPolicyUpdatePreservesOverridesWithoutTransientRevocation(t *testing.T) 
 		}
 		members, current, _ := store.Snapshot()
 		for _, member := range members {
-			if member.Member.MemberID == ids[gp.CloudInherit] && (cloudPolicyAllows(member, current) != allow || EffectiveCloudAllowed(member, current) != (allow && !member.Member.CloudRevocationPending)) {
+			if member.Member.MemberID == ids[gp.CloudInherit] && (cloudPolicyAllows(member, current) != allow || EffectiveCloudAllowed(member, current) != allow) {
 				t.Fatal("inherited member did not follow the committed default")
 			}
 		}
@@ -172,7 +172,7 @@ func TestHookRefreshStorageFailureClosesOldCloudGrants(t *testing.T) {
 				t.Fatal("expected persistence failure")
 			}
 			records, policy, _ := store.Snapshot()
-			if EffectiveCloudAllowed(records[0], policy) || !records[0].Member.CloudRevocationPending {
+			if EffectiveCloudAllowed(records[0], policy) {
 				t.Fatal("storage failure preserved the old directory grant")
 			}
 			if EffectiveCloudAllowed(applied[0], appliedPolicy) {
@@ -201,8 +201,8 @@ func TestHookRefreshStorageFailureClosesOldCloudGrants(t *testing.T) {
 				t.Fatal(err)
 			}
 			records, policy, _ = store.Snapshot()
-			if !records[0].HookCloudAllowed || EffectiveCloudAllowed(records[0], policy) {
-				t.Fatal("storage recovery erased the undelivered denial")
+			if !records[0].HookCloudAllowed || !EffectiveCloudAllowed(records[0], policy) {
+				t.Fatal("explicit reevaluation did not restore local egress")
 			}
 			if err := store.AcknowledgeCloudDirectory("namespace", policy.Revision, records); err != nil {
 				t.Fatal(err)

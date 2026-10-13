@@ -31,7 +31,7 @@ describe('Cloud state migration', () => {
     } }));
     await migrateDesktopCloudState(options);
     expect(JSON.parse(await fs.readFile(options.preferencesFile, 'utf8')).control_planes[0]).toEqual({
-      id: 'stable-old-key', cloud: { cloud_origin: 'https://redeven.com', cloud_id: 'same-id', protocol_version: 'rcpp-v4' },
+      id: 'stable-old-key', cloud: { cloud_origin: 'https://redeven.com', cloud_id: 'same-id', protocol_version: 'rcpp-v5' },
     });
     const secrets = await fs.readFile(options.secretsFile, 'utf8');
     expect(secrets).toContain('opaque-encoded-secret');

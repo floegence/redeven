@@ -571,7 +571,6 @@ export function gatewayRecordToSourceWithCatalog(
     policy?: DesktopGatewaySource['policy'];
     catalog_revision?: number;
     member_endpoints?: DesktopGatewaySource['member_endpoints'];
-    rebuild_required?: boolean;
     hook_status?: DesktopGatewaySource['hook_status'];
   }>,
 ): DesktopGatewaySource {
@@ -600,7 +599,7 @@ export function gatewayRecordToSourceWithCatalog(
     member_endpoints: catalog.member_endpoints,
     environments: [...(catalog.environments ?? [])],
     permissions: catalog.permissions, policy: catalog.policy,
-    catalog_revision: catalog.catalog_revision, rebuild_required: catalog.rebuild_required, hook_status: catalog.hook_status,
+    catalog_revision: catalog.catalog_revision, hook_status: catalog.hook_status,
   };
 }
 

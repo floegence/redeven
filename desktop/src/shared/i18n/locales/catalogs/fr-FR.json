@@ -3338,8 +3338,7 @@
     "cloud_denied": "Membre · Cloud non autorisé",
     "cloud_pending": "Membre · En attente d’approbation Cloud",
     "cloud_control_offline": "Cloud connecté · Connexion de contrôle de l’environnement hors ligne",
-    "accessible": "Membre · Accessible depuis Cloud",
-    "migration_pending": "Membre · Migration de l’environnement en attente"
+    "accessible": "Membre · Accessible depuis Cloud"
   },
   "gatewayMembers": {
     "reevaluate": "Revérifier l’accès",
@@ -3357,7 +3356,6 @@
     "confirmLeave": "Confirmer le départ",
     "leave": "Quitter le Gateway",
     "failed": "L’opération n’a pas abouti. La saisie et la dernière liste des membres sont conservées. Vous pouvez réessayer chaque élément en échec.",
-    "rebuild": "Les anciennes configurations d’URL du Gateway ont été supprimées. Chaque environnement d’exécution doit rejoindre le Gateway avec une nouvelle invitation. Les environnements existants dans Redeven Cloud sont conservés et doivent être reconnectés.",
     "invite": "Inviter un environnement d’exécution",
     "listenerAddress": "Écoute de la passerelle",
     "listenerAddressHelp": "Adresse sur laquelle cette passerelle écoute sur son hôte. Les environnements utilisent les adresses accessibles confirmées ci-dessous.",
@@ -3461,7 +3459,8 @@
     "publishHelp": "Publier cet environnement d’exécution dans Redeven Cloud via ce Gateway. Une approbation Cloud est requise.",
     "empty": "Aucun Gateway associé.",
     "unavailable": "Autorisez Desktop sur ce Gateway pour ouvrir Env App.",
-    "tab": "Gateway"
+    "tab": "Gateway",
+    "useRouteChange": "Cet environnement d’exécution est déjà associé à Cloud. Utilisez Changer de route pour changer de connexion tout en conservant son identité et son appartenance."
   },
   "tessivenRuntime": {
     "confirmTitle": "Confirmer : {action}",
@@ -3473,5 +3472,36 @@
     "stop": "arrêt",
     "restart": "redémarrage",
     "update": "mise à niveau"
+  },
+  "cloudRoute": {
+    "approval": "Approbation Cloud",
+    "connection": "Connexion Cloud",
+    "selected": "Chemin sélectionné",
+    "nextAttempt": "Prochaine vérification : {time}",
+    "change": "Changer de chemin",
+    "retry": "Réessayer la connexion",
+    "manageApproval": "Gérer l’approbation",
+    "cancelIntent": "Déconnecter Cloud",
+    "pendingOperation": "Voir le changement en attente",
+    "direct": "Direct",
+    "gatewayUnavailable": "Gateway indisponible",
+    "approved": "Approuvé",
+    "pending": "En attente d’approbation",
+    "revoked": "Révoqué",
+    "identity_required": "Identité expirée",
+    "action_required": "Action requise",
+    "connected": "Connecté",
+    "disconnected": "Déconnecté",
+    "reauthorizeHelp": "Renouvelez l’autorisation de la machine avec un nouveau ticket de configuration ou une inscription explicite au Namespace. Le travail local reste disponible.",
+    "impact": "Après confirmation, les sessions Cloud seront reconnectées par ce chemin. Les tâches en arrière-plan continueront. L’identité et le propriétaire Cloud restent identiques.",
+    "verify": "Vérifier le chemin",
+    "ready": "Chemin vérifié. Confirmez pour reconnecter.",
+    "confirm": "Confirmer et reconnecter",
+    "query": "Consulter l’opération initiale",
+    "committed": "Chemin enregistré",
+    "unknown": "Le résultat est inconnu. Consultez l’opération initiale avant de réessayer.",
+    "corrupt": "L’opération enregistrée est illisible. Vérifiez le chemin actuel avant d’effacer cet enregistrement local.",
+    "storageFailed": "L’opération n’a pas pu être enregistrée localement. Aucun changement n’a commencé.",
+    "reviewCurrent": "Effacer l’enregistrement local"
   }
 }

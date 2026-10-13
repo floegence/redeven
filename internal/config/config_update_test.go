@@ -29,7 +29,7 @@ func TestSaveConnectionPreservesCurrentSettingsAndAccountRemoval(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "config.json")
-			stale := configWithDirectArtifact(json.RawMessage(directArtifactFixture), false)
+			stale := configWithPoolArtifact(json.RawMessage(directArtifactFixture), false)
 			stale.AI = savedChatGPTConfig()
 			if err := Save(path, stale); err != nil {
 				t.Fatal(err)
@@ -39,13 +39,13 @@ func TestSaveConnectionPreservesCurrentSettingsAndAccountRemoval(t *testing.T) {
 				cfg.Shell, cfg.LogLevel = "/bin/zsh", "debug"
 				cfg.AgentHomeDir = t.TempDir()
 				cfg.CodeServerPortMin, cfg.CodeServerPortMax = 32000, 32100
-				cfg.extra = map[string]json.RawMessage{"extension_settings": json.RawMessage(`{"enabled":true}`)}
 				return nil
 			})
 			if err != nil {
 				t.Fatal(err)
 			}
-			stale.Direct.Spent = true
+			stale.ControlArtifactPool.Entries[0].Spent = true
+			stale.ControlArtifactPool.Entries[0].ArtifactJSON = nil
 			if err := SaveConnection(path, stale); err != nil {
 				t.Fatal(err)
 			}
@@ -53,7 +53,8 @@ func TestSaveConnectionPreservesCurrentSettingsAndAccountRemoval(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			current.Direct.Spent = true
+			current.ControlArtifactPool.Entries[0].Spent = true
+			current.ControlArtifactPool.Entries[0].ArtifactJSON = nil
 			if !jsonEqual(mustCanonicalJSON(restarted), mustCanonicalJSON(current)) || !jsonEqual(mustCanonicalJSON(stale), mustCanonicalJSON(current)) {
 				t.Fatal("connection save lost current settings, restored a removed account, or failed to publish the committed configuration")
 			}
@@ -63,7 +64,7 @@ func TestSaveConnectionPreservesCurrentSettingsAndAccountRemoval(t *testing.T) {
 
 func TestSettingsAndConnectionUpdatesSerialize(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.json")
-	connection := configWithDirectArtifact(json.RawMessage(directArtifactFixture), false)
+	connection := configWithPoolArtifact(json.RawMessage(directArtifactFixture), false)
 	if err := Save(path, connection); err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +80,8 @@ func TestSettingsAndConnectionUpdatesSerialize(t *testing.T) {
 		settingsDone <- err
 	}()
 	<-entered
-	connection.Direct.Spent = true
+	connection.ControlArtifactPool.Entries[0].Spent = true
+	connection.ControlArtifactPool.Entries[0].ArtifactJSON = nil
 	go func() { connectionDone <- SaveConnection(path, connection) }()
 	select {
 	case err := <-connectionDone:
@@ -103,14 +105,14 @@ func TestSettingsAndConnectionUpdatesSerialize(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(restarted.AI, savedChatGPTConfig()) || !restarted.Direct.Spent || restarted.Shell != "/bin/zsh" {
+	if !reflect.DeepEqual(restarted.AI, savedChatGPTConfig()) || !restarted.ControlArtifactPool.Entries[0].Spent || restarted.Shell != "/bin/zsh" {
 		t.Fatal("concurrent settings and connection updates lost a committed fact")
 	}
 }
 
 func TestSaveConnectionFailurePreservesDiskAndCandidate(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.json")
-	current := configWithDirectArtifact(json.RawMessage(directArtifactFixture), false)
+	current := configWithPoolArtifact(json.RawMessage(directArtifactFixture), false)
 	current.AI = savedChatGPTConfig()
 	if err := Save(path, current); err != nil {
 		t.Fatal(err)
@@ -119,8 +121,8 @@ func TestSaveConnectionFailurePreservesDiskAndCandidate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	next := configWithDirectArtifact(json.RawMessage(directArtifactFixture), true)
-	want := configWithDirectArtifact(json.RawMessage(directArtifactFixture), true)
+	next := configWithPoolArtifact(json.RawMessage(directArtifactFixture), true)
+	want := configWithPoolArtifact(json.RawMessage(directArtifactFixture), true)
 	writeErr := errors.New("rename denied")
 	persistence := defaultConfigPersistence()
 	persistence.writeConfig = func(string, *Config) error { return writeErr }

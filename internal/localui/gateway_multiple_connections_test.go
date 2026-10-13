@@ -40,7 +40,7 @@ func TestRuntimePairsWithTwoGatewaysAndRemovesOnlySelectedMember(t *testing.T) {
 		}
 		defer server.Close()
 		gateways = append(gateways, gateway)
-		request := httptest.NewRequest(http.MethodPost, "http://localhost/gateway/v5/invitation-codes", strings.NewReader(`{"protocol_version":"redeven-gateway-v5"}`))
+		request := httptest.NewRequest(http.MethodPost, "http://localhost/gateway/v6/invitation-codes", strings.NewReader(`{"protocol_version":"redeven-gateway-v6"}`))
 		request.RemoteAddr = "127.0.0.1:1234"
 		request.Header.Set(gatewayservice.HostAdminHeader, hostToken)
 		response := httptest.NewRecorder()
@@ -90,7 +90,7 @@ func TestRuntimePairsWithTwoGatewaysAndRemovesOnlySelectedMember(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(saved.Gateways) != 2 || saved.CloudGateway() != nil || saved.GatewayPublication != nil {
+	if len(saved.Gateways) != 2 || saved.CloudGateway() != nil {
 		t.Fatal("pairing changed Cloud ownership")
 	}
 	runtime.a.CloseGatewayMembership()
@@ -116,7 +116,7 @@ func TestRuntimePairsWithTwoGatewaysAndRemovesOnlySelectedMember(t *testing.T) {
 		t.Fatal("selected removal lost the other member")
 	}
 	for index, gateway := range gateways {
-		request := httptest.NewRequest(http.MethodPost, "http://localhost/gateway/v5/catalog", strings.NewReader(`{"protocol_version":"redeven-gateway-v5"}`))
+		request := httptest.NewRequest(http.MethodPost, "http://localhost/gateway/v6/catalog", strings.NewReader(`{"protocol_version":"redeven-gateway-v6"}`))
 		request.RemoteAddr = "127.0.0.1:1234"
 		request.Header.Set(gatewayservice.HostAdminHeader, hostToken)
 		response := httptest.NewRecorder()

@@ -3,6 +3,7 @@ package config
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
@@ -18,6 +19,9 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/floegence/redeven/internal/runtimecloud"
+	rc "github.com/floegence/redeven/internal/runtimecloud/protocol"
 
 	flowersec "github.com/floegence/flowersec/flowersec-go/v5"
 	"github.com/floegence/redeven/internal/gatewaymembership"
@@ -110,55 +114,26 @@ type bootstrapControlArtifactPool struct {
 	ResponseDigestB64u            string                              `json:"response_digest_b64u"`
 }
 
-type LocalEnvironmentBinding struct {
-	LocalEnvironmentPublicID string `json:"local_environment_public_id"`
-	UserPublicID             string `json:"user_public_id,omitempty"`
-	EnvPublicID              string `json:"env_public_id"`
-	Generation               int64  `json:"generation"`
-	Hostname                 string `json:"hostname,omitempty"`
-	OS                       string `json:"os,omitempty"`
-	Arch                     string `json:"arch,omitempty"`
-	RuntimeVersion           string `json:"runtime_version,omitempty"`
-	LastSeenAtUnixMS         int64  `json:"last_seen_at_unix_ms,omitempty"`
-}
-
-type runtimeLinkExchangeRequest struct {
-	ExpectedBindingGeneration int64  `json:"expected_binding_generation,omitempty"`
-	ProtocolVersion           string `json:"protocol_version"`
-	EnvPublicID               string `json:"env_public_id"`
-	CloudOrigin               string `json:"cloud_origin"`
-	LocalEnvironmentPublicID  string `json:"local_environment_public_id"`
-	AgentInstanceID           string `json:"agent_instance_id"`
-	DeliveryRequestIDB64u     string `json:"delivery_request_id_b64u"`
-	Hostname                  string `json:"hostname,omitempty"`
-	OS                        string `json:"os,omitempty"`
-	Arch                      string `json:"arch,omitempty"`
-	RuntimeVersion            string `json:"runtime_version,omitempty"`
-}
-
-type runtimeLinkExchangeResponse struct {
-	ProtocolVersion         string                        `json:"protocol_version"`
-	CloudID                 string                        `json:"cloud_id"`
-	CloudOrigin             string                        `json:"cloud_origin"`
-	AccessPointID           string                        `json:"access_point_id"`
-	AccessPointOrigin       string                        `json:"access_point_origin"`
-	EnvPublicID             string                        `json:"env_public_id"`
-	ControlArtifactPool     *bootstrapControlArtifactPool `json:"control_artifact_pool"`
-	LocalEnvironmentBinding *LocalEnvironmentBinding      `json:"local_environment_binding"`
-}
-
-const bootstrapDeliveryAttemptVersion = 2
-
-var errBootstrapDeliveryExpired = errors.New("bootstrap delivery expired")
+const bootstrapDeliveryAttemptVersion = 4
 
 type bootstrapDeliveryAttempt struct {
-	Version                        int    `json:"version"`
-	CloudOrigin                    string `json:"cloud_origin"`
-	AccessPointOrigin              string `json:"access_point_origin"`
-	EnvPublicID                    string `json:"env_public_id"`
-	LocalEnvironmentPublicID       string `json:"local_environment_public_id"`
-	AgentInstanceID                string `json:"agent_instance_id"`
-	BootstrapDeliveryRequestIDB64u string `json:"delivery_request_id_b64u"`
+	CloudID                        string      `json:"cloud_id"`
+	DeliveryRequestID              string      `json:"delivery_request_id"`
+	RecoveryOnly                   bool        `json:"recovery_only"`
+	Suspended                      bool        `json:"suspended"`
+	ExpectedAssociationRevision    int64       `json:"expected_association_revision"`
+	ExpectedRouteRevision          int64       `json:"expected_route_revision"`
+	PublicKeyB64u                  string      `json:"public_key_b64u"`
+	PrivateKeyB64u                 string      `json:"private_key_b64u"`
+	NamespacePublicID              string      `json:"namespace_public_id"`
+	Metadata                       rc.Metadata `json:"metadata"`
+	Version                        int         `json:"version"`
+	CloudOrigin                    string      `json:"cloud_origin"`
+	AccessPointOrigin              string      `json:"access_point_origin"`
+	EnvPublicID                    string      `json:"env_public_id"`
+	LocalEnvironmentPublicID       string      `json:"local_environment_public_id"`
+	AgentInstanceID                string      `json:"agent_instance_id"`
+	BootstrapDeliveryRequestIDB64u string      `json:"delivery_request_id_b64u"`
 }
 
 type bootstrapExchangeErrorResponse struct {
@@ -224,9 +199,6 @@ func BootstrapCloudLink(ctx context.Context, args CloudLinkBootstrapArgs) (*Conf
 }
 
 func ResolveCloudLinkConfig(ctx context.Context, args CloudLinkBootstrapArgs) (*Config, error) {
-	if normalizeBearerToken(args.RuntimeLinkTicket) == "" {
-		return nil, errors.New("missing bootstrap ticket")
-	}
 	return resolveCloudLinkConfig(ctx, cloudLinkResolveArgs{
 		ExpectedBindingGeneration: args.ExpectedBindingGeneration,
 		ConfigPath:                args.ConfigPath, CloudOrigin: args.CloudOrigin,
@@ -239,6 +211,7 @@ func ResolveCloudLinkConfig(ctx context.Context, args CloudLinkBootstrapArgs) (*
 }
 
 type runtimeLinkAssignment struct {
+	NamespacePublicID string `json:"namespace_public_id"`
 	ProtocolVersion   string `json:"protocol_version"`
 	CloudID           string `json:"cloud_id"`
 	CloudOrigin       string `json:"cloud_origin"`
@@ -254,11 +227,11 @@ func resolveCloudAccessPoint(ctx context.Context, client *http.Client, cloudOrig
 		return nil, err
 	}
 	endpoint := *origin
-	endpoint.Path = "/api/rcpp/v4/runtime-link/resolve"
+	endpoint.Path = "/api/rcpp/v5/runtime-link/resolve"
 	payload, err := json.Marshal(struct {
 		ProtocolVersion string `json:"protocol_version"`
 		EnvPublicID     string `json:"env_public_id"`
-	}{"rcpp-v4", envID})
+	}{"rcpp-v5", envID})
 	if err != nil {
 		return nil, err
 	}
@@ -280,7 +253,7 @@ func resolveCloudAccessPoint(ctx context.Context, client *http.Client, cloudOrig
 		return nil, err
 	}
 	if len(body) > maxAssignmentBytes {
-		return nil, errors.New("Cloud assignment exceeds exact byte bound")
+		return nil, errors.New("cloud assignment exceeds exact byte bound")
 	}
 	if resp.StatusCode != http.StatusOK {
 		failure := &RuntimeLinkExchangeError{StatusCode: resp.StatusCode}
@@ -298,15 +271,15 @@ func resolveCloudAccessPoint(ctx context.Context, client *http.Client, cloudOrig
 	}
 	var extra any
 	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
-		return nil, errors.New("Cloud assignment contains multiple JSON values")
+		return nil, errors.New("cloud assignment contains multiple JSON values")
 	}
 	accessOrigin, err := normalizeAccessPointOrigin(assignment.AccessPointOrigin)
-	if err != nil || accessOrigin != assignment.AccessPointOrigin || assignment.ProtocolVersion != "rcpp-v4" ||
+	if err != nil || accessOrigin != assignment.AccessPointOrigin || assignment.ProtocolVersion != "rcpp-v5" ||
 		assignment.CloudOrigin != cloudOrigin || assignment.EnvPublicID != envID ||
 		strings.TrimSpace(assignment.CloudID) == "" || assignment.CloudID != strings.TrimSpace(assignment.CloudID) ||
 		strings.TrimSpace(assignment.AccessPointID) == "" || assignment.AccessPointID != strings.TrimSpace(assignment.AccessPointID) ||
 		assignment.ExpiresAtUnixMS <= time.Now().UnixMilli() {
-		return nil, errors.New("Cloud assignment identity, origin, expiry or protocol mismatch")
+		return nil, errors.New("cloud assignment identity, origin, expiry or protocol mismatch")
 	}
 	return &assignment, nil
 }
@@ -323,92 +296,151 @@ func resolveCloudLinkConfig(ctx context.Context, args cloudLinkResolveArgs) (*Co
 	if cloudOrigin == "" || envID == "" {
 		return nil, errors.New("missing cloud/env-id")
 	}
-	if credential == "" {
-		return nil, errors.New("missing Runtime link ticket")
-	}
 	cloudOrigin, err := normalizeAccessPointOrigin(cloudOrigin)
 	if err != nil {
 		return nil, fmt.Errorf("invalid Cloud origin: %w", err)
 	}
-	assignment, err := resolveCloudAccessPoint(ctx, args.HTTPClient, cloudOrigin, envID, credential)
-	if err != nil {
-		return nil, err
-	}
-	baseURL = assignment.AccessPointOrigin
-	if args.CloudID != "" && args.CloudID != assignment.CloudID {
-		return nil, errors.New("Cloud identity mismatch")
-	}
-	args.CloudID = assignment.CloudID
-
 	var prev *Config
 	if c, loadErr := Load(cfgPath); loadErr == nil {
 		prev = c
 	} else if !errors.Is(loadErr, os.ErrNotExist) {
 		return nil, fmt.Errorf("load existing runtime configuration: %w", loadErr)
 	}
-	if prev != nil && (prev.CloudGateway() != nil || prev.GatewayPublication != nil || prev.GatewayMigrationEvidence != nil || prev.GatewayRejoinRequired) {
-		return nil, errors.New("gateway Cloud access requires explicit migration before changing the provider binding")
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	if args.HTTPClient != nil && args.HTTPClient.Transport != nil {
+		selected, ok := args.HTTPClient.Transport.(*http.Transport)
+		if !ok {
+			return nil, errors.New("cloud enrollment requires an HTTP transport")
+		}
+		transport = selected.Clone()
 	}
-	if args.ExpectedBindingGeneration > 0 && (prev == nil ||
-		prev.CloudOrigin != cloudOrigin || prev.CloudID != assignment.CloudID ||
-		prev.EnvironmentID != envID || prev.AccessPointOrigin != assignment.AccessPointOrigin ||
-		prev.BindingGeneration != args.ExpectedBindingGeneration) {
+	if prev != nil && prev.CloudRoute != nil && prev.CloudRoute.Kind == CloudRouteGateway {
+		proxy, err := prev.CloudProxy()
+		if err != nil {
+			return nil, err
+		}
+		// Both discovery and enrollment use the selected route. Preserve the
+		// independent inner Cloud TLS trust when installing the proxy dialer.
+		proxied := proxy.HTTPTransport()
+		proxied.TLSClientConfig = transport.TLSClientConfig
+		transport = proxied
+	}
+	defer transport.CloseIdleConnections()
+	assignmentClient := &http.Client{Transport: transport, Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	var assignment *runtimeLinkAssignment
+	journalPath := filepath.Clean(cfgPath) + ".cloud-enrollment-v5.json"
+	if raw, readErr := os.ReadFile(journalPath); readErr == nil {
+		var pending bootstrapDeliveryAttempt
+		if err := decodeExactBootstrapDeliveryAttempt(raw, &pending); err != nil {
+			return nil, fmt.Errorf("read pending Cloud enrollment: %w; inspect the journal before registering again", err)
+		}
+		if pending.Suspended {
+			return nil, errors.New("cloud enrollment is cancelled locally; use cloud enrollment resume with the original operation ID")
+		}
+		if pending.CloudOrigin != cloudOrigin || pending.EnvPublicID != envID {
+			return nil, errors.New("pending Cloud enrollment belongs to another environment; inspect the original operation")
+		}
+		assignment = &runtimeLinkAssignment{CloudID: pending.CloudID, CloudOrigin: pending.CloudOrigin, EnvPublicID: pending.EnvPublicID, NamespacePublicID: pending.NamespacePublicID, AccessPointOrigin: pending.AccessPointOrigin}
+	} else if !errors.Is(readErr, os.ErrNotExist) {
+		return nil, readErr
+	} else {
+		if credential == "" {
+			return nil, errors.New("missing Runtime link ticket; inspect cloud enrollment status to resume an existing operation")
+		}
+		assignment, err = resolveCloudAccessPoint(ctx, assignmentClient, cloudOrigin, envID, credential)
+	}
+	if err != nil {
+		return nil, err
+	}
+	baseURL = assignment.AccessPointOrigin
+	if args.CloudID != "" && args.CloudID != assignment.CloudID {
+		return nil, errors.New("cloud identity mismatch")
+	}
+	args.CloudID = assignment.CloudID
+	if args.ExpectedBindingGeneration > 0 && (prev == nil || prev.CloudAssociation == nil || prev.CloudAssociation.CloudOrigin != cloudOrigin || prev.CloudAssociation.Binding == nil || prev.CloudAssociation.Binding.EnvPublicID != envID || prev.CloudAssociation.Binding.Generation != args.ExpectedBindingGeneration) {
 		return nil, &RuntimeLinkExchangeError{StatusCode: http.StatusConflict, Code: "RUNTIME_LINK_BINDING_STALE"}
 	}
-	attempt, attemptPath, err := prepareBootstrapDeliveryAttempt(cfgPath, cloudOrigin, baseURL, envID, prev)
+	if assignment.NamespacePublicID == "" {
+		return nil, errors.New("cloud assignment is missing its Namespace")
+	}
+	attempt, attemptPath, err := prepareRuntimeCloudEnrollment(cfgPath, assignment, prev, args)
 	if err != nil {
 		return nil, err
 	}
-	bootstrap, err := exchangeRuntimeLinkTicket(ctx, args, baseURL, envID, credential, attempt)
-	if errors.Is(err, errBootstrapDeliveryExpired) {
-		attempt, err = rotateExpiredBootstrapDeliveryAttempt(attemptPath, attempt)
+	if credential == "" {
+		attempt.RecoveryOnly = true
+	}
+	// A saved success with a failed journal unlink is already complete. Never
+	// replay its old reserve over spent entries, a newer generation or settings.
+	if prev != nil && prev.CloudAssociation != nil && prev.CloudAssociation.EnrollmentOperationID == attempt.BootstrapDeliveryRequestIDB64u && prev.CloudAssociation.Revision >= attempt.ExpectedAssociationRevision+1 {
+		prev.bootstrapDeliveryAttemptPath = attemptPath
+		prev.bootstrapDeliveryRequestIDB64u = attempt.BootstrapDeliveryRequestIDB64u
+		prev.cloudEnrollmentExpectedAssociationRevision = attempt.ExpectedAssociationRevision
+		prev.cloudEnrollmentExpectedRouteRevision = attempt.ExpectedRouteRevision
+		return prev, nil
+	}
+	keyRaw, err := base64.RawURLEncoding.DecodeString(attempt.PrivateKeyB64u)
+	if err != nil || len(keyRaw) != ed25519.PrivateKeySize {
+		return nil, errors.New("invalid pending Cloud enrollment identity")
+	}
+	client, err := runtimecloud.NewClient(cloudOrigin, transport)
+	if err != nil {
+		return nil, err
+	}
+	defer client.Close()
+	var enrolled *rc.RecoverResponse
+	if !attempt.RecoveryOnly {
+		enrolled, err = client.Enroll(ctx, assignment.NamespacePublicID, ed25519.PrivateKey(keyRaw), nil, rc.EnrollRequest{OperationID: attempt.BootstrapDeliveryRequestIDB64u, RuntimePublicID: attempt.LocalEnvironmentPublicID, PublicKeyB64u: attempt.PublicKeyB64u, Authorization: rc.EnrollmentAuthorization{RuntimeLinkTicket: credential, EnvPublicID: envID}, Metadata: attempt.Metadata})
+	}
+	var remote *runtimecloud.Error
+	if runtimecloud.DeliveryExpired(err) {
+		attempt.DeliveryRequestID, err = runtimecloud.NewOperationID()
 		if err != nil {
-			return nil, fmt.Errorf("retire expired bootstrap delivery attempt: %w", err)
+			return nil, err
 		}
-		bootstrap, err = exchangeRuntimeLinkTicket(ctx, args, baseURL, envID, credential, attempt)
+		attempt.RecoveryOnly = true
+		if err := updateBootstrapDeliveryAttempt(attemptPath, attempt); err != nil {
+			return nil, err
+		}
+	}
+	if attempt.RecoveryOnly || errors.As(err, &remote) && remote.Code == "INVALID_RUNTIME_LINK_TICKET" {
+		enrolled, err = client.Recover(ctx, assignment.NamespacePublicID, attempt.LocalEnvironmentPublicID, "", ed25519.PrivateKey(keyRaw), rc.RecoverRequest{RuntimePublicID: attempt.LocalEnvironmentPublicID, DeliveryRequestID: attempt.DeliveryRequestID, EnrollmentOperationID: attempt.BootstrapDeliveryRequestIDB64u})
+	}
+	if runtimecloud.DeliveryExpired(err) {
+		attempt.DeliveryRequestID, err = runtimecloud.NewOperationID()
+		if err != nil {
+			return nil, err
+		}
+		attempt.RecoveryOnly = true
+		if err := updateBootstrapDeliveryAttempt(attemptPath, attempt); err != nil {
+			return nil, err
+		}
+		return nil, errors.New("cloud delivery expired; retry the original enrollment to recover its credentials")
 	}
 	if err != nil {
 		return nil, err
 	}
-	if strings.TrimSpace(bootstrap.EnvPublicID) != envID {
-		return nil, errors.New("invalid bootstrap exchange response: env_public_id mismatch")
+	if enrolled.State != rc.ApprovalApproved || enrolled.Delivery == nil || enrolled.Binding.EnvPublicID != envID || enrolled.Binding.CloudID != assignment.CloudID || enrolled.Delivery.CloudOrigin != cloudOrigin || enrolled.Delivery.RegionOrigin != baseURL || enrolled.Delivery.DeliveryRequestID != attempt.DeliveryRequestID {
+		return nil, errors.New("cloud enrollment did not approve the selected environment")
 	}
-	agentInstanceID := attempt.AgentInstanceID
-	localEnvironmentPublicID := attempt.LocalEnvironmentPublicID
-	binding := bootstrap.LocalEnvironmentBinding
-	if binding == nil {
-		return nil, errors.New("invalid bootstrap exchange response: missing local_environment_binding")
-	}
-	if strings.TrimSpace(binding.LocalEnvironmentPublicID) != localEnvironmentPublicID {
-		return nil, errors.New("invalid bootstrap exchange response: local_environment_public_id mismatch")
-	}
-	if strings.TrimSpace(binding.EnvPublicID) != envID {
-		return nil, errors.New("invalid bootstrap exchange response: env_public_id mismatch")
-	}
-	if args.ExpectedBindingGeneration > 0 && binding.Generation != args.ExpectedBindingGeneration+1 {
-		return nil, errors.New("runtime link renewal returned an unexpected binding generation")
-	}
-	if binding.Generation <= 0 {
-		return nil, errors.New("invalid bootstrap exchange response: missing binding generation")
-	}
-	if bootstrap.ControlArtifactPool == nil {
-		return nil, errors.New("invalid bootstrap response: missing control artifact pool")
-	}
-	controlPool, err := controlArtifactPoolFromBootstrap(*bootstrap.ControlArtifactPool, binding.Generation, time.Now())
-	if err != nil {
-		return nil, fmt.Errorf("invalid bootstrap control artifact pool: %w", err)
-	}
-	if bootstrap.CloudOrigin != cloudOrigin {
-		return nil, errors.New("invalid bootstrap exchange response: cloud_origin mismatch")
-	}
-	if bootstrap.AccessPointOrigin != baseURL || bootstrap.AccessPointID != assignment.AccessPointID {
-		return nil, errors.New("invalid bootstrap exchange response: access_point_origin mismatch")
-	}
-
+	binding := enrolled.Binding
+	agentInstanceID, localEnvironmentPublicID := attempt.AgentInstanceID, attempt.LocalEnvironmentPublicID
 	cloudID := assignment.CloudID
-	if bootstrap.CloudID != cloudID {
-		return nil, errors.New("invalid bootstrap exchange response: cloud_id mismatch")
+	association := &CloudAssociation{Revision: 1, Enabled: true, CloudID: cloudID, CloudOrigin: cloudOrigin, NamespacePublicID: assignment.NamespacePublicID, RegionOrigin: baseURL, RuntimePublicID: localEnvironmentPublicID, PublicKeyB64u: attempt.PublicKeyB64u, PrivateKeyB64u: attempt.PrivateKeyB64u, Binding: binding, ApprovalState: rc.ApprovalApproved, EnrollmentSubmitted: true, DeliveryRequestID: attempt.DeliveryRequestID, EnrollmentOperationID: attempt.BootstrapDeliveryRequestIDB64u}
+	route := &CloudRoute{Kind: CloudRouteDirect, Revision: 1}
+	if prev != nil && prev.CloudAssociation != nil {
+		association.Revision = attempt.ExpectedAssociationRevision + 1
 	}
+	if prev != nil && prev.CloudRoute != nil {
+		copy := *prev.CloudRoute
+		route = &copy
+	}
+	deliveryConfig := &Config{CloudAssociation: association, CloudRoute: route}
+	if err := deliveryConfig.ApplyCloudDelivery(enrolled.Delivery); err != nil {
+		return nil, err
+	}
+	association = deliveryConfig.CloudAssociation
+	controlPool := deliveryConfig.ControlArtifactPool
 
 	agentHomeDir := strings.TrimSpace(args.AgentHomeDir)
 	if agentHomeDir == "" && prev != nil {
@@ -431,23 +463,25 @@ func resolveCloudLinkConfig(ctx context.Context, args cloudLinkResolveArgs) (*Co
 	}
 
 	cfg := &Config{
-		CloudOrigin:                    cloudOrigin,
-		AccessPointOrigin:              baseURL,
-		CloudID:                        cloudID,
-		EnvironmentID:                  envID,
-		LocalEnvironmentPublicID:       localEnvironmentPublicID,
-		BindingGeneration:              binding.Generation,
-		AgentInstanceID:                agentInstanceID,
-		Direct:                         nil,
-		ControlArtifactPool:            controlPool,
-		AI:                             nil,
-		PermissionPolicy:               nil,
-		AgentHomeDir:                   agentHomeDir,
-		Shell:                          shell,
-		LogFormat:                      logFormat,
-		LogLevel:                       logLevel,
-		bootstrapDeliveryAttemptPath:   attemptPath,
-		bootstrapDeliveryRequestIDB64u: attempt.BootstrapDeliveryRequestIDB64u,
+		CloudAssociation: association, CloudRoute: route,
+		cloudEnrollmentExpectedAssociationRevision: attempt.ExpectedAssociationRevision,
+		cloudEnrollmentExpectedRouteRevision:       attempt.ExpectedRouteRevision,
+		CloudOrigin:                                cloudOrigin,
+		AccessPointOrigin:                          baseURL,
+		CloudID:                                    cloudID,
+		EnvironmentID:                              envID,
+		LocalEnvironmentPublicID:                   localEnvironmentPublicID,
+		BindingGeneration:                          binding.Generation,
+		AgentInstanceID:                            agentInstanceID,
+		ControlArtifactPool:                        controlPool,
+		AI:                                         nil,
+		PermissionPolicy:                           nil,
+		AgentHomeDir:                               agentHomeDir,
+		Shell:                                      shell,
+		LogFormat:                                  logFormat,
+		LogLevel:                                   logLevel,
+		bootstrapDeliveryAttemptPath:               attemptPath,
+		bootstrapDeliveryRequestIDB64u:             attempt.BootstrapDeliveryRequestIDB64u,
 	}
 
 	// Write permission_policy explicitly so users can audit what is enabled locally.
@@ -488,96 +522,6 @@ func (e *RuntimeLinkExchangeError) Error() string {
 	return fmt.Sprintf("runtime link exchange failed with HTTP %d/%s", e.StatusCode, e.Code)
 }
 
-func exchangeRuntimeLinkTicket(ctx context.Context, args cloudLinkResolveArgs, baseURL string, envID string, runtimeLinkTicket string, delivery bootstrapDeliveryAttempt) (*runtimeLinkExchangeResponse, error) {
-	u, err := url.Parse(strings.TrimSpace(baseURL))
-	if err != nil {
-		return nil, fmt.Errorf("invalid access point origin: %w", err)
-	}
-	if !strings.EqualFold(u.Scheme, "https") || strings.TrimSpace(u.Hostname()) == "" {
-		return nil, errors.New("runtime link exchange requires an HTTPS origin")
-	}
-	u.Path = strings.TrimRight(u.Path, "/") + "/api/rcpp/v4/runtime-link/exchange"
-	u.RawQuery = ""
-	if !validCanonicalBase64URL32(delivery.BootstrapDeliveryRequestIDB64u) {
-		return nil, errors.New("invalid Runtime link delivery request id")
-	}
-	payload, err := json.Marshal(runtimeLinkExchangeRequest{
-		ExpectedBindingGeneration: args.ExpectedBindingGeneration,
-		ProtocolVersion:           "rcpp-v4", EnvPublicID: strings.TrimSpace(envID), CloudOrigin: delivery.CloudOrigin,
-		LocalEnvironmentPublicID: delivery.LocalEnvironmentPublicID, AgentInstanceID: delivery.AgentInstanceID,
-		DeliveryRequestIDB64u: delivery.BootstrapDeliveryRequestIDB64u,
-		Hostname:              firstNonEmpty(args.RuntimeHostname, hostnameBestEffort()), OS: firstNonEmpty(args.RuntimeGOOS, runtime.GOOS),
-		Arch: firstNonEmpty(args.RuntimeGOARCH, runtime.GOARCH), RuntimeVersion: strings.TrimSpace(args.RuntimeVersion),
-	})
-	if err != nil {
-		return nil, err
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u.String(), bytes.NewReader(payload))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+runtimeLinkTicket)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
-	client := secureBootstrapHTTPClient(args.HTTPClient, u)
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, ControlArtifactMaxResponseBytes+1))
-	if err != nil {
-		return nil, fmt.Errorf("read Runtime link exchange response: %w", err)
-	}
-	if len(body) > ControlArtifactMaxResponseBytes {
-		return nil, errors.New("runtime link exchange response exceeds exact byte bound")
-	}
-	if resp.StatusCode != http.StatusOK {
-		var failure bootstrapExchangeErrorResponse
-		if decodeErr := decodeExactBootstrapExchangeError(body, &failure); decodeErr == nil {
-			if resp.StatusCode == http.StatusConflict && failure.Error.Code == "RUNTIME_LINK_DELIVERY_EXPIRED" {
-				return nil, errBootstrapDeliveryExpired
-			}
-			return nil, &RuntimeLinkExchangeError{StatusCode: resp.StatusCode, Code: failure.Error.Code}
-		}
-		return nil, &RuntimeLinkExchangeError{StatusCode: resp.StatusCode}
-	}
-	var out runtimeLinkExchangeResponse
-	if err := decodeExactRuntimeLinkResponse(body, &out); err != nil {
-		return nil, fmt.Errorf("invalid Runtime link exchange json: %w", err)
-	}
-	if out.ProtocolVersion != "rcpp-v4" || out.ControlArtifactPool == nil {
-		return nil, errors.New("invalid Runtime link exchange response contract")
-	}
-	return &out, nil
-}
-
-func decodeExactRuntimeLinkResponse(raw []byte, response *runtimeLinkExchangeResponse) error {
-	if response == nil {
-		return errors.New("nil Runtime link response")
-	}
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(response); err != nil {
-		return err
-	}
-	var extra any
-	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
-		return errors.New("runtime link response contains multiple JSON values")
-	}
-	return nil
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		value = strings.TrimSpace(value)
-		if value != "" {
-			return value
-		}
-	}
-	return ""
-}
-
 func resolveBootstrapStateLayout(args BootstrapArgs) (StateLayout, error) {
 	return LocalEnvironmentStateLayout(args.StateRoot)
 }
@@ -606,7 +550,9 @@ func decodeExactBootstrapExchangeError(raw []byte, response *bootstrapExchangeEr
 // an unlink directory-sync failure is completion-safe because a crash can only
 // restore the same idempotent request ID after the configuration is committed.
 func SaveCloudLinkConfig(path string, cfg *Config) error {
-	if err := Save(path, cfg); err != nil {
+	unlock := lockConfig(path)
+	defer unlock()
+	if err := saveEnrollmentConnectionConfig(path, cfg, true); err != nil {
 		return err
 	}
 	return completeBootstrapDeliveryAttempt(cfg)
@@ -615,161 +561,12 @@ func SaveCloudLinkConfig(path string, cfg *Config) error {
 // SaveCloudLinkConnectionConfig commits an online Cloud exchange without
 // replacing local settings saved while the exchange was in flight.
 func SaveCloudLinkConnectionConfig(path string, cfg *Config) error {
-	if err := SaveConnection(path, cfg); err != nil {
+	unlock := lockConfig(path)
+	defer unlock()
+	if err := saveEnrollmentConnectionConfig(path, cfg, false); err != nil {
 		return err
 	}
 	return completeBootstrapDeliveryAttempt(cfg)
-}
-
-func prepareBootstrapDeliveryAttempt(configPath, cloudOrigin, accessPointOrigin, envPublicID string, prev *Config) (bootstrapDeliveryAttempt, string, error) {
-	path := filepath.Clean(configPath) + ".cloud-link-delivery-v2.json"
-	wanted := bootstrapDeliveryAttempt{
-		Version:           bootstrapDeliveryAttemptVersion,
-		CloudOrigin:       strings.TrimSpace(cloudOrigin),
-		AccessPointOrigin: strings.TrimSpace(accessPointOrigin),
-		EnvPublicID:       strings.TrimSpace(envPublicID),
-	}
-	if prev != nil {
-		wanted.AgentInstanceID = strings.TrimSpace(prev.AgentInstanceID)
-		wanted.LocalEnvironmentPublicID = strings.TrimSpace(prev.LocalEnvironmentPublicID)
-	}
-	if err := migrateBootstrapDeliveryAttempt(configPath, path, wanted); err != nil {
-		return bootstrapDeliveryAttempt{}, "", err
-	}
-	if raw, err := os.ReadFile(path); err == nil {
-		var persisted bootstrapDeliveryAttempt
-		if decodeErr := decodeExactBootstrapDeliveryAttempt(raw, &persisted); decodeErr != nil {
-			return bootstrapDeliveryAttempt{}, "", fmt.Errorf("invalid pending bootstrap delivery attempt: %w", decodeErr)
-		}
-		if persisted.CloudOrigin == wanted.CloudOrigin && persisted.AccessPointOrigin == wanted.AccessPointOrigin && persisted.EnvPublicID == wanted.EnvPublicID &&
-			(wanted.AgentInstanceID == "" || persisted.AgentInstanceID == wanted.AgentInstanceID) &&
-			(wanted.LocalEnvironmentPublicID == "" || persisted.LocalEnvironmentPublicID == wanted.LocalEnvironmentPublicID) {
-			return persisted, path, nil
-		}
-		return bootstrapDeliveryAttempt{}, "", errors.New("pending bootstrap delivery attempt belongs to a different provider or environment")
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return bootstrapDeliveryAttempt{}, "", err
-	}
-	var err error
-	if wanted.AgentInstanceID == "" {
-		wanted.AgentInstanceID, err = newAgentInstanceID()
-		if err != nil {
-			return bootstrapDeliveryAttempt{}, "", err
-		}
-	}
-	if wanted.LocalEnvironmentPublicID == "" {
-		wanted.LocalEnvironmentPublicID, err = newLocalEnvironmentPublicID()
-		if err != nil {
-			return bootstrapDeliveryAttempt{}, "", err
-		}
-	}
-	wanted.BootstrapDeliveryRequestIDB64u, err = newBootstrapDeliveryRequestID()
-	if err != nil {
-		return bootstrapDeliveryAttempt{}, "", err
-	}
-	if err := writeBootstrapDeliveryAttemptAtomic(path, wanted); err != nil {
-		return bootstrapDeliveryAttempt{}, "", err
-	}
-	return wanted, path, nil
-}
-
-// Only local identity crosses the protocol boundary. A v3 delivery ID must
-// never request replay of a response under the v4 contract.
-func migrateBootstrapDeliveryAttempt(configPath, path string, wanted bootstrapDeliveryAttempt) error {
-	legacyPath := filepath.Clean(configPath) + ".bootstrap-delivery-v1.json"
-	raw, err := os.ReadFile(legacyPath)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &fields); err != nil {
-		return fmt.Errorf("invalid legacy delivery journal: %w", err)
-	}
-	var version int
-	if err := json.Unmarshal(fields["version"], &version); err != nil || version != 1 {
-		return errors.New("unsupported legacy delivery journal version")
-	}
-	for oldName, newName := range map[string]string{
-		"provider_origin": "cloud_origin", "bootstrap_delivery_request_id_b64u": "delivery_request_id_b64u",
-	} {
-		if _, exists := fields[newName]; exists {
-			return errors.New("conflicting legacy delivery journal fields")
-		}
-		fields[newName] = fields[oldName]
-		delete(fields, oldName)
-	}
-	fields["version"] = json.RawMessage("2")
-	converted, err := json.Marshal(fields)
-	if err != nil {
-		return err
-	}
-	var legacy bootstrapDeliveryAttempt
-	if err := decodeExactBootstrapDeliveryAttempt(converted, &legacy); err != nil {
-		return fmt.Errorf("invalid legacy delivery journal: %w", err)
-	}
-	if legacy.CloudOrigin != wanted.CloudOrigin || legacy.EnvPublicID != wanted.EnvPublicID ||
-		(wanted.AgentInstanceID != "" && wanted.AgentInstanceID != legacy.AgentInstanceID) ||
-		(wanted.LocalEnvironmentPublicID != "" && wanted.LocalEnvironmentPublicID != legacy.LocalEnvironmentPublicID) {
-		return errors.New("legacy delivery journal belongs to a different Cloud or environment")
-	}
-	if current, readErr := os.ReadFile(path); readErr == nil {
-		var next bootstrapDeliveryAttempt
-		if err := decodeExactBootstrapDeliveryAttempt(current, &next); err != nil {
-			return err
-		}
-		if next.CloudOrigin != legacy.CloudOrigin || next.EnvPublicID != legacy.EnvPublicID ||
-			next.AgentInstanceID != legacy.AgentInstanceID || next.LocalEnvironmentPublicID != legacy.LocalEnvironmentPublicID ||
-			next.BootstrapDeliveryRequestIDB64u == legacy.BootstrapDeliveryRequestIDB64u {
-			return errors.New("conflicting Cloud delivery journals")
-		}
-	} else if !errors.Is(readErr, os.ErrNotExist) {
-		return readErr
-	} else {
-		legacy.AccessPointOrigin = wanted.AccessPointOrigin
-		legacy.BootstrapDeliveryRequestIDB64u, err = newBootstrapDeliveryRequestID()
-		if err != nil {
-			return err
-		}
-		if err := writeBootstrapDeliveryAttemptAtomic(path, legacy); err != nil {
-			return err
-		}
-	}
-	if err := os.Remove(legacyPath); err != nil {
-		return err
-	}
-	// The new journal is durable. An unlink sync failure can only restore the
-	// validated legacy journal, which the next read retires idempotently.
-	_ = syncDirectory(filepath.Dir(legacyPath))
-	return nil
-}
-
-func rotateExpiredBootstrapDeliveryAttempt(path string, expected bootstrapDeliveryAttempt) (bootstrapDeliveryAttempt, error) {
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return bootstrapDeliveryAttempt{}, err
-	}
-	var persisted bootstrapDeliveryAttempt
-	if err := decodeExactBootstrapDeliveryAttempt(raw, &persisted); err != nil {
-		return bootstrapDeliveryAttempt{}, err
-	}
-	if persisted != expected {
-		return bootstrapDeliveryAttempt{}, errors.New("bootstrap delivery attempt changed before expiry retirement")
-	}
-	next := persisted
-	next.BootstrapDeliveryRequestIDB64u, err = newBootstrapDeliveryRequestID()
-	if err != nil {
-		return bootstrapDeliveryAttempt{}, err
-	}
-	if next.BootstrapDeliveryRequestIDB64u == persisted.BootstrapDeliveryRequestIDB64u {
-		return bootstrapDeliveryAttempt{}, errors.New("bootstrap delivery request id did not advance")
-	}
-	if err := writeBootstrapDeliveryAttemptAtomic(path, next); err != nil {
-		return bootstrapDeliveryAttempt{}, err
-	}
-	return next, nil
 }
 
 func decodeExactBootstrapDeliveryAttempt(raw []byte, attempt *bootstrapDeliveryAttempt) error {
@@ -788,8 +585,21 @@ func decodeExactBootstrapDeliveryAttempt(raw []byte, attempt *bootstrapDeliveryA
 	if attempt.Version != bootstrapDeliveryAttemptVersion || strings.TrimSpace(attempt.CloudOrigin) == "" ||
 		strings.TrimSpace(attempt.AccessPointOrigin) == "" || strings.TrimSpace(attempt.EnvPublicID) == "" ||
 		strings.TrimSpace(attempt.LocalEnvironmentPublicID) == "" || strings.TrimSpace(attempt.AgentInstanceID) == "" ||
-		!validCanonicalBase64URL32(attempt.BootstrapDeliveryRequestIDB64u) {
+		!validCanonicalBase64URL32(attempt.BootstrapDeliveryRequestIDB64u) || !validCanonicalBase64URL32(attempt.DeliveryRequestID) || attempt.CloudID == "" || attempt.NamespacePublicID == "" || !rc.ValidPublicKey(attempt.PublicKeyB64u) {
 		return errors.New("invalid bootstrap delivery attempt fields")
+	}
+	identity := CloudAssociation{PublicKeyB64u: attempt.PublicKeyB64u, PrivateKeyB64u: attempt.PrivateKeyB64u}
+	if _, err := identity.Identity(); err != nil {
+		return err
+	}
+	for _, origin := range []string{attempt.CloudOrigin, attempt.AccessPointOrigin} {
+		normalized, err := normalizeAccessPointOrigin(origin)
+		if err != nil || normalized != origin {
+			return errors.New("invalid pending Cloud enrollment origin")
+		}
+	}
+	if attempt.ExpectedAssociationRevision < 0 || attempt.ExpectedAssociationRevision == math.MaxInt64 || attempt.ExpectedRouteRevision < 0 || attempt.ExpectedRouteRevision == math.MaxInt64 {
+		return errors.New("invalid pending Cloud enrollment revision")
 	}
 	return nil
 }

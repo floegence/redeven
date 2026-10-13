@@ -220,3 +220,29 @@ func TestEgressIdentityExpiryRejectsNewFlowsWithoutCancelingExisting(t *testing.
 		t.Fatal("member replacement failed to close the old flow")
 	}
 }
+
+func TestEgressCertificateReplacementCancelsOldFlow(t *testing.T) {
+	server, err := New(Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer server.Close()
+	member := Member{ID: "member", MemberVersion: 1, Generation: 1, CertificateSHA256: strings.Repeat("a", 64), Destinations: []string{"cloud.example:443"}}
+	if err := server.ReplaceMembers([]Member{member}); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	connection, status := server.reserve(member.CertificateSHA256, "cloud.example:443", cancel)
+	if status != 200 {
+		t.Fatal(status)
+	}
+	defer connection.reservation.Release()
+	member.CertificateSHA256 = strings.Repeat("b", 64)
+	if err := server.ReplaceMembers([]Member{member}); err != nil {
+		t.Fatal(err)
+	}
+	if ctx.Err() == nil {
+		t.Fatal("certificate replacement kept old flow authorized")
+	}
+}

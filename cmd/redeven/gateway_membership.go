@@ -8,7 +8,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"golang.org/x/term"
 	"io"
 	"net"
 	"net/http"
@@ -17,6 +16,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"golang.org/x/term"
 
 	"github.com/floegence/redeven/internal/agent"
 	"github.com/floegence/redeven/internal/config"
@@ -32,7 +33,6 @@ const gatewayMembershipHelp = `Usage: redeven gateway <join|replace|update-endpo
   --gateway ADDRESS       Administrator-confirmed HTTPS Gateway address
   --code-stdin --yes       Read the invitation code from stdin and confirm for automation
   --gateway-id ID         Select a paired Gateway for retry, leave or publish
-  --environment-choice preserve|new  Cloud publication only
 
 Joining adds Gateway access without changing Cloud ownership.
 A Runtime can pair with multiple Gateways. Startup reconnects each saved member.
@@ -53,7 +53,6 @@ func (c *cli) gatewayCmd(args []string) int {
 	flags := newCLIFlagSet("gateway " + action)
 	root := flags.String("state-root", "", "Runtime state root")
 	gatewayID := flags.String("gateway-id", "", "Gateway identity for retry or leave")
-	choice := flags.String("environment-choice", "", "Preserve the existing Cloud environment or create a new one")
 	address := flags.String("gateway", "", "Gateway HTTPS address")
 	codeStdin := flags.Bool("code-stdin", false, "Read the invitation code from stdin")
 	yes := flags.Bool("yes", false, "Confirm verified Gateway enrollment")
@@ -64,7 +63,7 @@ func (c *cli) gatewayCmd(args []string) int {
 		}
 		return 2
 	}
-	if (action != "publish" && *choice != "") || flags.NArg() != 0 || (action == "join" || action == "replace" || action == "update-endpoints") != (*address != "") || (*codeStdin && !*yes) || ((action != "join" && action != "replace" && action != "update-endpoints") && *codeStdin) {
+	if flags.NArg() != 0 || (action == "join" || action == "replace" || action == "update-endpoints") != (*address != "") || (*codeStdin && !*yes) || ((action != "join" && action != "replace" && action != "update-endpoints") && *codeStdin) {
 		writeText(c.stderr, gatewayMembershipHelp)
 		return 2
 	}
@@ -84,7 +83,7 @@ func (c *cli) gatewayCmd(args []string) int {
 	ctx := context.Background()
 	_, err = runtimemanagement.LoadStatus(ctx, layout.RuntimeControlSocketPath, 2*time.Second)
 	if err == nil {
-		return c.gatewayRunningCommand(ctx, layout.RuntimeControlSocketPath, action, *address, code, *choice, *gatewayID, *yes)
+		return c.gatewayRunningCommand(ctx, layout.RuntimeControlSocketPath, action, *address, code, "", *gatewayID, *yes)
 	}
 	if err := os.MkdirAll(layout.StateDir, 0700); err != nil {
 		fmt.Fprintln(c.stderr, "Cannot open Runtime state.")
@@ -113,11 +112,6 @@ func (c *cli) gatewayCmd(args []string) int {
 			id = current.GatewayID
 		}
 		next.SetGatewayMember(id, member)
-		if (member == nil || member.Leaving) && cfg.CloudGateway() != nil && cfg.CloudGateway().GatewayID == id {
-			if err := next.RetireGatewayPublication(); err != nil {
-				return err
-			}
-		}
 		if err := config.Save(layout.ConfigPath, &next); err != nil {
 			return err
 		}
@@ -127,12 +121,11 @@ func (c *cli) gatewayCmd(args []string) int {
 	var invitation gp.EnrollmentDescriptor
 	if *address != "" {
 		invitation, err = gatewaymembership.PreviewInvitation(ctx, *address, code)
-		code = ""
 		if err != nil {
 			fmt.Fprintln(c.stderr, "Gateway verification failed:", err)
 			return 1
 		}
-		*choice, err = c.confirmGatewayEnrollment(invitation.GatewayName, cfg.LocalEnvironmentPublicID, invitation.ExpiresAtUnixMS, "", action, *choice, *yes)
+		_, err = c.confirmGatewayEnrollment(invitation.GatewayName, cfg.LocalEnvironmentPublicID, invitation.ExpiresAtUnixMS, "", action, "", *yes)
 		if err != nil {
 			fmt.Fprintln(c.stderr, err)
 			return 1
@@ -144,7 +137,7 @@ func (c *cli) gatewayCmd(args []string) int {
 		if action == "replace" {
 			prepare = cfg.PrepareGatewayReplacement
 		}
-		next, err := prepare(invitation, gp.MemberMetadata{Hostname: hostname, OS: runtime.GOOS, Arch: runtime.GOARCH, Version: Version}, *choice)
+		next, err := prepare(invitation, gp.MemberMetadata{Hostname: hostname, OS: runtime.GOOS, Arch: runtime.GOARCH, Version: Version}, "")
 		if err != nil {
 			fmt.Fprintln(c.stderr, err.Error())
 			return 1
@@ -183,7 +176,13 @@ func (c *cli) gatewayCmd(args []string) int {
 		return 1
 	}
 	if action == "publish" {
-		next, err := cfg.PrepareGatewayPublication(member.GatewayID, *choice)
+		var association gp.MemberCloudContext
+		err := member.Request(ctx, "/v6/member/cloud", gp.CatalogRequest{ProtocolVersion: gp.Version}, &association, true)
+		if err != nil {
+			fmt.Fprintln(c.stderr, "Cannot verify Gateway batch enrollment; retry or select another route.")
+			return 1
+		}
+		next, err := cfg.PrepareNamespaceCloud(member.MemberID, association)
 		if err != nil {
 			fmt.Fprintln(c.stderr, err)
 			return 1
@@ -225,9 +224,9 @@ func (c *cli) gatewayCmd(args []string) int {
 			return 1
 		}
 	}
-	result := agent.GatewayMembershipStatus{Phase: "not_joined", ExistingEnvironmentID: cfg.EnvironmentID, RejoinRequired: cfg.GatewayRejoinRequired}
+	result := agent.GatewayMembershipStatus{Phase: "not_joined", ExistingEnvironmentID: cfg.EnvironmentID}
 	for _, member := range cfg.Gateways {
-		item := agent.GatewayMembershipStatus{Joined: member.PendingJoin == nil && !member.Leaving, GatewayID: member.GatewayID, GatewayName: member.GatewayName, CloudPublication: cfg.CloudGateway() != nil && cfg.CloudGateway().MemberID == member.MemberID, Endpoints: member.ConnectionEndpoints(), LastEndpointID: member.LastEndpointID, MemberID: member.MemberID, Phase: "gateway_offline"}
+		item := agent.GatewayMembershipStatus{Joined: member.PendingJoin == nil && !member.Leaving, GatewayID: member.GatewayID, GatewayName: member.GatewayName, RouteSelected: cfg.CloudGateway() != nil && cfg.CloudGateway().MemberID == member.MemberID, Endpoints: member.ConnectionEndpoints(), LastEndpointID: member.LastEndpointID, MemberID: member.MemberID, Phase: "gateway_offline"}
 		if member.PendingJoin != nil {
 			item.Phase = "joining"
 		}
@@ -267,11 +266,12 @@ func (c *cli) readGatewayCode(fromStdin bool) (string, error) {
 
 func (c *cli) confirmGatewayEnrollment(name, target string, expires int64, environment, action, choice string, yes bool) (string, error) {
 	fmt.Fprintf(c.stdout, "Gateway: %s\nTarget Runtime: %s\nExpires: %s\n", name, target, time.UnixMilli(expires).Format(time.RFC3339))
-	if action == "update-endpoints" {
+	switch action {
+	case "update-endpoints":
 		fmt.Fprintln(c.stdout, "Update this Gateway's endpoints while preserving member identity.")
-	} else if action == "replace" {
+	case "replace":
 		fmt.Fprintln(c.stdout, "Replace the current Gateway and interrupt its connections, including any Cloud access through it. Cloud publication requires a separate gateway publish action.")
-	} else {
+	default:
 		fmt.Fprintln(c.stdout, "Add Gateway access. Cloud ownership and other Gateway pairings stay unchanged.")
 	}
 	if yes {
@@ -291,7 +291,7 @@ func (c *cli) confirmGatewayEnrollment(name, target string, expires int64, envir
 		return "", err
 	}
 	if !strings.EqualFold(strings.TrimSpace(answer), "y") {
-		return "", errors.New("Gateway enrollment canceled")
+		return "", errors.New("gateway enrollment canceled")
 	}
 	if expires <= time.Now().UnixMilli() {
 		return "", gatewaymembership.ErrInvitationExpired
@@ -319,7 +319,7 @@ func (c *cli) gatewayRunningCommand(ctx context.Context, socketPath, action, add
 		}
 		if action != "retry" && !yes {
 			impact := "Confirm " + action + " for " + target.GatewayID + "?"
-			if action == "leave" && target.CloudPublication {
+			if action == "leave" && target.RouteSelected {
 				impact += " Cloud access through this Gateway will be interrupted."
 			}
 			if !c.confirmGatewayAction(impact) {
@@ -328,10 +328,7 @@ func (c *cli) gatewayRunningCommand(ctx context.Context, socketPath, action, add
 		}
 		body = map[string]any{"gateway_id": target.GatewayID}
 		if action == "leave" {
-			body.(map[string]any)["cloud_impact_acknowledged"] = target.CloudPublication
-		}
-		if action == "publish" && choice != "" {
-			body.(map[string]any)["environment_choice"] = choice
+			body.(map[string]any)["route_impact_acknowledged"] = target.RouteSelected
 		}
 	}
 	if address != "" {
@@ -340,17 +337,15 @@ func (c *cli) gatewayRunningCommand(ctx context.Context, socketPath, action, add
 			fmt.Fprintln(c.stderr, "Gateway verification failed:", err)
 			return 1
 		}
-		code = ""
 		var err error
-		choice, err = c.confirmGatewayEnrollment(preview.GatewayName, preview.TargetRuntimeID, preview.ExpiresAtUnixMS, "", action, choice, yes)
+		_, err = c.confirmGatewayEnrollment(preview.GatewayName, preview.TargetRuntimeID, preview.ExpiresAtUnixMS, "", action, choice, yes)
 		if err != nil {
 			fmt.Fprintln(c.stderr, err)
 			return 1
 		}
 		body = struct {
-			PreviewID         string `json:"preview_id"`
-			EnvironmentChoice string `json:"environment_choice,omitempty"`
-		}{preview.PreviewID, choice}
+			PreviewID string `json:"preview_id"`
+		}{preview.PreviewID}
 	}
 	var status agent.GatewayMembershipStatus
 	if err := gatewayRuntimeRequest(ctx, socketPath, action, body, &status); err != nil {
@@ -362,17 +357,21 @@ func (c *cli) gatewayRunningCommand(ctx context.Context, socketPath, action, add
 }
 
 func gatewayRuntimeRequest(ctx context.Context, socketPath, action string, body, output any) error {
+	method := http.MethodPost
+	if action == "status" {
+		method = http.MethodGet
+	}
+	return ownerRuntimeRequest(ctx, socketPath, method, "/v2/gateway/"+action, body, output)
+}
+
+func ownerRuntimeRequest(ctx context.Context, socketPath, method, path string, body, output any) error {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	raw, err := json.Marshal(body)
 	if err != nil {
 		return err
 	}
-	method := http.MethodPost
-	if action == "status" {
-		method = http.MethodGet
-	}
-	request, err := http.NewRequestWithContext(ctx, method, "http://127.0.0.1:1/v2/gateway/"+action, bytes.NewReader(raw))
+	request, err := http.NewRequestWithContext(ctx, method, "http://127.0.0.1:1"+path, bytes.NewReader(raw))
 	if err != nil {
 		return err
 	}
@@ -385,7 +384,7 @@ func gatewayRuntimeRequest(ctx context.Context, socketPath, action string, body,
 	client := &http.Client{Transport: transport, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	response, err := client.Do(request)
 	if err != nil {
-		return errors.New("Runtime management is unavailable")
+		return errors.New("runtime management is unavailable")
 	}
 	defer response.Body.Close()
 	var envelope struct {
@@ -399,7 +398,7 @@ func gatewayRuntimeRequest(ctx context.Context, socketPath, action string, body,
 		return errors.New("invalid Runtime management response")
 	}
 	if response.StatusCode != http.StatusOK || !envelope.OK {
-		return errors.New("Runtime rejected the Gateway operation: " + envelope.Error.Code)
+		return errors.New("Runtime rejected the management operation: " + envelope.Error.Code)
 	}
 	return json.Unmarshal(envelope.Data, output)
 }

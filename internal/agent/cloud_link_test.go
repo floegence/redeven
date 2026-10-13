@@ -1,8 +1,8 @@
 package agent
 
 import (
-	"bytes"
 	"context"
+	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
@@ -12,13 +12,14 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	rc "github.com/floegence/redeven/internal/runtimecloud/protocol"
 
 	flowersec "github.com/floegence/flowersec/flowersec-go/v5"
 	flowercontrol "github.com/floegence/flowersec/flowersec-go/v5/controlplane"
@@ -92,10 +93,6 @@ func TestDirectCloudChangesPreserveGatewayMembers(t *testing.T) {
 	}
 }
 
-type roundTripFunc func(*http.Request) (*http.Response, error)
-
-func (f roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) { return f(request) }
-
 func TestConnectCloudRetriesWhenRegionHasNotStarted(t *testing.T) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -133,13 +130,12 @@ func TestConnectCloudDoesNotRetryUntrustedRegionCertificate(t *testing.T) {
 
 func TestConnectCloudRetriesTemporaryDNSFailure(t *testing.T) {
 	a := newCloudLinkTestAgent(t, filepath.Join(t.TempDir(), "config.json"), nil)
-	_, err := a.ConnectCloud(context.Background(), CloudLinkRequest{
-		CloudOrigin: "https://redeven.test", CloudID: "example_control_plane",
-		EnvPublicID: "env_new", RuntimeLinkTicket: "ticket-123",
-		runtimeLinkHTTPClient: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
-			return nil, &net.DNSError{Name: "redeven.test", Err: "temporary resolver failure", IsTemporary: true}
-		})},
-	})
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.Proxy = nil
+	transport.DialContext = func(context.Context, string, string) (net.Conn, error) {
+		return nil, &net.DNSError{Name: "redeven.test", Err: "temporary resolver failure", IsTemporary: true}
+	}
+	_, err := a.ConnectCloud(context.Background(), CloudLinkRequest{CloudOrigin: "https://redeven.test", CloudID: "example_control_plane", EnvPublicID: "env_new", RuntimeLinkTicket: "ticket-123", runtimeLinkHTTPClient: &http.Client{Transport: transport}})
 	var linkErr *CloudLinkError
 	if !errors.As(err, &linkErr) || linkErr.Code != CloudLinkErrorUnavailable {
 		t.Fatalf("ConnectCloud() error = %v, want %s", err, CloudLinkErrorUnavailable)
@@ -169,23 +165,11 @@ func (f *providerDisconnectFakeRPC) Call(_ context.Context, typeID uint32, reque
 		}
 		return f.rpcError
 	}
-	encoded, err := json.Marshal(runtimeDisconnectResp{
-		OK:         true,
-		Cleared:    true,
-		State:      "disconnected",
-		ReasonCode: "runtime_disconnected",
-	})
+	encoded, err := json.Marshal(map[string]any{"ok": true})
 	if err != nil {
 		return err
 	}
 	return json.Unmarshal(encoded, response)
-}
-
-func testDirectConnectInfo() *config.DirectConnectInfo {
-	return &config.DirectConnectInfo{
-		ArtifactJSON:   []byte(controlArtifactFixture),
-		ExpiresAtUnixS: 4102444800,
-	}
 }
 
 func cloudLinkRemoteConfig(t *testing.T, cfgPath string) *config.Config {
@@ -203,7 +187,6 @@ func cloudLinkRemoteConfig(t *testing.T, cfgPath string) *config.Config {
 		LocalEnvironmentPublicID: "le_existing",
 		BindingGeneration:        7,
 		AgentInstanceID:          "ai_existing",
-		Direct:                   testDirectConnectInfo(),
 		ControlArtifactPool: &config.ControlArtifactPool{
 			SchemaVersion:         config.ControlArtifactPoolSchemaVersion,
 			LogicalBindingID:      "provider-binding-7",
@@ -222,23 +205,13 @@ func cloudLinkRemoteConfig(t *testing.T, cfgPath string) *config.Config {
 		AgentHomeDir:     t.TempDir(),
 		PermissionPolicy: policy,
 	}
+	attachTestCloudAssociation(cfg)
 	if cfgPath != "" {
 		if err := config.Save(cfgPath, cfg); err != nil {
 			t.Fatalf("config.Save() error = %v", err)
 		}
 	}
 	return cfg
-}
-
-func linkProviderControlForTest(a *Agent, caller *providerDisconnectFakeRPC) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	a.controlChannelEnabled = true
-	a.remoteEnabled = true
-	a.effectiveRunMode = "hybrid"
-	a.controlRPCSerial++
-	a.controlRPC = caller
-	a.controlRegistered = true
 }
 
 func newCloudLinkTestAgent(t *testing.T, cfgPath string, cfg *config.Config) *Agent {
@@ -281,7 +254,7 @@ func newCloudLinkTestAgent(t *testing.T, cfgPath string, cfg *config.Config) *Ag
 func cloudLinkTestServer(t *testing.T, handler func(http.ResponseWriter, *http.Request)) *httptest.Server {
 	t.Helper()
 	return httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost && r.URL.Path == "/api/rcpp/v4/runtime-link/resolve" {
+		if r.Method == http.MethodPost && r.URL.Path == "/api/rcpp/v5/runtime-link/resolve" {
 			var request struct {
 				EnvPublicID string `json:"env_public_id"`
 			}
@@ -290,11 +263,18 @@ func cloudLinkTestServer(t *testing.T, handler func(http.ResponseWriter, *http.R
 			}
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(map[string]any{
-				"protocol_version": "rcpp-v4", "cloud_id": "example_control_plane",
+				"protocol_version": "rcpp-v5", "cloud_id": "example_control_plane",
 				"cloud_origin": "https://" + r.Host, "env_public_id": request.EnvPublicID,
 				"access_point_id": "dev", "access_point_origin": "https://" + r.Host,
-				"expires_at_unix_ms": time.Now().Add(time.Minute).UnixMilli(),
+				"expires_at_unix_ms": time.Now().Add(time.Minute).UnixMilli(), "namespace_public_id": "namespace",
 			})
+			return
+		}
+		if r.URL.Path == "/api/console/v1/runtime-cloud/v5/challenges" {
+			var q rc.ChallengeRequest
+			_ = json.NewDecoder(r.Body).Decode(&q)
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{"success": true, "data": rc.ChallengeResponse{Proof: rc.Proof{ProtocolVersion: rc.ProtocolVersion, CloudOrigin: "https://" + r.Host, NamespacePublicID: q.NamespacePublicID, RuntimePublicID: q.RuntimePublicID, Purpose: q.Purpose, ChallengeID: "challenge", NonceB64u: base64.RawURLEncoding.EncodeToString(make([]byte, 32)), ExpiresAtUnixMS: time.Now().Add(time.Minute).UnixMilli()}}})
 			return
 		}
 		handler(w, r)
@@ -322,25 +302,18 @@ type cloudLinkRuntimeLinkPool struct {
 
 func writeCloudRuntimeLinkResponse(t *testing.T, w http.ResponseWriter, r *http.Request, channelPrefix string, endpointURLs ...string) {
 	t.Helper()
-	if r.Method != http.MethodPost || r.URL.Path != "/api/rcpp/v4/runtime-link/exchange" {
+	if r.Method != http.MethodPost || r.URL.Path != "/api/console/v1/runtime-cloud/v5/enroll" {
 		t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
 	}
-	if got := r.Header.Get("Authorization"); got != "Bearer ticket-123" {
-		t.Fatalf("Authorization = %q, want %q", got, "Bearer ticket-123")
+	var signed rc.SignedRequest
+	var enrollment rc.EnrollRequest
+	if json.NewDecoder(r.Body).Decode(&signed) != nil || json.Unmarshal(signed.Payload, &enrollment) != nil || signed.Proof.Verify(enrollment.PublicKeyB64u, signed.Payload, time.Now()) != nil {
+		t.Fatal("invalid independent Cloud identity")
 	}
-	var payload struct {
-		ExpectedBindingGeneration int64  `json:"expected_binding_generation"`
-		ProtocolVersion           string `json:"protocol_version"`
-		EnvPublicID               string `json:"env_public_id"`
-		CloudOrigin               string `json:"cloud_origin"`
-		LocalEnvironmentPublicID  string `json:"local_environment_public_id"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		t.Fatalf("Decode(request) error = %v", err)
-	}
-	if payload.ProtocolVersion != "rcpp-v4" || payload.CloudOrigin == "" {
-		t.Fatalf("CloudOrigin is empty")
-	}
+	payload := struct {
+		LocalEnvironmentPublicID, EnvPublicID, CloudOrigin string
+		ExpectedBindingGeneration                          int64
+	}{LocalEnvironmentPublicID: enrollment.RuntimePublicID, EnvPublicID: enrollment.Authorization.EnvPublicID, CloudOrigin: "https://" + r.Host}
 	endpointURL := "wss://example.com/flowersec/v3/direct"
 	if len(endpointURLs) != 0 {
 		endpointURL = endpointURLs[0]
@@ -394,31 +367,30 @@ func writeCloudRuntimeLinkResponse(t *testing.T, w http.ResponseWriter, r *http.
 	}
 	digest := sha256.Sum256(unsigned)
 	pool.ResponseDigestB64u = base64.RawURLEncoding.EncodeToString(digest[:])
+	pool.LogicalCloudBindingID = "runtime-cloud-v5:binding"
+	pool.ResponseDigestB64u = ""
+	unsigned, _ = json.Marshal(pool)
+	digest = sha256.Sum256(unsigned)
+	pool.ResponseDigestB64u = base64.RawURLEncoding.EncodeToString(digest[:])
+	var shared rc.ControlArtifactPoolV2
+	raw, _ := json.Marshal(pool)
+	_ = json.Unmarshal(raw, &shared)
+	binding := rc.Binding{BindingFence: rc.BindingFence{PublicID: "binding", CloudID: "example_control_plane", NamespacePublicID: "namespace", RuntimePublicID: enrollment.RuntimePublicID, EnvPublicID: enrollment.Authorization.EnvPublicID, OwnerKind: rc.OwnerUser, OwnerPublicID: "user", Generation: generation}, Region: "dev", State: "active", PublicKeyB64u: enrollment.PublicKeyB64u, IdentityExpiresAtUnixMS: time.Now().Add(time.Hour).UnixMilli()}
+	response := rc.RecoverResponse{ProtocolVersion: rc.ProtocolVersion, State: rc.ApprovalApproved, Binding: &binding, Closures: []rc.Closure{}, Delivery: &rc.CredentialDelivery{ProtocolVersion: rc.ProtocolVersion, CloudOrigin: payload.CloudOrigin, RegionOrigin: "https://" + r.Host, Binding: binding, DeliveryRequestID: enrollment.OperationID, ControlArtifactPool: &shared}}
 	w.Header().Set("Content-Type", "application/json")
-	response := map[string]any{
-		"protocol_version":      "rcpp-v4",
-		"cloud_id":              "example_control_plane",
-		"cloud_origin":          payload.CloudOrigin,
-		"access_point_id":       "dev",
-		"access_point_origin":   "https://" + r.Host,
-		"env_public_id":         payload.EnvPublicID,
-		"control_artifact_pool": pool,
-		"local_environment_binding": map[string]any{
-			"local_environment_public_id": payload.LocalEnvironmentPublicID,
-			"env_public_id":               payload.EnvPublicID,
-			"generation":                  generation,
-		},
+	if err := json.NewEncoder(w).Encode(map[string]any{"success": true, "data": response}); err != nil {
+		t.Fatal(err)
 	}
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		t.Fatalf("Encode(response) error = %v", err)
-	}
+
 }
 
 func TestConnectCloudPersistsConfigOnlyAfterRuntimeLinkExchangeSucceeds(t *testing.T) {
 	cfgPath := filepath.Join(t.TempDir(), "config.json")
 	a := newCloudLinkTestAgent(t, cfgPath, nil)
 	server := cloudLinkTestServer(t, func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, "ticket expired", http.StatusUnauthorized)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"success":false,"error":{"code":"INVALID_RUNTIME_LINK_TICKET","message":"Ticket expired"}}`))
 	})
 	defer server.Close()
 
@@ -480,11 +452,14 @@ func TestConnectCloudRechecksActiveWorkBeforePersistingConfig(t *testing.T) {
 		LocalEnvironmentPublicID: "le_existing",
 		BindingGeneration:        1,
 		AgentInstanceID:          "ai_existing",
-		Direct:                   testDirectConnectInfo(),
 		AgentHomeDir:             t.TempDir(),
 	}
 	if err := config.Save(cfgPath, initial); err != nil {
 		t.Fatalf("config.Save() error = %v", err)
+	}
+	attachTestCloudAssociation(initial)
+	if err := config.Save(cfgPath, initial); err != nil {
+		t.Fatal(err)
 	}
 	a := newCloudLinkTestAgent(t, cfgPath, initial)
 	releaseExchange := make(chan struct{})
@@ -543,8 +518,7 @@ func TestConnectCloudRechecksActiveWorkBeforePersistingConfig(t *testing.T) {
 	}
 	if cfg.AccessPointOrigin != initial.AccessPointOrigin ||
 		cfg.EnvironmentID != initial.EnvironmentID ||
-		cfg.BindingGeneration != initial.BindingGeneration ||
-		cfg.Direct == nil || cfg.Direct.ExpiresAtUnixS != initial.Direct.ExpiresAtUnixS || cfg.Direct.Spent {
+		cfg.BindingGeneration != initial.BindingGeneration {
 		t.Fatalf("config changed after blocked relink: %#v", cfg)
 	}
 	if binding := a.CloudLinkBinding(); binding.EnvPublicID != "env_old" || binding.BindingGeneration != 1 {
@@ -566,10 +540,10 @@ func TestConnectCloudRefreshesExistingMatchingBindingWhenExplicitlyRequested(t *
 		LocalEnvironmentPublicID: "le_existing",
 		BindingGeneration:        3,
 		AgentInstanceID:          "ai_existing",
-		Direct:                   testDirectConnectInfo(),
 		AgentHomeDir:             t.TempDir(),
 	}
 	cfgPath := filepath.Join(t.TempDir(), "config.json")
+	attachTestCloudAssociation(cfg)
 	if err := config.Save(cfgPath, cfg); err != nil {
 		t.Fatalf("config.Save() error = %v", err)
 	}
@@ -613,9 +587,6 @@ func TestConnectCloudRefreshesExistingMatchingBindingWhenExplicitlyRequested(t *
 	if err != nil {
 		t.Fatalf("config.Load() error = %v", err)
 	}
-	if saved.Direct != nil {
-		t.Fatalf("saved Direct = %#v, want nil after artifact-pool bootstrap", saved.Direct)
-	}
 	if saved.ControlArtifactPool == nil || len(saved.ControlArtifactPool.Entries) != config.ControlArtifactTargetWaterline {
 		t.Fatalf("saved ControlArtifactPool = %#v, want ready bootstrap pool", saved.ControlArtifactPool)
 	}
@@ -624,231 +595,13 @@ func TestConnectCloudRefreshesExistingMatchingBindingWhenExplicitlyRequested(t *
 	}
 }
 
-func TestDisconnectCloudSendsRuntimeDisconnectBeforeClearingConfig(t *testing.T) {
-	cfgPath := filepath.Join(t.TempDir(), "config.json")
-	cfg := cloudLinkRemoteConfig(t, cfgPath)
-	a := newCloudLinkTestAgent(t, cfgPath, cfg)
-	fakeRPC := &providerDisconnectFakeRPC{}
-	linkProviderControlForTest(a, fakeRPC)
-
-	resp, err := a.DisconnectCloud(context.Background())
-	if err != nil {
-		t.Fatalf("DisconnectCloud() error = %v", err)
+// Tests must represent the current persisted association instead of bypassing the loader.
+func attachTestCloudAssociation(cfg *config.Config) {
+	key := ed25519.NewKeyFromSeed(make([]byte, 32))
+	public := base64.RawURLEncoding.EncodeToString(key.Public().(ed25519.PublicKey))
+	if cfg.CloudID == "" {
+		cfg.CloudID = "example_control_plane"
 	}
-	if resp.Binding.State != runtimeservice.CloudLinkStateUnbound || resp.Binding.LastDisconnectedAtUnixMS <= 0 {
-		t.Fatalf("DisconnectCloud() binding = %#v, want unbound with disconnect time", resp.Binding)
-	}
-
-	fakeRPC.mu.Lock()
-	gotTypeID := fakeRPC.typeID
-	gotPayload := append([]byte(nil), fakeRPC.payload...)
-	fakeRPC.mu.Unlock()
-	if gotTypeID != controlRPCTypeRuntimeDisconnect {
-		t.Fatalf("runtime disconnect RPC type = %d, want %d", gotTypeID, controlRPCTypeRuntimeDisconnect)
-	}
-	var req runtimeDisconnectReq
-	if err := json.Unmarshal(gotPayload, &req); err != nil {
-		t.Fatalf("Unmarshal(runtime disconnect request) error = %v", err)
-	}
-	if req.EnvPublicID != "env_demo" ||
-		req.CloudOrigin != "https://redeven.test" ||
-		req.CloudID != "example_control_plane" ||
-		req.AccessPointOrigin != "https://dev.redeven.test" ||
-		req.LocalEnvironmentPublicID != "le_existing" ||
-		req.BindingGeneration != 7 ||
-		req.AgentInstanceID != "ai_existing" ||
-		req.ReasonCode != providerDisconnectReasonUser {
-		t.Fatalf("runtime disconnect request = %#v, want current provider binding snapshot", req)
-	}
-
-	saved, err := config.Load(cfgPath)
-	if err != nil {
-		t.Fatalf("config.Load() error = %v", err)
-	}
-	if saved.CloudOrigin != "" ||
-		saved.AccessPointOrigin != "" ||
-		saved.CloudID != "" ||
-		saved.EnvironmentID != "" ||
-		saved.LocalEnvironmentPublicID == "" || saved.LocalEnvironmentPublicID == cfg.LocalEnvironmentPublicID ||
-		saved.BindingGeneration != 0 ||
-		saved.Direct != nil ||
-		saved.ControlArtifactPool != nil {
-		t.Fatalf("saved config after disconnect = %#v, want provider fields cleared", saved)
-	}
-	if saved.AgentInstanceID != "ai_existing" {
-		t.Fatalf("AgentInstanceID = %q, want preserved", saved.AgentInstanceID)
-	}
-	if a.currentControlRPC() != nil {
-		t.Fatalf("currentControlRPC still set after provider disconnect")
-	}
-	binding := a.CloudLinkBinding()
-	if binding.State != runtimeservice.CloudLinkStateUnbound {
-		t.Fatalf("CloudLinkBinding() = %#v, want unbound", binding)
-	}
-}
-
-func TestDisconnectCloudConflictDoesNotClearConfig(t *testing.T) {
-	cfgPath := filepath.Join(t.TempDir(), "config.json")
-	cfg := cloudLinkRemoteConfig(t, cfgPath)
-	a := newCloudLinkTestAgent(t, cfgPath, cfg)
-	msg := "local environment binding mismatch"
-	fakeRPC := &providerDisconnectFakeRPC{rpcError: &flowersec.RPCError{Code: 409, Message: msg}}
-	linkProviderControlForTest(a, fakeRPC)
-
-	_, err := a.DisconnectCloud(context.Background())
-	var linkErr *CloudLinkError
-	if !errors.As(err, &linkErr) || linkErr.Code != CloudLinkErrorBindingNotCurrent {
-		t.Fatalf("DisconnectCloud() error = %v, want %s", err, CloudLinkErrorBindingNotCurrent)
-	}
-
-	saved, loadErr := config.Load(cfgPath)
-	if loadErr != nil {
-		t.Fatalf("config.Load() error = %v", loadErr)
-	}
-	if saved.CloudOrigin != cfg.CloudOrigin ||
-		saved.AccessPointOrigin != cfg.AccessPointOrigin ||
-		saved.CloudID != cfg.CloudID ||
-		saved.EnvironmentID != cfg.EnvironmentID ||
-		saved.LocalEnvironmentPublicID != cfg.LocalEnvironmentPublicID ||
-		saved.BindingGeneration != cfg.BindingGeneration ||
-		saved.Direct == nil || saved.Direct.ExpiresAtUnixS != cfg.Direct.ExpiresAtUnixS || saved.Direct.Spent != cfg.Direct.Spent ||
-		saved.ControlArtifactPool == nil || saved.ControlArtifactPool.BindingGeneration != cfg.ControlArtifactPool.BindingGeneration ||
-		len(saved.ControlArtifactPool.Entries) != len(cfg.ControlArtifactPool.Entries) {
-		t.Fatalf("config changed after rejected disconnect: %#v", saved)
-	}
-	if binding := a.CloudLinkBinding(); binding.State != runtimeservice.CloudLinkStateLinked || !binding.RemoteEnabled {
-		t.Fatalf("CloudLinkBinding() = %#v, want linked remote enabled", binding)
-	}
-}
-
-func TestDisconnectCloudClearsConfigWithoutActiveControlChannel(t *testing.T) {
-	cfgPath := filepath.Join(t.TempDir(), "config.json")
-	cfg := cloudLinkRemoteConfig(t, cfgPath)
-	a := newCloudLinkTestAgent(t, cfgPath, cfg)
-
-	resp, err := a.DisconnectCloud(context.Background())
-	if err != nil {
-		t.Fatalf("DisconnectCloud() error = %v", err)
-	}
-	if resp.Binding.State != runtimeservice.CloudLinkStateUnbound || resp.Binding.LastDisconnectedAtUnixMS <= 0 {
-		t.Fatalf("DisconnectCloud() binding = %#v, want unbound with disconnect time", resp.Binding)
-	}
-
-	saved, loadErr := config.Load(cfgPath)
-	if loadErr != nil {
-		t.Fatalf("config.Load() error = %v", loadErr)
-	}
-	if saved.CloudOrigin != "" ||
-		saved.AccessPointOrigin != "" ||
-		saved.CloudID != "" ||
-		saved.EnvironmentID != "" ||
-		saved.LocalEnvironmentPublicID == "" || saved.LocalEnvironmentPublicID == cfg.LocalEnvironmentPublicID ||
-		saved.BindingGeneration != 0 ||
-		saved.Direct != nil ||
-		saved.ControlArtifactPool != nil {
-		t.Fatalf("saved config after inactive-channel disconnect = %#v, want provider fields cleared", saved)
-	}
-	if saved.AgentInstanceID != "ai_existing" {
-		t.Fatalf("AgentInstanceID = %q, want preserved", saved.AgentInstanceID)
-	}
-	if binding := a.CloudLinkBinding(); binding.State != runtimeservice.CloudLinkStateUnbound {
-		t.Fatalf("CloudLinkBinding() = %#v, want unbound", binding)
-	}
-	_, address, delivery := previewGatewayServer(t)
-	before, err := os.ReadFile(cfgPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	preview, err := a.PreviewGateway(t.Context(), address, delivery.Code, "join")
-	if err != nil || preview.TargetRuntimeID != saved.LocalEnvironmentPublicID || preview.ExistingEnvironmentID != "" {
-		t.Fatalf("detached Runtime could not preview Gateway access: %v", err)
-	}
-	after, err := os.ReadFile(cfgPath)
-	if err != nil || !bytes.Equal(before, after) {
-		t.Fatal("Gateway preview mutated detached Runtime state", err)
-	}
-}
-
-func TestConnectCloudRenewsExactBindingWithoutRestartingLocalWork(t *testing.T) {
-	cfgPath := filepath.Join(t.TempDir(), "config.json")
-	cfg := cloudLinkRemoteConfig(t, cfgPath)
-	var expectedGeneration int64
-	server := cloudLinkTestServer(t, func(w http.ResponseWriter, r *http.Request) {
-		raw, err := io.ReadAll(r.Body)
-		if err != nil {
-			t.Error(err)
-			return
-		}
-		var request struct {
-			ExpectedBindingGeneration int64 `json:"expected_binding_generation"`
-		}
-		if err := json.Unmarshal(raw, &request); err != nil {
-			t.Error(err)
-			return
-		}
-		expectedGeneration = request.ExpectedBindingGeneration
-		r.Body = io.NopCloser(bytes.NewReader(raw))
-		writeCloudRuntimeLinkResponse(t, w, r, "renewal")
-	})
-	defer server.Close()
-	cfg.CloudOrigin = server.URL
-	cfg.AccessPointOrigin = server.URL
-	if err := config.Save(cfgPath, cfg); err != nil {
-		t.Fatal(err)
-	}
-	a := newCloudLinkTestAgent(t, cfgPath, cfg)
-	localWork := &activeSession{connectedAtUnixMs: 1, meta: session.Meta{EndpointID: LocalEnvPublicIDForAgent()}}
-	a.sessions["local-work"] = localWork
-	result, err := a.ConnectCloud(context.Background(), CloudLinkRequest{
-		CloudOrigin: cfg.CloudOrigin, CloudID: cfg.CloudID, EnvPublicID: cfg.EnvironmentID,
-		RuntimeLinkTicket: "ticket-123", RenewCurrentBinding: true,
-		ExpectedCloudOrigin: cfg.CloudOrigin, ExpectedCloudID: cfg.CloudID,
-		ExpectedEnvPublicID: cfg.EnvironmentID, ExpectedAccessPointOrigin: cfg.AccessPointOrigin,
-		ExpectedGeneration: cfg.BindingGeneration, runtimeLinkHTTPClient: server.Client(),
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if expectedGeneration != cfg.BindingGeneration || result.Binding.BindingGeneration != cfg.BindingGeneration+1 {
-		t.Fatal("renewal did not fence and advance the current generation")
-	}
-	if result.Binding.LocalEnvironmentPublicID != cfg.LocalEnvironmentPublicID || a.sessions["local-work"] != localWork {
-		t.Fatal("renewal changed local identity or interrupted local work")
-	}
-	saved, err := config.Load(cfgPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if saved.AgentHomeDir != cfg.AgentHomeDir || saved.AgentInstanceID != cfg.AgentInstanceID {
-		t.Fatal("renewal replaced local runtime configuration")
-	}
-}
-
-func TestConnectCloudRenewalRejectsChangedAccessPointBeforeExchange(t *testing.T) {
-	server := cloudLinkTestServer(t, func(http.ResponseWriter, *http.Request) {
-		t.Error("changed Access Point must be reviewed before ticket exchange")
-	})
-	defer server.Close()
-	path := filepath.Join(t.TempDir(), "config.json")
-	cfg := cloudLinkRemoteConfig(t, "")
-	cfg.CloudOrigin = server.URL
-	if err := config.Save(path, cfg); err != nil {
-		t.Fatal(err)
-	}
-	a := newCloudLinkTestAgent(t, path, cfg)
-	_, err := a.ConnectCloud(context.Background(), CloudLinkRequest{
-		CloudOrigin: cfg.CloudOrigin, CloudID: cfg.CloudID, EnvPublicID: cfg.EnvironmentID,
-		RuntimeLinkTicket: "ticket-123", RenewCurrentBinding: true,
-		ExpectedCloudOrigin: cfg.CloudOrigin, ExpectedCloudID: cfg.CloudID,
-		ExpectedEnvPublicID: cfg.EnvironmentID, ExpectedAccessPointOrigin: cfg.AccessPointOrigin,
-		ExpectedGeneration: cfg.BindingGeneration, runtimeLinkHTTPClient: server.Client(),
-	})
-	var linkErr *CloudLinkError
-	if !errors.As(err, &linkErr) || linkErr.Code != CloudLinkErrorBindingChanged {
-		t.Fatalf("renewal error = %v, want changed binding", err)
-	}
-	saved, err := config.Load(path)
-	if err != nil || saved.AccessPointOrigin != cfg.AccessPointOrigin || saved.BindingGeneration != cfg.BindingGeneration {
-		t.Fatal("failed renewal changed the saved binding")
-	}
+	cfg.CloudAssociation = &config.CloudAssociation{Revision: 1, Enabled: true, CloudID: cfg.CloudID, CloudOrigin: cfg.CloudOrigin, RegionOrigin: cfg.AccessPointOrigin, NamespacePublicID: "namespace", RuntimePublicID: cfg.LocalEnvironmentPublicID, PublicKeyB64u: public, PrivateKeyB64u: base64.RawURLEncoding.EncodeToString(key), ApprovalState: rc.ApprovalApproved, Binding: &rc.Binding{BindingFence: rc.BindingFence{PublicID: "binding", CloudID: cfg.CloudID, NamespacePublicID: "namespace", RuntimePublicID: cfg.LocalEnvironmentPublicID, EnvPublicID: cfg.EnvironmentID, OwnerKind: rc.OwnerUser, OwnerPublicID: "user", Generation: cfg.BindingGeneration}, Region: "dev", State: "active", PublicKeyB64u: public, IdentityExpiresAtUnixMS: 4102444800000}}
+	cfg.CloudRoute = &config.CloudRoute{Kind: config.CloudRouteDirect, Revision: 1}
 }

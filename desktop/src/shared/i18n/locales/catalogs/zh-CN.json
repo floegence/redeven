@@ -3332,8 +3332,7 @@
     "cloud_denied": "已加入 · Cloud 不允许",
     "cloud_pending": "已加入 · 待 Cloud 批准",
     "cloud_control_offline": "Cloud 已连接 · 运行时控制连接离线",
-    "accessible": "已加入 · Cloud 可访问",
-    "migration_pending": "已加入 · 环境迁移待完成"
+    "accessible": "已加入 · Cloud 可访问"
   },
   "gatewayMembers": {
     "reevaluate": "重新检查访问",
@@ -3351,7 +3350,6 @@
     "confirmLeave": "确认离开",
     "leave": "离开 Gateway",
     "failed": "操作未完成。输入和上次成员列表已保留，可单独重试失败项。",
-    "rebuild": "旧版 Gateway URL 配置已移除。每个运行时都需要使用新邀请加入。现有 Redeven Cloud 环境记录会保留，但需要重新接入。",
     "invite": "邀请运行时",
     "listenerAddress": "Gateway 监听地址",
     "listenerAddressHelp": "Gateway 在所在设备上监听的位置。运行时设备使用下方已确认的可达地址连接。",
@@ -3455,7 +3453,8 @@
     "publishHelp": "通过此 Gateway 将运行时发布到 Redeven Cloud，需要 Cloud 审批。",
     "empty": "尚未配对 Gateway。",
     "unavailable": "授权 Desktop 访问此 Gateway 后，即可打开 Env App。",
-    "tab": "Gateway"
+    "tab": "Gateway",
+    "useRouteChange": "此运行时已关联 Cloud。请使用“更改通路”切换连接，环境身份和归属会保留。"
   },
   "tessivenRuntime": {
     "confirmTitle": "确认{action}",
@@ -3467,5 +3466,36 @@
     "stop": "停止",
     "restart": "重启",
     "update": "升级"
+  },
+  "cloudRoute": {
+    "approval": "云端批准",
+    "connection": "云端连接",
+    "selected": "选定通路",
+    "nextAttempt": "下次检查：{time}",
+    "change": "更换通路",
+    "retry": "重试连接",
+    "manageApproval": "管理批准",
+    "cancelIntent": "断开云端",
+    "pendingOperation": "查看待确认变更",
+    "direct": "直连",
+    "gatewayUnavailable": "Gateway 不可用",
+    "approved": "已批准",
+    "pending": "等待批准",
+    "revoked": "已撤销",
+    "identity_required": "身份已过期",
+    "action_required": "需要处理",
+    "connected": "已连接",
+    "disconnected": "未连接",
+    "reauthorizeHelp": "使用新的设置票据或显式 Namespace 登记更新机器授权。本地工作仍可继续。",
+    "impact": "确认后，云端会话将经此通路重连，后台任务继续运行，云端身份与归属不变。",
+    "verify": "验证通路",
+    "ready": "通路已验证，确认后重连。",
+    "confirm": "确认并重连",
+    "query": "查询原操作",
+    "committed": "通路已提交",
+    "unknown": "结果未知，请先查询原操作再重试。",
+    "corrupt": "无法读取保存的操作。清除此本地记录前，请核对当前通路。",
+    "storageFailed": "无法保存本地操作，尚未开始更换通路。",
+    "reviewCurrent": "清除本地记录"
   }
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/runtimemanagement"
 	"github.com/floegence/redeven/internal/runtimeservice"
+	"github.com/floegence/redeven/internal/testutil/cloudfixture"
 )
 
 func TestDiscoverTargetsFromLocalEnvironmentState(t *testing.T) {
@@ -34,6 +35,8 @@ func TestDiscoverTargetsFromLocalEnvironmentState(t *testing.T) {
 		CloudID:                  "provider_1",
 		EnvironmentID:            "env_123",
 		LocalEnvironmentPublicID: "le_123",
+		CloudAssociation:         cloudfixture.Association("le_123", "env_123"),
+		CloudRoute:               &config.CloudRoute{Kind: config.CloudRouteDirect, Revision: 1},
 		AgentHomeDir:             "/workspace",
 		Shell:                    "/bin/zsh",
 		AI: &config.AIConfig{

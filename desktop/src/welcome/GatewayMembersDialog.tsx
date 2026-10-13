@@ -175,10 +175,6 @@ export function GatewayMembersPanel(props: Readonly<{
   }
   return (
     <div class="redeven-gateway-members-panel">
-      <Show when={props.gateway?.rebuild_required}><div class="space-y-2 rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm">
-        <p>{props.i18n.t('gatewayMembers.rebuild')}</p>
-        <Button class="cursor-pointer" size="sm" disabled={busy()} onClick={() => props.gateway && void perform({ kind: 'dismiss_gateway_rebuild', gateway_id: props.gateway.gateway_id })}>{props.i18n.t('common.close')}</Button>
-      </div></Show>
       <Show when={props.section === 'connection'}>
       <section class="redeven-gateway-settings-section">
         <div>

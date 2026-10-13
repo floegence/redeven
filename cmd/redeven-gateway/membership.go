@@ -97,11 +97,11 @@ func (c *cli) membershipCmd(args []string) int {
 	var result any
 	switch command + "/" + action {
 	case "clients/access-code":
-		err = client.request(ctx, "/gateway/v5/clients/access-codes", gp.ClientAccessCodeRequest{ProtocolVersion: gp.Version}, &result)
+		err = client.request(ctx, "/gateway/v6/clients/access-codes", gp.ClientAccessCodeRequest{ProtocolVersion: gp.Version}, &result)
 	case "clients/list":
-		err = client.request(ctx, "/gateway/v5/clients/list", gp.ClientListRequest{ProtocolVersion: gp.Version}, &result)
+		err = client.request(ctx, "/gateway/v6/clients/list", gp.ClientListRequest{ProtocolVersion: gp.Version}, &result)
 	case "clients/revoke":
-		err = client.request(ctx, "/gateway/v5/clients/revoke", gp.ClientRevokeRequest{ProtocolVersion: gp.Version, ClientKeyID: *clientKeyID}, &result)
+		err = client.request(ctx, "/gateway/v6/clients/revoke", gp.ClientRevokeRequest{ProtocolVersion: gp.Version, ClientKeyID: *clientKeyID}, &result)
 	case "endpoints/set":
 		file, openErr := os.Open(*filePath)
 		if openErr != nil {
@@ -117,23 +117,23 @@ func (c *cli) membershipCmd(args []string) int {
 			return 2
 		}
 		var updated gp.EndpointUpdateResponse
-		err = client.request(ctx, "/gateway/v5/endpoints", gp.EndpointUpdateRequest{ProtocolVersion: gp.Version, Endpoints: endpoints}, &updated)
+		err = client.request(ctx, "/gateway/v6/endpoints", gp.EndpointUpdateRequest{ProtocolVersion: gp.Version, Endpoints: endpoints}, &updated)
 		result = updated.Endpoints
 	case "invite/":
 		var delivery gc.InvitationCodeDelivery
-		err = client.request(ctx, "/gateway/v5/invitation-codes", gp.InvitationRequest{ProtocolVersion: gp.Version}, &delivery)
+		err = client.request(ctx, "/gateway/v6/invitation-codes", gp.InvitationRequest{ProtocolVersion: gp.Version}, &delivery)
 		result = delivery
 	case "members/remove":
-		err = client.request(ctx, "/gateway/v5/members/remove", gp.RemoveMemberRequest{ProtocolVersion: gp.Version, MemberID: *member, ExpectedMemberVersion: *version}, &result)
+		err = client.request(ctx, "/gateway/v6/members/remove", gp.RemoveMemberRequest{ProtocolVersion: gp.Version, MemberID: *member, ExpectedMemberVersion: *version}, &result)
 	case "members/reevaluate":
-		err = client.request(ctx, "/gateway/v5/members/reevaluate", gp.RemoveMemberRequest{ProtocolVersion: gp.Version, MemberID: *member, ExpectedMemberVersion: *version}, &result)
+		err = client.request(ctx, "/gateway/v6/members/reevaluate", gp.RemoveMemberRequest{ProtocolVersion: gp.Version, MemberID: *member, ExpectedMemberVersion: *version}, &result)
 	case "members/policy":
 		var results []gp.MemberOperationResult
-		err = client.request(ctx, "/gateway/v5/members/policy", gp.UpdateMembersRequest{ProtocolVersion: gp.Version, Items: []gp.MemberPolicyUpdate{{MemberID: *member, ExpectedMemberVersion: *version, CloudPermission: gp.CloudPermission(*cloud)}}}, &results)
+		err = client.request(ctx, "/gateway/v6/members/policy", gp.UpdateMembersRequest{ProtocolVersion: gp.Version, Items: []gp.MemberPolicyUpdate{{MemberID: *member, ExpectedMemberVersion: *version, CloudPermission: gp.CloudPermission(*cloud)}}}, &results)
 		result = results
 	default:
 		var catalog gp.CatalogResponse
-		err = client.request(ctx, "/gateway/v5/catalog", gp.CatalogRequest{ProtocolVersion: gp.Version}, &catalog)
+		err = client.request(ctx, "/gateway/v6/catalog", gp.CatalogRequest{ProtocolVersion: gp.Version}, &catalog)
 		if err != nil {
 			break
 		}
@@ -163,7 +163,7 @@ func (c *cli) membershipCmd(args []string) int {
 			}
 		}
 		if *apply {
-			err = client.request(ctx, "/gateway/v5/policy", gp.UpdatePolicyRequest{ProtocolVersion: gp.Version, ExpectedRevision: catalog.Policy.Revision, Policy: policy}, nil)
+			err = client.request(ctx, "/gateway/v6/policy", gp.UpdatePolicyRequest{ProtocolVersion: gp.Version, ExpectedRevision: catalog.Policy.Revision, Policy: policy}, nil)
 			if err == nil {
 				policy.Revision = catalog.Policy.Revision + 1
 			}

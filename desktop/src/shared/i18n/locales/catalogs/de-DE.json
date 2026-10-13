@@ -3337,8 +3337,7 @@
     "cloud_denied": "Beigetreten · Cloud nicht erlaubt",
     "cloud_pending": "Beigetreten · Cloud-Freigabe ausstehend",
     "cloud_control_offline": "Cloud verbunden · Steuerverbindung der Laufzeitumgebung offline",
-    "accessible": "Beigetreten · Über Cloud erreichbar",
-    "migration_pending": "Beigetreten · Umgebungsmigration ausstehend"
+    "accessible": "Beigetreten · Über Cloud erreichbar"
   },
   "gatewayMembers": {
     "reevaluate": "Zugriff erneut prüfen",
@@ -3356,7 +3355,6 @@
     "confirmLeave": "Austritt bestätigen",
     "leave": "Gateway verlassen",
     "failed": "Der Vorgang konnte nicht abgeschlossen werden. Eingaben und die letzte Mitgliederliste bleiben erhalten. Fehlgeschlagene Einträge können einzeln erneut versucht werden.",
-    "rebuild": "Die bisherigen Gateway-URL-Konfigurationen wurden entfernt. Jede Laufzeitumgebung muss mit einer neuen Einladung beitreten. Bestehende Umgebungen in Redeven Cloud bleiben gespeichert und müssen erneut verbunden werden.",
     "invite": "Laufzeitumgebung einladen",
     "listenerAddress": "Gateway-Listener",
     "listenerAddressHelp": "Hier lauscht dieses Gateway auf seinem Host. Laufzeiten verwenden stattdessen die unten bestätigten erreichbaren Adressen.",
@@ -3460,7 +3458,8 @@
     "publishHelp": "Diese Laufzeitumgebung über dieses Gateway in Redeven Cloud veröffentlichen. Eine Cloud-Genehmigung ist erforderlich.",
     "empty": "Kein Gateway gekoppelt.",
     "unavailable": "Autorisieren Sie Desktop an diesem Gateway, um Env App zu öffnen.",
-    "tab": "Gateway"
+    "tab": "Gateway",
+    "useRouteChange": "Diese Laufzeitumgebung ist bereits mit Cloud verknüpft. Verwenden Sie „Route ändern“, um die Verbindung zu wechseln; Identität und Besitz bleiben erhalten."
   },
   "tessivenRuntime": {
     "confirmTitle": "{action} bestätigen",
@@ -3472,5 +3471,36 @@
     "stop": "Stopp",
     "restart": "Neustart",
     "update": "Upgrade"
+  },
+  "cloudRoute": {
+    "approval": "Cloud-Freigabe",
+    "connection": "Cloud-Verbindung",
+    "selected": "Gewählter Weg",
+    "nextAttempt": "Nächste Prüfung: {time}",
+    "change": "Verbindungsweg ändern",
+    "retry": "Verbindung wiederholen",
+    "manageApproval": "Freigabe verwalten",
+    "cancelIntent": "Cloud trennen",
+    "pendingOperation": "Ausstehende Änderung prüfen",
+    "direct": "Direkt",
+    "gatewayUnavailable": "Gateway nicht verfügbar",
+    "approved": "Freigegeben",
+    "pending": "Freigabe ausstehend",
+    "revoked": "Widerrufen",
+    "identity_required": "Identität abgelaufen",
+    "action_required": "Aktion erforderlich",
+    "connected": "Verbunden",
+    "disconnected": "Getrennt",
+    "reauthorizeHelp": "Erneuern Sie die Gerätefreigabe mit einem neuen Einrichtungsticket oder einer ausdrücklichen Namespace-Registrierung. Lokale Arbeit bleibt verfügbar.",
+    "impact": "Nach der Bestätigung werden Cloud-Sitzungen über diesen Weg neu verbunden. Hintergrundaufgaben laufen weiter. Cloud-Identität und Eigentümer bleiben gleich.",
+    "verify": "Weg prüfen",
+    "ready": "Weg geprüft. Bestätigen Sie die neue Verbindung.",
+    "confirm": "Bestätigen und verbinden",
+    "query": "Ursprünglichen Vorgang abfragen",
+    "committed": "Weg gespeichert",
+    "unknown": "Das Ergebnis ist unbekannt. Fragen Sie vor einem erneuten Versuch den ursprünglichen Vorgang ab.",
+    "corrupt": "Der gespeicherte Vorgang kann nicht gelesen werden. Prüfen Sie den aktuellen Weg, bevor Sie diesen lokalen Eintrag löschen.",
+    "storageFailed": "Der Vorgang konnte nicht lokal gespeichert werden. Kein Wechsel wurde gestartet.",
+    "reviewCurrent": "Lokalen Eintrag löschen"
   }
 }

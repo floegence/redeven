@@ -108,8 +108,8 @@ try {
       await urlClient.verifyAddress(consumer);
       assert.deepEqual((await urlClient.catalog(consumer)).gateway.permissions, { access: true, manage_members: false, configure_cloud: false });
       await assert.rejects(urlClient.listClients(consumer), { code: 'HOST_MANAGEMENT_REQUIRED' });
-      const headers = await trust.createGatewayAuthHeaders({ record: consumer, method: 'POST', route: '/gateway/v5/clients/access-codes', body: { protocol_version: 'redeven-gateway-v5' }, secret_store: secretStore });
-      const forbidden = await fetch(new URL('gateway/v5/clients/access-codes', placement.baseURL), { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json', 'X-Redeven-Gateway-Transport': 'desktop_bridge' }, body: JSON.stringify({ protocol_version: 'redeven-gateway-v5' }) });
+      const headers = await trust.createGatewayAuthHeaders({ record: consumer, method: 'POST', route: '/gateway/v6/clients/access-codes', body: { protocol_version: 'redeven-gateway-v6' }, secret_store: secretStore });
+      const forbidden = await fetch(new URL('gateway/v6/clients/access-codes', placement.baseURL), { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json', 'X-Redeven-Gateway-Transport': 'desktop_bridge' }, body: JSON.stringify({ protocol_version: 'redeven-gateway-v6' }) });
       assert.equal(forbidden.status, 403, 'Direct HTTP cannot bypass main-process management restriction');
       assert.equal((await client.listClients(record)).length, 1);
       assert.equal(JSON.parse(await invokeCLI(['clients', 'list'])).clients.length, 1, 'Host CLI lists the same authorized client');

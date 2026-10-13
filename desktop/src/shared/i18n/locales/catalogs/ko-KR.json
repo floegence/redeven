@@ -3332,8 +3332,7 @@
     "cloud_denied": "가입됨 · Cloud 허용 안 됨",
     "cloud_pending": "가입됨 · Cloud 승인 대기 중",
     "cloud_control_offline": "Cloud 연결됨 · 런타임 연결 오프라인",
-    "accessible": "가입됨 · Cloud 접근 가능",
-    "migration_pending": "가입됨 · 환경 이전 대기 중"
+    "accessible": "가입됨 · Cloud 접근 가능"
   },
   "gatewayMembers": {
     "reevaluate": "액세스 다시 확인",
@@ -3351,7 +3350,6 @@
     "confirmLeave": "탈퇴 확인",
     "leave": "Gateway 탈퇴",
     "failed": "작업을 완료하지 못했습니다. 입력과 이전 멤버 목록은 유지됩니다. 실패한 항목을 개별적으로 다시 시도하세요.",
-    "rebuild": "기존 Gateway URL 설정이 삭제되었습니다. 각 런타임은 새 초대로 가입해야 합니다. 기존 Redeven Cloud 환경 기록은 유지되지만 다시 연결해야 합니다.",
     "invite": "런타임 초대",
     "listenerAddress": "Gateway 수신 주소",
     "listenerAddressHelp": "이 Gateway가 호스트에서 수신하는 위치입니다. 런타임은 아래에서 확인된 연결 가능 주소를 사용합니다.",
@@ -3455,7 +3453,8 @@
     "publishHelp": "이 Gateway를 통해 런타임을 Redeven Cloud에 게시합니다. Cloud 승인이 필요합니다.",
     "empty": "페어링된 Gateway가 없습니다.",
     "unavailable": "Env App을 열려면 이 Gateway에서 Desktop 접근을 승인하세요.",
-    "tab": "Gateway"
+    "tab": "Gateway",
+    "useRouteChange": "이 런타임은 이미 Cloud에 연결되어 있습니다. 경로 변경을 사용하면 환경 ID와 소유권을 유지하면서 연결 경로를 바꿀 수 있습니다."
   },
   "tessivenRuntime": {
     "confirmTitle": "{action} 확인",
@@ -3467,5 +3466,36 @@
     "stop": "중지",
     "restart": "다시 시작",
     "update": "업그레이드"
+  },
+  "cloudRoute": {
+    "approval": "클라우드 승인",
+    "connection": "클라우드 연결",
+    "selected": "선택한 경로",
+    "nextAttempt": "다음 확인: {time}",
+    "change": "경로 변경",
+    "retry": "연결 재시도",
+    "manageApproval": "승인 관리",
+    "cancelIntent": "클라우드 연결 해제",
+    "pendingOperation": "보류 중인 변경 확인",
+    "direct": "직접 연결",
+    "gatewayUnavailable": "Gateway 사용 불가",
+    "approved": "승인됨",
+    "pending": "승인 대기",
+    "revoked": "취소됨",
+    "identity_required": "ID 만료",
+    "action_required": "조치 필요",
+    "connected": "연결됨",
+    "disconnected": "연결 안 됨",
+    "reauthorizeHelp": "새 설정 티켓 또는 명시적 Namespace 등록으로 기기 인증을 갱신하세요. 로컬 작업은 계속할 수 있습니다.",
+    "impact": "확인 후 이 경로로 클라우드 세션을 다시 연결합니다. 백그라운드 작업은 계속되며 클라우드 ID와 소유권은 유지됩니다.",
+    "verify": "경로 확인",
+    "ready": "경로를 확인했습니다. 확인하면 다시 연결합니다.",
+    "confirm": "확인 후 다시 연결",
+    "query": "원래 작업 조회",
+    "committed": "경로 적용됨",
+    "unknown": "결과를 알 수 없습니다. 재시도 전에 원래 작업을 조회하세요.",
+    "corrupt": "저장된 작업을 읽을 수 없습니다. 로컬 기록을 지우기 전에 현재 경로를 확인하세요.",
+    "storageFailed": "작업을 로컬에 저장하지 못했습니다. 경로 변경은 시작되지 않았습니다.",
+    "reviewCurrent": "로컬 기록 지우기"
   }
 }

@@ -3332,8 +3332,7 @@
     "cloud_denied": "参加済み · Cloud は許可されていません",
     "cloud_pending": "参加済み · Cloud の承認待ち",
     "cloud_control_offline": "Cloud 接続済み · ランタイムの制御接続はオフライン",
-    "accessible": "参加済み · Cloud からアクセス可能",
-    "migration_pending": "参加済み · 環境の移行待ち"
+    "accessible": "参加済み · Cloud からアクセス可能"
   },
   "gatewayMembers": {
     "reevaluate": "アクセスを再確認",
@@ -3351,7 +3350,6 @@
     "confirmLeave": "離脱を確定",
     "leave": "Gateway から離脱",
     "failed": "操作を完了できませんでした。入力と前回のメンバー一覧は保持されています。失敗した項目を個別に再試行できます。",
-    "rebuild": "Gateway に保存されていた接続先 URL の設定は削除されました。各ランタイムは新しい招待で参加してください。既存の Redeven Cloud 環境の記録は保持されますが、再接続が必要です。",
     "invite": "ランタイム を招待",
     "listenerAddress": "Gateway の待ち受け",
     "listenerAddressHelp": "この Gateway がホストで待ち受ける場所です。ランタイムは下に確認済みの接続可能なアドレスを使用します。",
@@ -3455,7 +3453,8 @@
     "publishHelp": "この Gateway 経由でランタイムを Redeven Cloud に公開します。Cloud の承認が必要です。",
     "empty": "ペアリング済みの Gateway はありません。",
     "unavailable": "Env App を開くには、この Gateway で Desktop を認可してください。",
-    "tab": "Gateway"
+    "tab": "Gateway",
+    "useRouteChange": "このランタイムはすでに Cloud に関連付けられています。「経路を変更」で接続経路を切り替えると、環境の ID と所属を維持できます。"
   },
   "tessivenRuntime": {
     "confirmTitle": "{action}を確認",
@@ -3467,5 +3466,36 @@
     "stop": "停止",
     "restart": "再起動",
     "update": "アップグレード"
+  },
+  "cloudRoute": {
+    "approval": "クラウド承認",
+    "connection": "クラウド接続",
+    "selected": "選択した経路",
+    "nextAttempt": "次の確認：{time}",
+    "change": "経路を変更",
+    "retry": "接続を再試行",
+    "manageApproval": "承認を管理",
+    "cancelIntent": "クラウドを切断",
+    "pendingOperation": "保留中の変更を確認",
+    "direct": "直接接続",
+    "gatewayUnavailable": "Gateway が利用できません",
+    "approved": "承認済み",
+    "pending": "承認待ち",
+    "revoked": "取り消し済み",
+    "identity_required": "ID の有効期限切れ",
+    "action_required": "操作が必要",
+    "connected": "接続済み",
+    "disconnected": "未接続",
+    "reauthorizeHelp": "新しい設定チケットまたは明示的な Namespace 登録でマシン認証を更新してください。ローカル作業は継続できます。",
+    "impact": "確認後、この経路でクラウドセッションを再接続します。バックグラウンドタスクは継続し、クラウド ID と所有権は変わりません。",
+    "verify": "経路を検証",
+    "ready": "経路を検証しました。確認すると再接続します。",
+    "confirm": "確認して再接続",
+    "query": "元の操作を照会",
+    "committed": "経路を確定しました",
+    "unknown": "結果が不明です。再試行前に元の操作を照会してください。",
+    "corrupt": "保存された操作を読めません。このローカル記録を消す前に現在の経路を確認してください。",
+    "storageFailed": "操作をローカルに保存できません。経路変更は開始されていません。",
+    "reviewCurrent": "ローカル記録を消去"
   }
 }

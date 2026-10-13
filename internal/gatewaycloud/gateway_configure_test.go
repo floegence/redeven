@@ -41,7 +41,7 @@ func TestGatewayConfigureRecoversLostResponseAndRequiresRevocation(t *testing.T)
 		defer mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
-		case "/api/console/v1/gateway-cloud/v2/challenges":
+		case "/api/console/v1/gateway-cloud/v3/challenges":
 			var request gc.ChallengeRequest
 			if json.NewDecoder(r.Body).Decode(&request) != nil {
 				t.Error("invalid challenge request")
@@ -49,7 +49,7 @@ func TestGatewayConfigureRecoversLostResponseAndRequiresRevocation(t *testing.T)
 				return
 			}
 			_ = json.NewEncoder(w).Encode(gc.Response[gc.ChallengeResponse]{Success: true, Data: gc.ChallengeResponse{Proof: gc.Proof{ProtocolVersion: gc.ProtocolVersion, CloudOrigin: origin, Purpose: request.Purpose, GatewayPublicID: request.GatewayPublicID, ChallengeID: "challenge", ChallengeB64u: base64.RawURLEncoding.EncodeToString(make([]byte, 32)), ExpiresAtUnixMS: time.Now().Add(time.Minute).UnixMilli()}}})
-		case "/api/console/v1/gateway-cloud/v2/register":
+		case "/api/console/v1/gateway-cloud/v3/register":
 			var signed gc.SignedRequest
 			var request gc.GatewayRegistration
 			if json.NewDecoder(r.Body).Decode(&signed) != nil || json.Unmarshal(signed.Payload, &request) != nil || gc.VerifyGatewayMachineIdentity(signed.Proof, request) != nil || signed.Proof.Verify(request.PublicKeyB64u, signed.Payload, time.Now()) != nil {
@@ -68,7 +68,7 @@ func TestGatewayConfigureRecoversLostResponseAndRequiresRevocation(t *testing.T)
 				return
 			}
 			_ = json.NewEncoder(w).Encode(gc.Response[gc.Gateway]{Success: true, Data: gc.Gateway{GatewayID: stable.ID, PublicID: id, State: "pending"}})
-		case "/api/console/v1/gateway-cloud/v2/gateway-status":
+		case "/api/console/v1/gateway-cloud/v3/gateway-status":
 			var signed gc.SignedRequest
 			if json.NewDecoder(r.Body).Decode(&signed) != nil {
 				w.WriteHeader(400)

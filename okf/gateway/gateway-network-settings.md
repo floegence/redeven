@@ -13,7 +13,7 @@ Gateway owns three independent network settings: administrator-confirmed Runtime
 
 ## Configuration ownership
 
-`POST /gateway/v5/network-settings` requires current verified host management proof and saves one bounded settings object. It accepts up to sixteen local IP:port or hostname:port bindings, sixty-four exact hostnames or IP addresses, and sixteen confirmed HTTPS share endpoints. Bindings and Host restrictions reject duplicates. Hostnames are case-insensitive; restrictions have no scheme, port or wildcard. Desktop validates the same shape at its IPC boundary.
+`POST /gateway/v6/network-settings` requires current verified host management proof and saves one bounded settings object. It accepts up to sixteen local IP:port or hostname:port bindings, sixty-four exact hostnames or IP addresses, and sixteen confirmed HTTPS share endpoints. Bindings and Host restrictions reject duplicates. Hostnames are case-insensitive; restrictions have no scheme, port or wildcard. Desktop validates the same shape at its IPC boundary.
 
 A bind address names a socket on the Gateway device. A share endpoint names the address a Runtime should dial and may include DNS or port forwarding. Share endpoints alone provide ordinary TLS certificate names. Editing either setting preserves the stable Gateway key, member CA, membership, policy and Cloud associations. Removing all share endpoints disables new invitation issuance; listener sockets remain independently configured.
 
@@ -39,4 +39,4 @@ Member state v4 appends `allowed_hosts` to the existing endpoint state. The cont
 - `redeven:internal/gatewayservice/network_test.go` — Real TLS sockets, host-proof enforcement and saved-binding restart.
 - `redeven:desktop/scripts/check-gateway-network-host.mjs` — Real Desktop host bridge save, retained listener and explicit restart.
 - `redeven:desktop/src/shared/gatewayNetworkSettings.ts` — Bounded IPC validation.
-- `redeven:spec/openapi/gateway-v5.yaml` — Executable network settings and catalog contract.
+- `redeven:spec/openapi/gateway-v6.yaml` — Executable network settings and catalog contract.

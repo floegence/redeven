@@ -11,9 +11,34 @@ import (
 
 	"github.com/floegence/redeven/internal/agentprotocol"
 	"github.com/floegence/redeven/internal/config"
+	"github.com/floegence/redeven/internal/lockfile"
 	"github.com/floegence/redeven/internal/runtimemanagement"
 	"github.com/floegence/redeven/internal/runtimeservice"
+	"github.com/floegence/redeven/internal/testutil/cloudfixture"
 )
+
+func TestBootstrapCannotReplaceRunningRuntimeCloudIdentity(t *testing.T) {
+	root := t.TempDir()
+	layout, err := resolveBootstrapTargetLayout(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(layout.StateDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	lock, err := lockfile.Acquire(layout.LockPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = lock.Release() }()
+	code, _, stderr := runCLITest(t, "bootstrap", "--state-root", root, "--cloud", "https://redeven.test", "--env-id", "env_test", "--link-ticket", "unused-ticket")
+	if code != 1 || !strings.Contains(stderr, "Stop this Runtime before changing its Cloud enrollment") {
+		t.Fatalf("bootstrap while running: code=%d, stderr=%q", code, stderr)
+	}
+	if _, err := os.Stat(layout.ConfigPath); !os.IsNotExist(err) {
+		t.Fatalf("bootstrap changed the active configuration: %v", err)
+	}
+}
 
 func TestRunCLIHelp(t *testing.T) {
 	t.Run("top level help flag prints quick start", func(t *testing.T) {
@@ -574,6 +599,8 @@ func TestTargetsCommandJSON(t *testing.T) {
 		CloudID:                  "provider_1",
 		EnvironmentID:            "env_123",
 		LocalEnvironmentPublicID: "le_123",
+		CloudAssociation:         cloudfixture.Association("le_123", "env_123"),
+		CloudRoute:               &config.CloudRoute{Kind: config.CloudRouteDirect, Revision: 1},
 	}); err != nil {
 		t.Fatalf("Save() error = %v", err)
 	}
@@ -856,6 +883,8 @@ func TestEnvCommandJSON(t *testing.T) {
 		CloudID:                  "provider_1",
 		EnvironmentID:            "env_123",
 		LocalEnvironmentPublicID: "le_123",
+		CloudAssociation:         cloudfixture.Association("le_123", "env_123"),
+		CloudRoute:               &config.CloudRoute{Kind: config.CloudRouteDirect, Revision: 1},
 	}); err != nil {
 		t.Fatalf("Save() error = %v", err)
 	}
@@ -1034,6 +1063,8 @@ func TestEnvRestartStoppedLocalRuntimeReturnsDesktopHandoffPlan(t *testing.T) {
 		CloudID:                  "provider_1",
 		EnvironmentID:            "env_123",
 		LocalEnvironmentPublicID: "le_123",
+		CloudAssociation:         cloudfixture.Association("le_123", "env_123"),
+		CloudRoute:               &config.CloudRoute{Kind: config.CloudRouteDirect, Revision: 1},
 	}); err != nil {
 		t.Fatalf("Save() error = %v", err)
 	}

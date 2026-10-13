@@ -87,7 +87,7 @@ func (l *Listener) applicationHandler(egress http.Handler) http.Handler {
 			http.Error(w, "HOST_NOT_ALLOWED", http.StatusForbidden)
 			return
 		}
-		if r.Method == http.MethodConnect || r.URL.Path == "/v5/member/cloud" || r.URL.Path == "/v5/member/cloud-closure" {
+		if r.Method == http.MethodConnect || r.URL.Path == "/v6/member/cloud" {
 			if egress == nil {
 				http.Error(w, "CLOUD_NOT_CONFIGURED", http.StatusForbidden)
 				return

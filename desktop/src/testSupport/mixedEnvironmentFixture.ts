@@ -21,7 +21,7 @@ export function mixedEnvironmentFixture(options: {
     const origin = index ? REDEVEN_CLOUD_DEVELOPMENT_ORIGIN : REDEVEN_CLOUD_ORIGIN;
     const accessPoint = { access_point_id: 'dev', region: 'dev', display_name: 'Development', description: '',
       access_point_origin: index ? 'https://personal.example.invalid' : 'https://team.example.invalid', country_code: 'SG', city: 'Singapore', status: 'active', health_status: 'healthy' };
-    const provider = normalizeDesktopCloud({ protocol_version: 'rcpp-v4', cloud_id: 'redeven',
+    const provider = normalizeDesktopCloud({ protocol_version: 'rcpp-v5', cloud_id: 'redeven',
       display_name: 'Redeven Cloud', cloud_origin: origin, documentation_url: `${origin}/help`, access_points: [accessPoint] })!;
     return { cloud: provider, account: { cloud_id: 'redeven', cloud_origin: origin, display_name: name,
       user_public_id: `user_${index}`, user_display_name: index ? 'Personal account' : 'Team account', authorization_expires_at_unix_ms: now + 3600000 },

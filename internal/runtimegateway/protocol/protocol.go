@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-const Version = "redeven-gateway-v5"
+const Version = "redeven-gateway-v6"
 
 type IdentityRequest struct {
 	ProtocolVersion string `json:"protocol_version"`
@@ -69,7 +69,6 @@ type CatalogResponse struct {
 	Members         []Member                  `json:"members"`
 	Policy          GatewayPolicy             `json:"policy"`
 	Revision        int64                     `json:"revision"`
-	RebuildRequired bool                      `json:"rebuild_required"`
 	HookStatus      map[HookAction]HookStatus `json:"hook_status"`
 }
 

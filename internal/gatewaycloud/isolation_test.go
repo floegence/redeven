@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
-	"github.com/floegence/redeven/internal/gatewaystate"
 	"io"
 	"net"
 	"net/http"
@@ -17,6 +16,9 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/floegence/redeven/internal/config"
+	"github.com/floegence/redeven/internal/gatewaystate"
 
 	flowersec "github.com/floegence/flowersec/flowersec-go/v5"
 	"github.com/floegence/flowersec/flowersec-go/v5/controlplane"
@@ -225,11 +227,8 @@ func runIsolationRuntime(t *testing.T, root string) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	association, err := PrepareRuntime(&cfg, gp.MemberCloudContext{ProtocolVersion: gp.Version, Allowed: true, GatewayID: cfg.GatewayID, MemberID: cfg.MemberID, MemberVersion: cfg.MemberVersion, CloudOrigin: "https://cloud.gateway.test:8443", RegionOrigin: "https://cloud.gateway.test:8443", NamespacePublicID: "namespace", GatewayPublicID: "cloud_gateway"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	proxy, err := association.Proxy(&cfg)
+	runtimeConfig := &config.Config{LocalEnvironmentPublicID: cfg.RuntimePublicID, Gateways: []*gatewaymembership.RuntimeConfig{&cfg}, CloudRoute: &config.CloudRoute{Kind: config.CloudRouteGateway, MemberID: cfg.MemberID, Revision: 1}}
+	proxy, err := runtimeConfig.CloudProxy()
 	if err != nil {
 		t.Fatal(err)
 	}

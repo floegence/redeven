@@ -5,516 +5,147 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"math"
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"reflect"
+	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
 	flowercontrol "github.com/floegence/flowersec/flowersec-go/v5/controlplane"
-	"github.com/floegence/redeven/internal/gatewaymembership"
-	"github.com/floegence/redeven/internal/testutil/gatewayfixture"
+	rc "github.com/floegence/redeven/internal/runtimecloud/protocol"
 )
 
-func TestBootstrapConfigExplicitLogLevelOverridesPreviousConfig(t *testing.T) {
-	server := newCloudLinkTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/.well-known/redeven-cloud.json":
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"cloud_id":"example_control_plane"}`))
-			return
-		case r.Method != http.MethodPost:
-			t.Fatalf("method = %s, want POST", r.Method)
-		}
-		if r.URL.Path != "/api/rcpp/v4/runtime-link/exchange" {
-			t.Fatalf("path = %s", r.URL.Path)
-		}
-		if got := r.Header.Get("Authorization"); got != "Bearer ticket-123" {
-			t.Fatalf("Authorization = %q, want %q", got, "Bearer ticket-123")
-		}
-		var payload runtimeLinkExchangeRequest
-		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-			t.Fatalf("Decode(request) error = %v", err)
-		}
-		assertBootstrapDeliveryRequestID(t, payload.DeliveryRequestIDB64u)
-		writeBootstrapTestResponse(t, w, r.Host, payload.LocalEnvironmentPublicID, 7)
-	}))
-	defer server.Close()
-
-	stateRoot := t.TempDir()
-	layout, err := LocalEnvironmentStateLayout(stateRoot)
-	if err != nil {
-		t.Fatalf("LocalEnvironmentStateLayout() error = %v", err)
-	}
-	store, _ := gatewayfixture.New(t, "https://gateway.internal:7443", "127.0.0.1:7443")
-	member := gatewayfixture.Enroll(t, store, "le_existing")
-	if err := Save(layout.ConfigPath, &Config{
-		Gateways:                 []*gatewaymembership.RuntimeConfig{member},
-		CloudOrigin:              server.URL,
-		AccessPointOrigin:        "https://old.example.invalid",
-		EnvironmentID:            "env_old",
-		LocalEnvironmentPublicID: "le_existing",
-		AgentInstanceID:          "ai_existing",
-		LogFormat:                "json",
-		LogLevel:                 "debug",
-	}); err != nil {
-		t.Fatalf("Save() error = %v", err)
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	writtenPath, err := BootstrapConfig(ctx, BootstrapArgs{
-		CloudOrigin:       server.URL,
-		EnvironmentID:     "env_123",
-		RuntimeLinkTicket: "ticket-123",
-		StateRoot:         stateRoot,
-		LogLevel:          "info",
-		HTTPClient:        server.Client(),
-	})
-	if err != nil {
-		t.Fatalf("BootstrapConfig() error = %v", err)
-	}
-	if writtenPath != layout.ConfigPath {
-		t.Fatalf("writtenPath = %q, want %q", writtenPath, layout.ConfigPath)
-	}
-
-	cfg, err := Load(layout.ConfigPath)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	if cfg.LogLevel != "info" {
-		t.Fatalf("LogLevel = %q, want %q", cfg.LogLevel, "info")
-	}
-	if len(cfg.Gateways) != 1 || !reflect.DeepEqual(cfg.Gateways[0], member) {
-		t.Fatal("Cloud bootstrap discarded independent Gateway access")
-	}
-	if cfg.CloudOrigin != server.URL {
-		t.Fatalf("CloudOrigin = %q, want %q", cfg.CloudOrigin, "https://redeven.test")
-	}
-	if cfg.AgentInstanceID != "ai_existing" {
-		t.Fatalf("AgentInstanceID = %q, want %q", cfg.AgentInstanceID, "ai_existing")
-	}
-	if cfg.LocalEnvironmentPublicID != "le_existing" {
-		t.Fatalf("LocalEnvironmentPublicID = %q, want %q", cfg.LocalEnvironmentPublicID, "le_existing")
-	}
-	if cfg.BindingGeneration != 7 {
-		t.Fatalf("BindingGeneration = %d, want 7", cfg.BindingGeneration)
-	}
-	if cfg.EnvironmentID != "env_123" {
-		t.Fatalf("EnvironmentID = %q, want %q", cfg.EnvironmentID, "env_123")
-	}
-	if cfg.CloudID != "example_control_plane" {
-		t.Fatalf("CloudID = %q, want %q", cfg.CloudID, "example_control_plane")
-	}
-	if cfg.Direct != nil {
-		t.Fatalf("Direct = %#v, want nil", cfg.Direct)
-	}
-	if cfg.ControlArtifactPool == nil || len(cfg.ControlArtifactPool.Entries) != 2 {
-		t.Fatalf("ControlArtifactPool = %#v", cfg.ControlArtifactPool)
-	}
-	configBody, err := os.ReadFile(layout.ConfigPath)
-	if err != nil {
-		t.Fatalf("ReadFile(config) error = %v", err)
-	}
-	if strings.Contains(string(configBody), "ticket-123") {
-		t.Fatalf("config contains bootstrap ticket: %s", configBody)
-	}
-	assertBootstrapAttemptRemoved(t, layout.ConfigPath)
-}
-
-func TestSavePreservesUnknownConfigFields(t *testing.T) {
-	path := t.TempDir() + "/config.json"
-	if err := os.WriteFile(path, []byte(`{
-  "agent_home_dir": "/tmp",
-  "future_runtime_field": {
-    "enabled": true,
-    "label": "kept"
-  }
-}`), 0o600); err != nil {
-		t.Fatalf("WriteFile() error = %v", err)
-	}
-
-	cfg, err := Load(path)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	cfg.Shell = "/bin/sh"
-	if err := Save(path, cfg); err != nil {
-		t.Fatalf("Save() error = %v", err)
-	}
-
-	var raw map[string]any
-	b, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("ReadFile() error = %v", err)
-	}
-	if err := json.Unmarshal(b, &raw); err != nil {
-		t.Fatalf("Unmarshal() error = %v", err)
-	}
-	future, ok := raw["future_runtime_field"].(map[string]any)
-	if !ok {
-		t.Fatalf("future_runtime_field missing after save: %s", string(b))
-	}
-	if future["enabled"] != true || future["label"] != "kept" {
-		t.Fatalf("future_runtime_field = %#v", future)
-	}
-	if raw["shell"] != "/bin/sh" {
-		t.Fatalf("shell = %#v", raw["shell"])
-	}
-}
-
-func TestBootstrapConfigSupportsRuntimeLinkTicketExchange(t *testing.T) {
-	server := newCloudLinkTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/.well-known/redeven-cloud.json":
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"cloud_id":"example_control_plane"}`))
-			return
-		case r.Method != http.MethodPost:
-			t.Fatalf("method = %s, want POST", r.Method)
-		}
-		if r.URL.Path != "/api/rcpp/v4/runtime-link/exchange" {
-			t.Fatalf("path = %s", r.URL.Path)
-		}
-		if got := r.Header.Get("Authorization"); got != "Bearer ticket-123" {
-			t.Fatalf("Authorization = %q, want %q", got, "Bearer ticket-123")
-		}
-		var payload runtimeLinkExchangeRequest
-		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-			t.Fatalf("Decode(request) error = %v", err)
-		}
-		if payload.EnvPublicID != "env_123" {
-			t.Fatalf("EnvPublicID = %q", payload.EnvPublicID)
-		}
-		if payload.CloudOrigin != "https://"+r.Host {
-			t.Fatalf("CloudOrigin = %q", payload.CloudOrigin)
-		}
-		if payload.LocalEnvironmentPublicID == "" {
-			t.Fatalf("LocalEnvironmentPublicID is empty")
-		}
-		if payload.AgentInstanceID == "" {
-			t.Fatalf("AgentInstanceID is empty")
-		}
-		assertBootstrapDeliveryRequestID(t, payload.DeliveryRequestIDB64u)
-		writeBootstrapTestResponse(t, w, r.Host, payload.LocalEnvironmentPublicID, 3)
-	}))
-	defer server.Close()
-
-	stateRoot := t.TempDir()
-	layout, err := LocalEnvironmentStateLayout(stateRoot)
-	if err != nil {
-		t.Fatalf("LocalEnvironmentStateLayout() error = %v", err)
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	writtenPath, err := BootstrapConfig(ctx, BootstrapArgs{
-		CloudOrigin:       server.URL,
-		EnvironmentID:     "env_123",
-		RuntimeLinkTicket: "ticket-123",
-		StateRoot:         stateRoot,
-		HTTPClient:        server.Client(),
-	})
-	if err != nil {
-		t.Fatalf("BootstrapConfig() error = %v", err)
-	}
-	if writtenPath != layout.ConfigPath {
-		t.Fatalf("writtenPath = %q, want %q", writtenPath, layout.ConfigPath)
-	}
-
-	cfg, err := Load(layout.ConfigPath)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	if cfg.CloudID != "example_control_plane" {
-		t.Fatalf("CloudID = %q, want %q", cfg.CloudID, "example_control_plane")
-	}
-	if cfg.Direct != nil {
-		t.Fatalf("Direct = %#v, want nil", cfg.Direct)
-	}
-	if cfg.ControlArtifactPool == nil || len(cfg.ControlArtifactPool.Entries) != 2 {
-		t.Fatalf("ControlArtifactPool = %#v", cfg.ControlArtifactPool)
-	}
-	if cfg.LocalEnvironmentPublicID == "" {
-		t.Fatalf("LocalEnvironmentPublicID is empty")
-	}
-	if cfg.BindingGeneration != 3 {
-		t.Fatalf("BindingGeneration = %d, want 3", cfg.BindingGeneration)
-	}
-	assertBootstrapAttemptRemoved(t, layout.ConfigPath)
-}
-
-func TestBootstrapConfigRejectsMismatchedBootstrapResponseEnvironment(t *testing.T) {
-	server := newCloudLinkTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/.well-known/redeven-cloud.json":
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"cloud_id":"example_control_plane"}`))
-		case r.Method == http.MethodPost && r.URL.Path == "/api/rcpp/v4/runtime-link/exchange":
-			var payload runtimeLinkExchangeRequest
-			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-				t.Fatal(err)
+// The fixture exercises the signed v5 enrollment and exact shared delivery.
+func enrollmentTestServer(t *testing.T, enroll func(http.ResponseWriter, *http.Request, rc.SignedRequest, rc.EnrollRequest), recover ...func(http.ResponseWriter, *http.Request, rc.SignedRequest, rc.RecoverRequest)) *httptest.Server {
+	t.Helper()
+	return httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		origin := "https://" + r.Host
+		switch r.URL.Path {
+		case "/api/rcpp/v5/runtime-link/resolve":
+			var q struct {
+				EnvPublicID string `json:"env_public_id"`
 			}
-			writeBootstrapTestResponseForEnvironment(t, w, r.Host, payload.LocalEnvironmentPublicID, 3, "env_other")
+			if json.NewDecoder(r.Body).Decode(&q) != nil {
+				w.WriteHeader(400)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(runtimeLinkAssignment{ProtocolVersion: rc.ProtocolVersion, NamespacePublicID: "namespace", CloudID: "example_control_plane", CloudOrigin: origin, EnvPublicID: q.EnvPublicID, AccessPointID: "dev", AccessPointOrigin: origin, ExpiresAtUnixMS: time.Now().Add(time.Minute).UnixMilli()})
+		case "/api/console/v1/runtime-cloud/v5/challenges":
+			var q rc.ChallengeRequest
+			if json.NewDecoder(r.Body).Decode(&q) != nil {
+				w.WriteHeader(400)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"success": true, "data": rc.ChallengeResponse{Proof: rc.Proof{ProtocolVersion: rc.ProtocolVersion, CloudOrigin: origin, NamespacePublicID: q.NamespacePublicID, RuntimePublicID: q.RuntimePublicID, Purpose: q.Purpose, ChallengeID: "challenge", NonceB64u: base64.RawURLEncoding.EncodeToString(make([]byte, 32)), ExpiresAtUnixMS: time.Now().Add(time.Minute).UnixMilli()}}})
+		case "/api/console/v1/runtime-cloud/v5/enroll":
+			var signed rc.SignedRequest
+			var q rc.EnrollRequest
+			if json.NewDecoder(r.Body).Decode(&signed) != nil || json.Unmarshal(signed.Payload, &q) != nil || signed.Proof.Verify(q.PublicKeyB64u, signed.Payload, time.Now()) != nil {
+				t.Error("invalid independent identity proof")
+				w.WriteHeader(400)
+				return
+			}
+			enroll(w, r, signed, q)
+		case "/api/console/v1/runtime-cloud/v5/recover":
+			var signed rc.SignedRequest
+			var q rc.RecoverRequest
+			if len(recover) != 1 || json.NewDecoder(r.Body).Decode(&signed) != nil || json.Unmarshal(signed.Payload, &q) != nil {
+				t.Error("unexpected recovery")
+				w.WriteHeader(400)
+				return
+			}
+			recover[0](w, r, signed, q)
 		default:
-			t.Fatalf("unexpected request = %s %s", r.Method, r.URL.Path)
+			t.Errorf("retired or unknown route: %s", r.URL.Path)
+			w.WriteHeader(404)
 		}
 	}))
-	defer server.Close()
-
-	_, err := BootstrapConfig(context.Background(), BootstrapArgs{
-		CloudOrigin:       server.URL,
-		EnvironmentID:     "env_123",
-		RuntimeLinkTicket: "ticket-123",
-		StateRoot:         t.TempDir(),
-		HTTPClient:        server.Client(),
+}
+func writeEnrollmentTestDelivery(t *testing.T, w http.ResponseWriter, r *http.Request, q rc.EnrollRequest) {
+	t.Helper()
+	b := rc.Binding{BindingFence: rc.BindingFence{PublicID: "binding", CloudID: "example_control_plane", RuntimePublicID: q.RuntimePublicID, EnvPublicID: q.Authorization.EnvPublicID, NamespacePublicID: "namespace", OwnerKind: rc.OwnerUser, OwnerPublicID: "user", Generation: 7}, Region: "dev", State: "active", PublicKeyB64u: q.PublicKeyB64u, IdentityExpiresAtUnixMS: time.Now().Add(time.Hour).UnixMilli()}
+	p := bootstrapTestControlArtifactPool(t, 7)
+	p.LogicalCloudBindingID = "runtime-cloud-v5:binding"
+	finalizeBootstrapTestPoolDigest(t, p)
+	raw, _ := json.Marshal(p)
+	var shared rc.ControlArtifactPoolV2
+	_ = json.Unmarshal(raw, &shared)
+	_ = json.NewEncoder(w).Encode(map[string]any{"success": true, "data": rc.RecoverResponse{ProtocolVersion: rc.ProtocolVersion, State: rc.ApprovalApproved, Binding: &b, Closures: []rc.Closure{}, Delivery: &rc.CredentialDelivery{ProtocolVersion: rc.ProtocolVersion, CloudOrigin: "https://" + r.Host, RegionOrigin: "https://" + r.Host, Binding: b, DeliveryRequestID: q.OperationID, ControlArtifactPool: &shared}}})
+}
+func TestBootstrapSignedEnrollmentPreservesSettingsAndDoesNotPersistTicket(t *testing.T) {
+	server := enrollmentTestServer(t, func(w http.ResponseWriter, r *http.Request, _ rc.SignedRequest, q rc.EnrollRequest) {
+		writeEnrollmentTestDelivery(t, w, r, q)
 	})
-	if err == nil || !strings.Contains(err.Error(), "env_public_id mismatch") {
-		t.Fatalf("BootstrapConfig() error = %v, want env_public_id mismatch", err)
+	defer server.Close()
+	root := t.TempDir()
+	layout, _ := LocalEnvironmentStateLayout(root)
+	if err := Save(layout.ConfigPath, &Config{LogLevel: "debug", Shell: "/bin/zsh", AI: savedChatGPTConfig()}); err != nil {
+		t.Fatal(err)
+	}
+	_, err := BootstrapConfig(t.Context(), BootstrapArgs{CloudOrigin: server.URL, EnvironmentID: "env", RuntimeLinkTicket: "ticket", StateRoot: root, LogLevel: "info", HTTPClient: server.Client()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(layout.ConfigPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.LogLevel != "info" || cfg.Shell != "/bin/zsh" || cfg.AI == nil || cfg.CloudAssociation.Binding.EnvPublicID != "env" || len(cfg.ControlArtifactPool.Entries) != 2 {
+		t.Fatal("enrollment changed local settings or failed to persist identity")
+	}
+	raw, _ := os.ReadFile(layout.ConfigPath)
+	if strings.Contains(string(raw), "ticket") {
+		t.Fatal("setup ticket persisted")
+	}
+	if _, err := os.Stat(layout.ConfigPath + ".cloud-enrollment-v5.json"); !os.IsNotExist(err) {
+		t.Fatal("completed journal remains")
 	}
 }
-
-func TestBootstrapConfigRejectsExchangeAssignmentDrift(t *testing.T) {
-	for _, field := range []string{"cloud_id", "cloud_origin", "access_point_id", "access_point_origin", "protocol_version"} {
-		t.Run(field, func(t *testing.T) {
-			server := newCloudLinkTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				var request runtimeLinkExchangeRequest
-				if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-					t.Error(err)
-					return
-				}
-				recorder := httptest.NewRecorder()
-				writeBootstrapTestResponse(t, recorder, r.Host, request.LocalEnvironmentPublicID, 3)
-				var response map[string]json.RawMessage
-				if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
-					t.Error(err)
-					return
-				}
-				response[field] = json.RawMessage(`""`)
-				_ = json.NewEncoder(w).Encode(response)
-			}))
-			defer server.Close()
-			stateRoot := t.TempDir()
-			if _, err := BootstrapConfig(context.Background(), BootstrapArgs{
-				CloudOrigin: server.URL, EnvironmentID: "env_123", RuntimeLinkTicket: "ticket",
-				StateRoot: stateRoot, HTTPClient: server.Client(),
-			}); err == nil {
-				t.Fatal("exchange must match every assigned identity and protocol field")
-			}
-			layout, err := LocalEnvironmentStateLayout(stateRoot)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if _, err := os.Stat(layout.ConfigPath); !errors.Is(err, os.ErrNotExist) {
-				t.Fatalf("invalid exchange wrote configuration: %v", err)
-			}
-		})
-	}
-}
-
-func TestBootstrapConfigReusesPendingDeliveryAttemptAfterUncertainResponse(t *testing.T) {
-	var mu sync.Mutex
-	requests := make([]runtimeLinkExchangeRequest, 0, 2)
-	server := newCloudLinkTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || r.URL.Path != "/api/rcpp/v4/runtime-link/exchange" {
-			t.Fatalf("request = %s %s, want bootstrap exchange", r.Method, r.URL.Path)
-		}
-		var payload runtimeLinkExchangeRequest
-		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-			t.Fatalf("Decode(request) error = %v", err)
-		}
-		assertBootstrapDeliveryRequestID(t, payload.DeliveryRequestIDB64u)
-		mu.Lock()
-		requests = append(requests, payload)
-		attemptNumber := len(requests)
-		mu.Unlock()
-		if attemptNumber == 1 {
-			http.Error(w, "temporary response loss", http.StatusServiceUnavailable)
+func TestBootstrapUnknownResultReusesOriginalOperationAndIdentity(t *testing.T) {
+	var requests []rc.EnrollRequest
+	server := enrollmentTestServer(t, func(w http.ResponseWriter, r *http.Request, _ rc.SignedRequest, q rc.EnrollRequest) {
+		requests = append(requests, q)
+		if len(requests) == 1 {
+			w.WriteHeader(503)
+			_, _ = w.Write([]byte(`{"success":false,"error":{"code":"SERVICE_UNAVAILABLE","message":"retry"}}`))
 			return
 		}
-		writeBootstrapTestResponse(t, w, r.Host, payload.LocalEnvironmentPublicID, 5)
-	}))
+		writeEnrollmentTestDelivery(t, w, r, q)
+	})
 	defer server.Close()
-
-	stateRoot := t.TempDir()
-	layout, err := LocalEnvironmentStateLayout(stateRoot)
-	if err != nil {
-		t.Fatalf("LocalEnvironmentStateLayout() error = %v", err)
-	}
-	args := BootstrapArgs{
-		CloudOrigin:       server.URL,
-		EnvironmentID:     "env_123",
-		RuntimeLinkTicket: "ticket-123",
-		StateRoot:         stateRoot,
-		HTTPClient:        server.Client(),
-	}
+	args := BootstrapArgs{CloudOrigin: server.URL, EnvironmentID: "env", RuntimeLinkTicket: "ticket", StateRoot: t.TempDir(), HTTPClient: server.Client()}
 	if _, err := BootstrapConfig(context.Background(), args); err == nil {
-		t.Fatal("first BootstrapConfig() error = nil, want uncertain response failure")
-	}
-	attemptPath := layout.ConfigPath + ".cloud-link-delivery-v2.json"
-	if _, err := os.Stat(attemptPath); err != nil {
-		t.Fatalf("Stat(pending attempt) error = %v", err)
+		t.Fatal("lost result must remain pending")
 	}
 	if _, err := BootstrapConfig(context.Background(), args); err != nil {
-		t.Fatalf("second BootstrapConfig() error = %v", err)
+		t.Fatal(err)
 	}
-
-	mu.Lock()
-	gotRequests := append([]runtimeLinkExchangeRequest(nil), requests...)
-	mu.Unlock()
-	if len(gotRequests) != 2 {
-		t.Fatalf("request count = %d, want 2", len(gotRequests))
+	if len(requests) != 2 || requests[0].OperationID != requests[1].OperationID || requests[0].PublicKeyB64u != requests[1].PublicKeyB64u || requests[0].RuntimePublicID != requests[1].RuntimePublicID {
+		t.Fatal("unknown operation was repeated with a new identity or ID")
 	}
-	first, second := gotRequests[0], gotRequests[1]
-	if first.DeliveryRequestIDB64u != second.DeliveryRequestIDB64u ||
-		first.AgentInstanceID != second.AgentInstanceID ||
-		first.LocalEnvironmentPublicID != second.LocalEnvironmentPublicID {
-		t.Fatalf("bootstrap identity changed across retry: first=%#v second=%#v", first, second)
-	}
-	assertBootstrapAttemptRemoved(t, layout.ConfigPath)
 }
-
-func TestBootstrapConfigRotatesAuthenticatedExpiredDeliveryAttempt(t *testing.T) {
-	var mu sync.Mutex
-	requests := make([]runtimeLinkExchangeRequest, 0, 2)
-	server := newCloudLinkTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || r.URL.Path != "/api/rcpp/v4/runtime-link/exchange" {
-			t.Fatalf("request = %s %s, want bootstrap exchange", r.Method, r.URL.Path)
-		}
-		var payload runtimeLinkExchangeRequest
-		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-			t.Fatalf("Decode(request) error = %v", err)
-		}
-		assertBootstrapDeliveryRequestID(t, payload.DeliveryRequestIDB64u)
-		mu.Lock()
-		requests = append(requests, payload)
-		attemptNumber := len(requests)
-		mu.Unlock()
-		if attemptNumber == 1 {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusConflict)
-			_ = json.NewEncoder(w).Encode(bootstrapExchangeErrorResponse{
-				Success: false,
-				Error: &bootstrapExchangeError{
-					Code:    "RUNTIME_LINK_DELIVERY_EXPIRED",
-					Message: "Bootstrap delivery is no longer available",
-				},
-			})
-			return
-		}
-		writeBootstrapTestResponse(t, w, r.Host, payload.LocalEnvironmentPublicID, 6)
-	}))
-	defer server.Close()
-
-	stateRoot := t.TempDir()
-	layout, err := LocalEnvironmentStateLayout(stateRoot)
+func TestEnrollmentJournalRejectsAnotherTargetWithoutChangingBytes(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	assignment := &runtimeLinkAssignment{CloudID: "example_control_plane", CloudOrigin: "https://cloud.example", AccessPointOrigin: "https://region.example", EnvPublicID: "env", NamespacePublicID: "namespace"}
+	_, journal, err := prepareRuntimeCloudEnrollment(path, assignment, nil, cloudLinkResolveArgs{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := BootstrapConfig(context.Background(), BootstrapArgs{
-		CloudOrigin:       server.URL,
-		EnvironmentID:     "env_123",
-		RuntimeLinkTicket: "fresh-ticket",
-		StateRoot:         stateRoot,
-		HTTPClient:        server.Client(),
-	}); err != nil {
-		t.Fatalf("BootstrapConfig() error = %v", err)
+	before, _ := os.ReadFile(journal)
+	assignment.EnvPublicID = "other"
+	if _, _, err := prepareRuntimeCloudEnrollment(path, assignment, nil, cloudLinkResolveArgs{}); err == nil {
+		t.Fatal("pending target overwritten")
 	}
-
-	mu.Lock()
-	gotRequests := append([]runtimeLinkExchangeRequest(nil), requests...)
-	mu.Unlock()
-	if len(gotRequests) != 2 {
-		t.Fatalf("request count = %d, want expired attempt plus one fresh attempt", len(gotRequests))
-	}
-	first, second := gotRequests[0], gotRequests[1]
-	if first.DeliveryRequestIDB64u == second.DeliveryRequestIDB64u {
-		t.Fatalf("expired bootstrap request id was reused: %q", first.DeliveryRequestIDB64u)
-	}
-	if first.AgentInstanceID != second.AgentInstanceID || first.LocalEnvironmentPublicID != second.LocalEnvironmentPublicID {
-		t.Fatalf("bootstrap identity changed while retiring delivery attempt: first=%#v second=%#v", first, second)
-	}
-	assertBootstrapAttemptRemoved(t, layout.ConfigPath)
-}
-
-func TestBootstrapConfigRejectsMissingRuntimeLinkTicket(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	_, err := BootstrapConfig(ctx, BootstrapArgs{
-		CloudOrigin:   "https://redeven.test",
-		EnvironmentID: "env_123",
-		StateRoot:     t.TempDir(),
-	})
-	if err == nil || err.Error() != "missing bootstrap ticket" {
-		t.Fatalf("BootstrapConfig() error = %v", err)
+	after, _ := os.ReadFile(journal)
+	if string(before) != string(after) {
+		t.Fatal("pending journal changed")
 	}
 }
-
-func TestExchangeRuntimeLinkTicketRejectsPlaintextControlplane(t *testing.T) {
-	_, err := exchangeRuntimeLinkTicket(context.Background(), cloudLinkResolveArgs{}, "http://127.0.0.1:8080", "env", "ticket", bootstrapDeliveryAttempt{})
-	if err == nil || !strings.Contains(err.Error(), "requires an HTTPS origin") {
-		t.Fatalf("exchangeRuntimeLinkTicket() error = %v, want HTTPS rejection", err)
-	}
-}
-
-func TestBootstrapResponseDecodeRejectsRetiredAndUnknownFields(t *testing.T) {
-	for _, raw := range []string{
-		`{"cloud_id":"provider","direct":null}`,
-		`{"cloud_id":"provider","control_artifact_pool":{"version":"control_artifact_pool_v2","unexpected":true}}`,
-		`{"cloud_id":"provider"}{"cloud_id":"second"}`,
-	} {
-		var response runtimeLinkExchangeResponse
-		if err := decodeExactRuntimeLinkResponse([]byte(raw), &response); err == nil {
-			t.Fatalf("decodeExactRuntimeLinkResponse(%s) error = nil", raw)
-		}
-	}
-}
-
-func TestExchangeRuntimeLinkTicketEnforcesPoolResponseByteBound(t *testing.T) {
-	server := newCloudLinkTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(strings.Repeat("x", ControlArtifactMaxResponseBytes+1)))
-	}))
-	defer server.Close()
-	requestID := base64.RawURLEncoding.EncodeToString(make([]byte, sha256.Size))
-	_, err := exchangeRuntimeLinkTicket(context.Background(), cloudLinkResolveArgs{HTTPClient: server.Client()}, server.URL, "env", "ticket", bootstrapDeliveryAttempt{
-		BootstrapDeliveryRequestIDB64u: requestID,
-	})
-	if err == nil || !strings.Contains(err.Error(), "exceeds exact byte bound") {
-		t.Fatalf("exchangeRuntimeLinkTicket() error = %v, want exact byte bound", err)
-	}
-}
-
-func TestPrepareBootstrapDeliveryAttemptRejectsDifferentPendingTarget(t *testing.T) {
-	path := t.TempDir() + "/config.json"
-	first, attemptPath, err := prepareBootstrapDeliveryAttempt(path, "https://provider-a.test", "https://access-a.test", "env-a", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, _, err := prepareBootstrapDeliveryAttempt(path, "https://provider-b.test", "https://access-a.test", "env-a", nil); err == nil {
-		t.Fatal("different provider overwrote an uncertain bootstrap delivery attempt")
-	}
-	raw, err := os.ReadFile(attemptPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var persisted bootstrapDeliveryAttempt
-	if err := decodeExactBootstrapDeliveryAttempt(raw, &persisted); err != nil {
-		t.Fatal(err)
-	}
-	if persisted.BootstrapDeliveryRequestIDB64u != first.BootstrapDeliveryRequestIDB64u || persisted.CloudOrigin != first.CloudOrigin {
-		t.Fatalf("pending attempt changed: got %#v want %#v", persisted, first)
-	}
-}
-
 func TestBootstrapAndPersistedPoolsRejectDuplicateArtifactIdentity(t *testing.T) {
 	digestDuplicate := bootstrapTestControlArtifactPool(t, 7)
 	digestDuplicate.Entries[1].ArtifactJSON = append(json.RawMessage(nil), digestDuplicate.Entries[0].ArtifactJSON...)
@@ -584,59 +215,6 @@ func TestBootstrapAndPersistedPoolsRejectSharedContractDrift(t *testing.T) {
 	}
 }
 
-func writeBootstrapTestResponse(t *testing.T, w http.ResponseWriter, host, localEnvironmentPublicID string, generation int64) {
-	writeBootstrapTestResponseForEnvironment(t, w, host, localEnvironmentPublicID, generation, "env_123")
-}
-
-func writeBootstrapTestResponseForEnvironment(t *testing.T, w http.ResponseWriter, host, localEnvironmentPublicID string, generation int64, envPublicID string) {
-	t.Helper()
-	w.Header().Set("Content-Type", "application/json")
-	response := runtimeLinkExchangeResponse{
-		ProtocolVersion:     "rcpp-v4",
-		CloudID:             "example_control_plane",
-		CloudOrigin:         "https://" + host,
-		AccessPointID:       "dev",
-		AccessPointOrigin:   "https://" + host,
-		EnvPublicID:         envPublicID,
-		ControlArtifactPool: bootstrapTestControlArtifactPool(t, generation),
-		LocalEnvironmentBinding: &LocalEnvironmentBinding{
-			LocalEnvironmentPublicID: localEnvironmentPublicID,
-			EnvPublicID:              "env_123",
-			Generation:               generation,
-		},
-	}
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		t.Fatalf("Encode(response) error = %v", err)
-	}
-}
-
-func newCloudLinkTestServer(t *testing.T, handler http.Handler) *httptest.Server {
-	t.Helper()
-	return httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/api/rcpp/v4/runtime-link/resolve" {
-			var request struct {
-				ProtocolVersion string `json:"protocol_version"`
-				EnvPublicID     string `json:"env_public_id"`
-			}
-			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-				t.Error(err)
-				w.WriteHeader(400)
-				return
-			}
-			if request.ProtocolVersion != "rcpp-v4" || request.EnvPublicID == "" {
-				t.Error("invalid resolve request")
-			}
-			_ = json.NewEncoder(w).Encode(runtimeLinkAssignment{
-				ProtocolVersion: "rcpp-v4", CloudID: "example_control_plane", CloudOrigin: "https://" + r.Host,
-				AccessPointID: "dev", AccessPointOrigin: "https://" + r.Host, EnvPublicID: request.EnvPublicID,
-				ExpiresAtUnixMS: time.Now().Add(time.Minute).UnixMilli(),
-			})
-			return
-		}
-		handler.ServeHTTP(w, r)
-	}))
-}
-
 func bootstrapTestControlArtifactPool(t *testing.T, generation int64) *bootstrapControlArtifactPool {
 	t.Helper()
 	endpoints, err := flowercontrol.NewEndpointSet(flowercontrol.EndpointConfig{
@@ -693,18 +271,171 @@ func finalizeBootstrapTestPoolDigest(t *testing.T, pool *bootstrapControlArtifac
 	pool.ResponseDigestB64u = base64.RawURLEncoding.EncodeToString(digest[:])
 }
 
-func assertBootstrapDeliveryRequestID(t *testing.T, value string) {
-	t.Helper()
-	decoded, err := base64.RawURLEncoding.DecodeString(value)
-	if err != nil || len(decoded) != sha256.Size || base64.RawURLEncoding.EncodeToString(decoded) != value {
-		t.Fatalf("bootstrap delivery request id = %q, want canonical 32-byte base64url", value)
+func TestBootstrapLostResultRecoversAfterTicketExpiryWithoutNewEnrollment(t *testing.T) {
+	var original rc.EnrollRequest
+	enrolls := 0
+	server := enrollmentTestServer(t, func(w http.ResponseWriter, r *http.Request, _ rc.SignedRequest, q rc.EnrollRequest) {
+		enrolls++
+		if enrolls == 1 {
+			original = q
+			w.WriteHeader(503)
+			_, _ = w.Write([]byte(`{"success":false,"error":{"code":"SERVICE_UNAVAILABLE","message":"lost"}}`))
+			return
+		}
+		if q.OperationID != original.OperationID {
+			t.Error("operation changed")
+		}
+		w.WriteHeader(401)
+		_, _ = w.Write([]byte(`{"success":false,"error":{"code":"INVALID_RUNTIME_LINK_TICKET","message":"expired"}}`))
+	}, func(w http.ResponseWriter, r *http.Request, signed rc.SignedRequest, q rc.RecoverRequest) {
+		if q.EnrollmentOperationID != original.OperationID || q.RuntimePublicID != original.RuntimePublicID || signed.Proof.Verify(original.PublicKeyB64u, signed.Payload, time.Now()) != nil {
+			t.Error("recovery did not prove the original enrollment")
+		}
+		delivered := original
+		delivered.OperationID = q.DeliveryRequestID
+		writeEnrollmentTestDelivery(t, w, r, delivered)
+	})
+	defer server.Close()
+	args := BootstrapArgs{CloudOrigin: server.URL, EnvironmentID: "env", RuntimeLinkTicket: "expired-ticket", StateRoot: t.TempDir(), HTTPClient: server.Client()}
+	if _, err := BootstrapConfig(t.Context(), args); err == nil {
+		t.Fatal("first lost response must remain pending")
+	}
+	if _, err := BootstrapConfig(t.Context(), args); err != nil {
+		t.Fatal(err)
+	}
+	if enrolls != 2 {
+		t.Fatal("enrollment repeated with a new ID")
+	}
+}
+func TestBootstrapExpiredDeliveryUsesSignedRecoveryAndKeepsEnrollmentID(t *testing.T) {
+	var original rc.EnrollRequest
+	server := enrollmentTestServer(t, func(w http.ResponseWriter, r *http.Request, _ rc.SignedRequest, q rc.EnrollRequest) {
+		original = q
+		w.WriteHeader(410)
+		_, _ = w.Write([]byte(`{"success":false,"error":{"code":"DELIVERY_EXPIRED","message":"expired"}}`))
+	}, func(w http.ResponseWriter, r *http.Request, signed rc.SignedRequest, q rc.RecoverRequest) {
+		if q.DeliveryRequestID == original.OperationID || q.EnrollmentOperationID != original.OperationID || signed.Proof.Verify(original.PublicKeyB64u, signed.Payload, time.Now()) != nil {
+			t.Error("expired delivery lost the enrollment identity")
+		}
+		delivered := original
+		delivered.OperationID = q.DeliveryRequestID
+		writeEnrollmentTestDelivery(t, w, r, delivered)
+	})
+	defer server.Close()
+	root := t.TempDir()
+	path, err := BootstrapConfig(t.Context(), BootstrapArgs{CloudOrigin: server.URL, EnvironmentID: "env", RuntimeLinkTicket: "ticket", StateRoot: root, HTTPClient: server.Client()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.CloudAssociation.EnrollmentOperationID != original.OperationID || cfg.CloudAssociation.DeliveryRequestID == original.OperationID {
+		t.Fatal("delivery replaced the enrollment operation")
 	}
 }
 
-func assertBootstrapAttemptRemoved(t *testing.T, configPath string) {
-	t.Helper()
-	_, err := os.Stat(configPath + ".cloud-link-delivery-v2.json")
-	if !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("pending bootstrap delivery attempt still exists: %v", err)
+func TestSavedEnrollmentWithRestoredJournalNeverReplaysCredentials(t *testing.T) {
+	var savedJournal []byte
+	var calls int
+	root := t.TempDir()
+	layout, _ := LocalEnvironmentStateLayout(root)
+	journal := layout.ConfigPath + ".cloud-enrollment-v5.json"
+	server := enrollmentTestServer(t, func(w http.ResponseWriter, r *http.Request, _ rc.SignedRequest, q rc.EnrollRequest) {
+		calls++
+		savedJournal, _ = os.ReadFile(journal)
+		writeEnrollmentTestDelivery(t, w, r, q)
+	})
+	defer server.Close()
+	args := BootstrapArgs{CloudOrigin: server.URL, EnvironmentID: "env", RuntimeLinkTicket: "ticket", StateRoot: root, HTTPClient: server.Client()}
+	if _, err := BootstrapConfig(t.Context(), args); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Update(layout.ConfigPath, func(c *Config) error {
+		c.LogLevel = "debug"
+		c.ControlArtifactPool.Entries[0].Spent = true
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(journal, savedJournal, 0600); err != nil {
+		t.Fatal(err)
+	}
+	args.RuntimeLinkTicket = ""
+	if _, err := BootstrapConfig(t.Context(), args); err != nil {
+		t.Fatal(err)
+	}
+	current, err := Load(layout.ConfigPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 || current.LogLevel != "debug" || !current.ControlArtifactPool.Entries[0].Spent {
+		t.Fatal("completed enrollment replayed an old pool or settings")
+	}
+}
+
+func TestPendingEnrollmentCancellationFencesLateSaveAndRetainsIdentity(t *testing.T) {
+	var captured *Config
+	server := enrollmentTestServer(t, func(w http.ResponseWriter, r *http.Request, _ rc.SignedRequest, q rc.EnrollRequest) {
+		writeEnrollmentTestDelivery(t, w, r, q)
+	})
+	defer server.Close()
+	root := t.TempDir()
+	layout, _ := LocalEnvironmentStateLayout(root)
+	captured, err := ResolveCloudLinkConfig(t.Context(), CloudLinkBootstrapArgs{ConfigPath: layout.ConfigPath, CloudOrigin: server.URL, EnvironmentID: "env", RuntimeLinkTicket: "ticket", HTTPClient: server.Client()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pending, err := InspectPendingCloudEnrollment(layout.ConfigPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	journal := layout.ConfigPath + ".cloud-enrollment-v5.json"
+	before, _ := readPendingCloudEnrollment(layout.ConfigPath)
+	if err := SetPendingCloudEnrollmentSuspended(layout.ConfigPath, pending.OperationID, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveCloudLinkConfig(layout.ConfigPath, captured); err == nil {
+		t.Fatal("cancelled enrollment committed a late result")
+	}
+	after, err := readPendingCloudEnrollment(layout.ConfigPath)
+	if err != nil || !after.Suspended || after.PrivateKeyB64u != before.PrivateKeyB64u || after.BootstrapDeliveryRequestIDB64u != before.BootstrapDeliveryRequestIDB64u {
+		t.Fatal("cancel discarded original identity", err)
+	}
+	if err := SetPendingCloudEnrollmentSuspended(layout.ConfigPath, pending.OperationID, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveCloudLinkConfig(layout.ConfigPath, captured); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(journal); !os.IsNotExist(err) {
+		t.Fatal("committed journal remains")
+	}
+}
+
+func TestEnrollmentJournalRejectsDamagedIdentityAndOriginReadOnly(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	assignment := &runtimeLinkAssignment{CloudID: "cloud", CloudOrigin: "https://cloud.example", AccessPointOrigin: "https://region.example", EnvPublicID: "env", NamespacePublicID: "namespace"}
+	original, journal, err := prepareRuntimeCloudEnrollment(path, assignment, nil, cloudLinkResolveArgs{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, damage := range []func(*bootstrapDeliveryAttempt){func(a *bootstrapDeliveryAttempt) {
+		a.PrivateKeyB64u = base64.RawURLEncoding.EncodeToString(make([]byte, 64))
+	}, func(a *bootstrapDeliveryAttempt) { a.CloudOrigin = "http://cloud.example" }, func(a *bootstrapDeliveryAttempt) { a.ExpectedAssociationRevision = -1 }} {
+		copy := original
+		damage(&copy)
+		raw, _ := json.Marshal(copy)
+		if err := os.WriteFile(journal, raw, 0600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := InspectPendingCloudEnrollment(path); err == nil {
+			t.Fatal("damaged journal accepted")
+		}
+		after, _ := os.ReadFile(journal)
+		if string(after) != string(raw) {
+			t.Fatal("invalid journal rewritten")
+		}
 	}
 }

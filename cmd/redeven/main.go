@@ -71,6 +71,8 @@ func (c *cli) run(args []string) int {
 	switch strings.TrimSpace(strings.ToLower(args[0])) {
 	case "help":
 		return c.helpCmd(args[1:])
+	case "cloud":
+		return c.cloudCmd(args[1:])
 	case "gateway":
 		return c.gatewayCmd(args[1:])
 	case "bootstrap":
@@ -220,6 +222,16 @@ func (c *cli) bootstrapCmd(args []string) int {
 	if err != nil {
 		return c.printRunStateLayoutGuidance(err)
 	}
+	if err := os.MkdirAll(stateLayout.StateDir, 0o700); err != nil {
+		fmt.Fprintln(c.stderr, "Cannot prepare Runtime enrollment state:", err)
+		return 1
+	}
+	lock, err := lockfile.Acquire(stateLayout.LockPath)
+	if err != nil {
+		fmt.Fprintln(c.stderr, "Stop this Runtime before changing its Cloud enrollment:", err)
+		return 1
+	}
+	defer func() { _ = lock.Release() }()
 
 	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
 	defer cancel()

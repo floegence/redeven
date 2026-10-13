@@ -7,6 +7,7 @@ import (
 
 	"context"
 	"errors"
+
 	flowersec "github.com/floegence/flowersec/flowersec-go/v5"
 	"github.com/floegence/redeven/internal/agent"
 	"github.com/floegence/redeven/internal/gatewaymembership"
@@ -108,7 +109,7 @@ func (s *runtimeControlServer) handleGatewayLeave(w http.ResponseWriter, r *http
 	}
 	var body struct {
 		GatewayID               string `json:"gateway_id"`
-		CloudImpactAcknowledged bool   `json:"cloud_impact_acknowledged"`
+		RouteImpactAcknowledged bool   `json:"route_impact_acknowledged"`
 	}
 	if r.Body != nil && r.ContentLength != 0 {
 		dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 2048))
@@ -118,10 +119,10 @@ func (s *runtimeControlServer) handleGatewayLeave(w http.ResponseWriter, r *http
 			return
 		}
 	}
-	if err := s.agent.UnpairGateway(body.GatewayID, body.CloudImpactAcknowledged); err != nil {
+	if err := s.agent.UnpairGateway(body.GatewayID, body.RouteImpactAcknowledged); err != nil {
 		code := "GATEWAY_LEAVE_FAILED"
-		if errors.Is(err, agent.ErrGatewayCloudImpactRequired) {
-			code = "GATEWAY_CLOUD_IMPACT_REQUIRED"
+		if errors.Is(err, agent.ErrGatewayRouteImpactRequired) {
+			code = "GATEWAY_ROUTE_IMPACT_REQUIRED"
 		}
 		writeRuntimeControlError(w, http.StatusConflict, code, "Gateway removal requires the selected member and confirmation of any Cloud interruption.")
 		return
@@ -198,17 +199,16 @@ func (s *runtimeControlServer) handleGatewayPublish(w http.ResponseWriter, r *ht
 		return
 	}
 	var body struct {
-		GatewayID         string `json:"gateway_id"`
-		EnvironmentChoice string `json:"environment_choice,omitempty"`
+		GatewayID string `json:"gateway_id"`
 	}
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 2048))
 	dec.DisallowUnknownFields()
 	if dec.Decode(&body) != nil || dec.Decode(new(any)) != io.EOF || body.GatewayID == "" {
-		writeRuntimeControlError(w, http.StatusBadRequest, "GATEWAY_PUBLICATION_INVALID", "Select a Gateway and a Cloud publication choice.")
+		writeRuntimeControlError(w, http.StatusBadRequest, "GATEWAY_PUBLICATION_INVALID", "Select a Gateway for Namespace enrollment.")
 		return
 	}
-	if err := s.agent.PublishGateway(body.GatewayID, body.EnvironmentChoice); err != nil {
-		writeRuntimeControlError(w, http.StatusConflict, "GATEWAY_PUBLICATION_FAILED", "Cloud publication could not be saved. Check the selected Gateway and ownership choice.")
+	if err := s.agent.PublishGateway(r.Context(), body.GatewayID); err != nil {
+		writeRuntimeControlError(w, http.StatusConflict, "GATEWAY_PUBLICATION_FAILED", "Cloud publication could not be saved. Check Gateway access, or use Change route for an existing Cloud association.")
 		return
 	}
 	s.notifyRuntimeServiceChanged()

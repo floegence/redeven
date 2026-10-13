@@ -379,7 +379,7 @@ func TestControlArtifactPoolTopUpResponseBindsPendingRequestBeforeApply(t *testi
 }
 
 func TestControlArtifactPoolTopUpGoldenFixture(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join("..", "..", "spec", "fixtures", "rcpp-v4", "control_artifact_pool_top_up_v1.json"))
+	raw, err := os.ReadFile(filepath.Join("..", "..", "spec", "fixtures", "rcpp-v5", "control_artifact_pool_top_up_v1.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -470,10 +470,12 @@ func issuePoolTestArtifact(t *testing.T, suffix string) (json.RawMessage, string
 }
 
 func poolTestConfig(path string, entries []config.ControlArtifactEntry) *config.Config {
-	return &config.Config{
+	cfg := &config.Config{
 		CloudOrigin: "https://redeven.test", AccessPointOrigin: "https://control.test", EnvironmentID: "env-1", LocalEnvironmentPublicID: "local-1", BindingGeneration: 7, AgentInstanceID: "agent-1",
 		ControlArtifactPool: &config.ControlArtifactPool{SchemaVersion: config.ControlArtifactPoolSchemaVersion, LogicalBindingID: "binding-1", TargetWaterline: config.ControlArtifactTargetWaterline, RefreshHorizonSeconds: config.ControlArtifactRefreshHorizonS, BindingGeneration: 7, RecoveryState: config.ControlArtifactRecoveryDegraded, Entries: entries},
 	}
+	attachTestCloudAssociation(cfg)
+	return cfg
 }
 
 func digestB64uForTest(value []byte) string {

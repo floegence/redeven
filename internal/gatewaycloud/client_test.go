@@ -1,55 +1,55 @@
 package gatewaycloud
 
 import (
-	"context"
 	"crypto/ed25519"
-	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	gc "github.com/floegence/redeven/internal/gatewaycloud/protocol"
 )
 
-func TestJoinResumesAfterBindingWasPersisted(t *testing.T) {
-	public, private, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
+func TestGatewayManagementReusesHTTPSWithFreshMachineProofs(t *testing.T) {
+	key := ed25519.NewKeyFromSeed(make([]byte, 32))
+	public := base64.RawURLEncoding.EncodeToString(key.Public().(ed25519.PublicKey))
 	var origin string
-	var joined bool
-	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	var connections, challenges atomic.Int64
+	consumed := map[string]bool{}
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		switch r.URL.Path {
-		case "/api/console/v1/gateway-cloud/v2/challenges":
+		if strings.HasSuffix(r.URL.Path, "/challenges") {
 			var request gc.ChallengeRequest
-			if json.NewDecoder(r.Body).Decode(&request) != nil || request.BindingPublicID != "" || request.Purpose != gc.PurposeRuntimeJoin {
-				t.Error("join requested a binding-scoped challenge")
-				w.WriteHeader(http.StatusBadRequest)
+			if json.NewDecoder(r.Body).Decode(&request) != nil || request.Purpose != gc.PurposeGatewayStatus || request.RuntimePublicID != "" {
+				t.Error("unexpected challenge scope")
+				w.WriteHeader(400)
 				return
 			}
-			_ = json.NewEncoder(w).Encode(gc.Response[gc.ChallengeResponse]{Success: true, Data: gc.ChallengeResponse{Proof: gc.Proof{ProtocolVersion: gc.ProtocolVersion, CloudOrigin: origin, Purpose: request.Purpose, GatewayPublicID: request.GatewayPublicID, RuntimePublicID: request.RuntimePublicID, ChallengeID: "resume-challenge", ChallengeB64u: base64.RawURLEncoding.EncodeToString(make([]byte, 32)), ExpiresAtUnixMS: time.Now().Add(time.Minute).UnixMilli()}}})
-		case "/api/console/v1/gateway-cloud/v2/join":
-			var signed gc.SignedRequest
-			if json.NewDecoder(r.Body).Decode(&signed) != nil || signed.Proof.BindingPublicID != "" || signed.Proof.BindingGeneration != 0 || signed.Proof.NamespacePublicID != "namespace" {
-				t.Error("join carried partially saved binding claims")
-				w.WriteHeader(http.StatusForbidden)
-				return
-			}
-			if err := signed.Proof.Verify(base64.RawURLEncoding.EncodeToString(public), signed.Payload, time.Now()); err != nil {
-				t.Error(err)
-				w.WriteHeader(http.StatusForbidden)
-				return
-			}
-			joined = true
-			_ = json.NewEncoder(w).Encode(gc.Response[gc.Candidate]{Success: true, Data: gc.Candidate{RequestPublicID: "request", State: "published"}})
-		default:
-			w.WriteHeader(http.StatusNotFound)
+			proof := gc.Proof{ProtocolVersion: gc.ProtocolVersion, Purpose: request.Purpose, CloudOrigin: origin, GatewayPublicID: request.GatewayPublicID, ChallengeID: fmt.Sprint(challenges.Add(1)), ChallengeB64u: base64.RawURLEncoding.EncodeToString(make([]byte, 32)), ExpiresAtUnixMS: time.Now().Add(time.Minute).UnixMilli()}
+			_ = json.NewEncoder(w).Encode(gc.Response[gc.ChallengeResponse]{Success: true, Data: gc.ChallengeResponse{Proof: proof}})
+			return
 		}
+		var signed gc.SignedRequest
+		if json.NewDecoder(r.Body).Decode(&signed) != nil || signed.Proof.Verify(public, signed.Payload, time.Now()) != nil || consumed[signed.Proof.ChallengeID] {
+			t.Error("invalid or reused machine proof")
+			w.WriteHeader(401)
+			return
+		}
+		consumed[signed.Proof.ChallengeID] = true
+		_ = json.NewEncoder(w).Encode(gc.Response[gc.GatewayStatus]{Success: true, Data: gc.GatewayStatus{Gateway: gc.Gateway{PublicID: "gateway"}}})
 	}))
+	server.Config.ConnState = func(_ net.Conn, state http.ConnState) {
+		if state == http.StateNew {
+			connections.Add(1)
+		}
+	}
+	server.StartTLS()
 	defer server.Close()
 	origin = server.URL
 	client, err := NewClient(origin, server.Client().Transport)
@@ -57,12 +57,13 @@ func TestJoinResumesAfterBindingWasPersisted(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer client.Close()
-	identity := Identity{PrivateKey: private, MemberKey: private, NamespacePublicID: "namespace", GatewayPublicID: "gateway", RuntimePublicID: "runtime", BindingPublicID: "binding", BindingGeneration: 7}
-	result, err := client.Join(context.Background(), identity, gc.RuntimeJoin{MemberVersion: 1})
-	if err != nil || !joined || result.State != "published" {
-		t.Fatalf("resume did not complete: %v", err)
+	for range 2 {
+		status, err := client.GatewayStatus(t.Context(), Identity{PrivateKey: key, GatewayPublicID: "gateway", NamespacePublicID: "namespace"})
+		if err != nil || status.Gateway.PublicID != "gateway" {
+			t.Fatal("management request failed", err)
+		}
 	}
-	if identity.BindingPublicID != "binding" || identity.BindingGeneration != 7 {
-		t.Fatal("join modified the recovery identity")
+	if connections.Load() != 1 || challenges.Load() != 2 {
+		t.Fatalf("connections=%d challenges=%d", connections.Load(), challenges.Load())
 	}
 }

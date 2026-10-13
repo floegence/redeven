@@ -47,7 +47,7 @@ func TestStoppedGatewayUnpairPreservesOtherCloudOwner(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer server.Close()
-		request := httptest.NewRequest(http.MethodPost, "http://localhost/gateway/v5/invitation-codes", strings.NewReader(`{"protocol_version":"redeven-gateway-v5"}`))
+		request := httptest.NewRequest(http.MethodPost, "http://localhost/gateway/v6/invitation-codes", strings.NewReader(`{"protocol_version":"redeven-gateway-v6"}`))
 		request.RemoteAddr = "127.0.0.1:1234"
 		request.Header.Set(gatewayservice.HostAdminHeader, hostToken)
 		response := httptest.NewRecorder()
@@ -72,7 +72,7 @@ func TestStoppedGatewayUnpairPreservesOtherCloudOwner(t *testing.T) {
 		t.Fatal(err)
 	}
 	cloud := cfg.GatewayMember(ids[1]).Clone()
-	cfg.GatewayCloudMemberID = cloud.MemberID
+	cfg.CloudRoute = &config.CloudRoute{Kind: config.CloudRouteGateway, MemberID: cloud.MemberID, Revision: 1}
 	if err := config.Save(layout.ConfigPath, cfg); err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +104,7 @@ func TestRunningGatewayUnpairAcknowledgesOnlyObservedCloudImpact(t *testing.T) {
 	server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v2/gateway/leave" {
 			var body struct {
-				Acknowledged bool `json:"cloud_impact_acknowledged"`
+				Acknowledged bool `json:"route_impact_acknowledged"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 				t.Error(err)

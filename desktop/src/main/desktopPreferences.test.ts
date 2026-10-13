@@ -81,7 +81,7 @@ function testAccessPoint(cloudOrigin = 'https://redeven.test') {
 
 function buildTestCloud(cloudOrigin = 'https://redeven.test') {
   const provider = normalizeDesktopCloud({
-    protocol_version: 'rcpp-v4',
+    protocol_version: 'rcpp-v5',
     cloud_id: 'example_control_plane',
     display_name: 'Example Control Plane',
     cloud_origin: cloudOrigin,
@@ -1604,7 +1604,7 @@ describe('desktopPreferences', () => {
     const devAccessPoint = testAccessPoint();
     const uswAccessPoint = testAccessPoint('https://redeven.test');
     const provider = normalizeDesktopCloud({
-      protocol_version: 'rcpp-v4',
+      protocol_version: 'rcpp-v5',
       cloud_id: 'example_control_plane',
       display_name: 'Example Control Plane',
       cloud_origin: 'https://redeven.test',

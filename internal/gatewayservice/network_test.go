@@ -33,14 +33,14 @@ func TestNetworkSettingsSaveKeepsLiveListenerAndAppliesOnRestart(t *testing.T) {
 	settings.ListenAddresses = []string{"[::1]:0"}
 	settings.AllowedHosts = []string{"gateway.internal"}
 	raw, _ := json.Marshal(gp.NetworkSettingsRequest{ProtocolVersion: gp.Version, Settings: settings})
-	request := httptest.NewRequest("POST", "http://127.0.0.1/gateway/v5/network-settings", bytes.NewReader(raw))
+	request := httptest.NewRequest("POST", "http://127.0.0.1/gateway/v6/network-settings", bytes.NewReader(raw))
 	request.RemoteAddr = "127.0.0.1:5000"
 	denied := httptest.NewRecorder()
 	server.Handler().ServeHTTP(denied, request)
 	if denied.Code != http.StatusUnauthorized {
 		t.Fatalf("untrusted update: %d", denied.Code)
 	}
-	request = httptest.NewRequest("POST", "http://127.0.0.1/gateway/v5/network-settings", bytes.NewReader(raw))
+	request = httptest.NewRequest("POST", "http://127.0.0.1/gateway/v6/network-settings", bytes.NewReader(raw))
 	request.RemoteAddr = "127.0.0.1:5000"
 	request.Header.Set(HostAdminHeader, token)
 	response := httptest.NewRecorder()
@@ -58,7 +58,7 @@ func TestNetworkSettingsSaveKeepsLiveListenerAndAppliesOnRestart(t *testing.T) {
 	client := &http.Client{Transport: transport}
 	// Both the product exchange and the released protocol upgrade boundary must
 	// reject a disallowed Host before accepting any authentication material.
-	for _, path := range []string{"/v5/member/invitation-exchange", flowersec.WebSocketDirectPath} {
+	for _, path := range []string{"/v6/member/invitation-exchange", flowersec.WebSocketDirectPath} {
 		for _, host := range []string{"evil.example", "gateway.internal"} {
 			req, _ := http.NewRequest("GET", "https://"+listeners[1].Addr().String()+path, nil)
 			req.Host = host
@@ -73,7 +73,7 @@ func TestNetworkSettingsSaveKeepsLiveListenerAndAppliesOnRestart(t *testing.T) {
 
 		}
 	}
-	req, _ := http.NewRequest("GET", "https://"+listeners[1].Addr().String()+"/v5/member/unknown", nil)
+	req, _ := http.NewRequest("GET", "https://"+listeners[1].Addr().String()+"/v6/member/unknown", nil)
 	req.Host = "gateway.internal"
 	allowed, err := client.Do(req)
 	if err != nil {

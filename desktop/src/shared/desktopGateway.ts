@@ -177,7 +177,6 @@ export type DesktopGatewaySource = Readonly<{
   permissions?: GatewayPermissions;
   policy?: GatewayPolicy;
   catalog_revision?: number;
-  rebuild_required?: boolean;
   hook_status?: GatewayHookStatuses;
 }>;
 
