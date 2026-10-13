@@ -1185,6 +1185,18 @@
   overflow: visible;
 }
 
+.flower-composer-notices {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.375rem;
+  margin-bottom: 0.5rem;
+}
+
+.flower-composer-notices:empty {
+  display: none;
+}
+
 /* Keep thread selection from changing the composer footprint while its detail loads. */
 .flower-surface[data-flower-selected-thread-loading='true'] .flower-composer-footer {
   min-height: var(--floe-control-height-md);
