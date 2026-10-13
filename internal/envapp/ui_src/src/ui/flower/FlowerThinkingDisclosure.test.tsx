@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FlowerThinkingDisclosure } from '../../../../../flower_ui/src/FlowerThinkingDisclosure';
 
 vi.mock('@floegence/floe-webapp-core/icons', () => ({
-  ChevronDown: () => <span data-chevron />,
+  ChevronRight: () => <span data-chevron />,
 }));
 
 const disposers: Array<() => void> = [];

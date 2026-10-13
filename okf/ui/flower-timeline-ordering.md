@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower timeline ordering
 description: Canonical typed views, optimistic transport input, and stable row identity.
 tags: [ui, flower, timeline, ordering]
-timestamp: 2026-10-12T00:00:00Z
+timestamp: 2026-10-13T00:00:00Z
 ---
 # Summary
 
@@ -14,6 +14,8 @@ Flower renders the ordered items in Floret's typed current view. Canonical stabl
 Floret canonical journal order is authoritative for durable rows. Current-process assistant and thinking drafts arrive only inside the typed current view and disappear when canonical terminal output replaces them. Repeated provider attempts use the same stable output identity, so late or duplicate completion cannot append a second assistant or tool row.
 
 Thinking is presentation state over the same canonical current view. While a thinking block is live, Flower shows a tail-following preview capped at four visual lines and fades its older prefix; the user may expand the complete accumulated text. Each segment closes when its canonical live flag ends normally, including a manually expanded segment, without waiting for turn completion. Failure, interruption or cancellation for the same thread, turn and run preserves the current view; a later run in the same turn cannot supply that exception. Already closed segments stay closed. Connection confirmation controls tail following only; disconnect is not segment completion. Completed history starts closed with the neutral localized Thought process heading, and manual reopening survives repeated detail updates. Closing content returns its interior focus to the thinking button. The inner thinking choice does not control whole-turn disclosure. Whole-turn disclosure and reading protection follow [Flower terminal turn process disclosure](flower-turn-process-disclosure.md), without changing message order, live transport ownership or persisted content.
+
+The thinking disclosure chevron points right when collapsed and down whenever content is visible, including the live preview and full expansion. Its direction follows the same open state exposed by the button's `aria-expanded` attribute across full, embedded and child-detail timelines.
 
 Queued input is canonical Floret state and appears exactly once in the queue lane. An idle Send appears as the user row; a busy Send appears directly in the queue. Flower never guesses ordering from timestamps, prompt equality, or a local operation reducer.
 
@@ -33,5 +35,5 @@ Stable row identity and order come only from the published Floret current view. 
 - `redeven:internal/flower_ui/src/flowerTimelineProjection.ts` - Stable row projection.
 - `redeven:internal/flower_ui/src/runtimeCurrentView.test.ts` - Covers explicit live state and canonical lifecycle projection.
 
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.thinkingDisclosure.browser.test.tsx` - Segment sealing during active turns, reconnect, exact run ownership, child state and narrow keyboard behavior.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.thinkingDisclosure.browser.test.tsx` - Rendered chevron direction, segment sealing during active turns, reconnect, exact run ownership, child state and narrow keyboard behavior.
 - `redeven:internal/envapp/ui_src/src/ui/flower/FlowerThinkingDisclosure.test.tsx` - Independent view transitions, abnormal retention and focus return.

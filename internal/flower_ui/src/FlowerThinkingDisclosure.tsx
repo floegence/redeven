@@ -1,6 +1,6 @@
 import type { Accessor, Component } from 'solid-js';
 import { Show, createEffect, createSignal, on, onCleanup } from 'solid-js';
-import { ChevronDown } from '@floegence/floe-webapp-core/icons';
+import { ChevronRight } from '@floegence/floe-webapp-core/icons';
 
 export type FlowerThinkingDisclosureView = 'preview' | 'expanded' | 'collapsed';
 
@@ -78,7 +78,7 @@ export const FlowerThinkingDisclosure: Component<FlowerThinkingDisclosureProps> 
         aria-label={view() === 'expanded' ? props.collapseLabel() : props.expandLabel()}
         onClick={toggle}
       >
-        <ChevronDown class="flower-thinking-toggle-icon" aria-hidden="true" />
+        <ChevronRight class="flower-thinking-toggle-icon" aria-hidden="true" />
         <span>{props.label()}</span>
         <span class="flower-visually-hidden">
           {view() === 'expanded' ? props.collapseLabel() : props.expandLabel()}

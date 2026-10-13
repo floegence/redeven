@@ -34615,7 +34615,7 @@
         "timeline",
         "ui"
       ],
-      "timestamp": "2026-10-12T00:00:00Z",
+      "timestamp": "2026-10-13T00:00:00Z",
       "frontmatter": {
         "description": "Canonical typed views, optimistic transport input, and stable row identity.",
         "tags": [
@@ -34624,19 +34624,19 @@
           "timeline",
           "ui"
         ],
-        "timestamp": "2026-10-12T00:00:00Z",
+        "timestamp": "2026-10-13T00:00:00Z",
         "title": "Flower timeline ordering",
         "type": "UI Contract"
       },
-      "body_length": 4279,
+      "body_length": 4595,
       "summary": "Flower renders the ordered items in Floret's typed current view. Canonical stable IDs plus each item's exact TurnID and RunID determine user, assistant, tool, interaction, queue, and terminal rows. A short-lived transport outbox may show an unconfirmed user input at its final transcript position, but matching request-key confirmation atomically replaces it with the canonical row. Summaries never write timeline detail.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Floret canonical journal order is authoritative for durable rows. Current-process assistant and thinking drafts arrive only inside the typed current view and disappear when canonical terminal output replaces them. Repeated provider attempts use the same stable output identity, so late or duplicate completion cannot append a second assistant or tool row.\n\nThinking is presentation state over the same canonical current view. While a thinking block is live, Flower shows a tail-following preview capped at four visual lines and fades its older prefix; the user may expand the complete accumulated text. Each segment closes when its canonical live flag ends normally, including a manually expanded segment, without waiting for turn completion. Failure, interruption or cancellation for the same thread, turn and run preserves the current view; a later run in the same turn cannot supply that exception. Already closed segments stay closed. Connection confirmation controls tail following only; disconnect is not segment completion. Completed history starts closed with the neutral localized Thought process heading, and manual reopening survives repeated detail updates. Closing content returns its interior focus to the thinking button. The inner thinking choice does not control whole-turn disclosure. Whole-turn disclosure and reading protection follow [Flower terminal turn process disclosure](flower-turn-process-disclosure.md), without changing message order, live transport ownership or persisted content.\n\nQueued input is canonical Floret state and appears exactly once in the queue lane. An idle Send appears as the user row; a busy Send appears directly in the queue. Flower never guesses ordering from timestamps, prompt equality, or a local operation reducer.\n\nThreadCache accepts detail only from detail GET and LiveCurrent after the complete timeline validates. It rejects missing or conflicting execution identity and an older view version, and retains cached A and B views across A-to-B-to-A selection. One coordinator deduplicates a cold selection with summary-driven loading, coalesces an advancing summary to one latest request, and never retries a failed revision without a new display cycle or explicit user action. Summary refresh, disconnect, hidden-page recovery, and slow responses cannot clear messages. Cancel and Reject update the corresponding turn or tool row without a global failure card.",
-          "char_count": 2419
+          "body": "Floret canonical journal order is authoritative for durable rows. Current-process assistant and thinking drafts arrive only inside the typed current view and disappear when canonical terminal output replaces them. Repeated provider attempts use the same stable output identity, so late or duplicate completion cannot append a second assistant or tool row.\n\nThinking is presentation state over the same canonical current view. While a thinking block is live, Flower shows a tail-following preview capped at four visual lines and fades its older prefix; the user may expand the complete accumulated text. Each segment closes when its canonical live flag ends normally, including a manually expanded segment, without waiting for turn completion. Failure, interruption or cancellation for the same thread, turn and run preserves the current view; a later run in the same turn cannot supply that exception. Already closed segments stay closed. Connection confirmation controls tail following only; disconnect is not segment completion. Completed history starts closed with the neutral localized Thought process heading, and manual reopening survives repeated detail updates. Closing content returns its interior focus to the thinking button. The inner thinking choice does not control whole-turn disclosure. Whole-turn disclosure and reading protection follow [Flower terminal turn process disclosure](flower-turn-process-disclosure.md), without changing message order, live transport ownership or persisted content.\n\nThe thinking disclosure chevron points right when collapsed and down whenever content is visible, including the live preview and full expansion. Its direction follows the same open state exposed by the button's `aria-expanded` attribute across full, embedded and child-detail timelines.\n\nQueued input is canonical Floret state and appears exactly once in the queue lane. An idle Send appears as the user row; a busy Send appears directly in the queue. Flower never guesses ordering from timestamps, prompt equality, or a local operation reducer.\n\nThreadCache accepts detail only from detail GET and LiveCurrent after the complete timeline validates. It rejects missing or conflicting execution identity and an older view version, and retains cached A and B views across A-to-B-to-A selection. One coordinator deduplicates a cold selection with summary-driven loading, coalesces an advancing summary to one latest request, and never retries a failed revision without a new display cycle or explicit user action. Summary refresh, disconnect, hidden-page recovery, and slow responses cannot clear messages. Cancel and Reject update the corresponding turn or tool row without a global failure card.",
+          "char_count": 2707
         },
         {
           "id": "boundaries",
@@ -34683,9 +34683,9 @@
           "description": "Covers explicit live state and canonical lifecycle projection."
         },
         {
-          "id": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.thinkingDisclosure.browser.test.tsx:0:segment sealing during active turns, reconnect, exact run ownership, child state and narrow keyboard behavior.",
+          "id": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.thinkingDisclosure.browser.test.tsx:0:rendered chevron direction, segment sealing during active turns, reconnect, exact run ownership, child state and narrow keyboard behavior.",
           "source": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.thinkingDisclosure.browser.test.tsx",
-          "description": "Segment sealing during active turns, reconnect, exact run ownership, child state and narrow keyboard behavior."
+          "description": "Rendered chevron direction, segment sealing during active turns, reconnect, exact run ownership, child state and narrow keyboard behavior."
         },
         {
           "id": "redeven:internal/envapp/ui_src/src/ui/flower/FlowerThinkingDisclosure.test.tsx:0:independent view transitions, abnormal retention and focus return.",
@@ -38660,5 +38660,5 @@
       ]
     }
   ],
-  "source_sha256": "44c6d700fb1a22758962ab5d2c042540d8013a0677051716a2102c473a85e041"
+  "source_sha256": "841bcf712fb397acfa91c6e56ff2d7615a45e3811212bfaa852b7a1527a12b23"
 }
