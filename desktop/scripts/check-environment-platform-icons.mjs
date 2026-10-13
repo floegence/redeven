@@ -31,7 +31,9 @@ try {
     await page.evaluate(() => document.fonts.ready);
     for (const [width, dark, fontSize] of [[1280, false, 16], [1280, true, 16], [390, false, 16], [390, true, 20]]) {
       await page.setViewportSize({ width, height: 1000 });
-      await page.evaluate(({ dark, fontSize }) => { document.documentElement.classList.toggle('dark', dark); document.documentElement.style.fontSize = `${fontSize}px`; }, { dark, fontSize });
+      await page.emulateMedia({ colorScheme: dark ? 'dark' : 'light' });
+      await page.waitForFunction(expected => document.documentElement.classList.contains('dark') === expected, dark);
+      await page.evaluate(fontSize => { document.documentElement.style.fontSize = `${fontSize}px`; }, fontSize);
       const result = await page.evaluate(async ({ snapshot, runtimeID }) => {
         const card = document.querySelector(`[data-environment-group="${CSS.escape(runtimeID)}"]`);
         const title = card.querySelector('.redeven-environment-title');
