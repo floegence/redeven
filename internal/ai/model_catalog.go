@@ -24,8 +24,6 @@ type ModelCatalogRequest struct {
 	ProviderID string `json:"provider_id,omitempty"`
 	AuthMethod string `json:"auth_method,omitempty"`
 	AccountID  string `json:"account_id,omitempty"`
-	AttemptID  string `json:"attempt_id,omitempty"`
-	ScopeID    string `json:"scope_id,omitempty"`
 	Type       string `json:"type"`
 	BaseURL    string `json:"base_url,omitempty"`
 	APIKey     string `json:"api_key,omitempty"`
@@ -66,17 +64,7 @@ func (s *Service) discoverProviderCatalog(ctx context.Context, in ModelCatalogRe
 		if s.chatGPT == nil || in.Type != "openai" || in.BaseURL != "" && in.BaseURL != chatgpt.Resource || in.APIKey != "" {
 			return ModelCatalogResponse{}, errors.New("invalid ChatGPT catalog request")
 		}
-		var models []chatgpt.Model
-		var err error
-		if in.AttemptID != "" {
-			status, statusErr := s.chatGPT.Poll(in.ScopeID, in.AttemptID)
-			if statusErr != nil || status.Account == nil || status.Account.AccountID != in.AccountID {
-				return ModelCatalogResponse{}, errors.New("invalid ChatGPT model catalog account")
-			}
-			models, err = s.chatGPT.AttemptModels(ctx, in.ScopeID, in.AttemptID)
-		} else {
-			models, err = s.chatGPT.Models(ctx, in.AccountID)
-		}
+		models, err := s.chatGPT.Models(ctx, in.AccountID)
 		if err != nil {
 			return ModelCatalogResponse{}, err
 		}

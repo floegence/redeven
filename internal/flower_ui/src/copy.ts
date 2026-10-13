@@ -202,6 +202,9 @@ export type FlowerSettingsCopy = Readonly<{
 export type FlowerProviderDialogCopy = Readonly<{
   chatGPT: Readonly<{
     changeAccount: string;
+    savedAccounts: string;
+    chooseAccount: string;
+    savedSignIn: string;
     usageUnavailable: string;
     authentication: string;
     account: string;
@@ -1432,7 +1435,10 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
         openai_compatible: 'Custom endpoint',
       },
       chatGPT: {
-        changeAccount: 'Use another account',
+        changeAccount: 'Add another account',
+        savedAccounts: 'Saved ChatGPT accounts',
+        chooseAccount: 'Choose an account',
+        savedSignIn: 'This account is saved on this device. Closing this dialog keeps you signed in.',
         usageUnavailable: "ChatGPT plan usage is unavailable for this request. Manage your usage or try again later.",
         authentication: "Authentication",
         account: "ChatGPT account",

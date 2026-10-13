@@ -6,6 +6,7 @@
   maintenance through [one configuration transaction boundary](ui/runtime-settings.md#configuration-editing);
   cover concurrent saves, account removal, storage failures, and restart.
 
+- Separate [ChatGPT account lifecycle](ai/chatgpt-account-lifecycle.md) from local admission and request contracts: verified sign-ins persist before connection saves, issued-client retries retain registration, canceled grants use logout cleanup, and saved accounts remain selectable at compatibility epoch 56.
 - Keep provider model defaults exclusively in the Runtime. Directory responses publish read-only defaults for new connections; frontend source and bundle checks reject embedded catalogs, and settings retain explicit overrides without numeric substitutes.
 - Audited all 140 shipped model defaults and documented current-default resolution, account-only ChatGPT snapshot scope, sparse override parity, and metadata retention for unavailable settings rows.
 - Documented Runtime-owned [OpenAI account lifecycle](ai/chatgpt-local-authentication.md), protected credentials schema 3, independent local cleanup and remote revocation results, and Desktop account fact observation at compatibility epoch 55.

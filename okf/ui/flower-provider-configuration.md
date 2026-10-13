@@ -51,9 +51,13 @@ models in another section. Host permission checks and persistence remain unchang
 The shared dialog offers ChatGPT account and API key methods. Verified local
 OpenAI drafts default to ChatGPT; existing drafts retain their method. Remote
 settings keep ChatGPT disabled with persistent guidance and no login panel.
-Verification preserves choices, search and focus until explicit save. Account,
-locality and cancellation rules belong to the
-[local authentication contract](../ai/chatgpt-local-authentication.md).
+Verification preserves model choices, search and focus. The verified sign-in
+is saved independently of connection editing; a saved-account picker includes
+signed-out registrations and distinguishes same-email entries. Explicitly adding
+another account starts a new registration. Account persistence, renewal and
+cancellation belong to the [account lifecycle](../ai/chatgpt-account-lifecycle.md);
+local admission belongs to the
+[authentication contract](../ai/chatgpt-local-authentication.md).
 
 The connection panel groups account identity, state guidance, and actions. Initial
 sign-in has one prominent browser action. Runtime-reported preparation, browser

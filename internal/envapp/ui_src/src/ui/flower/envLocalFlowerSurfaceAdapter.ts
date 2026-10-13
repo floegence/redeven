@@ -674,7 +674,6 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
         body: JSON.stringify({
           auth_schema_version: 1,
           model_profile: await draftToModelProfile(draft),
-          chatgpt_attempts: draft.model_profile.providers.flatMap(p => p.chatgpt_attempt ? [{ provider_id: p.id, ...p.chatgpt_attempt }] : []),
           provider_api_key_patches: providerAPIKeyPatches,
           web_search_provider_key_patches: webSearchKeyPatches,
         }),

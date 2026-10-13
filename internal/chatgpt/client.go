@@ -92,11 +92,11 @@ type attempt struct {
 	status                                     AttemptStatus
 	state, nonce, verifier, redirect, clientID string
 	returning                                  settings.ChatGPTAccount
-	account                                    settings.ChatGPTAccount
-	applying                                   bool
-	expires                                    time.Time
-	cancel                                     context.CancelFunc
-	listener                                   net.Listener
+	// finishMu orders cancellation against the short credential commit.
+	finishMu sync.Mutex
+	expires  time.Time
+	cancel   context.CancelFunc
+	listener net.Listener
 }
 
 type Client struct {
@@ -125,23 +125,27 @@ func (c *Client) Start(owner, accountID string, reconsent bool) (AttemptStatus, 
 	return c.start(owner, accountID, reconsent, nil)
 }
 
-// A declined grant may be re-consented using its issued registration while the
-// account remains a draft. It never falls back to registering a new client.
-func (c *Client) StartWithDraft(owner, accountID string, reconsent bool, previousAttemptID string) (AttemptStatus, error) {
+// StartRetry starts fresh PKCE/state/nonce while retaining a client ID issued by
+// an earlier failed exchange. Completed sign-ins use the canonical account store.
+func (c *Client) StartRetry(owner, accountID string, reconsent bool, previousAttemptID string) (AttemptStatus, error) {
 	if previousAttemptID == "" {
 		return c.Start(owner, accountID, reconsent)
 	}
 	c.mu.Lock()
 	a := c.attempts[previousAttemptID]
-	if a == nil || a.owner != owner || a.status.State != "ready" || time.Now().After(a.expires) || a.account.ID() != accountID {
+	if a == nil || a.owner != owner || a.status.State != "failed" || time.Now().After(a.expires) || a.returning.Subject != "" && a.returning.ID() != accountID {
 		c.mu.Unlock()
 		return AttemptStatus{}, Failure("attempt_expired")
 	}
-	registration := a.account
+	registration := a.returning
+	registration.ClientID = a.clientID
 	c.mu.Unlock()
+	if registration.Subject != "" {
+		return c.Start(owner, accountID, reconsent)
+	}
 	return c.start(owner, accountID, reconsent, &registration)
 }
-func (c *Client) start(owner, accountID string, reconsent bool, draft *settings.ChatGPTAccount) (AttemptStatus, error) {
+func (c *Client) start(owner, accountID string, reconsent bool, registration *settings.ChatGPTAccount) (AttemptStatus, error) {
 	if owner == "" {
 		return AttemptStatus{}, errors.New("missing local access owner")
 	}
@@ -164,12 +168,21 @@ func (c *Client) start(owner, accountID string, reconsent bool, draft *settings.
 	a.redirect = "http://" + ln.Addr().String() + "/auth/callback"
 	a.status.State = "preparing"
 	c.mu.Lock()
-	for id, pending := range c.attempts {
-		if time.Now().After(pending.expires) || pending.owner == owner {
-			pending.cancel()
-			_ = pending.listener.Close()
-			delete(c.attempts, id)
+	for {
+		var obsolete []*attempt
+		for _, pending := range c.attempts {
+			if time.Now().After(pending.expires) || pending.owner == owner {
+				obsolete = append(obsolete, pending)
+			}
 		}
+		if len(obsolete) == 0 {
+			break
+		}
+		c.mu.Unlock()
+		for _, pending := range obsolete {
+			c.Cancel(pending.owner, pending.status.ID)
+		}
+		c.mu.Lock()
 	}
 	if len(c.attempts) >= 16 {
 		c.mu.Unlock()
@@ -184,11 +197,7 @@ func (c *Client) start(owner, accountID string, reconsent bool, draft *settings.
 	go func() {
 		<-ctx.Done()
 		_ = server.Close()
-		c.mu.Lock()
-		if c.attempts[a.status.ID] == a {
-			delete(c.attempts, a.status.ID)
-		}
-		c.mu.Unlock()
+		c.Cancel(owner, a.status.ID)
 	}()
 	// Publish ownership before credential reads can block, so channel loss also
 	// cancels preparation rather than allowing a late browser launch.
@@ -202,13 +211,11 @@ func (c *Client) start(owner, accountID string, reconsent bool, draft *settings.
 	if err != nil {
 		return AttemptStatus{}, err
 	}
-	if accountID != "" {
+	if registration != nil {
+		a.returning = *registration
+		a.clientID = registration.ClientID
+	} else if accountID != "" {
 		old, ok, err := c.Store.ChatGPTAccount(accountID)
-		if draft != nil {
-			old = *draft
-			ok = true
-			err = nil
-		}
 		if err != nil || !ok || old.Lifecycle == "signing_out" {
 			cancel()
 			return AttemptStatus{}, Failure("authorization_required")
@@ -277,7 +284,7 @@ func (c *Client) callback(ctx context.Context, a *attempt, w http.ResponseWriter
 		http.Error(w, "This sign-in attempt has ended.", 410)
 		return
 	}
-	var account settings.ChatGPTAccount
+	var account, received settings.ChatGPTAccount
 	var err error
 	switch {
 	case q.Get("error") != "":
@@ -297,30 +304,37 @@ func (c *Client) callback(ctx context.Context, a *attempt, w http.ResponseWriter
 			clientID = a.clientID
 		}
 		if err == nil {
-			token, e := c.exchange(ctx, url.Values{"grant_type": {"authorization_code"}, "client_id": {clientID}, "code": {q.Get("code")}, "code_verifier": {a.verifier}, "redirect_uri": {a.redirect}, "resource": {Resource}})
+			// Keep the issued registration even if the one-time code is unusable.
+			c.mu.Lock()
+			a.clientID = clientID
+			c.mu.Unlock()
+			// Finish an accepted exchange even after UI cancellation so minted
+			// tokens can be revoked instead of being abandoned in transit.
+			exchangeCtx, exchangeCancel := context.WithTimeout(context.Background(), 20*time.Second)
+			token, e := c.exchange(exchangeCtx, url.Values{"grant_type": {"authorization_code"}, "client_id": {clientID}, "code": {q.Get("code")}, "code_verifier": {a.verifier}, "redirect_uri": {a.redirect}, "resource": {Resource}})
+			received = settings.ChatGPTAccount{ClientID: clientID, RefreshToken: token.RefreshToken}
 			if e != nil {
 				err = e
 			} else {
-				account, err = c.validate(ctx, clientID, a.nonce, token, a.returning)
+				account, err = c.validate(exchangeCtx, clientID, a.nonce, token, a.returning)
 			}
+			exchangeCancel()
 		}
 	}
-	if err == nil && a.returning.ClientID == "" {
-		existing, ok, readErr := c.Store.ChatGPTAccount(account.ID())
-		if readErr != nil {
-			err = Failure("storage_unavailable")
-		}
-		if ok {
-			if existing.Lifecycle == "signing_out" || existing.SignedOutAt.After(a.expires.Add(-attemptTTL)) {
-				err = Failure("attempt_expired")
-			}
-			account.SessionRevision = existing.SessionRevision + 1
-			account.WelcomeAcknowledged = existing.WelcomeAcknowledged
+	if err == nil {
+		err = c.completeSignIn(ctx, a, account)
+	}
+	if err != nil && received.RefreshToken != "" {
+		// A canceled or rejected exchange must not leave a newly minted session
+		// active. Cleanup is independent of the abandoned browser request.
+		confirmed := c.discardSignIn(account, received)
+		if !confirmed {
+			err = Failure("revocation_unconfirmed")
 		}
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.attempts[a.status.ID] != a || ctx.Err() != nil {
+	if c.attempts[a.status.ID] != a {
 		http.Error(w, "This sign-in attempt has ended.", 410)
 		return
 	}
@@ -333,15 +347,75 @@ func (c *Client) callback(ctx context.Context, a *attempt, w http.ResponseWriter
 		}
 		http.Error(w, "Sign-in did not complete. Return to Redeven to try again.", 400)
 	} else {
-		a.account = account
-		s := status(account)
-		a.status.Account = &s
-		a.status.State = "ready"
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		io.WriteString(w, `<!doctype html><html><meta name="viewport" content="width=device-width"><title>Redeven</title><style>body{font:16px system-ui;margin:12vh auto;padding:24px;max-width:480px;color:#242424;background:#fafafa}h1{font-size:26px}p{line-height:1.6;color:#666}@media(prefers-color-scheme:dark){body{background:#141414;color:#eee}p{color:#aaa}}</style><h1>Continue in Redeven</h1><p>Your account has been verified. Return to the provider settings to review and save your connection. You can close this tab.</p></html>`)
+		io.WriteString(w, `<!doctype html><html><meta name="viewport" content="width=device-width"><title>Redeven</title><style>body{font:16px system-ui;margin:12vh auto;padding:24px;max-width:480px;color:#242424;background:#fafafa}h1{font-size:26px}p{line-height:1.6;color:#666}@media(prefers-color-scheme:dark){body{background:#141414;color:#eee}p{color:#aaa}}</style><h1>Continue in Redeven</h1><p>Your sign-in has been saved on this device. Return to Redeven to configure your connection. You can close this tab.</p></html>`)
 	}
-	// Stop accepting callbacks, but retain the verified draft until Save or cancel.
 	_ = a.listener.Close()
+}
+
+// A verified new registration can reuse the existing durable logout journal.
+// It is never installed as usable after cancellation; a crash during revocation
+// leaves signing_out for startup recovery. Existing sessions are not overwritten.
+func (c *Client) discardSignIn(account, received settings.ChatGPTAccount) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	journaled := false
+	if account.Subject != "" {
+		unlock, err := c.Store.LockChatGPTAccountOperation(ctx, account.ID())
+		if err == nil {
+			_, exists, readErr := c.Store.ChatGPTAccount(account.ID())
+			if readErr == nil && !exists {
+				account.Lifecycle = "signing_out"
+				account.SignedOutAt = c.nowTime()
+				journaled = c.Store.InstallChatGPTAccounts(ctx, []settings.ChatGPTAccount{account}) == nil
+			}
+			unlock()
+		}
+	}
+	if journaled {
+		result, err := c.SignOutAccount(ctx, account.ID())
+		return err == nil && result.RevocationConfirmed
+	}
+	return c.revoke(ctx, received)
+}
+
+func (c *Client) completeSignIn(ctx context.Context, a *attempt, account settings.ChatGPTAccount) error {
+	unlock, err := c.Store.LockChatGPTAccountOperation(ctx, account.ID())
+	if err != nil {
+		return Failure("storage_unavailable")
+	}
+	defer unlock()
+	a.finishMu.Lock()
+	defer a.finishMu.Unlock()
+	c.mu.Lock()
+	active := c.attempts[a.status.ID] == a && ctx.Err() == nil
+	c.mu.Unlock()
+	if !active {
+		return Failure("authorization_cancelled")
+	}
+	if a.returning.Subject == "" {
+		existing, ok, err := c.Store.ChatGPTAccount(account.ID())
+		if err != nil {
+			return Failure("storage_unavailable")
+		}
+		if ok {
+			if existing.Lifecycle == "signing_out" || existing.SignedOutAt.After(a.expires.Add(-attemptTTL)) {
+				return Failure("attempt_expired")
+			}
+			account.SessionRevision = existing.SessionRevision + 1
+			account.WelcomeAcknowledged = existing.WelcomeAcknowledged
+		}
+	}
+	if err := c.Store.InstallChatGPTAccounts(ctx, []settings.ChatGPTAccount{account}); err != nil {
+		return Failure("storage_unavailable")
+	}
+	c.resetMemory(account.ID())
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	s := c.accountStatus(account)
+	a.status.Account = &s
+	a.status.State = "ready"
+	return nil
 }
 func (c *Client) Poll(owner, id string) (AttemptStatus, error) {
 	c.mu.Lock()
@@ -357,67 +431,25 @@ func (c *Client) Poll(owner, id string) (AttemptStatus, error) {
 	}
 	return out, nil
 }
+
+// Cancel ends the OAuth attempt. A sign-in already committed to the account
+// store is independent of the editor and is removed only by explicit sign-out.
 func (c *Client) Cancel(owner, id string) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	if a := c.attempts[id]; a != nil && a.owner == owner {
-		delete(c.attempts, id)
-		a.cancel()
-		_ = a.listener.Close()
-	}
-}
-func (c *Client) UseAttempt(owner, id, accountID string, apply func(settings.ChatGPTAccount) error) error {
-	return c.UseAttempts([]Binding{{Owner: owner, AttemptID: id, AccountID: accountID}}, func(accounts []settings.ChatGPTAccount) error { return apply(accounts[0]) })
-}
-
-type Binding struct{ Owner, AttemptID, AccountID string }
-
-// UseAttempts consumes verified drafts only after the whole configuration save
-// succeeds. A failed save leaves the same owner able to retry without signing in.
-func (c *Client) UseAttempts(bindings []Binding, apply func([]settings.ChatGPTAccount) error) (resultErr error) {
-	if len(bindings) == 0 {
-		return apply(nil)
-	}
-	c.mu.Lock()
-	accounts := make([]settings.ChatGPTAccount, 0, len(bindings))
-	attempts := make([]*attempt, 0, len(bindings))
-	seen := map[string]bool{}
-	for _, binding := range bindings {
-		a := c.attempts[binding.AttemptID]
-		if a == nil || a.applying || seen[binding.AttemptID] || a.owner != binding.Owner || a.status.State != "ready" || time.Now().After(a.expires) || a.account.ID() != binding.AccountID {
-			c.mu.Unlock()
-			return Failure("attempt_expired")
-		}
-		seen[binding.AttemptID] = true
-		accounts = append(accounts, a.account)
-		attempts = append(attempts, a)
-	}
-	for _, a := range attempts {
-		a.applying = true
-	}
+	a := c.attempts[id]
 	c.mu.Unlock()
-	defer func() {
-		c.mu.Lock()
-		defer c.mu.Unlock()
-		for index, binding := range bindings {
-			a := attempts[index]
-			a.applying = false
-			if resultErr == nil && c.attempts[binding.AttemptID] == a {
-				delete(c.attempts, binding.AttemptID)
-				a.cancel()
-				_ = a.listener.Close()
-			}
-		}
-	}()
-	for _, account := range accounts {
-		current, exists, err := c.Store.ChatGPTAccount(account.ID())
-		if err != nil || exists && (current.Lifecycle == "signing_out" || current.SessionRevision+1 != account.SessionRevision) {
-			return Failure("attempt_expired")
-		}
+	if a == nil || a.owner != owner {
+		return
 	}
-	// Account installation may wait for another process's refresh. The attempt
-	// mutex must not make unrelated account or API-key actions wait with it.
-	return apply(accounts)
+	a.cancel()
+	_ = a.listener.Close()
+	a.finishMu.Lock()
+	defer a.finishMu.Unlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.attempts[id] == a {
+		delete(c.attempts, id)
+	}
 }
 func (c *Client) Status(id string) (AccountStatus, error) {
 	a, ok, err := c.Store.ChatGPTAccount(id)
@@ -480,7 +512,7 @@ func (c *Client) exchange(ctx context.Context, form url.Values) (tokenResponse, 
 		return tokenResponse{}, Failure("invalid_token_response")
 	}
 	if token.AccessToken == "" || token.ExpiresIn <= 0 || !strings.EqualFold(token.TokenType, "Bearer") {
-		return tokenResponse{}, Failure("invalid_token_response")
+		return token, Failure("invalid_token_response")
 	}
 	return token, nil
 }
@@ -596,20 +628,6 @@ func (c *Client) Models(ctx context.Context, accountID string) ([]Model, error) 
 	}
 	return models, err
 }
-func (c *Client) AttemptModels(ctx context.Context, owner, id string) ([]Model, error) {
-	c.mu.Lock()
-	a := c.attempts[id]
-	if a == nil || a.owner != owner || a.status.State != "ready" || time.Now().After(a.expires) {
-		c.mu.Unlock()
-		return nil, Failure("attempt_expired")
-	}
-	account := a.account
-	c.mu.Unlock()
-	if !account.PlanEnabled() {
-		return nil, Failure("plan_permission_required")
-	}
-	return c.models(ctx, account.AccessToken)
-}
 func (c *Client) models(ctx context.Context, bearer string) ([]Model, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.resource+"/models", nil)
 	if err != nil {
@@ -654,13 +672,15 @@ func (c *Client) models(ctx context.Context, bearer string) ([]Model, error) {
 // CancelChannel ends short-lived attempts when their admitted connection closes.
 func (c *Client) CancelChannel(channelID string) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	for id, a := range c.attempts {
+	var pending []*attempt
+	for _, a := range c.attempts {
 		owner := strings.SplitN(a.owner, ":", 3)
 		if len(owner) == 3 && owner[1] == channelID {
-			delete(c.attempts, id)
-			a.cancel()
-			_ = a.listener.Close()
+			pending = append(pending, a)
 		}
+	}
+	c.mu.Unlock()
+	for _, a := range pending {
+		c.Cancel(a.owner, a.status.ID)
 	}
 }

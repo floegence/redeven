@@ -8,7 +8,6 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -130,7 +129,7 @@ func finishTestLogin(t *testing.T, c *Client, authorization *url.URL) AttemptSta
 	}
 	return out
 }
-func TestSignInDraftAndFailedSave(t *testing.T) {
+func TestSignInPersistsIndependentlyOfConnectionEditing(t *testing.T) {
 	c, address, _, _ := testClient(t)
 	q := address.Query()
 	if q.Get("client_id") != "dynamic_agent_client" || q.Get("agent_name_hint") != "Redeven" || q.Get("code_challenge_method") != "S256" || q.Get("state") == "" || q.Get("nonce") == "" {
@@ -140,26 +139,15 @@ func TestSignInDraftAndFailedSave(t *testing.T) {
 	if ready.State != "ready" || ready.Account.State != "ready" {
 		t.Fatalf("not verified: %+v", ready)
 	}
-	if _, ok, _ := c.Store.ChatGPTAccount(ready.Account.AccountID); ok {
-		t.Fatal("callback persisted a draft")
+	if stored, ok, err := c.Store.ChatGPTAccount(ready.Account.AccountID); err != nil || !ok || stored.AccessToken == "" {
+		t.Fatalf("verified login not persisted: %v", err)
 	}
 	if _, err := c.Poll("other", ready.ID); err == nil {
 		t.Fatal("cross-owner access")
 	}
-	err := c.UseAttempt("owner", ready.ID, ready.Account.AccountID, func(settings.ChatGPTAccount) error { return fmt.Errorf("write failure") })
-	if err == nil {
-		t.Fatal("missing failure")
-	}
-	if _, err := c.Poll("owner", ready.ID); err != nil {
-		t.Fatal("failed save consumed draft")
-	}
-	if err := c.UseAttempt("owner", ready.ID, ready.Account.AccountID, func(a settings.ChatGPTAccount) error {
-		return c.Store.UpdateChatGPTAccount(context.Background(), a.ID(), func(stored *settings.ChatGPTAccount) error { *stored = a; return nil })
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := c.Poll("owner", ready.ID); err == nil {
-		t.Fatal("saved draft remains usable")
+	c.Cancel("owner", ready.ID)
+	if stored, ok, _ := c.Store.ChatGPTAccount(ready.Account.AccountID); !ok || stored.AccessToken == "" {
+		t.Fatal("closing the editor removed completed login")
 	}
 	raw, _ := json.Marshal(ready)
 	if strings.Contains(string(raw), "access_token") || strings.Contains(string(raw), "id_token") || strings.Contains(string(raw), "refresh_token") {
@@ -263,7 +251,7 @@ func TestCancelRejectsLateCallback(t *testing.T) {
 	if response.Code != 410 {
 		t.Fatalf("late callback %d", response.Code)
 	}
-	if _, ok, _ := c.Store.ChatGPTAccount(a.account.ID()); ok {
+	if _, ok, _ := c.Store.ChatGPTAccount(a.returning.ID()); ok {
 		t.Fatal("late callback stored credentials")
 	}
 }
@@ -299,20 +287,16 @@ func TestDisconnectCancelsSignInWhileCredentialStoreIsBusy(t *testing.T) {
 	}
 }
 
-func TestDraftReconsentUsesIssuedRegistration(t *testing.T) {
+func TestSavedAccountReconsentUsesIssuedRegistration(t *testing.T) {
 	c, address, _, _ := testClient(t)
 	ready := finishTestLogin(t, c, address)
-	c.mu.Lock()
-	a := c.attempts[ready.ID]
-	a.account.Scopes = []string{"openid", "resource.invoke"}
-	c.mu.Unlock()
 	var nextURL *url.URL
 	c.openBrowser = func(_ context.Context, address string) error {
 		var err error
 		nextURL, err = url.Parse(address)
 		return err
 	}
-	next, err := c.StartWithDraft("owner", ready.Account.AccountID, true, ready.ID)
+	next, err := c.Start("owner", ready.Account.AccountID, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -320,8 +304,8 @@ func TestDraftReconsentUsesIssuedRegistration(t *testing.T) {
 	if nextURL.Query().Get("client_id") != "issued" || nextURL.Query().Get("prompt") != "consent" || nextURL.Query().Get("state") == address.Query().Get("state") {
 		t.Fatal("reconsent registered another client or reused state")
 	}
-	if _, ok, _ := c.Store.ChatGPTAccount(ready.Account.AccountID); ok {
-		t.Fatal("reconsent persisted a draft")
+	if _, ok, _ := c.Store.ChatGPTAccount(ready.Account.AccountID); !ok {
+		t.Fatal("reconsent lost saved registration")
 	}
 	if _, err := c.Poll("owner", ready.ID); err == nil {
 		t.Fatal("superseded draft remains active")

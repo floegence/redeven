@@ -7,7 +7,7 @@ import { render } from 'solid-js/web';
 import { page, userEvent } from 'vitest/browser';
 import { afterEach, expect, it, vi } from 'vitest';
 import { FlowerProviderDialog } from '../../../../flower_ui/src/settings/FlowerProviderDialog';
-import type { FlowerChatGPTAuth, FlowerProviderDraft } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import type { FlowerChatGPTAuth, FlowerChatGPTAccount, FlowerProviderDraft, FlowerSurfaceAdapter } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { createLocalizedFlowerSurfaceCopy } from '../../../../flower_ui/src/i18n/createLocalizedFlowerSurfaceCopy';
 import { createI18nHelpers } from './i18n/createI18n';
 import { loadEnvAppDictionary, type EnvAppTranslationKey } from './i18n/locales';
@@ -17,28 +17,31 @@ let dispose: (() => void) | undefined;
 let host: HTMLDivElement;
 afterEach(() => { dispose?.(); host?.remove(); document.documentElement.classList.remove('dark'); });
 
-async function mount(local: boolean, locale: RedevenLocale, width: number, dark: boolean, provider?: FlowerProviderDraft, auth?: FlowerChatGPTAuth, mode?: 'create' | 'edit') {
+async function mount(local: boolean, locale: RedevenLocale, width: number, dark: boolean, provider?: FlowerProviderDraft, auth?: FlowerChatGPTAuth, mode?: 'create' | 'edit', loadAccounts?: FlowerSurfaceAdapter['loadChatGPTAccounts']) {
   await page.viewport(width, 900);
   const i18n = createI18nHelpers(locale, await loadEnvAppDictionary(locale));
   const copy = createLocalizedFlowerSurfaceCopy({ locale,
     t: (key, params) => i18n.t(key as EnvAppTranslationKey, params),
     tn: (key, count, params) => i18n.tn(key as EnvAppTranslationKey, count, params),
   }).settings.dialog;
+  const onConfirm = vi.fn();
   const [open, setOpen] = createSignal(true);
   const [account, setAccount] = createSignal(provider?.chatgpt_account);
+  const [registry, setRegistry] = createSignal<readonly FlowerChatGPTAccount[] | undefined>();
   const [binding, setBinding] = createSignal('verified-local-channel');
   host = document.createElement('div'); host.className = 'flower-surface'; document.body.append(host);
   function Theme() { const theme = useTheme(); onMount(() => theme.selectShellTheme(dark ? 'dark' : 'light', dark ? 'porcelain-dark' : 'porcelain-light')); return null; }
   dispose = render(() => <FloeProvider config={{ theme: { shellPresets: builtInShellThemePresets } }}><Theme /><FlowerProviderDialog
     open={open()} mode={mode ?? (provider ? 'edit' : 'create')} provider={provider ?? { id: 'openai', type: 'openai', models: [] }}
-    copy={copy} chatGPTAvailable={local} chatGPTBindingID={binding()} chatGPTAccount={account()}
+    copy={copy} chatGPTAvailable={local} chatGPTBindingID={binding()} chatGPTAccount={account()} chatGPTAccounts={registry()}
+    loadChatGPTAccounts={loadAccounts}
     chatGPTAuth={auth ?? vi.fn(async () => ({ id: 'attempt', state: 'waiting' }))}
     onDiscoverModels={async () => ({ models: provider?.catalog_models ?? [{ model_name: 'gpt-6.1-sol', context_window: 1050000, input_modalities: ['text', 'image'] }] })}
-    keyConfigured={false} webSearchKeyConfigured={false} onOpenChange={setOpen} onConfirm={vi.fn()} /></FloeProvider>, host);
+    keyConfigured={false} webSearchKeyConfigured={false} onOpenChange={setOpen} onConfirm={onConfirm} /></FloeProvider>, host);
   await expect.element(page.getByRole('dialog')).toBeVisible();
   if (!provider || mode === 'create') await userEvent.click(document.querySelector<HTMLButtonElement>('[aria-controls=flower-provider-type-openai]')!);
   await expect.poll(() => document.querySelector('[role=dialog]')!.getAnimations({ subtree: true }).every(animation => animation.playState !== 'running')).toBe(true);
-  return { copy, setOpen, setBinding, setAccount, open };
+  return { copy, setOpen, setBinding, setAccount, setRegistry, open, onConfirm };
 }
 
 for (const [local, locale, width, dark] of [
@@ -174,4 +177,66 @@ it('confirms shared task impact and disables repeated sign-out while Runtime com
   finish({ local_cleanup_complete: true, revocation_confirmed: false });
   await expect.element(page.getByText(copy.chatGPT.revocationUnconfirmed, { exact: true }).first()).toBeVisible();
   await expect.element(page.getByRole('link', { name: copy.chatGPT.disconnectApps, exact: true })).toHaveAttribute('href', 'https://chatgpt.com/#settings');
+});
+
+for (const [locale, width] of [['zh-CN', 390], ['de-DE', 320]] as const) {
+it(`selects a saved signed-out registration without registering a new client and distinguishes equal emails (${locale})`, async () => {
+  const saved = [
+    { account_id: 'chatgpt_11111111', email: 'same@example.com', state: 'signed_out' as const, welcome_acknowledged: true },
+    { account_id: 'chatgpt_22222222', email: 'same@example.com', state: 'ready' as const, welcome_acknowledged: true },
+  ];
+  const auth = vi.fn<FlowerChatGPTAuth>(async action => action === 'start' ? { id: 'saved-attempt', state: 'waiting' } : {});
+  const { copy } = await mount(true, locale, width, true, undefined, auth, undefined, async () => ({ accounts: {}, saved_accounts: saved }));
+  const picker = page.getByRole('button', { name: copy.chatGPT.savedAccounts, exact: true });
+  await expect.element(picker).toBeEnabled();
+  await userEvent.click(picker);
+  await expect.element(page.getByRole('menuitem', { name: /11111111/ })).toBeVisible();
+  await expect.element(page.getByRole('menuitem', { name: /22222222/ })).toBeVisible();
+  await userEvent.click(page.getByRole('menuitem', { name: /11111111/ }));
+  expect(auth).not.toHaveBeenCalled();
+  await expect.element(page.getByRole('button', { name: copy.chatGPT.reauthorize, exact: true })).toBeVisible();
+  await expect.poll(() => document.querySelector('[role=menu]') === null).toBe(true);
+  await expect.poll(() => document.querySelector('[role=dialog]')!.getAnimations({ subtree: true }).every(animation => animation.playState !== 'running')).toBe(true);
+  const panel = document.getElementById('flower-provider-type-openai')!;
+  expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth);
+  if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: document.querySelector<HTMLElement>('.flower-provider-dialog')!, path: `__screenshots__/flower-chatgpt-saved-${locale}-${width}.png` });
+  await userEvent.click(page.getByRole('button', { name: copy.chatGPT.reauthorize, exact: true }));
+  expect(auth.mock.calls[0][1]).toMatchObject({ account_id: saved[0].account_id });
+  expect(auth.mock.calls[0][1].previous_attempt_id).toBeUndefined();
+});
+}
+
+it('retries a failed initial exchange with its attempt registration and permits immediate sign-out of identity-only login', async () => {
+  let starts = 0;
+  const auth = vi.fn<FlowerChatGPTAuth>(async (action) => {
+    if (action === 'start') return { id: `attempt-${++starts}`, state: 'waiting' };
+    if (action === 'status') return starts === 1 ? { state: 'failed', error_code: 'invalid_grant' } : { state: 'ready', account: { account_id: 'saved-new', email: 'new@example.com', state: 'plan_permission_required', welcome_acknowledged: false } };
+    if (action === 'sign-out') return { local_cleanup_complete: true, revocation_confirmed: true };
+    return {};
+  });
+  const { copy } = await mount(true, 'en-US', 1280, false, undefined, auth);
+  await userEvent.click(page.getByRole('button', { name: copy.chatGPT.continue, exact: true }));
+  await expect.element(page.getByRole('alert')).toHaveTextContent(copy.chatGPT.signInFailed);
+  await userEvent.click(page.getByRole('button', { name: copy.chatGPT.continue, exact: true }));
+  const startsCalls = auth.mock.calls.filter(([action]) => action === 'start');
+  expect(startsCalls[1][1]).toMatchObject({ previous_attempt_id: 'attempt-1', scope_id: startsCalls[0][1].scope_id });
+  await expect.element(page.getByRole('button', { name: copy.chatGPT.signOut, exact: true })).toBeVisible();
+  await expect.element(page.getByRole('alert')).toHaveTextContent(copy.chatGPT.planPermission);
+  await userEvent.click(page.getByRole('button', { name: copy.chatGPT.signOut, exact: true }));
+  expect(auth.mock.calls.find(([action]) => action === 'sign-out')?.[1].account_id).toBe('saved-new');
+});
+
+it('observes canonical renewal and logout of a newly saved unbound account without losing model choices', async () => {
+  const saved: FlowerChatGPTAccount = { account_id: 'unbound', email: 'saved@example.com', state: 'ready', welcome_acknowledged: true, binding_count: 0 };
+  const draft: FlowerProviderDraft = { id: 'openai', type: 'openai', auth_method: 'chatgpt', account_id: saved.account_id, chatgpt_account: saved, models: [{ model_name: 'gpt-6.1-sol', context_window: 1050000 }], model_selection: { selected_models: ['gpt-6.1-sol'] } };
+  const { copy, setRegistry } = await mount(true, 'de-DE', 320, true, draft, undefined, undefined, async () => ({ accounts: {}, saved_accounts: [saved] }));
+  await userEvent.click(page.getByRole('button', { name: copy.chatGPT.account, exact: true }));
+  await expect.element(page.getByText(copy.chatGPT.savedSignIn, { exact: true })).toBeVisible();
+  setRegistry([{ ...saved, state: 'renewing' }]);
+  await expect.element(page.getByText(copy.chatGPT.renewing, { exact: true })).toBeVisible();
+  setRegistry([{ ...saved, state: 'signed_out', revocation_confirmed: true }]);
+  await expect.element(page.getByText(copy.chatGPT.signedOut, { exact: true })).toBeVisible();
+  expect(document.querySelector<HTMLInputElement>('input[type=checkbox]')!.checked).toBe(true);
+  const panel = document.getElementById('flower-provider-type-openai')!;
+  expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth);
 });

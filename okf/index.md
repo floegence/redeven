@@ -252,6 +252,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Model directory and selection](ai/model-directory-and-selection.md) - Preserve explicit selections across catalog updates and present a bounded, searchable chat menu.
 - [Model web search](ai/model-web-search.md) - Review search capability and align badges, admission, and provider tools.
 - [Local ChatGPT plan authentication](ai/chatgpt-local-authentication.md) - Admit official sign-in only on a verified local host and preserve account, credentials, history and billing choice.
+- [ChatGPT account lifecycle](ai/chatgpt-account-lifecycle.md) - Save verified registrations, select local accounts, renew rotating sessions and recover cancellation or logout independently of connection editing.
 - [Provider configuration validation](ai/provider-configuration-validation.md) - Validate required provider fields and credentials while preserving optional defaults and keyless Ollama and compatible-endpoint chat.
 - [Provider API and catalog review](ai/provider-api-catalog-review.md) - Check current official models, endpoint compatibility, regional configuration, and released-adapter blockers.
 

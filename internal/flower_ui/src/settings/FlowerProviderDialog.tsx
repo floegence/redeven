@@ -10,8 +10,8 @@ import type { FlowerChatGPTAuth, FlowerChatGPTAccount, FlowerModelCatalogDiscove
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, untrack } from 'solid-js';
 import { createStore, reconcile } from 'solid-js/store';
 import { cn } from '@floegence/floe-webapp-core';
-import { Check, ExternalLink, Info, Pencil, Save } from '@floegence/floe-webapp-core/icons';
-import { Button, Checkbox, ConfirmDialog, Dialog, Input, Select, StableText } from '@floegence/floe-webapp-core/ui';
+import { Check, ChevronDown, ExternalLink, Info, Pencil, Save } from '@floegence/floe-webapp-core/icons';
+import { Button, Checkbox, ConfirmDialog, Dialog, Dropdown, Input, Select, StableText } from '@floegence/floe-webapp-core/ui';
 
 import { defaultFlowerProviderModels } from './modelSelection';
 import type { FlowerProviderDialogCopy } from '../copy';
@@ -36,9 +36,11 @@ export type FlowerProviderDialogMode = 'create' | 'edit';
 
 export type FlowerProviderDialogProps = Readonly<{
   chatGPTAuth?: FlowerChatGPTAuth;
+  loadChatGPTAccounts?: import('../contracts/flowerSurfaceContracts').FlowerSurfaceAdapter['loadChatGPTAccounts'];
   chatGPTAvailable?: boolean;
   chatGPTBindingID?: string;
   chatGPTAccount?: FlowerChatGPTAccount;
+  chatGPTAccounts?: readonly FlowerChatGPTAccount[];
   onDiscoverModels?: FlowerModelCatalogDiscovery;
   open: boolean;
   mode: FlowerProviderDialogMode;
@@ -69,7 +71,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
   const [query, setQuery] = createSignal('');
   const [loading, setLoading] = createSignal(false);
   const [discoveryError, setDiscoveryError] = createSignal('');
-  const discoveryIdentity = (draft: FlowerProviderDraft) => JSON.stringify([draft.id, draft.type, draft.base_url, draft.provider_api_key, draft.auth_method, draft.account_id, draft.chatgpt_attempt, draft.web_search, draft.web_search_api_key, props.webSearchKeyConfigured]);
+  const discoveryIdentity = (draft: FlowerProviderDraft) => JSON.stringify([draft.id, draft.type, draft.base_url, draft.provider_api_key, draft.auth_method, draft.account_id, draft.web_search, draft.web_search_api_key, props.webSearchKeyConfigured]);
   let discoverySequence = 0;
   let lastDiscoveryIdentity: string | undefined;
   const invalidateDiscovery = () => {
@@ -86,7 +88,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
     const currentRequest = () => sequence === discoverySequence && props.open && store.draft && identity === discoveryIdentity(store.draft);
     setLoading(true); setDiscoveryError('');
     try {
-      const result = await props.onDiscoverModels({ provider_id: draft.id, type: draft.type, base_url: draft.base_url, api_key: draft.auth_method === 'chatgpt' ? undefined : draft.provider_api_key ?? undefined, auth_method: draft.auth_method, account_id: draft.account_id, ...draft.chatgpt_attempt });
+      const result = await props.onDiscoverModels({ provider_id: draft.id, type: draft.type, base_url: draft.base_url, api_key: draft.auth_method === 'chatgpt' ? undefined : draft.provider_api_key ?? undefined, auth_method: draft.auth_method, account_id: draft.account_id });
       const current = store.draft;
       if (currentRequest() && current) setStore('draft', reconcile(applyFlowerModelDiscovery(current, result.models)));
     } catch (error) { if (currentRequest()) setDiscoveryError(error instanceof Error ? error.message : String(error)); }
@@ -135,7 +137,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
     if (restoreFocus && props.open) authPrimary?.focus({ preventScroll: true });
   };
   let authSequence = 0;
-  let pendingAttempt: { id: string; scope: string; auth: FlowerChatGPTAuth } | null = null;
+  let pendingAttempt: { id: string; scope: string; auth: FlowerChatGPTAuth; failed?: boolean } | null = null;
   let pollTimer: ReturnType<typeof setTimeout> | undefined;
   const cancelAuthorization = () => {
     authSequence++; clearTimeout(pollTimer); finishAuthorization();
@@ -145,6 +147,56 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
   onCleanup(cancelAuthorization);
   const chatGPTEnabled = () => props.chatGPTAvailable === true && Boolean(props.chatGPTAuth);
   const chatGPTSelected = () => store.draft?.auth_method === 'chatgpt';
+  const [savedAccounts, setSavedAccounts] = createSignal<readonly FlowerChatGPTAccount[]>([]);
+  const [accountsLoading, setAccountsLoading] = createSignal(false);
+  const [accountsError, setAccountsError] = createSignal('');
+  let accountsSequence = 0;
+  const refreshSavedAccounts = async () => {
+    const load = props.loadChatGPTAccounts;
+    if (!load || !props.open || !chatGPTEnabled()) return;
+    const sequence = ++accountsSequence;
+    const binding = props.chatGPTBindingID;
+    setAccountsLoading(true); setAccountsError('');
+    try {
+      const result = await load();
+      if (sequence !== accountsSequence || !props.open || binding !== props.chatGPTBindingID) return;
+      setSavedAccounts(result.saved_accounts);
+      const selected = result.saved_accounts.find(item => item.account_id === store.draft?.account_id);
+      if (selected) updateProvider({ chatgpt_account: selected });
+    } catch {
+      if (sequence === accountsSequence && props.open) setAccountsError(copy().chatGPT.storageUnavailable);
+    } finally { if (sequence === accountsSequence) setAccountsLoading(false); }
+  };
+  createEffect(on(() => [props.open, props.chatGPTBindingID, chatGPTEnabled()] as const, () => {
+    accountsSequence++; setSavedAccounts([]); setAccountsError(''); setAccountsLoading(false);
+    if (props.open && chatGPTEnabled()) void refreshSavedAccounts();
+  }));
+  createEffect(on(() => props.chatGPTAccounts, next => {
+    if (!props.open || !next || !chatGPTEnabled()) return;
+    setSavedAccounts(next);
+    const selected = next.find(item => item.account_id === store.draft?.account_id);
+    if (selected) updateProvider({ chatgpt_account: selected });
+  }));
+  const selectAccount = (id: string) => {
+    const selected = savedAccounts().find(item => item.account_id === id);
+    if (!selected || accountBusy() || authorizing()) return;
+    cancelAuthorization(); setAuthError('');
+    invalidateDiscovery();
+    updateProvider({ account_id: selected.account_id, chatgpt_account: selected });
+    if (selected.state === 'ready') void discover();
+  };
+  const savedAccountLabel = (item: FlowerChatGPTAccount) => {
+    const identity = item.email || copy().chatGPT.account;
+    const peers = savedAccounts().filter(other => other.email === item.email);
+    const shortID = item.account_id.slice(-8);
+    const registration = peers.some(other => other.account_id !== item.account_id && other.account_id.endsWith(shortID)) ? item.account_id : shortID;
+    const label = peers.length > 1 ? `${identity} · ${registration}` : identity;
+    return item.state === 'signed_out' || item.state === 'authorization_required' ? `${label} · ${copy().chatGPT.signedOut}` : label;
+  };
+  const selectedSavedAccountLabel = createMemo(() => {
+    const selected = savedAccounts().find(item => item.account_id === store.draft?.account_id);
+    return selected ? savedAccountLabel(selected) : copy().chatGPT.chooseAccount;
+  });
   const [signingOut, setSigningOut] = createSignal(false);
   const [confirmSignOut, setConfirmSignOut] = createSignal(false);
   const [retrying, setRetrying] = createSignal(false);
@@ -182,7 +234,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
         queueMicrotask(() => authPrimary?.focus({ preventScroll: true }));
       }
     } catch { if (props.open && store.draft?.account_id === id) setAuthError(copy().chatGPT.signOutStatusUnavailable); }
-    finally { setSigningOut(false); }
+    finally { setSigningOut(false); void refreshSavedAccounts(); }
   };
   const retryAccount = async () => {
     if (account()?.error_code === 'logout_cleanup_failed') { await signOut(); return; }
@@ -211,7 +263,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
         && (document.activeElement === focusedAction || document.activeElement === document.body)) authCancel?.focus({ preventScroll: true });
     });
     try {
-      const initial = await auth('start', { scope_id: scope, previous_attempt_id: !newAccount ? store.draft?.chatgpt_attempt?.attempt_id : undefined, account_id: newAccount ? undefined : store.draft?.account_id, reconsent: account()?.state === 'plan_permission_required' });
+      const initial = await auth('start', { scope_id: scope, previous_attempt_id: !newAccount && prior?.failed ? prior.id : undefined, account_id: newAccount ? undefined : store.draft?.account_id, reconsent: account()?.state === 'plan_permission_required' });
       if (!initial.id) throw new Error('missing attempt');
       if (sequence !== authSequence || !props.open || !chatGPTEnabled()) {
         void auth('cancel', { scope_id: scope, attempt_id: initial.id }).catch(() => undefined); return;
@@ -225,12 +277,13 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
           if (sequence !== authSequence || !props.open || !chatGPTEnabled()) return;
           if (result.state === 'ready' && result.account) {
             finishAuthorization();
-            updateProvider({ account_id: result.account.account_id, chatgpt_account: result.account, chatgpt_attempt: { attempt_id: id, scope_id: scope } });
+            void refreshSavedAccounts();
+            updateProvider({ account_id: result.account.account_id, chatgpt_account: result.account });
             if (result.account.state !== 'ready') setAuthError(copy().chatGPT.planPermission);
             else void discover();
             return;
           }
-          if (result.state === 'failed') { finishAuthorization(); setAuthError(copy().chatGPT.signInFailed); return; }
+          if (result.state === 'failed') { if (pendingAttempt?.id === id) pendingAttempt.failed = true; finishAuthorization(); setAuthError(result.error_code === 'revocation_unconfirmed' ? copy().chatGPT.revocationUnconfirmed : copy().chatGPT.signInFailed); return; }
           if (result.state === 'preparing' || result.state === 'waiting' || result.state === 'verifying') setAuthProgress(result.state);
           pollTimer = setTimeout(() => { void poll(); }, 800);
         } catch {
@@ -239,7 +292,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
       };
       void poll();
     } catch {
-      if (sequence === authSequence) { finishAuthorization(); setAuthError(copy().chatGPT.signInFailed); }
+      if (sequence === authSequence) { cancelAuthorization(); setAuthError(copy().chatGPT.signInFailed); }
     }
   };
   const changeAuthentication = (method: 'api_key' | 'chatgpt') => {
@@ -247,7 +300,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
     if (method === 'chatgpt' && !chatGPTEnabled()) return;
     cancelAuthorization(); setAuthError('');
     invalidateDiscovery();
-    updateProvider({ auth_method: method, account_id: undefined, chatgpt_account: undefined, chatgpt_attempt: undefined, catalog_models: undefined });
+    updateProvider({ auth_method: method, account_id: undefined, chatgpt_account: undefined, catalog_models: undefined });
   };
   let currentAuth: FlowerChatGPTAuth | undefined;
   let currentBinding: string | undefined;
@@ -315,7 +368,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
     const next = props.chatGPTAccount;
     if (!props.open || !next) return;
     untrack(() => {
-      if (store.draft?.account_id === next.account_id && !store.draft.chatgpt_attempt) {
+      if (store.draft?.account_id === next.account_id) {
         setStore('draft', draft => draft ? { ...draft, chatgpt_account: next } : draft);
       }
     });
@@ -343,7 +396,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
     updateProvider({
       type,
       auth_method: type === 'openai' ? chatGPTEnabled() ? 'chatgpt' : 'api_key' : undefined,
-      account_id: undefined, chatgpt_account: undefined, chatgpt_attempt: undefined,
+      account_id: undefined, chatgpt_account: undefined,
       name: providerTypeLabel(type),
       base_url: defaultBaseURLForFlowerProviderType(type),
       web_search: flowerProviderNeedsWebSearchConfig(type) ? { mode: 'disabled' } : undefined,
@@ -483,6 +536,17 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                   </Show>
                   <Show when={chatGPTSelected() && chatGPTEnabled()}>
                     <div class="flower-provider-account-group">
+                      <Show when={savedAccounts().length > 0}>
+                        <div class="mb-3 min-w-0">
+                          <FlowerFieldLabel>{copy().chatGPT.savedAccounts}</FlowerFieldLabel>
+                          <Dropdown triggerAriaLabel={copy().chatGPT.savedAccounts} triggerInputSurface
+                            trigger={<><span class="truncate">{selectedSavedAccountLabel()}</span><ChevronDown class="h-3.5 w-3.5 shrink-0 text-muted-foreground" /></>}
+                            triggerClass="flex h-8 w-full items-center justify-between gap-2 rounded border border-input bg-background px-2.5 text-sm shadow-sm" class="w-full"
+                            value={store.draft?.account_id ?? ''} items={savedAccounts().map(item => ({ id: item.account_id, label: savedAccountLabel(item) }))}
+                            disabled={authorizing() || accountBusy() || accountsLoading()} onSelect={selectAccount} />
+                        </div>
+                      </Show>
+                      <Show when={accountsError()}><div role="alert" class="flower-provider-account-error">{accountsError()}<Button size="sm" variant="ghost" onClick={() => void refreshSavedAccounts()}>{copy().chatGPT.retry}</Button></div></Show>
                       <div class="flower-provider-account" data-connected={connected() || undefined} data-state={authorizing() ? authProgress() : authError() ? 'failed' : account()?.state === 'ready' ? 'connected' : 'idle'}>
                         <div class="flower-provider-account-heading">
                           <div class="flower-provider-account-symbol" aria-hidden="true">
@@ -496,6 +560,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                           </div>
                           <Show when={!authorizing() && account()?.state === 'ready'}><span class="flower-provider-account-connected"><Check class="h-3 w-3" aria-hidden="true" />{copy().chatGPT.connected}</span></Show>
                         </div>
+                        <Show when={account()?.state === 'ready' || account()?.state === 'plan_permission_required'}><p class="text-xs text-muted-foreground">{copy().chatGPT.savedSignIn}</p></Show>
                         <Show when={authError()}><div role="alert" class="flower-provider-account-error">{authError()}</div></Show>
                         <Show when={account()?.state === 'temporarily_unavailable' || account()?.state === 'storage_unavailable'}>
                           <Button size="sm" variant="outline" disabled={retrying() || accountBusy()} onClick={() => void retryAccount()}>{copy().chatGPT.retry}</Button>
@@ -512,7 +577,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                           <Show when={authorizing()}><Button ref={authCancel} size="sm" variant="ghost" onClick={cancelAuthorization}>{copy().chatGPT.cancel}</Button></Show>
                           <Show when={account() && !authorizing()}><div class="flower-provider-account-secondary">
                             <Button size="sm" variant="ghost" disabled={accountBusy()} onClick={() => void startAuthorization(true)}>{copy().chatGPT.changeAccount}</Button>
-                            <Show when={account() && !store.draft?.chatgpt_attempt}>
+                            <Show when={account()}>
                               <Button size="sm" variant="ghost" class="whitespace-nowrap" disabled={accountBusy() || account()?.state === 'signed_out'} onClick={() => {
                                 if ((account()?.binding_count ?? 1) > 1 || (account()?.active_task_count ?? 0) > 0) setConfirmSignOut(true);
                                 else void signOut();
@@ -529,7 +594,10 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                               <Info class="flower-provider-account-welcome-icon" aria-hidden="true" />
                               <p>{copy().chatGPT.welcome}</p>
                               <Button size="sm" variant="outline" class="flower-provider-account-confirm" onClick={() => {
-                                updateProvider({ chatgpt_account: { ...account()!, welcome_acknowledged: true } });
+                                const id = account()!.account_id;
+                                void props.chatGPTAuth?.('acknowledge', { scope_id: crypto.randomUUID(), account_id: id }).then(() => {
+                                  if (props.open && account()?.account_id === id) updateProvider({ chatgpt_account: { ...account()!, welcome_acknowledged: true } });
+                                }).catch(() => { if (props.open) setAuthError(copy().chatGPT.storageUnavailable); });
                                 authPrimary?.focus({ preventScroll: true });
                               }}>{copy().chatGPT.welcomeConfirm}</Button>
                             </div>

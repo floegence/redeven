@@ -142,7 +142,7 @@ func TestMaintenanceNotifiesExpiryWhileSharedBackoffDefersRefresh(t *testing.T) 
 	defer unsubscribe()
 	ticks := make(chan time.Time)
 	c.maintenanceTick = ticks
-	stop := c.Maintain(t.Context(), func() ([]string, error) { return []string{a.ID()}, nil })
+	stop := c.Maintain(t.Context())
 	defer stop()
 	for _, expected := range []string{"ready", "temporarily_unavailable"} {
 		if expected != "ready" {
@@ -218,7 +218,7 @@ func TestMaintenanceRotatesAcrossThirtyDaysAndClockResumeWithoutRequests(t *test
 	ticks := make(chan time.Time)
 	c.maintenanceTick = ticks
 	a := savedAccount(t, c, c.nowTime().Add(time.Hour))
-	stop := c.Maintain(t.Context(), func() ([]string, error) { return []string{a.ID(), a.ID()}, nil })
+	stop := c.Maintain(t.Context())
 	defer stop()
 	for i := 1; i <= 33; i++ {
 		now.Store(c.nowTime().Add(24 * time.Hour).UnixNano())
@@ -289,7 +289,7 @@ func TestRequestRejectionNeverDeletesTokensAndLateErrorsCannotRejectNewLogin(t *
 	next.SessionRevision++
 	next.AccessToken = "login-new"
 	next.RefreshToken = "login-refresh"
-	if err := c.InstallAccount(t.Context(), next); err != nil {
+	if err := c.Store.InstallChatGPTAccounts(t.Context(), []settings.ChatGPTAccount{next}); err != nil {
 		t.Fatal(err)
 	}
 	c.ObserveRequestFailure(t.Context(), a.ID(), "old", &RequestError{Status: 401, Code: "unauthorized"})
@@ -374,7 +374,7 @@ func TestMaintenanceDoesNotRecoverLiveSignOut(t *testing.T) {
 	entered, release := make(chan struct{}), make(chan struct{})
 	c := lifecycleClient(t, func(w http.ResponseWriter, r *http.Request) { close(entered); <-release; w.WriteHeader(200) })
 	a := savedAccount(t, c, time.Now().Add(time.Hour))
-	stop := c.Maintain(t.Context(), func() ([]string, error) { return []string{a.ID()}, nil })
+	stop := c.Maintain(t.Context())
 	defer stop()
 	// Ensure startup recovery has completed before accepting a new logout.
 	time.Sleep(25 * time.Millisecond)
@@ -657,31 +657,5 @@ func TestInterruptedLogoutIsNeverRestoredAtStartup(t *testing.T) {
 	stored, _, _ := c.Store.ChatGPTAccount(a.ID())
 	if stored.AccessToken != "" || stored.RefreshToken != "" || stored.Lifecycle != "signed_out" || stored.RevocationConfirmed == nil || *stored.RevocationConfirmed {
 		t.Fatal("interrupted logout restored login or hid unconfirmed revocation")
-	}
-}
-
-func TestConfigurationSaveDoesNotLockUnrelatedAccountActions(t *testing.T) {
-	c, _, _, _ := testClient(t)
-	entered, release := make(chan struct{}), make(chan struct{})
-	first := make(chan error, 1)
-	go func() {
-		first <- c.UseAttempts(nil, func([]settings.ChatGPTAccount) error { close(entered); <-release; return nil })
-	}()
-	<-entered
-	second := make(chan error, 1)
-	go func() { second <- c.UseAttempts(nil, func([]settings.ChatGPTAccount) error { return nil }) }()
-	select {
-	case err := <-second:
-		if err != nil {
-			t.Fatal(err)
-		}
-	case <-time.After(time.Second):
-		close(release)
-		<-first
-		t.Fatal("unrelated credential action waited for account installation")
-	}
-	close(release)
-	if err := <-first; err != nil {
-		t.Fatal(err)
 	}
 }

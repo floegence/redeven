@@ -228,7 +228,7 @@ func (s *SecretsStore) ChatGPTAccounts(ctx context.Context) (map[string]ChatGPTA
 	return out, nil
 }
 
-// InstallChatGPTAccounts atomically installs a verified configuration batch.
+// InstallChatGPTAccounts atomically commits verified sign-ins.
 // Callers serialize each account's operation before entering this short lock.
 func (s *SecretsStore) InstallChatGPTAccounts(ctx context.Context, accounts []ChatGPTAccount) error {
 	if len(accounts) == 0 {
@@ -252,7 +252,7 @@ func (s *SecretsStore) InstallChatGPTAccounts(ctx context.Context, accounts []Ch
 	for _, next := range accounts {
 		old := sf.ChatGPT.Accounts[next.ID()]
 		if next.Issuer == "" || next.Subject == "" || next.ClientID == "" || next.ClientID == "dynamic_agent_client" || old.Lifecycle == "signing_out" || old.SessionRevision+1 != next.SessionRevision {
-			return errors.New("ChatGPT authorization draft is no longer current")
+			return errors.New("ChatGPT sign-in is no longer current")
 		}
 		sf.ChatGPT.Accounts[next.ID()] = next
 	}
