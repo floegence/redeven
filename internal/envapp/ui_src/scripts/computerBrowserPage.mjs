@@ -1,7 +1,7 @@
 import { browserKey } from './computerBrowserKeys.mjs';
 
 export const navigationURL = value => {
-  if (typeof value !== 'string' || !value.trim() || value.length > 4096 || (/\s/u.test(value.trim()) || [...value].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127))) throw new Error('INVALID_REQUEST');
+  if (typeof value !== 'string' || !value.trim() || value.length > 4096 || /\p{Cc}/u.test(value)) throw new Error('INVALID_REQUEST');
   let parsed;
   try { parsed = new URL(value.trim()); } catch { throw new Error('INVALID_REQUEST'); }
   return parsed;

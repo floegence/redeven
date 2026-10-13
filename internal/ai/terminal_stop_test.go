@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"os/exec"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -71,5 +72,26 @@ func TestTerminalStopRequiresOutputDrain(t *testing.T) {
 	_, err := process.WaitForYieldContext(t.Context(), 10000)
 	if err == nil {
 		t.Fatal("undrained output was confirmed")
+	}
+}
+
+func TestTerminalGrepNoMatchesRetainsCompletedOutput(t *testing.T) {
+	manager := newTerminalProcessManager()
+	t.Cleanup(func() { _ = manager.Close(context.Background()) })
+	process, err := manager.Start(terminalProcessStartRequest{
+		ProcessID: "grep-no-matches", EndpointID: "env", ThreadID: "thread", RunID: "run", TurnID: "turn",
+		ToolID: "tool", ToolName: "terminal.exec", Command: "printf 'absent\n' | /usr/bin/grep -c present", CwdAbs: t.TempDir(), Shell: "/bin/sh", Env: []string{"HOME=" + t.TempDir(), "PATH=/usr/bin:/bin"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-process.reapedDone:
+	case <-time.After(3 * time.Second):
+		t.Fatal("grep did not finish")
+	}
+	snapshot := process.Snapshot()
+	if snapshot.ExitCode != 1 || strings.TrimSpace(snapshot.Output) != "0" || snapshot.Error == nil || snapshot.Error.Code != aitools.ErrorCodeCommandFailed || terminalProcessResultPayload(snapshot)["completed"] != true {
+		t.Fatalf("grep completion facts lost: %+v", snapshot)
 	}
 }
