@@ -3,7 +3,7 @@ type: AI Product Contract
 title: Tessiven Runtime discovery and operations
 description: Discover scoped Runtime paths and delegate explicit connection, business access, and native process operations to their existing owners.
 tags: [tessiven, runtime, desktop, gateway, security]
-timestamp: 2026-10-11T00:00:00Z
+timestamp: 2026-10-12T00:00:00Z
 ---
 # Summary
 
@@ -145,6 +145,11 @@ require checking the selected connection in its native owner rather than retryin
 ## UI and compatibility
 
 The Connected environments panel and Runtime node entry use this same service.
+Opening either entry, including the first open in Activity or a standalone
+canvas, retains the canvas, toolbar and Flower surface. The Runtime Dialog is
+part of the loaded Tessiven page; opening it must not suspend the page or show
+its navigation loading placeholder. Pending or failed directory reads are
+presented inside the Dialog.
 Search and keyed refresh retain selection, focus, scroll and visible targets
 when one source fails. Only the active target's controls are disabled. Unknown
 mutations block another effect; querying a definitive original operation result
@@ -171,6 +176,7 @@ persistent database lineages retain their current shapes.
 - `desktop/src/main/tessivenRuntimeHandoff.test.ts` — No effect before acceptance, cancellation and validation failure.
 - `desktop/src/main/main.ts` — Original registry, Gateway transport, authentication and lifecycle adapters.
 - `internal/envapp/ui_src/src/styles/tessiven-runtimes.browser.test.tsx` — Narrow locale layouts, keyboard, refresh continuity and original-operation recovery.
+- `internal/envapp/ui_src/src/styles/tessiven-runtime-dialog-continuity.browser.test.tsx` — First and repeated Runtime detail opening retains Activity and standalone canvases through pending and failed directory reads.
 - `internal/ai/tessiven_runtime_integration_test.go` — Canonical provider discovery retains fresh private source metadata without exposing it.
 - `internal/ai/system_skills/redeven-tessiven/SKILL.md` — Official discovery-to-result workflow.
 - `internal/runtimeservice/compatibility_contract.json` — Reviewed epoch authority.

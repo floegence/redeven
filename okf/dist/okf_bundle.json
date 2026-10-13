@@ -11507,7 +11507,7 @@
         "security",
         "tessiven"
       ],
-      "timestamp": "2026-10-11T00:00:00Z",
+      "timestamp": "2026-10-12T00:00:00Z",
       "frontmatter": {
         "description": "Discover scoped Runtime paths and delegate explicit connection, business access, and native process operations to their existing owners.",
         "tags": [
@@ -11517,11 +11517,11 @@
           "security",
           "tessiven"
         ],
-        "timestamp": "2026-10-11T00:00:00Z",
+        "timestamp": "2026-10-12T00:00:00Z",
         "title": "Tessiven Runtime discovery and operations",
         "type": "AI Product Contract"
       },
-      "body_length": 10972,
+      "body_length": 11526,
       "summary": "The Runtime-owned Tessiven product service is the authority for UI and Flower\nRuntime discovery and dispatch. It composes the existing Desktop connection\nregistry, authenticated Gateway catalogs, Runtime business resource executors,\nand Desktop lifecycle coordinator. Discovery observes registered paths without\nstarting a process or acquiring a business session. A reference identifies one\npath; it grants no permission. Lost source authority, changed path generations,\nreplaced identities, and revoked permissions stop dispatch. A lost mutation\nresponse reports an unknown outcome and permits only observation of the original\noperation until its result is known.",
       "sections": [
         {
@@ -11535,8 +11535,8 @@
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "## UI and compatibility\n\nThe Connected environments panel and Runtime node entry use this same service.\nSearch and keyed refresh retain selection, focus, scroll and visible targets\nwhen one source fails. Only the active target's controls are disabled. Unknown\nmutations block another effect; querying a definitive original operation result\nallows a subsequent explicit request. Guidance and states are localized in all\nshipped catalogs and use the standard Dialog body description and stable buttons.\n\nRuntime compatibility epoch 50 admits the scoped host and fixed business\ncontracts. Older endpoints require an explicit Runtime update; there is no\nhidden compatibility path. Gateway v5 application access, Tessiven DSL, and\npersistent database lineages retain their current shapes.",
-          "char_count": 783
+          "body": "## UI and compatibility\n\nThe Connected environments panel and Runtime node entry use this same service.\nOpening either entry, including the first open in Activity or a standalone\ncanvas, retains the canvas, toolbar and Flower surface. The Runtime Dialog is\npart of the loaded Tessiven page; opening it must not suspend the page or show\nits navigation loading placeholder. Pending or failed directory reads are\npresented inside the Dialog.\nSearch and keyed refresh retain selection, focus, scroll and visible targets\nwhen one source fails. Only the active target's controls are disabled. Unknown\nmutations block another effect; querying a definitive original operation result\nallows a subsequent explicit request. Guidance and states are localized in all\nshipped catalogs and use the standard Dialog body description and stable buttons.\n\nRuntime compatibility epoch 50 admits the scoped host and fixed business\ncontracts. Older endpoints require an explicit Runtime update; there is no\nhidden compatibility path. Gateway v5 application access, Tessiven DSL, and\npersistent database lineages retain their current shapes.",
+          "char_count": 1118
         }
       ],
       "snippet": "The Runtime-owned Tessiven product service is the authority for UI and Flower Runtime discovery and dispatch. It composes the existing Desktop connection registry, authenticated Gateway catalogs, Runtime business resource executors,",
@@ -38265,5 +38265,5 @@
       ]
     }
   ],
-  "source_sha256": "f0d875fafabbce03bb1a05aafdb61b03f156ed4b4d36154322a9168612bdbbd2"
+  "source_sha256": "2adaf961de9d831e1c641ddd230b6af1e908e320e9828f41ce7bc701dcacf278"
 }
