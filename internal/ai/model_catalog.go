@@ -161,7 +161,14 @@ func discoverModelCatalog(ctx context.Context, in ModelCatalogRequest, client *h
 			if m.Expiration != "" && m.Expiration <= time.Now().UTC().Format("2006-01-02") {
 				continue
 			}
-			model := config.AIProviderModel{ModelName: config.AIModelLocalName(m.ID), WireModelName: m.ID, DisplayName: m.Name, ContextWindow: contextWindow, MaxOutputTokens: m.TopProvider.MaxTokens, InputModalities: catalogInputModalities(m.Architecture.Input)}
+			// OpenRouter reports the provider's output limit independently from the
+			// model context window. It can be larger than the window, but the
+			// snapshot contract requires a safe output capacity for this model.
+			maxOutputTokens := m.TopProvider.MaxTokens
+			if maxOutputTokens > contextWindow {
+				maxOutputTokens = contextWindow
+			}
+			model := config.AIProviderModel{ModelName: config.AIModelLocalName(m.ID), WireModelName: m.ID, DisplayName: m.Name, ContextWindow: contextWindow, MaxOutputTokens: maxOutputTokens, InputModalities: catalogInputModalities(m.Architecture.Input)}
 			// Supported effort controls are a specific wire declaration, not an inference
 			// from a model-family name or an unqualified reasoning boolean.
 			if slices.Contains(m.Parameters, "reasoning") || slices.Contains(m.Parameters, "reasoning_effort") {
