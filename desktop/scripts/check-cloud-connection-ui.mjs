@@ -167,8 +167,9 @@ try {
       await publish(failedSnapshot(state, code));
       await details.getByText(i18n.t(`providerRecovery.${key}`), { exact: true }).waitFor();
       sameGeometry(beforeStates, await geometry(), `${state} preserves the grid`);
-      assert.equal(await status().getByRole('button', { name: i18n.t('providerRecovery.restoreAction'), exact: true }).count(), 0);
-      assert.equal(await details.getByRole('button', { name: i18n.t('providerRecovery.restoreShort'), exact: true }).count(), 0);
+      const restoreCount = code === 'provider_tls_untrusted' ? 1 : 0;
+      assert.equal(await status().getByRole('button', { name: i18n.t('providerRecovery.restoreAction'), exact: true }).count(), restoreCount);
+      assert.equal(await details.getByRole('button', { name: i18n.t('providerRecovery.restoreShort'), exact: true }).count(), restoreCount);
       assert.equal(await details.getByRole('button', { name: i18n.t('providerRecovery.openLocally'), exact: true }).count(), 1);
     }
     await page.keyboard.press('Escape'); await details.waitFor({ state: 'detached' });
