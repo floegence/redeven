@@ -69,6 +69,48 @@ func TestModelCatalogSchedulerRequiresExplicitOptIn(t *testing.T) {
 	}
 }
 
+func TestModelCatalogSchedulerExcludesOpenRouterButAllowsExplicitDiscovery(t *testing.T) {
+	openrouter := config.AIProvider{ID: "router", Type: "openrouter"}
+	ollama := config.AIProvider{ID: "local", Type: "ollama"}
+	called := make(chan string, 4)
+	m := newModelCatalogManager(t.TempDir(), nil, func(_ context.Context, in ModelCatalogRequest) (ModelCatalogResponse, error) {
+		called <- in.Type
+		return ModelCatalogResponse{Models: []ModelCatalogModel{}}, nil
+	}, nil)
+	enabled := true
+	m.configure(&config.AIConfig{AutoUpdateModelCatalog: &enabled, Providers: []config.AIProvider{openrouter, ollama}})
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { m.run(ctx); close(done) }()
+	defer func() { cancel(); <-done }()
+	select {
+	case providerType := <-called:
+		if providerType != "ollama" {
+			t.Fatalf("background discovery contacted %s instead of Ollama", providerType)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("background discovery did not contact Ollama")
+	}
+	select {
+	case providerType := <-called:
+		t.Fatalf("unexpected background discovery of %s", providerType)
+	case <-time.After(100 * time.Millisecond):
+	}
+	// Explicit discovery is independent of the automatic-update setting.
+	for _, autoUpdate := range []bool{true, false} {
+		m.configure(&config.AIConfig{AutoUpdateModelCatalog: &autoUpdate, Providers: []config.AIProvider{openrouter, ollama}})
+		if _, err := m.sync(ctx, providerCatalogRequest(openrouter, "key")); err != nil {
+			t.Fatalf("explicit OpenRouter discovery: %v", err)
+		}
+		if providerType := <-called; providerType != "openrouter" {
+			t.Fatalf("explicit discovery contacted %s", providerType)
+		}
+	}
+	if _, err := config.ReadModelCatalogSnapshot(m.root, config.ModelCatalogIdentity(openrouter, "key")); err != nil {
+		t.Fatalf("explicit OpenRouter discovery did not persist its snapshot: %v", err)
+	}
+}
+
 func TestCatalogSnapshotSurvivesFailureRestartAndRemoval(t *testing.T) {
 	p := config.AIProvider{ID: "local", Type: "ollama", BaseURL: "http://localhost:11434/v1", ModelSelection: &config.AIModelSelection{SelectedModels: []string{"agent"}}}
 	cfg := &config.AIConfig{Providers: []config.AIProvider{p}, CurrentModelID: "local/agent"}

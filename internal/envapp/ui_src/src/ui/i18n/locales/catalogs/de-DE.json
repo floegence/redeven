@@ -5928,7 +5928,9 @@
       "modelCatalogAutoUpdateTitle": "Modelllisten aktualisieren",
       "modelCatalogAutoUpdateDescription": "Automatische Updates sind standardmäßig deaktiviert. Für normale Chats werden integrierte Modellinformationen und deine gespeicherten Einstellungen verwendet.",
       "modelCatalogAutoUpdateLabel": "Modelllisten der Anbieter automatisch aktualisieren",
-      "modelCatalogAutoUpdateDisclosure": "Wenn aktiviert, fragt Redeven regelmäßig die APIs aktivierter Modellanbieter nach ihren Modelllisten ab."
+      "modelCatalogAutoUpdateDisclosure": "Wenn aktiviert, ruft Redeven regelmäßig Modelllisten über die APIs aktivierter Modellanbieter ab. OpenRouter ist ausgenommen.",
+      "dialogOpenRouterDiscovery": "Beim Hinzufügen von OpenRouter ruft Redeven die Modellliste ab, sobald Sie die Eingabe des API-Schlüssels oder der Adresse abschließen und das Eingabefeld verlassen. Dies gilt auch bei ausgeschalteten automatischen Updates. Spätere Updates erfolgen nur durch manuelle Synchronisierung.",
+      "dialogOllamaDiscovery": "Beim Hinzufügen von Ollama ruft Redeven Modelle von der Standardadresse ab. Nach Änderungen an Adresse oder API-Schlüssel wird die Liste erneut abgerufen, sobald Sie das Eingabefeld verlassen. Dies gilt auch bei ausgeschalteten automatischen Updates."
     },
     "computer": {
       "title": "Browser und Desktop",

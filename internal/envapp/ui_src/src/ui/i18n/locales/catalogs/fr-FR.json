@@ -5928,7 +5928,9 @@
       "modelCatalogAutoUpdateTitle": "Mise à jour des listes de modèles",
       "modelCatalogAutoUpdateDescription": "Les mises à jour automatiques sont désactivées par défaut. Le chat habituel utilise les informations de modèles intégrées et vos réglages enregistrés.",
       "modelCatalogAutoUpdateLabel": "Mettre à jour automatiquement les listes de modèles des fournisseurs",
-      "modelCatalogAutoUpdateDisclosure": "Une fois activé, Redeven demande périodiquement les listes de modèles aux API des fournisseurs de modèles activés."
+      "modelCatalogAutoUpdateDisclosure": "Lorsque cette option est activée, Redeven demande régulièrement les listes de modèles aux API des fournisseurs de modèles activés, à l’exception d’OpenRouter.",
+      "dialogOpenRouterDiscovery": "Lors de l’ajout d’OpenRouter, Redeven demande sa liste de modèles une fois la clé API ou l’adresse saisie et le champ quitté. Cela se produit même si les mises à jour automatiques sont désactivées. Les mises à jour suivantes se font uniquement par synchronisation manuelle.",
+      "dialogOllamaDiscovery": "Lors de l’ajout d’Ollama, Redeven demande les modèles à l’adresse par défaut. Il les demande à nouveau après modification de l’adresse ou de la clé API, lorsque vous quittez le champ. Cela se produit même si les mises à jour automatiques sont désactivées."
     },
     "computer": {
       "title": "Navigateur et bureau",

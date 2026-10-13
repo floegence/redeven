@@ -225,7 +225,8 @@ func (m *modelCatalogManager) run(ctx context.Context) {
 		now := time.Now()
 		delay := 15 * time.Minute
 		for id, c := range m.connections {
-			if !c.provider.IsEnabled() || !catalogEndpointSupported(providerCatalogRequest(c.provider, c.key)) {
+			// OpenRouter's large inventory is discovered only during setup or explicit sync.
+			if !c.provider.IsEnabled() || c.provider.Type == "openrouter" || !catalogEndpointSupported(providerCatalogRequest(c.provider, c.key)) {
 				continue
 			}
 			if m.flights[id] != nil {

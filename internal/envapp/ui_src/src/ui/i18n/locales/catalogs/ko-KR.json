@@ -5928,7 +5928,9 @@
       "modelCatalogAutoUpdateTitle": "모델 목록 업데이트",
       "modelCatalogAutoUpdateDescription": "자동 업데이트는 기본적으로 꺼져 있습니다. 일반 채팅은 내장 모델 정보와 저장된 설정을 사용합니다.",
       "modelCatalogAutoUpdateLabel": "모델 공급자의 모델 목록 자동 업데이트",
-      "modelCatalogAutoUpdateDisclosure": "켜면 Redeven이 활성화된 모델 공급자의 API에 주기적으로 모델 목록을 요청합니다."
+      "modelCatalogAutoUpdateDisclosure": "활성화하면 Redeven이 활성화된 모델 제공업체의 API에서 주기적으로 모델 목록을 가져옵니다. OpenRouter는 제외됩니다.",
+      "dialogOpenRouterDiscovery": "OpenRouter를 추가할 때 API 키 또는 주소 입력을 마치고 입력란을 벗어나면 Redeven이 모델 목록을 가져옵니다. 자동 업데이트가 꺼져 있어도 가져옵니다. 이후에는 수동 동기화로만 업데이트합니다.",
+      "dialogOllamaDiscovery": "Ollama를 추가할 때 Redeven이 기본 주소에서 모델 목록을 가져옵니다. 주소 또는 API 키를 변경하고 입력란을 벗어나면 다시 가져옵니다. 자동 업데이트가 꺼져 있어도 가져옵니다."
     },
     "computer": {
       "title": "브라우저 및 데스크톱",

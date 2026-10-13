@@ -46,6 +46,7 @@ vi.mock('@floegence/floe-webapp-core/ui', async (original) => ({
       placeholder={props.placeholder}
       disabled={props.disabled}
       onInput={props.onInput}
+      onBlur={props.onBlur}
     />
   ),
   Select: (props: any) => (
@@ -87,6 +88,114 @@ function mountDialog(mode: 'create' | 'edit' = 'create', discover?: FlowerModelC
 }
 
 describe('shared Flower provider dialog', () => {
+  const inputValue = (input: HTMLInputElement, value: string) => {
+    input.value = value; input.dispatchEvent(new Event('input', { bubbles: true }));
+  };
+  const finishInput = (input: HTMLInputElement) => input.dispatchEvent(new FocusEvent('blur'));
+
+  it('discovers a new Ollama connection once and leaves discovered models unselected', async () => {
+    const discover = vi.fn(async () => ({ models: [{ model_name: 'local-agent', context_window: 8192, supports_tools: true }] }));
+    const dialog = mountDialog('create', discover, false);
+    try {
+      dialog.type('ollama');
+      await vi.waitFor(() => expect(dialog.host.textContent).toContain('local-agent'));
+      expect(discover).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ type: 'ollama', base_url: 'http://127.0.0.1:11434/v1' }));
+      expect(dialog.selected()).toBe(0);
+      dialog.type('ollama');
+      finishInput(dialog.host.querySelector('input[type=password]')!);
+      expect(discover).toHaveBeenCalledTimes(1);
+      dialog.button('Save provider').click();
+      expect(dialog.confirmed().models).toEqual([]);
+    } finally { dialog.dispose(); }
+  });
+
+  it('waits for the OpenRouter key to be completed and supports discovery at a changed endpoint', async () => {
+    const discover = vi.fn(async () => ({ models: [] }));
+    const dialog = mountDialog('create', discover, false);
+    try {
+      dialog.type('openrouter');
+      const key = dialog.host.querySelector<HTMLInputElement>('input[type=password]')!;
+      inputValue(key, 'partial'); inputValue(key, 'completed-key');
+      expect(discover).not.toHaveBeenCalled();
+      finishInput(key);
+      await vi.waitFor(() => expect(discover).toHaveBeenCalledTimes(1));
+      expect(discover).toHaveBeenLastCalledWith(expect.objectContaining({ type: 'openrouter', api_key: 'completed-key' }));
+      finishInput(key); expect(discover).toHaveBeenCalledTimes(1);
+      const endpoint = [...dialog.host.querySelectorAll('input')].find(input => input.value === 'https://openrouter.ai/api/v1')!;
+      inputValue(endpoint, 'https://router.example/v1');
+      expect(discover).toHaveBeenCalledTimes(1);
+      finishInput(endpoint);
+      await vi.waitFor(() => expect(discover).toHaveBeenCalledTimes(2));
+      expect(discover).toHaveBeenLastCalledWith(expect.objectContaining({ base_url: 'https://router.example/v1' }));
+    } finally { dialog.dispose(); }
+  });
+
+  it.each(['openrouter', 'ollama'] as const)('does not automatically discover an existing %s connection', async type => {
+    const discover = vi.fn(async () => ({ models: [] }));
+    const dialog = mountDialog('edit', discover);
+    try {
+      dialog.setProvider({ id: 'existing', type, models: [], base_url: 'https://existing.example/v1' });
+      finishInput(dialog.host.querySelector('input[type=password]')!);
+      expect(discover).not.toHaveBeenCalled();
+      dialog.button('Sync model list').click();
+      await vi.waitFor(() => expect(discover).toHaveBeenCalledTimes(1));
+    } finally { dialog.dispose(); }
+  });
+
+  it('retains selected models after discovery failure, avoids silent retries and permits explicit retry', async () => {
+    const discover = vi.fn<FlowerModelCatalogDiscovery>()
+      .mockRejectedValueOnce(new Error('Ollama connection refused'))
+      .mockResolvedValue({ models: [{ model_name: 'agent', context_window: 8192 }] });
+    const dialog = mountDialog('create', discover, false);
+    try {
+      dialog.setProvider({ id: 'draft', type: 'ollama', models: [{ model_name: 'agent', context_window: 8192 }] });
+      dialog.type('ollama');
+      await vi.waitFor(() => expect(discover).toHaveBeenCalledTimes(1));
+      await Promise.resolve();
+      expect(dialog.selected()).toBe(1);
+      expect(dialog.button('Save provider').disabled).toBe(false);
+      dialog.type('ollama'); expect(discover).toHaveBeenCalledTimes(1);
+      dialog.button('Sync model list').click();
+      await vi.waitFor(() => expect(discover).toHaveBeenCalledTimes(2));
+      expect(dialog.selected()).toBe(1);
+    } finally { dialog.dispose(); }
+  });
+
+  it.each(['success', 'failure'] as const)('fences a late discovery %s after connection changes', async outcome => {
+    let resolve!: (result: { models: FlowerProviderDraft['models'] }) => void;
+    let reject!: (error: Error) => void;
+    const discover = vi.fn<FlowerModelCatalogDiscovery>(() => new Promise((done, fail) => { resolve = done; reject = fail; }));
+    const dialog = mountDialog('create', discover, false);
+    try {
+      dialog.type('ollama');
+      const endpoint = [...dialog.host.querySelectorAll('input')].find(input => input.value === 'http://127.0.0.1:11434/v1')!;
+      inputValue(endpoint, 'http://remote.example:11434/v1');
+      if (outcome === 'success') resolve({ models: [{ model_name: 'stale-agent', context_window: 8192 }] });
+      else reject(new Error('Stale endpoint failure'));
+      await Promise.resolve(); await Promise.resolve();
+      expect(dialog.host.textContent).not.toContain('stale-agent');
+      expect(dialog.host.textContent).not.toContain('Stale endpoint failure');
+      expect(dialog.button('Sync model list').disabled).toBe(false);
+    } finally { dialog.dispose(); }
+  });
+
+  it('fences pending discovery across close and reopen and skips incomplete endpoints', async () => {
+    let resolve!: (result: { models: FlowerProviderDraft['models'] }) => void;
+    const discover = vi.fn<FlowerModelCatalogDiscovery>(() => new Promise(done => { resolve = done; }));
+    const dialog = mountDialog('create', discover, false);
+    try {
+      dialog.type('ollama'); dialog.setOpen(false); dialog.setOpen(true); dialog.type('openrouter');
+      resolve({ models: [{ model_name: 'closed-agent', context_window: 8192 }] });
+      await Promise.resolve(); await Promise.resolve();
+      expect(dialog.host.textContent).not.toContain('closed-agent');
+      const endpoint = [...dialog.host.querySelectorAll('input')].find(input => input.value === 'https://openrouter.ai/api/v1')!;
+      inputValue(endpoint, 'https://'); finishInput(endpoint);
+      const key = dialog.host.querySelector<HTMLInputElement>('input[type=password]')!;
+      inputValue(key, 'key'); finishInput(key);
+      expect(discover).toHaveBeenCalledTimes(1);
+    } finally { dialog.dispose(); }
+  });
+
   it('uses backend defaults for a new connection and never persists them as user configuration', () => {
     const dialog = mountDialog();
     const backendModel = { model_name: 'server-only-model', context_window: 543210, max_output_tokens: 12345, effective_context_window_percent: 87, input_modalities: ['text', 'image'], supports_tools: true };

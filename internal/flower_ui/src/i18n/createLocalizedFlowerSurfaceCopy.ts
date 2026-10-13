@@ -917,6 +917,8 @@ function createLocalizedFlowerProviderDialogCopy(i18n: FlowerSurfaceTranslator):
     connectionTitle: t(i18n, k('dialogConnectionTitle')),
     connectionDescription: t(i18n, k('dialogConnectionDescription')),
     connectionName: t(i18n, k('dialogConnectionName')),
+    openRouterDiscovery: t(i18n, k('dialogOpenRouterDiscovery')),
+    ollamaDiscovery: t(i18n, k('dialogOllamaDiscovery')),
     apiKey: t(i18n, k('dialogAPIKey')),
     storedKeyKept: t(i18n, k('dialogStoredKeyKept')),
     replaceStoredKeyHint: t(i18n, k('dialogReplaceStoredKeyHint')),

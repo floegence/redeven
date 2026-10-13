@@ -5928,7 +5928,9 @@
       "modelCatalogAutoUpdateTitle": "Atualizações das listas de modelos",
       "modelCatalogAutoUpdateDescription": "As atualizações automáticas ficam desativadas por padrão. As conversas normais usam as informações de modelos integradas e suas configurações salvas.",
       "modelCatalogAutoUpdateLabel": "Atualizar automaticamente as listas de modelos dos provedores",
-      "modelCatalogAutoUpdateDisclosure": "Quando ativado, o Redeven solicita periodicamente as listas de modelos às APIs dos provedores de modelos ativados."
+      "modelCatalogAutoUpdateDisclosure": "Quando ativada, esta opção faz o Redeven solicitar periodicamente listas de modelos às APIs dos provedores de modelos habilitados, exceto o OpenRouter.",
+      "dialogOpenRouterDiscovery": "Ao adicionar o OpenRouter, o Redeven solicita a lista de modelos quando você termina de inserir a chave de API ou o endereço e sai do campo. Isso também ocorre com as atualizações automáticas desativadas. As próximas atualizações são feitas apenas por sincronização manual.",
+      "dialogOllamaDiscovery": "Ao adicionar o Ollama, o Redeven solicita os modelos no endereço padrão. Ele solicita novamente após você alterar o endereço ou a chave de API e sair do campo. Isso também ocorre com as atualizações automáticas desativadas."
     },
     "computer": {
       "title": "Navegador e área de trabalho",
