@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower setup and settings
 description: First-time model setup, actionable starter tasks, and shared provider, permission, and computer settings.
 tags: [ai, flower, settings, onboarding]
-timestamp: 2026-09-27T17:29:30Z
+timestamp: 2026-10-13T02:05:00Z
 ---
 # Summary
 
@@ -90,20 +90,23 @@ the display name, and model identifiers remain fully readable when expanded.
 
 Four peer sections share one page background: current model, providers, default
 permission, and computer/browser use. Each has a localized accessible name and a
-heading and description above its controls, with generous vertical spacing.
+heading and description above its controls, with consistent vertical spacing.
 The centered frame is at most 860px including 40px side padding and uses a 25px
 primary heading. Provider rows share one quiet 14px-radius group with internal
 dividers. At 760 CSS pixels or below page padding contracts to 16px while
 preserving the reading order.
 
-The current model, capacity figures, and reasoning preferences share one quiet
-group with inset dividers. Labels stay left; model selection, capacities, and
-reasoning controls stay right. Model input capabilities sit beneath its label;
-narrow containers stack the selector without truncating controls. Provider rows always expose identity, credential readiness,
-and edit/remove actions. A keyboard-operable model disclosure shows the configured
-count and expands to every model identifier plus web/image capability details;
-identifiers wrap rather than hiding the rest of the inventory behind a count.
-Adding a provider stays in the section heading without expanding details.
+The model group presents brand, model name, and provider above one wrapping row
+of input capabilities, capacity label/value pairs, and a compact default-reasoning
+control. The localized edit action reveals the selector. A selection restores
+the summary and edit-action focus, then uses profile autosave; the finish action
+closes without changes. Narrow layouts use a labeled edit icon and contain the selector.
+
+Provider rows align brand and name left, credential readiness toward the right,
+and edit/remove actions at the trailing edge. Below the name, a keyboard-operable
+count expands all model identifiers and web/image details; identifiers wrap.
+Narrow layouts move readiness below identity and keep actions visible. Adding a
+provider stays in the section heading.
 
 Permission choices remain visible as one divided vertical radio group, with a
 check indicator and no additional selection border. Long translations must wrap

@@ -5744,6 +5744,8 @@
       "backToChat": "Retour à la conversation",
       "description": "Configurez les modèles et l’autorisation par défaut de Flower pour le profil d’IA local.",
       "currentModel": "Modèle actuel",
+      "changeModel": "Changer de modèle",
+      "finishModelEdit": "Terminé",
       "noModelSelected": "Aucun modèle sélectionné",
       "text": "Texte",
       "imageInput": "Entrée d’image",

@@ -750,6 +750,8 @@ function createLocalizedFlowerSettingsCopy(i18n: FlowerSurfaceTranslator): Flowe
     backToChat: t(i18n, k('backToChat')),
     description: t(i18n, k('description')),
     currentModel: t(i18n, k('currentModel')),
+    changeModel: t(i18n, k('changeModel')),
+    finishModelEdit: t(i18n, k('finishModelEdit')),
     noModelSelected: t(i18n, k('noModelSelected')),
     text: t(i18n, k('text')),
     imageInput: t(i18n, k('imageInput')),

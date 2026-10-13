@@ -45,6 +45,8 @@ import { reasoningCapabilitySupportsControl } from '../reasoning';
 type FlowerModelOption = Readonly<{
   id: string;
   label: string;
+  modelName: string;
+  providerName: string;
   supportsImageInput: boolean;
   contextWindow?: number;
   maxOutputTokens?: number;
@@ -105,9 +107,13 @@ function collectModelOptions(providers: readonly FlowerProviderDraft[], labels?:
       const modelName = trim(model.model_name);
       const providerID = trim(provider.id);
       if (!providerID || !modelName) return null;
+      const displayName = model.display_name || model.wire_model_name || modelName;
+      const providerName = providerDisplayName(provider, labels);
       return {
         id: flowerModelID(providerID, modelName),
-        label: `${providerDisplayName(provider, labels)} / ${model.display_name || model.wire_model_name || modelName}`,
+        label: `${providerName} / ${displayName}`,
+        modelName: displayName,
+        providerName,
         supportsImageInput: flowerModelSupportsImage(model.input_modalities),
         ...(model.context_window != null ? { contextWindow: model.context_window } : {}),
         ...(model.max_output_tokens != null ? { maxOutputTokens: model.max_output_tokens } : {}),
@@ -184,6 +190,10 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
   const copy = () => props.copy ?? DEFAULT_FLOWER_SURFACE_COPY.settings;
   const [providers, setProviders] = createSignal<readonly FlowerProviderDraft[]>([]);
   const [currentModelID, setCurrentModelID] = createSignal('');
+  const [modelEditing, setModelEditing] = createSignal(false);
+  const modelEditorID = createUniqueId();
+  let modelEditButton: HTMLButtonElement | undefined;
+  let modelEditor: HTMLDivElement | undefined;
   const [permissionType, setPermissionType] = createSignal<FlowerPermissionType>('approval_required');
   const [confirmedPermissionType, setConfirmedPermissionType] = createSignal<FlowerPermissionType>('approval_required');
   const [permissionDirty, setPermissionDirty] = createSignal(false);
@@ -231,6 +241,14 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
   });
   const normalizedProviders = createMemo(() => providers().map(normalizeProviderForSave));
   const markDirty = () => setDirty(true);
+  const finishModelEdit = () => {
+    setModelEditing(false);
+    queueMicrotask(() => modelEditButton?.focus());
+  };
+  const openModelEditor = () => {
+    setModelEditing(true);
+    queueMicrotask(() => modelEditor?.querySelector<HTMLElement>('[data-floe-dropdown-trigger]')?.focus());
+  };
   const focusPermissionType = (kind: FlowerPermissionType) => {
     queueMicrotask(() => permissionButtonRefs.get(kind)?.focus());
   };
@@ -575,38 +593,60 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
               </Show>
               <Show when={modelOptions().length > 0} fallback={<p class="flower-body-copy text-muted-foreground">{copy().noModelSelected}</p>}>
                 <div class="flower-settings-model-field">
-                  <div class="flower-settings-model-label"><span>{copy().currentModel}</span>
+                  <div class="flower-settings-provider-brand"><Show when={activeModelOption()}>{option => <FlowerProviderBrandIcon type={option().provider_type} class="h-6 w-6" />}</Show></div>
+                  <div class="flower-settings-model-identity">
+                    <Show when={modelEditing()} fallback={
+                      <div class="flower-settings-model-name">{activeModelOption()?.modelName || currentModelID() || copy().noModelSelected}</div>
+                    }>
+                      <div ref={modelEditor} id={modelEditorID} class="flower-settings-model-editor" onKeyDown={event => { if (event.key === 'Escape') finishModelEdit(); }}>
+                        <Select
+                          value={currentModelID()}
+                          options={modelSelectOptions()}
+                          onChange={(value) => { setCurrentModelID(trim(value)); markDirty(); finishModelEdit(); }}
+                          placeholder={copy().selectModelPlaceholder}
+                          disabled={props.saving}
+                          class="flower-settings-model-select w-full"
+                        />
+                      </div>
+                    </Show>
+                    <div class="flower-settings-model-provider">{activeModelOption()?.providerName}</div>
+                  </div>
+                  <Button ref={modelEditButton} size="sm" variant="ghost" icon={modelEditing() ? Check : Pencil}
+                    class="flower-settings-model-edit" aria-expanded={modelEditing()} aria-controls={modelEditing() ? modelEditorID : undefined}
+                    aria-label={modelEditing() ? copy().finishModelEdit : copy().changeModel}
+                    title={modelEditing() ? copy().finishModelEdit : copy().changeModel}
+                    disabled={props.saving}
+                    onClick={() => modelEditing() ? finishModelEdit() : openModelEditor()}>
+                    <span class="flower-settings-model-edit-label">{modelEditing() ? copy().finishModelEdit : copy().changeModel}</span>
+                  </Button>
+                </div>
+                <Show when={activeModelOption()}>
+                  <div class="flower-settings-model-metadata">
                     <div class="flower-settings-model-capabilities">
                       <span>{copy().text}</span>
                       <Show when={activeModelOption()?.supportsImageInput}><span>{copy().imageInput}</span></Show>
                     </div>
-                  </div>
-                  <Select
-                    value={currentModelID()}
-                    options={modelSelectOptions()}
-                    onChange={(value) => { setCurrentModelID(trim(value)); markDirty(); }}
-                    placeholder={copy().selectModelPlaceholder}
-                    disabled={props.saving}
-                    class="flower-settings-model-select w-full"
-                  />
-                </div>
-                <dl class="flower-settings-model-limits">
-                  <Show when={activeModelOption()?.contextWindow}>
-                    <div><dt>{copy().dialog.contextWindow}</dt><dd>{formatFlowerTokenCount(activeModelOption()?.contextWindow)}</dd></div>
-                  </Show>
-                  <Show when={activeModelOption()?.maxOutputTokens}>
-                    <div><dt>{copy().dialog.maxOutput}</dt><dd>{formatFlowerTokenCount(activeModelOption()?.maxOutputTokens)}</dd></div>
-                  </Show>
-                </dl>
-                <Show when={activeProviderModel()?.reasoning_capability && reasoningCapabilitySupportsControl(activeProviderModel()?.reasoning_capability)}>
-                  <div class="flower-settings-reasoning">
-                    <FlowerReasoningControl
-                      copy={copy().reasoningControl}
-                      capability={activeProviderModel()?.reasoning_capability}
-                      selection={activeProviderModel()?.default_reasoning_selection}
-                      label={copy().reasoningControl.defaultLabel}
-                      onChange={updateCurrentModelReasoning}
-                    />
+                    <dl class="flower-settings-model-limits">
+                      <Show when={activeModelOption()?.contextWindow}>
+                        <div><dt>{copy().dialog.contextWindow}</dt><dd>{formatFlowerTokenCount(activeModelOption()?.contextWindow)}</dd></div>
+                      </Show>
+                      <Show when={activeModelOption()?.maxOutputTokens}>
+                        <div><dt>{copy().dialog.maxOutput}</dt><dd>{formatFlowerTokenCount(activeModelOption()?.maxOutputTokens)}</dd></div>
+                      </Show>
+                    </dl>
+                    <Show when={activeProviderModel()?.reasoning_capability && reasoningCapabilitySupportsControl(activeProviderModel()?.reasoning_capability)}>
+                      <div class="flower-settings-reasoning">
+                        <span>{copy().reasoningControl.defaultLabel}</span>
+                        <FlowerReasoningControl
+                          variant="badge"
+                          copy={copy().reasoningControl}
+                          capability={activeProviderModel()?.reasoning_capability}
+                          selection={activeProviderModel()?.default_reasoning_selection}
+                          label={copy().reasoningControl.defaultLabel}
+                          onChange={updateCurrentModelReasoning}
+                        />
+                      </div>
+                    </Show>
                   </div>
                 </Show>
               </Show>
@@ -631,28 +671,12 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
                       <div class="flower-settings-provider-card">
                         <div class="flower-settings-provider-brand"><FlowerProviderBrandIcon type={provider.type} class="h-6 w-6" /></div>
                         <div class="flower-settings-provider-body">
-                          <div class="flower-settings-provider-topline">
-                            <div class="flower-settings-provider-title">
-                              <span class="truncate flower-body-copy font-semibold text-foreground">{providerDisplayName(provider, copy().providerTypeLabels)}</span>
-                              <Show when={providerDisplayName(provider, copy().providerTypeLabels) !== copy().providerTypeLabels[provider.type]}>
-                                <span class="text-xs text-muted-foreground">{copy().providerTypeLabels[provider.type]}</span>
-                              </Show>
-                              <Show when={isDefault()}><span class="flower-settings-provider-default">{copy().defaultProvider}</span></Show>
-                            </div>
-                            <div class="flower-settings-provider-actions">
-                              <Button size="icon" variant="ghost" class="h-8 w-8 text-muted-foreground hover:text-foreground" onClick={event => { event.stopPropagation(); openEditProviderDialog(index()); }} aria-label={copy().editProvider}>
-                                <Pencil class="h-3.5 w-3.5" />
-                              </Button>
-                              <Button size="icon" variant="ghost" class="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={event => { event.stopPropagation(); removeProvider(index()); }} disabled={providers().length <= 1} aria-label={copy().removeProvider}>
-                                <Trash class="h-3.5 w-3.5" />
-                              </Button>
-                            </div>
-                          </div>
-                          <div class="flower-settings-provider-status">
-                            <span>{isChatGPT() ? copy().dialog.chatGPT.account : copy().apiKey}</span>
-                            <span class={cn('flower-settings-dot-pill', keyReady() && 'flower-settings-dot-pill-active')}>
-                              {keyReady() ? copy().ready : isChatGPT() ? copy().dialog.chatGPT.reauthorize : flowerProviderAPIKeyOptional(provider.type) ? copy().dialog.catalog.optionalKey : copy().needsKey}
-                            </span>
+                          <div class="flower-settings-provider-title">
+                            <span class="truncate flower-body-copy font-semibold text-foreground" title={providerDisplayName(provider, copy().providerTypeLabels)}>{providerDisplayName(provider, copy().providerTypeLabels)}</span>
+                            <Show when={providerDisplayName(provider, copy().providerTypeLabels) !== copy().providerTypeLabels[provider.type]}>
+                              <span class="text-xs text-muted-foreground">{copy().providerTypeLabels[provider.type]}</span>
+                            </Show>
+                            <Show when={isDefault()}><span class="flower-settings-provider-default">{copy().defaultProvider}</span></Show>
                           </div>
                           <details class="flower-settings-provider-details">
                             <summary><span>{copy().models}</span><span class="flower-settings-provider-count">{modelNames().length}</span><ChevronDown class="h-3.5 w-3.5" aria-hidden="true" /></summary>
@@ -671,6 +695,20 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
                               </Show>
                             </div>
                           </details>
+                        </div>
+                        <div class="flower-settings-provider-status">
+                          <span class={cn('flower-settings-dot-pill', keyReady() && 'flower-settings-dot-pill-active')}>
+                            {keyReady() ? copy().ready : isChatGPT() ? copy().dialog.chatGPT.reauthorize : flowerProviderAPIKeyOptional(provider.type) ? copy().dialog.catalog.optionalKey : copy().needsKey}
+                          </span>
+                          <span>{isChatGPT() ? copy().dialog.chatGPT.account : copy().apiKey}</span>
+                        </div>
+                        <div class="flower-settings-provider-actions">
+                          <Button size="icon" variant="ghost" class="h-8 w-8 text-muted-foreground hover:text-foreground" onClick={() => openEditProviderDialog(index())} aria-label={copy().editProvider}>
+                            <Pencil class="h-3.5 w-3.5" />
+                          </Button>
+                          <Button size="icon" variant="ghost" class="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => removeProvider(index())} disabled={providers().length <= 1} aria-label={copy().removeProvider}>
+                            <Trash class="h-3.5 w-3.5" />
+                          </Button>
                         </div>
                       </div>
                     );

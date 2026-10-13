@@ -855,6 +855,8 @@
       "backToChat": "チャットに戻る",
       "description": "ローカル AI プロファイルのモデルとデフォルトの Flower 権限を構成します。",
       "currentModel": "現在のモデル",
+      "changeModel": "モデルを変更",
+      "finishModelEdit": "完了",
       "noModelSelected": "モデルが選択されていません",
       "text": "テキスト",
       "imageInput": "画像入力",
