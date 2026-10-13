@@ -3,7 +3,7 @@ type: Architecture Contract
 title: Remote desktop media and input scheduling
 description: Preserve bounded pixel ownership, cursor presentation and ordered input/video while reducing capture and playback work.
 tags: [desktop, media, input, wayland, latency]
-timestamp: 2026-10-05T05:30:00Z
+timestamp: 2026-10-13T02:00:00Z
 ---
 # Summary
 
@@ -20,7 +20,7 @@ work cannot overwrite or authorize a successor generation.
 
 The physical-seat service uses one latest-sample mailbox for capture and a
 separate 60 Hz cursor stream. Unchanged frames are not encoded repeatedly;
-H.264 reference order is preserved and one settled lossless refinement follows
+H.264 and VP9 reference order is preserved and one settled lossless refinement follows
 activity. Cursor position, visibility and hotspot validity are independent of
 video progress, so pointer motion remains responsive on a static desktop.
 The media worker is attached through an authenticated inherited descriptor and
@@ -30,7 +30,21 @@ The published player draws every current decoded picture immediately. A cumulati
 paint receipt names only the latest picture unchanged across a rendering opportunity
 and its following task. Replaced pictures do not receive individual paint receipts;
 reset cancels retired authority. PNG refinement decoding cannot serialize later
-H.264 decoding. Encoded reference dependencies remain ordered and bounded.
+video decoding. Encoded reference dependencies remain ordered and bounded.
+
+Linux picture requests offer VP9 only after the published player's positive
+WebCodecs probe; H.264 remains available. The same offer applies to connect,
+configuration and reconnect. A retired asynchronous probe cannot acquire a
+successor attachment ticket. macOS retains its native picture contract.
+The software path prefers supported VP9 after hardware H.264 candidates fail
+their capability probes. Codec selection is observable and does not certify
+hardware decoding or RustDesk performance parity.
+
+Four cumulative frame credits bound unacknowledged pictures. Encoder timestamps
+advance by one configured frame period per submitted frame, even after credits
+stall submission; capture telemetry retains the actual monotonic capture time.
+Idle transport time cannot inflate the next frame's codec budget. Encoder reset
+starts a fresh keyframe chain; it cannot discard a transported reference.
 
 ## Encoder Capability
 
@@ -90,7 +104,7 @@ owns format, lifetime, installed-stack and measured performance evidence.
 Portal input submits bounded ordered asynchronous D-Bus calls without blocking
 media callbacks. Delivery failure closes that OS session and requires reconnect.
 Static refinement waits for input and pixels to settle and retires stale candidates
-before admission. Transported H.264 dependencies remain ordered. These paths do
+before admission. Transported video dependencies remain ordered. These paths do
 not implement DMA-BUF encoder zero-copy, libei/EIS or network congestion adaptation.
 The [Wayland optimization record](../operations/remote-desktop-wayland-optimization-results.md)
 separates native/browser checks from real desktop and physical latency evidence.

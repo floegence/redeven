@@ -178,6 +178,27 @@ alternating pairs are recorded; they establish a failing baseline, not parity.
 
 # Evidence
 
+## Released Candidate Preparation
+
+Native `v0.22.40` is released at
+`eeddccc4a3b42e126e82406628705e2a0715541b`. Its module checksum is
+`h1:rKsKYiAnc4aMIp+0za1hsQ4pOZGwozSj+tij+lSblPo=`; all 545 module archive
+entries match the immutable source commit. Source, extended CodeQL,
+vulnerability, native AMD64/ARM64, private-desktop, host-media and macOS
+qualification pass. The first AMD64 private-desktop job stopped before Firefox
+launch at host-service initialization; the same job passed on the same commit
+when rerun. Its initial cause remains unresolved and the failed attempt is retained.
+
+Redeven consumes this published module with `GOWORK=off`. Codec offer tests
+cover X11, Wayland, physical-seat, macOS and H.264-only clients, including
+configuration, reconnect and retired asynchronous capability probes. Full
+Viewer behavior checks cover the four platform contracts. These checks establish
+integration behavior, not real RustDesk latency, resource or quality parity.
+
+- [Native v0.22.40 release](https://github.com/floegence/floe-native-apps/releases/tag/v0.22.40).
+- [Native release qualification](https://github.com/floegence/floe-native-apps/actions/runs/38335810377): original and rerun evidence.
+- [Extended CodeQL](https://github.com/floegence/floe-native-apps/actions/runs/38335574962).
+
 - [Orange functional deployment and recovery](remote-desktop-orange-viewer-results.md): candidate identity and functional boundaries.
 - [RustDesk official release](https://github.com/rustdesk/rustdesk/releases/tag/1.5.0): baseline source and artifact digests.
 - `internal/codeapp/appserver/remote_desktop_viewer/viewer.js`: displayed image, lock authority and input paths.

@@ -2557,7 +2557,7 @@ SOFTWARE.
 | github.com/dunglas/httpsfv | v1.1.1 | BSD-style | Runtime | https://pkg.go.dev/github.com/dunglas/httpsfv@v1.1.1 | Detected from LICENSE. |
 | github.com/dustin/go-humanize | v1.0.1 | MIT | Runtime | https://pkg.go.dev/github.com/dustin/go-humanize@v1.0.1 | Detected from LICENSE. |
 | github.com/ebitengine/purego | v0.9.1 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/ebitengine/purego@v0.9.1 | Detected from LICENSE. |
-| github.com/floegence/floe-native-apps | v0.22.37 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floe-native-apps@v0.22.37 | Detected from LICENSE. |
+| github.com/floegence/floe-native-apps | v0.22.40 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floe-native-apps@v0.22.40 | Detected from LICENSE. |
 | github.com/floegence/floeterm/terminal-go | v0.19.2 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floeterm/terminal-go@v0.19.2 | Floegence first-party dependency. |
 | github.com/floegence/floret/v7 | v7.30.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floret/v7@v7.30.0 | Detected from LICENSE. |
 | github.com/floegence/flowersec/flowersec-go/v5 | v5.11.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/flowersec/flowersec-go/v5@v5.11.0 | Floegence first-party dependency. |
@@ -2621,7 +2621,7 @@ SOFTWARE.
 | golang.org/x/net | v0.60.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/net@v0.60.0 | Detected from LICENSE. |
 | golang.org/x/oauth2 | v0.36.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/oauth2@v0.36.0 | Detected from LICENSE. |
 | golang.org/x/sync | v0.23.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/sync@v0.23.0 | Detected from LICENSE. |
-| golang.org/x/sys | v0.48.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/sys@v0.48.0 | Detected from LICENSE. |
+| golang.org/x/sys | v0.49.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/sys@v0.49.0 | Detected from LICENSE. |
 | golang.org/x/term | v0.46.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/term@v0.46.0 | Detected from LICENSE. |
 | golang.org/x/text | v0.42.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/text@v0.42.0 | Detected from LICENSE. |
 | golang.org/x/time | v0.15.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/time@v0.15.0 | Detected from LICENSE. |
