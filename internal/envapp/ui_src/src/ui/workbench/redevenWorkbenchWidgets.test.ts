@@ -37,15 +37,15 @@ describe('redevenWorkbenchWidgets source contract', () => {
   it('projects every launcher-frontable widget onto the overlay surface', () => {
     const widgetTypes = filterBarWidgetTypes();
     expect(widgetTypes).toEqual([
+      'redeven.ai',
       'redeven.files',
       'redeven.terminal',
       'redeven.monitor',
       'redeven.codespaces',
       'redeven.ports',
-      'redeven.applications',
       'redeven.remote-desktop',
+      'redeven.applications',
       'redeven.containers',
-      'redeven.ai',
     ]);
     for (const type of widgetTypes) {
       expectProjectedSurface(type);

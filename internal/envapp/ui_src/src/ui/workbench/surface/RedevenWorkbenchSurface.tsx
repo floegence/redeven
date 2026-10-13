@@ -571,6 +571,7 @@ export function RedevenWorkbenchSurface(props: RedevenWorkbenchSurfaceProps) {
           : null)}
         onRequestDelete={props.onRequestDelete}
         onDockItemClick={props.onDockItemClick}
+        dockComponentOrder={props.filterBarWidgetTypes}
         dockActions={props.dockActions}
         dockItems={props.dockItems}
         registerExternalDockDragController={props.registerExternalDockDragController}

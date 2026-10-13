@@ -22,9 +22,14 @@ failures and current permissions.
 ## Discovery and exact inventory
 
 The Activity Bar `Plugins` entry opens a Shell-root Launcher without changing
-the current normal surface. On desktop it is the permanent first Activity Bar
-entry, followed by built-in Activities, Flower, and then user-pinned plugins in
-saved order. Desktop uses a centered modal with a search field,
+the current normal surface. Activity navigation and the Workbench Dock lead with
+Flower, Files, and Terminal, then retain the other built-in entries in their
+relative order. The Launcher is the last built-in entry, followed by launchable
+pins in that mode's saved order. Workbench keeps Work Mode at the far left and
+places creation tools after the product widgets. Its trailing Tessiven and
+Launcher actions precede pinned shortcuts through released Floe Dock placement;
+Floe owns rendering, button interaction, hover slots, and drag placement.
+Desktop uses a centered modal with a search field,
 responsive icon grid and stable scrolling body without a summary footer; mobile uses a
 released Floe Shell navigation panel with rounded corners, a visible handle, and
 at least 44px touch targets. Its title and actions share one row, followed by a
@@ -68,8 +73,8 @@ Dock click activates, focuses, and centers the existing widget, so one exact
 target cannot occupy two Workbench widgets; different targets may coexist. A
 Dock drop only pins the inventory item. Cancellation or release outside
 both targets performs no action. Workbench pins declare Floe Webapp's
-`after-components` placement, so they follow the built-in component group and
-Flower in saved order; the external drag placeholder uses the same placement.
+`after-components` placement, so they follow the built-in components and trailing
+Launcher action in saved order; the external drag placeholder uses the same placement.
 Pin persistence is one renderer- and
 environment-scoped v2 record with independent ordered `activityInventoryKeys`
 and `workbenchInventoryKeys` lists. v1 Dock order migrates only into the
@@ -240,7 +245,7 @@ stable component id derived from `inventoryKey`. Released
 keeps its DOM while other Activity pages are selected. View activation drives
 the released `visible` and `hidden` lifecycle, and returning to the page does not
 create another slot. The Activity Bar and top bar remain visible.
-Pinned Activity entries follow Flower and retain the saved pin order.
+Pinned Activity entries follow the Launcher and retain the saved pin order.
 Mobile never receives dynamic plugin tab entries and continues to use the
 Launcher and Activity window presentation.
 
@@ -298,6 +303,7 @@ or call business adapters directly.
 
 # Evidence
 
+- `redeven:internal/envapp/ui_src/src/ui/workbench/surface/RedevenWorkbenchSurface.navigation.browser.test.tsx` - Verifies the published Dock order, trailing actions and saved pins, pointer activation, and keyboard activation.
 - `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:1` - Owns inventory, client lifetime, lifecycle commands, and cross-placement serialization.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/PluginPanel.tsx:1` - Carries exact inventory keys into launch, drag, and mode-specific pin menus.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/PluginPinContextMenu.tsx:1` - Owns accessible pin-menu keyboard, outside-dismissal, focus restoration, and surface-aware projection.

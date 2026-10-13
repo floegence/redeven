@@ -473,15 +473,15 @@ export function localizedRedevenWorkbenchWidgets(t: I18nHelpers['t']): readonly 
 }
 
 export const redevenWorkbenchFilterBarWidgetTypes: readonly WorkbenchWidgetType[] = [
+  'redeven.ai',
   'redeven.files',
   'redeven.terminal',
   'redeven.monitor',
   'redeven.codespaces',
   'redeven.ports',
-  'redeven.applications',
   'redeven.remote-desktop',
+  'redeven.applications',
   'redeven.containers',
-  'redeven.ai',
 ];
 
 export const redevenWorkbenchInitialCanvasWidgetTypes: readonly WorkbenchWidgetType[] = [

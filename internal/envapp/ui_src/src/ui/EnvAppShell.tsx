@@ -1301,8 +1301,20 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       } : undefined,
     })));
   const workbenchDockActions = createMemo<readonly WorkbenchDockAction[]>(() => {
-    const actions: WorkbenchDockAction[] = [{
+    const actions: WorkbenchDockAction[] = [];
+    if (isLocalMode()) {
+      actions.push({
+        id: ENV_TESSIVEN_ACTIVITY_ID,
+        dockPlacement: 'after-components',
+        label: i18n.t('shell.tessivenLabel'),
+        icon: TessivenWorkbenchIcon,
+        active: false,
+        onActivate: () => openTessivenWindow(),
+      });
+    }
+    actions.push({
       id: 'plugins',
+      dockPlacement: 'after-components',
       label: i18n.t('uiCopy.plugin.panelTitle'),
       icon: PluginsWorkbenchIcon,
       active: pluginsPanelOpen() && pluginsPanelPlacement() === 'workbench',
@@ -1310,16 +1322,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
         const nextOpen = !(pluginsPanelOpen() && pluginsPanelPlacement() === 'workbench');
         updatePluginPanel({ open: nextOpen, trigger, placement: 'workbench' });
       },
-    }];
-    if (isLocalMode()) {
-      actions.push({
-        id: ENV_TESSIVEN_ACTIVITY_ID,
-        label: i18n.t('shell.tessivenLabel'),
-        icon: TessivenWorkbenchIcon,
-        active: false,
-        onActivate: () => openTessivenWindow(),
-      });
-    }
+    });
     return actions;
   });
   const [pluginCenterSelectedInventoryKey, setPluginCenterSelectedInventoryKey] = createSignal<string | undefined>();
@@ -1824,7 +1827,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
         icon: (iconProps) => <PluginIcon item={tile.item} size="dock" class={iconProps.class} />,
         component: ActivityPluginPage,
         sidebar: {
-          order: 20 + index,
+          order: 102 + index,
           fullScreen: true,
           hiddenOnMobile: true,
           collapseBehavior: 'preserve',
@@ -3836,13 +3839,13 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
 
   const components = createMemo<FloeComponent[]>(() => {
     const list: FloeComponent[] = [
-      { id: 'terminal', name: i18n.t('shell.nav.terminal'), icon: Terminal, component: ActivityTerminalPage, sidebar: { order: 1, fullScreen: true } },
-      { id: 'monitor', name: i18n.t('shell.nav.monitoring'), icon: Activity, component: ActivityMonitorPage, sidebar: { order: 2, fullScreen: true } },
-      { id: 'files', name: i18n.t('shell.nav.fileBrowser'), icon: Files, component: ActivityFileBrowserPage, sidebar: { order: 3, fullScreen: true } },
-      { id: 'codespaces', name: i18n.t('shell.nav.codespaces'), icon: Code, component: ActivityCodespacesPage, sidebar: { order: 4, fullScreen: true } },
-      { id: 'ports', name: i18n.t('shell.nav.webServices'), icon: ActivityBarPortsIcon, component: ActivityPortForwardsPage, sidebar: { order: 5, fullScreen: true } },
-      { id: 'applications', name: i18n.t('hostApplications.title'), icon: ActivityBarHostApplicationsIcon, component: ActivityHostApplicationsPage, sidebar: { order: 5.5, fullScreen: true } },
-      { id: 'containers', name: i18n.t('shell.nav.containers'), icon: Layers, component: ActivityContainersPage, sidebar: { order: 6, fullScreen: true } },
+      { id: 'terminal', name: i18n.t('shell.nav.terminal'), icon: Terminal, component: ActivityTerminalPage, sidebar: { order: 3, fullScreen: true } },
+      { id: 'monitor', name: i18n.t('shell.nav.monitoring'), icon: Activity, component: ActivityMonitorPage, sidebar: { order: 4, fullScreen: true } },
+      { id: 'files', name: i18n.t('shell.nav.fileBrowser'), icon: Files, component: ActivityFileBrowserPage, sidebar: { order: 2, fullScreen: true } },
+      { id: 'codespaces', name: i18n.t('shell.nav.codespaces'), icon: Code, component: ActivityCodespacesPage, sidebar: { order: 5, fullScreen: true } },
+      { id: 'ports', name: i18n.t('shell.nav.webServices'), icon: ActivityBarPortsIcon, component: ActivityPortForwardsPage, sidebar: { order: 6, fullScreen: true } },
+      { id: 'applications', name: i18n.t('hostApplications.title'), icon: ActivityBarHostApplicationsIcon, component: ActivityHostApplicationsPage, sidebar: { order: 7, fullScreen: true } },
+      { id: 'containers', name: i18n.t('shell.nav.containers'), icon: Layers, component: ActivityContainersPage, sidebar: { order: 8, fullScreen: true } },
     ];
     const ActivityFlowerFullPageHost = () => {
       let host: HTMLDivElement | undefined;
@@ -3865,7 +3868,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       name: i18n.t('shell.nav.flower'),
       icon: FlowerNavigationIcon,
       component: ActivityFlowerFullPageHost,
-      sidebar: { order: 7, fullScreen: true },
+      sidebar: { order: 1, fullScreen: true },
     });
     list.push({
       id: ENV_TESSIVEN_ACTIVITY_ID,
@@ -4265,45 +4268,6 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       },
     };
 
-    if (!layout.isMobile()) items.push(pluginPanelItem);
-
-    items.push(
-      {
-        id: 'terminal', icon: ActivityBarTerminalIcon, label: i18n.t('shell.nav.terminal'), collapseBehavior: 'preserve',
-        buttonRef: (trigger) => { mobileTerminalTrigger = trigger; },
-        ariaExpanded: () => layout.isMobile() && mobileTerminalSessionsOpen(),
-        ariaHasPopup: layout.isMobile() ? 'dialog' : undefined,
-        onClick: () => {
-          if (layout.isMobile()) mobileTerminalTrigger?.focus({ preventScroll: true });
-          const nextOpen = layout.sidebarActiveTab() !== 'terminal' || !mobileTerminalSessionsOpen();
-          activateActivitySurface('terminal');
-          if (layout.isMobile()) setMobileTerminalSessionsOpen(nextOpen);
-        },
-      },
-      { id: 'monitor', icon: ActivityBarMonitorIcon, label: i18n.t('shell.nav.monitoring'), collapseBehavior: 'preserve' },
-      layout.isMobile()
-        ? {
-            id: 'files',
-            icon: ActivityBarFolderIcon,
-            label: i18n.t('shell.nav.fileBrowser'),
-            collapseBehavior: 'preserve',
-            onClick: () => {
-              const active = layout.sidebarActiveTab() === 'files';
-              if (!active) {
-                setEnvSidebarActiveTab('files', { openSidebar: false });
-                setFilesMobileSidebarOpen(true);
-                return;
-              }
-              toggleFilesMobileSidebar();
-            },
-          }
-        : { id: 'files', icon: ActivityBarFolderIcon, label: i18n.t('shell.nav.fileBrowser'), collapseBehavior: 'preserve' },
-      { id: 'codespaces', icon: ActivityBarCodespacesIcon, label: i18n.t('shell.nav.codespaces'), collapseBehavior: 'preserve' },
-      { id: 'ports', icon: ActivityBarPortsIcon, label: i18n.t('shell.nav.webServices'), collapseBehavior: 'preserve' },
-      { id: 'applications', icon: ActivityBarHostApplicationsIcon, label: i18n.t('hostApplications.title'), collapseBehavior: 'preserve' },
-      { id: 'containers', icon: ActivityBarContainersIcon, label: i18n.t('shell.nav.containers'), collapseBehavior: 'preserve' },
-    );
-    if (layout.isMobile()) items.push(pluginPanelItem);
     if (canUseFlower()) {
       items.push({
         id: 'ai',
@@ -4321,6 +4285,43 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
         },
       });
     }
+
+    items.push(
+      layout.isMobile()
+        ? {
+            id: 'files',
+            icon: ActivityBarFolderIcon,
+            label: i18n.t('shell.nav.fileBrowser'),
+            collapseBehavior: 'preserve',
+            onClick: () => {
+              const active = layout.sidebarActiveTab() === 'files';
+              if (!active) {
+                setEnvSidebarActiveTab('files', { openSidebar: false });
+                setFilesMobileSidebarOpen(true);
+                return;
+              }
+              toggleFilesMobileSidebar();
+            },
+          }
+        : { id: 'files', icon: ActivityBarFolderIcon, label: i18n.t('shell.nav.fileBrowser'), collapseBehavior: 'preserve' },
+      {
+        id: 'terminal', icon: ActivityBarTerminalIcon, label: i18n.t('shell.nav.terminal'), collapseBehavior: 'preserve',
+        buttonRef: (trigger) => { mobileTerminalTrigger = trigger; },
+        ariaExpanded: () => layout.isMobile() && mobileTerminalSessionsOpen(),
+        ariaHasPopup: layout.isMobile() ? 'dialog' : undefined,
+        onClick: () => {
+          if (layout.isMobile()) mobileTerminalTrigger?.focus({ preventScroll: true });
+          const nextOpen = layout.sidebarActiveTab() !== 'terminal' || !mobileTerminalSessionsOpen();
+          activateActivitySurface('terminal');
+          if (layout.isMobile()) setMobileTerminalSessionsOpen(nextOpen);
+        },
+      },
+      { id: 'monitor', icon: ActivityBarMonitorIcon, label: i18n.t('shell.nav.monitoring'), collapseBehavior: 'preserve' },
+      { id: 'codespaces', icon: ActivityBarCodespacesIcon, label: i18n.t('shell.nav.codespaces'), collapseBehavior: 'preserve' },
+      { id: 'ports', icon: ActivityBarPortsIcon, label: i18n.t('shell.nav.webServices'), collapseBehavior: 'preserve' },
+      { id: 'applications', icon: ActivityBarHostApplicationsIcon, label: i18n.t('hostApplications.title'), collapseBehavior: 'preserve' },
+      { id: 'containers', icon: ActivityBarContainersIcon, label: i18n.t('shell.nav.containers'), collapseBehavior: 'preserve' },
+    );
     if (isLocalMode()) {
       items.push({
         id: ENV_TESSIVEN_ACTIVITY_ID,
@@ -4330,6 +4331,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
         onClick: () => openTessiven(),
       });
     }
+    items.push(pluginPanelItem);
     if (!layout.isMobile()) {
       for (const tile of pinnedActivityPluginTiles()) {
         items.push({
