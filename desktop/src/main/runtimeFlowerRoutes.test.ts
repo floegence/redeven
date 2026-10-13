@@ -119,3 +119,17 @@ describe('Independent context compaction route', () => {
     for (const suffix of ['/extra', '?force=true', '/']) expect(() => runtimeFlowerPath(path + suffix)).toThrow();
   });
 });
+
+
+describe('Local account lifecycle routes', () => {
+  it('admits only the read-only status and explicit retry actions', () => {
+    const accounts = '/_redeven_proxy/api/ai/auth/chatgpt/accounts';
+    const retry = '/_redeven_proxy/api/ai/auth/chatgpt/retry';
+    expect(runtimeFlowerPath(accounts)).toBe(accounts);
+    expect(runtimeFlowerMethodAllowed(accounts, 'GET')).toBe(true);
+    expect(runtimeFlowerMethodAllowed(accounts, 'POST')).toBe(false);
+    expect(runtimeFlowerMethodAllowed(retry, 'POST')).toBe(true);
+    expect(runtimeFlowerMethodAllowed(retry, 'GET')).toBe(false);
+    for (const path of [accounts + '?token=x', accounts + '/x', retry + '?account_id=x']) expect(() => runtimeFlowerPath(path)).toThrow();
+  });
+});

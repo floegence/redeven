@@ -3,6 +3,7 @@ import { flowerProviderAPIKeyOptional, missingFlowerProviderCredential } from '.
 import { secureRandomUUID } from '@floegence/floe-webapp-core';
 import { FlowerIcon } from '../icons/FlowerIcon';
 import type { FlowerModelCatalogDiscovery } from '../contracts/flowerSurfaceContracts';
+import { Button, ConfirmDialog } from '@floegence/floe-webapp-core/ui';
 import type { Component, JSX } from 'solid-js';
 import { For, Show, createEffect, createMemo, createSignal, createUniqueId, onCleanup, untrack } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
@@ -165,6 +166,7 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
   const [computerUseError, setComputerUseError] = createSignal('');
   const [computerUseSavedAt, setComputerUseSavedAt] = createSignal<number | null>(null);
   const [localError, setLocalError] = createSignal('');
+  const [orphanRetrying, setOrphanRetrying] = createSignal('');
   const [dirty, setDirty] = createSignal(false);
   const [providerDialogOpen, setProviderDialogOpen] = createSignal(false);
   const [providerDialogIndex, setProviderDialogIndex] = createSignal<number | null>(null);
@@ -184,7 +186,9 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
     } else {
       setProviders(previous => previous.map(provider => {
         const catalog = rows.find(row => row.id === provider.id)?.catalog_models;
-        return catalog ? applyFlowerModelDiscovery(provider, catalog) : provider;
+        const account = snapshot.chatgpt_accounts?.[provider.id];
+        const updated = catalog ? applyFlowerModelDiscovery(provider, catalog) : provider;
+        return account && account.account_id === provider.account_id && !provider.chatgpt_attempt ? { ...updated, chatgpt_account: account } : updated;
       }));
     }
     const savedPermission = snapshot.defaults.permission_type ?? 'approval_required';
@@ -401,8 +405,12 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
     }
   };
 
-  const removeProvider = (index: number) => {
+  const [pendingRemoval, setPendingRemoval] = createSignal<number | null>(null);
+  const removeProvider = (index: number, confirmed = false) => {
+    const provider = providers()[index];
+    if (!confirmed && provider?.auth_method === 'chatgpt' && !providers().some((other, i) => i !== index && other.auth_method === 'chatgpt' && other.account_id === provider.account_id)) { setPendingRemoval(index); return; }
     const next = providers().filter((_, itemIndex) => itemIndex !== index);
+    if (currentModelID().startsWith(`${provider?.id}/`)) setCurrentModelID('');
     updateProviders(next);
   };
 
@@ -556,12 +564,27 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
               ? props.snapshot?.chatgpt_accounts?.[provider.id]?.state === 'ready'
               : (flowerProviderAPIKeyOptional(provider.type) || providerSecretConfigured(props.snapshot, provider.id)) && (provider.web_search?.mode !== 'brave' || providerWebSearchSecretConfigured(props.snapshot, provider.id))}
             onChooseModel={id => { setCurrentModelID(id); markDirty(); }} onChangeReasoning={updateCurrentModelReasoning}
-            onAddProvider={openAddProviderDialog} onEditProvider={openEditProviderDialog} onRemoveProvider={removeProvider}
+            onAddProvider={openAddProviderDialog} onEditProvider={openEditProviderDialog} onRemoveProvider={index => removeProvider(index)}
             onToggleProvider={toggleProvider} />
           <Show when={localError() || props.saveError}>
             <p role="alert" class="flower-settings-model-notice text-destructive">{localError() || props.saveError}</p>
           </Show>
 
+          <For each={props.snapshot?.account_sign_outs?.filter(result => !result.local_cleanup_complete || !result.revocation_confirmed)}>{result => (
+            <div role="status" class="flower-settings-model-notice flex flex-wrap items-center gap-2">
+              <p>{result.local_cleanup_complete ? copy().dialog.chatGPT.revocationUnconfirmed : copy().dialog.chatGPT.cleanupFailed}</p>
+              <Show when={!result.local_cleanup_complete}>
+                <Button size="sm" variant="outline" disabled={orphanRetrying() === result.account_id} onClick={async () => {
+                  if (!props.chatGPTAuth || orphanRetrying()) return;
+                  setOrphanRetrying(result.account_id);
+                  try { await props.chatGPTAuth('sign-out', { scope_id: crypto.randomUUID(), account_id: result.account_id }); }
+                  catch { /* Canonical account status remains available for another attempt. */ }
+                  finally { setOrphanRetrying(''); }
+                }}>{copy().dialog.chatGPT.retry}</Button>
+              </Show>
+              <Show when={result.local_cleanup_complete && !result.revocation_confirmed}><a class="cursor-pointer text-primary hover:underline" href="https://chatgpt.com/#settings" target="_blank" rel="noopener noreferrer">{copy().dialog.chatGPT.disconnectApps}</a></Show>
+            </div>
+          )}</For>
           <section class="flower-settings-section flower-settings-policy-section" aria-label={copy().defaultPermissionTitle}>
             <FlowerSubSectionHeader
               title={copy().defaultPermissionTitle}
@@ -626,6 +649,12 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
 
         </div>
       </div>
+
+      <ConfirmDialog open={pendingRemoval() !== null} onOpenChange={open => { if (!open) setPendingRemoval(null); }}
+        title={copy().removeProvider} confirmText={copy().removeProvider} cancelText={copy().dialog.chatGPT.cancelSignOut}
+        variant="destructive" onConfirm={() => { const index = pendingRemoval(); setPendingRemoval(null); if (index !== null) removeProvider(index,true); }}>
+        <p>{copy().dialog.chatGPT.removeAccountOnSaveImpact(pendingRemoval() !== null ? props.snapshot?.chatgpt_accounts?.[providers()[pendingRemoval()!]?.id ?? '']?.active_task_count ?? 0 : 0)}</p>
+      </ConfirmDialog>
 
       <FlowerProviderDialog
         providerDefaults={props.snapshot?.model_directory?.provider_defaults}

@@ -1032,7 +1032,22 @@
       "providerNeedsSetup": "Требуется настройка",
       "currentProviderDisabled": "Поставщик текущей модели отключён. Включите его или выберите другую модель.",
       "enableProvider": "Включить {provider}",
-      "disableProvider": "Отключить {provider}"
+      "disableProvider": "Отключить {provider}",
+      "dialogChatGPTRenewing": "Обновление подключения к ChatGPT…",
+      "dialogChatGPTTemporarilyUnavailable": "Подключение временно недоступно. Учётные данные сохранены; подключение восстановится автоматически.",
+      "dialogChatGPTReviewRequired": "ChatGPT отклонил это подключение. Проверьте его или разрешите доступ заново.",
+      "dialogChatGPTStorageUnavailable": "Не удалось надёжно сохранить учётные данные. Исправьте локальное хранилище аккаунтов и повторите попытку.",
+      "dialogChatGPTSigningOut": "Выход…",
+      "dialogChatGPTSignedOut": "Вы вышли на этом устройстве.",
+      "dialogChatGPTCleanupFailed": "Использование аккаунта остановлено, но локальные учётные данные не удалены. Исправьте хранилище и повторите выход.",
+      "dialogChatGPTSignOutStatusUnavailable": "Не удалось прочитать состояние выхода. Проверьте соединение и повторите попытку, чтобы подтвердить результат.",
+      "dialogChatGPTRemoveAccountOnSaveImpact": "После сохранения удаления произойдёт выход из аккаунта, поскольку других подключений нет. Будут остановлены все его задачи, включая {tasks} активных задач этой среды выполнения и их дочерние задачи. Переписка сохранится. До сохранения аккаунт остаётся авторизованным.",
+      "dialogChatGPTRetry": "Повторить",
+      "dialogChatGPTDisconnectApps": "Проверить подключённые приложения в настройках ChatGPT",
+      "dialogChatGPTEligibilityRequired": "Ваш аккаунт не может предоставлять доступ к тарифу ChatGPT. Проверьте тариф и права аккаунта.",
+      "dialogChatGPTRegionUnavailable": "Предоставление доступа к тарифу ChatGPT недоступно в вашем регионе.",
+      "dialogChatGPTCancelSignOut": "Остаться в аккаунте",
+      "dialogChatGPTSignOutImpact": "Этот аккаунт используется подключениями ({connections}) и активными задачами ({tasks}). Выход остановит все задачи, использующие этот аккаунт, включая дочерние. Переписка сохранится."
     },
     "reasoningControl": {
       "default": "По умолчанию",
@@ -3262,7 +3277,6 @@
     "back": "Назад",
     "restoreConnection": "Восстановить соединение",
     "operationInProgress": "Другая операция использует эту среду выполнения. Дождитесь её завершения.",
-
     "title": "Добавить доступ через Gateway",
     "menuAction": "Добавить доступ через Gateway",
     "currentStatus": "Текущее состояние",

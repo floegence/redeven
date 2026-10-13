@@ -370,6 +370,9 @@ func (p *AIModelProfile) Validate() error {
 
 	// Validate providers.
 	if len(p.Providers) == 0 {
+		if p.Providers != nil && strings.TrimSpace(p.CurrentModelID) == "" {
+			return nil
+		}
 		return errors.New("missing providers")
 	}
 	seen := make(map[string]struct{}, len(p.Providers))

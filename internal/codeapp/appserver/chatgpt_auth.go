@@ -8,7 +8,10 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"sort"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/floegence/redeven/internal/chatgpt"
 	"github.com/floegence/redeven/internal/config"
@@ -84,6 +87,73 @@ func (g *Server) handleChatGPTAuth(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 503, apiResp{OK: false, Error: "local account storage is unavailable"})
 		return
 	}
+	if r.URL.Path == "/_redeven_proxy/api/ai/auth/chatgpt/accounts" {
+		if r.Method != http.MethodGet || r.URL.RawQuery != "" {
+			writeJSON(w, 405, apiResp{OK: false, Error: "method not allowed"})
+			return
+		}
+		cfg, err := g.loadConfigLocked()
+		if err != nil {
+			writeJSON(w, 503, apiResp{OK: false, ErrorCode: "storage_unavailable", Error: "Account status is unavailable."})
+			return
+		}
+		out := map[string]chatgpt.AccountStatus{}
+		counts := map[string]int{}
+		if cfg.AI != nil {
+			for _, p := range cfg.AI.Providers {
+				if p.EffectiveAuthMethod() == config.AIAuthChatGPT {
+					counts[p.AccountID]++
+				}
+			}
+		}
+		if cfg.AI != nil {
+			for _, p := range cfg.AI.Providers {
+				if p.EffectiveAuthMethod() != config.AIAuthChatGPT {
+					continue
+				}
+				status, err := g.chatGPT.Status(p.AccountID)
+				if err != nil {
+					status = chatgpt.AccountStatus{AccountID: p.AccountID, State: "storage_unavailable", ErrorCode: "storage_unavailable"}
+				}
+				status.BindingCount = counts[p.AccountID]
+				out[p.ID] = status
+			}
+		}
+		if g.aiProvider != nil {
+			ctx, cancel := context.WithTimeout(r.Context(), 50*time.Millisecond)
+			svc, _, _, release, err := g.aiProvider.AcquireAIService(ctx)
+			if release != nil {
+				defer release()
+			}
+			if err == nil && svc != nil {
+				for id, status := range out {
+					status.ActiveTaskCount = svc.AccountTaskCount(status.AccountID)
+					out[id] = status
+				}
+			}
+			cancel()
+		}
+		var signOuts []chatgpt.SignOutResult
+		accounts, readErr := g.secrets.ChatGPTAccounts(r.Context())
+		if readErr == nil {
+			for id, account := range accounts {
+				if counts[id] != 0 || account.Lifecycle != "signing_out" && account.Lifecycle != "signed_out" {
+					continue
+				}
+				confirmed := account.RevocationConfirmed != nil && *account.RevocationConfirmed
+				complete := account.Lifecycle == "signed_out"
+				if !complete || !confirmed {
+					signOuts = append(signOuts, chatgpt.SignOutResult{AccountID: id, LocalCleanupComplete: complete, RevocationConfirmed: confirmed, ErrorCode: account.ErrorCode})
+				}
+			}
+		}
+		sort.Slice(signOuts, func(i, j int) bool { return signOuts[i].AccountID < signOuts[j].AccountID })
+		writeJSON(w, 200, apiResp{OK: true, Data: struct {
+			Accounts map[string]chatgpt.AccountStatus `json:"accounts"`
+			SignOuts []chatgpt.SignOutResult          `json:"account_sign_outs"`
+		}{out, signOuts}})
+		return
+	}
 	var body struct {
 		AttemptID         string `json:"attempt_id,omitempty"`
 		PreviousAttemptID string `json:"previous_attempt_id,omitempty"`
@@ -112,7 +182,7 @@ func (g *Server) handleChatGPTAuth(w http.ResponseWriter, r *http.Request) {
 	case "/_redeven_proxy/api/ai/auth/chatgpt/cancel":
 		g.chatGPT.Cancel(owner, body.AttemptID)
 		out = struct{}{}
-	case "/_redeven_proxy/api/ai/auth/chatgpt/sign-out", "/_redeven_proxy/api/ai/auth/chatgpt/acknowledge":
+	case "/_redeven_proxy/api/ai/auth/chatgpt/sign-out", "/_redeven_proxy/api/ai/auth/chatgpt/acknowledge", "/_redeven_proxy/api/ai/auth/chatgpt/retry":
 		// Account actions are restricted to a currently configured binding.
 		cfg, e := g.loadConfigLocked()
 		if e != nil {
@@ -125,16 +195,24 @@ func (g *Server) handleChatGPTAuth(w http.ResponseWriter, r *http.Request) {
 				bound = bound || p.EffectiveAuthMethod() == config.AIAuthChatGPT && p.AccountID == body.AccountID
 			}
 		}
+		if !bound && strings.HasSuffix(r.URL.Path, "sign-out") {
+			account, exists, _ := g.secrets.ChatGPTAccount(body.AccountID)
+			bound = exists && (account.Lifecycle == "signing_out" || account.Lifecycle == "signed_out")
+		}
 		if !bound {
 			err = errors.New("ChatGPT account is not bound to this configuration")
 			break
 		}
 		if strings.HasSuffix(r.URL.Path, "sign-out") {
-			var confirmed bool
-			confirmed, err = g.chatGPT.SignOut(r.Context(), body.AccountID)
-			out = struct {
-				RevocationConfirmed bool `json:"revocation_confirmed"`
-			}{confirmed}
+			// Once accepted, the Runtime owns completion even if the UI disconnects.
+			result, signOutErr := g.chatGPT.SignOutAccount(context.Background(), body.AccountID)
+			if signOutErr != nil && result.ErrorCode == "" {
+				result.ErrorCode = "storage_unavailable"
+			}
+			out = result
+		} else if strings.HasSuffix(r.URL.Path, "retry") {
+			err = g.chatGPT.RetryAccount(r.Context(), body.AccountID)
+			out, _ = g.chatGPT.Status(body.AccountID)
 		} else {
 			err = g.chatGPT.Acknowledge(r.Context(), body.AccountID)
 			out = struct{}{}
@@ -159,4 +237,44 @@ func (g *Server) CancelChatGPTForChannel(channelID string) {
 	if g != nil && g.chatGPT != nil {
 		g.chatGPT.CancelChannel(channelID)
 	}
+}
+
+// Configuration and logout have separate outcomes. No draft or failed save
+// reaches this path; disabled connections continue to count as bindings.
+func (g *Server) signOutRemovedAccounts(previous, next *config.AIConfig) []chatgpt.SignOutResult {
+	refs := func(cfg *config.AIConfig) map[string]bool {
+		out := map[string]bool{}
+		if cfg != nil {
+			for _, p := range cfg.Providers {
+				if p.EffectiveAuthMethod() == config.AIAuthChatGPT {
+					out[p.AccountID] = true
+				}
+			}
+		}
+		return out
+	}
+	old, current := refs(previous), refs(next)
+	var results []chatgpt.SignOutResult
+	ids := make([]string, 0, len(old))
+	for id := range old {
+		if !current[id] {
+			ids = append(ids, id)
+		}
+	}
+	sort.Strings(ids)
+	results = make([]chatgpt.SignOutResult, len(ids))
+	var operations sync.WaitGroup
+	for index, id := range ids {
+		operations.Add(1)
+		go func() {
+			defer operations.Done()
+			result, err := g.chatGPT.SignOutAccount(context.Background(), id)
+			if err != nil && result.ErrorCode == "" {
+				result.ErrorCode = "storage_unavailable"
+			}
+			results[index] = result
+		}()
+	}
+	operations.Wait()
+	return results
 }

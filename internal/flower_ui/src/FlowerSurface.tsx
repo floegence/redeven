@@ -2403,6 +2403,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   ): string => {
     const code = trimString(error?.code);
     switch (code) {
+      case 'chatgpt_review_required': return copy().settings.dialog.chatGPT.reviewRequired;
+      case 'chatgpt_temporarily_unavailable': return copy().settings.dialog.chatGPT.temporarilyUnavailable;
+      case 'chatgpt_storage_unavailable': return copy().settings.dialog.chatGPT.storageUnavailable;
       case 'chatgpt_usage_unavailable': return copy().settings.dialog.chatGPT.usageUnavailable;
       case 'chatgpt_authorization_required': return copy().settings.dialog.chatGPT.authorizationRequired;
       case 'chatgpt_plan_permission_required': return copy().settings.dialog.chatGPT.planPermission;
@@ -2781,12 +2784,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     reasoningCapability?: FlowerReasoningCapability;
     defaultReasoningSelection?: FlowerReasoningSelection;
     pending?: boolean;
+    unavailableReason?: string;
   }>;
   const catalogModelOptions = createMemo<readonly ComposerModelOption[]>(() => (modelDirectory()?.models ?? []).map(model => ({
     id: model.id, label: model.label || model.id, billingSource: model.billing_source,
     name: model.label?.split(' / ').slice(1).join(' / ') || model.model_name,
     group: model.provider_name || (model.source === 'platform' ? 'Redeven AI' : model.source === 'desktop_model_source' ? 'Desktop' : copy().settings.dialog.catalog.unavailableModel),
     source: model.source === 'runtime_config' ? 'model_profile' : model.source || 'thread_snapshot',
+    unavailableReason: ({ chatgpt_renewing: copy().settings.dialog.chatGPT.renewing, chatgpt_temporarily_unavailable: copy().settings.dialog.chatGPT.temporarilyUnavailable, chatgpt_review_required: copy().settings.dialog.chatGPT.reviewRequired, chatgpt_plan_permission_required: copy().settings.dialog.chatGPT.planPermission, chatgpt_authorization_required: copy().settings.dialog.chatGPT.authorizationRequired, chatgpt_signing_out: copy().settings.dialog.chatGPT.signingOut, chatgpt_signed_out: copy().settings.dialog.chatGPT.signedOut, chatgpt_storage_unavailable: copy().settings.dialog.chatGPT.storageUnavailable } as Record<string, string>)[model.reason ?? ''],
     disabled: model.state !== 'ready', pending: model.state === 'pending', providerType: model.provider_type,
     aliasKey: model.alias_group, quantization: model.quantization,
     supportsImageInput: flowerModelSupportsImage(model.input_modalities),
@@ -4316,6 +4321,24 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return request;
   };
 
+  let accountRefresh: Promise<void> | null = null;
+  const refreshAccounts = (): Promise<void> => {
+    if (accountRefresh) return accountRefresh;
+    if (!props.adapter.loadChatGPTAccounts || !snapshot()?.auth_capabilities?.openai_chatgpt.available) return Promise.resolve();
+    const binding = snapshot()?.auth_capabilities?.openai_chatgpt.binding_id;
+    const request = props.adapter.loadChatGPTAccounts().then(result => {
+      if (!surfaceDisposed && binding === snapshot()?.auth_capabilities?.openai_chatgpt.binding_id) {
+        setSnapshot(previous => previous ? { ...previous, chatgpt_accounts: result.accounts, account_sign_outs: result.account_sign_outs } : previous);
+      }
+    }).catch(() => undefined).finally(() => { if (accountRefresh === request) accountRefresh = null; });
+    accountRefresh = request;
+    return request;
+  };
+  const accountAction: NonNullable<FlowerSurfaceAdapter['chatGPTAuth']> = async (action, input) => {
+    if (!props.adapter.chatGPTAuth) throw new Error('Account actions are unavailable.');
+    try { return await props.adapter.chatGPTAuth(action, input); }
+    finally { void refreshAccounts(); }
+  };
   const refreshDirectory = () => props.adapter.loadModelDirectory?.(true).then(directory => { if (!surfaceDisposed) { setModelDirectory(directory); setSnapshot(previous => previous ? withFlowerModelDirectory(previous, directory) : previous); } }).catch(() => undefined);
   const loadSurface = async () => {
     void refreshThreads();
@@ -4323,14 +4346,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     try { await refreshSettingsForRevision(); } catch {
       // Configuration errors do not gate conversation history or navigation.
     }
-    if (!surfaceDisposed) void refreshDirectory();
+    if (!surfaceDisposed) { void refreshDirectory(); void refreshAccounts(); }
   };
 
   createEffect(on(
     () => props.settingsRevision?.() ?? 0,
     (revision, previousRevision) => {
       if (revision === previousRevision) return;
-      void refreshSettingsForRevision(true).then(() => refreshDirectory()).catch(() => undefined);
+      void refreshSettingsForRevision(true).then(() => { void refreshAccounts(); return refreshDirectory(); }).catch(() => undefined);
     },
     { defer: true },
   ));
@@ -4685,7 +4708,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   });
 
   const applyFlowerLiveStreamEnvelope = (envelope: FlowerLiveStreamEnvelope): void => {
-    if (envelope.kind === 'model_directory.changed') { void refreshDirectory(); return; }
+    if (envelope.kind === 'model_directory.changed') { void refreshDirectory(); void refreshAccounts(); return; }
     if (envelope.kind === 'computer.frame') {
       const frame = envelope.computer_frame;
       if (envelope.thread_id !== selectedThreadID() || !frame || frame.session_id !== computerObserverID()
@@ -6566,7 +6589,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       )
       || code === 'provider_request_invalid'
     ));
-    const actionable = code === 'chatgpt_authorization_required' || code === 'chatgpt_plan_permission_required' || code === 'provider_auth_failed'
+    const actionable = code === 'chatgpt_review_required' || code === 'chatgpt_storage_unavailable' || code === 'chatgpt_authorization_required' || code === 'chatgpt_plan_permission_required' || code === 'provider_auth_failed'
       || code === 'provider_missing_key'
       || code === 'provider_model_unavailable'
       || code === 'provider_unreachable'
@@ -10822,7 +10845,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           <span class="flower-model-menu-name" title={option.label}>{option.name || option.label}</span>
           <span class="flower-model-menu-meta">
             <Show when={option.quantization}><span>{option.quantization} · </span></Show>
-            <Show when={option.disabled}><span>{option.pending ? copy().chat.modelsChecking : copy().settings.dialog.catalog.unavailableModel}{option.contextWindow ? ' · ' : ''}</span></Show>
+            <Show when={option.disabled}><span>{option.unavailableReason ?? (option.pending ? copy().chat.modelsChecking : copy().settings.dialog.catalog.unavailableModel)}{option.contextWindow ? ' · ' : ''}</span></Show>
             <Show when={option.contextWindow}>
               <span>{formatFlowerTokenCount(option.contextWindow)} context</span>
             </Show>
@@ -12296,7 +12319,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             <Suspense fallback={<div class="p-4 flower-body-copy text-muted-foreground" role="status">{copy().chat.loadingSettings}</div>}>
               <FlowerSettingsSurface
                 onDiscoverModels={props.adapter.discoverProviderModels}
-                chatGPTAuth={props.adapter.chatGPTAuth}
+                chatGPTAuth={props.adapter.chatGPTAuth ? accountAction : undefined}
                 snapshot={snapshot()}
                 copy={copy().settings}
                 onSaveDefaultPermission={saveDefaultPermission}

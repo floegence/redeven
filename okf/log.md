@@ -4,6 +4,8 @@
 
 - Keep provider model defaults exclusively in the Runtime. Directory responses publish read-only defaults for new connections; frontend source and bundle checks reject embedded catalogs, and settings retain explicit overrides without numeric substitutes.
 - Audited all 140 shipped model defaults and documented current-default resolution, account-only ChatGPT snapshot scope, sparse override parity, and metadata retention for unavailable settings rows.
+- Documented Runtime-owned [OpenAI account lifecycle](ai/chatgpt-local-authentication.md), protected credentials schema 3, independent local cleanup and remote revocation results, and Desktop account fact observation at compatibility epoch 55.
+
 - Documented immediate model reads, silent Runtime-owned synchronization, atomic provider snapshots, cloud scope isolation, and explicit Provider synchronization feedback.
 - Updated Desktop source and configuration boundaries for saved connections without selected models and manual unknown-model capabilities.
 

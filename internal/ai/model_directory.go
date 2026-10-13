@@ -148,13 +148,16 @@ func (s *Service) projectModelDirectory(cfg *config.AIConfig, out *ModelsRespons
 					var status chatgpt.AccountStatus
 					status, keyErr = s.chatGPT.Status(p.AccountID)
 					ready = status.State == "ready"
+					if !ready {
+						source.State, source.Reason = "unavailable", "chatgpt_"+status.State
+					}
 				}
 			} else {
 				_, ready, keyErr = resolveModelProviderKey(p.Type, p.ID, s.resolveProviderKey)
 			}
 			if keyErr != nil {
 				source.State, source.Reason = "unavailable", "credentials_unavailable"
-			} else if !ready {
+			} else if !ready && p.EffectiveAuthMethod() != config.AIAuthChatGPT {
 				source.State, source.Reason = "unavailable", "missing_keys"
 			}
 		}

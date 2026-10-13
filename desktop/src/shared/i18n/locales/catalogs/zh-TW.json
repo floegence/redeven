@@ -1017,7 +1017,22 @@
       "providerNeedsSetup": "需設定",
       "currentProviderDisabled": "目前模型的供應商已停用。請重新啟用，或選擇其他模型。",
       "enableProvider": "啟用 {provider}",
-      "disableProvider": "停用 {provider}"
+      "disableProvider": "停用 {provider}",
+      "dialogChatGPTRenewing": "正在續期 ChatGPT 連線…",
+      "dialogChatGPTTemporarilyUnavailable": "連線暫時無法使用。憑證已保留，恢復後會自動重新連線。",
+      "dialogChatGPTReviewRequired": "ChatGPT 拒絕了此連線。請檢查連線或重新授權。",
+      "dialogChatGPTStorageUnavailable": "無法可靠地儲存憑證。請修復本機帳號儲存空間後重試。",
+      "dialogChatGPTSigningOut": "正在登出…",
+      "dialogChatGPTSignedOut": "已在此裝置登出。",
+      "dialogChatGPTCleanupFailed": "帳號使用已停止，但本機憑證尚未清除。請修復儲存空間後重試登出。",
+      "dialogChatGPTSignOutStatusUnavailable": "無法讀取登出狀態。請檢查連線並重試，以確認結果。",
+      "dialogChatGPTRemoveAccountOnSaveImpact": "儲存此次移除後，帳號將因沒有其他連線而登出。使用此帳號的所有任務將停止，包括此 執行環境 上的 {tasks} 個活動任務及其子任務。對話會保留。儲存前，帳號仍保持登入。",
+      "dialogChatGPTRetry": "重試",
+      "dialogChatGPTDisconnectApps": "在 ChatGPT 設定中檢查已連結的應用程式",
+      "dialogChatGPTEligibilityRequired": "此帳號不符合共享 ChatGPT 方案的資格。請檢查方案及帳號權限。",
+      "dialogChatGPTRegionUnavailable": "你所在的地區暫不支援共享 ChatGPT 方案。",
+      "dialogChatGPTCancelSignOut": "保持登入",
+      "dialogChatGPTSignOutImpact": "此帳號用於 {connections} 個連線及 {tasks} 個進行中的任務。登出會停止所有使用此帳號的任務，包括子任務。對話將保留。"
     },
     "reasoningControl": {
       "default": "預設",
@@ -3220,7 +3235,6 @@
     "back": "上一步",
     "restoreConnection": "恢復連線",
     "operationInProgress": "其他操作正在使用此執行階段，請等待操作完成。",
-
     "title": "新增 Gateway 存取",
     "menuAction": "新增 Gateway 存取",
     "currentStatus": "目前狀態",

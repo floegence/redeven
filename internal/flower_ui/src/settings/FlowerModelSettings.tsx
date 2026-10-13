@@ -131,7 +131,7 @@ export const FlowerModelSettings: Component<FlowerModelSettingsProps> = (props) 
                     <span class={cn('flower-settings-toggle-track', enabled() && 'flower-settings-toggle-track-on')} aria-hidden="true"><span class="flower-settings-toggle-thumb" /></span>
                   </button>
                   <Button size="icon" variant="ghost" class="h-8 w-8 text-muted-foreground hover:text-foreground" onClick={() => props.onEditProvider(index())} disabled={props.disabled} aria-label={copy().editProvider}><Pencil class="h-3.5 w-3.5" /></Button>
-                  <Button size="icon" variant="ghost" class="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => props.onRemoveProvider(index())} disabled={props.disabled || props.providers.length <= 1} aria-label={copy().removeProvider}><Trash class="h-3.5 w-3.5" /></Button>
+                  <Button size="icon" variant="ghost" class="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => props.onRemoveProvider(index())} disabled={props.disabled} aria-label={copy().removeProvider}><Trash class="h-3.5 w-3.5" /></Button>
                 </div>
                 <div id={detailsID} class="flower-settings-provider-details" ref={node => { viewport = node; motion.bindViewport(node); }}
                   data-state={motion.state()} aria-hidden={!expanded()} inert={!expanded()}

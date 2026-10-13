@@ -3,7 +3,7 @@ type: Authentication Contract
 title: Local ChatGPT plan authentication
 description: Admit official ChatGPT sign-in only through verified local host access and preserve provider history, credentials and billing choice.
 tags: [ai, flower, authentication, openai, desktop, security]
-timestamp: 2026-10-12T00:00:00Z
+timestamp: 2026-10-13T00:00:00Z
 ---
 
 # Summary
@@ -11,7 +11,7 @@ timestamp: 2026-10-12T00:00:00Z
 OpenAI connections have one active authentication method: API key or ChatGPT
 account. Omitted authentication fields retain API-key behavior. ChatGPT uses
 OpenAI's public open-source sign-in and `/v1/responses` contracts; it never reads
-Codex credentials or calls a private ChatGPT backend. Floret v7.29.2 owns the
+Codex credentials or calls a private ChatGPT backend. Floret v7.30.0 owns the
 engine, canonical conversation, provider-state lifecycle and compaction. Redeven
 owns account admission, protected credentials, provider configuration and UI.
 
@@ -64,15 +64,63 @@ new environment. UI responses contain only account ID, email and readiness.
 Changing the trusted connection binding closes the old dialog and clears its
 draft, including any in-flight model discovery.
 
-The protected secrets file migrates contiguously from version 0 to 1 to 2,
-retaining API keys; future schemas fail without mutation. Runtime and Desktop
-share the same resolver and store. An in-process mutex plus OS file lock
-serializes rotating refresh across processes, including atomic 0600 replacement.
-Refresh omits scopes and honors `earliest_refresh_at`. Transient failures retain
-credentials. Terminal refresh errors clear tokens while preserving registration
-and host identity. Sign-out clears local tokens and reports unconfirmed remote
-revocation. A failed account/configuration save retains the current configured
-binding and keeps the verified attempt available for retry.
+The protected secrets file migrates contiguously from version 0 to 1 to 2 to 3,
+retaining API keys and verified registration; future schemas fail without mutation.
+The canonical account retains logout intent, session identity, terminal reason,
+shared retry time and revocation confirmation. Retry counts and cancellation
+handles remain in memory. Interrupted logout is completed at startup; normal
+maintenance scans never clear a live logout.
+
+[Account maintenance](../../internal/chatgpt/lifecycle.go) starts with the Runtime
+service, independently of AI readiness and open windows. Every saved binding,
+including disabled connections, counts once per account. Unsaved OAuth attempts
+are excluded. Runtime shutdown cancels maintenance without signing out and never
+schedules OS background work. A one-second wake detects configuration changes,
+clock resume and peer-written credential facts. Refresh runs at expiry minus two
+minutes and 0–30 seconds of deterministic jitter, respecting earliest refresh.
+It uses the issued client ID, latest refresh token and public resource, omitting
+scope. New ID tokens undergo OIDC verification; an old ID token's expiry alone
+never ends a session.
+
+Each account has an OS operation lock for refresh, installation and revocation.
+The global file lock covers only canonical reads and atomic 0600 replacement,
+never a network request. Rotation results compare the exact source credentials
+before installation, retaining a concurrent logout's intent. Failed replacement
+writes retry briefly, then deny use while retaining the latest replacement and
+operation lock for repair or revocation. Old refresh tokens are never retried
+while that replacement awaits storage.
+
+Network failures, 429 and 5xx preserve credentials, use 15/30/60/120/300-second
+backoff and respect Retry-After. Canonical retry time prevents another process
+from bypassing the same failure. Valid access may continue; expired access cannot
+dispatch. Ordinary 401 and invalid-user responses retain tokens and report review,
+with safe status/code/request-ID evidence bound to the exact bearer sent. Only
+terminal refresh rejection clears tokens and requires authorization. Models,
+settings, discovery and execution consume one credential state projection.
+Account updates use model_directory.changed and merge independently of drafts.
+
+Sign-out first records intent and stops related tasks through Floret's existing
+immediate Cancel with descendants. The private Desktop model source observes
+current account facts once per second and passes confirmed account stop reasons
+to its owning Runtime; it never owns another task lifecycle. Logout waits for any
+rotation, revokes the latest refresh token at the trusted issuer's advertised
+HTTPS endpoint, then clears access/refresh/ID tokens, scopes and expiry. Revocation
+tries network/5xx failures at most three times, with 0.5/1.5-second delays within a
+15-second budget. Local cleanup and remote confirmation have independent results.
+Registration and stable host ID remain. UI closure does not cancel accepted logout.
+
+Configuration validates candidate accounts before writing, installs them as one
+atomic credential batch only after the configuration succeeds, and restores the
+configuration if credential installation fails. A failed save preserves the
+current binding and verified draft. Only successful saves sign out orphaned old
+accounts; removing one shared binding or pausing connections retains login.
+An explicit empty provider list can clear the final connection. Removal clears
+the selected draft model when it belonged to that connection; absent providers
+remain invalid.
+The local admin GET account route shares the existing verified-host admission.
+Remote and unknown callers cannot read account identity or mutate credentials.
+Compatibility epoch 55 covers the additive shared UI and private Desktop source
+contracts; Floret's public API and domain migration remain unchanged.
 
 ## Model and request contracts
 
@@ -107,13 +155,14 @@ Floret owns canonical conversation, engine execution and opaque provider state.
 Redeven owns local account admission, credentials and product configuration;
 account fields never become engine domain records or a remote credential source.
 
-Runtime/Desktop compatibility epoch 53 and provider-bundle
+Runtime/Desktop compatibility epoch 55 and provider-bundle
 `auth_schema_version: 1` prevent an old client from erasing a saved account method.
 Old API-key-only saves remain supported.
 
 # Evidence
 
 - `redeven:internal/chatgpt/client.go` - Registration, identity verification, ephemeral attempts and refresh.
+- `redeven:internal/chatgpt/lifecycle_test.go` - Long-running renewal, backoff, rotation/logout races, storage faults and interrupted authorization.
 - `redeven:internal/chatgpt/client_test.go` - Ownership, late callback, reconsent, cross-process refresh and failure recovery.
 - `redeven:internal/settings/chatgpt_secrets.go` - Protected registration and serialized atomic updates.
 - `redeven:internal/codeapp/appserver/chatgpt_auth.go` - One trusted local capability and authorization boundary.
@@ -122,5 +171,8 @@ Old API-key-only saves remain supported.
 - `redeven:internal/ai/model_gateway_chatgpt_floret_test.go` - Published-engine tool history, restart and compaction.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerProviderDialog.chatgpt.browser.test.tsx` - Themes, narrow translations, disabled keyboard behavior, cancellation and preserved drafts/focus.
 - [Official open-source sign-in](https://developers.openai.com/siwc/token-sharing-open-source/sign-in).
+- [Token reference](https://developers.openai.com/siwc/token-sharing-open-source/token-reference).
+- [Accounts and sessions](https://developers.openai.com/siwc/token-sharing-open-source/profiles-and-sessions).
+- [Errors and recovery](https://developers.openai.com/siwc/token-sharing-open-source/errors-and-recovery).
 - [Preview request limitations](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations).
 - [Official UI guidelines](https://developers.openai.com/siwc/ui-ux-guidelines).

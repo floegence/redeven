@@ -557,3 +557,14 @@ func TestAIConfig_EffectiveToolRecoveryDefaults(t *testing.T) {
 		t.Fatalf("EffectiveToolRecoveryFailOnRepeatedSignature explicit=%v, want false", got)
 	}
 }
+
+func TestAIModelProfileExplicitEmptyClearsLastProvider(t *testing.T) {
+	if err := (&AIModelProfile{Providers: []AIProvider{}}).Validate(); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []*AIModelProfile{{}, {Providers: []AIProvider{}, CurrentModelID: "removed/model"}} {
+		if p.Validate() == nil {
+			t.Fatal("incomplete empty profile accepted")
+		}
+	}
+}

@@ -823,9 +823,10 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
     loadModelDirectory: refresh => resource.loadDirectory(refresh),
     recoverModelSource: async () => { await bridge.retryDesktopModels?.(); },
     subscribeModelDirectory: resource.subscribe,
+    loadChatGPTAccounts: () => runtimeJSON(bridge, 'GET', '/_redeven_proxy/api/ai/auth/chatgpt/accounts'),
     chatGPTAuth: async (action, input) => {
       const result = await runtimeJSON<Awaited<ReturnType<NonNullable<FlowerSurfaceAdapter['chatGPTAuth']>>>>(bridge, 'POST', `/_redeven_proxy/api/ai/auth/chatgpt/${action}`, input);
-      if (action === 'sign-out') {
+      if (action === 'sign-out' || action === 'retry') {
         resource.invalidate();
         if (options.onSettingsChanged) void Promise.resolve(options.onSettingsChanged()).catch(() => undefined);
       }
@@ -887,8 +888,8 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
     setComputerViewer: async (input) => { await runtimeJSON(bridge, 'PUT', '/_redeven_proxy/api/ai/computer/view', input); },
     computerManagement: { ...computerManagementAdapter((method, path, body) => runtimeJSON(bridge, method, path, body, undefined, options.runtimeEnvironmentID), `desktop:${options.runtimeEnvironmentID ?? 'default'}`) },
     saveModelProfile: async (draft) => {
-      await runtimeJSON<unknown>(bridge, 'PUT', '/_redeven_proxy/api/ai/provider_bundle', mapFlowerSettingsDraftToRuntimeBundle(draft));
-      return reloadSettings();
+      const result = await runtimeJSON<{ account_sign_outs?: FlowerSettingsSnapshot['account_sign_outs'] }>(bridge, 'PUT', '/_redeven_proxy/api/ai/provider_bundle', mapFlowerSettingsDraftToRuntimeBundle(draft));
+      return { ...await reloadSettings(), account_sign_outs: result.account_sign_outs };
     },
     persistDefaultModel: async (modelID) => {
       const mid = trim(modelID);

@@ -30,6 +30,14 @@ type ChatGPTAccount struct {
 	ExpiresAt           time.Time `json:"expires_at"`
 	EarliestRefreshAt   time.Time `json:"earliest_refresh_at"`
 	WelcomeAcknowledged bool      `json:"welcome_acknowledged,omitempty"`
+	SessionRevision     uint64    `json:"session_revision,omitempty"`
+	Lifecycle           string    `json:"lifecycle,omitempty"`
+	ErrorCode           string    `json:"error_code,omitempty"`
+	RevocationConfirmed *bool     `json:"revocation_confirmed,omitempty"`
+	SignedOutAt         time.Time `json:"signed_out_at,omitempty"`
+	RetryAt             time.Time `json:"retry_at,omitempty"`
+	HTTPStatus          int       `json:"http_status,omitempty"`
+	RequestID           string    `json:"request_id,omitempty"`
 }
 
 func (a ChatGPTAccount) ID() string {
@@ -139,8 +147,8 @@ func (s *SecretsStore) ChatGPTAccount(id string) (ChatGPTAccount, bool, error) {
 	return a, ok, nil
 }
 
-// UpdateChatGPTAccount holds the cross-process lock across read, refresh and
-// atomic replacement. Failure keeps the previous canonical bytes intact.
+// UpdateChatGPTAccount locks only the canonical read and atomic replacement.
+// Network operations use the separate per-account operation lock.
 func (s *SecretsStore) UpdateChatGPTAccount(ctx context.Context, id string, update func(*ChatGPTAccount) error) error {
 	unlock, err := s.lock(ctx)
 	if err != nil {
@@ -170,5 +178,83 @@ func (s *SecretsStore) UpdateChatGPTAccount(ctx context.Context, id string, upda
 		return nil
 	}
 	sf.ChatGPT.Accounts[id] = account
+	return s.saveLocked(sf)
+}
+
+// LockChatGPTAccountOperation serializes rotating refresh and revocation for one
+// registration across processes without blocking other credential operations.
+func (s *SecretsStore) LockChatGPTAccountOperation(ctx context.Context, id string) (func(), error) {
+	if s == nil || s.path == "" {
+		return nil, errors.New("missing secrets store")
+	}
+	if err := os.MkdirAll(filepath.Dir(s.path), 0700); err != nil {
+		return nil, err
+	}
+	digest := sha256.Sum256([]byte(id))
+	for {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		lock, err := lockfile.Acquire(s.path + ".chatgpt-" + hex.EncodeToString(digest[:16]) + ".lock")
+		if err == nil {
+			return func() { _ = lock.Release() }, nil
+		}
+		if !errors.Is(err, lockfile.ErrAlreadyLocked) {
+			return nil, err
+		}
+		if err := waitForSecretsLock(ctx); err != nil {
+			return nil, err
+		}
+	}
+}
+
+func (s *SecretsStore) ChatGPTAccounts(ctx context.Context) (map[string]ChatGPTAccount, error) {
+	unlock, err := s.lock(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	sf, err := s.loadLocked()
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]ChatGPTAccount{}
+	if sf.ChatGPT != nil {
+		for id, account := range sf.ChatGPT.Accounts {
+			account.Scopes = slices.Clone(account.Scopes)
+			out[id] = account
+		}
+	}
+	return out, nil
+}
+
+// InstallChatGPTAccounts atomically installs a verified configuration batch.
+// Callers serialize each account's operation before entering this short lock.
+func (s *SecretsStore) InstallChatGPTAccounts(ctx context.Context, accounts []ChatGPTAccount) error {
+	if len(accounts) == 0 {
+		return nil
+	}
+	unlock, err := s.lock(ctx)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	sf, err := s.loadLocked()
+	if err != nil {
+		return err
+	}
+	if sf.ChatGPT == nil {
+		sf.ChatGPT = &chatGPTSecrets{}
+	}
+	if sf.ChatGPT.Accounts == nil {
+		sf.ChatGPT.Accounts = map[string]ChatGPTAccount{}
+	}
+	for _, next := range accounts {
+		old := sf.ChatGPT.Accounts[next.ID()]
+		if next.Issuer == "" || next.Subject == "" || next.ClientID == "" || next.ClientID == "dynamic_agent_client" || old.Lifecycle == "signing_out" || old.SessionRevision+1 != next.SessionRevision {
+			return errors.New("ChatGPT authorization draft is no longer current")
+		}
+		sf.ChatGPT.Accounts[next.ID()] = next
+	}
 	return s.saveLocked(sf)
 }

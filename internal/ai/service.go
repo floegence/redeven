@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/floegence/floret/v7/identity"
 	flruntime "github.com/floegence/floret/v7/runtime"
 	contextadapter "github.com/floegence/redeven/internal/ai/context/adapter"
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
@@ -109,6 +110,9 @@ type Options struct {
 
 type Service struct {
 	chatGPT                *chatgpt.Client
+	accountMu              sync.Mutex
+	accountTasks           map[string]accountTaskWatch
+	accountUnsubscribe     func()
 	platformHTTPTransport  func() (http.RoundTripper, error)
 	tessiven               *tessiven.Service
 	tessivenResources      *tessiven.ResourceBackend
@@ -478,6 +482,9 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 	}
 	svc.modelCatalogs = newModelCatalogManager(catalogRoot, resolveProviderKey, svc.discoverProviderCatalog, svc.publishModelDirectoryChanged)
 	svc.modelCatalogs.configure(opts.Config)
+	if svc.chatGPT != nil {
+		svc.accountUnsubscribe = svc.chatGPT.Subscribe(func(string) { svc.publishModelDirectoryChanged() })
+	}
 	if opts.ModelCatalogDir != "" {
 		svc.serviceWorkers.Add(1)
 		go func() { defer svc.serviceWorkers.Done(); svc.modelCatalogs.run(lifecycleCtx) }()
@@ -588,6 +595,7 @@ func (s *Service) startFlowerRuntimeViewPump() {
 					computer.releaseComputerControl(threadID, string(current.RunID))
 				}
 			}
+			s.reconcileAccountWatches(current)
 			s.reconcileAIWorkloadLeases(threadID, current)
 			lookupCtx, cancel := context.WithTimeout(s.lifecycleCtx, s.persistTimeout())
 			endpointID, parentThreadID, lookupErr := s.resolveFlowerRuntimeRoute(lookupCtx, threadID)
@@ -621,6 +629,9 @@ func (s *Service) closeService() error {
 	s.activationMu.Lock()
 	defer s.activationMu.Unlock()
 	s.serviceClosed = true
+	if s.accountUnsubscribe != nil {
+		s.accountUnsubscribe()
+	}
 	s.mu.Lock()
 	s.serviceClosing = true
 	terminalProcesses := s.terminalProcesses
@@ -1597,12 +1608,21 @@ func (s *Service) buildThreadEffectAgent(ctx context.Context, effect *threadEffe
 	if err != nil {
 		return nil, err
 	}
+	if desktop, ok := gateway.adapterOverride.(*desktopModelSourceProvider); ok {
+		desktop.accountStopped = func() { s.cancelAccountTurn(r.threadID, identity.TurnID(r.turnID)) }
+	}
 	effect.req.Model = model
 	agent, err := r.prepareFloretHostedAgent(ctx, RunRequest{
 		Model: model, Input: effect.req.Input, Options: effect.req.Options,
 		ModelCapability: modelCapability, Retry: effect.req.Retry, TurnKind: effect.turnKind,
 	}, gateway.provider, gateway.apiKey, gateway.adapterOverride)
 	if err != nil {
+		return nil, err
+	}
+	if resolvedModel.DesktopModelSourceModelID != "" {
+		s.bindDesktopAccountTask(r.threadID, identity.TurnID(r.turnID), resolvedModel.DesktopModelSourceModelID)
+	}
+	if err := s.bindAccountTask(r.threadID, identity.TurnID(r.turnID), gateway.provider); err != nil {
 		return nil, err
 	}
 	return agent, nil

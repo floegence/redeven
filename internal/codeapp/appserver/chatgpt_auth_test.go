@@ -4,10 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/floegence/redeven/internal/ai"
-	"github.com/floegence/redeven/internal/config"
-	"github.com/floegence/redeven/internal/session"
-	"github.com/floegence/redeven/internal/settings"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -15,6 +11,11 @@ import (
 	"testing"
 	"testing/fstest"
 	"time"
+
+	"github.com/floegence/redeven/internal/ai"
+	"github.com/floegence/redeven/internal/config"
+	"github.com/floegence/redeven/internal/session"
+	"github.com/floegence/redeven/internal/settings"
 )
 
 func TestChatGPTLocalCapabilityAndRemoteMutationDenial(t *testing.T) {
@@ -47,11 +48,18 @@ func TestChatGPTLocalCapabilityAndRemoteMutationDenial(t *testing.T) {
 			if json.Unmarshal(response.Body.Bytes(), &envelope) != nil || envelope.Data.AuthCapabilities.OpenAIChatGPT.Available != (location == "local") {
 				t.Fatalf("wrong capability: %s", response.Body.String())
 			}
+			accounts := performServerRequest(srv, http.MethodGet, "/_redeven_proxy/api/ai/auth/chatgpt/accounts", envOriginWithChannel("local-check"), "")
+			if location != "local" && accounts.Code != 403 {
+				t.Fatalf("remote account state admitted: %d", accounts.Code)
+			}
+			if location == "local" && accounts.Code != 200 {
+				t.Fatalf("local account state denied: %d %s", accounts.Code, accounts.Body.String())
+			}
 			if location == "local" {
 				return
 			}
 			before, _ := os.ReadFile(path)
-			for _, action := range []string{"start", "status", "cancel", "sign-out", "acknowledge"} {
+			for _, action := range []string{"start", "status", "cancel", "sign-out", "acknowledge", "retry"} {
 				req := httptest.NewRequest("POST", "/_redeven_proxy/api/ai/auth/chatgpt/"+action, strings.NewReader(`{"scope_id":"dialog","local_host":true}`))
 				req.Header.Set("Origin", envOriginWithChannel("local-check"))
 				req.Header.Set("X-Redeven-Host-Access", "local_host")
@@ -188,5 +196,134 @@ func TestRemoteProviderSaveRechecksLatestAccountInsideConfigWrite(t *testing.T) 
 	after, _ := os.ReadFile(path)
 	if string(before) != string(after) {
 		t.Fatal("stale remote save replaced the newly confirmed account")
+	}
+}
+
+func TestChatGPTAccountProjectionDoesNotExposeCredentialsAndRequiresAdmin(t *testing.T) {
+	path := writeTestConfigWithAI(t)
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc, err := ai.NewService(ai.Options{StateDir: t.TempDir(), AgentHomeDir: t.TempDir(), Shell: "/bin/sh", Config: cfg.AI})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = svc.Close() })
+	for _, admin := range []bool{false, true} {
+		srv, err := New(Options{Backend: &stubBackend{}, DistFS: fstest.MapFS{"env/index.html": {Data: []byte("env")}}, ListenAddr: "127.0.0.1:0", ConfigPath: path, AIServiceProvider: newStaticAIServiceProvider(svc), ResolveSessionMeta: resolveMetaForTest("status", session.Meta{CanRead: true, CanAdmin: admin, LocalHostAccess: "verified"})})
+		if err != nil {
+			t.Fatal(err)
+		}
+		a := settings.ChatGPTAccount{Issuer: "https://auth.openai.com", Subject: "verified-subject", Email: "person@example.com", ClientID: "issued-client", AccessToken: "secret-access", RefreshToken: "secret-refresh", IDToken: "secret-id", Scopes: []string{"resource.invoke", "chatgpt.tokens.use.direct"}, ExpiresAt: time.Now().Add(time.Hour)}
+		if err := srv.secrets.UpdateChatGPTAccount(t.Context(), a.ID(), func(p *settings.ChatGPTAccount) error { *p = a; return nil }); err != nil {
+			t.Fatal(err)
+		}
+		cfg.AI.Providers[0].AuthMethod = config.AIAuthChatGPT
+		cfg.AI.Providers[0].AccountID = a.ID()
+		cfg.AI.Providers[0].Models = nil
+		cfg.AI.Providers[0].ModelSelection = &config.AIModelSelection{SelectedModels: []string{"gpt-5-mini"}}
+		if err := config.Save(path, cfg); err != nil {
+			t.Fatal(err)
+		}
+		response := performServerRequest(srv, "GET", "/_redeven_proxy/api/ai/auth/chatgpt/accounts", envOriginWithChannel("status"), "")
+		if !admin {
+			if response.Code != 403 {
+				t.Fatalf("nonadmin status admitted: %d", response.Code)
+			}
+			continue
+		}
+		if response.Code != 200 || !strings.Contains(response.Body.String(), "person@example.com") {
+			t.Fatalf("status projection: %d %s", response.Code, response.Body.String())
+		}
+		for _, secret := range []string{"secret-access", "secret-refresh", "secret-id", "issued-client", "verified-subject", "access_token", "refresh_token", "id_token"} {
+			if strings.Contains(response.Body.String(), secret) {
+				t.Fatalf("status leaked %s", secret)
+			}
+		}
+	}
+}
+
+func TestChatGPTRemovedBindingSignsOutOnlyAfterSuccessfulSave(t *testing.T) {
+	for _, scenario := range []string{"shared", "disabled", "remove-last", "remove-all", "api-key", "failed-save", "stale-new-login"} {
+		t.Run(scenario, func(t *testing.T) {
+			path := writeTestConfigWithAI(t)
+			cfg, err := config.Load(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			svc, err := ai.NewService(ai.Options{StateDir: t.TempDir(), AgentHomeDir: t.TempDir(), Shell: "/bin/sh", Config: cfg.AI})
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = svc.Close() })
+			srv, err := New(Options{Backend: &stubBackend{}, DistFS: fstest.MapFS{"env/index.html": {Data: []byte("env")}}, ListenAddr: "127.0.0.1:0", ConfigPath: path, AIServiceProvider: newStaticAIServiceProvider(svc), ResolveSessionMeta: resolveMetaForTest("save", session.Meta{CanRead: true, CanAdmin: true, LocalHostAccess: "verified"})})
+			if err != nil {
+				t.Fatal(err)
+			}
+			a := settings.ChatGPTAccount{Issuer: "https://auth.openai.com", Subject: "subject", ClientID: "issued", AccessToken: "saved", Scopes: []string{"resource.invoke", "chatgpt.tokens.use.direct"}, ExpiresAt: time.Now().Add(time.Hour)}
+			if err := srv.secrets.UpdateChatGPTAccount(t.Context(), a.ID(), func(p *settings.ChatGPTAccount) error { *p = a; return nil }); err != nil {
+				t.Fatal(err)
+			}
+			old := &config.AIConfig{Providers: []config.AIProvider{{ID: "one", Type: "openai", AuthMethod: config.AIAuthChatGPT, AccountID: a.ID(), ModelSelection: &config.AIModelSelection{SelectedModels: []string{"gpt-5-mini"}}}}}
+			cfg.AI = old
+			if err := config.Save(path, cfg); err != nil {
+				t.Fatal(err)
+			}
+			next := config.AIModelProfile{}
+			switch scenario {
+			case "shared":
+				old.Providers = append(old.Providers, config.AIProvider{ID: "two", Type: "openai", AuthMethod: config.AIAuthChatGPT, AccountID: a.ID(), ModelSelection: &config.AIModelSelection{SelectedModels: []string{"gpt-5-mini"}}})
+				next.Providers = old.Providers[1:]
+			case "disabled":
+				next.Providers = append([]config.AIProvider(nil), old.Providers...)
+				disabled := false
+				next.Providers[0].Enabled = &disabled
+			case "remove-all":
+				next.Providers = []config.AIProvider{}
+			case "remove-last":
+				next.Providers = []config.AIProvider{{ID: "local", Type: "ollama", BaseURL: "http://127.0.0.1:11434/v1", Models: []config.AIProviderModel{{ModelName: "agent", ContextWindow: 32768}}}}
+				next.CurrentModelID = "local/agent"
+			case "api-key", "failed-save":
+				next.Providers = []config.AIProvider{{ID: "one", Type: "openai", Models: []config.AIProviderModel{{ModelName: "gpt-5-mini"}}}}
+				next.CurrentModelID = "one/gpt-5-mini"
+			case "stale-new-login":
+				next.Providers = append([]config.AIProvider(nil), old.Providers...)
+			}
+			var patches []settings.AIProviderAPIKeyPatch
+			if scenario == "api-key" {
+				key := "api-key"
+				patches = []settings.AIProviderAPIKeyPatch{{ProviderID: "one", APIKey: &key}}
+			}
+			var drafts []settings.ChatGPTAccount
+			if scenario == "stale-new-login" {
+				drafts = []settings.ChatGPTAccount{a}
+			} // Revision zero is stale; install must roll back the config.
+			updated, saveErr := srv.saveAIProviderBundle(svc, next, patches, nil, true, drafts...)
+			if scenario == "failed-save" || scenario == "stale-new-login" {
+				if saveErr == nil {
+					t.Fatal("invalid save accepted")
+				}
+				stored, _, _ := srv.secrets.ChatGPTAccount(a.ID())
+				if stored.AccessToken != "saved" || stored.Lifecycle != "" {
+					t.Fatal("failed save signed out old account")
+				}
+				return
+			}
+			if saveErr != nil {
+				t.Fatal(saveErr)
+			}
+			results := srv.signOutRemovedAccounts(old, updated.AI)
+			stored, _, _ := srv.secrets.ChatGPTAccount(a.ID())
+			if scenario == "shared" || scenario == "disabled" {
+				if len(results) != 0 || stored.AccessToken != "saved" {
+					t.Fatal("remaining binding was signed out")
+				}
+				return
+			}
+			if len(results) != 1 || !results[0].LocalCleanupComplete || stored.AccessToken != "" || stored.Lifecycle != "signed_out" || stored.ClientID != "issued" {
+				t.Fatalf("final removal did not sign out: %+v", results)
+			}
+		})
 	}
 }

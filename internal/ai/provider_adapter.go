@@ -115,5 +115,11 @@ func configureChatGPTAdapter(adapter ModelGateway, p config.AIProvider, client *
 		gateway.chatGPT = true
 		gateway.requireTerminal = true
 		gateway.chatGPTToken = func(ctx context.Context) (string, error) { return client.AccessToken(ctx, p.AccountID) }
+		gateway.chatGPTFailure = func(ctx context.Context, token string, err error) {
+			client.ObserveRequestFailure(ctx, p.AccountID, token, err)
+		}
+		gateway.chatGPTWatch = func(ctx context.Context, stop func(error)) (func(), error) {
+			return client.WatchSession(ctx, p.AccountID, stop)
+		}
 	}
 }

@@ -34,8 +34,9 @@ const (
 )
 
 type Error struct {
-	Code   string
-	Action string
+	Code    string
+	Action  string
+	RetryAt time.Time
 }
 
 func (e *Error) Error() string { return "ChatGPT: " + e.Code }
@@ -46,17 +47,26 @@ func Failure(code string) *Error {
 		action = "manage_usage"
 	case "subscription_sharing_user_not_eligible", "subscription_sharing_unsupported_capability", "subscription_sharing_route_not_supported", "chatpass_v2_scope_not_authorized", "chatpass_v2_invalid_authorization_context":
 		action = "review_connection"
-	case "authorization_required", "plan_permission_required", "invalid_grant", "invalid_refresh_token", "token_expired", "refresh_token_expired", "refresh_token_invalidated", "refresh_token_invalid", "refresh_token_reused", "subscription_sharing_invalid_user":
+	case "review_required", "subscription_sharing_invalid_user", "invalid_client", "identity_validation_failed", "account_mismatch":
+		action = "review_connection"
+	case "authorization_required", "plan_permission_required", "invalid_grant", "invalid_refresh_token", "token_expired", "refresh_token_expired", "refresh_token_invalidated", "refresh_token_invalid", "refresh_token_reused":
 		action = "sign_in"
 	}
 	return &Error{Code: code, Action: action}
 }
 
 type AccountStatus struct {
-	AccountID           string `json:"account_id"`
-	Email               string `json:"email"`
-	State               string `json:"state"`
-	WelcomeAcknowledged bool   `json:"welcome_acknowledged"`
+	AccountID           string     `json:"account_id"`
+	Email               string     `json:"email"`
+	State               string     `json:"state"`
+	WelcomeAcknowledged bool       `json:"welcome_acknowledged"`
+	ErrorCode           string     `json:"error_code,omitempty"`
+	RetryAt             *time.Time `json:"retry_at,omitempty"`
+	RevocationConfirmed *bool      `json:"revocation_confirmed,omitempty"`
+	HTTPStatus          int        `json:"http_status,omitempty"`
+	RequestID           string     `json:"request_id,omitempty"`
+	BindingCount        int        `json:"binding_count,omitempty"`
+	ActiveTaskCount     int        `json:"active_task_count,omitempty"`
 }
 
 func status(a settings.ChatGPTAccount) AccountStatus {
@@ -67,7 +77,7 @@ func status(a settings.ChatGPTAccount) AccountStatus {
 			state = "ready"
 		}
 	}
-	return AccountStatus{a.ID(), a.Email, state, a.WelcomeAcknowledged}
+	return AccountStatus{AccountID: a.ID(), Email: a.Email, State: state, WelcomeAcknowledged: a.WelcomeAcknowledged}
 }
 
 type AttemptStatus struct {
@@ -83,6 +93,7 @@ type attempt struct {
 	state, nonce, verifier, redirect, clientID string
 	returning                                  settings.ChatGPTAccount
 	account                                    settings.ChatGPTAccount
+	applying                                   bool
 	expires                                    time.Time
 	cancel                                     context.CancelFunc
 	listener                                   net.Listener
@@ -97,10 +108,13 @@ type Client struct {
 	attempts                                 map[string]*attempt
 	providerMu                               sync.Mutex
 	provider                                 *oidc.Provider
+	coordination                             *accountCoordinator
+	now                                      func() time.Time
+	maintenanceTick                          <-chan time.Time
 }
 
 func New(store *settings.SecretsStore) *Client {
-	return &Client{Store: store, http: &http.Client{Timeout: 20 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, issuer: Issuer, resource: Resource, authorizeURL: Issuer + "/api/accounts/authorize", tokenURL: Issuer + "/api/accounts/oauth/token", openBrowser: openBrowser, attempts: map[string]*attempt{}}
+	return &Client{Store: store, coordination: coordinator(store.Path()), http: &http.Client{Timeout: 20 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, issuer: Issuer, resource: Resource, authorizeURL: Issuer + "/api/accounts/authorize", tokenURL: Issuer + "/api/accounts/oauth/token", openBrowser: openBrowser, attempts: map[string]*attempt{}}
 }
 func random() (string, error) {
 	b := make([]byte, 32)
@@ -195,7 +209,7 @@ func (c *Client) start(owner, accountID string, reconsent bool, draft *settings.
 			ok = true
 			err = nil
 		}
-		if err != nil || !ok {
+		if err != nil || !ok || old.Lifecycle == "signing_out" {
 			cancel()
 			return AttemptStatus{}, Failure("authorization_required")
 		}
@@ -291,6 +305,19 @@ func (c *Client) callback(ctx context.Context, a *attempt, w http.ResponseWriter
 			}
 		}
 	}
+	if err == nil && a.returning.ClientID == "" {
+		existing, ok, readErr := c.Store.ChatGPTAccount(account.ID())
+		if readErr != nil {
+			err = Failure("storage_unavailable")
+		}
+		if ok {
+			if existing.Lifecycle == "signing_out" || existing.SignedOutAt.After(a.expires.Add(-attemptTTL)) {
+				err = Failure("attempt_expired")
+			}
+			account.SessionRevision = existing.SessionRevision + 1
+			account.WelcomeAcknowledged = existing.WelcomeAcknowledged
+		}
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.attempts[a.status.ID] != a || ctx.Err() != nil {
@@ -347,29 +374,50 @@ type Binding struct{ Owner, AttemptID, AccountID string }
 
 // UseAttempts consumes verified drafts only after the whole configuration save
 // succeeds. A failed save leaves the same owner able to retry without signing in.
-func (c *Client) UseAttempts(bindings []Binding, apply func([]settings.ChatGPTAccount) error) error {
+func (c *Client) UseAttempts(bindings []Binding, apply func([]settings.ChatGPTAccount) error) (resultErr error) {
+	if len(bindings) == 0 {
+		return apply(nil)
+	}
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	accounts := make([]settings.ChatGPTAccount, 0, len(bindings))
+	attempts := make([]*attempt, 0, len(bindings))
 	seen := map[string]bool{}
 	for _, binding := range bindings {
 		a := c.attempts[binding.AttemptID]
-		if a == nil || seen[binding.AttemptID] || a.owner != binding.Owner || a.status.State != "ready" || time.Now().After(a.expires) || a.account.ID() != binding.AccountID {
+		if a == nil || a.applying || seen[binding.AttemptID] || a.owner != binding.Owner || a.status.State != "ready" || time.Now().After(a.expires) || a.account.ID() != binding.AccountID {
+			c.mu.Unlock()
 			return Failure("attempt_expired")
 		}
 		seen[binding.AttemptID] = true
 		accounts = append(accounts, a.account)
+		attempts = append(attempts, a)
 	}
-	if err := apply(accounts); err != nil {
-		return err
+	for _, a := range attempts {
+		a.applying = true
 	}
-	for _, binding := range bindings {
-		a := c.attempts[binding.AttemptID]
-		delete(c.attempts, binding.AttemptID)
-		a.cancel()
-		_ = a.listener.Close()
+	c.mu.Unlock()
+	defer func() {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		for index, binding := range bindings {
+			a := attempts[index]
+			a.applying = false
+			if resultErr == nil && c.attempts[binding.AttemptID] == a {
+				delete(c.attempts, binding.AttemptID)
+				a.cancel()
+				_ = a.listener.Close()
+			}
+		}
+	}()
+	for _, account := range accounts {
+		current, exists, err := c.Store.ChatGPTAccount(account.ID())
+		if err != nil || exists && (current.Lifecycle == "signing_out" || current.SessionRevision+1 != account.SessionRevision) {
+			return Failure("attempt_expired")
+		}
 	}
-	return nil
+	// Account installation may wait for another process's refresh. The attempt
+	// mutex must not make unrelated account or API-key actions wait with it.
+	return apply(accounts)
 }
 func (c *Client) Status(id string) (AccountStatus, error) {
 	a, ok, err := c.Store.ChatGPTAccount(id)
@@ -379,7 +427,7 @@ func (c *Client) Status(id string) (AccountStatus, error) {
 	if !ok {
 		return AccountStatus{AccountID: id, State: "authorization_required"}, nil
 	}
-	return status(a), nil
+	return c.accountStatus(a), nil
 }
 func (c *Client) Acknowledge(ctx context.Context, id string) error {
 	return c.Store.UpdateChatGPTAccount(ctx, id, func(a *settings.ChatGPTAccount) error { a.WelcomeAcknowledged = true; return nil })
@@ -412,8 +460,16 @@ func (c *Client) exchange(ctx context.Context, form url.Values) (tokenResponse, 
 		}
 		_ = json.NewDecoder(io.LimitReader(response.Body, 64<<10)).Decode(&out)
 		if response.StatusCode >= 500 {
-			return tokenResponse{}, Failure("temporarily_unavailable")
+			failure := Failure("temporarily_unavailable")
+			failure.RetryAt = retryAfter(response.Header.Get("Retry-After"), c.nowTime())
+			return tokenResponse{}, failure
 		}
+		if response.StatusCode == 429 {
+			failure := Failure("rate_limited")
+			failure.RetryAt = retryAfter(response.Header.Get("Retry-After"), c.nowTime())
+			return tokenResponse{}, failure
+		}
+		out.Error = safeEvidence(out.Error)
 		if out.Error == "" {
 			out.Error = "authorization_failed"
 		}
@@ -464,7 +520,11 @@ func (c *Client) validate(ctx context.Context, clientID, nonce string, t tokenRe
 	if slices.Contains(strings.Fields(t.Scope), "offline_access") && t.RefreshToken == "" {
 		return settings.ChatGPTAccount{}, Failure("invalid_token_response")
 	}
-	return settings.ChatGPTAccount{Issuer: token.Issuer, Subject: token.Subject, Email: claims.Email, ClientID: clientID, IDToken: t.IDToken, AccessToken: t.AccessToken, RefreshToken: t.RefreshToken, Scopes: strings.Fields(t.Scope), ExpiresAt: time.Now().Add(time.Duration(t.ExpiresIn) * time.Second), EarliestRefreshAt: time.Unix(t.EarliestRefreshAt, 0), WelcomeAcknowledged: old.WelcomeAcknowledged}, nil
+	revision := old.SessionRevision
+	if nonce != "" {
+		revision++
+	}
+	return settings.ChatGPTAccount{SessionRevision: revision, Issuer: token.Issuer, Subject: token.Subject, Email: claims.Email, ClientID: clientID, IDToken: t.IDToken, AccessToken: t.AccessToken, RefreshToken: t.RefreshToken, Scopes: strings.Fields(t.Scope), ExpiresAt: c.nowTime().Add(time.Duration(t.ExpiresIn) * time.Second), EarliestRefreshAt: time.Unix(t.EarliestRefreshAt, 0), WelcomeAcknowledged: old.WelcomeAcknowledged}, nil
 }
 func unusable(code string) bool {
 	return slices.Contains([]string{"invalid_grant", "invalid_refresh_token", "token_expired", "refresh_token_expired", "refresh_token_invalidated", "refresh_token_invalid", "refresh_token_reused"}, code)
@@ -476,98 +536,11 @@ func clearTokens(a *settings.ChatGPTAccount) {
 	a.Scopes = nil
 	a.ExpiresAt = time.Time{}
 	a.EarliestRefreshAt = time.Time{}
+	a.RetryAt = time.Time{}
+	a.HTTPStatus, a.RequestID = 0, ""
 }
 func (c *Client) AccessToken(ctx context.Context, id string) (string, error) {
-	var bearer string
-	var terminal error
-	err := c.Store.UpdateChatGPTAccount(ctx, id, func(a *settings.ChatGPTAccount) error {
-		if a.AccessToken == "" {
-			return Failure("authorization_required")
-		}
-		if !a.PlanEnabled() {
-			return Failure("plan_permission_required")
-		}
-		if time.Until(a.ExpiresAt) > 2*time.Minute {
-			bearer = a.AccessToken
-			return nil
-		}
-		if a.RefreshToken == "" {
-			return Failure("authorization_required")
-		}
-		if time.Now().Before(a.EarliestRefreshAt) {
-			if time.Now().Before(a.ExpiresAt) {
-				bearer = a.AccessToken
-				return nil
-			}
-			return Failure("temporarily_unavailable")
-		}
-		t, err := c.exchange(ctx, url.Values{"grant_type": {"refresh_token"}, "client_id": {a.ClientID}, "refresh_token": {a.RefreshToken}, "resource": {Resource}})
-		if err != nil {
-			var e *Error
-			if errors.As(err, &e) && unusable(e.Code) {
-				clearTokens(a)
-				terminal = e
-				return nil
-			}
-			return err
-		}
-		if t.RefreshToken == "" {
-			return Failure("invalid_token_response")
-		}
-		next := *a
-		if t.IDToken != "" {
-			next, err = c.validate(ctx, a.ClientID, "", t, *a)
-			if err != nil {
-				return err
-			}
-		} else {
-			next.AccessToken = t.AccessToken
-			next.RefreshToken = t.RefreshToken
-			next.Scopes = strings.Fields(t.Scope)
-			next.ExpiresAt = time.Now().Add(time.Duration(t.ExpiresIn) * time.Second)
-			next.EarliestRefreshAt = time.Unix(t.EarliestRefreshAt, 0)
-		}
-		*a = next
-		if !a.PlanEnabled() {
-			terminal = Failure("plan_permission_required")
-			return nil
-		}
-		bearer = a.AccessToken
-		return nil
-	})
-	if err != nil {
-		return "", err
-	}
-	if terminal != nil {
-		return "", terminal
-	}
-	return bearer, nil
-}
-func (c *Client) SignOut(ctx context.Context, id string) (bool, error) {
-	confirmed := false
-	err := c.Store.UpdateChatGPTAccount(ctx, id, func(a *settings.ChatGPTAccount) error {
-		if a.RefreshToken == "" {
-			confirmed = true
-		} else if p, err := c.oidcProvider(ctx); err == nil {
-			var metadata struct {
-				RevocationEndpoint string `json:"revocation_endpoint"`
-			}
-			if p.Claims(&metadata) == nil && strings.HasPrefix(metadata.RevocationEndpoint, c.issuer+"/") {
-				form := url.Values{"token": {a.RefreshToken}, "token_type_hint": {"refresh_token"}, "client_id": {a.ClientID}}
-				req, err := http.NewRequestWithContext(ctx, http.MethodPost, metadata.RevocationEndpoint, strings.NewReader(form.Encode()))
-				if err == nil {
-					req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-					if response, err := c.http.Do(req); err == nil {
-						confirmed = response.StatusCode == 200
-						response.Body.Close()
-					}
-				}
-			}
-		}
-		clearTokens(a)
-		return nil
-	})
-	return confirmed, err
+	return c.accessToken(ctx, id, false)
 }
 func openBrowser(ctx context.Context, address string) error {
 	var cmd *exec.Cmd
@@ -598,9 +571,9 @@ func (e *RequestError) Error() string {
 	if Failure(e.Code).Action == "retry" {
 		switch e.Status {
 		case http.StatusUnauthorized:
-			return Failure("authorization_required").Error()
+			return Failure("review_required").Error()
 		case http.StatusForbidden:
-			return Failure("plan_permission_required").Error()
+			return Failure("review_required").Error()
 		}
 	}
 	return "ChatGPT: " + e.Code
@@ -617,7 +590,11 @@ func (c *Client) Models(ctx context.Context, accountID string) ([]Model, error) 
 	if err != nil {
 		return nil, err
 	}
-	return c.models(ctx, bearer)
+	models, err := c.models(ctx, bearer)
+	if err != nil {
+		c.ObserveRequestFailure(context.WithoutCancel(ctx), accountID, bearer, err)
+	}
+	return models, err
 }
 func (c *Client) AttemptModels(ctx context.Context, owner, id string) ([]Model, error) {
 	c.mu.Lock()

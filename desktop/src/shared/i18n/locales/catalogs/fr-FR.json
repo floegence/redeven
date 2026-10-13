@@ -1017,7 +1017,22 @@
       "providerNeedsSetup": "Configuration requise",
       "currentProviderDisabled": "Le fournisseur du modèle actuel est désactivé. Activez-le ou choisissez un autre modèle.",
       "enableProvider": "Activer {provider}",
-      "disableProvider": "Désactiver {provider}"
+      "disableProvider": "Désactiver {provider}",
+      "dialogChatGPTRenewing": "Renouvellement de la connexion ChatGPT…",
+      "dialogChatGPTTemporarilyUnavailable": "Connexion temporairement indisponible. Vos identifiants sont conservés ; la connexion sera rétablie automatiquement.",
+      "dialogChatGPTReviewRequired": "ChatGPT a refusé cette connexion. Vérifiez-la ou autorisez-la à nouveau.",
+      "dialogChatGPTStorageUnavailable": "Les identifiants n’ont pas pu être enregistrés de manière fiable. Réparez le stockage local des comptes et réessayez.",
+      "dialogChatGPTSigningOut": "Déconnexion en cours…",
+      "dialogChatGPTSignedOut": "Déconnexion effectuée sur cet appareil.",
+      "dialogChatGPTCleanupFailed": "L’utilisation du compte a été arrêtée, mais les identifiants locaux n’ont pas été supprimés. Réparez le stockage et réessayez de vous déconnecter.",
+      "dialogChatGPTSignOutStatusUnavailable": "Impossible de lire le statut de déconnexion. Vérifiez la connexion et réessayez pour confirmer le résultat.",
+      "dialogChatGPTRemoveAccountOnSaveImpact": "Enregistrer cette suppression déconnecte le compte, car il ne possède aucune autre connexion. Toutes ses tâches sont arrêtées, y compris les {tasks} tâches actives sur ce environnement d’exécution et leurs sous-tâches. Les conversations sont conservées. Le compte reste connecté tant que vous n’avez pas enregistré.",
+      "dialogChatGPTRetry": "Réessayer",
+      "dialogChatGPTDisconnectApps": "Vérifier les applications connectées dans les paramètres ChatGPT",
+      "dialogChatGPTEligibilityRequired": "Votre compte n’est pas éligible au partage de son forfait ChatGPT. Vérifiez votre forfait et les droits du compte.",
+      "dialogChatGPTRegionUnavailable": "Le partage du forfait ChatGPT n’est pas disponible dans votre région.",
+      "dialogChatGPTCancelSignOut": "Rester connecté",
+      "dialogChatGPTSignOutImpact": "Ce compte est utilisé par {connections} connexions et {tasks} tâches actives. La déconnexion arrête toutes les tâches utilisant ce compte, y compris les sous-tâches. Les conversations sont conservées."
     },
     "reasoningControl": {
       "default": "Par défaut",
@@ -3226,7 +3241,6 @@
     "back": "Retour",
     "restoreConnection": "Rétablir la connexion",
     "operationInProgress": "Une autre opération utilise cet environnement d’exécution. Attendez qu’elle se termine.",
-
     "title": "Ajouter un accès via Gateway",
     "menuAction": "Ajouter un accès via Gateway",
     "currentStatus": "État actuel",

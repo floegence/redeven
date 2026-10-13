@@ -9,7 +9,7 @@ import (
 )
 
 // Validate the resulting credential state before persisting any part of a bundle.
-func validateAIProviderBundleCredentials(profile config.AIModelProfile, store *settings.SecretsStore, keys []settings.AIProviderAPIKeyPatch, webKeys []settings.WebSearchProviderAPIKeyPatch) error {
+func validateAIProviderBundleCredentials(profile config.AIModelProfile, store *settings.SecretsStore, keys []settings.AIProviderAPIKeyPatch, webKeys []settings.WebSearchProviderAPIKeyPatch, drafts ...settings.ChatGPTAccount) error {
 	keyUpdates := make(map[string]bool, len(keys))
 	for _, patch := range keys {
 		keyUpdates[strings.TrimSpace(patch.ProviderID)] = patch.APIKey != nil && strings.TrimSpace(*patch.APIKey) != ""
@@ -36,6 +36,11 @@ func validateAIProviderBundleCredentials(profile config.AIModelProfile, store *s
 			account, ok, err := store.ChatGPTAccount(provider.AccountID)
 			if err != nil {
 				return fmt.Errorf("read ChatGPT credential: %w", err)
+			}
+			for _, draft := range drafts {
+				if draft.ID() == provider.AccountID {
+					account, ok = draft, true
+				}
 			}
 			if !ok || !account.PlanEnabled() {
 				return fmt.Errorf("provider %q requires ChatGPT plan permission", id)
