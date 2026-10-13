@@ -3204,6 +3204,15 @@
     "registering": "Cloud-Registrierung ausstehend"
   },
   "gatewayJoin": {
+    "connectEnvironment": "Umgebung verbinden",
+    "gatewayInvitation": "Einladung prüfen",
+    "confirmAccess": "Zugriff bestätigen",
+    "connectHelp": "Bestätigen Sie die Verbindung zu dieser Umgebung, bevor Sie die Gateway-Adresse und den Einladungscode eingeben. Dabei wird nur die Laufzeitumgebung geprüft; sie tritt keinem Gateway bei.",
+    "connectAndContinue": "Verbinden und weiter",
+    "connecting": "Verbindung wird hergestellt…",
+    "connectFailed": "Die Verbindung zu dieser Umgebung ist fehlgeschlagen. Versuchen Sie es erneut oder prüfen Sie die Verbindungseinstellungen.",
+    "back": "Zurück",
+
     "title": "Gateway-Zugang hinzufügen",
     "menuAction": "Gateway-Zugang hinzufügen",
     "currentStatus": "Aktueller Status",
@@ -3264,7 +3273,6 @@
     "copied": "Kopiert",
     "copyFailed": "Kopieren fehlgeschlagen. Kopieren Sie den Text manuell oder erlauben Sie den Zugriff auf die Zwischenablage und versuchen Sie es erneut.",
     "regenerate": "Neuen Code erstellen",
-    "prepareTitle": "Diese Laufzeitumgebung vorbereiten",
     "checkHelp": "Prüfen Sie den Status dieser Laufzeitumgebung, bevor Sie Gateway-Zugriff hinzufügen.",
     "controlHelp": "Starten Sie diese Laufzeitumgebung über Desktop neu, um ihre Verwaltungsverbindung vorzubereiten.",
     "updateHelp": "Aktualisieren Sie diese Laufzeitumgebung, bevor Sie Gateway-Zugriff hinzufügen.",

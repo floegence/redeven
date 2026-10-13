@@ -3199,6 +3199,15 @@
     "registering": "Cloud 등록 대기 중"
   },
   "gatewayJoin": {
+    "connectEnvironment": "환경 연결",
+    "gatewayInvitation": "초대 검증",
+    "confirmAccess": "접근 확인",
+    "connectHelp": "Gateway 주소와 초대 코드를 입력하기 전에 이 환경에 연결할 수 있는지 확인하세요. 이 단계에서는 런타임만 확인하며 Gateway에 가입하지 않습니다.",
+    "connectAndContinue": "연결 후 계속",
+    "connecting": "연결 중…",
+    "connectFailed": "이 환경에 연결하지 못했습니다. 다시 시도하거나 환경의 연결 설정을 확인하세요.",
+    "back": "이전",
+
     "title": "Gateway 액세스 추가",
     "menuAction": "Gateway 액세스 추가",
     "currentStatus": "현재 상태",
@@ -3259,7 +3268,6 @@
     "copied": "복사됨",
     "copyFailed": "복사하지 못했습니다. 텍스트를 선택하여 직접 복사하거나 클립보드 접근을 허용한 후 다시 시도하세요.",
     "regenerate": "새 코드 생성",
-    "prepareTitle": "이 런타임 준비",
     "checkHelp": "게이트웨이 액세스를 추가하기 전에 이 런타임의 상태를 확인하세요.",
     "controlHelp": "Desktop에서 이 런타임을 다시 시작하여 관리 연결을 준비하세요.",
     "updateHelp": "게이트웨이 액세스를 추가하기 전에 이 런타임을 업데이트하세요.",

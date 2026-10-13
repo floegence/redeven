@@ -6183,19 +6183,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       <RuntimeGatewaySetupDialog gateways={snapshot().gateway_sources} environment={gatewaySetupEnvironment()}
         operationBusy={gatewaySetupOperation()?.actionsDisabled}
         progress={gatewaySetupOperation()?.activeProgress}
-        progressContent={<Show when={gatewaySetupEnvironment()}>{environment =>
-          <Show when={gatewaySetupOperation()?.panelProgress}>{progress =>
-            <EnvironmentProgressPanel i18n={i18n()} progress={progress()} cancelOperation={progress => void cancelLauncherOperation(progress)} dismissOperation={progress => void dismissLauncherOperation(progress)} copyOperationDiagnostics={progress => void copyLauncherOperationDiagnostics(progress)}
-              runNextAction={(action, current) => {
-                if (action.kind === 'copy_diagnostics') void copyLauncherOperationDiagnostics(current);
-                else if (action.kind === 'dismiss') void dismissLauncherOperation(current);
-                else if (action.kind === 'retry') { const retry = environmentActionForLauncherRetry(action.retry_action); if (retry) void triggerLocalEnvironmentAction(environment(), retry, 'dialog'); }
-                else if (action.kind === 'refresh_status') void refreshEnvironmentRuntime(environment(), 'dialog');
-                else if (action.kind === 'update_runtime') void updateEnvironmentRuntime(environment(), 'dialog');
-                else if (action.kind === 'manage_desktop_update') void triggerLocalEnvironmentAction(environment(), { intent: 'update_desktop', label: i18n().t('environmentAction.updateRedevenDesktop'), enabled: true, variant: 'default' }, 'dialog');
-              }} />
-          }</Show>
-        }</Show>}
+        progressDetail={gatewaySetupOperation()?.panelProgress ? localizedProgressDetail(i18n(), gatewaySetupOperation()!.panelProgress!) : undefined}
         i18n={i18n()} close={() => {
           const id = gatewaySetupEnvironmentID(); setGatewaySetupEnvironmentID('');
           requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-owner-id="${CSS.escape(id)}"]`)?.focus());

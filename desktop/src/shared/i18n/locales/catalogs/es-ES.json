@@ -3205,6 +3205,15 @@
     "registering": "Registro en Cloud pendiente"
   },
   "gatewayJoin": {
+    "connectEnvironment": "Conectar entorno",
+    "gatewayInvitation": "Verificar invitación",
+    "confirmAccess": "Confirmar acceso",
+    "connectHelp": "Confirme la conexión a este entorno antes de introducir la dirección del Gateway y el código de invitación. Este paso solo comprueba el entorno de ejecución; no lo une a ningún Gateway.",
+    "connectAndContinue": "Conectar y continuar",
+    "connecting": "Conectando…",
+    "connectFailed": "No se pudo conectar a este entorno. Reintente o revise sus ajustes de conexión.",
+    "back": "Atrás",
+
     "title": "Añadir acceso mediante Gateway",
     "menuAction": "Añadir acceso mediante Gateway",
     "currentStatus": "Estado actual",
@@ -3265,7 +3274,6 @@
     "copied": "Copiado",
     "copyFailed": "No se pudo copiar. Selecciona y copia el texto manualmente, o permite el acceso al portapapeles e inténtalo de nuevo.",
     "regenerate": "Generar código nuevo",
-    "prepareTitle": "Preparar este entorno de ejecución",
     "checkHelp": "Comprueba el estado de este entorno de ejecución antes de añadir acceso mediante la puerta de enlace.",
     "controlHelp": "Reinicia este entorno de ejecución desde Desktop para preparar su conexión de administración.",
     "updateHelp": "Actualiza este entorno de ejecución antes de añadir acceso mediante la puerta de enlace.",

@@ -3205,6 +3205,15 @@
     "registering": "Enregistrement Cloud en attente"
   },
   "gatewayJoin": {
+    "connectEnvironment": "Connecter l’environnement",
+    "gatewayInvitation": "Vérifier l’invitation",
+    "confirmAccess": "Confirmer l’accès",
+    "connectHelp": "Confirmez la connexion à cet environnement avant de saisir l’adresse du Gateway et le code d’invitation. Cette étape vérifie uniquement l’environnement d’exécution, sans rejoindre de Gateway.",
+    "connectAndContinue": "Connecter et continuer",
+    "connecting": "Connexion en cours…",
+    "connectFailed": "Impossible de se connecter à cet environnement. Réessayez ou vérifiez ses paramètres de connexion.",
+    "back": "Retour",
+
     "title": "Ajouter un accès via Gateway",
     "menuAction": "Ajouter un accès via Gateway",
     "currentStatus": "État actuel",
@@ -3265,7 +3274,6 @@
     "copied": "Copié",
     "copyFailed": "Échec de la copie. Sélectionnez et copiez le texte manuellement, ou autorisez l’accès au presse-papiers et réessayez.",
     "regenerate": "Générer un nouveau code",
-    "prepareTitle": "Préparer cet environnement d’exécution",
     "checkHelp": "Vérifiez l’état de cet environnement d’exécution avant d’ajouter un accès à la passerelle.",
     "controlHelp": "Redémarrez cet environnement d’exécution depuis Desktop pour préparer sa connexion de gestion.",
     "updateHelp": "Mettez à jour cet environnement d’exécution avant d’ajouter un accès à la passerelle.",

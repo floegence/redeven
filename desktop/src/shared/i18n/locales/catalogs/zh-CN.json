@@ -3199,6 +3199,15 @@
     "registering": "Cloud 登记待完成"
   },
   "gatewayJoin": {
+    "connectEnvironment": "连接环境",
+    "gatewayInvitation": "验证邀请",
+    "confirmAccess": "确认接入",
+    "connectHelp": "先确认可以连接此环境，再填写 Gateway 地址和邀请码。此步骤只检查运行时，不会加入 Gateway。",
+    "connectAndContinue": "连接并继续",
+    "connecting": "正在连接…",
+    "connectFailed": "无法连接此环境。请重试或检查环境的连接设置。",
+    "back": "上一步",
+
     "title": "添加 Gateway 访问",
     "menuAction": "添加 Gateway 访问",
     "currentStatus": "当前状态",
@@ -3259,7 +3268,6 @@
     "copied": "已复制",
     "copyFailed": "复制失败。请手动选择并复制文本，或允许剪贴板访问后重试。",
     "regenerate": "生成新邀请码",
-    "prepareTitle": "准备此运行时",
     "checkHelp": "添加网关访问前，请先检查此运行时的状态。",
     "controlHelp": "请通过 Desktop 重启此运行时，以准备管理连接。",
     "updateHelp": "添加网关访问前，请先更新此运行时。",

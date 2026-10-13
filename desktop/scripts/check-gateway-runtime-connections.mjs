@@ -88,6 +88,7 @@ try {
     await dialog.getByRole('button',{name:i18n.t('common.cancel'),exact:true}).click();await dialog.waitFor({state:'detached'});
     await toggle.click();await page.getByRole('menu').getByRole('menuitem',{name:i18n.t('gatewayJoin.menuAction'),exact:true}).click();
     const join=page.getByRole('dialog');await join.waitFor();
+    await join.getByRole('button',{name:i18n.t('gatewayJoin.connectAndContinue'),exact:true}).click();
     const inputs=join.locator('input');await inputs.nth(0).fill('https://draft.internal:7443');await inputs.nth(1).fill('TEST-ONLY-CODE');
     await page.evaluate(()=>window.settingsFixture.publish({...structuredClone(window.settingsFixtureSnapshot),snapshot_revision:4}));
     assert.equal(await inputs.nth(0).inputValue(),'https://draft.internal:7443');assert.equal(await inputs.nth(1).inputValue(),'TEST-ONLY-CODE');
@@ -123,7 +124,7 @@ try {
     report.cases.push(`${locale}/${width}: original tabs, upward menu, explicit target, Cloud impact, retained draft and independent pairing`);
    } finally {await context.close();}
    for(const kind of ['local','ssh','wsl','local_container','ssh_container']) {
-    const fixtures=Object.fromEntries(['unknown','stopped','control_missing','ready','update_required','management_unavailable']
+    const fixtures=Object.fromEntries(['unknown','stopped','control_missing','connection_required','ready','update_required','management_unavailable']
       .map(state=>[state,runtimeGatewayAccessFixture(kind,state)]));
     const runtime=fixtures.ready.environment;
     const context=await browser.newContext({viewport:{width,height:1050},reducedMotion:'reduce'});
@@ -155,6 +156,7 @@ try {
         return {ok:true,outcome:outcomes[request.kind]};
        }
        if(request.kind==='manage_runtime_gateway') {
+        if(request.operation==='status' && window.gatewayAcceptanceFailConnection)return {ok:false,code:'cloud_link_failed',gateway_error_code:'RUNTIME_CONTROL_UNREACHABLE'};
         if(request.operation==='preview')return {ok:true,gateway_preview:{preview_id:'a'.repeat(43),purpose:'join',gateway_id:'office',gateway_name:'Office',target_runtime_id:'runtime',expires_at_unix_ms:Date.now()+300000}};
         return {ok:true,gateway_membership:{joined:false,phase:'not_joined'}};
        }
@@ -193,7 +195,7 @@ try {
       await dialog.getByText(i18n.t('gatewayJoin.recoveryFailed'),{exact:true}).waitFor();
       assert.equal(await inputs.nth(0).inputValue(),'https://office.example:7443');
       assert.equal(await inputs.nth(1).inputValue(),'DRAFT-CODE');
-      await dialog.getByText('Office',{exact:true}).waitFor();
+      assert.equal(await dialog.locator('.redeven-gateway-join-summary').textContent().then(text=>text.includes('Office')),true);
       await page.evaluate(()=>{window.gatewayAcceptanceFailRecovery=false;});
       await dialog.getByRole('button',{name:i18n.t(key),exact:true}).click();
       await dialog.getByRole('button',{name:i18n.t('gatewayJoin.confirmEnable'),exact:true}).waitFor();
@@ -215,6 +217,21 @@ try {
      const controls=await dialog.locator('button:visible').evaluateAll(elements=>elements.map(element=>({width:element.scrollWidth,client:element.clientWidth,whiteSpace:getComputedStyle(element).whiteSpace})));
      assert.ok(controls.every(item=>item.width<=item.client+1 && item.whiteSpace==='nowrap'));
      await page.screenshot({path:`${output}/${locale}-${width}-${kind}-setup.png`});
+     await dialog.getByRole('button',{name:i18n.t('gatewayJoin.back'),exact:true}).click();
+     assert.equal(await inputs.nth(1).inputValue(),'DRAFT-CODE');
+     await dialog.getByRole('button',{name:i18n.t('gatewayJoin.back'),exact:true}).click();
+     await publish('connection_required');
+     await dialog.getByRole('button',{name:i18n.t('gatewayJoin.connectAndContinue'),exact:true}).waitFor();
+     assert.equal(await inputs.nth(0).isVisible(),false);
+     await page.screenshot({path:`${output}/${locale}-${width}-${kind}-connect.png`});
+     await page.evaluate(()=>{window.gatewayAcceptanceFailConnection=true;});
+     await dialog.getByRole('button',{name:i18n.t('gatewayJoin.connectAndContinue'),exact:true}).click();
+     await dialog.getByText(i18n.t('gatewayJoin.connectFailed'),{exact:true}).waitFor();
+     assert.equal(await dialog.locator('[data-gateway-step]').getAttribute('data-gateway-step'),'0');
+     assert.equal(await inputs.nth(0).isVisible(),false);
+     await page.evaluate(()=>{window.gatewayAcceptanceFailConnection=false;});
+     await dialog.getByRole('button',{name:i18n.t('common.retry'),exact:true}).click();
+     await dialog.getByRole('button',{name:i18n.t('gatewayJoin.confirmEnable'),exact:true}).waitFor();
      await dialog.getByRole('button',{name:i18n.t('common.cancel'),exact:true}).click();await dialog.waitFor({state:'detached'});
      await page.waitForFunction(element=>element===document.activeElement,await toggle.elementHandle());
      const requests=await page.evaluate(()=>window.settingsFixture.requests);
@@ -222,7 +239,7 @@ try {
      assert.ok(requests.filter(request=>request.kind==='manage_runtime_gateway').every(request=>request.runtime_target_id===runtime.provider_runtime_link_target.id));
      assert.ok(requests.some(request=>request.operation==='status'));
      assert.equal(requests.filter(request=>request.operation==='join').length,0,'cancel never consumes an invitation');
-     report.cases.push(`${locale}/${width}/${kind}: unchecked entry, explicit startup, restart/update failure, retry, retained preview, busy controls and focus return`);
+     report.cases.push(`${locale}/${width}/${kind}: unchecked entry, horizontal steps, explicit bridge connection and failure, startup/recovery, retained preview, busy controls and focus return`);
     } finally {await context.close();}
    }
   }

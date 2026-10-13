@@ -33,6 +33,72 @@ const refresh = async () => true;
 beforeEach(() => { vi.stubGlobal('CSS', { escape: (value: string) => value }); HTMLElement.prototype.scrollIntoView = vi.fn(); });
 afterEach(() => { dispose?.(); document.body.replaceChildren(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
+it.each(['ssh', 'wsl', 'local_container', 'ssh_container'] as const)('connects the running %s management bridge before exposing Gateway fields', async kind => {
+  const selected = runtimeGatewayAccessFixture(kind, 'connection_required').environment;
+  let complete!: (value: object) => void;
+  const perform = vi.fn(() => new Promise(resolve => { complete = resolve; }));
+  const refresh = vi.fn(async () => true), recover = vi.fn();
+  vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
+  const root = document.createElement('div'); document.body.append(root);
+  dispose = render(() => <RuntimeGatewaySetupDialog environment={selected} i18n={i18n} refresh={refresh} recover={recover} edit={() => {}} close={() => {}} />, root);
+  await settle();
+  expect(document.querySelector('[data-gateway-step]')?.getAttribute('data-gateway-step')).toBe('0');
+  expect(document.querySelectorAll('[data-floe-surface-part="step"]')).toHaveLength(3);
+  expect(document.body.textContent).not.toContain(i18n.t('gatewayJoin.channelHelp'));
+  expect(perform).not.toHaveBeenCalled(); expect(recover).not.toHaveBeenCalled();
+  expect(document.querySelector('input')?.closest('[hidden]')).not.toBeNull();
+  button('gatewayJoin.connectAndContinue').click(); await settle();
+  expect(button('gatewayJoin.connecting').hasAttribute('disabled')).toBe(true);
+  expect(document.querySelector('[data-gateway-step]')?.getAttribute('data-gateway-step')).toBe('0');
+  expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'manage_runtime_gateway', runtime_target_id: selected.provider_runtime_link_target!.id, operation: 'status' });
+  complete({ ok: true, gateway_membership: { joined: false, phase: 'not_joined' } }); await settle();
+  expect(document.querySelector('[data-gateway-step]')?.getAttribute('data-gateway-step')).toBe('1');
+  expect(document.querySelector('input')?.closest('[hidden]')).toBeNull();
+  expect(document.activeElement).toBe(document.querySelector('input'));
+  expect(recover).not.toHaveBeenCalled();
+});
+
+it('keeps connection failure in the first step with Retry and settings, then continues after success', async () => {
+  const selected = runtimeGatewayAccessFixture('ssh', 'connection_required').environment;
+  const perform = vi.fn().mockResolvedValueOnce({ ok: false, gateway_error_code: 'RUNTIME_CONTROL_UNREACHABLE' })
+    .mockResolvedValueOnce({ ok: true, gateway_membership: { joined: false, phase: 'not_joined' } });
+  const edit = vi.fn(); vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
+  const root = document.createElement('div'); document.body.append(root);
+  dispose = render(() => <RuntimeGatewaySetupDialog environment={selected} i18n={i18n} refresh={refresh} recover={vi.fn()} edit={edit} close={() => {}} />, root);
+  await settle(); button('gatewayJoin.connectAndContinue').click(); await settle();
+  expect(document.querySelector('[role="alert"]')?.textContent).toBe(i18n.t('gatewayJoin.connectFailed'));
+  expect(document.querySelector('[data-gateway-step]')?.getAttribute('data-gateway-step')).toBe('0');
+  expect(button('common.settings').hasAttribute('disabled')).toBe(false);
+  button('common.retry').click(); await settle();
+  expect(document.querySelector('[data-gateway-step]')?.getAttribute('data-gateway-step')).toBe('1');
+  expect(perform.mock.calls.every(([request]) => request.operation === 'status')).toBe(true);
+});
+
+it('separates invitation entry from consent and preserves the draft when navigating back', async () => {
+  const perform = vi.fn(async (request: { operation: string }) => request.operation === 'preview'
+    ? { ok: true, gateway_preview: { preview_id: 'a'.repeat(43), purpose: 'join', gateway_id: 'office', gateway_name: 'Office', target_runtime_id: 'runtime', expires_at_unix_ms: Date.now() + 600000 } }
+    : { ok: true, gateway_membership: { joined: false, phase: 'not_joined' } });
+  vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
+  const root = document.createElement('div'); document.body.append(root);
+  dispose = render(() => <RuntimeGatewaySetupDialog environment={readyEnvironment} i18n={i18n} refresh={refresh} recover={vi.fn()} edit={() => {}} close={() => {}} />, root);
+  await settle(); expect(perform).not.toHaveBeenCalled();
+  button('gatewayJoin.connectAndContinue').click(); await settle();
+  const inputs = [...document.querySelectorAll<HTMLInputElement>('input')];
+  for (const [index, value] of ['https://office.example:7443', 'draft-code'].entries()) {
+    inputs[index].value = value; inputs[index].dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  button('gatewayJoin.verify').click(); await settle();
+  expect(document.querySelector('[data-gateway-step]')?.getAttribute('data-gateway-step')).toBe('2');
+  expect(inputs[0].closest('[hidden]')).not.toBeNull();
+  expect(document.activeElement).toBe(button('gatewayJoin.confirmEnable'));
+  button('gatewayJoin.back').click(); await settle();
+  expect(inputs[0].closest('[hidden]')).toBeNull();
+  expect(inputs.map(input => input.value)).toEqual(['https://office.example:7443', 'draft-code']);
+  inputs[1].value = 'new-code'; inputs[1].dispatchEvent(new Event('input', { bubbles: true }));
+  expect(document.querySelector('.redeven-gateway-join-summary')).toBeNull();
+  expect(perform.mock.calls.some(([request]) => request.operation === 'join')).toBe(false);
+});
+
 it('explains unsupported Runtime versions and requires an explicit update', async () => {
   const source = runtimeGatewayAccessFixture('ssh_container').environment;
   const selected = { ...source, runtime_service: { ...source.runtime_service!, capabilities: {
@@ -95,6 +161,7 @@ it('preserves enrollment input and focus when the selected environment snapshot 
   const root = document.createElement('div'); document.body.append(root);
   dispose = render(() => <RuntimeGatewaySetupDialog environment={current()} i18n={i18n} refresh={refresh} recover={async () => true} edit={() => {}} close={() => setCurrent(undefined)} />, root);
   await settle();
+  button('gatewayJoin.connectAndContinue').click(); await settle();
   const inputs = [...document.querySelectorAll<HTMLInputElement>('input')];
   for (const [index, value] of ['https://draft.example:7443', 'draft-code'].entries()) {
     inputs[index]!.value = value; inputs[index]!.dispatchEvent(new Event('input', { bubbles: true }));
@@ -137,6 +204,7 @@ it('keeps drafts and verified consent across a failed management retry', async (
   const root = document.createElement('div'); document.body.append(root);
   dispose = render(() => <RuntimeGatewaySetupDialog environment={current()} i18n={i18n} refresh={refresh} recover={vi.fn()} edit={() => {}} close={() => setCurrent(undefined)} />, root);
   await settle();
+  button('gatewayJoin.connectAndContinue').click(); await settle();
   const inputs = [...document.querySelectorAll<HTMLInputElement>('input')];
   for (const [index, value] of ['https://office.example:7443', 'draft-code'].entries()) {
     inputs[index].value = value; inputs[index].dispatchEvent(new Event('input', { bubbles: true }));
@@ -162,6 +230,7 @@ it.each(['restart', 'update'] as const)('retains the enrollment session across f
   const root = document.createElement('div'); document.body.append(root);
   dispose = render(() => <RuntimeGatewaySetupDialog environment={current()} i18n={i18n} refresh={refresh} recover={recover} edit={() => {}} close={() => setCurrent(undefined)} />, root);
   await settle();
+  button('gatewayJoin.connectAndContinue').click(); await settle();
   const inputs = [...document.querySelectorAll<HTMLInputElement>('input')];
   for (const [index, value] of ['https://office.example:7443', 'draft-code'].entries()) {
     inputs[index].value = value; inputs[index].dispatchEvent(new Event('input', { bubbles: true }));

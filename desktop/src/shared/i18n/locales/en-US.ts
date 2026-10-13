@@ -74,7 +74,15 @@ export const enUS = {
     "lastSeen": "Last access"
   },
   gatewayJoin: {
-    prepareTitle: "Prepare this Runtime",
+    connectEnvironment: "Connect environment",
+    gatewayInvitation: "Gateway invitation",
+    confirmAccess: "Confirm access",
+    connectHelp: "Confirm the connection to this environment before entering the Gateway address and invitation code. This only checks the Runtime; it does not join a Gateway.",
+    connectAndContinue: "Connect and continue",
+    connecting: "Connecting…",
+    connectFailed: "Could not connect to this environment. Retry or check its connection settings.",
+    back: "Back",
+
     checkHelp: "Check this Runtime’s status before adding Gateway access.",
     controlHelp: "Restart this Runtime through Desktop to prepare its management connection.",
     updateHelp: "Update this Runtime before adding Gateway access.",

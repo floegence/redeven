@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { DesktopLauncherActionRequest, DesktopLauncherActionResult } from '../shared/desktopLauncherIPC';
 import { desktopCloudRuntimeLinkTargetKindFromID, desktopCloudRuntimeLinkTargetRuntimeKey, type DesktopCloudRuntimeLinkTargetID } from '../shared/providerRuntimeLinkTarget';
 import { RuntimeControlError } from './runtimeControlClient';
+import { requireEnvironmentManagementAvailable } from './environmentAccessSettings';
 
 function productionBoundary(name: string, context: object) {
   const source = ts.createSourceFile('main.ts', fs.readFileSync(path.join(__dirname, 'main.ts'), 'utf8'), ts.ScriptTarget.ESNext, true);
@@ -32,6 +33,23 @@ function fixture() {
 }
 
 describe('Runtime Gateway launcher ownership', () => {
+  it.each(['ssh_host', 'wsl_host', 'local_host'] as const)('acquires the %s bridge after an observed running target without opening an Env App', async hostKind => {
+    const target = { id: 'chosen', label: 'Chosen', host_access: { kind: hostKind }, placement: { kind: 'host_process' } };
+    const inspection = { runtime_target_available: true, runtime_control_status: { state: 'missing', reason_code: 'forward_unavailable' }, running: true };
+    const ready = { runtime_key: target.id };
+    const acquire = vi.fn(async () => ({ record: { target_id: 'ssh:chosen' }, release: vi.fn() }));
+    const inspect = vi.fn(async () => inspection);
+    const connect = productionBoundary('acquireEnvironmentManagementConnection', {
+      loadDesktopPreferencesCached: async () => ({ saved_runtime_targets: [target] }),
+      runtimePlacementBridgeRegistry: { get: () => null }, runtimeLifecycleTargetKey: () => 'chosen',
+      runtimeLifecycleCoordinator: { active: () => null }, inspectRuntimePlacementTargetState: inspect,
+      requireEnvironmentManagementAvailable, runtimePlacementReadyByTargetID: new Map([[target.id, ready]]),
+      acquireRuntimePlacementBridgeForReadyRecord: acquire,
+    }) as (id: string, owner: string) => Promise<unknown>;
+    await connect(target.id, 'cloud-link');
+    expect(inspect).toHaveBeenCalledOnce();
+    expect(acquire).toHaveBeenCalledExactlyOnceWith(ready, 'cloud-link', undefined);
+  });
   it.each([
     ['local:container', 'local_host'], ['ssh:runtime', 'ssh_host'], ['ssh:container', 'ssh_host'], ['wsl:runtime', 'wsl_host'],
   ] as const)('resolves and validates the actual %s bridge lease', async (id, hostKind) => {
