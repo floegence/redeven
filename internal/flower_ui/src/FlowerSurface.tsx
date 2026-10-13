@@ -28,7 +28,7 @@ import { Dynamic } from 'solid-js/web';
 import { For, Match, Show, Suspense, Switch, batch, createEffect, createMemo, createResource, createSignal, lazy, on, onCleanup, onMount, untrack } from 'solid-js';
 import { cn, useMobileLayout, createAdaptiveSidebar, createRetainedContent } from '@floegence/floe-webapp-core';
 import type { UIFirstSelectionEvent } from '@floegence/floe-webapp-core';
-import { AlertCircle, AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Copy, ExternalLink, FileText, Globe, GripVertical, Link, Menu, MoreHorizontal, MonitorPointer, Paperclip, Pencil, Plus, Refresh, Send, Settings, Shield, Terminal, Trash, XCircle, Zap } from '@floegence/floe-webapp-core/icons';
+import { AlertCircle, AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Copy, ExternalLink, FileText, Globe, GripVertical, Link, Menu, MoreHorizontal, MonitorPointer, Paperclip, Pencil, Plus, Refresh, Search, Send, Settings, Shield, Terminal, Trash, XCircle, Zap } from '@floegence/floe-webapp-core/icons';
 import { createInputHistoryController, MarkdownMedia, type InputHistoryEntry, type MarkdownMediaProps } from '@floegence/floe-webapp-core/chat';
 import { flowerInputHistoryEntries } from './composer/flowerInputHistory';
 
@@ -10922,7 +10922,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         onKeyDown={handleModelMenuKeyDown}
       >
         <div class="flower-model-menu-header">
-          <Input ref={modelSearchRef} value={modelQuery()} onInput={(event) => setModelQuery(event.currentTarget.value)} placeholder={copy().settings.dialog.catalog.search} aria-label={copy().settings.dialog.catalog.search} size="sm" />
+          <Input ref={modelSearchRef} class="flower-model-menu-search" leftIcon={<Search class="flower-model-menu-search-icon" aria-hidden="true" />} value={modelQuery()} onInput={(event) => setModelQuery(event.currentTarget.value)} placeholder={copy().settings.dialog.catalog.search} aria-label={copy().settings.dialog.catalog.search} size="sm" />
         </div>
         <div class="flower-model-menu-list" role="listbox" aria-label={copy().settings.dialog.catalog.search}>
           <Show when={menuModelOptions().models.length} fallback={<p class="flower-model-menu-empty">{copy().settings.dialog.catalog.empty}</p>}>
@@ -10934,13 +10934,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             )}</For>
           </Show>
         </div>
-        <p class="flower-model-menu-empty" role="status"><Show when={composerModelLoading()} fallback={selectedModelNeedsAttention() ? copy().chat.modelsUnavailable : ''}>{copy().chat.modelsChecking}</Show></p>
+        <Show when={!modelQuery().trim() && !modelMenuExpanded() && menuModelOptions().total > menuModelOptions().models.length}>
+          <Button class="flower-model-menu-expand" size="sm" variant="ghost" onClick={() => setModelMenuExpanded(true)}>{copy().settings.dialog.catalog.showAll} ({menuModelOptions().total})</Button>
+        </Show>
+        <Show when={composerModelLoading() || selectedModelNeedsAttention()}>
+          <p class="flower-model-menu-status" role="status"><Show when={composerModelLoading()} fallback={copy().chat.modelsUnavailable}>{copy().chat.modelsChecking}</Show></p>
+        </Show>
         <div class="flower-model-menu-footer">
-          <Button size="sm" variant="ghost" icon={Refresh} disabled={modelSourceRefreshing()} onClick={() => void refreshModelSource()}>{copy().settings.dialog.catalog.refresh}</Button>
-          <Show when={!modelQuery().trim() && !modelMenuExpanded() && menuModelOptions().total > menuModelOptions().models.length}>
-            <Button size="sm" variant="ghost" onClick={() => setModelMenuExpanded(true)}>{copy().settings.dialog.catalog.showAll} ({menuModelOptions().total})</Button>
-          </Show>
-          <Button size="sm" variant="ghost" icon={Settings} onClick={() => { closeModelMenu(false); openSettings(); }}>{copy().settings.dialog.catalog.manage}</Button>
+          <Button class="flower-model-menu-action" size="xs" variant="ghost" icon={Refresh} loading={modelSourceRefreshing()} onClick={() => void refreshModelSource()}>{copy().settings.dialog.catalog.refresh}</Button>
+          <Button class="flower-model-menu-action flower-model-menu-manage" size="xs" variant="ghost" icon={Settings} onClick={() => { closeModelMenu(false); openSettings(); }}>{copy().settings.dialog.catalog.manage}</Button>
         </div>
         {modelSourceStatusRow('menu')}
       </div>

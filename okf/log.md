@@ -1,5 +1,13 @@
 # Redeven OKF Update Log
 
+## 2026-10-12: Compact Flower model picker
+
+- Refine [model navigation](ui/flower-model-navigation.md) with caption-sized
+  search and actions, a solid theme surface, readable disabled choices, and
+  status rows that appear only when needed.
+- Keep catalog expansion separate from refresh and management; verify keyboard
+  focus, four locales, both themes, and narrow layouts with real Floe controls.
+
 ## 2026-10-12: Local ChatGPT authentication and catalog refresh
 
 - Add [official ChatGPT authentication](ai/chatgpt-local-authentication.md) to the shared provider dialog with backend-enforced local host admission; remote and unknown settings keep the account option disabled.
