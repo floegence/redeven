@@ -74,6 +74,13 @@ it('uses the shared compact model and provider presentation in global Env settin
   expect([...host.querySelectorAll('.flower-settings-provider-status')].every(status => status.textContent === '就绪')).toBe(true);
   expect(host.querySelectorAll('.flower-settings-provider-toggle')).toHaveLength(2);
   expect(host.scrollWidth).toBeLessThanOrEqual(host.clientWidth);
+  const details = host.querySelector<HTMLDetailsElement>('.flower-settings-provider-details')!;
+  await userEvent.click(details.querySelector('summary')!);
+  expect(details.querySelectorAll('table thead th[scope="col"]')).toHaveLength(5);
+  expect(details.querySelectorAll('table tbody tr')).toHaveLength(1);
+  expect(details.textContent).toContain('1,000,000');
+  expect(details.textContent).toContain('384,000');
+  expect(details.textContent).toContain('网页搜索');
   if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: host, path: '__screenshots__/flower-env-settings-zh-CN.png' });
 });
 
@@ -103,6 +110,12 @@ it('keeps narrow global Env settings readable and disables administrative contro
   const panel = host.querySelector<HTMLElement>('[data-flower-settings-panel="models"]')!;
   expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth);
   for (const button of panel.querySelectorAll<HTMLButtonElement>('button')) expect(button.disabled).toBe(true);
+  const details = panel.querySelector<HTMLDetailsElement>('details')!;
+  await userEvent.click(details.querySelector('summary')!);
+  expect(details.open).toBe(true);
+  const scroll = details.querySelector<HTMLElement>('.flower-settings-provider-table-scroll')!;
+  expect(scroll.scrollWidth).toBeGreaterThan(scroll.clientWidth);
+  expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth);
   expect(bundles).toHaveLength(0);
 });
 

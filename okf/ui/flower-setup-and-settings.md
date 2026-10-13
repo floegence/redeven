@@ -104,8 +104,13 @@ models remain excluded and reselecting the current default does not save.
 Provider rows place identity and model count left, useful availability status
 right, and an enable switch with edit/remove actions at the trailing edge.
 Authentication-method and optional-key labels do not appear in the list. The
-count expands complete model identifiers and web/image details. Narrow layouts
-move status below identity; adding a provider stays in the heading. Switch saves
+count expands a full-width semantic table, with one row per model and labeled
+columns for identity, input capabilities, declared context/output limits and exact
+model-level web-search status. A compact check badge marks the current model
+beside its name; the identifier remains secondary below it. Unavailable models
+remain explicit; missing token limits show a dash. Narrow screens scroll only the
+table inside its own keyboard-focusable region. Provider status moves below
+identity on narrow layouts; adding a provider stays in the heading. Switch saves
 are immediate, block duplicate edits, and restore the previous state on failure.
 Disabled defaults remain visible with guidance to enable or choose a replacement;
 only enabled providers contribute model choices. Retention and admission rules

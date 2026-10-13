@@ -183,6 +183,40 @@ for (const [locale, dark, width] of [
     providerDetails.querySelector('summary')!.click();
     expect(providerDetails.open).toBe(true);
     expect(providerDetails.scrollWidth).toBeLessThanOrEqual(providerDetails.clientWidth);
+    const modelTable = providerDetails.querySelector<HTMLTableElement>('table')!;
+    const tableScroll = providerDetails.querySelector<HTMLElement>('.flower-settings-provider-table-scroll')!;
+    expect(modelTable.querySelectorAll('tbody tr')).toHaveLength(3);
+    expect(tableScroll.clientWidth).toBeLessThanOrEqual(providerDetails.clientWidth);
+    expect(modelTable.querySelector('th')?.textContent).toBe(copy.settings.dialog.modelName);
+    const currentBadge = modelTable.querySelector<HTMLElement>('.flower-settings-provider-model-current')!;
+    const modelHeading = modelTable.querySelector<HTMLElement>('.flower-settings-provider-model-heading')!;
+    const modelName = modelHeading.querySelector<HTMLElement>('.flower-settings-provider-model-name')!;
+    expect(modelHeading.contains(currentBadge)).toBe(true);
+    expect(currentBadge.scrollWidth).toBeLessThanOrEqual(currentBadge.clientWidth);
+    expect(currentBadge.getBoundingClientRect().height).toBeLessThanOrEqual(24);
+    expect(currentBadge.querySelector('svg')).not.toBeNull();
+    const nameBounds = modelName.getBoundingClientRect();
+    const badgeBounds = currentBadge.getBoundingClientRect();
+    expect(Math.abs(nameBounds.top + nameBounds.height / 2 - badgeBounds.top - badgeBounds.height / 2)).toBeLessThan(1);
+    expect(modelName.title).toBe('DeepSeek V4 Flash Vision Exp');
+    if (width >= 1000) expect(modelName.scrollWidth).toBeLessThanOrEqual(modelName.clientWidth);
+    expect(badgeBounds.right).toBeLessThanOrEqual(tableScroll.getBoundingClientRect().right);
+    if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1' && locale === 'zh-CN' && !dark) {
+      await page.screenshot({ element: frame.querySelector('.flower-settings-providers-section')!, path: '__screenshots__/flower-provider-model-table-zh-CN.png' });
+    }
+    if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1' && width === 320) {
+      await page.screenshot({ element: frame.querySelector('.flower-settings-providers-section')!, path: '__screenshots__/flower-provider-model-table-narrow.png' });
+    }
+    if (width < 760) {
+      expect(tableScroll.scrollWidth).toBeGreaterThan(tableScroll.clientWidth);
+      tableScroll.focus();
+      await userEvent.keyboard('{ArrowRight}');
+      await expect.poll(() => tableScroll.scrollLeft).toBeGreaterThan(0);
+      expect(frame.scrollWidth).toBeLessThanOrEqual(frame.clientWidth);
+      tableScroll.blur();
+      tableScroll.scrollTo({ left: 0, behavior: 'instant' });
+      await expect.poll(() => tableScroll.scrollLeft).toBe(0);
+    }
     providerDetails.querySelector('summary')!.click();
     const computer = [...frame.querySelectorAll<HTMLButtonElement>('.flower-settings-computer-use-section button')].find(button => button.textContent === copy.computer.title)!;
     expect(computer.querySelector('input')).toBeNull();
@@ -235,7 +269,7 @@ it('aligns section headings separately from controls and discloses provider deta
   await userEvent.keyboard('{Enter}');
   expect(details.open).toBe(true);
   expect(details.textContent).toContain('deepseek-v4-flash-vision-exp');
-  expect(details.textContent).toContain(copy.settings.web);
+  expect(details.textContent).toContain(copy.settings.dialog.webSearch);
   await userEvent.keyboard('{Enter}');
   expect(details.open).toBe(false);
 });
@@ -417,4 +451,41 @@ it.each([360, 1000])('scrolls large model catalogs within a %ipx dialog while ke
   await userEvent.keyboard('{Enter}');
   await expect.poll(() => saveModel.mock.lastCall?.[0].model_profile?.current_model_id).toBe('deepseek/catalog-model-29');
   await expect.poll(() => document.querySelector('.flower-model-selection-dialog')).toBeNull();
+});
+it('compares each provider model in a full-width table with its own capability data', async () => {
+  const snapshot = settings();
+  const initial = { ...snapshot, model_profile: { ...snapshot.model_profile!, providers: snapshot.model_profile!.providers.map((provider, index) => index === 0 ? { ...provider, models: provider.models.map((model, modelIndex) => ({ ...model,
+    web_search: modelIndex === 0 ? { status: 'available' as const, reason: '' } : modelIndex === 1 ? { status: 'unavailable' as const, reason: 'unsupported' } : undefined,
+    unavailable: modelIndex === 2,
+  })) } : provider) } };
+  const { copy, saveModel } = await mount('en-US', 1000, false, initial);
+  const provider = host.querySelector<HTMLElement>('.flower-settings-provider-card')!;
+  const details = provider.querySelector<HTMLDetailsElement>('details')!;
+  await userEvent.click(details.querySelector('summary')!);
+  const table = details.querySelector<HTMLTableElement>('table')!;
+  expect(table).not.toBeNull();
+  expect([...table.querySelectorAll('thead th')].map(header => header.textContent)).toEqual([
+    copy.settings.dialog.modelName, copy.settings.inputCapabilities, copy.settings.dialog.contextWindow, copy.settings.dialog.maxOutput, copy.settings.dialog.webSearch,
+  ]);
+  expect(table.querySelectorAll('thead th[scope="col"]')).toHaveLength(5);
+  const rows = [...table.querySelectorAll('tbody tr')];
+  expect(rows).toHaveLength(3);
+  expect(rows[0].querySelector('th[scope="row"]')?.textContent).toContain('DeepSeek V4 Flash Vision Exp');
+  expect(rows[0].querySelector('.flower-settings-provider-model-heading .flower-settings-provider-model-current')?.textContent).toBe(copy.settings.currentModel);
+  expect(rows[0].textContent).toContain(copy.settings.imageInput);
+  expect(rows[0].textContent).toContain('1,000,000');
+  expect(rows[0].textContent).toContain('384,000');
+  expect(rows[0].textContent).toContain(copy.settings.dialog.catalog.searchAvailable);
+  expect(rows[1].textContent).not.toContain(copy.settings.imageInput);
+  expect(rows[1].textContent).toContain(copy.settings.dialog.catalog.searchUnsupported);
+  expect(rows[1].querySelectorAll('td')[1].textContent).toBe('—');
+  expect(rows[2].textContent).toContain(copy.settings.dialog.catalog.unavailableModel);
+  expect(rows[2].textContent).toContain(copy.settings.dialog.catalog.searchPending);
+  expect(details.getBoundingClientRect().width).toBeGreaterThan(provider.getBoundingClientRect().width * 0.95);
+  expect(table.getBoundingClientRect().right).toBeGreaterThan(provider.querySelector('.flower-settings-provider-actions')!.getBoundingClientRect().left);
+  if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: host.querySelector('.flower-settings-providers-section')!, path: '__screenshots__/flower-provider-model-table.png' });
+  await userEvent.click(details.querySelector('summary')!);
+  expect(details.open).toBe(false);
+  expect(details.getBoundingClientRect().height).toBeLessThan(32);
+  expect(saveModel).not.toHaveBeenCalled();
 });
