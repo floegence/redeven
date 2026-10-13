@@ -1017,7 +1017,22 @@
       "providerNeedsSetup": "Requer configuração",
       "currentProviderDisabled": "O provedor do modelo atual está desativado. Ative-o ou escolha outro modelo.",
       "enableProvider": "Ativar {provider}",
-      "disableProvider": "Desativar {provider}"
+      "disableProvider": "Desativar {provider}",
+      "dialogChatGPTRenewing": "Renovando a conexão com o ChatGPT…",
+      "dialogChatGPTTemporarilyUnavailable": "Conexão temporariamente indisponível. Suas credenciais são mantidas; a recuperação é automática.",
+      "dialogChatGPTReviewRequired": "O ChatGPT recusou esta conexão. Revise a conexão ou autorize-a novamente.",
+      "dialogChatGPTStorageUnavailable": "Não foi possível salvar as credenciais com segurança. Repare o armazenamento local de contas e tente novamente.",
+      "dialogChatGPTSigningOut": "Saindo…",
+      "dialogChatGPTSignedOut": "Você saiu neste dispositivo.",
+      "dialogChatGPTCleanupFailed": "O uso da conta foi interrompido, mas as credenciais locais não foram apagadas. Repare o armazenamento e tente sair novamente.",
+      "dialogChatGPTSignOutStatusUnavailable": "Não foi possível ler o status de saída. Verifique a conexão e tente novamente para confirmar o resultado.",
+      "dialogChatGPTRemoveAccountOnSaveImpact": "Salvar esta remoção encerra a sessão da conta porque ela não tem outras conexões. Todas as tarefas dessa conta serão interrompidas, incluindo as {tasks} tarefas ativas neste ambiente de execução e suas subtarefas. As conversas serão mantidas. A conta continuará conectada até você salvar.",
+      "dialogChatGPTRetry": "Tentar novamente",
+      "dialogChatGPTDisconnectApps": "Revisar aplicativos conectados nas configurações do ChatGPT",
+      "dialogChatGPTEligibilityRequired": "Sua conta não é elegível para compartilhar o plano do ChatGPT. Revise seu plano e as permissões da conta.",
+      "dialogChatGPTRegionUnavailable": "O compartilhamento do plano do ChatGPT não está disponível na sua região.",
+      "dialogChatGPTCancelSignOut": "Continuar conectado",
+      "dialogChatGPTSignOutImpact": "Esta conta é usada por {connections} conexões e {tasks} tarefas ativas. Sair interrompe todas as tarefas que usam esta conta, incluindo subtarefas. As conversas são mantidas."
     },
     "reasoningControl": {
       "default": "Padrão",
@@ -3226,7 +3241,6 @@
     "back": "Voltar",
     "restoreConnection": "Restabelecer conexão",
     "operationInProgress": "Outra operação está usando este ambiente de execução. Aguarde a conclusão.",
-
     "title": "Adicionar acesso via Gateway",
     "menuAction": "Adicionar acesso via Gateway",
     "currentStatus": "Status atual",

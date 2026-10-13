@@ -203,6 +203,7 @@ export type FlowerModelSourceRecovery = Readonly<{
 export type FlowerSettingsSnapshot = Readonly<{
   auth_capabilities?: Readonly<{ openai_chatgpt: Readonly<{ available: boolean; reason?: string; binding_id?: string }> }>;
   chatgpt_accounts?: Readonly<Record<string, FlowerChatGPTAccount>>;
+  account_sign_outs?: readonly FlowerAccountSignOutResult[];
   model_directory?: FlowerModelDirectory;
   defaults: Readonly<{
     permission_type: FlowerPermissionType;
@@ -1265,8 +1266,10 @@ export type FlowerSurfaceRuntimeDescriptor = Readonly<{
   subtitle: string;
 }>;
 
-export type FlowerChatGPTAccount = Readonly<{ account_id: string; email: string; state: string; welcome_acknowledged: boolean }>;
-export type FlowerChatGPTAuth = (action: 'start' | 'status' | 'cancel' | 'sign-out' | 'acknowledge', input: Readonly<{ scope_id: string; attempt_id?: string; previous_attempt_id?: string; account_id?: string; reconsent?: boolean }>) => Promise<Readonly<{ id?: string; state?: string; account?: FlowerChatGPTAccount; error_code?: string; revocation_confirmed?: boolean }>>;
+export type FlowerChatGPTAccountState = 'ready' | 'renewing' | 'temporarily_unavailable' | 'review_required' | 'plan_permission_required' | 'authorization_required' | 'signing_out' | 'signed_out' | 'storage_unavailable';
+export type FlowerChatGPTAccount = Readonly<{ account_id: string; email: string; state: FlowerChatGPTAccountState; welcome_acknowledged: boolean; error_code?: string; retry_at?: string; revocation_confirmed?: boolean; binding_count?: number; active_task_count?: number; http_status?: number; request_id?: string }>;
+export type FlowerAccountSignOutResult = Readonly<{ account_id: string; local_cleanup_complete: boolean; revocation_confirmed: boolean; error_code?: string }>;
+export type FlowerChatGPTAuth = (action: 'start' | 'status' | 'cancel' | 'sign-out' | 'acknowledge' | 'retry', input: Readonly<{ scope_id: string; attempt_id?: string; previous_attempt_id?: string; account_id?: string; reconsent?: boolean }>) => Promise<Readonly<{ id?: string; state?: string; account?: FlowerChatGPTAccount; error_code?: string; revocation_confirmed?: boolean; local_cleanup_complete?: boolean }>>;
 export type FlowerModelCatalogQuery = Readonly<{ provider_id?: string; type: FlowerProviderType; base_url?: string; api_key?: string; auth_method?: 'api_key' | 'chatgpt'; account_id?: string; attempt_id?: string; scope_id?: string }>;
 export type FlowerModelCatalogDiscovery = (input: FlowerModelCatalogQuery) => Promise<Readonly<{ models: readonly FlowerProviderModel[] }>>;
 
@@ -1357,6 +1360,7 @@ export type FlowerSurfaceAdapter = Readonly<{
   /** Keep the canonical summary stream connected while the document is hidden. */
   keepLiveWhenHidden?: boolean;
   chatGPTAuth?: FlowerChatGPTAuth;
+  loadChatGPTAccounts?: () => Promise<Readonly<{ accounts: Readonly<Record<string, FlowerChatGPTAccount>>; account_sign_outs?: readonly FlowerAccountSignOutResult[] }>>;
   discoverProviderModels?: FlowerModelCatalogDiscovery;
   loadSettings: () => Promise<FlowerSettingsSnapshot>;
   loadModelDirectory?: (refresh?: boolean) => Promise<FlowerModelDirectory>;

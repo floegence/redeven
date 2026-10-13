@@ -1017,7 +1017,22 @@
       "providerNeedsSetup": "설정 필요",
       "currentProviderDisabled": "현재 모델의 제공업체가 비활성화되어 있습니다. 활성화하거나 다른 모델을 선택하세요.",
       "enableProvider": "{provider} 활성화",
-      "disableProvider": "{provider} 비활성화"
+      "disableProvider": "{provider} 비활성화",
+      "dialogChatGPTRenewing": "ChatGPT 연결을 갱신하는 중…",
+      "dialogChatGPTTemporarilyUnavailable": "일시적으로 연결을 사용할 수 없습니다. 인증 정보는 보관되며 연결이 자동으로 복구됩니다.",
+      "dialogChatGPTReviewRequired": "ChatGPT에서 이 연결을 거부했습니다. 연결을 확인하거나 다시 승인하세요.",
+      "dialogChatGPTStorageUnavailable": "인증 정보를 안전하게 저장하지 못했습니다. 로컬 계정 저장소를 복구한 후 다시 시도하세요.",
+      "dialogChatGPTSigningOut": "로그아웃하는 중…",
+      "dialogChatGPTSignedOut": "이 기기에서 로그아웃했습니다.",
+      "dialogChatGPTCleanupFailed": "계정 사용은 중지되었지만 로컬 인증 정보가 삭제되지 않았습니다. 저장소를 복구한 후 로그아웃을 다시 시도하세요.",
+      "dialogChatGPTSignOutStatusUnavailable": "로그아웃 상태를 읽을 수 없습니다. 연결을 확인하고 다시 시도하여 결과를 확인하세요.",
+      "dialogChatGPTRemoveAccountOnSaveImpact": "이 제거를 저장하면 다른 연결이 없으므로 계정에서 로그아웃됩니다. 이 런타임의 활성 작업 {tasks}개와 하위 작업을 포함하여 이 계정을 사용하는 모든 작업이 중지됩니다. 대화는 유지됩니다. 저장하기 전까지 로그인 상태가 유지됩니다.",
+      "dialogChatGPTRetry": "다시 시도",
+      "dialogChatGPTDisconnectApps": "ChatGPT 설정에서 연결된 앱 확인",
+      "dialogChatGPTEligibilityRequired": "이 계정은 ChatGPT 요금제를 공유할 수 없습니다. 요금제와 계정 권한을 확인하세요.",
+      "dialogChatGPTRegionUnavailable": "현재 지역에서는 ChatGPT 요금제 공유를 사용할 수 없습니다.",
+      "dialogChatGPTCancelSignOut": "로그인 유지",
+      "dialogChatGPTSignOutImpact": "이 계정은 연결 {connections}개와 진행 중인 작업 {tasks}개에서 사용됩니다. 로그아웃하면 하위 작업을 포함하여 이 계정을 사용하는 모든 작업이 중지됩니다. 대화는 유지됩니다."
     },
     "reasoningControl": {
       "default": "기본값",
@@ -3220,7 +3235,6 @@
     "back": "이전",
     "restoreConnection": "연결 복구",
     "operationInProgress": "다른 작업이 이 런타임을 사용 중입니다. 작업이 완료될 때까지 기다려 주세요.",
-
     "title": "Gateway 액세스 추가",
     "menuAction": "Gateway 액세스 추가",
     "currentStatus": "현재 상태",

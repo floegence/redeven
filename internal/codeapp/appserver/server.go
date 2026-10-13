@@ -1473,8 +1473,9 @@ type settingsAIUpdateView struct {
 }
 
 type settingsUpdateView struct {
-	Settings settingsView          `json:"settings"`
-	AIUpdate *settingsAIUpdateView `json:"ai_update,omitempty"`
+	Settings        settingsView            `json:"settings"`
+	AIUpdate        *settingsAIUpdateView   `json:"ai_update,omitempty"`
+	AccountSignOuts []chatgpt.SignOutResult `json:"account_sign_outs,omitempty"`
 }
 
 type settingsAISecretsView struct {
@@ -1648,8 +1649,9 @@ func (g *Server) saveAIProviderBundle(
 	aiKeyPatches []settings.AIProviderAPIKeyPatch,
 	webSearchKeyPatches []settings.WebSearchProviderAPIKeyPatch,
 	allowChatGPTAuthentication bool,
+	accounts ...settings.ChatGPTAccount,
 ) (*config.Config, error) {
-	if err := validateAIProviderBundleCredentials(modelProfile, g.secrets, aiKeyPatches, webSearchKeyPatches); err != nil {
+	if err := validateAIProviderBundleCredentials(modelProfile, g.secrets, aiKeyPatches, webSearchKeyPatches, accounts...); err != nil {
 		return nil, aiProviderBundleSaveError{status: http.StatusBadRequest, err: err}
 	}
 	prevConfig, err := g.loadConfigLocked()
@@ -1705,6 +1707,9 @@ func (g *Server) saveAIProviderBundle(
 			return nil, aiProviderBundleSaveError{status: http.StatusInternalServerError, err: errors.Join(err, restoreErr)}
 		}
 		return nil, aiProviderBundleSaveError{status: http.StatusBadRequest, err: err}
+	}
+	if err := g.chatGPT.InstallAccounts(context.Background(), accounts); err != nil {
+		return nil, aiProviderBundleSaveError{status: http.StatusInternalServerError, err: errors.Join(err, restore())}
 	}
 	aiSvc.RefreshModelCatalogConnections()
 	return updated, nil
@@ -4106,14 +4111,11 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 					return chatgpt.Failure("plan_permission_required")
 				}
 			}
-			for _, account := range accounts {
-				account.WelcomeAcknowledged = true
-				if err := g.secrets.UpdateChatGPTAccount(r.Context(), account.ID(), func(stored *settings.ChatGPTAccount) error { *stored = account; return nil }); err != nil {
-					return err
-				}
+			for i := range accounts {
+				accounts[i].WelcomeAcknowledged = true
 			}
 			var err error
-			updated, err = g.saveAIProviderBundle(aiSvc, modelProfile, aiKeyPatches, webSearchKeyPatches, localAuthCapabilities(meta).OpenAIChatGPT.Available)
+			updated, err = g.saveAIProviderBundle(aiSvc, modelProfile, aiKeyPatches, webSearchKeyPatches, localAuthCapabilities(meta).OpenAIChatGPT.Available, accounts...)
 			return err
 		})
 		if saveErr != nil {
@@ -4130,12 +4132,14 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, status, apiResp{OK: false, Error: saveErr.Error(), ErrorCode: code})
 			return
 		}
+		accountSignOuts := g.signOutRemovedAccounts(previous.AI, updated.AI)
 		g.appendAudit(meta, "ai_provider_bundle_update", "success", auditDetail, nil)
 		writeJSON(w, http.StatusOK, apiResp{
 			OK: true,
 			Data: settingsUpdateView{
-				Settings: g.toSettingsView(updated, aiSvc, meta),
-				AIUpdate: aiUpdate,
+				Settings:        g.toSettingsView(updated, aiSvc, meta),
+				AIUpdate:        aiUpdate,
+				AccountSignOuts: accountSignOuts,
 			},
 		})
 		return

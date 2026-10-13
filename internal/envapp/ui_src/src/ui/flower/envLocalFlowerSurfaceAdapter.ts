@@ -612,9 +612,10 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
     loadModelDirectory: async refresh => directoryForSurface(await resource.loadDirectory(refresh)),
     recoverModelSource: options.retryModelSource,
     subscribeModelDirectory: listener => resource.subscribe(directory => listener(directoryForSurface(directory))),
+    loadChatGPTAccounts: () => fetchLocalApiJSON('/_redeven_proxy/api/ai/auth/chatgpt/accounts', { method: 'GET' }),
     chatGPTAuth: async (action, input) => {
       const result = await fetchLocalApiJSON<Awaited<ReturnType<NonNullable<FlowerSurfaceAdapter['chatGPTAuth']>>>>(`/_redeven_proxy/api/ai/auth/chatgpt/${action}`, { method: 'POST', body: JSON.stringify(input) });
-      if (action === 'sign-out') {
+      if (action === 'sign-out' || action === 'retry') {
         resource.invalidate();
         if (options.onSettingsChanged) void Promise.resolve(options.onSettingsChanged()).catch(() => undefined);
       }
@@ -656,7 +657,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
         const apiKey = trim(provider.web_search_api_key);
         return apiKey ? [{ provider_id: providerID, api_key: apiKey }] : [];
       });
-      await fetchLocalApiJSON<unknown>('/_redeven_proxy/api/ai/provider_bundle', {
+      const result = await fetchLocalApiJSON<{ account_sign_outs?: FlowerSettingsSnapshot['account_sign_outs'] }>('/_redeven_proxy/api/ai/provider_bundle', {
         method: 'PUT',
         body: JSON.stringify({
           auth_schema_version: 1,
@@ -667,7 +668,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
         }),
       });
       resource.invalidate();
-      return loadSettings();
+      return { ...await loadSettings(), account_sign_outs: result.account_sign_outs };
     },
     persistDefaultModel: async (modelID) => {
       const mid = trim(modelID);

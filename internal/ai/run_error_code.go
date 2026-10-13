@@ -16,6 +16,9 @@ import (
 )
 
 const (
+	runErrorCodeChatGPTReview              = "chatgpt_review_required"
+	runErrorCodeChatGPTTemporary           = "chatgpt_temporarily_unavailable"
+	runErrorCodeChatGPTStorage             = "chatgpt_storage_unavailable"
 	runErrorCodeChatGPTUsage               = "chatgpt_usage_unavailable"
 	runErrorCodeChatGPTAuthorization       = "chatgpt_authorization_required"
 	runErrorCodeChatGPTPermission          = "chatgpt_plan_permission_required"
@@ -41,6 +44,12 @@ const (
 func userFacingRunError(code string, fallback string) string {
 	fallback = strings.TrimSpace(fallback)
 	switch strings.TrimSpace(code) {
+	case runErrorCodeChatGPTReview:
+		return "ChatGPT rejected this connection. Review the connection or authorize it again in provider settings."
+	case runErrorCodeChatGPTTemporary:
+		return "The ChatGPT connection is temporarily unavailable. It will recover automatically when the service is reachable."
+	case runErrorCodeChatGPTStorage:
+		return "ChatGPT credentials could not be saved safely. Repair local account storage and retry in provider settings."
 	case runErrorCodeChatGPTUsage:
 		return "ChatGPT plan usage is unavailable for this request. Manage your usage or try again later."
 	case runErrorCodeChatGPTAuthorization:
@@ -105,10 +114,10 @@ func classifyRunFailureCode(err error, fallback string) string {
 			return code
 		}
 		if accountRequest.Status == http.StatusUnauthorized {
-			return runErrorCodeChatGPTAuthorization
+			return runErrorCodeChatGPTReview
 		}
 		if accountRequest.Status == http.StatusForbidden {
-			return runErrorCodeChatGPTPermission
+			return runErrorCodeChatGPTReview
 		}
 		if code := providerHTTPStatusRunErrorCode(accountRequest.Status); code != "" {
 			return code
@@ -328,8 +337,17 @@ func chatGPTRunFailureCode(code string) string {
 	switch code {
 	case "subscription_sharing_usage_limit_exceeded", "subscription_sharing_usage_unavailable":
 		return runErrorCodeChatGPTUsage
-	case "plan_permission_required", "chatpass_v2_scope_not_authorized", "subscription_sharing_user_not_eligible", "chatpass_v2_invalid_authorization_context":
+	case "plan_permission_required", "chatpass_v2_scope_not_authorized":
 		return runErrorCodeChatGPTPermission
+	}
+	if code == "temporarily_unavailable" {
+		return runErrorCodeChatGPTTemporary
+	}
+	if code == "storage_unavailable" || code == "logout_cleanup_failed" {
+		return runErrorCodeChatGPTStorage
+	}
+	if code == "subscription_sharing_invalid_user" || chatgpt.Failure(code).Action == "review_connection" {
+		return runErrorCodeChatGPTReview
 	}
 	if chatgpt.Failure(code).Action == "sign_in" {
 		return runErrorCodeChatGPTAuthorization

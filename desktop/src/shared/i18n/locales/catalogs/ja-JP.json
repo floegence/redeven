@@ -1017,7 +1017,22 @@
       "providerNeedsSetup": "設定が必要",
       "currentProviderDisabled": "現在のモデルのプロバイダーは無効です。有効にするか、別のモデルを選択してください。",
       "enableProvider": "{provider} を有効にする",
-      "disableProvider": "{provider} を無効にする"
+      "disableProvider": "{provider} を無効にする",
+      "dialogChatGPTRenewing": "ChatGPT 接続を更新しています…",
+      "dialogChatGPTTemporarilyUnavailable": "接続を一時的に利用できません。認証情報は保持され、復旧すると自動的に再接続します。",
+      "dialogChatGPTReviewRequired": "ChatGPT がこの接続を拒否しました。接続を確認するか、再度認証してください。",
+      "dialogChatGPTStorageUnavailable": "認証情報を安全に保存できませんでした。ローカルのアカウントストレージを修復して再試行してください。",
+      "dialogChatGPTSigningOut": "ログアウト中…",
+      "dialogChatGPTSignedOut": "このデバイスからログアウトしました。",
+      "dialogChatGPTCleanupFailed": "アカウントの使用は停止しましたが、ローカルの認証情報は削除されていません。ストレージを修復してログアウトを再試行してください。",
+      "dialogChatGPTSignOutStatusUnavailable": "ログアウト状態を読み取れませんでした。接続を確認し、再試行して結果を確認してください。",
+      "dialogChatGPTRemoveAccountOnSaveImpact": "この削除を保存すると、他の接続がないためアカウントからログアウトします。この ランタイム 上の {tasks} 件の実行中タスクとその子タスクを含め、このアカウントを使用するすべてのタスクを停止します。会話は保持されます。保存するまではログイン状態を維持します。",
+      "dialogChatGPTRetry": "再試行",
+      "dialogChatGPTDisconnectApps": "ChatGPT の設定で接続済みアプリを確認",
+      "dialogChatGPTEligibilityRequired": "このアカウントは ChatGPT プランの共有対象ではありません。プランとアカウントの権限を確認してください。",
+      "dialogChatGPTRegionUnavailable": "お住まいの地域では ChatGPT プランの共有を利用できません。",
+      "dialogChatGPTCancelSignOut": "ログインを維持",
+      "dialogChatGPTSignOutImpact": "このアカウントは {connections} 件の接続と {tasks} 件の実行中のタスクで使用されています。ログアウトすると、子タスクを含む、このアカウントを使用するすべてのタスクが停止します。会話は保持されます。"
     },
     "reasoningControl": {
       "default": "デフォルト",
@@ -3220,7 +3235,6 @@
     "back": "戻る",
     "restoreConnection": "接続を復旧",
     "operationInProgress": "別の操作がこのランタイムを使用しています。完了するまでお待ちください。",
-
     "title": "Gateway アクセスを追加",
     "menuAction": "Gateway アクセスを追加",
     "currentStatus": "現在の状態",

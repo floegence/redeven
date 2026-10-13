@@ -222,6 +222,22 @@ export type FlowerProviderDialogCopy = Readonly<{
     signInFailed: string;
     signOut: string;
     revocationUnconfirmed: string;
+    renewing: string;
+    temporarilyUnavailable: string;
+    reviewRequired: string;
+    storageUnavailable: string;
+    signingOut: string;
+    signedOut: string;
+    cleanupFailed: string;
+    signOutStatusUnavailable: string;
+    removeAccountOnSaveImpact: (tasks: number) => string;
+    retry: string;
+    disconnectApps: string;
+    eligibilityRequired: string;
+    regionUnavailable: string;
+    cancelSignOut: string;
+    signOutImpact: (connections: number, tasks: number) => string;
+
   }>;
   catalog: ModelCatalogCopy;
   addTitle: string;
@@ -1425,6 +1441,21 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
         signInFailed: "Sign-in could not complete. Try again.",
         signOut: "Sign out",
         revocationUnconfirmed: "Signed out on this device. Revocation could not be confirmed; review connected apps in ChatGPT.",
+        renewing: "Renewing your ChatGPT connection…",
+        temporarilyUnavailable: "Connection temporarily unavailable. Your credentials are kept; recovery is automatic.",
+        reviewRequired: "ChatGPT rejected this connection. Review the connection or authorize it again.",
+        storageUnavailable: "Credentials could not be saved safely. Repair local account storage and retry.",
+        signingOut: "Signing out…",
+        signedOut: "Signed out on this device.",
+        cleanupFailed: "Account use has stopped, but local credentials have not been cleared. Repair storage and retry sign-out.",
+        signOutStatusUnavailable: "Sign-out status could not be read. Check the connection and retry to confirm the result.",
+        removeAccountOnSaveImpact: tasks => `Saving this removal signs out the account because it has no other connections. It stops all tasks using this account, including ${tasks} active tasks on this Runtime and their child tasks. Conversations are kept. Until you save, the account stays signed in.`,
+        retry: "Retry",
+        disconnectApps: "Review connected apps in ChatGPT settings",
+        eligibilityRequired: "Your account is not eligible to share its ChatGPT plan. Review your plan and account access.",
+        regionUnavailable: "ChatGPT plan sharing is unavailable in your region.",
+        cancelSignOut: "Keep signed in",
+        signOutImpact: (connections, tasks) => `This account is used by ${connections} connections and ${tasks} active tasks. Signing out stops every task using this account, including child tasks. Conversations are kept.`,
       },
       connectionTitle: 'Connection',
       connectionDescription: 'Credentials and endpoints are stored with the Local AI Profile.',

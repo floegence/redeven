@@ -25,19 +25,20 @@ async function mount(local: boolean, locale: RedevenLocale, width: number, dark:
     tn: (key, count, params) => i18n.tn(key as EnvAppTranslationKey, count, params),
   }).settings.dialog;
   const [open, setOpen] = createSignal(true);
+  const [account, setAccount] = createSignal(provider?.chatgpt_account);
   const [binding, setBinding] = createSignal('verified-local-channel');
   host = document.createElement('div'); host.className = 'flower-surface'; document.body.append(host);
   function Theme() { const theme = useTheme(); onMount(() => theme.selectShellTheme(dark ? 'dark' : 'light', dark ? 'porcelain-dark' : 'porcelain-light')); return null; }
   dispose = render(() => <FloeProvider config={{ theme: { shellPresets: builtInShellThemePresets } }}><Theme /><FlowerProviderDialog
     open={open()} mode={mode ?? (provider ? 'edit' : 'create')} provider={provider ?? { id: 'openai', type: 'openai', models: [] }}
-    copy={copy} chatGPTAvailable={local} chatGPTBindingID={binding()} chatGPTAccount={provider?.chatgpt_account}
+    copy={copy} chatGPTAvailable={local} chatGPTBindingID={binding()} chatGPTAccount={account()}
     chatGPTAuth={auth ?? vi.fn(async () => ({ id: 'attempt', state: 'waiting' }))}
     onDiscoverModels={async () => ({ models: provider?.catalog_models ?? [{ model_name: 'gpt-6.1-sol', context_window: 1050000, input_modalities: ['text', 'image'] }] })}
     keyConfigured={false} webSearchKeyConfigured={false} onOpenChange={setOpen} onConfirm={vi.fn()} /></FloeProvider>, host);
   await expect.element(page.getByRole('dialog')).toBeVisible();
   if (!provider || mode === 'create') await userEvent.click(document.querySelector<HTMLButtonElement>('[aria-controls=flower-provider-type-openai]')!);
   await expect.poll(() => document.querySelector('[role=dialog]')!.getAnimations({ subtree: true }).every(animation => animation.playState !== 'running')).toBe(true);
-  return { copy, setOpen, setBinding, open };
+  return { copy, setOpen, setBinding, setAccount, open };
 }
 
 for (const [local, locale, width, dark] of [
@@ -142,3 +143,35 @@ for (const dark of [false, true]) {
     if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: dialog, path: `__screenshots__/flower-provider-api-${dark ? 'dark' : 'light'}.png` });
   });
 }
+
+
+it('updates account facts without replacing the model selection or search', async () => {
+  const draft: FlowerProviderDraft = { id: 'openai', type: 'openai', name: 'Saved name', catalog_models: [{ model_name: 'gpt-6.1-sol', display_name: 'GPT-6.1 Sol' }], model_selection: { selected_models: ['gpt-6.1-sol'] }, auth_method: 'chatgpt', account_id: 'saved', chatgpt_account: { account_id: 'saved', email: 'person@example.com', state: 'ready', welcome_acknowledged: true }, models: [{ model_name: 'gpt-6.1-sol' }] };
+  const { copy, setAccount } = await mount(true, 'en-US', 390, true, draft);
+  const search = page.getByRole('textbox', { name: copy.catalog.search, exact: true });
+  await userEvent.fill(search, 'gpt');
+  (search.element() as HTMLInputElement).focus();
+  setAccount({ ...draft.chatgpt_account!, state: 'temporarily_unavailable', error_code: 'rate_limited' });
+  await expect.element(page.getByText(copy.chatGPT.temporarilyUnavailable, { exact: true })).toBeVisible();
+  expect((document.querySelector<HTMLInputElement>('input[type=checkbox]')!).checked).toBe(true);
+  expect((search.element() as HTMLInputElement).value).toBe('gpt');
+  expect(document.activeElement).toBe(search.element());
+  const dialog = document.querySelector<HTMLElement>('.flower-provider-dialog')!;
+  expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth);
+});
+
+it('confirms shared task impact and disables repeated sign-out while Runtime completes it', async () => {
+  let finish!: (result: Awaited<ReturnType<FlowerChatGPTAuth>>) => void;
+  const auth = vi.fn<FlowerChatGPTAuth>(async action => action === 'sign-out' ? new Promise(resolve => { finish = resolve; }) : {});
+  const draft: FlowerProviderDraft = { id: 'openai', type: 'openai', auth_method: 'chatgpt', account_id: 'saved', chatgpt_account: { account_id: 'saved', email: 'person@example.com', state: 'ready', welcome_acknowledged: true, binding_count: 2, active_task_count: 1 }, models: [{ model_name: 'gpt-6.1-sol' }] };
+  const { copy } = await mount(true, 'en-US', 390, false, draft, auth);
+  await userEvent.click(page.getByRole('button', { name: copy.chatGPT.signOut, exact: true }));
+  await expect.element(page.getByText(copy.chatGPT.signOutImpact(2, 1), { exact: true })).toBeVisible();
+  expect(auth.mock.calls).toHaveLength(0);
+  await userEvent.click(page.getByRole('dialog', { name: copy.chatGPT.signOut, exact: true }).getByRole('button', { name: copy.chatGPT.signOut, exact: true }));
+  await expect.poll(() => auth.mock.calls.length).toBe(1);
+  await expect.element(page.getByRole('button', { name: copy.chatGPT.signingOut, exact: true })).toBeDisabled();
+  finish({ local_cleanup_complete: true, revocation_confirmed: false });
+  await expect.element(page.getByText(copy.chatGPT.revocationUnconfirmed, { exact: true }).first()).toBeVisible();
+  await expect.element(page.getByRole('link', { name: copy.chatGPT.disconnectApps, exact: true })).toHaveAttribute('href', 'https://chatgpt.com/#settings');
+});

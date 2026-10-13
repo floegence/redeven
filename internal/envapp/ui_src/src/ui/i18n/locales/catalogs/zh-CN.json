@@ -5906,7 +5906,22 @@
       "providerNeedsSetup": "需配置",
       "currentProviderDisabled": "当前模型的提供商已停用。请重新启用，或选择其他模型。",
       "enableProvider": "启用 {provider}",
-      "disableProvider": "停用 {provider}"
+      "disableProvider": "停用 {provider}",
+      "dialogChatGPTRenewing": "正在续期 ChatGPT 连接…",
+      "dialogChatGPTTemporarilyUnavailable": "连接暂时不可用。凭证已保留，恢复后将自动重连。",
+      "dialogChatGPTReviewRequired": "ChatGPT 拒绝了此连接。请检查连接或重新授权。",
+      "dialogChatGPTStorageUnavailable": "凭证无法可靠保存。请修复本地账号存储后重试。",
+      "dialogChatGPTSigningOut": "正在退出…",
+      "dialogChatGPTSignedOut": "已在此设备退出。",
+      "dialogChatGPTCleanupFailed": "账号使用已停止，但本地凭证尚未清除。请修复存储后重试退出。",
+      "dialogChatGPTSignOutStatusUnavailable": "未能读取退出状态。请检查连接并重试，以确认结果。",
+      "dialogChatGPTRemoveAccountOnSaveImpact": "保存此次移除后，账号将因没有其他连接而退出。使用此账号的所有任务将停止，包括此 运行时 上的 {tasks} 个活动任务及其子任务。对话会保留。保存前，账号仍保持登录。",
+      "dialogChatGPTRetry": "重试",
+      "dialogChatGPTDisconnectApps": "在 ChatGPT 设置中检查已连接的应用",
+      "dialogChatGPTEligibilityRequired": "此账号不符合共享 ChatGPT 套餐的条件。请检查套餐及账号权限。",
+      "dialogChatGPTRegionUnavailable": "你所在地区暂不支持共享 ChatGPT 套餐。",
+      "dialogChatGPTCancelSignOut": "保持登录",
+      "dialogChatGPTSignOutImpact": "此账号用于 {connections} 个连接和 {tasks} 个活动任务。退出将停止使用此账号的所有任务，包括子任务。对话会保留。"
     },
     "computer": {
       "title": "浏览器与桌面",

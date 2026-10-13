@@ -5906,7 +5906,22 @@
       "providerNeedsSetup": "Requiere configuración",
       "currentProviderDisabled": "El proveedor del modelo actual está desactivado. Actívalo o elige otro modelo.",
       "enableProvider": "Activar {provider}",
-      "disableProvider": "Desactivar {provider}"
+      "disableProvider": "Desactivar {provider}",
+      "dialogChatGPTRenewing": "Renovando la conexión con ChatGPT…",
+      "dialogChatGPTTemporarilyUnavailable": "Conexión no disponible temporalmente. Se conservan tus credenciales; la recuperación es automática.",
+      "dialogChatGPTReviewRequired": "ChatGPT ha rechazado esta conexión. Revísala o autorízala de nuevo.",
+      "dialogChatGPTStorageUnavailable": "No se han podido guardar las credenciales de forma segura. Repara el almacenamiento local de cuentas e inténtalo de nuevo.",
+      "dialogChatGPTSigningOut": "Cerrando sesión…",
+      "dialogChatGPTSignedOut": "Sesión cerrada en este dispositivo.",
+      "dialogChatGPTCleanupFailed": "Se ha detenido el uso de la cuenta, pero no se han borrado las credenciales locales. Repara el almacenamiento y vuelve a cerrar sesión.",
+      "dialogChatGPTSignOutStatusUnavailable": "No se pudo leer el estado del cierre de sesión. Comprueba la conexión y vuelve a intentarlo para confirmar el resultado.",
+      "dialogChatGPTRemoveAccountOnSaveImpact": "Al guardar esta eliminación, se cerrará la sesión de la cuenta porque no tiene otras conexiones. Se detendrán todas sus tareas, incluidas las {tasks} tareas activas de este entorno de ejecución y sus subtareas. Las conversaciones se conservarán. La sesión seguirá abierta hasta que guardes.",
+      "dialogChatGPTRetry": "Reintentar",
+      "dialogChatGPTDisconnectApps": "Revisar las aplicaciones conectadas en los ajustes de ChatGPT",
+      "dialogChatGPTEligibilityRequired": "Tu cuenta no cumple los requisitos para compartir su plan de ChatGPT. Revisa tu plan y los permisos de la cuenta.",
+      "dialogChatGPTRegionUnavailable": "Compartir el plan de ChatGPT no está disponible en tu región.",
+      "dialogChatGPTCancelSignOut": "Mantener la sesión",
+      "dialogChatGPTSignOutImpact": "Esta cuenta se usa en {connections} conexiones y {tasks} tareas activas. Cerrar sesión detiene todas las tareas que usan esta cuenta, incluidas las subtareas. Se conservan las conversaciones."
     },
     "computer": {
       "title": "Navegador y escritorio",

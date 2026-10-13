@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/http"
 	"net/url"
 	"os"
@@ -99,6 +100,7 @@ type AIRuntimeStatus struct {
 }
 
 type DesktopModelSourceModel struct {
+	AccountID                     string                        `json:"account_id,omitempty"`
 	BillingSource                 string                        `json:"billing_source,omitempty"`
 	AliasGroup                    string                        `json:"alias_group,omitempty"`
 	Quantization                  string                        `json:"quantization,omitempty"`
@@ -114,11 +116,17 @@ type DesktopModelSourceModel struct {
 	Capability                    *contextmodel.ModelCapability `json:"capability,omitempty"`
 }
 
+type DesktopAccountFact struct {
+	State    string `json:"state"`
+	Revision uint64 `json:"revision"`
+}
+
 type DesktopModelSourceModelSnapshot struct {
-	Configured            bool                      `json:"configured"`
-	CurrentModel          string                    `json:"current_model"`
-	Models                []DesktopModelSourceModel `json:"models"`
-	MissingKeyProviderIDs []string                  `json:"missing_key_provider_ids,omitempty"`
+	Accounts              map[string]DesktopAccountFact `json:"accounts,omitempty"`
+	Configured            bool                          `json:"configured"`
+	CurrentModel          string                        `json:"current_model"`
+	Models                []DesktopModelSourceModel     `json:"models"`
+	MissingKeyProviderIDs []string                      `json:"missing_key_provider_ids,omitempty"`
 }
 
 type DesktopModelSourceConnectorOptions struct {
@@ -199,6 +207,7 @@ type desktopModelSourceClient struct {
 type desktopModelSourceProvider struct {
 	client         *desktopModelSourceClient
 	defaultModelID string
+	accountStopped func()
 }
 
 type desktopModelSourceRuntimeConn struct {
@@ -349,7 +358,7 @@ func (c *desktopModelSourceClient) ServeRPC(ctx context.Context, session Desktop
 					}
 				}
 			}
-			timer.Reset(5 * time.Second)
+			timer.Reset(time.Second)
 		}
 	}()
 	err = runtimeConn.readLoop(ctx)
@@ -486,6 +495,7 @@ func (c *desktopModelSourceClient) Snapshot() *DesktopModelSourceModelSnapshot {
 		return nil
 	}
 	cp := *c.lastSnapshot
+	cp.Accounts = maps.Clone(cp.Accounts)
 	cp.Models = append([]DesktopModelSourceModel(nil), cp.Models...)
 	cp.MissingKeyProviderIDs = append([]string(nil), cp.MissingKeyProviderIDs...)
 	return &cp
@@ -525,6 +535,7 @@ func (c *desktopModelSourceClient) ListModels(ctx context.Context) (*DesktopMode
 	}
 	c.lastErr = ""
 	cp := out
+	cp.Accounts = maps.Clone(out.Accounts)
 	cp.Models = append([]DesktopModelSourceModel(nil), out.Models...)
 	cp.MissingKeyProviderIDs = append([]string(nil), out.MissingKeyProviderIDs...)
 	c.lastSnapshot = &cp
@@ -867,7 +878,12 @@ func (p *desktopModelSourceProvider) StreamTurn(ctx context.Context, req ModelGa
 		return ModelGatewayResult{}, errors.New("missing desktop model source model")
 	}
 	req.Model = model
-	return p.client.StreamTurn(ctx, req, onEvent)
+	result, err := p.client.StreamTurn(ctx, req, onEvent)
+	var failure *DesktopModelSourceRPCError
+	if p.accountStopped != nil && errors.As(err, &failure) && (failure.Code == "CHATGPT_AUTHORIZATION_REQUIRED" || failure.Code == "CHATGPT_STORAGE_UNAVAILABLE") {
+		p.accountStopped()
+	}
+	return result, err
 }
 
 func RunDesktopModelSourceConnector(ctx context.Context, opts DesktopModelSourceConnectorOptions) error {
@@ -1146,6 +1162,10 @@ func (e *desktopModelSourceExecutor) handleRequest(ctx context.Context, frame De
 			if errors.As(err, &contractErr) {
 				code = "MODEL_RESULT_INVALID"
 			}
+			var failure *chatgpt.Error
+			if errors.As(err, &failure) && (failure.Code == "authorization_required" || failure.Code == "storage_unavailable") {
+				code = "CHATGPT_" + strings.ToUpper(failure.Code)
+			}
 			sendErr(code, err)
 			return
 		}
@@ -1284,6 +1304,16 @@ func (e *desktopModelSourceExecutor) writeStartupReport(reportFile string) error
 
 func buildDesktopModelSourceModelSnapshot(cfg *config.AIConfig, secretStore *settings.SecretsStore, catalogRoots ...string) (*DesktopModelSourceModelSnapshot, map[string]desktopModelSourceRegistryEntry, error) {
 	out := &DesktopModelSourceModelSnapshot{Configured: cfg.HasModelProfile()}
+	if secretStore != nil {
+		accounts, err := chatgpt.New(secretStore).AccountSnapshots(context.Background())
+		if err != nil {
+			return nil, nil, err
+		}
+		out.Accounts = make(map[string]DesktopAccountFact, len(accounts))
+		for id, account := range accounts {
+			out.Accounts[id] = DesktopAccountFact{State: account.Status.State, Revision: account.SessionRevision}
+		}
+	}
 	registry := map[string]desktopModelSourceRegistryEntry{}
 	if !cfg.HasModelProfile() {
 		return out, registry, nil
@@ -1324,8 +1354,7 @@ func buildDesktopModelSourceModelSnapshot(cfg *config.AIConfig, secretStore *set
 		if secretStore != nil && !keySet {
 			var err error
 			if p.EffectiveAuthMethod() == config.AIAuthChatGPT {
-				account, ok, e := secretStore.ChatGPTAccount(p.AccountID)
-				keySet, err = ok && account.PlanEnabled(), e
+				keySet = out.Accounts[p.AccountID].State == "ready"
 			} else {
 				keySet, err = secretStore.HasAIProviderAPIKey(providerID)
 			}
@@ -1360,6 +1389,7 @@ func buildDesktopModelSourceModelSnapshot(cfg *config.AIConfig, secretStore *set
 				Quantization:                  m.Quantization,
 				Label:                         providerName + " / " + firstNonEmpty(m.DisplayName, modelName),
 				BillingSource:                 chatGPTBillingSource(p),
+				AccountID:                     p.AccountID,
 				Provider:                      providerName,
 				ContextWindow:                 m.ContextWindow,
 				MaxOutputTokens:               m.MaxOutputTokens,

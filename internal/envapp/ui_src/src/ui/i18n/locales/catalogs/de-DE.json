@@ -5906,7 +5906,22 @@
       "providerNeedsSetup": "Einrichtung erforderlich",
       "currentProviderDisabled": "Der Anbieter des aktuellen Modells ist deaktiviert. Aktivieren Sie ihn oder wählen Sie ein anderes Modell.",
       "enableProvider": "{provider} aktivieren",
-      "disableProvider": "{provider} deaktivieren"
+      "disableProvider": "{provider} deaktivieren",
+      "dialogChatGPTRenewing": "ChatGPT-Verbindung wird erneuert…",
+      "dialogChatGPTTemporarilyUnavailable": "Verbindung vorübergehend nicht verfügbar. Deine Zugangsdaten bleiben gespeichert; die Verbindung wird automatisch wiederhergestellt.",
+      "dialogChatGPTReviewRequired": "ChatGPT hat diese Verbindung abgelehnt. Prüfe die Verbindung oder autorisiere sie erneut.",
+      "dialogChatGPTStorageUnavailable": "Zugangsdaten konnten nicht sicher gespeichert werden. Repariere den lokalen Kontospeicher und versuche es erneut.",
+      "dialogChatGPTSigningOut": "Abmeldung läuft…",
+      "dialogChatGPTSignedOut": "Auf diesem Gerät abgemeldet.",
+      "dialogChatGPTCleanupFailed": "Die Kontonutzung wurde gestoppt, aber lokale Zugangsdaten wurden nicht gelöscht. Repariere den Speicher und wiederhole die Abmeldung.",
+      "dialogChatGPTSignOutStatusUnavailable": "Der Abmeldestatus konnte nicht gelesen werden. Prüfen Sie die Verbindung und versuchen Sie es erneut, um das Ergebnis zu bestätigen.",
+      "dialogChatGPTRemoveAccountOnSaveImpact": "Beim Speichern dieser Entfernung wird das Konto abgemeldet, da keine anderen Verbindungen bestehen. Alle Aufgaben dieses Kontos werden gestoppt, einschließlich der {tasks} aktiven Aufgaben dieser Laufzeit und ihrer Unteraufgaben. Gespräche bleiben erhalten. Bis zum Speichern bleibt das Konto angemeldet.",
+      "dialogChatGPTRetry": "Erneut versuchen",
+      "dialogChatGPTDisconnectApps": "Verbundene Apps in den ChatGPT-Einstellungen prüfen",
+      "dialogChatGPTEligibilityRequired": "Dein Konto ist nicht zur Freigabe des ChatGPT-Tarifs berechtigt. Prüfe deinen Tarif und die Kontoberechtigungen.",
+      "dialogChatGPTRegionUnavailable": "Die Freigabe des ChatGPT-Tarifs ist in deiner Region nicht verfügbar.",
+      "dialogChatGPTCancelSignOut": "Angemeldet bleiben",
+      "dialogChatGPTSignOutImpact": "Dieses Konto wird von {connections} Verbindungen und {tasks} aktiven Aufgaben genutzt. Die Abmeldung stoppt alle Aufgaben mit diesem Konto, einschließlich Unteraufgaben. Unterhaltungen bleiben erhalten."
     },
     "computer": {
       "title": "Browser und Desktop",

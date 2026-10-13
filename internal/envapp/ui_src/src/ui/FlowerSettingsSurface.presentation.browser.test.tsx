@@ -540,3 +540,19 @@ it('compares each provider model in a full-width table with its own capability d
   expect(details.getBoundingClientRect().height).toBeLessThan(32);
   expect(saveModel).not.toHaveBeenCalled();
 });
+
+
+it('confirms final account removal as a draft and preserves it through account updates', async () => {
+  const initial: FlowerSettingsSnapshot = { ...settings(), auth_capabilities: { openai_chatgpt: { available: true, binding_id: 'local' } }, model_profile: { ...settings().model_profile!, providers: [{ id: 'openai', type: 'openai', auth_method: 'chatgpt', account_id: 'saved', model_selection: { selected_models: ['gpt-6.1-sol'] }, models: [{ model_name: 'gpt-6.1-sol' }] }], current_model_id: 'openai/gpt-6.1-sol' }, chatgpt_accounts: { openai: { account_id: 'saved', email: 'person@example.com', state: 'ready', welcome_acknowledged: true, active_task_count: 1 } } };
+  const { copy, saveModel, setSnapshot } = await mount('zh-CN', 390, true, initial);
+  await userEvent.click(page.getByRole('button', { name: copy.settings.removeProvider, exact: true }));
+  const confirm = page.getByRole('dialog', { name: copy.settings.removeProvider, exact: true });
+  await expect.element(confirm.getByText(copy.settings.dialog.chatGPT.removeAccountOnSaveImpact(1), { exact: true })).toBeVisible();
+  await userEvent.keyboard('{Escape}');
+  expect(saveModel.mock.calls).toHaveLength(0);
+  await userEvent.click(page.getByRole('button', { name: copy.settings.removeProvider, exact: true }));
+  await userEvent.click(confirm.getByRole('button', { name: copy.settings.removeProvider, exact: true }));
+  setSnapshot({ ...initial, chatgpt_accounts: { openai: { ...initial.chatgpt_accounts!.openai, state: 'temporarily_unavailable' } } });
+  expect(host.querySelectorAll('.flower-settings-provider-card')).toHaveLength(0);
+  expect(saveModel.mock.calls).toHaveLength(0);
+});

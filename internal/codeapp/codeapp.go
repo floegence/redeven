@@ -123,7 +123,8 @@ type Service struct {
 
 	pluginIntegration *redevpluginintegration.Integration
 
-	terminalLayoutCleanup func()
+	terminalLayoutCleanup  func()
+	stopAccountMaintenance func()
 }
 
 func New(ctx context.Context, opts Options) (*Service, error) {
@@ -482,6 +483,21 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	svc.aiReady = aiReady
 	svc.pluginIntegration = pluginIntegration
 	svc.terminalLayoutCleanup = terminalLayoutCleanup
+	svc.stopAccountMaintenance = chatGPT.Maintain(context.Background(), func() ([]string, error) {
+		cfg, err := config.Load(opts.ConfigPath)
+		if err != nil {
+			return nil, err
+		}
+		var ids []string
+		if cfg.AI != nil {
+			for _, p := range cfg.AI.Providers {
+				if p.EffectiveAuthMethod() == config.AIAuthChatGPT {
+					ids = append(ids, p.AccountID)
+				}
+			}
+		}
+		return ids, nil
+	})
 	aiReady.Start()
 	managedSvc.Start(context.Background())
 	containerResourcesOwned = false
@@ -492,6 +508,9 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 func (s *Service) Close() error {
 	if s == nil {
 		return nil
+	}
+	if s.stopAccountMaintenance != nil {
+		s.stopAccountMaintenance()
 	}
 	// Enter management shutdown before retiring request and engine resources,
 	// so cancellation cannot be mistaken for a user request to stop a service.

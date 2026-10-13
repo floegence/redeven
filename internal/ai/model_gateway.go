@@ -94,6 +94,8 @@ type openAIProvider struct {
 	requireTerminal  bool
 	chatGPT          bool
 	chatGPTToken     func(context.Context) (string, error)
+	chatGPTFailure   func(context.Context, string, error)
+	chatGPTWatch     func(context.Context, func(error)) (func(), error)
 }
 
 type parallelToolCallsWireMode string
@@ -238,13 +240,35 @@ func (p *openAIProvider) prepareTurn(ctx context.Context, req ModelGatewayReques
 	})
 }
 
-func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases providerToolAliases, payload []byte, onEvent func(StreamEvent), chatGPTContext ...chatGPTStreamContext) (ModelGatewayResult, error) {
+func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases providerToolAliases, payload []byte, onEvent func(StreamEvent), chatGPTContext ...chatGPTStreamContext) (result ModelGatewayResult, resultErr error) {
+	var bearer string
+	if p.chatGPTWatch != nil {
+		watchCtx, cancel := context.WithCancelCause(ctx)
+		stop, err := p.chatGPTWatch(watchCtx, cancel)
+		if err != nil {
+			return ModelGatewayResult{}, err
+		}
+		defer stop()
+		defer cancel(nil)
+		ctx = watchCtx
+		defer func() {
+			if cause := context.Cause(watchCtx); cause != nil && !errors.Is(cause, context.Canceled) {
+				resultErr = cause
+			}
+		}()
+	}
+	defer func() {
+		if resultErr != nil && p.chatGPTFailure != nil && bearer != "" {
+			p.chatGPTFailure(context.WithoutCancel(ctx), bearer, resultErr)
+		}
+	}()
 	options := []ooption.RequestOption{ooption.WithRequestBody("application/json", payload)}
 	if p.chatGPTToken != nil {
 		token, err := p.chatGPTToken(ctx)
 		if err != nil {
 			return ModelGatewayResult{}, err
 		}
+		bearer = token
 		options = append(options, ooption.WithAPIKey(token), ooption.WithMaxRetries(0))
 	}
 	stream := p.client.Responses.NewStreaming(ctx, oresponses.ResponseNewParams{}, options...)
@@ -491,7 +515,7 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 		return ModelGatewayResult{}, errors.New("missing response.completed event")
 	}
 
-	result := ModelGatewayResult{
+	result = ModelGatewayResult{
 		FinishReason:    "unknown",
 		Text:            strings.TrimSpace(textBuf.String()),
 		Reasoning:       reasoningBuf.String(),
