@@ -14,6 +14,9 @@ import (
 // ModelCatalogIdentity contains no credential bytes. Rotating credentials or
 // changing an account/endpoint starts a separate inventory scope.
 func ModelCatalogIdentity(p AIProvider, key string) string {
+	if p.EffectiveAuthMethod() == AIAuthChatGPT {
+		key = ""
+	}
 	credential := sha256.Sum256([]byte(key))
 	raw, _ := json.Marshal([]string{p.ID, p.Type, strings.TrimRight(p.BaseURL, "/"), p.EffectiveAuthMethod(), p.AccountID, hex.EncodeToString(credential[:])})
 	digest := sha256.Sum256(raw)
@@ -134,7 +137,7 @@ func WithLocalModelCatalogs(cfg *AIConfig, root string, resolveKey func(string) 
 	next.Providers = append([]AIProvider(nil), cfg.Providers...)
 	for i, p := range next.Providers {
 		key := ""
-		if resolveKey != nil {
+		if resolveKey != nil && p.EffectiveAuthMethod() != AIAuthChatGPT {
 			var err error
 			key, _, err = resolveKey(p.ID)
 			if err != nil {

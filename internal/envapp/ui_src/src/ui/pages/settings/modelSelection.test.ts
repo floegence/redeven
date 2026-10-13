@@ -3,8 +3,47 @@ import { createStore } from 'solid-js/store';
 import { cloneFlowerModel, applyFlowerModelDiscovery, defaultFlowerProviderModels, filterFlowerModels, flowerProviderModelChoices, resolveFlowerProviderModels, serializeFlowerProvider, setFlowerModelsEnabled } from '../../../../../../flower_ui/src/settings/modelSelection';
 import * as catalog from '../../../../../../flower_ui/src/settings/providerCatalog';
 import type { FlowerProviderDraft, FlowerProviderModel } from '../../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import { applyModelOverride } from '../../../../../../flower_ui/src/providerModelProjection';
 
 const model = (name: string): FlowerProviderModel => ({ model_name: name, context_window: 32000, input_modalities: ['text'] });
+
+describe('reviewed defaults across every provider', () => {
+  for (const type of ['openai', 'anthropic', 'google', 'moonshot', 'chatglm', 'deepseek', 'qwen', 'xai', 'groq'] as const) {
+    it(`preserves every ${type} model through sparse overrides and save/reopen`, () => {
+      const models = catalog.recommendedModelsForFlowerProviderType(type).map(cloneFlowerModel);
+      expect(models.length).toBeGreaterThan(0);
+      const provider: FlowerProviderDraft = { id: type, type, models: [], model_selection: {
+        selected_models: models.map(m => m.model_name),
+        // Go serializes zero-valued nested structs even in sparse overrides.
+        model_overrides: models.map(m => JSON.parse(JSON.stringify({ model_name: m.model_name, context_window: 0, max_output_tokens: 0, input_modalities: null,
+          reasoning_capability: { kind: '', wire_shape: '', source_urls: null, source_checked_at: '', fixture: '' }, default_reasoning_selection: {} }))),
+      } };
+      const resolved = resolveFlowerProviderModels(provider, models);
+      expect(resolved).toEqual(models);
+      expect(resolveFlowerProviderModels(serializeFlowerProvider({ ...provider, catalog_models: models, models: resolved }), models)).toEqual(models);
+    });
+  }
+  it('retains OpenAI metadata when the account inventory is absent or empty without enabling models', () => {
+    const models = catalog.recommendedModelsForFlowerProviderType('openai').map(cloneFlowerModel);
+    const provider: FlowerProviderDraft = { id: 'account', type: 'openai', auth_method: 'chatgpt', account_id: 'account', models: [],
+      model_selection: { selected_models: models.map(m => m.model_name) } };
+    for (const inventory of [undefined, []]) {
+      const resolved = resolveFlowerProviderModels(provider, inventory);
+      expect(resolved).toEqual(models.map(m => ({ ...m, unavailable: true })));
+      expect(flowerProviderModelChoices({ ...provider, catalog_models: inventory, models: resolved }).every(m => m.unavailable)).toBe(true);
+    }
+    const confirmed = applyFlowerModelDiscovery(provider, models.slice(0, 7));
+    expect(confirmed.models.slice(0, 7)).toEqual(models.slice(0, 7));
+    expect(confirmed.models.slice(7).every(m => m.unavailable)).toBe(true);
+  });
+  it('cannot override inventory status or persist stale unavailable state after a model returns', () => {
+    expect(applyModelOverride({ ...model('agent'), status: 'needs_configuration' }, { ...model('agent'), status: 'beta' }).status).toBe('needs_configuration');
+    const saved = { id: 'account', type: 'openai' as const, auth_method: 'chatgpt' as const, models: [], model_selection: { selected_models: ['gpt-6.1-sol'] } };
+    const unavailable = applyFlowerModelDiscovery(saved, []);
+    const recovered = applyFlowerModelDiscovery(unavailable, catalog.recommendedModelsForFlowerProviderType('openai'));
+    expect(recovered.models[0].unavailable).not.toBe(true);
+  });
+});
 
 describe('model catalog preferences', () => {
   it('starts new providers with no selected models', () => {

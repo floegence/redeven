@@ -31,9 +31,9 @@ type ModelDirectorySource struct {
 }
 
 type ModelDirectory struct {
-	ProviderCatalogs map[string][]config.AIProviderModel `json:"provider_catalogs"`
-	Models           []ModelDirectoryModel               `json:"models"`
-	Sources          []ModelDirectorySource              `json:"sources"`
+	ProviderCatalogs map[string][]ModelCatalogModel `json:"provider_catalogs"`
+	Models           []ModelDirectoryModel          `json:"models"`
+	Sources          []ModelDirectorySource         `json:"sources"`
 }
 
 // RuntimeStatusSnapshot reads local observation only. Settings and baseline
@@ -107,7 +107,7 @@ func (s *Service) readModelDirectory(ctx context.Context, meta *session.Meta, _ 
 }
 
 func (s *Service) projectModelDirectory(cfg *config.AIConfig, out *ModelsResponse, desktopSnapshot *DesktopModelSourceModelSnapshot) ModelDirectory {
-	directory := ModelDirectory{ProviderCatalogs: map[string][]config.AIProviderModel{}, Models: []ModelDirectoryModel{}, Sources: []ModelDirectorySource{}}
+	directory := ModelDirectory{ProviderCatalogs: map[string][]ModelCatalogModel{}, Models: []ModelDirectoryModel{}, Sources: []ModelDirectorySource{}}
 	available := map[string]Model{}
 	for _, m := range out.Models {
 		available[m.ID] = m
@@ -117,7 +117,10 @@ func (s *Service) projectModelDirectory(cfg *config.AIConfig, out *ModelsRespons
 		if p.Type == platformGatewayProviderType {
 			continue
 		}
-		directory.ProviderCatalogs[p.ID] = p.CatalogModels()
+		directory.ProviderCatalogs[p.ID] = []ModelCatalogModel{}
+		for _, m := range p.CatalogModels() {
+			directory.ProviderCatalogs[p.ID] = append(directory.ProviderCatalogs[p.ID], ModelCatalogModel{AIProviderModel: m, WebSearch: config.ResolveAIWebSearch(p, m.EffectiveWireModelName(), false).AIWebSearchAvailability})
+		}
 		name := firstNonEmpty(p.Name, defaultProviderDisplayName(p), p.ID)
 		source := ModelDirectorySource{ID: p.ID, Kind: modelSourceRuntimeConfig, State: "ready"}
 		dynamic := p.Type == "ollama" || p.Type == "openrouter" || p.EffectiveAuthMethod() == config.AIAuthChatGPT
@@ -150,7 +153,7 @@ func (s *Service) projectModelDirectory(cfg *config.AIConfig, out *ModelsRespons
 		if p.ModelSelection != nil {
 			for _, id := range p.ModelSelection.SelectedModels {
 				if !slices.ContainsFunc(models, func(m config.AIProviderModel) bool { return m.ModelName == id }) {
-					models = append(models, config.AIProviderModel{ModelName: id})
+					models = append(models, p.ModelMetadata(id))
 				}
 			}
 		}
@@ -162,7 +165,7 @@ func (s *Service) projectModelDirectory(cfg *config.AIConfig, out *ModelsRespons
 			id := p.ID + "/" + m.ModelName
 			view, exists := available[id]
 			if !exists {
-				view = Model{ID: id, Label: name + " / " + m.ModelName, Source: modelSourceRuntimeConfig, SourceLabel: modelSourceRuntimeConfigLabel, WebSearch: config.AIWebSearchAvailability{Status: "unavailable", Reason: "model_unavailable"}}
+				view = configModelView(id, name+" / "+firstNonEmpty(m.DisplayName, m.WireModelName, m.ModelName), p, m)
 			}
 			entry := ModelDirectoryModel{Model: view, State: source.State, Reason: source.Reason, ProviderID: p.ID, ProviderName: name, ProviderType: p.Type, ModelName: m.ModelName}
 			if !exists && entry.State == "ready" {

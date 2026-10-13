@@ -1,4 +1,6 @@
 import type { FlowerProvider, FlowerProviderModel } from './contracts/flowerSurfaceContracts';
+import { normalizeFlowerReasoningCapability, normalizeFlowerReasoningSelection } from './reasoning';
+import { recommendedModelsForFlowerProviderType } from './settings/providerCatalog';
 
 export function cloneFlowerModel(model: FlowerProviderModel): FlowerProviderModel {
   const { supports_tools, model_digest, quantization, unavailable, web_search, model_name, display_name, status, wire_model_name, context_window, max_output_tokens, effective_context_window_percent, input_modalities, reasoning_capability, default_reasoning_selection } = model;
@@ -6,7 +8,19 @@ export function cloneFlowerModel(model: FlowerProviderModel): FlowerProviderMode
 }
 
 export function applyModelOverride(model: FlowerProviderModel, override?: FlowerProviderModel): FlowerProviderModel {
-  const merged = { ...model, ...override };
+  const merged = { ...model };
+  if (override) {
+    merged.model_name = override.model_name;
+    if (override.wire_model_name) merged.wire_model_name = override.wire_model_name;
+    if (override.display_name) merged.display_name = override.display_name;
+    if (override.supports_tools != null) merged.supports_tools = override.supports_tools;
+    for (const key of ['context_window', 'max_output_tokens', 'effective_context_window_percent'] as const) {
+      if (override[key]) merged[key] = override[key];
+    }
+    if (override.input_modalities != null) merged.input_modalities = override.input_modalities;
+    if (normalizeFlowerReasoningCapability(override.reasoning_capability)) merged.reasoning_capability = override.reasoning_capability;
+    if (normalizeFlowerReasoningSelection(override.default_reasoning_selection)) merged.default_reasoning_selection = override.default_reasoning_selection;
+  }
   if (model.status === 'unsupported' || model.supports_tools === false) {
     merged.status = 'unsupported'; merged.supports_tools = false;
   }
@@ -15,11 +29,17 @@ export function applyModelOverride(model: FlowerProviderModel, override?: Flower
   return merged;
 }
 
+function unavailableModelMetadata(provider: FlowerProvider, name: string, override?: FlowerProviderModel): FlowerProviderModel {
+  const wire = override?.wire_model_name || name;
+  const reviewed = recommendedModelsForFlowerProviderType(provider.type).find(m => m.model_name === wire || (m.wire_model_name || m.model_name) === wire);
+  return applyModelOverride({ ...reviewed, model_name: name, unavailable: true }, override);
+}
+
 export function projectFlowerProviderModels(provider: FlowerProvider, discovered?: readonly FlowerProviderModel[], authoritative = discovered !== undefined): FlowerProviderModel[] {
   if (!provider.model_selection) return (provider.models ?? []).map(model => {
     if (discovered === undefined) return cloneFlowerModel(model);
     const entry = discovered.find(listed => (listed.wire_model_name || listed.model_name) === (model.wire_model_name || model.model_name));
-    return cloneFlowerModel(entry ? { ...applyModelOverride(entry, model), model_name: model.model_name } : { ...model, unavailable: true });
+    return cloneFlowerModel(entry ? { ...applyModelOverride(entry, model), model_name: model.model_name } : unavailableModelMetadata(provider, model.model_name, model));
   });
   const selection = provider.model_selection;
   const catalog = discovered ?? [];
@@ -28,7 +48,7 @@ export function projectFlowerProviderModels(provider: FlowerProvider, discovered
     const override = overrides.get(model.model_name);
     const target = override?.wire_model_name && override.wire_model_name !== (model.wire_model_name || model.model_name)
       ? catalog.find(entry => (entry.wire_model_name || entry.model_name) === override.wire_model_name) : model;
-    return [model.model_name, applyModelOverride(target ? { ...target, model_name: model.model_name } : { ...model, unavailable: authoritative }, override)] as const;
+    return [model.model_name, applyModelOverride(target ? { ...target, model_name: model.model_name } : unavailableModelMetadata(provider, model.model_name, override), override)] as const;
   }));
   for (const override of overrides.values()) {
     if (!models.has(override.model_name) && override.wire_model_name) {
@@ -38,12 +58,10 @@ export function projectFlowerProviderModels(provider: FlowerProvider, discovered
   }
   for (const custom of selection.custom_models ?? []) {
     const catalogModel = models.get(custom.model_name) ?? catalog.find((entry) => (entry.wire_model_name || entry.model_name) === custom.wire_model_name);
-    models.set(custom.model_name, applyModelOverride(catalogModel ?? { model_name: custom.model_name, ...(authoritative ? { unavailable: true } : {}) }, custom));
+    models.set(custom.model_name, applyModelOverride(catalogModel ?? { ...unavailableModelMetadata(provider, custom.model_name, custom), unavailable: authoritative || undefined }, custom));
   }
   // Legacy profiles must be frozen by the configuration owner, never expanded in chat.
-  return (selection.selected_models ?? []).map((name) => cloneFlowerModel(models.get(name) ?? {
-    ...overrides.get(name), model_name: name, unavailable: true,
-  }));
+  return (selection.selected_models ?? []).map((name) => cloneFlowerModel(models.get(name) ?? unavailableModelMetadata(provider, name, overrides.get(name))));
 }
 
 export function flowerModelNeedsConfiguration(model: FlowerProviderModel): boolean {

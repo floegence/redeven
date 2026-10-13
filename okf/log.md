@@ -2,6 +2,7 @@
 
 ## 2026-10-13
 
+- Audited all 140 shipped model defaults and documented current-default resolution, account-only ChatGPT snapshot scope, sparse override parity, and metadata retention for unavailable settings rows.
 - Documented immediate model reads, silent Runtime-owned synchronization, atomic provider snapshots, cloud scope isolation, and explicit Provider synchronization feedback.
 - Updated Desktop source and configuration boundaries for saved connections without selected models and manual unknown-model capabilities.
 

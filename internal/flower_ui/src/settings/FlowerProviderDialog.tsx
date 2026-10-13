@@ -304,7 +304,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
       if (modelIndex !== index) return model;
       const edited = { ...model, ...patch };
       const listed = store.draft?.catalog_models?.find((entry) => (entry.wire_model_name || entry.model_name) === (edited.wire_model_name || edited.model_name));
-      return applyModelOverride(listed ?? { model_name: edited.model_name }, edited);
+      return applyModelOverride(listed ?? { model_name: edited.model_name, status: model.status }, edited);
     }));
   };
 

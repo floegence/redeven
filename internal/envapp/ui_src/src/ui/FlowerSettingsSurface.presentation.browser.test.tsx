@@ -12,6 +12,9 @@ import { createLocalizedFlowerSurfaceCopy } from '../../../../flower_ui/src/i18n
 import { createI18nHelpers } from './i18n/createI18n';
 import { loadEnvAppDictionary, type EnvAppTranslationKey } from './i18n/locales';
 import type { RedevenLocale } from './i18n/localeMeta';
+import { recommendedModelsForFlowerProviderType } from '../../../../flower_ui/src/settings/providerCatalog';
+import { cloneFlowerModel } from '../../../../flower_ui/src/providerModelProjection';
+import { withFlowerModelDirectory } from '../../../../flower_ui/src/modelDirectory';
 
 let dispose: (() => void) | undefined;
 let host: HTMLDivElement;
@@ -77,7 +80,43 @@ async function mount(locale: RedevenLocale = 'en-US', width = 1000, dark = false
     onSaveModelProfile={saveModel}
     onOpenComputerSettings={openComputerSettings}
   /></FloeProvider>, host);
-  return { copy, savePermission, saveComputer, saveModel, openComputerSettings };
+  return { copy, savePermission, saveComputer, saveModel, openComputerSettings, setSnapshot };
+}
+
+for (const dark of [false, true]) {
+  it(`shows every reviewed OpenAI model after account login in the ${dark ? 'dark' : 'light'} theme`, async () => {
+    const catalog = recommendedModelsForFlowerProviderType('openai').map(cloneFlowerModel);
+    const profile = { schema_version: 1 as const, current_model_id: '', providers: [{ id: 'openai', type: 'openai' as const,
+      auth_method: 'chatgpt' as const, account_id: 'test-account', models: [], model_selection: { selected_models: catalog.map(m => m.model_name),
+        model_overrides: catalog.map(m => ({ model_name: m.model_name, reasoning_capability: {}, default_reasoning_selection: {} })) },
+    }] };
+    const snapshot: FlowerSettingsSnapshot = { ...settings(), model_profile: profile };
+    const directory = { current_model_id: '', sources: [{ id: 'openai', kind: 'runtime_config' as const, state: 'ready' as const }],
+      models: catalog.map(m => ({ id: `openai/${m.model_name}`, label: m.display_name || m.model_name, model_name: m.model_name,
+        provider_id: 'openai', source: 'runtime_config' as const, state: 'ready' as const, web_search: { status: 'available' as const, reason: '' } })),
+      provider_catalogs: { openai: catalog.map(m => ({ ...m, web_search: { status: 'available' as const, reason: '' } })) },
+    };
+    const { setSnapshot, saveModel } = await mount('zh-CN', 1000, dark, withFlowerModelDirectory(snapshot, directory));
+    await userEvent.click(host.querySelector<HTMLButtonElement>('.flower-settings-provider-disclosure')!);
+    const rows = () => [...host.querySelectorAll<HTMLTableRowElement>('.flower-settings-provider-model-table tbody tr')];
+    await expect.poll(() => rows().length).toBe(catalog.length);
+    const checkDefaults = () => rows().forEach((row, i) => {
+      expect(row.textContent).toContain(catalog[i].display_name);
+      expect(row.cells[2].textContent).toBe(catalog[i].context_window!.toLocaleString('en-US'));
+      expect(row.cells[3].textContent).toBe(catalog[i].max_output_tokens!.toLocaleString('en-US'));
+      expect(row.querySelector('[data-web-search]')?.getAttribute('data-web-search')).toBe('available');
+    });
+    checkDefaults();
+    expect(host.querySelectorAll('.flower-settings-provider-model-unavailable')).toHaveLength(0);
+    if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: host.querySelector('.flower-settings-providers-section')!, path: `__screenshots__/flower-openai-defaults-${dark ? 'dark' : 'light'}.png` });
+    setSnapshot(withFlowerModelDirectory(snapshot, { ...directory, provider_catalogs: { openai: [] }, models: directory.models.map(m => ({ ...m, state: 'unavailable' })) }));
+    await expect.poll(() => host.querySelectorAll('.flower-settings-provider-model-unavailable').length).toBe(catalog.length);
+    checkDefaults();
+    setSnapshot(withFlowerModelDirectory(snapshot, directory));
+    await expect.poll(() => host.querySelectorAll('.flower-settings-provider-model-unavailable').length).toBe(0);
+    checkDefaults();
+    expect(saveModel).not.toHaveBeenCalled();
+  });
 }
 
 it('opens a searchable model dialog with metadata and saves a selection', async () => {

@@ -16,7 +16,7 @@ export function flowerProviderModelChoices(provider: FlowerProviderDraft): Flowe
   const choices = new Map(catalog.map((model) => [model.model_name, model]));
   for (const model of [...provider.model_selection?.model_overrides ?? [], ...provider.model_selection?.custom_models ?? [], ...provider.models]) {
     const entry = catalog.find(listed => (listed.wire_model_name || listed.model_name) === (model.wire_model_name || model.model_name));
-    choices.set(model.model_name, applyModelOverride(entry ?? { model_name: model.model_name, ...(provider.catalog_models ? { unavailable: true } : {}) }, model));
+    choices.set(model.model_name, applyModelOverride(entry ?? { model_name: model.model_name, status: model.status, unavailable: model.unavailable ?? (provider.catalog_models ? true : undefined) }, model));
   }
   return [...choices.values()].map((model) => ({ ...model, web_search: provider.models.find((selected) => selected.model_name === model.model_name)?.web_search ?? model.web_search }));
 }
@@ -24,7 +24,9 @@ export function flowerProviderModelChoices(provider: FlowerProviderDraft): Flowe
 export function resolveFlowerProviderModels(provider: FlowerProvider, discovered?: readonly FlowerProviderModel[]): FlowerProviderModel[] {
   if (!provider.model_selection && discovered === undefined) return projectFlowerProviderModels(provider);
   const catalog = discovered ?? (provider.auth_method !== 'chatgpt' && flowerProviderUsesCatalog(provider.type) ? recommendedModelsForFlowerProviderType(provider.type) : undefined);
-  return projectFlowerProviderModels(provider, catalog, discovered !== undefined);
+  return projectFlowerProviderModels(provider, catalog, discovered !== undefined).map(model => ({ ...model,
+    web_search: model.web_search ?? provider.models.find(selected => selected.model_name === model.model_name && (selected.wire_model_name || selected.model_name) === (model.wire_model_name || model.model_name))?.web_search,
+  }));
 }
 
 function equalValue(a: unknown, b: unknown): boolean {
