@@ -67,3 +67,17 @@ func TestSettingsCatalogRetainsRawIdentityAndCapabilities(t *testing.T) {
 		}
 	}
 }
+
+func TestWireOverrideUsesActualTargetCapabilities(t *testing.T) {
+	yes, no := true, false
+	known := AIProviderModel{ModelName: "known", ContextWindow: 32768, MaxOutputTokens: 4096, SupportsTools: &yes}
+	p := AIProvider{Type: "deepseek", ModelSelection: &AIModelSelection{SelectedModels: []string{"known"}, ModelOverrides: []AIProviderModel{{ModelName: "known", WireModelName: "target"}}}}
+	for _, target := range []AIProviderModel{
+		{ModelName: "target", Status: "needs_configuration"},
+		{ModelName: "target", ContextWindow: 8192, SupportsTools: &no},
+	} {
+		if got := p.WithDiscoveredModels([]AIProviderModel{known, target}).EffectiveModels(); len(got) != 0 {
+			t.Fatalf("alias borrowed capabilities from another wire model: %+v", got)
+		}
+	}
+}

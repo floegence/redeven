@@ -12,11 +12,11 @@ export function defaultFlowerProviderModels(_type: FlowerProviderType): FlowerPr
 }
 
 export function flowerProviderModelChoices(provider: FlowerProviderDraft): FlowerProviderModel[] {
-  const choices = new Map((provider.catalog_models ?? (provider.auth_method === 'chatgpt' ? [] : recommendedModelsForFlowerProviderType(provider.type))).map((model) => [model.model_name, model]));
+  const catalog = provider.catalog_models ?? (provider.auth_method === 'chatgpt' ? [] : recommendedModelsForFlowerProviderType(provider.type));
+  const choices = new Map(catalog.map((model) => [model.model_name, model]));
   for (const model of [...provider.model_selection?.model_overrides ?? [], ...provider.model_selection?.custom_models ?? [], ...provider.models]) {
-    const entry = choices.get(model.model_name) ?? (model.wire_model_name
-      ? provider.catalog_models?.find((listed) => (listed.wire_model_name || listed.model_name) === model.wire_model_name) : undefined);
-    choices.set(model.model_name, applyModelOverride(entry ?? { model_name: model.model_name }, model));
+    const entry = catalog.find(listed => (listed.wire_model_name || listed.model_name) === (model.wire_model_name || model.model_name));
+    choices.set(model.model_name, applyModelOverride(entry ?? { model_name: model.model_name, ...(provider.catalog_models ? { unavailable: true } : {}) }, model));
   }
   return [...choices.values()].map((model) => ({ ...model, web_search: provider.models.find((selected) => selected.model_name === model.model_name)?.web_search ?? model.web_search }));
 }
