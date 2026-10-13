@@ -147,42 +147,22 @@ func TestInvitationHasOneDurableConcurrentDelivery(t *testing.T) {
 	}
 }
 
-func TestSchemaThreeMigrationRetiresUnconsumedInvitationsPreservingReceipts(t *testing.T) {
-	store, identity := membershipStore(t)
-	consumed, err := store.Invite("admin")
-	if err != nil {
-		t.Fatal(err)
-	}
-	request, _ := memberRequest(t, consumed, "runtime_migration_consumed")
-	response, err := store.Join(t.Context(), request)
-	if err != nil {
-		t.Fatal(err)
-	}
-	unconsumed, err := store.Invite("admin")
-	if err != nil {
-		t.Fatal(err)
-	}
-	store.mu.Lock()
-	migrated := store.clone()
-	migrated.SchemaVersion = 2
-	if err := gatewaystate.Write(store.path, migrated); err != nil {
-		store.mu.Unlock()
-		t.Fatal(err)
-	}
-	store.mu.Unlock()
-	reopened, err := NewStore(store.path, identity, "", "", store.hooks)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if reopened.state.SchemaVersion != 4 {
-		t.Fatalf("schema version = %d, want 4", reopened.state.SchemaVersion)
-	}
-	if got := reopened.state.Invitations[consumed.InvitationID].Response; got == nil || got.MemberID != response.MemberID {
-		t.Fatal("consumed response receipt was not preserved")
-	}
-	retired := reopened.state.Invitations[unconsumed.InvitationID]
-	if !retired.Canceled || retired.Issued != nil {
-		t.Fatalf("unconsumed legacy invitation remained usable: %#v", retired)
+func TestOldMembershipSchemasAreRejectedWithoutRewrite(t *testing.T) {
+	for _, version := range []int{1, 2, 3, 4} {
+		store, identity := membershipStore(t)
+		legacy := store.clone()
+		legacy.SchemaVersion = version
+		if err := gatewaystate.Write(store.path, legacy); err != nil {
+			t.Fatal(err)
+		}
+		before, _ := os.ReadFile(store.path)
+		if _, err := NewStore(store.path, identity, "", "", store.hooks); !errors.Is(err, ErrState) {
+			t.Fatalf("schema %d was accepted: %v", version, err)
+		}
+		after, _ := os.ReadFile(store.path)
+		if string(before) != string(after) {
+			t.Fatal("old membership state was rewritten")
+		}
 	}
 }
 
@@ -190,7 +170,7 @@ func TestFutureMembershipSchemaIsRejectedWithoutRewrite(t *testing.T) {
 	store, identity := membershipStore(t)
 	store.mu.Lock()
 	future := store.clone()
-	future.SchemaVersion = 5
+	future.SchemaVersion = 6
 	if err := gatewaystate.Write(store.path, future); err != nil {
 		store.mu.Unlock()
 		t.Fatal(err)

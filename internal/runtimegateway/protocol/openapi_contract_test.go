@@ -9,7 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	gc "github.com/floegence/redeven/internal/gatewaycloud/protocol"
 	"github.com/floegence/redeven/internal/gatewaymembership"
 	gp "github.com/floegence/redeven/internal/runtimegateway/protocol"
 )
@@ -17,7 +16,7 @@ import (
 func TestMembershipOpenAPIContainsOnlyCurrentContract(t *testing.T) {
 	_, file, _, _ := runtime.Caller(0)
 	root := filepath.Join(filepath.Dir(file), "../../..")
-	raw, err := os.ReadFile(filepath.Join(root, "spec/openapi/gateway-v5.yaml"))
+	raw, err := os.ReadFile(filepath.Join(root, "spec/openapi/gateway-v6.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +38,7 @@ func TestMembershipOpenAPIContainsOnlyCurrentContract(t *testing.T) {
 		t.Fatal("OpenAPI protocol version differs from the executable")
 	}
 	for _, value := range []any{
-		gc.RuntimeClosureExchangeRequest{}, gc.RuntimeClosureExchangeResponse{}, gc.BindingFence{}, gc.Closure{}, gp.IdentityRequest{}, gp.IdentityResponse{}, gp.ConfigureCloudRequest{}, gp.MemberCloudContext{}, gp.GatewayPermissions{}, gp.GatewayMetadata{}, gp.CatalogRequest{}, gp.CatalogResponse{}, gp.OpenSessionRequest{}, gp.MemberServiceRequest{}, gp.MemberServiceResponse{},
+		gp.IdentityRequest{}, gp.IdentityResponse{}, gp.ConfigureCloudRequest{}, gp.MemberCloudContext{}, gp.GatewayPermissions{}, gp.GatewayMetadata{}, gp.CatalogRequest{}, gp.CatalogResponse{}, gp.OpenSessionRequest{}, gp.MemberServiceRequest{}, gp.MemberServiceResponse{},
 		gp.ClientAccessCodeRequest{}, gp.ClientAccessCodeResponse{}, gp.ClientListRequest{}, gp.ClientListResponse{}, gp.ClientRevokeRequest{}, gp.GatewayClientRecord{}, gp.InvitationRequest{}, gp.RemoveMemberRequest{}, gp.UpdatePolicyRequest{}, gp.UpdateMembersRequest{}, gp.PairingChallengeRequest{}, gp.PairingChallengeResponse{}, gp.PairingCompleteRequest{}, gp.PairingCompleteResponse{},
 		gp.EnrollmentDescriptor{}, gp.MemberDelegation{}, gp.MemberService{}, gp.MemberMetadata{}, gp.MemberJoinRequest{}, gp.MemberJoinResponse{}, gp.MemberRotateRequest{}, gp.MemberRotateResponse{}, gp.GatewayEndpoint{}, gp.EndpointUpdateRequest{}, gp.EndpointUpdateResponse{}, gp.GatewayNetworkSettings{}, gp.NetworkSettingsRequest{}, gp.NetworkSettingsResponse{}, gp.MemberEndpointUpdateRequest{}, gp.MemberEndpointUpdateResponse{},
 		gp.Member{}, gp.MemberConnectRequest{}, gp.GatewayPolicy{}, gp.MemberPolicyUpdate{}, gp.MemberOperationResult{}, gp.HookInput{}, gp.HookResult{}, gatewaymembership.ConnectionOffer{},
@@ -66,7 +65,7 @@ func TestMembershipOpenAPIContainsOnlyCurrentContract(t *testing.T) {
 			}
 		}
 	}
-	expected := []string{"/gateway/v5/clients/access-codes", "/gateway/v5/clients/list", "/gateway/v5/clients/revoke", "/gateway/v5/identity", "/v5/member/cloud-closure", "/gateway/v5/cloud/configure", "/gateway/v5/cloud/status", "/gateway/v5/members/reevaluate", "/v5/member/cloud", "/gateway/v5/pairing/challenge", "/gateway/v5/pairing/complete", "/gateway/v5/catalog", "/gateway/v5/invitation-codes", "/gateway/v5/endpoints", "/gateway/v5/network-settings", "/gateway/v5/members/remove", "/gateway/v5/members/policy", "/gateway/v5/policy", "/gateway/v5/access/open", "/gateway/v5/access/service", "/gateway/v5/migration/dismiss", "/v5/member/join", "/v5/member/cancel-join", "/v5/member/rotate", "/v5/member/leave", "/v5/member/connect", "/v5/member/invitation-exchange", "/v5/member/update-endpoints"}
+	expected := []string{"/gateway/v6/clients/access-codes", "/gateway/v6/clients/list", "/gateway/v6/clients/revoke", "/gateway/v6/identity", "/gateway/v6/cloud/configure", "/gateway/v6/cloud/status", "/gateway/v6/members/reevaluate", "/v6/member/cloud", "/gateway/v6/pairing/challenge", "/gateway/v6/pairing/complete", "/gateway/v6/catalog", "/gateway/v6/invitation-codes", "/gateway/v6/endpoints", "/gateway/v6/network-settings", "/gateway/v6/members/remove", "/gateway/v6/members/policy", "/gateway/v6/policy", "/gateway/v6/access/open", "/gateway/v6/access/service", "/v6/member/join", "/v6/member/cancel-join", "/v6/member/rotate", "/v6/member/leave", "/v6/member/connect", "/v6/member/invitation-exchange", "/v6/member/update-endpoints"}
 	if len(spec.Paths) != len(expected) {
 		t.Fatal("OpenAPI contains unexpected routes")
 	}

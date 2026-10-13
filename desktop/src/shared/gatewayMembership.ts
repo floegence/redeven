@@ -1,6 +1,6 @@
-/** Gateway v5 is the membership and multi-endpoint access contract. */
-export const GATEWAY_PROTOCOL_VERSION = 'redeven-gateway-v5' as const;
-export const GATEWAY_ACCESS_STREAM = 'redeven.gateway.access.https.v5';
+/** Gateway v6 is the membership and multi-endpoint access contract. */
+export const GATEWAY_PROTOCOL_VERSION = 'redeven-gateway-v6' as const;
+export const GATEWAY_ACCESS_STREAM = 'redeven.gateway.access.https.v6';
 
 export type GatewayEndpointScope = 'lan' | 'overlay' | 'public';
 export type GatewayEndpoint = Readonly<{

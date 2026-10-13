@@ -128,7 +128,7 @@ func (c *cli) cloudConnectCmd(args []string) int {
 	}
 	defer client.client.Close()
 	var response gc.Gateway
-	err = client.request(ctx, "/gateway/v5/cloud/configure", gp.ConfigureCloudRequest{ProtocolVersion: gp.Version, CloudOrigin: origin, Reauthorize: *reauthorize}, &response)
+	err = client.request(ctx, "/gateway/v6/cloud/configure", gp.ConfigureCloudRequest{ProtocolVersion: gp.Version, CloudOrigin: origin, Reauthorize: *reauthorize}, &response)
 	gateway := &response
 	if err != nil {
 		writeError(c.stderr, err.Error())
@@ -838,7 +838,7 @@ func (c *cli) cloudStatusCmd(args []string) int {
 	}
 	defer client.client.Close()
 	var status gatewaycloud.Summary
-	err = client.request(ctx, "/gateway/v5/cloud/status", gp.CatalogRequest{ProtocolVersion: gp.Version}, &status)
+	err = client.request(ctx, "/gateway/v6/cloud/status", gp.CatalogRequest{ProtocolVersion: gp.Version}, &status)
 	if err != nil {
 		writeError(c.stderr, err.Error())
 		return 1

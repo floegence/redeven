@@ -745,17 +745,12 @@ export function buildEnvironmentCardFactsModel(environment: DesktopEnvironmentEn
   const facts = baseEnvironmentCardFactsModel(environment);
   const target = environment.provider_runtime_link_target;
   if (target?.cloud_link_state !== 'linked') return facts;
-  const state = target.credential_recovery ?? target.provider_connection_state;
+  const state = target.provider_connection_state;
   const valueKey: DesktopTranslationKey = state === 'authorization_required'
     ? target.cloud_link_binding?.last_error_code === 'CONTROL_CREDENTIALS_EXPIRED' ? 'providerRecovery.expired' : 'providerRecovery.needsAuthorization'
-    : state === 'permission_required' ? 'providerRecovery.permissionRevoked'
-    : state === 'sign_in_required' ? 'environmentCenter.cloudSignInRequired'
-    : state === 'binding_changed' ? 'providerRecovery.attention'
     : state === 'connected' ? 'providerRecovery.connected'
     : state === 'connecting' ? 'providerRecovery.connecting'
     : state === 'retrying' ? 'providerRecovery.retrying'
-    : state === 'restoring' ? 'providerRecovery.restoring'
-    : state === 'waiting' || state === 'waiting_for_service' ? 'providerRecovery.waitingService'
     : state === 'disabled' ? 'providerRecovery.disabled'
     : state === 'unknown' ? 'providerRecovery.unknown' : 'providerRecovery.attention';
   return [...facts, { id: 'cloud-connection', label: 'Redeven Cloud', value: state, value_key: valueKey, value_tone: 'default' }];

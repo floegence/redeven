@@ -182,7 +182,7 @@ func TestControlplaneCapacityQualification(t *testing.T) {
 			path = filepath.Join(filepath.Dir(manifestPath), path)
 		}
 		cfg, err := config.Load(path)
-		if err != nil || cfg.ValidateRemoteStrict() != nil || cfg.GatewayPublication == nil {
+		if err != nil || cfg.ValidateRemoteStrict() != nil || cfg.CloudAssociation == nil {
 			t.Fatalf("invalid runtime fixture %d", index)
 		}
 		if seen[cfg.LocalEnvironmentPublicID] {
@@ -214,15 +214,8 @@ func TestControlplaneCapacityQualification(t *testing.T) {
 			}
 			metrics.observe(name, elapsed, err)
 		}
-		a.gatewayStatusObserver = func(elapsed time.Duration, err error) {
-			metrics.observe("runtime_signed_status", elapsed, err)
-		}
 		agents = append(agents, a)
 		a.startControlChannel(ctx)
-		if cfg.GatewayPublication != nil {
-			wg.Add(1)
-			go func() { defer wg.Done(); a.observeGatewayCloud(ctx) }()
-		}
 		select {
 		case <-ramp.C:
 		case <-ctx.Done():

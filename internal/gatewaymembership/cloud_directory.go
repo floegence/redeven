@@ -1,7 +1,7 @@
 package gatewaymembership
 
-// AcknowledgeCloudDirectory clears only the exact local denial observations
-// committed by Cloud. A newer local edit cannot be acknowledged by an old sync.
+// AcknowledgeCloudDirectory retires confirmed removed directory records.
+// Cloud readback never changes local egress permission.
 func (s *Store) AcknowledgeCloudDirectory(namespace string, policyRevision int64, observed []MemberRecord) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -18,10 +18,6 @@ func (s *Store) AcknowledgeCloudDirectory(namespace string, policyRevision int64
 		}
 		if current.Member.State == "removed" {
 			delete(next.Members, id)
-			changed = true
-		} else if current.Member.CloudRevocationPending && observation.Member.CloudRevocationPending && current.CloudRevocationRevision == observation.CloudRevocationRevision {
-			current.Member.CloudRevocationPending = false
-			next.Members[id] = current
 			changed = true
 		}
 	}

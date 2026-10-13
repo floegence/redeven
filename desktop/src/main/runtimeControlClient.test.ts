@@ -9,6 +9,7 @@ import type { DesktopRuntimeControlEndpoint } from '../shared/runtimeControl';
 import {
   connectCloudLink,
   manageRuntimeGateway,
+  manageRuntimeCloud,
   getCloudLinkStatus,
   RuntimeControlError,
   runtimeControlServiceURL,
@@ -114,31 +115,33 @@ afterEach(async () => {
 
 describe('runtimeControlClient', () => {
   it('sends explicit Gateway targets and isolates Cloud consent from pairing confirmation', async () => {
-    const membership = { joined: true, phase: 'joined', gateway_id: 'one', member_id: 'member-one', cloud_publication: false };
+    const membership = { joined: true, phase: 'joined', gateway_id: 'one', member_id: 'member-one', route_selected: false };
     const server = await startServer((_request, _body, response) => {
       response.setHeader('Content-Type', 'application/json');
       response.end(JSON.stringify({ ok: true, data: { joined: true, phase: 'joined', memberships: [membership] } }));
     });
     const control = endpoint(server.origin);
     expect((await manageRuntimeGateway(control, 'status')).memberships).toEqual([membership]);
-    await manageRuntimeGateway(control, 'leave', undefined, undefined, 'one', false);
-    await manageRuntimeGateway(control, 'leave', undefined, undefined, 'one', true);
-    await manageRuntimeGateway(control, 'publish', undefined, 'preserve', 'one');
+    await manageRuntimeGateway(control, 'leave', undefined, 'one', false);
+    await manageRuntimeGateway(control, 'leave', undefined, 'one', true);
+    await manageRuntimeGateway(control, 'publish', undefined, 'one');
     await manageRuntimeGateway(control, 'join', 'a'.repeat(43));
     expect(server.requests.map(request => request.url)).toEqual(['/v2/gateway/status', '/v2/gateway/leave', '/v2/gateway/leave', '/v2/gateway/publish', '/v2/gateway/join']);
     expect(server.bodies.slice(1).map(body => JSON.parse(body))).toEqual([
-      { gateway_id: 'one' }, { gateway_id: 'one', cloud_impact_acknowledged: true },
-      { gateway_id: 'one', environment_choice: 'preserve' }, { preview_id: 'a'.repeat(43) },
+      { gateway_id: 'one' }, { gateway_id: 'one', route_impact_acknowledged: true },
+      { gateway_id: 'one' }, { preview_id: 'a'.repeat(43) },
     ]);
-    await expect(manageRuntimeGateway(control, 'join', 'a'.repeat(43), 'preserve')).rejects.toMatchObject({ code: 'GATEWAY_JOIN_INVALID' });
+    await expect(manageRuntimeGateway(control, 'join')).rejects.toMatchObject({ code: 'GATEWAY_JOIN_INVALID' });
     expect(server.requests).toHaveLength(5);
   });
-  it.each(['BINDING_PROOF_REQUIRED', 'CLOUD_UNAVAILABLE'])('preserves Gateway publication diagnostic %s', async code => {
-    const server = await startServer((_request, _body, response) => {
-      response.setHeader('Content-Type', 'application/json');
-      response.end(JSON.stringify({ ok: true, data: { joined: true, phase: 'cloud_pending', publication_error_code: code } }));
-    });
-    expect(await manageRuntimeGateway(endpoint(server.origin), 'status')).toMatchObject({ publication_error_code: code });
+  it('uses one typed route operation across preflight, query, commit and cancellation',async()=>{
+    const operationID='a'.repeat(43);
+    const operation={operation_id:operationID,association_revision:1,expected_route_revision:3,selection:{kind:'direct'},state:'awaiting_confirmation',expires_at_unix_ms:Date.now()+60000};
+    const server=await startServer((_request,_body,response)=>{response.setHeader('Content-Type','application/json');response.end(JSON.stringify({ok:true,data:operation}));});
+    await manageRuntimeCloud(endpoint(server.origin),{operation:'preflight',operation_id:operationID,expected_route_revision:3,selection:{kind:'direct'}});
+    for(const action of ['query','commit','cancel'] as const) await manageRuntimeCloud(endpoint(server.origin),{operation:action,operation_id:operationID});
+    expect(server.requests.map(r=>[r.method,r.url])).toEqual([['POST','/v2/cloud/route/preflight'],['GET',`/v2/cloud/route/operations/${operationID}`],['POST','/v2/cloud/route/commit'],['DELETE',`/v2/cloud/route/operations/${operationID}`]]);
+    expect(JSON.parse(server.bodies[2]!)).toEqual({operation_id:operationID,confirmed:true});
   });
 
   it('reads and saves server access only with the private control credential', async () => {

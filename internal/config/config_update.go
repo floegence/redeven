@@ -54,24 +54,64 @@ func SaveConnection(path string, next *Config) error {
 }
 
 func saveConnectionConfig(path string, next *Config, persistence configPersistence) error {
+	return saveConnectionConfigMode(path, next, persistence, false, false)
+}
+
+func saveEnrollmentConnectionConfig(path string, next *Config, bootstrap bool) error {
+	if next != nil && next.bootstrapDeliveryAttemptPath != "" {
+		attempt, err := readPendingCloudEnrollment(path)
+		if err != nil {
+			return err
+		}
+		if attempt.Suspended || attempt.BootstrapDeliveryRequestIDB64u != next.bootstrapDeliveryRequestIDB64u {
+			return errors.New("cloud enrollment was cancelled or replaced")
+		}
+	}
+	return saveConnectionConfigMode(path, next, defaultConfigPersistence(), true, bootstrap)
+}
+
+func saveConnectionConfigMode(path string, next *Config, persistence configPersistence, enrollment, bootstrap bool) error {
 	if next == nil {
 		return errors.New("nil config")
 	}
 	current, err := loadConfig(path, persistence)
 	if errors.Is(err, os.ErrNotExist) {
 		initial := *next
+		if enrollment {
+			initial.CloudAssociation, initial.CloudRoute = nil, nil
+		}
 		current = &initial
 	} else if err != nil {
 		return err
 	}
+	if current.CloudRoute != nil && (next.CloudRoute == nil || current.CloudRoute.Revision != next.CloudRoute.Revision) {
+		return ErrCloudRouteConflict
+	}
+	if enrollment {
+		associationRevision, routeRevision := int64(0), int64(0)
+		if current.CloudAssociation != nil {
+			associationRevision = current.CloudAssociation.Revision
+		}
+		if current.CloudRoute != nil {
+			routeRevision = current.CloudRoute.Revision
+		}
+		alreadyCommitted := current.CloudAssociation != nil && next.CloudAssociation != nil && current.CloudAssociation.EnrollmentOperationID == next.CloudAssociation.EnrollmentOperationID && associationRevision == next.CloudAssociation.Revision
+		if !alreadyCommitted && (associationRevision != next.cloudEnrollmentExpectedAssociationRevision || routeRevision != next.cloudEnrollmentExpectedRouteRevision || next.CloudAssociation == nil || next.CloudAssociation.Revision != associationRevision+1) {
+			return errors.New("cloud enrollment owner changed")
+		}
+	} else if current.CloudAssociation != nil && (next.CloudAssociation == nil || current.CloudAssociation.Revision != next.CloudAssociation.Revision || current.CloudAssociation.CloudOrigin != next.CloudAssociation.CloudOrigin || current.CloudAssociation.NamespacePublicID != next.CloudAssociation.NamespacePublicID || current.CloudAssociation.PublicKeyB64u != next.CloudAssociation.PublicKeyB64u) {
+		return errors.New("cloud association changed")
+	}
+	if current.CloudAssociation != nil && next.CloudAssociation != nil && current.CloudAssociation.Binding != nil && next.CloudAssociation.Binding != nil && current.CloudAssociation.Binding.PublicID == next.CloudAssociation.Binding.PublicID && current.CloudAssociation.Binding.Generation > next.CloudAssociation.Binding.Generation {
+		return errors.New("cloud binding generation regressed")
+	}
+	if bootstrap {
+		current.AgentHomeDir, current.Shell, current.LogLevel, current.LogFormat, current.PermissionPolicy = next.AgentHomeDir, next.Shell, next.LogLevel, next.LogFormat, next.PermissionPolicy
+	}
+	current.CloudAssociation = next.CloudAssociation
+	current.CloudRoute = next.CloudRoute
 	current.GatewayRemovalOutbox = next.GatewayRemovalOutbox
-	current.GatewayClosureOutbox = next.GatewayClosureOutbox
 	current.Gateways = next.Gateways
-	current.GatewayCloudMemberID = next.GatewayCloudMemberID
-	current.GatewayMigrationEvidence = next.GatewayMigrationEvidence
-	current.GatewayEnvironmentChoice = next.GatewayEnvironmentChoice
-	current.GatewayRejoinRequired = next.GatewayRejoinRequired
-	current.GatewayPublication = next.GatewayPublication
 	current.CloudOrigin = next.CloudOrigin
 	current.AccessPointOrigin = next.AccessPointOrigin
 	current.CloudID = next.CloudID
@@ -79,7 +119,6 @@ func saveConnectionConfig(path string, next *Config, persistence configPersisten
 	current.LocalEnvironmentPublicID = next.LocalEnvironmentPublicID
 	current.BindingGeneration = next.BindingGeneration
 	current.AgentInstanceID = next.AgentInstanceID
-	current.Direct = next.Direct
 	current.ControlArtifactPool = next.ControlArtifactPool
 	current.bootstrapDeliveryAttemptPath = next.bootstrapDeliveryAttemptPath
 	current.bootstrapDeliveryRequestIDB64u = next.bootstrapDeliveryRequestIDB64u

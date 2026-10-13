@@ -3,10 +3,11 @@ package agent
 import (
 	"context"
 	"encoding/json"
-	flowersec "github.com/floegence/flowersec/flowersec-go/v5"
 	"path/filepath"
 	"testing"
 	"time"
+
+	flowersec "github.com/floegence/flowersec/flowersec-go/v5"
 
 	"github.com/floegence/redeven/internal/runtimeservice"
 )
@@ -14,14 +15,13 @@ import (
 func TestCloudBindingSurvivesMissingConnectionCredentials(t *testing.T) {
 	cfg := cloudLinkRemoteConfig(t, filepath.Join(t.TempDir(), "config.json"))
 	cfg.ControlArtifactPool = nil
-	cfg.Direct = nil
 	a := &Agent{cfg: cfg, remoteEnabled: true, controlChannelEnabled: true}
 	binding := a.CloudLinkBinding()
-	if binding.State != runtimeservice.CloudLinkStateLinked || binding.EnvPublicID != cfg.EnvironmentID || binding.ConnectionState != "authorization_required" {
+	if binding.State != runtimeservice.CloudLinkStateLinked || binding.EnvPublicID != cfg.EnvironmentID || binding.ConnectionState != "retrying" {
 		t.Fatalf("connection failure must preserve saved identity: %+v", binding)
 	}
-	if cfg.ValidateRemoteStrict() == nil {
-		t.Fatal("display association must not authorize a connection without credentials")
+	if cfg.ValidateRemoteStrict() != nil {
+		t.Fatal("valid independent identity must remain eligible for recovery")
 	}
 }
 
@@ -42,7 +42,7 @@ func TestProviderConnectionDoesNotInferOnlineFromSavedBinding(t *testing.T) {
 	if binding["state"] != "linked" {
 		t.Fatalf("saved binding was lost: %s", encoded)
 	}
-	if binding["connection_state"] != "authorization_required" || binding["last_error_code"] != "CONTROL_CREDENTIALS_EXPIRED" {
+	if binding["connection_state"] != "retrying" || binding["last_error_code"] != "CONTROL_CREDENTIALS_RECOVERING" {
 		t.Fatalf("expired credentials need explicit recovery, not inferred online: %s", encoded)
 	}
 }
@@ -78,7 +78,7 @@ func TestProviderConnectionRecoveryBoundaries(t *testing.T) {
 		{"exhaustion can renew", func(a *Agent) {
 			a.controlFailure = &flowersec.ConnectionDiagnostic{State: flowersec.ConnectionFailed}
 			a.controlCredentialsUnavailable = true
-		}, "authorization_required", "CONTROL_CREDENTIALS_EXHAUSTED"},
+		}, "retrying", "CONTROL_CREDENTIALS_RECOVERING"},
 		{"rejected registration requires review", func(a *Agent) { a.controlBusinessRejected = true }, "authorization_required", "CONTROL_RELINK_REQUIRED"},
 	}
 	for _, tc := range cases {

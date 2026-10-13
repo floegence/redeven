@@ -350,7 +350,6 @@ func (a *Agent) applyControlArtifactTopUp(pending *config.ControlArtifactPending
 	}
 	next := *a.cfg
 	next.ControlArtifactPool = pool
-	next.Direct = nil
 	if err := config.SaveConnection(a.configPath, &next); err != nil {
 		return fmt.Errorf("persist applied control artifact pool: %w", err)
 	}
@@ -533,11 +532,6 @@ func cloneRemoteConfig(source *config.Config) *config.Config {
 	}
 	clone := *source
 	clone.ControlArtifactPool = cloneControlArtifactPool(source.ControlArtifactPool)
-	if source.Direct != nil {
-		direct := *source.Direct
-		direct.ArtifactJSON = append(json.RawMessage(nil), source.Direct.ArtifactJSON...)
-		clone.Direct = &direct
-	}
 	return &clone
 }
 

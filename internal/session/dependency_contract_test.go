@@ -272,7 +272,9 @@ func TestFlowersecTransportPoliciesAreExplicit(t *testing.T) {
 	root := repoRootForTest(t)
 	agentSource := readRepoFile(t, root, "internal/agent/agent.go")
 	for _, marker := range []string{
-		"flowersec.NewConnectionController(&controlArtifactSource",
+		"flowersec.NewConnectionController(source,",
+		"source := &controlArtifactSource{agent: a, expectedConfig: cfg}",
+		"defer source.Close()",
 		"flowersec.NewRPCHandlers()",
 		"RPCHandlers:    handlers",
 		"RPCHandlers:    flowersec.NewRPCHandlers()",
@@ -668,7 +670,7 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 			"Floret ThreadService is the only lifecycle boundary",
 			"one workspace SSE",
 			"redeven-desktop-placement-h2/1",
-			"\"compatibility_epoch\": 57",
+			"\"compatibility_epoch\": 58",
 			"flower-title-generation-v1",
 			"title_generation",
 			"redeven-runtime-v2",

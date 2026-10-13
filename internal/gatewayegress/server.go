@@ -126,12 +126,8 @@ func (s *Server) ReplaceMembers(members []Member) error {
 		return net.ErrClosed
 	}
 	s.members = next
-	byID := make(map[string]memberPolicy, len(next))
-	for _, policy := range next {
-		byID[policy.id] = policy
-	}
 	for current := range s.active {
-		policy, exists := byID[current.memberID]
+		policy, exists := next[current.fingerprint]
 		_, allowed := policy.destinations[current.destination]
 		if !exists || !allowed || policy.id != current.memberID || policy.generation != current.generation || policy.memberVersion != current.reservation.Version {
 			current.cancel()

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"runtime"
 	"sync"
+	"time"
 
 	flowersec "github.com/floegence/flowersec/flowersec-go/v5"
 	"github.com/floegence/redeven/internal/config"
@@ -54,12 +55,6 @@ func (a *Agent) persistGatewayMemberFor(id string, member *gatewaymembership.Run
 		return gatewaymembership.ErrConflict
 	}
 	next := *a.cfg
-	if (member == nil || member.Leaving) && a.cfg.CloudGateway() != nil && a.cfg.CloudGateway().GatewayID == id {
-		if err := next.RetireGatewayPublication(); err != nil {
-			return err
-		}
-		next.GatewayCloudMemberID = ""
-	}
 	if member != nil {
 		member = member.Clone()
 		member.Revision++
@@ -194,7 +189,6 @@ func (a *Agent) changeGateway(invitation gp.EnrollmentDescriptor, choice string,
 		a.mu.Unlock()
 		return err
 	}
-	publication := a.cfg.GatewayPublication.Clone()
 	a.setRemoteConfigLocked(next)
 	a.mu.Unlock()
 	if replace {
@@ -202,26 +196,25 @@ func (a *Agent) changeGateway(invitation gp.EnrollmentDescriptor, choice string,
 		if previous != nil {
 			a.stopControlChannel()
 		}
-		if publication != nil && publication.Binding != nil {
-			a.closeGatewaySessions(publication.Binding.PublicID, publication.Binding.Generation)
+		if previous != nil && next.CloudRoute != nil {
+			a.closeCloudRouteSessions(next.CloudRoute.Revision)
 		}
 	}
 	return a.startGatewayMemberLocked()
 }
 
 type GatewayMembershipStatus struct {
-	Joined                bool                      `json:"joined"`
-	GatewayID             string                    `json:"gateway_id,omitempty"`
-	GatewayName           string                    `json:"gateway_name,omitempty"`
-	Endpoints             []gp.GatewayEndpoint      `json:"endpoints,omitempty"`
-	LastEndpointID        string                    `json:"last_endpoint_id,omitempty"`
-	MemberID              string                    `json:"member_id,omitempty"`
-	Phase                 string                    `json:"phase"`
-	ExistingEnvironmentID string                    `json:"existing_environment_id,omitempty"`
-	RejoinRequired        bool                      `json:"rejoin_required,omitempty"`
-	PublicationErrorCode  string                    `json:"publication_error_code,omitempty"`
-	CloudPublication      bool                      `json:"cloud_publication,omitempty"`
-	Memberships           []GatewayMembershipStatus `json:"memberships,omitempty"`
+	RouteSelected           bool                      `json:"route_selected"`
+	CloudEnrollmentRequired bool                      `json:"cloud_enrollment_required"`
+	Joined                  bool                      `json:"joined"`
+	GatewayID               string                    `json:"gateway_id,omitempty"`
+	GatewayName             string                    `json:"gateway_name,omitempty"`
+	Endpoints               []gp.GatewayEndpoint      `json:"endpoints,omitempty"`
+	LastEndpointID          string                    `json:"last_endpoint_id,omitempty"`
+	MemberID                string                    `json:"member_id,omitempty"`
+	Phase                   string                    `json:"phase"`
+	ExistingEnvironmentID   string                    `json:"existing_environment_id,omitempty"`
+	Memberships             []GatewayMembershipStatus `json:"memberships,omitempty"`
 }
 
 func (a *Agent) GatewayMembershipStatus() GatewayMembershipStatus {
@@ -231,9 +224,13 @@ func (a *Agent) GatewayMembershipStatus() GatewayMembershipStatus {
 	if cfg == nil {
 		return GatewayMembershipStatus{Phase: "not_joined"}
 	}
-	out := GatewayMembershipStatus{Phase: "not_joined", ExistingEnvironmentID: cfg.EnvironmentID, RejoinRequired: cfg.GatewayRejoinRequired}
+	out := GatewayMembershipStatus{Phase: "not_joined", ExistingEnvironmentID: cfg.EnvironmentID}
+	if c := cfg.CloudAssociation; c != nil {
+		out.CloudEnrollmentRequired = c.ApprovalState == "identity_required" || c.ApprovalState == "action_required"
+	}
 	for _, member := range cfg.Gateways {
 		status := GatewayMembershipStatus{Joined: true, GatewayID: member.GatewayID, GatewayName: member.GatewayName, Endpoints: member.ConnectionEndpoints(), LastEndpointID: member.LastEndpointID, MemberID: member.MemberID, Phase: "gateway_offline"}
+		status.RouteSelected = cfg.CloudRoute != nil && cfg.CloudRoute.Kind == config.CloudRouteGateway && cfg.CloudRoute.MemberID == member.MemberID
 		if member.PendingJoin != nil {
 			status.Phase = "joining"
 		}
@@ -247,40 +244,6 @@ func (a *Agent) GatewayMembershipStatus() GatewayMembershipStatus {
 				status.Phase = "reauthorization_required"
 			}
 		}
-		status.CloudPublication = cfg.CloudGateway() != nil && cfg.CloudGateway().MemberID == member.MemberID
-		if status.CloudPublication && status.Phase == "joined" {
-			a.mu.Lock()
-			route := a.cfg.GatewayPublication
-			if route != nil {
-				switch {
-				case route.Revoked:
-					status.Phase = "cloud_denied"
-				case route.Binding == nil:
-					status.Phase = "cloud_pending"
-				case a.controlRegistered:
-					status.Phase = "accessible"
-				default:
-					status.Phase = "cloud_control_offline"
-				}
-			}
-			if a.cfg.GatewayEnvironmentChoice == "preserve" && (route == nil || route.Binding == nil) {
-				status.Phase = "migration_pending"
-			}
-			if a.gatewayCloudMemberID == member.MemberID {
-				status.PublicationErrorCode = a.gatewayCloudError
-				switch a.gatewayCloudState {
-				case "cloud_denied", "unpublished":
-					status.Phase = "cloud_denied"
-				case "cloud_approval_required":
-					status.Phase = "cloud_pending"
-				case "awaiting_cloud_approval":
-					if status.Phase == "joined" {
-						status.Phase = "cloud_pending"
-					}
-				}
-			}
-			a.mu.Unlock()
-		}
 		out.Memberships = append(out.Memberships, status)
 	}
 	if len(out.Memberships) > 0 {
@@ -292,6 +255,9 @@ func (a *Agent) GatewayMembershipStatus() GatewayMembershipStatus {
 		out = members[0]
 		out.Memberships = members
 		out.ExistingEnvironmentID = cfg.EnvironmentID
+		if c := cfg.CloudAssociation; c != nil {
+			out.CloudEnrollmentRequired = c.ApprovalState == "identity_required" || c.ApprovalState == "action_required"
+		}
 	}
 	return out
 }
@@ -319,7 +285,7 @@ func (a *Agent) CloseGatewayMembership() {
 	a.stopGatewayMemberLocked()
 }
 
-var ErrGatewayCloudImpactRequired = errors.New("GATEWAY_CLOUD_IMPACT_REQUIRED")
+var ErrGatewayRouteImpactRequired = errors.New("GATEWAY_ROUTE_IMPACT_REQUIRED")
 
 func (a *Agent) LeaveGateway(ids ...string) error {
 	id := ""
@@ -328,10 +294,10 @@ func (a *Agent) LeaveGateway(ids ...string) error {
 	}
 	return a.leaveGateway(id, true)
 }
-func (a *Agent) UnpairGateway(id string, cloudImpactAcknowledged bool) error {
-	return a.leaveGateway(id, cloudImpactAcknowledged)
+func (a *Agent) UnpairGateway(id string, routeImpactAcknowledged bool) error {
+	return a.leaveGateway(id, routeImpactAcknowledged)
 }
-func (a *Agent) leaveGateway(id string, cloudImpactAcknowledged bool) error {
+func (a *Agent) leaveGateway(id string, routeImpactAcknowledged bool) error {
 	a.cloudLinkMu.Lock()
 	defer a.cloudLinkMu.Unlock()
 	a.gatewayMember.mu.Lock()
@@ -345,8 +311,8 @@ func (a *Agent) leaveGateway(id string, cloudImpactAcknowledged bool) error {
 	}
 	cfg := a.remoteConfigSnapshot()
 	affected := cfg.CloudGateway() != nil && cfg.CloudGateway().MemberID == member.MemberID
-	if affected && !cloudImpactAcknowledged {
-		return ErrGatewayCloudImpactRequired
+	if affected && !routeImpactAcknowledged {
+		return ErrGatewayRouteImpactRequired
 	}
 	a.stopGatewayMemberLocked(member.GatewayID)
 	if !member.Leaving {
@@ -358,28 +324,55 @@ func (a *Agent) leaveGateway(id string, cloudImpactAcknowledged bool) error {
 	}
 	if affected {
 		a.stopControlChannel()
-		if cfg.GatewayPublication != nil && cfg.GatewayPublication.Binding != nil {
-			a.closeGatewaySessions(cfg.GatewayPublication.Binding.PublicID, cfg.GatewayPublication.Binding.Generation)
+		if cfg.CloudRoute != nil {
+			a.closeCloudRouteSessions(cfg.CloudRoute.Revision)
 		}
 	}
 	return a.startGatewayMemberLocked()
 }
 
-func (a *Agent) PublishGateway(gatewayID, choice string) error {
+// PublishGateway records one independent Runtime Cloud enrollment. Existing
+// associations use the route coordinator instead of migrating environments.
+func (a *Agent) PublishGateway(ctx context.Context, gatewayID string) error {
 	a.cloudLinkMu.Lock()
 	defer a.cloudLinkMu.Unlock()
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	next, err := a.cfg.PrepareGatewayPublication(gatewayID, choice)
+	before := a.remoteConfigSnapshot()
+	member := before.GatewayMember(gatewayID)
+	if member == nil || member.Leaving || member.PendingJoin != nil {
+		return gatewaymembership.ErrState
+	}
+	callCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	var association gp.MemberCloudContext
+	if err := member.Request(callCtx, "/v6/member/cloud", gp.CatalogRequest{ProtocolVersion: gp.Version}, &association, true); err != nil {
+		return err
+	}
+	next, err := before.PrepareNamespaceCloud(member.MemberID, association)
 	if err != nil {
 		return err
 	}
-	if err = config.SaveConnection(a.configPath, next); err != nil {
+	next.CloudAssociation.EnrollmentMetadata.Version = a.version
+	a.mu.Lock()
+	persisted, err := config.Update(a.configPath, func(current *config.Config) error {
+		memberNow := current.GatewayMember(gatewayID)
+		if memberNow == nil || memberNow.MemberID != member.MemberID || memberNow.Revision != member.Revision || before.CloudAssociation == nil && current.CloudAssociation != nil || before.CloudAssociation != nil && !sameCloudOwner(before, current) {
+			return gatewaymembership.ErrConflict
+		}
+		current.CloudAssociation, current.CloudRoute, current.ControlArtifactPool = next.CloudAssociation, next.CloudRoute, nil
+		current.CloudID, current.CloudOrigin, current.AccessPointOrigin = next.CloudID, next.CloudOrigin, next.AccessPointOrigin
+		return nil
+	})
+	if err != nil {
+		a.mu.Unlock()
 		return err
 	}
+	next = persisted
 	a.setRemoteConfigLocked(next)
-	if a.controlCancel != nil {
-		a.controlCancel()
+	a.controlChannelEnabled, a.remoteEnabled, a.effectiveRunMode = true, true, "hybrid"
+	running := a.runCtx != nil
+	a.mu.Unlock()
+	if running {
+		a.startOrRestartControlChannel()
 	}
 	return nil
 }

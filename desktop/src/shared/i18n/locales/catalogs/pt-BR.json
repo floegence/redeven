@@ -3338,8 +3338,7 @@
     "cloud_denied": "Membro · Cloud não permitido",
     "cloud_pending": "Membro · Aguardando aprovação do Cloud",
     "cloud_control_offline": "Cloud conectado · Conexão do ambiente offline",
-    "accessible": "Membro · Acessível pelo Cloud",
-    "migration_pending": "Membro · Migração do ambiente pendente"
+    "accessible": "Membro · Acessível pelo Cloud"
   },
   "gatewayMembers": {
     "reevaluate": "Verificar acesso novamente",
@@ -3357,7 +3356,6 @@
     "confirmLeave": "Confirmar saída",
     "leave": "Sair do Gateway",
     "failed": "Não foi possível concluir a operação. Os dados e a última lista de membros são preservados. Você pode tentar novamente cada item com falha.",
-    "rebuild": "As configurações antigas de URL do Gateway foram removidas. Cada ambiente de execução deve ingressar com um novo convite. Os ambientes existentes no Redeven Cloud são mantidos, mas precisam ser reconectados.",
     "invite": "Convidar ambiente de execução",
     "listenerAddress": "Listener do Gateway",
     "listenerAddressHelp": "Onde este Gateway escuta no host. Os ambientes usam os endereços acessíveis confirmados abaixo.",
@@ -3461,7 +3459,8 @@
     "publishHelp": "Publicar este ambiente de execução no Redeven Cloud por este Gateway. É necessária aprovação do Cloud.",
     "empty": "Nenhum Gateway vinculado.",
     "unavailable": "Autorize o Desktop neste Gateway para abrir o Env App.",
-    "tab": "Gateway"
+    "tab": "Gateway",
+    "useRouteChange": "Este ambiente de execução já está associado ao Cloud. Use Alterar rota para mudar a conexão e manter a identidade e a propriedade do ambiente."
   },
   "tessivenRuntime": {
     "confirmTitle": "Confirmar {action}",
@@ -3473,5 +3472,36 @@
     "stop": "parada",
     "restart": "reinício",
     "update": "atualização"
+  },
+  "cloudRoute": {
+    "approval": "Aprovação do Cloud",
+    "connection": "Conexão com Cloud",
+    "selected": "Rota selecionada",
+    "nextAttempt": "Próxima verificação: {time}",
+    "change": "Alterar rota",
+    "retry": "Tentar conexão novamente",
+    "manageApproval": "Gerenciar aprovação",
+    "cancelIntent": "Desconectar Cloud",
+    "pendingOperation": "Revisar alteração pendente",
+    "direct": "Direta",
+    "gatewayUnavailable": "Gateway indisponível",
+    "approved": "Aprovado",
+    "pending": "Aguardando aprovação",
+    "revoked": "Revogado",
+    "identity_required": "Identidade expirada",
+    "action_required": "Ação necessária",
+    "connected": "Conectado",
+    "disconnected": "Desconectado",
+    "reauthorizeHelp": "Renove a autorização da máquina com um novo ticket de configuração ou registro explícito no Namespace. O trabalho local continua disponível.",
+    "impact": "Após confirmar, as sessões do Cloud serão reconectadas por esta rota. As tarefas em segundo plano continuarão. A identidade e a propriedade no Cloud não mudam.",
+    "verify": "Verificar rota",
+    "ready": "Rota verificada. Confirme para reconectar.",
+    "confirm": "Confirmar e reconectar",
+    "query": "Consultar operação original",
+    "committed": "Rota salva",
+    "unknown": "O resultado é desconhecido. Consulte a operação original antes de tentar novamente.",
+    "corrupt": "Não foi possível ler a operação salva. Revise a rota atual antes de apagar este registro local.",
+    "storageFailed": "Não foi possível salvar a operação localmente. Nenhuma alteração de rota foi iniciada.",
+    "reviewCurrent": "Apagar registro local"
   }
 }

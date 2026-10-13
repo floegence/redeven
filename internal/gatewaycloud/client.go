@@ -17,7 +17,10 @@ import (
 
 var ErrCloudRequest = errors.New("Gateway Cloud request failed")
 
-type CloudError struct{ Code string }
+type CloudError struct {
+	Code   string
+	Status int
+}
 
 func (e *CloudError) Error() string { return "Gateway Cloud: " + e.Code }
 
@@ -41,7 +44,7 @@ func (c *Client) Close() {
 }
 
 func cloudCall[In, Out any](c *Client, ctx context.Context, path string, input In) (*Out, error) {
-	return cloudCallPath[In, Out](c, ctx, "/api/console/v1/gateway-cloud/v2/"+path, input)
+	return cloudCallPath[In, Out](c, ctx, "/api/console/v1/gateway-cloud/v3/"+path, input)
 }
 
 func cloudCallPath[In, Out any](c *Client, ctx context.Context, path string, input In) (*Out, error) {
@@ -67,12 +70,14 @@ func cloudCallPath[In, Out any](c *Client, ctx context.Context, path string, inp
 		return nil, ErrCloudRequest
 	}
 	var envelope gc.Response[Out]
-	if json.Unmarshal(raw, &envelope) != nil {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(&envelope) != nil || decoder.Decode(new(any)) != io.EOF {
 		return nil, ErrCloudRequest
 	}
 	if response.StatusCode != http.StatusOK || !envelope.Success {
 		if envelope.Error != nil && validErrorCode(envelope.Error.Code) {
-			return nil, &CloudError{Code: envelope.Error.Code}
+			return nil, &CloudError{Code: envelope.Error.Code, Status: response.StatusCode}
 		}
 		return nil, ErrCloudRequest
 	}
@@ -88,7 +93,6 @@ func validErrorCode(code string) bool {
 
 type Identity struct {
 	GatewayKey        ed25519.PrivateKey
-	MemberKey         ed25519.PrivateKey
 	PrivateKey        ed25519.PrivateKey
 	NamespacePublicID string
 	GatewayPublicID   string
@@ -116,11 +120,7 @@ func (c *Client) Sign(ctx context.Context, identity Identity, purpose gc.Purpose
 			return gc.SignedRequest{}, err
 		}
 		payload = value
-	case gc.RuntimeJoin:
-		if err := gc.SignRuntimeMembership(proof, &value, identity.MemberKey); err != nil {
-			return gc.SignedRequest{}, err
-		}
-		payload = value
+
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -144,32 +144,11 @@ func (c *Client) Register(ctx context.Context, identity Identity, request gc.Gat
 	return signedCloudCall[gc.GatewayRegistration, gc.Gateway](c, ctx, identity, gc.PurposeGatewayRegister, "register", request)
 }
 func (c *Client) GatewayStatus(ctx context.Context, identity Identity) (*gc.GatewayStatus, error) {
-	return c.GatewayStatusPage(ctx, identity, "")
-}
-
-func (c *Client) GatewayStatusPage(ctx context.Context, identity Identity, after string) (*gc.GatewayStatus, error) {
-	return signedCloudCall[gc.GatewayStatusRequest, gc.GatewayStatus](c, ctx, identity, gc.PurposeGatewayStatus, "gateway-status", gc.GatewayStatusRequest{ClosureAfter: after})
+	return signedCloudCall[gc.GatewayStatusRequest, gc.GatewayStatus](c, ctx, identity, gc.PurposeGatewayStatus, "gateway-status", gc.GatewayStatusRequest{})
 }
 func (c *Client) Directory(ctx context.Context, identity Identity, request gc.DirectorySync) (*gc.Gateway, error) {
 	return signedCloudCall[gc.DirectorySync, gc.Gateway](c, ctx, identity, gc.PurposeGatewaySync, "directory", request)
 }
-func (c *Client) Join(ctx context.Context, identity Identity, request gc.RuntimeJoin) (*gc.Candidate, error) {
-	// A resumed join authenticates the enrollment, even when publication was
-	// already persisted before a credential-delivery interruption.
-	identity.BindingPublicID, identity.BindingGeneration = "", 0
-	return signedCloudCall[gc.RuntimeJoin, gc.Candidate](c, ctx, identity, gc.PurposeRuntimeJoin, "join", request)
-}
-func (c *Client) RuntimeStatus(ctx context.Context, identity Identity, requestID string) (*gc.RuntimeStatus, error) {
-	return c.RuntimeStatusPage(ctx, identity, requestID, "")
-}
-
-func (c *Client) RuntimeStatusPage(ctx context.Context, identity Identity, requestID, after string) (*gc.RuntimeStatus, error) {
-	return signedCloudCall[gc.RuntimeStatusRequest, gc.RuntimeStatus](c, ctx, identity, gc.PurposeRuntimeStatus, "runtime-status", gc.RuntimeStatusRequest{RequestPublicID: requestID, ClosureAfter: after})
-}
-func (c *Client) Acknowledge(ctx context.Context, identity Identity, request gc.ClosureAck) (*gc.Closure, error) {
-	return signedCloudCall[gc.ClosureAck, gc.Closure](c, ctx, identity, gc.PurposeClosureAck, "closure-ack", request)
-}
-
 func (c *Client) RotateKey(ctx context.Context, identity Identity, newKey ed25519.PrivateKey) error {
 	if len(newKey) != ed25519.PrivateKeySize {
 		return ErrState

@@ -64,9 +64,8 @@ type MemberRecord struct {
 	HookPolicyRevision      int64               `json:"hook_policy_revision"`
 	// A denial is delivered even if a later edit permits Cloud again. The
 	// transaction revision prevents an older receipt from clearing a newer denial.
-	CloudRevocationRevision int64             `json:"cloud_revocation_revision,omitempty"`
-	ConnectionGeneration    uint64            `json:"connection_generation"`
-	Rotation                *rotationDelivery `json:"rotation,omitempty"`
+	ConnectionGeneration uint64            `json:"connection_generation"`
+	Rotation             *rotationDelivery `json:"rotation,omitempty"`
 }
 
 type rotationDelivery struct {
@@ -135,7 +134,7 @@ func NewStore(path string, identity GatewayIdentity, endpointURL, listen string,
 			return nil, err
 		}
 		endpoint.AllowedHosts = []string{}
-		s.state = memberState{SchemaVersion: 4, GatewayID: identity.ID, Revision: 1, Endpoint: endpoint, Policy: gp.GatewayPolicy{Revision: 1, PublicationMode: gp.PublicationManual}, Members: map[string]MemberRecord{}, Invitations: map[string]invitationRecord{}, CloudCommands: map[string]cloudCommandDelivery{}, Admissions: map[string]Admission{}}
+		s.state = memberState{SchemaVersion: 5, GatewayID: identity.ID, Revision: 1, Endpoint: endpoint, Policy: gp.GatewayPolicy{Revision: 1, PublicationMode: gp.PublicationManual}, Members: map[string]MemberRecord{}, Invitations: map[string]invitationRecord{}, CloudCommands: map[string]cloudCommandDelivery{}, Admissions: map[string]Admission{}}
 		if confirmedURL != "" {
 			s.state.AdvertisedEndpoints = []gp.GatewayEndpoint{{EndpointID: "endpoint_primary", Address: endpoint.URL, Scope: gp.GatewayEndpointLAN, Priority: 0}}
 		}
@@ -145,41 +144,14 @@ func NewStore(path string, identity GatewayIdentity, endpointURL, listen string,
 	} else if err != nil {
 		return nil, err
 	}
-	migrated := s.state.SchemaVersion == 1
-	if migrated {
-		if !validOrigin(s.state.Endpoint.URL) {
-			return nil, ErrState
-		}
-		s.state.SchemaVersion = 2
-		s.state.AdvertisedEndpoints = []gp.GatewayEndpoint{{EndpointID: "endpoint_legacy", Address: s.state.Endpoint.URL, Scope: gp.GatewayEndpointLAN, Priority: 0}}
-	}
-	if s.state.SchemaVersion == 2 {
-		// Retire unconsumed file capabilities, preserving exact successful delivery
-		// receipts so a Runtime with a lost response can still finish enrollment.
-		for id, record := range s.state.Invitations {
-			if record.Response == nil {
-				record.Canceled = true
-				record.Issued = nil
-			}
-			s.state.Invitations[id] = record
-		}
-		s.state.SchemaVersion = 3
-		migrated = true
-	}
-	if s.state.SchemaVersion == 3 {
-		s.state.Endpoint.AllowedHosts = []string{}
-		s.state.SchemaVersion = 4
-		migrated = true
-	}
-	if s.state.Endpoint.AllowedHosts == nil || s.state.SchemaVersion != 4 || s.state.GatewayID != identity.ID || s.state.Revision < 1 || s.state.Policy.Revision < 1 || s.state.Members == nil || s.state.Invitations == nil {
+	if s.state.Endpoint.AllowedHosts == nil || s.state.SchemaVersion != 5 || s.state.GatewayID != identity.ID || s.state.Revision < 1 || s.state.Policy.Revision < 1 || s.state.Members == nil || s.state.Invitations == nil {
 		return nil, ErrState
 	}
 	if s.state.CloudCommands == nil {
 		s.state.CloudCommands = map[string]cloudCommandDelivery{}
 	}
 	if len(s.state.Endpoint.ListenAddresses) == 0 {
-		s.state.Endpoint.ListenAddresses = []string{s.state.Endpoint.ListenAddress}
-		migrated = true
+		return nil, ErrState
 	}
 	if _, err := normalizeNetworkSettings(gp.GatewayNetworkSettings{ListenAddresses: s.state.Endpoint.ListenAddresses, AllowedHosts: s.state.Endpoint.AllowedHosts, Endpoints: s.state.AdvertisedEndpoints}); err != nil {
 		return nil, ErrState
@@ -237,11 +209,6 @@ func NewStore(path string, identity GatewayIdentity, endpointURL, listen string,
 				}
 				break
 			}
-		}
-	}
-	if migrated {
-		if err := gatewaystate.Write(path, s.state); err != nil {
-			return nil, err
 		}
 	}
 	return s, nil
@@ -371,14 +338,6 @@ func validateStoredEndpoints(endpoints []gp.GatewayEndpoint) error {
 
 func (s *Store) nextRevision(next memberState) memberState {
 	next.Revision = s.state.Revision + 1
-	for id, member := range next.Members {
-		previous, exists := s.state.Members[id]
-		if exists && cloudPolicyAllows(previous, s.state.Policy) && !cloudPolicyAllows(member, next.Policy) {
-			member.Member.CloudRevocationPending = true
-			member.CloudRevocationRevision = next.Revision
-			next.Members[id] = member
-		}
-	}
 	return next
 }
 
@@ -612,7 +571,7 @@ func (s *Store) Join(ctx context.Context, request gp.MemberJoinRequest) (_ gp.Me
 }
 
 func EffectiveCloudAllowed(member MemberRecord, policy gp.GatewayPolicy) bool {
-	return !member.Member.CloudRevocationPending && cloudPolicyAllows(member, policy)
+	return cloudPolicyAllows(member, policy)
 }
 
 func cloudPolicyAllows(member MemberRecord, policy gp.GatewayPolicy) bool {
@@ -638,7 +597,6 @@ func (s *Store) removeLocked(memberID string, version int64) error {
 	}
 	member.Member.State = "removed"
 	member.Member.MemberVersion++
-	member.Member.CloudRevocationPending = true
 	member.HookCloudAllowed = false
 	next := s.clone()
 	next.Members[memberID] = member

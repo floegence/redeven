@@ -19,15 +19,15 @@ import {
 } from './cloudTransport';
 
 const CLOUD_DISCOVERY_PATH = '/.well-known/redeven-cloud.json';
-const CLOUD_ME_PATH = '/api/rcpp/v4/me';
-const CLOUD_ENVIRONMENTS_PATH = '/api/rcpp/v4/environments';
-const CLOUD_ENVIRONMENTS_RUNTIME_HEALTH_QUERY_PATH = '/api/rcpp/v4/environments/runtime-health/query';
-const CLOUD_DESKTOP_CONNECT_EXCHANGE_PATH = '/api/rcpp/v4/desktop/connect/exchange';
-const CLOUD_DESKTOP_TOKEN_REFRESH_PATH = '/api/rcpp/v4/desktop/token/refresh';
-const CLOUD_DESKTOP_TOKEN_REVOKE_PATH = '/api/rcpp/v4/desktop/token/revoke';
+const CLOUD_ME_PATH = '/api/rcpp/v5/me';
+const CLOUD_ENVIRONMENTS_PATH = '/api/rcpp/v5/environments';
+const CLOUD_ENVIRONMENTS_RUNTIME_HEALTH_QUERY_PATH = '/api/rcpp/v5/environments/runtime-health/query';
+const CLOUD_DESKTOP_CONNECT_EXCHANGE_PATH = '/api/rcpp/v5/desktop/connect/exchange';
+const CLOUD_DESKTOP_TOKEN_REFRESH_PATH = '/api/rcpp/v5/desktop/token/refresh';
+const CLOUD_DESKTOP_TOKEN_REVOKE_PATH = '/api/rcpp/v5/desktop/token/revoke';
 const CLOUD_DESKTOP_OPEN_SESSION_PATH_SUFFIX = '/desktop/open-session';
 const CLOUD_RUNTIME_LINK_AUTHORIZATION_PATH_SUFFIX = '/runtime-link/authorizations';
-const CLOUD_PROTOCOL_VERSION = 'rcpp-v4';
+const CLOUD_PROTOCOL_VERSION = 'rcpp-v5';
 const DEFAULT_CLOUD_TIMEOUT_MS = 15_000;
 
 export type ProviderDesktopOpenSession = Readonly<{

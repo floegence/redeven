@@ -3,7 +3,7 @@ type: Gateway Contract
 title: Gateway service
 description: Manage Runtime-initiated membership without acquiring Runtime lifecycle authority.
 tags: [gateway, desktop, access, identity]
-timestamp: 2026-10-10T00:00:00Z
+timestamp: 2026-10-13T00:00:00Z
 ---
 # Summary
 
@@ -13,13 +13,13 @@ timestamp: 2026-10-10T00:00:00Z
 
 ## Membership authority
 
-An administrator verified through the Gateway host creates a ten-minute, single-use invitation code and shares an administrator-confirmed Gateway address. A trusted Runtime management channel or local `redeven gateway join --gateway <address>` verifies the address and code, holds a short-lived read-only preview, and records consent only after explicit confirmation. The Runtime signs delegation for this exact Gateway to manage LAN access and subsequent Cloud publication. A lost response recovers the original durable delivery; it cannot create another member. Regeneration cancels unconsumed older codes.
+An administrator verified through the Gateway host creates a ten-minute, single-use invitation code and shares an administrator-confirmed Gateway address. A trusted Runtime management channel or local `redeven gateway join --gateway <address>` verifies the address and code, holds a short-lived read-only preview, and records consent only after explicit confirmation. The Runtime signs separate consent for LAN membership, Cloud egress and optional Namespace batch enrollment. Gateway never obtains Runtime Cloud credentials from its directory. A lost response recovers the original durable delivery; it cannot create another member. Regeneration cancels unconsumed older codes.
 
-Local and Desktop startup persist the Runtime identity before exposing trusted management, including on a machine that has never connected to Cloud. Disconnecting direct Cloud clears only its binding. Existing Gateway members retain their Runtime identity and credentials; an unpaired Runtime receives a fresh local identity in the same atomic save. Connecting direct Cloud likewise preserves member progress, including credential updates completed during the Cloud exchange. Preview binds to that stable identity and does not initialize or mutate configuration.
+Local and Desktop startup persist the Runtime identity before exposing trusted management, including on a machine that has never connected to Cloud. Disconnecting Cloud disables the local connection intent and closes its sessions while retaining the independent Cloud association. Gateway memberships and Runtime identity remain intact. Connecting direct Cloud likewise preserves member progress, including credential updates completed during the Cloud exchange. Preview binds to that stable identity and does not initialize or mutate configuration.
 
 Each Runtime can pair with up to sixteen Gateways. Each member owns its credentials, revision and reconnect controller. Adding a pairing changes neither existing members nor Cloud ownership. Startup reconnects every saved member independently without prompting or direct fallback. Targeted retry or removal affects only the chosen Gateway. The explicit `replace` command requires one current member, a fresh invitation and confirmation of connection interruption; adding another Gateway uses `join`. Gateway identity is a persisted machine key independent of its address. Each member has its own key, mTLS client certificate, service certificate and version. Credential rotation requires a currently valid identity; expired or revoked identity requires reauthorization.
 
-The sole member store owns invitation consumption, membership, credentials, policy and revocation. Cloud refers to those members and cannot enroll them independently. Connection generation is a live observation, never an authorization source. Desktop display association uses the trusted Runtime management membership summary and the paired Gateway key; public health proof remains a separate observation and grants no authority.
+The sole member store owns invitation consumption, membership, credentials, policy and revocation. Cloud can approve batch enrollment, but Runtime independently proves its registered identity before receiving credentials. Connection generation is a live observation, never an authorization source. Desktop display association uses the trusted Runtime management membership summary and the paired Gateway key; public health proof remains a separate observation and grants no authority.
 
 ## Policy and executable hooks
 
@@ -45,7 +45,7 @@ The signed code delivery contains the Gateway name, stable identity, selected sh
 
 The host can update its listener and administrator-confirmed Runtime connection endpoints while retaining the Gateway identity and member CA. Runtime `update-endpoints` verifies a fresh invitation from the same pinned key and CA, using only its signed endpoint descriptor. It retains the existing member and Cloud association; a new identity requires `replace`. Confirmation persists one pending redemption, and the reconnect controller alone delivers it. Repeated confirmation recovers that consent after response loss, including after delivery, while changed or leaving membership invalidates recovery. Desktop registration edits prove the pinned machine key with a fresh signed nonce before saving the new audience.
 
-Runtime configuration membership schema v1 migrates through the v2 collection to v3 atomically. The v2-to-v3 edge retires the implicit Cloud member selection and environment choice only when no Cloud publication request is persisted. A paired Gateway then retains its access membership alongside the existing direct Cloud binding. Member credentials, pending deliveries, Runtime identity, Cloud credentials, policy and persisted publication requests survive unchanged; pending, approved and revoked publication records retain their selected owner. Current v3 explicit publication intent remains valid. An orphan Gateway Cloud credential pool is rejected rather than reclassified as direct credentials. Mixed, drifted and future shapes fail read-only; migration persistence failure preserves the original file and stops startup. Existing single-address member state also migrates to one endpoint without replacing identity or Cloud binding. Old invitations must be recreated. Legacy Cloud-only enrollment without membership remains non-executable; see [Gateway Cloud access](gateway-cloud-access.md) for environment preservation.
+Runtime configuration version 1 contains one independent Cloud association and one selected route. Gateway local protocol v6 and Cloud management v3 are the only executable contracts. Unsupported configuration and retired fields fail read-only with instructions to create a fresh state root and enroll again. No automatic configuration conversion, implicit Gateway selection or environment migration runs at startup. An ordinary route change preserves environment identity, ownership and binding generation; it requires preflight and explicit confirmation through Runtime's route coordinator.
 
 Transport continues to use the published Flowersec implementation. The fixed WSS enrollment route uses the restricted invitation-code exchange and enrollment TLS profile; ordinary member connections retain CA and pin checks. Administrators do not apply for a public certificate or configure system trust. Runtime users enter an address and code, verify, and approve Gateway access. Optional Cloud publishing remains a separate flow.
 
@@ -55,8 +55,8 @@ Gateway owns membership, policy, invitations, and restricted forwarding. Runtime
 
 # Evidence
 
-- `redeven:internal/config/gateway_connections_test.go` - Contiguous member migration preserves persisted publication and credentials, rejects malformed sources and rolls back failed persistence.
-- `redeven:internal/agent/runtime_gateway_cloud_test.go` - Production Cloud exchange remains linked after upgrading implicit Gateway publication state.
+- `redeven:internal/config/cloud_config_version_test.go` - Unsupported configuration fails without rewriting operator state.
+- `redeven:internal/agent/cloud_route_test.go` - Route changes preserve Cloud association and fence stale owners.
 
 - `redeven:internal/gatewaymembership/store.go` — Sole durable membership and invitation delivery.
 - `redeven:internal/gatewaymembership/hooks.go` — Bounded deny-only hook execution.
@@ -65,22 +65,22 @@ Gateway owns membership, policy, invitations, and restricted forwarding. Runtime
 - `redeven:internal/gatewayservice/server.go` — Request-bound host administration and URL access boundary.
 - `redeven:cmd/redeven/gateway_membership.go` — Shared live/stopped membership commands and explicit Cloud publication.
 - `redeven:internal/localui/gateway_multiple_connections_test.go` — Two real TLS Gateways, independent reconnect and targeted removal.
-- `redeven:internal/config/gateway_connections_test.go` — Collection migration and Cloud ownership preservation.
+- `redeven:internal/config/gateway_connections_test.go` — Independent member updates preserve Cloud association and selected route.
 - `redeven:desktop/src/main/gatewayLifecycleManager.ts` — Independent Gateway process owner.
 - `redeven:desktop/scripts/check-gateway-local-update.mjs` — Real local update/restart, stable identity and failed-package service/bridge preservation.
 
 ## Operational observations
 
 Structured `Gateway operation` log events expose `member.join`, `access.open`,
-`cloud.sync`, and `cloud.recover` outcomes and `duration_ms`. Aggregate the outcome
+`cloud.sync`, and Runtime recovery outcomes and `duration_ms`. Aggregate the outcome
 counts for admission and recovery success rates and duration distributions for
 reverse-stream opening and directory synchronization. These durations cover the
-named operation, not complete application rendering. Error text and proof material
+named operation and do not measure complete application rendering. Error text and proof material
 are excluded.
 
 Every 30 seconds, `Gateway forwarding` reports the shared LAN/Cloud active budget,
 including pending opens and uncompleted cancellation, cumulative admission counts,
 and Cloud buffer budgets and completed byte counts. `Gateway Cloud projection`
-reports directory age and the server's total pending closure count with its
+reports directory age and pending local management commands with its
 observation timestamp. During an outage that timestamp stays stale; the backlog
 must not be interpreted as a fresh zero. Counters reset when the Gateway restarts.

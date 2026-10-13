@@ -60,7 +60,6 @@ func (s *Store) ApplyCloudCommand(ctx context.Context, command CloudCommand) (st
 	case command.Kind == "remove_member":
 		member.Member.State = "removed"
 		member.Member.MemberVersion++
-		member.Member.CloudRevocationPending = true
 		member.HookCloudAllowed = false
 		next.Members[command.MemberID] = member
 	default:

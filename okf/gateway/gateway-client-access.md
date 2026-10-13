@@ -21,7 +21,7 @@ Desktop connection changes must verify the pinned Gateway identity through the n
 
 ## URL enrollment and reconnection
 
-Administrators create client access codes through POST `/gateway/v5/clients/access-codes` or `redeven-gateway clients access-code`. Each code expires after ten minutes and is single-use. The store persists only its digest, expiry and consuming client identity. Enrollment atomically binds a valid code to one client public key. An identical completion retry returns the original result after response loss; other clients cannot consume that code. Existing valid client keys reconnect without another code.
+Administrators create client access codes through POST `/gateway/v6/clients/access-codes` or `redeven-gateway clients access-code`. Each code expires after ten minutes and is single-use. The store persists only its digest, expiry and consuming client identity. Enrollment atomically binds a valid code to one client public key. An identical completion retry returns the original result after response loss; other clients cannot consume that code. Existing valid client keys reconnect without another code.
 
 URL clients can list and open the environments provided by Gateway, subject to existing access policy and independent Runtime authentication. Electron main and Gateway both reject URL management requests, including forged legacy permissions. Static `--pairing-code`, caller-selected registration permissions and the Desktop role editor are removed.
 
@@ -29,9 +29,9 @@ Runtime invitations are separate: they authorize Runtime membership and still re
 
 ## Client visibility and revocation
 
-Host administrators list clients through POST `/gateway/v5/clients/list` or `redeven-gateway clients list`. The display name is a recognition label, never identity evidence. Records expose enrollment and recent verified access times without credentials.
+Host administrators list clients through POST `/gateway/v6/clients/list` or `redeven-gateway clients list`. The display name is a recognition label, never identity evidence. Records expose enrollment and recent verified access times without credentials.
 
-POST `/gateway/v5/clients/revoke` and `redeven-gateway clients revoke --client ID` persist revocation before acknowledgment. Revoked clients cannot make new signed requests, redeem pending connection tickets, or finish establishing an access session. Existing access sessions for that client are canceled immediately. Other clients, Runtime member connections and Cloud bindings remain unchanged. Revocation survives restart.
+POST `/gateway/v6/clients/revoke` and `redeven-gateway clients revoke --client ID` persist revocation before acknowledgment. Revoked clients cannot make new signed requests, redeem pending connection tickets, or finish establishing an access session. Existing access sessions for that client are canceled immediately. Other clients, Runtime member connections and Cloud bindings remain unchanged. Revocation survives restart.
 
 ## State and compatibility
 
@@ -48,4 +48,4 @@ environment access; neither path replaces Runtime consent or Cloud authorization
 - `redeven:internal/gatewayservice/client_authority_test.go` — Service-side management rejection and signed host identity preservation.
 - `redeven:internal/gatewaymembership/reverse_access_test.go` — Live session cancellation, pending-ticket denial and unaffected other clients and Runtime connections.
 - `redeven:desktop/scripts/check-gateway-host-authority.mjs` — Real local, SSH, container and SSH-container management plus denied host and URL revocation.
-- `redeven:spec/openapi/gateway-v5.yaml` — Shared request/response and host-only management contract.
+- `redeven:spec/openapi/gateway-v6.yaml` — Shared request/response and host-only management contract.

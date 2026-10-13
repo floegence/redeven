@@ -1,8 +1,8 @@
 package protocol
 
 const (
-	MemberConnectionStream = "redeven.gateway.member.https.v5"
-	MemberAccessStream     = "redeven.gateway.access.https.v5"
+	MemberConnectionStream = "redeven.gateway.member.https.v6"
+	MemberAccessStream     = "redeven.gateway.access.https.v6"
 	MaxMembers             = 1024
 	MaxMemberConnections   = 32
 	MaxGatewayConnections  = 1024
@@ -167,18 +167,17 @@ type MemberRotateResponse struct {
 }
 
 type Member struct {
-	MemberID               string          `json:"member_id"`
-	RuntimePublicID        string          `json:"runtime_public_id"`
-	MemberVersion          int64           `json:"member_version"`
-	DisplayName            string          `json:"display_name"`
-	State                  string          `json:"state"`
-	Connected              bool            `json:"connected"`
-	LastSeenAtUnixMS       int64           `json:"last_seen_at_unix_ms"`
-	CloudPermission        CloudPermission `json:"cloud_permission"`
-	EffectiveCloudAllowed  bool            `json:"effective_cloud_allowed"`
-	CloudState             string          `json:"cloud_state"`
-	CloudRevocationPending bool            `json:"cloud_revocation_pending"`
-	Metadata               MemberMetadata  `json:"metadata"`
+	MemberID              string          `json:"member_id"`
+	RuntimePublicID       string          `json:"runtime_public_id"`
+	MemberVersion         int64           `json:"member_version"`
+	DisplayName           string          `json:"display_name"`
+	State                 string          `json:"state"`
+	Connected             bool            `json:"connected"`
+	LastSeenAtUnixMS      int64           `json:"last_seen_at_unix_ms"`
+	CloudPermission       CloudPermission `json:"cloud_permission"`
+	EffectiveCloudAllowed bool            `json:"effective_cloud_allowed"`
+	CloudState            string          `json:"cloud_state"`
+	Metadata              MemberMetadata  `json:"metadata"`
 }
 
 type GatewayPolicy struct {

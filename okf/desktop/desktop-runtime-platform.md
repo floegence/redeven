@@ -29,7 +29,7 @@ The title reserves a 1rem non-shrinking slot immediately before the selectable, 
 
 Native Local uses `platform_capabilities.platform`; WSL always uses Linux. SSH, container and external URL entries use normalized `runtime_platform` from actual Runtime startup, health or Presence observations. Gateway entries use the member Runtime's `metadata.os`. Cloud entries display only an OS supplied by Runtime health. Desktop host, provider origin, region, hostname and CPU architecture cannot supply a remote Runtime OS. The title follows the primary Runtime across linked access perspectives.
 
-The same observations carry the optional distribution through health, Presence and the Environment entry. Gateway v5 catalogs do not publish a distribution; an opened member’s own Runtime startup/health report can supply it for that exact Gateway member without changing catalog identity or access authority. Unopened members retain Tux until a trusted distribution observation exists. Cloud consumes the optional field only when Runtime health supplies it. Existing Runtime reports with no distribution remain openable.
+The same observations carry the optional distribution through health, Presence and the Environment entry. Gateway v6 catalogs do not publish a distribution; an opened member’s own Runtime startup/health report can supply it for that exact Gateway member without changing catalog identity or access authority. Unopened members retain Tux until a trusted distribution observation exists. Cloud consumes the optional field only when Runtime health supplies it. Existing Runtime reports with no distribution remain openable.
 
 Apple `light.svg` and `dark.svg`, Linux and distribution `default.svg` files, Windows `default.svg` and the Azure collection’s Virtual Machine `default.svg` are bundled unchanged from `glincker/thesvg` commit `8731f4b62fea303b022e4aa0125783aeb42c3ea5`. Native images preserve original colors without changing source bytes or fetching a CDN. `assets/environment_platform_icons.json` binds source paths, revision, theme variants, licenses and SHA-256. The notice generator verifies and reproduces CC0-1.0, MIT, applicable CC-BY-SA versions and Fedora’s custom trademark guidelines, links original brand sources and records attribution. Brand and distribution names remain literal; surrounding accessible copy is localized.
 
@@ -39,7 +39,7 @@ Apple `light.svg` and `dark.svg`, Linux and distribution `default.svg` files, Wi
 
 # Evidence
 
-- `redeven:spec/openapi/rcpp-v4.yaml` - Optional Runtime OS in the Cloud health schema.
+- `redeven:spec/openapi/rcpp-v5.yaml` - Optional Runtime OS in the Cloud health schema.
 - `redeven:internal/runtimemanagement/runtime_platform_test.go` - Exact distribution identity, missing facts, shell literals and non-Linux boundaries.
 - `redeven:internal/localui/localui.go` - Runtime-owned OS in live health and management attach status.
 - `redeven:cmd/redeven/desktop_startup_coordination.go` - Preserve the actual observed OS in attached launch reports.

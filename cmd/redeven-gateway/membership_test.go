@@ -33,17 +33,17 @@ func TestHostMemberCommandsUseCurrentMemberAuthority(t *testing.T) {
 	defer shared.Close()
 	client := hostAdminClient{client: shared}
 	var invitation gc.InvitationCodeDelivery
-	if err := client.request(context.Background(), "/gateway/v5/invitation-codes", gp.InvitationRequest{ProtocolVersion: gp.Version}, &invitation); err != nil {
+	if err := client.request(context.Background(), "/gateway/v6/invitation-codes", gp.InvitationRequest{ProtocolVersion: gp.Version}, &invitation); err != nil {
 		t.Fatal(err)
 	}
 	if err := invitation.Verify(invitation.GatewayID, invitation.GatewayPublicKey, time.Now()); err != nil {
 		t.Fatal(err)
 	}
-	if err := client.request(context.Background(), "/gateway/v5/invitations", gp.InvitationRequest{ProtocolVersion: gp.Version}, nil); err == nil {
+	if err := client.request(context.Background(), "/gateway/v6/invitations", gp.InvitationRequest{ProtocolVersion: gp.Version}, nil); err == nil {
 		t.Fatal("retired file endpoint accepted")
 	}
 	var catalog gp.CatalogResponse
-	if err := client.request(context.Background(), "/gateway/v5/catalog", gp.CatalogRequest{ProtocolVersion: gp.Version}, &catalog); err != nil {
+	if err := client.request(context.Background(), "/gateway/v6/catalog", gp.CatalogRequest{ProtocolVersion: gp.Version}, &catalog); err != nil {
 		t.Fatal(err)
 	}
 	if !catalog.Gateway.Permissions.ManageMembers || catalog.Policy.DefaultCloudAllowed || len(catalog.Members) != 0 {
@@ -52,10 +52,10 @@ func TestHostMemberCommandsUseCurrentMemberAuthority(t *testing.T) {
 	policy := catalog.Policy
 	policy.DefaultCloudAllowed = true
 	request := gp.UpdatePolicyRequest{ProtocolVersion: gp.Version, ExpectedRevision: policy.Revision, Policy: policy}
-	if err := client.request(context.Background(), "/gateway/v5/policy", request, nil); err != nil {
+	if err := client.request(context.Background(), "/gateway/v6/policy", request, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := client.request(context.Background(), "/gateway/v5/policy", request, nil); err == nil {
+	if err := client.request(context.Background(), "/gateway/v6/policy", request, nil); err == nil {
 		t.Fatal("stale policy revision accepted")
 	}
 }

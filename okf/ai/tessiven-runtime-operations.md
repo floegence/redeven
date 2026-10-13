@@ -158,7 +158,7 @@ shipped catalogs and use the standard Dialog body description and stable buttons
 
 Runtime compatibility epoch 50 admits the scoped host and fixed business
 contracts. Older endpoints require an explicit Runtime update; there is no
-hidden compatibility path. Gateway v5 application access, Tessiven DSL, and
+hidden compatibility path. Gateway v6 application access, Tessiven DSL, and
 persistent database lineages retain their current shapes.
 
 # Evidence

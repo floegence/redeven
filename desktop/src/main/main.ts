@@ -4,7 +4,7 @@ import { completeTessivenRuntimeHandoff } from './tessivenRuntimeHandoff';
 import { registeredTessivenConnections } from './tessivenRegisteredConnections';
 import { TessivenRuntimes, withExecutionRuntimePath, type TessivenRuntimeInventory, type TessivenRuntimePath, type TessivenRuntimeTarget } from './tessivenRuntimes';
 import { prepareGatewayMemberPartition, clearGatewayMemberPartition, closeGatewayMemberTransport } from './gatewayMemberPartition';
-import { manageRuntimeGateway, previewRuntimeGateway } from './runtimeControlClient';
+import { manageRuntimeCloud, manageRuntimeGateway, previewRuntimeGateway } from './runtimeControlClient';
 import { connectTessivenHost, type TessivenHost, type HostMessage } from './tessivenHost';
 import { preflightTessivenSource, requestTessivenTarget } from './runtimeControlClient';
 import { isTessivenRuntimePath } from './runtimeTessivenRoutes';
@@ -22,7 +22,6 @@ import { DESKTOP_SECURITY_CHANNEL, parseDesktopSecurityRequest } from '../shared
 import { manageRuntimeSecurity } from './runtimeControlClient';
 import { DesktopResourceCache } from './desktopResourceCache';
 import { DESKTOP_RESOURCE_CACHE_CHANNEL } from '../shared/resourceCacheIPC';
-import { CloudCredentialRecovery, providerCredentialsNeedRenewal } from './cloudCredentialRecovery';
 import { BrowserPackages, browserPackageOwner } from './browserPackage';
 import { BROWSER_PACKAGE_CHANNEL, BROWSER_PACKAGE_PROGRESS_CHANNEL, parseBrowserPackageRequest } from '../shared/browserPackageIPC';
 import { HostApplicationComponents } from './hostApplicationComponents';
@@ -5318,11 +5317,7 @@ async function buildCurrentDesktopWelcomeSnapshot(
   return {
     ...snapshot,
     environments: retainDesktopRuntimePlatformFacts(snapshot.environments, desktopStateStore()).map((entry) => {
-      const target = entry.provider_runtime_link_target;
-      const environment = target ? { ...entry, provider_runtime_link_target: { ...target,
-        credential_recovery: cloudCredentialRecovery.state(target.id, target.cloud_link_binding?.binding_generation ?? 0),
-        credential_recovery_details: cloudCredentialRecovery.details(target.id, target.cloud_link_binding?.binding_generation ?? 0),
-      } } : entry;
+      const environment = entry;
       const descriptor = reinstallDescriptors.find((candidate) => candidate.environment_id === environment.id);
       if (!descriptor) {
         return environment;
@@ -5898,8 +5893,7 @@ async function syncGatewayRecord(
         listener_restart_required: catalog.gateway.listener_restart_required,
         allowed_hosts: catalog.gateway.allowed_hosts,
         endpoint_last_used_at: catalog.gateway.endpoint_last_used_at,
-        member_endpoints: catalog.gateway.member_endpoints,
-        rebuild_required: catalog.rebuild_required, hook_status: catalog.hook_status,
+        member_endpoints: catalog.gateway.member_endpoints, hook_status: catalog.hook_status,
         environments: catalogEnvironments,
       }), syncedRecord, {
         gateway_id: syncedRecord.gateway_id,
@@ -6068,7 +6062,7 @@ function runtimeLifecycleTitleKey(operation: 'start' | 'stop' | 'restart' | 'upd
 }
 
 async function manageGatewayMemberFromLauncher(
-  request: Extract<DesktopLauncherActionRequest, { kind: 'issue_gateway_access_code' | 'list_gateway_clients' | 'revoke_gateway_client' | 'invite_gateway_runtime' | 'update_gateway_endpoints' | 'update_gateway_network_settings' | 'remove_gateway_member' | 'reevaluate_gateway_member' | 'update_gateway_policy' | 'update_gateway_members' | 'dismiss_gateway_rebuild' }>,
+  request: Extract<DesktopLauncherActionRequest, { kind: 'issue_gateway_access_code' | 'list_gateway_clients' | 'revoke_gateway_client' | 'invite_gateway_runtime' | 'update_gateway_endpoints' | 'update_gateway_network_settings' | 'remove_gateway_member' | 'reevaluate_gateway_member' | 'update_gateway_policy' | 'update_gateway_members' }>,
 ): Promise<DesktopLauncherActionResult> {
   const record = await gatewayStore().get(request.gateway_id);
   if (!record) return launcherActionFailure('environment_missing', 'gateway', 'This Gateway is no longer available.', { shouldRefreshSnapshot: true });
@@ -6096,7 +6090,6 @@ async function manageGatewayMemberFromLauncher(
     } else if (request.kind === 'reevaluate_gateway_member') await client.reevaluateMember(record, request.member_id, request.member_version);
     else if (request.kind === 'update_gateway_policy') await client.updatePolicy(record, request.policy);
     else if (request.kind === 'update_gateway_members') results = await client.updateMembers(record, request.items);
-    else await client.dismissMigration(record);
     await syncGatewayRecord(record, { force: true, mode: 'refresh_catalog', startPolicy: 'require_ready' }).catch(() => undefined);
     return { ...launcherActionSuccess('gateway_members_updated'), gateway_member_results: results, gateway_network_settings: network };
   } catch (error) { return gatewayActionFailure(record, error); }
@@ -13614,10 +13607,8 @@ async function refreshAllCloudEnvironmentRuntimeHealth(): Promise<void> {
   }));
 }
 
-const cloudCredentialRecovery = new CloudCredentialRecovery();
 const cloudLinkIntentVersions = new Map<string, number>();
 const explicitCloudLinkTargets = new Set<string>();
-let cloudCredentialRecoveryTask: Promise<void> | null = null;
 
 function attachedProviderRuntimeTargets(preferences: DesktopPreferences): CloudRuntimeLinkTargetRecord[] {
   const local = currentLocalEnvironmentRuntimeRecord(preferences.local_environment);
@@ -13634,96 +13625,6 @@ function providerRuntimeTargetIsCurrent(target: CloudRuntimeLinkTargetRecord): b
   return 'session' in target.record
     ? runtimePlacementBridgeRegistry.get(target.record.session.placement_target_id)?.session === target.record.session
     : localEnvironmentRuntimeRecord?.startup.runtime_control === target.record.startup.runtime_control;
-}
-
-async function recoverAttachedCloudCredentials(): Promise<void> {
-  if (cloudCredentialRecoveryTask) return cloudCredentialRecoveryTask;
-  cloudCredentialRecoveryTask = (async () => {
-    const preferences = await loadDesktopPreferencesCached();
-    const targets = attachedProviderRuntimeTargets(preferences);
-    cloudCredentialRecovery.prune(new Set(targets.map(target => target.id)));
-    await Promise.all(targets.map(async target => {
-      const endpoint = target.record.startup.runtime_control;
-      if (!endpoint || explicitCloudLinkTargets.has(target.id) || !providerRuntimeTargetIsCurrent(target)) return;
-      const observedIntentVersion = cloudLinkIntentVersions.get(target.id) ?? 0;
-      const observationIsCurrent = () => providerRuntimeTargetIsCurrent(target)
-        && !explicitCloudLinkTargets.has(target.id)
-        && (cloudLinkIntentVersions.get(target.id) ?? 0) === observedIntentVersion;
-      try {
-        const status = await getCloudLinkStatus(endpoint);
-        if (!observationIsCurrent()) return;
-        updateProviderRuntimeTargetStartup(target, { runtime_service: status.runtime_service });
-        const binding = status.binding;
-        if (!providerCredentialsNeedRenewal(binding)) {
-          if (binding.connection_state === 'connected' || binding.state !== 'linked') cloudCredentialRecovery.forget(target.id);
-          return;
-        }
-        const current = await loadDesktopPreferencesCached();
-        if (!observationIsCurrent()) return;
-        const environment = current.cloud_environments.find(candidate => desktopRuntimeProviderBindingMatches(binding, candidate));
-        const account = savedControlPlaneByIdentity(current, binding.cloud_origin!, binding.cloud_id!);
-        if (!account || !controlPlaneRefreshToken(current, binding.cloud_origin!, binding.cloud_id!)) {
-          cloudCredentialRecovery.requireSignIn(target.id, binding.binding_generation!);
-          return;
-        }
-        if (!environment) return;
-        const accountKey = desktopControlPlaneKey(binding.cloud_origin!, binding.cloud_id!);
-        const accountGeneration = launcherOperations.currentSubjectGeneration('control_plane', accountKey);
-        const intentVersion = cloudLinkIntentVersions.get(target.id) ?? 0;
-        const isCurrent = () => (cloudLinkIntentVersions.get(target.id) ?? 0) === intentVersion && providerRuntimeTargetIsCurrent(target)
-          && !explicitCloudLinkTargets.has(target.id)
-          && launcherOperations.currentSubjectGeneration('control_plane', accountKey) === accountGeneration;
-        const generation = binding.binding_generation!;
-        const classifyFailure = (error: unknown) => {
-          const error_code = error instanceof RuntimeControlError || error instanceof DesktopProviderRequestError
-            ? error.code : 'provider_recovery_failed';
-          if (!isCurrent()) return { outcome: 'attention' as const, error_code };
-          console.warn('[redeven:provider-recovery]', { target_id: target.id, binding_generation: generation, error_code });
-          if (error instanceof RuntimeControlError && error.code === 'CLOUD_LINK_PERMISSION_REVOKED'
-            || error instanceof DesktopProviderRequestError && error.status === 403) return { outcome: 'permission_required' as const, error_code };
-          if (error instanceof RuntimeControlError && error.code === 'CLOUD_LINK_BINDING_CHANGED') return { outcome: 'binding_changed' as const, error_code };
-          if (controlPlaneAuthorizationNeedsReconnect(error)) {
-            setControlPlaneSyncRecord(binding.cloud_origin!, binding.cloud_id!, {
-              sync_state: 'auth_required', last_sync_attempt_at_ms: Date.now(),
-              last_sync_error_code: 'authorization_expired', last_sync_error_message: DESKTOP_PROVIDER_RECONNECT_MESSAGE,
-            });
-            return { outcome: 'sign_in_required' as const, error_code };
-          }
-          const transient = (error instanceof RuntimeControlError && ['CLOUD_LINK_UNAVAILABLE', 'RUNTIME_CONTROL_TIMEOUT', 'RUNTIME_CONTROL_UNREACHABLE'].includes(error.code))
-            || (error instanceof DesktopProviderRequestError && (error.status === 429 || error.status >= 500
-              || ['provider_timeout', 'provider_dns_failed', 'provider_connection_failed'].includes(error.code)));
-          return { outcome: transient ? 'retry' as const : 'attention' as const, error_code };
-        };
-        await cloudCredentialRecovery.renew({
-          targetID: target.id, generation, now: Date.now(),
-          identity: JSON.stringify([binding.cloud_origin, binding.cloud_id, binding.env_public_id,
-            binding.local_environment_public_id, target.record.startup.started_at_unix_ms,
-            account.account.user_public_id, accountGeneration, intentVersion]),
-          isCurrent, changed: broadcastDesktopWelcomeSnapshots,
-          probe: async () => {
-            try {
-              // Observe the exact saved access point without issuing a new Runtime credential.
-              await refreshCloudEnvironmentRuntimeHealth(binding.cloud_origin!, binding.cloud_id!, [binding.env_public_id!]);
-              return { outcome: 'restored' };
-            } catch (error) { return classifyFailure(error); }
-          },
-          exchange: async () => {
-            try {
-              const result = await connectProviderRuntimeFromLauncher({ kind: 'connect_cloud_runtime',
-                provider_environment_id: environment.id, runtime_target_id: target.id }, {
-                target, runtimeService: status.runtime_service, isCurrent,
-              });
-              return result.ok ? { outcome: 'restored' } : { outcome: 'attention', error_code: result.code };
-            } catch (error) { return classifyFailure(error); }
-          },
-        });
-      } catch {
-        // An unavailable management endpoint never grants permission to create a new bridge.
-      }
-    }));
-    broadcastDesktopWelcomeSnapshots();
-  })().finally(() => { cloudCredentialRecoveryTask = null; });
-  return cloudCredentialRecoveryTask;
 }
 
 const welcomeRuntimePoller = new DesktopWelcomeRuntimePoller(
@@ -17296,17 +17197,13 @@ async function manageDesktopUpdateFromLauncher(
 
 async function connectProviderRuntimeFromLauncher(
   request: Extract<DesktopLauncherActionRequest, Readonly<{ kind: 'connect_cloud_runtime' }>>,
-  recovery?: Readonly<{ target: CloudRuntimeLinkTargetRecord; runtimeService: RuntimeServiceSnapshot; isCurrent: () => boolean }>,
 ): Promise<DesktopLauncherActionResult> {
-  if (recovery) return connectProviderRuntimeOperation(request, recovery);
   if (explicitCloudLinkTargets.has(request.runtime_target_id)) {
     return launcherActionFailure('cloud_link_failed', 'environment', 'A Cloud connection action is already in progress.');
   }
   explicitCloudLinkTargets.add(request.runtime_target_id);
   cloudLinkIntentVersions.set(request.runtime_target_id, (cloudLinkIntentVersions.get(request.runtime_target_id) ?? 0) + 1);
   try {
-    await cloudCredentialRecovery.settled(request.runtime_target_id);
-    cloudCredentialRecovery.forget(request.runtime_target_id);
     return await connectProviderRuntimeOperation(request);
   } catch (error) {
     return launcherActionFailureFromCloudLinkError(error, { environmentID: request.provider_environment_id });
@@ -17316,7 +17213,6 @@ async function connectProviderRuntimeFromLauncher(
 
 async function connectProviderRuntimeOperation(
   request: Extract<DesktopLauncherActionRequest, Readonly<{ kind: 'connect_cloud_runtime' }>>,
-  recovery?: Readonly<{ target: CloudRuntimeLinkTargetRecord; runtimeService: RuntimeServiceSnapshot; isCurrent: () => boolean }>,
 ): Promise<DesktopLauncherActionResult> {
   const intentVersion = cloudLinkIntentVersions.get(request.runtime_target_id) ?? 0;
   const preferences = await loadDesktopPreferencesCached();
@@ -17335,12 +17231,8 @@ async function connectProviderRuntimeOperation(
 
   let runtimeTarget: CloudRuntimeLinkTargetRecord | null;
   try {
-    runtimeTarget = recovery?.target ?? await resolveCloudRuntimeLinkTarget(preferences, request.runtime_target_id);
-    if (recovery && runtimeTarget?.record && 'session' in runtimeTarget.record) {
-      const lease = await acquireEnvironmentManagementConnection(runtimeTarget.record.environment_id, 'provider-recovery');
-      if (!lease || lease.record.session !== runtimeTarget.record.session) { await lease?.release(); return launcherActionFailure('runtime_not_started', 'environment', 'The Runtime connection changed.'); }
-      runtimeTarget = { ...runtimeTarget, bridge_lease: lease };
-    }
+    runtimeTarget = await resolveCloudRuntimeLinkTarget(preferences, request.runtime_target_id);
+
   } catch (error) {
     return launcherActionFailureFromSessionOpenError(error, providerEnvironmentFailureContext(environment));
   }
@@ -17362,11 +17254,11 @@ async function connectProviderRuntimeOperation(
       providerEnvironmentFailureContext(environment),
     );
   }
-  if (!recovery && runtimeRecord.startup.runtime_control) {
+  if (runtimeRecord.startup.runtime_control) {
     const observed = await getCloudLinkStatus(runtimeRecord.startup.runtime_control);
     updateProviderRuntimeTargetStartup(runtimeTarget, { runtime_service: observed.runtime_service });
   }
-  const currentBinding = runtimeServiceCloudLinkBinding(recovery?.runtimeService ?? runtimeRecord.startup.runtime_service);
+  const currentBinding = runtimeServiceCloudLinkBinding(runtimeRecord.startup.runtime_service);
   if (currentBinding.state === 'linked' && !localRuntimeMatchesProvider(runtimeRecord.startup, environment)) {
     return runtimeTargetProviderBindingFailure(environment, runtimeTarget.label, runtimeRecord.startup);
   }
@@ -17407,7 +17299,7 @@ async function connectProviderRuntimeOperation(
   const accountGeneration = launcherOperations.currentSubjectGeneration('control_plane', accountKey);
   const isCurrent = () => launcherOperations.currentSubjectGeneration('control_plane', accountKey) === accountGeneration
     && (cloudLinkIntentVersions.get(request.runtime_target_id) ?? 0) === intentVersion
-    && providerRuntimeTargetIsCurrent(runtimeTarget) && (!recovery || recovery.isCurrent());
+    && providerRuntimeTargetIsCurrent(runtimeTarget);
   try {
     if (!isCurrent()) throw new RuntimeControlError('CLOUD_LINK_BINDING_CHANGED', 'The saved connection changed.');
     const target = await resolveProviderDesktopSessionTarget(preferences, environment);
@@ -17450,12 +17342,10 @@ async function connectProviderRuntimeOperation(
       ? persistLocalEnvironmentProviderBinding(rememberCloudEnvironmentUse(current, environment.id), environment)
       : rememberCloudEnvironmentUse(current, environment.id));
     await syncLinkedProviderRuntimeHealthFromService(linked.runtime_service);
-    if (!recovery) cloudCredentialRecovery.forget(runtimeTarget.id);
     resetLauncherIssueState();
     broadcastDesktopWelcomeSnapshots();
     return launcherActionSuccess('connected_provider_runtime');
   } catch (error) {
-    if (recovery) throw error;
     return thrownLauncherActionFailure(error)
       ?? launcherActionFailureFromProviderAuthError(error, providerEnvironmentFailureContext(environment))
       ?? launcherActionFailureFromCloudLinkError(error, providerEnvironmentFailureContext(environment));
@@ -17472,8 +17362,6 @@ async function disconnectProviderRuntimeFromLauncher(
   explicitCloudLinkTargets.add(request.runtime_target_id);
   cloudLinkIntentVersions.set(request.runtime_target_id, (cloudLinkIntentVersions.get(request.runtime_target_id) ?? 0) + 1);
   try {
-    await cloudCredentialRecovery.settled(request.runtime_target_id);
-    cloudCredentialRecovery.forget(request.runtime_target_id);
     return await disconnectProviderRuntimeOperation(request);
   } catch (error) {
     return launcherActionFailureFromCloudLinkError(error, { environmentID: request.provider_environment_id });
@@ -18931,6 +18819,8 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
       return checkGatewayFromLauncher(request);
     case 'set_gateway_enabled':
       return setGatewayEnabledFromLauncher(request);
+    case 'manage_runtime_cloud':
+      return manageRuntimeCloudFromLauncher(request);
     case 'manage_runtime_gateway':
       return manageRuntimeGatewayFromLauncher(request);
     case 'configure_gateway_cloud':
@@ -18981,7 +18871,6 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
     case 'reevaluate_gateway_member':
     case 'update_gateway_policy':
     case 'update_gateway_members':
-    case 'dismiss_gateway_rebuild':
       return manageGatewayMemberFromLauncher(request);
     case 'set_environment_access_route': {
       const snapshot = await buildCurrentDesktopWelcomeSnapshot('launcher');
@@ -20389,14 +20278,6 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(async () => {
     installDesktopDiagnosticsHooks(session.defaultSession);
     void hostApplicationComponents.maintainCache().catch(error => { console.warn('[redeven:component-cache]', error); });
-    // Keep attached provider links healthy for every Desktop session, including
-    // direct and local transports. The recovery coordinator coalesces wakeups
-    // and fences stale completions, so this timer is intentionally process-wide.
-    const credentialRecoveryTimer = setInterval(() => {
-      void recoverAttachedCloudCredentials().catch(() => undefined);
-    }, 5_000);
-    credentialRecoveryTimer.unref();
-    app.once('before-quit', () => clearInterval(credentialRecoveryTimer));
     registerDesktopProtocolClient();
     void pruneDesktopRuntimePackageCacheForCurrentRelease().catch((error) => {
       const message = error instanceof Error ? error.message : String(error);
@@ -20481,8 +20362,6 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   powerMonitor.on('resume', () => {
-    cloudCredentialRecovery.wake();
-    void recoverAttachedCloudCredentials().catch(() => undefined);
     desktopLanguageState().refreshSystemLocale();
     void syncVisibleControlPlanesIfNeeded({ force: true }).catch(() => {
       // Best-effort refresh after sleep/wake.
@@ -20552,7 +20431,7 @@ async function runGatewayCloudActionFromLauncher(request: Extract<DesktopLaunche
 }
 
 async function manageRuntimeGatewayFromLauncher(request: Extract<DesktopLauncherActionRequest, { kind: 'manage_runtime_gateway' }>): Promise<DesktopLauncherActionResult> {
-  const mutating = request.operation === 'publish' || request.operation === 'replace' || request.operation === 'leave' && request.cloud_impact_acknowledged === true;
+  const mutating = request.operation === 'publish' || request.operation === 'replace' || request.operation === 'leave' && request.route_impact_acknowledged === true;
   if (mutating && explicitCloudLinkTargets.has(request.runtime_target_id)) return launcherActionFailure('cloud_link_failed', 'environment', 'A Cloud connection action is already in progress.');
   if (mutating) {
     explicitCloudLinkTargets.add(request.runtime_target_id);
@@ -20560,10 +20439,6 @@ async function manageRuntimeGatewayFromLauncher(request: Extract<DesktopLauncher
   }
   let target: CloudRuntimeLinkTargetRecord | null = null;
   try {
-    if (mutating) {
-      await cloudCredentialRecovery.settled(request.runtime_target_id);
-      cloudCredentialRecovery.forget(request.runtime_target_id);
-    }
     target = await resolveCloudRuntimeLinkTarget(await loadDesktopPreferencesCached(), request.runtime_target_id);
     const endpoint = target?.record.startup.runtime_control;
     if (!target || !endpoint) return launcherActionFailure('runtime_not_started', 'environment', 'Start this Runtime through its trusted management connection first.');
@@ -20575,7 +20450,7 @@ async function manageRuntimeGatewayFromLauncher(request: Extract<DesktopLauncher
     const leavingMember = request.operation === 'leave'
       ? (await manageRuntimeGateway(endpoint, 'status')).memberships?.find(member => member.gateway_id === request.gateway_id)
       : undefined;
-    const result = await manageRuntimeGateway(endpoint, request.operation, request.preview_id, request.environment_choice, request.gateway_id, request.cloud_impact_acknowledged);
+    const result = await manageRuntimeGateway(endpoint, request.operation, request.preview_id, request.gateway_id, request.route_impact_acknowledged);
     if (!providerRuntimeTargetIsCurrent(target)) return launcherActionFailure('cloud_link_failed', 'environment', 'The Runtime connection changed. Reconnect to inspect enrollment.');
     if (leavingMember) {
       for (const record of await gatewayStore().list()) {
@@ -20595,4 +20470,18 @@ async function manageRuntimeGatewayFromLauncher(request: Extract<DesktopLauncher
     try { await target?.bridge_lease?.release(); }
     finally { if (mutating) explicitCloudLinkTargets.delete(request.runtime_target_id); }
   }
+}
+
+async function manageRuntimeCloudFromLauncher(request: Extract<DesktopLauncherActionRequest, {kind: 'manage_runtime_cloud'}>): Promise<DesktopLauncherActionResult> {
+ let target: CloudRuntimeLinkTargetRecord | null = null;
+ try {
+  target = await resolveCloudRuntimeLinkTarget(await loadDesktopPreferencesCached(), request.runtime_target_id);
+  const endpoint = target?.record.startup.runtime_control;
+  if (!target || !endpoint) return launcherActionFailure('runtime_not_started','environment','Start the Runtime through its trusted management connection first.');
+  const result = await manageRuntimeCloud(endpoint, request);
+  if (!providerRuntimeTargetIsCurrent(target)) return launcherActionFailure('cloud_link_failed','environment','Runtime connection changed. Query the original route operation.');
+  return {...launcherActionSuccess('gateway_membership_updated'), ...result};
+ } catch (error) {
+  return {...launcherActionFailure('cloud_link_failed','environment',error instanceof Error ? error.message : 'Cloud route request failed. Query its original operation before retrying.'), cloud_error_code: error instanceof RuntimeControlError ? error.code : 'CLOUD_UNREACHABLE'};
+ } finally { await target?.bridge_lease?.release(); }
 }

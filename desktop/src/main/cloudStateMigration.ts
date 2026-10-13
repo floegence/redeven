@@ -44,8 +44,8 @@ function migrateRecord(value: unknown): boolean {
     delete record[oldName];
     changed = true;
   }
-  if (record.protocol_version === 'rcpp-v3') { record.protocol_version = 'rcpp-v4'; changed = true; }
-  else if (typeof record.protocol_version === 'string' && record.protocol_version.startsWith('rcpp-') && record.protocol_version !== 'rcpp-v4') {
+  if (record.protocol_version === 'rcpp-v3') { record.protocol_version = 'rcpp-v5'; changed = true; }
+  else if (typeof record.protocol_version === 'string' && record.protocol_version.startsWith('rcpp-') && record.protocol_version !== 'rcpp-v5') {
     throw new Error('Unsupported saved Cloud protocol version.');
   }
   for (const child of Object.values(record)) changed = migrateRecord(child) || changed;

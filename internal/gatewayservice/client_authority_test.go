@@ -60,7 +60,7 @@ func TestClientAuthorityRequiresCurrentPrivateHostProof(t *testing.T) {
 		}
 		return req
 	}
-	for _, route := range []string{"/gateway/v5/clients/access-codes", "/gateway/v5/clients/list", "/gateway/v5/clients/revoke", "/gateway/v5/invitation-codes", "/gateway/v5/endpoints", "/gateway/v5/members/remove", "/gateway/v5/policy", "/gateway/v5/cloud/configure", "/gateway/v5/cloud/status"} {
+	for _, route := range []string{"/gateway/v6/clients/access-codes", "/gateway/v6/clients/list", "/gateway/v6/clients/revoke", "/gateway/v6/invitation-codes", "/gateway/v6/endpoints", "/gateway/v6/members/remove", "/gateway/v6/policy", "/gateway/v6/cloud/configure", "/gateway/v6/cloud/status"} {
 		response := httptest.NewRecorder()
 		server.Handler().ServeHTTP(response, request(route, map[string]any{"protocol_version": gp.Version}, false, "127.0.0.1:1234"))
 		if response.Code != http.StatusForbidden {
@@ -68,22 +68,22 @@ func TestClientAuthorityRequiresCurrentPrivateHostProof(t *testing.T) {
 		}
 	}
 	forged := httptest.NewRecorder()
-	server.Handler().ServeHTTP(forged, request("/gateway/v5/catalog", map[string]any{"protocol_version": gp.Version, "permissions": gp.GatewayPermissions{Access: true, ManageMembers: true, ConfigureCloud: true}}, false, "127.0.0.1:1234"))
+	server.Handler().ServeHTTP(forged, request("/gateway/v6/catalog", map[string]any{"protocol_version": gp.Version, "permissions": gp.GatewayPermissions{Access: true, ManageMembers: true, ConfigureCloud: true}}, false, "127.0.0.1:1234"))
 	if forged.Code != http.StatusBadRequest {
 		t.Fatal("client supplied permissions accepted")
 	}
 	public := httptest.NewRecorder()
-	server.Handler().ServeHTTP(public, request("/gateway/v5/clients/access-codes", gp.ClientAccessCodeRequest{ProtocolVersion: gp.Version}, true, "192.0.2.2:1234"))
+	server.Handler().ServeHTTP(public, request("/gateway/v6/clients/access-codes", gp.ClientAccessCodeRequest{ProtocolVersion: gp.Version}, true, "192.0.2.2:1234"))
 	if public.Code != http.StatusForbidden {
 		t.Fatal("host credential accepted on nonlocal request")
 	}
-	host := request("/gateway/v5/catalog", gp.CatalogRequest{ProtocolVersion: gp.Version}, true, "127.0.0.1:1234")
+	host := request("/gateway/v6/catalog", gp.CatalogRequest{ProtocolVersion: gp.Version}, true, "127.0.0.1:1234")
 	response := httptest.NewRecorder()
 	verified, ok := server.authenticated(response, host, &gp.CatalogRequest{})
 	if !ok || verified.ClientKeyID != id || !verified.Permissions.ManageMembers {
 		t.Fatal("signed host identity was replaced or not verified", response.Body.String())
 	}
-	host = request("/gateway/v5/catalog", gp.CatalogRequest{ProtocolVersion: gp.Version}, true, "127.0.0.1:1234")
+	host = request("/gateway/v6/catalog", gp.CatalogRequest{ProtocolVersion: gp.Version}, true, "127.0.0.1:1234")
 	host.Header.Set("X-Redeven-Request-Signature", "invalid")
 	response = httptest.NewRecorder()
 	server.Handler().ServeHTTP(response, host)
@@ -91,7 +91,7 @@ func TestClientAuthorityRequiresCurrentPrivateHostProof(t *testing.T) {
 		t.Fatal("host proof bypassed invalid client signature")
 	}
 	consumer := httptest.NewRecorder()
-	server.Handler().ServeHTTP(consumer, request("/gateway/v5/clients/list", gp.ClientListRequest{ProtocolVersion: gp.Version}, false, "127.0.0.1:1234"))
+	server.Handler().ServeHTTP(consumer, request("/gateway/v6/clients/list", gp.ClientListRequest{ProtocolVersion: gp.Version}, false, "127.0.0.1:1234"))
 	if consumer.Code != http.StatusForbidden {
 		t.Fatal("host proof persisted as client management grant")
 	}
@@ -103,7 +103,7 @@ func TestStaticPairingPermissionsAreRejected(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, route := range []string{"challenge", "complete"} {
-		req := httptest.NewRequest(http.MethodPost, "http://gateway/gateway/v5/pairing/"+route, strings.NewReader(`{"protocol_version":"redeven-gateway-v5","pairing_code":"old","permissions":{"access":true,"manage_members":true}}`))
+		req := httptest.NewRequest(http.MethodPost, "http://gateway/gateway/v6/pairing/"+route, strings.NewReader(`{"protocol_version":"redeven-gateway-v6","pairing_code":"old","permissions":{"access":true,"manage_members":true}}`))
 		response := httptest.NewRecorder()
 		server.Handler().ServeHTTP(response, req)
 		if response.Code != http.StatusBadRequest {

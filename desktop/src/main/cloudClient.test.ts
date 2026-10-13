@@ -12,7 +12,7 @@ const response = (body: unknown): DesktopProviderTransportResponse => ({
 describe('cloudClient', () => {
   it('fetches Provider discovery without Runtime management capabilities', async () => {
     const transport = vi.fn<DesktopProviderTransport>().mockResolvedValue(response({
-      protocol_version: 'rcpp-v4',
+      protocol_version: 'rcpp-v5',
       cloud_id: 'provider-1',
       display_name: 'Provider',
       cloud_origin: 'https://provider.test',

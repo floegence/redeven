@@ -1,3 +1,4 @@
+import {normalizeRuntimeCloudStatus, normalizeCloudRouteOperation, type RuntimeCloudOperation} from '../shared/runtimeCloud';
 import { normalizeGatewayJoinPreview, type GatewayJoinPreview, type GatewayPreviewInput, type GatewayMembershipStatus, type GatewayMembershipOperation } from '../shared/gatewayJoin';
 import { parseSecurityResult, type SecurityRequest, type SecurityResult } from '../shared/runtimeSecurity';
 import http from 'node:http';
@@ -32,6 +33,7 @@ type RuntimeControlEnvelope = Readonly<{
 }>;
 
 type RuntimeControlServiceRoute =
+  | 'v2/cloud/retry' | 'v2/cloud/route/preflight' | 'v2/cloud/route/commit' | `v2/cloud/route/operations/${string}`
   | 'v2/gateway/preview'
   | 'v2/gateway/join'
   | 'v2/gateway/replace'
@@ -155,7 +157,7 @@ function requestRuntimeControl(
   endpoint: DesktopRuntimeControlEndpoint,
   route: RuntimeControlServiceRoute,
   options: Readonly<{
-    method: 'GET' | 'POST' | 'PUT';
+    method: 'GET' | 'POST' | 'PUT' | 'DELETE';
     body?: unknown;
     rawBody?: Buffer;
     contentType?: string;
@@ -310,23 +312,23 @@ export async function requestTessivenTarget(endpoint: DesktopRuntimeControlEndpo
   return (await requestRuntimeControl(endpoint, 'v2/tessiven/resources', { method: 'POST', body: payload, signal, timeoutMs: 30000 })).data;
 }
 
-export async function manageRuntimeGateway(endpoint: DesktopRuntimeControlEndpoint, operation: GatewayMembershipOperation, previewID?: string, choice?: 'preserve' | 'new', gatewayID?: string, cloudImpactAcknowledged?: boolean): Promise<GatewayMembershipStatus> {
+export async function manageRuntimeGateway(endpoint: DesktopRuntimeControlEndpoint, operation: GatewayMembershipOperation, previewID?: string, gatewayID?: string, routeImpactAcknowledged?: boolean): Promise<GatewayMembershipStatus> {
   const confirming = ['join','replace','update-endpoints'].includes(operation);
-  if (confirming !== Boolean(previewID) || choice && operation !== 'publish') throw new RuntimeControlError('GATEWAY_JOIN_INVALID', 'Confirmation requires a verified preview.');
+  if (confirming !== Boolean(previewID)) throw new RuntimeControlError('GATEWAY_JOIN_INVALID', 'Confirmation requires a verified preview.');
   const result = (await requestRuntimeControl(endpoint, `v2/gateway/${operation}`, {
     method: operation === 'status' ? 'GET' : 'POST',
-    ...(operation === 'status' ? {} : {body: { ...(confirming ? {preview_id: previewID} : {}), ...(gatewayID ? {gateway_id: gatewayID} : {}), ...(choice ? {environment_choice: choice} : {}), ...(cloudImpactAcknowledged ? {cloud_impact_acknowledged: true} : {}) }}), timeoutMs: 30_000,
+    ...(operation === 'status' ? {} : {body: { ...(confirming ? {preview_id: previewID} : {}), ...(gatewayID ? {gateway_id: gatewayID} : {}), ...(routeImpactAcknowledged ? {route_impact_acknowledged: true} : {}) }}), timeoutMs: 30_000,
   })).data;
   function parse(value: unknown, child = false): GatewayMembershipStatus {
     const data = value as Record<string, unknown> | undefined;
-    if (!data || !['not_joined','joining','gateway_offline','joined','reauthorization_required','removal_pending','cloud_denied','cloud_pending','cloud_control_offline','accessible','migration_pending'].includes(String(data.phase)) || typeof data.joined !== 'boolean'
+    if (!data || !['not_joined','joining','gateway_offline','joined','reauthorization_required','removal_pending'].includes(String(data.phase)) || typeof data.joined !== 'boolean'
       || child && (typeof data.gateway_id !== 'string' || typeof data.member_id !== 'string' || data.memberships !== undefined)
       || data.memberships !== undefined && (!Array.isArray(data.memberships) || data.memberships.length > 16)) throw new RuntimeControlError('GATEWAY_JOIN_INVALID_RESPONSE','The Runtime did not return Gateway membership status.');
     return {joined: data.joined, phase: data.phase as GatewayMembershipStatus['phase'],
-      ...Object.fromEntries(['gateway_id','gateway_name','last_endpoint_id','member_id','existing_environment_id','publication_error_code'].filter(key => typeof data[key] === 'string').map(key => [key,data[key]])),
+      ...Object.fromEntries(['gateway_id','gateway_name','last_endpoint_id','member_id','existing_environment_id'].filter(key => typeof data[key] === 'string').map(key => [key,data[key]])),
       ...(Array.isArray(data.endpoints) ? {endpoints: data.endpoints as GatewayMembershipStatus['endpoints']} : {}),
-      ...(typeof data.cloud_publication === 'boolean' ? {cloud_publication:data.cloud_publication} : {}),
-      ...(typeof data.rejoin_required === 'boolean' ? {rejoin_required:data.rejoin_required} : {}),
+      ...(typeof data.cloud_enrollment_required === 'boolean' ? {cloud_enrollment_required:data.cloud_enrollment_required} : {}),
+      ...(typeof data.route_selected === 'boolean' ? {route_selected:data.route_selected} : {}),
       ...(Array.isArray(data.memberships) ? {memberships:data.memberships.map(item => parse(item,true))} : {}),
     };
   }
@@ -342,4 +344,18 @@ export async function previewRuntimeGateway(endpoint: DesktopRuntimeControlEndpo
 
 export async function preflightTessivenSource(endpoint: DesktopRuntimeControlEndpoint, source: string, scope: {user_public_id:string;floe_app:string}, permissions: {read:boolean;write:boolean;execute:boolean;admin:boolean}, effect: 'read'|'resource'|'connect'|'lifecycle', signal?: AbortSignal): Promise<void> {
   await requestRuntimeControl(endpoint, 'v2/tessiven/preflight', {method:'POST',body:{source,scope,permissions,effect},signal,timeoutMs:5000});
+}
+
+export async function manageRuntimeCloud(endpoint: DesktopRuntimeControlEndpoint, request: RuntimeCloudOperation) {
+ const path: RuntimeControlServiceRoute = request.operation === 'query' || request.operation === 'cancel' ? `v2/cloud/route/operations/${request.operation_id}` : request.operation === 'retry' ? 'v2/cloud/retry' : `v2/cloud/route/${request.operation}`;
+ const body = request.operation === 'preflight' ? {operation_id: request.operation_id, expected_route_revision: request.expected_route_revision, selection: request.selection} : request.operation === 'commit' ? {operation_id: request.operation_id, confirmed: true} : request.operation === 'retry' ? {expected_association_revision: request.expected_association_revision} : undefined;
+ const response = await requestRuntimeControl(endpoint, path, {method: request.operation === 'query' ? 'GET' : request.operation === 'cancel' ? 'DELETE' : 'POST', ...(body ? {body} : {}), timeoutMs: 30000});
+ if (request.operation === 'retry') {
+ const cloud = normalizeRuntimeCloudStatus(response.data);
+ if (!cloud) throw new RuntimeControlError('CLOUD_STATUS_INVALID_RESPONSE','Runtime returned an invalid Cloud status.');
+ return {};
+ }
+ const operation = normalizeCloudRouteOperation(response.data);
+ if (!operation) throw new RuntimeControlError('CLOUD_ROUTE_INVALID_RESPONSE', 'The Runtime returned an invalid route operation. Query the original operation before retrying.');
+ return {cloud_route_operation: operation};
 }

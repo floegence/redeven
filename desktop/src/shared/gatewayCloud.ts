@@ -4,7 +4,7 @@ export type GatewayCloudSummary = Readonly<{
   gateway_public_id?: string;
   namespace_public_id?: string;
   region?: string;
-  state: 'unconfigured' | 'pending' | 'active' | 'revoked' | 'expired' | 'retired' | 'rejoin_required' | 'registering';
+  state: 'unconfigured' | 'pending' | 'active' | 'revoked' | 'expired' | 'retired' | 'registering';
   management_url?: string;
 }>;
 
@@ -27,7 +27,7 @@ export function normalizeGatewayCloudConfiguration(value: unknown): GatewayCloud
 export function parseGatewayCloudSummary(raw: string): GatewayCloudSummary {
   if (raw.length > 32 * 1024) throw new Error('Invalid Gateway Cloud response.');
   const value = JSON.parse(raw) as GatewayCloudSummary;
-  if (!value || typeof value !== 'object' || typeof value.configured !== 'boolean' || !['unconfigured', 'pending', 'active', 'revoked', 'expired', 'retired', 'rejoin_required', 'registering'].includes(value.state)) throw new Error('Invalid Gateway Cloud response.');
+  if (!value || typeof value !== 'object' || typeof value.configured !== 'boolean' || !['unconfigured', 'pending', 'active', 'revoked', 'expired', 'retired', 'registering'].includes(value.state)) throw new Error('Invalid Gateway Cloud response.');
   if (!value.configured) return { configured: false, state: 'unconfigured' };
   if (value.state === 'registering') {
     const origin = new URL(value.cloud_origin ?? '');

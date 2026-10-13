@@ -157,7 +157,7 @@ func (r *RuntimeConfig) DeliverPendingEndpointUpdate(ctx context.Context, persis
 	}
 	request := r.PendingEndpointUpdate
 	var response gp.MemberEndpointUpdateResponse
-	if err := r.Request(ctx, "/v5/member/update-endpoints", request, &response, true); err != nil {
+	if err := r.Request(ctx, "/v6/member/update-endpoints", request, &response, true); err != nil {
 		return err
 	}
 	if response.ProtocolVersion != gp.Version || response.GatewayID != r.GatewayID || response.MemberID != r.MemberID || response.MemberVersion != r.MemberVersion || response.DeliveryID != request.DeliveryID {

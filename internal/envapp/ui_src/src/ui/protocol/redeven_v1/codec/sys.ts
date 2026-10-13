@@ -5,6 +5,7 @@ import type {
   RuntimeServiceCompatibility,
   RuntimeServiceOpenReadiness,
   RuntimeServiceCloudLinkBinding,
+  RuntimeServiceCloudStatus,
   RuntimeServiceCloudLinkState,
   RuntimeServiceSnapshot,
   SysMaintenanceSnapshot,
@@ -145,6 +146,23 @@ function fromWireRuntimeServiceCapability(value: unknown): RuntimeServiceCapabil
   };
 }
 
+function fromWireCloudStatus(value: unknown): RuntimeServiceCloudStatus | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const v = value as Record<string, unknown>;
+  const route = v.route as Record<string, unknown> | undefined;
+  if (!Number.isSafeInteger(v.association_revision) || Number(v.association_revision) < 1
+    || !Number.isSafeInteger(v.route_revision) || Number(v.route_revision) < 1
+    || typeof v.enabled !== 'boolean' || typeof v.connection_state !== 'string'
+    || !['approved','pending','revoked','identity_required','action_required'].includes(String(v.approval_state))
+    || !route || !['direct','gateway'].includes(String(route.kind))
+    || route.kind === 'gateway' && !route.member_id || route.kind === 'direct' && route.member_id) return undefined;
+  return {associationRevision:Number(v.association_revision), enabled:v.enabled,
+    approvalState:v.approval_state as RuntimeServiceCloudStatus['approvalState'],
+    reasonCode:typeof v.reason_code === 'string' ? v.reason_code : undefined,
+    connectionState:v.connection_state, route:{kind:route.kind as 'direct' | 'gateway',memberId:typeof route.member_id === 'string' ? route.member_id : undefined},
+    routeRevision:Number(v.route_revision),nextAttemptAtUnixMs:typeof v.next_attempt_at_unix_ms === 'number' ? v.next_attempt_at_unix_ms : undefined};
+}
+
 function fromWireRuntimeServiceCloudLinkBinding(
   value: wire_sys_ping_resp['runtime_service'] extends infer RuntimeService
     ? RuntimeService extends { bindings?: infer Bindings }
@@ -159,8 +177,9 @@ function fromWireRuntimeServiceCloudLinkBinding(
   const state = normalizeRuntimeServiceCloudLinkState(record.state, supported);
   return {
     state,
+    ...(fromWireCloudStatus(record.cloud) ? {cloud:fromWireCloudStatus(record.cloud)} : {}),
     cloudOrigin: String(record.cloud_origin ?? '').trim() || undefined,
-    providerId: String(record.provider_id ?? '').trim() || undefined,
+    cloudId: String(record.cloud_id ?? '').trim() || undefined,
     envPublicId: String(record.env_public_id ?? '').trim() || undefined,
     accessPointOrigin: String(record.access_point_origin ?? '').trim() || undefined,
     localEnvironmentPublicId: String(record.local_environment_public_id ?? '').trim() || undefined,
@@ -219,7 +238,7 @@ function fromWireRuntimeServiceSnapshot(resp: wire_sys_ping_resp['runtime_servic
         connectedAtUnixMs: normalizeCount(desktopModelSourceBinding.connected_at_unix_ms) || undefined,
         modelSource: String(desktopModelSourceBinding.model_source ?? '').trim() || undefined,
         modelCount: normalizeCount(desktopModelSourceBinding.model_count),
-        missingKeyProviderIds: compactStringArray(desktopModelSourceBinding.missing_key_provider_ids),
+        missingKeyProviderIds: compactStringArray(desktopModelSourceBinding.missing_key_cloud_ids),
         lastError: String(desktopModelSourceBinding.last_error ?? '').trim() || undefined,
       },
       cloudLink: fromWireRuntimeServiceCloudLinkBinding(cloudLinkBinding, cloudLinkSupported),

@@ -37,13 +37,6 @@ func loadConfig(path string, persistence configPersistence) (*Config, error) {
 		return nil, fmt.Errorf("invalid config: %w", err)
 	}
 
-	if cfg.gatewayConfigMigrated || cfg.cloudConfigMigrated {
-		if err := persistence.writeConfig(path, &cfg); err != nil {
-			return nil, fmt.Errorf("persist configuration migration: %w", err)
-		}
-		cfg.gatewayConfigMigrated = false
-		cfg.cloudConfigMigrated = false
-	}
 	return &cfg, nil
 }
 
@@ -59,11 +52,6 @@ func saveConfig(path string, cfg *Config, persistence configPersistence) error {
 	}
 
 	next := *cfg
-	if cfg.Direct != nil {
-		directCopy := *cfg.Direct
-		directCopy.ArtifactJSON = append([]byte(nil), cfg.Direct.ArtifactJSON...)
-		next.Direct = &directCopy
-	}
 	if cfg.ControlArtifactPool != nil {
 		poolCopy := *cfg.ControlArtifactPool
 		if cfg.ControlArtifactPool.PendingTopUp != nil {

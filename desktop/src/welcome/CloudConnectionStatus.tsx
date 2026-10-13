@@ -10,8 +10,8 @@ export function cloudConnectionState(runtime: DesktopEnvironmentEntry, cloud: De
   const target = runtime.provider_runtime_link_target;
   if (cloud.control_plane_sync_state === 'auth_required') return 'sign_in_required';
   if (target?.provider_connection_state === 'connected') return 'connected';
-  if (target?.credential_recovery_details?.last_error_code === 'provider_tls_untrusted') return 'tls_error';
-  return target?.credential_recovery ?? target?.provider_connection_state ?? 'unknown';
+  if (target?.cloud_link_binding?.last_error_code === 'provider_tls_untrusted') return 'tls_error';
+  return target?.provider_connection_state ?? 'unknown';
 }
 
 export function cloudConnectionTitleKey(runtime: DesktopEnvironmentEntry, cloud: DesktopEnvironmentEntry): DesktopTranslationKey {
@@ -65,8 +65,8 @@ export function CloudConnectionStatus(props: Readonly<{
     .action_presentation.menu_actions.find(item => item.action.intent === 'connect_cloud_runtime')?.action);
   const canRestore = () => !['connected', 'connecting', 'restoring', 'retrying', 'unknown', 'sign_in_required', 'permission_required', 'binding_changed'].includes(state())
     && restoreAction()?.enabled;
-  const diagnostics = () => target()?.credential_recovery_details;
-  const errorCode = () => diagnostics()?.last_error_code ?? target()?.cloud_link_binding?.last_error_code;
+  const diagnostics = () => ({last_attempt_at_unix_ms:target()?.cloud_link_binding?.last_connected_at_unix_ms,next_retry_at_unix_ms:target()?.cloud_link_binding?.cloud?.next_attempt_at_unix_ms});
+  const errorCode = () => target()?.cloud_link_binding?.last_error_code;
   const restore = () => {
     const action = restoreAction();
     if (action && canRestore()) { setDetailsOpen(false); props.onRuntimeAction(action); }

@@ -17,7 +17,12 @@ func TestRemoteDesktopApprovalPolicyMigration(t *testing.T) {
 		{`{"remote_desktop":{"unattended":true,"approval_preference_set":true}}`, true},
 	} {
 		var cfg Config
-		if err := json.Unmarshal([]byte(tt.data), &cfg); err != nil {
+		if err := json.Unmarshal([]byte(`{"runtime_config_version":1`+func() string {
+			if tt.data == `{}` {
+				return `}`
+			}
+			return `,` + tt.data[1:]
+		}()), &cfg); err != nil {
 			t.Fatal(err)
 		}
 		if cfg.RemoteDesktop.RememberApproval() != tt.enabled {

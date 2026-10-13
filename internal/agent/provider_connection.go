@@ -33,6 +33,10 @@ func (a *Agent) providerConnectionLocked() (state, code, message string) {
 		return "error", "CONTROL_CONNECTION_FAILED", "The Redeven Cloud connection failed. Review the connection details before retrying."
 	}
 	pool := a.cfg.ControlArtifactPool
+	if association := a.cfg.CloudAssociation; association != nil && association.Enabled && association.ApprovalState == "approved" &&
+		(pool == nil || usableControlArtifactCount(pool, time.Now().Unix()) == 0) {
+		return "retrying", "CONTROL_CREDENTIALS_RECOVERING", "Restoring the Cloud connection with this Runtime's registered identity. Local work remains available."
+	}
 	if pool == nil || pool.RecoveryState == config.ControlArtifactRecoveryRelink ||
 		(pool.PendingTopUp != nil && pool.PendingTopUp.State == config.ControlArtifactTopUpTerminal) {
 		return "authorization_required", "CONTROL_RELINK_REQUIRED", "Reconnect this Runtime to Redeven Cloud. Local work remains available."

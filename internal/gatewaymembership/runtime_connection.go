@@ -82,7 +82,7 @@ func (s *runtimeSource) Acquire(ctx context.Context) (flowersec.ArtifactLease, *
 		s.failedEndpoints = make(map[string]bool)
 		r.GatewayEndpoints = endpoints
 	}
-	if err := r.Request(ctx, "/v5/member/connect", gp.MemberConnectRequest{ProtocolVersion: gp.Version}, &offer, true); err != nil {
+	if err := r.Request(ctx, "/v6/member/connect", gp.MemberConnectRequest{ProtocolVersion: gp.Version}, &offer, true); err != nil {
 		return flowersec.ArtifactLease{}, memberSourceError(err)
 	}
 	s.attemptedEndpointID = r.LastEndpointID

@@ -87,10 +87,22 @@ export type RuntimeServiceCloudLinkState =
   | 'unsupported'
   | 'error';
 
+export type RuntimeServiceCloudStatus = {
+  associationRevision: number;
+  enabled: boolean;
+  approvalState: 'approved' | 'pending' | 'revoked' | 'identity_required' | 'action_required';
+  reasonCode?: string;
+  connectionState: string;
+  route: {kind: 'direct' | 'gateway'; memberId?: string};
+  routeRevision: number;
+  nextAttemptAtUnixMs?: number;
+};
+
 export type RuntimeServiceCloudLinkBinding = {
+  cloud?: RuntimeServiceCloudStatus;
   state: RuntimeServiceCloudLinkState;
   cloudOrigin?: string;
-  providerId?: string;
+  cloudId?: string;
   envPublicId?: string;
   accessPointOrigin?: string;
   localEnvironmentPublicId?: string;

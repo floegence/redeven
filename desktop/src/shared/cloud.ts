@@ -4,7 +4,7 @@ import type {
 } from './providerEnvironmentState';
 import { normalizeDesktopRuntimeLinuxDistribution, normalizeDesktopRuntimePlatform, type DesktopRuntimePlatform } from './desktopRuntimePlatform';
 
-export type DesktopCloudProtocolVersion = 'rcpp-v4';
+export type DesktopCloudProtocolVersion = 'rcpp-v5';
 
 export type DesktopCloudAccessPoint = Readonly<{
   access_point_id: string;
@@ -160,7 +160,7 @@ export function desktopControlPlaneKey(cloudOrigin: string, cloudID: string): st
 }
 
 function normalizeCloudProtocolVersion(value: unknown): DesktopCloudProtocolVersion | null {
-  return compact(value) === 'rcpp-v4' ? 'rcpp-v4' : null;
+  return compact(value) === 'rcpp-v5' ? 'rcpp-v5' : null;
 }
 
 function normalizeUnixMS(value: unknown): number {

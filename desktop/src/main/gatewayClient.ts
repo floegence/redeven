@@ -37,7 +37,6 @@ export type GatewayCatalogResponse = Readonly<{
   members: readonly GatewayMember[];
   policy: GatewayPolicy;
   revision: number;
-  rebuild_required: boolean;
   hook_status: GatewayHookStatuses;
 }>;
 export type GatewayMemberPolicyUpdate = Readonly<{
@@ -141,7 +140,7 @@ export function normalizeGatewayCatalogResponse(value: unknown): GatewayCatalogR
       allowed_hosts: Array.isArray(gateway.allowed_hosts) ? gateway.allowed_hosts.map(value => text(value)) : [],
       endpoint_last_used_at: Object.fromEntries(Object.entries(object(gateway.endpoint_last_used_at ?? {})).map(([key, value]) => [id(key), integer(value, 0)])),
       member_tls_root_pem: text(gateway.member_tls_root_pem, 16_384), permissions: permissions(gateway.permissions),
-    }, members, policy: policy(item.policy), revision: integer(item.revision, 1), rebuild_required: boolean(item.rebuild_required),
+    }, members, policy: policy(item.policy), revision: integer(item.revision, 1),
     hook_status: { 'member.admit': hookStatus(hooks['member.admit']), 'access.open': hookStatus(hooks['access.open']), 'cloud.publish': hookStatus(hooks['cloud.publish']) },
   };
 }
@@ -175,7 +174,7 @@ export class GatewayClient {
     }
     const signal = options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(options.timeoutMs ?? 20_000)]) : AbortSignal.timeout(options.timeoutMs ?? 20_000);
     signal.throwIfAborted();
-    const path = `/gateway/v5/${route}`;
+    const path = `/gateway/v6/${route}`;
     const headers = authenticated ? await createGatewayAuthHeaders({ record, method: 'POST', route: path, body, secret_store: this.secretStore }) : {};
     signal.throwIfAborted();
     let url: URL;
@@ -186,7 +185,7 @@ export class GatewayClient {
       agent.createConnection = () => openGatewayBridgeSocket(this.bridge!) as net.Socket;
     } else {
       if (record.connection.kind !== 'url') throw new GatewayClientError('GATEWAY_BRIDGE_UNAVAILABLE', 'Gateway host bridge is unavailable.');
-      url = new URL(`gateway/v5/${route}`, normalizeGatewayBaseURL(record.connection.base_url));
+      url = new URL(`gateway/v6/${route}`, normalizeGatewayBaseURL(record.connection.base_url));
       if (url.protocol !== 'https:' && !(record.connection.allow_loopback_http && url.protocol === 'http:' && ['127.0.0.1', '[::1]'].includes(url.hostname))) {
         throw new GatewayClientError('GATEWAY_URL_INSECURE', 'Gateway requires HTTPS.');
       }
@@ -333,9 +332,6 @@ export class GatewayClient {
     await this.request(record, 'policy', { protocol_version: GATEWAY_PROTOCOL_VERSION, expected_revision: next.revision, policy: next }, options);
   }
 
-  async dismissMigration(record: GatewayRecord, options: GatewayRequestOptions = {}): Promise<void> {
-    await this.request(record, 'migration/dismiss', { protocol_version: GATEWAY_PROTOCOL_VERSION }, options);
-  }
 }
 
 export { redactGatewayDiagnosticValue } from '../shared/gatewayDiagnostics';

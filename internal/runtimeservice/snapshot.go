@@ -3,6 +3,8 @@ package runtimeservice
 import (
 	"sort"
 	"strings"
+
+	rc "github.com/floegence/redeven/internal/runtimecloud/protocol"
 )
 
 const ProtocolVersion = "redeven-runtime-v2"
@@ -103,6 +105,7 @@ const (
 )
 
 type CloudLinkBinding struct {
+	Cloud                    *rc.Status     `json:"cloud,omitempty"`
 	State                    CloudLinkState `json:"state"`
 	ConnectionState          string         `json:"connection_state"`
 	CloudOrigin              string         `json:"cloud_origin,omitempty"`
@@ -126,7 +129,6 @@ type GatewayMembership struct {
 	MemberID            string           `json:"member_id"`
 	RuntimePublicID     string           `json:"runtime_public_id"`
 	Phase               string           `json:"phase"`
-	CloudPublication    bool             `json:"cloud_publication"`
 	Endpoints           []GatewayAddress `json:"endpoints"`
 }
 type GatewayAddress struct {
@@ -135,7 +137,6 @@ type GatewayAddress struct {
 
 type Snapshot struct {
 	GatewayMemberships    []GatewayMembership `json:"gateway_memberships,omitempty"`
-	GatewayPublication    *GatewayPublication `json:"gateway_publication,omitempty"`
 	RuntimeVersion        string              `json:"runtime_version,omitempty"`
 	RuntimeCommit         string              `json:"runtime_commit,omitempty"`
 	RuntimeBuildTime      string              `json:"runtime_build_time,omitempty"`
@@ -153,15 +154,6 @@ type Snapshot struct {
 	ActiveWorkload        Workload            `json:"active_workload"`
 	Capabilities          Capabilities        `json:"capabilities"`
 	Bindings              Bindings            `json:"bindings"`
-}
-
-// GatewayPublication contains presentation metadata only, never admission keys.
-type GatewayPublication struct {
-	ProtocolVersion   int    `json:"protocol_version"`
-	CloudOrigin       string `json:"cloud_origin"`
-	NamespacePublicID string `json:"namespace_public_id"`
-	GatewayPublicID   string `json:"gateway_public_id"`
-	State             string `json:"state"`
 }
 
 // NormalizeSnapshotForEndpoint applies endpoint-level facts that older or

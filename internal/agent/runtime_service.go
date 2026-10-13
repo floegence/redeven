@@ -44,11 +44,6 @@ func (a *Agent) RuntimeServiceSnapshot() runtimeservice.Snapshot {
 			BindMethod: runtimeservice.RuntimeControlBindMethodV2,
 		},
 	}
-	gatewayCloud := a.gatewayPublicationSnapshot()
-	cfg := a.remoteConfigSnapshot()
-	if gatewayCloud != nil || (cfg != nil && (cfg.CloudGateway() != nil || cfg.GatewayRejoinRequired)) {
-		capabilities.CloudLink = runtimeservice.Capability{ReasonCode: "gateway_managed", Message: "Manage the Gateway connection in Runtime settings and its publication in Redeven Cloud."}
-	}
 	bindings := runtimeservice.Bindings{
 		DesktopModelSource: runtimeservice.Binding{State: runtimeservice.BindingStateUnsupported},
 		CloudLink:          a.CloudLinkBinding(),
@@ -74,7 +69,6 @@ func (a *Agent) RuntimeServiceSnapshot() runtimeservice.Snapshot {
 	}
 
 	return runtimeservice.ApplyCompatibilityContract(runtimeservice.Snapshot{
-		GatewayPublication: gatewayCloud,
 		GatewayMemberships: a.gatewayMembershipSummaries(),
 		RuntimeVersion:     strings.TrimSpace(a.version),
 		RuntimeCommit:      strings.TrimSpace(a.commit),
@@ -92,27 +86,6 @@ func (a *Agent) RuntimeServiceSnapshot() runtimeservice.Snapshot {
 		Capabilities: capabilities,
 		Bindings:     bindings,
 	})
-}
-
-func (a *Agent) gatewayPublicationSnapshot() *runtimeservice.GatewayPublication {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if a.cfg == nil || a.cfg.GatewayPublication == nil {
-		return nil
-	}
-	route := a.cfg.GatewayPublication
-	state := "connecting"
-	switch {
-	case route.Revoked:
-		state = "revoked"
-	case route.Binding == nil:
-		state = "pending"
-	case !a.remoteEnabled:
-		state = "disabled"
-	case a.controlRegistered:
-		state = "connected"
-	}
-	return &runtimeservice.GatewayPublication{ProtocolVersion: route.ProtocolVersion, CloudOrigin: route.CloudOrigin, NamespacePublicID: route.NamespacePublicID, GatewayPublicID: route.GatewayPublicID, State: state}
 }
 
 func (a *Agent) CurrentRuntimeServiceSnapshot() runtimeservice.Snapshot {
@@ -140,7 +113,7 @@ func (a *Agent) gatewayMembershipSummaries() []runtimeservice.GatewayMembership 
 		if err != nil {
 			continue
 		}
-		summary := runtimeservice.GatewayMembership{GatewayID: member.GatewayID, GatewayName: member.GatewayName, IdentityFingerprint: fingerprint, MemberID: member.MemberID, RuntimePublicID: member.RuntimePublicID, Phase: item.Phase, CloudPublication: item.CloudPublication}
+		summary := runtimeservice.GatewayMembership{GatewayID: member.GatewayID, GatewayName: member.GatewayName, IdentityFingerprint: fingerprint, MemberID: member.MemberID, RuntimePublicID: member.RuntimePublicID, Phase: item.Phase}
 		for _, endpoint := range member.ConnectionEndpoints() {
 			summary.Endpoints = append(summary.Endpoints, runtimeservice.GatewayAddress{Address: endpoint.Address})
 		}

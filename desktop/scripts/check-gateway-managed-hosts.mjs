@@ -104,7 +104,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends openssh-server 
     const endpoints = [{ endpoint_id: 'lan', address: 'https://localhost:7443', scope: 'lan', priority: 0 }];
     await session.client.updateEndpoints(record, endpoints);
     const invitation = await session.client.invite(record);
-    assert.equal(invitation.protocol_version, 'redeven-gateway-v5');
+    assert.equal(invitation.protocol_version, 'redeven-gateway-v6');
     assert.equal(invitation.gateway_id, catalog.gateway.gateway_id);
     assert.deepEqual(invitation.share_addresses, endpoints.map(endpoint => endpoint.address));
     assert.match(invitation.code, /^[0-9A-HJKMNP-TV-Z]{26}$/u);

@@ -39,7 +39,7 @@ func TestCloudCommandDeliveryIsAtomicAndSurvivesRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	records, _, revision := restarted.Snapshot()
-	if records[0].HookCloudAllowed || !records[0].Member.CloudRevocationPending {
+	if records[0].HookCloudAllowed {
 		t.Fatal("restart preserved a grant from the invalidated hook")
 	}
 	if code, err := restarted.ApplyCloudCommand(t.Context(), command); err != nil || code != "" {

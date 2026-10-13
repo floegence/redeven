@@ -144,7 +144,7 @@ void app.whenReady().then(async () => {
     cases.push('production partition verifier rejects a different Runtime certificate');
     const member = catalog.members.find(member => member.member_id === fixture.plainMember)!;
     await assert.rejects(client.removeMember(record, member.member_id, member.member_version), { code: 'HOST_MANAGEMENT_REQUIRED' });
-    const removal = await fetch(new URL('gateway/v5/members/remove', fixture.gateway), { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Redeven-Gateway-Host-Token': fixture.hostToken }, body: JSON.stringify({ protocol_version: 'redeven-gateway-v5', member_id: member.member_id, expected_member_version: member.member_version }) });
+    const removal = await fetch(new URL('gateway/v6/members/remove', fixture.gateway), { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Redeven-Gateway-Host-Token': fixture.hostToken }, body: JSON.stringify({ protocol_version: 'redeven-gateway-v6', member_id: member.member_id, expected_member_version: member.member_version }) });
     assert.equal(removal.status, 200);
     await assert.rejects(prepareGatewayEnvironmentAccess(record, member, catalog, client));
     assert.equal((await client.catalog(record)).members.length, 1);

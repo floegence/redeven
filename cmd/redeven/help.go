@@ -24,6 +24,7 @@ Usage:
   redeven help [command]
 
 Commands:
+  cloud       Inspect Cloud approval, retry, disconnect, or change route.
   gateway     Join, inspect, retry, or leave a Gateway membership.
   bootstrap   Bind the Local Environment to a control-plane environment.
   run         Start the runtime in remote, hybrid, local, or desktop mode.
@@ -805,6 +806,8 @@ func lookupHelpText(args []string) (string, bool) {
 	switch strings.Join(normalizeHelpTopic(args), " ") {
 	case "":
 		return rootHelpText(), true
+	case "cloud":
+		return cloudHelp, true
 	case "gateway":
 		return gatewayMembershipHelp, true
 	case "bootstrap":

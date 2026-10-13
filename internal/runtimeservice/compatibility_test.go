@@ -16,8 +16,8 @@ func TestCurrentCompatibilityContractIsValid(t *testing.T) {
 	if contract.CompatibilityEpoch <= 0 {
 		t.Fatalf("CompatibilityEpoch = %d, want positive", contract.CompatibilityEpoch)
 	}
-	if contract.CompatibilityEpoch != 57 {
-		t.Fatalf("CompatibilityEpoch = %d, want Flower strict request epoch 57", contract.CompatibilityEpoch)
+	if contract.CompatibilityEpoch != 58 {
+		t.Fatalf("CompatibilityEpoch = %d, want unified Cloud route epoch 58", contract.CompatibilityEpoch)
 	}
 	if len(contract.UpgradeFromRuntimeEpochs) != 48 {
 		t.Fatalf("UpgradeFromRuntimeEpochs = %v, want the reviewed epochs 9 through 56", contract.UpgradeFromRuntimeEpochs)

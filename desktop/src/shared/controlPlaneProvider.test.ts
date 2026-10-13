@@ -26,7 +26,7 @@ function accessPoint(overrides: Record<string, unknown> = {}) {
 
 function provider(overrides: Record<string, unknown> = {}) {
   return {
-    protocol_version: 'rcpp-v4',
+    protocol_version: 'rcpp-v5',
     cloud_id: 'example_control_plane',
     display_name: 'Example Control Plane',
     cloud_origin: 'https://redeven.test',
@@ -72,7 +72,7 @@ describe('cloud', () => {
         access_point_origin: 'https://dev.redeven.test/root/path',
       })],
     }))).toEqual({
-      protocol_version: 'rcpp-v4',
+      protocol_version: 'rcpp-v5',
       cloud_id: 'example_control_plane',
       display_name: 'Example Control Plane',
       cloud_origin: 'https://redeven.test',

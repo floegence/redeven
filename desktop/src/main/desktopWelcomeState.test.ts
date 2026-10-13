@@ -121,7 +121,7 @@ const testAccessPoint = {
 } as const;
 
 const testProvider = normalizeDesktopCloud({
-  protocol_version: 'rcpp-v4',
+  protocol_version: 'rcpp-v5',
   cloud_id: 'example_control_plane',
   display_name: 'Example Control Plane',
   cloud_origin: 'https://provider.example.invalid',

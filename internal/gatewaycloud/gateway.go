@@ -4,11 +4,12 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/tls"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/floegence/redeven/internal/periodic"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -17,6 +18,8 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/floegence/redeven/internal/periodic"
 
 	gc "github.com/floegence/redeven/internal/gatewaycloud/protocol"
 	"github.com/floegence/redeven/internal/gatewayegress"
@@ -28,6 +31,10 @@ import (
 
 // GatewayConfig holds only the Cloud machine association and its last verified
 // projection. Member identities, certificates and invitations belong to Store.
+var ErrState = errors.New("Gateway Cloud state is invalid; create a new state root and register again")
+
+const gatewayConfigVersion = 3
+
 type GatewayConfig struct {
 	SchemaVersion         int               `json:"schema_version"`
 	CloudOrigin           string            `json:"cloud_origin"`
@@ -37,7 +44,6 @@ type GatewayConfig struct {
 	PendingPrivateKeyB64u string            `json:"pending_private_key_b64u,omitempty"`
 	KeyRotatedAtUnixMS    int64             `json:"key_rotated_at_unix_ms"`
 	Status                *gc.GatewayStatus `json:"status,omitempty"`
-	ClosureRoutes         []ClosureRoute    `json:"closure_routes,omitempty"`
 }
 
 func (GatewayConfig) String() string       { return "Gateway.CloudAssociation" }
@@ -45,7 +51,7 @@ func (GatewayConfig) GoString() string     { return "Gateway.CloudAssociation" }
 func GatewayConfigPath(root string) string { return filepath.Join(root, "cloud-access.json") }
 
 func directCloudClient(origin string) (*Client, error) {
-	return NewClient(origin, &http.Transport{TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS13}, ForceAttemptHTTP2: true, TLSHandshakeTimeout: 10 * time.Second, IdleConnTimeout: 60 * time.Second})
+	return NewClient(origin, &http.Transport{TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS13}, ForceAttemptHTTP2: true, TLSHandshakeTimeout: 10 * time.Second, IdleConnTimeout: 5 * time.Minute, MaxIdleConns: 16, MaxIdleConnsPerHost: 4, MaxConnsPerHost: 8, ResponseHeaderTimeout: 10 * time.Second})
 }
 func gatewayIdentity(config GatewayConfig) (Identity, error) {
 	key, err := gc.DecodeKey(config.PrivateKeyB64u)
@@ -56,22 +62,24 @@ func gatewayIdentity(config GatewayConfig) (Identity, error) {
 }
 
 type Gateway struct {
-	receiptSlots  chan struct{}
-	opMu          sync.Mutex
-	mu            sync.Mutex
-	path          string
-	config        GatewayConfig
-	stable        gatewaymembership.GatewayIdentity
-	members       *gatewaymembership.Store
-	connections   *gatewaymembership.Connections
-	records       []gatewaymembership.MemberRecord
-	policy        gp.GatewayPolicy
-	client        *Client
-	status        *gc.GatewayStatus
-	egress        *gatewayegress.Server
-	budget        *gatewayflow.Budget
-	log           *slog.Logger
-	closureCursor string
+	admissionTimer     *time.Timer
+	dirty              chan struct{}
+	directoryDigest    [32]byte
+	directoryConfirmed bool
+	opMu               sync.Mutex
+	mu                 sync.Mutex
+	path               string
+	config             GatewayConfig
+	stable             gatewaymembership.GatewayIdentity
+	members            *gatewaymembership.Store
+	connections        *gatewaymembership.Connections
+	records            []gatewaymembership.MemberRecord
+	policy             gp.GatewayPolicy
+	client             *Client
+	status             *gc.GatewayStatus
+	egress             *gatewayegress.Server
+	budget             *gatewayflow.Budget
+	log                *slog.Logger
 }
 
 // NewGateway uses the sole member store and shared flow budget. It never opens
@@ -81,12 +89,12 @@ func NewGateway(root string, stable gatewaymembership.GatewayIdentity, members *
 	if err != nil {
 		return nil, err
 	}
-	g := &Gateway{receiptSlots: make(chan struct{}, 8), path: GatewayConfigPath(root), stable: stable, members: members, connections: connections, egress: forwarding, budget: budget, log: logger}
+	g := &Gateway{dirty: make(chan struct{}, 1), path: GatewayConfigPath(root), stable: stable, members: members, connections: connections, egress: forwarding, budget: budget, log: logger}
 	if err := readGatewayConfig(g.path, &g.config); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
 	if g.config.SchemaVersion != 0 {
-		if g.config.SchemaVersion != 2 {
+		if g.config.SchemaVersion != gatewayConfigVersion {
 			return nil, ErrState
 		}
 		if _, err := gatewayIdentity(g.config); err != nil {
@@ -106,6 +114,10 @@ func (g *Gateway) Apply(records []gatewaymembership.MemberRecord, policy gp.Gate
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.records, g.policy = records, policy
+	select {
+	case g.dirty <- struct{}{}:
+	default:
+	}
 	g.applyPolicyOrDenyLocked()
 }
 
@@ -176,15 +188,11 @@ func (g *Gateway) Configure(ctx context.Context, origin, version string, reautho
 		next.Status = status
 	}
 	if next.SchemaVersion == 0 || (reauthorize && next.GatewayPublicID != "") {
-		routes, err := retireClosureRoute(next)
-		if err != nil {
-			return nil, err
-		}
 		_, key, err := ed25519.GenerateKey(rand.Reader)
 		if err != nil {
 			return nil, err
 		}
-		next = GatewayConfig{SchemaVersion: 2, CloudOrigin: origin, PrivateKeyB64u: base64.RawURLEncoding.EncodeToString(key), KeyRotatedAtUnixMS: time.Now().UnixMilli(), ClosureRoutes: routes}
+		next = GatewayConfig{SchemaVersion: gatewayConfigVersion, CloudOrigin: origin, PrivateKeyB64u: base64.RawURLEncoding.EncodeToString(key), KeyRotatedAtUnixMS: time.Now().UnixMilli()}
 		// Persist before registration so a lost response retries this same identity.
 		if err := gatewaystate.Write(g.path, next); err != nil {
 			return nil, err
@@ -221,36 +229,146 @@ func (g *Gateway) Configure(ctx context.Context, origin, version string, reautho
 		g.client.Close()
 	}
 	g.config, g.client, g.status = next, liveClient, nil
+	select {
+	case g.dirty <- struct{}{}:
+	default:
+	}
 	g.applyPolicyOrDenyLocked()
 	g.mu.Unlock()
 	return registered, nil
 }
 
+// Run owns management synchronization and its sole notification reconnect loop.
+// Runtime control connections have their own Flowersec controller.
 func (g *Gateway) Run(ctx context.Context) {
-	ticker := time.NewTimer(periodic.InitialDelay(5 * time.Second))
-	defer ticker.Stop()
 	defer g.egress.Close()
 	defer func() {
 		g.mu.Lock()
+		if g.admissionTimer != nil {
+			g.admissionTimer.Stop()
+		}
 		if g.client != nil {
 			g.client.Close()
 		}
 		g.mu.Unlock()
 	}()
-	lastObservation := time.Time{}
-	for {
-		_ = g.sync(ctx)
-		if time.Since(lastObservation) >= 30*time.Second {
-			g.observe(ctx)
-			lastObservation = time.Now()
+	summary := time.NewTicker(30 * time.Second)
+	defer summary.Stop()
+	retry := time.NewTimer(periodic.InitialDelay(30 * time.Second))
+	defer retry.Stop()
+	for ctx.Err() == nil {
+		g.mu.Lock()
+		cfg, client := g.config, g.client
+		g.mu.Unlock()
+		if client == nil || cfg.GatewayPublicID == "" {
+			select {
+			case <-ctx.Done():
+				return
+			case <-summary.C:
+				g.observe(ctx)
+				continue
+			case <-g.dirty:
+				continue
+			case <-retry.C:
+				retry.Reset(30 * time.Second)
+				continue
+			}
 		}
+		g.opMu.Lock()
+		g.directoryConfirmed = false
+		g.opMu.Unlock()
+		identity, err := gatewayIdentity(cfg)
+		if err != nil {
+			return
+		}
+		streamCtx, cancel := context.WithCancel(ctx)
+		snapshots := make(chan *gc.GatewayStatus, 4)
+		finished := make(chan error, 1)
+		go func() {
+			finished <- client.Notifications(streamCtx, identity, func(snapshot *gc.GatewayStatus) error {
+				select {
+				case snapshots <- snapshot:
+					return nil
+				case <-streamCtx.Done():
+					return streamCtx.Err()
+				default:
+					return errors.New("Gateway notification consumer is slow")
+				}
+			})
+		}()
+		active := true
+		for active {
+			select {
+			case <-ctx.Done():
+				cancel()
+				<-finished
+				return
+			case <-summary.C:
+				g.observe(ctx)
+			case <-g.dirty:
+				g.mu.Lock()
+				replaced := g.client != client
+				g.mu.Unlock()
+				if replaced {
+					active = false
+					continue
+				}
+				if err := g.sync(streamCtx); err != nil && g.log != nil {
+					g.log.Warn("Gateway directory synchronization failed", "category", "retry_pending")
+				}
+			case snapshot := <-snapshots:
+				g.opMu.Lock()
+				g.mu.Lock()
+				accepted := g.client == client && g.acceptSnapshotLocked(snapshot)
+				g.mu.Unlock()
+				g.opMu.Unlock()
+				if !accepted {
+					continue
+				}
+				if err := g.sync(streamCtx); err != nil && g.log != nil {
+					g.log.Warn("Gateway management synchronization failed", "category", "retry_pending")
+				}
+			case <-finished:
+				active = false
+				finished = nil
+			}
+		}
+		cancel()
+		if finished != nil {
+			<-finished
+		}
+		retry.Reset(30 * time.Second)
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
-			ticker.Reset(5 * time.Second)
+		case <-summary.C:
+			g.observe(ctx)
+		case <-g.dirty:
+		case <-retry.C:
 		}
 	}
+}
+
+// Management versions remain monotonic across replacement streams. A delayed
+// directory confirmation cannot restore older admission or Namespace policy.
+func (g *Gateway) acceptSnapshotLocked(snapshot *gc.GatewayStatus) bool {
+	if snapshot == nil || snapshot.Gateway.PublicID != g.config.GatewayPublicID || snapshot.Gateway.GatewayID != g.stable.ID {
+		return false
+	}
+	if current := g.status; current != nil {
+		old, next := current.Gateway, snapshot.Gateway
+		if next.AuthorizationRevision < old.AuthorizationRevision || next.DirectoryRevision < old.DirectoryRevision || next.Policy.Revision < old.Policy.Revision {
+			return false
+		}
+		if next.AuthorizationRevision == old.AuthorizationRevision && (next.NamespacePublicID != old.NamespacePublicID || next.State != old.State) {
+			return false
+		}
+	}
+	g.status = snapshot
+	g.config.Status = snapshot
+	g.config.NamespacePublicID = snapshot.Gateway.NamespacePublicID
+	g.applyPolicyOrDenyLocked()
+	return true
 }
 
 func (g *Gateway) sync(ctx context.Context) (resultErr error) {
@@ -268,38 +386,11 @@ func (g *Gateway) sync(ctx context.Context) (resultErr error) {
 	if err != nil {
 		return err
 	}
-	status, err := client.GatewayStatusPage(ctx, identity, g.closureCursor)
-	if err != nil && config.PendingPrivateKeyB64u != "" {
-		key, keyErr := gc.DecodeKey(config.PendingPrivateKeyB64u)
-		if keyErr == nil && len(key) == ed25519.PrivateKeySize {
-			staged := identity
-			staged.PrivateKey = ed25519.PrivateKey(key)
-			if recovered, recoveryErr := client.GatewayStatusPage(ctx, staged, g.closureCursor); recoveryErr == nil {
-				config.PrivateKeyB64u, config.PendingPrivateKeyB64u, config.KeyRotatedAtUnixMS = config.PendingPrivateKeyB64u, "", time.Now().UnixMilli()
-				status, identity, err = recovered, staged, nil
-			}
-		}
-	}
-	if err != nil {
-		return err
-	}
-	if status.Gateway.PublicID == config.GatewayPublicID && status.Gateway.State == "rejoin_required" && status.Gateway.GatewayID == "" {
-		// Retain the approved machine identity while replacing the retired local
-		// listener. Both the saved Cloud key and stable Gateway key must prove it.
-		registrationIdentity := identity
-		registrationIdentity.NamespacePublicID, registrationIdentity.GatewayPublicID = "", ""
-		registrationIdentity.GatewayKey = g.stable.PrivateKey
-		registered, registerErr := client.Register(ctx, registrationIdentity, g.registration(status.Gateway.Version, registrationIdentity))
-		if registerErr != nil {
-			return registerErr
-		}
-		if registered.PublicID != config.GatewayPublicID || registered.GatewayID != g.stable.ID {
-			return ErrState
-		}
-		status, err = client.GatewayStatusPage(ctx, identity, g.closureCursor)
-		if err != nil {
-			return err
-		}
+	g.mu.Lock()
+	status := g.status
+	g.mu.Unlock()
+	if status == nil {
+		return nil
 	}
 	if status.Gateway.PublicID != config.GatewayPublicID || status.Gateway.GatewayID != g.stable.ID {
 		return ErrState
@@ -324,17 +415,6 @@ func (g *Gateway) sync(ctx context.Context) (resultErr error) {
 		return err
 	}
 	identity.NamespacePublicID = config.NamespacePublicID
-	g.closureCursor = status.NextClosureCursor
-	for _, closure := range status.Closures {
-		if g.egress.ActiveThrough(closure.MemberID, uint64(closure.Generation)) != 0 {
-			continue
-		}
-		ack := identity
-		ack.BindingPublicID, ack.BindingGeneration = closure.BindingPublicID, closure.Generation
-		if _, err := client.Acknowledge(ctx, ack, gc.ClosureAck{ClosurePublicID: closure.PublicID, Generation: closure.Generation, Side: "gateway"}); err != nil {
-			return err
-		}
-	}
 	if status.Gateway.State != "active" {
 		return nil
 	}
@@ -351,6 +431,17 @@ func (g *Gateway) sync(ctx context.Context) (resultErr error) {
 	if err != nil {
 		return err
 	}
+	directoryBody, err := json.Marshal(struct {
+		Records []gatewaymembership.MemberRecord
+		Policy  gp.GatewayPolicy
+	}{records, policy})
+	if err != nil {
+		return err
+	}
+	digest := sha256.Sum256(directoryBody)
+	if g.directoryConfirmed && digest == g.directoryDigest {
+		return g.rotateMachineKey(ctx, identity)
+	}
 	active := make([]gatewaymembership.MemberRecord, 0, len(records))
 	removed := make([]gatewaymembership.MemberRecord, 0)
 	for _, record := range records {
@@ -363,10 +454,8 @@ func (g *Gateway) sync(ctx context.Context) (resultErr error) {
 	revision := status.Gateway.DirectoryRevision
 	syncBatch := func(batch []gatewaymembership.MemberRecord, full bool) error {
 		members := make([]gc.DirectoryMember, 0, len(batch))
-		hasDenial := false
 		for _, record := range batch {
 			m := record.Member
-			hasDenial = hasDenial || m.CloudRevocationPending
 			members = append(members, gc.DirectoryMember{MemberID: m.MemberID, MemberVersion: m.MemberVersion, Delegation: gc.MemberDelegation(record.Delegation), State: m.State, CloudPermission: string(m.CloudPermission), HookAllowed: gatewaymembership.EffectiveCloudAllowed(record, policy), Reachable: g.connections.IsConnected(m.MemberID), Metadata: gc.RuntimeMetadata(m.Metadata)})
 		}
 		sort.Slice(members, func(i, j int) bool { return members[i].MemberID < members[j].MemberID })
@@ -378,26 +467,13 @@ func (g *Gateway) sync(ctx context.Context) (resultErr error) {
 			return ErrState
 		}
 		revision++
-		if hasDenial {
-			// Do not let acknowledging a denial reinstall a cached active binding.
-			// Read back the committed Cloud projection before releasing the local
-			// fence; a lost response leaves the durable denial pending for retry.
-			fresh, err := client.GatewayStatusPage(ctx, identity, g.closureCursor)
-			if err != nil {
-				return err
-			}
-			if fresh.Gateway.PublicID != config.GatewayPublicID || fresh.Gateway.GatewayID != g.stable.ID || fresh.Gateway.NamespacePublicID != config.NamespacePublicID || fresh.Gateway.DirectoryRevision < revision {
-				return ErrState
-			}
-			config.Status = fresh
-			if err := gatewaystate.Write(g.path, config); err != nil {
-				return err
-			}
-			g.mu.Lock()
-			g.config, g.status = config, fresh
-			g.applyPolicyOrDenyLocked()
-			g.mu.Unlock()
+		g.mu.Lock()
+		if g.client == client && g.status != nil && g.status.Gateway.DirectoryRevision < revision {
+			confirmed := *g.status
+			confirmed.Gateway.DirectoryRevision = revision
+			g.status, g.config.Status = &confirmed, &confirmed
 		}
+		g.mu.Unlock()
 		return g.members.AcknowledgeCloudDirectory(config.NamespacePublicID, policy.Revision, batch)
 	}
 	// Retire tombstones before a complete active snapshot so old members do not
@@ -413,6 +489,7 @@ func (g *Gateway) sync(ctx context.Context) (resultErr error) {
 		return err
 	}
 
+	g.directoryDigest, g.directoryConfirmed = digest, true
 	return g.rotateMachineKey(ctx, identity)
 }
 

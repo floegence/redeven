@@ -13,7 +13,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -30,6 +29,7 @@ import (
 	"github.com/floegence/redeven/internal/filesystemscope"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/sessionhop"
+	"github.com/floegence/redeven/internal/testutil/cloudfixture"
 	"github.com/floegence/redeven/internal/threadreadstate"
 	_ "modernc.org/sqlite"
 )
@@ -149,21 +149,14 @@ func writeTestConfig(t *testing.T) string {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "config.json")
 
-	// Minimal valid config for config.Load. Includes E2EE PSK to validate redaction in /api/settings.
-	raw := `{
-  "access_point_origin": "https://example.com",
-  "environment_id": "env_123",
-  "agent_instance_id": "agent_123",
-  "direct": {
-    "artifact_json": {"v": 2},
-    "expires_at_unix_s": 4102444800
-  }
-}
-`
-
-	if err := os.WriteFile(p, []byte(raw), 0o600); err != nil {
-		t.Fatalf("write config: %v", err)
+	cfg := &config.Config{LocalEnvironmentPublicID: "le_123", AgentInstanceID: "agent_123",
+		CloudAssociation: cloudfixture.Association("le_123", "env_123"), CloudRoute: &config.CloudRoute{Kind: config.CloudRouteDirect, Revision: 1},
+		CloudOrigin: "https://redeven.test", CloudID: "provider_1", AccessPointOrigin: "https://dev.redeven.test", EnvironmentID: "env_123", BindingGeneration: 1,
+		ControlArtifactPool: &config.ControlArtifactPool{LogicalBindingID: "runtime-cloud-v5:binding_fixture", BindingGeneration: 1, TargetWaterline: 2, RefreshHorizonSeconds: 60, Entries: []config.ControlArtifactEntry{{Sequence: 1, ArtifactJSON: json.RawMessage(`{"e2ee_psk_b64u":"test-secret"}`), ExpiresAtUnixS: 4102444800}}}}
+	if err := config.Save(p, cfg); err != nil {
+		t.Fatal(err)
 	}
+
 	return p
 }
 
@@ -194,37 +187,15 @@ func newDistRouteTestServer(t *testing.T, dist fs.FS, backend Backend) *Server {
 func writeTestConfigWithAI(t *testing.T) string {
 	t.Helper()
 
-	dir := t.TempDir()
-	p := filepath.Join(dir, "config.json")
-
-	raw := `{
-  "access_point_origin": "https://example.com",
-  "environment_id": "env_123",
-  "agent_instance_id": "agent_123",
-  "direct": {
-    "artifact_json": {"v": 2},
-    "expires_at_unix_s": 4102444800
-  },
-  "ai": {
-    "current_model_id": "openai/gpt-5-mini",
-    "providers": [
-      {
-        "id": "openai",
-        "name": "OpenAI",
-        "type": "openai",
-        "base_url": "https://api.openai.com/v1",
-        "models": [
-          { "model_name": "gpt-5-mini" }
-        ]
-      }
-    ]
-  }
-}
-`
-
-	if err := os.WriteFile(p, []byte(raw), 0o600); err != nil {
-		t.Fatalf("write config: %v", err)
+	p := writeTestConfig(t)
+	_, err := config.Update(p, func(cfg *config.Config) error {
+		cfg.AI = &config.AIConfig{CurrentModelID: "openai/gpt-5-mini", Providers: []config.AIProvider{{ID: "openai", Name: "OpenAI", Type: "openai", BaseURL: "https://api.openai.com/v1", Models: []config.AIProviderModel{{ModelName: "gpt-5-mini"}}}}}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
+
 	return p
 }
 
@@ -1684,8 +1655,8 @@ func TestServer_Settings_RedactsSecrets(t *testing.T) {
 		if _, ok := direct["e2ee_psk_b64u"]; ok {
 			t.Fatalf("secret leaked: e2ee_psk_b64u must not be returned")
 		}
-		if direct["artifact_provisioned"] != false {
-			t.Fatalf("legacy direct artifact must not be projected as provisioned: got=%v", direct["artifact_provisioned"])
+		if direct["artifact_provisioned"] != true {
+			t.Fatalf("usable pool must be projected as provisioned: got=%v", direct["artifact_provisioned"])
 		}
 	}
 
@@ -1704,7 +1675,6 @@ func TestServer_Settings_RedactsSecrets(t *testing.T) {
 func TestControlArtifactPoolSettingsViewUsesOnlyUsableEntries(t *testing.T) {
 	now := int64(2_000_000_000)
 	cfg := &config.Config{
-		Direct: &config.DirectConnectInfo{ArtifactJSON: json.RawMessage(`{"legacy":true}`), ExpiresAtUnixS: now + 10_000},
 		ControlArtifactPool: &config.ControlArtifactPool{
 			RefreshHorizonSeconds: 60,
 			Entries: []config.ControlArtifactEntry{

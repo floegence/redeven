@@ -7,11 +7,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/floegence/redeven/internal/gatewaycloud"
-	"github.com/floegence/redeven/internal/gatewaymembership"
 	"math"
 	"strings"
-	"time"
+
+	"github.com/floegence/redeven/internal/gatewaymembership"
+	rc "github.com/floegence/redeven/internal/runtimecloud/protocol"
 
 	flowersec "github.com/floegence/flowersec/flowersec-go/v5"
 )
@@ -40,19 +40,11 @@ const (
 	ControlArtifactRecoveryRelink    = "relink_required"
 )
 
-// DirectConnectInfo is the control-plane artifact envelope persisted by
-// Redeven. The opaque artifact bytes are interpreted only by Transport v3.
-type DirectConnectInfo struct {
-	ArtifactJSON   json.RawMessage `json:"artifact_json"`
-	ExpiresAtUnixS int64           `json:"expires_at_unix_s"`
-	Spent          bool            `json:"spent"`
-}
-
 // ControlArtifactEntry is one independently issued, one-shot control lease.
 // ArtifactJSON remains opaque to Redeven and is never emitted in diagnostics.
 type ControlArtifactEntry struct {
 	Sequence       uint64          `json:"artifact_sequence"`
-	ArtifactJSON   json.RawMessage `json:"artifact_json"`
+	ArtifactJSON   json.RawMessage `json:"artifact_json,omitempty"`
 	ArtifactDigest string          `json:"artifact_digest_b64u"`
 	ChannelID      string          `json:"artifact_channel_id"`
 	ExpiresAtUnixS int64           `json:"expires_at_unix_s"`
@@ -272,15 +264,15 @@ func (c *RemoteDesktopConfig) RememberApproval() bool {
 // Config is the runtime configuration for Redeven. Runtime-managed one-shot
 // artifacts remain opaque but are intentionally persisted here for recovery;
 // user-provided provider keys are loaded separately from secrets.json.
+const RuntimeConfigVersion = 1
+
 type Config struct {
+	ConfigVersion            int                                 `json:"runtime_config_version"`
+	CloudRouteOperations     []rc.RouteOperation                 `json:"cloud_route_operations,omitempty"`
+	CloudAssociation         *CloudAssociation                   `json:"cloud_association,omitempty"`
+	CloudRoute               *CloudRoute                         `json:"cloud_route,omitempty"`
 	GatewayRemovalOutbox     []gatewaymembership.RemovalDelivery `json:"gateway_removal_outbox,omitempty"`
-	GatewayClosureOutbox     []gatewaycloud.ClosureDelivery      `json:"gateway_closure_outbox,omitempty"`
 	Gateways                 []*gatewaymembership.RuntimeConfig  `json:"gateways,omitempty"`
-	GatewayCloudMemberID     string                              `json:"gateway_cloud_member_id,omitempty"`
-	GatewayMigrationEvidence *gatewaycloud.MigrationEvidence     `json:"gateway_migration_evidence,omitempty"`
-	GatewayEnvironmentChoice string                              `json:"gateway_environment_choice,omitempty"`
-	GatewayRejoinRequired    bool                                `json:"gateway_rejoin_required,omitempty"`
-	GatewayPublication       *gatewaycloud.RuntimeConfig         `json:"gateway_publication,omitempty"`
 	RemoteDesktop            *RemoteDesktopConfig                `json:"remote_desktop,omitempty"`
 	CloudOrigin              string                              `json:"cloud_origin"`
 	AccessPointOrigin        string                              `json:"access_point_origin"`
@@ -289,7 +281,6 @@ type Config struct {
 	LocalEnvironmentPublicID string                              `json:"local_environment_public_id"`
 	BindingGeneration        int64                               `json:"binding_generation,omitempty"`
 	AgentInstanceID          string                              `json:"agent_instance_id"`
-	Direct                   *DirectConnectInfo                  `json:"direct"`
 	ControlArtifactPool      *ControlArtifactPool                `json:"control_artifact_pool,omitempty"`
 
 	// AI config controls optional Flower AI assistant features.
@@ -323,11 +314,10 @@ type Config struct {
 	CodeServerPortMin int `json:"code_server_port_min,omitempty"`
 	CodeServerPortMax int `json:"code_server_port_max,omitempty"`
 
-	extra                          map[string]json.RawMessage
-	gatewayConfigMigrated          bool
-	cloudConfigMigrated            bool
-	bootstrapDeliveryAttemptPath   string
-	bootstrapDeliveryRequestIDB64u string
+	cloudEnrollmentExpectedAssociationRevision int64
+	cloudEnrollmentExpectedRouteRevision       int64
+	bootstrapDeliveryAttemptPath               string
+	bootstrapDeliveryRequestIDB64u             string
 }
 
 // ValidateLocalMinimal validates config fields required to start the runtime in local-only mode.
@@ -352,18 +342,6 @@ func (c *Config) ValidateLocalMinimal() error {
 			return fmt.Errorf("invalid Gateway membership: %w", err)
 		}
 	}
-	if c.GatewayCloudMemberID != "" && (!seenMembers[c.GatewayCloudMemberID] || c.GatewayPublication != nil && c.GatewayPublication.MemberID != c.GatewayCloudMemberID) {
-		return errors.New("invalid Gateway Cloud publication owner")
-	}
-
-	if c.GatewayEnvironmentChoice != "" && c.GatewayEnvironmentChoice != "preserve" && c.GatewayEnvironmentChoice != "new" {
-		return errors.New("invalid Gateway environment choice")
-	}
-	if c.GatewayPublication != nil {
-		if _, err := c.GatewayPublication.Identity(); err != nil {
-			return err
-		}
-	}
 	if c.PermissionPolicy != nil {
 		if err := c.PermissionPolicy.Validate(); err != nil {
 			return fmt.Errorf("invalid permission_policy: %w", err)
@@ -386,63 +364,36 @@ func (c *Config) ValidateLocalMinimal() error {
 //
 // This is the standard mode requirements: the runtime must be fully bootstrapped.
 func (c *Config) ValidateRemoteStrict() error {
-	if err := c.validateRemoteBinding(false); err != nil {
-		return err
-	}
-	if c.ControlArtifactPool != nil {
-		if err := c.ControlArtifactPool.Validate(time.Now().Unix()); err != nil {
+	if c != nil && c.CloudAssociation != nil {
+		if err := c.ValidateLocalMinimal(); err != nil {
 			return err
 		}
-	} else {
-		if c.Direct == nil || len(c.Direct.ArtifactJSON) == 0 || c.Direct.ExpiresAtUnixS <= 0 {
-			return errors.New("missing direct connect info")
+		if err := c.ValidateCloudAssociation(); err != nil {
+			return err
 		}
-		if _, err := flowersec.ParseArtifact(c.Direct.ArtifactJSON); err != nil {
-			return fmt.Errorf("invalid direct connect artifact: %w", err)
+		if !c.CloudAssociation.Enabled {
+			return errors.New("cloud connection intent is disabled")
 		}
+		return c.ValidateCloudRoute()
 	}
-	return nil
+	return errors.New("cloud identity is not registered; create a new configuration and enroll this Runtime")
 }
 
-// ValidateRemoteBinding checks persisted association, without authorizing a connection.
-// Revoked Gateway bindings retain their identity for explicit recovery and removal.
+// ValidateRemoteBinding checks only the persisted Cloud identity and binding.
+// Selected route availability is a separate connection fact.
 func (c *Config) ValidateRemoteBinding() error {
-	return c.validateRemoteBinding(true)
-}
-
-func (c *Config) validateRemoteBinding(allowRevoked bool) error {
-	if c == nil {
-		return errors.New("nil config")
+	if c == nil || c.CloudAssociation == nil || c.CloudAssociation.Binding == nil {
+		return errors.New("cloud identity is not registered")
 	}
 	if err := c.ValidateLocalMinimal(); err != nil {
 		return err
 	}
-	if err := c.validateGatewayPath(allowRevoked); err != nil {
+	if err := c.ValidateCloudAssociation(); err != nil {
 		return err
 	}
-	if strings.TrimSpace(c.AccessPointOrigin) == "" {
-		return errors.New("missing access_point_origin")
-	}
-	if strings.TrimSpace(c.CloudOrigin) == "" {
-		return errors.New("missing cloud_origin")
-	}
-	if _, err := normalizeAccessPointOrigin(c.CloudOrigin); err != nil {
-		return fmt.Errorf("invalid cloud_origin: %w", err)
-	}
-	if _, err := normalizeAccessPointOrigin(c.AccessPointOrigin); err != nil {
-		return fmt.Errorf("invalid access_point_origin: %w", err)
-	}
-	if strings.TrimSpace(c.EnvironmentID) == "" {
-		return errors.New("missing environment_id")
-	}
-	if strings.TrimSpace(c.LocalEnvironmentPublicID) == "" {
-		return errors.New("missing local_environment_public_id")
-	}
-	if c.BindingGeneration <= 0 {
-		return errors.New("missing binding_generation")
-	}
-	if strings.TrimSpace(c.AgentInstanceID) == "" {
-		return errors.New("missing agent_instance_id")
+	b := c.CloudAssociation.Binding
+	if c.EnvironmentID != b.EnvPublicID || c.CloudID != b.CloudID || c.LocalEnvironmentPublicID != b.RuntimePublicID || c.BindingGeneration != b.Generation || c.AccessPointOrigin != c.CloudAssociation.RegionOrigin || c.CloudOrigin != c.CloudAssociation.CloudOrigin {
+		return errors.New("cloud binding projection does not match its association")
 	}
 	return nil
 }

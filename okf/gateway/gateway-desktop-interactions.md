@@ -23,7 +23,7 @@ Gateway provides an approved network path with separate Runtime and Cloud author
 
 Local suggestions show a local marker, name, Use and selected-address checkmark. Multiple endpoints include host/port; accessible names/tooltips preserve addresses. Only confirmed endpoints in enabled, paired, online local-host inventory qualify; remote Runtimes exclude loopback. No scanning/guessing. Selection invalidates verification and retains/focuses code. Discovery never overwrites drafts, spends invitations or grants access. Inline identity names the target.
 
-The upward menu retains Runtime/Cloud actions and adds Cancel Gateway pairing. Runtime/Cloud perspectives require selection among multiple members and show a sole member directly. Gateway fixes its selected member without another selector. Equivalent snapshots retain the target; absence disables confirmation. Only the selected Cloud owner shows interruption impact, which Runtime rechecks at commit. Publish through Gateway is separate and alone offers preserve/new for existing Cloud identity. Joined, Gateway offline, Cloud denied, pending approval, published control offline, accessible and migration pending stay distinct. Management uses the trusted direct owner, never a member card.
+The upward menu retains Runtime/Cloud actions and adds Cancel Gateway pairing. Runtime/Cloud perspectives require selection among multiple members and show a sole member directly. Gateway fixes its selected member without another selector. Equivalent snapshots retain the target; absence disables confirmation. Only the selected Cloud owner shows interruption impact, which Runtime rechecks at commit. Initial Namespace enrollment is separate from route switching. Existing Cloud identity uses the unified route preflight and confirmation flow. Cloud approval, actual connection and selected route stay distinct. Management uses the trusted direct owner, never a member card.
 
 The enrollment session owns steps, address, code, preview and pending connection/verification/join requests. Same-target background probes preserve these, DOM controls, focus, selection and reading position. Checking after a completed observation uses the retained presentation diagnosis defined by [Runtime readiness](../desktop/desktop-runtime-readiness.md); first inspection remains check-required. Background checks never show operation progress or grant live control authority.
 
@@ -57,7 +57,7 @@ Card menu actions share icon geometry/label alignment. Restart's power-cycle ico
 
 Settings/setup wizard use fixed, viewport-bounded panels. Tabs preserve state/geometry. Setup retains outer bounds across steps, loading and errors, with pinned header/steps/actions and a scrolling body. Step labels reserve two lines; action groups reflow whole buttons. Short windows respect the Desktop titlebar; long guidance remains reachable. Target, suggestions and fields use shared compact body/control typography with distinct headings and usable text scaling/touch inputs. New steps start at the top, preserving focused-field visibility. Cloud shares typography/spacing. Client/address rows stay compact; transport metadata stays internal. Motion respects reduced-motion preferences.
 
-Rebuild notices require rejoining obsolete entries without inventing migration lists or executable legacy URL profiles.
+Retired configurations are rejected read-only with guidance to create a new state root and register again. They are never silently rewritten.
 
 # Boundaries
 

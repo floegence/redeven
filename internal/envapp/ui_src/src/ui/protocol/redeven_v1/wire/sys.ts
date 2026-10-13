@@ -82,14 +82,24 @@ export type wire_sys_ping_resp = {
         connected_at_unix_ms?: number;
         model_source?: string;
         model_count?: number;
-        missing_key_provider_ids?: string[];
+        missing_key_cloud_ids?: string[];
         last_error?: string;
       };
       cloud_link?: {
+        cloud?: {
+          association_revision: number;
+          enabled: boolean;
+          approval_state: 'approved' | 'pending' | 'revoked' | 'identity_required' | 'action_required';
+          reason_code?: string;
+          connection_state: string;
+          route: {kind: 'direct' | 'gateway'; member_id?: string};
+          route_revision: number;
+          next_attempt_at_unix_ms?: number;
+        };
         state?: string;
         connection_state?: string;
         cloud_origin?: string;
-        provider_id?: string;
+        cloud_id?: string;
         env_public_id?: string;
         access_point_origin?: string;
         local_environment_public_id?: string;

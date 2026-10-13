@@ -194,7 +194,7 @@ func TestRuntimeNetworkEndpointAcceptance(t *testing.T) {
 	}
 	closePublic()
 	waitGatewayCondition(t, ctx, func() bool { return runtime.Snapshot().State != flowersec.ConnectionConnected })
-	if err := current().Request(ctx, "/v5/member/connect", gp.MemberConnectRequest{ProtocolVersion: gp.Version}, &ConnectionOffer{}, true); !errors.Is(err, errGatewayUnavailable) {
+	if err := current().Request(ctx, "/v6/member/connect", gp.MemberConnectRequest{ProtocolVersion: gp.Version}, &ConnectionOffer{}, true); !errors.Is(err, errGatewayUnavailable) {
 		t.Fatalf("all unreachable routes must return Gateway unavailable: %v", err)
 	}
 	if store.EndpointUsage()["public_new"] != 0 {

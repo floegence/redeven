@@ -86,7 +86,7 @@ func New(root, listen string) (*Client, error) {
 func (c *Client) Close() { c.transport.CloseIdleConnections() }
 func (c *Client) Catalog(ctx context.Context) (gp.CatalogResponse, error) {
 	var catalog gp.CatalogResponse
-	err := c.Request(ctx, "/gateway/v5/catalog", gp.CatalogRequest{ProtocolVersion: gp.Version}, &catalog)
+	err := c.Request(ctx, "/gateway/v6/catalog", gp.CatalogRequest{ProtocolVersion: gp.Version}, &catalog)
 	if err == nil && catalog.ProtocolVersion != gp.Version {
 		err = errors.New("Update Gateway to the current protocol")
 	}
