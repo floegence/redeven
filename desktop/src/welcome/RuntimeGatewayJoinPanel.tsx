@@ -25,10 +25,11 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
   const ready = createMemo(() => props.ready !== false);
   const [hasBeenReady, setHasBeenReady] = createSignal(ready());
   const [step, setStep] = createSignal(0);
-  const currentStep = () => props.wizard ? ready() ? step() : 0 : preview() ? 2 : 1;
+  const currentStep = createMemo(() => props.wizard ? ready() ? step() : 0 : preview() ? 2 : 1);
   const [now, setNow] = createSignal(Date.now());
   let generation = 0, statusGeneration = 0;
   let trigger: HTMLButtonElement | undefined, addressInput: HTMLInputElement | undefined, codeInput: HTMLInputElement | undefined, connectButton: HTMLButtonElement | undefined, confirmButton: HTMLButtonElement | undefined;
+  let scrollViewport: HTMLDivElement | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let lastConnectionRequest = 0;
   let lastOpenRequest = props.openRequest ?? 0;
@@ -39,6 +40,9 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
   const initialAddress = createMemo(() => props.address ?? '');
   const initialCode = createMemo(() => props.code ?? '');
   const initialPurpose = createMemo(purpose);
+  createEffect(on(currentStep, () => {
+    if (props.wizard && scrollViewport) scrollViewport.scrollTop = 0;
+  }, { defer: true }));
   const suggestions = createMemo(() => localGatewaySuggestions(props.gateways ?? [], props.targetID));
   function fillAddress(value: string) { invalidate(); setAddress(value); queueMicrotask(() => codeInput?.focus()); }
   const invalidate = () => { generation++; setPreview(undefined); setBusy(false); setError(''); };
@@ -133,7 +137,7 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
         steps={[{ id: 'environment', label: text('gatewayJoin.connectEnvironment') },
           { id: 'invitation', label: text('gatewayJoin.gatewayInvitation') }, { id: 'confirmation', label: text('gatewayJoin.confirmAccess') }]} />
     </div></Show>
-    <div class="redeven-gateway-join-scroll">
+    <div ref={scrollViewport} class="redeven-gateway-join-scroll">
         <div class="redeven-gateway-join-target"><Monitor class="h-4 w-4 shrink-0" /><span class="shrink-0 text-muted-foreground">{text('gatewayJoin.targetRuntime')}</span><strong class="truncate font-medium" title={props.targetLabel ?? props.targetID}>{props.targetLabel ?? props.targetID}</strong></div>
         <Show when={currentStep() === 0}>
           <Show when={ready()} fallback={props.preparation}><section class="redeven-gateway-join-section redeven-gateway-connect-stage">
@@ -144,7 +148,7 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
         <section class="redeven-gateway-join-section" hidden={!hasBeenReady() || props.wizard && currentStep() !== 1}>
           <Show when={props.wizard}><h3>{text('gatewayJoin.gatewayInvitation')}</h3><p class="text-sm text-muted-foreground">{text('gatewayJoin.codeHelp')}</p></Show>
           <div class="redeven-gateway-join-address">
-            <label class="block space-y-2 text-sm"><span>{text('gatewayJoin.address')}</span><Input ref={addressInput} value={address()} placeholder="https://gateway.example:7443" autocomplete="off" spellcheck={false} disabled={busy() || !ready()}
+            <label class="redeven-gateway-join-field"><span>{text('gatewayJoin.address')}</span><Input ref={addressInput} value={address()} placeholder="https://gateway.example:7443" autocomplete="off" spellcheck={false} disabled={busy() || !ready()}
               onInput={event => { invalidate(); setAddress(event.currentTarget.value); }} /></label>
             <Show when={suggestions().length}><div class="redeven-gateway-local-suggestions">
               <For each={suggestions()}>{suggestion => {
@@ -159,7 +163,7 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
               }}</For>
             </div></Show>
           </div>
-          <label class="block space-y-2 text-sm"><span>{text('gatewayJoin.code')}</span><Input ref={codeInput} value={code()} autocomplete="off" spellcheck={false} disabled={busy() || !ready()}
+          <label class="redeven-gateway-join-field"><span>{text('gatewayJoin.code')}</span><Input ref={codeInput} value={code()} autocomplete="off" spellcheck={false} disabled={busy() || !ready()}
             onInput={event => { invalidate(); setCode(event.currentTarget.value); }} onKeyDown={event => { if (event.key === 'Enter' && ready() && !busy() && address().trim() && code().trim()) { event.preventDefault(); void verify(); } }} /></label>
         </section>
         <Show when={preview()}>{value => <section class="redeven-gateway-join-section" hidden={props.wizard && currentStep() !== 2}>

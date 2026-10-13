@@ -4,23 +4,76 @@ import {fileURLToPath} from 'node:url';
 import {chromium} from '../../internal/envapp/ui_src/node_modules/playwright/index.mjs';
 import {createSSHSettingsPreviewServer} from './ssh-settings-preview.mjs';
 
+const supportedLocales=['en-US','zh-CN','zh-TW','ja-JP','ko-KR','de-DE','fr-FR','es-ES','pt-BR','ru-RU'];
+// Optional locale arguments restrict focused iteration; no arguments runs the complete matrix.
+const locales=process.argv.slice(2);
+assert.ok(locales.every(locale=>supportedLocales.includes(locale)),'arguments must be supported locale codes');
+const localGateway={gateway_id:'local-gateway',display_name:'Office Gateway',local_enabled:true,connection_kind:'local_host',
+ management_capability:'managed_local_host',capabilities:[],status:'online',trust_state:'paired',listener_running:true,
+ created_at_ms:1,updated_at_ms:1,environments:[],member_endpoints:[{endpoint_id:'lan',address:'https://office.local:7443',scope:'lan',priority:0}]};
 const output=fileURLToPath(new URL('../dist/gateway-runtime-connections/',import.meta.url));
 await mkdir(output,{recursive:true});
 const server=await createSSHSettingsPreviewServer(0);
 await server.watcher.close();
 const browser=await chromium.launch({headless:true});
-const report={cases:[],errors:[]};
+const report={cases:[],layouts:[],errors:[]};
+const wizardLayout=dialog=>dialog.evaluate(panel=>{
+ const bounds=element=>{const {x,y,width,height}=element.getBoundingClientRect();return {x,y,width,height};};
+ const scroll=panel.querySelector('.redeven-gateway-join-scroll');
+ return {panel:bounds(panel),steps:bounds(panel.querySelector('.redeven-gateway-wizard-steps')),
+  actions:bounds(panel.querySelector('.redeven-gateway-join-actions')),scroll:bounds(scroll),
+  scrollWidth:scroll.scrollWidth,clientWidth:scroll.clientWidth};
+});
+async function assertStableWizard(dialog,initial,stage) {
+ const layout=await wizardLayout(dialog);
+ for(const part of ['panel','steps'])for(const coordinate of ['x','y','width','height']) {
+  assert.ok(Math.abs(layout[part][coordinate]-initial[part][coordinate])<1,
+   `${stage}: ${part}.${coordinate} must stay stable: ${JSON.stringify({initial,layout})}`);
+ }
+ assert.ok(Math.abs(layout.actions.y+layout.actions.height-initial.actions.y-initial.actions.height)<1,
+  `${stage}: actions must stay pinned to the same bottom edge`);
+ assert.ok(layout.actions.y+layout.actions.height<=layout.panel.y+layout.panel.height+1,
+  `${stage}: actions must remain inside the panel`);
+ assert.ok(layout.scrollWidth<=layout.clientWidth+1,`${stage}: content must not overflow horizontally`);
+ assert.ok(layout.scroll.y>=layout.steps.y+layout.steps.height-1);
+ assert.ok(layout.scroll.y+layout.scroll.height<=layout.actions.y+1);
+}
+async function assertWizardTypography(dialog) {
+ const typography=await dialog.evaluate(panel=>{
+  const rem=parseFloat(getComputedStyle(document.documentElement).fontSize);
+  const font=selector=>[...panel.querySelectorAll(selector)].filter(element=>element.checkVisibility())
+   .map(element=>parseFloat(getComputedStyle(element).fontSize)/rem);
+  return {coarse:matchMedia('(pointer: coarse)').matches,title:font('h2'),heading:font('h3'),
+   copy:font('.redeven-gateway-join-section p'),labels:font('label'),inputs:font('input'),
+   suggestions:font('.redeven-gateway-local-name'),localLabels:font('.redeven-gateway-local-label')};
+ });
+ assert.ok(typography.title.every(size=>Math.abs(size-1)<.01),JSON.stringify(typography));
+ assert.ok(typography.heading.every(size=>Math.abs(size-.8125)<.01),JSON.stringify(typography));
+ assert.ok(typography.copy.every(size=>Math.abs(size-(typography.coarse ? .875 : .75))<.01),JSON.stringify(typography));
+ assert.ok(typography.labels.every(size=>Math.abs(size-(typography.coarse ? .8125 : .75))<.01),JSON.stringify(typography));
+ assert.ok(typography.inputs.every(size=>Math.abs(size-(typography.coarse ? 1 : .75))<.01),JSON.stringify(typography));
+ assert.ok(typography.suggestions.every(size=>Math.abs(size-(typography.coarse ? .875 : .75))<.01),JSON.stringify(typography));
+ assert.ok(typography.localLabels.every(size=>Math.abs(size-.6875)<.01),JSON.stringify(typography));
+ return typography;
+}
+async function holdAction(page) {
+ await page.evaluate(()=>{window.settingsFixture.beforeAction=()=>new Promise(resolve=>{window.gatewayResolveAction=resolve;});});
+}
+async function releaseAction(page) {
+ await page.evaluate(()=>{window.settingsFixture.beforeAction=undefined;window.gatewayResolveAction();});
+}
 try {
  const load=relative=>server.ssrLoadModule(fileURLToPath(new URL(relative,import.meta.url)));
  const {runtimeConnectionFixture}=await load('../src/testSupport/runtimeConnectionFixture.ts');
  const {runtimeGatewayAccessFixture}=await load('../src/testSupport/runtimeGatewayAccessFixture.ts');
  const {buildDesktopWelcomeSnapshot}=await load('../src/main/desktopWelcomeState.ts');
  const {createDesktopI18n}=await load('../src/shared/i18n/index.ts');
- for(const locale of ['en-US','zh-CN','zh-TW','ja-JP','ko-KR','de-DE','fr-FR','es-ES','pt-BR','ru-RU']) {
+ for(const locale of locales.length ? locales : supportedLocales) {
   const i18n=createDesktopI18n(locale);
   for(const width of [430,1280]) {
    const {snapshot,memberships,inputs:fixtureInputs}=runtimeConnectionFixture({cloudManagement:false,gatewayWindow:true,
     cloudDirectoryAccessPointOrigin:'https://rotated-region.example.invalid'});
+   snapshot.gateway_sources=[...snapshot.gateway_sources,localGateway];
    const runtime=snapshot.environments.find(entry=>entry.kind==='local_environment');
    const context=await browser.newContext({viewport:{width,height:1050},reducedMotion:'reduce'});
    try {
@@ -88,13 +141,30 @@ try {
     await dialog.getByRole('button',{name:i18n.t('common.cancel'),exact:true}).click();await dialog.waitFor({state:'detached'});
     await toggle.click();await page.getByRole('menu').getByRole('menuitem',{name:i18n.t('gatewayJoin.menuAction'),exact:true}).click();
     const join=page.getByRole('dialog');await join.waitFor();
+    const initialLayout=await wizardLayout(join);
+    await assertWizardTypography(join);
+    await holdAction(page);
     await join.getByRole('button',{name:i18n.t('gatewayJoin.connectAndContinue'),exact:true}).click();
+    await join.getByRole('button',{name:i18n.t('gatewayJoin.connecting'),exact:true}).waitFor();
+    await assertStableWizard(join,initialLayout,'connecting');
+    await releaseAction(page);
     const inputs=join.locator('input');await inputs.nth(0).fill('https://draft.internal:7443');await inputs.nth(1).fill('TEST-ONLY-CODE');
+    await assertStableWizard(join,initialLayout,'invitation');
+    await assertWizardTypography(join);
+    await page.screenshot({path:`${output}/${locale}-${width}-invitation.png`});
     await page.evaluate(()=>window.settingsFixture.publish({...structuredClone(window.settingsFixtureSnapshot),snapshot_revision:4}));
     assert.equal(await inputs.nth(0).inputValue(),'https://draft.internal:7443');assert.equal(await inputs.nth(1).inputValue(),'TEST-ONLY-CODE');
     assert.equal(await inputs.nth(1).evaluate(element => element === document.activeElement),true);
+    await assertStableWizard(join,initialLayout,'same-target snapshot');
+    await holdAction(page);
     await join.getByRole('button',{name:i18n.t('gatewayJoin.verify'),exact:true}).click();
+    await join.getByRole('button',{name:i18n.t('gatewayJoin.verifying'),exact:true}).waitFor();
+    await assertStableWizard(join,initialLayout,'verifying');
+    await releaseAction(page);
     await join.getByRole('button',{name:i18n.t('gatewayJoin.confirmEnable'),exact:true}).waitFor();
+    await assertStableWizard(join,initialLayout,'confirmation');
+    await assertWizardTypography(join);
+    report.layouts.push({locale,width,initial:initialLayout,confirmation:await wizardLayout(join)});
     assert.equal(await join.locator('input[type="radio"]').count(),0);
     for(const surface of [join]) {
      const bounds=await surface.boundingBox();assert.ok(bounds.x>=0 && bounds.x+bounds.width<=width+1);
@@ -126,8 +196,9 @@ try {
    for(const kind of ['local','ssh','wsl','local_container','ssh_container']) {
     const fixtures=Object.fromEntries(['unknown','stopped','control_missing','connection_required','ready','update_required','management_unavailable']
       .map(state=>[state,runtimeGatewayAccessFixture(kind,state)]));
+    for(const fixture of Object.values(fixtures))fixture.snapshot.gateway_sources=[...fixture.snapshot.gateway_sources,localGateway];
     const runtime=fixtures.ready.environment;
-    const context=await browser.newContext({viewport:{width,height:1050},reducedMotion:'reduce'});
+    const context=await browser.newContext({viewport:{width,height:1050},reducedMotion:'reduce',hasTouch:locale==='zh-TW' && width===430});
     try {
      const page=await context.newPage();page.on('pageerror',error=>report.errors.push(error.message));
      await page.addInitScript(({snapshot,locale})=>{
@@ -171,6 +242,8 @@ try {
      assert.equal(await entry.isDisabled(),false);await entry.click();
      const dialog=page.getByRole('dialog');await dialog.waitFor();
      await dialog.locator('[data-gateway-preparation="not_started"]').waitFor();
+     const initialLayout=await wizardLayout(dialog);
+     await assertWizardTypography(dialog);
      await dialog.getByText(runtime.label,{exact:true}).waitFor();
      const lifecycle=()=>page.evaluate(()=>window.settingsFixture.requests.filter(request=>['start_environment_runtime','restart_environment_runtime','update_environment_runtime'].includes(request.kind)));
      assert.equal((await lifecycle()).length,0,'opening performs a read-only check');
@@ -179,29 +252,40 @@ try {
      await page.screenshot({path:`${output}/${locale}-${width}-${kind}-preparation.png`});
      await dialog.getByRole('button',{name:i18n.t('gatewayJoin.startAndContinue'),exact:true}).click();
      const inputs=dialog.locator('input');await inputs.nth(0).waitFor({state:'visible'});
+     await dialog.locator('[data-gateway-suggestion="local-gateway"]').waitFor();
+     await assertStableWizard(dialog,initialLayout,'startup');
      await inputs.nth(0).fill('https://office.example:7443');await inputs.nth(1).fill('DRAFT-CODE');
      await page.evaluate(snapshot=>window.gatewayAcceptancePublish(snapshot),fixtures.ready.snapshot);
      assert.equal(await inputs.nth(1).evaluate(element=>element===document.activeElement),true);
      await dialog.getByRole('button',{name:i18n.t('gatewayJoin.verify'),exact:true}).click();
      await dialog.getByRole('button',{name:i18n.t('gatewayJoin.confirmEnable'),exact:true}).waitFor();
+     await assertStableWizard(dialog,initialLayout,'verified preview');
      const publish=async state=>page.evaluate(({snapshot,state})=>{
       window.gatewayAcceptanceState=state;window.gatewayAcceptancePublish(snapshot);
      },{snapshot:fixtures[state].snapshot,state});
      for(const [state,key] of [['control_missing','environmentAction.restartRuntime'],['update_required','environmentAction.updateRuntime']]) {
       await publish(state);await dialog.locator(`[data-gateway-preparation="${state}"]`).waitFor();
+      await assertStableWizard(dialog,initialLayout,state);
       assert.equal(await inputs.nth(0).isDisabled(),true);
       await page.evaluate(()=>{window.gatewayAcceptanceFailRecovery=true;});
+      await holdAction(page);
       await dialog.getByRole('button',{name:i18n.t(key),exact:true}).click();
+      await dialog.getByRole('status').first().waitFor();
+      await assertStableWizard(dialog,initialLayout,`${state} pending`);
+      await releaseAction(page);
       await dialog.getByText(i18n.t('gatewayJoin.recoveryFailed'),{exact:true}).waitFor();
+      await assertStableWizard(dialog,initialLayout,`${state} failure`);
       assert.equal(await inputs.nth(0).inputValue(),'https://office.example:7443');
       assert.equal(await inputs.nth(1).inputValue(),'DRAFT-CODE');
       assert.equal(await dialog.locator('.redeven-gateway-join-summary').textContent().then(text=>text.includes('Office')),true);
       await page.evaluate(()=>{window.gatewayAcceptanceFailRecovery=false;});
       await dialog.getByRole('button',{name:i18n.t(key),exact:true}).click();
       await dialog.getByRole('button',{name:i18n.t('gatewayJoin.confirmEnable'),exact:true}).waitFor();
+      await assertStableWizard(dialog,initialLayout,`${state} recovery`);
      }
      await publish('management_unavailable');
      await dialog.getByText(i18n.t('gatewayJoin.credentialsHelp'),{exact:true}).waitFor();
+     await assertStableWizard(dialog,initialLayout,'credentials unavailable');
      await dialog.getByRole('button',{name:i18n.t('common.retry'),exact:true}).click();
      await dialog.getByRole('button',{name:i18n.t('gatewayJoin.confirmEnable'),exact:true}).waitFor();
      assert.equal(await inputs.nth(1).inputValue(),'DRAFT-CODE');
@@ -210,6 +294,7 @@ try {
       status:'running',phase:'checking_runtime_service',title:'Restart Runtime',detail:'',active_progress_surface:'runtime_lifecycle',cancelable:true,
      }]}),{snapshot:fixtures.ready.snapshot,id:runtime.id});
      await dialog.locator('[data-gateway-preparation="busy"]').waitFor();
+     await assertStableWizard(dialog,initialLayout,'lifecycle progress');
      assert.equal(await dialog.getByRole('button',{name:i18n.t('common.settings'),exact:true}).isDisabled(),false);
      assert.equal(await inputs.nth(1).isDisabled(),true);
      await publish('ready');await dialog.getByRole('button',{name:i18n.t('gatewayJoin.confirmEnable'),exact:true}).waitFor();
@@ -218,6 +303,7 @@ try {
      assert.ok(controls.every(item=>item.width<=item.client+1 && item.whiteSpace==='nowrap'));
      await page.screenshot({path:`${output}/${locale}-${width}-${kind}-setup.png`});
      await dialog.getByRole('button',{name:i18n.t('gatewayJoin.back'),exact:true}).click();
+     await assertStableWizard(dialog,initialLayout,'back to invitation');
      assert.equal(await inputs.nth(1).inputValue(),'DRAFT-CODE');
      await dialog.getByRole('button',{name:i18n.t('gatewayJoin.back'),exact:true}).click();
      await publish('connection_required');
@@ -227,11 +313,54 @@ try {
      await page.evaluate(()=>{window.gatewayAcceptanceFailConnection=true;});
      await dialog.getByRole('button',{name:i18n.t('gatewayJoin.connectAndContinue'),exact:true}).click();
      await dialog.getByText(i18n.t('gatewayJoin.connectFailed'),{exact:true}).waitFor();
+     await assertStableWizard(dialog,initialLayout,'connection failure');
      assert.equal(await dialog.locator('[data-gateway-step]').getAttribute('data-gateway-step'),'0');
      assert.equal(await inputs.nth(0).isVisible(),false);
      await page.evaluate(()=>{window.gatewayAcceptanceFailConnection=false;});
      await dialog.getByRole('button',{name:i18n.t('common.retry'),exact:true}).click();
      await dialog.getByRole('button',{name:i18n.t('gatewayJoin.confirmEnable'),exact:true}).waitFor();
+     if(kind==='ssh' && ['en-US','zh-CN','de-DE'].includes(locale)) {
+      for(const fontSize of width===430 ? [16,24] : [24]) {
+       const shortWidth=fontSize===16 ? 320 : width;
+       await page.setViewportSize({width:shortWidth,height:460});
+       await page.evaluate(fontSize=>document.documentElement.style.fontSize=`${fontSize}px`,fontSize);
+       const shortLayout=await wizardLayout(dialog);
+       assert.ok(shortLayout.panel.y>=56 && shortLayout.panel.y+shortLayout.panel.height<=444,
+        `short window must respect titlebar and bottom clearance: ${JSON.stringify(shortLayout)}`);
+       assert.ok(shortLayout.panel.x>=0 && shortLayout.panel.x+shortLayout.panel.width<=shortWidth);
+       await assertWizardTypography(dialog);
+       const scroll=dialog.locator('.redeven-gateway-join-scroll');
+       assert.equal(await scroll.evaluate(element=>element.scrollHeight>element.clientHeight),true);
+       await scroll.evaluate(element=>{element.scrollTop=element.scrollHeight;});
+       await assertStableWizard(dialog,shortLayout,'short window scrolling');
+       const scrollTop=await scroll.evaluate(element=>element.scrollTop);
+       await publish('ready');
+       assert.equal(await scroll.evaluate(element=>element.scrollTop),scrollTop,'same-target snapshots retain the reading position');
+       const copyBounds=await scroll.locator('section:visible > p').last().boundingBox();
+       assert.ok(copyBounds.y+copyBounds.height<=shortLayout.actions.y+1,'final guidance remains reachable above actions');
+       for(const step of ['invitation','connection']) {
+        await dialog.getByRole('button',{name:i18n.t('gatewayJoin.back'),exact:true}).click();
+        await assertStableWizard(dialog,shortLayout,`short window ${step}`);
+        await assertWizardTypography(dialog);
+        if(step==='connection')assert.equal(await scroll.evaluate(element=>element.scrollTop),0,'the connection step starts at the top');
+       }
+       await dialog.getByRole('button',{name:i18n.t('gatewayJoin.connectAndContinue'),exact:true}).click();
+       await dialog.getByRole('button',{name:i18n.t('gatewayJoin.confirmEnable'),exact:true}).waitFor();
+       await assertStableWizard(dialog,shortLayout,'short window reconnection');
+       assert.equal(await scroll.evaluate(element=>element.scrollTop),0);
+       const controls=await dialog.locator('button:visible').evaluateAll(elements=>elements.map(element=>({
+        width:element.scrollWidth,client:element.clientWidth,whiteSpace:getComputedStyle(element).whiteSpace,
+        left:element.getBoundingClientRect().left,right:element.getBoundingClientRect().right,
+       })));
+       assert.ok(controls.every(item=>item.width<=item.client+1 && item.whiteSpace==='nowrap'
+        && item.left>=shortLayout.panel.x && item.right<=shortLayout.panel.x+shortLayout.panel.width),JSON.stringify(controls));
+       assert.equal(await inputs.nth(0).inputValue(),'https://office.example:7443');
+       assert.equal(await inputs.nth(1).inputValue(),'DRAFT-CODE');
+       await page.screenshot({path:`${output}/${locale}-${shortWidth}-short-${fontSize}.png`});
+       report.layouts.push({locale,width:shortWidth,height:460,fontSize,initial:shortLayout,confirmation:await wizardLayout(dialog)});
+       report.cases.push(`${locale}/${shortWidth}/460/${fontSize}px: stable steps, reachable scrolling guidance, pinned single-line actions and retained draft`);
+      }
+     }
      await dialog.getByRole('button',{name:i18n.t('common.cancel'),exact:true}).click();await dialog.waitFor({state:'detached'});
      await page.waitForFunction(element=>element===document.activeElement,await toggle.elementHandle());
      const requests=await page.evaluate(()=>window.settingsFixture.requests);
