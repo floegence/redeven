@@ -5,9 +5,9 @@ import { FloeProvider, builtInShellThemePresets, useTheme } from '@floegence/flo
 import { onMount } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, expect, it, vi } from 'vitest';
-import { page, userEvent } from 'vitest/browser';
+import { commands, page, userEvent } from 'vitest/browser';
 import { FlowerProviderDialog } from '../../../../flower_ui/src/settings/FlowerProviderDialog';
-import type { FlowerChatGPTAuth } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import type { FlowerChatGPTAuth, FlowerChatGPTAccount } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../../../../flower_ui/src/copy';
 import { createLocalizedFlowerSurfaceCopy } from '../../../../flower_ui/src/i18n/createLocalizedFlowerSurfaceCopy';
 import { createI18nHelpers } from './i18n/createI18n';
@@ -18,9 +18,10 @@ const copy = DEFAULT_FLOWER_SURFACE_COPY.settings.dialog;
 let dispose: (() => void) | undefined;
 let host: HTMLElement;
 let style: HTMLStyleElement;
-afterEach(() => { dispose?.(); host?.remove(); style?.remove(); localStorage.clear(); });
+const media = commands as unknown as { emulateMediaPreferences: (value: { reducedMotion: 'reduce' | 'no-preference' }) => Promise<void> };
+afterEach(async () => { dispose?.(); host?.remove(); style?.remove(); localStorage.clear(); await media.emulateMediaPreferences({ reducedMotion: 'no-preference' }); });
 
-async function mount(surface: 'desktop' | 'env', theme = 'porcelain-light', auth?: FlowerChatGPTAuth, width = 1280, locale: RedevenLocale = 'en-US') {
+async function mount(surface: 'desktop' | 'env', theme = 'porcelain-light', auth?: FlowerChatGPTAuth, width = 1280, locale: RedevenLocale = 'en-US', account?: FlowerChatGPTAccount) {
   await page.viewport(width, 900);
   const i18n = createI18nHelpers(locale, await loadEnvAppDictionary(locale));
   const localizedCopy = createLocalizedFlowerSurfaceCopy({ locale,
@@ -36,13 +37,14 @@ async function mount(surface: 'desktop' | 'env', theme = 'porcelain-light', auth
     onMount(() => themeContext.selectShellTheme(theme.includes('dark') ? 'dark' : 'light', theme));
     return null;
   }
-  const discover = vi.fn(async () => ({ models: [
+  const models = [
     { model_name: 'gpt-6.1-sol', display_name: 'GPT-6.1 Sol', context_window: 1050000, max_output_tokens: 128000, input_modalities: ['text', 'image'] },
     { model_name: 'gpt-6-sol', display_name: 'GPT-6 Sol', context_window: 1050000, max_output_tokens: 128000, input_modalities: ['text', 'image'] },
     { model_name: 'gpt-6-luna', display_name: 'GPT-6 Luna', context_window: 1050000, max_output_tokens: 128000, input_modalities: ['text', 'image'] },
-  ] }));
+  ];
+  const discover = vi.fn(async () => ({ models }));
   dispose = render(() => <FloeProvider config={{ theme: { shellPresets: builtInShellThemePresets, defaultSurfaceStyle: 'soft-neumorphic' } }}><Theme /><FlowerProviderDialog
-    open mode="create" copy={localizedCopy} provider={{ id: 'openai', type: 'openai', models: [] }} chatGPTAvailable chatGPTBindingID="local"
+    open mode="create" copy={localizedCopy} provider={{ id: 'openai', type: 'openai', models: account ? [models[0]] : [], ...(account ? { auth_method: 'chatgpt' as const, account_id: account.account_id, catalog_models: models } : {}) }} chatGPTAvailable chatGPTBindingID="local" chatGPTAccount={account}
     chatGPTAuth={auth ?? vi.fn(async () => ({ id: 'attempt', state: 'waiting' }))} onDiscoverModels={discover}
     keyConfigured={false} webSearchKeyConfigured={false} onOpenChange={vi.fn()} onConfirm={vi.fn()} /></FloeProvider>, host);
   await expect.element(page.getByRole('dialog')).toBeVisible();
@@ -63,6 +65,70 @@ function contrast(left: string, right: string) {
 }
 
 for (const surface of ['desktop', 'env'] as const) {
+  it(`presents a compact connected account and aligns first-use confirmation with its notice in ${surface}`, async () => {
+    const { dialog, copy: localized } = await mount(surface, 'porcelain-light', undefined, 1280, 'zh-CN', {
+      account_id: 'verified', email: 'person@example.com', state: 'ready', welcome_acknowledged: false,
+    });
+    const account = dialog.querySelector<HTMLElement>('.flower-provider-account')!;
+    const notice = dialog.querySelector<HTMLElement>('.flower-provider-account-welcome')!;
+    const confirm = page.getByRole('button', { name: localized.chatGPT.welcomeConfirm, exact: true }).element() as HTMLButtonElement;
+    const identity = account.querySelector<HTMLElement>('.flower-provider-account-heading')!;
+    const actions = account.querySelector<HTMLElement>('.flower-provider-account-actions')!;
+    expect(account.getBoundingClientRect().height).toBeLessThan(160);
+    expect(account.contains(notice)).toBe(false);
+    expect(notice.getAttribute('role')).toBe('note');
+    expect(notice.querySelector('h4')).toBeNull();
+    expect(Math.abs(confirm.getBoundingClientRect().right - notice.getBoundingClientRect().right)).toBeLessThanOrEqual(17);
+    expect(actions.getBoundingClientRect().left).toBeCloseTo(identity.getBoundingClientRect().left, 0);
+    expect(actions.getBoundingClientRect().height).toBeLessThanOrEqual(48);
+    const primary = account.querySelector<HTMLButtonElement>('.flower-provider-account-primary')!;
+    if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: dialog, path: `__screenshots__/flower-connected-${surface}-notice-zh-CN.png` });
+    confirm.focus(); confirm.click();
+    expect(document.activeElement).toBe(primary);
+    const viewport = dialog.querySelector<HTMLElement>('.flower-provider-account-notice')!;
+    expect(viewport.getAttribute('aria-hidden')).toBe('true');
+    expect(viewport.inert).toBe(true);
+    expect(viewport.getAnimations().some(animation => animation.playState === 'running')).toBe(true);
+    await expect.poll(() => dialog.querySelector('.flower-provider-account-welcome')).toBeNull();
+    expect(account.getBoundingClientRect().height).toBeLessThan(160);
+    expect(account.querySelector('.flower-provider-account-primary')).toBe(primary);
+    if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: dialog, path: `__screenshots__/flower-connected-${surface}-summary-zh-CN.png` });
+  });
+
+  it(`acknowledges the plan notice with the keyboard and skips collapse motion when reduced motion is enabled in ${surface}`, async () => {
+    await media.emulateMediaPreferences({ reducedMotion: 'reduce' });
+    const { dialog, copy: localized } = await mount(surface, 'porcelain-light', undefined, 1280, 'en-US', {
+      account_id: 'verified', email: 'person@example.com', state: 'ready', welcome_acknowledged: false,
+    });
+    const primary = dialog.querySelector<HTMLButtonElement>('.flower-provider-account-primary')!;
+    const confirm = page.getByRole('button', { name: localized.chatGPT.welcomeConfirm, exact: true }).element() as HTMLButtonElement;
+    confirm.focus();
+    await userEvent.keyboard('{Enter}');
+    expect(document.activeElement).toBe(primary);
+    expect(dialog.querySelector('.flower-provider-account-welcome')).toBeNull();
+    expect(dialog.querySelector('.flower-provider-account-notice')).toBeNull();
+    expect(dialog.getAnimations({ subtree: true }).some(animation => animation.playState === 'running')).toBe(false);
+  });
+
+  for (const locale of SUPPORTED_LOCALES) it(`keeps connected account actions and confirmation readable at 390px in ${surface} ${locale}`, async () => {
+    const { dialog, copy: localized } = await mount(surface, 'porcelain-dark', undefined, 390, locale, {
+      account_id: 'verified', email: 'a.long.account.name@example.com', state: 'ready', welcome_acknowledged: false,
+    });
+    const account = dialog.querySelector<HTMLElement>('.flower-provider-account')!;
+    const notice = dialog.querySelector<HTMLElement>('.flower-provider-account-welcome')!;
+    for (const element of [account, notice, ...account.querySelectorAll<HTMLElement>('button, a'), notice.querySelector<HTMLButtonElement>('button')!]) {
+      expect(element.scrollWidth).toBeLessThanOrEqual(element.clientWidth + 1);
+      expect(element.getBoundingClientRect().right).toBeLessThanOrEqual(dialog.getBoundingClientRect().right);
+    }
+    expect(notice.querySelector('p')?.textContent).toBe(localized.chatGPT.welcome);
+    const primary = account.querySelector<HTMLButtonElement>('.flower-provider-account-primary')!;
+    if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1' && locale === 'zh-CN') await page.screenshot({ element: dialog, path: `__screenshots__/flower-connected-${surface}-narrow-dark-zh-CN.png` });
+    await userEvent.click(page.getByRole('button', { name: localized.chatGPT.welcomeConfirm, exact: true }));
+    expect(document.activeElement).toBe(primary);
+    await expect.poll(() => dialog.querySelector('.flower-provider-account-welcome')).toBeNull();
+    expect(dialog.querySelector('.flower-provider-account-primary')).toBe(primary);
+  });
+
   it(`groups ChatGPT sign-in identity, guidance and its primary action in ${surface}`, async () => {
     const { dialog, copy: localized } = await mount(surface);
     const panel = dialog.querySelector<HTMLElement>('.flower-provider-account')!;
@@ -84,6 +150,7 @@ for (const surface of ['desktop', 'env'] as const) {
     const panel = dialog.querySelector<HTMLElement>('.flower-provider-account')!;
     const primary = panel.querySelector<HTMLButtonElement>('.flower-provider-account-primary')!;
     const screenshot = async (state: string) => {
+      await expect.poll(() => !['opening', 'closing'].includes(dialog.querySelector<HTMLElement>('.flower-provider-account-notice')?.dataset.state ?? '')).toBe(true);
       if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: dialog, path: `__screenshots__/flower-auth-${surface}-${state}-zh-CN.png` });
     };
     await screenshot('idle');
@@ -111,7 +178,7 @@ for (const surface of ['desktop', 'env'] as const) {
     await screenshot('confirmation');
     await userEvent.click(page.getByRole('button', { name: localized.chatGPT.welcomeConfirm, exact: true }));
     expect(document.activeElement).toBe(primary);
-    expect(panel.querySelector('.flower-provider-account-welcome')).toBeNull();
+    await expect.poll(() => dialog.querySelector('.flower-provider-account-welcome')).toBeNull();
     await screenshot('connected');
     await userEvent.click(primary);
     await expect.poll(() => document.activeElement?.textContent).toBe(localized.chatGPT.cancel);
