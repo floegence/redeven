@@ -39,16 +39,19 @@ const environmentPlatformAssets: Record<DesktopRuntimePlatform, { url: string; n
   linux: { url: new URL('./assets/environment-platform-icons/linux.svg', import.meta.url).href, name: 'Linux' },
   windows: { url: new URL('./assets/environment-platform-icons/windows.svg', import.meta.url).href, name: 'Windows' },
 };
+const defaultEnvironmentDeviceIcon = new URL('./assets/environment-platform-icons/default-device.svg', import.meta.url).href;
 
 export function EnvironmentPlatformIcon(props: Readonly<{ platform?: DesktopRuntimePlatform; i18n: DesktopI18n }>) {
   const asset = () => props.platform ? environmentPlatformAssets[props.platform] : undefined;
-  const label = () => props.i18n.t('environmentCenter.runtimePlatform', { platform: asset()?.name ?? '' });
+  const label = () => {
+    const current = asset();
+    return current ? props.i18n.t('environmentCenter.runtimePlatform', { platform: current.name })
+      : props.i18n.t('environmentCenter.runtimePlatformUnknown');
+  };
   return (
     <span class="redeven-environment-platform-slot" data-runtime-platform-slot>
-      <Show when={asset()}>
-        {(current) => <span class="redeven-environment-platform-icon" role="img" aria-label={label()} title={label()}
-          data-runtime-platform={props.platform} style={{ 'mask-image': `url("${current().url}")` }} />}
-      </Show>
+      <span class="redeven-environment-platform-icon" role="img" aria-label={label()} title={label()}
+        data-runtime-platform={props.platform ?? 'unknown'} style={{ 'mask-image': `url("${asset()?.url ?? defaultEnvironmentDeviceIcon}")` }} />
     </span>
   );
 }

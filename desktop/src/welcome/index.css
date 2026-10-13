@@ -4668,7 +4668,8 @@ pre,
 
 .redeven-environment-title-row {
   display: flex;
-  align-items: center;
+  align-items: baseline;
+  font-size: var(--floe-type-control);
   gap: .375rem;
   min-width: 0;
   padding-top: .25rem;
@@ -4679,13 +4680,16 @@ pre,
   align-items: center;
   justify-content: center;
   width: 1rem;
-  height: 1.25rem;
+  height: .875rem;
   flex: none;
+  position: relative;
+  /* Center marks on the title's capital letters, independently of line height. */
+  top: calc((.875rem - 1cap) / 2);
 }
 
 .redeven-environment-platform-icon {
-  width: .9375rem;
-  height: .9375rem;
+  width: .875rem;
+  height: .875rem;
   background-color: var(--redeven-welcome-icon);
   mask-size: contain;
   mask-repeat: no-repeat;

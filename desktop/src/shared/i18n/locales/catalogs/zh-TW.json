@@ -1737,6 +1737,7 @@
   },
   "environmentCenter": {
     "runtimePlatform": "執行階段作業系統：{platform}",
+    "runtimePlatformUnknown": "執行階段作業系統未知",
     "title": "環境",
     "description": "管理本地和遠端環境。連接 Redeven Cloud、開啟工作區並在需要時重新綁定此本機環境設定檔。",
     "environmentsTitle": "環境",
