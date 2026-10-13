@@ -3394,7 +3394,6 @@
     "inherit": "Heredar valor predeterminado",
     "allow": "Permitir",
     "deny": "Prohibir",
-    "revocationPending": "Revocación de Cloud pendiente de sincronización",
     "saved": "Guardado",
     "confirmRemove": "Confirmar eliminación",
     "remove": "Eliminar miembro",

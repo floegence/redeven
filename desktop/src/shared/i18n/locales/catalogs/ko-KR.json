@@ -3388,7 +3388,6 @@
     "inherit": "기본값 상속",
     "allow": "허용",
     "deny": "금지",
-    "revocationPending": "Cloud 취소 동기화 대기",
     "saved": "저장됨",
     "confirmRemove": "제거 확인",
     "remove": "멤버 제거",

@@ -22,7 +22,7 @@ describe('Gateway access client contracts', () => {
     expect(() => normalizeGatewayCatalogResponse({ ...catalogFixture, members: [...catalogFixture.members, ...catalogFixture.members] })).toThrow();
     expect(() => normalizeGatewayCatalogResponse({ ...catalogFixture, policy: { ...catalogFixture.policy, default_cloud_allowed: 'yes' } })).toThrow();
   });
-  it('preserves explicit permissions and separate member connection and Cloud states', () => {
+  it('accepts the v6 local catalog without retired Cloud lifecycle fields', () => {
     expect(normalizeGatewayCatalogResponse(catalogFixture)).toEqual(catalogFixture);
   });
 

@@ -3394,7 +3394,6 @@
     "inherit": "Herdar padrão",
     "allow": "Permitir",
     "deny": "Proibir",
-    "revocationPending": "Revogação no Cloud aguardando sincronização",
     "saved": "Salvo",
     "confirmRemove": "Confirmar remoção",
     "remove": "Remover membro",

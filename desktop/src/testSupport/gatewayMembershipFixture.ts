@@ -5,7 +5,7 @@ import type { GatewayRecord } from '../main/gatewayStore';
 export const memberFixture: GatewayMember = {
   member_id: 'member_fixture', runtime_public_id: 'runtime_fixture', member_version: 1, display_name: 'Runtime',
   state: 'active', connected: true, last_seen_at_unix_ms: 1, cloud_permission: 'inherit', effective_cloud_allowed: false,
-  cloud_state: 'not_published', cloud_revocation_pending: false, metadata: { hostname: 'runtime.internal', os: 'linux', arch: 'arm64', version: 'test' },
+  metadata: { hostname: 'runtime.internal', os: 'linux', arch: 'arm64', version: 'test' },
 };
 export const catalogFixture: GatewayCatalogResponse = {
   protocol_version: GATEWAY_PROTOCOL_VERSION, gateway: { gateway_id: 'gateway_fixture', display_name: 'Gateway', gateway_public_key_fingerprint: 'fixture', listener_address: ':7443',

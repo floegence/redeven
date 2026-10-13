@@ -3393,7 +3393,6 @@
     "inherit": "Standard erben",
     "allow": "Erlauben",
     "deny": "Verbieten",
-    "revocationPending": "Cloud-Widerruf wartet auf Synchronisierung",
     "saved": "Gespeichert",
     "confirmRemove": "Entfernen bestätigen",
     "remove": "Mitglied entfernen",

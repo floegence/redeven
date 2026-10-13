@@ -117,8 +117,7 @@ function member(value: unknown): GatewayMember {
     member_id: id(item.member_id), runtime_public_id: id(item.runtime_public_id), member_version: integer(item.member_version, 1),
     display_name: text(item.display_name), state: item.state, connected: boolean(item.connected),
     last_seen_at_unix_ms: integer(item.last_seen_at_unix_ms), cloud_permission: cloudPermission(item.cloud_permission),
-    effective_cloud_allowed: boolean(item.effective_cloud_allowed), cloud_state: text(item.cloud_state, 80),
-    cloud_revocation_pending: boolean(item.cloud_revocation_pending), metadata: {
+    effective_cloud_allowed: boolean(item.effective_cloud_allowed), metadata: {
       hostname: text(metadata.hostname), os: text(metadata.os, 64), arch: text(metadata.arch, 64), version: text(metadata.version, 128),
     },
   };

@@ -2460,9 +2460,6 @@
           "effective_cloud_allowed": {
             "type": "boolean"
           },
-          "cloud_state": {
-            "type": "string"
-          },
           "metadata": {
             "$ref": "#/components/schemas/MemberMetadata"
           }
@@ -2477,7 +2474,6 @@
           "last_seen_at_unix_ms",
           "cloud_permission",
           "effective_cloud_allowed",
-          "cloud_state",
           "metadata"
         ]
       },

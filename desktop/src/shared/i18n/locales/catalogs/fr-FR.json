@@ -3394,7 +3394,6 @@
     "inherit": "Hériter de la valeur par défaut",
     "allow": "Autoriser",
     "deny": "Interdire",
-    "revocationPending": "Révocation Cloud en attente de synchronisation",
     "saved": "Enregistré",
     "confirmRemove": "Confirmer la suppression",
     "remove": "Supprimer le membre",
