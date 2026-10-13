@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createFlowerModelReadResource, readFlowerModelDirectory } from '../../../../../flower_ui/src/modelDirectory';
 import type { FlowerModelDirectory } from '../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 
@@ -13,6 +13,95 @@ const directory = (state: 'pending' | 'unavailable'): FlowerModelDirectory => ({
 });
 
 describe('connection-owned model reads', () => {
+  afterEach(() => vi.useRealTimers());
+
+  it('settles a transport AbortError instead of retaining pending models', async () => {
+    const resource = createFlowerModelReadResource({ scope: () => 'connection', loadConfiguration: async () => configuration,
+      loadDirectory: async baseline => { if (baseline) return directory('pending'); throw new DOMException('Transport closed.', 'AbortError'); },
+    });
+    await resource.loadSettings();
+    const failed = await resource.loadDirectory();
+    expect(failed.error).toBe('directory_unavailable');
+    expect(failed.models.map(model => model.state)).toEqual(['ready', 'unavailable']);
+    expect(failed.sources[0].state).toBe('unavailable');
+  });
+
+  it('bounds baseline and discovery together to ten seconds and ignores late results', async () => {
+    vi.useFakeTimers();
+    let finishBaseline!: (value: FlowerModelDirectory) => void;
+    let finishFull!: (value: FlowerModelDirectory) => void;
+    const resource = createFlowerModelReadResource({ scope: () => 'connection', loadConfiguration: async () => configuration,
+      loadDirectory: async baseline => baseline ? new Promise(resolve => { finishBaseline = resolve; }) : new Promise(resolve => { finishFull = resolve; }),
+    });
+    const settings = resource.loadSettings();
+    const read = resource.loadDirectory();
+    await vi.advanceTimersByTimeAsync(7_000);
+    finishBaseline(directory('pending'));
+    await settings;
+    await vi.advanceTimersByTimeAsync(2_999);
+    const changes = vi.fn();
+    resource.subscribe(changes);
+    expect(changes.mock.calls.at(-1)?.[0].models[1].state).toBe('pending');
+    await vi.advanceTimersByTimeAsync(1);
+    const failed = await read;
+    expect(failed.error).toBe('directory_timeout');
+    expect(failed.models.map(model => model.state)).toEqual(['ready', 'unavailable']);
+    const count = changes.mock.calls.length;
+    finishFull({ ...directory('unavailable'), current_model_id: 'late/model' });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(changes).toHaveBeenCalledTimes(count);
+    expect((await resource.loadSettings()).model_directory?.current_model_id).toBe('static/agent');
+  });
+
+  it('settles discovery even while the configuration read stalls', async () => {
+    vi.useFakeTimers();
+    const resource = createFlowerModelReadResource({ scope: () => 'connection',
+      loadConfiguration: () => new Promise(() => undefined),
+      loadDirectory: async baseline => baseline ? directory('pending') : new Promise(() => undefined),
+    });
+    const settings = resource.loadSettings();
+    const rejected = expect(settings).rejects.toMatchObject({ name: 'TimeoutError' });
+    const changes = vi.fn();
+    resource.subscribe(changes);
+    await vi.advanceTimersByTimeAsync(10_000);
+    await rejected;
+    expect(changes.mock.calls.at(-1)?.[0].models[1].state).toBe('unavailable');
+    expect(changes.mock.calls.at(-1)?.[0].checking).toBe(false);
+  });
+
+  it('ends a stalled baseline and aborts its transport at ten seconds', async () => {
+    vi.useFakeTimers();
+    let signal!: AbortSignal;
+    const resource = createFlowerModelReadResource({ scope: () => 'connection', loadConfiguration: async () => configuration,
+      loadDirectory: (_baseline, inputSignal) => { signal = inputSignal; return new Promise(() => undefined); },
+    });
+    const settings = resource.loadSettings();
+    const read = resource.loadDirectory();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(signal.aborted).toBe(true);
+    expect((await settings).model_directory?.error).toBe('directory_timeout');
+    expect(await read).toMatchObject({ checking: false, error: 'directory_timeout' });
+  });
+
+  it('includes Desktop recovery in the deadline and permits retry after timeout', async () => {
+    vi.useFakeTimers();
+    const loadDirectory = vi.fn(async () => directory('unavailable'));
+    const resource = createFlowerModelReadResource({ scope: () => 'connection', loadConfiguration: async () => configuration, loadDirectory });
+    await resource.loadSettings();
+    await resource.loadDirectory();
+    let finishRecovery!: () => void;
+    const prepare = vi.fn(() => new Promise<void>(resolve => { finishRecovery = resolve; }));
+    const read = resource.loadDirectory(true, prepare);
+    expect(resource.loadDirectory(true, prepare)).toBe(read);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(await read).toMatchObject({ error: 'directory_timeout', checking: false });
+    const count = loadDirectory.mock.calls.length;
+    finishRecovery();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(loadDirectory).toHaveBeenCalledTimes(count);
+    expect((await resource.loadDirectory(true, async () => undefined)).error).toBeUndefined();
+    expect(prepare).toHaveBeenCalledTimes(1);
+  });
   it('makes the baseline usable before discovery and shares one background read', async () => {
     let finish!: (value: FlowerModelDirectory) => void;
     const full = new Promise<FlowerModelDirectory>(resolve => { finish = resolve; });
@@ -25,13 +114,13 @@ describe('connection-owned model reads', () => {
     expect(first.model_directory?.models[0].state).toBe('ready');
     expect(second).toEqual(first);
     expect(loadConfiguration).toHaveBeenCalledTimes(1);
-    expect(loadDirectory).toHaveBeenCalledExactlyOnceWith(true);
+    expect(loadDirectory.mock.calls[0]).toEqual([true, expect.any(AbortSignal)]);
     const refresh = resource.loadDirectory();
     const simultaneous = resource.loadDirectory(true);
     expect(refresh).toBe(simultaneous);
     finish(directory('unavailable'));
     await refresh;
-    expect(loadDirectory.mock.calls).toEqual([[true], [false]]);
+    expect(loadDirectory.mock.calls.map(call => call[0])).toEqual([true, false]);
     expect((await resource.loadSettings()).model_directory?.models[0].state).toBe('ready');
     unsubscribe();
     const count = changes.mock.calls.length;

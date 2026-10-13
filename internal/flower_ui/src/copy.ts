@@ -380,6 +380,8 @@ export type FlowerSurfaceCopy = Readonly<{
 
     loadingSettings: string;
     modelsChecking: string;
+    modelsCheckTimedOut: string;
+    modelsCheckFailed: string;
     modelsUnavailable: string;
     warmupTitle: string;
     warmupDetail: string;
@@ -727,6 +729,8 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
 
     loadingSettings: 'Flower settings are still loading.',
     modelsChecking: 'Checking model availability…',
+    modelsCheckTimedOut: 'The model check timed out after 10 seconds. Refresh to try again.',
+    modelsCheckFailed: 'Could not finish checking models. Refresh to try again.',
     modelsUnavailable: 'This model is unavailable. Refresh the list, select another model, or open settings.',
     warmupTitle: 'Preparing Flower',
     warmupDetail: 'Desktop is starting the Local Environment runtime before Flower loads conversations.',

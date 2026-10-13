@@ -1,6 +1,40 @@
 import { expect, it, vi } from 'vitest';
-import type { FlowerSettingsDraft } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import type { FlowerModelDirectory, FlowerSettingsDraft } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { adapter, renderSurfaceWithAdapter, settingsSnapshot, waitFor } from './FlowerSurface.navigation.testHarness';
+
+it.each(['ready', 'pending'] as const)('keeps the selected %s model clear while checks run only in the popup', async state => {
+  const directory: FlowerModelDirectory = { current_model_id: 'static/agent', checking: true,
+    models: [{ id: 'static/agent', label: 'Current provider / Agent', source: 'runtime_config', state, provider_id: 'static', model_name: 'agent' }],
+    sources: [{ id: 'offline', kind: 'runtime_config', state: 'pending' }],
+  };
+  let publish!: (value: FlowerModelDirectory) => void;
+  const surface = renderSurfaceWithAdapter({ ...adapter(),
+    loadSettings: async () => ({ ...settingsSnapshot(), model_profile: null, model_directory: directory }),
+    loadModelDirectory: async () => directory,
+    subscribeModelDirectory: listener => { publish = listener; return () => undefined; },
+    listThreads: async () => [],
+  });
+  await waitFor(() => surface.querySelector('.flower-model-reasoning-model-label')?.textContent?.includes('Agent') === true);
+  const trigger = surface.querySelector<HTMLButtonElement>('button.flower-model-reasoning-model-trigger')!;
+  expect(trigger.querySelector('[class*="animate-spin"]')).toBeNull();
+  expect(trigger.hasAttribute('aria-busy')).toBe(false);
+  expect(trigger.getAttribute('aria-label')).toContain('Current provider / Agent');
+  trigger.click();
+  await waitFor(() => Boolean(document.querySelector('.flower-model-menu input')));
+  const search = document.querySelector<HTMLInputElement>('.flower-model-menu input')!;
+  search.value = 'Agent'; search.dispatchEvent(new InputEvent('input', { bubbles: true }));
+  expect(document.querySelector('.flower-model-menu-status')?.textContent).toBe('Checking model availability…');
+  publish({ ...directory, checking: false, error: 'directory_timeout',
+    models: directory.models.map(model => ({ ...model, state: state === 'ready' ? 'ready' : 'unavailable' })),
+    sources: [{ ...directory.sources[0], state: 'unavailable' }],
+  });
+  expect(document.querySelector('.flower-model-menu-status')?.textContent).toContain('10 seconds');
+  expect(search.value).toBe('Agent');
+  expect(document.activeElement).toBe(search);
+  expect(trigger.textContent).toContain('Current provider / Agent');
+  expect(trigger.querySelector('[class*="animate-spin"]')).toBeNull();
+  expect(document.querySelector<HTMLButtonElement>('.flower-model-menu-item')?.disabled).toBe(state === 'pending');
+});
 
 it('searches a bounded menu, preserves a selected alias, and opens model management', async () => {
   const base = settingsSnapshot();

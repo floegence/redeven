@@ -232,6 +232,8 @@
       },
       "loadingSettings": "Flower 設定を読み込み中です。",
       "modelsChecking": "モデルの利用可否を確認しています…",
+      "modelsCheckTimedOut": "モデルの確認が10秒でタイムアウトしました。更新して再試行してください。",
+      "modelsCheckFailed": "モデルの確認を完了できませんでした。更新して再試行してください。",
       "modelsUnavailable": "このモデルは利用できません。一覧を更新するか、別のモデルを選択するか、設定を開いてください。",
       "warmupTitle": "Flower を準備しています",
       "warmupDetail": "Flower が会話を読み込む前に、デスクトップがローカル環境のランタイムを起動しています。",

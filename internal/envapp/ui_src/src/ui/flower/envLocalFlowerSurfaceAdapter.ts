@@ -486,8 +486,8 @@ function decision(options: EnvLocalFlowerSurfaceAdapterOptions): FlowerRouterDec
 export function createEnvFlowerModelReadResource(scope: () => string): FlowerModelReadResource {
   return createFlowerModelReadResource({
     scope,
-    loadConfiguration: async () => mapEnvFlowerSettings(await fetchLocalApiJSON<AgentSettingsResponse>('/_redeven_proxy/api/settings', { method: 'GET', signal: AbortSignal.timeout(6_000) })),
-    loadDirectory: async baseline => readFlowerModelDirectory(await fetchLocalApiJSON('/_redeven_proxy/api/ai/models' + (baseline ? '?mode=baseline' : ''), { method: 'GET', signal: AbortSignal.timeout(6_000) })),
+    loadConfiguration: async signal => mapEnvFlowerSettings(await fetchLocalApiJSON<AgentSettingsResponse>('/_redeven_proxy/api/settings', { method: 'GET', signal })),
+    loadDirectory: async (baseline, signal) => readFlowerModelDirectory(await fetchLocalApiJSON('/_redeven_proxy/api/ai/models' + (baseline ? '?mode=baseline' : ''), { method: 'GET', signal })),
   });
 }
 
@@ -609,7 +609,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
     mapperOptions: envLiveMapperOptions(options),
     extensions: flowerExtensionsAdapter((method, path, body) => fetchLocalApiJSON(path, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }), { canInteract: () => options.isAvailable?.() ?? true, canAdmin: () => options.canManageExtensions?.() ?? false }),
     loadSettings,
-    loadModelDirectory: async refresh => directoryForSurface(await resource.loadDirectory(refresh)),
+    loadModelDirectory: async refresh => directoryForSurface(await resource.loadDirectory(refresh, options.retryModelSource)),
     subscribeModelDirectory: listener => resource.subscribe(directory => listener(directoryForSurface(directory))),
     chatGPTAuth: async (action, input) => {
       const result = await fetchLocalApiJSON<Awaited<ReturnType<NonNullable<FlowerSurfaceAdapter['chatGPTAuth']>>>>(`/_redeven_proxy/api/ai/auth/chatgpt/${action}`, { method: 'POST', body: JSON.stringify(input) });
@@ -887,15 +887,6 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
     ...(options.openWorkingDirectoryInTerminal ? { openWorkingDirectoryInTerminal: options.openWorkingDirectoryInTerminal } : {}),
     ...(options.workingDirectoryActionAvailability ? { workingDirectoryActionAvailability: options.workingDirectoryActionAvailability } : {}),
     ...(options.openLinkedDirectoryBrowser ? { openLinkedDirectoryBrowser: options.openLinkedDirectoryBrowser } : {}),
-    retryModelSource: async () => {
-      resource.invalidate();
-      try {
-        await options.retryModelSource?.();
-      } finally {
-        // Recovery can overlap an existing refresh; discard every pre-recovery result.
-        resource.invalidate();
-      }
-    },
     ...(options.modelSourceRecovery ? { modelSourceRecovery: options.modelSourceRecovery } : {}),
   });
 }

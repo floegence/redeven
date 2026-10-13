@@ -81,7 +81,7 @@ it('retries a platform outage immediately instead of reusing the cached error', 
   let modelReads = 0;
   fetchMock.mockImplementation(async (url: string) => {
     if (url === '/_redeven_proxy/api/settings') return jsonResponse({ ai: null, ai_runtime: { platform_available: true } });
-    if (url === '/_redeven_proxy/api/ai/models?mode=baseline') {
+    if (url.startsWith('/_redeven_proxy/api/ai/models')) {
       modelReads++;
       return jsonResponse({ current_model: 'platform/selected', models: recovered ? [{ id: 'platform/selected', name: 'Selected', source: 'platform', available: true }] : [], runtime: recovered ? {} : { platform_error: 'Redeven AI unavailable' } });
     }
@@ -91,13 +91,13 @@ it('retries a platform outage immediately instead of reusing the cached error', 
   expect((await adapter.loadSettings()).platform_model_source?.error).toBe('Redeven AI is currently unavailable. Select another model or try again.');
   recovered = true;
   expect((await adapter.loadSettings()).platform_model_source?.error).toBe('Redeven AI is currently unavailable. Select another model or try again.');
-  expect(modelReads).toBe(1);
-  expect(adapter.retryModelSource).toBeDefined();
-  await adapter.retryModelSource?.();
+  await adapter.loadModelDirectory?.();
+  const previousReads = modelReads;
+  await adapter.loadModelDirectory?.(true);
   const snapshot = await adapter.loadSettings();
   expect(snapshot.platform_model_source?.error).toBeUndefined();
   expect(snapshot.platform_model_source?.models).toHaveLength(1);
-  expect(modelReads).toBe(2);
+  expect(modelReads).toBe(previousReads + 1);
 });
 
 it.each([false, true])('preserves an unavailable selection with replacement platform models: %s', async (hasReplacement) => {
@@ -708,7 +708,7 @@ describe('Env local Flower surface adapter', () => {
     expect((await adapter.loadSettings()).model_directory?.error).toBe('directory_unavailable');
   });
 
-  it('loads permission-only settings without requesting runtime models', async () => {
+  it('loads permission-only settings independently of a failed directory read', async () => {
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/_redeven_proxy/api/settings' && init?.method === 'GET') {
         return jsonResponse({
@@ -728,7 +728,7 @@ describe('Env local Flower surface adapter', () => {
 
     expect(snapshot.defaults.permission_type).toBe('readonly');
     expect(snapshot.model_profile).toBeNull();
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(fetchMock).toHaveBeenCalledWith('/_redeven_proxy/api/ai/models?mode=baseline', expect.anything());
   });
 

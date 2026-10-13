@@ -142,7 +142,8 @@ export type FlowerModelDirectory = Readonly<{
     reason?: string;
     missing_key_provider_ids?: readonly string[];
   }>[];
-  error?: 'directory_unavailable';
+  checking?: boolean;
+  error?: 'directory_unavailable' | 'directory_timeout';
 }>;
 
 export type FlowerModelSourceStatus =
@@ -1414,7 +1415,6 @@ export type FlowerSurfaceAdapter = Readonly<{
   openWorkingDirectoryInTerminal?: (request: FlowerWorkingDirectoryOpenRequest) => Promise<void>;
   workingDirectoryActionAvailability?: () => FlowerWorkingDirectoryActionAvailability;
   openLinkedDirectoryBrowser?: (request: FlowerLinkedContextPathOpenRequest) => Promise<void>;
-  retryModelSource?: () => Promise<void>;
   modelSourceRecovery?: FlowerModelSourceRecovery;
 }>;
 

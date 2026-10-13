@@ -86,6 +86,8 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
 
       loadingSettings: t(i18n, k('chat.loadingSettings')),
       modelsChecking: t(i18n, k('chat.modelsChecking')),
+      modelsCheckTimedOut: t(i18n, k('chat.modelsCheckTimedOut')),
+      modelsCheckFailed: t(i18n, k('chat.modelsCheckFailed')),
       modelsUnavailable: t(i18n, k('chat.modelsUnavailable')),
       warmupTitle: t(i18n, k('chat.warmupTitle')),
       warmupDetail: t(i18n, k('chat.warmupDetail')),
