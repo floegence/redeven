@@ -1204,6 +1204,7 @@ vi.mock('./workbench/EnvWorkbenchPage', () => ({
             <button
               type="button"
               data-workbench-dock-action={action.id}
+              data-workbench-dock-placement={action.dockPlacement}
               aria-pressed={Boolean(action.active)}
               onClick={(event) => action.onActivate?.(event.currentTarget)}
             >
@@ -3484,7 +3485,8 @@ describe('EnvAppShell environment entry affordances', () => {
     }
   }, 10000);
 
-  it('keeps the desktop Plugin Panel first and appends Activity pins after Flower in saved order', async () => {
+  it.each([false, true])('leads Activity with Flower, Files, and Terminal and appends desktop pins after the Plugin Panel: mobile=%s', async (isMobile) => {
+    layoutIsMobile = isMobile;
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     const projection = activityPluginProjection(2);
@@ -3508,27 +3510,29 @@ describe('EnvAppShell environment entry affordances', () => {
       const pinnedIDs = pinOrder.map((inventoryKey) => (
         `redeven.plugin.activity:${encodeURIComponent(inventoryKey)}`
       ));
-      await flushUntil(() => activityItemsState.items.some((item) => item.id === pinnedIDs[1]), 60);
+      await flushUntil(() => activityItemsState.items.some((item) => item.id === 'ai')
+        && activityItemsState.items.some((item) => item.id === 'tessiven')
+        && (isMobile || activityItemsState.items.some((item) => item.id === pinnedIDs[1])), 60);
 
       expect(activityItemsState.items.map((item) => item.id)).toEqual([
-        'plugins',
+        'ai',
+        'files',
         'terminal',
         'monitor',
-        'files',
         'codespaces',
         'ports',
         'applications',
         'containers',
-        'ai',
         'tessiven',
-        ...pinnedIDs,
+        'plugins',
+        ...(isMobile ? [] : pinnedIDs),
       ]);
     } finally {
       dispose();
     }
   }, 10000);
 
-  it('places Service Canvas last in Activity, keeps the standard sidebar, and removes the header shortcut', async () => {
+  it('places Service Canvas before the Plugin Panel in Activity and keeps the standard sidebar', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
@@ -3541,7 +3545,7 @@ describe('EnvAppShell environment entry affordances', () => {
     try {
       await flushUntil(() => activityItemsState.items.some((item) => item.id === 'tessiven'));
       const items = activityItemsState.items.map((item) => item.id);
-      expect(items.at(-1)).toBe('tessiven');
+      expect(items.slice(-2)).toEqual(['tessiven', 'plugins']);
       expect(host.querySelector('[aria-label="Tessiven"]')).toBeNull();
 
       (host.querySelector('[data-activity-id="tessiven"]') as HTMLButtonElement).click();
@@ -3554,7 +3558,7 @@ describe('EnvAppShell environment entry affordances', () => {
     }
   }, 10000);
 
-  it.each([true, false])('opens Service Canvas after Workbench plugin apps with browser popup allowed=%s', async (allowed) => {
+  it.each([true, false])('opens Service Canvas from the trailing Dock actions with browser popup allowed=%s', async (allowed) => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(examplePluginProjection('enabled'));
@@ -3579,7 +3583,10 @@ describe('EnvAppShell environment entry affordances', () => {
       await flushUntil(() => Boolean(host.querySelector('[data-workbench-dock-action="tessiven"]')));
       const dockActions = [...host.querySelectorAll<HTMLElement>('[data-workbench-dock-action]')].map((item) => item.dataset.workbenchDockAction);
       const dockItems = [...host.querySelectorAll<HTMLElement>('[data-workbench-dock-item]')].map((item) => item.dataset.workbenchDockItem);
-      expect(dockActions).toEqual(['plugins', 'tessiven']);
+      expect(dockActions).toEqual(['tessiven', 'plugins']);
+      for (const action of host.querySelectorAll<HTMLElement>('[data-workbench-dock-action]')) {
+        expect(action.dataset.workbenchDockPlacement).toBe('after-components');
+      }
       expect(dockItems).toEqual([pluginInventoryKey]);
       expect(host.querySelector('[data-workbench-icon="service-canvas"]')).not.toBeNull();
 
@@ -4390,16 +4397,16 @@ describe('EnvAppShell environment entry affordances', () => {
       await flushAsync();
       await flushUntil(() => activityItemsState.items.some((item) => item.id === 'ai'));
       expect(activityItemsState.items.map((item) => item.id)).toEqual([
+        'ai',
+        'files',
         'terminal',
         'monitor',
-        'files',
         'codespaces',
         'ports',
         'applications',
         'containers',
-        'plugins',
-        'ai',
         'tessiven',
+        'plugins',
       ]);
       (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement | null)?.click();
       await flushUntil(() => Boolean(host.querySelector('[data-plugin-panel-tile="instance:plugin_example_metrics"]')));
