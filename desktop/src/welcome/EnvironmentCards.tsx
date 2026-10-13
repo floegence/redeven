@@ -7,7 +7,7 @@ import { RuntimeGatewayJoinPanel } from './RuntimeGatewayJoinPanel';
 import { environmentAccessPresentation } from './environmentAccessPresentation';
 import { RuntimeGatewayPublicationStatus } from './RuntimeGatewayPublicationStatus';
 import type { AddressRecoveryTarget } from '../shared/desktopEnvironmentConnection';
-import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, type JSX } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, type JSX } from 'solid-js';
 import { cn, useTheme } from '@floegence/floe-webapp-core';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, Tag, Tabs, TabPanel } from '@floegence/floe-webapp-core/ui';
 import { Clock, Cloud, MonitorPointer, Pin, Refresh, Search, Settings, Terminal, Trash, Link } from '@floegence/floe-webapp-core/icons';
@@ -582,6 +582,10 @@ export function EnvironmentCardsPanel(
   );
   const RelationCard = (cardProps: { groupID: string }) => {
     const group = () => projectedGroup(cardProps.groupID);
+    const relationID = createUniqueId();
+    const tabID = (ownerID: string) => `${relationID}-tab-${encodeURIComponent(ownerID)}`;
+    const panelID = (ownerID: string) => `${relationID}-panel-${encodeURIComponent(ownerID)}`;
+    const hasTabs = () => Boolean(group().provider_entry || group().gateway_tab_id);
     const active = () => activeOwnerID(group());
     const memberIDs = createMemo(() => group().owner_ids ?? group().member_ids, undefined, {
       equals: (left, right) => left.length === right.length && left.every((id, index) => id === right[index]),
@@ -602,7 +606,7 @@ export function EnvironmentCardsPanel(
       && entry.gateway_member?.runtime_public_id === gatewayMember()?.runtime_public_id) ?? group().primary_entry;
     const gatewaySelector = <Show when={gatewayMembers().length > 1}><label class="mb-2 flex min-w-0 items-center gap-2 text-xs"><span class="shrink-0 text-muted-foreground">{props.i18n.t('gatewayConnections.tab')}</span><select class="min-w-0 flex-1 cursor-pointer rounded-md border border-border bg-background px-2 py-1 text-xs" aria-label={props.i18n.t('gatewayConnections.select')} value={gatewayMember()?.gateway_id} onChange={event => {setSelectedGateway(event.currentTarget.value);setActiveEnvironmentOverlayState(closedEnvironmentLibraryOverlayState());}}><For each={gatewayMembers()}>{member => <option value={member.gateway_id}>{member.gateway_name || member.gateway_id}</option>}</For></select></label></Show>;
     const items = createMemo(() => memberIDs().map(ownerID => {
-      if (ownerID === gatewayTabID()) return {id:ownerID, label:props.i18n.t('environmentCenter.accessTabs.gateway'), fullName:props.i18n.t('gatewayConnections.tab'), icon:(
+      if (ownerID === gatewayTabID()) return {id:ownerID, domId:tabID(ownerID), panelId:panelID(ownerID), label:props.i18n.t('environmentCenter.accessTabs.gateway'), fullName:props.i18n.t('gatewayConnections.tab'), icon:(
         <span class="redeven-owner-tab-icon" role="img" title={props.i18n.t('gatewayConnections.tab')} aria-label={props.i18n.t('environmentCenter.accessTabStatus', { name: props.i18n.t('gatewayConnections.tab'), status: props.i18n.t(`gatewayMembership.${gatewayMember()?.phase ?? 'not_joined'}`) })}>
           <Link aria-hidden="true" />
         </span>
@@ -617,6 +621,7 @@ export function EnvironmentCardsPanel(
         : cloudState() !== undefined && cloudState() !== 'connected' ? props.i18n.t(cloudConnectionTitleKey(group().primary_entry, entry())) : model().status_label;
       const fullName = () => entry().kind === 'provider_environment' ? props.i18n.t('environmentCenter.providerFilter') : model().kind_label;
       return { id: ownerID,
+        domId: tabID(ownerID), panelId: panelID(ownerID),
         get label() {
           if (entry().kind === 'provider_environment') return props.i18n.t('environmentCenter.accessTabs.cloud');
           if (entry().kind === 'local_environment') return props.i18n.t('environmentCenter.accessTabs.local');
@@ -648,7 +653,7 @@ export function EnvironmentCardsPanel(
       <Card class={cn("redeven-environment-card overflow-hidden", (active() === group().gateway_tab_id
         ? gatewayEntry().is_open : group().member_entries.find(entry => entry.id === active())?.is_open) && "redeven-environment-card--open")} data-environment-group={cardProps.groupID}>
         <div class="redeven-environment-access-heading">
-          <Show when={group().provider_entry || group().gateway_tab_id} fallback={
+          <Show when={hasTabs()} fallback={
             <Tag variant={environmentKindTagVariant(group().primary_entry.kind)} tone="soft" size="sm" class="redeven-environment-kind-tag cursor-default whitespace-nowrap" title={props.presentation.card(group().primary_entry).kind_label}>
               <span class="redeven-control-label">{props.presentation.card(group().primary_entry).kind_label}</span>
             </Tag>
@@ -670,6 +675,8 @@ export function EnvironmentCardsPanel(
           <For each={memberIDs().filter(id => id !== group().gateway_tab_id)}>
             {ownerID => (
               <TabPanel
+                id={panelID(ownerID)}
+                labelledBy={hasTabs() ? tabID(ownerID) : undefined}
                 active={active() === ownerID}
                 keepMounted
                 inert={active() !== ownerID}
@@ -680,7 +687,7 @@ export function EnvironmentCardsPanel(
               </TabPanel>
             )}
           </For>
-          <Show when={group().gateway_tab_id}>{id => <TabPanel active={active()===id()} keepMounted inert={active()!==id()} aria-label={props.i18n.t('gatewayConnections.tab')} class="redeven-environment-owner-panel">{renderOwner(id(),cardProps.groupID,{entry:gatewayEntry,member:gatewayMember,selector:gatewaySelector})}</TabPanel>}</Show>
+          <Show when={group().gateway_tab_id}>{id => <TabPanel id={panelID(id())} labelledBy={hasTabs() ? tabID(id()) : undefined} active={active()===id()} keepMounted inert={active()!==id()} aria-label={props.i18n.t('gatewayConnections.tab')} class="redeven-environment-owner-panel">{renderOwner(id(),cardProps.groupID,{entry:gatewayEntry,member:gatewayMember,selector:gatewaySelector})}</TabPanel>}</Show>
         </div>
       </Card>
     );

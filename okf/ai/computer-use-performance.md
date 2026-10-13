@@ -64,7 +64,7 @@ reruns after implementation changes use a new evidence directory.
 
 ## Schema version 2 qualification
 
-On 2026-10-13, the final measured schema-v2 pair retained 18 samples with actual
+On 2026-10-13, the first measured schema-v2 pair retained 18 samples with actual
 provider usage. Semantic tasks succeeded 9/9 and visual tasks 8/9. Requests fell
 43.9%, image bytes 91.9%, and median duration 34.6%, with zero reported foreground
 operations. The failed visual dynamic-form sample timed out while clicking Save
@@ -72,6 +72,14 @@ and stopped with `floret_effect_outcome_unknown`; its action was never replayed.
 Although the efficiency thresholds passed and semantic success did not fall,
 the report correctly remains incomplete because acceptance requires every sample
 to succeed. This is a measured limitation, not complete performance acceptance.
+
+A subsequent complete pair retained all 18 samples with actual provider usage;
+visual and semantic tasks both succeeded 9/9. Requests fell 48.5%, image bytes
+93.3%, and median duration 37.0%, with zero reported foreground operations. The
+same paired completeness and efficiency gates pass. The earlier incomplete
+report remains committed separately. This qualifies only the measured
+production-Service managed-browser fixtures; it does not establish universal
+model reliability or Desktop/extension performance.
 
 Earlier diagnostic runs are retained separately: a wrapper removed concrete
 adapter identity and disabled scripts; transport measurement restored scripts;
@@ -123,4 +131,5 @@ speed or reliability across applications, models or network conditions.
 - `redeven:scripts/run_computer_benchmark.mjs` - explicit credentialed runner and evidence output.
 - `redeven:scripts/computer_benchmark_report.mjs` - paired completeness and threshold evaluation.
 - `redeven:scripts/computer_benchmark_report.test.mjs` - failed, missing, duplicate and unmeasured samples.
-- `redeven:scripts/fixtures/computer-semantic-v2-benchmark.json` - retained schema-v2 measurements and incomplete acceptance report, with no provider credentials or private request content.
+- `redeven:scripts/fixtures/computer-semantic-v2-benchmark.json` - complete schema-v2 pair and passing efficiency report, with no provider credentials or private request content.
+- `redeven:scripts/fixtures/computer-semantic-v2-benchmark-incomplete.json` - earlier incomplete pair, retained without replaying an unknown Save effect.

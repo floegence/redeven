@@ -43,6 +43,8 @@ not an exhaustive view of every application node.
 ## Roles, states and relationships
 
 One Runtime alias inventory owns normalization and canonical selector expansion.
+Existing tab panels, list boxes/options, radio groups, tooltips and separators
+retain their semantic roles rather than degrading to `other`.
 Unknown native roles become `other` while preserving their original spelling.
 A canonical locator expands to explicit platform roles before dispatch; native
 adapters retain their existing event waits and revalidation. Duplicate matches
