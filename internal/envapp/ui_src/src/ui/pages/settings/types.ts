@@ -37,7 +37,7 @@ export type AIProvider = Readonly<{
   type: AIProviderType;
   base_url?: string;
   web_search?: AIProviderWebSearch;
-  models: AIProviderModel[];
+  models?: AIProviderModel[];
   model_selection?: FlowerModelSelection;
 }>;
 

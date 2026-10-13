@@ -1,6 +1,6 @@
 import '../../../index.css';
 import { FloeProvider, builtInShellThemePresets, useTheme } from '@floegence/floe-webapp-core';
-import { createSignal, onMount } from 'solid-js';
+import { ErrorBoundary, Show, createSignal, onMount } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, expect, it, vi } from 'vitest';
 import { page, userEvent } from 'vitest/browser';
@@ -8,7 +8,7 @@ import type { RedevenLocale } from '../../i18n/localeMeta';
 import { I18nProvider } from '../../i18n';
 import { writeStoredLanguagePreference } from '../../i18n/storage';
 import { EnvSettingsPageCtx, type EnvSettingsPageContextValue } from './EnvSettingsPageContext';
-import type { AgentSettingsResponse, AIModelProfile } from './types';
+import type { AgentSettingsResponse, AIConfig, AIModelProfile } from './types';
 import { FlowerSection } from './sections/FlowerSection';
 
 const request = vi.hoisted(() => vi.fn());
@@ -17,7 +17,11 @@ let dispose: (() => void) | undefined;
 let host: HTMLDivElement;
 afterEach(() => { dispose?.(); host?.remove(); request.mockReset(); });
 
-async function mount(width = 1000, canAdmin = true, locale: RedevenLocale = 'en-US', account = false, brave = false) {
+async function mount(width = 1000, canAdmin = true, locale: RedevenLocale = 'en-US', account = false, brave = false, options: {
+  ai?: AIConfig;
+  directory?: Promise<unknown>;
+  enterFromOtherPage?: boolean;
+} = {}) {
   await page.viewport(1280, 960);
   writeStoredLanguagePreference(locale);
   const [settings, setSettings] = createSignal<AgentSettingsResponse>({
@@ -32,10 +36,13 @@ async function mount(width = 1000, canAdmin = true, locale: RedevenLocale = 'en-
     ai_secrets: { provider_api_key_set: { deepseek: true }, web_search_provider_api_key_set: brave ? { deepseek: true } : {} },
     chatgpt_accounts: { account: { account_id: 'saved-account', email: 'person@example.com', state: 'ready', welcome_acknowledged: true } },
   });
+  const initialAI = options.ai;
+  if (initialAI) setSettings(previous => ({ ...previous, ai: initialAI }));
+  const [open, setOpen] = createSignal(!options.enterFromOtherPage);
   let failNextSave = false;
   const bundles: Record<string, unknown>[] = [];
   request.mockImplementation(async (url: string, init?: RequestInit) => {
-    if (url.endsWith('/ai/models')) return { models: [] };
+    if (url.endsWith('/ai/models')) return options.directory ?? { models: [] };
     if (url.endsWith('/current_model')) {
       const body = JSON.parse(String(init?.body));
       if (failNextSave) { failNextSave = false; throw new Error('Model save unavailable'); }
@@ -61,9 +68,50 @@ async function mount(width = 1000, canAdmin = true, locale: RedevenLocale = 'en-
   Object.assign(host.style, { width: `${width}px`, padding: '24px', background: 'var(--background)', color: 'var(--foreground)' });
   document.body.appendChild(host);
   function Theme() { const theme = useTheme(); onMount(() => theme.selectShellTheme('light', 'porcelain-light')); return null; }
-  dispose = render(() => <FloeProvider config={{ theme: { shellPresets: builtInShellThemePresets } }}><Theme /><I18nProvider><EnvSettingsPageCtx.Provider value={ctx}><FlowerSection /></EnvSettingsPageCtx.Provider></I18nProvider></FloeProvider>, host);
-  await expect.poll(() => host.querySelector('.flower-settings-model-name')?.textContent).toBe('DeepSeek V4 Flash Vision Exp');
+  dispose = render(() => <FloeProvider config={{ theme: { shellPresets: builtInShellThemePresets } }}><Theme /><I18nProvider><EnvSettingsPageCtx.Provider value={ctx}>
+    <ErrorBoundary fallback={error => <div data-settings-entry-error>{String(error)}</div>}>
+      <Show when={open()} fallback={<button onClick={() => setOpen(true)}>Flower settings</button>}><FlowerSection /></Show>
+    </ErrorBoundary>
+  </EnvSettingsPageCtx.Provider></I18nProvider></FloeProvider>, host);
+  if (!options.enterFromOtherPage) await expect.poll(() => host.querySelector('.flower-settings-model-name')?.textContent).toBe('DeepSeek V4 Flash Vision Exp');
   return { settings, bundles, failSave: () => { failNextSave = true; } };
+}
+
+for (const catalogFailure of [false, true]) {
+  it(`opens persisted model selections before the directory ${catalogFailure ? 'fails' : 'arrives'} without losing account identity`, async () => {
+    let resolveDirectory!: (value: unknown) => void;
+    let rejectDirectory!: (reason: Error) => void;
+    const directory = new Promise<unknown>((resolve, reject) => { resolveDirectory = resolve; rejectDirectory = reject; });
+    // AIProvider.Models uses omitempty; a saved selection has no inline models.
+    const ai: AIConfig = { current_model_id: 'account/gpt-6.1-sol', providers: [
+      { id: 'account', type: 'openai', auth_method: 'chatgpt', account_id: 'saved-account', model_selection: {
+        selected_models: ['gpt-6.1-sol', 'missing-model'], model_overrides: [{ model_name: 'gpt-6.1-sol', context_window: 64000 }],
+      } },
+      { id: 'deepseek', type: 'deepseek', model_selection: { selected_models: ['deepseek-v4-pro'] } },
+    ] };
+    const { bundles, settings } = await mount(1000, true, 'en-US', false, false, { ai, directory, enterFromOtherPage: true });
+    await userEvent.click(host.querySelector<HTMLButtonElement>('button')!);
+    expect(host.querySelector('[data-settings-entry-error]')?.textContent ?? '').toBe('');
+    await expect.poll(() => host.querySelectorAll('.flower-settings-provider-card').length).toBe(2);
+    await userEvent.click(host.querySelector<HTMLButtonElement>('.flower-settings-provider-disclosure')!);
+    const models = () => host.querySelector<HTMLElement>('.flower-settings-provider-details')!;
+    expect(models().textContent).toContain('gpt-6.1-sol');
+    expect(models().textContent).toContain('missing-model');
+    expect(models().textContent).toContain('64,000');
+    if (catalogFailure) rejectDirectory(new Error('Directory unavailable'));
+    else resolveDirectory({ current_model: ai.current_model_id, directory: { sources: [], models: [],
+      provider_defaults: { deepseek: [{ model_name: 'deepseek-v4-pro', context_window: 1_000_000 }] },
+      provider_catalogs: { account: [{ model_name: 'gpt-6.1-sol', context_window: 128000, max_output_tokens: 16000 }] },
+    } });
+    await expect.poll(() => request.mock.calls.some(([url]) => url.endsWith('/ai/models'))).toBe(true);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(host.querySelector('[data-settings-entry-error]')).toBeNull();
+    expect(models().textContent).toContain('missing-model');
+    expect(models().textContent).toContain('64,000');
+    if (!catalogFailure) await expect.poll(() => models().textContent).toContain('16,000');
+    expect(settings().ai?.providers?.[0].account_id).toBe('saved-account');
+    expect(bundles).toHaveLength(0);
+  });
 }
 
 it('uses the shared compact model and provider presentation in global Env settings', async () => {
