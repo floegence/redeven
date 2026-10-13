@@ -139,6 +139,7 @@ export type FlowerSettingsSurfaceProps = Readonly<{
   snapshot: FlowerSettingsSnapshot | null;
   onSaveDefaultPermission: (permissionType: FlowerPermissionType) => Promise<FlowerSettingsSnapshot>;
   onSaveComputerUseEnabled?: (enabled: boolean) => Promise<FlowerSettingsSnapshot>;
+  onSaveAutoUpdateModelCatalog?: (enabled: boolean) => Promise<FlowerSettingsSnapshot>;
   onOpenComputerSettings?: () => void;
   computerCopy?: FlowerComputerCopy;
   onSaveModelProfile: (draft: FlowerSettingsDraft) => Promise<FlowerSettingsSnapshot>;
@@ -165,6 +166,10 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
   const [computerUseSaving, setComputerUseSaving] = createSignal(false);
   const [computerUseError, setComputerUseError] = createSignal('');
   const [computerUseSavedAt, setComputerUseSavedAt] = createSignal<number | null>(null);
+  const [autoUpdateModelCatalog, setAutoUpdateModelCatalog] = createSignal(false);
+  const [autoUpdateModelCatalogSaving, setAutoUpdateModelCatalogSaving] = createSignal(false);
+  const [autoUpdateModelCatalogError, setAutoUpdateModelCatalogError] = createSignal('');
+  const [autoUpdateModelCatalogSavedAt, setAutoUpdateModelCatalogSavedAt] = createSignal<number | null>(null);
   const [localError, setLocalError] = createSignal('');
   const [orphanRetrying, setOrphanRetrying] = createSignal('');
   const [dirty, setDirty] = createSignal(false);
@@ -174,6 +179,7 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
   const [providerDialogProvider, setProviderDialogProvider] = createSignal<FlowerProviderDraft | null>(null);
   const [providerDialogError, setProviderDialogError] = createSignal('');
   const permissionDescriptionID = createUniqueId();
+  const modelCatalogDisclosureID = createUniqueId();
   const permissionButtonRefs = new Map<FlowerPermissionType, HTMLButtonElement>();
 
   createEffect(() => {
@@ -195,6 +201,7 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
     setConfirmedPermissionType(savedPermission);
     if (!permissionDirty() && !permissionSaving()) setPermissionType(savedPermission);
     if (!computerUseSaving()) setComputerUseEnabled(snapshot.defaults.computer_use_enabled !== false);
+    if (!autoUpdateModelCatalogSaving()) setAutoUpdateModelCatalog(snapshot.defaults.auto_update_model_catalog === true);
     if (!untrack(dirty)) setLocalError('');
   });
 
@@ -223,6 +230,22 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
       setComputerUseError(error instanceof Error ? error.message : String(error));
     } finally {
       setComputerUseSaving(false);
+    }
+  };
+  const persistAutoUpdateModelCatalog = async (enabled: boolean) => {
+    if (!props.onSaveAutoUpdateModelCatalog || autoUpdateModelCatalogSaving()) return;
+    const previous = autoUpdateModelCatalog();
+    setAutoUpdateModelCatalog(enabled);
+    setAutoUpdateModelCatalogSaving(true);
+    setAutoUpdateModelCatalogError('');
+    try {
+      await props.onSaveAutoUpdateModelCatalog(enabled);
+      setAutoUpdateModelCatalogSavedAt(Date.now());
+    } catch (error) {
+      setAutoUpdateModelCatalog(previous);
+      setAutoUpdateModelCatalogError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setAutoUpdateModelCatalogSaving(false);
     }
   };
   const movePermissionType = (delta: number) => {
@@ -643,6 +666,26 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
                 <Show when={props.onOpenComputerSettings}>
                   <button type="button" class="flower-settings-computer-action" onClick={() => props.onOpenComputerSettings?.()}><span>{(props.computerCopy ?? computerUseEnUS).title}</span><ChevronDown class="h-4 w-4 -rotate-90" aria-hidden="true" /></button>
                 </Show>
+              </div>
+            </section>
+          </Show>
+
+          <Show when={props.onSaveAutoUpdateModelCatalog}>
+            <section class="flower-settings-section flower-settings-model-catalog-update-section" aria-label={copy().modelCatalogAutoUpdateTitle}>
+              <FlowerSubSectionHeader
+                title={copy().modelCatalogAutoUpdateTitle}
+                description={copy().modelCatalogAutoUpdateDescription}
+                actions={<FlowerAutoSaveIndicator dirty={autoUpdateModelCatalogSaving()} copy={copy().autoSave} saving={autoUpdateModelCatalogSaving()} error={autoUpdateModelCatalogError()} savedAt={autoUpdateModelCatalogSavedAt()} />}
+              />
+              <div class="flower-settings-section-content flower-settings-computer-group">
+                <button type="button" class="flower-settings-toggle-card" role="switch" aria-checked={autoUpdateModelCatalog()}
+                  aria-describedby={modelCatalogDisclosureID}
+                  disabled={autoUpdateModelCatalogSaving()} onClick={() => void persistAutoUpdateModelCatalog(!autoUpdateModelCatalog())}>
+                  <span class="flower-settings-toggle-label min-w-0 flex-1 truncate" title={copy().modelCatalogAutoUpdateLabel}>{copy().modelCatalogAutoUpdateLabel}</span>
+                  <span class={cn('flower-settings-toggle-track', autoUpdateModelCatalog() && 'flower-settings-toggle-track-on')} aria-hidden="true"><span class="flower-settings-toggle-thumb" /></span>
+                </button>
+                <p id={modelCatalogDisclosureID} class="flower-body-copy text-muted-foreground">{copy().modelCatalogAutoUpdateDisclosure}</p>
+                <Show when={autoUpdateModelCatalogError()}><p role="alert" class="mt-2 text-xs text-destructive">{autoUpdateModelCatalogError()}</p></Show>
               </div>
             </section>
           </Show>

@@ -208,6 +208,7 @@ export type FlowerSettingsSnapshot = Readonly<{
   defaults: Readonly<{
     permission_type: FlowerPermissionType;
     computer_use_enabled?: boolean;
+    auto_update_model_catalog?: boolean;
   }>;
   model_profile: FlowerModelProfile | null;
   provider_secrets: readonly FlowerProviderSecretState[];
@@ -1367,6 +1368,7 @@ export type FlowerSurfaceAdapter = Readonly<{
   subscribeModelDirectory?: (listener: (directory: FlowerModelDirectory) => void) => () => void;
   saveDefaultPermission: (permissionType: FlowerPermissionType) => Promise<FlowerSettingsSnapshot>;
   saveComputerUseEnabled?: (enabled: boolean) => Promise<FlowerSettingsSnapshot>;
+  saveAutoUpdateModelCatalog?: (enabled: boolean) => Promise<FlowerSettingsSnapshot>;
   saveModelProfile: (draft: FlowerSettingsDraft) => Promise<FlowerSettingsSnapshot>;
   listThreads: () => Promise<readonly FlowerThreadSnapshot[]>;
   loadThread: (threadID: string) => Promise<FlowerThreadView>;

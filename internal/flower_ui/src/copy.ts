@@ -147,6 +147,10 @@ export type FlowerSettingsCopy = Readonly<{
   defaultPermissionBadge: string;
   computerUseTitle: string;
 	computerUseLabel: string;
+  modelCatalogAutoUpdateTitle: string;
+  modelCatalogAutoUpdateDescription: string;
+  modelCatalogAutoUpdateLabel: string;
+  modelCatalogAutoUpdateDisclosure: string;
   connectBrowserTitle: string;
   connectBrowserPlaceholder: string;
   connectBrowser: string;
@@ -406,6 +410,9 @@ export type FlowerSurfaceCopy = Readonly<{
     modelsCheckTimedOut: string;
     modelsCheckFailed: string;
     modelsUnavailable: string;
+    modelUnavailableMissingKeys: string;
+    modelUnavailableProviderDisabled: string;
+    modelUnavailableModelMissing: string;
     warmupTitle: string;
     warmupDetail: string;
     warmupComposerPlaceholder: string;
@@ -755,6 +762,9 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     modelsCheckTimedOut: 'The model check timed out after 10 seconds. Refresh to try again.',
     modelsCheckFailed: 'Could not finish checking models. Refresh to try again.',
     modelsUnavailable: 'This model is unavailable. Refresh the list, select another model, or open settings.',
+    modelUnavailableMissingKeys: "This model provider has no credentials configured. Add credentials in settings.",
+    modelUnavailableProviderDisabled: "This model provider is disabled. Enable it in settings or select another model.",
+    modelUnavailableModelMissing: "This model is absent from the provider model list. Check its model ID in settings or select another model.",
     warmupTitle: 'Preparing Flower',
     warmupDetail: 'Desktop is starting the Local Environment runtime before Flower loads conversations.',
     warmupComposerPlaceholder: 'Preparing Flower on Local Environment...',
@@ -1326,6 +1336,10 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     defaultPermissionBadge: 'Default',
     computerUseTitle: 'Computer and browser use',
 	computerUseLabel: 'Enable computer use',
+    modelCatalogAutoUpdateTitle: "Model list updates",
+    modelCatalogAutoUpdateDescription: "Automatic updates are off by default. Normal chat uses built-in model metadata and your saved settings.",
+    modelCatalogAutoUpdateLabel: "Automatically update provider model lists",
+    modelCatalogAutoUpdateDisclosure: "When enabled, Redeven periodically requests model lists from enabled model providers’ APIs.",
     connectBrowserTitle: 'Connect current Chrome',
     connectBrowserPlaceholder: 'http://127.0.0.1:9222',
     connectBrowser: 'Connect',

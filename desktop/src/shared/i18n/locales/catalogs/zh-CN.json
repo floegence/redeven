@@ -647,7 +647,10 @@
         "failed": "Flower 未能完成本轮对话。",
         "cancelled": "已停止",
         "interrupted": "本轮对话异常中断。"
-      }
+      },
+      "modelUnavailableMissingKeys": "此模型的模型提供商尚未配置凭据。请在设置中添加凭据。",
+      "modelUnavailableProviderDisabled": "此模型的模型提供商已停用。请在设置中启用，或选择其他模型。",
+      "modelUnavailableModelMissing": "模型提供商的模型列表中没有此模型。请在设置中检查模型 ID，或选择其他模型。"
     },
     "threadList": {
       "title": "对话",
@@ -1032,7 +1035,11 @@
       "dialogChatGPTEligibilityRequired": "此账号不符合共享 ChatGPT 套餐的条件。请检查套餐及账号权限。",
       "dialogChatGPTRegionUnavailable": "你所在地区暂不支持共享 ChatGPT 套餐。",
       "dialogChatGPTCancelSignOut": "保持登录",
-      "dialogChatGPTSignOutImpact": "此账号用于 {connections} 个连接和 {tasks} 个活动任务。退出将停止使用此账号的所有任务，包括子任务。对话会保留。"
+      "dialogChatGPTSignOutImpact": "此账号用于 {connections} 个连接和 {tasks} 个活动任务。退出将停止使用此账号的所有任务，包括子任务。对话会保留。",
+      "modelCatalogAutoUpdateTitle": "模型列表更新",
+      "modelCatalogAutoUpdateDescription": "自动更新默认关闭。正常对话使用内置模型信息和已保存的设置。",
+      "modelCatalogAutoUpdateLabel": "自动更新模型提供商的模型列表",
+      "modelCatalogAutoUpdateDisclosure": "开启后，Redeven 会定期请求已启用的模型提供商 API，以获取模型列表。"
     },
     "reasoningControl": {
       "default": "默认",

@@ -36,6 +36,7 @@ type modelCatalogManager struct {
 	flights     map[string]*catalogFlight
 	slots       chan struct{}
 	kick        chan struct{}
+	autoUpdate  bool
 }
 
 func newModelCatalogManager(root string, resolveKey func(string) (string, bool, error), discover func(context.Context, ModelCatalogRequest) (ModelCatalogResponse, error), changed func()) *modelCatalogManager {
@@ -90,6 +91,7 @@ func (m *modelCatalogManager) configure(cfg *config.AIConfig) {
 	}
 	m.snapshots = retained
 	m.connections = next
+	m.autoUpdate = cfg != nil && cfg.IsAutoUpdateModelCatalogEnabled()
 	m.mu.Unlock()
 	m.wake()
 }
@@ -210,6 +212,16 @@ func (m *modelCatalogManager) run(ctx context.Context) {
 		case <-timer.C:
 		}
 		m.mu.Lock()
+		if !m.autoUpdate {
+			m.mu.Unlock()
+			if !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
+				}
+			}
+			continue
+		}
 		now := time.Now()
 		delay := 15 * time.Minute
 		for id, c := range m.connections {

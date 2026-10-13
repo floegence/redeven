@@ -647,7 +647,10 @@
         "failed": "Flower konnte diesen Durchlauf nicht abschließen.",
         "cancelled": "Gestoppt",
         "interrupted": "Dieser Durchlauf wurde unterbrochen."
-      }
+      },
+      "modelUnavailableMissingKeys": "Für diesen Modellanbieter sind keine Zugangsdaten eingerichtet. Füge sie in den Einstellungen hinzu.",
+      "modelUnavailableProviderDisabled": "Dieser Modellanbieter ist deaktiviert. Aktiviere ihn in den Einstellungen oder wähle ein anderes Modell.",
+      "modelUnavailableModelMissing": "Dieses Modell fehlt in der Modellliste des Anbieters. Prüfe seine Modell-ID in den Einstellungen oder wähle ein anderes Modell."
     },
     "threadList": {
       "title": "Unterhaltungen",
@@ -1032,7 +1035,11 @@
       "dialogChatGPTEligibilityRequired": "Dein Konto ist nicht zur Freigabe des ChatGPT-Tarifs berechtigt. Prüfe deinen Tarif und die Kontoberechtigungen.",
       "dialogChatGPTRegionUnavailable": "Die Freigabe des ChatGPT-Tarifs ist in deiner Region nicht verfügbar.",
       "dialogChatGPTCancelSignOut": "Angemeldet bleiben",
-      "dialogChatGPTSignOutImpact": "Dieses Konto wird von {connections} Verbindungen und {tasks} aktiven Aufgaben genutzt. Die Abmeldung stoppt alle Aufgaben mit diesem Konto, einschließlich Unteraufgaben. Unterhaltungen bleiben erhalten."
+      "dialogChatGPTSignOutImpact": "Dieses Konto wird von {connections} Verbindungen und {tasks} aktiven Aufgaben genutzt. Die Abmeldung stoppt alle Aufgaben mit diesem Konto, einschließlich Unteraufgaben. Unterhaltungen bleiben erhalten.",
+      "modelCatalogAutoUpdateTitle": "Modelllisten aktualisieren",
+      "modelCatalogAutoUpdateDescription": "Automatische Updates sind standardmäßig deaktiviert. Für normale Chats werden integrierte Modellinformationen und deine gespeicherten Einstellungen verwendet.",
+      "modelCatalogAutoUpdateLabel": "Modelllisten der Anbieter automatisch aktualisieren",
+      "modelCatalogAutoUpdateDisclosure": "Wenn aktiviert, fragt Redeven regelmäßig die APIs aktivierter Modellanbieter nach ihren Modelllisten ab."
     },
     "reasoningControl": {
       "default": "Standard",

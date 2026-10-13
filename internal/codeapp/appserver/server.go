@@ -1462,6 +1462,7 @@ type settingsView struct {
 
 	PermissionPolicy *config.PermissionPolicy `json:"permission_policy"`
 	AI               *config.AIConfig         `json:"ai"`
+	AIModels         *ai.ModelsResponse       `json:"ai_models,omitempty"`
 	AIRuntime        *ai.AIRuntimeStatus      `json:"ai_runtime,omitempty"`
 	AIReadiness      AIReadinessSnapshot      `json:"ai_readiness"`
 	AISecrets        *settingsAISecretsView   `json:"ai_secrets,omitempty"`
@@ -2047,6 +2048,9 @@ func (g *Server) toSettingsView(cfg *config.Config, aiSvc *ai.Service, access ..
 		out.AI = cfg.AI
 		if aiSvc != nil {
 			out.AIRuntime = aiSvc.RuntimeStatusSnapshot()
+			// Settings carry the same local projection as the directory route.
+			// No provider discovery or session-scoped cloud access occurs here.
+			out.AIModels, _ = aiSvc.ListModels()
 		}
 
 		if secrets != nil && cfg.AI != nil && len(cfg.AI.Providers) > 0 {
@@ -3569,6 +3573,49 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		g.appendAudit(meta, "ai_computer_use_update", "success", map[string]any{"enabled": enabled}, nil)
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: settingsUpdateView{Settings: g.toSettingsView(updated, aiSvc, meta)}})
+		return
+
+	case r.Method == http.MethodPut && r.URL.Path == "/_redeven_proxy/api/ai/model_catalog_auto_update":
+		meta, ok := g.requirePermission(w, r, requiredPermissionAdmin)
+		if !ok {
+			return
+		}
+		if !g.requireAIService(w, aiSvc) {
+			return
+		}
+		dec := json.NewDecoder(r.Body)
+		dec.DisallowUnknownFields()
+		var body struct {
+			Enabled *bool `json:"enabled"`
+		}
+		if err := dec.Decode(&body); err != nil || body.Enabled == nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return
+		}
+		if err := dec.Decode(&struct{}{}); err != io.EOF {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return
+		}
+		enabled := *body.Enabled
+		var updated *config.Config
+		persist := func(next *config.AIConfig) error {
+			cfg, err := g.updateConfigLocked(func(c *config.Config) error {
+				c.AI = next
+				return nil
+			})
+			if err != nil {
+				return err
+			}
+			updated = cfg
+			return nil
+		}
+		if err := aiSvc.SetAutoUpdateModelCatalog(enabled, persist); err != nil {
+			g.appendAudit(meta, "ai_model_catalog_auto_update", "failure", map[string]any{"enabled": enabled}, err)
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+			return
+		}
+		g.appendAudit(meta, "ai_model_catalog_auto_update", "success", map[string]any{"enabled": enabled}, nil)
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: settingsUpdateView{Settings: g.toSettingsView(updated, aiSvc, meta)}})
 		return
 

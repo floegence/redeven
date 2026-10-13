@@ -395,12 +395,13 @@ export function mapEnvFlowerSettings(settings: AgentSettingsResponse): FlowerSet
     : null;
   const providerSecrets = settings.ai_secrets?.provider_api_key_set ?? {};
   const webSecrets = settings.ai_secrets?.web_search_provider_api_key_set ?? {};
-  return {
+  const snapshot: FlowerSettingsSnapshot = {
     auth_capabilities: settings.auth_capabilities,
     chatgpt_accounts: settings.chatgpt_accounts,
     defaults: {
       permission_type: normalizePermissionType(ai?.permission_type),
       computer_use_enabled: ai?.computer_use_enabled !== false,
+      auto_update_model_catalog: ai?.auto_update_model_catalog === true,
     },
     model_profile: modelProfile,
     provider_secrets: (modelProfile?.providers ?? []).map((provider) => ({
@@ -409,6 +410,7 @@ export function mapEnvFlowerSettings(settings: AgentSettingsResponse): FlowerSet
       web_search_api_key_configured: Boolean(webSecrets[provider.id]),
     })),
   };
+  return settings.ai_models ? withFlowerModelDirectory(snapshot, readFlowerModelDirectory(settings.ai_models)) : snapshot;
 }
 
 async function draftToModelProfile(draft: FlowerSettingsDraft): Promise<AIModelProfile> {
@@ -632,6 +634,16 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
     computerManagement: { ...computerManagementAdapter((method, path, body, signal) => fetchLocalApiJSON(path, { method, signal, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }), `environment:${options.envPublicID}`, options.revealHostApplication) },
     saveComputerUseEnabled: async (enabled) => {
       await fetchLocalApiJSON<unknown>('/_redeven_proxy/api/ai/computer_use', {
+        method: 'PUT',
+        body: JSON.stringify({ enabled }),
+      });
+      resource.invalidate();
+      const snapshot = await loadSettings();
+      if (options.onSettingsChanged) void Promise.resolve(options.onSettingsChanged()).catch(() => undefined);
+      return snapshot;
+    },
+    saveAutoUpdateModelCatalog: async (enabled) => {
+      await fetchLocalApiJSON<unknown>('/_redeven_proxy/api/ai/model_catalog_auto_update', {
         method: 'PUT',
         body: JSON.stringify({ enabled }),
       });

@@ -1849,6 +1849,58 @@ func TestServer_AIDefaultPermissionUpdate_PreservesModelProfile(t *testing.T) {
 		t.Fatalf("tool recovery setting changed: %#v", updated.AI.ToolRecoveryEnabled)
 	}
 
+	req = httptest.NewRequest(http.MethodPut, "/_redeven_proxy/api/ai/model_catalog_auto_update", bytes.NewBufferString(`{"enabled":true}`))
+	req.Header.Set("Origin", envOrigin)
+	rr = httptest.NewRecorder()
+	srv.serveHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("model catalog auto-update status = %d, want %d body=%s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+	updated, err = config.Load(cfgPath)
+	if err != nil {
+		t.Fatalf("load auto-update config: %v", err)
+	}
+	if updated.AI == nil || updated.AI.AutoUpdateModelCatalog == nil || !*updated.AI.AutoUpdateModelCatalog {
+		t.Fatalf("auto-update setting = %#v, want true", updated.AI.AutoUpdateModelCatalog)
+	}
+	var autoUpdateResponse struct {
+		Data settingsUpdateView `json:"data"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &autoUpdateResponse); err != nil {
+		t.Fatal(err)
+	}
+	models := autoUpdateResponse.Data.Settings.AIModels
+	if models == nil || len(models.Directory.ProviderDefaults["openai"]) == 0 || len(models.Directory.Models) == 0 {
+		t.Fatalf("settings did not carry the backend local model projection: %+v", models)
+	}
+	for _, body := range []string{`{}`, `{"enabled":null}`, `{"enabled":"true"}`, `{"enabled":true,"unexpected":true}`, `{"enabled":false} {}`} {
+		req = httptest.NewRequest(http.MethodPut, "/_redeven_proxy/api/ai/model_catalog_auto_update", bytes.NewBufferString(body))
+		req.Header.Set("Origin", envOrigin)
+		rr = httptest.NewRecorder()
+		srv.serveHTTP(rr, req)
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("invalid automatic update body %s: status = %d, want %d", body, rr.Code, http.StatusBadRequest)
+		}
+	}
+	updated, err = config.Load(cfgPath)
+	if err != nil || !updated.AI.IsAutoUpdateModelCatalogEnabled() {
+		t.Fatalf("invalid request changed the enabled setting: error=%v config=%+v", err, updated)
+	}
+	req = httptest.NewRequest(http.MethodPut, "/_redeven_proxy/api/ai/model_catalog_auto_update", bytes.NewBufferString(`{"enabled":false}`))
+	req.Header.Set("Origin", envOrigin)
+	rr = httptest.NewRecorder()
+	srv.serveHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("disable automatic updates: status = %d, want %d body=%s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+	updated, err = config.Load(cfgPath)
+	if err != nil || updated.AI.IsAutoUpdateModelCatalogEnabled() {
+		t.Fatalf("automatic updates remained enabled: error=%v config=%+v", err, updated)
+	}
+	if updated.AI.CurrentModelID != aiCfg.CurrentModelID || updated.AI.PermissionType != config.AIPermissionFullAccess || len(updated.AI.Providers) != len(aiCfg.Providers) {
+		t.Fatalf("automatic update setting changed the model profile or permissions: %+v", updated.AI)
+	}
+
 	req = httptest.NewRequest(http.MethodPut, "/_redeven_proxy/api/settings", bytes.NewBufferString(`{"ai":{"permission_type":"readonly"}}`))
 	req.Header.Set("Origin", envOrigin)
 	rr = httptest.NewRecorder()

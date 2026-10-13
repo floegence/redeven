@@ -516,7 +516,10 @@
       "failed": "Flower could not complete this turn.",
       "cancelled": "Stopped",
       "interrupted": "This turn was interrupted."
-    }
+    },
+    "modelUnavailableMissingKeys": "This model provider has no credentials configured. Add credentials in settings.",
+    "modelUnavailableProviderDisabled": "This model provider is disabled. Enable it in settings or select another model.",
+    "modelUnavailableModelMissing": "This model is absent from the provider model list. Check its model ID in settings or select another model."
   },
   "threadList": {
     "title": "Conversations",
@@ -901,7 +904,11 @@
     "dialogChatGPTEligibilityRequired": "Your account is not eligible to share its ChatGPT plan. Review your plan and account access.",
     "dialogChatGPTRegionUnavailable": "ChatGPT plan sharing is unavailable in your region.",
     "dialogChatGPTCancelSignOut": "Keep signed in",
-    "dialogChatGPTSignOutImpact": "This account is used by {connections} connections and {tasks} active tasks. Signing out stops every task using this account, including child tasks. Conversations are kept."
+    "dialogChatGPTSignOutImpact": "This account is used by {connections} connections and {tasks} active tasks. Signing out stops every task using this account, including child tasks. Conversations are kept.",
+    "modelCatalogAutoUpdateTitle": "Model list updates",
+    "modelCatalogAutoUpdateDescription": "Automatic updates are off by default. Normal chat uses built-in model metadata and your saved settings.",
+    "modelCatalogAutoUpdateLabel": "Automatically update provider model lists",
+    "modelCatalogAutoUpdateDisclosure": "When enabled, Redeven periodically requests model lists from enabled model providers’ APIs."
   },
   "filesystemPicker": {
     "path": "Directory path",

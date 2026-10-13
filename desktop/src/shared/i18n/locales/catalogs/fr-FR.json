@@ -647,7 +647,10 @@
         "failed": "Flower n’a pas pu terminer ce tour.",
         "cancelled": "Arrêté",
         "interrupted": "Ce tour a été interrompu."
-      }
+      },
+      "modelUnavailableMissingKeys": "Aucun identifiant n’est configuré pour ce fournisseur de modèles. Ajoutez-les dans les réglages.",
+      "modelUnavailableProviderDisabled": "Ce fournisseur de modèles est désactivé. Activez-le dans les réglages ou sélectionnez un autre modèle.",
+      "modelUnavailableModelMissing": "Ce modèle ne figure pas dans la liste du fournisseur. Vérifiez son ID dans les réglages ou sélectionnez un autre modèle."
     },
     "threadList": {
       "title": "Discussions",
@@ -1032,7 +1035,11 @@
       "dialogChatGPTEligibilityRequired": "Votre compte n’est pas éligible au partage de son forfait ChatGPT. Vérifiez votre forfait et les droits du compte.",
       "dialogChatGPTRegionUnavailable": "Le partage du forfait ChatGPT n’est pas disponible dans votre région.",
       "dialogChatGPTCancelSignOut": "Rester connecté",
-      "dialogChatGPTSignOutImpact": "Ce compte est utilisé par {connections} connexions et {tasks} tâches actives. La déconnexion arrête toutes les tâches utilisant ce compte, y compris les sous-tâches. Les conversations sont conservées."
+      "dialogChatGPTSignOutImpact": "Ce compte est utilisé par {connections} connexions et {tasks} tâches actives. La déconnexion arrête toutes les tâches utilisant ce compte, y compris les sous-tâches. Les conversations sont conservées.",
+      "modelCatalogAutoUpdateTitle": "Mise à jour des listes de modèles",
+      "modelCatalogAutoUpdateDescription": "Les mises à jour automatiques sont désactivées par défaut. Le chat habituel utilise les informations de modèles intégrées et vos réglages enregistrés.",
+      "modelCatalogAutoUpdateLabel": "Mettre à jour automatiquement les listes de modèles des fournisseurs",
+      "modelCatalogAutoUpdateDisclosure": "Une fois activé, Redeven demande périodiquement les listes de modèles aux API des fournisseurs de modèles activés."
     },
     "reasoningControl": {
       "default": "Par défaut",

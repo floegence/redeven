@@ -59,6 +59,30 @@ function errorResponse(code: string, data: unknown): Response {
 
 const DESKTOP_MODEL_ID = `desktop:model_${'a'.repeat(64)}`;
 
+async function loadSettingsWithDirectory(adapter: FlowerSurfaceAdapter) {
+  await adapter.loadSettings();
+  await adapter.loadModelDirectory!();
+  return adapter.loadSettings();
+}
+
+it('uses backend model defaults from settings independently of a failed directory request', async () => {
+  fetchMock.mockImplementation(async (url: string) => {
+    if (url !== '/_redeven_proxy/api/settings') throw new Error('Model directory is offline.');
+    return jsonResponse({ ai: { current_model_id: 'default/agent', providers: [{ id: 'default', type: 'openai_compatible', models: [{ model_name: 'agent' }] }] },
+      ai_models: { current_model: 'default/agent', directory: {
+        provider_defaults: { openai: [{ model_name: 'reviewed', context_window: 128000 }] },
+        models: [{ id: 'default/agent', source: 'runtime_config', provider_id: 'default', model_name: 'agent', state: 'ready' }],
+        sources: [{ id: 'default', kind: 'runtime_config', state: 'ready' }],
+      } },
+    });
+  });
+  const adapter = createEnvLocalFlowerSurfaceAdapter({ envPublicID: 'env', envLabel: 'Environment', rpc: { ai: {} } as any });
+  const snapshot = await adapter.loadSettings();
+  expect(snapshot.model_directory?.models[0].state).toBe('ready');
+  expect(snapshot.defaults.auto_update_model_catalog).toBe(false);
+  expect((await adapter.loadModelDirectory!(true)).models[0].state).toBe('ready');
+});
+
 it('loads authorized platform models without exposing editable provider credentials', async () => {
   fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
     if (url === '/_redeven_proxy/api/settings') return jsonResponse({ ai: null, ai_runtime: { platform_available: true } });
@@ -68,7 +92,7 @@ it('loads authorized platform models without exposing editable provider credenti
     throw new Error(`Unexpected request: ${init?.method} ${url}`);
   });
   const adapter = createEnvLocalFlowerSurfaceAdapter({ envPublicID: 'env', envLabel: 'Environment', rpc: { ai: {} } as any });
-  const snapshot = await adapter.loadSettings();
+  const snapshot = await loadSettingsWithDirectory(adapter);
   expect(snapshot.model_profile).toBeNull();
   expect(snapshot.provider_secrets).toEqual([]);
   expect(snapshot.platform_model_source).toMatchObject({ current_model_id: 'platform/available', models: [{ id: 'platform/available', input_modalities: ['text', 'image'] }] });
@@ -94,7 +118,7 @@ it('keeps platform synchronization failures silent and refreshes the current sna
   await adapter.loadModelDirectory?.();
   const previousReads = modelReads;
   await adapter.loadModelDirectory?.(true);
-  const snapshot = await adapter.loadSettings();
+  const snapshot = await loadSettingsWithDirectory(adapter);
   expect(snapshot.platform_model_source?.error).toBeUndefined();
   expect(snapshot.platform_model_source?.models).toHaveLength(1);
   expect(modelReads).toBe(previousReads + 1);
@@ -108,7 +132,7 @@ it.each([false, true])('preserves an unavailable selection with replacement plat
     throw new Error(`Unexpected request: ${url}`);
   });
   const adapter = createEnvLocalFlowerSurfaceAdapter({ envPublicID: 'env', envLabel: 'Environment', rpc: { ai: {} } as any });
-  const snapshot = await adapter.loadSettings();
+  const snapshot = await loadSettingsWithDirectory(adapter);
   expect(snapshot.platform_model_source).toMatchObject({ current_model_id: 'platform/selected', models });
 });
 
@@ -563,7 +587,7 @@ describe('Env local Flower surface adapter', () => {
       desktopSessionTargetRoute: 'remote_desktop',
     });
 
-    const sourceStatus = (await adapter.loadSettings()).model_source;
+    const sourceStatus = (await loadSettingsWithDirectory(adapter)).model_source;
 
     expect(sourceStatus).toMatchObject({
       kind: 'desktop_model_source',
@@ -870,7 +894,7 @@ describe('Env local Flower surface adapter', () => {
       desktopSessionTargetRoute: 'remote_desktop',
     });
 
-    const snapshot = await adapter.loadSettings();
+    const snapshot = await loadSettingsWithDirectory(adapter);
 
     expect(snapshot.model_profile).toBeNull();
     expect(snapshot.model_source).toMatchObject({
@@ -936,7 +960,7 @@ describe('Env local Flower surface adapter', () => {
       desktopSessionTargetRoute: 'remote_desktop',
     });
 
-    const snapshot = await adapter.loadSettings();
+    const snapshot = await loadSettingsWithDirectory(adapter);
 
     expect(snapshot.model_profile).toMatchObject({
       current_model_id: 'remote/gpt-5.4',
@@ -996,7 +1020,7 @@ describe('Env local Flower surface adapter', () => {
         desktopSessionTargetRoute,
       });
 
-      const snapshot = await adapter.loadSettings();
+      const snapshot = await loadSettingsWithDirectory(adapter);
 
       expect(snapshot.model_profile?.current_model_id).toBe('remote/gpt-5.4');
       expect(snapshot.model_source).toBeUndefined();
@@ -1205,7 +1229,7 @@ describe('Env local Flower surface adapter', () => {
       desktopSessionTargetRoute: 'remote_desktop',
     });
 
-    const snapshot = await adapter.loadSettings();
+    const snapshot = await loadSettingsWithDirectory(adapter);
 
     expect(snapshot.model_profile).toBeNull();
     expect(snapshot.model_source?.state).toBe('ready');

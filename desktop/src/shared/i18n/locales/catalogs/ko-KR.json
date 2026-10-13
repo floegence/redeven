@@ -647,7 +647,10 @@
         "failed": "Flower가 이번 대화를 완료하지 못했습니다.",
         "cancelled": "중지됨",
         "interrupted": "이번 대화가 중단되었습니다."
-      }
+      },
+      "modelUnavailableMissingKeys": "이 모델 공급자의 인증 정보가 설정되어 있지 않습니다. 설정에서 인증 정보를 추가하세요.",
+      "modelUnavailableProviderDisabled": "이 모델 공급자는 비활성화되어 있습니다. 설정에서 활성화하거나 다른 모델을 선택하세요.",
+      "modelUnavailableModelMissing": "이 모델이 공급자의 모델 목록에 없습니다. 설정에서 모델 ID를 확인하거나 다른 모델을 선택하세요."
     },
     "threadList": {
       "title": "대화",
@@ -1032,7 +1035,11 @@
       "dialogChatGPTEligibilityRequired": "이 계정은 ChatGPT 요금제를 공유할 수 없습니다. 요금제와 계정 권한을 확인하세요.",
       "dialogChatGPTRegionUnavailable": "현재 지역에서는 ChatGPT 요금제 공유를 사용할 수 없습니다.",
       "dialogChatGPTCancelSignOut": "로그인 유지",
-      "dialogChatGPTSignOutImpact": "이 계정은 연결 {connections}개와 진행 중인 작업 {tasks}개에서 사용됩니다. 로그아웃하면 하위 작업을 포함하여 이 계정을 사용하는 모든 작업이 중지됩니다. 대화는 유지됩니다."
+      "dialogChatGPTSignOutImpact": "이 계정은 연결 {connections}개와 진행 중인 작업 {tasks}개에서 사용됩니다. 로그아웃하면 하위 작업을 포함하여 이 계정을 사용하는 모든 작업이 중지됩니다. 대화는 유지됩니다.",
+      "modelCatalogAutoUpdateTitle": "모델 목록 업데이트",
+      "modelCatalogAutoUpdateDescription": "자동 업데이트는 기본적으로 꺼져 있습니다. 일반 채팅은 내장 모델 정보와 저장된 설정을 사용합니다.",
+      "modelCatalogAutoUpdateLabel": "모델 공급자의 모델 목록 자동 업데이트",
+      "modelCatalogAutoUpdateDisclosure": "켜면 Redeven이 활성화된 모델 공급자의 API에 주기적으로 모델 목록을 요청합니다."
     },
     "reasoningControl": {
       "default": "기본값",

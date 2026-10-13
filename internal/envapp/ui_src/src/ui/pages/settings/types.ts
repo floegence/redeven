@@ -45,6 +45,7 @@ export type AIPermissionType = 'readonly' | 'approval_required' | 'full_access';
 
 export type AIConfig = Readonly<{
   current_model_id?: string;
+  auto_update_model_catalog?: boolean;
   providers?: AIProvider[];
   permission_type?: AIPermissionType;
   computer_use_enabled?: boolean;
@@ -83,6 +84,7 @@ export type AIRuntimeStatus = Readonly<{
 }>;
 
 export type AgentSettingsResponse = Readonly<{
+  ai_models?: Readonly<{ current_model: string; directory: Omit<import('../../../../../../flower_ui/src/contracts/flowerSurfaceContracts').FlowerModelDirectory, 'current_model_id'> }>;
   auth_capabilities?: import('../../../../../../flower_ui/src/contracts/flowerSurfaceContracts').FlowerSettingsSnapshot['auth_capabilities'];
   chatgpt_accounts?: import('../../../../../../flower_ui/src/contracts/flowerSurfaceContracts').FlowerSettingsSnapshot['chatgpt_accounts'];
   config_path: string;

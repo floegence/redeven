@@ -47,7 +47,8 @@ describe('connection-owned local model reads', () => {
     const resource = createFlowerModelReadResource({ scope: () => 'connection', loadConfiguration: configRead, loadDirectory: modelRead });
     const [first, second] = await Promise.all([resource.loadSettings(), resource.loadSettings()]);
     expect(first).toEqual(second);
-    expect(first.model_directory?.checking).toBe(false);
+    await resource.loadDirectory();
+    expect((await resource.loadSettings()).model_directory?.checking).toBe(false);
     expect(configRead).toHaveBeenCalledTimes(1);
     expect(modelRead).toHaveBeenCalledTimes(1);
     expect(modelRead.mock.calls[0]?.[0]).toBe(true);
@@ -113,6 +114,16 @@ describe('connection-owned local model reads', () => {
     expect(await resource.loadSettings()).toEqual(configuration);
     expect(configRead).toHaveBeenCalledTimes(1);
     await expect(resource.loadDirectory(true)).rejects.toThrow('offline');
+  });
+  it('returns saved configuration without waiting for a hung local directory read', async () => {
+    vi.useFakeTimers();
+    const resource = createFlowerModelReadResource({ scope: () => 'connection', loadConfiguration: async () => configuration,
+      loadDirectory: () => new Promise(() => undefined) });
+    const settings = vi.fn();
+    void resource.loadSettings().then(settings);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(settings).toHaveBeenCalledWith(configuration);
+    resource.invalidate();
   });
   it('ends a hung initial settings read with a bounded error', async () => {
     vi.useFakeTimers();
