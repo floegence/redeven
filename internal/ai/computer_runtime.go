@@ -359,6 +359,15 @@ func (r *ComputerUseRuntime) executeComputerToolLocked(ctx context.Context, call
 	if err := r.authorizeComputerCall(ctx, &call); err != nil {
 		return TargetToolResult{}, err
 	}
+	control.mu.Lock()
+	approvedURL := ""
+	if len(call.allowedNavigationURLs) > 0 {
+		approvedURL = call.allowedNavigationURLs[0]
+	}
+	if control.navigationURL != "" {
+		call.allowedNavigationURLs = append(call.allowedNavigationURLs, control.navigationURL)
+	}
+	control.mu.Unlock()
 	if call.ToolName == "computer.action" {
 		resolved, err := resolveComputerCanonicalSelector(call)
 		if err != nil {
@@ -394,6 +403,13 @@ func (r *ComputerUseRuntime) executeComputerToolLocked(ctx context.Context, call
 		defer cancel()
 	}
 	result, err := executor.ExecuteTargetTool(captureCtx, call)
+	if approvedURL != "" {
+		if payload, ok := result.Result.(map[string]any); ok && payload["action_executed"] == true {
+			control.mu.Lock()
+			control.navigationURL = approvedURL
+			control.mu.Unlock()
+		}
+	}
 	var navigationFailure *computerNavigationError
 	if errors.As(err, &navigationFailure) {
 		slog.Info("computer navigation failed", "thread_id", call.ThreadID, "turn_id", call.TurnID, "run_id", call.RunID,

@@ -6,9 +6,9 @@ if [[ "${REDEVEN_COMPUTER_USE_E2E}" != "1" ]]; then
   echo "computer-use qualification disabled (set REDEVEN_COMPUTER_USE_E2E=1)"
   exit 0
 fi
-model="${REDEVEN_COMPUTER_USE_MODEL:-deepseek-v4-flash-vision-exp}"
-if [[ "$model" != "deepseek-v4-flash-vision-exp" ]]; then
-  echo "qualification requires deepseek-v4-flash-vision-exp" >&2
+model="${REDEVEN_COMPUTER_USE_MODEL:-deepseek-v4-flash}"
+if [[ "$model" != "deepseek-v4-flash" ]]; then
+  echo "qualification requires the configured deepseek-v4-flash" >&2
   exit 1
 fi
 
@@ -16,4 +16,11 @@ fi
 # adapter. A direct HTTP response with fabricated screenshots is not acceptance.
 export GOWORK=off
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export REDEVEN_COMPUTER_UI_SCENARIO="${REDEVEN_COMPUTER_UI_SCENARIO:-file-animation}"
+export REDEVEN_COMPUTER_USE_MODEL="$model"
+if [[ -z "${REDEVEN_DESKTOP_CDP:-}" && -z "${REDEVEN_COMPUTER_WEBTOP_URL:-}" ]]; then
+  export REDEVEN_FLOWER_SMOKE_SUITE=computer
+  export REDEVEN_FLOWER_SMOKE_MODEL="$model"
+  exec "$root/scripts/smoke_flower_deepseek.sh"
+fi
 exec node "$root/internal/envapp/ui_src/scripts/checkDesktopComputerStage.mjs"

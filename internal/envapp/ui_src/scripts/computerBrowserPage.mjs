@@ -1,5 +1,17 @@
 import { browserKey } from './computerBrowserKeys.mjs';
 
+export const navigationURL = value => {
+  if (typeof value !== 'string' || !value.trim() || value.length > 4096 || (/\s/u.test(value.trim()) || [...value].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127))) throw new Error('INVALID_REQUEST');
+  let parsed;
+  try { parsed = new URL(value.trim()); } catch { throw new Error('INVALID_REQUEST'); }
+  return parsed;
+};
+export const redactedNavigationURL = value => {
+  const parsed = new URL(value);
+  parsed.username = ''; parsed.password = '';
+  return parsed.href;
+};
+
 const navigationNetworkErrors = new Set([
   'ERR_TUNNEL_CONNECTION_FAILED', 'ERR_PROXY_CONNECTION_FAILED', 'ERR_CONNECTION_FAILED',
   'ERR_CONNECTION_REFUSED', 'ERR_CONNECTION_RESET', 'ERR_CONNECTION_CLOSED',
@@ -70,6 +82,7 @@ export class BrowserComputerPage {
     this.transport = transport;
     this.responseDownloads = responseDownloads;
     this.allowedOrigins = new Set(allowedOrigins);
+    this.allowedNavigationURLs = new Set();
     this.fullAccess = false;
     this.references = new Map();
     this.revision = 0;
@@ -78,6 +91,7 @@ export class BrowserComputerPage {
     this.sessions = new Map();
     this.sessionDisposers = new Map();
     this.requiredOrigin = undefined;
+    this.requiredURL = undefined;
     this.openedPages = [];
     this.downloads = new Map();
     this.guardFailure = false;
@@ -93,7 +107,17 @@ export class BrowserComputerPage {
 
   }
 
-  allowsOrigin(origin) { return this.allowedOrigins.has(origin) || (this.fullAccess && (origin.startsWith('https://') || origin.startsWith('http://'))); }
+  allowsURL(value) {
+    let parsed;
+    try { parsed = new URL(value); } catch { return false; }
+    const normalized = redactedNavigationURL(parsed.href);
+    if (this.fullAccess) return true;
+    // Opaque origins (data/about and browser pages) have no meaningful origin
+    // grant. A temporary approval therefore matches the exact destination.
+    if (this.allowedNavigationURLs.has(normalized)) return true;
+    return this.allowedOrigins.has(parsed.origin) && parsed.origin !== 'null';
+  }
+  allowsOrigin(origin) { return this.fullAccess || (origin !== 'null' && this.allowedOrigins.has(origin)); }
 
   invalidate() { this.revision++; this.references.clear(); this.observedFrames.clear(); this.changed(); }
   changed() { for (const listener of this.listeners) listener(); }
@@ -117,7 +141,7 @@ export class BrowserComputerPage {
       listen('Page.windowOpen', event => {
         // Opening a page completes an action; choosing that page is the
         // agent's next decision. It does not grant control or require a user.
-        if (this.openedPages.length < 16) this.openedPages.push({ url: String(event.url || '').slice(0, 8192) });
+        if (this.openedPages.length < 16) { try { this.openedPages.push({ url: redactedNavigationURL(event.url) }); } catch { this.openedPages.push({ url: '' }); } }
         this.invalidate();
       });
       listen('Page.downloadWillBegin', event => {
@@ -141,13 +165,12 @@ export class BrowserComputerPage {
             return;
           }
           let allowed = this.userBrowsing || this.privateInput;
-          let origin;
-          try { const url = new URL(event.request.url); origin = url.origin; allowed ||= ['http:', 'https:'].includes(url.protocol) && this.allowsOrigin(origin); }
+          try { const url = new URL(event.request.url); allowed ||= this.allowsURL(url.href) || (this.requiredURL && url.href === 'chrome-error://chromewebdata/'); }
           catch { /* Unsupported navigation has no ambient authority. */ }
           if (allowed) await session.send('Fetch.continueRequest', { requestId: event.requestId });
           else {
-            this.requiredOrigin = origin;
-            this.stopped = true; this.invalidate();
+            this.requiredURL ||= redactedNavigationURL(event.request.url);
+            this.invalidate();
             await session.send('Fetch.failRequest', { requestId: event.requestId, errorReason: 'BlockedByClient' });
           }
         })().catch(() => {
@@ -224,7 +247,7 @@ export class BrowserComputerPage {
     for (const frame of await this.frames()) await this.inFrame(frame, 'globalThis.__flowerPrivacyObserver.begin()');
   }
 
-  async safety() {
+  async safety({ authorizedNavigation = false } = {}) {
     const revision = this.revision;
     const reasons = new Set();
     const checkedSessions = new Set();
@@ -244,9 +267,12 @@ export class BrowserComputerPage {
       // the permission boundary; the internal page does not grant any origin.
       const url = frame.frame.url === 'chrome-error://chromewebdata/' && frame.frame.unreachableUrl
         ? frame.frame.unreachableUrl : frame.frame.url;
-      if (url !== 'about:blank' && !url.startsWith('about:srcdoc')) {
-        try { if (!this.allowsOrigin(new URL(url).origin)) { reasons.add('site_permission'); requiredOrigin ||= new URL(url).origin; } }
-        catch { scanFailed = true; }
+      if (!authorizedNavigation && url !== 'about:blank' && !url.startsWith('about:srcdoc')) {
+        try { if (!this.allowsURL(url)) {
+          if (new URL(url).origin === 'null') { this.requiredURL = redactedNavigationURL(url); throw new Error('TARGET_PERMISSION_REQUIRED'); }
+          reasons.add('site_permission'); requiredOrigin ||= new URL(url).origin;
+        } }
+        catch (error) { if (error.message === 'TARGET_PERMISSION_REQUIRED') throw error; scanFailed = true; }
       }
       try {
         if (!checkedSessions.has(frame.session)) {
@@ -380,16 +406,21 @@ export class BrowserComputerPage {
   }
 
   async resolve(selector) {
-    if (!selector || typeof selector !== 'object' || Object.keys(selector).some(key => !['ref', 'role', 'roles', 'name', 'root_ref'].includes(key))) throw new Error('INVALID_REQUEST');
+    if (!selector || typeof selector !== 'object' || Object.keys(selector).some(key => !['ref', 'role', 'roles', 'name', 'exact', 'root_ref'].includes(key))) throw new Error('INVALID_REQUEST');
     let entry;
     if (typeof selector.ref === 'string') {
       entry = this.references.get(selector.ref);
       if (!entry || entry.revision !== this.revision) throw new Error('STALE_REFERENCE');
+      if (selector.name !== undefined && typeof selector.name === 'string' && selector.exact === true && entry.name !== selector.name) throw new Error('STALE_REFERENCE');
     } else {
       const roles = selector.roles || [selector.role];
-      if (!Array.isArray(roles) || !roles.length || roles.some(role => typeof role !== 'string') || typeof selector.name !== 'string') throw new Error('INVALID_REQUEST');
+      if (!Array.isArray(roles) || !roles.length || roles.some(role => typeof role !== 'string')) throw new Error('INVALID_REQUEST');
       const observed = await this.observe({ limit: 1000, root_ref: selector.root_ref });
-      const matches = observed.nodes.filter(node => roles.includes(node.role) && node.name === selector.name);
+      const exact = selector.exact === true;
+      const wantedName = selector.name;
+      if (wantedName !== undefined && typeof wantedName !== 'string') throw new Error('INVALID_REQUEST');
+      const matches = observed.nodes.filter(node => roles.some(role => role === node.role || role.toLowerCase() === node.role.toLowerCase())
+        && (wantedName === undefined || (exact ? node.name === wantedName : node.name.toLocaleLowerCase().includes(wantedName.toLocaleLowerCase()))));
       if (matches.length !== 1 || observed.truncated) throw new Error(matches.length > 1 || observed.truncated ? 'AMBIGUOUS_ELEMENT' : 'ELEMENT_NOT_FOUND');
       entry = this.references.get(matches[0].ref);
     }
@@ -419,7 +450,7 @@ export class BrowserComputerPage {
           const { nodes } = await element.frame.session.send('Accessibility.getPartialAXTree', { backendNodeId: element.backendNodeId, fetchRelatives: false });
           enabled = !nodes[0]?.properties?.some(prop => prop.name === 'disabled' && prop.value?.value);
         } catch (error) {
-          if (!['ELEMENT_NOT_FOUND', 'STALE_REFERENCE'].includes(error.message)) throw error;
+          if (error.message !== 'ELEMENT_NOT_FOUND') throw error;
         }
         if ((state === 'hidden' && !found) || (state === 'visible' && found) || (state === 'enabled' && enabled)) return { state };
         if (this.stopped || this.invalid) throw new Error('TAKEOVER_REQUIRED');
@@ -432,7 +463,12 @@ export class BrowserComputerPage {
   async effect(operation) {
     if ((this.stopped && !this.privateInput) || this.invalid) throw new Error('TAKEOVER_REQUIRED');
     this.uncertainEffect = true;
-    const result = await operation();
+    let result;
+    try { result = await operation(); }
+    catch (error) {
+      if (['TARGET_PERMISSION_REQUIRED', 'TARGET_CAPABILITY_UNAVAILABLE'].includes(error.message)) this.uncertainEffect = false;
+      throw error;
+    }
     this.uncertainEffect = false;
     this.effectCount++;
     return result;
@@ -487,14 +523,27 @@ export class BrowserComputerPage {
   async navigate(command, parameters) {
     let ready;
     const loaded = new Promise(resolve => { ready = resolve; });
-    const listener = () => ready();
+    let loaderId;
+    let acknowledged = false, loadSeen = false;
+    const loadedDocuments = new Set();
+    const listener = () => { loadSeen = true; if (acknowledged && !loaderId) ready(); };
+    const lifecycle = event => {
+      if (event.name !== 'load') return;
+      loadedDocuments.add(event.loaderId);
+      if (loaderId === event.loaderId) ready();
+    };
     this.transport.on('Page.loadEventFired', listener);
     this.transport.on('Page.navigatedWithinDocument', listener);
+    this.transport.on('Page.lifecycleEvent', lifecycle);
     let interrupted;
     const cancelled = new Promise(resolve => { interrupted = () => { if (this.stopped || this.invalid) resolve(); }; this.listeners.add(interrupted); });
     let timer;
     try {
       const result = await this.effect(() => this.transport.send(command, parameters));
+      loaderId = result?.loaderId;
+      acknowledged = true;
+      if (loaderId && loadedDocuments.has(loaderId)) ready();
+      if (!loaderId && loadSeen) ready();
       if (!result || typeof result !== 'object' || Array.isArray(result)
         || (result.errorText !== undefined && typeof result.errorText !== 'string')
         || (result.isDownload !== undefined && typeof result.isDownload !== 'boolean')) throw new Error('INVALID_NAVIGATION_RESPONSE');
@@ -505,13 +554,18 @@ export class BrowserComputerPage {
       // Even a failed or still-loading navigation makes previous references
       // unsuitable for the next call. Observation must start from the page now.
       this.invalidate();
-      if (result.errorText) throw new BrowserNavigationError('response', result.errorText);
+      if (result.errorText) {
+        if (/ERR_UNKNOWN_URL_SCHEME|ERR_DISALLOWED_URL_SCHEME|ERR_BLOCKED_BY_ADMINISTRATOR/u.test(result.errorText)) throw new Error('TARGET_CAPABILITY_UNAVAILABLE');
+        if (/ERR_ACCESS_DENIED/u.test(result.errorText)) throw new Error('TARGET_PERMISSION_REQUIRED');
+        throw new BrowserNavigationError('response', result.errorText);
+      }
       await Promise.race([loaded, cancelled, new Promise((_, reject) => { timer = setTimeout(() => reject(new BrowserNavigationError('load')), 20000); })]);
       if (this.stopped || this.invalid) throw new Error('TAKEOVER_REQUIRED');
     } finally {
       clearTimeout(timer);
       this.transport.off('Page.loadEventFired', listener);
       this.transport.off('Page.navigatedWithinDocument', listener);
+      this.transport.off('Page.lifecycleEvent', lifecycle);
       this.listeners.delete(interrupted);
     }
   }

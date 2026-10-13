@@ -25,7 +25,7 @@ func TestComputerFailurePreservesLayerAndReadiness(t *testing.T) {
 		{"TARGET_PERMISSION_REQUIRED", "TARGET_PERMISSION_REQUIRED", "permission_required", false},
 		{"TARGET_CONNECTION_REQUIRED", "TARGET_CONNECTION_REQUIRED", "connection_required", false},
 		{"INVALID_REQUEST", "INVALID_ARGUMENTS", "ready", true},
-		{"Authorization: private-fixture-secret", "UNKNOWN", "ready", true},
+		{"Authorization: private-fixture-secret", "TARGET_ACTION_FAILED", "ready", true},
 	} {
 		t.Run(test.code, func(t *testing.T) {
 			registry := NewTargetRegistry()

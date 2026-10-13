@@ -428,7 +428,8 @@ func (c *atspiClient) resolve(ctx context.Context, selector map[string]any) (ats
 		}
 	}
 	name, nameOK := selector["name"].(string)
-	if len(roles) == 0 || !nameOK {
+	exact, _ := selector["exact"].(bool)
+	if len(roles) == 0 {
 		return atspiReference{}, errors.New("INVALID_REQUEST")
 	}
 	observeArgs := map[string]any{"limit": float64(1000)}
@@ -444,7 +445,10 @@ func (c *atspiClient) resolve(ctx context.Context, selector map[string]any) (ats
 	}
 	var matches []atspiReference
 	for _, node := range observed["nodes"].([]map[string]any) {
-		if slices.Contains(roles, node["role"].(string)) && node["name"] == name {
+		roleMatch := slices.Contains(roles, node["role"].(string))
+		candidateName, _ := node["name"].(string)
+		nameMatch := !nameOK || (exact && candidateName == name) || (!exact && strings.Contains(strings.ToLower(candidateName), strings.ToLower(name)))
+		if roleMatch && nameMatch {
 			matches = append(matches, c.references[node["ref"].(string)])
 		}
 	}

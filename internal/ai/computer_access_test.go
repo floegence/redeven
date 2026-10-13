@@ -2,10 +2,46 @@ package ai
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"reflect"
 	"testing"
 )
+
+func TestComputerApprovedFileURLIsTemporaryAndBoundToTargetLease(t *testing.T) {
+	runtime, _, store, _ := computerBindingFixture(t)
+	var calls []TargetToolCall
+	runtime.executors["browser-main"] = scriptTestExecutor{func(_ context.Context, call TargetToolCall) (TargetToolResult, error) {
+		calls = append(calls, call)
+		return TargetToolResult{Result: map[string]any{"action_executed": call.ToolName == "browser.navigate"}}, nil
+	}}
+	url := "file:///tmp/animation.html"
+	args, _ := json.Marshal(map[string]any{"url": url})
+	call := TargetToolCall{ThreadID: "thread-first", TurnID: "turn", RunID: "run", TargetID: "browser-main", ToolName: "browser.navigate", Arguments: args}
+	ctx := context.WithValue(computerPermissionContext(t, "approval_required"), computerAuthorizedNavigationKey{}, url)
+	if _, err := runtime.ExecuteTargetTool(ctx, call); err != nil {
+		t.Fatal(err)
+	}
+	call.ToolName, call.Arguments = "computer.observe", nil
+	if _, err := runtime.ExecuteTargetTool(computerPermissionContext(t, "approval_required"), call); err != nil {
+		t.Fatal(err)
+	}
+	if len(calls[1].allowedNavigationURLs) != 1 || calls[1].allowedNavigationURLs[0] != url {
+		t.Fatal("approved page cannot be observed")
+	}
+	access, err := store.GetComputerAccess(t.Context(), call.ThreadID)
+	if err != nil || len(access.Origins) != 0 {
+		t.Fatal("file approval became a permanent origin grant")
+	}
+	runtime.releaseComputerControl(call.ThreadID, call.RunID)
+	call.RunID = "next-run"
+	if _, err := runtime.ExecuteTargetTool(computerPermissionContext(t, "approval_required"), call); err != nil {
+		t.Fatal(err)
+	}
+	if len(calls[2].allowedNavigationURLs) != 0 {
+		t.Fatal("temporary URL outlived its target lease")
+	}
+}
 
 func TestComputerFullAccessIncludesForegroundWithoutSeparateGrants(t *testing.T) {
 	runtime, executor, store, _ := computerBindingFixture(t)

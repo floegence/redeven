@@ -267,7 +267,7 @@ func (p *terminalProcess) recordInitialInputFailure(cause error) {
 		return
 	}
 	toolErr := &aitools.ToolError{
-		Code:      aitools.ErrorCodeUnknown,
+		Code:      aitools.ErrorCodeTerminalRuntimeFailure,
 		Message:   "Failed to write initial terminal input after the process started: " + cause.Error(),
 		Retryable: false,
 	}
@@ -598,7 +598,7 @@ func (p *terminalProcess) readLoop() {
 			if !errors.Is(err, io.EOF) && !strings.Contains(strings.ToLower(err.Error()), "input/output error") {
 				p.mu.Lock()
 				if p.err == nil && p.status == terminalProcessStatusRunning {
-					p.err = &aitools.ToolError{Code: aitools.ErrorCodeUnknown, Message: err.Error(), Retryable: false}
+					p.err = &aitools.ToolError{Code: aitools.ErrorCodeTerminalRuntimeFailure, Message: err.Error(), Retryable: false}
 				}
 				p.mu.Unlock()
 			}
@@ -622,13 +622,13 @@ func (p *terminalProcess) waitLoop() {
 			exitCode = ee.ExitCode()
 			status = terminalProcessStatusError
 			toolErr = &aitools.ToolError{
-				Code:      aitools.ErrorCodeUnknown,
+				Code:      aitools.ErrorCodeCommandFailed,
 				Message:   fmt.Sprintf("Terminal process exited with code %d", exitCode),
 				Retryable: false,
 			}
 		} else {
 			status = terminalProcessStatusError
-			toolErr = &aitools.ToolError{Code: aitools.ErrorCodeUnknown, Message: err.Error(), Retryable: false}
+			toolErr = &aitools.ToolError{Code: aitools.ErrorCodeTerminalRuntimeFailure, Message: err.Error(), Retryable: false}
 		}
 	}
 	p.mu.Lock()
@@ -642,6 +642,13 @@ func (p *terminalProcess) waitLoop() {
 		p.exitCode = exitCode
 		p.endedAt = time.Now()
 	} else if p.status == terminalProcessStatusRunning {
+		if p.err != nil && p.err.Code == aitools.ErrorCodeTerminalRuntimeFailure {
+			status, toolErr = terminalProcessStatusError, p.err
+		}
+		if drainErr != nil {
+			status = terminalProcessStatusError
+			toolErr = &aitools.ToolError{Code: aitools.ErrorCodeTerminalRuntimeFailure, Message: "Terminal output could not be drained", Retryable: false}
+		}
 		p.status = status
 		p.exitCode = exitCode
 		p.endedAt = time.Now()
@@ -697,7 +704,7 @@ func (p *terminalProcess) maxRuntimeLoop() {
 	if running {
 		if _, err := p.Terminate(context.Background()); err != nil {
 			p.mu.Lock()
-			p.err = &aitools.ToolError{Code: aitools.ErrorCodeUnknown, Message: "Terminal runtime limit could not terminate the process: " + err.Error(), Retryable: false}
+			p.err = &aitools.ToolError{Code: aitools.ErrorCodeTerminalRuntimeFailure, Message: "Terminal runtime limit could not terminate the process: " + err.Error(), Retryable: false}
 			p.mu.Unlock()
 		}
 	}
@@ -867,6 +874,7 @@ func (p *terminalProcess) snapshotWithOutputLocked(output string, firstSeq int64
 func terminalProcessResultPayload(snapshot terminalProcessSnapshot) map[string]any {
 	out := map[string]any{
 		"operation":          "exec",
+		"completed":          snapshot.Status != terminalProcessStatusRunning,
 		"timed_out":          snapshot.Error != nil && snapshot.Error.Code == aitools.ErrorCodeTimeout,
 		"status":             strings.TrimSpace(snapshot.Status),
 		"process_id":         strings.TrimSpace(snapshot.ProcessID),

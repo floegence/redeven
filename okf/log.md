@@ -1421,3 +1421,5 @@ Restore normal thinking-segment completion collapse independently of terminal
 turn-process disclosure. Preserve abnormal endings and manual reopening, separate
 canonical live state from connection confirmation, and scope completion facts to
 the root or SubAgent thread that owns the message.
+
+- 2026-10-13: Document browser-native URL navigation, temporary target/URL approvals, portable locator matching and partial Computer Use execution facts.

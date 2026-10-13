@@ -3,10 +3,11 @@ import assert from 'node:assert/strict';
 import { readFile, mkdir, writeFile, mkdtemp, rm } from 'node:fs/promises';
 import http from 'node:http';
 import { once } from 'node:events';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
+import { createHash } from 'node:crypto';
 import { chromium } from 'playwright';
 import { ensureFlowerSurface, findDeepSeekProvider } from '../../../../scripts/smoke_flower_deepseek.mjs';
 import { observeDesktopComputerFrames, decodedLiveFramesForTarget } from './desktopComputerLiveEvidence.mjs';
@@ -16,6 +17,7 @@ import { qualifyComputerRecovery } from './computerRecoveryQualification.mjs';
 import { webtopRuntimeQualification } from './webtopRuntimeQualification.mjs';
 import { forwardQualificationResponse } from '../../../../scripts/qualification_response_stream.mjs';
 import { createComputerTask, configureComputerTask, openComputerStage } from './computerTaskQualification.mjs';
+import { fileAnimationFacts, assertFileAnimationEvidence, providerStreamCompleted } from './computerFileAcceptance.mjs';
 
 // This qualification drives the built Desktop welcome surface. It deliberately
 // does not replace its adapter, provider, Activity mapper, or media loader.
@@ -23,7 +25,7 @@ assert.equal(process.env.REDEVEN_COMPUTER_USE_E2E, '1');
 const cdp = process.env.REDEVEN_DESKTOP_CDP;
 const webtopURL = process.env.REDEVEN_COMPUTER_WEBTOP_URL;
 const scenario = process.env.REDEVEN_COMPUTER_UI_SCENARIO ?? 'complete';
-assert(['complete', 'lifecycle', 'recovery', 'native'].includes(scenario), 'unknown UI qualification scenario');
+assert(['complete', 'lifecycle', 'recovery', 'native', 'file-animation'].includes(scenario), 'unknown UI qualification scenario');
 assert(scenario !== 'recovery' || webtopURL, 'recovery qualification requires the isolated Linux container');
 assert(Boolean(cdp) !== Boolean(webtopURL), 'identify exactly one task-owned Desktop or Linux Webtop');
 if (webtopURL) assert.equal(process.platform, 'linux', 'Webtop qualification must execute inside Linux');
@@ -33,9 +35,13 @@ const source = process.env.REDEVEN_COMPUTER_CONFIG_ROOT;
 assert(source, 'REDEVEN_COMPUTER_CONFIG_ROOT must contain the authorized local DeepSeek configuration');
 const config = JSON.parse(await readFile(path.join(source, 'config.json'), 'utf8'));
 const secrets = JSON.parse(await readFile(path.join(source, 'secrets.json'), 'utf8'));
-const { provider, apiKey } = findDeepSeekProvider(config, secrets);
-const model = 'deepseek-v4-flash-vision-exp';
+const model = process.env.REDEVEN_COMPUTER_USE_MODEL ?? 'deepseek-v4-flash';
+assert.equal(model, 'deepseek-v4-flash', 'acceptance must use the configured Flash model');
+const { provider, apiKey } = findDeepSeekProvider(config, secrets, { model, requireCurrent: true });
 const root = fileURLToPath(new URL('../../../../', import.meta.url));
+const catalog = JSON.parse(await readFile(path.join(root, 'internal/config/model_catalog.generated.json'), 'utf8'));
+const modelCapability = catalog.providers.deepseek.find(entry => entry.model_name === model);
+assert(modelCapability?.input_modalities.includes('image') && modelCapability.supports_tools !== false && modelCapability.status !== 'unsupported', 'configured model must accept images and tools');
 const browser = cdp ? await chromium.connectOverCDP(cdp) : await chromium.launch({ headless: false });
 const page = webtopURL ? await browser.newPage({ viewport: { width: 1440, height: 1000 } })
   : browser.contexts()[0].pages().find((entry) => entry.url() === new URL('desktop/dist/welcome/index.html', `file://${root}`).href);
@@ -189,9 +195,8 @@ const server = http.createServer((request, response) => {
     <style>body{font:24px system-ui;background:#ecf3fb;color:#17304a;padding:60px}button{font:24px system-ui;background:#126846;color:white;padding:24px 40px;border:0}output{display:block;margin-top:28px}</style>
     ${liveMarker}<h1>Visual task</h1><button onclick="fetch('/complete',{method:'POST'}).then(r=>r.json()).then(r=>{document.querySelector('output').textContent='Completed '+r.completed;document.body.style.background='#d6f5e5'})">Complete step</button><output>Ready</output>`);
 });
-server.listen(0, '127.0.0.1');
-await once(server, 'listening');
-const fixtureURL = `http://127.0.0.1:${server.address().port}`;
+if (scenario !== 'file-animation') { server.listen(0, '127.0.0.1'); await once(server, 'listening'); }
+const fixtureURL = server.listening ? `http://127.0.0.1:${server.address().port}` : undefined;
 const protocol = [];
 const protocolErrors = [];
 const proxy = http.createServer(async (request, response) => {
@@ -211,6 +216,14 @@ const proxy = http.createServer(async (request, response) => {
       for (const value of [privateASCIIInput, privateIMEInput]) assert.equal(raw.includes(Buffer.from(value)), false, 'private user input entered the provider request');
       assert((body.tools ?? []).every((tool) => tool.type === 'function'));
       record = { model: body.model, wireBytes: raw.length, toolCount: body.tools?.length ?? 0, tools: (body.tools ?? []).map((tool) => tool.name),
+        animationFacts: fileAnimationFacts(body.input),
+        calls: (body.input ?? []).filter(item => item.type === 'function_call').map(item => {
+          const args = typeof item.arguments === 'string' ? JSON.parse(item.arguments) : item.arguments;
+          let urlType;
+          if (/^browser[_.]navigate$/u.test(item.name)) urlType = new URL(args.url).protocol;
+          else if (/^computer[_.]exec$/u.test(item.name) && /browser\.navigate\(['"]file:\/\//u.test(args.code ?? '')) urlType = 'file:';
+          return { call_id: item.call_id, tool: item.name, ...(urlType ? { url_type: urlType } : {}) };
+        }),
         imageCount: (body.input ?? []).reduce((count, item) => {
           const content = item.type === 'function_call_output' ? item.output : item.content;
           return count + (Array.isArray(content) ? content.filter((part) => part.type === 'input_image').length : 0);
@@ -230,8 +243,9 @@ const proxy = http.createServer(async (request, response) => {
       ...(raw.length ? { body: raw } : {}),
     });
     if (record) record.httpStatus = upstream.status;
+    const completion = record ? upstream.clone().text().then(providerStreamCompleted, () => false) : undefined;
     const streamStatus = await forwardQualificationResponse(upstream, response);
-    if (record) record.streamStatus = streamStatus;
+    if (record) { record.streamStatus = streamStatus; record.providerCompleted = await completion; }
   } catch (error) {
     if (record) record.streamStatus = 'interrupted';
     protocolErrors.push(error instanceof assert.AssertionError ? error.message : 'Qualification proxy transport failed');
@@ -249,7 +263,7 @@ const request = (method, url, body) => page.evaluate(async ({ method, url, body 
     return result.data;
   }
   const result = await window.redevenDesktopSettings.requestRuntimeFlower({ method, path: url, ...(body ? { body } : {}) });
-  if (!result.ok) throw new Error(`Runtime request failed: ${result.error.code || result.error.status}`);
+  if (!result.ok) throw new Error(`Runtime request failed: ${result.error.code || result.error.status} (${result.error.status}): ${result.error.message}`);
   return result.data;
 }, { method, url, body });
 async function waitForProgress(predicate, label, timeout = 180_000, requireActiveTurn = false) {
@@ -323,7 +337,38 @@ try {
   }
   await page.locator('.flower-new-chat-button').click();
   await page.evaluate(observeDesktopComputerFrames);
-  if (scenario === 'lifecycle') {
+  if (scenario === 'file-animation') {
+    const fixture = path.join(output, 'animation.html');
+    const fileURL = pathToFileURL(fixture).href;
+    await writeFile(fixture, `<!doctype html><title>Flower local animation acceptance</title>
+      <style>body{font:24px system-ui;background:#edf4fa;padding:40px}button{font:24px system-ui;padding:16px}svg{display:block;margin:30px}circle{animation:move 1s infinite alternate}@keyframes move{to{transform:translateX(220px)}}</style>
+      <h1>Local SVG animation</h1><svg role="img" aria-label="Flower animation" width="400" height="100"><circle cx="40" cy="50" r="24" fill="#177b62"/></svg>
+      <button onclick="document.querySelector('circle').style.animationPlayState='paused';document.querySelector('output').textContent='Animation paused';document.querySelector('output').setAttribute('aria-label','Animation paused');this.textContent='Resume animation';this.onclick=()=>{document.querySelector('circle').style.animationPlayState='running';document.querySelector('output').textContent='Animation running';document.querySelector('output').setAttribute('aria-label','Animation running');this.textContent='Pause animation'}">Pause animation</button>
+      <output role="status" aria-label="Animation running" aria-live="polite">Animation running</output>`);
+    threadID = await createComputerTask({ page, request, ownedThreads });
+    const composer = page.locator('.flower-surface textarea').first();
+    for (const [index, prompt] of [
+      `Open the local HTML ${fileURL} directly with browser.navigate using file://. Use only computer/browser tools. Do not start a server or proxy. Observe the SVG image with canonical role image and its actual name. Pause the animation, read the status to verify Animation paused, then emit a full ui.observe and ui.screenshot in the same computer.exec script. Use ui.assert on the read status. Report completion only after the structured result proves the paused state. Leave it paused.`,
+      `On the current local file page, resume the animation. Use computer.exec to click Resume animation, read the status and assert it is Animation running, then ui.observe({full:true}) and ui.screenshot in that same script. Use only computer/browser tools, and report verification only after the structured result proves it is running.`,
+    ].entries()) {
+      await composer.fill(prompt); await composer.press('Enter');
+      await page.locator('[data-flower-primary-action="stop"], .flower-composer-stop-inline').first().waitFor();
+      await waitForProgress(async () => await page.locator('.flower-surface').getAttribute('data-flower-selected-thread-status') === 'success', `file animation turn ${index + 1}`, 180000, true);
+    }
+    const confirmed = assertFileAnimationEvidence(protocol);
+    assert.deepEqual(protocolErrors, [], 'provider protocol assertions failed');
+    const runConfig = JSON.parse(await readFile(path.join(output, '../run-config.json'), 'utf8'));
+    const bundleBytes = await readFile(path.join(output, '../bundle-manifest.json'));
+    const bundle = JSON.parse(bundleBytes);
+    assert.equal(createHash('sha256').update(bundleBytes).digest('hex'), runConfig.bundleManifestSHA256, 'bundle hash mismatch');
+    assert.equal(bundle.commit, runConfig.commit.slice(0, 12), 'bundle commit mismatch');
+    await writeFile(path.join(output, 'evidence.json'), JSON.stringify({ scope: 'real-deepseek-flash-local-svg-animation', passed: true,
+      provider_id: provider.id, model, navigation_url_type: 'file:', bundle_commit: bundle.commit,
+      bundle_hash: runConfig.bundleManifestSHA256, source_diff_hash: runConfig.sourceDiffSHA256,
+      thread_id: threadID, ...confirmed, protocol }, null, 2));
+    await rm(fixture);
+    console.log('Real DeepSeek Flash file navigation, SVG observation, pause and resume acceptance passed.');
+  } else if (scenario === 'lifecycle') {
     await qualifyComputerStop({ page, request, fixtureURL, fixture: lifecycleFixture, ownedThreads, waitForProgress, results: lifecycleEvidence });
     assert(protocol.some((entry) => entry.imageToolOutput), 'follow-up did not return a real tool image to the provider');
     assert.deepEqual(protocolErrors, [], 'provider protocol assertions failed');

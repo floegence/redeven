@@ -427,12 +427,19 @@ func resolveComputerCanonicalSelector(call TargetToolCall) (TargetToolCall, erro
 		return call, nil
 	}
 	role, roleOK := selector["canonical_role"].(string)
-	_, nameOK := selector["name"].(string)
-	if !roleOK || !nameOK || len(selector) > 3 {
+	if !roleOK || len(selector) > 4 {
 		return call, computerTargetFailure(call, "INVALID_REQUEST")
 	}
 	for key := range selector {
-		if !slices.Contains([]string{"canonical_role", "name", "root_ref"}, key) {
+		if !slices.Contains([]string{"canonical_role", "name", "exact", "root_ref"}, key) {
+			return call, computerTargetFailure(call, "INVALID_REQUEST")
+		}
+	}
+	if role == "img" {
+		role = "image"
+	}
+	if name, exists := selector["name"]; exists {
+		if _, ok := name.(string); !ok {
 			return call, computerTargetFailure(call, "INVALID_REQUEST")
 		}
 	}
@@ -445,6 +452,11 @@ func resolveComputerCanonicalSelector(call TargetToolCall) (TargetToolCall, erro
 	if root, exists := selector["root_ref"]; exists {
 		text, ok := root.(string)
 		if !ok || text == "" {
+			return call, computerTargetFailure(call, "INVALID_REQUEST")
+		}
+	}
+	if exact, exists := selector["exact"]; exists {
+		if _, ok := exact.(bool); !ok {
 			return call, computerTargetFailure(call, "INVALID_REQUEST")
 		}
 	}

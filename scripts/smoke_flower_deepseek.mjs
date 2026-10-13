@@ -62,7 +62,7 @@ function aiConfig(value) {
   return value?.ai && typeof value.ai === 'object' ? value.ai : value;
 }
 
-export function findDeepSeekProvider(config, secrets) {
+export function findDeepSeekProvider(config, secrets, { model = SMOKE_MODEL, requireCurrent = false } = {}) {
   const ai = aiConfig(config) ?? {};
   const secretAI = aiConfig(secrets) ?? {};
   const providers = Array.isArray(ai.providers) ? ai.providers : [];
@@ -73,6 +73,7 @@ export function findDeepSeekProvider(config, secrets) {
   const provider = candidates[0];
   const providerID = String(provider?.id ?? '').trim();
   if (!providerID) throw new Error('DeepSeek provider ID is missing');
+  if (requireCurrent && ai.current_model_id !== `${providerID}/${model}`) throw new Error('Computer acceptance requires the configured current DeepSeek Flash model');
   const apiKey = String(secretAI?.provider_api_keys?.[providerID] ?? '');
   if (!apiKey) throw new Error('DeepSeek provider API key is missing');
   const selectedProvider = structuredClone(provider);
@@ -80,7 +81,7 @@ export function findDeepSeekProvider(config, secrets) {
   // Never invent a reduced model entry or inherit user capability overrides.
   delete selectedProvider.models;
   selectedProvider.model_selection = {};
-  return { provider: selectedProvider, apiKey, currentModelID: `${providerID}/${SMOKE_MODEL}` };
+  return { provider: selectedProvider, apiKey, currentModelID: `${providerID}/${model}` };
 }
 
 function listenProbe(port, host) {
@@ -254,7 +255,8 @@ export async function prepareIsolatedProviderState(sourceRoot, runtimeStateRoot,
   const sourceSecretsFile = path.join(sourceRoot, 'secrets.json');
   const sourceConfig = JSON.parse(await readFile(sourceConfigFile, 'utf8'));
   const sourceSecrets = JSON.parse(await readFile(sourceSecretsFile, 'utf8'));
-  const selected = findDeepSeekProvider(sourceConfig, sourceSecrets);
+  const computerAcceptance = process.env.REDEVEN_COMPUTER_UI_SCENARIO === 'file-animation';
+  const selected = findDeepSeekProvider(sourceConfig, sourceSecrets, computerAcceptance ? { model: 'deepseek-v4-flash', requireCurrent: true } : {});
   const targetConfig = structuredClone(sourceConfig);
   targetConfig.agent_home_dir = SMOKE_WORKSPACE;
   targetConfig.ai = {
@@ -274,8 +276,8 @@ export async function prepareIsolatedProviderState(sourceRoot, runtimeStateRoot,
   await writePrivateJSON(secretsFile, targetSecrets);
   await writeFile(metadataFile, `${JSON.stringify({
     schema_version: 1,
-    model: SMOKE_MODEL,
-    provider: { configured: true },
+    model: selected.currentModelID.split("/").at(-1),
+    provider: { configured: true, id: selected.provider.id },
   }, null, 2)}\n`, { mode: 0o600 });
   return { apiKey: selected.apiKey, currentModelID: selected.currentModelID };
 }

@@ -5,13 +5,16 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"path"
 	"strings"
+	"unicode"
 
 	fltools "github.com/floegence/floret/v7/tools"
 )
 
 type computerAuthorizedTargetKey struct{}
 type computerAuthorizedCandidateKey struct{}
+type computerAuthorizedNavigationKey struct{}
 
 func floretComputerResources(r *run, inv fltools.Invocation[map[string]any]) ([]fltools.ResourceRef, error) {
 	if inv.Name == "computer.targets" {
@@ -56,11 +59,62 @@ func floretComputerResources(r *run, inv fltools.Invocation[map[string]any]) ([]
 	}
 	resources := []fltools.ResourceRef{{Kind: "computer_target", Value: target.ID}}
 	if inv.Name == "browser.navigate" {
-		u, err := url.Parse(strings.TrimSpace(anyToString(inv.Args["url"])))
-		if err != nil || u.Hostname() == "" || u.User != nil || (u.Scheme != "http" && u.Scheme != "https") {
+		u, err := parseComputerNavigationURL(anyToString(inv.Args["url"]))
+		if err != nil {
 			return nil, errors.New("invalid browser navigation URL")
 		}
-		resources = append(resources, fltools.ResourceRef{Kind: "url", Value: u.Scheme + "://" + u.Host})
+		// Resource approval is scoped to the exact normalized destination. This
+		// keeps file/data/about destinations usable without turning an opaque
+		// origin into a wildcard grant.
+		resources = append(resources, fltools.ResourceRef{Kind: "url", Value: normalizedComputerNavigationURL(u)})
 	}
 	return resources, nil
+}
+
+const maxComputerNavigationURLLength = 4096
+
+func parseComputerNavigationURL(raw string) (*url.URL, error) {
+	for _, r := range raw {
+		if unicode.IsControl(r) {
+			return nil, errors.New("URL contains control characters")
+		}
+	}
+	value := strings.TrimSpace(raw)
+	if value == "" || len(value) > maxComputerNavigationURLLength {
+		return nil, errors.New("empty or oversized URL")
+	}
+	for _, r := range value {
+		if unicode.IsSpace(r) || unicode.IsControl(r) {
+			return nil, errors.New("URL contains control characters")
+		}
+	}
+	u, err := url.Parse(value)
+	if err != nil || !u.IsAbs() || u.Scheme == "" {
+		return nil, errors.New("URL must be absolute")
+	}
+	return u, nil
+}
+
+func normalizedComputerNavigationURL(u *url.URL) string {
+	if u == nil {
+		return ""
+	}
+	copy := *u
+	// Never carry credentials into activity, approval or resource records.
+	copy.User = nil
+	copy.Scheme = strings.ToLower(copy.Scheme)
+	copy.Host = strings.ToLower(copy.Host)
+	if copy.Scheme == "file" {
+		if copy.Host == "localhost" {
+			copy.Host = ""
+		}
+		if copy.Path == "" {
+			copy.Path = "/"
+		}
+		copy.Path = path.Clean(copy.Path)
+		copy.RawPath = ""
+	} else if copy.Host != "" && copy.Path == "" {
+		copy.Path = "/"
+	}
+	return copy.String()
 }

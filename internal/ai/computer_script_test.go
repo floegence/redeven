@@ -75,6 +75,9 @@ func TestComputerScriptNamespaceLifetimeAndPartialResult(t *testing.T) {
 	if calls != 3 || payload["completed"] != false || payload["script_error"] != "STALE_REFERENCE" || payload["action_executed"] != true {
 		t.Fatalf("unsafe partial result: %+v; calls=%d", payload, calls)
 	}
+	if payload["failed_operation_index"] != 1 || payload["failed_action"] != "click" || payload["needs_observation"] != true || payload["effect_outcome_unknown"] != false {
+		t.Fatalf("recovery facts lost: %#v", payload)
+	}
 	if len(runtime.scripts) != 0 {
 		t.Fatal("failed script namespace survived")
 	}
@@ -298,7 +301,7 @@ func TestComputerScriptTimeoutPreservesConfirmedPrefix(t *testing.T) {
 }
 
 func TestComputerScriptCannotSupplyHostAuthorization(t *testing.T) {
-	for _, key := range []string{"full_access", "allowed_origins", "allowed_apps", "allow_foreground"} {
+	for _, key := range []string{"full_access", "allowed_origins", "allowed_navigation_urls", "allowed_apps", "allow_foreground"} {
 		t.Run(key, func(t *testing.T) {
 			_, err := computerScriptOperation(TargetToolCall{}, map[string]any{"action": "observe", key: true})
 			var denied *targetToolPolicyError

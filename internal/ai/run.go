@@ -1626,10 +1626,16 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		}
 		var scriptErr *computerScriptExecutionError
 		if errors.As(toolErrRaw, &scriptErr) {
-			setToolError(&aitools.ToolError{Code: aitools.ErrorCodeUnknown, Message: scriptErr.Error(), Retryable: false}, "", partial)
+			setToolError(&aitools.ToolError{Code: computerScriptErrorCode(scriptErr.code), Message: scriptErr.Error(), Retryable: false}, "", partial)
 			return outcome, nil
 		}
 		toolErr := aitools.ClassifyError(aitools.Invocation{ToolName: toolName, Args: args, WorkingDir: r.workingDir, AgentHomeDir: r.agentHomeDir}, toolErrRaw)
+		if isComputerUseTool(toolName) && toolErr.Code == aitools.ErrorCodeUnknown {
+			toolErr.Code = aitools.ErrorCodeTargetActionFailed
+			if toolName == "computer.exec" {
+				toolErr.Code = aitools.ErrorCodeScriptFailed
+			}
+		}
 		recoveryAction := ""
 		if aitools.ShouldRetryWithNormalizedArgs(toolErr) {
 			recoveryAction = "retry_with_normalized_args"
@@ -3744,11 +3750,11 @@ func (r *run) handleTerminalExecProcessTool(ctx context.Context, meta *session.M
 	}
 	terminalHost := r.host.terminal
 	if terminalHost == nil {
-		return outcome, &aitools.ToolError{Code: aitools.ErrorCodeUnknown, Message: "terminal process manager unavailable", Retryable: true}
+		return outcome, &aitools.ToolError{Code: aitools.ErrorCodeTerminalRuntimeFailure, Message: "terminal process manager unavailable", Retryable: true}
 	}
 	processID, err := newTerminalProcessID()
 	if err != nil {
-		return outcome, aitools.ClassifyError(aitools.Invocation{ToolName: "terminal.exec", Args: args, WorkingDir: r.workingDir, AgentHomeDir: r.agentHomeDir}, err)
+		return outcome, &aitools.ToolError{Code: aitools.ErrorCodeTerminalRuntimeFailure, Message: "Terminal process identity could not be created", Retryable: false}
 	}
 	shell := strings.TrimSpace(r.shell)
 	if shell == "" {
@@ -3761,7 +3767,7 @@ func (r *run) handleTerminalExecProcessTool(ctx context.Context, meta *session.M
 
 	canonicalRunID, canonicalThreadID, canonicalTurnID := r.floretCanonicalIdentity()
 	if canonicalRunID == "" || canonicalThreadID == "" || canonicalTurnID == "" {
-		return outcome, &aitools.ToolError{Code: aitools.ErrorCodeUnknown, Message: "Terminal execution identity is unavailable", Retryable: false}
+		return outcome, &aitools.ToolError{Code: aitools.ErrorCodeTerminalRuntimeFailure, Message: "Terminal execution identity is unavailable", Retryable: false}
 	}
 	startRequest := terminalProcessStartRequest{
 		ProcessID:  processID,
@@ -3785,7 +3791,7 @@ func (r *run) handleTerminalExecProcessTool(ctx context.Context, meta *session.M
 	proc, err := terminalHost.Start(startRequest)
 	r.muExecution.Unlock()
 	if err != nil {
-		return outcome, aitools.ClassifyError(aitools.Invocation{ToolName: "terminal.exec", Args: args, WorkingDir: r.workingDir, AgentHomeDir: r.agentHomeDir}, err)
+		return outcome, &aitools.ToolError{Code: aitools.ErrorCodeTerminalRuntimeFailure, Message: "Terminal process could not start: " + err.Error(), Retryable: false}
 	}
 	if activityUpdater != nil {
 		snapshot := proc.Snapshot()
@@ -3797,7 +3803,11 @@ func (r *run) handleTerminalExecProcessTool(ctx context.Context, meta *session.M
 	outcome.Result = result
 	if waitErr != nil {
 		outcome.dispatchErr = waitErr
-		return outcome, &aitools.ToolError{Code: aitools.ErrorCodeCanceled, Message: "Terminal exit or output could not be confirmed: " + waitErr.Error(), Retryable: false}
+		code := aitools.ErrorCodeTerminalRuntimeFailure
+		if errors.Is(waitErr, context.Canceled) {
+			code = aitools.ErrorCodeCanceled
+		}
+		return outcome, &aitools.ToolError{Code: code, Message: "Terminal exit or output could not be confirmed: " + waitErr.Error(), Retryable: false}
 	}
 	if snapshot.Status == terminalProcessStatusRunning {
 		outcome.Success = true
@@ -3813,7 +3823,7 @@ func (r *run) handleTerminalExecProcessTool(ctx context.Context, meta *session.M
 			return outcome, snapshot.Error
 		}
 		outcome.Result = result
-		return outcome, &aitools.ToolError{Code: aitools.ErrorCodeUnknown, Message: "Terminal process failed", Retryable: false, Meta: map[string]any{"process_id": snapshot.ProcessID}}
+		return outcome, &aitools.ToolError{Code: aitools.ErrorCodeTerminalRuntimeFailure, Message: "Terminal process failed", Retryable: false, Meta: map[string]any{"process_id": snapshot.ProcessID}}
 	}
 
 	outcome.Success = true

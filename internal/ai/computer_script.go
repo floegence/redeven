@@ -9,6 +9,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	aitools "github.com/floegence/redeven/internal/ai/tools"
 	"sync"
 	"time"
 )
@@ -193,12 +195,27 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 	var navigationFailure *computerNavigationError
 	operations := 0
 	actionExecuted := false
+	failedOperationIndex := -1
+	failedAction := ""
+	requiredNavigationURL := ""
 	// Prefix facts survive interpreter timeout, exhaustion and broken IPC.
 	// Never fabricate completion of the operation whose outcome is unknown.
 	defer func() {
 		if output.Result == nil {
 			output = result
 			output.Result = map[string]any{"summary": args.Description, "completed_actions": completed, "action_executed": actionExecuted, "operations": operations, "completed": false, "script_error": "SCRIPT_STOPPED"}
+		}
+		if payload, ok := output.Result.(map[string]any); ok {
+			if failedOperationIndex >= 0 {
+				payload["failed_operation_index"] = failedOperationIndex
+				payload["failed_action"] = failedAction
+			}
+			payload["needs_observation"] = observationInvalidated || observationFailureStage != "" || (actionExecuted && lastObservation == nil)
+			payload["observation_invalidated"] = observationInvalidated
+			payload["effect_outcome_unknown"] = errors.Is(outputErr, errComputerEffectUnknown)
+			if requiredNavigationURL != "" {
+				payload["required_navigation_url"] = requiredNavigationURL
+			}
 		}
 		if pause != nil {
 			output.Safety = pause
@@ -223,6 +240,7 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 			}
 		case "operation":
 			operations++
+			failedOperationIndex, failedAction = operations-1, anyToString(msg.Operation["action"])
 			if stopped != nil || pause != nil || operations > 50 || msg.ID == "" {
 				return result, errors.New("computer script exceeded its operation boundary")
 			}
@@ -265,6 +283,7 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 				stopped = ErrInteractionTakeoverRequired
 			}
 			if payload, ok := observed.Result.(map[string]any); ok {
+				requiredNavigationURL = anyToString(payload["required_navigation_url"])
 				if payload["target_changed"] == true {
 					targetChange = map[string]any{"target_changed": true, "opened_pages": payload["opened_pages"], "opener_tab_id": payload["opener_tab_id"]}
 					stopped = errors.New("computer target changed")
@@ -316,6 +335,9 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 			}
 			if err := send(response); err != nil {
 				return result, err
+			}
+			if stopped == nil {
+				failedOperationIndex, failedAction = -1, ""
 			}
 		case "result", "error":
 			if msg.ID != call.ToolCallID {
@@ -411,7 +433,7 @@ func computerScriptOperation(parent TargetToolCall, operation map[string]any) (T
 	default:
 		return TargetToolCall{}, computerTargetFailure(parent, "INVALID_REQUEST")
 	}
-	for _, key := range []string{"target", "target_id", "thread_id", "turn_id", "run_id", "user_control", "recovery_observation", "allow_foreground", "full_access", "allowed_origins", "allowed_apps"} {
+	for _, key := range []string{"target", "target_id", "thread_id", "turn_id", "run_id", "user_control", "recovery_observation", "allow_foreground", "full_access", "allowed_origins", "allowed_navigation_urls", "allowed_apps"} {
 		if _, ok := args[key]; ok {
 			return TargetToolCall{}, computerTargetFailure(parent, "TARGET_NOT_ALLOWED")
 		}
@@ -423,6 +445,39 @@ func computerScriptOperation(parent TargetToolCall, operation map[string]any) (T
 
 // Execution failures may follow effects. They are never argument-regeneration feedback.
 type computerScriptExecutionError struct{ code string }
+
+func computerScriptErrorCode(code string) aitools.ErrorCode {
+	switch strings.ToUpper(strings.TrimSpace(code)) {
+	case "AMBIGUOUS_ELEMENT":
+		return aitools.ErrorCodeAmbiguousElement
+	case "STALE_REFERENCE":
+		return aitools.ErrorCodeStaleReference
+	case "ELEMENT_NOT_FOUND":
+		return aitools.ErrorCodeElementNotFound
+	case "CONDITION_TIMEOUT":
+		return aitools.ErrorCodeConditionTimeout
+	case "TARGET_CAPABILITY_UNAVAILABLE":
+		return aitools.ErrorCodeTargetCapabilityUnavailable
+	case "TARGET_PERMISSION_REQUIRED":
+		return aitools.ErrorCodeTargetPermissionRequired
+	case "TARGET_OBSERVATION_UNAVAILABLE":
+		return aitools.ErrorCodeTargetObservationUnavailable
+	case "NAVIGATION_FAILED":
+		return aitools.ErrorCodeNavigationFailed
+	case "NAVIGATION_TIMEOUT":
+		return aitools.ErrorCodeNavigationTimeout
+	case "INVALID_REQUEST", "INVALID_COMPUTER_ARGUMENTS":
+		return aitools.ErrorCodeInvalidArguments
+	case "TARGET_ACTION_FAILED":
+		return aitools.ErrorCodeTargetActionFailed
+	case "TAKEOVER_REQUIRED":
+		return aitools.ErrorCodeTakeoverRequired
+	case "TARGET_CONNECTION_REQUIRED":
+		return aitools.ErrorCodeTargetConnectionRequired
+	default:
+		return aitools.ErrorCodeScriptFailed
+	}
+}
 
 func (e *computerScriptExecutionError) Error() string {
 	return "Computer script stopped before completion (" + e.code + ")"
