@@ -52,6 +52,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Orange Viewer follow-up](operations/remote-desktop-orange-viewer-results.md) - Verify published Orange deployment, functional recovery, and the limits of the current RustDesk comparison.
 - [Physical desktop RustDesk comparison](operations/remote-desktop-rustdesk-comparison-results.md) - Check paired presentation, quality and resource evidence before accepting latency and performance parity.
 - [udesk26 hardware AV1 comparison](operations/remote-desktop-rustdesk-v42-results.md) - Inspect published AV1 diagnostic latency, complete resources and unresolved parity failures.
+- [udesk26 DRM cadence comparison](operations/remote-desktop-rustdesk-v43-results.md) - Inspect released cadence improvements, corrected motion validity and remaining latency, quality and memory deficits.
 - [Orange RustDesk comparison attempts](operations/remote-desktop-rustdesk-orange-results.md) - Inspect failed responses and unstable LAN conditions before applying another host's results to Orange.
 - [udesk26 v0.22.37 RustDesk comparison](operations/remote-desktop-rustdesk-v37-results.md) - Trace the failing H.264 baseline and clock limits before assessing successor releases.
 - [Desktop reconnect qualification](operations/remote-desktop-recovery-results.md) - Verify published sound continuity, Mac physical hotplug, locked reconnect and Wayland display recovery.
