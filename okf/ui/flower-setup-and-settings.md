@@ -3,19 +3,18 @@ type: UI Contract
 title: Flower setup and settings
 description: First-time model setup, actionable starter tasks, and shared provider, permission, and computer settings.
 tags: [ai, flower, settings, onboarding]
-timestamp: 2026-10-13T02:05:00Z
+timestamp: 2026-10-13T03:06:33Z
 ---
 # Summary
 
-The shared Flower surface owns first-time configuration and settings presentation
-for Desktop and Env App. An empty provider profile with no usable model and no
-selected conversation presents a neutral welcome with explicit setup actions.
-Configured new conversations offer concrete starter tasks as editable drafts;
-selecting one never launches a turn automatically.
-Settings use flat sections, typography, spacing, and separators instead of nested
-rounded panels. Presentation must preserve drafts, model-source identity, and
-permission ownership. Connection failures and configured profiles needing repair
-retain their existing recovery controls instead of being described as first setup.
+The shared Flower surface owns setup and settings for Desktop and Env App.
+An empty profile without a usable model or selected conversation offers explicit
+setup actions. Configured new conversations offer starter tasks as editable
+drafts; selecting one never launches a turn. Settings use flat sections and
+preserve drafts, model-source identity and permission ownership. Connection
+failures and configured profiles needing repair retain their recovery controls.
+Chat stays mounted across panel switches. Inactive panels cannot paint, receive
+input, or acknowledge reads; settings save progress and errors survive hiding.
 
 # Contract
 
@@ -125,6 +124,21 @@ Verification preserves choices, search and focus until explicit save. Account,
 locality and cancellation rules belong to the
 [local authentication contract](../ai/chatgpt-local-authentication.md).
 
+## Retained panels
+
+FlowerSurface owns one active chat/settings/extensions panel. Chat and its
+ordinary textarea remain mounted; settings and extensions load on first visit
+and remain mounted afterwards. Native `hidden`, `inert`, and `aria-hidden`
+exclude inactive panels from paint, pointer input, keyboard focus and accessible
+navigation. Hidden chat does not acknowledge transcript reads. Switching panels
+preserves the selected thread, draft, selection, IME, form choices, extension
+filters and tabs, pending saves and errors without adding a connection or state
+copy. Optional header trailing actions let hosts supply their existing controls.
+
+The [Activity companion contract](flower-activity-companion.md#stable-flower-placement)
+owns the complete-collapse reset and explicit shortcut activation. Returning to
+chat through that reset does not discard the previously visited settings form.
+
 ## Saving and ownership
 
 The adapter exposes independent `saveDefaultPermission`, `saveModelProfile`, and
@@ -153,6 +167,7 @@ Settings fields follow the shared [product field treatment](runtime-settings.md#
 - `redeven:internal/flower_ui/src/settings/FlowerSettingsSurface.tsx` - Shared settings actions and save controllers.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.setupGuide.browser.test.tsx:20` - Narrow setup actions and transition back to the existing draft.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSettingsSurface.presentation.browser.test.tsx:63` - Real controls, localized container layouts, themes, and keyboard saving.
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.settings.browser.test.tsx:24` - Browser discovery, explicit connection, and retained failed-connection input.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.settings.browser.test.tsx` - Browser discovery, explicit connection, and retained failed-connection input.
 - `redeven:internal/flower_ui/src/settings/FlowerModelSettings.tsx` - Shared model/provider presentation and transient edit ownership.
 - `redeven:internal/envapp/ui_src/src/ui/pages/settings/FlowerSection.browser.test.tsx` - Global Env layout, provider persistence, rollback, account retention, and reader controls.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.companionPanels.browser.test.tsx` - Retained settings and extensions, editor identity, focus exclusion, save outcomes, and published companion phases.

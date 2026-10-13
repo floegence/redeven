@@ -1120,6 +1120,61 @@ async function verifyBuiltFlowerLifecycle(browser, tls) {
       throw new Error(`built Flower did not preserve its full-page identity: ${JSON.stringify(fullPageIdentity)}`);
     }
 
+    await composer.fill('Retained settings transition draft');
+    await composer.evaluate(element => element.setSelectionRange(2, 8));
+    await page.getByRole('button', { name: 'Flower settings', exact: true }).click();
+    const settingsPanel = page.locator('[data-flower-panel="settings"]');
+    await settingsPanel.locator('.flower-settings-surface').waitFor({ state: 'visible' });
+    await page.evaluate(() => {
+      globalThis.__redevenBuiltFlowerSettings = globalThis.document.querySelector('.flower-settings-surface');
+    });
+    const retainedEditor = await composer.evaluate(element => ({
+      same: element === globalThis.__redevenBuiltFlowerIdentity.composer,
+      hidden: element.getClientRects().length === 0,
+      inert: !!element.closest('[inert]'),
+      selection: [element.selectionStart, element.selectionEnd],
+    }));
+    if (!retainedEditor.same || !retainedEditor.hidden || !retainedEditor.inert
+      || retainedEditor.selection.join(',') !== '2,8') {
+      throw new Error(`built Flower settings must retain the inactive editor: ${JSON.stringify(retainedEditor)}`);
+    }
+    // Expand a native form disclosure so this checks retained state as well as identity.
+    const settingsDisclosure = settingsPanel.locator('.flower-settings-provider-details').first();
+    await settingsDisclosure.locator('summary').click();
+    await page.getByRole('button', { name: 'File Browser', exact: true }).click();
+    await page.waitForFunction(() => (
+      globalThis.document.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-companion-phase') === 'collapsed'
+      && globalThis.document.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-side-panel') === 'chat'
+    ));
+    await settingsPanel.waitFor({ state: 'hidden' });
+    const entryAfterSettings = await composer.boundingBox();
+    if (!entryAfterSettings || entryAfterSettings.height <= 0 || await composer.inputValue() !== 'Retained settings transition draft') {
+      throw new Error('leaving built Flower settings must restore the ordinary compact entry and draft');
+    }
+    await composer.click();
+    await page.waitForFunction(() => (
+      globalThis.document.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-companion-phase') === 'expanded'
+    ));
+    await page.getByRole('button', { name: 'Flower settings', exact: true }).click();
+    await settingsPanel.waitFor({ state: 'visible' });
+    const settingsRetained = await settingsPanel.evaluate(element => ({
+      same: element.querySelector('.flower-settings-surface') === globalThis.__redevenBuiltFlowerSettings,
+      disclosureOpen: element.querySelector('.flower-settings-provider-details')?.open,
+    }));
+    if (!settingsRetained.same || !settingsRetained.disclosureOpen) {
+      throw new Error(`built Flower must retain settings form state: ${JSON.stringify(settingsRetained)}`);
+    }
+    await settingsPanel.getByRole('button', { name: 'Collapse Flower', exact: true }).click();
+    await page.waitForFunction(() => (
+      globalThis.document.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-companion-phase') === 'collapsed'
+    ));
+    await settingsPanel.waitFor({ state: 'hidden' });
+    await composer.click();
+    await page.waitForFunction(() => (
+      globalThis.document.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-companion-phase') === 'expanded'
+    ));
+    await flowerEntry.click();
+
     const draftBeforeTessiven = await composer.inputValue();
     await page.getByRole('button', { name: 'Tessiven service canvas', exact: true }).click();
     await page.locator('.tessiven').waitFor({ state: 'visible' });
@@ -1210,6 +1265,7 @@ async function verifyBuiltFlowerLifecycle(browser, tls) {
       identity_preserved: true,
       single_collapsed_outline: true,
       frozen_page_context_verified: true,
+      settings_panel_and_editor_retained: true,
       tessiven_companion_hidden: true,
     };
   } finally {

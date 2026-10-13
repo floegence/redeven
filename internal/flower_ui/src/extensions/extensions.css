@@ -6,6 +6,7 @@
 }
 .flower-extensions-header { display: flex; align-items: center; gap: 10px; padding: 10px 20px; border-bottom: 1px solid var(--extensions-divider); flex-shrink: 0; }
 .flower-extensions-header h1 { margin: 0; font-size: 15px; font-weight: 650; letter-spacing: -.02em; line-height: 1.4; white-space: nowrap; }
+.flower-extensions-header-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; flex: 0 0 auto; }
 .flower-extensions-tabs { display: flex; align-self: stretch; gap: 4px; margin-left: 24px; }
 .flower-extensions-tabs > button { display: flex; align-items: center; gap: 7px; padding: 5px 12px; border-radius: 6px; cursor: pointer; color: var(--muted-foreground); font-size: 12px; font-weight: 550; white-space: nowrap; }
 .flower-extensions-tabs > button[aria-selected='true'] { background: var(--muted); color: var(--foreground); }

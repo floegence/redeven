@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower Activity companion
 description: Activity presents one Flower surface as a dedicated page or a continuous floating companion without changing canonical ownership.
 tags: [ui, flower, activity, companion, read-state, floret]
-timestamp: 2026-10-12T00:00:00Z
+timestamp: 2026-10-13T03:06:33Z
 quality_exception: Cross-surface placement contract spanning Activity, Workbench residency, contextual launch handoff, and viewer read acknowledgement; composer presentation has its own owner.
 ---
 # Summary
@@ -37,6 +37,16 @@ The product root consumes the same authoritative visibility decision for native 
 Redeven owns one stable product Portal around exactly one `EnvAIPage`. That owner mounts outside the Activity and Workbench mode views, so starting directly in a persisted Workbench mode does not depend on Activity rendering first. Its requested target is the connected companion content host, dedicated Activity full-page host, or available and unfiltered Workbench Flower host. On mobile outside the Flower page, the existing Activity overlay host retains the hidden, inert product without reserving layout space. The Workbench widget contributes only that host; it never constructs an adapter or Flower surface. While that widget remains available and unfiltered in Workbench, its host stays foreground and engaged even when a background pointer gesture clears selection or its canvas lifecycle becomes cold. Permission loss, filtering, or host disposal withdraws the host. Target replacement is atomic: if the requested host is unavailable, the product tree remains in its previous connected host hidden, inert, and disengaged. Neither the shell Portal nor the product Portal uses an implicit body mount.
 
 [Flower companion composer and motion](flower-companion-composer.md) owns native editor identity, explicit compact entry, text and toolbar layout, autosizing, content dissolve, and surface treatment. These presentation rules do not change the placement or lifecycle owner.
+
+The compact entry always presents chat. Settings or extensions remain visible
+through the published closing phase and its content dissolve, then the active
+panel resets to chat at complete collapse. Explicit shortcut activation restores
+chat before requesting expansion, including reversal during closing. Panel reset
+neither creates a conversation nor refreshes page references; actual new-draft
+activation retains the existing reference-refresh rules. Settings and extension
+headers receive the same Shell collapse action and focus handoff as chat.
+[Flower setup and settings](flower-setup-and-settings.md#retained-panels) owns
+retained form, editor and inactive-panel semantics.
 
 ## Contextual Ask Flower
 
@@ -81,6 +91,7 @@ The companion never auto-expands for completion, failure, approval, or user inpu
 - `redeven:internal/envapp/ui_src/src/ui/workbench/redevenWorkbenchWidgets.tsx` - Workbench registers a placement host instead of mounting an independent Flower product.
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx` - collapsed presentation retains the ordinary composer and gates transcript engagement, secret input, and approval controls.
 - `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.flowerCompanion.browser.test.tsx` - browser tests cover continuous geometry, outside dismissal, breakpoint placement, and DOM identity.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.companionPanels.browser.test.tsx` - Real Flower and published companion cover settings departure, retained forms, dismissal, reversal, and closing dissolve.
 - `redeven:internal/envapp/ui_src/scripts/checkPackagedRenderer.mjs` - production-build checks load the unmocked lazy Flower feature, verify desktop placement, and cover mobile unlock, hidden paint, navigation, breakpoint changes, and retained drafts in both themes.
 - `redeven:internal/flower_ui/src/FlowerSurface.visibility.test.tsx` - focused tests cover collapsed engagement, background refresh, and composer identity.
 

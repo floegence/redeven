@@ -417,17 +417,21 @@ describe('FlowerSurface navigation', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('.flower-settings-providers-section')));
 
-    expect(runtime.querySelector('.flower-chat-shell')).toBeNull();
+    expect(runtime.querySelector('[data-flower-panel="chat"]')?.hasAttribute('hidden')).toBe(true);
+    expect(runtime.querySelector<HTMLElement>('[data-flower-panel="chat"]')?.inert).toBe(true);
+    expect(runtime.querySelector('.flower-composer textarea')).not.toBeNull();
     expect(runtime.textContent).toContain('OpenAI');
   });
 
   it('returns from settings to the chat panel with an icon-only control', async () => {
     const runtime = renderSurface();
     await flush();
+    const editor = runtime.querySelector('.flower-composer textarea');
 
     (runtime.querySelector('button[aria-label="Flower settings"]') as HTMLButtonElement).click();
     await flush();
-    expect(runtime.querySelector('.flower-chat-shell')).toBeNull();
+    expect(runtime.querySelector('[data-flower-panel="chat"]')?.hasAttribute('hidden')).toBe(true);
+    expect(runtime.querySelector('.flower-composer textarea')).toBe(editor);
 
     const back = runtime.querySelector('.flower-component-main button[aria-label="Back to chat"]') as HTMLButtonElement | null;
     expect(back).toBeTruthy();
@@ -437,6 +441,9 @@ describe('FlowerSurface navigation', () => {
     await flush();
 
     expect(runtime.querySelector('.flower-chat-shell')).toBeTruthy();
+    expect(runtime.querySelector('[data-flower-panel="chat"]')?.hasAttribute('hidden')).toBe(false);
+    expect(runtime.querySelector<HTMLElement>('[data-flower-panel="settings"]')?.inert).toBe(true);
+    expect(runtime.querySelector('.flower-composer textarea')).toBe(editor);
   });
 
   it('lets the single flower entry start a new chat from settings', async () => {
@@ -758,7 +765,8 @@ describe('FlowerSurface navigation', () => {
     (runtime.querySelector('button[aria-label="Flower settings"]') as HTMLButtonElement).click();
     await flush();
 
-    expect(runtime.querySelector('.flower-settings-current-model')?.textContent).toContain('OpenAI / gpt-5.2');
+    expect(runtime.querySelector('.flower-settings-model-name')?.textContent).toBe('gpt-5.2');
+    expect(runtime.querySelector('.flower-settings-model-provider')?.textContent).toBe('OpenAI');
     expect(runtime.querySelector('.flower-settings-policy-card')).toBeTruthy();
     expect(runtime.querySelector('.flower-settings-providers-section')).toBeTruthy();
     expect(runtime.textContent).toContain('Add provider');

@@ -8882,6 +8882,14 @@ button.flower-attachment-preview-trigger:disabled {
   padding-bottom: 1rem;
 }
 
+.flower-settings-title-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
 .flower-settings-title-feedback {
   display: flex;
   flex: 0 0 auto;

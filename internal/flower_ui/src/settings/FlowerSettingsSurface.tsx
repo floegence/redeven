@@ -3,7 +3,7 @@ import { flowerProviderAPIKeyOptional, missingFlowerProviderCredential } from '.
 import { secureRandomUUID } from '@floegence/floe-webapp-core';
 import { FlowerIcon } from '../icons/FlowerIcon';
 import type { FlowerModelCatalogDiscovery } from '../contracts/flowerSurfaceContracts';
-import type { Component } from 'solid-js';
+import type { Component, JSX } from 'solid-js';
 import { For, Show, createEffect, createMemo, createSignal, createUniqueId, onCleanup } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { Check, ChevronDown, ChevronLeft } from '@floegence/floe-webapp-core/icons';
@@ -145,6 +145,7 @@ export type FlowerSettingsSurfaceProps = Readonly<{
   saving?: boolean;
   copy?: FlowerSettingsCopy;
   onBackToChat?: () => void;
+  headerTrailingActions?: JSX.Element;
 }>;
 
 export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (props) => {
@@ -534,14 +535,17 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
                 </p>
               </div>
             </div>
-            <div class="flower-settings-title-feedback" aria-live="polite">
-              <FlowerAutoSaveIndicator
-                dirty={dirty() || permissionDirty()}
-                copy={copy().autoSave}
-                saving={props.saving || providerToggleSaving() || permissionSaving()}
-                error={localError() || permissionError() || props.saveError}
-                savedAt={Math.max(props.savedAt ?? 0, permissionSavedAt() ?? 0) || null}
-              />
+            <div class="flower-settings-title-actions">
+              <div class="flower-settings-title-feedback" aria-live="polite">
+                <FlowerAutoSaveIndicator
+                  dirty={dirty() || permissionDirty()}
+                  copy={copy().autoSave}
+                  saving={props.saving || providerToggleSaving() || permissionSaving()}
+                  error={localError() || permissionError() || props.saveError}
+                  savedAt={Math.max(props.savedAt ?? 0, permissionSavedAt() ?? 0) || null}
+                />
+              </div>
+              {props.headerTrailingActions}
             </div>
           </header>
 
