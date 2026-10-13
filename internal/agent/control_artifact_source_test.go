@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
@@ -41,6 +42,16 @@ func TestControlArtifactSourceUsesPublishedFlowersecLeaseAndPersistsSpend(t *tes
 		t.Fatalf("Save() error = %v", err)
 	}
 	a := &Agent{cfg: cfg, configPath: path}
+	savedAI := &config.AIConfig{Providers: []config.AIProvider{{
+		ID: "openai", Type: "openai", AuthMethod: config.AIAuthChatGPT, AccountID: "saved-account",
+		ModelSelection: &config.AIModelSelection{SelectedModels: []string{"gpt-6.1-sol"}},
+	}}}
+	if _, err := config.Update(path, func(current *config.Config) error {
+		current.AI = savedAI
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
 	source := &controlArtifactSource{agent: a}
 	var _ flowersec.ArtifactSource = source
 	if _, sourceErr := source.Acquire(context.Background()); sourceErr != nil {
@@ -56,6 +67,9 @@ func TestControlArtifactSourceUsesPublishedFlowersecLeaseAndPersistsSpend(t *tes
 	if restarted.ControlArtifactPool == nil || len(restarted.ControlArtifactPool.Entries) != 1 ||
 		!restarted.ControlArtifactPool.Entries[0].Spent || len(restarted.ControlArtifactPool.Entries[0].ArtifactJSON) != 0 {
 		t.Fatalf("control artifact spend was not persisted: %#v", restarted.ControlArtifactPool)
+	}
+	if !reflect.DeepEqual(restarted.AI, savedAI) {
+		t.Fatal("control artifact spend overwrote the saved ChatGPT binding")
 	}
 	if _, sourceErr := source.Acquire(context.Background()); sourceErr == nil ||
 		sourceErr.RetryDisposition().Kind != flowersec.RetryDispositionTerminal {

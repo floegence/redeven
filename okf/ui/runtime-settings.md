@@ -3,7 +3,7 @@ type: UI Contract
 title: Runtime settings
 description: Navigate and edit runtime configuration through consistent, responsive settings surfaces while preserving API and permission ownership.
 tags: [ui, runtime, settings]
-timestamp: 2026-09-27T17:29:30Z
+timestamp: 2026-10-13T00:00:00Z
 ---
 # Summary
 
@@ -96,6 +96,17 @@ Default ports are reset with zero values. Failed autosaves retain the draft and
 stop retrying until the user edits it. Editing controls and autosave require
 both a connected usable settings context and administrator permission.
 
+Settings saves and connection maintenance share the configuration package's
+per-path transaction lock. Settings mutations read the latest file under that
+lock; the Agent persists only its Gateway and Cloud connection fields while
+preserving current local settings and unknown extension fields. Its startup
+snapshot must never replace a later Flower provider binding, account removal,
+or shell, filesystem, permission, logging, or editor setting. Successful
+connection commits update the Agent's observation with the saved configuration;
+failed writes do not publish it. The Runtime state-directory process lock
+excludes another Runtime or offline connection writer. AppServer orders its
+settings commits and live AI option publication together.
+
 Directory rows show their name and path opposite actual access and actions.
 Adding or editing a custom directory uses a separate draft dialog; Cancel never
 creates or saves a root. Enabling writes still requires explicit confirmation.
@@ -140,6 +151,14 @@ browsing, and extension management interactions.
 Read access cannot edit administrator fields. All writes use existing authenticated APIs, and failed operations preserve input with an actionable error. Runtime maintenance requires explicit user confirmation through its existing shared controller.
 
 # Evidence
+
+- `redeven:internal/config/config_update.go` and
+  `redeven:internal/config/config_update_test.go` own coordinated configuration
+  transactions, settings preservation, account removal, and failed writes.
+- `redeven:internal/agent/gateway_membership_lifecycle_test.go`,
+  `redeven:internal/agent/control_artifact_source_test.go`, and
+  `redeven:internal/agent/cloud_link_test.go` verify saved ChatGPT bindings
+  survive connection maintenance, in-flight exchanges, and restart.
 
 - `internal/envapp/ui_src/src/ui/pages/EnvSettingsPage.tsx` owns destinations,
   selection, and retained panels.

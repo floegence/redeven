@@ -448,9 +448,13 @@ func (c *Config) validateRemoteBinding(allowRevoked bool) error {
 }
 
 func Load(path string) (*Config, error) {
+	unlock := lockConfig(path)
+	defer unlock()
 	return loadConfig(path, defaultConfigPersistence())
 }
 
 func Save(path string, cfg *Config) error {
+	unlock := lockConfig(path)
+	defer unlock()
 	return saveConfig(path, cfg, defaultConfigPersistence())
 }

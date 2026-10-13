@@ -612,6 +612,15 @@ func SaveCloudLinkConfig(path string, cfg *Config) error {
 	return completeBootstrapDeliveryAttempt(cfg)
 }
 
+// SaveCloudLinkConnectionConfig commits an online Cloud exchange without
+// replacing local settings saved while the exchange was in flight.
+func SaveCloudLinkConnectionConfig(path string, cfg *Config) error {
+	if err := SaveConnection(path, cfg); err != nil {
+		return err
+	}
+	return completeBootstrapDeliveryAttempt(cfg)
+}
+
 func prepareBootstrapDeliveryAttempt(configPath, cloudOrigin, accessPointOrigin, envPublicID string, prev *Config) (bootstrapDeliveryAttempt, string, error) {
 	path := filepath.Clean(configPath) + ".cloud-link-delivery-v2.json"
 	wanted := bootstrapDeliveryAttempt{

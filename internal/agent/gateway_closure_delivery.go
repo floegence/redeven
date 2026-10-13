@@ -38,7 +38,7 @@ func (a *Agent) observeGatewayClosure(ctx context.Context) {
 	// No receipt can be sent until the exact revoked state is persisted later.
 	err = next.QueueGatewayClosure()
 	if err == nil {
-		err = config.Save(a.configPath, &next)
+		err = config.SaveConnection(a.configPath, &next)
 	}
 	a.setRemoteConfigLocked(&next)
 	if err != nil {
@@ -69,7 +69,7 @@ func (a *Agent) saveGatewayClosure(fence gc.BindingFence, update *gatewaycloud.C
 	} else {
 		next.GatewayClosureOutbox[found] = update.Clone()
 	}
-	if err := config.Save(a.configPath, &next); err != nil {
+	if err := config.SaveConnection(a.configPath, &next); err != nil {
 		return err
 	}
 	a.setRemoteConfigLocked(&next)
@@ -134,7 +134,7 @@ func (a *Agent) drainGatewayRemoval(ctx context.Context, cursor int) int {
 	for i, current := range next.GatewayRemovalOutbox {
 		if current.MemberID == item.MemberID && slices.Equal(current.GatewayEndpoints, item.GatewayEndpoints) {
 			next.GatewayRemovalOutbox = append(next.GatewayRemovalOutbox[:i], next.GatewayRemovalOutbox[i+1:]...)
-			if config.Save(a.configPath, &next) == nil {
+			if config.SaveConnection(a.configPath, &next) == nil {
 				a.setRemoteConfigLocked(&next)
 			}
 			break

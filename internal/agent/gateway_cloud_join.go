@@ -89,7 +89,7 @@ func (a *Agent) advanceGatewayPublication(ctx context.Context) error {
 				return err
 			}
 		}
-		if err := config.Save(a.configPath, &next); err != nil {
+		if err := config.SaveConnection(a.configPath, &next); err != nil {
 			return err
 		}
 		a.setRemoteConfigLocked(&next)

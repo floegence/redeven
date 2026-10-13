@@ -56,6 +56,45 @@ func TestGatewayConnectionChangesInvalidateOnlyTheControlOwner(t *testing.T) {
 	}
 }
 
+func TestGatewayMaintenancePreservesSavedChatGPTBindingAfterRestart(t *testing.T) {
+	store, _ := gatewayfixture.New(t, "https://gateway.internal:7443", "127.0.0.1:7443")
+	member := gatewayfixture.Enroll(t, store, "runtime")
+	path := filepath.Join(t.TempDir(), "config.json")
+	startup := &config.Config{Gateways: []*gatewaymembership.RuntimeConfig{member}, LocalEnvironmentPublicID: "runtime"}
+	if err := config.Save(path, startup); err != nil {
+		t.Fatal(err)
+	}
+	a := &Agent{cfg: startup, configPath: path}
+	saved, err := config.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved.AI = &config.AIConfig{CurrentModelID: "openai/gpt-6.1-sol", Providers: []config.AIProvider{{
+		ID: "openai", Type: "openai", AuthMethod: config.AIAuthChatGPT, AccountID: "saved-account",
+		ModelSelection: &config.AIModelSelection{SelectedModels: []string{"gpt-6.1-sol"}},
+	}}}
+	saved.Shell = "/bin/zsh"
+	saved.CodeServerPortMin, saved.CodeServerPortMax = 32000, 32100
+	if err := config.Save(path, saved); err != nil {
+		t.Fatal(err)
+	}
+	refreshed := member.Clone()
+	refreshed.LastSpentChannelID = "next-channel"
+	if err := a.persistGatewayMember(refreshed); err != nil {
+		t.Fatal(err)
+	}
+	restarted, err := config.LoadForStartup(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(restarted.AI, saved.AI) || restarted.Shell != saved.Shell || restarted.CodeServerPortMin != saved.CodeServerPortMin || restarted.CodeServerPortMax != saved.CodeServerPortMax {
+		t.Fatal("connection maintenance overwrote saved local settings or ChatGPT binding")
+	}
+	if restarted.GatewayMember(member.GatewayID).LastSpentChannelID != "next-channel" {
+		t.Fatal("connection maintenance was not persisted")
+	}
+}
+
 func TestGatewayLeaveFencesCloudBeforeRemovalDelivery(t *testing.T) {
 	store, _ := gatewayfixture.New(t, "https://gateway.internal:7443", "127.0.0.1:7443")
 	member := gatewayfixture.Enroll(t, store, "runtime")
