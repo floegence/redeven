@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower provider configuration
 description: Configure provider access before choosing models, with stable navigation and explicit authentication states.
 tags: [ai, flower, settings, authentication]
-timestamp: 2026-10-13T06:26:33Z
+timestamp: 2026-10-13T10:48:00Z
 ---
 # Summary
 
@@ -58,9 +58,14 @@ locality and cancellation rules belong to the
 The connection panel groups account identity, state guidance, and actions. Initial
 sign-in has one prominent browser action. Runtime-reported preparation, browser
 authorization, and verification have distinct status text; waiting explains how
-to finish in the browser, and cancellation remains available. Ready accounts show
-their identity and plan source, with a first-use acknowledgement followed by
-connection and usage actions. Failures keep the recovery action in the same panel.
+to finish in the browser, and cancellation remains available. Ready accounts use a
+compact summary with the account identity, plan source, one connected status, and
+an aligned toolbar for usage and account actions. Reauthorization remains a quiet
+secondary action after connection. The first-use explanation is a separate notice;
+its confirmation aligns with its copy, retains keyboard access, and collapses
+without an abrupt layout jump. Closing notice content becomes inert immediately,
+and reduced-motion preferences skip the animation. Failures keep the recovery
+action in the account panel.
 The primary action retains its DOM identity across these states. Starting sign-in
 from an account action moves focus to its available cancellation control.
 Completion, cancellation, or acknowledgement returns owned focus to the primary
