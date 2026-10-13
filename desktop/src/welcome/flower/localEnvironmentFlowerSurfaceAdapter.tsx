@@ -393,12 +393,13 @@ export function mapRuntimeFlowerSettings(settings: AgentSettingsResponse): Flowe
     : null;
   const providerSecrets = settings.ai_secrets?.provider_api_key_set ?? {};
   const webSecrets = settings.ai_secrets?.web_search_provider_api_key_set ?? {};
-  return {
+  const snapshot: FlowerSettingsSnapshot = {
     auth_capabilities: settings.auth_capabilities,
     chatgpt_accounts: settings.chatgpt_accounts,
     defaults: {
       permission_type: normalizePermissionType(ai?.permission_type),
       computer_use_enabled: ai?.computer_use_enabled !== false,
+      auto_update_model_catalog: ai?.auto_update_model_catalog === true,
     },
     model_profile: modelProfile,
     provider_secrets: (modelProfile?.providers ?? []).map((provider) => ({
@@ -407,6 +408,7 @@ export function mapRuntimeFlowerSettings(settings: AgentSettingsResponse): Flowe
       web_search_api_key_configured: Boolean(webSecrets[provider.id]),
     })),
   };
+  return settings.ai_models ? withFlowerModelDirectory(snapshot, readFlowerModelDirectory(settings.ai_models)) : snapshot;
 }
 
 function draftProviderToAI(provider: FlowerProviderDraft): NonNullable<AIConfig['providers']>[number] {
@@ -716,7 +718,7 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
   options: LocalEnvironmentFlowerSurfaceAdapterOptions = {},
 ): FlowerSurfaceAdapter {
   const resource = options.modelReadResource ?? createDesktopFlowerModelReadResource(bridge, () => options.runtimeEnvironmentID ?? 'default', options.runtimeEnvironmentID);
-  const loadSettings = async () => { const snapshot = await resource.loadSettings(); return withFlowerModelDirectory(snapshot, snapshot.model_directory!); };
+  const loadSettings = () => resource.loadSettings();
   const reloadSettings = () => { resource.invalidate(); return loadSettings(); };
   return createRuntimeFlowerSurfaceAdapter({
     runtime: {
@@ -841,6 +843,12 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
     },
     saveComputerUseEnabled: async (enabled) => {
       await runtimeJSON<unknown>(bridge, 'PUT', '/_redeven_proxy/api/ai/computer_use', {
+        enabled,
+      });
+      return reloadSettings();
+    },
+    saveAutoUpdateModelCatalog: async (enabled) => {
+      await runtimeJSON<unknown>(bridge, 'PUT', '/_redeven_proxy/api/ai/model_catalog_auto_update', {
         enabled,
       });
       return reloadSettings();

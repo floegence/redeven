@@ -63,6 +63,10 @@ async function mount(locale: RedevenLocale = 'en-US', width = 1000, dark = false
     const next = { ...snapshot(), defaults: { ...snapshot().defaults, computer_use_enabled } };
     setSnapshot(next); return next;
   });
+  const saveModelUpdates = vi.fn(async (auto_update_model_catalog: boolean) => {
+    const next = { ...snapshot(), defaults: { ...snapshot().defaults, auto_update_model_catalog } };
+    setSnapshot(next); return next;
+  });
   host = document.createElement('div');
   Object.assign(host.style, { width: `${width}px`, height: '940px' });
   document.body.append(host);
@@ -77,10 +81,11 @@ async function mount(locale: RedevenLocale = 'en-US', width = 1000, dark = false
   }
   dispose = render(() => <FloeProvider config={{ theme: { shellPresets: builtInShellThemePresets } }}><SettingsTheme /><FlowerSettingsSurface snapshot={snapshot()} copy={copy.settings} computerCopy={copy.computer}
     onSaveDefaultPermission={savePermission} onSaveComputerUseEnabled={saveComputer}
+    onSaveAutoUpdateModelCatalog={saveModelUpdates}
     onSaveModelProfile={saveModel}
     onOpenComputerSettings={openComputerSettings}
   /></FloeProvider>, host);
-  return { copy, savePermission, saveComputer, saveModel, openComputerSettings, setSnapshot };
+  return { copy, savePermission, saveComputer, saveModel, openComputerSettings, setSnapshot, saveModelUpdates };
 }
 
 for (const dark of [false, true]) {
@@ -191,7 +196,7 @@ for (const [locale, dark, width] of [
     expect(getComputedStyle(frame.querySelector('.flower-settings-subsection-description')!).fontSize).toBe('12px');
     expect(document.querySelector('.flower-model-selection-dialog')).toBeNull();
     const sections = [...frame.querySelectorAll<HTMLElement>(':scope > section')];
-    expect(sections).toHaveLength(4);
+    expect(sections).toHaveLength(5);
     for (let index = 0; index < sections.length; index++) {
       expect(sections[index].scrollWidth).toBeLessThanOrEqual(sections[index].clientWidth);
       expect(getComputedStyle(sections[index]).borderRadius).toBe('0px');
@@ -299,6 +304,7 @@ it('aligns section headings separately from controls and discloses provider deta
   const sections = [...host.querySelectorAll<HTMLElement>('.flower-settings-frame > section')];
   expect(sections.map(section => section.getAttribute('aria-label'))).toEqual([
     copy.settings.currentModel, copy.settings.providersTitle, copy.settings.defaultPermissionTitle, copy.settings.computerUseTitle,
+    copy.settings.modelCatalogAutoUpdateTitle,
   ]);
   const contentEdges = sections.map(section => {
     const heading = section.querySelector<HTMLElement>('.flower-settings-subsection-header')!;

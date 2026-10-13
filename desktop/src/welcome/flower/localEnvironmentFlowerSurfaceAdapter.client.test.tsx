@@ -64,6 +64,7 @@ function settingsResponse(): AgentSettingsResponse {
       }],
       permission_type: 'approval_required',
       computer_use_enabled: true,
+      auto_update_model_catalog: false,
     },
     ai_secrets: {
       provider_api_key_set: { default: true },
@@ -138,6 +139,24 @@ function attachmentBridgeStubs() {
 }
 
 describe('Local Environment Flower surface adapter', () => {
+  it('uses backend model defaults from settings while model IPC is unavailable', async () => {
+    const directory = { provider_defaults: { openai_compatible: [{ model_name: 'gpt-4.1', context_window: 128000 }] },
+      provider_catalogs: { default: [{ model_name: 'gpt-4.1', context_window: 128000 }] },
+      models: [{ id: 'default/gpt-4.1', source: 'runtime_config' as const, provider_id: 'default', model_name: 'gpt-4.1', state: 'ready' as const }],
+      sources: [{ id: 'default', kind: 'runtime_config' as const, state: 'ready' as const }],
+    };
+    const bridge = bridgeFor(request => {
+      if (request.path === '/_redeven_proxy/api/settings') return { ...settingsResponse(), ai_models: { current_model: 'default/gpt-4.1', directory } };
+      throw new Error('Model IPC is offline.');
+    });
+    const surfaceAdapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge);
+    const snapshot = await surfaceAdapter.loadSettings();
+    expect(snapshot.model_directory?.models[0].state).toBe('ready');
+    expect(snapshot.model_profile?.providers[0].model_defaults?.[0].context_window).toBe(128000);
+    expect((await surfaceAdapter.loadModelDirectory!(true)).models[0].state).toBe('ready');
+    expect(snapshot.defaults.auto_update_model_catalog).toBe(false);
+  });
+
   it('settles stalled model IPC within ten seconds and keeps its late reply out of settings', async () => {
     vi.useFakeTimers();
     try {
@@ -153,6 +172,7 @@ describe('Local Environment Flower surface adapter', () => {
       });
       const surfaceAdapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge);
       await surfaceAdapter.loadSettings();
+      await surfaceAdapter.loadModelDirectory!();
       hang = true;
       const read = surfaceAdapter.loadModelDirectory!(true);
       await vi.advanceTimersByTimeAsync(10_000);
@@ -197,6 +217,8 @@ describe('Local Environment Flower surface adapter', () => {
         throw new Error(`Unexpected request ${request.path}`);
       });
       const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge);
+      await adapter.loadSettings();
+      await adapter.loadModelDirectory!();
       const initial = await adapter.loadSettings();
       expect(initial.model_directory?.models[0].state).toBe('ready');
       expect((await adapter.loadModelDirectory!()).models).toEqual([expect.objectContaining({ model_name: 'agent', alias_group: 'digest', quantization: 'Q8_0', state: 'ready' })]);
@@ -424,6 +446,7 @@ describe('Local Environment Flower surface adapter', () => {
     const snapshot = mapRuntimeFlowerSettings(settingsResponse());
 
     expect(snapshot.defaults.computer_use_enabled).toBe(true);
+    expect(snapshot.defaults.auto_update_model_catalog).toBe(false);
     expect(snapshot.model_profile?.providers[0].models[0]).toEqual({
       model_name: 'gpt-4.1',
       context_window: 128000,
@@ -451,6 +474,20 @@ describe('Local Environment Flower surface adapter', () => {
 
     expect(calls[0]).toEqual({ method: 'PUT', path: '/_redeven_proxy/api/ai/computer_use', body: { enabled: false } });
     expect(calls.some((request) => request.method === 'GET' && request.path === '/_redeven_proxy/api/settings')).toBe(true);
+  });
+
+  it('exposes the opt-in model catalog update setting through the Desktop runtime route', async () => {
+    const calls: RuntimeFlowerRequest[] = [];
+    const bridge = bridgeFor(async (request) => {
+      calls.push(request);
+      if (request.method === 'GET' && request.path === '/_redeven_proxy/api/settings') return settingsResponse();
+      return {};
+    });
+    const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge);
+
+    await adapter.saveAutoUpdateModelCatalog?.(true);
+
+    expect(calls[0]).toEqual({ method: 'PUT', path: '/_redeven_proxy/api/ai/model_catalog_auto_update', body: { enabled: true } });
   });
 
   it('builds provider bundle updates for the runtime gateway', () => {

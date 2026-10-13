@@ -5536,7 +5536,10 @@
         "failed": "Flower はこのターンを完了できませんでした。",
         "cancelled": "停止しました",
         "interrupted": "このターンは中断されました。"
-      }
+      },
+      "modelUnavailableMissingKeys": "このモデルプロバイダーの認証情報が設定されていません。設定で認証情報を追加してください。",
+      "modelUnavailableProviderDisabled": "このモデルプロバイダーは無効です。設定で有効にするか、別のモデルを選択してください。",
+      "modelUnavailableModelMissing": "このモデルはプロバイダーのモデル一覧にありません。設定でモデル ID を確認するか、別のモデルを選択してください。"
     },
     "threadList": {
       "title": "会話",
@@ -5921,7 +5924,11 @@
       "dialogChatGPTEligibilityRequired": "このアカウントは ChatGPT プランの共有対象ではありません。プランとアカウントの権限を確認してください。",
       "dialogChatGPTRegionUnavailable": "お住まいの地域では ChatGPT プランの共有を利用できません。",
       "dialogChatGPTCancelSignOut": "ログインを維持",
-      "dialogChatGPTSignOutImpact": "このアカウントは {connections} 件の接続と {tasks} 件の実行中のタスクで使用されています。ログアウトすると、子タスクを含む、このアカウントを使用するすべてのタスクが停止します。会話は保持されます。"
+      "dialogChatGPTSignOutImpact": "このアカウントは {connections} 件の接続と {tasks} 件の実行中のタスクで使用されています。ログアウトすると、子タスクを含む、このアカウントを使用するすべてのタスクが停止します。会話は保持されます。",
+      "modelCatalogAutoUpdateTitle": "モデル一覧の更新",
+      "modelCatalogAutoUpdateDescription": "自動更新は初期設定でオフです。通常のチャットでは内蔵のモデル情報と保存済みの設定を使用します。",
+      "modelCatalogAutoUpdateLabel": "モデルプロバイダーのモデル一覧を自動更新",
+      "modelCatalogAutoUpdateDisclosure": "有効にすると、Redeven は有効なモデルプロバイダーの API に定期的にモデル一覧をリクエストします。"
     },
     "computer": {
       "title": "ブラウザーとデスクトップ",

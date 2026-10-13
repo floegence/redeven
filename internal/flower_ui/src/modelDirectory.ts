@@ -127,20 +127,26 @@ export function createFlowerModelReadResource(options: Readonly<{
     if (settingsRequest) return settingsRequest;
     const revision = generation;
     const requestScope = scope;
-    const request = Promise.all([read(options.loadConfiguration), loadDirectory().catch(() => null)]).then(([value, models]) => {
+    // Read local availability independently; provider discovery never enters
+    // this path and a slow directory cannot delay saved configuration.
+    const request = read(options.loadConfiguration).then(value => {
       checkScope();
       if (revision !== generation) {
         if (requestScope !== scope) throw new DOMException('Flower connection changed.', 'AbortError');
         return loadSettings();
       }
       configuration = value;
-      const currentDirectory = directory ?? models;
-      return currentDirectory ? withFlowerModelDirectory(value, currentDirectory) : value;
+      if (!directory && value.model_directory) {
+        directory = value.model_directory;
+        for (const listener of listeners) listener(directory);
+      }
+      return directory ? withFlowerModelDirectory(value, directory) : value;
     }).catch(error => {
       checkScope();
       if (revision !== generation && requestScope === scope) return loadSettings();
       throw error;
     }).finally(() => { if (settingsRequest === request) settingsRequest = null; });
+    void loadDirectory().catch(() => undefined);
     settingsRequest = request;
     return request;
   };

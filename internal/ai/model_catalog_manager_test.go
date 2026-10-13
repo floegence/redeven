@@ -13,6 +13,62 @@ import (
 	"github.com/floegence/redeven/internal/config"
 )
 
+func TestModelCatalogSchedulerRequiresExplicitOptIn(t *testing.T) {
+	p := config.AIProvider{ID: "local", Type: "ollama", BaseURL: "http://localhost:11434/v1", Models: []config.AIProviderModel{{ModelName: "agent", ContextWindow: 8192}}}
+	called := make(chan struct{}, 1)
+	published := make(chan struct{}, 1)
+	m := newModelCatalogManager(t.TempDir(), nil, func(context.Context, ModelCatalogRequest) (ModelCatalogResponse, error) {
+		called <- struct{}{}
+		return ModelCatalogResponse{Models: []ModelCatalogModel{{AIProviderModel: config.AIProviderModel{ModelName: "agent", ContextWindow: 8192}}}}, nil
+	}, func() { published <- struct{}{} })
+	cfg := &config.AIConfig{Providers: []config.AIProvider{p}}
+	m.configure(cfg)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan struct{})
+	go func() { m.run(ctx); close(done) }()
+	defer func() { cancel(); <-done }()
+	select {
+	case <-called:
+		t.Fatal("scheduler contacted provider while automatic updates were disabled")
+	case <-time.After(100 * time.Millisecond):
+	}
+	enabled := true
+	cfg.AutoUpdateModelCatalog = &enabled
+	m.configure(cfg)
+	select {
+	case <-called:
+	case <-time.After(time.Second):
+		t.Fatal("scheduler did not contact provider after automatic updates were enabled")
+	}
+	select {
+	case <-published:
+	case <-time.After(time.Second):
+		t.Fatal("scheduler did not publish the completed inventory")
+	}
+	enabled = false
+	m.configure(cfg)
+	m.mu.Lock()
+	connection := m.connections[p.ID]
+	connection.next = time.Time{}
+	m.connections[p.ID] = connection
+	m.mu.Unlock()
+	m.wake()
+	select {
+	case <-called:
+		t.Fatal("scheduler contacted provider after automatic updates were disabled")
+	case <-time.After(100 * time.Millisecond):
+	}
+	if _, err := m.sync(ctx, providerCatalogRequest(p, "")); err != nil {
+		t.Fatalf("manual synchronization with automatic updates disabled: %v", err)
+	}
+	select {
+	case <-called:
+	default:
+		t.Fatal("manual synchronization did not contact provider")
+	}
+}
+
 func TestCatalogSnapshotSurvivesFailureRestartAndRemoval(t *testing.T) {
 	p := config.AIProvider{ID: "local", Type: "ollama", BaseURL: "http://localhost:11434/v1", ModelSelection: &config.AIModelSelection{SelectedModels: []string{"agent"}}}
 	cfg := &config.AIConfig{Providers: []config.AIProvider{p}, CurrentModelID: "local/agent"}

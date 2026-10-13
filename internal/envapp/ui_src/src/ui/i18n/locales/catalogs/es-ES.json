@@ -5536,7 +5536,10 @@
         "failed": "Flower no pudo completar este turno.",
         "cancelled": "Detenido",
         "interrupted": "Este turno se interrumpió."
-      }
+      },
+      "modelUnavailableMissingKeys": "Este proveedor de modelos no tiene credenciales configuradas. Añádelas en la configuración.",
+      "modelUnavailableProviderDisabled": "Este proveedor de modelos está desactivado. Actívalo en la configuración o selecciona otro modelo.",
+      "modelUnavailableModelMissing": "Este modelo no aparece en la lista del proveedor. Comprueba su ID en la configuración o selecciona otro modelo."
     },
     "threadList": {
       "title": "Conversaciones",
@@ -5921,7 +5924,11 @@
       "dialogChatGPTEligibilityRequired": "Tu cuenta no cumple los requisitos para compartir su plan de ChatGPT. Revisa tu plan y los permisos de la cuenta.",
       "dialogChatGPTRegionUnavailable": "Compartir el plan de ChatGPT no está disponible en tu región.",
       "dialogChatGPTCancelSignOut": "Mantener la sesión",
-      "dialogChatGPTSignOutImpact": "Esta cuenta se usa en {connections} conexiones y {tasks} tareas activas. Cerrar sesión detiene todas las tareas que usan esta cuenta, incluidas las subtareas. Se conservan las conversaciones."
+      "dialogChatGPTSignOutImpact": "Esta cuenta se usa en {connections} conexiones y {tasks} tareas activas. Cerrar sesión detiene todas las tareas que usan esta cuenta, incluidas las subtareas. Se conservan las conversaciones.",
+      "modelCatalogAutoUpdateTitle": "Actualización de listas de modelos",
+      "modelCatalogAutoUpdateDescription": "Las actualizaciones automáticas están desactivadas de forma predeterminada. El chat normal utiliza la información de modelos integrada y tu configuración guardada.",
+      "modelCatalogAutoUpdateLabel": "Actualizar automáticamente las listas de modelos de los proveedores",
+      "modelCatalogAutoUpdateDisclosure": "Al activarlo, Redeven solicita periódicamente las listas de modelos a las API de los proveedores de modelos activados."
     },
     "computer": {
       "title": "Navegador y escritorio",

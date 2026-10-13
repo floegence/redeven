@@ -485,9 +485,12 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 	if svc.chatGPT != nil {
 		svc.accountUnsubscribe = svc.chatGPT.Subscribe(func(string) { svc.publishModelDirectoryChanged() })
 	}
+	// Keep the scheduler alive for the service lifetime. It remains idle while
+	// automatic updates are disabled, and a later settings change can therefore
+	// take effect without restarting the service.
+	svc.serviceWorkers.Add(1)
+	go func() { defer svc.serviceWorkers.Done(); svc.modelCatalogs.run(lifecycleCtx) }()
 	if opts.ModelCatalogDir != "" {
-		svc.serviceWorkers.Add(1)
-		go func() { defer svc.serviceWorkers.Done(); svc.modelCatalogs.run(lifecycleCtx) }()
 		svc.serviceWorkers.Add(1)
 		go func() { defer svc.serviceWorkers.Done(); svc.runPlatformModelCatalogs(lifecycleCtx) }()
 	}
@@ -828,6 +831,36 @@ func (s *Service) RefreshModelCatalogConnections() {
 	s.mu.Unlock()
 	s.modelCatalogs.configure(cfg)
 	s.publishModelDirectoryChanged()
+}
+
+// SetAutoUpdateModelCatalog persists the user's explicit consent for
+// background provider model-catalog requests. Disabling it stops future
+// scheduled requests while preserving the last known catalog snapshot.
+func (s *Service) SetAutoUpdateModelCatalog(enabled bool, persist func(next *config.AIConfig) error) error {
+	if s == nil {
+		return errors.New("nil service")
+	}
+	if persist == nil {
+		return errors.New("missing persist function")
+	}
+	s.mu.Lock()
+	next := config.AIConfig{}
+	if s.cfg != nil {
+		next = *s.cfg
+	}
+	next.AutoUpdateModelCatalog = &enabled
+	if err := next.Validate(); err != nil {
+		s.mu.Unlock()
+		return err
+	}
+	if err := persist(&next); err != nil {
+		s.mu.Unlock()
+		return err
+	}
+	s.cfg = &next
+	s.mu.Unlock()
+	s.modelCatalogs.configure(&next)
+	return nil
 }
 
 // SetDefaultPermissionType updates the default permission for future Flower

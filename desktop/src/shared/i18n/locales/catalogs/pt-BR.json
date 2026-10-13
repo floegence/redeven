@@ -647,7 +647,10 @@
         "failed": "Flower não conseguiu concluir este turno.",
         "cancelled": "Parado",
         "interrupted": "Este turno foi interrompido."
-      }
+      },
+      "modelUnavailableMissingKeys": "Este provedor de modelos não tem credenciais configuradas. Adicione-as nas configurações.",
+      "modelUnavailableProviderDisabled": "Este provedor de modelos está desativado. Ative-o nas configurações ou selecione outro modelo.",
+      "modelUnavailableModelMissing": "Este modelo não consta na lista do provedor. Confira seu ID nas configurações ou selecione outro modelo."
     },
     "threadList": {
       "title": "Conversas",
@@ -1032,7 +1035,11 @@
       "dialogChatGPTEligibilityRequired": "Sua conta não é elegível para compartilhar o plano do ChatGPT. Revise seu plano e as permissões da conta.",
       "dialogChatGPTRegionUnavailable": "O compartilhamento do plano do ChatGPT não está disponível na sua região.",
       "dialogChatGPTCancelSignOut": "Continuar conectado",
-      "dialogChatGPTSignOutImpact": "Esta conta é usada por {connections} conexões e {tasks} tarefas ativas. Sair interrompe todas as tarefas que usam esta conta, incluindo subtarefas. As conversas são mantidas."
+      "dialogChatGPTSignOutImpact": "Esta conta é usada por {connections} conexões e {tasks} tarefas ativas. Sair interrompe todas as tarefas que usam esta conta, incluindo subtarefas. As conversas são mantidas.",
+      "modelCatalogAutoUpdateTitle": "Atualizações das listas de modelos",
+      "modelCatalogAutoUpdateDescription": "As atualizações automáticas ficam desativadas por padrão. As conversas normais usam as informações de modelos integradas e suas configurações salvas.",
+      "modelCatalogAutoUpdateLabel": "Atualizar automaticamente as listas de modelos dos provedores",
+      "modelCatalogAutoUpdateDisclosure": "Quando ativado, o Redeven solicita periodicamente as listas de modelos às APIs dos provedores de modelos ativados."
     },
     "reasoningControl": {
       "default": "Padrão",

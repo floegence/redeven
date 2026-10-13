@@ -85,7 +85,7 @@ describe('Flower provider credential readiness', () => {
     send();
     expect(launches).toEqual([]);
     expect(flowerSurfaceNotifications()).toEqual(expect.arrayContaining([
-      expect.objectContaining({ message: 'Set up a model provider to start chatting.' }),
+      expect.objectContaining({ message: 'This model provider has no credentials configured. Add credentials in settings.' }),
     ]));
   });
 

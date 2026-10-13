@@ -13,6 +13,7 @@ export function modelDirectoryFixture(snapshot: FlowerSettingsSnapshot): FlowerM
     for (const model of resolveFlowerProviderModels(provider, provider.catalog_models)) {
       models.push({ id: `${provider.id}/${model.model_name}`, label: `${provider.name || provider.id} / ${model.display_name || model.model_name}`,
         source: 'runtime_config', state: ready && !model.unavailable ? 'ready' : 'unavailable',
+        reason: ready ? (model.unavailable ? 'model_missing' : undefined) : 'missing_keys',
         provider_id: provider.id, provider_name: provider.name || provider.id, provider_type: provider.type, model_name: model.model_name,
         alias_group: model.model_digest ? JSON.stringify([provider.id, model.model_digest, model.context_window, model.max_output_tokens, model.effective_context_window_percent, model.input_modalities, model.reasoning_capability, model.default_reasoning_selection]) : undefined,
         quantization: model.quantization, context_window: model.context_window, max_output_tokens: model.max_output_tokens,

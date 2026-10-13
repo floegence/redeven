@@ -24,6 +24,12 @@ type AIConfig struct {
 	// Format: <provider_id>/<model_name>
 	CurrentModelID string `json:"current_model_id,omitempty"`
 
+	// AutoUpdateModelCatalog controls whether the runtime periodically contacts
+	// configured providers to refresh their model inventories. It is disabled
+	// by default; an explicit true value is required before any background
+	// provider catalog requests are made.
+	AutoUpdateModelCatalog *bool `json:"auto_update_model_catalog,omitempty"`
+
 	// PermissionType controls the Flower tool surface and approval behavior.
 	//
 	// Supported values:
@@ -51,6 +57,12 @@ type AIConfig struct {
 	// ToolRecoveryFailOnRepeatedSignature controls fail-fast behavior when the same failure signature
 	// repeats across recovery attempts.
 	ToolRecoveryFailOnRepeatedSignature *bool `json:"tool_recovery_fail_on_repeated_signature,omitempty"`
+}
+
+// IsAutoUpdateModelCatalogEnabled reports whether background provider catalog
+// refreshes were explicitly enabled by the user.
+func (c *AIConfig) IsAutoUpdateModelCatalogEnabled() bool {
+	return c != nil && c.AutoUpdateModelCatalog != nil && *c.AutoUpdateModelCatalog
 }
 
 // IsComputerUseEnabled preserves the enabled-by-default behavior for existing

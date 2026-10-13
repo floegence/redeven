@@ -2791,7 +2791,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     name: model.label?.split(' / ').slice(1).join(' / ') || model.model_name,
     group: model.provider_name || (model.source === 'platform' ? 'Redeven AI' : model.source === 'desktop_model_source' ? 'Desktop' : copy().settings.dialog.catalog.unavailableModel),
     source: model.source === 'runtime_config' ? 'model_profile' : model.source || 'thread_snapshot',
-    unavailableReason: ({ chatgpt_renewing: copy().settings.dialog.chatGPT.renewing, chatgpt_temporarily_unavailable: copy().settings.dialog.chatGPT.temporarilyUnavailable, chatgpt_review_required: copy().settings.dialog.chatGPT.reviewRequired, chatgpt_plan_permission_required: copy().settings.dialog.chatGPT.planPermission, chatgpt_authorization_required: copy().settings.dialog.chatGPT.authorizationRequired, chatgpt_signing_out: copy().settings.dialog.chatGPT.signingOut, chatgpt_signed_out: copy().settings.dialog.chatGPT.signedOut, chatgpt_storage_unavailable: copy().settings.dialog.chatGPT.storageUnavailable } as Record<string, string>)[model.reason ?? ''],
+    unavailableReason: ({ missing_keys: copy().chat.modelUnavailableMissingKeys, provider_disabled: copy().chat.modelUnavailableProviderDisabled, model_missing: copy().chat.modelUnavailableModelMissing, chatgpt_renewing: copy().settings.dialog.chatGPT.renewing, chatgpt_temporarily_unavailable: copy().settings.dialog.chatGPT.temporarilyUnavailable, chatgpt_review_required: copy().settings.dialog.chatGPT.reviewRequired, chatgpt_plan_permission_required: copy().settings.dialog.chatGPT.planPermission, chatgpt_authorization_required: copy().settings.dialog.chatGPT.authorizationRequired, chatgpt_signing_out: copy().settings.dialog.chatGPT.signingOut, chatgpt_signed_out: copy().settings.dialog.chatGPT.signedOut, chatgpt_storage_unavailable: copy().settings.dialog.chatGPT.storageUnavailable } as Record<string, string>)[model.reason ?? ''],
     disabled: model.state !== 'ready', pending: model.state === 'pending', providerType: model.provider_type,
     aliasKey: model.alias_group, quantization: model.quantization,
     supportsImageInput: flowerModelSupportsImage(model.input_modalities),
@@ -2881,10 +2881,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     && (!selectedThreadID() || typeof props.adapter.setThreadReasoningSelection === 'function')
   ));
   const modelSource = createMemo(() => modelDirectory() ? flowerDirectoryDesktopStatus(modelDirectory()!) ?? null : null);
-  const modelOptionReady = (option: ComposerModelOption | null | undefined): boolean => Boolean(option && modelDirectory()?.models.some(model => model.id === option.id && model.state === 'ready'));
+  const modelOptionReady = (option: ComposerModelOption | null | undefined): boolean => Boolean(option
+    && catalogModelOptions().some(model => model.id === option.id && !model.disabled && !model.pending));
   const readyForChat = createMemo(() => modelOptionReady(selectedModelOption()));
-  const anyModelReady = createMemo(() => catalogModelOptions().some((option) => modelOptionReady(option)));
-  const selectedModelNeedsAttention = createMemo(() => !readyForChat() && !modelDirectory()?.models.some(model => model.id === selectedComposerModelID() && model.state === 'pending'));
+  const anyModelReady = createMemo(() => catalogModelOptions().some(option => !option.disabled));
+  const selectedModelNeedsAttention = createMemo(() => Boolean(snapshot() && selectedComposerModelID()
+    && !readyForChat() && !selectedModelOption()?.pending));
+  const selectedModelAvailabilityMessage = createMemo(() => selectedModelOption()?.unavailableReason ?? copy().chat.modelsUnavailable);
   const unavailableModelSource = createMemo<UnavailableFlowerModelSourceStatus | null>(() => {
     const source = modelSource();
     if (source && (source.state === 'not_configured' || source.state === 'empty') && snapshot()?.model_profile) return null;
@@ -4931,6 +4934,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       : Promise.reject(new Error('Computer use settings are unavailable.'))
   );
 
+  const saveAutoUpdateModelCatalog = (enabled: boolean) => (
+    props.adapter.saveAutoUpdateModelCatalog
+      ? saveSettingsMutation(() => props.adapter.saveAutoUpdateModelCatalog!(enabled))
+      : Promise.reject(new Error('Automatic model-list updates are unavailable.'))
+  );
+
   const saveModelProfile = (draft: FlowerSettingsDraft) => (
     saveSettingsMutation(() => props.adapter.saveModelProfile(draft))
   );
@@ -5163,7 +5172,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return;
     }
     if (!readyForChat()) {
-      notifyComposerError(copy().chat.configureProviderBeforeChat);
+      notifyComposerError(selectedModelNeedsAttention() ? selectedModelAvailabilityMessage() : copy().chat.configureProviderBeforeChat);
       return;
     }
     if (selectedThreadReadOnly()) {
@@ -10970,7 +10979,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         <Show when={modelAvailabilityChecking() || modelDirectory()?.error || selectedModelNeedsAttention()}>
           <p class="flower-model-menu-status" role="status">{modelAvailabilityChecking() ? copy().chat.modelsChecking
             : modelDirectory()?.error === 'directory_timeout' ? copy().chat.modelsCheckTimedOut
-            : modelDirectory()?.error ? copy().chat.modelsCheckFailed : copy().chat.modelsUnavailable}</p>
+            : modelDirectory()?.error ? copy().chat.modelsCheckFailed : selectedModelAvailabilityMessage()}</p>
         </Show>
         <div class="flower-model-menu-footer">
           <Button class="flower-model-menu-action" size="xs" variant="ghost" icon={Refresh} loading={modelSourceRefreshing()} onClick={() => void refreshModelSource()}>{copy().settings.dialog.catalog.refresh}</Button>
@@ -10992,8 +11001,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             <a href="https://chatgpt.com/settings/usage" target="_blank" rel="noopener noreferrer" class="cursor-pointer whitespace-nowrap font-medium text-primary hover:underline">{copy().settings.dialog.chatGPT.manageUsage}</a>
           </div>
         </Show>
-        <Show when={needsSetup() && !composerModelLoading() && (presentation() !== 'companion' || !unavailableModelSource())}>
-          <div class="flower-setup-inline" role="status">{selectedComposerModelID() ? copy().chat.modelsUnavailable : copy().chat.configureProviderBeforeChat}</div>
+        <Show when={(needsSetup() || selectedModelNeedsAttention()) && !composerModelLoading() && (presentation() !== 'companion' || !unavailableModelSource())}>
+          <div class="flower-setup-inline" role="status">{modelAvailabilityChecking() ? copy().chat.modelsChecking : selectedModelNeedsAttention() ? selectedModelAvailabilityMessage() : selectedComposerModelID() ? copy().chat.modelsUnavailable : copy().chat.configureProviderBeforeChat}</div>
         </Show>
         <Show when={!anyModelReady() || selectedComposerModelID().startsWith('desktop:')}>{modelSourceStatusRow('footer')}</Show>
         <Show when={handlerNotice()}>
@@ -11035,10 +11044,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           aria-haspopup="dialog"
           aria-expanded={modelMenuOpen()}
           aria-label={selectedModelNeedsAttention()
-            ? `${copy().chat.modelLabel}: ${selectedThreadModelLabel()}. ${copy().chat.configureProviderBeforeChat}`
+            ? `${copy().chat.modelLabel}: ${selectedThreadModelLabel()}. ${selectedModelAvailabilityMessage()}`
             : `${copy().chat.modelLabel}: ${selectedThreadModelLabel()}`}
           title={selectedModelNeedsAttention()
-            ? copy().chat.configureProviderBeforeChat
+            ? selectedModelAvailabilityMessage()
             : `${copy().chat.modelLabel}: ${selectedThreadModelLabel()}`}
           onClick={() => { if (modelMenuOpen()) { closeModelMenu(false); return; } openModelMenu(); }}
           onKeyDown={handleModelTriggerKeyDown}
@@ -12325,6 +12334,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 copy={copy().settings}
                 onSaveDefaultPermission={saveDefaultPermission}
                 onSaveComputerUseEnabled={props.adapter.saveComputerUseEnabled ? saveComputerUseEnabled : undefined}
+                onSaveAutoUpdateModelCatalog={props.adapter.saveAutoUpdateModelCatalog ? saveAutoUpdateModelCatalog : undefined}
                 computerCopy={copy().computer}
                 onOpenComputerSettings={props.adapter.computerManagement ? () => { returnToChat(); setComputerDialog('settings'); } : undefined}
                 onSaveModelProfile={saveModelProfile}
