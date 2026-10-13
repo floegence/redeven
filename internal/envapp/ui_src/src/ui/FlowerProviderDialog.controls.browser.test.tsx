@@ -12,7 +12,7 @@ import { DEFAULT_FLOWER_SURFACE_COPY } from '../../../../flower_ui/src/copy';
 import { createLocalizedFlowerSurfaceCopy } from '../../../../flower_ui/src/i18n/createLocalizedFlowerSurfaceCopy';
 import { createI18nHelpers } from './i18n/createI18n';
 import { loadEnvAppDictionary, type EnvAppTranslationKey } from './i18n/locales';
-import type { RedevenLocale } from './i18n/localeMeta';
+import { SUPPORTED_LOCALES, type RedevenLocale } from './i18n/localeMeta';
 
 const copy = DEFAULT_FLOWER_SURFACE_COPY.settings.dialog;
 let dispose: (() => void) | undefined;
@@ -63,6 +63,98 @@ function contrast(left: string, right: string) {
 }
 
 for (const surface of ['desktop', 'env'] as const) {
+  it(`groups ChatGPT sign-in identity, guidance and its primary action in ${surface}`, async () => {
+    const { dialog, copy: localized } = await mount(surface);
+    const panel = dialog.querySelector<HTMLElement>('.flower-provider-account')!;
+    expect(panel.dataset.state).toBe('idle');
+    expect(panel.querySelector('h4')).not.toBeNull();
+    expect(panel.querySelector('.flower-provider-account-description')?.textContent).toBe(localized.chatGPT.planPermission);
+    const primary = panel.querySelector<HTMLButtonElement>('.flower-provider-account-primary')!;
+    expect(primary).not.toBeNull();
+    expect(primary.getBoundingClientRect().height).toBeGreaterThanOrEqual(40);
+    expect(panel.getBoundingClientRect().width).toBeGreaterThan(primary.getBoundingClientRect().width);
+  });
+
+  it(`presents each authorization stage and keeps confirmation and cancellation focus usable in ${surface}`, async () => {
+    type Result = Awaited<ReturnType<FlowerChatGPTAuth>>;
+    let start!: (result: Result) => void;
+    let status!: (result: Result) => void;
+    const auth = vi.fn<FlowerChatGPTAuth>(async action => action === 'start' ? new Promise(resolve => { start = resolve; }) : action === 'status' ? new Promise(resolve => { status = resolve; }) : {});
+    const { dialog, copy: localized, discover } = await mount(surface, 'porcelain-light', auth, 1280, 'zh-CN');
+    const panel = dialog.querySelector<HTMLElement>('.flower-provider-account')!;
+    const primary = panel.querySelector<HTMLButtonElement>('.flower-provider-account-primary')!;
+    const screenshot = async (state: string) => {
+      if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: dialog, path: `__screenshots__/flower-auth-${surface}-${state}-zh-CN.png` });
+    };
+    await screenshot('idle');
+    await userEvent.click(primary);
+    expect(panel.dataset.state).toBe('preparing');
+    expect(panel.querySelector('h4')?.textContent).toBe(localized.chatGPT.preparing);
+    expect(primary.disabled).toBe(true);
+    await expect.poll(() => document.activeElement?.textContent).toBe(localized.chatGPT.cancel);
+    await screenshot('preparing');
+    start({ id: 'attempt', state: 'waiting' });
+    await expect.poll(() => panel.dataset.state).toBe('waiting');
+    expect(panel.querySelector('.flower-provider-account-description')?.textContent).toBe(localized.chatGPT.waitingDescription);
+    await screenshot('waiting');
+    await expect.poll(() => typeof status).toBe('function');
+    const firstStatus = status;
+    status({ id: 'attempt', state: 'verifying' });
+    await expect.poll(() => panel.dataset.state).toBe('verifying');
+    await screenshot('verifying');
+    await expect.poll(() => status !== firstStatus).toBe(true);
+    status({ id: 'attempt', state: 'ready', account: { account_id: 'verified', email: 'person@example.com', state: 'ready', welcome_acknowledged: false } });
+    await expect.poll(() => panel.dataset.state).toBe('connected');
+    expect(panel.querySelector('h4')?.textContent).toBe('person@example.com');
+    expect(primary).toBe(panel.querySelector('.flower-provider-account-primary'));
+    expect(discover).toHaveBeenCalledTimes(1);
+    await screenshot('confirmation');
+    await userEvent.click(page.getByRole('button', { name: localized.chatGPT.welcomeConfirm, exact: true }));
+    expect(document.activeElement).toBe(primary);
+    expect(panel.querySelector('.flower-provider-account-welcome')).toBeNull();
+    await screenshot('connected');
+    await userEvent.click(primary);
+    await expect.poll(() => document.activeElement?.textContent).toBe(localized.chatGPT.cancel);
+    await userEvent.click(page.getByRole('button', { name: localized.chatGPT.cancel, exact: true }));
+    expect(document.activeElement).toBe(primary);
+    expect(primary.disabled).toBe(false);
+    const canceledStart = start;
+    canceledStart({ id: 'canceled', state: 'waiting' });
+    await expect.poll(() => auth.mock.calls.some(([action, input]) => action === 'cancel' && input.attempt_id === 'canceled')).toBe(true);
+    expect(panel.dataset.state).toBe('connected');
+  });
+
+  it(`keeps failure and retry in the same connection panel in ${surface}`, async () => {
+    const auth = vi.fn<FlowerChatGPTAuth>(async action => action === 'start' ? { id: 'attempt', state: 'waiting' } : action === 'status' ? { state: 'failed' } : {});
+    const { dialog, copy: localized, discover } = await mount(surface, 'porcelain-light', auth, 1280, 'zh-CN');
+    const panel = dialog.querySelector<HTMLElement>('.flower-provider-account')!;
+    const primary = panel.querySelector<HTMLButtonElement>('.flower-provider-account-primary')!;
+    await userEvent.click(primary);
+    await expect.poll(() => panel.dataset.state).toBe('failed');
+    expect(panel.querySelector('[role=alert]')?.textContent).toBe(localized.chatGPT.signInFailed);
+    expect(document.activeElement).toBe(primary);
+    expect(primary.disabled).toBe(false);
+    expect(dialog.querySelector('.flower-provider-models')).toBeNull();
+    expect(discover).not.toHaveBeenCalled();
+    if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: dialog, path: `__screenshots__/flower-auth-${surface}-failed-zh-CN.png` });
+    await userEvent.click(primary);
+    await expect.poll(() => auth.mock.calls.filter(([action]) => action === 'start').length).toBe(2);
+  });
+
+  for (const locale of SUPPORTED_LOCALES) it(`keeps account guidance and actions inside a narrow ${surface} dialog in ${locale}`, async () => {
+    const { dialog } = await mount(surface, 'porcelain-dark', undefined, 390, locale);
+    const panel = dialog.querySelector<HTMLElement>('.flower-provider-account')!;
+    const primary = panel.querySelector<HTMLButtonElement>('.flower-provider-account-primary')!;
+    expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth);
+    expect(primary.scrollWidth).toBeLessThanOrEqual(primary.clientWidth);
+    await userEvent.click(primary);
+    await expect.poll(() => panel.dataset.state).toBe('waiting');
+    expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth);
+    expect(primary.scrollWidth).toBeLessThanOrEqual(primary.clientWidth);
+    for (const button of panel.querySelectorAll('button')) expect(button.getBoundingClientRect().right).toBeLessThanOrEqual(panel.getBoundingClientRect().right);
+    if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1' && locale === 'zh-CN') await page.screenshot({ element: dialog, path: `__screenshots__/flower-auth-${surface}-waiting-narrow-zh-CN.png` });
+  });
+
   it(`aligns every brand and provider label in ${surface}, including span-based SVG brands`, async () => {
     await mount(surface);
     const rows = [...document.querySelectorAll<HTMLButtonElement>('.flower-provider-picker-options > button')];
