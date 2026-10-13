@@ -316,7 +316,7 @@ function latestThreadFailureIsUserRejectedTool(thread: FlowerThreadSnapshot | nu
 type FlowerComposerControlID = 'permission' | 'model_reasoning' | 'read_only';
 type FlowerComposerControlLocation = 'inline' | 'overflow';
 type FlowerComposerControlLayout = Readonly<{
-  availableWidth: number;
+  availableWidth: number | null;
   itemWidths: Partial<Record<FlowerComposerControlID, number>>;
 }>;
 type PendingPermissionPatch = Readonly<{
@@ -951,7 +951,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let cancelActiveLongTextSubmission: (() => void) | null = null;
   const [composerMorePanelPosition, setComposerMorePanelPosition] = createSignal<FlowerFloatingPoint>({ x: 8, y: 8 });
   const [composerControlLayout, setComposerControlLayout] = createSignal<FlowerComposerControlLayout>({
-    availableWidth: 0,
+    availableWidth: null,
     itemWidths: {},
   });
   const terminalVisibleOutputStore = createTerminalVisibleOutputStore();
@@ -2947,11 +2947,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     presentation() === 'companion'
     && !props.embeddedConversation
     && !companionCollapsed()
-    && !needsSetup()
     && !selectedInputRequest()
     && !selectedThreadReadOnly()
     && !selectedComposerApprovalDisplayAction()
-    && !handlerNotice()
     && !selectedThreadDetailPending()
     && !surfaceWarmupActive()
   ));
@@ -2973,13 +2971,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
   const composerOverflowControlIDs = createMemo<readonly FlowerComposerControlID[]>(() => {
     const ids = composerControlIDs();
-    if (companionCompactComposer()) return ids;
+    if (presentation() === 'companion' && !props.embeddedConversation) return ids;
     const availableWidth = composerControlLayout().availableWidth;
     const overflow = new Set<FlowerComposerControlID>();
     if (mobileInteraction() && ids.includes('permission')) overflow.add('permission');
     for (const id of FLOWER_COMPOSER_CONTROL_OVERFLOW_ORDER) {
       const inlineIDs = ids.filter((candidate) => !overflow.has(candidate));
-      if (availableWidth <= 0 || composerControlWidth(inlineIDs) <= availableWidth) break;
+      if (availableWidth === null || (availableWidth > 0 && composerControlWidth(inlineIDs) <= availableWidth)) break;
       if (ids.includes(id)) overflow.add(id);
     }
     return FLOWER_COMPOSER_CONTROL_ORDER.filter((id) => overflow.has(id));
@@ -10744,7 +10742,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             disabled={!readyForChat()}
             showSuggestions={presentation() !== 'companion'}
             workingDirectory={(
-              <Show when={workingDirectoryPickerAvailable()}>
+              <Show when={presentation() !== 'companion' && workingDirectoryPickerAvailable()}>
                 <div class="flower-new-working-directory">
                   <span class="flower-new-working-directory-label">{copy().threadList.workingDirectoryLabel}</span>
                   <FlowerWorkingDirectoryControl
@@ -10960,6 +10958,34 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   );
 
   const composerModelLoading = () => !surfaceWarmupActive() && (settingsLoading() || Boolean(modelDirectory()?.models.some(model => model.id === selectedComposerModelID() && model.state === 'pending')));
+  const composerNotices = () => (
+    <Show when={bottomActionMode() === 'chat' && !companionCollapsed()}>
+      <div class="flower-composer-notices">
+        <Show when={selectedModelOption()?.billingSource === 'chatgpt_plan'}>
+          <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+            <span>{copy().settings.dialog.chatGPT.planSource}</span>
+            <a href="https://chatgpt.com/settings/usage" target="_blank" rel="noopener noreferrer" class="cursor-pointer whitespace-nowrap font-medium text-primary hover:underline">{copy().settings.dialog.chatGPT.manageUsage}</a>
+          </div>
+        </Show>
+        <Show when={needsSetup() && !composerModelLoading() && (presentation() !== 'companion' || !unavailableModelSource())}>
+          <div class="flower-setup-inline" role="status">{selectedComposerModelID() ? copy().chat.modelsUnavailable : copy().chat.configureProviderBeforeChat}</div>
+        </Show>
+        <Show when={!anyModelReady() || selectedComposerModelID().startsWith('desktop:')}>{modelSourceStatusRow('footer')}</Show>
+        <Show when={handlerNotice()}>
+          {(notice) => <div role="alert" class="flower-handler-error-card">
+            <div class="flower-handler-error-icon"><AlertTriangle class="h-3.5 w-3.5" /></div>
+            <div class="flower-handler-error-copy">
+              <div class="flower-handler-error-title">{notice().title}</div>
+              <div class="flower-handler-error-message">{notice().message}</div>
+            </div>
+            <button type="button" class="flower-handler-retry" onClick={() => void resolveHandlerDecision().catch(() => undefined)}>
+              {copy().chat.handlerRetry}
+            </button>
+          </div>}
+        </Show>
+      </div>
+    </Show>
+  );
   const modelAvailabilityChecking = () => Boolean(modelSourceRefreshing() || modelDirectory()?.checking || modelDirectory()?.models.some(model => model.state === 'pending') || modelDirectory()?.sources.some(source => source.state === 'pending'));
   const modelReasoningSelector = (location: FlowerComposerControlLocation = 'inline') => (
     <Show
@@ -11527,6 +11553,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 </Show>
                 {queuedTurnsDock()}
               </Show>
+              {composerNotices()}
               <div
                 data-floe-input-surface={!companionCollapsed() && (bottomActionMode() === 'chat' || (bottomActionMode() === 'input_request' && activeInputQuestionUsesTextEditor())) ? '' : undefined}
                 data-floe-surface={companionCollapsed() ? 'flat' : 'inset'}
@@ -11897,32 +11924,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 <div class="flower-composer-footer">
                     <div class="flower-model-stack">
                       {composerControls()}
-                      <Show when={selectedModelOption()?.billingSource === 'chatgpt_plan'}>
-                        <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
-                          <span>{copy().settings.dialog.chatGPT.planSource}</span>
-                          <a href="https://chatgpt.com/settings/usage" target="_blank" rel="noopener noreferrer" class="cursor-pointer whitespace-nowrap font-medium text-primary hover:underline">{copy().settings.dialog.chatGPT.manageUsage}</a>
-                        </div>
-                      </Show>
-                      <Show when={needsSetup() && !composerModelLoading()}>
-                        <div class="flower-setup-inline" role="status">{selectedComposerModelID() ? copy().chat.modelsUnavailable : copy().chat.configureProviderBeforeChat}</div>
-                      </Show>
-                      <Show when={!anyModelReady() || selectedComposerModelID().startsWith('desktop:')}>{modelSourceStatusRow('footer')}</Show>
-                      <Show when={handlerNotice()}>
-                        {(notice) => <div role="alert" class="flower-handler-error-card">
-                          <div class="flower-handler-error-icon"><AlertTriangle class="h-3.5 w-3.5" /></div>
-                          <div class="flower-handler-error-copy">
-                            <div class="flower-handler-error-title">{notice().title}</div>
-                            <div class="flower-handler-error-message">{notice().message}</div>
-                          </div>
-                          <button
-                            type="button"
-                            class="flower-handler-retry"
-                            onClick={() => void resolveHandlerDecision().catch(() => undefined)}
-                          >
-                            {copy().chat.handlerRetry}
-                          </button>
-                        </div>}
-                      </Show>
                     </div>
                     <div class="flower-composer-actions">
                 <div class="flower-composer-tool-cluster">
@@ -12028,7 +12029,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const chatHeaderActions = () => (
           <div class="flower-chat-header-actions">
-            <Show when={!props.embeddedConversation}><FlowerWorkingDirectoryControl
+            <Show when={!props.embeddedConversation && presentation() !== 'companion'}><FlowerWorkingDirectoryControl
               variant="browse"
               name={displayedWorkingDirectoryLabel()}
               title={workingDirectoryBrowseTitle()}

@@ -3,13 +3,15 @@ type: UI Contract
 title: Flower working directory navigation
 description: Select a new Flower draft directory and browse its files from the header, with shared conversation menu navigation.
 tags: [ui, flower, filesystem, terminal, workbench]
-timestamp: 2026-09-21T00:00:00Z
+timestamp: 2026-10-13T05:15:00Z
 ---
 # Summary
 
 Flower owns draft and conversation directory intent; Env App owns Activity and
-Workbench navigation. The header browses the displayed directory, and the
-new-conversation welcome selects the draft directory. Created directories stay
+Workbench navigation. The full-page header browses the displayed directory, and the
+full-page new-conversation welcome selects the draft directory. The floating
+companion omits both directory controls while retaining the same draft and
+runtime execution directory. Created directories stay
 immutable. Row and transcript menus capture the exact thread and directory;
 updates cannot retarget actions. Activity opens Files or a new Terminal session;
 Workbench creates the corresponding widget without changing scale. Runtime
@@ -23,7 +25,7 @@ Directory validation and selection state are owned by [absolute filesystem direc
 
 ## Header and new-conversation entry points
 
-The top-right header uses a compact, borderless folder-and-name button to browse
+The full-page top-right header uses a compact, borderless folder-and-name button to browse
 the current directory. Clicking it neither copies the path nor edits the draft.
 The current draft uses its selected directory or the runtime-declared default
 root. A selected conversation uses only its identity-matching loaded detail:
@@ -32,13 +34,16 @@ An unavailable target or browse capability disables the button with an explicit
 reason. Successful dispatch hands focus to Files; a dispatch failure reports the
 error and restores the connected header origin.
 
-Before creation, the welcome area places a muted working-directory label beside
+Before creation, the full-page welcome area places a muted working-directory label beside
 a blue folder/name/chevron selector. It opens the existing directory picker at
 the current draft path. A Recently used tab beside Home/Root offers up to three
 unique recent root-conversation directories ranked by update time. [Picker navigation](filesystem-picker-navigation.md)
 owns validation; only confirmation updates the draft. Cancellation keeps
 it unchanged and restores the selector. The selector is absent after creation.
 The composer footer and More panel contain no working-directory control.
+The floating companion also omits directory controls from its header and welcome
+area. This presentation choice never changes the shared draft directory or the
+runtime-declared default used when admitting a new conversation.
 
 Both entries adapt to available width. Long names truncate in the middle while
 retaining their identifying suffix, and full absolute paths remain available in
