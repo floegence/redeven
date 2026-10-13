@@ -85,7 +85,7 @@ import {
   MANAGED_RUNTIME_STAMP_SCHEMA_VERSION,
 } from './managedRuntimeSlot';
 
-const PUBLIC_INSTALL_SCRIPT_URL = 'https://redeven.com/install.sh';
+const PUBLIC_INSTALL_SCRIPT_URL = 'https://raw.githubusercontent.com/floegence/redeven/main/scripts/install.sh';
 const DEFAULT_SSH_STARTUP_TIMEOUT_MS = 45_000;
 const DEFAULT_SSH_STOP_TIMEOUT_MS = 5_000;
 const DEFAULT_SSH_POLL_INTERVAL_MS = 200;
