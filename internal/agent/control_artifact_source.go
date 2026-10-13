@@ -164,7 +164,7 @@ func (a *Agent) acquireControlArtifactEntry() (config.ControlArtifactEntry, int6
 		if err := config.Save(a.configPath, &next); err != nil {
 			return config.ControlArtifactEntry{}, 0, fmt.Errorf("migrate control artifact pool: %w", err)
 		}
-		a.cfg = &next
+		a.setRemoteConfigLocked(&next)
 		return config.ControlArtifactEntry{}, pool.BindingGeneration, errControlArtifactPoolEmpty
 	}
 	pool := a.cfg.ControlArtifactPool
@@ -187,7 +187,7 @@ func (a *Agent) acquireControlArtifactEntry() (config.ControlArtifactEntry, int6
 		if err := config.Save(a.configPath, &next); err != nil {
 			return config.ControlArtifactEntry{}, 0, fmt.Errorf("persist normalized control artifact pool: %w", err)
 		}
-		a.cfg = &next
+		a.setRemoteConfigLocked(&next)
 		pool = poolCopy
 	}
 	if pool.RecoveryState == config.ControlArtifactRecoveryRelink ||
@@ -211,7 +211,7 @@ func (a *Agent) acquireControlArtifactEntry() (config.ControlArtifactEntry, int6
 		if err := config.Save(a.configPath, &next); err != nil {
 			return config.ControlArtifactEntry{}, pool.BindingGeneration, fmt.Errorf("persist exhausted control artifact pool: %w", err)
 		}
-		a.cfg = &next
+		a.setRemoteConfigLocked(&next)
 	}
 	return config.ControlArtifactEntry{}, pool.BindingGeneration, errControlArtifactPoolEmpty
 }
@@ -276,7 +276,7 @@ func (a *Agent) commitControlArtifactPoolSpend(_ context.Context, bindingGenerat
 		}
 		return err
 	}
-	a.cfg = &next
+	a.setRemoteConfigLocked(&next)
 	a.controlArtifact = controlArtifactSessionBinding{
 		BindingGeneration: bindingGeneration,
 		Sequence:          sequence,

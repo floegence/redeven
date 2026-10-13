@@ -396,7 +396,7 @@ func (a *Agent) ConnectCloud(ctx context.Context, req CloudLinkRequest) (*CloudL
 			Err:     err,
 		}
 	}
-	a.cfg = cfg
+	a.setRemoteConfigLocked(cfg)
 	binding := a.enableProviderControlChannelLocked()
 	a.mu.Unlock()
 	if a.code != nil {
@@ -471,7 +471,7 @@ func (a *Agent) clearCloudLinkBindingLocked(snapshot providerDisconnectSnapshot)
 			Err:     err,
 		}
 	}
-	a.cfg = &next
+	a.setRemoteConfigLocked(&next)
 	a.controlChannelEnabled = false
 	a.remoteEnabled = false
 	a.effectiveRunMode = "local"

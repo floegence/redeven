@@ -32,7 +32,7 @@ func (a *Agent) advanceGatewayPublication(ctx context.Context) error {
 		return gatewaycloud.ErrState
 	}
 	var association gp.MemberCloudContext
-	if err := member.Request(ctx, "/v5/member/cloud", gp.CatalogRequest{ProtocolVersion: gp.Version}, &association, true); err != nil {
+	if err := a.gatewayMemberCloudContext(ctx, cfg, &association); err != nil {
 		return err
 	}
 	a.mu.Lock()
@@ -92,7 +92,7 @@ func (a *Agent) advanceGatewayPublication(ctx context.Context) error {
 		if err := config.Save(a.configPath, &next); err != nil {
 			return err
 		}
-		a.cfg = &next
+		a.setRemoteConfigLocked(&next)
 		if delivery != nil {
 			a.enableProviderControlChannelLocked()
 			restart = true

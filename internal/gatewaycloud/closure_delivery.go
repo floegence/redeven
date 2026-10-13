@@ -86,6 +86,14 @@ func (d *ClosureDelivery) Deliver(ctx context.Context) (*gc.RuntimeClosureExchan
 	return exchangeClosure(ctx, d.GatewayEndpoints, d.GatewayTLSRootPEM, d.Receipt)
 }
 func (r *RuntimeConfig) ObserveClosure(ctx context.Context, member *gatewaymembership.RuntimeConfig) (*gc.RuntimeClosureExchangeResponse, error) {
+	client, err := gatewaymembership.NewEndpointClient(member, false)
+	if err != nil {
+		return nil, err
+	}
+	defer client.Close()
+	return r.ObserveClosureUsing(ctx, member, client)
+}
+func (r *RuntimeConfig) ObserveClosureUsing(ctx context.Context, member *gatewaymembership.RuntimeConfig, client *gatewaymembership.EndpointClient) (*gc.RuntimeClosureExchangeResponse, error) {
 	if r == nil || r.Binding == nil || member == nil || r.ValidateMember(member) != nil {
 		return nil, ErrState
 	}
@@ -97,7 +105,14 @@ func (r *RuntimeConfig) ObserveClosure(ctx context.Context, member *gatewaymembe
 	if err := request.Sign(identity.PrivateKey); err != nil {
 		return nil, err
 	}
-	return exchangeClosure(ctx, member.ConnectionEndpoints(), member.GatewayTLSRootPEM, request)
+	var result gc.RuntimeClosureExchangeResponse
+	if err := client.Request(ctx, "/v5/member/cloud-closure", request, &result); err != nil {
+		return nil, err
+	}
+	if err := validateClosureExchange(request, result); err != nil {
+		return nil, err
+	}
+	return &result, nil
 }
 func exchangeClosure(ctx context.Context, endpoints []gp.GatewayEndpoint, root string, request gc.RuntimeClosureExchangeRequest) (*gc.RuntimeClosureExchangeResponse, error) {
 	// Only public trust is used after removal; expired or revoked member credentials
@@ -107,11 +122,18 @@ func exchangeClosure(ctx context.Context, endpoints []gp.GatewayEndpoint, root s
 	if err := relay.Request(ctx, "/v5/member/cloud-closure", request, &result, false); err != nil {
 		return nil, err
 	}
-	if c := result.Closure; c != nil && (c.BindingPublicID != request.Binding.PublicID || c.Generation != request.Binding.Generation || c.GatewayPublicID != request.Binding.GatewayPublicID || c.RuntimePublicID != request.Binding.RuntimePublicID) {
-		return nil, ErrState
-	}
-	if result.Accepted && (result.Closure == nil || !result.Closure.RuntimeClosed) {
-		return nil, ErrState
+	if err := validateClosureExchange(request, result); err != nil {
+		return nil, err
 	}
 	return &result, nil
+}
+
+func validateClosureExchange(request gc.RuntimeClosureExchangeRequest, result gc.RuntimeClosureExchangeResponse) error {
+	if c := result.Closure; c != nil && (c.BindingPublicID != request.Binding.PublicID || c.Generation != request.Binding.Generation || c.GatewayPublicID != request.Binding.GatewayPublicID || c.RuntimePublicID != request.Binding.RuntimePublicID) {
+		return ErrState
+	}
+	if result.Accepted && (result.Closure == nil || !result.Closure.RuntimeClosed) {
+		return ErrState
+	}
+	return nil
 }

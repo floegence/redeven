@@ -71,7 +71,7 @@ func (a *Agent) persistGatewayMemberFor(id string, member *gatewaymembership.Run
 	if !sameControlBinding(a.cfg, &next) && a.controlCancel != nil {
 		a.controlCancel()
 	}
-	a.cfg = &next
+	a.setRemoteConfigLocked(&next)
 	return nil
 }
 
@@ -195,7 +195,7 @@ func (a *Agent) changeGateway(invitation gp.EnrollmentDescriptor, choice string,
 		return err
 	}
 	publication := a.cfg.GatewayPublication.Clone()
-	a.cfg = next
+	a.setRemoteConfigLocked(next)
 	a.mu.Unlock()
 	if replace {
 		a.stopGatewayMemberLocked()
@@ -377,7 +377,7 @@ func (a *Agent) PublishGateway(gatewayID, choice string) error {
 	if err = config.Save(a.configPath, next); err != nil {
 		return err
 	}
-	a.cfg = next
+	a.setRemoteConfigLocked(next)
 	if a.controlCancel != nil {
 		a.controlCancel()
 	}

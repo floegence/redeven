@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/x509"
 	"encoding/base32"
 	"encoding/json"
 	"errors"
@@ -37,6 +38,7 @@ import (
 	"github.com/floegence/redeven/internal/gitruntime"
 	"github.com/floegence/redeven/internal/logsafe"
 	"github.com/floegence/redeven/internal/monitor"
+	"github.com/floegence/redeven/internal/periodic"
 	"github.com/floegence/redeven/internal/portforward"
 	"github.com/floegence/redeven/internal/redevpluginintegration"
 	"github.com/floegence/redeven/internal/rpcutil"
@@ -312,6 +314,12 @@ type Agent struct {
 	controlRPCSerial              uint64
 	controlRPCCallMu              sync.Mutex
 	controlArtifact               controlArtifactSessionBinding
+	// Optional diagnostics observe completed calls without changing authority or retries.
+	controlGrantObserver  func(context.Context, json.RawMessage)
+	controlRPCObserver    func(uint32, time.Duration, error)
+	gatewayStatusObserver func(time.Duration, error)
+	controlTrustRoots     *x509.CertPool
+	gatewayStatusClient   *gatewayStatusClient
 
 	localUIEnabled          bool
 	controlChannelEnabled   bool
@@ -740,6 +748,10 @@ func (a *Agent) runControlLoop(ctx context.Context) {
 	}
 	handlers := flowersec.NewRPCHandlers()
 	if err := handlers.HandleNotification(controlRPCTypeGrantServer, func(handlerCtx context.Context, payload json.RawMessage) error {
+		if a.controlGrantObserver != nil {
+			a.controlGrantObserver(handlerCtx, payload)
+			return nil
+		}
 		a.handleGrantNotifyForConfig(handlerCtx, payload, cfg)
 		return nil
 	}); err != nil {
@@ -756,6 +768,7 @@ func (a *Agent) runControlLoop(ctx context.Context) {
 			HTTPSProxy: proxy,
 			// Nil selects platform trust, including macOS Keychain roots.
 			Origin:         strings.TrimSuffix(cfg.AccessPointOrigin, "/"),
+			TrustRoots:     a.controlTrustRoots,
 			ConnectTimeout: 15 * time.Second,
 			RPCHandlers:    handlers,
 		},
@@ -901,7 +914,7 @@ func (a *Agent) runControlSession(ctx context.Context, current flowersec.Session
 	}
 
 	// Register is the Portal-side active-owner fence for this exact artifact.
-	_, err := callControlJSON[registerReq, registerResp](ctx, a, rpcC, controlRPCTypeRegister, &registerReq{
+	registered, err := callControlJSON[registerReq, registerResp](ctx, a, rpcC, controlRPCTypeRegister, &registerReq{
 		NamespaceBinding: gatewayFence(cfg), EnvPublicID: cfg.EnvironmentID,
 		LocalEnvironmentPublicID: cfg.LocalEnvironmentPublicID,
 		BindingGeneration:        cfg.BindingGeneration,
@@ -915,6 +928,13 @@ func (a *Agent) runControlSession(ctx context.Context, current flowersec.Session
 		EffectiveRunMode:         normalizeEffectiveRunMode(a.effectiveRunMode),
 		RemoteEnabled:            a.remoteEnabled,
 	})
+	if err != nil {
+		return err
+	}
+	if !registered.OK {
+		return errors.New("control registration rejected")
+	}
+	policy, err := applyHeartbeatPolicy(heartbeatPolicy{}, registered.HeartbeatPolicy)
 	if err != nil {
 		return err
 	}
@@ -939,7 +959,7 @@ func (a *Agent) runControlSession(ctx context.Context, current flowersec.Session
 	})
 
 	// Heartbeat loop.
-	t := time.NewTicker(10 * time.Second)
+	t := time.NewTimer(periodic.InitialDelay(policy.interval()))
 	defer t.Stop()
 
 	for {
@@ -947,12 +967,22 @@ func (a *Agent) runControlSession(ctx context.Context, current flowersec.Session
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-t.C:
-			_, err := callControlJSON[heartbeatReq, heartbeatResp](ctx, a, rpcC, controlRPCTypeHeartbeat, &heartbeatReq{
+			heartbeatCtx, cancelHeartbeat := context.WithTimeout(ctx, 3*time.Second)
+			reply, err := callControlJSON[heartbeatReq, heartbeatResp](heartbeatCtx, a, rpcC, controlRPCTypeHeartbeat, &heartbeatReq{
 				NowUnixMs: time.Now().UnixMilli(),
 			})
+			cancelHeartbeat()
 			if err != nil {
 				return err
 			}
+			if !reply.OK {
+				return errors.New("control heartbeat rejected")
+			}
+			policy, err = applyHeartbeatPolicy(policy, reply.HeartbeatPolicy)
+			if err != nil {
+				return err
+			}
+			t.Reset(policy.interval())
 			if err := a.maintainControlArtifactPool(ctx, rpcC); err != nil {
 				a.log.Warn("control recovery reserve remains degraded", "error", err)
 			}
@@ -1036,7 +1066,13 @@ func (a *Agent) currentControlRPC() rpcutil.Caller {
 	return a.controlRPC
 }
 
-func callControlJSON[TReq any, TResp any](ctx context.Context, a *Agent, caller rpcutil.Caller, typeID uint32, req *TReq) (*TResp, error) {
+func callControlJSON[TReq any, TResp any](ctx context.Context, a *Agent, caller rpcutil.Caller, typeID uint32, req *TReq) (result *TResp, callErr error) {
+	start := time.Now()
+	defer func() {
+		if a != nil && a.controlRPCObserver != nil && ctx.Err() != context.Canceled {
+			a.controlRPCObserver(typeID, time.Since(start), callErr)
+		}
+	}()
 	if caller == nil {
 		return nil, errors.New("missing control rpc client")
 	}
@@ -2010,7 +2046,8 @@ type registerReq struct {
 }
 
 type registerResp struct {
-	OK bool `json:"ok"`
+	OK              bool            `json:"ok"`
+	HeartbeatPolicy heartbeatPolicy `json:"heartbeat_policy"`
 }
 
 type heartbeatReq struct {
@@ -2018,7 +2055,8 @@ type heartbeatReq struct {
 }
 
 type heartbeatResp struct {
-	OK bool `json:"ok"`
+	OK              bool            `json:"ok"`
+	HeartbeatPolicy heartbeatPolicy `json:"heartbeat_policy"`
 }
 
 type runtimeDisconnectReq struct {

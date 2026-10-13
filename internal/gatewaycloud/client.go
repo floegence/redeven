@@ -33,7 +33,7 @@ func NewClient(origin string, transport http.RoundTripper) (*Client, error) {
 	return &Client{origin: origin, http: &http.Client{Transport: transport, Timeout: 20 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}, nil
 }
 
-// Close releases idle sockets owned by a short-lived client.
+// Close releases idle sockets when the owning identity is retired.
 func (c *Client) Close() {
 	if c != nil && c.http != nil {
 		c.http.CloseIdleConnections()

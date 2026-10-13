@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"github.com/floegence/redeven/internal/periodic"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -226,7 +227,7 @@ func (g *Gateway) Configure(ctx context.Context, origin, version string, reautho
 }
 
 func (g *Gateway) Run(ctx context.Context) {
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTimer(periodic.InitialDelay(5 * time.Second))
 	defer ticker.Stop()
 	defer g.egress.Close()
 	defer func() {
@@ -247,6 +248,7 @@ func (g *Gateway) Run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			ticker.Reset(5 * time.Second)
 		}
 	}
 }

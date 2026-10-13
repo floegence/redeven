@@ -177,7 +177,7 @@ func (a *Agent) prepareControlArtifactTopUp() (*config.ControlArtifactPendingTop
 				if err := config.Save(a.configPath, &next); err != nil {
 					return nil, nil, err
 				}
-				a.cfg = &next
+				a.setRemoteConfigLocked(&next)
 			}
 			return clonePendingControlArtifactTopUp(pool.PendingTopUp), cloneRemoteConfig(&next), nil
 		}
@@ -193,7 +193,7 @@ func (a *Agent) prepareControlArtifactTopUp() (*config.ControlArtifactPendingTop
 			if err := config.Save(a.configPath, &next); err != nil {
 				return nil, nil, err
 			}
-			a.cfg = &next
+			a.setRemoteConfigLocked(&next)
 		}
 		return nil, cloneRemoteConfig(&next), nil
 	}
@@ -211,7 +211,7 @@ func (a *Agent) prepareControlArtifactTopUp() (*config.ControlArtifactPendingTop
 	if err := config.Save(a.configPath, &next); err != nil {
 		return nil, nil, err
 	}
-	a.cfg = &next
+	a.setRemoteConfigLocked(&next)
 	return clonePendingControlArtifactTopUp(pool.PendingTopUp), cloneRemoteConfig(&next), nil
 }
 
@@ -354,7 +354,7 @@ func (a *Agent) applyControlArtifactTopUp(pending *config.ControlArtifactPending
 	if err := config.Save(a.configPath, &next); err != nil {
 		return fmt.Errorf("persist applied control artifact pool: %w", err)
 	}
-	a.cfg = &next
+	a.setRemoteConfigLocked(&next)
 	return nil
 }
 
@@ -380,7 +380,7 @@ func (a *Agent) markControlArtifactTopUpAcknowledged(expected *config.ControlArt
 	if err := config.Save(a.configPath, &next); err != nil {
 		return fmt.Errorf("persist control artifact pool acknowledgement: %w", err)
 	}
-	a.cfg = &next
+	a.setRemoteConfigLocked(&next)
 	return nil
 }
 
@@ -404,7 +404,7 @@ func (a *Agent) clearAcknowledgedControlArtifactTopUp(expected *config.ControlAr
 	if err := config.Save(a.configPath, &next); err != nil {
 		return fmt.Errorf("clear acknowledged control artifact top-up: %w", err)
 	}
-	a.cfg = &next
+	a.setRemoteConfigLocked(&next)
 	return nil
 }
 
@@ -422,7 +422,7 @@ func (a *Agent) markControlArtifactTopUpTerminal(expected *config.ControlArtifac
 	if err := config.Save(a.configPath, &next); err != nil {
 		return err
 	}
-	a.cfg = &next
+	a.setRemoteConfigLocked(&next)
 	return nil
 }
 
@@ -463,11 +463,17 @@ func (a *Agent) recordExpiredControlArtifactTopUp(expected *config.ControlArtifa
 	if err := config.Save(a.configPath, &next); err != nil {
 		return err
 	}
-	a.cfg = &next
+	a.setRemoteConfigLocked(&next)
 	return nil
 }
 
-func callControlRawJSON(ctx context.Context, a *Agent, caller rpcutil.Caller, typeID uint32, request any) (json.RawMessage, error) {
+func callControlRawJSON(ctx context.Context, a *Agent, caller rpcutil.Caller, typeID uint32, request any) (result json.RawMessage, callErr error) {
+	start := time.Now()
+	defer func() {
+		if a != nil && a.controlRPCObserver != nil && ctx.Err() != context.Canceled {
+			a.controlRPCObserver(typeID, time.Since(start), callErr)
+		}
+	}()
 	if caller == nil {
 		return nil, errors.New("missing control rpc client")
 	}

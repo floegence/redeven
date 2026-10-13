@@ -61,6 +61,10 @@ Successful issuance must lead to observed control registration before another au
 
 Expired account authorization requires sign-in; revoked permission requires access review without a sign-in loop. A replaced binding requires connection review. These terminal outcomes remain visible until explicit user intent or account authorization changes. Background status reads are fenced across manual connection actions, so a late read cannot restore an obsolete connection snapshot.
 
+## Control heartbeat policy
+
+Registration and heartbeats deliver a versioned, session-scoped policy. Runtime validates it, resets its timer, and fences reused Gateway transports by identity; see `redeven:okf/operations/controlplane-capacity-qualification.md`.
+
 # Boundaries
 
 RCPP v4 does not mirror Desktop Launcher Operations or Gateway state. Cloud may route requests to Runtime directly or through an optional Gateway, but it cannot start or repair the destination. An Environment with Cloud or Gateway access but no direct Desktop management channel remains access-only.
