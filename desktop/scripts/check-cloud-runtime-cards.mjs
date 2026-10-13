@@ -103,7 +103,7 @@ try{
    const cards=[...document.querySelectorAll('[data-environment-group]')];
    const tabs=cards[0]?.querySelectorAll('[role=tab]');
    return cards.length===1&&cards[0].getAttribute('data-environment-group')==='local'
-    &&[...tabs??[]].some(tab=>tab.textContent.includes('Redeven Cloud'))
+    &&[...tabs??[]].some(tab=>tab.textContent.trim()==='Cloud')
     &&tabs.length===(expectedGateways?3:2)&&!document.querySelector(`[data-environment-group="${cloudID}"]`);
   },{cloudID,expectedGateways},{timeout:15000});
   const value=await snapshot();const runtime=value.environments.find(entry=>entry.kind==='local_environment');
@@ -112,7 +112,7 @@ try{
   assert.equal(remote.access_group_id,runtime.id);
   assert.equal(runtime.runtime_service.gateway_memberships?.length??0,expectedGateways);
   const card=page.locator('[data-environment-group="local"]');
-  assert.deepEqual(await card.getByRole('tab').allTextContents(),expectedGateways?['Local','Redeven Cloud','Gateway']:['Local','Redeven Cloud']);
+  assert.deepEqual(await card.getByRole('tab').allTextContents(),expectedGateways?['Local','Cloud','Gateway']:['Local','Cloud']);
   await card.getByRole('tab').nth(1).click();
   await card.getByRole('tabpanel',{name:'Redeven Cloud',exact:true}).waitFor();
   return card;
