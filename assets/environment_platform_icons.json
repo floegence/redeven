@@ -44,6 +44,18 @@
       "sha256": "449a3893f905fd5a3206ff6cd7ca9cb4b26f64f23d480bec2e335ccb5a395b96",
       "upstream_sha256": "449a3893f905fd5a3206ff6cd7ca9cb4b26f64f23d480bec2e335ccb5a395b96",
       "modified": false
+    },
+    {
+      "identity": "unknown",
+      "label": "Virtual Machine (default device)",
+      "file": "default-device.svg",
+      "source_path": "public/icons/azure-virtual-machine/default.svg",
+      "license": "MIT",
+      "license_url": "https://opensource.org/license/mit",
+      "license_file": "assets/licenses/thesvg-MIT.txt",
+      "sha256": "092d18ffadec9ec0e5af129186dc7bc2a80544011e55f965604ed4b13873e0fc",
+      "upstream_sha256": "092d18ffadec9ec0e5af129186dc7bc2a80544011e55f965604ed4b13873e0fc",
+      "modified": false
     }
   ]
 }

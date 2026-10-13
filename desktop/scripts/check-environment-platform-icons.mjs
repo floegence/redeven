@@ -36,6 +36,7 @@ try {
         const card = document.querySelector(`[data-environment-group="${CSS.escape(runtimeID)}"]`);
         const title = card.querySelector('.redeven-environment-title');
         const slot = title.previousElementSibling;
+        const originalGraphic = slot.querySelector('[role="img"]');
         const tab = card.querySelectorAll('[role="tab"]')[1];
         tab.click();
         await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
@@ -50,20 +51,31 @@ try {
             || card.querySelector('.redeven-environment-title') !== title || title.previousElementSibling !== slot) throw new Error('OS refresh replaced card or title');
           if (document.activeElement !== tab || tab.getAttribute('aria-selected') !== 'true') throw new Error(`OS refresh changed access perspective or focus: ${JSON.stringify({ platform, selected: tab.getAttribute('aria-selected'), active: document.activeElement?.outerHTML, connected: tab.isConnected })}`);
           const graphic = slot.querySelector('[role="img"]');
+          if (!graphic || graphic !== originalGraphic) throw new Error('OS refresh replaced or removed the graphic');
+          const cap = document.createElement('span');
+          cap.style.cssText = 'display:inline-block;width:0;height:1cap;vertical-align:baseline';
+          title.append(cap);
+          const capRect = cap.getBoundingClientRect();
+          cap.remove();
+          const graphicRect = graphic.getBoundingClientRect();
+          const alignmentOffset = Math.abs(graphicRect.top + graphicRect.height / 2 - capRect.top - capRect.height / 2);
+          if (alignmentOffset > .3) throw new Error(`OS graphic is not aligned to the title cap height: ${alignmentOffset}px`);
           if (platform) {
-            if (graphic?.dataset.runtimePlatform !== platform || !graphic.getAttribute('aria-label')) throw new Error('OS graphic or accessible label missing');
-            const style = getComputedStyle(graphic);
-            if (style.maskImage === 'none' || style.backgroundColor === 'rgba(0, 0, 0, 0)') throw new Error('OS graphic theme mask is missing');
-            const url = style.maskImage.match(/^url\("?(.*?)"?\)$/)?.[1];
-            const image = new Image(); image.src = url;
-            await image.decode();
-            if (!url.startsWith('data:') && new URL(url).origin !== location.origin) throw new Error('OS asset has a remote network dependency');
-          } else if (graphic) throw new Error('Unknown OS rendered a graphic');
+            if (graphic.dataset.runtimePlatform !== platform || !graphic.getAttribute('aria-label')) throw new Error('OS graphic or accessible label missing');
+          } else {
+            if (graphic.dataset.runtimePlatform !== 'unknown' || !graphic.getAttribute('aria-label')) throw new Error('Unknown OS device graphic or accessible label missing');
+          }
+          const style = getComputedStyle(graphic);
+          if (style.maskImage === 'none' || style.backgroundColor === 'rgba(0, 0, 0, 0)') throw new Error('OS graphic theme mask is missing');
+          const url = style.maskImage.match(/^url\("?(.*?)"?\)$/)?.[1];
+          const image = new Image(); image.src = url;
+          await image.decode();
+          if (!url.startsWith('data:') && new URL(url).origin !== location.origin) throw new Error('OS asset has a remote network dependency');
           const after = card.getBoundingClientRect();
           if (Math.abs(before.height - after.height) > .5 || Math.abs(before.width - after.width) > .5) throw new Error('OS refresh changed card dimensions');
           if (getComputedStyle(title).userSelect !== 'text' || getComputedStyle(title).textOverflow !== 'ellipsis') throw new Error('Title selection or truncation is missing');
           if (getComputedStyle(slot).flexShrink !== '0' || title.getBoundingClientRect().left <= slot.getBoundingClientRect().left) throw new Error('OS slot is not fixed to the left of the name');
-          dimensions.push({ platform: platform ?? 'unknown', height: after.height, slotWidth: slot.getBoundingClientRect().width });
+          dimensions.push({ platform: platform ?? 'unknown', height: after.height, slotWidth: slot.getBoundingClientRect().width, alignmentOffset });
         }
         return dimensions;
       }, { snapshot, runtimeID: runtime.id });

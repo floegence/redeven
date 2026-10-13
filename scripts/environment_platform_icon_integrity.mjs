@@ -9,6 +9,7 @@ const approved = [
   ['macos', 'Apple', 'apple.svg', 'public/icons/apple/mono.svg', 'CC0-1.0'],
   ['linux', 'Linux', 'linux.svg', 'public/icons/linux/mono.svg', 'CC0-1.0'],
   ['windows', 'Windows', 'windows.svg', 'public/icons/windows/default.svg', 'MIT'],
+  ['unknown', 'Virtual Machine (default device)', 'default-device.svg', 'public/icons/azure-virtual-machine/default.svg', 'MIT'],
 ];
 const licenses = {
   'CC0-1.0': { file: 'assets/licenses/CC0-1.0.txt', hash: 'a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499', url: 'https://creativecommons.org/publicdomain/zero/1.0/' },
@@ -24,7 +25,7 @@ export function collectEnvironmentPlatformIconAssets(repoRoot) {
     throw new Error('environment platform icons must use the reviewed pinned theSVG source and license metadata');
   }
   if (JSON.stringify(manifest.assets?.map(asset => asset.identity)) !== JSON.stringify(approved.map(row => row[0]))) {
-    throw new Error('environment platform icons must exactly declare macOS, Linux and Windows');
+    throw new Error('environment platform icons must exactly declare macOS, Linux, Windows and the default device');
   }
   const licenseNotices = Object.entries(licenses).map(([license, details]) => {
     const bytes = fs.readFileSync(path.join(repoRoot, details.file));

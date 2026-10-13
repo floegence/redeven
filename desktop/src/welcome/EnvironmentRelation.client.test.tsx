@@ -65,7 +65,9 @@ describe('linked environment owner interactions', () => {
     const title = card.querySelector<HTMLElement>('.redeven-environment-title')!;
     const slot = title.previousElementSibling!;
     expect(slot.hasAttribute('data-runtime-platform-slot')).toBe(true);
-    expect(slot.querySelector('[role="img"]')).toBeNull();
+    const initialGraphic = slot.querySelector('[role="img"]')!;
+    expect(initialGraphic?.getAttribute('data-runtime-platform')).toBe('unknown');
+    expect(initialGraphic?.getAttribute('aria-label')).toBe('Runtime operating system unknown');
     expect(title.classList.contains('truncate')).toBe(true);
     expect(title.classList.contains('select-text')).toBe(true);
     await selectTab(card, 1);
@@ -81,11 +83,15 @@ describe('linked environment owner interactions', () => {
       expect(tab.getAttribute('aria-selected')).toBe('true');
       expect(document.activeElement).toBe(tab);
       const graphic = slot.querySelector<HTMLElement>('[role="img"]');
+      expect(graphic).toBe(initialGraphic);
+      expect(graphic?.style.getPropertyValue('mask-image')).toMatch(/^url\(/);
       if (runtime_platform) {
         expect(graphic?.dataset.runtimePlatform).toBe(runtime_platform);
         expect(graphic?.getAttribute('aria-label')).toContain('Runtime operating system:');
-        expect(graphic?.style.getPropertyValue('mask-image')).toMatch(/^url\(/);
-      } else expect(graphic).toBeNull();
+      } else {
+        expect(graphic?.dataset.runtimePlatform).toBe('unknown');
+        expect(graphic?.getAttribute('aria-label')).toBe('Runtime operating system unknown');
+      }
     }
   });
   it.each(['local', 'ssh', 'wsl', 'local_container', 'ssh_container'] as const)('offers Gateway access for an unchecked %s Runtime without starting it', async kind => {

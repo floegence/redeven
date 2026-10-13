@@ -1737,6 +1737,7 @@
   },
   "environmentCenter": {
     "runtimePlatform": "Betriebssystem der Laufzeit: {platform}",
+    "runtimePlatformUnknown": "Betriebssystem der Laufzeit unbekannt",
     "title": "Umgebungen",
     "description": "Lokale und Remote-Umgebungen verwalten. Verbinden Sie Redeven Cloud, öffnen Sie Arbeitsbereiche und binden Sie dieses lokale Umgebungsprofil bei Bedarf erneut.",
     "environmentsTitle": "Umgebungen",

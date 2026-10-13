@@ -1737,6 +1737,7 @@
   },
   "environmentCenter": {
     "runtimePlatform": "Système d’exploitation de l’environnement d’exécution : {platform}",
+    "runtimePlatformUnknown": "Système d’exploitation de l’environnement d’exécution inconnu",
     "title": "Environnements Environnements",
     "description": "Gérer les environnements locaux et distants. Connectez les Redeven Cloud, ouvrez des espaces de travail et reliez ce profil d'environnement local si nécessaire.",
     "environmentsTitle": "Environnements",

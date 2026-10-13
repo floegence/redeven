@@ -1737,6 +1737,7 @@
   },
   "environmentCenter": {
     "runtimePlatform": "런타임 운영체제: {platform}",
+    "runtimePlatformUnknown": "런타임 운영체제 알 수 없음",
     "title": "환경",
     "description": "로컬 및 원격 환경을 관리합니다. Redeven Cloud를 연결하고, 작업 공간을 열고, 필요할 때 이 로컬 환경 프로필을 다시 바인딩하세요.",
     "environmentsTitle": "환경",

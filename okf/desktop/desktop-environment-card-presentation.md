@@ -3,11 +3,11 @@ type: Interaction Contract
 title: Environment card presentation
 description: Preserve compact Env card tabs, facts, action footers, focus and geometry across snapshots.
 tags: [desktop, environment, interaction, accessibility]
-timestamp: 2026-10-12T00:00:00Z
+timestamp: 2026-10-13T00:00:00Z
 ---
 # Summary
 
-The shared Environment card renders independent access perspectives with its existing tabs, facts and split footer. Perspective changes select an explicit route and never grant authority or fall back after failure. Snapshot refresh preserves nodes, selection, drafts and focus; removing an owner closes only its surfaces. Long translations and narrow layouts retain single-line controls and stable card geometry. A locally bundled OS mark beside the Runtime name displays a trusted platform fact; unknown platforms keep an empty fixed slot.
+The shared Environment card renders independent access perspectives with its existing tabs, facts and split footer. Perspective changes select an explicit route and never grant authority or fall back after failure. Snapshot refresh preserves nodes, selection, drafts and focus; removing an owner closes only its surfaces. Long translations and narrow layouts retain single-line controls and stable card geometry. A locally bundled OS mark beside the Runtime name displays a trusted platform fact; unknown platforms show a neutral device silhouette in the same fixed slot.
 
 # Contract
 
