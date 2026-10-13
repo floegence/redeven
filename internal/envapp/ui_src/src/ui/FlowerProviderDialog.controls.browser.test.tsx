@@ -7,6 +7,7 @@ import { render } from 'solid-js/web';
 import { afterEach, expect, it, vi } from 'vitest';
 import { commands, page, userEvent } from 'vitest/browser';
 import { FlowerProviderDialog } from '../../../../flower_ui/src/settings/FlowerProviderDialog';
+import { providerDefaultsFixture } from '../../../../flower_ui/testing/providerCatalogFixture';
 import type { FlowerChatGPTAuth, FlowerChatGPTAccount } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../../../../flower_ui/src/copy';
 import { createLocalizedFlowerSurfaceCopy } from '../../../../flower_ui/src/i18n/createLocalizedFlowerSurfaceCopy';
@@ -44,7 +45,7 @@ async function mount(surface: 'desktop' | 'env', theme = 'porcelain-light', auth
   ];
   const discover = vi.fn(async () => ({ models }));
   dispose = render(() => <FloeProvider config={{ theme: { shellPresets: builtInShellThemePresets, defaultSurfaceStyle: 'soft-neumorphic' } }}><Theme /><FlowerProviderDialog
-    open mode="create" copy={localizedCopy} provider={{ id: 'openai', type: 'openai', models: account ? [models[0]] : [], ...(account ? { auth_method: 'chatgpt' as const, account_id: account.account_id, catalog_models: models } : {}) }} chatGPTAvailable chatGPTBindingID="local" chatGPTAccount={account}
+    open mode="create" copy={localizedCopy} providerDefaults={providerDefaultsFixture} provider={{ id: 'openai', type: 'openai', models: account ? [models[0]] : [], ...(account ? { auth_method: 'chatgpt' as const, account_id: account.account_id, catalog_models: models } : {}) }} chatGPTAvailable chatGPTBindingID="local" chatGPTAccount={account}
     chatGPTAuth={auth ?? vi.fn(async () => ({ id: 'attempt', state: 'waiting' }))} onDiscoverModels={discover}
     keyConfigured={false} webSearchKeyConfigured={false} onOpenChange={vi.fn()} onConfirm={vi.fn()} /></FloeProvider>, host);
   await expect.element(page.getByRole('dialog')).toBeVisible();

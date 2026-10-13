@@ -10,7 +10,7 @@ import type { FlowerChatGPTAuth, FlowerChatGPTAccount, FlowerModelCatalogDiscove
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, untrack } from 'solid-js';
 import { createStore, reconcile } from 'solid-js/store';
 import { cn } from '@floegence/floe-webapp-core';
-import { Check, ExternalLink, Info, Pencil } from '@floegence/floe-webapp-core/icons';
+import { Check, ExternalLink, Info, Pencil, Save } from '@floegence/floe-webapp-core/icons';
 import { Button, Checkbox, ConfirmDialog, Dialog, Input, Select, StableText } from '@floegence/floe-webapp-core/ui';
 
 import { defaultFlowerProviderModels } from './modelSelection';
@@ -403,6 +403,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
           <Button
             size="sm"
             variant="default"
+            icon={Save}
             loading={props.saving}
             disabled={!selectedProviderType() || props.saving || Boolean(missingCredential()) || incompleteModel() || Boolean(store.draft?.model_selection && !store.draft.model_selection.selected_models)}
             onClick={() => { if (selectedProviderType() && store.draft && !missingCredential() && !incompleteModel()) void props.onConfirm(store.draft); }}
