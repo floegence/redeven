@@ -52,7 +52,10 @@ authorization.
 The shared read resource owns a ten-second total availability deadline across
 baseline, explicit Desktop recovery, and discovery. Pending sources start their
 background check as soon as the baseline arrives, independently of a stalled
-settings read. Web transports receive the owner's abort signal; Desktop IPC
+settings read. Flower observes both settings revision and connection authorization
+generation, so confirmation or replacement of a connection restarts its reads
+instead of leaving the previous pending projection visible. Web transports
+receive the owner's abort signal; Desktop IPC
 late replies cannot publish after timeout. Transport cancellation is a settled
 failure unless the owning scope changed. Failed pending rows become unavailable,
 known ready models and selection identities remain intact, and explicit refresh

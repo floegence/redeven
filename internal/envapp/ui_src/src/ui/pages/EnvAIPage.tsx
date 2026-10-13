@@ -86,6 +86,7 @@ export function EnvAIPage(props: EnvAIPageProps) {
   const filesystemPicker = useEnvFilesystemPicker();
   const i18n = useI18n();
   const notification = useNotification();
+  const modelReadRevision = () => (env.settingsSeq?.() ?? 0) + (env.resourceCacheAccess?.().generation ?? 0);
   const readinessController = env.aiReadinessController ?? createAIReadinessController();
   const surfaceCopy = createMemo(() => createEnvFlowerSurfaceCopy(i18n, i18n.locale()));
   const companionCopy = createMemo<FlowerThreadSwitcherCopy | undefined>(() => (
@@ -98,7 +99,7 @@ export function EnvAIPage(props: EnvAIPageProps) {
     envLabel: trim(env.env()?.name) || trim(env.env_id()) || i18n.t('flower.currentEnvironmentFallback'),
     desktopSessionTargetRoute: readDesktopSessionContextSnapshot()?.target_route,
     rpc,
-    settingsRevision: env.settingsSeq,
+    settingsRevision: modelReadRevision,
     modelReadResource: env.flowerModelReadResource,
     isAvailable: () => {
       const state = readinessController.snapshot().state;
@@ -214,7 +215,7 @@ export function EnvAIPage(props: EnvAIPageProps) {
         }}
         copy={surfaceCopy()}
         draftCoordinator={props.draftCoordinator}
-        settingsRevision={env.settingsSeq}
+        settingsRevision={modelReadRevision}
         presentation={props.presentation}
         engaged={props.engaged}
         transcriptVisible={props.transcriptVisible}
