@@ -5900,6 +5900,7 @@
       "dialogChatGPTAuthorizationRequired": "Tu conexión de ChatGPT necesita autorización. Abre la configuración del proveedor e inicia sesión de nuevo.",
       "dialogChatGPTManageUsage": "Gestionar uso",
       "dialogChatGPTSignInFailed": "No se pudo completar el inicio de sesión. Inténtalo de nuevo.",
+      "dialogChatGPTSignInCleanupUnconfirmed": "El inicio de sesión no se completó. No se pudo confirmar la eliminación de la nueva sesión; revisa las aplicaciones conectadas en ChatGPT.",
       "dialogChatGPTSignOut": "Cerrar sesión",
       "dialogChatGPTRevocationUnconfirmed": "Has cerrado sesión en este dispositivo. No se pudo confirmar la revocación; revisa las aplicaciones conectadas en ChatGPT.",
       "dialogChatGPTUsageUnavailable": "El uso del plan de ChatGPT no está disponible para esta solicitud. Gestiona tu uso o inténtalo de nuevo más tarde.",

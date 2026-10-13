@@ -880,6 +880,7 @@
     "dialogChatGPTAuthorizationRequired": "Your ChatGPT connection needs authorization. Open provider settings and sign in again.",
     "dialogChatGPTManageUsage": "Manage usage",
     "dialogChatGPTSignInFailed": "Sign-in could not complete. Try again.",
+    "dialogChatGPTSignInCleanupUnconfirmed": "Sign-in did not complete. Cleanup of the new session could not be confirmed; review connected apps in ChatGPT.",
     "dialogChatGPTSignOut": "Sign out",
     "dialogChatGPTRevocationUnconfirmed": "Signed out on this device. Revocation could not be confirmed; review connected apps in ChatGPT.",
     "dialogChatGPTUsageUnavailable": "ChatGPT plan usage is unavailable for this request. Manage your usage or try again later.",

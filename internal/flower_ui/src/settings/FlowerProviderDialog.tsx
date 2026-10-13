@@ -127,7 +127,9 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
   const visibleModelNames = createMemo(() => filterFlowerModels(catalog(), query()).map((model) => model.model_name));
   const [authorizing, setAuthorizing] = createSignal(false);
   const [authProgress, setAuthProgress] = createSignal<'preparing' | 'waiting' | 'verifying'>('preparing');
-  const [authError, setAuthError] = createSignal('');
+  const [authFailure, setAuthFailure] = createSignal<{ message: string; cleanupUnconfirmed: boolean }>();
+  const authError = () => authFailure()?.message ?? '';
+  const setAuthError = (message: string, cleanupUnconfirmed = false) => setAuthFailure(message ? { message, cleanupUnconfirmed } : undefined);
   let authPrimary: HTMLButtonElement | undefined;
   let authCancel: HTMLButtonElement | undefined;
   let authActions: HTMLDivElement | undefined;
@@ -283,7 +285,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
             else void discover();
             return;
           }
-          if (result.state === 'failed') { if (pendingAttempt?.id === id) pendingAttempt.failed = true; finishAuthorization(); setAuthError(result.error_code === 'revocation_unconfirmed' ? copy().chatGPT.revocationUnconfirmed : copy().chatGPT.signInFailed); return; }
+          if (result.state === 'failed') { if (pendingAttempt?.id === id) pendingAttempt.failed = true; finishAuthorization(); setAuthError(result.error_code === 'revocation_unconfirmed' ? copy().chatGPT.signInCleanupUnconfirmed : copy().chatGPT.signInFailed, result.error_code === 'revocation_unconfirmed'); return; }
           if (result.state === 'preparing' || result.state === 'waiting' || result.state === 'verifying') setAuthProgress(result.state);
           pollTimer = setTimeout(() => { void poll(); }, 800);
         } catch {
@@ -565,7 +567,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                         <Show when={account()?.state === 'temporarily_unavailable' || account()?.state === 'storage_unavailable'}>
                           <Button size="sm" variant="outline" disabled={retrying() || accountBusy()} onClick={() => void retryAccount()}>{copy().chatGPT.retry}</Button>
                         </Show>
-                        <Show when={account()?.revocation_confirmed === false}>
+                        <Show when={account()?.revocation_confirmed === false || authFailure()?.cleanupUnconfirmed}>
                           <a class="cursor-pointer text-sm text-primary hover:underline" href="https://chatgpt.com/#settings" target="_blank" rel="noopener noreferrer">{copy().chatGPT.disconnectApps}<ExternalLink class="inline h-3 w-3" aria-hidden="true" /></a>
                         </Show>
                         <div class="flower-provider-account-actions" ref={authActions}>

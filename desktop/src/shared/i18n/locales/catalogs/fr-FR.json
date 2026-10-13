@@ -1011,6 +1011,7 @@
       "dialogChatGPTAuthorizationRequired": "Votre connexion ChatGPT nécessite une autorisation. Ouvrez les paramètres du fournisseur et reconnectez-vous.",
       "dialogChatGPTManageUsage": "Gérer l’utilisation",
       "dialogChatGPTSignInFailed": "La connexion n’a pas pu aboutir. Réessayez.",
+      "dialogChatGPTSignInCleanupUnconfirmed": "La connexion n’a pas abouti. Le nettoyage de la nouvelle session n’a pas pu être confirmé ; vérifiez les applications connectées dans ChatGPT.",
       "dialogChatGPTSignOut": "Se déconnecter",
       "dialogChatGPTRevocationUnconfirmed": "Déconnexion effectuée sur cet appareil. La révocation n’a pas pu être confirmée. Vérifiez les applications connectées dans ChatGPT.",
       "dialogChatGPTUsageUnavailable": "L’utilisation du forfait ChatGPT est indisponible pour cette requête. Gérez votre utilisation ou réessayez plus tard.",
