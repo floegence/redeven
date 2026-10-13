@@ -3055,7 +3055,7 @@
               "settings"
             ],
             "summary": "The shared Flower dialog and global Env provider editor own provider configuration.\nUsers choose a provider, supply required connection access, and then configure\nmodels. Unready ChatGPT authorization exposes connection actions only. Provider\nnavigation, authentication selection, and model rows retain stable geometry and\nfocus. Failed authorization or discovery keeps recovery actions visible and must\nnot apply responses from a changed provider or trusted connection.",
-            "section_count": 1
+            "section_count": 2
           },
           {
             "concept_id": "ui.flower-composer-attachments",
@@ -33374,7 +33374,7 @@
         "title": "Flower provider configuration",
         "type": "UI Contract"
       },
-      "body_length": 3871,
+      "body_length": 4279,
       "summary": "The shared Flower dialog and global Env provider editor own provider configuration.\nUsers choose a provider, supply required connection access, and then configure\nmodels. Unready ChatGPT authorization exposes connection actions only. Provider\nnavigation, authentication selection, and model rows retain stable geometry and\nfocus. Failed authorization or discovery keeps recovery actions visible and must\nnot apply responses from a changed provider or trusted connection.",
       "sections": [
         {
@@ -33383,6 +33383,13 @@
           "level": 1,
           "body": "## Layout and connection readiness\n\nProvider creation in the shared Flower dialog places a compact provider picker\nbeside one configuration pane. Selecting a provider reveals its identity,\nconnection controls, and searchable model catalog without pushing other provider\nchoices below a long expanded form. Icon, label, and selection slots keep every\nbrand aligned. Selecting the current provider retains its pane and draft;\nchanging type clears transient search, discovery, and entered credentials.\nExisting shared-provider edits retain their type.\nNarrow screens move the picker above the form and use the dialog body as the only\nvertical scroller; wide layouts scroll the picker and configuration independently.\n\nAuthentication methods use a clearly contrasted segmented control below the\nconnection heading. Account actions and endpoint fields remain flat; redundant provider, credential, and aggregate\nsearch badges are omitted. Required credentials, authorization guidance, and save\nerrors remain actionable. Before ChatGPT authorization is ready, only connection\ncontrols appear; success synchronizes the catalog once and reveals models.\nAPI providers reveal models after required credentials are available; optional\nlocal keys remain optional. Global Env model navigation follows the same boundary.\nModel rows use thin horizontal rules and stable controls,\nwith metadata editing revealed explicitly. Search, refresh, and selection preserve\nsurviving row identity and focus; loading, authorization, errors, and empty search\nresults have distinct visible feedback. Provider changes retain the existing\nauthentication cancellation and discovery identity boundaries.\n\nGlobal Env settings retain their type, connection, models, and advanced sections,\nwith the same flat picker and catalog treatment. The catalog includes selected\ncustom models and is the single model-selection list; it does not repeat selected\nmodels in another section. Host permission checks and persistence remain unchanged.\n\n## OpenAI authentication\n\nThe shared dialog offers ChatGPT account and API key methods. Verified local\nOpenAI drafts default to ChatGPT; existing drafts retain their method. Remote\nsettings keep ChatGPT disabled with persistent guidance and no login panel.\nVerification preserves choices, search and focus until explicit save. Account,\nlocality and cancellation rules belong to the\n[local authentication contract](../ai/chatgpt-local-authentication.md).",
           "char_count": 2452
+        },
+        {
+          "id": "boundaries",
+          "title": "Boundaries",
+          "level": 1,
+          "body": "Credential entry makes API model configuration available; it does not claim that\nthe service has verified the key. ChatGPT requires a verified ready account.\nAuthentication authority and cancellation remain owned by the local authentication\ncontract. The editors preserve host permission checks and save explicitly;\ncatalog synchronization never selects newly discovered models automatically.",
+          "char_count": 392
         }
       ],
       "evidence": [
@@ -38347,5 +38354,5 @@
       ]
     }
   ],
-  "source_sha256": "c5690fc4d63cb70fbdf34c8a6dcab32dc88fb431aaed2fa87519e51b54aac283"
+  "source_sha256": "ad047136483f9907adf55ba2ce7f1d7847040053d64a6252a6a07715ff2ded9f"
 }
