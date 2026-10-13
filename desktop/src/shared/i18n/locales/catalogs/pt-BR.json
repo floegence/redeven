@@ -858,7 +858,7 @@
       "description": "Configure os modelos e a permissão padrão do Flower para o perfil de IA local.",
       "currentModel": "Modelo atual",
       "changeModel": "Alterar modelo",
-      "finishModelEdit": "Concluído",
+      "closeModelSelection": "Fechar seleção de modelos",
       "noModelSelected": "Nenhum modelo selecionado",
       "text": "Texto",
       "imageInput": "Entrada de imagem",

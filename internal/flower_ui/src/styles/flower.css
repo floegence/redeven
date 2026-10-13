@@ -8937,11 +8937,42 @@ button.flower-attachment-preview-trigger:disabled {
 
 .flower-settings-model-field { display: grid; grid-template-columns: 2rem minmax(0, 1fr) auto; min-width: 0; align-items: center; gap: 0.875rem; padding-block: 16px 12px; }
 .flower-settings-model-identity { min-width: 0; }
-.flower-settings-model-editor > div { display: block; width: 100%; min-width: 0; }
 .flower-settings-model-name { color: var(--foreground); font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
 .flower-settings-model-provider { margin-top: 2px; color: var(--muted-foreground); font-size: 12px; }
 .flower-settings-model-edit { flex-shrink: 0; }
-.flower-settings-model-select { min-height: 2rem; max-width: 100%; font-size: var(--floe-type-body); }
+
+.flower-model-selection-dialog { width: min(44rem, 100%); max-width: min(44rem, 100%); }
+.flower-model-selection-dialog [data-floe-dialog-header] h2 { font-size: 16px; }
+.flower-model-selection-content { display: flex; min-height: 0; flex-direction: column; padding: 0; overflow: hidden; }
+.flower-model-selection-search { flex-shrink: 0; padding: 16px; border-bottom: 1px solid var(--border); }
+.flower-model-selection-search input { font-size: var(--floe-type-body); }
+.flower-model-selection-list { min-height: 0; max-height: min(60vh, 30rem); overflow-y: auto; overscroll-behavior: contain; padding: 4px 12px 12px; }
+.flower-model-selection-group-heading { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 16px 8px 8px; color: var(--muted-foreground); font-size: 12px; font-weight: 600; }
+.flower-model-selection-group-heading > span:first-of-type { min-width: 0; overflow-wrap: anywhere; }
+.flower-model-selection-count { margin-left: auto; font-size: 11px; font-weight: 400; font-variant-numeric: tabular-nums; }
+.flower-model-selection-option { display: block; width: 100%; min-width: 0; margin-block: 2px; padding: 12px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--foreground); text-align: left; cursor: pointer; }
+.flower-model-selection-option:hover { background: var(--muted); }
+.flower-model-selection-option[aria-selected='true'] { background: color-mix(in srgb, var(--primary) 7%, var(--card)); }
+.flower-model-selection-option:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+.flower-model-selection-option:disabled { cursor: not-allowed; opacity: 0.6; }
+.flower-model-selection-identity { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+.flower-model-selection-name { flex: 1; min-width: 0; overflow: hidden; color: var(--foreground); font-size: 13px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.flower-model-selection-current { display: inline-flex; flex-shrink: 0; align-items: center; gap: 4px; color: var(--primary); font-size: 11px; white-space: nowrap; }
+.flower-model-selection-id { flex-basis: 100%; min-width: 0; color: var(--muted-foreground); font-size: 11px; overflow-wrap: anywhere; }
+.flower-model-selection-metadata { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 10px 0 0; }
+.flower-model-selection-metadata > div { min-width: 0; }
+.flower-model-selection-metadata dt { color: var(--muted-foreground); font-size: 11px; overflow-wrap: anywhere; }
+.flower-model-selection-metadata dd { margin: 3px 0 0; color: var(--foreground); font-size: 12px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.flower-model-selection-reasoning { display: inline-block; margin-top: 8px; padding: 2px 6px; border-radius: 4px; background: var(--muted); color: var(--muted-foreground); font-size: 11px; }
+.flower-model-selection-empty { margin: 0; padding: 40px 16px; color: var(--muted-foreground); font-size: 13px; text-align: center; }
+@media (max-width: 480px) {
+  .flower-model-selection-search { padding: 12px; }
+  .flower-model-selection-list { padding-inline: 8px; }
+  .flower-model-selection-option { padding: 10px; }
+  .flower-model-selection-current { flex-basis: 100%; }
+  .flower-model-selection-metadata { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
 
 .flower-settings-policy-radio {
   display: inline-flex;
@@ -11152,7 +11183,7 @@ button.flower-attachment-preview-trigger:disabled {
   .flower-composer input[type='password'],
   .flower-reasoning-menu-budget { font-size: 1rem; }
 
-  .flower-settings-model-select,
+  .flower-model-selection-search input,
   .flower-settings-text-input,
   .flower-settings-input,
   .flower-settings-select { min-height: 44px; font-size: 1rem; }

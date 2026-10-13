@@ -858,7 +858,7 @@
       "description": "ローカル AI プロファイルのモデルとデフォルトの Flower 権限を構成します。",
       "currentModel": "現在のモデル",
       "changeModel": "モデルを変更",
-      "finishModelEdit": "完了",
+      "closeModelSelection": "モデル選択を閉じる",
       "noModelSelected": "モデルが選択されていません",
       "text": "テキスト",
       "imageInput": "画像入力",

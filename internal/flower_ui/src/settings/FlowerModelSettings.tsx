@@ -1,7 +1,7 @@
-import { For, Show, createMemo, createSignal, createUniqueId, type Component } from 'solid-js';
+import { For, Show, createMemo, createSignal, type Component } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { Check, ChevronDown, Pencil, Plus, Trash } from '@floegence/floe-webapp-core/icons';
-import { Button, Select } from '@floegence/floe-webapp-core/ui';
+import { ChevronDown, Pencil, Plus, Trash } from '@floegence/floe-webapp-core/icons';
+import { Button } from '@floegence/floe-webapp-core/ui';
 import type { FlowerSettingsCopy } from '../copy';
 import type { FlowerProvider, FlowerReasoningSelection } from '../contracts/flowerSurfaceContracts';
 import { flowerModelSupportsImage, formatFlowerTokenCount } from '../flowerModelLabel';
@@ -11,6 +11,7 @@ import { reasoningCapabilitySupportsControl } from '../reasoning';
 import { flowerProviderUsesCustomName } from './providerCatalog';
 import { FlowerProviderBrandIcon } from './FlowerProviderBrandIcon';
 import { FlowerSubSectionHeader } from './FlowerSettingsPrimitives';
+import { FlowerModelSelectionDialog } from './FlowerModelSelectionDialog';
 
 export type FlowerModelSettingsProps = Readonly<{
   copy: FlowerSettingsCopy;
@@ -32,50 +33,30 @@ export const FlowerModelSettings: Component<FlowerModelSettingsProps> = (props) 
   const displayName = (provider: FlowerProvider) => flowerProviderUsesCustomName(provider.type)
     ? provider.name?.trim() || copy().providerTypeLabels[provider.type]
     : copy().providerTypeLabels[provider.type];
-  const modelOptions = createMemo(() => props.providers.filter(provider => provider.enabled !== false)
-    .flatMap(provider => provider.models.filter(model => !model.unavailable).map(model => ({
-      value: `${provider.id}/${model.model_name}`,
-      label: `${displayName(provider)} / ${model.display_name || model.wire_model_name || model.model_name}`,
-    }))));
+  const modelGroups = createMemo(() => props.providers.filter(provider => provider.enabled !== false)
+    .map(provider => ({ id: provider.id, type: provider.type, label: displayName(provider), models: provider.models.filter(model => !model.unavailable) }))
+    .filter(group => group.models.length > 0));
   const activeProvider = createMemo(() => props.providers.find(provider => props.currentModelID.startsWith(`${provider.id}/`)));
   const activeModel = createMemo(() => activeProvider()?.models.find(model => `${activeProvider()?.id}/${model.model_name}` === props.currentModelID));
-  const [modelEditing, setModelEditing] = createSignal(false);
-  const modelEditorID = createUniqueId();
-  let modelEditButton: HTMLButtonElement | undefined;
-  let modelEditor: HTMLDivElement | undefined;
-  const finishModelEdit = () => {
-    setModelEditing(false);
-    queueMicrotask(() => modelEditButton?.focus());
-  };
-  const openModelEditor = () => {
-    setModelEditing(true);
-    queueMicrotask(() => modelEditor?.querySelector<HTMLElement>('[data-floe-dropdown-trigger]')?.focus());
-  };
+  const [modelDialogOpen, setModelDialogOpen] = createSignal(false);
 
   return <>
     <section class="flower-settings-section flower-settings-current-model" aria-label={copy().currentModel}>
       <FlowerSubSectionHeader title={copy().models} />
       <div class="flower-settings-section-content flower-settings-model-group">
-        <Show when={props.currentModelID || modelOptions().length} fallback={<p class="flower-body-copy text-muted-foreground">{copy().noModelSelected}</p>}>
+        <Show when={props.currentModelID || modelGroups().length} fallback={<p class="flower-body-copy text-muted-foreground">{copy().noModelSelected}</p>}>
           <div class="flower-settings-model-field">
             <div class="flower-settings-provider-brand"><Show when={activeProvider()}>{provider => <FlowerProviderBrandIcon type={provider().type} class="h-6 w-6" />}</Show></div>
             <div class="flower-settings-model-identity">
-              <Show when={modelEditing()} fallback={<div class="flower-settings-model-name">{activeModel()?.display_name || activeModel()?.wire_model_name || activeModel()?.model_name || props.currentModelID || copy().noModelSelected}</div>}>
-                <div ref={modelEditor} id={modelEditorID} class="flower-settings-model-editor" onKeyDown={event => { if (event.key === 'Escape') finishModelEdit(); }}>
-                  <Select value={props.currentModelID} options={modelOptions()}
-                    onChange={value => { if (modelOptions().some(option => option.value === value)) props.onChooseModel(value); finishModelEdit(); }}
-                    placeholder={copy().selectModelPlaceholder} disabled={props.disabled} class="flower-settings-model-select w-full" />
-                </div>
-              </Show>
+              <div class="flower-settings-model-name">{activeModel()?.display_name || activeModel()?.wire_model_name || activeModel()?.model_name || props.currentModelID || copy().noModelSelected}</div>
               <div class="flower-settings-model-provider">{activeProvider() && displayName(activeProvider()!)}</div>
             </div>
-            <Button ref={modelEditButton} size="sm" variant="ghost" icon={modelEditing() ? Check : Pencil}
-              class="flower-settings-model-edit" aria-expanded={modelEditing()} aria-controls={modelEditing() ? modelEditorID : undefined}
-              aria-label={modelEditing() ? copy().finishModelEdit : copy().changeModel}
-              title={modelEditing() ? copy().finishModelEdit : copy().changeModel}
-              disabled={props.disabled || modelOptions().length === 0}
-              onClick={() => modelEditing() ? finishModelEdit() : openModelEditor()}>
-              <span class="flower-settings-model-edit-label">{modelEditing() ? copy().finishModelEdit : copy().changeModel}</span>
+            <Button size="sm" variant="ghost" icon={Pencil}
+              class="flower-settings-model-edit" aria-haspopup="dialog" aria-expanded={modelDialogOpen()}
+              aria-label={copy().changeModel} title={copy().changeModel}
+              disabled={props.disabled || modelGroups().length === 0}
+              onClick={() => setModelDialogOpen(true)}>
+              <span class="flower-settings-model-edit-label">{copy().changeModel}</span>
             </Button>
           </div>
           <Show when={activeModel()}>{model =>
@@ -98,6 +79,9 @@ export const FlowerModelSettings: Component<FlowerModelSettingsProps> = (props) 
         </Show>
       </div>
     </section>
+    <FlowerModelSelectionDialog open={modelDialogOpen()} onOpenChange={setModelDialogOpen}
+      groups={modelGroups()} currentModelID={props.currentModelID} copy={copy()} disabled={props.disabled}
+      onChooseModel={props.onChooseModel} />
     <section class="flower-settings-section flower-settings-providers-section" aria-label={copy().providersTitle}>
       <FlowerSubSectionHeader title={copy().providersTitle} description={copy().providersDescription}
         actions={<Button size="sm" variant="ghost" icon={Plus} class="flower-settings-provider-add" onClick={props.onAddProvider} disabled={props.disabled}>{copy().addProvider}</Button>} />
