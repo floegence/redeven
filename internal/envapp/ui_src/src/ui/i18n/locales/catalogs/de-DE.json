@@ -5826,6 +5826,7 @@
       "dialogConnectionName": "Verbindungsname",
       "dialogAPIKey": "API-Schlüssel",
       "dialogStoredKeyKept": "Der gespeicherte Schlüssel bleibt erhalten",
+      "dialogReplaceStoredKeyHint": "Ersetzt den gespeicherten Schlüssel beim Speichern",
       "dialogRequiredBeforeUse": "Vor Nutzung erforderlich",
       "dialogPasteAPIKey": "API-Schlüssel einfügen",
       "dialogRequired": "Erforderlich",

@@ -287,6 +287,13 @@
   grid-column: 1 / -1;
 }
 
+.flower-provider-secret-input[data-stored-secret='true']::placeholder {
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  letter-spacing: 0.22em;
+  opacity: 1;
+}
+
 .flower-provider-choice:disabled {
   cursor: not-allowed;
   opacity: 0.6;

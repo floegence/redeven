@@ -33641,7 +33641,7 @@
         "title": "Flower provider configuration",
         "type": "UI Contract"
       },
-      "body_length": 5211,
+      "body_length": 6125,
       "summary": "The shared Flower dialog and global Env provider editor own provider configuration.\nUsers choose a provider, supply required connection access, and then configure\nmodels. Unready ChatGPT authorization exposes connection actions only. Provider\nnavigation, authentication selection, and model rows retain stable geometry and\nfocus. Failed authorization or discovery keeps recovery actions visible and must\nnot apply responses from a changed provider or trusted connection.",
       "sections": [
         {
@@ -33655,8 +33655,8 @@
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Credential entry makes API model configuration available; it does not claim that\nthe service has verified the key. ChatGPT requires a verified ready account.\nAuthentication authority and cancellation remain owned by the local authentication\ncontract. The editors preserve host permission checks and save explicitly;\ncatalog synchronization never selects newly discovered models automatically.",
-          "char_count": 392
+          "body": "Saved API and Brave credentials appear as a fixed-length dot placeholder in both\neditors. The input value contains only the new credential draft; the saved secret\nand its length never enter the browser. Focusing the field retains the placeholder,\ntyping shows a masked replacement with an explicit save hint, and clearing the\ndraft restores the placeholder. Saving an unchanged or cleared draft preserves the\nstored credential and emits no credential patch. Providers without a stored key\nretain their entry prompt and existing readiness requirements.\n\nCredential entry makes API model configuration available; it does not claim that\nthe service has verified the key. ChatGPT requires a verified ready account.\nAuthentication authority and cancellation remain owned by the local authentication\ncontract. The editors preserve host permission checks and save explicitly;\ncatalog synchronization never selects newly discovered models automatically.",
+          "char_count": 945
         }
       ],
       "evidence": [
@@ -33684,6 +33684,16 @@
           "id": "redeven:internal/envapp/ui_src/src/ui/FlowerProviderDialog.selection.browser.test.tsx:0:stable scroll, model row identity, focus, discovery metadata, and parameter editing.",
           "source": "redeven:internal/envapp/ui_src/src/ui/FlowerProviderDialog.selection.browser.test.tsx",
           "description": "Stable scroll, model row identity, focus, discovery metadata, and parameter editing."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/FlowerProviderDialog.credentials.browser.test.tsx:0:saved credential placeholders, focus, replacement, and empty-key guidance in actual desktop and env styles.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/FlowerProviderDialog.credentials.browser.test.tsx",
+          "description": "Saved credential placeholders, focus, replacement, and empty-key guidance in actual Desktop and Env styles."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/pages/settings/FlowerSection.browser.test.tsx:0:global env credential preservation and replacement request payloads.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/pages/settings/FlowerSection.browser.test.tsx",
+          "description": "Global Env credential preservation and replacement request payloads."
         }
       ],
       "snippet": "The shared Flower dialog and global Env provider editor own provider configuration. Users choose a provider, supply required connection access, and then configure models. Unready ChatGPT authorization exposes connection actions only. Provid",
@@ -38626,5 +38636,5 @@
       ]
     }
   ],
-  "source_sha256": "d75b03a0622876c84a06241f4b1a3dce8a9906da2d438975374ca9599a32b17e"
+  "source_sha256": "6ce15a11bd8a3a6eacee1983f30d8455879045b74cfd7fc434e67f40d1e2fca3"
 }

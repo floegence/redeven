@@ -27,6 +27,7 @@ import {
   flowerProviderUsesCustomName,
 } from './providerCatalog';
 import {
+  FLOWER_STORED_SECRET_PLACEHOLDER,
   FlowerFieldLabel,
   FlowerSettingsPill,
 } from './FlowerSettingsPrimitives';
@@ -86,6 +87,14 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
   const [editingModelName, setEditingModelName] = createSignal('');
   const [selectedProviderType, setSelectedProviderType] = createSignal<FlowerProviderType | null>(null);
   const [store, setStore] = createStore<{ draft: FlowerProviderDraft | null }>({ draft: null });
+  const keyHint = () => {
+    if (props.keyConfigured) return store.draft?.provider_api_key?.trim() ? copy().replaceStoredKeyHint : copy().storedKeyKept;
+    return store.draft && flowerProviderAPIKeyOptional(store.draft.type) ? copy().catalog.optionalKey : copy().requiredBeforeUse;
+  };
+  const braveKeyHint = () => {
+    if (props.webSearchKeyConfigured) return store.draft?.web_search_api_key?.trim() ? copy().replaceStoredKeyHint : copy().storedKeyKept;
+    return copy().requiredForBraveSearch;
+  };
   const catalog = createMemo(() => store.draft ? flowerProviderModelChoices(store.draft) : []);
   const catalogByName = createMemo(() => new Map(catalog().map((model) => [model.model_name, model])));
   // Selection and discovery replace metadata objects; model names keep rows and focus stable.
@@ -439,7 +448,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                     </Show>
                     <Show when={!chatGPTSelected()}>
                     <div>
-                      <FlowerFieldLabel hint={flowerProviderAPIKeyOptional(store.draft!.type) ? copy().catalog.optionalKey : props.keyConfigured ? copy().storedKeyKept : copy().requiredBeforeUse}>
+                      <FlowerFieldLabel hint={keyHint()}>
                         {copy().apiKey}
                       </FlowerFieldLabel>
                       <Input
@@ -448,9 +457,13 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                         onInput={(event) => updateProvider({
                           provider_api_key: event.currentTarget.value,
                         })}
-                        placeholder={props.keyConfigured ? copy().storedKeyKept : copy().pasteAPIKey}
+                        placeholder={props.keyConfigured ? FLOWER_STORED_SECRET_PLACEHOLDER : copy().pasteAPIKey}
+                        aria-label={copy().apiKey}
+                        aria-description={keyHint()}
+                        autocomplete="new-password"
+                        data-stored-secret={props.keyConfigured ? 'true' : undefined}
                         size="sm"
-                        class="w-full"
+                        class="flower-provider-secret-input w-full"
                         disabled={!providerID()}
                       />
                     </div>
@@ -487,7 +500,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                     </Show>
                     <Show when={(store.draft!.web_search?.mode ?? 'disabled') === 'brave'}>
                       <div>
-                        <FlowerFieldLabel hint={props.webSearchKeyConfigured ? copy().storedKeyKept : copy().requiredForBraveSearch}>
+                        <FlowerFieldLabel hint={braveKeyHint()}>
                           {copy().braveAPIKey}
                         </FlowerFieldLabel>
                         <Input
@@ -496,9 +509,13 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                           onInput={(event) => updateProvider({
                             web_search_api_key: event.currentTarget.value,
                           })}
-                          placeholder={props.webSearchKeyConfigured ? copy().storedBraveKeyKept : copy().pasteBraveAPIKey}
+                          placeholder={props.webSearchKeyConfigured ? FLOWER_STORED_SECRET_PLACEHOLDER : copy().pasteBraveAPIKey}
+                          aria-label={copy().braveAPIKey}
+                          aria-description={braveKeyHint()}
+                          autocomplete="new-password"
+                          data-stored-secret={props.webSearchKeyConfigured ? 'true' : undefined}
                           size="sm"
-                          class="w-full"
+                          class="flower-provider-secret-input w-full"
                           disabled={!providerID()}
                         />
                       </div>

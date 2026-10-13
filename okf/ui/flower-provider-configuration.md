@@ -70,6 +70,14 @@ shared Desktop and Env styles and explicit localized copy.
 
 # Boundaries
 
+Saved API and Brave credentials appear as a fixed-length dot placeholder in both
+editors. The input value contains only the new credential draft; the saved secret
+and its length never enter the browser. Focusing the field retains the placeholder,
+typing shows a masked replacement with an explicit save hint, and clearing the
+draft restores the placeholder. Saving an unchanged or cleared draft preserves the
+stored credential and emits no credential patch. Providers without a stored key
+retain their entry prompt and existing readiness requirements.
+
 Credential entry makes API model configuration available; it does not claim that
 the service has verified the key. ChatGPT requires a verified ready account.
 Authentication authority and cancellation remain owned by the local authentication
@@ -83,3 +91,5 @@ catalog synchronization never selects newly discovered models automatically.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerProviderDialog.chatgpt.browser.test.tsx` - Local and remote authorization, localized responsive layouts, and provider-picker stability through authentication and catalog search.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerProviderDialog.controls.browser.test.tsx` - Actual Desktop and Env styles, brand alignment, authentication contrast, and connection-before-model interaction.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerProviderDialog.selection.browser.test.tsx` - Stable scroll, model row identity, focus, discovery metadata, and parameter editing.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerProviderDialog.credentials.browser.test.tsx` - Saved credential placeholders, focus, replacement, and empty-key guidance in actual Desktop and Env styles.
+- `redeven:internal/envapp/ui_src/src/ui/pages/settings/FlowerSection.browser.test.tsx` - Global Env credential preservation and replacement request payloads.

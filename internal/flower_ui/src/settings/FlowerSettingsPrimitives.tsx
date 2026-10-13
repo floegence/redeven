@@ -7,6 +7,9 @@ import { AlertTriangle, Check } from '@floegence/floe-webapp-core/icons';
 import type { FlowerAutoSaveCopy } from '../copy';
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../copy';
 
+// A fixed placeholder represents a stored credential without loading its value or length.
+export const FLOWER_STORED_SECRET_PLACEHOLDER = '••••••••';
+
 export const FlowerSubSectionHeader: Component<{
   title: string;
   description?: string;

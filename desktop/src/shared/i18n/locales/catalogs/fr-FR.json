@@ -937,6 +937,7 @@
       "dialogConnectionName": "Nom de connexion",
       "dialogAPIKey": "Clé API",
       "dialogStoredKeyKept": "La clé stockée sera conservée",
+      "dialogReplaceStoredKeyHint": "Remplace la clé enregistrée lors de la sauvegarde",
       "dialogRequiredBeforeUse": "Requis avant utilisation",
       "dialogPasteAPIKey": "Coller la clé API",
       "dialogRequired": "Requis",

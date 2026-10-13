@@ -1,4 +1,5 @@
 import { ManualModelCapabilities } from '../../../../../../flower_ui/src/settings/ManualModelCapabilities';
+import { FLOWER_STORED_SECRET_PLACEHOLDER } from '../../../../../../flower_ui/src/settings/FlowerSettingsPrimitives';
 import { flowerModelNeedsConfiguration } from '../../../../../../flower_ui/src/providerModelProjection';
 import { ModelCatalogControls } from '../../../../../../flower_ui/src/settings/ModelCatalogControls';
 import { flowerProviderAPIKeyOptional, missingFlowerProviderCredential } from '../../../../../../flower_ui/src/providerCredentials';
@@ -90,6 +91,14 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
   const [customModelName, setCustomModelName] = createSignal('');
   const saving = createMemo(() => props.aiSaving || props.keySaving || props.webSearchKeySaving);
   const incompleteModel = () => props.provider?.models.some(flowerModelNeedsConfiguration) ?? false;
+  const keyHint = () => {
+    if (props.keySet) return props.keyDraft.trim() ? i18n.t('flowerSurface.settings.dialogReplaceStoredKeyHint') : i18n.t('flowerProviderDialog.savedKeyHint');
+    return props.provider && flowerProviderAPIKeyOptional(props.provider.type) ? catalogCopy().optionalKey : i18n.t('flowerProviderDialog.requiredBeforeUseHint');
+  };
+  const braveKeyHint = () => {
+    if (props.webSearchKeySet) return props.webSearchKeyDraft.trim() ? i18n.t('flowerSurface.settings.dialogReplaceStoredKeyHint') : i18n.t('flowerProviderDialog.savedKeyHint');
+    return i18n.t('flowerProviderDialog.requiredForBraveHint');
+  };
 
   createEffect(() => {
     if (!props.open) {
@@ -282,16 +291,20 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                         </div>
                       </Show>
                       <div>
-                        <FieldLabel hint={flowerProviderAPIKeyOptional(provider().type) ? catalogCopy().optionalKey : props.keySet ? i18n.t('flowerProviderDialog.savedKeyHint') : i18n.t('flowerProviderDialog.requiredBeforeUseHint')}>
+                        <FieldLabel hint={keyHint()}>
                           {i18n.t('flowerProviderDialog.apiKey')}
                         </FieldLabel>
                         <Input
                           type="password"
                           value={props.keyDraft}
                           onInput={(event) => props.onChangeKeyDraft(event.currentTarget.value)}
-                          placeholder={props.keySet ? i18n.t('flowerProviderDialog.keepExistingKey') : i18n.t('flowerProviderDialog.pasteApiKey')}
+                          placeholder={props.keySet ? FLOWER_STORED_SECRET_PLACEHOLDER : i18n.t('flowerProviderDialog.pasteApiKey')}
+                          aria-label={i18n.t('flowerProviderDialog.apiKey')}
+                          aria-description={keyHint()}
+                          autocomplete="new-password"
+                          data-stored-secret={props.keySet ? 'true' : undefined}
                           size="sm"
-                          class="w-full"
+                          class="flower-provider-secret-input w-full"
                           disabled={!props.canInteract || !props.canAdmin || !providerID()}
                         />
                       </div>
@@ -326,16 +339,20 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                       </Show>
                       <Show when={(provider().web_search?.mode ?? 'disabled') === 'brave'}>
                         <div>
-                          <FieldLabel hint={props.webSearchKeySet ? i18n.t('flowerProviderDialog.savedKeyHint') : i18n.t('flowerProviderDialog.requiredForBraveHint')}>
+                          <FieldLabel hint={braveKeyHint()}>
                             {i18n.t('flowerProviderDialog.braveApiKey')}
                           </FieldLabel>
                           <Input
                             type="password"
                             value={props.webSearchKeyDraft}
                             onInput={(event) => props.onChangeWebSearchKeyDraft(event.currentTarget.value)}
-                            placeholder={props.webSearchKeySet ? i18n.t('flowerProviderDialog.keepExistingBraveKey') : i18n.t('flowerProviderDialog.pasteBraveApiKey')}
+                            placeholder={props.webSearchKeySet ? FLOWER_STORED_SECRET_PLACEHOLDER : i18n.t('flowerProviderDialog.pasteBraveApiKey')}
+                            aria-label={i18n.t('flowerProviderDialog.braveApiKey')}
+                            aria-description={braveKeyHint()}
+                            autocomplete="new-password"
+                            data-stored-secret={props.webSearchKeySet ? 'true' : undefined}
                             size="sm"
-                            class="w-full"
+                            class="flower-provider-secret-input w-full"
                             disabled={!props.canInteract || !props.canAdmin || !providerID()}
                           />
                         </div>

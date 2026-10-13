@@ -714,6 +714,7 @@ export const flowerSurfaceEnUS = {
     dialogChatGPTSignOut: "Sign out",
     dialogChatGPTRevocationUnconfirmed: "Signed out on this device. Revocation could not be confirmed; review connected apps in ChatGPT.",
     dialogStoredKeyKept: 'Stored key will be kept',
+    dialogReplaceStoredKeyHint: 'Replaces the saved key on save',
     dialogRequiredBeforeUse: 'Required before use',
     dialogPasteAPIKey: 'Paste API key',
     dialogRequired: 'Required',

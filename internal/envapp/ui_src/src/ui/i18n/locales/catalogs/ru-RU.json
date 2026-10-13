@@ -5935,6 +5935,7 @@
       "dialogConnectionName": "Имя подключения",
       "dialogAPIKey": "API-ключ",
       "dialogStoredKeyKept": "Сохраненный ключ будет сохранен.",
+      "dialogReplaceStoredKeyHint": "Заменит сохранённый ключ при сохранении",
       "dialogRequiredBeforeUse": "Требуется перед использованием",
       "dialogPasteAPIKey": "Вставьте ключ API",
       "dialogRequired": "Обязательно",

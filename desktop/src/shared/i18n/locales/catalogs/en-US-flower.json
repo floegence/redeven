@@ -809,6 +809,7 @@
     "dialogConnectionName": "Connection name",
     "dialogAPIKey": "API key",
     "dialogStoredKeyKept": "Stored key will be kept",
+    "dialogReplaceStoredKeyHint": "Replaces the saved key on save",
     "dialogRequiredBeforeUse": "Required before use",
     "dialogPasteAPIKey": "Paste API key",
     "dialogRequired": "Required",

@@ -5826,6 +5826,7 @@
       "dialogConnectionName": "接続名",
       "dialogAPIKey": "API キー",
       "dialogStoredKeyKept": "保存されたキーは保持されます",
+      "dialogReplaceStoredKeyHint": "保存すると既存のキーが置き換わります",
       "dialogRequiredBeforeUse": "使用前に必須",
       "dialogPasteAPIKey": "API キーを貼り付けます",
       "dialogRequired": "必須",
