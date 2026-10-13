@@ -25,8 +25,9 @@ const (
 	flowersecGoVersion   = "v5.11.0"
 	flowersecCorePackage = "@floegence/flowersec-core"
 	flowersecCoreVersion = "5.11.0"
-	floeWebappVersion    = "0.86.25"
-	floeEnvCoreVersion   = "0.86.25"
+	floeWebappVersion    = "0.86.27"
+	floeEnvCoreVersion   = floeWebappVersion
+	floretVersion        = "v7.30.0"
 )
 
 var flowersecNPMPackages = []string{
@@ -572,10 +573,7 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 func TestFloretDependencyUsesPublishedRelease(t *testing.T) {
 	t.Parallel()
 
-	const (
-		floretModule  = "github.com/floegence/floret/v7"
-		floretVersion = "v7.29.2"
-	)
+	const floretModule = "github.com/floegence/floret/v7"
 	root := repoRootForTest(t)
 	goMod := readRepoFile(t, root, "go.mod")
 	goSum := readRepoFile(t, root, "go.sum")
@@ -670,7 +668,7 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 			"Floret ThreadService is the only lifecycle boundary",
 			"one workspace SSE",
 			"redeven-desktop-placement-h2/1",
-			"\"compatibility_epoch\": 54",
+			"\"compatibility_epoch\": 57",
 			"flower-title-generation-v1",
 			"title_generation",
 			"redeven-runtime-v2",
