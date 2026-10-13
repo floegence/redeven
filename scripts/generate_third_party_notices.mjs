@@ -1012,7 +1012,7 @@ ${renderTerminalAgentIconTable(containerServiceIcons.rows)}
 
 ## Bundled Environment platform icons
 
-The Apple, Linux and Windows marks identify the operating system of the Runtime shown in a Desktop Environment card. When the system is unknown, the Virtual Machine asset from the Azure collection supplies a neutral monitor silhouette; it does not identify an OS, virtualization technology or cloud provider. Assets are bundled unchanged from theSVG revision \`${environmentPlatformIcons.revision}\`; CSS masks present them in the current theme color. The pinned [upstream icon metadata](${environmentPlatformIcons.metadataURL}) declares CC0-1.0 for Apple and Linux and MIT for Windows and Virtual Machine. Product names and trademarks remain the property of their respective owners; copyright licenses do not grant trademark rights or imply endorsement.
+The Apple, Linux and Windows marks identify the operating system of the Runtime shown in a Desktop Environment card. When the system is unknown, the Virtual Machine asset from the Azure collection supplies a default device illustration; it does not identify an OS, virtualization technology or cloud provider. Assets are bundled unchanged from theSVG revision \`${environmentPlatformIcons.revision}\` and display their original colors. Apple uses the upstream black and white variants for light and dark themes respectively. The pinned [upstream icon metadata](${environmentPlatformIcons.metadataURL}) declares CC0-1.0 for Apple and Linux and MIT for Windows and Virtual Machine. Product names and trademarks remain the property of their respective owners; copyright licenses do not grant trademark rights or imply endorsement.
 
 ${renderTerminalAgentIconTable(environmentPlatformIcons.rows)}
 

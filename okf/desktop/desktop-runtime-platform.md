@@ -7,7 +7,7 @@ timestamp: 2026-10-13T00:00:00Z
 ---
 # Summary
 
-Redeven Runtime owns its OS fact; Desktop consumes only recognized trusted platform observations. Environment titles display pinned local theSVG marks for macOS, Linux or Windows with localized accessible names. Unknown platforms display a neutral device silhouette and do not block an otherwise supported Runtime. Snapshots preserve the card, access perspective, focus and geometry; provider or client identity never substitutes for the Runtime OS.
+Redeven Runtime owns its OS fact; Desktop consumes only recognized trusted platform observations. Environment titles display pinned local theSVG marks for macOS, Linux or Windows in their original brand colors with localized accessible names. Unknown platforms display a default device illustration and do not block an otherwise supported Runtime. Snapshots preserve the card, access perspective, focus and geometry; provider or client identity never substitutes for the Runtime OS.
 
 # Contract
 
@@ -19,11 +19,11 @@ Desktop normalizes recognized OS strings to `macos`, `linux` or `windows` at rep
 
 ## Display and bundled assets
 
-The title reserves a 1rem non-shrinking slot immediately before the selectable, single-line truncated Runtime name. A .875rem mark uses the theme's muted icon color in light and dark modes and scales with text. Its center follows the title font's capital height and baseline rather than the surrounding line box. Known platforms expose a localized Runtime operating-system name to assistive technology and on hover. An unknown platform displays a neutral monitor silhouette with localized copy stating that the Runtime operating system is unknown; it implies no OS, virtualization technology or cloud provider. Platform changes update the retained graphic/title/card subtree without changing height, selected access perspective or keyboard focus.
+The title reserves a 1rem non-shrinking slot immediately before the selectable, single-line truncated Runtime name. A .875rem image preserves the original brand colors and scales with text; masks, tinting and grayscale filters must not replace those colors. Apple uses the upstream black mark in light themes and white mark in dark themes, selected from Floe's resolved application theme. Linux retains the colored Tux and Windows retains its blue mark. Its center follows the title font's capital height and baseline rather than the surrounding line box. Known platforms expose a localized Runtime operating-system name to assistive technology and on hover. An unknown platform displays the default device illustration with localized copy stating that the Runtime operating system is unknown; it implies no OS, virtualization technology or cloud provider. Platform and theme changes update the retained image/title/card subtree without changing height, selected access perspective or keyboard focus. Images cannot be dragged, and environment names remain selectable.
 
 Native Local uses `platform_capabilities.platform`; WSL always uses Linux. SSH, container and external URL entries use normalized `runtime_platform` from actual Runtime startup, health or Presence observations. Gateway entries use the member Runtime's `metadata.os`. Cloud entries display only an OS supplied by Runtime health. Desktop host, provider origin, region, hostname and CPU architecture cannot supply a remote Runtime OS. The title follows the primary Runtime across linked access perspectives.
 
-Apple `mono.svg`, Linux `mono.svg`, Windows `default.svg` and the Azure collection's Virtual Machine `default.svg` are bundled unchanged from `glincker/thesvg` commit `8731f4b62fea303b022e4aa0125783aeb42c3ea5`. CSS masks normalize their color and use the Virtual Machine asset's neutral monitor silhouette without altering source bytes or fetching a CDN. `assets/environment_platform_icons.json` binds each source path, revision, license and SHA-256. The notice generator verifies the assets and CC0-1.0/MIT texts, reproduces those licenses and records trademark ownership. `macOS`, `Linux` and `Windows` are fixed operating-system names; surrounding accessible copy is localized.
+Apple `light.svg` and `dark.svg`, Linux `default.svg`, Windows `default.svg` and the Azure collection's Virtual Machine `default.svg` are bundled unchanged from `glincker/thesvg` commit `8731f4b62fea303b022e4aa0125783aeb42c3ea5`. Native image rendering preserves their original colors without altering source bytes or fetching a CDN. `assets/environment_platform_icons.json` binds each source path, revision, theme variant, license and SHA-256. The notice generator verifies the assets and CC0-1.0/MIT texts, reproduces those licenses and records trademark ownership. `macOS`, `Linux` and `Windows` are fixed operating-system names; surrounding accessible copy is localized.
 
 # Boundaries
 
@@ -38,6 +38,6 @@ Apple `mono.svg`, Linux `mono.svg`, Windows `default.svg` and the Azure collecti
 - `redeven:cmd/redeven/desktop_bridge.go` - Carry the observed Runtime platform through the placement hello.
 - `redeven:desktop/src/shared/desktopRuntimePlatform.ts` - Closed normalization for optional reports.
 - `redeven:desktop/src/main/desktopRuntimePlatformProjection.test.ts` - Native, WSL, SSH, container, URL and Cloud source selection, including absent reports.
-- `redeven:desktop/src/welcome/EnvironmentCards.tsx` - Local themed masks and a fixed title slot.
+- `redeven:desktop/src/welcome/EnvironmentCards.tsx` - Original brand colors, application-theme Apple variants and a fixed title slot.
 - `redeven:desktop/scripts/check-environment-platform-icons.mjs` - All-locale theme, narrow/enlarged-text, local asset loading and live refresh continuity.
 - `redeven:scripts/environment_platform_icon_integrity.mjs` - Pinned source, asset SHA-256 and per-asset license validation.

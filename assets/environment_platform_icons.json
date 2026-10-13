@@ -11,26 +11,38 @@
   "assets": [
     {
       "identity": "macos",
-      "label": "Apple",
+      "label": "Apple (light theme)",
       "file": "apple.svg",
-      "source_path": "public/icons/apple/mono.svg",
+      "source_path": "public/icons/apple/light.svg",
       "license": "CC0-1.0",
       "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
       "license_file": "assets/licenses/CC0-1.0.txt",
-      "sha256": "2a1509dccd25e6d2bc7a11a8e52941077e1a48555e192ce638699b9f083c2a7c",
-      "upstream_sha256": "2a1509dccd25e6d2bc7a11a8e52941077e1a48555e192ce638699b9f083c2a7c",
+      "sha256": "0b8ffab7955ccdd02e8a3a8cfc0091abb1ddb2d1e9eb0861a4c6ee3bad7d3582",
+      "upstream_sha256": "0b8ffab7955ccdd02e8a3a8cfc0091abb1ddb2d1e9eb0861a4c6ee3bad7d3582",
+      "modified": false
+    },
+    {
+      "identity": "macos_dark",
+      "label": "Apple (dark theme)",
+      "file": "apple-dark.svg",
+      "source_path": "public/icons/apple/dark.svg",
+      "license": "CC0-1.0",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "license_file": "assets/licenses/CC0-1.0.txt",
+      "sha256": "7834279835bdfb4d48a56e4daae398938cd81272c82874b4ea9f67c091fe5698",
+      "upstream_sha256": "7834279835bdfb4d48a56e4daae398938cd81272c82874b4ea9f67c091fe5698",
       "modified": false
     },
     {
       "identity": "linux",
       "label": "Linux",
       "file": "linux.svg",
-      "source_path": "public/icons/linux/mono.svg",
+      "source_path": "public/icons/linux/default.svg",
       "license": "CC0-1.0",
       "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
       "license_file": "assets/licenses/CC0-1.0.txt",
-      "sha256": "7e55f2779ae11a83c9dad2d0414a65d8ca7867d0716ce58bfe41ed299ae1447f",
-      "upstream_sha256": "7e55f2779ae11a83c9dad2d0414a65d8ca7867d0716ce58bfe41ed299ae1447f",
+      "sha256": "ee7e85d245e8cac3de69ad0e5ad131ccf5cead034f407fcdec410fcf24710185",
+      "upstream_sha256": "ee7e85d245e8cac3de69ad0e5ad131ccf5cead034f407fcdec410fcf24710185",
       "modified": false
     },
     {

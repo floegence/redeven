@@ -6,8 +6,9 @@ const revision = '8731f4b62fea303b022e4aa0125783aeb42c3ea5';
 const repository = 'https://github.com/glincker/thesvg';
 const assetRoot = 'desktop/src/welcome/assets/environment-platform-icons';
 const approved = [
-  ['macos', 'Apple', 'apple.svg', 'public/icons/apple/mono.svg', 'CC0-1.0'],
-  ['linux', 'Linux', 'linux.svg', 'public/icons/linux/mono.svg', 'CC0-1.0'],
+  ['macos', 'Apple (light theme)', 'apple.svg', 'public/icons/apple/light.svg', 'CC0-1.0'],
+  ['macos_dark', 'Apple (dark theme)', 'apple-dark.svg', 'public/icons/apple/dark.svg', 'CC0-1.0'],
+  ['linux', 'Linux', 'linux.svg', 'public/icons/linux/default.svg', 'CC0-1.0'],
   ['windows', 'Windows', 'windows.svg', 'public/icons/windows/default.svg', 'MIT'],
   ['unknown', 'Virtual Machine (default device)', 'default-device.svg', 'public/icons/azure-virtual-machine/default.svg', 'MIT'],
 ];

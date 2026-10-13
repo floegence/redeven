@@ -1863,7 +1863,7 @@
               "environment",
               "interaction"
             ],
-            "summary": "The shared Environment card renders independent access perspectives with its existing tabs, facts and split footer. Perspective changes select an explicit route and never grant authority or fall back after failure. Snapshot refresh preserves nodes, selection, drafts and focus; removing an owner closes only its surfaces. Long translations and narrow layouts retain single-line controls and stable card geometry. A locally bundled OS mark beside the Runtime name displays a trusted platform fact; unknown platforms show a neutral device silhouette in the same fixed slot.",
+            "summary": "The shared Environment card renders independent access perspectives with its existing tabs, facts and split footer. Perspective changes select an explicit route and never grant authority or fall back after failure. Snapshot refresh preserves nodes, selection, drafts and focus; removing an owner closes only its surfaces. Long translations and narrow layouts retain single-line controls and stable card geometry. A locally bundled OS mark in its original brand colors beside the Runtime name displays a trusted platform fact; unknown platforms show a default device illustration in the same fixed slot.",
             "section_count": 2
           },
           {
@@ -1923,7 +1923,7 @@
               "platform",
               "runtime"
             ],
-            "summary": "Redeven Runtime owns its OS fact; Desktop consumes only recognized trusted platform observations. Environment titles display pinned local theSVG marks for macOS, Linux or Windows with localized accessible names. Unknown platforms display a neutral device silhouette and do not block an otherwise supported Runtime. Snapshots preserve the card, access perspective, focus and geometry; provider or client identity never substitutes for the Runtime OS.",
+            "summary": "Redeven Runtime owns its OS fact; Desktop consumes only recognized trusted platform observations. Environment titles display pinned local theSVG marks for macOS, Linux or Windows in their original brand colors with localized accessible names. Unknown platforms display a default device illustration and do not block an otherwise supported Runtime. Snapshots preserve the card, access perspective, focus and geometry; provider or client identity never substitutes for the Runtime OS.",
             "section_count": 2
           },
           {
@@ -21848,8 +21848,8 @@
         "title": "Environment card presentation",
         "type": "Interaction Contract"
       },
-      "body_length": 11034,
-      "summary": "The shared Environment card renders independent access perspectives with its existing tabs, facts and split footer. Perspective changes select an explicit route and never grant authority or fall back after failure. Snapshot refresh preserves nodes, selection, drafts and focus; removing an owner closes only its surfaces. Long translations and narrow layouts retain single-line controls and stable card geometry. A locally bundled OS mark beside the Runtime name displays a trusted platform fact; unknown platforms show a neutral device silhouette in the same fixed slot.",
+      "body_length": 11065,
+      "summary": "The shared Environment card renders independent access perspectives with its existing tabs, facts and split footer. Perspective changes select an explicit route and never grant authority or fall back after failure. Snapshot refresh preserves nodes, selection, drafts and focus; removing an owner closes only its surfaces. Long translations and narrow layouts retain single-line controls and stable card geometry. A locally bundled OS mark in its original brand colors beside the Runtime name displays a trusted platform fact; unknown platforms show a default device illustration in the same fixed slot.",
       "sections": [
         {
           "id": "contract",
@@ -23145,15 +23145,15 @@
         "title": "Runtime platform facts and icons",
         "type": "Desktop Contract"
       },
-      "body_length": 4782,
-      "summary": "Redeven Runtime owns its OS fact; Desktop consumes only recognized trusted platform observations. Environment titles display pinned local theSVG marks for macOS, Linux or Windows with localized accessible names. Unknown platforms display a neutral device silhouette and do not block an otherwise supported Runtime. Snapshots preserve the card, access perspective, focus and geometry; provider or client identity never substitutes for the Runtime OS.",
+      "body_length": 5167,
+      "summary": "Redeven Runtime owns its OS fact; Desktop consumes only recognized trusted platform observations. Environment titles display pinned local theSVG marks for macOS, Linux or Windows in their original brand colors with localized accessible names. Unknown platforms display a default device illustration and do not block an otherwise supported Runtime. Snapshots preserve the card, access perspective, focus and geometry; provider or client identity never substitutes for the Runtime OS.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Optional Runtime platform fact\n\nRedeven Runtime owns `runtime_platform` in the private startup/attach report, local health response, management-socket status and placement bridge hello. It derives the value from its own Go runtime OS (`darwin` becomes `macos`; `linux` and `windows` remain canonical). This additive field grants no capability and does not change compatibility admission. ReDevPlugin is a separately released plugin execution dependency and does not generate these Redeven Desktop reports.\n\nDesktop normalizes recognized OS strings to `macos`, `linux` or `windows` at report boundaries and discards unknown values without guessing. Startup, current-runtime state, health and Presence retain this optional fact; absence in an older otherwise supported Runtime does not fail connection or health checks. Cloud health may carry the same optional fact but Cloud identity and URLs cannot infer it.\n\n## Display and bundled assets\n\nThe title reserves a 1rem non-shrinking slot immediately before the selectable, single-line truncated Runtime name. A .875rem mark uses the theme's muted icon color in light and dark modes and scales with text. Its center follows the title font's capital height and baseline rather than the surrounding line box. Known platforms expose a localized Runtime operating-system name to assistive technology and on hover. An unknown platform displays a neutral monitor silhouette with localized copy stating that the Runtime operating system is unknown; it implies no OS, virtualization technology or cloud provider. Platform changes update the retained graphic/title/card subtree without changing height, selected access perspective or keyboard focus.\n\nNative Local uses `platform_capabilities.platform`; WSL always uses Linux. SSH, container and external URL entries use normalized `runtime_platform` from actual Runtime startup, health or Presence observations. Gateway entries use the member Runtime's `metadata.os`. Cloud entries display only an OS supplied by Runtime health. Desktop host, provider origin, region, hostname and CPU architecture cannot supply a remote Runtime OS. The title follows the primary Runtime across linked access perspectives.\n\nApple `mono.svg`, Linux `mono.svg`, Windows `default.svg` and the Azure collection's Virtual Machine `default.svg` are bundled unchanged from `glincker/thesvg` commit `8731f4b62fea303b022e4aa0125783aeb42c3ea5`. CSS masks normalize their color and use the Virtual Machine asset's neutral monitor silhouette without altering source bytes or fetching a CDN. `assets/environment_platform_icons.json` binds each source path, revision, license and SHA-256. The notice generator verifies the assets and CC0-1.0/MIT texts, reproduces those licenses and records trademark ownership. `macOS`, `Linux` and `Windows` are fixed operating-system names; surrounding accessible copy is localized.",
-          "char_count": 2878
+          "body": "## Optional Runtime platform fact\n\nRedeven Runtime owns `runtime_platform` in the private startup/attach report, local health response, management-socket status and placement bridge hello. It derives the value from its own Go runtime OS (`darwin` becomes `macos`; `linux` and `windows` remain canonical). This additive field grants no capability and does not change compatibility admission. ReDevPlugin is a separately released plugin execution dependency and does not generate these Redeven Desktop reports.\n\nDesktop normalizes recognized OS strings to `macos`, `linux` or `windows` at report boundaries and discards unknown values without guessing. Startup, current-runtime state, health and Presence retain this optional fact; absence in an older otherwise supported Runtime does not fail connection or health checks. Cloud health may carry the same optional fact but Cloud identity and URLs cannot infer it.\n\n## Display and bundled assets\n\nThe title reserves a 1rem non-shrinking slot immediately before the selectable, single-line truncated Runtime name. A .875rem image preserves the original brand colors and scales with text; masks, tinting and grayscale filters must not replace those colors. Apple uses the upstream black mark in light themes and white mark in dark themes, selected from Floe's resolved application theme. Linux retains the colored Tux and Windows retains its blue mark. Its center follows the title font's capital height and baseline rather than the surrounding line box. Known platforms expose a localized Runtime operating-system name to assistive technology and on hover. An unknown platform displays the default device illustration with localized copy stating that the Runtime operating system is unknown; it implies no OS, virtualization technology or cloud provider. Platform and theme changes update the retained image/title/card subtree without changing height, selected access perspective or keyboard focus. Images cannot be dragged, and environment names remain selectable.\n\nNative Local uses `platform_capabilities.platform`; WSL always uses Linux. SSH, container and external URL entries use normalized `runtime_platform` from actual Runtime startup, health or Presence observations. Gateway entries use the member Runtime's `metadata.os`. Cloud entries display only an OS supplied by Runtime health. Desktop host, provider origin, region, hostname and CPU architecture cannot supply a remote Runtime OS. The title follows the primary Runtime across linked access perspectives.\n\nApple `light.svg` and `dark.svg`, Linux `default.svg`, Windows `default.svg` and the Azure collection's Virtual Machine `default.svg` are bundled unchanged from `glincker/thesvg` commit `8731f4b62fea303b022e4aa0125783aeb42c3ea5`. Native image rendering preserves their original colors without altering source bytes or fetching a CDN. `assets/environment_platform_icons.json` binds each source path, revision, theme variant, license and SHA-256. The notice generator verifies the assets and CC0-1.0/MIT texts, reproduces those licenses and records trademark ownership. `macOS`, `Linux` and `Windows` are fixed operating-system names; surrounding accessible copy is localized.",
+          "char_count": 3193
         },
         {
           "id": "boundaries",
@@ -23195,9 +23195,9 @@
           "description": "Native, WSL, SSH, container, URL and Cloud source selection, including absent reports."
         },
         {
-          "id": "redeven:desktop/src/welcome/EnvironmentCards.tsx:0:local themed masks and a fixed title slot.",
+          "id": "redeven:desktop/src/welcome/EnvironmentCards.tsx:0:original brand colors, application-theme apple variants and a fixed title slot.",
           "source": "redeven:desktop/src/welcome/EnvironmentCards.tsx",
-          "description": "Local themed masks and a fixed title slot."
+          "description": "Original brand colors, application-theme Apple variants and a fixed title slot."
         },
         {
           "id": "redeven:desktop/scripts/check-environment-platform-icons.mjs:0:all-locale theme, narrow/enlarged-text, local asset loading and live refresh continuity.",
@@ -23210,7 +23210,7 @@
           "description": "Pinned source, asset SHA-256 and per-asset license validation."
         }
       ],
-      "snippet": "Redeven Runtime owns its OS fact; Desktop consumes only recognized trusted platform observations. Environment titles display pinned local theSVG marks for macOS, Linux or Windows with localized accessible names. Unknown platforms display a ",
+      "snippet": "Redeven Runtime owns its OS fact; Desktop consumes only recognized trusted platform observations. Environment titles display pinned local theSVG marks for macOS, Linux or Windows in their original brand colors with localized accessible name",
       "links": [
         {
           "label": "Environment card presentation",
@@ -38626,5 +38626,5 @@
       ]
     }
   ],
-  "source_sha256": "7e0f7ea6e4f660bae6819fb595049733abc700c7d3d1060d7da273e22a30f4d6"
+  "source_sha256": "d75b03a0622876c84a06241f4b1a3dce8a9906da2d438975374ca9599a32b17e"
 }
