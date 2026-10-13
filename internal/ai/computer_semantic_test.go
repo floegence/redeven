@@ -157,6 +157,11 @@ func TestComputerSemanticByteBudgetPreservesTree(t *testing.T) {
 }
 
 func TestComputerSemanticPortableSelectorUsesAuthoritativeRoles(t *testing.T) {
+	for _, role := range []string{"tabpanel", "listbox", "option", "radiogroup", "tooltip", "separator"} {
+		if computerCanonicalRole(role) != role {
+			t.Fatalf("product semantic role %q is not portable", role)
+		}
+	}
 	for canonical, aliases := range computerRoleAliases {
 		for _, alias := range aliases {
 			if computerCanonicalRole(alias) != canonical {

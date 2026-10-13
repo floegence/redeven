@@ -1,4 +1,4 @@
-import { Show, createMemo, type JSX } from 'solid-js';
+import { Show, createMemo, createUniqueId, type JSX } from 'solid-js';
 import { Dialog, Tabs, TabPanel, createFloatingPresence } from '@floegence/floe-webapp-core/ui';
 import type { DesktopI18n } from '../shared/i18n';
 import type { DesktopEnvironmentEntry } from '../shared/desktopLauncherIPC';
@@ -33,6 +33,9 @@ export function EnvironmentSettingsDialog(props: {
   connection: JSX.Element;
   access: JSX.Element;
 }) {
+  const relationID = createUniqueId();
+  const tabID = (tab: EnvironmentSettingsTab) => `${relationID}-tab-${tab}`;
+  const panelID = (tab: EnvironmentSettingsTab) => `${relationID}-panel-${tab}`;
   const isOpen = createMemo(() => props.open);
   const presentation = createMemo<DesktopEnvironmentEntry | null>(previous => props.environment ?? previous, null);
   const hasConnection = () => presentation()?.registration_ref?.kind !== 'local_environment' || (presentation()?.access_routes?.length ?? 0) > 1 || presentation()?.default_access_route_missing;
@@ -50,17 +53,17 @@ export function EnvironmentSettingsDialog(props: {
     class={`redeven-environment-settings-dialog${hasTabs() ? ' environment-settings-with-tabs' : ''}`} contentClass="environment-settings-content">
     <Show when={hasTabs()}>
       <Tabs items={[
-        { id: 'connection', label: props.i18n.t('settings.connectionTab') },
-        { id: 'access', label: props.i18n.t('settings.accessTab') },
+        { id: 'connection', domId: tabID('connection'), panelId: panelID('connection'), label: props.i18n.t('settings.connectionTab') },
+        { id: 'access', domId: tabID('access'), panelId: panelID('access'), label: props.i18n.t('settings.accessTab') },
       ]} activeId={props.tab} onChange={id => props.onTabChange(id as EnvironmentSettingsTab)}
         features={{ indicator: { mode: 'slider', animated: true, thicknessPx: 2 } }}
         slotClassNames={{ tab: 'environment-settings-tab-trigger', indicator: 'environment-settings-indicator' }}
         ariaLabel={props.i18n.t('settings.settingsWindowTitle')} class="environment-settings-tabs" />
     </Show>
-    <TabPanel active={hasConnection() && props.tab === 'connection'} keepMounted class="environment-settings-tab">
+    <TabPanel id={panelID('connection')} labelledBy={hasTabs() ? tabID('connection') : undefined} active={hasConnection() && props.tab === 'connection'} keepMounted class="environment-settings-tab">
       {props.connection}
     </TabPanel>
-    <TabPanel active={hasAccess() && props.tab === 'access'} keepMounted class="environment-settings-tab">
+    <TabPanel id={panelID('access')} labelledBy={hasTabs() ? tabID('access') : undefined} active={hasAccess() && props.tab === 'access'} keepMounted class="environment-settings-tab">
       {props.access}
     </TabPanel>
   </Dialog>;

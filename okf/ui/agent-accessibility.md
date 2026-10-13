@@ -37,7 +37,10 @@ output remains in the semantic renderer and `terminal.read`; no DOM text mirror
 is introduced. Existing input bridge, IME, selection and history owners remain.
 
 Welcome retains one active owner panel and inert mounted inactive panels. Its
-localized owner names and native controls remain intact. Workbench retains the
+localized owner names and native controls remain intact. Owner cards and settings
+windows supply unique stable `domId`/`panelId` pairs through released Tabs APIs;
+TabPanel uses matching `id`/`labelledBy`. Snapshot refresh preserves identities.
+A single owner or settings panel without Tabs has no dangling `aria-labelledby`. Workbench retains the
 published local interaction, wheel, text-selection and floating-layer boundaries.
 Adding roles must not claim keyboard behavior that a surface does not implement.
 
@@ -45,14 +48,18 @@ Adding roles must not claim keyboard behavior that a surface does not implement.
 
 ## Shared gap decision and audit evidence
 
-The published floe-webapp 0.86.25 Tabs item API exposes no per-tab DOM identity
-or controlled-panel target. TabPanel accepts `labelledBy`, but consumers cannot
+The audit of published floe-webapp 0.86.25 established that its Tabs item API
+exposed no per-tab DOM identity or controlled-panel target. TabPanel accepts `labelledBy`, but consumers cannot
 supply a corresponding tab identity through the public Tabs API. Welcome's
 Local/Cloud/Gateway owner tabs consequently have selection state and named
 panels without a tab-to-panel relationship. This belongs to shared Tabs and is
 reusable by unrelated tab workflows. DOM patching, replacing the shared control,
-or copying its focus/navigation implementation would violate ownership. Complete
-Redeven semantic work and product audit before starting a separate upstream fix.
+or copying its focus/navigation implementation would violate ownership. Redeven
+semantic work and the product audit preceded the separate upstream change.
+The fix is consumed through published floe-webapp 0.86.27 packages only.
+Upstream SSR and browser tests cover relationships, independent groups, keyboard,
+focus, pointer and unchanged pixels/styles; Redeven supplies only product IDs.
+No local sibling checkout, overlay or copied shared control enters validation.
 
 Focused Chromium axe checks cover Files, terminal, Flower and Workbench.
 Semantic-only Flower auditing excludes the existing timestamp color-contrast
@@ -62,13 +69,21 @@ The Welcome filesystem request-count test also fails unchanged on the baseline
 main commit (expects five calls, observes seven); it is not accessibility
 regression evidence. Keep both findings visible rather than weakening assertions.
 
+The existing Welcome tab-motion qualification also fails on unchanged main
+`08f045b56` with published Core 0.86.25: populated Gateway cards are expected to
+animate, while the existing entrance selector excludes `.redeven-gateway-card`.
+The same assertion fails with this semantic change. Preserve its assertion and
+animation behavior; this is a separate motion follow-up, not a Tabs relation gap.
+
 Welcome's optional list-section heading also exposes an existing axe
 `heading-order` best-practice finding when that heading is omitted. The focused
 WCAG 2 A/AA card audit does not claim an exhaustive best-practice audit.
 
-Files and Flower screenshot hashes, layout geometry and computed styles are
+Welcome cards/settings, Files and Flower screenshot hashes, layout geometry and computed styles are
 compared with and without semantic naming/description/control/busy attributes.
-Existing browser tests cover path keyboard input, terminal structured keys and
+Welcome Chromium acceptance runs in en-US/zh-CN at 390/1200 widths, including
+Local/Cloud/Gateway perspectives, mounted inert panels, retained settings,
+keyboard navigation and close focus recovery. Existing browser tests cover path keyboard input, terminal structured keys and
 IME, and projected Workbench editing/focus. Tests that deliberately filter cases
 qualify only the cases executed, never the whole product or platform matrix.
 
@@ -78,5 +93,8 @@ qualify only the cases executed, never the whole product or platform matrix.
 - `redeven:internal/envapp/ui_src/src/ui/widgets/TerminalSessionRuntime.tsx` - semantic terminal viewport and history controls.
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx` - composer names and existing hidden/inert interaction boundaries.
 - `redeven:desktop/src/welcome/EnvironmentCards.tsx` - owner tab/panel composition.
+- `redeven:desktop/src/welcome/EnvironmentSettingsDialog.tsx` - settings tab relationships through published API.
+- `redeven:desktop/scripts/check-agent-accessibility.mjs` - Welcome axe, relationship, input and presentation qualification.
+- [Floe v0.86.27 release](https://github.com/floegence/floe-webapp/releases/tag/v0.86.27) - independently published shared Tabs contract.
 - `redeven:internal/envapp/ui_src/vitest.browser.config.ts` - screenshot and computed-presentation comparison.
 - `redeven:internal/envapp/ui_src/src/ui/workbench/surface/RedevenWorkbenchSurface.composition.browser.test.tsx` - accessibility and projected composition behavior.

@@ -371,6 +371,9 @@ describe('linked environment owner interactions', () => {
     expect(tabs[1].querySelector('[role="img"]')?.getAttribute('aria-label')).toContain('Redeven Cloud');
     expect(tabs.every(tab => tab.querySelector('.redeven-owner-tab-icon > svg'))).toBe(true);
     for (const tab of tabs) {
+      expect(tab.id).not.toBe('');
+      const controlled = document.getElementById(tab.getAttribute('aria-controls')!);
+      expect(controlled?.getAttribute('aria-labelledby')).toBe(tab.id);
       tab.click(); await settle();
       const visible = [...card.querySelectorAll<HTMLElement>('[role="tabpanel"]')].find(panel => panel.getAttribute('aria-hidden') !== 'true')!;
       expect(visible.querySelector('.redeven-environment-owner-heading')?.textContent).toContain(runtime.label);
@@ -490,10 +493,21 @@ describe('linked environment owner interactions', () => {
     expect(h.performAction.mock.calls.some(([request]) => request.kind === 'connect_cloud_runtime')).toBe(false);
   });
   it('uses one visible owner and owner tabs instead of stacked action surfaces', async () => {
-    await mount();
+    const h = await mount();
     const card = document.querySelector('[data-environment-group]')!;
     expect(card.querySelectorAll('[role="tab"]')).toHaveLength(2);
     expect([...card.querySelectorAll('[data-owner-id]')].filter(el => !el.closest('[hidden], [aria-hidden="true"]'))).toHaveLength(1);
+    const tabs = [...card.querySelectorAll<HTMLElement>('[role="tab"]')];
+    const ids = tabs.map(tab => tab.id);
+    expect(ids.every(Boolean)).toBe(true);
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const tab of tabs) {
+      const panel = document.getElementById(tab.getAttribute('aria-controls')!);
+      expect(panel?.getAttribute('aria-labelledby')).toBe(tab.id);
+    }
+    h.publish({ ...h.snapshot, environments: h.snapshot.environments.map(entry => ({ ...entry })) }); await settle();
+    expect([...card.querySelectorAll('[role="tab"]')]).toEqual(tabs);
+    expect(tabs.map(tab => tab.id)).toEqual(ids);
   });
   it('switches one card between owner actions, settings and independently scoped pins', async () => {
     const h = await mount();
@@ -609,6 +623,7 @@ describe('linked environment owner interactions', () => {
     ] }); await settle();
     expect(document.querySelectorAll('[data-environment-group]')).toHaveLength(2);
     expect(document.querySelectorAll('[role="tab"]')).toHaveLength(0);
+    expect(document.querySelectorAll('[role="tabpanel"][aria-labelledby]')).toHaveLength(0);
   });
 });
 

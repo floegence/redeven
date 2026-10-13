@@ -79,6 +79,7 @@ main() {
       node scripts/check-connection-table-layout.mjs
       node scripts/check-welcome-cards.mjs
       node scripts/check-welcome-tab-motion.mjs
+      node scripts/check-agent-accessibility.mjs
       node scripts/check-welcome-toolbar.mjs
       node scripts/check-body-typography.mjs
       node scripts/check-body-typography.mjs --electron
