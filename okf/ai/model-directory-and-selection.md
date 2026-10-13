@@ -20,7 +20,7 @@ ChatGPT scopes use the bound account and ignore inactive API keys, including vau
 
 Opted-in background synchronization starts asynchronously at startup and repeats every 15 minutes for enabled supported providers except OpenRouter. Failures retry after 1, 5, and 15 minutes. Each provider has one in-flight operation, at most four globally, with a 30-second deadline including queueing. Disabled scheduling reads snapshots without Provider requests. Explicit `POST /api/ai/model_catalog` uses the same owner independently of this setting, including for OpenRouter. Draft discovery persists a scoped snapshot usable when the connection is saved.
 
-OpenAI-compatible, Anthropic, and Google lists use their native authentication and pagination. OpenRouter uses tool-filtered inventory; Ollama reads tags, running context, and model details. Unsupported providers retain reviewed or manual metadata. Invalid, partial, repeated-page, timed-out, rate-limited, or unauthorized responses never replace a snapshot; disk publication failure retains the previous in-memory directory. A complete successful empty inventory is authoritative.
+OpenAI-compatible, Anthropic, and Google lists use their native authentication and pagination. OpenRouter uses tool-filtered inventory and prefers `top_provider.context_length` when its top-level context value is zero; individual unusable entries are skipped when usable entries remain. Ollama reads tags, running context, and model details. Unsupported providers retain reviewed or manual metadata. Invalid, partial, repeated-page, timed-out, rate-limited, or unauthorized responses never replace a snapshot; disk publication failure retains the previous in-memory directory. A complete successful empty inventory is authoritative.
 
 Cloud metadata remains in bounded memory, isolated by trusted user, namespace, environment, gateway, grant, and entitlement version. Cached metadata is not invocation authorization: actual requests still renew the lease and validate current route authority. Cloud execution consumes its catalog protocol rather than fetching inventory during dispatch.
 
@@ -66,6 +66,7 @@ The 2026-10-13 audit compared all consumed fields for nine static providers agai
 - `redeven:internal/ai/model_catalog_manager_test.go` - Default-off scheduling, explicit opt-in, offline restart, failed writes, late responses, removal/recovery, concurrency, and draft-save scope.
 - `redeven:internal/codeapp/appserver/server.go` - Admin setting endpoint for the explicit automatic-update consent.
 - `redeven:internal/ai/provider_inventory_test.go` - Pagination, authentication, partial failures, and empty success.
+- `redeven:internal/ai/model_catalog_test.go` - OpenRouter serving-context fallback and partial-entry handling.
 - `redeven:internal/config/ai_model_snapshot_test.go` - Manual override authority and snapshot isolation.
 - `redeven:internal/envapp/ui_src/src/ui/flower/modelDirectory.test.ts` - Coalescing, invalidation races, late scope responses, and bounded reads.
 - `redeven:internal/flower_ui/src/settings/modelSelection.ts` - Shared user intent and metadata merge.

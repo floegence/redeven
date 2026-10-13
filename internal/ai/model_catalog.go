@@ -121,6 +121,7 @@ func discoverModelCatalog(ctx context.Context, in ModelCatalogRequest, client *h
 				} `json:"architecture"`
 				Parameters  []string `json:"supported_parameters"`
 				TopProvider struct {
+					Context   int `json:"context_length"`
 					MaxTokens int `json:"max_completion_tokens"`
 				} `json:"top_provider"`
 				Expiration string `json:"expiration_date"`
@@ -134,27 +135,42 @@ func discoverModelCatalog(ctx context.Context, in ModelCatalogRequest, client *h
 		}
 		out := make([]config.AIProviderModel, 0, len(response.Data))
 		seen := map[string]bool{}
+		incomplete := 0
 		for _, m := range response.Data {
-			if m.ID == "" || seen[m.ID] || m.Parameters == nil || m.Architecture.Output == nil {
+			if m.ID == "" || seen[m.ID] {
 				return nil, errors.New("incomplete model catalog entry")
 			}
 			seen[m.ID] = true
+			if m.Parameters == nil || m.Architecture.Output == nil {
+				incomplete++
+				continue
+			}
 			if !slices.Contains(m.Parameters, "tools") || !slices.Equal(m.Architecture.Output, []string{"text"}) {
 				continue
 			}
-			if m.Context <= 0 {
-				return nil, errors.New("incomplete model catalog context capacity")
+			contextWindow := m.Context
+			if contextWindow <= 0 {
+				// OpenRouter currently reports context_length=0 for some models while
+				// publishing the serving capacity in top_provider.context_length.
+				contextWindow = m.TopProvider.Context
+			}
+			if contextWindow <= 0 {
+				incomplete++
+				continue
 			}
 			if m.Expiration != "" && m.Expiration <= time.Now().UTC().Format("2006-01-02") {
 				continue
 			}
-			model := config.AIProviderModel{ModelName: config.AIModelLocalName(m.ID), WireModelName: m.ID, DisplayName: m.Name, ContextWindow: m.Context, MaxOutputTokens: m.TopProvider.MaxTokens, InputModalities: catalogInputModalities(m.Architecture.Input)}
+			model := config.AIProviderModel{ModelName: config.AIModelLocalName(m.ID), WireModelName: m.ID, DisplayName: m.Name, ContextWindow: contextWindow, MaxOutputTokens: m.TopProvider.MaxTokens, InputModalities: catalogInputModalities(m.Architecture.Input)}
 			// Supported effort controls are a specific wire declaration, not an inference
 			// from a model-family name or an unqualified reasoning boolean.
 			if slices.Contains(m.Parameters, "reasoning") || slices.Contains(m.Parameters, "reasoning_effort") {
 				model.ReasoningCapability = config.OpenRouterReasoningCapability()
 			}
 			out = append(out, model)
+		}
+		if len(out) == 0 && incomplete > 0 {
+			return nil, errors.New("OpenRouter model catalog has no usable tool models")
 		}
 		sort.Slice(out, func(i, j int) bool { return out[i].DisplayName < out[j].DisplayName })
 		return out, nil
