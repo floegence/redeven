@@ -4,12 +4,12 @@ import { runtimeServiceNeedsRuntimeUpdate, runtimeServiceSupportsRuntimeGateway 
 
 export type RuntimeGatewayRecovery = Extract<DesktopRuntimeOperation, 'start' | 'restart' | 'update' | 'refresh'>;
 export type RuntimeGatewayAccessPresentation = Readonly<{
-  phase: 'ready' | 'check_required' | 'not_started' | 'control_missing' | 'update_required' | 'management_unavailable' | 'unsupported' | 'busy';
+  phase: 'ready' | 'connection_required' | 'check_required' | 'not_started' | 'control_missing' | 'update_required' | 'management_unavailable' | 'unsupported' | 'busy';
   recovery?: RuntimeGatewayRecovery;
   recovery_enabled: boolean;
 }>;
 
-/** A saved direct executor makes enrollment discoverable; only current Presence makes it executable. */
+/** A saved direct executor makes enrollment discoverable; current Presence selects recovery and main-process status proves the connection. */
 export function runtimeGatewayAccessPresentation(
   environment: DesktopEnvironmentEntry,
   busy = false,
@@ -27,6 +27,12 @@ export function runtimeGatewayAccessPresentation(
   const update = environment.runtime_operations.update;
   if (runtimeServiceNeedsRuntimeUpdate(service) || update.reason_code === 'runtime_update_required' || update.maintenance?.kind === 'runtime_update_required'
     || update.package_state?.state === 'outdated' || update.package_state?.state === 'incompatible') return state('update_required', 'update');
+  // A successful host probe can intentionally leave the Desktop bridge unopened.
+  // The main-process status action acquires that bridge for the exact target.
+  if (control?.state === 'missing' && control.reason_code === 'forward_unavailable'
+    && target?.runtime_running && health.status === 'online' && environment.runtime_operations.open.availability === 'available') {
+    return service && !runtimeServiceSupportsRuntimeGateway(service) ? state('unsupported', 'update') : state('connection_required');
+  }
   if (control?.state === 'missing' && ['auth_required', 'unverified', 'container_engine_unavailable', 'forward_unavailable', 'reinstall_required'].includes(control.reason_code)) {
     return state('management_unavailable', 'refresh');
   }

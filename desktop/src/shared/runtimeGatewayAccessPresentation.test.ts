@@ -14,7 +14,7 @@ function runtime(kind: 'local_environment' | 'ssh_environment' | 'wsl_environmen
 describe('managed Runtime Gateway access', () => {
   it.each(['local', 'ssh', 'wsl', 'local_container', 'ssh_container'] as const)('projects real %s snapshots through every preparation state', kind => {
     for (const [state, phase] of [['unknown', 'check_required'], ['stopped', 'not_started'], ['control_missing', 'control_missing'],
-      ['ready', 'ready'], ['update_required', 'update_required'], ['management_unavailable', 'management_unavailable']] as const) {
+      ['ready', 'ready'], ['connection_required', 'connection_required'], ['update_required', 'update_required'], ['management_unavailable', 'management_unavailable']] as const) {
       expect(runtimeGatewayAccessPresentation(runtimeGatewayAccessFixture(kind, state).environment)?.phase, `${kind}/${state}`).toBe(phase);
     }
   });
@@ -49,11 +49,21 @@ describe('managed Runtime Gateway access', () => {
   });
   it('keeps unreachable management distinct from stopped Runtime and allows retry', () => {
     const entry = runtime();
-    for (const reason_code of ['auth_required', 'container_engine_unavailable', 'forward_unavailable'] as const) {
+    for (const reason_code of ['auth_required', 'container_engine_unavailable'] as const) {
       expect(runtimeGatewayAccessPresentation({ ...entry, provider_runtime_link_target: {
         ...entry.provider_runtime_link_target!, runtime_control_status: { state: 'missing', reason_code, message: 'Unavailable' },
       } })).toMatchObject({ phase: 'management_unavailable', recovery: 'refresh' });
     }
+  });
+  it.each(['ssh', 'wsl', 'local_container', 'ssh_container'] as const)('offers connection for an observed running %s without a Desktop bridge', kind => {
+    const entry = runtimeGatewayAccessFixture(kind).environment;
+    const pending = { ...entry, provider_runtime_link_target: { ...entry.provider_runtime_link_target!,
+      runtime_control_status: { state: 'missing' as const, reason_code: 'forward_unavailable' as const, message: 'Connect the Desktop bridge' },
+    } };
+    expect(runtimeGatewayAccessPresentation(pending)).toMatchObject({ phase: 'connection_required' });
+    expect(runtimeGatewayAccessPresentation({ ...pending, runtime_operations: { ...pending.runtime_operations,
+      open: { ...pending.runtime_operations.open, availability: 'blocked' },
+    } })).toMatchObject({ phase: 'management_unavailable' });
   });
   it('prioritizes required updates and preserves a busy operation owner', () => {
     const entry = runtime();

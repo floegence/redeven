@@ -1,6 +1,6 @@
 import type { DesktopGatewaySource } from '../shared/desktopGateway';
 import { Button, Dialog, StableText } from '@floegence/floe-webapp-core/ui';
-import { createEffect, createMemo, createSignal, on, onCleanup, Show, type JSX } from 'solid-js';
+import { createEffect, createMemo, createSignal, on, onCleanup, Show } from 'solid-js';
 import type { DesktopEnvironmentEntry, DesktopLauncherActionProgress } from '../shared/desktopLauncherIPC';
 import type { DesktopI18n } from '../shared/i18n';
 import { runtimeGatewayAccessPresentation, type RuntimeGatewayRecovery } from '../shared/runtimeGatewayAccessPresentation';
@@ -13,7 +13,7 @@ export function RuntimeGatewaySetupDialog(props: Readonly<{
   i18n: DesktopI18n;
   operationBusy?: boolean;
   progress?: DesktopLauncherActionProgress | null;
-  progressContent?: JSX.Element;
+  progressDetail?: string;
   refresh: (environment: DesktopEnvironmentEntry) => Promise<boolean>;
   recover: (environment: DesktopEnvironmentEntry, operation: Exclude<RuntimeGatewayRecovery, 'refresh'>) => Promise<boolean>;
   edit: (environment: DesktopEnvironmentEntry) => void;
@@ -21,10 +21,11 @@ export function RuntimeGatewaySetupDialog(props: Readonly<{
 }>) {
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal('');
+  const [connectionRequest, setConnectionRequest] = createSignal(0);
   let generation = 0;
   const environmentID = createMemo(() => props.environment?.id ?? '');
   const presentation = createMemo(() => props.environment && runtimeGatewayAccessPresentation(props.environment, props.operationBusy));
-  const ready = createMemo(() => presentation()?.phase === 'ready' && !busy());
+  const ready = createMemo(() => ['ready', 'connection_required'].includes(presentation()?.phase ?? '') && !busy());
   const recovery = () => presentation()?.recovery;
   const recoveryLabel = () => props.i18n.t(recovery() === 'start' ? 'gatewayJoin.startAndContinue'
     : recovery() === 'restart' ? 'environmentAction.restartRuntime'
@@ -44,13 +45,14 @@ export function RuntimeGatewaySetupDialog(props: Readonly<{
           : 'gatewayJoin.checkHelp');
   };
 
-  async function refresh() {
+  async function refresh(continueAfterCheck = true) {
     const environment = props.environment;
     if (!environment || busy() || props.operationBusy) return;
     const current = generation;
     setBusy(true); setError('');
     try {
       if (!await props.refresh(environment) && current === generation) setError(props.i18n.t('gatewayJoin.checkFailed'));
+      else if (current === generation && continueAfterCheck) setConnectionRequest(value => value + 1);
     } catch { if (current === generation) setError(props.i18n.t('gatewayJoin.checkFailed')); }
     finally { if (current === generation) setBusy(false); }
   }
@@ -65,32 +67,36 @@ export function RuntimeGatewaySetupDialog(props: Readonly<{
       if (current !== generation) return;
       if (!completed) setError(props.i18n.t('gatewayJoin.recoveryFailed'));
       else if (!await props.refresh(environment) && current === generation) setError(props.i18n.t('gatewayJoin.checkFailed'));
+      else if (current === generation) setConnectionRequest(value => value + 1);
     } catch { if (current === generation) setError(props.i18n.t('gatewayJoin.recoveryFailed')); }
     finally { if (current === generation) setBusy(false); }
   }
   createEffect(on(environmentID, id => {
-    generation++; setBusy(false); setError('');
+    generation++; setBusy(false); setError(''); setConnectionRequest(0);
     // Checking is read-only; opening never starts, restarts or updates the Runtime.
-    if (id && presentation()?.phase !== 'ready') void refresh();
+    if (id && presentation()?.phase !== 'ready') void refresh(false);
   }));
   onCleanup(() => { generation++; });
   return <Dialog open={!!props.environment} onOpenChange={value => { if (!value) props.close(); }} title={props.i18n.t('gatewayJoin.title')}
-    bodyDescription={props.i18n.t('gatewayJoin.codeHelp')} closeLabel={props.i18n.t('common.close')}
+    closeLabel={props.i18n.t('common.close')}
     class="redeven-gateway-dialog redeven-gateway-join-dialog" contentClass="redeven-gateway-join-content">
     <Show when={props.environment?.provider_runtime_link_target?.id} keyed>{targetID =>
-      <RuntimeGatewayJoinPanel gateways={props.gateways} embedded targetID={targetID} targetLabel={props.environment?.label}
+      <RuntimeGatewayJoinPanel wizard connectionRequest={connectionRequest()} gateways={props.gateways} embedded targetID={targetID} targetLabel={props.environment?.label}
         i18n={props.i18n} onClose={props.close} ready={ready()}
         preparation={<Show when={!ready()}><section class="redeven-gateway-join-section" data-gateway-preparation={presentation()?.phase}>
-          <p class="font-medium">{props.i18n.t('gatewayJoin.prepareTitle')}</p>
+          <h3>{props.i18n.t('gatewayJoin.connectEnvironment')}</h3>
           <p class="text-sm text-muted-foreground">{detail()}</p>
           <Show when={recovery() === 'restart' || recovery() === 'update'}><p class="text-sm text-muted-foreground">{props.i18n.t('gatewayJoin.recoveryImpact')}</p></Show>
           <Show when={(busy() || props.operationBusy) && !props.progress}><p role="status" class="text-sm">{props.i18n.t('progress.checkingRuntime')}</p></Show>
-          {props.progressContent}
+          <Show when={props.progress}><div class="redeven-gateway-connect-progress" role="status">
+            <span class="redeven-gateway-connect-progress-dot" aria-hidden="true" />
+            <span>{props.progressDetail || props.i18n.t('progress.checkingRuntime')}</span>
+          </div></Show>
           <Show when={error()}><p role="alert" class="text-sm text-error">{error()}</p></Show>
         </section></Show>}
+        settingsAction={<Show when={props.environment?.can_edit}><Button class="cursor-pointer whitespace-nowrap" variant="outline"
+            onClick={() => { if (props.environment) props.edit(props.environment); }}>{props.i18n.t('common.settings')}</Button></Show>}
         preparationActions={<>
-          <Show when={props.environment?.can_edit}><Button class="cursor-pointer whitespace-nowrap" variant="outline"
-            onClick={() => { if (props.environment) props.edit(props.environment); }}>{props.i18n.t('common.settings')}</Button></Show>
           <Show when={presentation()?.phase === 'control_missing'}><Button class="cursor-pointer whitespace-nowrap" variant="outline"
             disabled={busy() || props.operationBusy || props.environment?.runtime_operations.refresh.availability !== 'available'}
             onClick={() => void refresh()}>{props.i18n.t('environmentAction.refreshRuntimeStatus')}</Button></Show>

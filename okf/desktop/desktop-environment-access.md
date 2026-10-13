@@ -118,7 +118,7 @@ This contract owns display association and route selection. Runtime health,
 Runtime login, direct management, Gateway trust and Cloud ownership retain their
 existing authorities. Proof observation never upgrades those permissions.
 
-Saved Desktop-managed Runtime connections expose Gateway enrollment across Local, SSH, WSL and host/container placements independently of current startup or probe status. Entry eligibility comes from the saved direct management target; execution authority comes only from current Runtime Presence and the trusted main-process management connection. Neither a public URL, an open window, a Cloud binding nor a Gateway association can manufacture it. [Gateway Desktop interactions](../gateway/gateway-desktop-interactions.md) owns the unified preparation flow and the independent management, invitation and local consent boundaries; recovery reuses the original Runtime lifecycle owner.
+Saved Desktop-managed Runtime connections expose Gateway enrollment across Local, SSH, WSL and host/container placements independently of current startup or probe status. Entry eligibility comes from the saved direct management target; execution authority comes only from current Runtime Presence and the trusted main-process management connection. Neither a public URL, an open window, a Cloud binding nor a Gateway association can manufacture it. [Gateway Desktop interactions](../gateway/gateway-desktop-interactions.md) owns the explicit environment connection, invitation and confirmation steps and the independent management, invitation and local consent boundaries; recovery reuses the original Runtime lifecycle owner.
 
 # Evidence
 

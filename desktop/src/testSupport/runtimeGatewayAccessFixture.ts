@@ -7,7 +7,7 @@ import { RUNTIME_SERVICE_COMPATIBILITY_EPOCH } from '../shared/runtimeService';
 import { mixedEnvironmentFixture } from './mixedEnvironmentFixture';
 
 export type GatewayRuntimeFixtureKind = 'local' | 'ssh' | 'wsl' | 'local_container' | 'ssh_container';
-export type GatewayRuntimeFixtureState = 'unknown' | 'stopped' | 'control_missing' | 'ready' | 'update_required' | 'management_unavailable';
+export type GatewayRuntimeFixtureState = 'unknown' | 'stopped' | 'control_missing' | 'connection_required' | 'ready' | 'update_required' | 'management_unavailable';
 
 /** Real saved targets and Presence projection; containers retain their direct host owner. */
 export function runtimeGatewayAccessFixture(kind: GatewayRuntimeFixtureKind, state: GatewayRuntimeFixtureState = 'ready') {
@@ -27,7 +27,8 @@ export function runtimeGatewayAccessFixture(kind: GatewayRuntimeFixtureKind, sta
   const rawPresence = {
     ...sourcePresence, environment_id: id, target_id: targetID, placement_target_id: desktopRuntimeTargetID(sourcePresence.host_access, placement),
     runtime_key: targetID, placement, running: state !== 'stopped', openable: state !== 'stopped',
-    runtime_control_status: state === 'stopped' ? { state: 'missing' as const, reason_code: 'not_started' as const, message: 'Stopped Runtime' }
+    open_connection_required: state === 'connection_required',
+    runtime_control_status: state === 'connection_required' ? { state: 'missing' as const, reason_code: 'forward_unavailable' as const, message: 'Connect the Desktop bridge' } : state === 'stopped' ? { state: 'missing' as const, reason_code: 'not_started' as const, message: 'Stopped Runtime' }
       : state === 'control_missing' ? { state: 'missing' as const, reason_code: 'not_reported' as const, message: 'Control unavailable' }
         : state === 'management_unavailable' ? { state: 'missing' as const, reason_code: 'auth_required' as const, message: 'Credentials required' }
           : { state: 'available' as const },

@@ -79,6 +79,8 @@ describe('linked environment owner interactions', () => {
     const owner = [...card.querySelectorAll<HTMLElement>('[role="tabpanel"]')].find(panel => panel.getAttribute('aria-hidden') !== 'true')!;
     const toggle = button(owner, 'Actions'); toggle.click(); await settle();
     button(document.querySelector('[role="menu"]')!, 'Add Gateway access').click(); await settle();
+    expect(perform).not.toHaveBeenCalled();
+    button(document.querySelector('[role="dialog"]')!, 'Connect and continue').click(); await settle();
     expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'manage_runtime_gateway', runtime_target_id: runtime.provider_runtime_link_target!.id, operation: 'status' });
     expect(h.performAction).not.toHaveBeenCalled();
     button(document.querySelector('[role="dialog"]')!, 'Cancel').click(); await settle();
@@ -152,6 +154,7 @@ describe('linked environment owner interactions', () => {
     button(owner, 'Actions').click(); await settle();
     button(document.querySelector('[role="menu"]')!, 'Add Gateway access').click(); await settle();
     const dialog = document.querySelector('[role="dialog"]')!;
+    button(dialog, 'Connect and continue').click(); await settle();
     const inputs = [...dialog.querySelectorAll<HTMLInputElement>('input')];
     const expected = method === 'typed' ? 'https://typed.example:7443' : gateway.member_endpoints[0].address;
     if (method === 'local suggestion') dialog.querySelector<HTMLButtonElement>('[data-gateway-suggestion]')!.click();

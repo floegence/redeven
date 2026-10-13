@@ -16,7 +16,6 @@ import type { DesktopGatewaySource } from '../shared/desktopGateway';
 import type { DesktopI18n } from '../shared/i18n';
 import type { DesktopEnvironmentEntry, DesktopLauncherActionProgress } from '../shared/desktopLauncherIPC';
 import type { EnvironmentCardFactsBlock, EnvironmentSplitActionButton, EnvironmentProgressPanel } from './App';
-import { environmentActionForLauncherRetry } from './operationNextActions';
 import { CloudConnectionStatus, cloudConnectionState, cloudConnectionTitleKey } from './CloudConnectionStatus';
 import type { DesktopControlPlaneSummary } from '../shared/cloud';
 import { DesktopTooltip } from './DesktopTooltip';
@@ -870,17 +869,6 @@ function EnvironmentOwnerSurface(
       <RuntimeGatewaySetupDialog gateways={props.gateways} environment={gatewaySetupOpen() ? runtime() : undefined} i18n={props.i18n}
         operationBusy={gatewayOperationState().actionsDisabled}
         progress={gatewayOperationState().activeProgress}
-        progressContent={<Show when={gatewayOperationState().panelProgress}>{progress =>
-          <props.Progress i18n={props.i18n} progress={progress()} cancelOperation={props.cancelOperation} dismissOperation={props.dismissOperation} copyOperationDiagnostics={props.copyOperationDiagnostics}
-            runNextAction={(action, current) => {
-              if (action.kind === 'copy_diagnostics') props.copyOperationDiagnostics(current);
-              else if (action.kind === 'dismiss') props.dismissOperation(current);
-              else if (action.kind === 'retry') { const retry = environmentActionForLauncherRetry(action.retry_action); if (retry) void props.runLocalEnvironmentAction(runtime(), retry, 'dialog'); }
-              else if (action.kind === 'refresh_status') void props.refreshEnvironmentRuntime(runtime(), 'dialog');
-              else if (action.kind === 'update_runtime') void props.runLocalEnvironmentAction(runtime(), { intent: 'update_runtime', label: props.i18n.t('environmentAction.updateRuntime'), enabled: true, variant: 'default' }, 'dialog');
-              else if (action.kind === 'manage_desktop_update') void props.runDesktopUpdateHandoff(runtime().id, runtime().label);
-            }} />
-        }</Show>}
         close={() => { setGatewaySetupOpen(false); queueMicrotask(() => (ownerElement?.querySelector<HTMLButtonElement>('[aria-haspopup="menu"]') ?? ownerElement)?.focus()); }}
         edit={environment => { setGatewaySetupOpen(false); props.editEnvironment(environment); }}
         refresh={environment => props.refreshEnvironmentRuntime(environment, 'dialog')}

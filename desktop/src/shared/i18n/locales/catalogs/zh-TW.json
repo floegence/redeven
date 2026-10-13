@@ -3199,6 +3199,15 @@
     "registering": "Cloud 登記待完成"
   },
   "gatewayJoin": {
+    "connectEnvironment": "連線環境",
+    "gatewayInvitation": "驗證邀請",
+    "confirmAccess": "確認接入",
+    "connectHelp": "先確認可以連線至此環境，再填寫 Gateway 位址和邀請碼。此步驟只檢查執行階段，不會加入 Gateway。",
+    "connectAndContinue": "連線並繼續",
+    "connecting": "正在連線…",
+    "connectFailed": "無法連線至此環境。請重試或檢查環境的連線設定。",
+    "back": "上一步",
+
     "title": "新增 Gateway 存取",
     "menuAction": "新增 Gateway 存取",
     "currentStatus": "目前狀態",
@@ -3259,7 +3268,6 @@
     "copied": "已複製",
     "copyFailed": "複製失敗。請手動選取並複製文字，或允許剪貼簿存取後重試。",
     "regenerate": "產生新邀請碼",
-    "prepareTitle": "準備此執行階段",
     "checkHelp": "新增閘道存取前，請先檢查此執行階段的狀態。",
     "controlHelp": "請透過 Desktop 重新啟動此執行階段，以準備管理連線。",
     "updateHelp": "新增閘道存取前，請先更新此執行階段。",

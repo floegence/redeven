@@ -3,7 +3,7 @@ type: Interaction Contract
 title: Gateway Desktop interactions
 description: Invite Runtime members and manage policy with explicit consent, retained drafts and truthful status.
 tags: [gateway, desktop, interaction, validation]
-timestamp: 2026-10-12T00:00:00Z
+timestamp: 2026-10-13T00:00:00Z
 ---
 # Summary
 
@@ -15,7 +15,7 @@ Desktop owns Gateway enrollment and management presentation. All saved Desktop-m
 
 Creation offers Not now or After setup, add Gateway access. Add Gateway access opens the same dialog for saved Local, SSH or WSL targets with a managed host connection and actual placement, including Local and SSH containers. Unknown health, stopped processes and absent capability snapshots cannot remove the entry. URL-only, Cloud-only and Gateway-only owners cannot grant it.
 
-Opening inspects only the selected target. Stopped targets offer Start Runtime and continue; missing control is refreshed before Restart Runtime. Required package or capability updates offer Update Runtime. Unavailable credentials, channels or container engines show Retry and Environment settings. Explicit recovery clicks reuse the exact-target lifecycle owner and progress, then refresh before resuming verification. Opening never changes lifecycle. Active work disables conflicting submissions while settings and cancellation remain available.
+Add Gateway access uses the published horizontal Stepper: Connect environment, Gateway invitation, Confirm access. Opening only inspects the selected target. Gateway fields stay hidden until an explicit Connect and continue succeeds through the existing exact-target `manage_runtime_gateway status` action. The main process acquires and releases its trusted management bridge without opening an Env App or changing Runtime lifecycle. A running, openable target reporting `forward_unavailable` is awaiting this connection, not an authentication or transport failure. A genuinely blocked channel remains unavailable. Stopped targets offer Start Runtime and continue; missing control is refreshed before Restart Runtime. Required package or capability updates offer Update Runtime. Unavailable credentials, channels or container engines show Retry and Environment settings. Explicit recovery clicks reuse the exact-target lifecycle owner, refresh, and check the management connection before continuing. One compact status line reflects the existing operation; a nested lifecycle timeline is not repeated inside enrollment. Opening never changes lifecycle. Active work disables conflicting submissions while settings and cancellation remain available.
 
 Gateway administrators issue signed address/code deliveries; Runtime owners verify them through `manage_runtime_gateway`. Delivery and SSH/container administration do not imply consent. Desktop must manage the selected Runtime, its trusted control must reach Gateway, address and invitation must verify, and the Runtime administrator must confirm locally. Main retains control tokens and host credentials; the renderer supplies only target, invitation coordinates and opaque preview ID.
 
@@ -25,7 +25,7 @@ Address suggestions show a local marker, Gateway name, Use action and selected-a
 
 The upward menu retains Runtime/Cloud actions and adds Cancel Gateway pairing. Runtime/Cloud perspectives require selection among multiple members and show a sole member directly. Gateway fixes its selected member without another selector. Equivalent snapshots retain the target; absence disables confirmation. Only the selected Cloud owner shows interruption impact, which Runtime rechecks at commit. Publish through Gateway is separate and alone offers preserve/new for existing Cloud identity. Joined, Gateway offline, Cloud denied, pending approval, published control offline, accessible and migration pending stay distinct. Management uses the trusted direct owner, never a member card.
 
-Same-target snapshots with unchanged invitation seeds preserve address, code, pending verification, preview and focus. The mounted panel retains drafts and unexpired previews through lost control or failed recovery, pausing status reads and submissions. Unpairing/publication retain their own target and consent. Scalar target/address/code changes reset verification and fence old responses; object replacement cannot reset a session. Closing clears secrets/consent, fences responses and restores the menu button. Success clears the consumed code permanently; reopening setup starts a fresh draft.
+Same-target snapshots with unchanged invitation seeds preserve address, code, pending verification, preview and focus. The mounted panel retains drafts and unexpired previews through lost control, back navigation or failed recovery, hiding later stages and pausing submissions. The setup wizard does not poll membership status; each enrollment operation reacquires and validates its own trusted connection. Unpairing/publication retain their own target and consent. Scalar target/address/code changes reset verification and fence old responses; object replacement cannot reset a session. Closing clears secrets/consent, fences responses and restores the menu button. Success clears the consumed code permanently; reopening setup starts a fresh draft.
 
 ## Members and policy
 
@@ -71,7 +71,7 @@ This surface presents current Gateway state and starts explicit user-authorized 
 - `redeven:desktop/scripts/check-gateway-runtime-connections.mjs` — Ten locales and two widths across five managed placements, explicit recovery, retained previews, busy controls and focus restoration, alongside original tabs and consent.
 - `redeven:desktop/src/welcome/RuntimeGatewayJoinPanel.client.test.tsx` — Snapshot/polling draft retention and target/secret/async-response lifecycle boundaries.
 - `redeven:desktop/src/welcome/EnvironmentRelation.client.test.tsx` — Typed and quick-filled drafts survive real launcher snapshot updates through the environment card.
-- `redeven:desktop/src/welcome/RuntimeGatewaySetupDialog.tsx` — One read-only preparation and explicit lifecycle recovery flow.
+- `redeven:desktop/src/welcome/RuntimeGatewaySetupDialog.tsx` — Explicit environment connection, compact recovery and horizontal enrollment steps.
 - `redeven:desktop/src/shared/runtimeGatewayAccessPresentation.test.ts` — Eligibility, actual placement snapshots and recovery availability.
 - `redeven:desktop/src/main/runtimeGatewayLauncher.test.ts` — Exact management target validation, lease release and independent Cloud recovery fencing.
 - `redeven:desktop/src/welcome/GatewayMembersDialog.client.test.tsx` — Partial failure and retained data.
