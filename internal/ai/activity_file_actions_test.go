@@ -5,12 +5,32 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/floegence/floret/v7/identity"
+	"github.com/floegence/floret/v7/observation"
+	flruntime "github.com/floegence/floret/v7/runtime"
 	fltools "github.com/floegence/floret/v7/tools"
+	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 )
+
+type fileActionTestRuntime struct {
+	flruntime.ThreadService
+	view   flruntime.ThreadView
+	result flruntime.ThreadToolResult
+}
+
+func (runtime *fileActionTestRuntime) View(context.Context, identity.ThreadID) (flruntime.ThreadView, error) {
+	return runtime.view, nil
+}
+
+func (runtime *fileActionTestRuntime) LookupToolResult(context.Context, flruntime.LookupToolResultInput) (flruntime.ThreadToolResult, bool, error) {
+	return runtime.result, true, nil
+}
 
 func rawActivityMessageWithPrivateFileActionSidecar(messageID string) string {
 	messageID = strings.TrimSpace(messageID)
@@ -243,11 +263,73 @@ func TestSanitizeActivityTimelineMessageJSONFiltersRunningActivitySidecar(t *tes
 }
 
 func TestResolveFlowerFileActionOpenTargetRejectsIncompleteIdentity(t *testing.T) {
-	svc := newTestService(t, nil)
+	svc := newTestService(t, &config.AIConfig{CurrentModelID: "openai/gpt-5-mini", Providers: []config.AIProvider{{ID: "openai", Name: "OpenAI", Type: "openai", Models: []config.AIProviderModel{{ModelName: "gpt-5-mini"}}}}})
 	meta := &session.Meta{EndpointID: "env_invalid_action", CanRead: true, CanWrite: true, CanExecute: true}
 	_, err := svc.ResolveFlowerFileActionOpenTarget(context.Background(), meta, FlowerFileActionOpenRequest{Action: "preview"})
 	if !errors.Is(err, ErrFlowerFileActionInvalid) {
 		t.Fatalf("err=%v, want ErrFlowerFileActionInvalid", err)
+	}
+}
+
+func TestFlowerFileActionPathFromCanonicalResultUsesOrderedTypedMutations(t *testing.T) {
+	t.Parallel()
+
+	content := `{"status":"success","data":{"mutations":[{"file_path":"/workspace/old.txt","old_path":"/workspace/old.txt","new_path":"/workspace/new.txt","change_type":"move"},{"file_path":"/workspace/deleted.txt","old_path":"/workspace/deleted.txt","change_type":"delete"}]}}`
+	path, err := flowerFileActionPathFromCanonicalResult(content, "apply_patch", 0, "preview")
+	if err != nil || path != "/workspace/new.txt" {
+		t.Fatalf("move preview path=%q err=%v", path, err)
+	}
+	path, err = flowerFileActionPathFromCanonicalResult(content, "apply_patch", 1, "browse_directory")
+	if err != nil || path != "/workspace" {
+		t.Fatalf("delete directory path=%q err=%v", path, err)
+	}
+	if path, err = flowerFileActionPathFromCanonicalResult(content, "apply_patch", 1, "preview"); err != nil || path != "" {
+		t.Fatalf("delete preview path=%q err=%v, want empty path", path, err)
+	}
+}
+
+func TestFlowerFileActionPathFromCanonicalResultRejectsUnconfirmedOrMismatchedResults(t *testing.T) {
+	t.Parallel()
+
+	for _, content := range []string{
+		`{"status":"error","data":{"file_path":"/workspace/app.ts"}}`,
+		`not-json`,
+	} {
+		if path, err := flowerFileActionPathFromCanonicalResult(content, "file.read", 0, "preview"); err == nil || path != "" {
+			t.Fatalf("content=%q path=%q err=%v, want rejected", content, path, err)
+		}
+	}
+	if path, err := flowerFileActionPathFromCanonicalResult(`{"status":"success","data":{"file_path":"/workspace/app.ts"}}`, "file.read", 1, "preview"); err == nil || path != "" {
+		t.Fatalf("mismatched ordinal path=%q err=%v, want rejected", path, err)
+	}
+}
+
+func TestResolveFlowerFileActionOpenTargetUsesExactCanonicalResult(t *testing.T) {
+	svc := newTestService(t, &config.AIConfig{CurrentModelID: "openai/gpt-5-mini", Providers: []config.AIProvider{{ID: "openai", Name: "OpenAI", Type: "openai", Models: []config.AIProviderModel{{ModelName: "gpt-5-mini"}}}}})
+	metaValue := testSendTurnMeta()
+	metaValue.EndpointID = "env_file_action"
+	metaValue.NamespacePublicID = "namespace"
+	meta := metaValue
+	thread, err := svc.CreateThread(t.Context(), meta, "File action", "", "", svc.agentHomeDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(svc.agentHomeDir, "confirmed.txt")
+	if err := os.WriteFile(path, []byte("confirmed"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	item := flruntime.ThreadItem{
+		ID: "tool-item", Kind: flruntime.ThreadItemTool, TurnID: identity.TurnID("turn-1"), RunID: identity.RunID("run-1"),
+		Activity: &observation.ActivityItem{ItemID: "activity-item", ToolID: "call-1", ToolName: "file.read", Presentation: &fltools.ActivityPresentation{TargetRefs: []fltools.ActivityTargetRef{{Kind: "file_action:action-1", Label: "confirmed.txt"}}}},
+	}
+	result := flruntime.ThreadToolResult{ToolName: "file.read", Status: "success", Content: `{"status":"success","data":{"file_path":"` + path + `"}}`}
+	svc.threadRuntime = &fileActionTestRuntime{view: flruntime.ThreadView{ThreadID: identity.ThreadID(thread.ThreadID), Items: []flruntime.ThreadItem{item}}, result: result}
+	target, err := svc.ResolveFlowerFileActionOpenTarget(t.Context(), meta, FlowerFileActionOpenRequest{ThreadID: thread.ThreadID, MessageID: item.ID, BlockIndex: 0, ItemID: item.Activity.ItemID, ActionID: "action-1", Action: "preview"})
+	if err != nil || target.Path != path {
+		t.Fatalf("target=%+v err=%v", target, err)
+	}
+	if _, err := svc.ResolveFlowerFileActionOpenTarget(t.Context(), meta, FlowerFileActionOpenRequest{ThreadID: thread.ThreadID, MessageID: item.ID, BlockIndex: 1, ItemID: item.Activity.ItemID, ActionID: "action-1", Action: "preview"}); !errors.Is(err, ErrFlowerFileActionNotFound) {
+		t.Fatalf("wrong block err=%v, want not found", err)
 	}
 }
 

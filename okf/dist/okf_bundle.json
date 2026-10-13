@@ -32727,15 +32727,15 @@
         "title": "Flower file activity presentation",
         "type": "UI Contract"
       },
-      "body_length": 3056,
+      "body_length": 3445,
       "summary": "Flower presents file reads and mutations only from canonical typed Floret\nActivity. A mutation row shows the user-facing file name and aggregate added and\ndeleted line counts; its detail contains the matching unified diff. Protocol\nfields, private paths, and internal action IDs never become display metadata.\nAn activity without typed mutation detail exposes safe purpose and status through\nthe shared disclosure, without inventing a diff panel.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Published Floret v7.25.2 owns the product-neutral file Activity payload. A read\ncarries bounded content and line metadata. A single-file mutation carries its\ndisplay name, change type, added and deleted line counts, unified diff,\nunavailable reason, and truncation state. A patch carries aggregate counts and\nan ordered typed mutation list. Redeven maps the tool result to that payload\nonce; Flower does not parse provider text, tool-result JSON, labels, or chips to\nreconstruct file changes.\n\nThe compact row and expanded detail consume the same mutation collection.\nFlower sums its `additions` and `deletions` for the compact green/red statistic\nand renders each mutation's `unified_diff` in order when the user expands the\nrow. A typed unavailable reason may produce the localized generic empty-diff\nmessage, and truncation uses localized copy. Missing typed mutation evidence\ndoes not create statistics or diff content. [Activity disclosure interaction](flower-activity-interaction.md)\nowns the stable detail affordance, safe empty state, and file-read error expansion.\n\nFile preview and directory actions are referenced through ordered\n`target_refs` whose kinds contain opaque `file_action` identities. Redeven uses\ntransient result IDs only to build those references, then removes them and all\nprivate paths from the public Activity payload. Flower associates references\nwith typed mutations by order and never reads an action ID from payload data.",
-          "char_count": 1454
+          "body": "Published Floret v7.30.0 owns the product-neutral file Activity payload. A read\ncarries bounded content and line metadata. A single-file mutation carries its\ndisplay name, change type, added and deleted line counts, unified diff,\nunavailable reason, and truncation state. A patch carries aggregate counts and\nan ordered typed mutation list. Redeven maps the tool result to that payload\nonce; Flower does not parse provider text, tool-result JSON, labels, or chips to\nreconstruct file changes.\n\nThe compact row and expanded detail consume the same mutation collection.\nFlower sums its `additions` and `deletions` for the compact green/red statistic\nand renders each mutation's `unified_diff` in order when the user expands the\nrow. A typed unavailable reason may produce the localized generic empty-diff\nmessage, and truncation uses localized copy. Missing typed mutation evidence\ndoes not create statistics or diff content. [Activity disclosure interaction](flower-activity-interaction.md)\nowns the stable detail affordance, safe empty state, and file-read error expansion.\n\nFile preview and directory actions are referenced through ordered\n`target_refs` whose kinds contain opaque `file_action` identities. Redeven uses\ntransient result IDs only to build those references, then removes them and all\nprivate paths from the public Activity payload. When a user activates an action,\nRedeven reads the confirmed canonical result through Floret's\n`ThreadToolResultReader` using the exact thread, turn, run, and tool-call\nidentity, associates the requested reference with the ordered typed result, and\nresolves the resulting path through the current filesystem scope. It never\nreconstructs the timeline from unrelated messages or stores a second path\nledger. Deleted files expose their parent directory action only.",
+          "char_count": 1810
         },
         {
           "id": "boundaries",
@@ -32752,9 +32752,9 @@
           "description": "One result-to-Floret payload mapping preserves reads and all ordered mutations."
         },
         {
-          "id": "redeven:internal/ai/activity_file_actions.go:0:public activity sanitization removes private paths and transient action ids.",
+          "id": "redeven:internal/ai/activity_file_actions.go:0:public activity sanitization removes private paths and resolves actions from the exact canonical tool result.",
           "source": "redeven:internal/ai/activity_file_actions.go",
-          "description": "Public Activity sanitization removes private paths and transient action IDs."
+          "description": "Public Activity sanitization removes private paths and resolves actions from the exact canonical tool result."
         },
         {
           "id": "redeven:internal/ai/activity_timeline_test.go:0:read, mutation, patch, target-reference, and chip coverage.",
@@ -38660,5 +38660,5 @@
       ]
     }
   ],
-  "source_sha256": "f8f42a5c60a3a6a0b7e5018796e0e7465b91da22d84f44edf18d8c0af234de08"
+  "source_sha256": "44c6d700fb1a22758962ab5d2c042540d8013a0677051716a2102c473a85e041"
 }
