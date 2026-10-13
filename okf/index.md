@@ -8,6 +8,8 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 
 ## Architecture
 
+- [Control-plane capacity qualification](operations/controlplane-capacity-qualification.md) - Measure enrolled control sessions, dynamic heartbeat policy, and real Gateway recovery on independent load hosts.
+
 - [Tessiven DSL versioning](architecture/tessiven-dsl-versioning.md) - Select frozen semantic-version schemas and upgrade supported documents without rewriting history.
 - [Tessiven stable canvas presentation](architecture/tessiven-canvas-presentation.md) - Keep native display compatibility independent of DSL upgrades.
 - [Tessiven canvas contract](architecture/tessiven-canvas-contract.md) - Store one Runtime-owned, versioned YAML canvas library with stable topology identities.

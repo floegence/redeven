@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"errors"
+	"github.com/floegence/redeven/internal/periodic"
 	"net/http"
 	"time"
 
@@ -53,7 +54,7 @@ func (a *Agent) recoverGatewayCredentials(ctx context.Context) error {
 			a.mu.Unlock()
 			return err
 		}
-		a.cfg = &next
+		a.setRemoteConfigLocked(&next)
 	}
 	a.mu.Unlock()
 	if r.PendingGenerationRenewal {
@@ -75,7 +76,7 @@ func (a *Agent) recoverGatewayCredentials(ctx context.Context) error {
 				a.mu.Unlock()
 				return saveErr
 			}
-			a.cfg = &updated
+			a.setRemoteConfigLocked(&updated)
 			a.mu.Unlock()
 			return a.finishGatewayGenerationRenewal(ctx, &r)
 		}
@@ -90,7 +91,7 @@ func (a *Agent) recoverGatewayCredentials(ctx context.Context) error {
 			if saveErr := config.Save(a.configPath, &updated); saveErr != nil {
 				return saveErr
 			}
-			a.cfg = &updated
+			a.setRemoteConfigLocked(&updated)
 		}
 		return err
 	}
@@ -106,7 +107,7 @@ func (a *Agent) recoverGatewayCredentials(ctx context.Context) error {
 	if err := config.Save(a.configPath, &updated); err != nil {
 		return err
 	}
-	a.cfg = &updated
+	a.setRemoteConfigLocked(&updated)
 	a.controlBusinessRejected = false
 	a.controlCredentialsUnavailable = false
 	return nil
@@ -115,8 +116,9 @@ func (a *Agent) recoverGatewayCredentials(ctx context.Context) error {
 // observeGatewayCloud acts only on authenticated closure requests. Network
 // failure never creates a new lifetime limit for existing data sessions.
 func (a *Agent) observeGatewayCloud(ctx context.Context) {
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTimer(periodic.InitialDelay(5 * time.Second))
 	defer ticker.Stop()
+	defer a.closeGatewayStatusClient()
 	closureCursor := ""
 	receiptCursor, removalCursor := 0, 0
 	for {
@@ -145,6 +147,7 @@ func (a *Agent) observeGatewayCloud(ctx context.Context) {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
+				ticker.Reset(5 * time.Second)
 				continue
 			}
 		}
@@ -158,7 +161,7 @@ func (a *Agent) observeGatewayCloud(ctx context.Context) {
 					clean.PreviousBinding = nil
 					next.GatewayPublication = &clean
 					if config.Save(a.configPath, &next) == nil {
-						a.cfg = &next
+						a.setRemoteConfigLocked(&next)
 					}
 				}
 				a.mu.Unlock()
@@ -171,8 +174,7 @@ func (a *Agent) observeGatewayCloud(ctx context.Context) {
 		}
 		// A revoked binding may still attempt its signed acknowledgement. It cannot
 		// obtain control artifacts, which remain fenced by the canonical authority.
-		r.Revoked = false
-		status, err := r.StatusPage(ctx, cfg.CloudGateway(), closureCursor)
+		status, err := a.gatewayStatusPage(ctx, &r, cfg.CloudGateway(), closureCursor)
 		if err == nil {
 			closureCursor = status.NextClosureCursor
 			for _, closure := range status.Closures {
@@ -199,7 +201,7 @@ func (a *Agent) observeGatewayCloud(ctx context.Context) {
 						continue
 					}
 					saveErr := config.Save(a.configPath, &next)
-					a.cfg = &next
+					a.setRemoteConfigLocked(&next)
 					a.controlBusinessRejected = true
 					a.mu.Unlock()
 					a.stopControlChannel()
@@ -249,6 +251,7 @@ func (a *Agent) observeGatewayCloud(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			ticker.Reset(5 * time.Second)
 		}
 	}
 }
@@ -294,7 +297,7 @@ func (a *Agent) adoptGatewayReapproval(status *gc.RuntimeStatus) error {
 	if err := config.Save(a.configPath, &updated); err != nil {
 		return err
 	}
-	a.cfg = &updated
+	a.setRemoteConfigLocked(&updated)
 	return nil
 }
 
@@ -332,7 +335,7 @@ func (a *Agent) rotateGatewayIdentity(ctx context.Context) error {
 		if err := config.Save(a.configPath, &updated); err != nil {
 			return err
 		}
-		a.cfg = &updated
+		a.setRemoteConfigLocked(&updated)
 		return nil
 	})
 }
@@ -356,7 +359,7 @@ func (a *Agent) finishGatewayGenerationRenewal(ctx context.Context, r *gatewaycl
 	if err := config.Save(a.configPath, &updated); err != nil {
 		return err
 	}
-	a.cfg = &updated
+	a.setRemoteConfigLocked(&updated)
 	return nil
 }
 

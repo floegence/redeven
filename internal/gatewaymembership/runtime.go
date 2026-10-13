@@ -297,6 +297,12 @@ func (r *RuntimeConfig) requestEndpoint(ctx context.Context, endpoint gp.Gateway
 	if err != nil {
 		return err
 	}
+	transport := &http.Transport{Proxy: nil, DialContext: (&net.Dialer{Timeout: 10 * time.Second}).DialContext, TLSClientConfig: config, MaxConnsPerHost: 4, MaxIdleConnsPerHost: 2, MaxIdleConns: 8, IdleConnTimeout: time.Minute, MaxResponseHeaderBytes: 16 << 10}
+	defer transport.CloseIdleConnections()
+	client := &http.Client{Transport: transport, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("gateway redirects are prohibited") }}
+	return requestGatewayEndpoint(ctx, client, endpoint, path, body, out)
+}
+func requestGatewayEndpoint(ctx context.Context, client *http.Client, endpoint gp.GatewayEndpoint, path string, body, out any) error {
 	if connect, ok := body.(gp.MemberConnectRequest); ok {
 		connect.Endpoint = endpoint
 		body = connect
@@ -307,9 +313,6 @@ func (r *RuntimeConfig) requestEndpoint(ctx context.Context, endpoint gp.Gateway
 	}
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	transport := &http.Transport{Proxy: nil, DialContext: (&net.Dialer{Timeout: 10 * time.Second}).DialContext, TLSClientConfig: config, DisableKeepAlives: true, MaxResponseHeaderBytes: 16 << 10}
-	defer transport.CloseIdleConnections()
-	client := &http.Client{Transport: transport, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("gateway redirects are prohibited") }}
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint.Address+path, bytes.NewReader(raw))
 	if err != nil {
 		return err

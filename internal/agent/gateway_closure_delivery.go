@@ -21,7 +21,7 @@ func (a *Agent) observeGatewayClosure(ctx context.Context) {
 	route := cfg.GatewayPublication
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-	result, err := route.ObserveClosure(ctx, cfg.CloudGateway())
+	result, err := a.gatewayClosureObservation(ctx, cfg)
 	if err != nil || result.Closure == nil {
 		return
 	}
@@ -40,7 +40,7 @@ func (a *Agent) observeGatewayClosure(ctx context.Context) {
 	if err == nil {
 		err = config.Save(a.configPath, &next)
 	}
-	a.cfg = &next
+	a.setRemoteConfigLocked(&next)
 	if err != nil {
 		a.controlBusinessRejected = true
 	}
@@ -72,7 +72,7 @@ func (a *Agent) saveGatewayClosure(fence gc.BindingFence, update *gatewaycloud.C
 	if err := config.Save(a.configPath, &next); err != nil {
 		return err
 	}
-	a.cfg = &next
+	a.setRemoteConfigLocked(&next)
 	return nil
 }
 
@@ -135,7 +135,7 @@ func (a *Agent) drainGatewayRemoval(ctx context.Context, cursor int) int {
 		if current.MemberID == item.MemberID && slices.Equal(current.GatewayEndpoints, item.GatewayEndpoints) {
 			next.GatewayRemovalOutbox = append(next.GatewayRemovalOutbox[:i], next.GatewayRemovalOutbox[i+1:]...)
 			if config.Save(a.configPath, &next) == nil {
-				a.cfg = &next
+				a.setRemoteConfigLocked(&next)
 			}
 			break
 		}
