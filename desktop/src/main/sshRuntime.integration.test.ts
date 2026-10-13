@@ -1376,7 +1376,8 @@ describe('sshRuntime integration', () => {
     expect(eventNames.filter((event) => event === 'probe_runtime')).toHaveLength(2);
     expect(transfers).toContainEqual({ transfer_kind: 'download', transfer_percent: 25 });
     expect(transfers).toContainEqual({ transfer_kind: 'download', transfer_percent: 100 });
-    expect(String(events.find((event) => event.event === 'remote_install')?.data?.install_script_url ?? '')).toMatch(/\/install\.sh$/u);
+    expect(events.find((event) => event.event === 'remote_install')?.data?.install_script_url)
+      .toBe('https://raw.githubusercontent.com/floegence/redeven/main/scripts/install.sh');
     await removeFakeSSHFixture(fixture);
   });
 
