@@ -8,9 +8,9 @@ timestamp: 2026-10-13T09:04:00Z
 # Summary
 
 The primary qualification task owns this comparison contract. Complete RustDesk
-parity remains unaccepted. The current published hardware AV1 candidate and
-its remaining latency/resource failures are recorded in the
-[v0.22.42 diagnostics](remote-desktop-rustdesk-v42-results.md). The software VP9
+parity remains unaccepted. The current published DRM cadence candidate and
+its remaining latency, quality and resource failures are recorded in the
+[v0.22.43 diagnostics](remote-desktop-rustdesk-v43-results.md). The software VP9
 `v0.22.40` rounds below remain historical comparison evidence. Equal application
 window sizes do not establish equal content viewports. Lower quality, omitted
 SSH costs or failed samples cannot satisfy acceptance; each successor needs
