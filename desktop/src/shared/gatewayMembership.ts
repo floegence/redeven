@@ -33,8 +33,6 @@ export type GatewayMember = Readonly<{
   last_seen_at_unix_ms: number;
   cloud_permission: GatewayCloudPermission;
   effective_cloud_allowed: boolean;
-  cloud_state: string;
-  cloud_revocation_pending: boolean;
   metadata: Readonly<{ hostname: string; os: string; arch: string; version: string }>;
 }>;
 export type GatewayInvitationCodeDelivery = Readonly<{

@@ -281,7 +281,6 @@ export function GatewayMembersPanel(props: Readonly<{
                 <For each={['inherit', 'allow', 'deny'] as const}>{value => <option value={value}>{props.i18n.t(`gatewayMembers.${value}`)}</option>}</For>
               </select>
             </label>
-            <Show when={member.cloud_revocation_pending}><p role="status" class="text-xs text-warning">{props.i18n.t('gatewayMembers.revocationPending')}</p></Show>
             <Button class="cursor-pointer" size="xs" variant="outline" disabled={busy() || !props.gateway?.permissions?.manage_members}
               onClick={() => props.gateway && void perform({ kind: 'reevaluate_gateway_member', gateway_id: props.gateway.gateway_id,
                 member_id: member.member_id, member_version: member.member_version })}>{props.i18n.t('gatewayMembers.reevaluate')}</Button>

@@ -557,7 +557,7 @@ func (s *Store) Join(ctx context.Context, request gp.MemberJoinRequest) (_ gp.Me
 		return gp.MemberJoinResponse{}, err
 	}
 	response := gp.MemberJoinResponse{ProtocolVersion: gp.Version, GatewayID: s.identity.ID, MemberID: request.Delegation.MemberID, MemberVersion: 1, DeliveryID: request.DeliveryID, ClientCertificatePEM: certificate, ClientExpiresAtUnixMS: expires}
-	member := MemberRecord{HookCloudAllowed: cloudAllowed, HookPolicyRevision: policy.Revision, Member: gp.Member{MemberID: request.Delegation.MemberID, RuntimePublicID: request.Delegation.RuntimePublicID, MemberVersion: 1, DisplayName: request.Metadata.Hostname, State: "active", CloudPermission: gp.CloudInherit, CloudState: "not_configured", Metadata: request.Metadata}, Delegation: request.Delegation, Service: request.Service, ClientCertificatePEM: certificate, ClientCertificateSHA256: fingerprint, ClientExpiresAtUnixMS: expires}
+	member := MemberRecord{HookCloudAllowed: cloudAllowed, HookPolicyRevision: policy.Revision, Member: gp.Member{MemberID: request.Delegation.MemberID, RuntimePublicID: request.Delegation.RuntimePublicID, MemberVersion: 1, DisplayName: request.Metadata.Hostname, State: "active", CloudPermission: gp.CloudInherit, Metadata: request.Metadata}, Delegation: request.Delegation, Service: request.Service, ClientCertificatePEM: certificate, ClientCertificateSHA256: fingerprint, ClientExpiresAtUnixMS: expires}
 	next := s.clone()
 	next.Members[response.MemberID] = member
 	record.DeliveryID = request.DeliveryID

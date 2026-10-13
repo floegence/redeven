@@ -176,7 +176,6 @@ type Member struct {
 	LastSeenAtUnixMS      int64           `json:"last_seen_at_unix_ms"`
 	CloudPermission       CloudPermission `json:"cloud_permission"`
 	EffectiveCloudAllowed bool            `json:"effective_cloud_allowed"`
-	CloudState            string          `json:"cloud_state"`
 	Metadata              MemberMetadata  `json:"metadata"`
 }
 

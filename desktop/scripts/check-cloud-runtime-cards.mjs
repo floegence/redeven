@@ -78,7 +78,7 @@ const child=spawn(electron,[host,'--remote-debugging-address=127.0.0.1','--remot
 const floeVersion=JSON.parse(await readFile(path.join(desktop,'node_modules/@floegence/floe-webapp-core/package.json'),'utf8')).version;
 const report={status:'running',sourceCommit,sourceDirty,runtimeBuild,gatewayBuild,nodeVersion:process.version,floeVersion,pid:child.pid,marker,state,runtimePort,cases:[],gateways:[]};
 const exited=new Promise(resolve=>child.once('exit',(code,signal)=>resolve({code,signal})));
-let diagnostic='',browser,page,action;
+let diagnostic='',browser,page,action,snapshot;
 child.stdout.on('data',bytes=>{diagnostic+=bytes.toString()});
 const signal=()=>{if(child.exitCode===null&&child.signalCode===null)process.kill(-child.pid,'SIGTERM')};
 const timer=setTimeout(signal,240000);
@@ -89,13 +89,14 @@ try{
  await page.waitForFunction(()=>Boolean(window.redevenDesktopLauncher));
  assert.ok(page.url().includes(desktop)||page.url().includes('redeven'),`Unexpected Desktop page: ${page.url()}`);
  await page.evaluate(async()=>{await window.redevenDesktopLanguage.setPreference('en-US');await window.redevenDesktopShell.openConnectionCenter()});
- const snapshot=()=>page.evaluate(()=>window.redevenDesktopLauncher.getSnapshot());
+ snapshot=()=>page.evaluate(()=>window.redevenDesktopLauncher.getSnapshot());
+ const waitSnapshot=async(check,timeout=60000)=>{const deadline=Date.now()+timeout;while(Date.now()<deadline){const value=await snapshot();if(check(value))return value;await new Promise(resolve=>setTimeout(resolve,100));}throw new Error('Runtime snapshot did not reach the expected state');};
  action=request=>page.evaluate(request=>window.redevenDesktopLauncher.performAction(request),request);
  let current=await snapshot();let local=current.environments.find(entry=>entry.kind==='local_environment');
  const started=await action({kind:'start_environment_runtime',environment_id:local.id});
  if(!started.ok)report.failedRuntimeStart=started;
  assert.equal(started.ok,true);
- await page.waitForFunction(async epoch=>{const snapshot=await window.redevenDesktopLauncher.getSnapshot();return snapshot.environments.find(entry=>entry.kind==='local_environment')?.runtime_service?.compatibility_epoch===epoch},compatibility.compatibility_epoch,{timeout:60000});
+ await waitSnapshot(snapshot=>snapshot.environments.find(entry=>entry.kind==='local_environment')?.runtime_service?.compatibility_epoch===compatibility.compatibility_epoch);
  report.cases.push(`production Desktop and live Runtime report compatibility epoch ${compatibility.compatibility_epoch}`);
  const cloudID=preferences.cloud_environments[0].id;
  const assertCloudCard=async expectedGateways=>{
@@ -106,7 +107,7 @@ try{
     &&[...tabs??[]].some(tab=>tab.textContent.trim()==='Cloud')
     &&tabs.length===(expectedGateways?3:2)&&!document.querySelector(`[data-environment-group="${cloudID}"]`);
   },{cloudID,expectedGateways},{timeout:15000});
-  const value=await snapshot();const runtime=value.environments.find(entry=>entry.kind==='local_environment');
+  const value=await waitSnapshot(snapshot=>(snapshot.environments.find(entry=>entry.kind==='local_environment')?.runtime_service?.gateway_memberships?.length??0)===expectedGateways);const runtime=value.environments.find(entry=>entry.kind==='local_environment');
   const remote=value.environments.find(entry=>entry.id===cloudID);
   assert.equal(runtime.runtime_service.bindings.cloud_link.state,'linked');
   assert.equal(remote.access_group_id,runtime.id);
@@ -114,7 +115,7 @@ try{
   const card=page.locator('[data-environment-group="local"]');
   assert.deepEqual(await card.getByRole('tab').allTextContents(),expectedGateways?['Local','Cloud','Gateway']:['Local','Cloud']);
   await card.getByRole('tab').nth(1).click();
-  await card.getByRole('tabpanel',{name:'Cloud',exact:true}).waitFor();
+  const tab=card.getByRole('tab').nth(1); const panelID=await tab.getAttribute('aria-controls'); assert.ok(panelID); const panel=card.locator(`[id="${panelID}"]`); assert.equal(await panel.getAttribute('aria-labelledby'),await tab.getAttribute('id')); await panel.waitFor();
   return card;
  };
  await page.getByRole('button',{name:'Environments',exact:true}).first().click();
@@ -127,7 +128,7 @@ try{
   const serviceRoot=path.join(dataRoot,'gateways',source.gateway_id,'state');report.gateways.push({id:source.gateway_id,serviceRoot});
   await mkdir(path.join(serviceRoot,'managed','bin'),{recursive:true});
   await copyFile(gatewayBinary,path.join(serviceRoot,'managed','bin','redeven-gateway'));
-  await writeFile(path.join(serviceRoot,'managed','managed-gateway.stamp'),`schema_version=3\ninstalled_by=redeven-desktop\nslot_release_tag=v0.0.0-dev\nsource_commit=${sourceCommit.slice(0,12)}\ninstall_strategy=desktop_upload\n`);
+  await writeFile(path.join(serviceRoot,'managed','managed-gateway.stamp'),`schema_version=3\ninstalled_by=redeven-desktop\nslot_release_tag=v0.0.0-dev\nsource_commit=${sourceCommit}\ninstall_strategy=desktop_upload\n`);
   execFileSync(gatewayBinary,['service-start','--state-root',serviceRoot,'--member-listen','127.0.0.1:0'],{stdio:'pipe'});
   execFileSync(gatewayBinary,['service-stop','--state-root',serviceRoot],{stdio:'pipe'});
   const trustPath=path.join(serviceRoot,'gateway-trust.json');
@@ -146,13 +147,14 @@ try{
   await page.getByRole('button',{name:'Environments',exact:true}).first().click();
   const card=page.locator(`[data-environment-group="${local.id}"]`);await card.waitFor();
   await card.getByRole('tab').first().click();
-  const owner=card.getByRole('tabpanel',{name:'Local',exact:true});await owner.getByRole('button',{name:'Actions',exact:true}).click();
+  const owner=card.locator('[role=tabpanel][aria-label="Local"]');await owner.getByRole('button',{name:'Actions',exact:true}).click();
   await page.getByRole('menuitem',{name:'Add Gateway access',exact:true}).click();
-  const dialog=page.getByRole('dialog');await dialog.locator('input').nth(0).fill(invitation.gateway_invitation_code.share_address);await dialog.locator('input').nth(1).fill(invitation.gateway_invitation_code.code);
+  const dialog=page.getByRole('dialog');await dialog.getByRole('button',{name:'Connect and continue',exact:true}).click();await dialog.locator('input').nth(0).fill(invitation.gateway_invitation_code.share_address);await dialog.locator('input').nth(1).fill(invitation.gateway_invitation_code.code);
   await dialog.getByRole('button',{name:'Verify',exact:true}).click();await dialog.getByRole('button',{name:'Confirm and enable',exact:true}).click();
   await dialog.waitFor({state:'detached'});
+  await waitSnapshot(snapshot=>{const members=snapshot.environments.find(entry=>entry.kind==='local_environment')?.runtime_service?.gateway_memberships??[];return members.length===index+1&&members.every(member=>member.phase==='joined')});
   await action({kind:'refresh_gateway_catalog',gateway_id:source.gateway_id});
-  await page.waitForFunction(async count=>{const snapshot=await window.redevenDesktopLauncher.getSnapshot();const runtime=snapshot.environments.find(entry=>entry.kind==='local_environment');return runtime?.runtime_service?.gateway_memberships?.length===count&&snapshot.environments.filter(entry=>entry.kind==='gateway_environment').length===count},index+1,{timeout:60000});
+  await waitSnapshot(snapshot=>snapshot.environments.find(entry=>entry.kind==='local_environment')?.runtime_service?.gateway_memberships?.length===index+1&&snapshot.environments.filter(entry=>entry.kind==='gateway_environment').length===index+1);
   report.ownership=(await snapshot()).environments.map(entry=>({id:entry.id,kind:entry.kind,owner:entry.access_group_id,member:entry.gateway_member?.runtime_public_id,fingerprint:entry.gateway_identity_fingerprint,memberships:entry.runtime_service?.gateway_memberships}));
   await page.waitForFunction(()=>document.querySelectorAll('[data-environment-group]').length===1,null,{timeout:10000});
   assert.equal(await page.locator('[data-environment-group]:visible').count(),1);
@@ -174,9 +176,9 @@ try{
  await assertCloudCard(2);
  report.cases.push('retired Runtime configuration fails read-only; restoring the current configuration resumes both independent members');
  const card=await assertCloudCard(2);await card.getByRole('tab').last().click();
- await page.waitForFunction(async()=>{const snapshot=await window.redevenDesktopLauncher.getSnapshot();const members=snapshot.environments.find(entry=>entry.kind==='local_environment')?.runtime_service?.gateway_memberships??[];return members.length===2&&members.every(member=>member.phase==='joined')},null,{timeout:60000});
+ await waitSnapshot(snapshot=>{const members=snapshot.environments.find(entry=>entry.kind==='local_environment')?.runtime_service?.gateway_memberships??[];return members.length===2&&members.every(member=>member.phase==='joined')});
  report.cases.push('both live Gateway member connections reach joined state');
- const panel=card.getByRole('tabpanel',{name:'Gateway',exact:true});const selector=panel.getByRole('combobox');
+ const panel=card.locator('[role=tabpanel][aria-label="Gateway"]');const selector=panel.getByRole('combobox');
  const runtime=(await snapshot()).environments.find(entry=>entry.kind==='local_environment');
  const lab=runtime.runtime_service.gateway_memberships.find(member=>member.gateway_name==='Lab');assert.ok(lab);
  await selector.selectOption(lab.gateway_id);await panel.getByRole('button',{name:'Actions',exact:true}).click();
@@ -189,7 +191,7 @@ try{
  await page.screenshot({path:path.join(output,'real-desktop-unpair-confirmation.png')});
  await confirmation.getByRole('button',{name:'Cancel pairing',exact:true}).click();await confirmation.waitFor({state:'detached'});
  await page.waitForFunction(()=>document.querySelectorAll('[data-environment-group]').length===1,null,{timeout:10000});
- await page.waitForFunction(async()=>{const snapshot=await window.redevenDesktopLauncher.getSnapshot();const members=snapshot.environments.find(entry=>entry.kind==='local_environment')?.runtime_service?.gateway_memberships??[];return members.length===1&&members[0].gateway_name==='Office'},null,{timeout:60000});
+ await waitSnapshot(snapshot=>{const members=snapshot.environments.find(entry=>entry.kind==='local_environment')?.runtime_service?.gateway_memberships??[];return members.length===1&&members[0].gateway_name==='Office'});
  await page.waitForFunction(()=>{const panel=[...document.querySelectorAll('[role="tabpanel"]')].find(element=>element.getAttribute('aria-label')==='Gateway'&&element.getAttribute('aria-hidden')!=='true');return panel?.textContent?.includes('Office')&&!panel.querySelector('select')},null,{timeout:10000});
  await assertCloudCard(1);
  report.cases.push('upward menu removes only selected Lab pairing and preserves Cloud plus live Office membership');
@@ -203,6 +205,8 @@ try{
  report.status='passed';console.log(`PASS real Desktop connection cards (${report.cases.length} cases)`);
 }catch(error){
  report.status='failed';report.error=String(error);
+ const failedSnapshot=snapshot?await snapshot().catch(()=>null):null;
+ report.lastMembershipCounts=failedSnapshot?.environments.map(entry=>({id:entry.id,kind:entry.kind,memberships:entry.runtime_service?.gateway_memberships?.map(m=>({name:m.gateway_name,phase:m.phase})),catalog:entry.gateway_member?.runtime_public_id}));
  report.panels=await page?.locator('[role="tabpanel"]').evaluateAll(elements=>elements.map(element=>({
   label:element.getAttribute('aria-label'),hidden:element.getAttribute('aria-hidden'),inert:element.inert,
   visibility:getComputedStyle(element).visibility,buttons:[...element.querySelectorAll('button')].map(button=>({

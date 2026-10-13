@@ -428,7 +428,6 @@ func (s *Server) handleCatalog(w http.ResponseWriter, r *http.Request) {
 		member := record.Member
 		member.Connected = s.connections.IsConnected(member.MemberID)
 		member.EffectiveCloudAllowed = gatewaymembership.EffectiveCloudAllowed(record, policy)
-		member.CloudState = s.cloud.MemberContext(record).State
 		members = append(members, member)
 	}
 	writeResult(w, gp.CatalogResponse{ProtocolVersion: gp.Version, Gateway: metadata, Members: members, Policy: policy, Revision: revision, HookStatus: s.hooks.Status()}, nil)

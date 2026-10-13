@@ -263,7 +263,6 @@ export const enUS = {
     "inherit": "Inherit default",
     "allow": "Allow",
     "deny": "Deny",
-    "revocationPending": "Cloud revocation awaiting synchronization",
     "saved": "Saved",
     "confirmRemove": "Confirm removal",
     "remove": "Remove member"

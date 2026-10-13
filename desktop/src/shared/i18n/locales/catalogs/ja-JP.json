@@ -3388,7 +3388,6 @@
     "inherit": "既定値を継承",
     "allow": "許可",
     "deny": "禁止",
-    "revocationPending": "Cloud 失効の同期待ち",
     "saved": "保存済み",
     "confirmRemove": "削除を確定",
     "remove": "メンバーを削除",

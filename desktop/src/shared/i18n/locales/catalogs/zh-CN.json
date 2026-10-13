@@ -3388,7 +3388,6 @@
     "inherit": "继承默认",
     "allow": "允许",
     "deny": "禁止",
-    "revocationPending": "Cloud 撤销待同步",
     "saved": "已保存",
     "confirmRemove": "确认移除",
     "remove": "移除成员",
