@@ -4326,7 +4326,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   createEffect(on(
     () => props.settingsRevision?.() ?? 0,
     (revision, previousRevision) => {
-      if (previousRevision === undefined || revision === previousRevision) return;
+      if (revision === previousRevision) return;
       const hadInFlightRefresh = settingsRefreshRequest !== null;
       void refreshSettingsForRevision(true).then(() => refreshDirectory()).catch(() => undefined).finally(() => {
         if (!surfaceDisposed && (hadInFlightRefresh || (props.settingsRevision?.() ?? 0) !== revision)) {

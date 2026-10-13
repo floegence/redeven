@@ -11,6 +11,8 @@ const mocks = vi.hoisted(() => {
     readinessSnapshot: () => Record<string, unknown>;
     setReadinessSnapshot: (snapshot: Record<string, unknown>) => void;
     settingsGate: Promise<void> | null;
+    resourceGeneration: () => number;
+    setResourceGeneration: (value: number) => void;
   } = {
     omitReadState: false,
     currentItems: null,
@@ -18,6 +20,8 @@ const mocks = vi.hoisted(() => {
     readinessSnapshot: () => ({ state: 'ready', reason_code: '', retryable: false, safe_to_retry: false }),
     setReadinessSnapshot: () => undefined,
     settingsGate: null,
+    resourceGeneration: () => 0,
+    setResourceGeneration: () => undefined,
   };
   const readStatus = (lastMessageAtUnixMs: number, _waitingPromptID = '') => {
     const activityRevision = lastMessageAtUnixMs;
@@ -370,6 +374,8 @@ vi.mock('../protocol/redeven_v1', () => ({
 
 vi.mock('./EnvContext', () => ({
   useEnvContext: () => ({
+    settingsSeq: () => 0,
+    resourceCacheAccess: () => ({ generation: mocks.state.resourceGeneration() }),
     env_id: () => 'env-1',
     env: () => ({
       name: 'Demo Env',
@@ -575,6 +581,9 @@ export function registerEnvAIPageSendTests() {
       mocks.state.currentInteractions = [];
       mocks.state.omitReadState = false;
       mocks.state.settingsGate = null;
+      const [resourceGeneration, setResourceGeneration] = createSignal(0);
+      mocks.state.resourceGeneration = resourceGeneration;
+      mocks.state.setResourceGeneration = setResourceGeneration;
       const [readinessSnapshot, setReadinessSnapshot] = createSignal<Record<string, unknown>>({
         state: 'ready', reason_code: '', retryable: false, safe_to_retry: false,
       });
@@ -584,6 +593,34 @@ export function registerEnvAIPageSendTests() {
 
     afterEach(() => {
       document.body.innerHTML = '';
+    });
+
+    it('rechecks pending models when the connection authorization generation changes', async () => {
+      const original = mocks.fetchLocalApiJSONMock.getMockImplementation()!;
+      const oldRead = deferred<Awaited<ReturnType<typeof original>>>();
+      let fullReads = 0;
+      mocks.fetchLocalApiJSONMock.mockImplementation(async (url, init) => {
+        const response = await original(url, init);
+        if (!url.includes('/api/ai/models')) return response;
+        if (!url.includes('mode=baseline') && ++fullReads === 1) return oldRead.promise;
+        if (url.includes('mode=baseline')) {
+          const value = response as Extract<Awaited<ReturnType<typeof original>>, { directory: unknown }>;
+          return { ...value, directory: { models: value.directory.models.map(model => ({ ...model, state: 'pending' })), sources: value.directory.sources.map(source => ({ ...source, state: 'pending' })) } };
+        }
+        return response;
+      });
+      const { host, dispose } = await renderPage(false);
+      try {
+        for (let attempt = 0; attempt < 30 && fullReads === 0; attempt++) await flush();
+        expect(fullReads).toBe(1);
+        mocks.state.setResourceGeneration(1);
+        for (let attempt = 0; attempt < 30 && fullReads < 2; attempt++) await flush();
+        expect(fullReads).toBe(2);
+        oldRead.resolve(await original('/_redeven_proxy/api/ai/models'));
+        await flush();
+        expect(host.querySelector('.flower-model-reasoning-model-label')?.textContent).toContain('gpt-5.2');
+        expect(host.querySelector('button.flower-model-reasoning-model-trigger')?.hasAttribute('aria-busy')).toBe(false);
+      } finally { dispose(); mocks.fetchLocalApiJSONMock.mockImplementation(original); }
     });
 
     it('renders the shared Flower layout with New chat, thread history, settings, and model visibility', async () => {
@@ -660,13 +697,17 @@ export function registerEnvAIPageSendTests() {
         mocks.state.setReadinessSnapshot({
           state: 'ready', reason_code: '', retryable: false, safe_to_retry: false,
         });
-        for (let attempt = 0; attempt < 20 && mocks.fetchLocalApiJSONMock.mock.calls.length === 0; attempt += 1) await flush();
-        const admittedReads = mocks.fetchLocalApiJSONMock.mock.calls.map(([url]) => url);
-        expect(admittedReads).toEqual(expect.arrayContaining([
+        const bootstrapURLs = [
           '/_redeven_proxy/api/settings',
           '/_redeven_proxy/api/ai/models?mode=baseline',
           '/_redeven_proxy/api/ai/threads?limit=200',
-        ]));
+        ];
+        for (let attempt = 0; attempt < 20; attempt += 1) {
+          if (bootstrapURLs.every(url => mocks.fetchLocalApiJSONMock.mock.calls.some(([admittedURL]) => admittedURL === url))) break;
+          await flush();
+        }
+        const admittedReads = mocks.fetchLocalApiJSONMock.mock.calls.map(([url]) => url);
+        expect(admittedReads).toEqual(expect.arrayContaining(bootstrapURLs));
 
         mocks.state.setReadinessSnapshot({
           state: 'blocked', reason_code: 'store_integrity_error', retryable: false, safe_to_retry: false,

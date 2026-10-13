@@ -765,6 +765,7 @@ describe('FlowerSurface navigation', () => {
     (runtime.querySelector('button[aria-label="Flower settings"]') as HTMLButtonElement).click();
     await flush();
 
+    await waitFor(() => Boolean(runtime.querySelector('.flower-settings-model-name')));
     expect(runtime.querySelector('.flower-settings-model-name')?.textContent).toBe('gpt-5.2');
     expect(runtime.querySelector('.flower-settings-model-provider')?.textContent).toBe('OpenAI');
     expect(runtime.querySelector('.flower-settings-policy-card')).toBeTruthy();
