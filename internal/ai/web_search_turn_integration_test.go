@@ -29,7 +29,7 @@ func TestWebSearchTurnSurfaceReachesProvider(t *testing.T) {
 		name, provider, model, wire, searchMode, toolType, functionName, path string
 		braveKey                                                              bool
 	}{
-		{name: "openai", provider: "openai", model: "gpt-5.5", toolType: "web_search_preview", path: "/responses"},
+		{name: "openai", provider: "openai", model: "gpt-5.5", toolType: "web_search", path: "/responses"},
 		{name: "vision", provider: "deepseek", model: "deepseek-v4-flash-vision-exp", path: "/responses"},
 		{name: "fetch_only", provider: "openai_compatible", model: "custom", searchMode: "openai_builtin", path: "/responses"},
 		{name: "flash", provider: "deepseek", model: "deepseek-v4-flash", path: "/responses"},
@@ -37,7 +37,7 @@ func TestWebSearchTurnSurfaceReachesProvider(t *testing.T) {
 		{name: "kimi", provider: "moonshot", model: "kimi-k2.6", toolType: "builtin_function", path: "/chat/completions"},
 		{name: "glm", provider: "chatglm", model: "glm-5.1", toolType: "web_search", path: "/chat/completions"},
 		{name: "qwen", provider: "qwen", model: "qwen3.6-plus", toolType: "web_search", path: "/responses"},
-		{name: "responses_builtin", provider: "openai_compatible", model: "custom", searchMode: "openai_builtin", toolType: "web_search_preview", path: "/responses"},
+		{name: "responses_builtin", provider: "openai_compatible", model: "custom", searchMode: "openai_builtin", toolType: "web_search", path: "/responses"},
 		{name: "brave", provider: "openai_compatible", model: "custom", searchMode: "brave", functionName: "web_search_tool", braveKey: true, path: "/responses"},
 		{name: "brave_missing_key", provider: "openai_compatible", model: "custom", searchMode: "brave", path: "/responses"},
 		{name: "disabled", provider: "openai_compatible", model: "custom", searchMode: "disabled", path: "/chat/completions"},
@@ -158,7 +158,7 @@ func TestWebSearchTurnSurfaceReachesProvider(t *testing.T) {
 			hosted, local := 0, 0
 			for _, value := range body["tools"].([]any) {
 				tool := value.(map[string]any)
-				if tool["type"] == "web_search" || tool["type"] == "web_search_preview" || tool["type"] == "builtin_function" {
+				if tool["type"] == "web_search" || tool["type"] == "builtin_function" {
 					hosted++
 				}
 				if tool["name"] == "web_search_tool" {
@@ -329,7 +329,7 @@ func testNativeSearchLifecycle(t *testing.T, failure string) {
 		hosted := 0
 		for _, value := range body["tools"].([]any) {
 			tool := value.(map[string]any)
-			if tool["type"] == "web_search" || tool["type"] == "web_search_preview" {
+			if tool["type"] == "web_search" {
 				hosted++
 			}
 			if tool["name"] == "web_search" {

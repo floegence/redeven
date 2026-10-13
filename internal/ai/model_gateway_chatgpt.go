@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/floegence/redeven/internal/chatgpt"
@@ -14,6 +15,64 @@ import (
 
 const chatGPTStateKind = "openai_chatgpt_native_v1"
 const chatGPTToolNamespace = "redeven"
+
+// Completed item events carry original native bytes even when the terminal
+// response omits its output snapshot. This collection belongs to one request.
+type chatGPTCompletedItems struct {
+	items map[int64]oresponses.ResponseOutputItemUnion
+	bytes int
+}
+
+func (c *chatGPTCompletedItems) add(index int64, item oresponses.ResponseOutputItemUnion) error {
+	var value map[string]any
+	raw := item.RawJSON()
+	if len(raw) > 8<<20 {
+		return errors.New("ChatGPT native output exceeds the context state limit")
+	}
+	if index < 0 || json.Unmarshal([]byte(raw), &value) != nil || value == nil {
+		return errors.New("invalid completed ChatGPT output item")
+	}
+	if previous, exists := c.items[index]; exists {
+		var old map[string]any
+		_ = json.Unmarshal([]byte(previous.RawJSON()), &old)
+		if !reflect.DeepEqual(old, value) {
+			return errors.New("conflicting completed ChatGPT output item")
+		}
+		return nil
+	}
+	if c.bytes+len(raw) > 8<<20 {
+		return errors.New("ChatGPT native output exceeds the context state limit")
+	}
+	if c.items == nil {
+		c.items = make(map[int64]oresponses.ResponseOutputItemUnion)
+	}
+	c.items[index] = item
+	c.bytes += len(raw)
+	return nil
+}
+
+func (c *chatGPTCompletedItems) complete(snapshot []oresponses.ResponseOutputItemUnion) ([]oresponses.ResponseOutputItemUnion, error) {
+	for index, item := range snapshot {
+		if err := c.add(int64(index), item); err != nil {
+			return nil, err
+		}
+	}
+	if len(c.items) == 0 {
+		return nil, errors.New("missing native ChatGPT output")
+	}
+	if len(snapshot) > 0 && len(snapshot) != len(c.items) {
+		return nil, errors.New("incomplete completed ChatGPT output snapshot")
+	}
+	output := make([]oresponses.ResponseOutputItemUnion, len(c.items))
+	for index := range output {
+		item, exists := c.items[int64(index)]
+		if !exists {
+			return nil, errors.New("missing completed ChatGPT output item")
+		}
+		output[index] = item
+	}
+	return output, nil
+}
 
 type chatGPTNativeRecord struct {
 	Start   int               `json:"start"`
@@ -36,7 +95,7 @@ func chatGPTNamespaces(tools []oresponses.ToolUnionParam) ([]oresponses.ToolUnio
 				return nil, err
 			}
 			functions = append(functions, oresponses.NamespaceToolToolUnionParam{OfFunction: &fn})
-		} else if tool.OfWebSearch != nil || tool.OfWebSearchPreview != nil {
+		} else if tool.OfWebSearch != nil {
 			out = append(out, tool)
 		} else {
 			return nil, chatgpt.Failure("subscription_sharing_unsupported_capability")

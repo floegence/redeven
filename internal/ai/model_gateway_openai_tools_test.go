@@ -773,11 +773,11 @@ func TestOpenAICompatibleBuiltinWebSearch_AttachesResponsesHostedTool(t *testing
 	}
 	for _, rawTool := range tools {
 		tool, _ := rawTool.(map[string]any)
-		if strings.TrimSpace(anyString(tool["type"])) == "web_search_preview" {
+		if strings.TrimSpace(anyString(tool["type"])) == "web_search" {
 			return
 		}
 	}
-	t.Fatalf("tools=%v, want web_search_preview", tools)
+	t.Fatalf("tools=%v, want web_search", tools)
 }
 
 func TestDecorateChatCompletionParams_WebSearchPayloads(t *testing.T) {
@@ -892,7 +892,7 @@ func TestDecorateResponsesParams_WebSearchPayloads(t *testing.T) {
 			name: "openai_builtin",
 			mode: providerWebSearchModeOpenAIResponsesBuiltin,
 			wantSubstr: []string{
-				`"type":"web_search_preview"`,
+				`"type":"web_search"`,
 			},
 		},
 		{
