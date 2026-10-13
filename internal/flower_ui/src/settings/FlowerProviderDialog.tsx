@@ -71,18 +71,41 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
   const [discoveryError, setDiscoveryError] = createSignal('');
   const discoveryIdentity = (draft: FlowerProviderDraft) => JSON.stringify([draft.id, draft.type, draft.base_url, draft.provider_api_key, draft.auth_method, draft.account_id, draft.chatgpt_attempt, draft.web_search, draft.web_search_api_key, props.webSearchKeyConfigured]);
   let discoverySequence = 0;
+  let lastDiscoveryIdentity: string | undefined;
+  const invalidateDiscovery = () => {
+    discoverySequence++;
+    setLoading(false); setDiscoveryError('');
+  };
+  onCleanup(invalidateDiscovery);
   const discover = async () => {
     const draft = store.draft;
-    if (!draft || !props.onDiscoverModels) return;
+    if (!props.open || !draft || !props.onDiscoverModels || loading()) return;
     const sequence = ++discoverySequence;
     const identity = discoveryIdentity(draft);
+    lastDiscoveryIdentity = identity;
+    const currentRequest = () => sequence === discoverySequence && props.open && store.draft && identity === discoveryIdentity(store.draft);
     setLoading(true); setDiscoveryError('');
     try {
       const result = await props.onDiscoverModels({ provider_id: draft.id, type: draft.type, base_url: draft.base_url, api_key: draft.auth_method === 'chatgpt' ? undefined : draft.provider_api_key ?? undefined, auth_method: draft.auth_method, account_id: draft.account_id, ...draft.chatgpt_attempt });
       const current = store.draft;
-      if (sequence === discoverySequence && props.open && current && identity === discoveryIdentity(current)) setStore('draft', reconcile(applyFlowerModelDiscovery(current, result.models)));
-    } catch (error) { if (sequence === discoverySequence) setDiscoveryError(error instanceof Error ? error.message : String(error)); }
+      if (currentRequest() && current) setStore('draft', reconcile(applyFlowerModelDiscovery(current, result.models)));
+    } catch (error) { if (currentRequest()) setDiscoveryError(error instanceof Error ? error.message : String(error)); }
     finally { if (sequence === discoverySequence) setLoading(false); }
+  };
+  const setupDiscovery = () => props.mode === 'create' && (selectedProviderType() === 'openrouter' || selectedProviderType() === 'ollama') && Boolean(props.onDiscoverModels);
+  const discoverNewConnection = () => {
+    const draft = store.draft;
+    if (!setupDiscovery() || !draft || !providerID() || loading() || lastDiscoveryIdentity === discoveryIdentity(draft)) return;
+    if (draft.type === 'openrouter' && !draft.provider_api_key?.trim() && !props.keyConfigured) return;
+    try {
+      const endpoint = new URL(draft.base_url?.trim() || defaultBaseURLForFlowerProviderType(draft.type));
+      if (!['http:', 'https:'].includes(endpoint.protocol) || !endpoint.hostname || endpoint.username || endpoint.password || endpoint.search || endpoint.hash) return;
+    } catch { return; }
+    void discover();
+  };
+  const finishConnectionInput = (event: FocusEvent) => {
+    if (event.relatedTarget instanceof Element && event.relatedTarget.closest('[data-flower-skip-discovery], [data-floe-dialog-header]')) return;
+    discoverNewConnection();
   };
   const [customModelName, setCustomModelName] = createSignal('');
   const [editingModelName, setEditingModelName] = createSignal('');
@@ -223,7 +246,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
     if ((store.draft?.auth_method ?? 'api_key') === method) return;
     if (method === 'chatgpt' && !chatGPTEnabled()) return;
     cancelAuthorization(); setAuthError('');
-    discoverySequence++; setLoading(false); setDiscoveryError('');
+    invalidateDiscovery();
     updateProvider({ auth_method: method, account_id: undefined, chatgpt_account: undefined, chatgpt_attempt: undefined, catalog_models: undefined });
   };
   let currentAuth: FlowerChatGPTAuth | undefined;
@@ -234,7 +257,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
     const open = props.open, enabled = chatGPTEnabled();
     if (auth !== currentAuth || binding !== currentBinding || !open || !enabled) cancelAuthorization();
     if (!open || bindingObserved && binding !== currentBinding) {
-      discoverySequence++; setLoading(false);
+      invalidateDiscovery();
     }
     if (bindingObserved && binding !== currentBinding && open) {
       setStore('draft', null);
@@ -257,6 +280,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
   createEffect(on(() => [props.open, props.provider?.id] as const, () => {
     if (props.open) {
       cancelAuthorization();
+      invalidateDiscovery(); lastDiscoveryIdentity = undefined;
       const initial = untrack(() => props.provider ? { ...props.provider, model_defaults: props.providerDefaults?.[props.provider.type] ?? props.provider.model_defaults, chatgpt_account: props.chatGPTAccount } : null);
       if (initial && props.mode === 'create' && initial.type === 'openai' && !initial.auth_method) initial.auth_method = untrack(chatGPTEnabled) ? 'chatgpt' : 'api_key';
       setStore('draft', reconcile(initial));
@@ -305,6 +329,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
         next.models = next.models.map((model) => ({ ...model, web_search: undefined }));
         next.catalog_models = undefined;
       }
+      if (discoveryIdentity(next) !== discoveryIdentity(draft)) invalidateDiscovery();
       return next;
     });
   };
@@ -312,7 +337,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
   const changeProviderType = (type: FlowerProviderType) => {
     if (!store.draft) return;
     cancelAuthorization();
-    discoverySequence++; setLoading(false); setDiscoveryError(''); setAuthError('');
+    invalidateDiscovery(); setAuthError('');
     setQuery(''); setCustomModelName(''); setEditingModelName('');
     const nextModels = defaultFlowerProviderModels(type);
     updateProvider({
@@ -335,6 +360,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
     if (props.mode === 'edit') return;
     setSelectedProviderType(type);
     if (store.draft?.type !== type) changeProviderType(type);
+    discoverNewConnection();
   };
 
   const setModels = (models: readonly FlowerProviderModel[]) => {
@@ -397,7 +423,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
             </span>
           </Show>
           <Show when={incompleteModel()}><span role="status" class="mr-auto text-sm text-muted-foreground">{copy().catalog.needsConfiguration}</span></Show>
-          <Button size="sm" variant="outline" onClick={() => props.onOpenChange(false)}>
+          <Button size="sm" variant="outline" data-flower-skip-discovery onClick={() => props.onOpenChange(false)}>
             {copy().discard}
           </Button>
           <Button
@@ -415,7 +441,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
     >
       <Show when={store.draft} fallback={<div class="flower-body-copy text-muted-foreground">{copy().providerRemoved}</div>}>
         <div class="flower-provider-workspace">
-          <nav class="flower-provider-picker" aria-label={copy().providerTypeTitle}>
+          <nav class="flower-provider-picker" aria-label={copy().providerTypeTitle} data-flower-skip-discovery>
             <h3 class="flower-provider-picker-title">{copy().providerTypeTitle}</h3>
             <div class="flower-provider-picker-options">
               <For each={props.mode === 'edit' ? FLOWER_PROVIDER_TYPES.filter((item) => item.value === store.draft?.type) : FLOWER_PROVIDER_TYPES}>
@@ -536,6 +562,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                         onInput={(event) => updateProvider({
                           provider_api_key: event.currentTarget.value,
                         })}
+                        onBlur={finishConnectionInput}
                         placeholder={props.keyConfigured ? FLOWER_STORED_SECRET_PLACEHOLDER : copy().pasteAPIKey}
                         aria-label={copy().apiKey}
                         aria-description={keyHint()}
@@ -553,6 +580,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                         <Input
                           value={store.draft!.base_url ?? ''}
                           onInput={(event) => updateProvider({ base_url: event.currentTarget.value })}
+                          onBlur={finishConnectionInput}
                           placeholder={defaultBaseURLForFlowerProviderType(store.draft!.type)}
                           size="sm"
                           class="w-full"
@@ -600,6 +628,9 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                       </div>
                     </Show>
                   </div>
+                  <Show when={setupDiscovery()}>
+                    <p role="note" class="flower-body-copy text-muted-foreground">{store.draft!.type === 'openrouter' ? copy().openRouterDiscovery : copy().ollamaDiscovery}</p>
+                  </Show>
                 </section>
 
                 <Show when={connectionReady()}><section class="flower-provider-models">

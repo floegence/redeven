@@ -259,6 +259,8 @@ export type FlowerProviderDialogCopy = Readonly<{
   connectionTitle: string;
   connectionDescription: string;
   connectionName: string;
+  openRouterDiscovery: string;
+  ollamaDiscovery: string;
   apiKey: string;
   storedKeyKept: string;
   replaceStoredKeyHint: string;
@@ -1339,7 +1341,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     modelCatalogAutoUpdateTitle: "Model list updates",
     modelCatalogAutoUpdateDescription: "Automatic updates are off by default. Normal chat uses built-in model metadata and your saved settings.",
     modelCatalogAutoUpdateLabel: "Automatically update provider model lists",
-    modelCatalogAutoUpdateDisclosure: "When enabled, Redeven periodically requests model lists from enabled model providers’ APIs.",
+    modelCatalogAutoUpdateDisclosure: "When enabled, Redeven periodically requests model lists from enabled model providers’ APIs, except OpenRouter.",
     connectBrowserTitle: 'Connect current Chrome',
     connectBrowserPlaceholder: 'http://127.0.0.1:9222',
     connectBrowser: 'Connect',
@@ -1474,6 +1476,8 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       connectionTitle: 'Connection',
       connectionDescription: 'Credentials and endpoints are stored with the Local AI Profile.',
       connectionName: 'Connection name',
+      openRouterDiscovery: "When adding OpenRouter, Redeven requests its model list after you finish entering the API key or address. This also happens with automatic updates off. Later updates are manual only.",
+      ollamaDiscovery: "When adding Ollama, Redeven requests models from the default address and again after you finish changing the address or API key. This also happens with automatic updates off.",
       apiKey: 'API key',
       storedKeyKept: 'Stored key will be kept',
       replaceStoredKeyHint: 'Replaces the saved key on save',

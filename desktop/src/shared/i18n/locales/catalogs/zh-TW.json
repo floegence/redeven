@@ -1039,7 +1039,9 @@
       "modelCatalogAutoUpdateTitle": "模型清單更新",
       "modelCatalogAutoUpdateDescription": "自動更新預設為關閉。一般對話使用內建模型資訊與已儲存的設定。",
       "modelCatalogAutoUpdateLabel": "自動更新模型供應商的模型清單",
-      "modelCatalogAutoUpdateDisclosure": "開啟後，Redeven 會定期請求已啟用的模型供應商 API，以取得模型清單。"
+      "modelCatalogAutoUpdateDisclosure": "開啟後，Redeven 會定期向已啟用的模型供應商 API 請求模型清單，OpenRouter 除外。",
+      "dialogOpenRouterDiscovery": "新增 OpenRouter 時，填妥 API Key 或位址並離開輸入欄位後，Redeven 會請求其模型清單，即使自動更新已關閉。之後僅透過手動同步更新。",
+      "dialogOllamaDiscovery": "新增 Ollama 時，Redeven 會從預設位址取得模型清單；修改位址或 API Key 並離開輸入欄位後會再次取得，即使自動更新已關閉。"
     },
     "reasoningControl": {
       "default": "預設",
