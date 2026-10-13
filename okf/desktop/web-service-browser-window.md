@@ -36,7 +36,10 @@ The default remains the browser presentation described above. Application presen
 uses the shared Desktop titlebar geometry with native OS window buttons, no
 browser navigation toolbar, no shell preload, and a target view filling the
 complete content area. Its title is the application document title
-without the Web Service suffix. The same forward admission, isolated partition,
+without the Web Service suffix. A newly created application host window does not
+navigate its hidden native document; the target view alone loads the application
+and its first DOM-ready event presents the window. This avoids allocating an
+unused blank-document renderer. The same forward admission, isolated partition,
 request routing, window reuse, and teardown remain authoritative. Presentation is
 part of reuse identity so opening a different presentation cannot silently retain
 an inappropriate window shell. Initial navigation failures provide a scriptless

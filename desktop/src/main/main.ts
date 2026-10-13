@@ -8685,6 +8685,9 @@ function createWebServiceBrowserController(
     preload: applicationWindow ? 'none' : 'web_service_browser',
     stealAppFocus: true,
     presentOnReadyToShow: !applicationWindow,
+    // The target view owns every application pixel and the first presentation.
+    // Loading a hidden blank host document would allocate an unused renderer.
+    deferInitialLoad: applicationWindow,
     onClosed: onApplicationClosed,
   });
   const win = windowRecord.browserWindow;

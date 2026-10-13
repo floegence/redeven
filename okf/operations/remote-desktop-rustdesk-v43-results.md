@@ -98,6 +98,35 @@ normalization to 1920 × 1280.
 Candidate errors are greater. Fractional compositor rasterization and viewport
 resampling limit these metrics; they alone cannot establish perceptual parity.
 
+## Clarity Diagnostic
+
+The formal Clarity selector provides a diagnostic without an encoder overlay.
+`r3-redeven-motion` has 100 matching spaces and a continuously moving source.
+It reports 136.82/282.61 ms P50/P95, 479.04 ms maximum, 46.11 presented FPS
+and seven gaps above 250 ms. Complete host/client CPU is 143.67%/33.59%,
+host RSS P95 is 535.55 MiB, client footprint P95 is 809.56 MiB and LAN send
+rate is 9.158 Mbps. Sampled TCP median/P95 RTT is 8.38/17.03 ms.
+
+`r3-redeven-quality` retains ten exact moving matches. Identical calibrated
+analysis gives text PSNR/MAE 12.83/25.87 and color PSNR/MAE 18.77/14.05.
+Clarity's limited pixel-metric improvement does not compensate for the latency
+and bandwidth regression. This is a candidate setting diagnostic, not a new
+contemporaneous RustDesk pair or acceptance result. A swatch-interior diagnostic
+also finds similar color bias in both products; it does not isolate compression
+as the source of the full-image error.
+
+## Hidden Host Renderer Diagnostic
+
+Before the local window adjustment, the task Desktop has three renderer
+processes: Env App, application target and the hidden native host document.
+The application controller now defers that unused native document's navigation.
+The target view continues to own loading and the first DOM-ready presentation.
+An isolated, invisible Electron 41.10.7 diagnostic repeats both paths twice:
+loading the hidden document adds two renderers; deferring it adds one. Every
+target emits DOM-ready and no diagnostic window becomes visible. This verifies
+the native API behavior, not whole-client memory or latency parity. A fresh
+real-Viewer comparison of the local change remains required.
+
 ## Invalid And Incomplete Attempts
 
 `r1-redeven-motion-retry1` matches 100 spaces plus a focus click and reports
@@ -113,6 +142,8 @@ analysis cannot qualify moving quality.
 - Task-owned `redeven-udesk26-rustdesk-baseline/published-v43-paired`: original inputs, pixels, source logs and explicit validity records.
 - `r1-redeven-motion-retry2`, `r1-rustdesk-motion-retry1`: complete moving pair and `resources-current-dynamic.json`.
 - `r2-redeven-quality-retry1`, `r2-rustdesk-quality`: ten moving matches each and identical calibrated analysis.
+- `r3-redeven-motion`, `r3-redeven-quality`: formal Clarity diagnostics, complete resource accounting and retained calibrated quality receipts.
+- `blank-host-native-probe.json`, `blank-host-before-processes.json`: invisible native renderer-count diagnostic and preceding task process identities.
 - `drm-cadence-v43-module-provenance.json` and `drm-cadence-v43-module-readback.json`: published module identity.
 - [Native v0.22.43 release](https://github.com/floegence/floe-native-apps/releases/tag/v0.22.43): immutable candidate.
 - [v0.22.43 qualification](https://github.com/floegence/floe-native-apps/actions/runs/38434313176): all jobs pass.
