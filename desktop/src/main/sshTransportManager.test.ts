@@ -120,11 +120,14 @@ describe('SSH package upload deadlines', () => {
         final(callback) { callback(); queueMicrotask(() => { child.exitCode = 0; child.emit('close', 0, null); }); },
       });
       fixture.spawnProcess.mockImplementationOnce(() => child);
-      const upload = lease.run('cat > package', { stdinData: Buffer.alloc(512 * 1024), timeout_ms: 50, stdin_progress_timeout_ms: 50 });
+      const onStdinProgress = vi.fn();
+      const upload = lease.run('cat > package', { stdinData: Buffer.alloc(512 * 1024), timeout_ms: 50, stdin_progress_timeout_ms: 50, onStdinProgress });
       const observed = upload.then(result => ({ result }), error => ({ error }));
       await vi.advanceTimersByTimeAsync(85);
       expect(await observed).toMatchObject({ result: { exit_code: 0 } });
       expect(received).toBe(512 * 1024);
+      expect(onStdinProgress.mock.calls.map(([completed]) => completed)).toEqual([0, 256 * 1024, 512 * 1024]);
+      expect(onStdinProgress.mock.calls.every(([, total]) => total === 512 * 1024)).toBe(true);
       expect(child.kill).not.toHaveBeenCalled();
       await lease.release();
     } finally { await fixture.manager.dispose(); vi.useRealTimers(); }
@@ -138,9 +141,11 @@ describe('SSH package upload deadlines', () => {
       const child = fakeProcess({ longLived: true });
       child.stdin = new Writable({ write() {} });
       fixture.spawnProcess.mockImplementationOnce(() => child);
-      const failure = expect(lease.run('cat > package', { stdinData: Buffer.alloc(512 * 1024), timeout_ms: 50, stdin_progress_timeout_ms: 50 })).rejects.toMatchObject({ timeoutMs: 50 });
+      const onStdinProgress = vi.fn();
+      const failure = expect(lease.run('cat > package', { stdinData: Buffer.alloc(512 * 1024), timeout_ms: 50, stdin_progress_timeout_ms: 50, onStdinProgress })).rejects.toMatchObject({ timeoutMs: 50 });
       await vi.advanceTimersByTimeAsync(51); await failure;
       expect(child.kill).toHaveBeenCalledOnce();
+      expect(onStdinProgress.mock.calls).toEqual([[0, 512 * 1024]]);
       const command = fakeProcess({ longLived: true });
       fixture.spawnProcess.mockImplementationOnce(() => command);
       const commandFailure = expect(lease.run('sleep', { timeout_ms: 50 })).rejects.toMatchObject({ timeoutMs: 50 });

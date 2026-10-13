@@ -2889,7 +2889,9 @@
     "componentName": {
       "gateway": "Gateway",
       "runtime": "Moteur d’exécution"
-    }
+    },
+    "transferUploading": "Envoi en cours",
+    "transferDownloading": "Téléchargement en cours"
   },
   "runtimeMessage": {
     "runtimeOfflineRefresh": "est hors ligne ou indisponible pour le moment. Démarrez-le à partir de sa source, puis actualisez l'état.",

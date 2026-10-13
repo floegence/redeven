@@ -482,6 +482,7 @@ if (args.includes('-M') && args.includes('-N')) {
       process.exit(0);
       break;
     case 'redeven-ssh-remote-install':
+      process.stderr.write('\r######## 25.0%\r################ 100.0%\n');
       appendLog('remote_install', {
         install_script_url: remoteScriptArgs()[2] || args[args.length - 1] || '',
         release_tag: remoteInstallReleaseTag(),
@@ -1358,8 +1359,9 @@ describe('sshRuntime integration', () => {
   it('runs the remote installer when the probe reports a missing runtime', async () => {
     const fixture = await createFakeSSHFixture('remote_install');
     let runtime: ManagedSSHRuntimeReady | null = null;
+    const transfers: unknown[] = [];
     try {
-      runtime = await startWithFakeSSH(fixture, 'remote_install');
+      runtime = await startWithFakeSSH(fixture, 'remote_install', { onProgress: progress => { if (progress.transfer) transfers.push(progress.transfer); } });
     } finally {
       await runtime?.stop();
     }
@@ -1372,6 +1374,8 @@ describe('sshRuntime integration', () => {
       'start_runtime',
     ]));
     expect(eventNames.filter((event) => event === 'probe_runtime')).toHaveLength(2);
+    expect(transfers).toContainEqual({ transfer_kind: 'download', transfer_percent: 25 });
+    expect(transfers).toContainEqual({ transfer_kind: 'download', transfer_percent: 100 });
     expect(String(events.find((event) => event.event === 'remote_install')?.data?.install_script_url ?? '')).toMatch(/\/install\.sh$/u);
     await removeFakeSSHFixture(fixture);
   });
@@ -1659,8 +1663,9 @@ describe('sshRuntime integration', () => {
     ]));
 
     let runtime: ManagedSSHRuntimeReady | null = null;
+    const transfers: unknown[] = [];
     try {
-      runtime = await startWithFakeSSH(fixture, 'desktop_upload');
+      runtime = await startWithFakeSSH(fixture, 'desktop_upload', { onProgress: progress => { if (progress.transfer) transfers.push(progress.transfer); } });
     } finally {
       await runtime?.stop();
     }
@@ -1676,6 +1681,8 @@ describe('sshRuntime integration', () => {
       'start_runtime',
     ]));
     expect(events.find((event) => event.event === 'upload_archive')?.data?.bytes).toBe(Buffer.byteLength('fake archive'));
+    expect(transfers).toContainEqual({ transfer_kind: 'upload', completed_bytes: 0, total_bytes: Buffer.byteLength('fake archive') });
+    expect(transfers).toContainEqual({ transfer_kind: 'upload', completed_bytes: Buffer.byteLength('fake archive'), total_bytes: Buffer.byteLength('fake archive') });
     await removeFakeSSHFixture(fixture);
   });
 

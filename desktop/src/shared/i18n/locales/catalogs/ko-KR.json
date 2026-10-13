@@ -2885,7 +2885,9 @@
     "componentName": {
       "gateway": "Gateway",
       "runtime": "런타임"
-    }
+    },
+    "transferUploading": "업로드 중",
+    "transferDownloading": "다운로드 중"
   },
   "runtimeMessage": {
     "runtimeOfflineRefresh": "현재 런타임이 오프라인이거나 사용할 수 없습니다. 소스에서 시작한 다음 상태를 새로 고칩니다.",

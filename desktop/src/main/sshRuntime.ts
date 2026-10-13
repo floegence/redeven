@@ -1,6 +1,8 @@
 import { randomBytes } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
+import type { DesktopRuntimeTransferProgress } from '../shared/desktopComponentTaskProgress';
+import { runtimeDownloadProgressObserver, runtimeUploadProgressObserver } from './runtimeTransferProgress';
 
 import {
   DEFAULT_DESKTOP_SSH_RELEASE_FETCH_TIMEOUT_MS,
@@ -192,6 +194,7 @@ export type DesktopSSHRuntimeProgress = Readonly<{
   phase: DesktopSSHRuntimeProgressPhase;
   title: string;
   detail: string;
+  transfer?: DesktopRuntimeTransferProgress;
 }>;
 
 type RecentLogs = Readonly<{
@@ -723,7 +726,7 @@ export function buildManagedSSHRemoteInstallScript(): string {
     'script_path="${staging_root}/install.sh"',
     'mkdir -p "$staging_bin_dir"',
     'curl -fsSL "$install_script_url" -o "$script_path"',
-    'REDEVEN_INSTALL_MODE=upgrade REDEVEN_VERSION="$target_release_tag" REDEVEN_INSTALL_DIR="$staging_bin_dir" sh "$script_path"',
+    'REDEVEN_INSTALL_PROGRESS=1 REDEVEN_INSTALL_MODE=upgrade REDEVEN_VERSION="$target_release_tag" REDEVEN_INSTALL_DIR="$staging_bin_dir" sh "$script_path"',
     'old_stamp_path="$stamp_path"',
     'old_managed_root="$managed_root"',
     'managed_root="$staging_root"',
@@ -1309,6 +1312,8 @@ async function runSSHControlCommand(
   options: Readonly<{
     timeout_ms?: number;
     stdin_progress_timeout_ms?: number;
+    onStdinProgress?: (completedBytes: number, totalBytes: number) => void;
+    onStderr?: (chunk: string) => void;
     record_stdout?: boolean;
   }> = {},
 ): Promise<SSHCommandResult> {
@@ -1316,9 +1321,13 @@ async function runSSHControlCommand(
     const result = await session.lease.run(remoteCommand, {
       stdinData,
       signal: session.signal,
-      onStderr: (chunk) => appendSSHRuntimeLog(session.logs, 'control_stderr', chunk, session.onLog),
+      onStderr: (chunk) => {
+        appendSSHRuntimeLog(session.logs, 'control_stderr', chunk, session.onLog);
+        options.onStderr?.(chunk);
+      },
       timeout_ms: options.timeout_ms ?? DEFAULT_RUNTIME_HOST_COMMAND_TIMEOUT_MS,
       stdin_progress_timeout_ms: options.stdin_progress_timeout_ms,
+      onStdinProgress: options.onStdinProgress,
     });
     if (options.record_stdout !== false) {
       appendSSHRuntimeLog(session.logs, 'control_stdout', result.stdout, session.onLog);
@@ -1543,12 +1552,13 @@ async function prepareRemoteRuntimeViaRemoteInstall(args: Readonly<{
   onProgress: StartManagedSSHRuntimeArgs['onProgress'];
 }>): Promise<PreparedManagedSSHRuntimePackage> {
   throwIfSSHRuntimeCanceled(args.session.signal);
-  emitSSHRuntimeProgress(
-    args.onProgress,
-    'ssh_remote_installing',
-    'Installing runtime on SSH host',
-    `The host is downloading and installing Redeven ${args.runtimeReleaseTag}. This can take a minute on first connection.`,
-  );
+  const publishTransfer = (transfer: DesktopRuntimeTransferProgress) => args.onProgress?.({
+    phase: 'ssh_remote_installing',
+    title: 'Installing runtime on SSH host',
+    detail: `The host is downloading and installing Redeven ${args.runtimeReleaseTag}.`,
+    transfer,
+  });
+  publishTransfer({ transfer_kind: 'download' });
   const result = await runSSHControlCommand(
     args.session,
     remoteShellCommand(buildManagedSSHRemoteInstallScript(), 'redeven-ssh-remote-install', [
@@ -1557,7 +1567,7 @@ async function prepareRemoteRuntimeViaRemoteInstall(args: Readonly<{
       args.installScriptURL,
     ]),
     undefined,
-    { timeout_ms: DEFAULT_RUNTIME_HOST_TRANSFER_TIMEOUT_MS },
+    { timeout_ms: DEFAULT_RUNTIME_HOST_TRANSFER_TIMEOUT_MS, onStderr: runtimeDownloadProgressObserver(publishTransfer) },
   );
   if (result.exit_code !== 0) {
     throw readinessFailure('Desktop could not install Redeven on the remote host using the remote installer.', args.session.logs, {
@@ -1602,6 +1612,12 @@ async function prepareDesktopSSHUploadAsset(args: Readonly<{
       signal: args.signal,
     },
     signal: args.signal,
+    onDownloadProgress: (transfer) => args.onProgress?.({
+      phase: 'ssh_preparing_upload',
+      title: 'Downloading runtime package for upload',
+      detail: `Desktop is downloading the ${args.platform.platform_label} Redeven ${args.runtimeReleaseTag} archive.`,
+      transfer,
+    }),
   });
   emitSSHRuntimeProgress(
     args.onProgress,
@@ -1654,19 +1670,23 @@ async function prepareRemoteRuntimeViaDesktopUpload(args: Readonly<{
   const remoteArchivePath = `${remoteTempDir}/redeven.tar.gz`;
 
   try {
-    emitSSHRuntimeProgress(
-      args.onProgress,
-      'ssh_uploading_archive',
-      'Uploading runtime package',
-      `Desktop is sending the ${args.platform.release_package_name} archive to the SSH host.`,
-    );
+    const publishTransfer = (transfer: DesktopRuntimeTransferProgress) => args.onProgress?.({
+      phase: 'ssh_uploading_archive',
+      title: 'Uploading runtime package',
+      detail: `Desktop is sending the ${args.platform.release_package_name} archive to the SSH host.`,
+      transfer,
+    });
     const uploadResult = await runSSHControlCommand(
       args.session,
       remoteShellCommand('set -eu\ncat > "$1"', 'redeven-ssh-upload-archive', [
         remoteArchivePath,
       ]),
       args.archiveData,
-      { timeout_ms: DEFAULT_RUNTIME_HOST_TRANSFER_TIMEOUT_MS, stdin_progress_timeout_ms: DEFAULT_RUNTIME_HOST_TRANSFER_TIMEOUT_MS },
+      {
+        timeout_ms: DEFAULT_RUNTIME_HOST_TRANSFER_TIMEOUT_MS,
+        stdin_progress_timeout_ms: DEFAULT_RUNTIME_HOST_TRANSFER_TIMEOUT_MS,
+        onStdinProgress: runtimeUploadProgressObserver(publishTransfer),
+      },
     );
     if (uploadResult.exit_code !== 0) {
       throw readinessFailure(

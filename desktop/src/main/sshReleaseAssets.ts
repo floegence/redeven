@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import type { DesktopRuntimeTransferProgress } from '../shared/desktopComponentTaskProgress';
 
 import {
   canonicalDesktopSSHReleaseTag,
@@ -97,6 +98,7 @@ type EnsureDesktopSSHReleaseArchiveArgs = Readonly<{
   packageName?: string;
   cacheRoot: string;
   fetchPolicy?: DesktopSSHReleaseFetchPolicy;
+  onDownloadProgress?: (progress: DesktopRuntimeTransferProgress) => void;
 }>;
 
 function compact(value: unknown): string {
@@ -394,9 +396,36 @@ async function downloadURLToPath(
   sourceURL: string,
   targetPath: string,
   fetchPolicy?: DesktopSSHReleaseFetchPolicy,
+  onDownloadProgress?: (progress: DesktopRuntimeTransferProgress) => void,
 ): Promise<void> {
   const data = await withFetchedReleaseAsset(sourceURL, fetchPolicy, async (response, signal) => {
-    const buffer = Buffer.from(await response.arrayBuffer());
+    const total = Number(response.headers.get('content-length'));
+    const totalBytes = Number.isSafeInteger(total) && total > 0 && !response.headers.get('content-encoding') ? total : undefined;
+    let completedBytes = 0;
+    let lastPublishedAt = 0;
+    const publish = (force = false) => {
+      const now = Date.now();
+      if (!force && now - lastPublishedAt < 100) return;
+      lastPublishedAt = now;
+      onDownloadProgress?.({ transfer_kind: 'download', completed_bytes: completedBytes, ...(totalBytes ? { total_bytes: totalBytes } : {}) });
+    };
+    publish(true);
+    const chunks: Buffer[] = [];
+    if (response.body) {
+      const reader = response.body.getReader();
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          throwIfReleaseFetchCanceled(signal);
+          if (done) break;
+          chunks.push(Buffer.from(value));
+          completedBytes += value.byteLength;
+          publish();
+        }
+      } finally { reader.releaseLock(); }
+    }
+    publish(true);
+    const buffer = Buffer.concat(chunks, completedBytes);
     throwIfReleaseFetchCanceled(signal);
     return buffer;
   });
@@ -593,6 +622,7 @@ export async function ensureDesktopSSHReleaseArchive(
       buildDesktopSSHReleaseAssetURL(args.manifest.release_base_url, releaseTag, packageName),
       archivePath,
       args.fetchPolicy,
+      args.onDownloadProgress,
     );
     await verifyDesktopSSHReleaseAsset(archivePath, sha256);
   }

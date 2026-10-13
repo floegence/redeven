@@ -2924,7 +2924,9 @@
     "componentName": {
       "gateway": "Gateway",
       "runtime": "Среда выполнения"
-    }
+    },
+    "transferUploading": "Загрузка на хост",
+    "transferDownloading": "Скачивание"
   },
   "runtimeMessage": {
     "runtimeOfflineRefresh": "сейчас отключена или недоступна. Запустите его из источника, затем обновите статус.",

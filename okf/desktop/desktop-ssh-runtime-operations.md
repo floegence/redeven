@@ -3,7 +3,7 @@ type: Desktop Contract
 title: Desktop SSH runtime operations
 description: Direct SSH and SSH-container Runtime lifecycle execution owned by Desktop.
 tags: [desktop, ssh, runtime, process]
-timestamp: 2026-10-08T11:00:00Z
+timestamp: 2026-10-13T07:10:00Z
 ---
 # Summary
 
@@ -41,6 +41,8 @@ The remote command snippets each perform one bounded action: probe, stage helper
 
 ## User-facing result
 
+Runtime package transfers appear inside the existing Launcher Operation task row for both Desktop upload and direct host download, including Update and Reinstall. Desktop upload reports acknowledged local pipe-write bytes and archive size; Desktop archive acquisition reports response-body bytes and a usable HTTP content length. Concurrent hosts sharing one cached acquisition observe the same transfer. Direct host download observes curl's progress-bar percentage from that exact installer command, without a second download or polling SSH command. Missing download length keeps the meter indeterminate. Transmission reaching 100% does not certify integrity, installation, or Runtime readiness. The preparation task remains active until the staged package is verified; cancellation or failure freezes the observed progress and never fills it synthetically. SSH package acquisition, upload-directory creation, archive upload, and staged unpacking all belong to package preparation; only activation modifies the installed slot.
+
 The Launcher Operation exists before the first SSH command and reports the actual active phase. SSH connection failure, missing container, unavailable engine, package preparation failure, command exit, and Runtime readiness failure remain distinct structured errors with technical stderr available in details. The session-specific startup-report reader returns an empty successful result until Runtime atomically publishes the report; Desktop treats that state as pending within the existing bounded startup deadline. A nonzero report-read result is a target-command failure, a valid blocked report is a Runtime start failure with the reported reason, and only a nonempty malformed or contract-invalid report is labeled invalid. Start, Restart, Update, Open recovery, and Reinstall consume this one report-availability contract.
 
 An SSH or SSH-container registration always retains its direct lifecycle menu. A Gateway-only or Provider-only Environment has no SSH authority and therefore cannot borrow this execution path.
@@ -56,6 +58,8 @@ Desktop never scans unrelated processes, selects a similarly named container, de
 - `redeven:desktop/src/main/sshTransportManager.test.ts:1` - Platform execution, failure classification, and owned-child disposal.
 - `redeven:desktop/src/main/managedRuntimeSlot.ts:1` - Standard managed Runtime file inventory and private metadata contract.
 - `redeven:desktop/src/main/sshRuntime.ts:1` - Direct SSH Runtime package, helper, process, start, and verification operations.
+- `redeven:desktop/src/main/runtimeTransferProgress.ts:1` - Bounded transfer observation and upload event frequency.
+- `redeven:desktop/src/welcome/RuntimeComponentTransferProgress.tsx:1` - Localized determinate and indeterminate transfer meters.
 - `redeven:desktop/src/main/runtimeArchive.ts:1` and `redeven:desktop/src/main/runtimeArchive.test.ts:1` - Bounded package expansion and complete-suite admission.
 - `redeven:desktop/src/main/containerRuntime.ts:1` - Exact SSH-container command construction.
 - `redeven:desktop/src/main/runtimeLifecycleCoordinator.ts:1` - One current-Desktop owner per physical target.

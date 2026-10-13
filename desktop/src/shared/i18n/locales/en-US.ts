@@ -1571,6 +1571,8 @@ export const enUS = {
     running: 'Running',
     environmentProgress: 'Environment progress',
     componentTasks: 'Component installation progress',
+    transferUploading: 'Uploading',
+    transferDownloading: 'Downloading',
     componentPhase: {
       preparing: 'Preparing',
       transferring: 'Transferring',

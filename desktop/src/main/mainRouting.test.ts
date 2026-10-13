@@ -136,7 +136,7 @@ describe('main routing', () => {
     const reporterStart = mainSrc.indexOf('function runtimePackageProgressReporter<');
     const reporterEnd = mainSrc.indexOf('function buildOpenConnectionProgress(', reporterStart);
     const reporterSrc = mainSrc.slice(reporterStart, reporterEnd);
-    expect(reporterSrc).toContain("[{ id: 'runtime', status, phase, strategy: input.strategy }]");
+    expect(reporterSrc).toContain("[{ id: 'runtime', status, phase, strategy: input.strategy, ...transfer }]");
     expect(reporterSrc).not.toContain('maintenance_helper');
     expect(mainSrc).not.toContain('concurrentRuntimePreparationReporter');
   });

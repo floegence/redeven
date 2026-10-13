@@ -2885,7 +2885,9 @@
     "componentName": {
       "gateway": "Gateway",
       "runtime": "运行时"
-    }
+    },
+    "transferUploading": "上传中",
+    "transferDownloading": "下载中"
   },
   "runtimeMessage": {
     "runtimeOfflineRefresh": "运行时当前离线或不可用。从源头启动它，然后刷新状态。",

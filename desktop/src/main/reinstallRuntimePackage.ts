@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { runtimeDownloadProgressObserver, runtimeUploadProgressObserver } from './runtimeTransferProgress';
 
 import type { DesktopRuntimePlacement } from '../shared/desktopRuntimePlacement';
 import type { DesktopComponentTaskProgress } from '../shared/desktopLauncherIPC';
@@ -84,7 +85,7 @@ const stageScript = [
   'target_root="$1"; operation_id="$2"; release_tag="$3"; expected_commit="$4"; expected_sha="$5"; expected_size="$6"; strategy="$7"; remote_url="${8:-}"; platform="${9:-}"; architecture="${10:-}"; installed_at_unix_ms="${11:-}"',
   'case "$target_root" in /*) ;; *) echo "target root must be absolute" >&2; exit 3 ;; esac',
   'stage="${target_root}.redeven-staging-${operation_id}-runtime"; [ ! -L "$stage" ] || { echo "staging root is a symbolic link" >&2; exit 4; }; rm -rf -- "$stage"; mkdir -p "$stage/managed/bin"',
-  'archive="$stage/package.tar.gz"; if [ "$strategy" = remote_install ]; then curl -fsSL "$remote_url" -o "$archive"; else cat > "$archive"; fi',
+  'archive="$stage/package.tar.gz"; if [ "$strategy" = remote_install ]; then curl -fL --progress-bar "$remote_url" -o "$archive"; else cat > "$archive"; fi',
   'if command -v sha256sum >/dev/null 2>&1; then actual_sha="$(sha256sum "$archive" | awk "{print \\$1}")"; else actual_sha="$(shasum -a 256 "$archive" | awk "{print \\$1}")"; fi',
   '[ "$actual_sha" = "$expected_sha" ] || { echo "package hash mismatch" >&2; exit 5; }; actual_size="$(wc -c < "$archive" | tr -d " \\n")"; [ "$expected_size" = 0 ] || [ "$actual_size" = "$expected_size" ] || { echo "package size mismatch" >&2; exit 6; }',
   'extract="$stage/extract"; mkdir -p "$extract"; tar --warning=no-unknown-keyword -xzf "$archive" -C "$extract" 2>/dev/null || tar -xzf "$archive" -C "$extract"',
@@ -408,7 +409,14 @@ export async function prepareReinstallRuntimePackage(args: Readonly<{
   on_progress?: (progress: ReinstallRuntimePackageProgress) => void;
 }>): Promise<PreparedReinstallRuntimePackage> {
   let progressPhase: ReinstallRuntimePackageProgress['phase'] = 'transferring';
-  args.on_progress?.({ id: 'runtime', status: 'running', phase: progressPhase, strategy: args.strategy });
+  let transferProgress: import('../shared/desktopComponentTaskProgress').DesktopRuntimeTransferProgress = {
+    transfer_kind: args.strategy === 'desktop_upload' ? 'upload' : 'download',
+  };
+  const publishTransfer = (transfer: import('../shared/desktopComponentTaskProgress').DesktopRuntimeTransferProgress) => {
+    transferProgress = transfer;
+    args.on_progress?.({ id: 'runtime', status: 'running', phase: progressPhase, strategy: args.strategy, ...transfer });
+  };
+  publishTransfer(transferProgress);
   try {
     const digest = args.archive ? createHash('sha256').update(args.archive).digest('hex') : args.archive_sha256;
     if (digest !== args.archive_sha256) {
@@ -430,9 +438,11 @@ export async function prepareReinstallRuntimePackage(args: Readonly<{
       ...(args.archive ? { stdinData: args.archive } : {}),
       ...(args.signal ? { signal: args.signal } : {}),
       timeout_ms: DEFAULT_RUNTIME_HOST_TRANSFER_TIMEOUT_MS,
+      ...(args.archive ? { onStdinProgress: runtimeUploadProgressObserver(publishTransfer) } : {}),
+      ...(args.strategy === 'remote_install' ? { onStderr: runtimeDownloadProgressObserver(publishTransfer) } : {}),
     });
     progressPhase = 'verifying';
-    args.on_progress?.({ id: 'runtime', status: 'running', phase: progressPhase, strategy: args.strategy });
+    args.on_progress?.({ id: 'runtime', status: 'running', phase: progressPhase, strategy: args.strategy, ...transferProgress });
     const evidence = parseStageOutput(result.stdout);
     if (evidence.reported_release_tag !== args.release_tag || evidence.reported_commit !== args.commit) {
       throw new Error('Prepared Runtime package identity changed during staging.');
@@ -442,6 +452,7 @@ export async function prepareReinstallRuntimePackage(args: Readonly<{
       status: 'succeeded',
       phase: 'ready',
       strategy: args.strategy,
+      transfer_kind: transferProgress.transfer_kind,
       completed_bytes: evidence.archive_size_bytes,
       total_bytes: evidence.archive_size_bytes,
     });
@@ -458,7 +469,7 @@ export async function prepareReinstallRuntimePackage(args: Readonly<{
       executable_sha256: evidence.executable_sha256,
     };
   } catch (error) {
-    args.on_progress?.({ id: 'runtime', status: 'failed', phase: progressPhase, strategy: args.strategy });
+    args.on_progress?.({ id: 'runtime', status: 'failed', phase: progressPhase, strategy: args.strategy, ...transferProgress });
     await cleanupReinstallRuntimePackage(
       args.executor,
       args.placement,

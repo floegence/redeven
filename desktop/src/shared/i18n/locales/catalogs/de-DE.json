@@ -2889,7 +2889,9 @@
     "componentName": {
       "gateway": "Gateway",
       "runtime": "Laufzeit"
-    }
+    },
+    "transferUploading": "Wird hochgeladen",
+    "transferDownloading": "Wird heruntergeladen"
   },
   "runtimeMessage": {
     "runtimeOfflineRefresh": "Die Ausführungsumgebung ist derzeit offline oder nicht verfügbar. Starten Sie es von seiner Quelle und aktualisieren Sie dann den Status.",

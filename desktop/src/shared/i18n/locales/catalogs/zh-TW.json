@@ -2885,7 +2885,9 @@
     "componentName": {
       "gateway": "Gateway",
       "runtime": "執行階段"
-    }
+    },
+    "transferUploading": "上傳中",
+    "transferDownloading": "下載中"
   },
   "runtimeMessage": {
     "runtimeOfflineRefresh": "運作時目前離線或無法使用。從來源啟動它，然後刷新狀態。",

@@ -5,6 +5,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { gzipSync } from 'node:zlib';
+import type { DesktopRuntimeTransferProgress } from '../shared/desktopComponentTaskProgress';
 
 import { sanitizeDesktopChildEnvironment } from './desktopProcessEnvironment';
 import {
@@ -79,7 +80,11 @@ type DesktopSourceRuntimePackageCacheEntry = Readonly<{
 }>;
 
 const inFlightReleaseManifests = new Map<string, Promise<DesktopSSHVerifiedReleaseManifest>>();
-const inFlightReleaseAssets = new Map<string, Promise<DesktopRuntimePackageCacheEntry>>();
+const inFlightReleaseAssets = new Map<string, {
+  promise: Promise<DesktopRuntimePackageCacheEntry>;
+  listeners: Set<(progress: DesktopRuntimeTransferProgress) => void>;
+  progress?: DesktopRuntimeTransferProgress;
+}>();
 const inFlightSourceRuntimeAssets = new Map<string, Promise<DesktopRuntimeUploadAsset>>();
 
 function compact(value: unknown): string {
@@ -1048,6 +1053,7 @@ async function ensureReleaseAssetEntry(args: Readonly<{
   packageKind: DesktopSSHReleasePackageKind;
   cacheRoot: string;
   fetchPolicy: DesktopSSHReleaseFetchPolicy;
+  onDownloadProgress?: (progress: DesktopRuntimeTransferProgress) => void;
 }>): Promise<DesktopRuntimePackageCacheEntry> {
   const packageName = desktopSSHReleasePackageName(args.platform, args.packageKind);
   const key = releaseAssetInFlightKey(
@@ -1056,7 +1062,22 @@ async function ensureReleaseAssetEntry(args: Readonly<{
     args.platform.platform_id,
     args.packageKind,
   );
-  return onceInFlight(inFlightReleaseAssets, key, async () => {
+  const existing = inFlightReleaseAssets.get(key);
+  if (existing) {
+    if (args.onDownloadProgress) {
+      existing.listeners.add(args.onDownloadProgress);
+      if (existing.progress) args.onDownloadProgress(existing.progress);
+    }
+    return existing.promise;
+  }
+  const listeners = new Set<(progress: DesktopRuntimeTransferProgress) => void>();
+  if (args.onDownloadProgress) listeners.add(args.onDownloadProgress);
+  const publish = (progress: DesktopRuntimeTransferProgress) => {
+    const job = inFlightReleaseAssets.get(key);
+    if (job) job.progress = progress;
+    for (const listener of listeners) listener(progress);
+  };
+  const promise = (async () => {
     const sha256 = args.manifest.sha256_by_asset_name.get(packageName);
     if (!sha256) {
       throw new Error(`SHA256SUMS did not include ${packageName}.`);
@@ -1093,6 +1114,7 @@ async function ensureReleaseAssetEntry(args: Readonly<{
         packageName,
         cacheRoot: args.cacheRoot,
         fetchPolicy: args.fetchPolicy,
+        onDownloadProgress: publish,
       });
       return {
         key: {
@@ -1109,7 +1131,9 @@ async function ensureReleaseAssetEntry(args: Readonly<{
         from_cache: false,
       };
     }
-  });
+  })().finally(() => inFlightReleaseAssets.delete(key));
+  inFlightReleaseAssets.set(key, { promise, listeners });
+  return promise;
 }
 
 export async function prepareDesktopRuntimeUploadAsset(args: Readonly<{
@@ -1121,6 +1145,7 @@ export async function prepareDesktopRuntimeUploadAsset(args: Readonly<{
   platform: DesktopSSHRemotePlatform;
   fetchPolicy: DesktopSSHReleaseFetchPolicy;
   signal?: AbortSignal;
+  onDownloadProgress?: (progress: DesktopRuntimeTransferProgress) => void;
 }>): Promise<DesktopRuntimeUploadAsset> {
   const packageKind = args.packageKind ?? 'runtime';
   try {
@@ -1194,6 +1219,7 @@ export async function prepareDesktopRuntimeUploadAsset(args: Readonly<{
       packageKind,
       cacheRoot: args.assetCacheRoot,
       fetchPolicy,
+      onDownloadProgress: args.onDownloadProgress,
     });
     const archiveData = await fs.readFile(cacheEntry.archive_path);
     return {

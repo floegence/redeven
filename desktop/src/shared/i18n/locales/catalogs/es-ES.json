@@ -2889,7 +2889,9 @@
     "componentName": {
       "gateway": "Gateway",
       "runtime": "Entorno de ejecución"
-    }
+    },
+    "transferUploading": "Subiendo",
+    "transferDownloading": "Descargando"
   },
   "runtimeMessage": {
     "runtimeOfflineRefresh": "El tiempo de ejecución está fuera de línea o no está disponible en este momento. Inícielo desde su fuente, luego actualice el estado.",

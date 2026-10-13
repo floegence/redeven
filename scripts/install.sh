@@ -365,7 +365,11 @@ download_file() {
     source_url="$1"
     out_file="$2"
 
-    curl -fsSL "$source_url" -o "$out_file"
+    if [ "${REDEVEN_INSTALL_PROGRESS:-0}" = "1" ] && [ "$out_file" = "${ARCHIVE_PATH:-}" ]; then
+        curl -fL --progress-bar "$source_url" -o "$out_file"
+    else
+        curl -fsSL "$source_url" -o "$out_file"
+    fi
 }
 
 runtime_install_command() {

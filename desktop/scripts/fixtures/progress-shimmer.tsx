@@ -4,6 +4,7 @@ import { FloeProvider, useTheme, builtInShellThemePresets } from '@floegence/flo
 import { EnvironmentSplitActionButton } from '../../src/welcome/App';
 import { createDesktopI18n } from '../../src/shared/i18n';
 import type { DesktopLauncherActionProgress } from '../../src/shared/desktopLauncherIPC';
+import type { DesktopComponentTaskProgress } from '../../src/shared/desktopComponentTaskProgress';
 import { runtimeLifecycleProgress } from '../../src/shared/desktopRuntimeLifecycleProgress';
 import { FlowerProgressIndicator } from '../../../internal/flower_ui/src/chat/FlowerProgressIndicator';
 import '../../src/welcome/index.css';
@@ -15,15 +16,30 @@ function Fixture() {
   const [progressOpen, setProgressOpen] = createSignal(false);
   const [cancelCount, setCancelCount] = createSignal(0);
   const [submitting, setSubmitting] = createSignal(false);
+  const [transferTask, setTransferTask] = createSignal<DesktopComponentTaskProgress | null>(null);
   const progress = createMemo<DesktopLauncherActionProgress | null>(() => status() === 'succeeded' || submitting() ? null : ({
     action: 'update_environment_runtime', environment_id: 'local-environment', environment_label: 'Local Environment',
     operation_key: 'progress-acceptance', subject_kind: 'local_environment', subject_id: 'local-environment',
     started_at_unix_ms: Date.now(), status: status(), phase: 'starting_runtime_process', title: 'Updating runtime', detail: 'Preparing runtime',
     active_progress_surface: 'runtime_lifecycle', cancelable: true,
-    lifecycle_progress: runtimeLifecycleProgress({ location: 'local_host', operation: 'update', phase: 'starting_runtime_process', targetID: 'local-environment', targetLabel: 'Local Environment' }),
+    lifecycle_progress: runtimeLifecycleProgress({
+      location: transferTask() ? 'ssh_host' : 'local_host', operation: 'update',
+      phase: transferTask() ? 'preparing_runtime_package' : 'starting_runtime_process',
+      targetID: 'local-environment', targetLabel: 'Local Environment',
+      ...(transferTask() ? { stepStates: [
+        { id: 'checking_host', status: 'succeeded' },
+        { id: 'checking_runtime_package', status: 'succeeded' },
+        { id: 'detecting_platform', status: 'succeeded' },
+        { id: 'preparing_runtime_package', status: 'running', tasks: [transferTask()!] },
+        { id: 'installing_runtime_package', status: 'pending' },
+        { id: 'starting_runtime_process', status: 'pending' },
+        { id: 'checking_runtime_service', status: 'pending' },
+        { id: 'runtime_ready', status: 'pending' },
+      ] } : {}),
+    }),
   }));
   const active = () => ['running', 'canceling', 'cleanup_running'].includes(status() ?? '');
-  onMount(() => Object.assign(window, { progressFixture: { theme, themes: builtInShellThemePresets, setStatus, setSubmitting, cancelCount } }));
+  onMount(() => Object.assign(window, { progressFixture: { theme, themes: builtInShellThemePresets, setStatus, setSubmitting, setTransferTask, cancelCount } }));
   return <main class="redeven-welcome-surface" style={{ padding: '180px 48px 48px', 'min-height': '100vh' }}>
     <section class="redeven-environment-card" style={{ padding: '24px', width: '350px', 'margin-bottom': '32px' }}>
       <h2 style={{ 'margin-bottom': '24px' }}>Local Environment</h2>
