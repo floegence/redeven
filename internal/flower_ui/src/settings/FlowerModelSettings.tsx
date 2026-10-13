@@ -1,4 +1,4 @@
-import { For, Show, createMemo, createSignal, type Component } from 'solid-js';
+import { For, Show, createMemo, createSignal, createUniqueId, type Component } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { Check, ChevronDown, Pencil, Plus, Trash } from '@floegence/floe-webapp-core/icons';
 import { Button } from '@floegence/floe-webapp-core/ui';
@@ -12,6 +12,7 @@ import { flowerProviderUsesCustomName } from './providerCatalog';
 import { FlowerProviderBrandIcon } from './FlowerProviderBrandIcon';
 import { FlowerSubSectionHeader } from './FlowerSettingsPrimitives';
 import { FlowerModelSelectionDialog } from './FlowerModelSelectionDialog';
+import { createFlowerActivityDisclosureMotion } from '../activityDisclosure';
 
 export type FlowerModelSettingsProps = Readonly<{
   copy: FlowerSettingsCopy;
@@ -93,6 +94,17 @@ export const FlowerModelSettings: Component<FlowerModelSettingsProps> = (props) 
               const enabled = () => provider().enabled !== false;
               const ready = () => props.providerReady(provider()) && provider().models.some(model => !model.unavailable) && !provider().catalog_error;
               const toggleLabel = () => enabled() ? copy().disableProvider(displayName(provider())) : copy().enableProvider(displayName(provider()));
+              const [expanded, setExpanded] = createSignal(false);
+              const detailsID = `flower-provider-models-${createUniqueId()}`;
+              let trigger: HTMLButtonElement | undefined;
+              let viewport: HTMLDivElement | undefined;
+              const motion = createFlowerActivityDisclosureMotion(expanded, {
+                openDurationMs: 240,
+                closeDurationMs: 180,
+                onBeforeClose: () => {
+                  if (viewport?.contains(document.activeElement)) trigger?.focus({ preventScroll: true });
+                },
+              });
               return <div class="flower-settings-provider-card" data-provider-enabled={enabled()}>
                 <div class="flower-settings-provider-brand"><FlowerProviderBrandIcon type={provider().type} class="h-6 w-6" /></div>
                 <div class="flower-settings-provider-body">
@@ -101,6 +113,10 @@ export const FlowerModelSettings: Component<FlowerModelSettingsProps> = (props) 
                     <Show when={displayName(provider()) !== copy().providerTypeLabels[provider().type]}><span class="text-xs text-muted-foreground">{copy().providerTypeLabels[provider().type]}</span></Show>
                     <Show when={props.currentModelID.startsWith(`${provider().id}/`)}><span class="flower-settings-provider-default">{copy().defaultProvider}</span></Show>
                   </div>
+                  <button ref={trigger} type="button" class="flower-settings-provider-disclosure" aria-expanded={expanded()} aria-controls={detailsID}
+                    aria-label={`${displayName(provider())} · ${copy().models} · ${provider().models.length}`} onClick={() => setExpanded(value => !value)}>
+                    <span>{copy().models}</span><span class="flower-settings-provider-count">{provider().models.length}</span><ChevronDown class="h-3 w-3" aria-hidden="true" />
+                  </button>
                 </div>
                 <div class="flower-settings-provider-status"><span class={cn('flower-settings-dot-pill', enabled() && ready() && 'flower-settings-dot-pill-active')}>
                   {enabled() ? ready() ? copy().ready : props.providerReady(provider()) && provider().models.length === 0 ? copy().dialog.catalog.configuredWithoutSelection : copy().providerNeedsSetup : copy().providerDisabled}
@@ -117,9 +133,10 @@ export const FlowerModelSettings: Component<FlowerModelSettingsProps> = (props) 
                   <Button size="icon" variant="ghost" class="h-8 w-8 text-muted-foreground hover:text-foreground" onClick={() => props.onEditProvider(index())} disabled={props.disabled} aria-label={copy().editProvider}><Pencil class="h-3.5 w-3.5" /></Button>
                   <Button size="icon" variant="ghost" class="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => props.onRemoveProvider(index())} disabled={props.disabled || props.providers.length <= 1} aria-label={copy().removeProvider}><Trash class="h-3.5 w-3.5" /></Button>
                 </div>
-                <details class="flower-settings-provider-details">
-                  <summary><span>{copy().models}</span><span class="flower-settings-provider-count">{provider().models.length}</span><ChevronDown class="h-3.5 w-3.5" aria-hidden="true" /></summary>
-                  <div class="flower-settings-provider-detail-body">
+                <div id={detailsID} class="flower-settings-provider-details" ref={node => { viewport = node; motion.bindViewport(node); }}
+                  data-state={motion.state()} aria-hidden={!expanded()} inert={!expanded()}
+                  style={{ height: motion.height(), display: motion.state() === 'closed' ? 'none' : undefined }}>
+                  <div class="flower-settings-provider-detail-body" ref={motion.bindContent}>
                     <div class="flower-settings-provider-table-scroll flower-scroll" role="region" tabindex="0" aria-label={`${displayName(provider())} · ${copy().models}`}>
                       <table class="flower-settings-provider-model-table">
                         <caption class="sr-only">{displayName(provider())} · {copy().models}</caption>
@@ -146,7 +163,7 @@ export const FlowerModelSettings: Component<FlowerModelSettingsProps> = (props) 
                       </table>
                     </div>
                   </div>
-                </details>
+                </div>
               </div>;
             }}
           </For>

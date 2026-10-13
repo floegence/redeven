@@ -201,6 +201,12 @@ export type FlowerProviderDialogCopy = Readonly<{
     usageUnavailable: string;
     authentication: string;
     account: string;
+    connectTitle: string;
+    preparing: string;
+    verifying: string;
+    waitingDescription: string;
+    progressDescription: string;
+    connected: string;
     localOnly: string;
     continue: string;
     waiting: string;
@@ -1397,6 +1403,12 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
         usageUnavailable: "ChatGPT plan usage is unavailable for this request. Manage your usage or try again later.",
         authentication: "Authentication",
         account: "ChatGPT account",
+        connectTitle: "Connect your ChatGPT account",
+        preparing: "Preparing sign-in",
+        verifying: "Verifying your account",
+        waitingDescription: "Complete sign-in and allow plan access in your browser. Then return here to continue.",
+        progressDescription: "This window will update automatically when your connection is ready.",
+        connected: "Connected",
         localOnly: "ChatGPT sign-in is available only on this device’s Desktop or local Runtime.",
         continue: "Continue with ChatGPT",
         waiting: "Waiting for authorization",

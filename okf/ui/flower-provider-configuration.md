@@ -29,7 +29,7 @@ Narrow screens move the picker above the form and use the dialog body as the onl
 vertical scroller; wide layouts scroll the picker and configuration independently.
 
 Authentication methods use a clearly contrasted segmented control below the
-connection heading. Account actions and endpoint fields remain flat; redundant provider, credential, and aggregate
+connection heading. ChatGPT uses one bounded connection panel; endpoint fields remain flat. Redundant provider, credential, and aggregate
 search badges are omitted. Required credentials, authorization guidance, and save
 errors remain actionable. Before ChatGPT authorization is ready, only connection
 controls appear; success synchronizes the catalog once and reveals models.
@@ -54,6 +54,19 @@ settings keep ChatGPT disabled with persistent guidance and no login panel.
 Verification preserves choices, search and focus until explicit save. Account,
 locality and cancellation rules belong to the
 [local authentication contract](../ai/chatgpt-local-authentication.md).
+
+The connection panel groups account identity, state guidance, and actions. Initial
+sign-in has one prominent browser action. Runtime-reported preparation, browser
+authorization, and verification have distinct status text; waiting explains how
+to finish in the browser, and cancellation remains available. Ready accounts show
+their identity and plan source, with a first-use acknowledgement followed by
+connection and usage actions. Failures keep the recovery action in the same panel.
+The primary action retains its DOM identity across these states. Starting sign-in
+from an account action moves focus to its available cancellation control.
+Completion, cancellation, or acknowledgement returns owned focus to the primary
+action without scrolling; an arriving account
+must not steal focus from a model search or surviving control. All stages use the
+shared Desktop and Env styles and explicit localized copy.
 
 # Boundaries
 

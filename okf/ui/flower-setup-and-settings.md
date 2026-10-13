@@ -103,12 +103,20 @@ models remain excluded and reselecting the current default does not save.
 
 Provider rows place identity and model count left, useful availability status
 right, and an enable switch with edit/remove actions at the trailing edge.
+Identity and count form one compact stack; status and actions align to its center.
 Authentication-method and optional-key labels do not appear in the list. The
 count expands a full-width semantic table, with one row per model and labeled
 columns for identity, input capabilities, declared context/output limits and exact
 model-level web-search status. The table uses the shared panel surface with thin
-horizontal rules after its header and between model rows. A compact check badge
-marks the current model beside its name; the identifier remains secondary below
+horizontal rules after its header and between model rows.
+The disclosure animates measured height and opacity using the existing Flower
+motion owner. Rapid reversals continue from the visible position; reduced motion
+settles immediately. Its button exposes expansion and controls the table region.
+Closing makes the region inert immediately and restores contained focus to the
+button without scrolling. Surviving table nodes and horizontal scroll persist
+across toggles.
+
+A compact check badge marks the current model beside its name; the identifier remains secondary below
 it. Unavailable models remain explicit; missing token limits show a dash. Narrow screens scroll only the
 table inside its own keyboard-focusable region. Provider status moves below
 identity on narrow layouts; adding a provider stays in the heading. Switch saves
@@ -178,5 +186,6 @@ Settings fields follow the shared [product field treatment](runtime-settings.md#
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSettingsSurface.presentation.browser.test.tsx:63` - Real controls, localized container layouts, themes, and keyboard saving.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.settings.browser.test.tsx` - Browser discovery, explicit connection, and retained failed-connection input.
 - `redeven:internal/flower_ui/src/settings/FlowerModelSettings.tsx` - Shared model/provider presentation and transient edit ownership.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerModelSettings.motion.browser.test.tsx` - Desktop and Env row geometry, reversible disclosure motion, reduced motion, and focus restoration.
 - `redeven:internal/envapp/ui_src/src/ui/pages/settings/FlowerSection.browser.test.tsx` - Global Env layout, provider persistence, rollback, account retention, and reader controls.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.companionPanels.browser.test.tsx` - Retained settings and extensions, editor identity, focus exclusion, save outcomes, and published companion phases.

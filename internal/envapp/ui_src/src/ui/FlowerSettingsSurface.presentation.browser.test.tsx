@@ -17,6 +17,15 @@ let dispose: (() => void) | undefined;
 let host: HTMLDivElement;
 afterEach(() => { dispose?.(); host?.remove(); document.documentElement.classList.remove('dark'); });
 
+it('keeps the model disclosure immediately beneath provider identity', async () => {
+  await mount();
+  const card = host.querySelector<HTMLElement>('.flower-settings-provider-card')!;
+  const title = card.querySelector('.flower-settings-provider-title')!.getBoundingClientRect();
+  const trigger = card.querySelector('.flower-settings-provider-disclosure')!.getBoundingClientRect();
+  expect(trigger.top - title.bottom).toBeLessThanOrEqual(4);
+  expect(trigger.left).toBeCloseTo(title.left, 0);
+});
+
 function settings(): FlowerSettingsSnapshot {
   return {
     defaults: { permission_type: 'approval_required', computer_use_enabled: true },
@@ -179,9 +188,9 @@ for (const [locale, dark, width] of [
     const thumb = frame.querySelector<HTMLElement>('.flower-settings-toggle-thumb')!;
     expect(getComputedStyle(thumb).backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
     expect(getComputedStyle(thumb).backgroundColor).not.toBe(getComputedStyle(thumb.parentElement!).backgroundColor);
-    const providerDetails = frame.querySelector<HTMLDetailsElement>('.flower-settings-provider-details')!;
-    providerDetails.querySelector('summary')!.click();
-    expect(providerDetails.open).toBe(true);
+    const providerDetails = frame.querySelector<HTMLDivElement>('.flower-settings-provider-details')!;
+    providerDetails.parentElement!.querySelector<HTMLButtonElement>('.flower-settings-provider-disclosure')!.click();
+    await expect.poll(() => providerDetails.dataset.state).toBe('open');
     expect(providerDetails.scrollWidth).toBeLessThanOrEqual(providerDetails.clientWidth);
     const modelTable = providerDetails.querySelector<HTMLTableElement>('table')!;
     const tableScroll = providerDetails.querySelector<HTMLElement>('.flower-settings-provider-table-scroll')!;
@@ -217,7 +226,7 @@ for (const [locale, dark, width] of [
       tableScroll.scrollTo({ left: 0, behavior: 'instant' });
       await expect.poll(() => tableScroll.scrollLeft).toBe(0);
     }
-    providerDetails.querySelector('summary')!.click();
+    providerDetails.parentElement!.querySelector<HTMLButtonElement>('.flower-settings-provider-disclosure')!.click();
     const computer = [...frame.querySelectorAll<HTMLButtonElement>('.flower-settings-computer-use-section button')].find(button => button.textContent === copy.computer.title)!;
     expect(computer.querySelector('input')).toBeNull();
     computer.click();
@@ -261,17 +270,17 @@ it('aligns section headings separately from controls and discloses provider deta
     return content.getBoundingClientRect().left;
   });
   expect(new Set(contentEdges).size).toBe(1);
-  const details = host.querySelector<HTMLDetailsElement>('.flower-settings-provider-details')!;
-  expect(details.open).toBe(false);
-  expect(details.querySelector('summary')?.textContent).toContain('3');
-  const summary = details.querySelector('summary')!;
+  const details = host.querySelector<HTMLDivElement>('.flower-settings-provider-details')!;
+  expect(details.dataset.state).toBe('closed');
+  const summary = details.parentElement!.querySelector<HTMLButtonElement>('.flower-settings-provider-disclosure')!;
+  expect(summary.textContent).toContain('3');
   summary.focus();
   await userEvent.keyboard('{Enter}');
-  expect(details.open).toBe(true);
+  expect(summary.getAttribute('aria-expanded')).toBe('true');
   expect(details.textContent).toContain('deepseek-v4-flash-vision-exp');
   expect(details.textContent).toContain(copy.settings.dialog.webSearch);
   await userEvent.keyboard('{Enter}');
-  expect(details.open).toBe(false);
+  expect(summary.getAttribute('aria-expanded')).toBe('false');
 });
 
 it('saves permission by keyboard and restores the computer switch after a failed save', async () => {
@@ -301,7 +310,7 @@ it('keeps the independently portaled provider dialog on the Flower reading scale
   await expect.poll(() => document.querySelector('.flower-provider-dialog')).not.toBeNull();
   const dialog = document.querySelector<HTMLElement>('.flower-provider-dialog')!;
   expect(getComputedStyle(dialog.querySelector('[data-floe-dialog-header] h2')!).fontSize).toBe('16px');
-  expect(getComputedStyle(dialog.querySelector('.flower-settings-subsection-description')!).fontSize).toBe('12px');
+  expect(getComputedStyle(dialog.querySelector('.flower-provider-introduction p')!).fontSize).toBe('14px');
   for (const copy of dialog.querySelectorAll('.flower-body-copy')) {
     expect(getComputedStyle(copy).fontSize).toBe('12px');
   }
@@ -460,8 +469,10 @@ it('compares each provider model in a full-width table with its own capability d
   })) } : provider) } };
   const { copy, saveModel } = await mount('en-US', 1000, false, initial);
   const provider = host.querySelector<HTMLElement>('.flower-settings-provider-card')!;
-  const details = provider.querySelector<HTMLDetailsElement>('details')!;
-  await userEvent.click(details.querySelector('summary')!);
+  const details = provider.querySelector<HTMLDivElement>('.flower-settings-provider-details')!;
+  const summary = provider.querySelector<HTMLButtonElement>('.flower-settings-provider-disclosure')!;
+  await userEvent.click(summary);
+  await expect.poll(() => details.dataset.state).toBe('open');
   const table = details.querySelector<HTMLTableElement>('table')!;
   expect(table).not.toBeNull();
   expect([...table.querySelectorAll('thead th')].map(header => header.textContent)).toEqual([
@@ -484,8 +495,9 @@ it('compares each provider model in a full-width table with its own capability d
   expect(details.getBoundingClientRect().width).toBeGreaterThan(provider.getBoundingClientRect().width * 0.95);
   expect(table.getBoundingClientRect().right).toBeGreaterThan(provider.querySelector('.flower-settings-provider-actions')!.getBoundingClientRect().left);
   if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: host.querySelector('.flower-settings-providers-section')!, path: '__screenshots__/flower-provider-model-table.png' });
-  await userEvent.click(details.querySelector('summary')!);
-  expect(details.open).toBe(false);
+  await userEvent.click(summary);
+  await expect.poll(() => details.dataset.state).toBe('closed');
+  expect(summary.getAttribute('aria-expanded')).toBe('false');
   expect(details.getBoundingClientRect().height).toBeLessThan(32);
   expect(saveModel).not.toHaveBeenCalled();
 });
