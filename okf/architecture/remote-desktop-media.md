@@ -20,7 +20,7 @@ work cannot overwrite or authorize a successor generation.
 
 The physical-seat service uses one latest-sample mailbox for capture and a
 separate 60 Hz cursor stream. Unchanged frames are not encoded repeatedly;
-H.264 and VP9 reference order is preserved and one settled lossless refinement follows
+H.264, VP9 and AV1 reference order is preserved and one settled lossless refinement follows
 activity. Cursor position, visibility and hotspot validity are independent of
 video progress, so pointer motion remains responsive on a static desktop.
 The media worker is attached through an authenticated inherited descriptor and
@@ -32,12 +32,14 @@ and its following task. Replaced pictures do not receive individual paint receip
 reset cancels retired authority. PNG refinement decoding cannot serialize later
 video decoding. Encoded reference dependencies remain ordered and bounded.
 
-Linux picture requests offer VP9 only after the published player's positive
+Linux picture requests offer AV1 and VP9 only after the published player's positive
 WebCodecs probe; H.264 remains available. The same offer applies to connect,
 configuration and reconnect. A retired asynchronous probe cannot acquire a
 successor attachment ticket. macOS retains its native picture contract.
-The software path prefers supported VP9 after hardware H.264 candidates fail
-their capability probes. Codec selection is observable and does not certify
+Native NVIDIA/Rockchip H.264 stays preferred. Intel VA-API selects AV1 when both
+the client probe and synthetic hardware encode succeed; its H.264 path remains
+available to older clients. The software path prefers supported VP9 after hardware
+candidates fail their capability probes. Codec selection is observable and does not certify
 hardware decoding or RustDesk performance parity.
 
 Four cumulative frame credits bound unacknowledged pictures. Encoder timestamps
@@ -47,6 +49,17 @@ Idle transport time cannot inflate the next frame's codec budget. Encoder reset
 starts a fresh keyframe chain; it cannot discard a transported reference.
 
 ## Encoder Capability
+
+Intel AV1 uses the published component's pinned, publisher-verified amd64 musl
+media driver and GMM library inside the private media closure. It inherits the
+Runtime user's existing render-device access, with no system package or device
+permission change. The prepared interpreter fixes `LIBVA_DRIVERS_PATH` to that
+closure and removes inherited driver-name overrides. The root DRM exporter never
+loads this userspace driver. Its Main-profile, eight-bit 4:2:0 OBU stream uses
+temporal-unit alignment and no lookahead/reordered pictures. Keyframe metadata
+reports the actual sequence level, and the browser rejects unoffered profiles.
+AV1 uses the resolution-scaled picture-mode bitrate budget and bounded quantizer;
+an active encode failure retires the chain rather than changing codecs.
 
 Linux NVIDIA encoding uses the published component's verified glibc 2.31 worker
 and the installed NVIDIA driver, independently of its musl capture/media stack.

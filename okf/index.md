@@ -51,6 +51,8 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Physical-device remote desktop Viewer qualification](operations/remote-desktop-device-viewer-results.md) - Assess actual udesk26 toolkit input, unlock and paint recovery while identifying incomplete orange, IME, cursor and competitor acceptance.
 - [Orange Viewer follow-up](operations/remote-desktop-orange-viewer-results.md) - Verify published Orange deployment, functional recovery, and the limits of the current RustDesk comparison.
 - [Physical desktop RustDesk comparison](operations/remote-desktop-rustdesk-comparison-results.md) - Check paired presentation, quality and resource evidence before accepting latency and performance parity.
+- [Orange RustDesk comparison attempts](operations/remote-desktop-rustdesk-orange-results.md) - Inspect failed responses and unstable LAN conditions before applying another host's results to Orange.
+- [udesk26 v0.22.37 RustDesk comparison](operations/remote-desktop-rustdesk-v37-results.md) - Trace the failing H.264 baseline and clock limits before assessing successor releases.
 - [Desktop reconnect qualification](operations/remote-desktop-recovery-results.md) - Verify published sound continuity, Mac physical hotplug, locked reconnect and Wayland display recovery.
 - [Wayland desktop qualification](operations/remote-desktop-wayland-results.md) - Assess real GNOME office interaction and retained capture limits after virtual graphics provisioning.
 - [Host Applications](architecture/host-applications.md) - Browse host applications and apply shared authorization and session lifecycle rules.

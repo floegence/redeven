@@ -19,6 +19,7 @@ const native = JSON.parse(execFileSync('go', ['list', '-m', '-json', 'github.com
 const token = 'qualification-private-ticket';
 const backend = process.argv.includes('--macos') ? 'macos' : process.argv.includes('--wayland') ? 'wayland' : process.argv.includes('--linux-service') ? 'linux-drm-kms' : 'x11';
 const noVP9 = process.argv.includes('--no-vp9');
+const noAV1 = process.argv.includes('--no-av1');
 const codecOnly = process.argv.includes('--codec-only');
 const separateCursor = backend !== 'macos' && !process.argv.includes('--embedded-cursor');
 const controlCursor = separateCursor ? 'default' : 'none';
@@ -177,11 +178,12 @@ try {
     page = await popup;
   }
   const errors = []; page.on('pageerror', error => { errors.push(error.message); console.error('Viewer error:', error.stack); });
-  await page.addInitScript(({ noVP9, codecOnly }) => {
-    if (codecOnly || noVP9) {
+  await page.addInitScript(({ noVP9, noAV1, codecOnly }) => {
+    if (codecOnly || noVP9 || noAV1) {
       const supported = VideoDecoder.isConfigSupported.bind(VideoDecoder);
       VideoDecoder.isConfigSupported = async config => config.codec.startsWith('vp09.')
-        ? { supported: !noVP9, config } : supported(config);
+        ? { supported: !noVP9, config } : config.codec.startsWith('av01.')
+        ? { supported: !noAV1, config } : supported(config);
     }
     window.qualificationAudioSamples = [];
     const Context = window.AudioContext;
@@ -201,7 +203,7 @@ try {
     };
     const denied = async () => { throw new DOMException('Fixture clipboard permission denied', 'NotAllowedError'); };
     Object.defineProperty(navigator, 'clipboard', { value: { readText: denied, writeText: denied } });
-  }, { noVP9, codecOnly });
+  }, { noVP9, noAV1, codecOnly });
   await page.goto(`http://127.0.0.1:${server.address().port}/_redeven_desktop/`);
   if (unsupportedReason) {
     await page.waitForFunction(() => document.querySelector('#status').textContent === 'Desktop unavailable');
@@ -225,7 +227,7 @@ try {
     console.log(JSON.stringify({ passed: true, backend: 'linux-drm-kms', checks: ['unsupported scanout reason', 'input disabled', 'unlock hidden', 'no misleading retry', 'no connect command'] }));
   } else if (codecOnly) {
     await page.waitForFunction(() => document.querySelector('#connection').hidden);
-    const expected = backend === 'macos' ? undefined : noVP9 ? ['h264'] : ['vp9', 'h264'];
+    const expected = backend === 'macos' ? undefined : [...(noAV1 ? [] : ['av1']), ...(noVP9 ? [] : ['vp9']), 'h264'];
     const checkOffer = method => assert.deepEqual(messages.findLast(item => item.command.method === method)?.command.picture.codecs,
       expected, `${backend} ${method} must offer only client-supported codecs`);
     checkOffer('connect');
