@@ -215,7 +215,8 @@ func (c *Client) start(owner, accountID string, reconsent bool, registration *se
 		a.returning = *registration
 		a.clientID = registration.ClientID
 	} else if accountID != "" {
-		old, ok, err := c.Store.ChatGPTAccount(accountID)
+		accounts, err := c.Store.ChatGPTAccounts(ctx)
+		old, ok := accounts[accountID]
 		if err != nil || !ok || old.Lifecycle == "signing_out" {
 			cancel()
 			return AttemptStatus{}, Failure("authorization_required")
@@ -363,7 +364,8 @@ func (c *Client) discardSignIn(account, received settings.ChatGPTAccount) bool {
 	if account.Subject != "" {
 		unlock, err := c.Store.LockChatGPTAccountOperation(ctx, account.ID())
 		if err == nil {
-			_, exists, readErr := c.Store.ChatGPTAccount(account.ID())
+			accounts, readErr := c.Store.ChatGPTAccounts(ctx)
+			_, exists := accounts[account.ID()]
 			if readErr == nil && !exists {
 				account.Lifecycle = "signing_out"
 				account.SignedOutAt = c.nowTime()
@@ -394,7 +396,8 @@ func (c *Client) completeSignIn(ctx context.Context, a *attempt, account setting
 		return Failure("authorization_cancelled")
 	}
 	if a.returning.Subject == "" {
-		existing, ok, err := c.Store.ChatGPTAccount(account.ID())
+		accounts, err := c.Store.ChatGPTAccounts(ctx)
+		existing, ok := accounts[account.ID()]
 		if err != nil {
 			return Failure("storage_unavailable")
 		}

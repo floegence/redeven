@@ -42,6 +42,8 @@ Closing the dialog, changing providers or authentication, changing trusted
 connection bindings, or losing the admitted channel cancels incomplete attempts.
 A per-attempt commit lock orders cancellation against the short atomic credential
 write, without holding the attempt-map mutex during disk or network operations.
+Preparation and commit reads inherit attempt cancellation, so an unrelated
+credential-file lock cannot delay cancellation until the storage timeout.
 An accepted exchange completes within a bounded deadline even after cancellation
 so received tokens can be revoked. Rejected identity or installation also revokes
 received refresh tokens. A canceled, verified new registration uses the existing
