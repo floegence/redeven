@@ -55,6 +55,14 @@ Verification preserves choices, search and focus until explicit save. Account,
 locality and cancellation rules belong to the
 [local authentication contract](../ai/chatgpt-local-authentication.md).
 
+# Boundaries
+
+Credential entry makes API model configuration available; it does not claim that
+the service has verified the key. ChatGPT requires a verified ready account.
+Authentication authority and cancellation remain owned by the local authentication
+contract. The editors preserve host permission checks and save explicitly;
+catalog synchronization never selects newly discovered models automatically.
+
 # Evidence
 
 - `redeven:internal/flower_ui/src/settings/FlowerProviderDialog.tsx` - Shared provider selection, credential readiness, authentication actions, and catalog ownership.
