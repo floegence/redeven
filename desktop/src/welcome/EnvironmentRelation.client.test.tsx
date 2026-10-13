@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'solid-js/web';
 import { DesktopWelcomeShell, type DesktopWelcomeRuntime } from './App';
 import { linkedEnvironmentFixture } from '../testSupport/linkedEnvironmentFixture';
-import type { DesktopWelcomeSnapshot, DesktopLauncherActionRequest, DesktopLauncherActionProgress } from '../shared/desktopLauncherIPC';
+import type { DesktopWelcomeSnapshot, DesktopLauncherActionRequest, DesktopLauncherActionResult, DesktopLauncherActionProgress } from '../shared/desktopLauncherIPC';
 import { openConnectionProgress } from '../shared/desktopOpenConnectionProgress';
 import { launchLocalEnvironmentFlowerTurn } from './flower/localEnvironmentFlowerSurfaceAdapter';
 
@@ -35,7 +35,7 @@ async function mount(initialSnapshot?: DesktopWelcomeSnapshot) {
   const fixture = linkedEnvironmentFixture();
   let snapshot: DesktopWelcomeSnapshot = initialSnapshot ?? fixture.snapshot;
   let receive: ((value: DesktopWelcomeSnapshot) => void) | undefined;
-  const performAction = vi.fn(async (_request: DesktopLauncherActionRequest) => ({ ok: true as const, outcome: 'opened_environment_window' as const }));
+  const performAction = vi.fn(async (_request: DesktopLauncherActionRequest): Promise<DesktopLauncherActionResult> => ({ ok: true, outcome: 'opened_environment_window' }));
   const settings = { load: vi.fn(), save: vi.fn(), cancel: vi.fn(), requestRuntimeFlower: vi.fn() } as unknown as DesktopWelcomeRuntime['settings'];
   const host = document.createElement('div'); document.body.append(host);
   disposers.push(render(() => <DesktopWelcomeShell snapshot={snapshot} runtime={{ settings, launcher: {
@@ -492,6 +492,57 @@ describe('linked environment owner interactions', () => {
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain(runtime.label);
     expect(h.performAction.mock.calls.some(([request]) => request.kind === 'connect_cloud_runtime')).toBe(false);
   });
+  it.each(['inline', 'details'] as const)('offers %s recovery after a Cloud certificate failure through the exact Runtime owner', async entry => {
+    const f = mixedEnvironmentFixture();
+    const originalRuntime = f.snapshot.environments.find(environment => environment.kind === 'local_environment')!;
+    const originalCloud = f.snapshot.environments.find(environment => environment.env_public_id === 'env_0_0')!;
+    const target = originalRuntime.provider_runtime_link_target!;
+    const binding = { ...target.cloud_link_binding!, connection_state: 'authorization_required' as const,
+      last_error_code: 'CONTROL_CREDENTIALS_EXPIRED',
+    };
+    const service = { ...target.runtime_service!, bindings: { ...target.runtime_service!.bindings!, cloud_link: binding } };
+    const runtime = { ...originalRuntime, runtime_service: service, provider_runtime_link_target: { ...target,
+      provider_connection_state: 'authorization_required' as const, can_connect_cloud: true,
+      credential_recovery: 'attention' as const,
+      credential_recovery_details: { last_error_code: 'provider_tls_untrusted', last_attempt_at_unix_ms: Date.now(), attempt_count: 1 },
+      cloud_link_binding: binding, runtime_service: service,
+    } };
+    const cloud = { ...originalCloud, remote_route_state: 'provider_unreachable' as const };
+    const h = await mount({ ...f.snapshot, environments: [runtime, cloud] });
+    document.querySelectorAll<HTMLButtonElement>('[role="tab"]')[1].click(); await settle();
+    const status = h.owner('cloud').querySelector('[data-cloud-connection-status]')!;
+    expect(status.textContent).toContain('Certificate not trusted');
+    if (entry === 'details') {
+      button(status, 'Connection details: Certificate not trusted').click(); await settle();
+      const details = document.querySelector('[data-cloud-connection-details]')!;
+      expect(details.textContent).toContain('Desktop could not verify the cloud certificate');
+      button(details, 'Restore connection').click();
+    } else {
+      button(status, 'Restore').click();
+    }
+    await settle();
+    expect(document.querySelectorAll('[role="tab"]')[0].getAttribute('aria-selected')).toBe('true');
+    const review = document.querySelector('[role="dialog"]:has(input[name="provider-runtime-link-target"])')!;
+    expect(review.textContent).toContain(runtime.label);
+    expect(h.performAction.mock.calls.some(([request]) => request.kind === 'connect_cloud_runtime')).toBe(false);
+    const confirm = button(review, 'Connect to Redeven Cloud');
+    expect(confirm.disabled).toBe(false);
+    h.performAction.mockResolvedValueOnce({ ok: true, outcome: 'connected_provider_runtime' });
+    confirm.click(); await settle();
+    expect(h.performAction).toHaveBeenCalledExactlyOnceWith({ kind: 'connect_cloud_runtime',
+      provider_environment_id: cloud.id, runtime_target_id: target.id,
+    });
+    const blockedRuntime = { ...runtime, provider_runtime_link_target: { ...runtime.provider_runtime_link_target,
+      can_connect_cloud: false,
+    } };
+    h.publish({ ...f.snapshot, environments: [blockedRuntime, cloud] }); await settle();
+    expect(h.owner('cloud').querySelector('.redeven-cloud-connection-action')).toBeNull();
+    h.publish({ ...f.snapshot, environments: [originalRuntime, originalCloud] }); await settle();
+    const restored = h.owner('cloud').querySelector('[data-cloud-connection-status]')!;
+    expect(restored.textContent).toContain('Connected');
+    expect(restored.querySelector('.redeven-cloud-connection-action')).toBeNull();
+  });
+
   it('uses one visible owner and owner tabs instead of stacked action surfaces', async () => {
     const h = await mount();
     const card = document.querySelector('[data-environment-group]')!;

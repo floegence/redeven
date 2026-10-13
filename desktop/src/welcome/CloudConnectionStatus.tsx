@@ -63,7 +63,7 @@ export function CloudConnectionStatus(props: Readonly<{
   });
   const restoreAction = createMemo(() => buildProviderBackedEnvironmentActionModel(props.runtime)
     .action_presentation.menu_actions.find(item => item.action.intent === 'connect_cloud_runtime')?.action);
-  const canRestore = () => !['connected', 'connecting', 'restoring', 'retrying', 'unknown', 'tls_error', 'sign_in_required', 'permission_required', 'binding_changed'].includes(state())
+  const canRestore = () => !['connected', 'connecting', 'restoring', 'retrying', 'unknown', 'sign_in_required', 'permission_required', 'binding_changed'].includes(state())
     && restoreAction()?.enabled;
   const diagnostics = () => target()?.credential_recovery_details;
   const errorCode = () => diagnostics()?.last_error_code ?? target()?.cloud_link_binding?.last_error_code;
