@@ -1,5 +1,6 @@
 import { writeTextToClipboard } from '../utils/clipboard';
 import {
+  createUniqueId,
   createEffect,
   createMemo,
   createSignal,
@@ -212,6 +213,7 @@ export type TerminalSessionRuntimeProps = Readonly<{
 
 export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
   const i18n = useI18n();
+  const semanticSurfaceId = createUniqueId();
   const sessionId = String(props.session.id ?? '').trim();
   const [loading, setLoading] = createSignal<SessionLoadingState>('initializing');
   const [ready, setReady] = createSignal(false);
@@ -1433,6 +1435,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
           props.registerSurfaceElement(sessionId, node);
         }}
         {...REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS}
+        id={semanticSurfaceId}
         class="absolute top-2 left-2 right-0 bottom-0 redeven-terminal-surface"
         data-terminal-semantic-surface="true"
         onClick={(event) => {
@@ -1512,6 +1515,8 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
         />
         <div
           aria-label={i18n.t('terminal.historyScrollbar')}
+          aria-controls={semanticSurfaceId}
+          aria-busy={historyBusy() || undefined}
           aria-orientation="vertical"
           aria-valuemax={historyMaximum()}
           aria-valuemin="0"
@@ -1568,6 +1573,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
             class="font-medium text-primary underline-offset-2 hover:underline"
             data-terminal-semantic-history-retry="true"
             disabled={historyBusy()}
+            aria-busy={historyBusy() || undefined}
             onClick={() => retryHistoryRequest?.()}
           >
             {i18n.t('terminal.retry')}

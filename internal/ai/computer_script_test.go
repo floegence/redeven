@@ -89,10 +89,10 @@ func TestComputerScriptNamespaceLifetimeAndPartialResult(t *testing.T) {
 }
 
 func TestComputerScriptObservationOutput(t *testing.T) {
-	observation := map[string]any{"document_id": "window:1", "nodes": []any{
-		map[string]any{"ref": "a", "role": "button", "name": "Apply"},
-		map[string]any{"ref": "b", "role": "textbox", "value": "before"},
-		map[string]any{"ref": "c", "role": "heading", "name": "An unchanged description of the selected application and its current task, retained in the model context from the first complete observation"},
+	observation := map[string]any{"semantic_schema_version": 2, "document_id": "window:1", "nodes": []any{
+		semanticFixtureNode("a", "button", "Apply"),
+		semanticFixtureNode("b", "textbox", "Search"),
+		semanticFixtureNode("c", "heading", "An unchanged description of the selected application and its current task, retained in the model context from the first complete observation"),
 	}, "truncated": false}
 	runtime, call := scriptRuntimeFixture(t, func(_ context.Context, _ TargetToolCall) (TargetToolResult, error) {
 		return TargetToolResult{Result: map[string]any{"observation": observation, "url": "https://example.test/work", "title": "Work"}}, nil
@@ -116,7 +116,8 @@ func TestComputerScriptObservationOutput(t *testing.T) {
 	if unchanged["format"] != "diff" || len(unchanged["nodes"].([]any)) != 0 {
 		t.Fatalf("repeated tree: %+v", unchanged)
 	}
-	observation["nodes"] = []any{map[string]any{"ref": "b", "role": "textbox", "value": "after"}, observation["nodes"].([]any)[2]}
+	observation["nodes"].([]any)[1].(map[string]any)["value"] = "after"
+	observation["nodes"] = []any{observation["nodes"].([]any)[1], observation["nodes"].([]any)[2]}
 	local := execute(`const state = await ui.observe({emit:false}); ui.assert(state.observation.nodes[0].value === 'after'); log('checked');`)
 	if local["observation"] != nil {
 		t.Fatalf("local read leaked a tree: %+v", local)
@@ -196,7 +197,7 @@ func TestComputerScriptTakeoverDiscardsObservedContent(t *testing.T) {
 	runtime, call := scriptRuntimeFixture(t, func(_ context.Context, _ TargetToolCall) (TargetToolResult, error) {
 		dispatched++
 		if dispatched == 1 {
-			return TargetToolResult{Result: map[string]any{"observation": "prior content"}}, nil
+			return TargetToolResult{Result: map[string]any{"observation": semanticFixtureText("prior content")}}, nil
 		}
 		return TargetToolResult{Result: map[string]any{"action_executed": true}, Safety: &InteractionSafetyDecision{Level: "takeover", ReasonCodes: []string{"secret_input"}}}, nil
 	})
@@ -218,11 +219,11 @@ func TestComputerScriptInvalidationDropsPriorObservationWithoutReplayingAction(t
 				dispatched++
 				switch dispatched {
 				case 1:
-					return TargetToolResult{Result: map[string]any{"observation": "old document"}}, nil
+					return TargetToolResult{Result: map[string]any{"observation": semanticFixtureText("old document")}}, nil
 				case 2:
 					return TargetToolResult{Result: map[string]any{"observation_invalidated": true, "action_executed": true}, Safety: &InteractionSafetyDecision{Level: "routine"}}, nil
 				default:
-					return TargetToolResult{Result: map[string]any{"observation": "new document"}}, nil
+					return TargetToolResult{Result: map[string]any{"observation": semanticFixtureText("new document")}}, nil
 				}
 			})
 			code := `await ui.observe(); const clicked = await ui.click(1, 2); ui.assert(clicked.observation_invalidated);`
@@ -238,7 +239,7 @@ func TestComputerScriptInvalidationDropsPriorObservationWithoutReplayingAction(t
 				t.Fatalf("lost confirmed action: %+v", payload)
 			}
 			if refresh {
-				if dispatched != 3 || payload["observation"] != "new document" || payload["observation_invalidated"] == true {
+				if dispatched != 3 || payload["observation"].(map[string]any)["document_id"] != "new document" || payload["observation_invalidated"] == true {
 					t.Fatalf("fresh observation unavailable: %+v; calls=%d", payload, dispatched)
 				}
 			} else if dispatched != 2 || payload["observation"] != nil || payload["observation_invalidated"] != true {
@@ -313,7 +314,7 @@ func TestComputerScriptReadFailurePreservesConfirmedPrefixWithoutContentOrReplay
 	host, call := scriptRuntimeFixture(t, func(_ context.Context, call TargetToolCall) (TargetToolResult, error) {
 		calls++
 		if calls == 1 {
-			return TargetToolResult{Result: map[string]any{"observation": "previous page content"}}, nil
+			return TargetToolResult{Result: map[string]any{"observation": semanticFixtureText("previous page content")}}, nil
 		}
 		return computerObservationFailure(call, map[string]any{"action_executed": true, "observation_stage": "safety_scan"}, "fixture")
 	})

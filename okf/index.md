@@ -191,6 +191,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [HTML file preview](ui/file-preview-html.md) - Open HTML pages by default with isolated interaction, bounded reads, and explicit source editing.
 - [Git workspace generation and Files decoration](ui/git-workspace-generation-and-decoration.md) - Keep Git views and background Files status consistent through capability gating and monotonic invalidation.
 - [Shared surface material](ui/surface-material.md) - Apply lightweight shared depth, quiet seams, and immediate control feedback across Env App, Desktop, and Flower.
+- [Product accessibility for AI agents](ui/agent-accessibility.md) - Preserve core UI presentation and interaction while auditing semantic gaps and shared ownership.
 - [Input focus boundaries](ui/input-focus-boundaries.md) - Keep one stable focus border across standard and compound inputs while preserving non-input keyboard cues.
 - [Git browser visual states](ui/git-browser-visual-states.md) - Keep selection, current-branch facts, Git status tones, hover, and focus visually independent across themes.
 - [Git diff request lifecycle](ui/git-diff-request-lifecycle.md) - Preserve request ownership and reading state across layout changes while refreshing on new Git targets, explicit actions, and transport replacement.
@@ -262,6 +263,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Flower attachment resources](ai/flower-attachment-resources.md) - Enforce owner-scoped uploads, canonical reads, quotas, and last-reference cleanup.
 - [AI tool permissions and dispatch](ai/tool-permission-runtime.md) - Apply tool registration, scheduling, permission, approval, readonly, and target-routing contracts.
 - [Computer and browser use runtime](ai/computer-use-runtime.md) - Keep authorization, execution, observation and packaged helper compatibility under one Runtime owner.
+- [Computer semantic snapshots](ai/computer-use-semantics.md) - Validate schema v2 trees, portable roles, relationships and privacy at the Runtime boundary.
 - [Computer script execution](ai/computer-use-scripts.md) - Compose bounded semantic operations and preserve partial results without replaying effects.
 - [Optional built-in browser installation](ai/computer-use-browser-installation.md) - Confirm browser download or Desktop upload, persist the capability switch, and validate task continuation.
 - [Built-in browser Linux system preparation](ai/computer-use-browser-system.md) - Authorize exact versioned AppArmor preparation while preserving the browser sandbox and user data.

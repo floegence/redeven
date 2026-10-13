@@ -1,8 +1,9 @@
 import '../../index.css';
+import axe from 'axe-core';
 import { FloeConfigProvider, LayoutProvider } from '@floegence/floe-webapp-core';
 import { render } from 'solid-js/web';
 import { afterEach, expect, it } from 'vitest';
-import { page } from 'vitest/browser';
+import { commands, page } from 'vitest/browser';
 import { FileBrowserWorkspace } from './FileBrowserWorkspace';
 
 let dispose: (() => void) | undefined;
@@ -35,6 +36,11 @@ it('retains action geometry across width changes and adjacent insertions', async
     return { x: rect.x, y: rect.y, width: rect.width, height: rect.height, display: style.display,
       gap: style.gap, flex: style.flex, padding: style.padding, minWidth: style.minWidth };
   });
+
+  const audit = await axe.run(host, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa'] } });
+  expect(audit.violations.map(issue => issue.id)).toEqual([]);
+  const visual = await (commands as unknown as { compareSemanticPresentation: (selector: string) => Promise<{ before: unknown; after: unknown }> }).compareSemanticPresentation('.file-workspace-header');
+  expect(visual.after).toEqual(visual.before);
 
   for (const width of [360, 640, 1100, 360]) {
     host.style.width = `${width}px`;

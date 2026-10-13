@@ -1,4 +1,5 @@
 import '../index.css';
+import axe from 'axe-core';
 import './flower-feature.css';
 import { For } from 'solid-js';
 import { render } from 'solid-js/web';
@@ -87,6 +88,14 @@ it('keeps the empty composer at 84px and the header at 40px', async () => {
   expect.soft(getComputedStyle(runtime.querySelector('.flower-composer textarea')!).fontSize).toBe('12px');
   expect.soft(runtime.querySelector('.flower-chat-header')!.getBoundingClientRect().height).toBe(40);
   expect.soft(runtime.querySelector('.flower-composer')!.getBoundingClientRect().height).toBe(84);
+  expect(runtime.querySelector('.flower-composer textarea')?.getAttribute('aria-label')).toBeTruthy();
+  // This semantic change preserves the existing timestamp colors. Track the
+  // pre-existing contrast finding in the product accessibility audit.
+  const audit = await axe.run(runtime, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa'] }, rules: { 'color-contrast': { enabled: false } } });
+  expect(audit.violations.map(issue => `${issue.id}: ${issue.nodes.map(node => node.target.join(' ')).join(', ')}`)).toEqual([]);
+  const visual = await (commands as unknown as { compareSemanticPresentation: (selector: string) => Promise<{ before: unknown; after: unknown }> }).compareSemanticPresentation('.flower-composer');
+  expect(visual.after).toEqual(visual.before);
+
 });
 
 

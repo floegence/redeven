@@ -11,6 +11,7 @@ export interface FileBrowserPathControlProps {
   draft: string;
   error?: string;
   submitting?: boolean;
+  describedBy?: string;
   inputRef?: (el: HTMLInputElement) => void;
   onDraftChange: (value: string) => void;
   onActivateEdit: () => void;
@@ -57,6 +58,8 @@ export function FileBrowserPathControl(props: FileBrowserPathControlProps) {
         placeholder={goToPathLabel()}
         aria-label={goToPathLabel()}
         aria-invalid={Boolean(String(props.error ?? '').trim())}
+        aria-describedby={props.describedBy}
+        aria-busy={props.submitting || undefined}
         class={cn(
           'h-full w-full min-w-0 border-0 bg-transparent text-[length:var(--floe-type-control)] text-foreground outline-none placeholder:text-muted-foreground/70',
           props.class,

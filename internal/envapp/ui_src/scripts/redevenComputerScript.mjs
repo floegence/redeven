@@ -77,7 +77,7 @@ export async function createComputerScript({ browser = true } = {}) {
         ui: {value: Object.freeze({
           observe: (options = {}) => call({action: 'observe', ...options}),
           screenshot: () => call({action: 'screenshot'}),
-          getByRole: (role, options = {}) => locator({role, ...options}),
+          getByRole: (role, options = {}) => locator({canonical_role: role, ...options}),
           ref: (ref) => locator({ref}),
           click: (x, y) => call({action: 'pointer_click', x, y}),
           drag: (from_x, from_y, to_x, to_y, duration_ms = 0) => call({action: 'drag', from_x, from_y, to_x, to_y, duration_ms}),

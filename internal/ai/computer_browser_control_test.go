@@ -144,7 +144,7 @@ func TestComputerSamplingReadFailureDoesNotAcquireUserControl(t *testing.T) {
 		if call.liveFrame {
 			return computerObservationFailure(call, map[string]any{"action_executed": false, "observation_stage": "safety_scan"}, "fixture")
 		}
-		return TargetToolResult{TargetID: target.ID, Result: map[string]any{"observation": "fresh normal page"}, Safety: &InteractionSafetyDecision{Level: "routine", SafeToCapture: true, SafeToSendToModel: true}}, nil
+		return TargetToolResult{TargetID: target.ID, Result: map[string]any{"observation": semanticFixtureText("fresh normal page")}, Safety: &InteractionSafetyDecision{Level: "routine", SafeToCapture: true, SafeToSendToModel: true}}, nil
 	}}}
 	r := &run{threadID: "thread-first", targetResolver: host, targetToolExecutor: host}
 	bindTargetTestRun(t, r)

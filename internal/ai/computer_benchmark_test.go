@@ -2,6 +2,7 @@ package ai
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -90,6 +91,62 @@ func (m *computerBenchmarkMetrics) observeRequest(body []byte) bool {
 
 type computerBenchmarkMeasuredKey struct{}
 
+func newComputerBenchmarkProxy(upstream *url.URL, key string, metrics *computerBenchmarkMetrics) *httputil.ReverseProxy {
+	proxy := &httputil.ReverseProxy{}
+	proxy.Rewrite = func(request *httputil.ProxyRequest) {
+		req := request.Out
+		body, _ := io.ReadAll(io.LimitReader(req.Body, 64<<20))
+		_ = req.Body.Close()
+		measured := metrics.observeRequest(body)
+		req.Body = io.NopCloser(bytes.NewReader(body))
+		request.SetURL(upstream)
+		req.Header.Set("Authorization", "Bearer "+key)
+		// Let the upstream transport own compression and transparently decode
+		// gzip before the SSE observer. Forwarding the client's gzip header
+		// would leave this measurement layer reading compressed bytes.
+		req.Header.Del("Accept-Encoding")
+		req.Host = upstream.Host
+		*req = *req.WithContext(context.WithValue(req.Context(), computerBenchmarkMeasuredKey{}, measured))
+	}
+	proxy.ModifyResponse = func(response *http.Response) error {
+		if response.Request.Context().Value(computerBenchmarkMeasuredKey{}) == true {
+			response.Body = &computerBenchmarkReader{ReadCloser: response.Body, metrics: metrics}
+		}
+		return nil
+	}
+	proxy.ErrorLog = slog.NewLogLogger(slog.NewTextHandler(io.Discard, nil), slog.LevelError)
+	return proxy
+}
+
+func TestComputerBenchmarkMeasuresCompressedProviderUsage(t *testing.T) {
+	const event = "data: {\"type\":\"response.completed\",\"response\":{\"usage\":{\"input_tokens\":42}}}\n\n"
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		if strings.Contains(request.Header.Get("Accept-Encoding"), "gzip") {
+			w.Header().Set("Content-Encoding", "gzip")
+			compressed := gzip.NewWriter(w)
+			_, _ = io.WriteString(compressed, event)
+			_ = compressed.Close()
+		} else {
+			_, _ = io.WriteString(w, event)
+		}
+	}))
+	defer provider.Close()
+	upstream, _ := url.Parse(provider.URL)
+	metrics := &computerBenchmarkMetrics{}
+	proxy := httptest.NewServer(newComputerBenchmarkProxy(upstream, "fixture", metrics))
+	defer proxy.Close()
+	response, err := http.Post(proxy.URL, "application/json", strings.NewReader(`{"tools":[{"name":"computer.observe"}],"input":[]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil || string(body) != event || metrics.InputTokens != 42 || metrics.ModelCalls != 1 {
+		t.Fatalf("compressed provider usage was not measured: calls=%d tokens=%d err=%v", metrics.ModelCalls, metrics.InputTokens, err)
+	}
+}
+
 type computerBenchmarkReader struct {
 	io.ReadCloser
 	metrics *computerBenchmarkMetrics
@@ -129,18 +186,49 @@ func (r *computerBenchmarkReader) Read(p []byte) (int, error) {
 	return n, err
 }
 
-type computerBenchmarkExecutor struct {
-	*PlaywrightTargetExecutor
+// Measure the private host transport without replacing a Runtime-owned adapter.
+// Concrete adapter identity controls script setup, recovery and target authority.
+type computerBenchmarkHostTransport struct {
+	http.RoundTripper
 	metrics *computerBenchmarkMetrics
 }
 
-func (e *computerBenchmarkExecutor) ExecuteTargetTool(ctx context.Context, call TargetToolCall) (TargetToolResult, error) {
+func (e *computerBenchmarkHostTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	if request.URL.Path != "/command" || request.Body == nil {
+		return e.RoundTripper.RoundTrip(request)
+	}
+	body, err := io.ReadAll(request.Body)
+	if err != nil {
+		return nil, err
+	}
+	_ = request.Body.Close()
+	request.Body = io.NopCloser(bytes.NewReader(body))
+	var command struct {
+		Method string `json:"method"`
+		Params struct {
+			Request playwrightTargetRequest `json:"request"`
+		} `json:"params"`
+	}
+	if json.Unmarshal(body, &command) != nil || command.Method != "source.tool" {
+		return e.RoundTripper.RoundTrip(request)
+	}
 	start := time.Now()
-	result, err := e.PlaywrightTargetExecutor.ExecuteTargetTool(ctx, call)
+	response, err := e.RoundTripper.RoundTrip(request)
+	var reply struct {
+		Result playwrightTargetResponse `json:"result"`
+	}
+	if err == nil {
+		body, readErr := io.ReadAll(io.LimitReader(response.Body, (24<<20)+1))
+		_ = response.Body.Close()
+		response.Body = io.NopCloser(bytes.NewReader(body))
+		if readErr != nil {
+			return nil, readErr
+		}
+		_ = json.Unmarshal(body, &reply)
+	}
 	elapsed := time.Since(start).Milliseconds()
-	var args map[string]any
-	_ = json.Unmarshal(call.Arguments, &args)
-	waiting := call.ToolName == "computer.wait" || strings.HasPrefix(call.ToolName, "browser.") || args["action"] == "wait"
+	call := command.Params.Request
+	waiting := call.ToolName == "computer.wait" || strings.HasPrefix(call.ToolName, "browser.") || call.Args["action"] == "wait"
 	e.metrics.mu.Lock()
 	defer e.metrics.mu.Unlock()
 	e.metrics.ToolCalls++
@@ -148,10 +236,42 @@ func (e *computerBenchmarkExecutor) ExecuteTargetTool(ctx context.Context, call 
 	if waiting {
 		e.metrics.WaitMilliseconds += elapsed
 	}
-	if payload, ok := result.Result.(map[string]any); ok && payload["execution_mode"] == "foreground" {
+	if reply.Result.Result["execution_mode"] == "foreground" {
 		e.metrics.ForegroundOperations++
 	}
-	return result, err
+	return response, err
+}
+
+func (e *computerBenchmarkHostTransport) CloseIdleConnections() {
+	if closer, ok := e.RoundTripper.(interface{ CloseIdleConnections() }); ok {
+		closer.CloseIdleConnections()
+	}
+}
+
+func TestComputerBenchmarkHostTransportPreservesProtocol(t *testing.T) {
+	payload := `{"result":{"result":{"execution_mode":"background"},"id":"tool"}}`
+	requestBody := `{"method":"source.tool","params":{"request":{"id":"tool","tool_name":"computer.action","args":{"action":"wait"}}}}`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		body, err := io.ReadAll(request.Body)
+		if err != nil || string(body) != requestBody {
+			t.Errorf("measuring changed the host request: %s %v", body, err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, payload)
+	}))
+	defer server.Close()
+	metrics := &computerBenchmarkMetrics{}
+	client := &http.Client{Transport: &computerBenchmarkHostTransport{RoundTripper: http.DefaultTransport, metrics: metrics}}
+	defer client.CloseIdleConnections()
+	response, err := client.Post(server.URL+"/command", "application/json", strings.NewReader(requestBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil || string(body) != payload || metrics.ToolCalls != 1 || metrics.ForegroundOperations != 0 {
+		t.Fatalf("measuring changed the host response or metrics: %s %v %+v", body, err, metrics)
+	}
 }
 
 // This online benchmark uses the production Service, Floret, provider adapter,
@@ -233,38 +353,27 @@ func TestComputerPairedModelBenchmark(t *testing.T) {
 						}
 					}))
 					defer fixture.Close()
-					proxy := &httputil.ReverseProxy{}
-					proxy.Rewrite = func(request *httputil.ProxyRequest) {
-						req := request.Out
-						body, _ := io.ReadAll(io.LimitReader(req.Body, 64<<20))
-						_ = req.Body.Close()
-						measured := metrics.observeRequest(body)
-						req.Body = io.NopCloser(bytes.NewReader(body))
-						request.SetURL(upstream)
-						req.Header.Set("Authorization", "Bearer "+key)
-						req.Host = upstream.Host
-						*req = *req.WithContext(context.WithValue(req.Context(), computerBenchmarkMeasuredKey{}, measured))
-					}
-					proxy.ModifyResponse = func(response *http.Response) error {
-						if response.Request.Context().Value(computerBenchmarkMeasuredKey{}) == true {
-							response.Body = &computerBenchmarkReader{ReadCloser: response.Body, metrics: metrics}
-						}
-						return nil
-					}
-					proxy.ErrorLog = slog.NewLogLogger(slog.NewTextHandler(io.Discard, nil), slog.LevelError)
+					proxy := newComputerBenchmarkProxy(upstream, key, metrics)
 					providerServer := httptest.NewServer(proxy)
 					defer providerServer.Close()
 					selected := provider
 					selected.BaseURL = providerServer.URL
 					registry := NewTargetRegistry()
-					target := TargetDescriptor{ID: "benchmark", Kind: "browser.managed", DisplayName: "Benchmark browser", Ready: true, State: "ready", Capabilities: []string{"observe", "interaction"}}
+					target := TargetDescriptor{ID: "browser-main", Kind: "browser.managed", DisplayName: "Benchmark browser", Capabilities: []string{"observe", "interaction"}}
 					if err := registry.Register(target); err != nil {
 						t.Fatal(err)
 					}
 					resources := NewPlaywrightTargetExecutor(node, helper, t.TempDir())
-					executor := &computerBenchmarkExecutor{PlaywrightTargetExecutor: resources, metrics: metrics}
-					runtime := NewComputerUseRuntime(registry, map[string]TargetToolExecutor{"browser-main": resources, "benchmark": executor}, t.TempDir())
+					runtime := NewComputerUseRuntime(registry, map[string]TargetToolExecutor{"browser-main": resources}, t.TempDir())
+					configureBrowserFixture(t, runtime)
 					defer runtime.Close()
+					target, err = runtime.PrepareTarget(t.Context(), target)
+					if err != nil {
+						t.Fatal(err)
+					}
+					// Initialization is outside timing and identical for both variants.
+					hostClient := runtime.browserHost.client
+					hostClient.Transport = &computerBenchmarkHostTransport{RoundTripper: hostClient.Transport, metrics: metrics}
 					state := t.TempDir()
 					svc, err := NewService(Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: state, AgentHomeDir: state, Shell: "/bin/sh", TargetResolver: runtime, TargetToolExecutor: runtime,
 						Config: &config.AIConfig{CurrentModelID: selected.ID + "/" + model, Providers: []config.AIProvider{selected}}, ResolveProviderAPIKey: func(string) (string, bool, error) { return "benchmark", true, nil }, RunMaxWallTime: 3 * time.Minute, RunIdleTimeout: 90 * time.Second})

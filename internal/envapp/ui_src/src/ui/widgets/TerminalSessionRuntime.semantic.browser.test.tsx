@@ -1,3 +1,4 @@
+import axe from 'axe-core';
 import { createSignal } from 'solid-js';
 import { useViewActivation } from '@floegence/floe-webapp-core';
 import { KeepAliveStack } from '@floegence/floe-webapp-core/layout';
@@ -436,6 +437,11 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
     expect(runtime.root.querySelector('[data-terminal-semantic-canvas="true"]')).toBeInstanceOf(HTMLCanvasElement);
     expect(runtime.root.querySelector('[data-terminal-input-bridge="semantic"]')).toBeInstanceOf(HTMLTextAreaElement);
     expect(runtime.getViewport()?.getVisibleScreenText()).toContain('first');
+    const scrollbar = runtime.root.querySelector<HTMLElement>('[role="scrollbar"]')!;
+    expect(document.getElementById(scrollbar.getAttribute('aria-controls')!)).toBe(runtime.root.querySelector('[data-terminal-semantic-surface]'));
+    const audit = await axe.run(runtime.root, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa'] } });
+    expect(audit.violations.map(issue => issue.id)).toEqual([]);
+
 
     runtime.emitPresentation(presentation(3, 'latest'));
     runtime.emitPresentation(presentation(2, 'stale'));

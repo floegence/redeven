@@ -11421,7 +11421,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           value={composerTextValue()}
           disabled={composerTextareaDisabled()}
           readOnly={composerTextareaReadOnly()}
-          aria-label={presentation() === 'companion' || props.embeddedConversation ? copy().chat.placeholder : undefined}
+          aria-label={copy().chat.placeholder}
           data-flower-input-custom-answer={selectedInputRequest() && questionMode(activeInputQuestion()!) === 'select_or_write' ? 'true' : undefined}
           aria-autocomplete={composerReferenceEditingAllowed() || composerCommandMenuVisible() ? 'list' : undefined}
           aria-haspopup="listbox"
@@ -11486,6 +11486,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         value={composerTextValue()}
         disabled={composerTextareaDisabled()}
         readOnly={composerTextareaReadOnly()}
+        aria-label={copy().chat.placeholder}
         aria-haspopup="listbox"
         data-flower-input-custom-answer={selectedInputRequest() && questionMode(activeInputQuestion()!) === 'select_or_write' ? 'true' : undefined}
         onInput={(event) => updateComposerText(event.currentTarget.value)}

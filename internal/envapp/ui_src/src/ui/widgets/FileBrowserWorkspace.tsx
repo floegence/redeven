@@ -1,5 +1,5 @@
 import './file-workspace-header.css';
-import { Show, createEffect, createMemo, createSignal, on, onCleanup, onMount, type JSX } from 'solid-js';
+import { Show, createUniqueId, createEffect, createMemo, createSignal, on, onCleanup, onMount, type JSX } from 'solid-js';
 import { cn, useFileBrowserDrag, useResizeObserver } from '@floegence/floe-webapp-core';
 import { Files as FilesIcon, Search, ArrowUp } from '@floegence/floe-webapp-core/icons';
 import {
@@ -111,6 +111,7 @@ interface FileWorkspaceHeaderProps {
 function FileWorkspaceHeader(props: FileWorkspaceHeaderProps) {
   const browser = useFileBrowser();
   const i18n = useI18n();
+  const pathStatusId = createUniqueId();
   let toolbarLayoutRef: HTMLDivElement | undefined;
   const toolbarSize = useResizeObserver(() => toolbarLayoutRef, { preserveWhenHidden: true });
   const canNavigateUp = () => {
@@ -163,6 +164,7 @@ function FileWorkspaceHeader(props: FileWorkspaceHeaderProps) {
               draft={props.pathDraft}
               error={props.pathError}
               submitting={props.pathSubmitting}
+              describedBy={props.pathStatusText?.trim() ? pathStatusId : undefined}
               inputRef={props.pathInputRef}
               onDraftChange={props.onPathDraftChange}
               onActivateEdit={props.onActivatePathEdit}
@@ -237,7 +239,7 @@ function FileWorkspaceHeader(props: FileWorkspaceHeaderProps) {
             <Show when={Boolean(browser.filterQueryApplied().trim())}>
               <span aria-hidden="true">·</span>
             </Show>
-            <span class={props.pathStatusTone === 'error' ? 'text-destructive' : undefined}>{props.pathStatusText}</span>
+            <span id={pathStatusId} class={props.pathStatusTone === 'error' ? 'text-destructive' : undefined}>{props.pathStatusText}</span>
           </Show>
         </div>
       </Show>
