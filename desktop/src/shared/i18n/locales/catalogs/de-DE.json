@@ -3263,7 +3263,19 @@
     "copyCode": "Code kopieren",
     "copied": "Kopiert",
     "copyFailed": "Kopieren fehlgeschlagen. Kopieren Sie den Text manuell oder erlauben Sie den Zugriff auf die Zwischenablage und versuchen Sie es erneut.",
-    "regenerate": "Neuen Code erstellen"
+    "regenerate": "Neuen Code erstellen",
+    "prepareTitle": "Diese Laufzeitumgebung vorbereiten",
+    "checkHelp": "Prüfen Sie den Status dieser Laufzeitumgebung, bevor Sie Gateway-Zugriff hinzufügen.",
+    "controlHelp": "Starten Sie diese Laufzeitumgebung über Desktop neu, um ihre Verwaltungsverbindung vorzubereiten.",
+    "updateHelp": "Aktualisieren Sie diese Laufzeitumgebung, bevor Sie Gateway-Zugriff hinzufügen.",
+    "unsupportedHelp": "Diese Version der Laufzeitumgebung unterstützt keinen Gateway-Zugriff. Aktualisieren Sie sie, bevor Sie fortfahren.",
+    "managementHelp": "Desktop kann diese Laufzeitumgebung derzeit nicht verwalten. Prüfen Sie die Verbindungseinstellungen der Umgebung und versuchen Sie es erneut.",
+    "recoveryImpact": "Ein Neustart oder Update kann laufende Arbeiten unterbrechen. Prüfen Sie die Auswirkungen, bevor Sie fortfahren.",
+    "checkFailed": "Der Status der Laufzeitumgebung konnte nicht geprüft werden. Versuchen Sie es erneut oder prüfen Sie die Umgebungseinstellungen.",
+    "recoveryFailed": "Die Vorbereitung der Laufzeitumgebung konnte nicht abgeschlossen werden. Prüfen Sie die Vorgangsdetails und versuchen Sie es erneut.",
+    "containerHelp": "Der Container oder seine Engine ist nicht verfügbar. Starten Sie die Container-Engine und prüfen Sie die Umgebungseinstellungen. Versuchen Sie es dann erneut.",
+    "credentialsHelp": "Desktop konnte die Verwaltungsverbindung der Laufzeitumgebung nicht authentifizieren. Prüfen Sie Anmeldedaten und Berechtigungen und versuchen Sie es erneut.",
+    "channelHelp": "Der Verwaltungskanal der Laufzeitumgebung ist nicht verfügbar. Prüfen Sie die Verbindung und versuchen Sie es erneut."
   },
   "gatewayMembership": {
     "not_joined": "Nicht verbunden",

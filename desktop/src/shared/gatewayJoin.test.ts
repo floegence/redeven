@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { normalizeDesktopLauncherActionRequest } from './desktopLauncherIPC';
 
 describe('Gateway verification and consent IPC', () => {
- it('sends only an address and code to the chosen trusted Runtime', () => {
-  const request = { kind: 'manage_runtime_gateway', runtime_target_id: 'ssh:chosen', operation: 'preview', purpose: 'join', address: 'https://gateway.internal:7443', code: 'abcd-efgh' };
+ it.each(['local:chosen', 'ssh:chosen', 'wsl:chosen', 'local:container', 'ssh:container'])('sends only an address and code to the chosen %s Runtime', runtime_target_id => {
+  const request = { kind: 'manage_runtime_gateway', runtime_target_id, operation: 'preview', purpose: 'join', address: 'https://gateway.internal:7443', code: 'abcd-efgh' };
   expect(normalizeDesktopLauncherActionRequest(request)).toEqual(request);
  });
  it('confirms only opaque Runtime preview IDs and rejects file material', () => {

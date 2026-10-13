@@ -3264,7 +3264,19 @@
     "copyCode": "Copiar código",
     "copied": "Copiado",
     "copyFailed": "Não foi possível copiar. Selecione e copie o texto manualmente ou permita o acesso à área de transferência e tente novamente.",
-    "regenerate": "Gerar novo código"
+    "regenerate": "Gerar novo código",
+    "prepareTitle": "Preparar este ambiente de execução",
+    "checkHelp": "Verifique o status deste ambiente de execução antes de adicionar acesso pelo gateway.",
+    "controlHelp": "Reinicie este ambiente de execução pelo Desktop para preparar sua conexão de gerenciamento.",
+    "updateHelp": "Atualize este ambiente de execução antes de adicionar acesso pelo gateway.",
+    "unsupportedHelp": "Esta versão do ambiente de execução não oferece acesso pelo gateway. Atualize-a antes de continuar.",
+    "managementHelp": "O Desktop não pode gerenciar este ambiente de execução no momento. Verifique as configurações de conexão do ambiente e tente novamente.",
+    "recoveryImpact": "Reiniciar ou atualizar pode interromper trabalhos em andamento. Confira o impacto antes de continuar.",
+    "checkFailed": "Não foi possível verificar o status do ambiente de execução. Tente novamente ou revise as configurações do ambiente.",
+    "recoveryFailed": "Não foi possível concluir a preparação do ambiente de execução. Verifique os detalhes da operação e tente novamente.",
+    "containerHelp": "O contêiner ou seu mecanismo está indisponível. Inicie o mecanismo de contêineres e verifique as configurações do ambiente antes de tentar novamente.",
+    "credentialsHelp": "O Desktop não conseguiu autenticar a conexão de gerenciamento do ambiente de execução. Verifique as credenciais e permissões e tente novamente.",
+    "channelHelp": "O canal de gerenciamento do ambiente de execução está indisponível. Verifique a conexão e tente novamente."
   },
   "gatewayMembership": {
     "not_joined": "Não conectado",

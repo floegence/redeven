@@ -3258,7 +3258,19 @@
     "copyCode": "複製邀請碼",
     "copied": "已複製",
     "copyFailed": "複製失敗。請手動選取並複製文字，或允許剪貼簿存取後重試。",
-    "regenerate": "產生新邀請碼"
+    "regenerate": "產生新邀請碼",
+    "prepareTitle": "準備此執行階段",
+    "checkHelp": "新增閘道存取前，請先檢查此執行階段的狀態。",
+    "controlHelp": "請透過 Desktop 重新啟動此執行階段，以準備管理連線。",
+    "updateHelp": "新增閘道存取前，請先更新此執行階段。",
+    "unsupportedHelp": "此執行階段版本不支援閘道存取。請先更新再繼續。",
+    "managementHelp": "Desktop 暫時無法管理此執行階段。請檢查環境連線設定後重試。",
+    "recoveryImpact": "重新啟動或更新可能中斷進行中的工作。請在繼續前確認操作的影響。",
+    "checkFailed": "無法檢查執行階段狀態。請重試或檢查環境設定。",
+    "recoveryFailed": "無法完成執行階段準備。請查看操作詳細資訊後重試。",
+    "containerHelp": "容器或容器引擎無法使用。請啟動容器引擎並檢查環境設定後重試。",
+    "credentialsHelp": "Desktop 無法驗證執行階段管理連線。請檢查認證資料與權限後重試。",
+    "channelHelp": "執行階段管理通道無法使用。請檢查連線後重試。"
   },
   "gatewayMembership": {
     "not_joined": "未連線",

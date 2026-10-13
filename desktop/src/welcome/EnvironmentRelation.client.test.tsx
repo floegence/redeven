@@ -1,4 +1,5 @@
 import { runtimeConnectionFixture } from '../testSupport/runtimeConnectionFixture';
+import { runtimeGatewayAccessFixture } from '../testSupport/runtimeGatewayAccessFixture';
 import { buildDesktopWelcomeSnapshot } from '../main/desktopWelcomeState';
 import { mixedEnvironmentFixture } from '../testSupport/mixedEnvironmentFixture';
 import { controlText } from '../testSupport/controlText';
@@ -56,6 +57,49 @@ async function mount(initialSnapshot?: DesktopWelcomeSnapshot) {
 afterEach(() => { for (const dispose of disposers.splice(0)) dispose(); document.body.replaceChildren(); vi.restoreAllMocks(); vi.unstubAllGlobals(); Reflect.deleteProperty(HTMLElement.prototype, 'animate'); });
 
 describe('linked environment owner interactions', () => {
+  it.each(['local', 'ssh', 'wsl', 'local_container', 'ssh_container'] as const)('offers Gateway access for an unchecked %s Runtime without starting it', async kind => {
+    const { environment: runtime, snapshot } = runtimeGatewayAccessFixture(kind, 'unknown');
+    const h = await mount(snapshot);
+    const owner = document.querySelector<HTMLElement>(`[data-owner-id="${runtime.id}"]`)!;
+    button(owner, 'Actions').click(); await settle();
+    button(document.querySelector('[role="menu"]')!, 'Add Gateway access').click(); await settle();
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+    expect(h.performAction.mock.calls.every(([request]) => request.kind === 'refresh_environment_runtime')).toBe(true);
+    expect(h.performAction).toHaveBeenCalledOnce();
+    expect(h.performAction.mock.calls[0][0]).toMatchObject({ environment_id: runtime.id });
+  });
+  it.each([0, 1, 2])('enrolls only the original Runtime from access perspective %s', async perspective => {
+    const fixture = runtimeConnectionFixture({ kind: 'ssh_environment' });
+    const runtime = fixture.snapshot.environments.find(entry => entry.kind === 'ssh_environment')!;
+    const perform = vi.fn(async () => ({ ok: true, gateway_membership: { joined: false, phase: 'not_joined' } }));
+    vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
+    const h = await mount(fixture.snapshot);
+    const card = document.querySelector(`[data-environment-group="${runtime.id}"]`)!;
+    await selectTab(card, perspective);
+    const owner = [...card.querySelectorAll<HTMLElement>('[role="tabpanel"]')].find(panel => panel.getAttribute('aria-hidden') !== 'true')!;
+    const toggle = button(owner, 'Actions'); toggle.click(); await settle();
+    button(document.querySelector('[role="menu"]')!, 'Add Gateway access').click(); await settle();
+    expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'manage_runtime_gateway', runtime_target_id: runtime.provider_runtime_link_target!.id, operation: 'status' });
+    expect(h.performAction).not.toHaveBeenCalled();
+    button(document.querySelector('[role="dialog"]')!, 'Cancel').click(); await settle();
+    expect(document.activeElement).toBe(toggle);
+  });
+  it.each([0, 1])('disables Gateway submission for busy Runtime owner from perspective %s while keeping settings available', async perspective => {
+    const fixture = runtimeConnectionFixture({ kind: 'ssh_environment' });
+    const runtime = fixture.snapshot.environments.find(entry => entry.kind === 'ssh_environment')!;
+    const h = await mount(fixture.snapshot);
+    h.publish({ ...fixture.snapshot, action_progress: [{ action: 'restart_environment_runtime', environment_id: runtime.id,
+      status: 'running', phase: 'checking_runtime_service', title: 'Restart Runtime', detail: '', operation_key: 'runtime-restart', started_at_unix_ms: 1 }] });
+    await settle();
+    const card = document.querySelector(`[data-environment-group="${runtime.id}"]`)!;
+    await selectTab(card, perspective);
+    const owner = [...card.querySelectorAll<HTMLElement>('[role="tabpanel"]')].find(panel => panel.getAttribute('aria-hidden') !== 'true')!;
+    const settings = [...owner.querySelectorAll<HTMLButtonElement>('button')].find(button => button.getAttribute('aria-label')?.startsWith('Settings for'))!;
+    expect(settings.disabled).toBe(false);
+    button(owner, 'Actions').click(); await settle();
+    expect(button(document.querySelector('[role="menu"]')!, 'Add Gateway access').disabled).toBe(true);
+    expect(h.performAction).not.toHaveBeenCalled();
+  });
   it.each(['local_environment', 'ssh_environment'] as const)(
     'shows Cloud connection status only in the Cloud perspective of a linked %s card',
     async kind => {
@@ -89,6 +133,7 @@ describe('linked environment owner interactions', () => {
     const fixture = mixedEnvironmentFixture();
     const original = fixture.snapshot.environments.find(entry => entry.kind === 'local_environment')!;
     const runtime = { ...original, runtime_service: { ...original.runtime_service!,
+      compatibility: 'compatible' as const,
       capabilities: { ...original.runtime_service!.capabilities!, runtime_gateway: { supported: true } },
     } };
     const gateway = { gateway_id: 'local-gateway', display_name: 'Gateway-local', local_enabled: true as const,
@@ -226,8 +271,8 @@ describe('linked environment owner interactions', () => {
       });
       await settle();
       expect([...document.querySelectorAll('[role="menuitem"]')].map(item => item.textContent?.trim()))
-        .toEqual(items.filter((_item, index) => index !== gatewayIndex).map(item => item.textContent?.trim()));
-      expect(document.querySelectorAll('[role="menu"] [role="separator"]')).toHaveLength(0);
+        .toEqual(items.map(item => item.textContent?.trim()));
+      expect(document.querySelectorAll('[role="menu"] [role="separator"]')).toHaveLength(1);
     },
   );
 
