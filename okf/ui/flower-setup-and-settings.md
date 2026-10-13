@@ -106,9 +106,10 @@ right, and an enable switch with edit/remove actions at the trailing edge.
 Authentication-method and optional-key labels do not appear in the list. The
 count expands a full-width semantic table, with one row per model and labeled
 columns for identity, input capabilities, declared context/output limits and exact
-model-level web-search status. A compact check badge marks the current model
-beside its name; the identifier remains secondary below it. Unavailable models
-remain explicit; missing token limits show a dash. Narrow screens scroll only the
+model-level web-search status. The table uses the shared panel surface with thin
+horizontal rules after its header and between model rows. A compact check badge
+marks the current model beside its name; the identifier remains secondary below
+it. Unavailable models remain explicit; missing token limits show a dash. Narrow screens scroll only the
 table inside its own keyboard-focusable region. Provider status moves below
 identity on narrow layouts; adding a provider stays in the heading. Switch saves
 are immediate, block duplicate edits, and restore the previous state on failure.

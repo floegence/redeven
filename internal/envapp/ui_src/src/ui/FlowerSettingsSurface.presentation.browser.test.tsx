@@ -201,8 +201,8 @@ for (const [locale, dark, width] of [
     expect(modelName.title).toBe('DeepSeek V4 Flash Vision Exp');
     if (width >= 1000) expect(modelName.scrollWidth).toBeLessThanOrEqual(modelName.clientWidth);
     expect(badgeBounds.right).toBeLessThanOrEqual(tableScroll.getBoundingClientRect().right);
-    if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1' && locale === 'zh-CN' && !dark) {
-      await page.screenshot({ element: frame.querySelector('.flower-settings-providers-section')!, path: '__screenshots__/flower-provider-model-table-zh-CN.png' });
+    if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1' && locale === 'zh-CN') {
+      await page.screenshot({ element: frame.querySelector('.flower-settings-providers-section')!, path: `__screenshots__/flower-provider-model-table${dark ? '-dark' : ''}-zh-CN.png` });
     }
     if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1' && width === 320) {
       await page.screenshot({ element: frame.querySelector('.flower-settings-providers-section')!, path: '__screenshots__/flower-provider-model-table-narrow.png' });
