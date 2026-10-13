@@ -43,6 +43,8 @@ export type RuntimeHostCommandOptions = Readonly<{
   stdinData?: Buffer;
   signal?: AbortSignal;
   timeout_ms?: number;
+  onStdinProgress?: (completedBytes: number, totalBytes: number) => void;
+  onStderr?: (chunk: string) => void;
 }>;
 
 type SpawnedCommand = ChildProcessByStdio<Writable | null, Readable | null, Readable | null>;
@@ -283,6 +285,7 @@ function spawnCommand(
     child.stderr?.setEncoding('utf8');
     child.stderr?.on('data', (chunk: string) => {
       stderr += chunk;
+      options.onStderr?.(chunk);
     });
     child.once('error', (error) => {
       if (settled) return;
@@ -291,7 +294,33 @@ function spawnCommand(
       rejectSpawnError(reject, failureContext, command, error, { stdout, stderr });
     });
     if (options.stdinData && child.stdin) {
-      child.stdin.end(options.stdinData);
+      if (!options.onStdinProgress) child.stdin.end(options.stdinData);
+      else {
+        const data = options.stdinData;
+        let offset = 0;
+        const failInput = (error: Error) => {
+          if (settled) return;
+          settled = true;
+          clearCommandTimeout();
+          child.kill('SIGTERM');
+          rejectSpawnError(reject, failureContext, command, error, { stdout, stderr });
+        };
+        options.onStdinProgress(0, data.length);
+        const writeNext = () => {
+          if (settled) return;
+          if (offset === data.length) { child.stdin?.end(); return; }
+          const end = Math.min(offset + 256 * 1024, data.length);
+          child.stdin?.write(data.subarray(offset, end), error => {
+            if (settled) return;
+            if (error) { failInput(error); return; }
+            offset = end;
+            options.onStdinProgress?.(offset, data.length);
+            writeNext();
+          });
+        };
+        child.stdin.once('error', failInput);
+        writeNext();
+      }
     }
     child.once('close', (exitCode, closeSignal) => {
       if (settled) return;
@@ -528,6 +557,11 @@ export function createSSHRuntimeHostExecutor(
           stdinData: commandOptions.stdinData,
           signal: commandOptions.signal,
           timeout_ms: commandOptions.timeout_ms ?? DEFAULT_RUNTIME_HOST_COMMAND_TIMEOUT_MS,
+          ...(commandOptions.onStdinProgress ? {
+            onStdinProgress: commandOptions.onStdinProgress,
+            stdin_progress_timeout_ms: commandOptions.timeout_ms ?? DEFAULT_RUNTIME_HOST_TRANSFER_TIMEOUT_MS,
+          } : {}),
+          onStderr: commandOptions.onStderr,
         });
         if (result.exit_code === 0 && !result.signal) {
           return { stdout: result.stdout, stderr: result.stderr };

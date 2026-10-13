@@ -37,6 +37,7 @@ export type DesktopSSHStreamingCommand = Readonly<{
 export type SSHCommandOptions = Readonly<{
   stdinData?: Buffer;
   stdin_progress_timeout_ms?: number;
+  onStdinProgress?: (completedBytes: number, totalBytes: number) => void;
   signal?: AbortSignal;
   onStderr?: (chunk: string) => void;
   timeout_ms?: number;
@@ -587,7 +588,7 @@ export class DefaultDesktopSSHTransportManager implements DesktopSSHTransportMan
           ...sharedArgs(entry),
           ...targetArgs(entry.target),
           command,
-        ], options.stdinData, options.signal, options.onStderr, options.timeout_ms, options.stdin_progress_timeout_ms);
+        ], options.stdinData, options.signal, options.onStderr, options.timeout_ms, options.stdin_progress_timeout_ms, options.onStdinProgress);
         if (entry.direct) {
           if (!transportAlive(entry) || entry.generation !== generation) {
             throw new DesktopSSHTransportInterruptedError(desktopSSHAuthority(entry.target), generation, result);
@@ -740,6 +741,7 @@ export class DefaultDesktopSSHTransportManager implements DesktopSSHTransportMan
     onStderr?: (chunk: string) => void,
     timeoutMs?: number,
     stdinProgressTimeoutMs?: number,
+    onStdinProgress?: (completedBytes: number, totalBytes: number) => void,
   ): Promise<DesktopSSHCommandResult> {
     return new Promise((resolve, reject) => {
       let child: SpawnedSSHProcess;
@@ -796,12 +798,13 @@ export class DefaultDesktopSSHTransportManager implements DesktopSSHTransportMan
         onStderr?.(chunk);
       });
       if (stdinData && child.stdin) {
-        if (!progressDeadline) child.stdin.end(stdinData);
+        if (!progressDeadline && !onStdinProgress) child.stdin.end(stdinData);
         else {
           // Observe bounded pipe writes rather than timing an entire package.
           // A slow upload may progress for longer than the command deadline;
           // stalled writes and command completion still have bounded deadlines.
           let offset = 0;
+          onStdinProgress?.(0, stdinData.length);
           const writeNext = () => {
             if (settled) return;
             if (offset === stdinData.length) {
@@ -814,7 +817,8 @@ export class DefaultDesktopSSHTransportManager implements DesktopSSHTransportMan
               if (settled) return;
               if (error) { fail(error); return; }
               offset = end;
-              armTimeout(progressTimeoutMs);
+              onStdinProgress?.(offset, stdinData.length);
+              if (progressDeadline) armTimeout(progressTimeoutMs);
               writeNext();
             });
           };

@@ -370,7 +370,7 @@ describe('sshReleaseAssets', () => {
       const fetchMock = vi.fn(async (input: string | URL) => {
         const url = String(input);
         expect(url).toContain('/redeven_linux_amd64.tar.gz');
-        return new Response(archive, { status: 200 });
+        return new Response(archive, { status: 200, headers: { 'content-length': String(archive.byteLength) } });
       });
       vi.stubGlobal('fetch', fetchMock);
       const platform = resolveDesktopSSHRemotePlatform('linux', 'x86_64');
@@ -389,10 +389,12 @@ describe('sshReleaseAssets', () => {
         sha256_by_asset_name: new Map([[platform.release_package_name, checksum]]),
       };
 
+      const progress = vi.fn();
       const assetA = await ensureDesktopSSHReleaseArchive({
         manifest: manifestA,
         platform,
         cacheRoot: root,
+        onDownloadProgress: progress,
       });
       const assetB = await ensureDesktopSSHReleaseArchive({
         manifest: manifestB,
@@ -407,6 +409,8 @@ describe('sshReleaseAssets', () => {
       await expect(fs.readFile(assetA.archive_path)).resolves.toEqual(archive);
       await expect(fs.readFile(assetB.archive_path)).resolves.toEqual(archive);
       expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(progress).toHaveBeenCalledWith({ transfer_kind: 'download', completed_bytes: 0, total_bytes: archive.byteLength });
+      expect(progress).toHaveBeenLastCalledWith({ transfer_kind: 'download', completed_bytes: archive.byteLength, total_bytes: archive.byteLength });
     } finally {
       await fs.rm(root, { recursive: true, force: true });
     }

@@ -3063,6 +3063,53 @@ html:not(.dark) .redeven-header-separator {
   white-space: nowrap;
 }
 
+.redeven-environment-progress__component-transfer {
+  grid-column: 1 / -1;
+  min-width: 0;
+  padding: 0.3rem 0 0.15rem;
+}
+
+.redeven-environment-progress__transfer-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.45rem;
+  margin-bottom: 0.25rem;
+  color: var(--muted-foreground);
+  font-size: 0.56rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.redeven-environment-progress__transfer-meter {
+  height: 0.25rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--border) 60%, transparent);
+}
+
+.redeven-environment-progress__transfer-meter > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--primary);
+  transition: width 100ms linear;
+}
+
+.redeven-environment-progress__component-transfer[data-active='true'] .redeven-environment-progress__transfer-meter[data-indeterminate='true'] > span {
+  animation: redeven-runtime-transfer 1.5s ease-in-out infinite;
+}
+
+@keyframes redeven-runtime-transfer {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(290%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .redeven-environment-progress__transfer-meter > span {
+    animation: none !important;
+    transition: none;
+  }
+}
+
 .redeven-environment-progress__component-task-phase,
 .redeven-environment-progress__component-task-strategy {
   min-width: 0;

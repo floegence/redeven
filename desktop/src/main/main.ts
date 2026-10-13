@@ -3653,6 +3653,7 @@ async function prepareFreshReinstallRuntimePackage(
       platform,
       fetchPolicy: runtimeReleaseFetchPolicy(45_000, signal),
       signal,
+      onDownloadProgress: (transfer) => report({ ...initial, phase: 'transferring', ...transfer }),
     });
     archiveData = asset.archiveData;
     cacheEntry = asset.cacheEntry;
@@ -12635,7 +12636,7 @@ function sshRuntimeLifecyclePhase(
     case 'ssh_remote_installing':
     case 'ssh_creating_upload_dir':
     case 'ssh_uploading_archive':
-    case 'ssh_installing_upload':
+    case 'ssh_installing_upload': return 'preparing_runtime_package';
     case 'ssh_activating_runtime_package': return 'installing_runtime_package';
     case 'ssh_discovering_runtime_instances': return 'discovering_runtime_instances';
     case 'ssh_stopping_runtime_process': return 'stopping_runtime_process';
@@ -12659,6 +12660,7 @@ function runtimePackageProgressReporter<Progress extends Readonly<{
   phase: string;
   title: string;
   detail: string;
+  transfer?: import('../shared/desktopComponentTaskProgress').DesktopRuntimeTransferProgress;
 }>>(input: Readonly<{
   strategy: DesktopComponentTaskProgress['strategy'];
   mapPhase: (phase: Progress['phase']) => DesktopRuntimeLifecyclePhase;
@@ -12670,16 +12672,21 @@ function runtimePackageProgressReporter<Progress extends Readonly<{
     detail: string,
     status: DesktopComponentTaskProgress['status'],
     phase: DesktopComponentTaskProgress['phase'],
+    transfer?: Progress['transfer'],
   ): void => {
     input.update(
       'preparing_runtime_package',
       'Preparing Runtime package',
       detail,
       undefined,
-      [{ id: 'runtime', status, phase, strategy: input.strategy }],
+      [{ id: 'runtime', status, phase, strategy: input.strategy, ...transfer }],
     );
   };
   return (progress) => {
+    if (progress.transfer) {
+      publishRuntimeTask(progress.detail, 'running', 'transferring', progress.transfer);
+      return;
+    }
     const runtimePhase = input.runtimeTaskPhase(progress.phase);
     if (runtimePhase) {
       publishRuntimeTask(progress.detail, 'running', runtimePhase);
@@ -16564,7 +16571,10 @@ async function executeDirectManagedEnvironmentLifecycle(
       runtimeTaskPhase: (phase) => {
         switch (phase) {
           case 'ssh_preparing_upload':
+          case 'ssh_creating_upload_dir':
             return 'preparing';
+          case 'ssh_installing_upload':
+            return 'verifying';
           default:
             return null;
         }

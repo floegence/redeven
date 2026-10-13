@@ -102,6 +102,7 @@ async function preparePackage(args: Readonly<{
   releaseBaseURL?: string;
   packageKind?: 'runtime' | 'gateway';
   sourceRuntimeRoot?: string;
+  onDownloadProgress?: Parameters<typeof prepareDesktopRuntimeUploadAsset>[0]['onDownloadProgress'];
 }>): Promise<Awaited<ReturnType<typeof prepareDesktopRuntimeUploadAsset>>> {
   return prepareDesktopRuntimeUploadAsset({
     runtimeReleaseTag: 'v1.2.3',
@@ -109,6 +110,7 @@ async function preparePackage(args: Readonly<{
     assetCacheRoot: args.cacheRoot,
     packageKind: args.packageKind,
     sourceRuntimeRoot: args.sourceRuntimeRoot,
+    onDownloadProgress: args.onDownloadProgress,
     platform: args.platform,
     fetchPolicy: runtimeReleaseFetchPolicy(45_000),
   });
@@ -264,10 +266,11 @@ describe('runtimePackageCache', () => {
     const archive = Buffer.from('linux-amd64-runtime');
     const fetchMock = installFetchMock(new Map([[platform.release_package_name, archive]]));
     try {
+      const observers = [vi.fn(), vi.fn(), vi.fn()];
       const results = await Promise.all([
-        preparePackage({ cacheRoot, platform }),
-        preparePackage({ cacheRoot, platform }),
-        preparePackage({ cacheRoot, platform }),
+        preparePackage({ cacheRoot, platform, onDownloadProgress: observers[0] }),
+        preparePackage({ cacheRoot, platform, onDownloadProgress: observers[1] }),
+        preparePackage({ cacheRoot, platform, onDownloadProgress: observers[2] }),
       ]);
 
       expect(results.map((result) => result.archiveData.toString('utf8'))).toEqual([
@@ -277,6 +280,9 @@ describe('runtimePackageCache', () => {
       ]);
       expect(archiveFetchCount(fetchMock, platform.release_package_name)).toBe(1);
       expect(results.every((result) => result.source === 'release_cache')).toBe(true);
+      for (const observer of observers) {
+        expect(observer).toHaveBeenLastCalledWith(expect.objectContaining({ transfer_kind: 'download', completed_bytes: archive.byteLength }));
+      }
 
       fetchMock.mockClear();
       const cached = await preparePackage({ cacheRoot, platform });

@@ -68,6 +68,27 @@ test('accepts only canonical release tags', () => {
   }
 });
 
+test('opts only the Runtime archive into curl progress and preserves download failures', () => {
+  const root = mkdtempSync(path.join(tmpdir(), 'redeven-installer-progress-'));
+  try {
+    const body = `
+curl() { printf '%s\\n' "$*"; return "${'$'}{CURL_TEST_EXIT:-0}"; }
+ARCHIVE_PATH=/runtime.tar.gz
+download_file https://example.invalid/runtime.tar.gz "$ARCHIVE_PATH"
+download_file https://example.invalid/SHA256SUMS /SHA256SUMS
+`;
+    const observed = runInstallerLibrary(root, body, { REDEVEN_INSTALL_PROGRESS: '1' });
+    assert.equal(observed.status, 0, observed.stderr);
+    assert.match(observed.stdout, /-fL --progress-bar https:\/\/example.invalid\/runtime.tar.gz/);
+    assert.match(observed.stdout, /-fsSL https:\/\/example.invalid\/SHA256SUMS/);
+    const quiet = runInstallerLibrary(root, body, { REDEVEN_INSTALL_PROGRESS: '0' });
+    assert.equal(quiet.status, 0, quiet.stderr);
+    assert.doesNotMatch(quiet.stdout, /--progress-bar/);
+    const failed = runInstallerLibrary(root, body, { REDEVEN_INSTALL_PROGRESS: '1', CURL_TEST_EXIT: '22' });
+    assert.equal(failed.status, 22, failed.stderr);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
 test('binds cosign verification to the exact selected tag identity', () => {
   const root = mkdtempSync(path.join(tmpdir(), 'redeven-installer-contract-'));
   try {

@@ -2885,7 +2885,9 @@
     "componentName": {
       "gateway": "Gateway",
       "runtime": "ランタイム"
-    }
+    },
+    "transferUploading": "アップロード中",
+    "transferDownloading": "ダウンロード中"
   },
   "runtimeMessage": {
     "runtimeOfflineRefresh": "ランタイムは現在オフラインか使用できません。ソースから起動してステータスを更新します。",

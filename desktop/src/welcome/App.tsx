@@ -1,4 +1,5 @@
 import { RuntimeGatewaySetupDialog } from './RuntimeGatewaySetupDialog';
+import { RuntimeComponentTransferProgress } from './RuntimeComponentTransferProgress';
 import { GatewayCloudPanel } from './GatewayCloudPanel';
 import { handleTessivenLink, type TessivenOpenRequest } from '../../../internal/tessiven_ui/src/navigation';
 import { TessivenPage } from '../../../internal/tessiven_ui/src/TessivenPage';
@@ -9072,8 +9073,11 @@ export function EnvironmentProgressPanel(props: Readonly<{
                                       ? 'progress.componentName.gateway'
                                       : 'progress.componentName.runtime')}
                                   </span>
-                                  <span class="redeven-environment-progress__component-task-phase">{props.i18n.t(`progress.componentPhase.${task.phase}` as 'progress.componentPhase.preparing')}</span>
+                                  <span class="redeven-environment-progress__component-task-phase">{task.phase === 'transferring' && task.transfer_kind
+                                    ? props.i18n.t(task.transfer_kind === 'upload' ? 'progress.transferUploading' : 'progress.transferDownloading')
+                                    : props.i18n.t(`progress.componentPhase.${task.phase}` as 'progress.componentPhase.preparing')}</span>
                                   <span class="redeven-environment-progress__component-task-strategy">{props.i18n.t(task.strategy === 'desktop_upload' ? 'common.desktopUpload' : 'common.remoteInstall')}</span>
+                                  <RuntimeComponentTransferProgress task={task} i18n={props.i18n} active={state() === 'active' && props.progress.status === 'running'} />
                                 </div>
                               )}
                             </For>
