@@ -77,8 +77,18 @@ func ClassifyError(inv Invocation, err error) *ToolError {
 			errorCode = ErrorCodeTargetObservationUnavailable
 		case "frame_unavailable":
 			errorCode = ErrorCodeFrameUnavailable
+		case "stale_reference":
+			errorCode = ErrorCodeStaleReference
+		case "ambiguous_element":
+			errorCode = ErrorCodeAmbiguousElement
+		case "element_not_found":
+			errorCode = ErrorCodeElementNotFound
+		case "condition_timeout":
+			errorCode = ErrorCodeConditionTimeout
+		case "target_capability_unavailable":
+			errorCode = ErrorCodeTargetCapabilityUnavailable
 		case "target_action_failed":
-			errorCode = ErrorCodeUnknown
+			errorCode = ErrorCodeTargetActionFailed
 		}
 		out := &ToolError{
 			Code:      errorCode,

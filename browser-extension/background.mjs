@@ -9,6 +9,16 @@ let pending = new Map();
 let ready = false;
 let lifecycle = Promise.resolve();
 const reconnectAlarm = 'redeven-native-reconnect';
+const isNavigableTabURL = value => {
+  if (!value || value === 'about:blank') return value === 'about:blank';
+  try { return Boolean(new URL(value).protocol); } catch { return false; }
+};
+const publicTabURL = value => {
+  try { const url = new URL(value); url.username = ''; url.password = ''; return url.href; } catch { return ''; }
+};
+const requireFileAccess = async value => {
+  if (value && new URL(value).protocol === 'file:' && !await chrome.extension.isAllowedFileSchemeAccess()) throw new Error('TARGET_PERMISSION_REQUIRED');
+};
 const schedule = operation => {
   const result = lifecycle.then(operation);
   lifecycle = result.catch(() => {});
@@ -115,10 +125,10 @@ async function inventory() {
     if (!nativeTarget) throw new Error('refresh browser directory');
     const ancestors = popupLineage.nativeAncestors('profile', String(tab.id));
     if (ancestors.length > 128) throw new Error('browser directory depth limit');
-    const url = tab.url || tab.pendingUrl || 'about:blank';
+    const url = publicTabURL(tab.url || tab.pendingUrl || 'about:blank');
     return { id: String(tab.id), native_target_id: nativeTarget, opener_native_target_ids: ancestors.map(id => nativeTargets.get(id)).filter(Boolean), profile_id: profile.id,
       title: (tab.title || '').slice(0, 512), url, pinned: !!tab.pinned, loading: tab.status === 'loading', discarded: !!tab.discarded, frozen: !!tab.frozen, window_id: tab.windowId, index: tab.index,
-      ...(!/^(https?:\/\/|about:blank$)/u.test(url) ? { availability: 'unsupported' } : {}),
+      ...(!isNavigableTabURL(url) ? { availability: 'unsupported' } : {}),
       ...(ancestors.length ? { opener_tab_id: ancestors[0], opener_tab_ids: ancestors } : {}),
     };
   });
@@ -189,9 +199,10 @@ async function attach(tabId, selection, signal) {
   if (lineageUnavailable) throw new Error('browser directory unavailable');
   if (!Number.isSafeInteger(tabId) || tabId < 0) throw new Error('invalid tab');
   const tab = await chrome.tabs.get(tabId);
-  if (tab.incognito || !/^(https?:\/\/|about:blank$)/u.test(tab.url || tab.pendingUrl || (selection ? '' : 'about:blank'))) throw new Error('unsupported tab');
+  if (tab.incognito || !isNavigableTabURL(tab.url || tab.pendingUrl || (selection ? '' : 'about:blank'))) throw new Error('unsupported tab');
+  await requireFileAccess(tab.url || tab.pendingUrl);
   const validateSelection = current => {
-    if (selection && (current.url !== selection.tab_url || (current.title || '').slice(0, 512) !== selection.tab_title || current.pendingUrl && current.pendingUrl !== selection.tab_url)) throw new Error('refresh tab selection');
+    if (selection && (publicTabURL(current.url) !== selection.tab_url || (current.title || '').slice(0, 512) !== selection.tab_title || current.pendingUrl && publicTabURL(current.pendingUrl) !== selection.tab_url)) throw new Error('refresh tab selection');
   };
   validateSelection(tab);
   await restoreDiscardedTab(chrome, tab, signal);
@@ -199,7 +210,12 @@ async function attach(tabId, selection, signal) {
   let created = false;
   let binding;
   if (!bindings.has(tabId)) {
-    await chrome.debugger.attach({ tabId }, '1.3');
+    try { await chrome.debugger.attach({ tabId }, '1.3'); }
+    catch (error) {
+      const currentURL = tab.url || tab.pendingUrl || '';
+      if (/^(chrome|edge|about|view-source):/u.test(currentURL)) throw new Error('TARGET_CAPABILITY_UNAVAILABLE: browser internal pages cannot be attached');
+      throw error;
+    }
     created = true;
     bindings.set(tabId, { id: crypto.randomUUID(), children: new Set(), streams: new Set() });
   }
@@ -287,6 +303,7 @@ async function execute(message, task) {
       const binding = bindings.get(Number(args.tab_id));
       if (!binding || binding.id !== args.binding || (args.session && !binding.children.has(args.session))) throw new Error('tab unavailable');
       const method = args.method, params = args.params || {};
+      if (method === 'Page.navigate') await requireFileAccess(params.url);
       // Only the trusted Runtime source owner speaks this private protocol.
       // Browser-wide discovery/attachment and arbitrary IO handles cannot turn
       // one selected personal tab into authority over the rest of the profile.
@@ -367,7 +384,10 @@ async function connect(name, label, remember = false) {
     task.finished = (async () => {
       let response;
       try { response = { id: message.id, result: await execute(message, task) }; }
-      catch { response = { id: message.id, error: 'EXTENSION_COMMAND_FAILED' }; }
+      catch (error) {
+        const code = String(error.message).split(':')[0];
+        response = { id: message.id, error: ['TARGET_PERMISSION_REQUIRED', 'TARGET_CAPABILITY_UNAVAILABLE'].includes(code) ? code : 'EXTENSION_COMMAND_FAILED' };
+      }
       // Retire before sending: the Runtime can issue another request as soon
       // as it receives the reply. Never race a later .finally callback.
       requests.delete(message.id);

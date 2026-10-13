@@ -124,28 +124,29 @@ type TargetToolAttachmentResolver interface {
 }
 
 type TargetToolCall struct {
-	bindSelection        bool
-	fullAccess           bool
-	progress             func(mode, reason string)
-	allowedApps          []string
-	allowForeground      bool
-	allowedOrigins       []string
-	revalidate           func(context.Context) error
-	scriptOperation      bool
-	liveFrame            bool
-	recoveryObservation  bool
-	recoverySelection    bool
-	interactionID        string
-	userInput            bool
-	passiveCapture       bool
-	ThreadID             string          `json:"thread_id,omitempty"`
-	TurnID               string          `json:"turn_id,omitempty"`
-	RunID                string          `json:"run_id,omitempty"`
-	ToolCallID           string          `json:"tool_call_id"`
-	TargetID             string          `json:"target_id"`
-	ToolName             string          `json:"tool_name"`
-	Arguments            json.RawMessage `json:"arguments"`
-	RequiredCapabilities []string        `json:"required_capabilities"`
+	bindSelection         bool
+	fullAccess            bool
+	progress              func(mode, reason string)
+	allowedApps           []string
+	allowForeground       bool
+	allowedOrigins        []string
+	allowedNavigationURLs []string
+	revalidate            func(context.Context) error
+	scriptOperation       bool
+	liveFrame             bool
+	recoveryObservation   bool
+	recoverySelection     bool
+	interactionID         string
+	userInput             bool
+	passiveCapture        bool
+	ThreadID              string          `json:"thread_id,omitempty"`
+	TurnID                string          `json:"turn_id,omitempty"`
+	RunID                 string          `json:"run_id,omitempty"`
+	ToolCallID            string          `json:"tool_call_id"`
+	TargetID              string          `json:"target_id"`
+	ToolName              string          `json:"tool_name"`
+	Arguments             json.RawMessage `json:"arguments"`
+	RequiredCapabilities  []string        `json:"required_capabilities"`
 }
 
 type TargetToolResult struct {

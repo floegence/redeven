@@ -9,6 +9,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	aitools "github.com/floegence/redeven/internal/ai/tools"
 )
 
 func TestTerminalStopPreservesConcurrentNormalExit(t *testing.T) {
@@ -29,6 +31,15 @@ func TestTerminalStopPreservesConcurrentNormalExit(t *testing.T) {
 			}
 			if got := process.Snapshot().Status; got != want {
 				t.Fatalf("concurrent exit %s became %s", exit, got)
+			}
+			if exit == "1" {
+				snapshot := process.Snapshot()
+				if snapshot.Error == nil || snapshot.Error.Code != aitools.ErrorCodeCommandFailed || snapshot.ExitCode != 1 {
+					t.Fatalf("normal exit classified as runtime uncertainty: %#v", snapshot)
+				}
+				if terminalProcessResultPayload(snapshot)["completed"] != true {
+					t.Fatal("normal nonzero exit did not retain completion")
+				}
 			}
 		})
 	}

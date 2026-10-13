@@ -1,6 +1,6 @@
-import { BrowserComputerPage, BrowserNavigationError } from './computerBrowserPage.mjs';
+import { BrowserComputerPage, BrowserNavigationError, navigationURL, redactedNavigationURL } from './computerBrowserPage.mjs';
 
-const rejections = new Set(['INVALID_REQUEST', 'STALE_REFERENCE', 'AMBIGUOUS_ELEMENT', 'ELEMENT_NOT_FOUND', 'CONDITION_TIMEOUT', 'TARGET_CAPABILITY_UNAVAILABLE', 'TARGET_CONNECTION_REQUIRED', 'TARGET_NOT_READY', 'TARGET_NOT_ALLOWED', 'TAKEOVER_REQUIRED']);
+const rejections = new Set(['INVALID_REQUEST', 'STALE_REFERENCE', 'AMBIGUOUS_ELEMENT', 'ELEMENT_NOT_FOUND', 'CONDITION_TIMEOUT', 'TARGET_CAPABILITY_UNAVAILABLE', 'TARGET_PERMISSION_REQUIRED', 'TARGET_CONNECTION_REQUIRED', 'TARGET_NOT_READY', 'TARGET_NOT_ALLOWED', 'TAKEOVER_REQUIRED']);
 
 // One tool/safety/result path for the managed helper and the extension. The
 // Runtime passes each invocation's current grants; the page never owns them.
@@ -75,6 +75,8 @@ export class BrowserComputerController {
     const page = this.page;
     page.fullAccess = request.full_access === true;
     page.allowedOrigins = new Set(Array.isArray(request.allowed_origins) ? request.allowed_origins : []);
+    page.allowedNavigationURLs = new Set(Array.isArray(request.allowed_navigation_urls) ? request.allowed_navigation_urls.map(redactedNavigationURL) : []);
+    if (page.fullAccess || (request.tool_name === 'browser.navigate' && page.allowsURL(args.url))) page.requiredURL = undefined;
     page.privateInput = privateInput;
     const initialEffects = page.effectCount;
     page.uncertainEffect = false;
@@ -93,7 +95,7 @@ export class BrowserComputerController {
             safety: { level: 'routine', reason_codes: [], safe_to_capture: false, safe_to_send_to_model: false } };
         }
         await this.readObservation(() => page.beginObservation(), 'frame_inventory');
-        const before = await this.readObservation(() => page.safety(), 'safety_scan');
+        const before = await this.readObservation(() => page.safety({ authorizedNavigation: request.tool_name === 'browser.navigate' && page.allowsURL(args.url) }), 'safety_scan');
         if (before.level === 'takeover') return this.pause(before, false);
       }
       if (!privateInput && page.openedPages.length) return await this.targetChange(false);
@@ -117,9 +119,8 @@ export class BrowserComputerController {
           url = previous.url; entryId = previous.id;
         } else if (tool === 'browser.reload') url = (await this.transport.send('Page.getFrameTree')).frameTree.frame.url;
         else throw new Error('INVALID_REQUEST');
-        const parsed = new URL(url);
-        if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('INVALID_REQUEST');
-        if (!privateInput && !page.allowsOrigin(parsed.origin)) return this.pause({ level: 'takeover', reason_codes: ['site_permission'], required_origin: parsed.origin, safe_to_capture: false, safe_to_send_to_model: false }, false);
+        const parsed = navigationURL(url);
+        if (!privateInput && !page.allowsURL(parsed.href)) return { error: 'TARGET_PERMISSION_REQUIRED', result: { action_executed: false, required_navigation_url: redactedNavigationURL(parsed.href) } };
         const command = tool === 'browser.back' ? 'Page.navigateToHistoryEntry' : tool === 'browser.reload' ? 'Page.reload' : 'Page.navigate';
         result = await page.navigate(command, entryId !== undefined ? { entryId } : tool === 'browser.reload' ? {} : { url }) || {};
       } else {
@@ -130,6 +131,7 @@ export class BrowserComputerController {
         result = await page.action(operation);
       }
       if (privateInput) return tool === 'computer.screenshot' ? { screenshot: await this.capture() } : { acknowledged: true };
+      if (page.requiredURL) return { error: 'TARGET_PERMISSION_REQUIRED', result: { action_executed: dispatched(), required_navigation_url: page.requiredURL, needs_observation: true } };
       const after = await this.readObservation(() => page.safety(), 'safety_scan');
       if (after.level === 'takeover') return this.pause(after, dispatched());
       if (page.openedPages.length) return await this.targetChange(dispatched());
@@ -147,13 +149,14 @@ export class BrowserComputerController {
       const metadata = await this.readObservation(async () => {
         const { frameTree } = await this.transport.send('Page.getFrameTree');
         const title = await page.inFrame({ session: this.transport, frame: frameTree.frame }, 'document.title');
-        return { url: frameTree.frame.url, title };
+        return { url: redactedNavigationURL(frameTree.frame.url), title };
       }, 'metadata');
       return { result: { ...result, summary: tool === 'computer.action' ? args.action : tool, ...metadata,
         action_executed: dispatched(), execution_mode: 'background', ...(page.downloads.size ? { downloads: [...page.downloads.values()] } : {}) }, safety: captured, ...(frame ? { screenshot: frame } : {}) };
     } catch (error) {
       if (page.uncertainEffect) return { error: 'EFFECT_OUTCOME_UNKNOWN' };
       if (page.guardFailure) return { error: 'TARGET_CONNECTION_REQUIRED' };
+      if (page.requiredURL) return { error: 'TARGET_PERMISSION_REQUIRED', result: { action_executed: dispatched(), required_navigation_url: page.requiredURL, needs_observation: true } };
       if (page.requiredOrigin || page.stopped) return this.pause({ level: 'takeover', reason_codes: [page.requiredOrigin ? 'site_permission' : 'user_control'],
         safe_to_capture: false, safe_to_send_to_model: false, ...(page.requiredOrigin ? { required_origin: page.requiredOrigin } : {}) }, dispatched());
       if (error.message === 'TARGET_OBSERVATION_UNAVAILABLE') return {
@@ -166,7 +169,8 @@ export class BrowserComputerController {
         safety: { level: 'routine', reason_codes: [], safe_to_capture: false, safe_to_send_to_model: false },
       };
       if (error instanceof BrowserNavigationError) return { error: error.message, result: error.result };
-      return { error: rejections.has(error.message) ? error.message : dispatched() ? 'EFFECT_OUTCOME_UNKNOWN' : 'TARGET_ACTION_FAILED' };
+      return { error: rejections.has(error.message) ? error.message : dispatched() ? 'EFFECT_OUTCOME_UNKNOWN' : 'TARGET_ACTION_FAILED',
+        result: { action_executed: dispatched(), needs_observation: dispatched() } };
     }
   }
 }

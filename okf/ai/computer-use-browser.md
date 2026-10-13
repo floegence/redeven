@@ -17,7 +17,7 @@ effects stop subsequent work without automatically selecting a replacement.
 
 Connecting an explicitly chosen tab or creating a new tab in Browser and desktop
 also selects that target for the current conversation. Full access already permits
-HTTP/HTTPS sites; other modes use separate saved grants. Delayed connection results cannot select a different
+browser-native absolute URLs, including local files. Approval Required uses the current target and URL through tool approval; temporary URL authorization never becomes a saved origin grant. Delayed connection results cannot select a different
 conversation after navigation.
 
 The [Connect Chrome guide](computer-use-browser-connection.md) prepares the

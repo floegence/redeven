@@ -37,6 +37,15 @@ func (s *Service) SetComputerAccess(ctx context.Context, meta *session.Meta, thr
 	// gate. The next invocation reads the sole durable policy source again.
 	if runtime, ok := s.targetToolExecutor.(*ComputerUseRuntime); ok {
 		runtime.releaseScripts(func(key computerScriptKey) bool { return key.thread == threadID })
+		runtime.mu.RLock()
+		for _, control := range runtime.controls {
+			control.mu.Lock()
+			if control.threadID == threadID {
+				control.navigationURL = ""
+			}
+			control.mu.Unlock()
+		}
+		runtime.mu.RUnlock()
 	}
 	return nil
 }
@@ -91,5 +100,12 @@ func (r *ComputerUseRuntime) authorizeComputerCall(ctx context.Context, call *Ta
 		return err
 	}
 	call.allowedOrigins, call.allowedApps, call.allowForeground = access.Origins, access.Apps, access.AllowForeground
+	// Approval Required is scoped to the exact admitted navigation. Keep this
+	// one-shot URL separate from persistent origin grants (especially file/data
+	// and opaque-origin targets).
+	call.allowedNavigationURLs = nil
+	if approvedURL, ok := ctx.Value(computerAuthorizedNavigationKey{}).(string); ok && !call.scriptOperation && call.ToolName == "browser.navigate" {
+		call.allowedNavigationURLs = []string{approvedURL}
+	}
 	return ctx.Err()
 }

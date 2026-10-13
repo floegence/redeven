@@ -195,6 +195,13 @@ func (r *run) withAuthorizedFloretEffect(ctx context.Context, req flruntime.Effe
 			return errors.New("computer effect target is missing")
 		}
 		executionContext = context.WithValue(executionContext, computerAuthorizedTargetKey{}, targetID)
+		if req.ToolName == "browser.navigate" {
+			for _, resource := range req.Resources {
+				if resource.Kind == "url" {
+					executionContext = context.WithValue(executionContext, computerAuthorizedNavigationKey{}, resource.Value)
+				}
+			}
+		}
 	}
 	dispatchErr := dispatch(executionContext, proof)
 	releaseAuthorization()

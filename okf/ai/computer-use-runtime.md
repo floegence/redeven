@@ -65,9 +65,10 @@ its independent bounded sampler; those samples never enter model history. See
 
 Each computer invocation receives the permission snapshot established at its
 tool authorization boundary. Authenticated user controls use the current saved
-setting; their TurnID is interaction provenance, not a model invocation. `full_access` includes HTTP/HTTPS origins, applications
-and temporary foreground use on the selected target; other modes use saved
-resource grants. Runtime verifies the thread and rereads resource grants after
+setting; their TurnID is interaction provenance, not a model invocation. `full_access` includes browser-native absolute URLs, applications
+and temporary foreground use on the selected target. Other modes use saved
+resource grants or an exact temporary navigation URL admitted by tool approval.
+Opaque origins never become origin grants. Runtime verifies the thread and rereads resource grants after
 acquiring the target gate for every operation, including script host calls and
 handback. A mode change applies to the next invocation and cannot rewrite a
 running script's snapshot. Explicit grant changes remain live and invalidate

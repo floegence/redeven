@@ -20,7 +20,6 @@ SMOKE_PORT_BASE=$((30000 + ($$ % 5000) * 4))
 LOCAL_UI_PORT=${REDEVEN_FLOWER_SMOKE_LOCAL_UI_PORT:-$SMOKE_PORT_BASE}
 CDP_PORT=${REDEVEN_FLOWER_SMOKE_CDP_PORT:-$((SMOKE_PORT_BASE + 1))}
 INSPECTOR_PORT=${REDEVEN_FLOWER_SMOKE_INSPECTOR_PORT:-$((SMOKE_PORT_BASE + 2))}
-REDEVEN_FLOWER_SMOKE_MODEL=${REDEVEN_FLOWER_SMOKE_MODEL:-deepseek-v4-flash-vision-exp}
 MANIFEST_FILE="$REPORT_ROOT/pid-manifest.json"
 PROVIDER_METADATA_FILE="$REPORT_ROOT/provider.json"
 DESKTOP_LOG="$REPORT_ROOT/desktop.log"
@@ -37,6 +36,13 @@ case "$SMOKE_SUITE" in
   flower|computer|computer-native) ;;
   *) echo "Unknown Flower smoke suite: $SMOKE_SUITE" >&2; exit 2 ;;
 esac
+if [[ "$SMOKE_SUITE" == computer* ]]; then
+  export REDEVEN_COMPUTER_USE_MODEL=deepseek-v4-flash
+  export REDEVEN_COMPUTER_UI_SCENARIO="${REDEVEN_COMPUTER_UI_SCENARIO:-file-animation}"
+  REDEVEN_FLOWER_SMOKE_MODEL=${REDEVEN_FLOWER_SMOKE_MODEL:-deepseek-v4-flash}
+else
+  REDEVEN_FLOWER_SMOKE_MODEL=${REDEVEN_FLOWER_SMOKE_MODEL:-deepseek-v4-flash-vision-exp}
+fi
 
 if [[ -e "$SMOKE_ROOT" ]]; then
   echo "Flower smoke root already exists; refusing to overwrite $SMOKE_ROOT" >&2

@@ -18,9 +18,10 @@ async function fixture(t, options = {}) {
   const port = { onMessage: event(), onDisconnect: event(), replies: [], postMessage(value) { this.replies.push(value); }, disconnect() {} };
   let saved = {}, attaches = 0, sequence = 0;
   const chrome = globalThis.chrome = {
+    extension: { isAllowedFileSchemeAccess: async () => options.fileAccess === true },
     webNavigation: { onCreatedNavigationTarget: event() },
     debugger: { onEvent: event(), onDetach: event(), getTargets: async () => { await options.beforeTargets?.(tabs, chrome); return [...tabs.values()].map(tab => ({ type: 'page', tabId: tab.id, id: tab.id.toString(16).padStart(32, '0') })); },
-      attach: async () => { attaches++; throw new Error('Debugger unavailable'); }, detach: async () => {} },
+      attach: async () => { attaches++; if (!options.attachSuccess) throw new Error('Debugger unavailable'); }, detach: async () => {} },
     tabs: { onRemoved: event(), onCreated: event(), onUpdated: event(), onMoved: event(), onAttached: event(), onDetached: event(), onReplaced: event(),
       query: async () => [...tabs.values()], get: async id => { if (!tabs.has(id)) throw new Error('Closed'); return tabs.get(id); },
       create: async options => { assert.equal(options.active, false); const tab = { id: 10, windowId: 1, index: 1, title: '', url: options.url }; tabs.set(10, tab); chrome.tabs.onCreated.emit(tab); return tab; },
@@ -39,11 +40,11 @@ async function fixture(t, options = {}) {
   const module = path.join(directory, 'background.mjs'); await writeFile(module, source); await import(pathToFileURL(module).href);
   const connected = new Promise(resolve => chrome.runtime.onMessage.emit({ command: 'connect', nativeHost: 'dev.floegence.redeven.r123456789abcdef0', profileName: 'Fixture' }, { id: 'fixture', url: chrome.runtime.getURL('popup.html') }, resolve));
   await flush(); port.onMessage.emit({ type: 'ready', protocol_version: 9 }); await connected;
-  return { tabs, chrome, port, attaches: () => attaches, async call(command, args) {
+  return { tabs, chrome, port, attaches: () => attaches, async call(command, args, errorCode) {
     const id = String(++sequence); port.onMessage.emit({ id, command, arguments: args });
     for (let i = 0; i < 30 && !port.replies.some(reply => reply.id === id); i++) await flush();
     const reply = port.replies.find(reply => reply.id === id); assert.ok(reply, 'Command must settle');
-    assert.equal(reply.error, undefined, `Native command ${command} failed`); return reply.result;
+    assert.equal(reply.error, errorCode, `Native command ${command} failed`); return reply.result;
   } };
 }
 
@@ -57,13 +58,27 @@ test('new tab identity survives projection failure and creation never attaches a
   assert.equal(f.tabs.get(7).active, true);
 });
 
+test('file tabs are discoverable and binding diagnoses the explicit Chrome file-access setting', async t => {
+  const options = { fileAccess: false, attachSuccess: true };
+  const f = await fixture(t, options);
+  f.tabs.set(11, { id:11, windowId:1, index:2, title:'Local SVG', url:'file:///tmp/animation.html' });
+  const inventory = await f.call('inventory');
+  assert.equal(inventory.find(tab => tab.id === '11').availability, undefined);
+  const args = { tab_id:'11', tab_url:'file:///tmp/animation.html', tab_title:'Local SVG' };
+  await f.call('bind', args, 'TARGET_PERMISSION_REQUIRED');
+  assert.equal(f.attaches(), 0, 'missing file permission must not attempt debugger input');
+  options.fileAccess = true;
+  const bound = await f.call('bind', args);
+  assert.equal(bound.tab_id, '11'); assert.equal(f.attaches(), 1);
+});
+
 test('profile directory sends one snapshot then ordered native changes without binding pages', async t => {
   const f = await fixture(t);
   await f.call('watch_tabs');
   const changes = () => f.port.replies.filter(reply => reply.type === 'tabs_changed');
   assert.equal(changes().length, 1);
   assert.deepEqual(changes()[0].tabs.map(tab => tab.id), ['7', '8']);
-  assert.equal(changes()[0].tabs[1].availability, 'unsupported');
+  assert.equal(changes()[0].tabs[1].availability, undefined, 'native schemes are discovered; debugger capability decides attachment');
   assert.equal(f.attaches(), 0);
   f.tabs.get(7).title = 'Updated'; f.chrome.tabs.onUpdated.emit(7, { title: 'Updated' }, f.tabs.get(7));
   await flush(); await flush();

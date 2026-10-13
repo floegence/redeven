@@ -94,15 +94,15 @@ test('semantic browser reads, fills, waits and rejects stale or ambiguous nodes 
     const stale = await perform({ action: 'click', selector: { ref: input.ref } });
     assert.equal(stale.error, 'STALE_REFERENCE');
     const denied = await send('browser.navigate', { url: 'https://unapproved.invalid' });
-    assert.equal(denied.safety.level, 'takeover');
+    assert.equal(denied.error, 'TARGET_PERMISSION_REQUIRED');
     assert.equal(denied.result.action_executed, false);
     assert.equal(denied.screenshot, undefined);
     // An allowed URL may redirect to an ungranted origin. Fetch interception
     // stops the document request before Chromium contacts the new site.
     await send('computer.screenshot', {}, { recovery_observation: true });
     const redirect = await send('browser.navigate', { url: origin + '/redirect' }, { script_operation: true });
-    assert.equal(redirect.safety.level, 'takeover');
-    assert.equal(redirect.safety.required_origin, 'https://unapproved.invalid');
+    assert.equal(redirect.error, 'TARGET_PERMISSION_REQUIRED');
+    assert.equal(redirect.result.required_navigation_url, 'https://unapproved.invalid/landing');
     assert.equal(redirect.screenshot, undefined);
 
   } finally {
@@ -470,9 +470,8 @@ test('full access permits new sites and redirects while preserving private input
     const navigated = await execute('browser.navigate', { url: `http://127.0.0.1:${source.address().port}` });
     assert.equal(navigated.safety?.level, 'routine', JSON.stringify(navigated));
     assert.equal(page.url(), destinationOrigin + '/');
-    assert.equal((await execute('browser.navigate', { url: 'file:///private/example' })).error, 'INVALID_REQUEST');
     const observation = await execute('computer.observe');
-    assert.ok(observation.result.observation.nodes.some(node => node.name === 'Search results'));
+    assert.ok(observation.result.observation.nodes.some(node => node.name === 'Search results'), JSON.stringify(observation));
     await page.setContent('<input type="password" value="private-fixture">');
     const sensitive = await execute('computer.screenshot');
     assert.ok(sensitive.safety.reason_codes.includes('secret_input'));

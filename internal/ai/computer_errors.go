@@ -83,7 +83,21 @@ func computerBrowserFailure(call TargetToolCall, private bool, code string, payl
 	if !computerKnownRejection(err) {
 		err = computerBrowserExchangeFailure(call, private, err)
 	}
-	return TargetToolResult{}, err, true
+	result := TargetToolResult{TargetID: call.TargetID, ExecutionLocation: location}
+	if computerKnownRejection(err) && payload != nil {
+		executed, _ := payload["action_executed"].(bool)
+		result.Result = map[string]any{"action_executed": executed, "needs_observation": executed}
+		if code == "TARGET_PERMISSION_REQUIRED" {
+			if parsed, parseErr := parseComputerNavigationURL(anyToString(payload["required_navigation_url"])); parseErr == nil {
+				result.Result.(map[string]any)["required_navigation_url"] = normalizedComputerNavigationURL(parsed)
+				var failure *targetToolPolicyError
+				if errors.As(err, &failure) {
+					failure.targetState = ""
+				}
+			}
+		}
+	}
+	return result, err, true
 }
 
 // Both helper protocols use a closed error vocabulary. Raw browser exceptions

@@ -24,6 +24,8 @@ logical target may be omitted in favor of the thread's selected target.
 Descriptions name user work, such as filling filters and checking results.
 Source and technical diagnostics belong in expandable details.
 
+Browser navigation accepts browser-native absolute URLs, including `file://`, `data:`, `about:`, extension pages and browser internal pages. Use local files directly; do not start a temporary HTTP server. Full Access executes directly. Approval Required uses the current target and URL in the existing tool approval; temporary authorization expires with the target lease and never becomes a persistent origin grant. Submit a separate `browser.navigate` when a script or redirect returns `TARGET_PERMISSION_REQUIRED` with `required_navigation_url`. Opaque origin `null` never grants access. Unsupported browser targets use `TARGET_CAPABILITY_UNAVAILABLE`; Chrome file access uses `TARGET_PERMISSION_REQUIRED`.
+
 Available operations are `ui.observe`, `ui.screenshot`, `ui.getByRole(role,
 {name})`, `ui.ref(ref)`, coordinate click and drag, key input and `ui.assert`.
 Locators expose `read`, `click`, `fill`, `press`, `scroll` and `waitFor`.
@@ -60,7 +62,7 @@ control authority. The Runtime admits at most eight active script namespaces.
 
 The [semantic snapshot contract](computer-use-semantics.md) owns schema v2,
 role normalization, tree validation, states, relationships and privacy projection.
-`ui.getByRole(role, {name, root_ref?})` uses a canonical role and exact name.
+`ui.getByRole(role, {name?, exact?, root_ref?})` uses a canonical role. `image` includes platform `img` roles. Names default to case-insensitive contains matching; `exact: true` requires the complete name. Omit name only when the role is unique in an untruncated subtree.
 Runtime projects its aliases into native selectors before platform dispatch, so
 platform event waits still work for controls that appear later. Explicit native
 `{role, name}` and opaque references retain their distinct native meanings.
@@ -113,6 +115,8 @@ Private takeover keeps observations and pixels out of model history.
 The Runtime revalidates target policy, grants, cancellation and current control
 before each host operation. The target remains owned by the same canonical turn
 across the batch; independent live sampling may run between operations.
+
+Results preserve `completed_actions`, zero-based `failed_operation_index`, `failed_action`, `action_executed`, `completed`, `script_error`, `needs_observation`, `effect_outcome_unknown` and `observation_invalidated` when applicable. A failed observation requires a fresh read, not replay. Only structured completion and a checked observed state support a final verification claim. Stable execution error codes preserve navigation, element, capability and observation failures; `UNKNOWN` means a dispatched effect cannot be confirmed.
 
 Results record confirmed completed actions, operation count and final compact
 observation. A popup returns `completed: false`, `target_changed`,

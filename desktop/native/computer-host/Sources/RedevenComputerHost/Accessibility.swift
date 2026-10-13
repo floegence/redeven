@@ -226,12 +226,16 @@ final class NativeWindow {
             return reference.element
         }
         let roles = (selector["roles"] as? [String]) ?? (selector["role"] as? String).map { [$0] } ?? []
-        guard !roles.isEmpty, let name = selector["name"] as? String else { throw NativeInput.invalid("A reference or roles and name is required.") }
+        guard !roles.isEmpty else { throw NativeInput.invalid("A role or reference is required.") }
+        let wantedName = selector["name"] as? String
+        let exact = selector["exact"] as? Bool ?? false
         let root = try (selector["root_ref"] as? String).map { try resolve(["ref": $0]) } ?? element
         var queue = [root], matches: [AXUIElement] = [], visited = 0
         while let node = queue.popLast(), visited < 5000 {
             visited += 1
-            if roles.contains(axString(node, kAXRoleAttribute)) && self.name(node) == name { matches.append(node) }
+            let candidateName = self.name(node)
+            let nameMatches = wantedName == nil || (exact ? candidateName == wantedName! : candidateName.localizedCaseInsensitiveContains(wantedName!))
+            if roles.contains(axString(node, kAXRoleAttribute)) && nameMatches { matches.append(node) }
             if matches.count > 1 { break }
             if let children = axValue(node, kAXChildrenAttribute) as? [AXUIElement] { queue.append(contentsOf: children.prefix(5001)) }
             if queue.count > 10000 { break }
@@ -281,7 +285,7 @@ final class NativeWindow {
             changed = false
             var found = false, enabled = false
             do { let node = try resolve(selector); found = true; enabled = (axValue(node, kAXEnabledAttribute) as? NSNumber)?.boolValue == true }
-            catch let error as HostFailure where ["ELEMENT_NOT_FOUND", "STALE_REFERENCE"].contains(error.code) { }
+            catch let error as HostFailure where error.code == "ELEMENT_NOT_FOUND" { }
             if (state == "hidden" && !found) || (state == "visible" && found) || (state == "enabled" && enabled) { return ["state": state] }
             guard Date() < deadline else { return ["state": "timeout", "requested_state": state, "last_known": ["found": found, "enabled": enabled]] }
             if !changed { CFRunLoopRunInMode(.defaultMode, deadline.timeIntervalSinceNow, true) }

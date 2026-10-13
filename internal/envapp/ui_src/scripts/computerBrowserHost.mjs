@@ -1,3 +1,4 @@
+import { redactedNavigationURL } from './computerBrowserPage.mjs';
 import { observeManagedBrowserDownloads } from './computerManagedDownloads.mjs';
 import { createBrowserLineage } from './computerBrowserLineage.mjs';
 import { lstat } from 'node:fs/promises';
@@ -273,7 +274,7 @@ export async function createComputerBrowserHost(options) {
       }
       setNativeDirectory(endpoint, live);
       reconcileNative();
-      return tabs.map(tab => lineage.lineage(nativeScope, extension ? tab.native_target_id : tab.id).some(id => privateTargets.has(id)) ? { ...tab, title: '', url: '', private: true } : tab);
+      return tabs.map(tab => lineage.lineage(nativeScope, extension ? tab.native_target_id : tab.id).some(id => privateTargets.has(id)) ? { ...tab, title: '', url: '', private: true } : { ...tab, url: tab.url ? redactedNavigationURL(tab.url) : '' });
     },
     async close() {
       closed = true;

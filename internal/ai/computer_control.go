@@ -20,6 +20,7 @@ type computerTargetControl struct {
 	pause                *InteractionSafetyDecision
 	recheckInteractionID string
 	browser              *browserTargetLease
+	navigationURL        string
 }
 
 // The Runtime owns the barrier. Helpers report observations, not a second
@@ -230,6 +231,7 @@ func (r *ComputerUseRuntime) releaseComputerControl(threadID, runID string) {
 			}
 			control.threadID, control.turnID, control.runID, control.pause = "", "", "", nil
 			control.recheckInteractionID = ""
+			control.navigationURL = ""
 			released = true
 		}
 		control.mu.Unlock()
@@ -265,6 +267,7 @@ func (r *ComputerUseRuntime) releasePreviousComputerTarget(call TargetToolCall) 
 		control.mu.Lock()
 		if control.threadID == call.ThreadID && control.runID == call.RunID && control.pause == nil {
 			control.threadID, control.turnID, control.runID = "", "", ""
+			control.navigationURL = ""
 		}
 		control.mu.Unlock()
 	}
