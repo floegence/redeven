@@ -3264,7 +3264,19 @@
     "copyCode": "Copier le code",
     "copied": "Copié",
     "copyFailed": "Échec de la copie. Sélectionnez et copiez le texte manuellement, ou autorisez l’accès au presse-papiers et réessayez.",
-    "regenerate": "Générer un nouveau code"
+    "regenerate": "Générer un nouveau code",
+    "prepareTitle": "Préparer cet environnement d’exécution",
+    "checkHelp": "Vérifiez l’état de cet environnement d’exécution avant d’ajouter un accès à la passerelle.",
+    "controlHelp": "Redémarrez cet environnement d’exécution depuis Desktop pour préparer sa connexion de gestion.",
+    "updateHelp": "Mettez à jour cet environnement d’exécution avant d’ajouter un accès à la passerelle.",
+    "unsupportedHelp": "Cette version de l’environnement d’exécution ne prend pas en charge l’accès à la passerelle. Mettez-la à jour avant de continuer.",
+    "managementHelp": "Desktop ne peut pas gérer cet environnement d’exécution pour le moment. Vérifiez ses paramètres de connexion, puis réessayez.",
+    "recoveryImpact": "Un redémarrage ou une mise à jour peut interrompre les tâches en cours. Vérifiez les conséquences avant de continuer.",
+    "checkFailed": "Impossible de vérifier l’état de l’environnement d’exécution. Réessayez ou consultez les paramètres de l’environnement.",
+    "recoveryFailed": "La préparation de l’environnement d’exécution n’a pas pu aboutir. Consultez les détails de l’opération, puis réessayez.",
+    "containerHelp": "Le conteneur ou son moteur est indisponible. Démarrez le moteur de conteneurs et vérifiez les paramètres de l’environnement, puis réessayez.",
+    "credentialsHelp": "Desktop n’a pas pu authentifier la connexion de gestion de l’environnement d’exécution. Vérifiez les identifiants et les autorisations, puis réessayez.",
+    "channelHelp": "Le canal de gestion de l’environnement d’exécution est indisponible. Vérifiez la connexion, puis réessayez."
   },
   "gatewayMembership": {
     "not_joined": "Non connecté",

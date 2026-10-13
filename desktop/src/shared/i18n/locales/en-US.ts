@@ -74,6 +74,19 @@ export const enUS = {
     "lastSeen": "Last access"
   },
   gatewayJoin: {
+    prepareTitle: "Prepare this Runtime",
+    checkHelp: "Check this Runtime’s status before adding Gateway access.",
+    controlHelp: "Restart this Runtime through Desktop to prepare its management connection.",
+    updateHelp: "Update this Runtime before adding Gateway access.",
+    unsupportedHelp: "This Runtime version does not support Gateway access. Update it before continuing.",
+    managementHelp: "Desktop cannot manage this Runtime right now. Check its connection settings, then retry.",
+    recoveryImpact: "Restarting or updating may interrupt active work. Review the impact before continuing.",
+    checkFailed: "Runtime status could not be checked. Retry or review the environment settings.",
+    recoveryFailed: "Runtime preparation could not complete. Check the operation details and retry.",
+    containerHelp: "The container or its engine is unavailable. Start the container engine and check the environment settings, then retry.",
+    credentialsHelp: "Desktop could not authenticate the Runtime management connection. Check its credentials and permissions, then retry.",
+    channelHelp: "The Runtime management channel is unavailable. Check the connection, then retry.",
+
     targetRuntime: "Target Runtime",
     address: "Gateway address",
     code: "One-time invitation code",

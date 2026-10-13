@@ -3264,7 +3264,19 @@
     "copyCode": "Copiar código",
     "copied": "Copiado",
     "copyFailed": "No se pudo copiar. Selecciona y copia el texto manualmente, o permite el acceso al portapapeles e inténtalo de nuevo.",
-    "regenerate": "Generar código nuevo"
+    "regenerate": "Generar código nuevo",
+    "prepareTitle": "Preparar este entorno de ejecución",
+    "checkHelp": "Comprueba el estado de este entorno de ejecución antes de añadir acceso mediante la puerta de enlace.",
+    "controlHelp": "Reinicia este entorno de ejecución desde Desktop para preparar su conexión de administración.",
+    "updateHelp": "Actualiza este entorno de ejecución antes de añadir acceso mediante la puerta de enlace.",
+    "unsupportedHelp": "Esta versión del entorno de ejecución no admite acceso mediante la puerta de enlace. Actualízala antes de continuar.",
+    "managementHelp": "Desktop no puede administrar este entorno de ejecución ahora. Comprueba la configuración de conexión del entorno y vuelve a intentarlo.",
+    "recoveryImpact": "Reiniciar o actualizar puede interrumpir el trabajo en curso. Revisa las consecuencias antes de continuar.",
+    "checkFailed": "No se pudo comprobar el estado del entorno de ejecución. Vuelve a intentarlo o revisa la configuración del entorno.",
+    "recoveryFailed": "No se pudo completar la preparación del entorno de ejecución. Comprueba los detalles de la operación y vuelve a intentarlo.",
+    "containerHelp": "El contenedor o su motor no está disponible. Inicia el motor de contenedores y comprueba la configuración del entorno; después, vuelve a intentarlo.",
+    "credentialsHelp": "Desktop no pudo autenticar la conexión de administración del entorno de ejecución. Comprueba las credenciales y los permisos y vuelve a intentarlo.",
+    "channelHelp": "El canal de administración del entorno de ejecución no está disponible. Comprueba la conexión y vuelve a intentarlo."
   },
   "gatewayMembership": {
     "not_joined": "Sin conexión",

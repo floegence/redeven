@@ -331,6 +331,7 @@ import {
   reconcileBusyStateWithActionProgressSnapshot,
   busyStateMatchesAction,
   busyStateMatchesEnvironment,
+  environmentOperationState,
   busyStateMatchesGateway,
   IDLE_LAUNCHER_BUSY_STATE,
   selectedSnapshotRuntimeLifecycleProgressForEnvironment,
@@ -6172,14 +6173,40 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
   };
 
+  const gatewaySetupEnvironment = createMemo(() => snapshot().environments.find(entry => entry.id === gatewaySetupEnvironmentID()));
+  const gatewaySetupOperation = createMemo(() => {
+    const environment = gatewaySetupEnvironment();
+    return environment ? environmentOperationState(environment, activeActionProgress(), busyState()) : undefined;
+  });
   return (
     <>
-      <RuntimeGatewaySetupDialog gateways={snapshot().gateway_sources} environment={snapshot().environments.find(environment => environment.id === gatewaySetupEnvironmentID())}
+      <RuntimeGatewaySetupDialog gateways={snapshot().gateway_sources} environment={gatewaySetupEnvironment()}
+        operationBusy={gatewaySetupOperation()?.actionsDisabled}
+        progress={gatewaySetupOperation()?.activeProgress}
+        progressContent={<Show when={gatewaySetupEnvironment()}>{environment =>
+          <Show when={gatewaySetupOperation()?.panelProgress}>{progress =>
+            <EnvironmentProgressPanel i18n={i18n()} progress={progress()} cancelOperation={progress => void cancelLauncherOperation(progress)} dismissOperation={progress => void dismissLauncherOperation(progress)} copyOperationDiagnostics={progress => void copyLauncherOperationDiagnostics(progress)}
+              runNextAction={(action, current) => {
+                if (action.kind === 'copy_diagnostics') void copyLauncherOperationDiagnostics(current);
+                else if (action.kind === 'dismiss') void dismissLauncherOperation(current);
+                else if (action.kind === 'retry') { const retry = environmentActionForLauncherRetry(action.retry_action); if (retry) void triggerLocalEnvironmentAction(environment(), retry, 'dialog'); }
+                else if (action.kind === 'refresh_status') void refreshEnvironmentRuntime(environment(), 'dialog');
+                else if (action.kind === 'update_runtime') void updateEnvironmentRuntime(environment(), 'dialog');
+                else if (action.kind === 'manage_desktop_update') void triggerLocalEnvironmentAction(environment(), { intent: 'update_desktop', label: i18n().t('environmentAction.updateRedevenDesktop'), enabled: true, variant: 'default' }, 'dialog');
+              }} />
+          }</Show>
+        }</Show>}
         i18n={i18n()} close={() => {
           const id = gatewaySetupEnvironmentID(); setGatewaySetupEnvironmentID('');
           requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-owner-id="${CSS.escape(id)}"]`)?.focus());
         }}
-        start={async environment => { const started = await startEnvironmentRuntime(environment, 'dialog'); await refreshSnapshot(); return started; }} />
+        refresh={environment => refreshEnvironmentRuntime(environment, 'dialog')}
+        recover={(environment, operation) => triggerLocalEnvironmentAction(environment, {
+          intent: operation === 'start' ? 'start_runtime' : operation === 'restart' ? 'restart_runtime' : 'update_runtime',
+          label: i18n().t(operation === 'start' ? 'gatewayJoin.startAndContinue' : operation === 'restart' ? 'environmentAction.restartRuntime' : 'environmentAction.updateRuntime'),
+          enabled: true, variant: 'default',
+        }, 'dialog')}
+        edit={environment => { setGatewaySetupEnvironmentID(''); startEditingEnvironment(environment); }} />
       <DesktopCommandRegistrar
         snapshot={snapshot}
         i18n={i18n()}
@@ -7540,6 +7567,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
       presentation={ownerPresentation}
       Facts={EnvironmentCardFactsBlock}
       Actions={EnvironmentSplitActionButton}
+      Progress={EnvironmentProgressPanel}
       newCard={<NewEnvironmentPlaceholderCard i18n={props.i18n} openCreateConnectionDialog={props.openCreateConnectionDialog} />}
       showQuickAddCards={gridProps.quickAdd ?? false}
       visibleCardCount={gridProps.groups.length + (gridProps.quickAdd ? 1 : 0)}
@@ -8691,7 +8719,7 @@ function localizedProgressPanelPrimaryAction(
     : null;
 }
 
-function EnvironmentProgressPanel(props: Readonly<{
+export function EnvironmentProgressPanel(props: Readonly<{
   i18n: DesktopI18n;
   progress: DesktopLauncherActionProgress;
   primaryAction?: EnvironmentActionModel;

@@ -4,6 +4,7 @@ import type { DesktopRuntimePresence } from '../shared/desktopRuntimePresence';
 import { buildGatewayDesktopTarget, type DesktopSessionSummary } from '../main/desktopTarget';
 import { memberFixture } from './gatewayMembershipFixture';
 import { mixedEnvironmentFixture } from './mixedEnvironmentFixture';
+import { RUNTIME_SERVICE_COMPATIBILITY_EPOCH } from '../shared/runtimeService';
 
 /** Raw trusted observations, catalog and session inputs; no display ownership is seeded. */
 export function runtimeConnectionFixture(options: {
@@ -23,6 +24,7 @@ export function runtimeConnectionFixture(options: {
   const presences = Object.fromEntries<DesktopRuntimePresence>(Object.entries(fixture.inputs.managedRuntimePresenceByTargetID).map(([id, presence]) => {
     if (presence.runtime_service.bindings?.cloud_link?.state !== 'linked') return [id, presence] as const;
     return [id, { ...presence, runtime_service: { ...presence.runtime_service,
+      compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH, compatibility: 'compatible',
       gateway_memberships: memberships,
       capabilities: { ...presence.runtime_service.capabilities!,
         cloud_link: { supported: options.cloudManagement !== false, reason_code: options.cloudManagement === false ? 'gateway_managed' : undefined },

@@ -1,4 +1,5 @@
 import { RuntimeGatewaySetupDialog } from './RuntimeGatewaySetupDialog';
+import { runtimeGatewayAccessPresentation } from '../shared/runtimeGatewayAccessPresentation';
 import { RuntimeGatewayConnectionsDialog } from './RuntimeGatewayConnectionsDialog';
 import type { RuntimeGatewayMembership } from '../shared/runtimeService';
 import type { GatewayEnrollmentPurpose } from '../shared/gatewayJoin';
@@ -14,7 +15,8 @@ import { FlowerSoftAuraIcon, type FlowerTurnLauncherAnchor } from '../../../inte
 import type { DesktopGatewaySource } from '../shared/desktopGateway';
 import type { DesktopI18n } from '../shared/i18n';
 import type { DesktopEnvironmentEntry, DesktopLauncherActionProgress } from '../shared/desktopLauncherIPC';
-import type { EnvironmentCardFactsBlock, EnvironmentSplitActionButton } from './App';
+import type { EnvironmentCardFactsBlock, EnvironmentSplitActionButton, EnvironmentProgressPanel } from './App';
+import { environmentActionForLauncherRetry } from './operationNextActions';
 import { CloudConnectionStatus, cloudConnectionState, cloudConnectionTitleKey } from './CloudConnectionStatus';
 import type { DesktopControlPlaneSummary } from '../shared/cloud';
 import { DesktopTooltip } from './DesktopTooltip';
@@ -102,6 +104,7 @@ export function EnvironmentCardsPanel(
     presentation: EnvironmentOwnerPresentation;
     Facts: typeof EnvironmentCardFactsBlock;
     Actions: typeof EnvironmentSplitActionButton;
+    Progress: typeof EnvironmentProgressPanel;
     newCard: JSX.Element;
     showQuickAddCards: boolean;
     visibleCardCount: number;
@@ -431,6 +434,7 @@ export function EnvironmentCardsPanel(
       presentation={props.presentation}
       Facts={props.Facts}
       Actions={props.Actions}
+      Progress={props.Progress}
       environment={gatewayView?.entry() ?? projectedEntriesByID()[environmentID]!}
       managementEnvironment={projectedGroup(groupID).primary_entry}
       gatewayPerspective={!!gatewayView}
@@ -703,6 +707,7 @@ function EnvironmentOwnerSurface(
     presentation: EnvironmentOwnerPresentation;
     Facts: typeof EnvironmentCardFactsBlock;
     Actions: typeof EnvironmentSplitActionButton;
+    Progress: typeof EnvironmentProgressPanel;
     environment: DesktopEnvironmentEntry;
     relationshipRole?: 'runtime' | 'cloud';
     managementEnvironment?: DesktopEnvironmentEntry;
@@ -764,6 +769,7 @@ function EnvironmentOwnerSurface(
   }>,
 ) {
   const runtime = () => props.managementEnvironment ?? props.environment;
+  const gatewayOperationState = createMemo(() => environmentOperationState(runtime(), props.actionProgress, props.busyState));
   const card = createMemo(() => {
     const original = props.presentation.card(props.environment);
     return props.gatewayPerspective && props.gatewayMember ? {...original,status_label:props.i18n.t(`gatewayMembership.${props.gatewayMember.phase}`),status_tone:['joined','accessible'].includes(props.gatewayMember.phase) ? 'success' as const : 'warning' as const} : original;
@@ -838,21 +844,11 @@ function EnvironmentOwnerSurface(
     setGatewayMode(mode);
   };
   const gatewayActions = createMemo(() => {
-    if (runtime().kind === 'local_environment'
-      && !runtime().runtime_service
-      && runtime().runtime_operations.start.availability === 'available') {
+    if (runtimeGatewayAccessPresentation(runtime())) {
       return [{
         label: props.i18n.t('gatewayJoin.menuAction'),
+        disabled: gatewayOperationState().actionsDisabled,
         onRun: (): void => { setGatewaySetupOpen(true); },
-      }];
-    }
-    if (runtime().kind !== 'provider_environment'
-      && runtime().runtime_service?.capabilities?.runtime_gateway?.supported
-      && runtime().provider_runtime_link_target) {
-      return [{
-        label: props.i18n.t('gatewayJoin.menuAction'),
-        disabled: operationState().actionsDisabled,
-        onRun: (): void => { openGatewayEnrollment('join'); },
       }, ...(runtime().runtime_service?.gateway_memberships?.length ? [
        {label:props.i18n.t('gatewayJoin.updateEndpoints')+'…',disabled:operationState().actionsDisabled,onRun:()=>openGatewayEnrollment('update-endpoints')},
        {label:props.i18n.t('gatewayConnections.unpairTitle')+'…',tone:'danger' as const,disabled:operationState().actionsDisabled,onRun:()=>openGatewayConfirmation('leave')},
@@ -871,13 +867,28 @@ function EnvironmentOwnerSurface(
       data-owner-role={props.relationshipRole ?? 'standalone'}
       aria-label={ownerLabel()}
     >
-      <RuntimeGatewaySetupDialog gateways={props.gateways} environment={gatewaySetupOpen() ? props.environment : undefined} i18n={props.i18n}
-        close={() => { setGatewaySetupOpen(false); queueMicrotask(() => ownerElement?.focus()); }}
-        start={async environment => {
-          const started = await props.runLocalEnvironmentAction(environment, { intent: 'start_runtime', label: props.i18n.t('gatewayJoin.startAndContinue'), enabled: true, variant: 'default' }, 'dialog');
-          await props.refreshEnvironmentRuntime(environment, 'dialog');
-          return started;
-        }} />
+      <RuntimeGatewaySetupDialog gateways={props.gateways} environment={gatewaySetupOpen() ? runtime() : undefined} i18n={props.i18n}
+        operationBusy={gatewayOperationState().actionsDisabled}
+        progress={gatewayOperationState().activeProgress}
+        progressContent={<Show when={gatewayOperationState().panelProgress}>{progress =>
+          <props.Progress i18n={props.i18n} progress={progress()} cancelOperation={props.cancelOperation} dismissOperation={props.dismissOperation} copyOperationDiagnostics={props.copyOperationDiagnostics}
+            runNextAction={(action, current) => {
+              if (action.kind === 'copy_diagnostics') props.copyOperationDiagnostics(current);
+              else if (action.kind === 'dismiss') props.dismissOperation(current);
+              else if (action.kind === 'retry') { const retry = environmentActionForLauncherRetry(action.retry_action); if (retry) void props.runLocalEnvironmentAction(runtime(), retry, 'dialog'); }
+              else if (action.kind === 'refresh_status') void props.refreshEnvironmentRuntime(runtime(), 'dialog');
+              else if (action.kind === 'update_runtime') void props.runLocalEnvironmentAction(runtime(), { intent: 'update_runtime', label: props.i18n.t('environmentAction.updateRuntime'), enabled: true, variant: 'default' }, 'dialog');
+              else if (action.kind === 'manage_desktop_update') void props.runDesktopUpdateHandoff(runtime().id, runtime().label);
+            }} />
+        }</Show>}
+        close={() => { setGatewaySetupOpen(false); queueMicrotask(() => (ownerElement?.querySelector<HTMLButtonElement>('[aria-haspopup="menu"]') ?? ownerElement)?.focus()); }}
+        edit={environment => { setGatewaySetupOpen(false); props.editEnvironment(environment); }}
+        refresh={environment => props.refreshEnvironmentRuntime(environment, 'dialog')}
+        recover={(environment, recovery) => props.runLocalEnvironmentAction(environment, {
+          intent: recovery === 'start' ? 'start_runtime' : recovery === 'restart' ? 'restart_runtime' : 'update_runtime',
+          label: props.i18n.t(recovery === 'start' ? 'gatewayJoin.startAndContinue' : recovery === 'restart' ? 'environmentAction.restartRuntime' : 'environmentAction.updateRuntime'),
+          enabled: true, variant: 'default',
+        }, 'dialog')} />
       <CardHeader class="redeven-environment-owner-heading">
         <div class="flex items-start justify-between gap-2">
           <div class="min-w-0 flex-1">

@@ -3258,7 +3258,19 @@
     "copyCode": "复制邀请码",
     "copied": "已复制",
     "copyFailed": "复制失败。请手动选择并复制文本，或允许剪贴板访问后重试。",
-    "regenerate": "生成新邀请码"
+    "regenerate": "生成新邀请码",
+    "prepareTitle": "准备此运行时",
+    "checkHelp": "添加网关访问前，请先检查此运行时的状态。",
+    "controlHelp": "请通过 Desktop 重启此运行时，以准备管理连接。",
+    "updateHelp": "添加网关访问前，请先更新此运行时。",
+    "unsupportedHelp": "此运行时版本不支持网关访问。请先更新再继续。",
+    "managementHelp": "Desktop 暂时无法管理此运行时。请检查环境连接设置后重试。",
+    "recoveryImpact": "重启或更新可能中断正在进行的工作。请在继续前确认操作的影响。",
+    "checkFailed": "无法检查运行时状态。请重试或检查环境设置。",
+    "recoveryFailed": "无法完成运行时准备。请查看操作详情后重试。",
+    "containerHelp": "容器或容器引擎不可用。请启动容器引擎并检查环境设置后重试。",
+    "credentialsHelp": "Desktop 无法验证运行时管理连接。请检查凭据和权限后重试。",
+    "channelHelp": "运行时管理通道不可用。请检查连接后重试。"
   },
   "gatewayMembership": {
     "not_joined": "未连接",
