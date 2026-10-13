@@ -2134,18 +2134,8 @@ func registerFlowerActivityFileAction(r *run, displayName string, previewPath st
 	}
 	r.muAssistant.Lock()
 	defer r.muAssistant.Unlock()
-	if r.activityFileActions == nil {
-		r.activityFileActions = map[string]FlowerActivityFileAction{}
-	}
 	r.activityFileActionSeq++
 	actionID := fmt.Sprintf("file_action_%d", r.activityFileActionSeq)
-	action := FlowerActivityFileAction{
-		ActionID:      actionID,
-		DisplayName:   displayName,
-		PreviewPath:   previewPath,
-		DirectoryPath: directoryPath,
-	}
-	r.activityFileActions[actionID] = action
 	return actionID
 }
 

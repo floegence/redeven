@@ -5,11 +5,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"unicode/utf8"
 
+	"github.com/floegence/floret/v7/identity"
 	"github.com/floegence/floret/v7/observation"
+	flruntime "github.com/floegence/floret/v7/runtime"
 	fltools "github.com/floegence/floret/v7/tools"
+	"github.com/floegence/redeven/internal/filesystemscope"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -55,41 +59,112 @@ func (s *Service) ResolveFlowerFileActionOpenTarget(ctx context.Context, meta *s
 	if endpointID == "" {
 		return FlowerFileActionOpenTarget{}, errors.New("missing endpoint_id")
 	}
-	values, err := s.rawFlowerActionMessageValues(ctx, endpointID, threadID)
-	if err != nil {
-		return FlowerFileActionOpenTarget{}, err
+	if s.threadRuntime == nil || s.threadsDB == nil || s.scope == nil {
+		return FlowerFileActionOpenTarget{}, ErrFlowerFileActionNotFound
 	}
-	target, ok, err := ResolveFlowerFileActionOpenTargetFromMessages(values, req)
-	if err != nil {
-		return FlowerFileActionOpenTarget{}, err
+	settings, err := s.threadsDB.GetThreadSettings(ctxOrBackground(ctx), endpointID, threadID)
+	if err != nil || settings == nil || (strings.TrimSpace(meta.NamespacePublicID) != "" && strings.TrimSpace(settings.NamespacePublicID) != "" && strings.TrimSpace(meta.NamespacePublicID) != strings.TrimSpace(settings.NamespacePublicID)) {
+		return FlowerFileActionOpenTarget{}, ErrFlowerFileActionNotFound
 	}
+	current, err := s.threadRuntime.View(ctxOrBackground(ctx), identity.ThreadID(threadID))
+	if err != nil {
+		return FlowerFileActionOpenTarget{}, ErrFlowerFileActionNotFound
+	}
+	var item flruntime.ThreadItem
+	for _, candidate := range current.Items {
+		if candidate.ID == messageID && candidate.Kind == flruntime.ThreadItemTool && candidate.Activity != nil && candidate.Activity.ItemID == itemID {
+			item = candidate
+			break
+		}
+	}
+	if item.ID == "" || req.BlockIndex != 0 || item.Activity == nil {
+		return FlowerFileActionOpenTarget{}, ErrFlowerFileActionNotFound
+	}
+	ordinal := -1
+	fileActionOrdinal := 0
+	for _, ref := range item.Activity.Presentation.TargetRefs {
+		refAction, ok := strings.CutPrefix(strings.TrimSpace(ref.Kind), "file_action:")
+		if !ok {
+			continue
+		}
+		if strings.TrimSpace(refAction) == actionID {
+			if ordinal >= 0 {
+				return FlowerFileActionOpenTarget{}, ErrFlowerFileActionNotFound
+			}
+			ordinal = fileActionOrdinal
+		}
+		fileActionOrdinal++
+	}
+	if ordinal < 0 || item.Activity.ToolID == "" || item.Activity.ToolName == "" {
+		return FlowerFileActionOpenTarget{}, ErrFlowerFileActionNotFound
+	}
+	reader, ok := s.threadRuntime.(flruntime.ThreadToolResultReader)
 	if !ok {
 		return FlowerFileActionOpenTarget{}, ErrFlowerFileActionNotFound
 	}
-	return target, nil
+	result, ok, err := reader.LookupToolResult(ctxOrBackground(ctx), flruntime.LookupToolResultInput{ThreadID: identity.ThreadID(threadID), TurnID: item.TurnID, RunID: item.RunID, ToolCallID: item.Activity.ToolID})
+	if err != nil || !ok || result.ToolName != item.Activity.ToolName || result.Status != "success" {
+		return FlowerFileActionOpenTarget{}, ErrFlowerFileActionNotFound
+	}
+	if s.toolTargetPolicy.requiresExplicitTarget() {
+		return FlowerFileActionOpenTarget{}, ErrFlowerFileActionNotFound
+	}
+	path, err := flowerFileActionPathFromCanonicalResult(result.Content, result.ToolName, ordinal, action)
+	if err != nil || path == "" {
+		return FlowerFileActionOpenTarget{}, ErrFlowerFileActionNotFound
+	}
+	resolved, err := s.scope.Resolve(path, filesystemscope.ResolveOptions{RequireExisting: true, RequireDir: action == "browse_directory"})
+	if err != nil {
+		return FlowerFileActionOpenTarget{}, ErrFlowerFileActionNotFound
+	}
+	info, err := os.Stat(resolved.RealAbs)
+	if err != nil || (action == "preview" && (info.IsDir() || !info.Mode().IsRegular())) || (action == "browse_directory" && !info.IsDir()) {
+		return FlowerFileActionOpenTarget{}, ErrFlowerFileActionNotFound
+	}
+	return FlowerFileActionOpenTarget{ActionID: actionID, Action: action, Path: resolved.RealAbs}, nil
 }
 
-func (s *Service) rawFlowerActionMessageValues(ctx context.Context, endpointID string, threadID string) ([]any, error) {
-	if s == nil {
-		return nil, errors.New("nil service")
+func flowerFileActionPathFromCanonicalResult(content, toolName string, ordinal int, action string) (string, error) {
+	var payload struct {
+		Status string          `json:"status"`
+		Data   json.RawMessage `json:"data"`
 	}
-	if ctx == nil {
-		ctx = context.Background()
+	if err := json.Unmarshal([]byte(content), &payload); err != nil || payload.Status != "success" || len(payload.Data) == 0 {
+		return "", ErrFlowerFileActionNotFound
 	}
-	endpointID = strings.TrimSpace(endpointID)
-	threadID = strings.TrimSpace(threadID)
-	if endpointID == "" || threadID == "" {
-		return nil, errors.New("invalid request")
+	var data map[string]any
+	if err := json.Unmarshal(payload.Data, &data); err != nil {
+		return "", err
 	}
-	messages, err := s.buildCanonicalFlowerTimelineMessages(ctx, endpointID, threadID)
-	if err != nil {
-		return nil, err
+	if toolName == "file.read" {
+		if ordinal != 0 {
+			return "", ErrFlowerFileActionNotFound
+		}
+		return fileActionPathForAction(anyToString(data["file_path"]), "", "", "", action), nil
 	}
-	values := make([]any, 0, len(messages))
-	for _, message := range messages {
-		values = append(values, message)
+	if toolName == "apply_patch" {
+		mutations, ok := data["mutations"].([]any)
+		if !ok || ordinal < 0 || ordinal >= len(mutations) {
+			return "", ErrFlowerFileActionNotFound
+		}
+		mutation, ok := mutations[ordinal].(map[string]any)
+		if !ok {
+			return "", ErrFlowerFileActionNotFound
+		}
+		return fileActionPathForAction(anyToString(mutation["file_path"]), anyToString(mutation["old_path"]), anyToString(mutation["new_path"]), anyToString(mutation["change_type"]), action), nil
 	}
-	return values, nil
+	if ordinal != 0 {
+		return "", ErrFlowerFileActionNotFound
+	}
+	return fileActionPathForAction(anyToString(data["file_path"]), anyToString(data["old_path"]), anyToString(data["new_path"]), anyToString(data["change_type"]), action), nil
+}
+
+func fileActionPathForAction(filePath, oldPath, newPath, changeType, action string) string {
+	path := mutationActionPath(filePath, oldPath, newPath, changeType)
+	if action == "browse_directory" {
+		return mutationDirectoryPath(path, oldPath, newPath)
+	}
+	return path
 }
 
 func SanitizeActivityTimelineMessageJSON(raw string) (json.RawMessage, error) {

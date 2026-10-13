@@ -16,7 +16,7 @@ the shared disclosure, without inventing a diff panel.
 
 # Contract
 
-Published Floret v7.25.2 owns the product-neutral file Activity payload. A read
+Published Floret v7.30.0 owns the product-neutral file Activity payload. A read
 carries bounded content and line metadata. A single-file mutation carries its
 display name, change type, added and deleted line counts, unified diff,
 unavailable reason, and truncation state. A patch carries aggregate counts and
@@ -35,8 +35,13 @@ owns the stable detail affordance, safe empty state, and file-read error expansi
 File preview and directory actions are referenced through ordered
 `target_refs` whose kinds contain opaque `file_action` identities. Redeven uses
 transient result IDs only to build those references, then removes them and all
-private paths from the public Activity payload. Flower associates references
-with typed mutations by order and never reads an action ID from payload data.
+private paths from the public Activity payload. When a user activates an action,
+Redeven reads the confirmed canonical result through Floret's
+`ThreadToolResultReader` using the exact thread, turn, run, and tool-call
+identity, associates the requested reference with the ordered typed result, and
+resolves the resulting path through the current filesystem scope. It never
+reconstructs the timeline from unrelated messages or stores a second path
+ledger. Deleted files expose their parent directory action only.
 
 # Boundaries
 
@@ -49,7 +54,7 @@ recomputes a diff merely to populate a historical row.
 # Evidence
 
 - `redeven:internal/ai/floret_tools.go` - One result-to-Floret payload mapping preserves reads and all ordered mutations.
-- `redeven:internal/ai/activity_file_actions.go` - Public Activity sanitization removes private paths and transient action IDs.
+- `redeven:internal/ai/activity_file_actions.go` - Public Activity sanitization removes private paths and resolves actions from the exact canonical tool result.
 - `redeven:internal/ai/activity_timeline_test.go` - Read, mutation, patch, target-reference, and chip coverage.
 - `redeven:internal/flower_ui/src/flowerActivityPresentation.ts` - One presenter derives compact statistics, actions, and diff detail.
 - `redeven:internal/flower_ui/src/flowerActivityPresentation.test.ts` - Typed mutation content and absent-diff payloads are covered.

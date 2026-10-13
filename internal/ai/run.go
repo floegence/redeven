@@ -173,7 +173,6 @@ type run struct {
 	assistantCreatedAtUnixMs int64
 	assistantBlocks          []any
 	assistantAnswer          assistantAnswerState
-	activityFileActions      map[string]FlowerActivityFileAction
 	activityFileActionSeq    int64
 
 	muFloretIdentity     sync.Mutex
@@ -356,7 +355,6 @@ func newRun(opts runOptions) *run {
 		webSearch:                   opts.WebSearch,
 		subagentRuntime:             opts.SubagentRuntime,
 		currentThinkingBlockIndex:   -1,
-		activityFileActions:         make(map[string]FlowerActivityFileAction),
 		subagentDepth:               opts.SubagentDepth,
 		toolTargetPolicy:            normalizeToolTargetPolicy(opts.ToolTargetPolicy),
 		canonicalReferenceAuthority: cloneFlowerCanonicalReferenceTargetAuthority(opts.CanonicalReferenceAuthority),
