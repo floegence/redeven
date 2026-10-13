@@ -79,7 +79,7 @@ export function RuntimeGatewaySetupDialog(props: Readonly<{
   onCleanup(() => { generation++; });
   return <Dialog open={!!props.environment} onOpenChange={value => { if (!value) props.close(); }} title={props.i18n.t('gatewayJoin.title')}
     closeLabel={props.i18n.t('common.close')}
-    class="redeven-gateway-dialog redeven-gateway-join-dialog" contentClass="redeven-gateway-join-content">
+    class="redeven-gateway-dialog redeven-gateway-join-dialog redeven-gateway-wizard-dialog" contentClass="redeven-gateway-join-content">
     <Show when={props.environment?.provider_runtime_link_target?.id} keyed>{targetID =>
       <RuntimeGatewayJoinPanel wizard connectionRequest={connectionRequest()} gateways={props.gateways} embedded targetID={targetID} targetLabel={props.environment?.label}
         i18n={props.i18n} onClose={props.close} ready={ready()}
