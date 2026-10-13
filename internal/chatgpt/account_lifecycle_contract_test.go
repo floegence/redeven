@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/floegence/redeven/internal/lockfile"
 	"github.com/floegence/redeven/internal/settings"
 )
 
@@ -257,4 +258,56 @@ func TestCanceledVerifiedRegistrationRetainsUnconfirmedRevocation(t *testing.T) 
 	if err != nil || status.State != "signed_out" || status.RevocationConfirmed == nil || *status.RevocationConfirmed {
 		t.Fatal("cleanup outcome is unavailable to the account picker")
 	}
+}
+
+func TestCancelDoesNotWaitForBusyCredentialFileDuringCommit(t *testing.T) {
+	c, address, _, _ := testClient(t)
+	lock, err := lockfile.Acquire(c.Store.Path() + ".lock")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lock.Release()
+	c.mu.Lock()
+	var a *attempt
+	for _, item := range c.attempts {
+		a = item
+	}
+	c.mu.Unlock()
+	callback, _ := url.Parse(address.Query().Get("redirect_uri"))
+	callback.RawQuery = url.Values{"state": {address.Query().Get("state")}, "code": {"code"}, "client_id": {"issued"}}.Encode()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		response, err := http.Get(callback.String())
+		if err == nil {
+			response.Body.Close()
+		}
+	}()
+	deadline := time.Now().Add(2 * time.Second)
+	committing := false
+	for time.Now().Before(deadline) {
+		if !a.finishMu.TryLock() {
+			committing = true
+			break
+		}
+		a.finishMu.Unlock()
+		time.Sleep(time.Millisecond)
+	}
+	if !committing {
+		lock.Release()
+		<-done
+		t.Fatal("callback did not reach commit")
+	}
+	canceled := make(chan struct{})
+	go func() { c.Cancel("owner", a.status.ID); close(canceled) }()
+	select {
+	case <-canceled:
+	case <-time.After(time.Second):
+		lock.Release()
+		<-canceled
+		<-done
+		t.Fatal("cancellation waited for an unrelated credential write")
+	}
+	lock.Release()
+	<-done
 }
