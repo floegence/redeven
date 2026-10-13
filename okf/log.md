@@ -5,7 +5,7 @@
 - Preserve saved Flower accounts and local settings across Gateway and Cloud
   maintenance through [one configuration transaction boundary](ui/runtime-settings.md#configuration-editing);
   cover concurrent saves, account removal, storage failures, and restart.
-- Documented [ChatGPT request contracts](ai/chatgpt-local-authentication.md): strict schema compilation, request-owned optional-argument restoration, canonical sanitized failure diagnostics and deliberate recovery at compatibility epoch 57. Removed the permanent composer allowance notice while retaining settings and explicit quota-error actions.
+- Documented [ChatGPT request contracts](ai/chatgpt-local-authentication.md): strict schema compilation, request-owned optional-argument restoration, current native web search, complete streamed native output, canonical sanitized failure diagnostics and deliberate recovery at compatibility epoch 57. Removed the permanent composer allowance notice while retaining settings and explicit quota-error actions.
 
 - Separate [ChatGPT account lifecycle](ai/chatgpt-account-lifecycle.md) from local admission and request contracts: verified sign-ins persist before connection saves, issued-client retries retain registration, canceled grants use logout cleanup, and saved accounts remain selectable at compatibility epoch 56.
 - Keep provider model defaults exclusively in the Runtime. Directory responses publish read-only defaults for new connections; frontend source and bundle checks reject embedded catalogs, and settings retain explicit overrides without numeric substitutes.

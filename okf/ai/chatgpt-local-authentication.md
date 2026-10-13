@@ -77,6 +77,13 @@ their previous hash. No separate conversation store or domain migration is added
 Only a completed response commits provider state; incomplete responses, stream
 errors and disconnects fail explicitly.
 
+Native web search uses the current `web_search` tool contract. Completed output
+items retain their original provider bytes in output-index order. The terminal
+response may omit its output snapshot; it still must reach `response.completed`.
+When both item events and a terminal snapshot are present, they must agree.
+Missing indices, conflicting items and oversized output fail without committing
+provider state. Native history is never reconstructed from text deltas.
+
 Per-tool `Strict` intent survives the internal Runtime/Desktop model-source DTO.
 The OpenAI adapter copies canonical schemas before freezing the request, makes
 all object properties required, and gives originally optional non-nullable

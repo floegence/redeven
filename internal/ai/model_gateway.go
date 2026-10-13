@@ -296,6 +296,7 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 		}
 	}
 	hosted := newResponsesHostedEvents(onEvent)
+	var nativeCompletedItems chatGPTCompletedItems
 
 	type partialCall struct {
 		ItemID      string
@@ -440,6 +441,11 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 
 		case "response.output_item.done":
 			item := event.Item
+			if p.chatGPT {
+				if err := nativeCompletedItems.add(event.OutputIndex, item); err != nil {
+					return ModelGatewayResult{}, err
+				}
+			}
 			if p.chatGPT && item.Type == "function_call" && item.Namespace != chatGPTToolNamespace {
 				return ModelGatewayResult{}, errors.New("unexpected ChatGPT tool namespace")
 			}
@@ -450,6 +456,9 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 			pc := getPartial(item.ID)
 			if pc == nil {
 				continue
+			}
+			if pc.OutputIndex < 0 {
+				pc.OutputIndex = event.OutputIndex
 			}
 			if cid := strings.TrimSpace(item.CallID); cid != "" {
 				pc.CallID = cid
@@ -470,6 +479,13 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 			gotCompleted = true
 		case "response.completed":
 			completed = event.Response
+			if p.chatGPT {
+				var err error
+				completed.Output, err = nativeCompletedItems.complete(completed.Output)
+				if err != nil {
+					return ModelGatewayResult{}, err
+				}
+			}
 			gotCompleted = true
 			for _, item := range completed.Output {
 				if p.chatGPT && item.Type == "function_call" && item.Namespace != chatGPTToolNamespace {
@@ -1456,7 +1472,7 @@ func decorateResponsesParams(params *oresponses.ResponseNewParams, webSearchMode
 	switch strings.TrimSpace(webSearchMode) {
 	case providerWebSearchModeOpenAIResponsesBuiltin:
 		if tools != nil {
-			*tools = append(*tools, oresponses.ToolParamOfWebSearchPreview(oresponses.WebSearchPreviewToolTypeWebSearchPreview))
+			*tools = append(*tools, oresponses.ToolParamOfWebSearch(oresponses.WebSearchToolTypeWebSearch))
 		}
 	case providerWebSearchModeQwenResponsesWebSearch:
 		if tools != nil {
