@@ -295,7 +295,7 @@ describe('shared Flower UI boundary', () => {
     const surfaceSrc = readText(path.join(flowerRoot, 'FlowerSurface.tsx'));
     const settingsSrc = readText(path.join(flowerRoot, 'settings', 'FlowerSettingsSurface.tsx'));
 
-    expect(surfaceSrc).toContain("sidePanel() !== 'settings' && 'hidden'");
+    expect(surfaceSrc).toContain('data-flower-panel="settings" hidden={visiblePanel() !== \'settings\'}');
     expect(settingsSrc).toContain('const confirmProviderDialog = async');
     expect(settingsSrc).toContain('const saved = await saveBuiltDraft(result);');
     expect(settingsSrc).not.toContain('Save provider draft');
@@ -332,6 +332,22 @@ describe('shared Flower UI boundary', () => {
     expect(cssSrc).toContain('--flower-chat-surface: var(--redeven-surface-main, var(--background));');
     expect(cssSrc).toContain('flower-settings-current-model');
     expect(cssSrc).not.toContain('.flower-settings-provider-card {\\n  display: flex;\\n  min-width: 0;\\n  align-items: flex-start;\\n  gap: 0.75rem;\\n  border: 1px');
+  });
+
+  it('keeps provider model defaults exclusively in the backend', () => {
+    for (const root of [flowerRoot, path.join(repoRoot, 'internal/envapp/ui_src/src'), path.join(repoRoot, 'desktop/src')]) {
+      for (const file of listSourceFiles(root)) expect(readText(file), file).not.toMatch(/model_catalog\.(generated|legacy)\.json/u);
+    }
+    for (const relative of [
+      'internal/flower_ui/src/settings/providerCatalog.ts',
+      'internal/flower_ui/src/providerModelProjection.ts',
+      'internal/flower_ui/src/settings/modelSelection.ts',
+      'internal/envapp/ui_src/src/ui/pages/settings/aiCatalog.ts',
+    ]) {
+      const source = readText(path.join(repoRoot, relative));
+      expect(source, relative).not.toContain('model_catalog.generated.json');
+      expect(source, relative).not.toMatch(/128_?000|\b95\b/u);
+    }
   });
 
   it('keeps Env App icon imports as re-exports from the shared Flower icon source', () => {

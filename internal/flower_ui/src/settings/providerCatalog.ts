@@ -1,18 +1,11 @@
-import type { FlowerProvider, FlowerProviderModel, FlowerProviderType, FlowerWebSearchMode } from '../contracts/flowerSurfaceContracts';
-import type { FlowerProviderModelNoteKey } from './providerModelNotes';
-
-export type FlowerProviderModelPreset = FlowerProviderModel & Readonly<{ note_key?: FlowerProviderModelNoteKey }>;
+import type { FlowerProvider, FlowerProviderType, FlowerWebSearchMode } from '../contracts/flowerSurfaceContracts';
 
 type FlowerProviderPreset = Readonly<{
   type: FlowerProviderType;
   name: string;
   default_base_url: string;
   web_search?: Readonly<{ mode: FlowerWebSearchMode }>;
-  models: readonly FlowerProviderModelPreset[];
 }>;
-
-import modelCatalog from '../../../config/model_catalog.generated.json';
-const generatedModels = modelCatalog.providers as Record<string, readonly FlowerProviderModelPreset[]>;
 
 export const FLOWER_PROVIDER_TYPES: readonly { value: FlowerProviderType; label: string; hint: string }[] = [
   { value: 'openai', label: 'OpenAI', hint: 'Native connection' },
@@ -34,18 +27,18 @@ export function flowerProviderTypeLabel(type: FlowerProviderType): string {
 }
 
 export const FLOWER_PROVIDER_PRESETS: Record<FlowerProviderType, FlowerProviderPreset> = {
-  openai: { type: 'openai', name: 'OpenAI', default_base_url: 'https://api.openai.com/v1', models: generatedModels.openai ?? [] },
-  anthropic: { type: 'anthropic', name: 'Anthropic', default_base_url: 'https://api.anthropic.com', models: generatedModels.anthropic ?? [] },
-  google: { type: 'google', name: 'Gemini', default_base_url: 'https://generativelanguage.googleapis.com/v1beta/openai', models: generatedModels.google ?? [] },
-  moonshot: { type: 'moonshot', name: 'Moonshot', default_base_url: 'https://api.moonshot.cn/v1', models: generatedModels.moonshot ?? [] },
-  chatglm: { type: 'chatglm', name: 'Z.ai', default_base_url: 'https://api.z.ai/api/paas/v4/', models: generatedModels.chatglm ?? [] },
-  deepseek: { type: 'deepseek', name: 'DeepSeek', default_base_url: 'https://api.deepseek.com', models: generatedModels.deepseek ?? [] },
-  qwen: { type: 'qwen', name: 'Qwen', default_base_url: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1', models: generatedModels.qwen ?? [] },
-  openrouter: { type: 'openrouter', name: 'OpenRouter', default_base_url: 'https://openrouter.ai/api/v1', models: generatedModels.openrouter ?? [] },
-  xai: { type: 'xai', name: 'xAI', default_base_url: 'https://api.x.ai/v1', models: generatedModels.xai ?? [] },
-  groq: { type: 'groq', name: 'Groq', default_base_url: 'https://api.groq.com/openai/v1', models: generatedModels.groq ?? [] },
-  ollama: { type: 'ollama', name: 'Ollama', default_base_url: 'http://127.0.0.1:11434/v1', models: generatedModels.ollama ?? [] },
-  openai_compatible: { type: 'openai_compatible', name: 'OpenAI compatible', default_base_url: 'https://api.example.com/v1', models: generatedModels.openai_compatible ?? [], web_search: { mode: 'disabled' } },
+  openai: { type: 'openai', name: 'OpenAI', default_base_url: 'https://api.openai.com/v1' },
+  anthropic: { type: 'anthropic', name: 'Anthropic', default_base_url: 'https://api.anthropic.com' },
+  google: { type: 'google', name: 'Gemini', default_base_url: 'https://generativelanguage.googleapis.com/v1beta/openai' },
+  moonshot: { type: 'moonshot', name: 'Moonshot', default_base_url: 'https://api.moonshot.cn/v1' },
+  chatglm: { type: 'chatglm', name: 'Z.ai', default_base_url: 'https://api.z.ai/api/paas/v4/' },
+  deepseek: { type: 'deepseek', name: 'DeepSeek', default_base_url: 'https://api.deepseek.com' },
+  qwen: { type: 'qwen', name: 'Qwen', default_base_url: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1' },
+  openrouter: { type: 'openrouter', name: 'OpenRouter', default_base_url: 'https://openrouter.ai/api/v1' },
+  xai: { type: 'xai', name: 'xAI', default_base_url: 'https://api.x.ai/v1' },
+  groq: { type: 'groq', name: 'Groq', default_base_url: 'https://api.groq.com/openai/v1' },
+  ollama: { type: 'ollama', name: 'Ollama', default_base_url: 'http://127.0.0.1:11434/v1' },
+  openai_compatible: { type: 'openai_compatible', name: 'OpenAI compatible', default_base_url: 'https://api.example.com/v1', web_search: { mode: 'disabled' } },
 };
 
 export function flowerProviderPresetForType(type: FlowerProviderType): FlowerProviderPreset {
@@ -54,10 +47,6 @@ export function flowerProviderPresetForType(type: FlowerProviderType): FlowerPro
 
 export function defaultBaseURLForFlowerProviderType(type: FlowerProviderType): string {
   return flowerProviderPresetForType(type).default_base_url;
-}
-
-export function recommendedModelsForFlowerProviderType(type: FlowerProviderType): readonly FlowerProviderModelPreset[] {
-  return flowerProviderPresetForType(type).models;
 }
 
 export function flowerProviderTypeRequiresBaseURL(type: FlowerProviderType): boolean {
@@ -104,17 +93,4 @@ export function normalizeFlowerInputModalities(raw: unknown): string[] {
   const unique = [...new Set(values)];
   if (!unique.includes('text')) unique.unshift('text');
   return unique.length > 0 ? unique : ['text'];
-}
-
-export function defaultFlowerContextWindowForProviderType(type: FlowerProviderType): number | undefined {
-  switch (type) {
-    case 'openai_compatible':
-    case 'openrouter':
-    case 'xai':
-    case 'groq':
-    case 'ollama':
-      return 128_000;
-    default:
-      return undefined;
-  }
 }

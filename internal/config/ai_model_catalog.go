@@ -27,6 +27,15 @@ func AIProviderCatalog(providerType string) []AIProviderModel {
 	return cloneAIModels(modelCatalog[strings.ToLower(strings.TrimSpace(providerType))])
 }
 
+// AIProviderCatalogs returns the backend-owned defaults for settings clients.
+func AIProviderCatalogs() map[string][]AIProviderModel {
+	out := make(map[string][]AIProviderModel, len(modelCatalog))
+	for kind, models := range modelCatalog {
+		out[kind] = cloneAIModels(models)
+	}
+	return out
+}
+
 func AIProviderUsesCatalog(providerType string) bool {
 	_, ok := modelCatalog[strings.ToLower(strings.TrimSpace(providerType))]
 	return ok

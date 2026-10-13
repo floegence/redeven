@@ -12,7 +12,7 @@ import { createLocalizedFlowerSurfaceCopy } from '../../../../flower_ui/src/i18n
 import { createI18nHelpers } from './i18n/createI18n';
 import { loadEnvAppDictionary, type EnvAppTranslationKey } from './i18n/locales';
 import type { RedevenLocale } from './i18n/localeMeta';
-import { recommendedModelsForFlowerProviderType } from '../../../../flower_ui/src/settings/providerCatalog';
+import { backendModelsForProviderType, providerDefaultsFixture } from '../../../../flower_ui/testing/providerCatalogFixture';
 import { cloneFlowerModel } from '../../../../flower_ui/src/providerModelProjection';
 import { withFlowerModelDirectory } from '../../../../flower_ui/src/modelDirectory';
 
@@ -85,13 +85,13 @@ async function mount(locale: RedevenLocale = 'en-US', width = 1000, dark = false
 
 for (const dark of [false, true]) {
   it(`shows every reviewed OpenAI model after account login in the ${dark ? 'dark' : 'light'} theme`, async () => {
-    const catalog = recommendedModelsForFlowerProviderType('openai').map(cloneFlowerModel);
+    const catalog = backendModelsForProviderType('openai').map(cloneFlowerModel);
     const profile = { schema_version: 1 as const, current_model_id: '', providers: [{ id: 'openai', type: 'openai' as const,
       auth_method: 'chatgpt' as const, account_id: 'test-account', models: [], model_selection: { selected_models: catalog.map(m => m.model_name),
         model_overrides: catalog.map(m => ({ model_name: m.model_name, reasoning_capability: {}, default_reasoning_selection: {} })) },
     }] };
     const snapshot: FlowerSettingsSnapshot = { ...settings(), model_profile: profile };
-    const directory = { current_model_id: '', sources: [{ id: 'openai', kind: 'runtime_config' as const, state: 'ready' as const }],
+    const directory = { provider_defaults: providerDefaultsFixture, current_model_id: '', sources: [{ id: 'openai', kind: 'runtime_config' as const, state: 'ready' as const }],
       models: catalog.map(m => ({ id: `openai/${m.model_name}`, label: m.display_name || m.model_name, model_name: m.model_name,
         provider_id: 'openai', source: 'runtime_config' as const, state: 'ready' as const, web_search: { status: 'available' as const, reason: '' } })),
       provider_catalogs: { openai: catalog.map(m => ({ ...m, web_search: { status: 'available' as const, reason: '' } })) },

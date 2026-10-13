@@ -1,18 +1,26 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { createStore } from 'solid-js/store';
 import { cloneFlowerModel, applyFlowerModelDiscovery, defaultFlowerProviderModels, filterFlowerModels, flowerProviderModelChoices, resolveFlowerProviderModels, serializeFlowerProvider, setFlowerModelsEnabled } from '../../../../../../flower_ui/src/settings/modelSelection';
-import * as catalog from '../../../../../../flower_ui/src/settings/providerCatalog';
+import { backendModelsForProviderType, providerDefaultsFixture } from '../../../../../../flower_ui/testing/providerCatalogFixture';
 import type { FlowerProviderDraft, FlowerProviderModel } from '../../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { applyModelOverride } from '../../../../../../flower_ui/src/providerModelProjection';
 
 const model = (name: string): FlowerProviderModel => ({ model_name: name, context_window: 32000, input_modalities: ['text'] });
 
 describe('reviewed defaults across every provider', () => {
+  it('retains received metadata for a missing selection and leaves unknown limits unset', () => {
+    const received = { model_name: 'server-only-model', context_window: 543210, max_output_tokens: 12345, input_modalities: ['text', 'image'] };
+    const provider: FlowerProviderDraft = { id: 'account', type: 'openai', auth_method: 'chatgpt', model_defaults: [], models: [received], model_selection: { selected_models: [received.model_name, 'unknown-model'] } };
+    const result = resolveFlowerProviderModels(provider, []);
+    expect(result).toEqual([{ ...received, unavailable: true }, { model_name: 'unknown-model', unavailable: true }]);
+    expect(result[1].context_window).toBeUndefined();
+    expect(result[1].max_output_tokens).toBeUndefined();
+  });
   for (const type of ['openai', 'anthropic', 'google', 'moonshot', 'chatglm', 'deepseek', 'qwen', 'xai', 'groq'] as const) {
     it(`preserves every ${type} model through sparse overrides and save/reopen`, () => {
-      const models = catalog.recommendedModelsForFlowerProviderType(type).map(cloneFlowerModel);
+      const models = backendModelsForProviderType(type).map(cloneFlowerModel);
       expect(models.length).toBeGreaterThan(0);
-      const provider: FlowerProviderDraft = { id: type, type, models: [], model_selection: {
+      const provider: FlowerProviderDraft = { id: type, type, model_defaults: models, models: [], model_selection: {
         selected_models: models.map(m => m.model_name),
         // Go serializes zero-valued nested structs even in sparse overrides.
         model_overrides: models.map(m => JSON.parse(JSON.stringify({ model_name: m.model_name, context_window: 0, max_output_tokens: 0, input_modalities: null,
@@ -24,8 +32,8 @@ describe('reviewed defaults across every provider', () => {
     });
   }
   it('retains OpenAI metadata when the account inventory is absent or empty without enabling models', () => {
-    const models = catalog.recommendedModelsForFlowerProviderType('openai').map(cloneFlowerModel);
-    const provider: FlowerProviderDraft = { id: 'account', type: 'openai', auth_method: 'chatgpt', account_id: 'account', models: [],
+    const models = backendModelsForProviderType('openai').map(cloneFlowerModel);
+    const provider: FlowerProviderDraft = { id: 'account', type: 'openai', model_defaults: models, auth_method: 'chatgpt', account_id: 'account', models: [],
       model_selection: { selected_models: models.map(m => m.model_name) } };
     for (const inventory of [undefined, []]) {
       const resolved = resolveFlowerProviderModels(provider, inventory);
@@ -40,7 +48,7 @@ describe('reviewed defaults across every provider', () => {
     expect(applyModelOverride({ ...model('agent'), status: 'needs_configuration' }, { ...model('agent'), status: 'beta' }).status).toBe('needs_configuration');
     const saved = { id: 'account', type: 'openai' as const, auth_method: 'chatgpt' as const, models: [], model_selection: { selected_models: ['gpt-6.1-sol'] } };
     const unavailable = applyFlowerModelDiscovery(saved, []);
-    const recovered = applyFlowerModelDiscovery(unavailable, catalog.recommendedModelsForFlowerProviderType('openai'));
+    const recovered = applyFlowerModelDiscovery(unavailable, backendModelsForProviderType('openai'));
     expect(recovered.models[0].unavailable).not.toBe(true);
   });
 });
@@ -57,25 +65,22 @@ describe('model catalog preferences', () => {
   });
 
   it('saves disabled models and overrides, retaining selection through reopening and future updates', () => {
-    const models = catalog.recommendedModelsForFlowerProviderType('openai').map(cloneFlowerModel);
+    const models = backendModelsForProviderType('openai').map(cloneFlowerModel);
     const disabled = models[0].model_name;
     const changed = { ...models[1], context_window: 98765 };
-    const draft: FlowerProviderDraft = { id: 'brand', type: 'openai', models: [changed, ...models.slice(2), model('custom')] };
+    const draft: FlowerProviderDraft = { id: 'brand', type: 'openai', model_defaults: backendModelsForProviderType('openai'), models: [changed, ...models.slice(2), model('custom')] };
     const [store] = createStore(draft);
     const saved = serializeFlowerProvider(store);
     expect(saved.models).toEqual([]);
     expect(saved.model_selection?.selected_models).toEqual(draft.models.map((entry) => entry.model_name));
     expect(saved.model_selection?.model_overrides).toEqual([{ model_name: changed.model_name, context_window: 98765 }]);
     expect(saved.model_selection?.custom_models?.[0].model_name).toBe('custom');
-    const reopened = resolveFlowerProviderModels(saved);
+    const reopened = resolveFlowerProviderModels({ ...saved, model_defaults: providerDefaultsFixture[saved.type] });
     expect(reopened.map((entry) => entry.model_name)).toEqual(draft.models.map((entry) => entry.model_name));
     expect(reopened.find((entry) => entry.model_name === changed.model_name)?.context_window).toBe(98765);
-    const source = vi.spyOn(catalog, 'recommendedModelsForFlowerProviderType').mockReturnValue([...models, model('new-release')] as ReturnType<typeof catalog.recommendedModelsForFlowerProviderType>);
-    try {
-      const updated = resolveFlowerProviderModels(saved);
-      expect(updated.some((entry) => entry.model_name === 'new-release')).toBe(false);
-      expect(updated.some((entry) => entry.model_name === disabled)).toBe(false);
-    } finally { source.mockRestore(); }
+    const updated = resolveFlowerProviderModels({ ...saved, model_defaults: [...models, model('new-release')] });
+    expect(updated.some((entry) => entry.model_name === 'new-release')).toBe(false);
+    expect(updated.some((entry) => entry.model_name === disabled)).toBe(false);
   });
 
   it('searches display and wire names without changing selected models', () => {
@@ -112,7 +117,7 @@ describe('model parameter preservation', () => {
     const saved = serializeFlowerProvider(cleared);
     expect(saved.model_selection?.custom_models).toEqual([custom]);
     expect(saved.model_selection?.selected_models).toEqual([]);
-    const reopened = { ...saved, models: resolveFlowerProviderModels(saved) };
+    const reopened = { ...saved, models: resolveFlowerProviderModels({ ...saved, model_defaults: providerDefaultsFixture[saved.type] }) };
     expect(reopened.models).toEqual([]);
     const choices = flowerProviderModelChoices(reopened);
     expect(choices).toContainEqual(custom);
@@ -123,12 +128,12 @@ describe('model parameter preservation', () => {
   });
 
   it('retains edited parameters when disabling, reopening, and selecting again', () => {
-    const models = catalog.recommendedModelsForFlowerProviderType('deepseek').map(cloneFlowerModel);
+    const models = backendModelsForProviderType('deepseek').map(cloneFlowerModel);
     const edited = { ...models[0], context_window: 81920, max_output_tokens: 4096, input_modalities: ['text', 'image'] };
-    const draft: FlowerProviderDraft = { id: 'deepseek', type: 'deepseek', models: [edited, ...models.slice(1)] };
+    const draft: FlowerProviderDraft = { id: 'deepseek', type: 'deepseek', model_defaults: backendModelsForProviderType('deepseek'), models: [edited, ...models.slice(1)] };
     const disabled = setFlowerModelsEnabled(draft, [edited], false);
     const saved = serializeFlowerProvider(disabled);
-    const reopened = { ...saved, models: resolveFlowerProviderModels(saved) };
+    const reopened = { ...saved, models: resolveFlowerProviderModels({ ...saved, model_defaults: providerDefaultsFixture[saved.type] }) };
     const enabled = setFlowerModelsEnabled(reopened, [models[0]], true);
     expect(enabled.models.find((entry) => entry.model_name === edited.model_name)).toEqual(edited);
     const cleared = setFlowerModelsEnabled(enabled, enabled.models, false);
@@ -136,9 +141,9 @@ describe('model parameter preservation', () => {
   });
 
   it('retains a custom model override when the upstream catalog gains the same name', () => {
-    const models = catalog.recommendedModelsForFlowerProviderType('openai').map(cloneFlowerModel);
+    const models = backendModelsForProviderType('openai').map(cloneFlowerModel);
     const custom = { ...models[0], context_window: 87654, max_output_tokens: 4096 };
-    const provider: FlowerProviderDraft = { id: 'brand', type: 'openai', models: [], model_selection: { selected_models: [custom.model_name], custom_models: [custom] } };
+    const provider: FlowerProviderDraft = { id: 'brand', type: 'openai', model_defaults: backendModelsForProviderType('openai'), models: [], model_selection: { selected_models: [custom.model_name], custom_models: [custom] } };
     const resolved = resolveFlowerProviderModels(provider);
     expect(resolved.filter((entry) => entry.model_name === custom.model_name)).toEqual([custom]);
     const saved = serializeFlowerProvider({ ...provider, models: resolved });
@@ -148,13 +153,13 @@ describe('model parameter preservation', () => {
     const choice = flowerProviderModelChoices(disabled).find((entry) => entry.model_name === custom.model_name)!;
     expect(choice.context_window).toBe(custom.context_window);
     const enabled = setFlowerModelsEnabled(disabled, [choice], true);
-    expect(resolveFlowerProviderModels(serializeFlowerProvider(enabled))).toContainEqual(custom);
+    expect(resolveFlowerProviderModels({ ...serializeFlowerProvider(enabled), model_defaults: models })).toContainEqual(custom);
   });
 });
 
 
 it('bounds inherited output capacity by a smaller user context override', () => {
-  const provider: FlowerProviderDraft = { id: 'brand', type: 'openai', models: [], model_selection: { selected_models: ['gpt-5.5'], model_overrides: [{ model_name: 'gpt-5.5', context_window: 32000 }] } };
+  const provider: FlowerProviderDraft = { id: 'brand', type: 'openai', model_defaults: backendModelsForProviderType('openai'), models: [], model_selection: { selected_models: ['gpt-5.5'], model_overrides: [{ model_name: 'gpt-5.5', context_window: 32000 }] } };
   const models = resolveFlowerProviderModels(provider);
   const model = models.find((entry) => entry.model_name === 'gpt-5.5')!;
   expect(model.context_window).toBe(32000);

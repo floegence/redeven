@@ -127,14 +127,14 @@ test('rejects the retired browser viewer from every initial document', () => {
   assert.deepEqual(analyzeInitialBuildGraph(manifest, chunks).forbiddenModules.map(item => item.moduleId), [moduleID]);
 });
 
-test('loads generated model metadata through a dynamic settings boundary', () => {
+test('rejects bundled backend model defaults even behind a dynamic settings boundary', () => {
   const catalog = '/workspace/redeven/internal/config/model_catalog.generated.json';
   const chunks = { chunks: { 'assets/index.js': chunk(['src/index.ts']), 'assets/models.js': chunk([catalog]) } };
   const manifest = {
     'index.html': entry('assets/index.js', { dynamicImports: ['models.ts'] }),
     'models.ts': { file: 'assets/models.js' },
   };
-  assert.deepEqual(analyzeInitialBuildGraph(manifest, chunks).forbiddenModules, []);
+  assert.deepEqual(analyzeInitialBuildGraph(manifest, chunks).forbiddenModules.map(item => item.moduleId), [catalog]);
   manifest['index.html'].imports = ['models.ts'];
   const result = analyzeInitialBuildGraph(manifest, chunks);
   assert.deepEqual(result.forbiddenModules.map((item) => item.moduleId), [catalog]);

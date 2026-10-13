@@ -168,7 +168,7 @@ it('keeps the shared parameter editor focused through consecutive edits and read
   await settledDialog();
   const row = document.querySelector('input[aria-label="agent-0"]')!.closest('label')!.parentElement!.parentElement!;
   await userEvent.click(row.querySelector<HTMLButtonElement>(`button[aria-label="${copy.catalog.edit}"]`)!);
-  const input = row.querySelector<HTMLInputElement>('input[type="number"][placeholder="128000"]')!;
+  const input = row.querySelector<HTMLInputElement>('input[type="number"]')!;
   await userEvent.fill(input, '8192');
   expect(input.isConnected).toBe(true);
   expect(document.activeElement === input).toBe(true);

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createFlowerModelReadResource, readFlowerModelDirectory, withFlowerModelDirectory } from '../../../../../flower_ui/src/modelDirectory';
 import { resolveFlowerProviderModels } from '../../../../../flower_ui/src/settings/modelSelection';
-import { recommendedModelsForFlowerProviderType } from '../../../../../flower_ui/src/settings/providerCatalog';
+import { backendModelsForProviderType, providerDefaultsFixture } from '../../../../../flower_ui/testing/providerCatalogFixture';
 import { cloneFlowerModel } from '../../../../../flower_ui/src/providerModelProjection';
 import type { FlowerModelDirectory, FlowerSettingsSnapshot } from '../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 
@@ -12,8 +12,16 @@ const directory: FlowerModelDirectory = {
   sources: [{ id: 'static', kind: 'runtime_config', state: 'ready' }],
 };
 
+it('reads backend defaults without treating them as account inventory', () => {
+  const defaults = { openai: [{ model_name: 'backend-only', context_window: 987654, max_output_tokens: 32109, supports_tools: true }] };
+  const result = readFlowerModelDirectory({ current_model: '', directory: { models: [], sources: [], provider_catalogs: {}, provider_defaults: defaults } });
+  expect(result.provider_defaults).toEqual(defaults);
+  expect(result.models).toEqual([]);
+  expect(() => readFlowerModelDirectory({ current_model: '', directory: { ...result, provider_defaults: { openai: [{ model_name: 'invalid', context_window: -1 }] } } })).toThrow('invalid');
+});
+
 it('carries search policy and complete defaults into settings without borrowing account availability', () => {
-  const reviewed = cloneFlowerModel(recommendedModelsForFlowerProviderType('openai')[0]);
+  const reviewed = cloneFlowerModel(backendModelsForProviderType('openai')[0]);
   const provider = { id: 'account', type: 'openai' as const, auth_method: 'chatgpt' as const, account_id: 'account', models: [], model_selection: { selected_models: [reviewed.model_name] } };
   const search = { status: 'available' as const, reason: '' };
   for (const available of [true, false]) {
@@ -21,6 +29,7 @@ it('carries search policy and complete defaults into settings without borrowing 
       current_model_id: `account/${reviewed.model_name}`,
       models: [{ id: `account/${reviewed.model_name}`, model_name: reviewed.model_name, provider_id: 'account', label: 'Account model', source: 'runtime_config', state: available ? 'ready' : 'unavailable', web_search: search }],
       sources: [{ id: 'account', kind: 'runtime_config', state: available ? 'ready' : 'unavailable' }],
+      provider_defaults: providerDefaultsFixture,
       provider_catalogs: { account: available ? [{ ...reviewed, web_search: search }] : [] },
     });
     const savedProvider = projected.model_profile!.providers[0];
