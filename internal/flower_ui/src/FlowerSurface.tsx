@@ -4935,9 +4935,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (modelSourceRefreshing()) return;
     setModelSourceRefreshing(true);
     try {
-      await props.adapter.retryModelSource?.();
-      if (loadError()) await refreshSettingsForRevision();
-      const directory = await props.adapter.loadModelDirectory?.(true);
+      const [directory] = await Promise.all([
+        props.adapter.loadModelDirectory?.(true),
+        loadError() ? refreshSettingsForRevision() : undefined,
+      ]);
       if (directory && !surfaceDisposed) setModelDirectory(directory);
     } catch (error) {
       notifyComposerError(getErrorMessage(error));
@@ -10943,8 +10944,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         <Show when={!modelQuery().trim() && !modelMenuExpanded() && menuModelOptions().total > menuModelOptions().models.length}>
           <Button class="flower-model-menu-expand" size="sm" variant="ghost" onClick={() => setModelMenuExpanded(true)}>{copy().settings.dialog.catalog.showAll} ({menuModelOptions().total})</Button>
         </Show>
-        <Show when={composerModelLoading() || selectedModelNeedsAttention()}>
-          <p class="flower-model-menu-status" role="status"><Show when={composerModelLoading()} fallback={copy().chat.modelsUnavailable}>{copy().chat.modelsChecking}</Show></p>
+        <Show when={modelAvailabilityChecking() || modelDirectory()?.error || selectedModelNeedsAttention()}>
+          <p class="flower-model-menu-status" role="status">{modelAvailabilityChecking() ? copy().chat.modelsChecking
+            : modelDirectory()?.error === 'directory_timeout' ? copy().chat.modelsCheckTimedOut
+            : modelDirectory()?.error ? copy().chat.modelsCheckFailed : copy().chat.modelsUnavailable}</p>
         </Show>
         <div class="flower-model-menu-footer">
           <Button class="flower-model-menu-action" size="xs" variant="ghost" icon={Refresh} loading={modelSourceRefreshing()} onClick={() => void refreshModelSource()}>{copy().settings.dialog.catalog.refresh}</Button>
@@ -10957,18 +10960,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   );
 
   const composerModelLoading = () => !surfaceWarmupActive() && (settingsLoading() || Boolean(modelDirectory()?.models.some(model => model.id === selectedComposerModelID() && model.state === 'pending')));
+  const modelAvailabilityChecking = () => Boolean(modelSourceRefreshing() || modelDirectory()?.checking || modelDirectory()?.models.some(model => model.state === 'pending') || modelDirectory()?.sources.some(source => source.state === 'pending'));
   const modelReasoningSelector = (location: FlowerComposerControlLocation = 'inline') => (
     <Show
       when={!surfaceWarmupActive()}
       fallback={(
-        <span class={cn('flower-model-chip', `flower-composer-control-${location}`, surfaceWarmupActive() && 'flower-model-chip-warmup')}
-          role={composerModelLoading() ? 'status' : undefined}
-          aria-label={composerModelLoading() ? copy().chat.loadingSettings : undefined}
-          aria-busy={composerModelLoading() ? 'true' : undefined}>
-          <Show when={composerModelLoading()}
-            fallback={surfaceWarmupActive() ? warmupModelLabel() : selectedThreadModelLabel()}>
-            <Refresh class="h-3.5 w-3.5 motion-safe:animate-spin" aria-hidden="true" />
-          </Show>
+        <span class={cn('flower-model-chip', `flower-composer-control-${location}`, surfaceWarmupActive() && 'flower-model-chip-warmup')}>
+          {warmupModelLabel()}
         </span>
       )}
     >
@@ -10985,12 +10983,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           disabled={!composerModelInteractive() || modelPatchPending()}
           aria-haspopup="dialog"
           aria-expanded={modelMenuOpen()}
-          role={composerModelLoading() ? 'status' : undefined}
-          aria-busy={composerModelLoading() ? 'true' : undefined}
-          aria-live={composerModelLoading() ? 'polite' : undefined}
-          aria-label={composerModelLoading()
-            ? copy().chat.loadingSettings
-            : selectedModelNeedsAttention()
+          aria-label={selectedModelNeedsAttention()
             ? `${copy().chat.modelLabel}: ${selectedThreadModelLabel()}. ${copy().chat.configureProviderBeforeChat}`
             : `${copy().chat.modelLabel}: ${selectedThreadModelLabel()}`}
           title={selectedModelNeedsAttention()
@@ -11002,7 +10995,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           <Show when={selectedModelNeedsAttention()}>
             <AlertTriangle class="flower-model-reasoning-warning" aria-hidden="true" />
           </Show>
-          <Show when={composerModelLoading()}><Refresh class="h-3.5 w-3.5 motion-safe:animate-spin" aria-hidden="true" /></Show>
           <span class="flower-model-reasoning-model-label">{selectedThreadModelLabel()}</span>
           <ChevronDown class="flower-model-reasoning-chevron" aria-hidden="true" />
         </button>
@@ -11071,7 +11063,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             data-has-reasoning={composerReasoningVisible() || composerReasoningLoading() ? 'true' : 'false'}
           >
             <span class="flower-model-reasoning-model-trigger">
-              <Show when={composerModelLoading()}><Refresh class="h-3.5 w-3.5 motion-safe:animate-spin" aria-hidden="true" /></Show>
               <span class="flower-model-reasoning-model-label">{selectedThreadModelLabel()}</span>
               <ChevronDown class="flower-model-reasoning-chevron" aria-hidden="true" />
             </span>

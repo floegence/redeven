@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -22,8 +23,12 @@ func TestService_ListModels_BoundsUnresponsiveCatalogWithoutLosingConfiguredMode
 	defer server.Close()
 	cfg := &config.AIConfig{CurrentModelID: "local/agent", Providers: []config.AIProvider{
 		{ID: "local", Type: "openai_compatible", Models: []config.AIProviderModel{{ModelName: "agent"}}},
-		{ID: "offline", Type: "ollama", BaseURL: server.URL, ModelSelection: &config.AIModelSelection{SelectedModels: []string{"missing"}}},
 	}}
+	// Exceed the four-worker limit: queued providers must share the same
+	// deadline instead of starting another timeout after the active batch.
+	for i := range 6 {
+		cfg.Providers = append(cfg.Providers, config.AIProvider{ID: "offline-" + strconv.Itoa(i), Type: "ollama", BaseURL: server.URL, ModelSelection: &config.AIModelSelection{SelectedModels: []string{"missing"}}})
+	}
 	svc := &Service{cfg: cfg}
 	ctx, cancel := context.WithTimeout(t.Context(), 6*time.Second)
 	defer cancel()
@@ -40,6 +45,11 @@ func TestService_ListModels_BoundsUnresponsiveCatalogWithoutLosingConfiguredMode
 	}
 	if cfg.Providers[1].ModelSelection.SelectedModels[0] != "missing" {
 		t.Fatal("catalog failure changed provider preferences")
+	}
+	for _, source := range out.Directory.Sources {
+		if strings.HasPrefix(source.ID, "offline-") && (source.State != "unavailable" || source.Reason != "catalog_unavailable") {
+			t.Fatalf("catalog did not settle after the shared deadline: %+v", source)
+		}
 	}
 }
 

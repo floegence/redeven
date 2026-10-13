@@ -1192,11 +1192,11 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   const bumpSettingsSeq = () => setSettingsSeq((n) => n + 1);
   const flowerModelReadResource = createFlowerModelReadResource({
     scope: () => JSON.stringify([envId(), resourceCacheAccess().generation, settingsSeq()]),
-    loadConfiguration: async () => {
+    loadConfiguration: async signal => {
       const { mapEnvFlowerSettings } = await import('./flower/envLocalFlowerSurfaceAdapter');
-      return mapEnvFlowerSettings(await fetchLocalApiJSON('/_redeven_proxy/api/settings', { method: 'GET', signal: AbortSignal.timeout(6_000) }));
+      return mapEnvFlowerSettings(await fetchLocalApiJSON('/_redeven_proxy/api/settings', { method: 'GET', signal }));
     },
-    loadDirectory: async baseline => readFlowerModelDirectory(await fetchLocalApiJSON('/_redeven_proxy/api/ai/models' + (baseline ? '?mode=baseline' : ''), { method: 'GET', signal: AbortSignal.timeout(6_000) })),
+    loadDirectory: async (baseline, signal) => readFlowerModelDirectory(await fetchLocalApiJSON('/_redeven_proxy/api/ai/models' + (baseline ? '?mode=baseline' : ''), { method: 'GET', signal })),
   });
   onCleanup(() => flowerModelReadResource.invalidate());
   const debugConsole = createDebugConsoleController({

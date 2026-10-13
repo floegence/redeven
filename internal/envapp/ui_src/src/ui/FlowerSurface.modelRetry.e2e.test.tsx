@@ -1,23 +1,28 @@
 // @vitest-environment jsdom
 import { expect, it, vi } from 'vitest';
+import { createFlowerModelReadResource } from '../../../../flower_ui/src/modelDirectory';
+import type { FlowerModelDirectory } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { adapter, renderSurfaceWithAdapter, settingsSnapshot, waitFor } from './FlowerSurface.navigation.testHarness';
 
 it('retries Desktop models only on explicit AI refresh and coalesces repeated clicks', async () => {
   let finish!: () => void;
   const pending = new Promise<void>(resolve => { finish = resolve; });
-  const retryModelSource = vi.fn(() => pending);
-  const loadSettings = vi.fn(async () => ({ ...settingsSnapshot(), model_profile: null, model_source: {
-    kind: 'desktop_model_source' as const, state: 'unbound' as const, label: 'Desktop' as const,
-  } }));
-  const surface = renderSurfaceWithAdapter({ ...adapter(), loadSettings, retryModelSource });
+  const retry = vi.fn(() => pending);
+  const directory: FlowerModelDirectory = { current_model_id: '', models: [], sources: [{ id: 'desktop', kind: 'desktop_model_source', state: 'unavailable', reason: 'unbound' }] };
+  const read = vi.fn(async () => directory);
+  const resource = createFlowerModelReadResource({ scope: () => 'connection', loadConfiguration: async () => ({ ...settingsSnapshot(), model_profile: null }), loadDirectory: read });
+  const surface = renderSurfaceWithAdapter({ ...adapter(), loadSettings: resource.loadSettings,
+    loadModelDirectory: refresh => resource.loadDirectory(refresh, retry), subscribeModelDirectory: resource.subscribe });
   await waitFor(() => Boolean(surface.querySelector('.flower-model-source-status-refresh')));
-  expect(retryModelSource).not.toHaveBeenCalled();
+  await resource.loadDirectory();
+  expect(retry).not.toHaveBeenCalled();
   const refresh = surface.querySelector<HTMLButtonElement>('.flower-model-source-status-refresh')!;
   refresh.click(); refresh.click();
-  expect(retryModelSource).toHaveBeenCalledTimes(1);
+  await waitFor(() => retry.mock.calls.length === 1);
   expect(refresh.disabled).toBe(true);
-  const priorReads = loadSettings.mock.calls.length;
+  const priorReads = read.mock.calls.length;
   finish();
-  await waitFor(() => loadSettings.mock.calls.length > priorReads);
-  expect(retryModelSource).toHaveBeenCalledTimes(1);
+  await waitFor(() => read.mock.calls.length > priorReads);
+  await waitFor(() => surface.querySelector<HTMLButtonElement>('.flower-model-source-status-refresh')?.disabled === false);
+  expect(retry).toHaveBeenCalledTimes(1);
 });

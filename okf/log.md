@@ -1,5 +1,13 @@
 # Redeven OKF Update Log
 
+## 2026-10-12: Bounded model availability checks
+
+- Give the shared [model directory](ai/model-directory-and-selection.md) one
+  ten-second deadline including baseline and Desktop recovery; settle transport
+  cancellation and reject late replies after timeout or scope changes.
+- Keep the composer model label stable and show localized progress, timeout,
+  and retry feedback in the [model popup](ui/flower-model-navigation.md).
+
 ## 2026-10-12: Compact Flower model picker
 
 - Refine [model navigation](ui/flower-model-navigation.md) with caption-sized

@@ -138,6 +138,29 @@ function attachmentBridgeStubs() {
 }
 
 describe('Local Environment Flower surface adapter', () => {
+  it('settles stalled model IPC within ten seconds and keeps its late reply out of settings', async () => {
+    vi.useFakeTimers();
+    try {
+      let finish!: (value: unknown) => void;
+      const bridge = bridgeFor(request => {
+        if (request.path === '/_redeven_proxy/api/settings') return settingsResponse();
+        if (request.path.endsWith('?mode=baseline')) return { current_model: 'default/agent', directory: {
+          models: [{ id: 'default/agent', label: 'Agent', source: 'runtime_config', provider_id: 'default', model_name: 'agent', state: 'pending' }],
+          sources: [{ id: 'default', kind: 'runtime_config', state: 'pending' }],
+        } };
+        return new Promise(resolve => { finish = resolve; });
+      });
+      const surfaceAdapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge);
+      await surfaceAdapter.loadSettings();
+      const read = surfaceAdapter.loadModelDirectory!();
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(await read).toMatchObject({ checking: false, error: 'directory_timeout', models: [{ id: 'default/agent', state: 'unavailable' }] });
+      finish({ current_model: 'late/model', directory: { models: [], sources: [] } });
+      await vi.advanceTimersByTimeAsync(0);
+      expect((await surfaceAdapter.loadSettings()).model_directory?.current_model_id).toBe('default/agent');
+    } finally { vi.useRealTimers(); }
+  });
+
   it('updates runtime copy without replacing the adapter or transport', () => {
     let label = 'Local Environment';
     let subtitle = 'Local workspace';
@@ -874,6 +897,7 @@ describe('Local Environment Flower surface adapter', () => {
       },
       { method: 'GET', path: '/_redeven_proxy/api/settings' },
       { method: 'GET', path: '/_redeven_proxy/api/ai/models?mode=baseline' },
+      { method: 'GET', path: '/_redeven_proxy/api/ai/models' },
     ]);
     expect(snapshot.model_profile?.current_model_id).toBe('default/gpt-5.4');
     expect(onSettingsChanged).toHaveBeenCalledTimes(1);

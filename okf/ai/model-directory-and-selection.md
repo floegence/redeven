@@ -49,6 +49,17 @@ refreshes share one request, and unmounting releases the subscription. The
 directory is an observation, not a second persistence ledger or an execution
 authorization.
 
+The shared read resource owns a ten-second total availability deadline across
+baseline, explicit Desktop recovery, and discovery. Pending sources start their
+background check as soon as the baseline arrives, independently of a stalled
+settings read. Web transports receive the owner's abort signal; Desktop IPC
+late replies cannot publish after timeout. Transport cancellation is a settled
+failure unless the owning scope changed. Failed pending rows become unavailable,
+known ready models and selection identities remain intact, and explicit refresh
+starts a new bounded attempt. Only the model popup displays checking and timeout
+feedback; the composer keeps its current model label and never spins for an
+availability check. Static-only baselines need no background provider request.
+
 Automatic model-list discovery has a five-second total catalog budget, shorter
 than Desktop's bootstrap request deadline. A slow or disconnected dynamic
 provider cannot prevent unrelated configured models from being listed. This

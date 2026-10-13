@@ -13,8 +13,8 @@ Flower keeps environment and Desktop model sources explicit, preserves thread-ow
 
 ## Mechanism
 
-Before the initial settings snapshot arrives, the composer shows a compact
-model-loading indicator with a localized accessible status. Settings, the
+The composer always keeps its model label visible without an availability
+spinner or busy status. Settings, the
 Runtime baseline directory, and thread history start independently. Dynamic
 directory checks run in the background; a ready static model remains usable.
 Settings, history, and directory failures expose their own recovery actions.
@@ -49,7 +49,7 @@ default, while a Desktop-model change stops after the thread PATCH. Returning
 to New Chat restores its draft without copying the thread preference.
 
 The exact directory entry controls chat readiness independently of web search.
-A pending selected model shows a checking status; an unavailable selection
+A pending source shows a checking status inside the model popup; an unavailable selection
 retains its identity and exposes refresh, another model, and settings. Existing
 conversations and configured profiles retain these controls even with no
 usable models. Actual Desktop connection or protocol failures expose connection

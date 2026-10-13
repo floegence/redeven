@@ -719,7 +719,6 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
   const loadSettings = async () => { const snapshot = await resource.loadSettings(); return withFlowerModelDirectory(snapshot, snapshot.model_directory!); };
   const reloadSettings = () => { resource.invalidate(); return loadSettings(); };
   return createRuntimeFlowerSurfaceAdapter({
-    retryModelSource: async () => { await bridge.retryDesktopModels?.(); },
     runtime: {
       runtime_id: LOCAL_ENVIRONMENT_RUNTIME_ID,
       runtime_kind: 'local_environment',
@@ -821,7 +820,7 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
     mapperOptions: localEnvironmentLiveMapperOptions(),
     extensions: flowerExtensionsAdapter((method, path, body) => runtimeJSON(bridge, method, path, body, undefined, options.runtimeEnvironmentID), { canInteract: () => true, canAdmin: () => true }),
     loadSettings,
-    loadModelDirectory: resource.loadDirectory,
+    loadModelDirectory: refresh => resource.loadDirectory(refresh, () => bridge.retryDesktopModels?.() ?? Promise.resolve()),
     subscribeModelDirectory: resource.subscribe,
     chatGPTAuth: async (action, input) => {
       const result = await runtimeJSON<Awaited<ReturnType<NonNullable<FlowerSurfaceAdapter['chatGPTAuth']>>>>(bridge, 'POST', `/_redeven_proxy/api/ai/auth/chatgpt/${action}`, input);
