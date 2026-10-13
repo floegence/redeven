@@ -3,11 +3,11 @@ type: Desktop Contract
 title: Desktop runtime readiness
 description: Direct Runtime health, access readiness, and Open recovery boundaries.
 tags: [desktop, runtime, startup, readiness]
-timestamp: 2026-09-22T00:00:00Z
+timestamp: 2026-10-13T00:00:00Z
 ---
 # Summary
 
-Desktop derives managed Runtime readiness from the exact Local, SSH, or container target, while access-only Gateway/Provider/URL readiness remains separate. A managed Environment opens only after the current Runtime reports compatible service and Local UI readiness. Missing, stopped, old, or damaged Runtime state selects a direct Desktop Start, Update, or reinstall recovery; it never invokes Gateway or Provider lifecycle. A transient status gap during startup is observed within the bounded readiness deadline and is not treated as process exit.
+Desktop derives managed Runtime readiness from the exact Local, SSH, or container target, while access-only Gateway/Provider/URL readiness remains separate. A managed Environment opens only after the current Runtime reports compatible service and Local UI readiness. Missing, stopped, old, or damaged Runtime state selects a direct Desktop Start, Update, or reinstall recovery; it never invokes Gateway or Provider lifecycle. A transient status gap during startup is observed within the bounded readiness deadline and is not treated as process exit. Retained control diagnoses support presentation continuity only; live Presence and command-time validation retain management authority.
 
 # Contract
 
@@ -37,6 +37,12 @@ A healthy Runtime opens directly. A stopped Runtime offers Start and Open. An in
 Open may reuse a Welcome health observation for the separate status preflight only while it remains inside the 30-second freshness window and matches the exact target's ready record by Runtime PID, process start identity, and Runtime Service build identity. Missing identity, stale or failed health, non-openable service state, or any mismatch forces the normal direct probe. A reused observation never supplies a bridge URL or credential: Open still creates the live placement bridge, verifies its current private token, and probes Runtime health and Env App readiness through that bridge. The first recoverable bridge-start failure after reuse forces one status refresh before the existing bounded bridge retry and lifecycle recovery flow continues.
 
 A missing startup timestamp does not establish that a Runtime is stopped. Welcome shows an unknown time/state for unverified, checking, or failed observations without a known startup time; the stopped label requires an explicit stopped Runtime or container reason without a pending or failed health check. A verified online Runtime without a timestamp shows that its start time is unavailable. Successful probes cache observed startup time and process identity alongside health, without bridge credentials or live control endpoints. A pending refresh retains that observation and its startup age while withdrawing live presence; completed results replace it.
+
+## Observation continuity and authority
+
+The main-process Welcome health store retains each target’s completed credential-free control diagnosis in `observed_runtime_control_status`. Checking retains that health record while withdrawing live Presence; completion replaces it. Probe failure or changed management configuration clears it. Target identity and monotonic generations fence retired probes, including removed/re-added registrations.
+
+Retained diagnosis must never fill live `runtime_control_status`, open a trusted connection or authorize an operation. The renderer may retain a stable prerequisite presentation while `revalidating`; without a completed observation it still requests inspection. Main validates the exact current target, trusted channel and Runtime permissions for every command. [Gateway Desktop interactions](../gateway/gateway-desktop-interactions.md) owns enrollment steps, fault recovery and request settlement; observation does not own those interaction states.
 
 Runtime process health, Runtime Service compatibility, Local UI availability, Workspace readiness, AI readiness, Provider link, and Gateway access are separate facts. AI or Provider failure does not make a healthy Runtime installation unavailable. Gateway failure affects only sessions routed through that Gateway.
 
@@ -126,5 +132,5 @@ The additive Runtime OS observation follows [Runtime platform facts and icons](d
 - `redeven:desktop/src/welcome/viewModel.test.ts:1` - Unknown versus explicitly stopped Runtime card evidence.
 - `redeven:desktop/src/welcome/App.tsx:1` - Localized action menu, progress, and recovery presentation.
 - `redeven:desktop/src/welcome/flower/DesktopFlowerRuntimeBoundary.client.test.tsx` - AI admission, preparation, blocked states, and draft preservation through recovery.
-- `redeven:desktop/src/main/desktopWelcomeRuntimeHealth.test.ts` - Preparation cache bypass on the existing observer.
+- `redeven:desktop/src/main/desktopWelcomeRuntimeHealth.test.ts` - Preparation cache bypass, presentation-only control retention, live Presence withdrawal and stale-response fencing on the existing observer.
 - `redeven:desktop/src/main/desktopWelcomeState.test.ts` - Current readiness wins over historical startup during refresh.

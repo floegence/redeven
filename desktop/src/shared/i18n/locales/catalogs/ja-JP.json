@@ -3218,6 +3218,8 @@
     "connecting": "接続中…",
     "connectFailed": "この環境に接続できませんでした。再試行するか、環境の接続設定を確認してください。",
     "back": "戻る",
+    "restoreConnection": "接続を復旧",
+    "operationInProgress": "別の操作がこのランタイムを使用しています。完了するまでお待ちください。",
 
     "title": "Gateway アクセスを追加",
     "menuAction": "Gateway アクセスを追加",

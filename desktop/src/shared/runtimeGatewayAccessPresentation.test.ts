@@ -3,6 +3,7 @@ import { mixedEnvironmentFixture } from '../testSupport/mixedEnvironmentFixture'
 import { runtimeGatewayAccessPresentation } from './runtimeGatewayAccessPresentation';
 import type { DesktopEnvironmentEntry } from './desktopLauncherIPC';
 import { runtimeGatewayAccessFixture } from '../testSupport/runtimeGatewayAccessFixture';
+import { runtimeGatewayBackgroundProbeFixture } from '../testSupport/runtimeGatewayBackgroundProbeFixture';
 
 function runtime(kind: 'local_environment' | 'ssh_environment' | 'wsl_environment' = 'ssh_environment') {
   const entry = mixedEnvironmentFixture({ linkKind: kind }).snapshot.environments.find(item => item.kind === kind)!;
@@ -12,6 +13,18 @@ function runtime(kind: 'local_environment' | 'ssh_environment' | 'wsl_environmen
 }
 
 describe('managed Runtime Gateway access', () => {
+  it.each(['local', 'ssh', 'wsl', 'local_container', 'ssh_container'] as const)('retains the completed %s diagnosis through real background probes without restoring live control', async kind => {
+    for (const state of ['ready', 'connection_required', 'stopped', 'control_missing', 'update_required', 'management_unavailable'] as const) {
+      const f = await runtimeGatewayBackgroundProbeFixture(kind, state);
+      const completed = runtimeGatewayAccessPresentation(f.snapshot().environments[0])!;
+      const check = f.beginProbe();
+      const environment = check.checking.environments[0];
+      expect(environment.provider_runtime_link_target?.runtime_control_status.state).toBe('missing');
+      expect(f.store.snapshot().managedRuntimePresenceByTargetID[environment.provider_runtime_link_target!.id]).toBeUndefined();
+      expect(runtimeGatewayAccessPresentation(environment), `${kind}/${state}`).toEqual({ ...completed, revalidating: true });
+      expect(runtimeGatewayAccessPresentation((await check.finish()).environments[0])).toEqual(completed);
+    }
+  });
   it.each(['local', 'ssh', 'wsl', 'local_container', 'ssh_container'] as const)('projects real %s snapshots through every preparation state', kind => {
     for (const [state, phase] of [['unknown', 'check_required'], ['stopped', 'not_started'], ['control_missing', 'control_missing'],
       ['ready', 'ready'], ['connection_required', 'connection_required'], ['update_required', 'update_required'], ['management_unavailable', 'management_unavailable']] as const) {
@@ -65,13 +78,12 @@ describe('managed Runtime Gateway access', () => {
       open: { ...pending.runtime_operations.open, availability: 'blocked' },
     } })).toMatchObject({ phase: 'management_unavailable' });
   });
-  it('prioritizes required updates and preserves a busy operation owner', () => {
+  it('prioritizes required updates independently of operation state', () => {
     const entry = runtime();
     const outdated = { ...entry, runtime_operations: { ...entry.runtime_operations,
       update: { ...entry.runtime_operations.update, package_state: { state: 'outdated' as const, current_version: 'v1', target_version: 'v2' } },
     } };
     expect(runtimeGatewayAccessPresentation(outdated)).toMatchObject({ phase: 'update_required', recovery: 'update' });
-    expect(runtimeGatewayAccessPresentation(outdated, true)).toMatchObject({ phase: 'busy' });
   });
   it('never manufactures management from a route, window or presentation kind', () => {
     const entry = runtime();

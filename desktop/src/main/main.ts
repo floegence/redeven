@@ -4848,6 +4848,8 @@ function buildWelcomeRuntimeHealthTargets(
   const localTargets: readonly DesktopWelcomeRuntimeHealthTarget[] = desktopPlatformCapabilities.native_local_environment
     ? [{
         key: `local:${preferences.local_environment.id}`,
+        observation_key: runtimeLifecycleFingerprint({ host_access: { kind: 'local_host' },
+          runtime_root: preferences.local_environment.local_hosting.state_dir }),
         environment_id: preferences.local_environment.id,
         slot: 'local_environment' as const,
         presence_target_id: desktopCloudRuntimeLinkTargetID('local_environment', preferences.local_environment.id),
@@ -4874,6 +4876,9 @@ function buildWelcomeRuntimeHealthTargets(
         const presenceTargetID = desktopCloudRuntimeLinkTargetID(targetKind, target.id);
         return {
           key: `runtime-target:${target.id}`,
+          observation_key: runtimeLifecycleFingerprint({ host_access: hostAccess, placement: target.placement,
+            credential_fingerprint: hostAccess.kind === 'ssh_host' && hostAccess.ssh.auth_mode === 'password'
+              ? crypto.createHash('sha256').update(target.ssh_password ?? '').digest('hex') : undefined }),
           probe_coordinator_key: welcomeRuntimeProbeCoordinatorKey(hostAccess, target.placement, target.id),
           environment_id: target.id,
           slot: 'runtime_target' as const,

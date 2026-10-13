@@ -10,7 +10,7 @@ export type GatewayRuntimeFixtureKind = 'local' | 'ssh' | 'wsl' | 'local_contain
 export type GatewayRuntimeFixtureState = 'unknown' | 'stopped' | 'control_missing' | 'connection_required' | 'ready' | 'update_required' | 'management_unavailable';
 
 /** Real saved targets and Presence projection; containers retain their direct host owner. */
-export function runtimeGatewayAccessFixture(kind: GatewayRuntimeFixtureKind, state: GatewayRuntimeFixtureState = 'ready') {
+export function runtimeGatewayAccessFixture(kind: GatewayRuntimeFixtureKind, state: GatewayRuntimeFixtureState = 'ready', startedAtUnixMS?: number) {
   const environmentKind = kind === 'wsl' ? 'wsl_environment' : kind.startsWith('local') ? 'local_environment' : 'ssh_environment';
   const fixture = mixedEnvironmentFixture({ linkKind: environmentKind });
   const original = fixture.snapshot.environments.find(entry => entry.kind === environmentKind)!;
@@ -27,6 +27,7 @@ export function runtimeGatewayAccessFixture(kind: GatewayRuntimeFixtureKind, sta
   const rawPresence = {
     ...sourcePresence, environment_id: id, target_id: targetID, placement_target_id: desktopRuntimeTargetID(sourcePresence.host_access, placement),
     runtime_key: targetID, placement, running: state !== 'stopped', openable: state !== 'stopped',
+    started_at_unix_ms: startedAtUnixMS ?? sourcePresence.started_at_unix_ms,
     open_connection_required: state === 'connection_required',
     runtime_control_status: state === 'connection_required' ? { state: 'missing' as const, reason_code: 'forward_unavailable' as const, message: 'Connect the Desktop bridge' } : state === 'stopped' ? { state: 'missing' as const, reason_code: 'not_started' as const, message: 'Stopped Runtime' }
       : state === 'control_missing' ? { state: 'missing' as const, reason_code: 'not_reported' as const, message: 'Control unavailable' }
@@ -43,14 +44,15 @@ export function runtimeGatewayAccessFixture(kind: GatewayRuntimeFixtureKind, sta
     },
   };
   const savedTarget = { ...fixture.targets[0], id: placementID, label: original.label, host_access: sourcePresence.host_access, placement };
-  const snapshot = buildDesktopWelcomeSnapshot({ ...fixture.inputs, controlPlanes: [],
+  const inputs = { ...fixture.inputs, controlPlanes: [],
     preferences: { ...fixture.inputs.preferences,
       saved_runtime_targets: environmentKind === 'local_environment' && !container ? [] : [savedTarget],
     },
     managedRuntimePresenceByTargetID: state === 'unknown' ? {} : {
       [targetID]: { ...rawPresence, operations: buildDesktopRuntimeOperationPlans({ surface: 'managed_runtime_card', ...rawPresence }) },
     },
-  });
+  };
+  const snapshot = buildDesktopWelcomeSnapshot(inputs);
   const environment = snapshot.environments.find(entry => entry.id === id)!;
-  return { environment, snapshot: { ...snapshot, environments: [environment] } };
+  return { environment, inputs, presence: inputs.managedRuntimePresenceByTargetID[targetID], snapshot: { ...snapshot, environments: [environment] } };
 }

@@ -66,6 +66,7 @@ try {
  const load=relative=>server.ssrLoadModule(fileURLToPath(new URL(relative,import.meta.url)));
  const {runtimeConnectionFixture}=await load('../src/testSupport/runtimeConnectionFixture.ts');
  const {runtimeGatewayAccessFixture}=await load('../src/testSupport/runtimeGatewayAccessFixture.ts');
+ const {runtimeGatewayBackgroundProbeFixture}=await load('../src/testSupport/runtimeGatewayBackgroundProbeFixture.ts');
  const {buildDesktopWelcomeSnapshot}=await load('../src/main/desktopWelcomeState.ts');
  const {createDesktopI18n}=await load('../src/shared/i18n/index.ts');
  for(const locale of locales.length ? locales : supportedLocales) {
@@ -194,8 +195,9 @@ try {
     report.cases.push(`${locale}/${width}: original tabs, upward menu, explicit target, Cloud impact, retained draft and independent pairing`);
    } finally {await context.close();}
    for(const kind of ['local','ssh','wsl','local_container','ssh_container']) {
+    const startedAtUnixMS=Date.now()-120000;
     const fixtures=Object.fromEntries(['unknown','stopped','control_missing','connection_required','ready','update_required','management_unavailable']
-      .map(state=>[state,runtimeGatewayAccessFixture(kind,state)]));
+      .map(state=>[state,runtimeGatewayAccessFixture(kind,state,startedAtUnixMS)]));
     for(const fixture of Object.values(fixtures))fixture.snapshot.gateway_sources=[...fixture.snapshot.gateway_sources,localGateway];
     const runtime=fixtures.ready.environment;
     const context=await browser.newContext({viewport:{width,height:1050},reducedMotion:'reduce',hasTouch:locale==='zh-TW' && width===430});
@@ -243,6 +245,45 @@ try {
      const dialog=page.getByRole('dialog');await dialog.waitFor();
      await dialog.locator('[data-gateway-preparation="not_started"]').waitFor();
      const initialLayout=await wizardLayout(dialog);
+     const observer=await runtimeGatewayBackgroundProbeFixture(kind,'ready',startedAtUnixMS);
+     async function assertBackgroundContinuity(stage) {
+      // Capture after explicit step focus and font layout settle, before injecting observations.
+      await page.evaluate(async()=>{await document.fonts.ready;await new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done)));});
+      await dialog.evaluate(panel=>{
+       const inputs=[...panel.querySelectorAll('input')];
+       const buttons=[...panel.querySelectorAll('.redeven-gateway-join-actions button')].filter(button=>button.checkVisibility());
+       window.gatewayContinuity={panel,inputs,buttons,labels:buttons.map(button=>button.textContent),disabled:buttons.map(button=>button.disabled),
+        focus:document.activeElement,selection:inputs.map(input=>[input.selectionStart,input.selectionEnd]),values:inputs.map(input=>input.value),
+        step:panel.querySelector('[data-gateway-step]').dataset.gatewayStep,scroll:panel.querySelector('.redeven-gateway-join-scroll').scrollTop};
+      });
+      async function assertContinuity() {
+       const errors=await page.evaluate(()=>{
+        const old=window.gatewayContinuity,panel=document.querySelector('[role="dialog"]');
+        const inputs=[...panel.querySelectorAll('input')];
+        const buttons=[...panel.querySelectorAll('.redeven-gateway-join-actions button')].filter(button=>button.checkVisibility());
+        return [panel===old.panel,inputs.every((input,index)=>input===old.inputs[index]),buttons.length===old.buttons.length,
+         buttons.every((button,index)=>button===old.buttons[index] && button.textContent===old.labels[index] && button.disabled===old.disabled[index]),
+         document.activeElement===old.focus,JSON.stringify(inputs.map(input=>input.value))===JSON.stringify(old.values),
+         JSON.stringify(inputs.map(input=>[input.selectionStart,input.selectionEnd]))===JSON.stringify(old.selection),
+         panel.querySelector('[data-gateway-step]').dataset.gatewayStep===old.step,
+         panel.querySelector('.redeven-gateway-join-scroll').scrollTop===old.scroll,
+         !panel.querySelector('[data-gateway-connection-blocked]')].map((valid,index)=>valid?null:index).filter(index=>index!==null);
+       });
+       assert.deepEqual(errors,[],`${locale}/${width}/${kind}/${stage}: background continuity`);
+       await assertStableWizard(dialog,initialLayout,`${stage} background probe`);
+      }
+      for(let cycle=0;cycle<3;cycle++) {
+       const check=observer.beginProbe();
+       await page.evaluate(({snapshot,gateways})=>window.gatewayAcceptancePublish({...snapshot,gateway_sources:gateways}),
+        {snapshot:check.checking,gateways:fixtures.ready.snapshot.gateway_sources});
+       await assertContinuity();
+       await page.evaluate(({snapshot,gateways})=>window.gatewayAcceptancePublish({...snapshot,gateway_sources:gateways}),
+        {snapshot:await check.finish(),gateways:fixtures.ready.snapshot.gateway_sources});
+       await assertContinuity();
+      }
+      report.cases.push(`${locale}/${width}/${kind}/${stage}: three production observer cycles preserve controls, focus, selection and geometry`);
+     }
+
      await assertWizardTypography(dialog);
      await dialog.getByText(runtime.label,{exact:true}).waitFor();
      const lifecycle=()=>page.evaluate(()=>window.settingsFixture.requests.filter(request=>['start_environment_runtime','restart_environment_runtime','update_environment_runtime'].includes(request.kind)));
@@ -255,18 +296,24 @@ try {
      await dialog.locator('[data-gateway-suggestion="local-gateway"]').waitFor();
      await assertStableWizard(dialog,initialLayout,'startup');
      await inputs.nth(0).fill('https://office.example:7443');await inputs.nth(1).fill('DRAFT-CODE');
+     await inputs.nth(1).evaluate(input=>input.setSelectionRange(1,4));
+     await assertBackgroundContinuity('invitation');
      await page.evaluate(snapshot=>window.gatewayAcceptancePublish(snapshot),fixtures.ready.snapshot);
      assert.equal(await inputs.nth(1).evaluate(element=>element===document.activeElement),true);
      await dialog.getByRole('button',{name:i18n.t('gatewayJoin.verify'),exact:true}).click();
      await dialog.getByRole('button',{name:i18n.t('gatewayJoin.confirmEnable'),exact:true}).waitFor();
      await assertStableWizard(dialog,initialLayout,'verified preview');
+     await assertBackgroundContinuity('confirmation');
      const publish=async state=>page.evaluate(({snapshot,state})=>{
       window.gatewayAcceptanceState=state;window.gatewayAcceptancePublish(snapshot);
      },{snapshot:fixtures[state].snapshot,state});
      for(const [state,key] of [['control_missing','environmentAction.restartRuntime'],['update_required','environmentAction.updateRuntime']]) {
       await publish(state);await dialog.locator(`[data-gateway-preparation="${state}"]`).waitFor();
       await assertStableWizard(dialog,initialLayout,state);
-      assert.equal(await inputs.nth(0).isDisabled(),true);
+      assert.equal(await inputs.nth(0).isDisabled(),false);
+      assert.equal(await dialog.getByRole('button',{name:i18n.t('gatewayJoin.confirmEnable'),exact:true}).isDisabled(),true);
+      assert.equal(await dialog.locator('[data-gateway-step]').getAttribute('data-gateway-step'),'2');
+      await dialog.getByRole('button',{name:i18n.t('gatewayJoin.restoreConnection'),exact:true}).click();
       await page.evaluate(()=>{window.gatewayAcceptanceFailRecovery=true;});
       await holdAction(page);
       await dialog.getByRole('button',{name:i18n.t(key),exact:true}).click();
@@ -280,12 +327,15 @@ try {
       assert.equal(await dialog.locator('.redeven-gateway-join-summary').textContent().then(text=>text.includes('Office')),true);
       await page.evaluate(()=>{window.gatewayAcceptanceFailRecovery=false;});
       await dialog.getByRole('button',{name:i18n.t(key),exact:true}).click();
+      await dialog.getByRole('button',{name:i18n.t('gatewayJoin.verify'),exact:true}).waitFor();
+      await dialog.getByRole('button',{name:i18n.t('gatewayJoin.verify'),exact:true}).click();
       await dialog.getByRole('button',{name:i18n.t('gatewayJoin.confirmEnable'),exact:true}).waitFor();
       await assertStableWizard(dialog,initialLayout,`${state} recovery`);
      }
      await publish('management_unavailable');
      await dialog.getByText(i18n.t('gatewayJoin.credentialsHelp'),{exact:true}).waitFor();
      await assertStableWizard(dialog,initialLayout,'credentials unavailable');
+     await dialog.getByRole('button',{name:i18n.t('gatewayJoin.restoreConnection'),exact:true}).click();
      await dialog.getByRole('button',{name:i18n.t('common.retry'),exact:true}).click();
      await dialog.getByRole('button',{name:i18n.t('gatewayJoin.confirmEnable'),exact:true}).waitFor();
      assert.equal(await inputs.nth(1).inputValue(),'DRAFT-CODE');
@@ -293,10 +343,11 @@ try {
       action:'restart_environment_runtime',environment_id:id,operation_key:'acceptance-operation',started_at_unix_ms:Date.now(),
       status:'running',phase:'checking_runtime_service',title:'Restart Runtime',detail:'',active_progress_surface:'runtime_lifecycle',cancelable:true,
      }]}),{snapshot:fixtures.ready.snapshot,id:runtime.id});
-     await dialog.locator('[data-gateway-preparation="busy"]').waitFor();
+     await dialog.locator('[data-gateway-connection-blocked]').waitFor();
      await assertStableWizard(dialog,initialLayout,'lifecycle progress');
-     assert.equal(await dialog.getByRole('button',{name:i18n.t('common.settings'),exact:true}).isDisabled(),false);
-     assert.equal(await inputs.nth(1).isDisabled(),true);
+     assert.equal(await dialog.getByRole('button',{name:i18n.t('gatewayJoin.restoreConnection'),exact:true}).isDisabled(),false);
+     assert.equal(await inputs.nth(1).isDisabled(),false);
+     assert.equal(await dialog.getByRole('button',{name:i18n.t('gatewayJoin.confirmEnable'),exact:true}).isDisabled(),true);
      await publish('ready');await dialog.getByRole('button',{name:i18n.t('gatewayJoin.confirmEnable'),exact:true}).waitFor();
      const bounds=await dialog.boundingBox();assert.ok(bounds.x>=0 && bounds.x+bounds.width<=width+1);
      const controls=await dialog.locator('button:visible').evaluateAll(elements=>elements.map(element=>({width:element.scrollWidth,client:element.clientWidth,whiteSpace:getComputedStyle(element).whiteSpace})));
@@ -309,6 +360,7 @@ try {
      await publish('connection_required');
      await dialog.getByRole('button',{name:i18n.t('gatewayJoin.connectAndContinue'),exact:true}).waitFor();
      assert.equal(await inputs.nth(0).isVisible(),false);
+     await assertBackgroundContinuity('connection');
      await page.screenshot({path:`${output}/${locale}-${width}-${kind}-connect.png`});
      await page.evaluate(()=>{window.gatewayAcceptanceFailConnection=true;});
      await dialog.getByRole('button',{name:i18n.t('gatewayJoin.connectAndContinue'),exact:true}).click();

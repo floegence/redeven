@@ -3218,6 +3218,8 @@
     "connecting": "연결 중…",
     "connectFailed": "이 환경에 연결하지 못했습니다. 다시 시도하거나 환경의 연결 설정을 확인하세요.",
     "back": "이전",
+    "restoreConnection": "연결 복구",
+    "operationInProgress": "다른 작업이 이 런타임을 사용 중입니다. 작업이 완료될 때까지 기다려 주세요.",
 
     "title": "Gateway 액세스 추가",
     "menuAction": "Gateway 액세스 추가",

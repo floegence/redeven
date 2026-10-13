@@ -50,6 +50,8 @@ export type DesktopWelcomeRuntimeHealthProbeResult = Readonly<{
 export type DesktopWelcomeRuntimeHealthTarget = Readonly<{
   key: string;
   probe_coordinator_key?: string;
+  /** Configured management coordinates; a changed scope retires previous observations and probes. */
+  observation_key?: string;
   environment_id: string;
   slot: DesktopWelcomeRuntimeHealthSlot;
   presence_target_id?: DesktopCloudRuntimeLinkTargetID;
@@ -127,6 +129,7 @@ function withFreshness(
 }
 
 export class DesktopWelcomeRuntimeHealthStore {
+  private sequence = 0;
   private readonly cache = new Map<string, CacheEntry>();
   private readonly inFlight = new Map<string, RefreshTask>();
   private readonly coordinatedProbes = new Map<string, Promise<DesktopWelcomeRuntimeHealthProbeResult>>();
@@ -146,15 +149,17 @@ export class DesktopWelcomeRuntimeHealthStore {
     }
     for (const target of targets) {
       const previous = this.cache.get(target.key);
-      if (previous) {
+      if (previous && previous.target.observation_key === target.observation_key) {
         this.cache.set(target.key, {
           ...previous,
           target,
         });
         continue;
       }
+      this.inFlight.delete(target.key);
+      if (previous?.target.probe_coordinator_key) this.coordinatedProbes.delete(previous.target.probe_coordinator_key);
       this.cache.set(target.key, {
-        generation: 0,
+        generation: ++this.sequence,
         target,
       });
     }
@@ -208,8 +213,9 @@ export class DesktopWelcomeRuntimeHealthStore {
 
   private retainTargets(targets: readonly DesktopWelcomeRuntimeHealthTarget[]): void {
     const targetKeys = new Set(targets.map((target) => target.key));
-    for (const key of this.cache.keys()) {
+    for (const [key, entry] of this.cache) {
       if (!targetKeys.has(key)) {
+        if (entry.target.probe_coordinator_key) this.coordinatedProbes.delete(entry.target.probe_coordinator_key);
         this.cache.delete(key);
       }
     }
@@ -224,6 +230,7 @@ export class DesktopWelcomeRuntimeHealthStore {
     target: DesktopWelcomeRuntimeHealthTarget,
     options: Readonly<{ force?: boolean }>,
   ): Promise<void> {
+    this.prime([target]);
     const existingTask = this.inFlight.get(target.key);
     if (existingTask) {
       return existingTask.promise;
@@ -236,7 +243,7 @@ export class DesktopWelcomeRuntimeHealthStore {
     ) {
       return Promise.resolve();
     }
-    const generation = (previous?.generation ?? 0) + 1;
+    const generation = ++this.sequence;
     this.cache.set(target.key, {
       generation,
       target,
@@ -254,7 +261,9 @@ export class DesktopWelcomeRuntimeHealthStore {
         this.cache.set(target.key, {
           generation,
           target,
-          health: result.health ? withFreshness(result.health, 'fresh') : undefined,
+          health: result.health ? withFreshness({ ...result.health,
+            observed_runtime_control_status: result.presence?.runtime_control_status,
+          }, 'fresh') : undefined,
           presence: result.presence,
         });
         this.onProbeEvent({
@@ -274,6 +283,7 @@ export class DesktopWelcomeRuntimeHealthStore {
           target,
           health: withFreshness({
             ...target.checking_health,
+            observed_runtime_control_status: undefined,
             checked_at_unix_ms: Date.now(),
             offline_reason: message || target.checking_health.offline_reason,
           }, 'failed'),

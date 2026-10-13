@@ -9,6 +9,7 @@ import {
   desktopWelcomeRuntimeHealthIsFresh,
   desktopWelcomeRuntimeHealthForEnvironment,
   type DesktopWelcomeRuntimeHealthTarget,
+  type DesktopWelcomeRuntimeHealthProbeResult,
 } from './desktopWelcomeRuntimeHealth';
 
 function deferred<T>() {
@@ -259,7 +260,7 @@ describe('DesktopWelcomeRuntimeHealthStore', () => {
     expect(events).toEqual(['failed:ssh timed out']);
   });
 
-  it('does not carry previous presence into checking state', async () => {
+  it('retains only the completed control diagnosis while withdrawing live presence during checking', async () => {
     const probeResult = deferred<{ health: DesktopRuntimeHealth }>();
     const store = new DesktopWelcomeRuntimeHealthStore(() => undefined);
     const runtimePresence = presence();
@@ -282,8 +283,43 @@ describe('DesktopWelcomeRuntimeHealthStore', () => {
     })], { force: true });
 
     expect(store.snapshot().managedRuntimePresenceByTargetID[runtimePresence.target_id]).toBeUndefined();
+    expect(store.snapshot().localRuntimeHealth.demo.observed_runtime_control_status).toEqual({ state: 'available' });
     probeResult.resolve({ health: health({ status: 'offline' }) });
     await refresh;
+    expect(store.snapshot().localRuntimeHealth.demo.observed_runtime_control_status).toBeUndefined();
+  });
+
+  it('retires observations and fences old completions when management coordinates change during a probe', async () => {
+    const store = new DesktopWelcomeRuntimeHealthStore(() => undefined);
+    const runtimePresence = presence();
+    const original = target(async () => ({ health: health({ status: 'online' }), presence: runtimePresence }), {
+      slot: 'local_environment', observation_key: 'original', probe_coordinator_key: 'shared',
+    });
+    await store.refresh([original]);
+    const oldProbe = deferred<DesktopWelcomeRuntimeHealthProbeResult>();
+    const pending = store.refresh([{ ...original, probe: () => oldProbe.promise }], { force: true });
+    const newProbe = deferred<DesktopWelcomeRuntimeHealthProbeResult>();
+    const changed = { ...original, observation_key: 'changed', probe: () => newProbe.promise };
+    store.prime([changed]);
+    expect(store.snapshot().localRuntimeHealth.demo).toBeUndefined();
+    const current = store.refresh([changed], { force: true });
+    newProbe.resolve({ health: health({ status: 'offline', offline_reason_code: 'auth_required' }) });
+    await current;
+    oldProbe.resolve({ health: health({ status: 'online' }), presence: runtimePresence }); await pending;
+    expect(store.snapshot().localRuntimeHealth.demo.offline_reason_code).toBe('auth_required');
+    expect(store.snapshot().localRuntimeHealth.demo.observed_runtime_control_status).toBeUndefined();
+    expect(store.snapshot().managedRuntimePresenceByTargetID[runtimePresence.target_id]).toBeUndefined();
+  });
+
+  it('fences an old probe when its key is removed and registered again', async () => {
+    const store = new DesktopWelcomeRuntimeHealthStore(() => undefined);
+    const oldProbe = deferred<DesktopWelcomeRuntimeHealthProbeResult>();
+    const old = store.refresh([target(() => oldProbe.promise, { probe_coordinator_key: 'shared' })], { force: true });
+    store.prime([], { pruneMissing: true });
+    const current = store.refresh([target(async () => ({ health: health({ status: 'offline', offline_reason_code: 'auth_required' }) }), { probe_coordinator_key: 'shared' })], { force: true });
+    oldProbe.resolve({ health: health({ status: 'online' }), presence: presence() }); await Promise.all([old, current]);
+    expect(store.snapshot().savedExternalRuntimeHealth.demo.offline_reason_code).toBe('auth_required');
+    expect(store.snapshot().managedRuntimePresenceByTargetID).toEqual({});
   });
 
   it('clears previous presence when a fresh probe does not return presence', async () => {

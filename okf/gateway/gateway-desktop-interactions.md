@@ -7,7 +7,7 @@ timestamp: 2026-10-13T00:00:00Z
 ---
 # Summary
 
-Desktop owns Gateway enrollment/management for managed Local, SSH, WSL and container targets, including before startup/inspection. Trusted Runtime control, invitation verification and local consent remain independent. Members appear only after joining; no Runtime URL form exists. Failures retain drafts/data; launcher operations own recovery/cancellation/progress. UI state cannot expand authority.
+Desktop owns Gateway enrollment/management for managed Local, SSH, WSL and container targets, including before startup/inspection. Trusted Runtime control, invitation verification and local consent remain independent. Members appear only after joining; no Runtime URL form exists. Background observations cannot change enrollment steps or cancel requests. Confirmed faults retain the current step and pause submission; explicit recovery reuses launcher operations. UI state cannot expand authority.
 
 # Contract
 
@@ -25,7 +25,11 @@ Local suggestions show a local marker, name, Use and selected-address checkmark.
 
 The upward menu retains Runtime/Cloud actions and adds Cancel Gateway pairing. Runtime/Cloud perspectives require selection among multiple members and show a sole member directly. Gateway fixes its selected member without another selector. Equivalent snapshots retain the target; absence disables confirmation. Only the selected Cloud owner shows interruption impact, which Runtime rechecks at commit. Publish through Gateway is separate and alone offers preserve/new for existing Cloud identity. Joined, Gateway offline, Cloud denied, pending approval, published control offline, accessible and migration pending stay distinct. Management uses the trusted direct owner, never a member card.
 
-Same-target snapshots with unchanged invitation seeds preserve address, code, pending verification, preview, focus and reading position. Mounted drafts and unexpired previews survive lost control, back navigation and failed recovery; later stages hide and submissions pause. The setup wizard does not poll membership; each operation reacquires/validates its trusted connection. Unpairing/publication retain their own target/consent. Changed target/address/code resets verification and fences responses; object replacement cannot reset a session. Closing clears secrets/consent, fences responses and restores the menu button. Success clears the consumed code; reopening starts a fresh draft.
+The enrollment session owns steps, address, code, preview and pending connection/verification/join requests. Same-target background probes preserve these, DOM controls, focus, selection and reading position. Checking after a completed observation uses the retained presentation diagnosis defined by [Runtime readiness](../desktop/desktop-runtime-readiness.md); first inspection remains check-required. Background checks never show operation progress or grant live control authority.
+
+A completed stopped, credential, engine, version or probe failure shows compact guidance in the current step and blocks submission. Only Restore connection returns to the connection step; Start, Restart and Update remain explicit lifecycle actions. Successful recovery performs exact-target trusted status again. Unexpired consent survives a read-only retry; expired consent returns to invitation verification. Runtime replacement invalidates process-local previews, including after lifecycle recovery, while retaining the draft. Active lifecycle progress belongs to its real operation key, not health freshness.
+
+The setup wizard does not poll membership. Every command reacquires and validates its trusted connection. Observational updates neither cancel pending requests nor discard their success/failure, including a join completing alongside a fault. Submissions are deduplicated and never automatically retried. Changed target, management coordinates, invitation coordinates or purpose fence old responses; equivalent snapshots cannot reset the session. Unpairing/publication retain their own target/consent. Closing clears code/consent, fences responses and restores the menu button. Success clears the consumed code; reopening starts a fresh draft.
 
 ## Members and policy
 
@@ -68,9 +72,9 @@ This surface presents current Gateway state and starts explicit user-authorized 
 - `redeven:desktop/src/welcome/GatewayMembersDialog.tsx` — Invitations, policies, partial results and reevaluation.
 - `redeven:desktop/src/welcome/RuntimeGatewayJoinPanel.tsx` — Retained address/code verification and confirmation.
 - `redeven:desktop/src/welcome/RuntimeGatewayConnectionsDialog.tsx` — Explicit target, Cloud impact and separate publication consent.
-- `redeven:desktop/scripts/check-gateway-runtime-connections.mjs` — Ten locales and two widths across five managed placements, stable wizard bounds through loading/recovery, compact typography, short windows and enlarged text, retained previews and focus restoration, alongside original tabs and consent.
+- `redeven:desktop/scripts/check-gateway-runtime-connections.mjs` — Ten locales and two widths across five managed placements, stable wizard bounds through loading/recovery, compact typography, short windows and enlarged text, complete production observer cycles in all steps, retained previews, focus/selection/scroll and action identity, alongside original tabs and consent.
 - `redeven:desktop/src/welcome/RuntimeGatewayJoinPanel.client.test.tsx` — Snapshot/polling draft retention and target/secret/async-response lifecycle boundaries.
-- `redeven:desktop/src/welcome/EnvironmentRelation.client.test.tsx` — Typed and quick-filled drafts survive real launcher snapshot updates through the environment card.
+- `redeven:desktop/src/welcome/EnvironmentRelation.client.test.tsx` — Production Poller/HealthStore/WelcomeSnapshot updates traverse the actual Environment owner and dialog, including five-second ticks, pending requests and confirmed faults.
 - `redeven:desktop/src/welcome/RuntimeGatewaySetupDialog.tsx` — Explicit environment connection, compact recovery and horizontal enrollment steps.
 - `redeven:desktop/src/shared/runtimeGatewayAccessPresentation.test.ts` — Eligibility, actual placement snapshots and recovery availability.
 - `redeven:desktop/src/main/runtimeGatewayLauncher.test.ts` — Exact management target validation, lease release and independent Cloud recovery fencing.

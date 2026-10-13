@@ -5,6 +5,7 @@ import {
   type RuntimeServiceWorkload,
 } from './runtimeService';
 import type { DesktopRuntimePlatform } from './desktopRuntimePlatform';
+import type { DesktopRuntimeControlStatus } from './desktopRuntimePresence';
 
 export type DesktopRuntimeStatus = 'online' | 'offline';
 export type DesktopRuntimeHealthFreshness =
@@ -72,6 +73,8 @@ export type DesktopRuntimeHealth = Readonly<{
   checked_at_unix_ms: number;
   source: DesktopRuntimeHealthSource;
   freshness?: DesktopRuntimeHealthFreshness;
+  /** Last completed probe diagnosis for presentation only; never live management authority. */
+  observed_runtime_control_status?: DesktopRuntimeControlStatus;
   local_ui_url?: string;
   local_ui_urls?: readonly string[];
   local_ui_address_issues?: readonly LocalUIAddressIssue[];

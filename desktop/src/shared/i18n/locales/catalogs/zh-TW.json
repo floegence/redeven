@@ -3218,6 +3218,8 @@
     "connecting": "正在連線…",
     "connectFailed": "無法連線至此環境。請重試或檢查環境的連線設定。",
     "back": "上一步",
+    "restoreConnection": "恢復連線",
+    "operationInProgress": "其他操作正在使用此執行階段，請等待操作完成。",
 
     "title": "新增 Gateway 存取",
     "menuAction": "新增 Gateway 存取",
