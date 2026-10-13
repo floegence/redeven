@@ -129,7 +129,7 @@ vi.mock('@floegence/floe-webapp-core/icons', async (importOriginal) => {
     ArrowRightLeft: Icon,
     Bot: Icon,
     Check: Icon,
-    ChevronDown: Icon,
+    ChevronDown: actual.ChevronDown,
     ChevronLeft: Icon,
     ChevronRight: actual.ChevronRight,
     Clock: Icon,

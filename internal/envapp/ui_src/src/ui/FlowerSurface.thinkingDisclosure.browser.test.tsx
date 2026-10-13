@@ -59,6 +59,15 @@ function stream(initial: FlowerRuntimeCurrentView, summaries: () => FlowerLiveSt
 }
 const disclosure = (root: ParentNode, id = 'thinking') => root.querySelector<HTMLElement>(`[data-flower-message-id="${id}"] .flower-thinking-disclosure`)!;
 const toggle = (root: ParentNode, id = 'thinking') => disclosure(root, id).querySelector<HTMLButtonElement>('button')!;
+function chevronDirection(root: ParentNode): number {
+  const path = toggle(root).querySelector<SVGPathElement>('.flower-thinking-toggle-icon path')!;
+  const length = path.getTotalLength();
+  const transform = path.getScreenCTM()!;
+  const start = path.getPointAtLength(0).matrixTransform(transform);
+  const tip = path.getPointAtLength(length / 2).matrixTransform(transform);
+  const end = path.getPointAtLength(length).matrixTransform(transform);
+  return Math.round(Math.atan2(tip.y - (start.y + end.y) / 2, tip.x - (start.x + end.x) / 2) * 180 / Math.PI);
+}
 async function mount(presentation: 'full' | 'companion' = 'full', localized = false) {
   await page.viewport(1280, 900);
   const initial = current();
@@ -77,6 +86,27 @@ async function mount(presentation: 'full' | 'companion' = 'full', localized = fa
   await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   return { root, live, initial };
 }
+
+it.each(['full', 'companion'] as const)('points thinking down while visible and right while collapsed in the %s surface', async presentation => {
+  const { root, live, initial } = await mount(presentation);
+  await expect.poll(() => chevronDirection(root)).toBe(90);
+  toggle(root).click();
+  expect(disclosure(root).dataset.flowerThinkingView).toBe('expanded');
+  await expect.poll(() => chevronDirection(root)).toBe(90);
+  toggle(root).click();
+  expect(disclosure(root).dataset.flowerThinkingView).toBe('preview');
+  await expect.poll(() => chevronDirection(root)).toBe(90);
+  live.push(sealed(initial));
+  await waitFor(() => disclosure(root).dataset.flowerThinkingView === 'collapsed');
+  await expect.poll(() => chevronDirection(root)).toBe(0);
+  toggle(root).focus();
+  await userEvent.keyboard('{Enter}');
+  expect(toggle(root).getAttribute('aria-expanded')).toBe('true');
+  await expect.poll(() => chevronDirection(root)).toBe(90);
+  await userEvent.keyboard(' ');
+  expect(toggle(root).getAttribute('aria-expanded')).toBe('false');
+  await expect.poll(() => chevronDirection(root)).toBe(0);
+});
 
 it.each([
   ['assistant', 'preview'], ['assistant', 'expanded'], ['tool', 'preview'], ['tool', 'expanded'],
