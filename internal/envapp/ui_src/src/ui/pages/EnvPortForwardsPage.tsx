@@ -1563,6 +1563,8 @@ export function ManagedServiceRow(props: { service: ManagedService; selected?: b
     return [...new Set(messages)];
   });
   const primaryCapability = (): ManagedActionCapability => primaryAction() === 'inspect' || primaryAction() === 'recover' ? props.service.actions?.inspect ?? { available: true } : actionCapability(primaryAction() as ManagedAction);
+  const openAvailable = () => Boolean(props.service.actions?.open?.available) && props.canOpen;
+  const startIsPrimary = () => !archived() && !openAvailable() && primaryAction() === 'start' && primaryCapability().available && props.canManage;
   const executePrimary = () => { const action = primaryAction(); if (action === 'start' || action === 'stop') props.onAction(action); else props.onInspect?.(); };
   const actionLabel = (action: ManagedAction): string => {
     const label = action === 'restart' ? i18n.t(props.service.pending_changes ? 'webServices.managed.applyAndRestart' : 'webServices.managed.restart') : i18n.t('webServices.managed.retry');
@@ -1661,13 +1663,13 @@ export function ManagedServiceRow(props: { service: ManagedService; selected?: b
 
         <div class={serviceRowActionsClass} data-archived={archived() || undefined} data-testid="managed-service-actions">
           <Show when={!archived()}><ServiceOpenButton busy={props.busy} busyText={props.busyText}
-            canOpen={Boolean(props.service.actions?.open?.available) && props.canOpen}
+            canOpen={openAvailable()}
             reason={!props.canOpen ? props.openUnavailableReason : !props.service.actions?.open?.available
-              ? managedActionUnavailableReason(props.service.actions?.open ?? { available: false, reason_code: 'SERVICE_STATE_UNAVAILABLE' }, i18n)
+              ? startIsPrimary() ? i18n.t('webServices.managed.openUnavailableStartRequired') : managedActionUnavailableReason(props.service.actions?.open ?? { available: false, reason_code: 'SERVICE_STATE_UNAVAILABLE' }, i18n)
               : props.openUnavailableReason}
             onOpen={props.onOpen} /></Show>
           <Tooltip content={managedActionUnavailableReason(primaryCapability(), i18n)} placement="top" anchorClass="web-service-manage" disabled={primaryCapability().available}>
-            <Button data-testid="managed-service-primary" size="sm" variant="outline" class="web-service-button" aria-label={`${props.service.name}: ${primaryFullLabel()}`} onClick={executePrimary} disabled={!primaryCapability().available || ((primaryAction() === 'start' || primaryAction() === 'stop') && (busy() || !props.canManage))}>
+            <Button data-testid="managed-service-primary" size="sm" variant={startIsPrimary() ? 'default' : 'outline'} class="web-service-button" aria-label={`${props.service.name}: ${primaryFullLabel()}`} onClick={executePrimary} disabled={!primaryCapability().available || ((primaryAction() === 'start' || primaryAction() === 'stop') && (busy() || !props.canManage))}>
               <Show when={primaryAction() === 'stop'}><Stop class="mr-1.5 h-3.5 w-3.5" /></Show>
               <Show when={primaryAction() === 'start'}><Play class="mr-1.5 h-3.5 w-3.5" /></Show>
               <Show when={primaryAction() !== 'start' && primaryAction() !== 'stop'}><Search class="mr-1.5 h-3.5 w-3.5" /></Show>

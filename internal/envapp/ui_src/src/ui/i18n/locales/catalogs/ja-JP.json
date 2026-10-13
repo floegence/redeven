@@ -4040,6 +4040,7 @@
       "templateInstalled": "このテンプレートのサービスは現在の環境にインストールされています。",
       "openUnavailableOperation": "サービス操作を実行中です。",
       "openUnavailableNotRunning": "サービスは実行されていません。",
+      "openUnavailableStartRequired": "サービスを起動してから開いてください。",
       "openUnavailableDesktopLoopback": "このサービスは「ローカル互換モード」に設定されており、Redeven Desktop でのみ使用できます。ブラウザーでアクセスするには、サービス設定の「一般」で「アクセスモード」を「Redeven セキュアプロキシ」に変更し、保存してください。",
       "installed": "インストール済み",
       "duplicate": "複製",

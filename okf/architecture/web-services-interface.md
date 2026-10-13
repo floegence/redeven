@@ -25,6 +25,8 @@ Opening indicators keep the same icon footprint as idle and restricted states. T
 
 ## Opening restrictions
 
+When Open is unavailable and the backend selects an executable Start action, Start uses the primary button style within existing management permissions. The restricted Open action guides the user to start the service. Once Open becomes available, it resumes the primary emphasis and lifecycle actions remain secondary.
+
 Managed and ordinary services share one Open action. Current access restrictions and backend action capability control availability; old opening errors and health-check failures do not permanently disable retries. A restricted action keeps its position and keyboard focusability, uses muted disabled styling, `aria-disabled`, and a yellow warning icon. Click, touch, Enter, or Space discloses the yellow reason tooltip without issuing an opening request. Hover and focus also expose the reason; Escape, a second activation, or outside interaction dismisses it. An associated accessible description retains the full reason independently of tooltip presence.
 
 Opening restrictions are not repeated in expanded yellow row notices. Pending configuration, blocked cleanup, and other management explanations remain in their existing support regions. The tooltip consumes the published visible viewport and `SurfaceFloatingLayer`; that layer owns Workbench projection and surface clamping. Long explanations wrap inside the visible boundary in either theme.
