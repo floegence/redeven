@@ -680,7 +680,14 @@
       },
       "citationSources": "Fontes",
       "citationCopySources": "Copiar fontes",
-      "citationUnavailable": "Fonte indisponível"
+      "citationUnavailable": "Fonte indisponível",
+      "queuedEdit": "Editar mensagem na fila",
+      "queuedEditSave": "Salvar alterações",
+      "queuedEditRetry": "Tentar salvar novamente",
+      "queuedEditCancel": "Voltar ao rascunho",
+      "queuedEditUnavailable": "A edição de mensagens na fila está indisponível.",
+      "queuedEditConflict": "Esta mensagem mudou ou começou a ser executada. Suas alterações foram preservadas.",
+      "queuedEditUnknown": "O resultado do salvamento é desconhecido. Tente o mesmo salvamento novamente para verificá-lo."
     },
     "threadList": {
       "title": "Conversas",

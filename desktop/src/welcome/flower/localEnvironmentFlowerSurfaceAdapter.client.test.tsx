@@ -1558,3 +1558,20 @@ it('round-trips disabled providers without discarding their default or secret re
   expect(bundle.model_profile.current_model_id).toBe(settings.ai?.current_model_id);
   expect(bundle.provider_api_key_patches).toEqual([]);
 });
+
+it('edits full queued content and resolves preview targets through scoped Desktop IPC', async () => {
+  const calls: RuntimeFlowerRequest[] = [];
+  const bridge = bridgeFor(request => {
+    calls.push(request);
+    if (request.path.endsWith('/reference-open-target')) return { kind: 'directory', label: 'src', path: '/workspace/src' };
+    if (request.method === 'PATCH') return { ok: true };
+    return detailView({}, { view_version: 2 });
+  });
+  const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge);
+  await adapter.editQueuedTurn!('thread-1', 'queue:first', { client_request_id: 'edit-1', expected_input_fingerprint: 'a'.repeat(64), prompt: 'updated', retained_attachment_ids: ['image'], retained_reference_ids: ['directory'], attachment_ids: ['new-image'], staging_scope: stagingScope('thread-1') });
+  expect(calls[0]).toMatchObject({ method: 'PATCH', path: '/_redeven_proxy/api/ai/threads/thread-1/queue/queue%3Afirst', body: { client_request_id: 'edit-1', content: { text: 'updated', retained_attachment_ids: ['image'], retained_reference_ids: ['directory'], attachments: [{ attachment_id: 'new-image' }], staging_scope_id: 'staging_thread-1' } }, staging_scope_id: 'staging_thread-1', staging_capability: 'secret_thread-1' });
+  expect(JSON.stringify(calls[0].body)).not.toContain('secret');
+  await expect(adapter.resolveCanonicalReference!({ thread_id: 'thread-1', queue_id: 'queue:first', reference_id: 'directory' })).resolves.toEqual({ kind: 'directory', label: 'src', path: '/workspace/src' });
+  expect(calls.at(-1)).toMatchObject({ method: 'POST', path: '/_redeven_proxy/api/ai/threads/thread-1/reference-open-target', body: { queue_id: 'queue:first', reference_id: 'directory' } });
+  await expect(adapter.resolveCanonicalReference!({ thread_id: 'thread-1', turn_id: 'turn', queue_id: 'queue:first', reference_id: 'directory' })).rejects.toThrow('exact Flower reference scope');
+});

@@ -680,7 +680,14 @@
       },
       "citationSources": "Quellen",
       "citationCopySources": "Quellen kopieren",
-      "citationUnavailable": "Quelle nicht verfügbar"
+      "citationUnavailable": "Quelle nicht verfügbar",
+      "queuedEdit": "Nachricht in Warteschlange bearbeiten",
+      "queuedEditSave": "Änderungen speichern",
+      "queuedEditRetry": "Speichern erneut versuchen",
+      "queuedEditCancel": "Zurück zum Entwurf",
+      "queuedEditUnavailable": "Nachrichten in der Warteschlange können derzeit nicht bearbeitet werden.",
+      "queuedEditConflict": "Diese Nachricht wurde geändert oder ihre Ausführung hat begonnen. Ihre Änderungen bleiben erhalten.",
+      "queuedEditUnknown": "Das Speicherergebnis ist unklar. Wiederholen Sie denselben Speichervorgang, um das Ergebnis zu prüfen."
     },
     "threadList": {
       "title": "Unterhaltungen",

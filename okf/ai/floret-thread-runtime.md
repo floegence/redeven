@@ -3,7 +3,7 @@ type: AI Runtime Contract
 title: Floret thread runtime integration
 description: Typed Floret v7 thread runtime ownership and Redeven product boundaries.
 tags: [ai, floret, threads, runtime]
-timestamp: 2026-10-08T00:00:00Z
+timestamp: 2026-10-14T00:00:00Z
 quality_exception: Typed Floret ThreadService lifecycle and restart contract covering canonical journal ownership, idempotent effects, and migration safety.
 ---
 # Summary
@@ -14,12 +14,14 @@ Floret v7 `ThreadService` is the sole owner of active and canonical thread lifec
 
 ## Typed runtime
 
+Published `ThreadQueueController` supports complete paired expected/replacement inputs in addition to text edits. `ThreadQueueEditReader` resolves committed edit identities from existing canonical facts after promotion or deletion. Redeven uses these contracts for the [shared queue editor](../ui/flower-turn-launcher.md); it does not persist an admitted edit ledger, inspect upstream records or alter the Floret schema.
+
 The optional published `ThreadQueryReader` owns indexed canonical queries, exact
 counts and bounded reads without widening `ThreadService`. [Canonical thread
 queries](flower-thread-queries.md) defines the Redeven authorization mapping.
 
 
-Floret v7.32.1 preserves explicit canonical RunID and the permanent schema
+Floret v7.33.0 preserves explicit canonical RunID and the permanent schema
 13-to-14 migration, then appends the 14-to-15 thread-reference migration. Observation metadata never advances execution identity;
 historical tool activities resolve through their canonical invocation. Public
 current views are projected and sanitized before the response is encoded.
@@ -45,7 +47,7 @@ and remain user-controlled; effects and unknown outcomes are never replayed.
 
 Independent context compaction uses the optional public capability without widening ThreadService. Floret owns typed control-turn admission, atomic installation, terminal results, replay, and recovery. See [Model context usage and compaction](model-context-usage-and-compaction.md) for command and presentation contracts.
 
-Redeven consumes published Floret v7.32.1, preserving graceful-stop ownership
+Redeven consumes published Floret v7.33.0, preserving graceful-stop ownership
 when a projection write is canceled. The stop owner settles pending approvals,
 tool results, and the terminal together; a canceled write must not enter competing
 failure finalization. Genuine storage and unknown-effect failures retain their

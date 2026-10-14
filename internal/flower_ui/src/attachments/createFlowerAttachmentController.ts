@@ -5,6 +5,7 @@ import type {
   FlowerAttachmentStagingScope,
   FlowerAttachmentUploadInput,
   FlowerStagedAttachment,
+  FlowerQueuedTurnAttachment,
   FlowerStagedLongTextReadResult,
 } from '../contracts/flowerSurfaceContracts';
 import {
@@ -53,6 +54,7 @@ export type FlowerAttachmentItem = Readonly<{
   preview_url?: string;
   error_code?: FlowerAttachmentErrorCode;
   staged?: FlowerStagedAttachment;
+  admitted?: FlowerQueuedTurnAttachment;
 }>;
 
 type MutableFlowerAttachmentItem = {
@@ -71,6 +73,7 @@ type MutableFlowerAttachmentItem = {
   preview_url?: string;
   error_code?: FlowerAttachmentErrorCode;
   staged?: FlowerStagedAttachment;
+  admitted?: FlowerQueuedTurnAttachment;
   file?: File;
   longText?: string;
   controller?: AbortController;
@@ -119,6 +122,7 @@ export type FlowerAttachmentDraftHydrationItem = Readonly<{
   mime_type: string;
   size_bytes: number;
   staged?: FlowerStagedAttachment;
+  admitted?: FlowerQueuedTurnAttachment;
 }>;
 
 export type FlowerAttachmentControllerOptions = Readonly<{
@@ -488,7 +492,7 @@ export function createFlowerAttachmentController(
             : staged?.text_stats
               ? { ...staged.text_stats }
               : undefined,
-          status: live?.status ?? (staged && capability && flowerStagedAttachmentCompatible(capability, staged)
+          status: draftItem.admitted ? 'staged_ready' : live?.status ?? (staged && capability && flowerStagedAttachmentCompatible(capability, staged)
             ? 'staged_ready'
             : staged
               ? 'incompatible'
@@ -499,6 +503,7 @@ export function createFlowerAttachmentController(
           error_code: live?.error_code,
           preview_url: live?.preview_url ?? (live?.file ? createLocalPreviewURL(live.file, draftItem.mime_type) : undefined),
           staged,
+          admitted: draftItem.admitted,
           ...(live?.file ? { file: live.file } : {}),
           ...(live?.longText !== undefined ? { longText: live.longText } : {}),
           ...(live?.controller ? { controller: live.controller } : {}),

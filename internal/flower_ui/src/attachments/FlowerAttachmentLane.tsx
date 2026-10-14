@@ -1,3 +1,4 @@
+import { FlowerMessageImage } from '../chat/FlowerMessageImage';
 import { FileItemIcon } from '@floegence/floe-webapp-core/file-browser';
 import type { Component } from 'solid-js';
 import { createEffect, createSignal, Index, onCleanup, Show } from 'solid-js';
@@ -46,6 +47,7 @@ export type FlowerAttachmentLaneProps = Readonly<{
   onRemove: (localID: string) => void;
   onRestore: (localID: string) => void;
   onPreview?: (item: FlowerAttachmentItem) => void;
+  loadAdmittedPreview?: (url: string, signal: AbortSignal) => Promise<Blob>;
   onFocusFallback?: () => void;
 }>;
 
@@ -160,7 +162,7 @@ export const FlowerAttachmentLane: Component<FlowerAttachmentLaneProps> = (props
           const errorDescriptionID = () => `flower-attachment-error-${item().local_id}`;
           const image = () => isFlowerImageMimeType(item().mime_type);
           const previewKey = () => `${item().local_id}:${item().preview_url ?? ''}`;
-          const previewable = () => Boolean(props.onPreview && (item().staged || item().preview_url));
+          const previewable = () => Boolean(props.onPreview && (item().staged || item().admitted?.url || item().preview_url));
           const attachmentFeedback = () => (
             <span class="flower-attachment-feedback" title={error() || status()}>
               <Show when={item().status === 'uploading'}>
@@ -187,7 +189,7 @@ export const FlowerAttachmentLane: Component<FlowerAttachmentLaneProps> = (props
             <>
               <Show when={image()} fallback={<span class="flower-attachment-file-icon" aria-hidden="true"><FileItemIcon size={18} item={{ name: item().name, type: 'file' }} /></span>}>
                 <span class="flower-attachment-image-thumb" aria-hidden="true">
-                  <Show
+                  <Show when={item().admitted?.url && props.loadAdmittedPreview} fallback={<Show
                     when={!failedPreviews().has(previewKey()) && item().preview_url}
                     fallback={<span class="flower-attachment-image-placeholder"><FileItemIcon size={18} item={{ name: item().name, type: 'file' }} /></span>}
                   >
@@ -205,6 +207,9 @@ export const FlowerAttachmentLane: Component<FlowerAttachmentLaneProps> = (props
                         })}
                       />
                     )}
+                  </Show>}>
+                    <FlowerMessageImage src={item().admitted!.url!} alt="" name={item().name} unavailableLabel={props.copy.failed}
+                      thumbnail load={props.loadAdmittedPreview!} onOpen={() => props.onPreview?.(item())} />
                   </Show>
                 </span>
               </Show>

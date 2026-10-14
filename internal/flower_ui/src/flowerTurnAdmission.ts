@@ -1,3 +1,4 @@
+import type { FlowerQueuedTurnEditInput } from './contracts/flowerSurfaceContracts';
 import type {
   FlowerPermissionType,
   FlowerRuntimeCurrentView,
@@ -137,4 +138,15 @@ export function normalizeFlowerTurnLaunchReceipt(
     thread_id: responseThreadID,
     ...(current ? { current } : {}),
   };
+}
+
+export function buildFlowerQueuedEditHTTPBody(input: FlowerQueuedTurnEditInput) {
+  return { client_request_id: input.client_request_id, content: {
+    expected_input_fingerprint: input.expected_input_fingerprint,
+    text: input.prompt, retained_attachment_ids: input.retained_attachment_ids,
+    retained_reference_ids: input.retained_reference_ids,
+    ...(input.attachment_ids?.length ? { attachments: input.attachment_ids.map(attachment_id => ({ attachment_id })) } : {}),
+    ...(input.context_action ? { context_action: input.context_action } : {}),
+    ...(input.staging_scope ? { staging_scope_id: input.staging_scope.staging_scope_id } : {}),
+  } };
 }

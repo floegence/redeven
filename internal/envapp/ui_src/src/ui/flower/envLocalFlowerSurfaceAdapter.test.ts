@@ -2183,6 +2183,13 @@ describe('Env local Flower surface adapter', () => {
       label: 'Source files',
       path: '/workspace/src',
     });
+    await expect(adapter.resolveCanonicalReference?.({ thread_id: 'thread/canonical', queue_id: 'queue:first', reference_id: 'ref-directory' })).resolves.toEqual({
+      kind: 'directory', label: 'Source files', path: '/workspace/src',
+    });
+    expect(JSON.parse(String(fetchMock.mock.calls[2]?.[1]?.body))).toEqual({ queue_id: 'queue:first', reference_id: 'ref-directory' });
+    expect(openCanonicalReferenceTarget).toHaveBeenCalledTimes(2);
+    await expect(adapter.resolveCanonicalReference?.({ thread_id: 'thread/canonical', turn_id: 'turn-canonical', queue_id: 'queue:first', reference_id: 'ref-directory' })).rejects.toThrow('Missing exact Flower reference scope.');
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
   it('rejects malformed canonical open targets without invoking host navigation', async () => {

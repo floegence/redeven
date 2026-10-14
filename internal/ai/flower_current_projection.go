@@ -72,6 +72,7 @@ func flowerCurrentJSON(current flruntime.ThreadView) (json.RawMessage, error) {
 			if input == nil {
 				continue
 			}
+			entry["input_fingerprint"] = queuedInputFingerprint(current.Queue[index].Input)
 			projectCurrentAttachmentURLs(input, current.Queue[index].Input.Attachments, threadID, "", current.Queue[index].ID)
 		}
 	}
@@ -145,6 +146,7 @@ func projectCurrentAttachmentURLs(parent map[string]any, attachments []flruntime
 			continue
 		}
 		if uploadID, err := uploadIDFromFloretResourceRef(attachments[index].ResourceRef); err == nil {
+			attachment["attachment_id"] = uploadID
 			if previewURL := flowerAttachmentURL(uploadID, threadID, turnID, queueID); previewURL != "" {
 				attachment["url"] = previewURL
 			}

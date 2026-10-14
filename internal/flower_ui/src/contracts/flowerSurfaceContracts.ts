@@ -566,10 +566,23 @@ export type FlowerThreadReadStatus = Readonly<{
 export type FlowerQueuedTurn = Readonly<{
   queue_id: string;
   request_key?: string;
+  input_fingerprint?: string;
+  references?: readonly FlowerMessageReference[];
   prompt: string;
   created_at_ms: number;
   attachments?: readonly FlowerQueuedTurnAttachment[];
   context_action?: unknown;
+}>;
+
+export type FlowerQueuedTurnEditInput = Readonly<{
+  client_request_id: string;
+  expected_input_fingerprint: string;
+  prompt: string;
+  retained_attachment_ids: readonly string[];
+  retained_reference_ids: readonly string[];
+  attachment_ids?: readonly string[];
+  context_action?: unknown;
+  staging_scope?: FlowerAttachmentStagingScope;
 }>;
 
 export type FlowerQueuedTurnAttachment = Readonly<{
@@ -723,13 +736,7 @@ export type FlowerRuntimeCurrentItem = Readonly<{
     size_bytes?: number;
     url?: string;
   }>[];
-  references?: readonly Readonly<{
-    reference_id: string;
-    kind: 'text' | 'file' | 'directory' | 'terminal' | 'process';
-    label: string;
-    text?: string;
-    truncated?: boolean;
-  }>[];
+  references?: readonly FlowerMessageReference[];
   activity?: Readonly<Record<string, unknown>>;
   interaction?: FlowerRuntimeInteraction;
 }>;
@@ -833,14 +840,17 @@ export type FlowerRuntimeCurrentView = Readonly<{
   queue?: readonly Readonly<{
     id: string;
     request_key: string;
+    input_fingerprint?: string;
     created_at?: string;
     input: Readonly<{
       text?: string;
+      references?: readonly FlowerMessageReference[];
       attachments?: readonly Readonly<{
         attachment_id?: string;
         name: string;
         mime_type?: string;
         size_bytes?: number;
+        text_stats?: FlowerQueuedTurnAttachment['text_stats'];
         url?: string;
       }>[];
     }>;
@@ -1211,7 +1221,8 @@ export type FlowerLinkedContextPathOpenRequest = Readonly<{
 
 export type FlowerCanonicalReferenceOpenRequest = Readonly<{
   thread_id: string;
-  turn_id: string;
+  turn_id?: string;
+  queue_id?: string;
   reference_id: string;
 }>;
 
@@ -1396,6 +1407,7 @@ export type FlowerSurfaceAdapter = Readonly<{
   setThreadReasoningSelection?: (threadID: string, selection: FlowerReasoningSelection | undefined) => Promise<FlowerThreadView>;
   reorderQueuedTurns?: (threadID: string, orderedQueueIDs: readonly string[]) => Promise<FlowerThreadView>;
   deleteQueuedTurn?: (threadID: string, queueID: string) => Promise<FlowerThreadView>;
+  editQueuedTurn?: (threadID: string, queueID: string, input: FlowerQueuedTurnEditInput) => Promise<FlowerThreadView>;
   sendQueuedTurnNow?: (threadID: string, queueID: string) => Promise<FlowerThreadView>;
   forkThread?: (threadID: string, input: Readonly<{ client_request_id: string; title: string }>) => Promise<FlowerThreadSnapshot>;
   deleteThread?: (threadID: string) => Promise<void>;
@@ -1434,6 +1446,7 @@ export type FlowerSurfaceAdapter = Readonly<{
   openFileBrowser?: (request: FlowerFileOpenRequest) => Promise<void>;
   openFilePreview?: (request: FlowerFileOpenRequest) => Promise<void>;
   openCanonicalReference?: (request: FlowerCanonicalReferenceOpenRequest) => Promise<void>;
+  resolveCanonicalReference?: (request: FlowerCanonicalReferenceOpenRequest) => Promise<Readonly<{ kind: 'file' | 'directory'; label: string; path: string }>>;
   openLinkedFilePreview?: (request: FlowerLinkedContextPathOpenRequest) => Promise<void>;
   openWorkingDirectoryInFileBrowser?: (request: FlowerWorkingDirectoryOpenRequest) => Promise<void>;
   openWorkingDirectoryInTerminal?: (request: FlowerWorkingDirectoryOpenRequest) => Promise<void>;

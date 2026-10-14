@@ -135,6 +135,16 @@ func TestServer_AIReferenceOpenTargetAcceptsOnlyCanonicalIdentity(t *testing.T) 
 	if rr.Code != http.StatusNotFound || !strings.Contains(rr.Body.String(), ai.FlowerCanonicalReferenceNotFoundErrorCode) {
 		t.Fatalf("missing reference status=%d body=%s", rr.Code, rr.Body.String())
 	}
+	for _, body := range []string{`{"reference_id":"context:0"}`, `{"turn_id":"turn_reference_open","queue_id":"queue:queued-reference","reference_id":"context:0"}`} {
+		rr = performServerRequest(srv, http.MethodPost, endpoint, origin, body)
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("ambiguous reference scope status=%d body=%s", rr.Code, rr.Body.String())
+		}
+	}
+	rr = performServerRequest(srv, http.MethodPost, endpoint, origin, `{"queue_id":"queue:queued-reference","reference_id":"context:0"}`)
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("deleted queue reference status=%d body=%s", rr.Code, rr.Body.String())
+	}
 	if strings.Contains(logs.String(), locator) || strings.Contains(logs.String(), filePath) {
 		t.Fatalf("reference resolver leaked host data to logs: %s", logs.String())
 	}

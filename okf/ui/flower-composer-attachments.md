@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower composer attachments
 description: Connection-local attachment staging, long-text conversion, and canonical timeline presentation.
 tags: [ui, flower, attachments, composer, accessibility]
-timestamp: 2026-10-10T00:00:00Z
+timestamp: 2026-10-14T00:00:00Z
 ---
 # Summary
 
@@ -24,13 +24,17 @@ The inline threshold is exactly 50,000 Unicode code points. Exactly 50,000 stays
 
 Long-text source keeps original whitespace and newline bytes. Until Send is accepted, the item offers Restore to editor. Restore reads the exact owner-and-staging-scope-bound text with the connection-held capability, verifies its digest, inserts it at the current selection, and removes the staging membership. Ordinary remove updates the local scope and releases that membership; abandoned late upload completion uses the same idempotent staged cleanup path. A subsequent Send may stage the current complete editor value again. Names are presentation only and include a timestamp plus collision ordinal.
 
-For a Desktop-initiated Runtime Restart, the Env App's existing draft coordinator temporarily suspends uploads and exports only unsent user-authored text, references, explicit choices, and locally available attachment bytes. Desktop holds the bounded transfer in memory for the retained window. The fresh session restores each draft before Flower surfaces mount, assigns new upload request ids, and stages local files against the new capability; it never reuses old staged locators, capability revisions, credentials, prepared submissions, or in-flight commands. An attachment without locally available bytes makes preparation fail before the old Runtime is stopped. A canceled preparation resumes the original upload controller. No automatic Send occurs during restoration.
+For a Desktop-initiated Runtime Restart, the Env App's existing draft coordinator temporarily suspends uploads and exports only unsent user-authored text, references, explicit choices, and locally available attachment bytes. Desktop holds the bounded transfer in memory for the retained window. The fresh session restores each draft before Flower surfaces mount, assigns new upload request ids, and stages local files against the new capability; it never reuses old staging secrets or automatically replays commands. Queue edit drafts retain admitted descriptors and any uncertain edit request identity so explicit replay can query canonical edit facts; new staged resources must be recovered under the fresh scope before a changed submission. An attachment without locally available bytes makes preparation fail before the old Runtime is stopped. A canceled preparation resumes the original upload controller. No automatic Send occurs during restoration.
 
 ## Connection-local editing
 
 Activity and Workbench use one Env App shell-owned in-memory coordinator; Desktop uses one App-owned coordinator per connection. A Flower surface never creates a module singleton. The coordinator starts empty, is not hydrated by the host, and is disposed with the connection. All placements that open the same thread or new-thread scope synchronously observe one cell, including across page switches and retained-surface remounts. Different scopes and different connections are isolated. There is no server draft, lease, holder, expected revision, takeover, conflict state, store-unavailable state, polling, or persistence retry. Picker activation happens in the originating click task, while captured files, focus, and text selection apply only to the same connection-local scope.
 
 The shared in-memory value contains text, staged attachment projection, references, model, reasoning, an optional explicit new-thread `permission_type_override`, working directory, a stable product `client_request_id` or `queue_id`, capability revision, and the local mode. It never persists file handles, editable text, references, or turn history. The environment permission default is read from the settings snapshot and is not copied into this value; an existing Thread uses its canonical `permission_type`. Each composer scope obtains a separate random staging scope and bearer capability, held only in connection memory. Existing-thread staging binds the exact Floret ThreadID; a new-conversation staging scope binds the stable client request target and carries no candidate canonical identity. Admission uncertainty preserves that product request identity in the live connection so retry and reconciliation cannot silently create another request.
+
+## Queued content
+
+Active execution keeps file selection, paste, drag-and-drop and reference controls available. Ready resources freeze into the ordinary Send path and appear immediately in the local queue row. [Turn launcher](flower-turn-launcher.md) owns the single-line layout, preview overflow and complete queue editor. Editing starts from canonical descriptors; admitted images can be previewed and removed locally without uploading again or deleting canonical bytes. Added files use a staging scope bound to the same ThreadID. New queue-edit uploads retain their exact staging claim until settlement, allowing an explicit retry after canonical mutation fails; releasing that scope removes temporary membership and preserves thread-owned bytes.
 
 ## Canonical Presentation
 
@@ -72,3 +76,6 @@ A surface never persists file bytes or editable state, creates its own global co
 - `redeven:internal/flower_host_ui/src/flowerAttachmentStaging.ts` - Hosts validate staging responses and place scope identity plus bearer authority only in fixed headers.
 - `redeven:internal/envapp/ui_src/src/ui/flower/envLocalFlowerSurfaceAdapter.ts` - Env preview authenticates a fetch before creating a short-lived Blob URL.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.composerAttachments.browser.test.tsx` - Chromium verifies narrow and 400-percent-equivalent attachment layout containment.
+
+- `redeven:internal/ai/threadstore/uploads_test.go` - Queue-edit claims remain retryable and reject unrelated staging scopes.
+- `redeven:internal/flower_ui/src/composer/createFlowerComposerDraftCoordinator.test.ts` - Restart preserves admitted media and uncertain edit identity without staging credentials.

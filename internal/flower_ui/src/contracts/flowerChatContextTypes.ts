@@ -43,4 +43,6 @@ export type FlowerChatContextSnapshotPreview = Readonly<{
   action: FlowerChatContextSnapshotAction;
   thread_id: string;
   message_id: string;
+  canonical_reference?: Readonly<{ turn_id?: string; queue_id?: string; reference_id: string }>;
+  source_action?: FlowerChatContextHostAction;
 }>;

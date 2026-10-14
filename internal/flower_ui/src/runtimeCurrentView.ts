@@ -99,13 +99,7 @@ function itemCreatedAt(item: FlowerRuntimeCurrentItem, fallback: number): number
 }
 
 function itemReferences(item: FlowerRuntimeCurrentItem): FlowerChatMessage['references'] {
-  const references = (item.references ?? []).map((reference) => ({
-    reference_id: trim(reference.reference_id),
-    kind: reference.kind,
-    label: trim(reference.label),
-    ...(reference.text !== undefined ? { text: String(reference.text) } : {}),
-    ...(reference.truncated ? { truncated: true } : {}),
-  })).filter((reference) => reference.reference_id && reference.label);
+  const references = (item.references ?? []).filter(reference => trim(reference.reference_id) && trim(reference.label));
   return references.length > 0 ? references : undefined;
 }
 
@@ -431,6 +425,8 @@ export function applyFlowerRuntimeCurrentView(
   const queuedTurns = (current.queue ?? []).map((queued) => ({
     queue_id: trim(queued.id),
     request_key: trim(queued.request_key),
+    input_fingerprint: trim(queued.input_fingerprint) || undefined,
+    references: queued.input?.references,
     prompt: String(queued.input?.text ?? ''),
     created_at_ms: itemCreatedAt({ created_at: queued.created_at } as FlowerRuntimeCurrentItem, base.updated_at_ms),
     ...(queued.input?.attachments?.length ? {
@@ -439,6 +435,7 @@ export function applyFlowerRuntimeCurrentView(
         name: trim(attachment.name),
         mime_type: trim(attachment.mime_type),
         size_bytes: Math.max(0, Math.floor(Number(attachment.size_bytes) || 0)),
+        ...(attachment.text_stats ? { text_stats: attachment.text_stats } : {}),
         ...(safeFlowerAttachmentURL(attachment.url) ? { url: safeFlowerAttachmentURL(attachment.url)! } : {}),
       })).filter((attachment) => attachment.name && attachment.mime_type),
     } : {}),

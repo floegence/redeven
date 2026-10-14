@@ -241,3 +241,22 @@ describe('createFlowerComposerDraftCoordinator', () => {
     expect(() => coordinator.moveScope('thread-1', 'thread-2')).toThrow(/disposed/i);
   });
 });
+
+it('restores admitted queue media and the uncertain edit identity without staging secrets', () => {
+  const coordinator = createFlowerComposerDraftCoordinator();
+  const attachment = { attachment_id: 'admitted-image', name: 'image.png', mime_type: 'image/png', size_bytes: 4, url: '/scoped-preview' };
+  const scope = 'queue-edit:thread:queue';
+  coordinator.open(scope).mutate(value => ({ ...value, text: 'frozen edit', queue_edit: {
+    threadID: 'thread', original: { queue_id: 'queue', prompt: 'original', created_at_ms: 1, input_fingerprint: 'a'.repeat(64) },
+    command: { client_request_id: 'edit-1', expected_input_fingerprint: 'a'.repeat(64), prompt: 'frozen edit', retained_attachment_ids: ['admitted-image'], retained_reference_ids: [], staging_scope: { staging_scope_id: 'staging', capability: 'secret', target_id: 'thread', expires_at_unix_ms: 1000 } }, errorUnknown: true,
+  }, attachments: [{ local_id: 'local', source: 'file', name: attachment.name, mime_type: attachment.mime_type, size_bytes: attachment.size_bytes, upload_request_id: '', attempt_state: 'staged_ready', admitted: attachment }] }));
+  const exported = coordinator.exportForRestart();
+  expect(exported[0].value.queue_edit?.command?.staging_scope).toBeUndefined();
+  const restored = createFlowerComposerDraftCoordinator();
+  restored.restoreAfterRestart(exported);
+  const hydrateDraft = vi.fn();
+  restored.attachmentController(scope, () => ({ hydrateDraft, restoreLocalFiles: vi.fn(), snapshot: () => ({ staging_scope: null }), setStagingScope: vi.fn() }) as never);
+  expect(hydrateDraft).toHaveBeenCalledWith([expect.objectContaining({ admitted: attachment })]);
+  expect(restored.read(scope).value.queue_edit).toMatchObject({ errorUnknown: true, command: { client_request_id: 'edit-1', retained_attachment_ids: ['admitted-image'] } });
+  expect(restored.scopes()).toContain(scope);
+});

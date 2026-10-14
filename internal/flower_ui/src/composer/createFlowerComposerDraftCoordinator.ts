@@ -5,6 +5,10 @@ import type {
   FlowerPermissionType,
   FlowerReasoningSelection,
   FlowerStagedAttachment,
+  FlowerQueuedTurnAttachment,
+  FlowerMessageReference,
+  FlowerQueuedTurn,
+  FlowerQueuedTurnEditInput,
 } from '../contracts/flowerSurfaceContracts';
 import type { FlowerAttachmentController } from '../attachments/createFlowerAttachmentController';
 
@@ -22,6 +26,7 @@ export type FlowerComposerDraftAttachment = Readonly<{
   upload_request_id: string;
   attempt_state: string;
   staged?: FlowerStagedAttachment;
+  admitted?: FlowerQueuedTurnAttachment;
 }>;
 
 export type FlowerComposerDraftReferenceKind = 'file' | 'directory';
@@ -37,10 +42,11 @@ export type FlowerComposerDraftReference = Readonly<{
   kind: FlowerComposerDraftReferenceKind;
   path: string;
   label: string;
-}> | (FlowerPageContextSnapshot & Readonly<{ local_id: string; kind: 'page_context' }>) | Readonly<{ local_id: string; kind: 'thread'; label: string; thread: ThreadReferenceSnapshot }>;
+}> | (FlowerPageContextSnapshot & Readonly<{ local_id: string; kind: 'page_context' }>) | Readonly<{ local_id: string; kind: 'thread'; label: string; thread: ThreadReferenceSnapshot }> | Readonly<{ local_id: string; kind: 'queued_reference'; label: string; reference: FlowerMessageReference }>;
 
 export type FlowerComposerDraftValue = Readonly<{
   text: string;
+  queue_edit?: Readonly<{ threadID: string; original: FlowerQueuedTurn; command?: FlowerQueuedTurnEditInput; error?: string; errorUnknown?: boolean }>;
   attachments: readonly FlowerComposerDraftAttachment[];
   references: readonly FlowerComposerDraftReference[];
   /** Prevent edit-time recapture until an explicit companion opening or New action. */
@@ -93,6 +99,7 @@ export type FlowerComposerDraftCoordinator = Readonly<{
   resumeAfterCanceledRestart: () => void;
   open: (scopeID: string) => FlowerComposerDraftSession;
   read: (scopeID: string) => FlowerComposerDraftSnapshot;
+  scopes: () => readonly string[];
   attachmentController: (
     scopeID: string,
     create: () => FlowerAttachmentController,
@@ -259,13 +266,15 @@ export function createFlowerComposerDraftCoordinator(
         // revisions and previously prepared submissions belong to the old session.
         drafts.push({ scope_id: scopeID, files, value: {
           text: value.text, mode: 'ordinary',
+          ...(value.queue_edit ? { queue_edit: { ...value.queue_edit, command: value.queue_edit.command ? { ...value.queue_edit.command, staging_scope: undefined } : undefined } } : {}),
           references: value.references.map(reference => ({ ...reference })),
           page_context_captured: value.page_context_captured,
           attachments: value.attachments.map(attachment => ({
             local_id: attachment.local_id, source: attachment.source,
             name: attachment.name, mime_type: attachment.mime_type, size_bytes: attachment.size_bytes,
             upload_request_id: `flower_attachment_request_${crypto.randomUUID()}`,
-            attempt_state: files.some(file => file.local_id === attachment.local_id) ? 'queued' : 'reselect_required',
+            attempt_state: attachment.admitted ? 'staged_ready' : files.some(file => file.local_id === attachment.local_id) ? 'queued' : 'reselect_required',
+            ...(attachment.admitted ? { admitted: attachment.admitted } : {}),
           })),
           model_id: value.model_id, permission_type_override: value.permission_type_override,
           reasoning_selection: value.reasoning_selection, working_dir: value.working_dir,
@@ -290,6 +299,7 @@ export function createFlowerComposerDraftCoordinator(
     },
     open,
     read: (scopeID) => stateFor(scopeID).cell.snapshot,
+    scopes: () => [...states.keys()],
     attachmentController: (scopeID, create) => {
       const handle = stateFor(scopeID);
       handle.attachmentController ??= create();
@@ -297,6 +307,7 @@ export function createFlowerComposerDraftCoordinator(
         handle.attachmentController.hydrateDraft(handle.cell.snapshot.value.attachments.map(item => ({
           local_id: item.local_id, request_id: item.upload_request_id, source: item.source,
           name: item.name, mime_type: item.mime_type, size_bytes: item.size_bytes,
+          admitted: item.admitted,
         })));
         handle.attachmentController.restoreLocalFiles(handle.restartFiles);
         handle.restartFiles = undefined;

@@ -217,7 +217,8 @@ describe('Flower new conversation page context', () => {
     edit(textarea, 'First request');
     await waitFor(() => !(runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).disabled);
     (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
-    await waitFor(() => launchTurn.mock.calls.length === 1 && textarea.value === '');
+    await waitFor(() => launchTurn.mock.calls.length === 1);
+    expect(textarea.value).toBe('First request');
     const original = launchTurn.mock.calls[0]![0];
     if (delivery === 'retry') await waitFor(() => Boolean(runtime.querySelector('[aria-label="Retry send"]')));
     setOpen(false);
@@ -261,7 +262,8 @@ describe('Flower new conversation page context', () => {
     edit(textarea, 'First conversation');
     await waitFor(() => !(runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).disabled);
     (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
-    await waitFor(() => launchTurn.mock.calls.length === 1 && textarea.value === '');
+    await waitFor(() => launchTurn.mock.calls.length === 1);
+    expect(textarea.value).toBe('First conversation');
     const requestID = launchTurn.mock.calls[0]![0].client_request_id;
     capture.mockReturnValue({ label: 'Files', title: 'Files page', content: '{"page_id":"files"}' });
     (runtime.querySelector('.flower-new-chat-button') as HTMLButtonElement).click();
@@ -346,7 +348,7 @@ describe('Flower new conversation page context', () => {
       listWorkingDirectoryEntries: vi.fn(async () => [{ name: 'main.ts', path: '/workspace/main.ts', isDirectory: false }]),
     }, { presentation: 'companion', get companionOpen() { return open(); }, get engaged() { return open(); },
       captureNewConversationContext: capture, onCompanionOpenRequest: () => setOpen(true) });
-    await waitFor(() => runtime.querySelector('.flower-working-directory-control')?.textContent?.includes('workspace') === true);
+    await waitFor(() => Boolean(runtime.querySelector('textarea')));
     const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
     textarea.focus();
     edit(textarea, 'Explain @main');

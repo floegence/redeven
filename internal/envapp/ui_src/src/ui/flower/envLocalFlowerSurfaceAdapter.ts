@@ -57,6 +57,7 @@ import {
 } from '../../../../../flower_ui/src/flowerRequestIdentity';
 import {
   buildFlowerTurnHTTPBody,
+  buildFlowerQueuedEditHTTPBody,
   flowerTurnAdmissionError,
   normalizeFlowerTurnLaunchReceipt,
   type FlowerTurnHTTPResponse,
@@ -523,26 +524,26 @@ function visibleDirectory(directory: FlowerModelDirectory, exposeDesktop: boolea
 
 export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfaceAdapterOptions): FlowerSurfaceAdapter {
   const copy = adapterCopy(options);
+  const resolveCanonicalReference = async (request: FlowerCanonicalReferenceOpenRequest): Promise<FlowerCanonicalReferenceNavigationTarget> => {
+    const threadID = trim(request.thread_id);
+    const turnID = trim(request.turn_id);
+    const queueID = trim(request.queue_id);
+    const referenceID = trim(request.reference_id);
+    if (!threadID) throw new Error(copy.missingThreadID);
+    if (Boolean(turnID) === Boolean(queueID)) throw new Error('Missing exact Flower reference scope.');
+    if (!referenceID) throw new Error('Missing Flower reference id.');
+    return parseCanonicalReferenceOpenTarget(await fetchLocalApiJSON<unknown>(
+      `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/reference-open-target`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ ...(turnID ? { turn_id: turnID } : { queue_id: queueID }), reference_id: referenceID }),
+      },
+    ));
+  };
   const openCanonicalReferenceTarget = options.openCanonicalReferenceTarget;
   const openCanonicalReference = openCanonicalReferenceTarget
     ? async (request: FlowerCanonicalReferenceOpenRequest): Promise<void> => {
-        const threadID = trim(request.thread_id);
-        const turnID = trim(request.turn_id);
-        const referenceID = trim(request.reference_id);
-        if (!threadID) throw new Error(copy.missingThreadID);
-        if (!turnID) throw new Error('Missing Flower turn id.');
-        if (!referenceID) throw new Error('Missing Flower reference id.');
-        const target = parseCanonicalReferenceOpenTarget(await fetchLocalApiJSON<unknown>(
-          `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/reference-open-target`,
-          {
-            method: 'POST',
-            body: JSON.stringify({
-              turn_id: turnID,
-              reference_id: referenceID,
-            }),
-          },
-        ));
-        await openCanonicalReferenceTarget(target);
+        await openCanonicalReferenceTarget(await resolveCanonicalReference(request));
       }
     : undefined;
 
@@ -610,6 +611,11 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       deleteQueuedTurn: (threadID, queueID) => fetchLocalApiJSON(
 		`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/queue/${encodeURIComponent(queueID)}`,
         { method: 'DELETE' },
+      ),
+      editQueuedTurn: (threadID, queueID, input) => fetchLocalApiJSON(
+        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/queue/${encodeURIComponent(queueID)}`,
+        { method: 'PATCH', body: JSON.stringify(buildFlowerQueuedEditHTTPBody(input)),
+          ...(input.staging_scope ? { headers: flowerAttachmentStagingHeaders(input.staging_scope) } : {}) },
       ),
       sendQueuedTurnNow: (threadID, queueID) => fetchLocalApiJSON(
 		`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/queue/${encodeURIComponent(queueID)}/send-now`,
@@ -916,6 +922,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
     ...(options.openMessageURL ? { openMessageURL: options.openMessageURL } : {}),
     ...(options.openFileBrowser ? { openFileBrowser: options.openFileBrowser } : {}),
     ...(options.openFilePreview ? { openFilePreview: options.openFilePreview } : {}),
+    resolveCanonicalReference,
     ...(openCanonicalReference ? { openCanonicalReference } : {}),
     ...(options.openLinkedFilePreview ? { openLinkedFilePreview: options.openLinkedFilePreview } : {}),
     ...(options.openWorkingDirectoryInFileBrowser ? { openWorkingDirectoryInFileBrowser: options.openWorkingDirectoryInFileBrowser } : {}),

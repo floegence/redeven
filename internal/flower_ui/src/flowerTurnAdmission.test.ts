@@ -62,3 +62,10 @@ describe('Flower turn admission', () => {
     )).toThrow(expect.objectContaining({ admission_kind: 'unknown' }));
   });
 });
+
+it('serializes a complete queue edit without embedding the staging secret', async () => {
+  const { buildFlowerQueuedEditHTTPBody } = await import('./flowerTurnAdmission');
+  const body = buildFlowerQueuedEditHTTPBody({ client_request_id: 'edit', expected_input_fingerprint: 'a'.repeat(64), prompt: 'updated', retained_attachment_ids: ['old-image'], retained_reference_ids: ['old-ref'], attachment_ids: ['new-image'], staging_scope: { staging_scope_id: 'scope', capability: 'secret', target_id: 'thread', expires_at_unix_ms: 1000 } });
+  expect(body).toEqual({ client_request_id: 'edit', content: { expected_input_fingerprint: 'a'.repeat(64), text: 'updated', retained_attachment_ids: ['old-image'], retained_reference_ids: ['old-ref'], attachments: [{ attachment_id: 'new-image' }], staging_scope_id: 'scope' } });
+  expect(JSON.stringify(body)).not.toContain('secret');
+});

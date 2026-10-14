@@ -431,3 +431,47 @@ func TestStagedByteQuotaAndLastLiveRefReleaseCapacity(t *testing.T) {
 		t.Fatalf("bind after last-ref release: %v", err)
 	}
 }
+
+func TestQueueEditUploadClaimRetainsExactStagingOwnershipUntilSettlement(t *testing.T) {
+	store := openStoreForTest(t)
+	rec := quotaUploadRecord(strings.Repeat("a", 64), "upl_queue_edit_retry", 4)
+	if err := store.InsertUpload(t.Context(), rec); err != nil {
+		t.Fatal(err)
+	}
+	scope := stagingScopeForTest(rec.EndpointID, "thread_queue_edit", rec.OwnerUserHash, "scope_queue_edit")
+	if err := store.CreateThreadSettings(t.Context(), ThreadSettings{ThreadID: scope.TargetID, EndpointID: rec.EndpointID, PermissionType: "approval_required"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.CreateUploadStagingScope(t.Context(), scope); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.Exec(`INSERT INTO ai_upload_refs(endpoint_id, upload_id, target_id, ref_kind, ref_id) VALUES(?, ?, ?, ?, ?)`, rec.EndpointID, rec.UploadID, scope.TargetID, UploadRefKindStaging, stagingUploadRefID(scope.OwnerUserHash, scope.StagingScopeID)); err != nil {
+		t.Fatal(err)
+	}
+	policy := AttachmentClaimPolicy{OwnerUserHash: rec.OwnerUserHash, CapabilityRevision: strings.Repeat("b", 64), MaxCount: AttachmentClaimPolicyMaxCount, MaxTurnBytes: AttachmentClaimPolicyMaxTurnBytes, Routes: map[string]string{"text/plain; charset=utf-8": "tool_read"}}
+	for attempt := 0; attempt < 2; attempt++ {
+		if _, err := store.GetStagingOwnedUpload(t.Context(), rec.EndpointID, rec.OwnerUserHash, scope.StagingScopeID, rec.UploadID); err != nil {
+			t.Fatalf("retry staging lookup %d: %v", attempt, err)
+		}
+		if err := store.ClaimStagedUploadsToThread(t.Context(), rec.EndpointID, scope.TargetID, []string{rec.UploadID}, policy, scope, true); err != nil {
+			t.Fatalf("claim %d: %v", attempt, err)
+		}
+	}
+	cleanup, err := store.ReleaseUploadStagingScope(t.Context(), scope, time.Now().UnixMilli())
+	if err != nil || len(cleanup) != 0 {
+		t.Fatalf("release=%v, %v", cleanup, err)
+	}
+	if _, err := store.GetThreadOwnedUpload(t.Context(), rec.EndpointID, scope.TargetID, rec.UploadID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.GetStagingOwnedUpload(t.Context(), rec.EndpointID, rec.OwnerUserHash, scope.StagingScopeID, rec.UploadID); err == nil {
+		t.Fatal("released staging scope still owns live upload")
+	}
+	other := stagingScopeForTest(rec.EndpointID, scope.TargetID, rec.OwnerUserHash, "scope_other")
+	if err := store.CreateUploadStagingScope(t.Context(), other); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.ClaimStagedUploadsToThread(t.Context(), rec.EndpointID, scope.TargetID, []string{rec.UploadID}, policy, other, true); err == nil {
+		t.Fatal("unrelated staging scope claimed live upload")
+	}
+}

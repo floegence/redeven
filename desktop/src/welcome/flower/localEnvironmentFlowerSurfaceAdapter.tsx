@@ -66,6 +66,7 @@ import {
 } from '../../../../internal/flower_ui/src/flowerRequestIdentity';
 import {
   buildFlowerTurnHTTPBody,
+  buildFlowerQueuedEditHTTPBody,
   normalizeFlowerTurnLaunchReceipt,
   type FlowerTurnHTTPResponse,
 } from '../../../../internal/flower_ui/src/flowerTurnAdmission';
@@ -798,6 +799,10 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
         'DELETE',
         `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/queue/${encodeURIComponent(queueID)}`,
       ),
+      editQueuedTurn: (threadID, queueID, input) => runtimeJSON(
+        bridge, 'PATCH', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/queue/${encodeURIComponent(queueID)}`,
+        buildFlowerQueuedEditHTTPBody(input), input.staging_scope,
+      ),
       sendQueuedTurnNow: (threadID, queueID) => runtimeJSON(
         bridge,
         'POST',
@@ -879,6 +884,14 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
       return new Blob([new Uint8Array(media.bytes)], { type: media.mime_type });
     },
     openMessageURL: options.openMessageURL,
+    resolveCanonicalReference: async request => {
+      if (Boolean(request.turn_id) === Boolean(request.queue_id)) throw new Error('Missing exact Flower reference scope.');
+      const target = await runtimeJSON<{ kind: 'file' | 'directory'; label: string; path: string }>(bridge, 'POST',
+        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(request.thread_id)}/reference-open-target`,
+        { ...(request.turn_id ? { turn_id: request.turn_id } : { queue_id: request.queue_id }), reference_id: request.reference_id }, undefined, options.runtimeEnvironmentID);
+      if (!target || (target.kind !== 'file' && target.kind !== 'directory') || !target.path || typeof target.label !== 'string') throw new Error('Invalid Flower reference preview target.');
+      return target;
+    },
     loadMessageAttachment: async ({ url, signal }) => {
       signal.throwIfAborted();
       const media = await runtimeJSON<RuntimeFlowerMedia>(bridge, 'GET', messageAttachmentPath(url), undefined, undefined, options.runtimeEnvironmentID);

@@ -9,6 +9,7 @@ export type FlowerMessageImageProps = Readonly<{
   unavailableLabel: string;
   load: (url: string, signal: AbortSignal) => Promise<Blob>;
   onOpen: () => void;
+  thumbnail?: boolean;
 }>;
 
 export const FlowerMessageImage: Component<FlowerMessageImageProps> = (props) => {
@@ -76,6 +77,7 @@ export const FlowerMessageImage: Component<FlowerMessageImageProps> = (props) =>
       )}
     >
       {(url) => (
+        <Show when={!props.thumbnail} fallback={<span class="flower-message-image"><img src={url()} alt={props.alt} onError={() => setFailed(true)} /></span>}>
         <a
           class="flower-message-image"
           href={url()}
@@ -92,6 +94,7 @@ export const FlowerMessageImage: Component<FlowerMessageImageProps> = (props) =>
             }}
           />
         </a>
+        </Show>
       )}
     </Show>
   );

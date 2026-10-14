@@ -5678,7 +5678,14 @@
       },
       "citationSources": "Источники",
       "citationCopySources": "Копировать источники",
-      "citationUnavailable": "Источник недоступен"
+      "citationUnavailable": "Источник недоступен",
+      "queuedEdit": "Изменить сообщение в очереди",
+      "queuedEditSave": "Сохранить изменения",
+      "queuedEditRetry": "Повторить сохранение",
+      "queuedEditCancel": "Вернуться к черновику",
+      "queuedEditUnavailable": "Редактирование сообщений в очереди недоступно.",
+      "queuedEditConflict": "Это сообщение изменилось или начало выполняться. Ваши правки сохранены.",
+      "queuedEditUnknown": "Результат сохранения неизвестен. Повторите то же сохранение, чтобы проверить результат."
     },
     "threadList": {
       "title": "Беседы",
