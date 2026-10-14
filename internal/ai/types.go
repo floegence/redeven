@@ -603,9 +603,21 @@ type ActiveThreadRun struct {
 	RunID    string `json:"run_id"`
 }
 
-// EditQueuedInputRequest changes text only, retaining pending attachments and context.
+// EditQueuedInputRequest supports text-only callers or complete content edits.
 type EditQueuedInputRequest struct {
-	ClientRequestID string  `json:"client_request_id"`
-	Text            string  `json:"text"`
-	ExpectedText    *string `json:"expected_text"`
+	ClientRequestID string             `json:"client_request_id"`
+	Text            string             `json:"text"`
+	ExpectedText    *string            `json:"expected_text"`
+	Content         *EditQueuedContent `json:"content,omitempty"`
+}
+
+type EditQueuedContent struct {
+	ExpectedInputFingerprint string                 `json:"expected_input_fingerprint"`
+	Text                     string                 `json:"text"`
+	RetainedAttachmentIDs    []string               `json:"retained_attachment_ids"`
+	RetainedReferenceIDs     []string               `json:"retained_reference_ids"`
+	Attachments              []RunAttachmentIn      `json:"attachments,omitempty"`
+	ContextAction            *ContextActionEnvelope `json:"context_action,omitempty"`
+	StagingScopeID           string                 `json:"staging_scope_id,omitempty"`
+	StagingCapability        string                 `json:"-"`
 }

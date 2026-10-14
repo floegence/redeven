@@ -400,3 +400,14 @@ describe('createFlowerAttachmentController', () => {
     });
   });
 });
+
+it('retains admitted queue attachments across scope changes and removes only the edit draft', async () => {
+  const upload = vi.fn(); const deleteStaged = vi.fn();
+  const controller = createFlowerAttachmentController({ capability: capability(), stagingScope, upload, deleteStaged });
+  controller.hydrateDraft([{ local_id: 'admitted', request_id: '', source: 'file', name: 'image.png', mime_type: 'image/png', size_bytes: 4,
+    admitted: { attachment_id: 'image', name: 'image.png', mime_type: 'image/png', size_bytes: 4, url: '/preview' } }]);
+  controller.setStagingScope(null); controller.setCapability(capability());
+  expect(controller.snapshot().items[0]).toMatchObject({ status: 'staged_ready', admitted: { attachment_id: 'image' } });
+  controller.cancel('admitted'); await controller.waitForIdle();
+  expect(controller.snapshot().items).toEqual([]); expect(upload).not.toHaveBeenCalled(); expect(deleteStaged).not.toHaveBeenCalled();
+});

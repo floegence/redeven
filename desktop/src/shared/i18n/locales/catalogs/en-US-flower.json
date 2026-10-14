@@ -549,7 +549,14 @@
     },
     "citationSources": "Sources",
     "citationCopySources": "Copy sources",
-    "citationUnavailable": "Source unavailable"
+    "citationUnavailable": "Source unavailable",
+    "queuedEdit": "Edit queued message",
+    "queuedEditSave": "Save edits",
+    "queuedEditRetry": "Retry save",
+    "queuedEditCancel": "Back to draft",
+    "queuedEditUnavailable": "Queue editing is unavailable.",
+    "queuedEditConflict": "This queued message changed or started running. Your edits are preserved.",
+    "queuedEditUnknown": "The save result is unknown. Retry the same save to check its result."
   },
   "threadList": {
     "title": "Conversations",

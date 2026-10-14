@@ -67,11 +67,15 @@ describe('Flower admitted attachment browser previews', () => {
     expect(archive.querySelector('svg')?.getBoundingClientRect().width).toBe(24);
     await userEvent.click(surface.querySelector('.flower-message-image')!);
     await waitFor(() => Boolean(document.querySelector<HTMLImageElement>('.flower-attachment-preview-surface img')?.naturalWidth));
+    await userEvent.click(document.querySelector<HTMLButtonElement>('.flower-attachment-preview-window [aria-label="Close"]')!);
+    await waitFor(() => !document.querySelector('.flower-attachment-preview-window'));
     await userEvent.click(surface.querySelector('a.flower-message-file')!);
     await waitFor(() => document.querySelector('.flower-attachment-preview-text')?.textContent === text);
     expect(document.querySelector('.flower-attachment-preview-error')).toBeNull();
     expect(requestRuntimeFlower).toHaveBeenCalledTimes(3);
     await page.screenshot({ path: './__screenshots__/flower-message-attachment-preview.png' });
+    await userEvent.click(document.querySelector<HTMLButtonElement>('.flower-attachment-preview-window [aria-label="Close"]')!);
+    await waitFor(() => !document.querySelector('.flower-attachment-preview-window'));
     await userEvent.click(archive);
     await waitFor(() => Boolean(document.querySelector('.flower-attachment-preview-state svg')));
     const fallbackIcon = document.querySelector<SVGSVGElement>('.flower-attachment-preview-state svg')!;
@@ -79,7 +83,7 @@ describe('Flower admitted attachment browser previews', () => {
     expect(fallbackIcon.getAttribute('data-file-icon-size')).toBe('detailed');
     expect(fallbackIcon.getBoundingClientRect().width).toBe(40);
     expect(requestRuntimeFlower).toHaveBeenCalledTimes(4);
-    await userEvent.keyboard('{Escape}');
+    await userEvent.click(document.querySelector<HTMLButtonElement>('.flower-attachment-preview-window [aria-label="Close"]')!);
     await waitFor(() => !document.querySelector('.flower-attachment-preview-window'));
   });
 });

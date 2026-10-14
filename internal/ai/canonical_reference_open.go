@@ -38,7 +38,8 @@ const (
 
 type FlowerCanonicalReferenceOpenRequest struct {
 	ThreadID    string `json:"-"`
-	TurnID      string `json:"turn_id"`
+	TurnID      string `json:"turn_id,omitempty"`
+	QueueID     string `json:"queue_id,omitempty"`
 	ReferenceID string `json:"reference_id"`
 }
 
@@ -70,8 +71,9 @@ func (s *Service) ResolveFlowerCanonicalReferenceOpenTarget(ctx context.Context,
 	endpointID := strings.TrimSpace(meta.EndpointID)
 	threadID := strings.TrimSpace(req.ThreadID)
 	turnID := strings.TrimSpace(req.TurnID)
+	queueID := strings.TrimSpace(req.QueueID)
 	referenceID := strings.TrimSpace(req.ReferenceID)
-	if endpointID == "" || threadID == "" || turnID == "" || referenceID == "" {
+	if endpointID == "" || threadID == "" || (turnID == "") == (queueID == "") || referenceID == "" {
 		return FlowerCanonicalReferenceOpenTarget{}, ErrFlowerCanonicalReferenceInvalid
 	}
 
@@ -100,6 +102,20 @@ func (s *Service) ResolveFlowerCanonicalReferenceOpenTarget(ctx context.Context,
 		return FlowerCanonicalReferenceOpenTarget{}, ErrFlowerCanonicalReferenceUnavailable
 	}
 	reference, ok := exactFlowerCanonicalReference(current.Items, turnID, referenceID)
+	if queueID != "" {
+		for _, queued := range current.Queue {
+			if queued.ID != queueID {
+				continue
+			}
+			for _, candidate := range queued.Input.References {
+				if candidate.ReferenceID == referenceID {
+					reference, ok = candidate, true
+					break
+				}
+			}
+			break
+		}
+	}
 	if !ok {
 		return FlowerCanonicalReferenceOpenTarget{}, ErrFlowerCanonicalReferenceNotFound
 	}

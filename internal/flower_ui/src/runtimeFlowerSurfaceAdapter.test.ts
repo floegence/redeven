@@ -895,3 +895,18 @@ describe('canonical title wire contract', () => {
     await expect(adapter.listThreads()).rejects.toThrow('Flower contract error: invalid canonical title snapshot');
   });
 });
+
+it.each([
+  ['http rejection', Object.assign(new Error('conflict'), { status: 409 }), false, 'rejected'],
+  ['desktop rejection', Object.assign(new Error('denied'), { failureKind: 'response' }), false, 'rejected'],
+  ['lost transport', new Error('lost response'), false, 'unknown'],
+  ['confirmed edit with failed reload', Object.assign(new Error('reload denied'), { status: 403 }), true, 'unknown'],
+] as const)('classifies queue edits at the canonical confirmation boundary: %s', async (_name, error, confirmed, kind) => {
+  const loadThread = vi.fn(async () => { throw error; });
+  const editQueuedTurn = vi.fn(async () => { if (!confirmed) throw error; });
+  const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ loadThread, editQueuedTurn }));
+  const command = { client_request_id: 'edit-1', expected_input_fingerprint: 'a'.repeat(64), prompt: 'new text', retained_attachment_ids: ['image'], retained_reference_ids: ['file'] };
+  await expect(adapter.editQueuedTurn!(' thread ', ' queue ', command)).rejects.toMatchObject({ admission_kind: kind });
+  expect(editQueuedTurn).toHaveBeenCalledWith('thread', 'queue', command);
+  expect(loadThread).toHaveBeenCalledTimes(confirmed ? 1 : 0);
+});

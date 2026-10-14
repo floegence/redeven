@@ -41,7 +41,7 @@ Consumption matches both local ID and full snapshot value, preserving newer
 reference edits. A definite transport failure restores queued text, references
 and files only when the original scope has no newer draft.
 Otherwise the existing frozen outbox and recovery controls retain the submission.
-A retry resends the frozen input rather than refreshing source metadata.
+A retry resends the frozen input rather than refreshing source metadata. Admitted queued conversation references also appear in the compact queue preview strip and can be retained or removed in the [shared queue editor](flower-turn-launcher.md); editing does not refresh their captured basic snapshot.
 
 Only `flower_composer` accepts `thread_reference` with a strict nested `thread`
 snapshot. First admission checks readable source metadata in the current runtime

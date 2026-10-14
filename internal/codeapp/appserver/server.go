@@ -5762,6 +5762,14 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
 				return
 			}
+			if body.Content != nil {
+				scopeID, capability, headerErr := optionalUploadStagingHeaders(r)
+				if headerErr != nil || strings.TrimSpace(body.Content.StagingScopeID) != scopeID {
+					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "upload staging scope mismatch"})
+					return
+				}
+				body.Content.StagingCapability = capability
+			}
 			view, err := aiSvc.EditQueuedInput(r.Context(), meta, threadID, parts[2], body)
 			if err != nil {
 				message := err.Error()

@@ -2,6 +2,10 @@
 
 ## 2026-10-14: Inert HTML preview loading
 
+- Adopt published Floret v7.33.0 complete queue edits and canonical edit lookup.
+  Document single-line queue media previews, shared composer editing, exact
+  retained resource authority, scoped staging retry and edit draft recovery.
+
 - Separate [assistant media capability](ui/flower-inline-media.md) from label
   readiness, preserve bounded loading and in-place retry, and restrict
   [Desktop session-root navigation](desktop/desktop-runtime-bridge.md) so local

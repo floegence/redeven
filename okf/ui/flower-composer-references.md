@@ -92,6 +92,10 @@ location, working-directory changes or permissions.
 
 The browser transport outbox may retain the original ordinary launch input under its exact `client_request_id` until canonical confirmation. Retry uses that same transport identity; it does not create a Redeven backend command row or use Floret's queue item ID as an idempotency key. After admission, the one-pass mapping defined by [AI tool runtime](../ai/ai-tool-runtime.md) gives Floret the canonical ordered `MessageReference` values and turn context snapshots.
 
+## Queue previews and editing
+
+Canonical queue references remain visible as compact icons and use exact ThreadID, QueueID and ReferenceID for file/directory preview. The resolver requires exactly one queue or turn scope, checks current canonical membership and repeats host filesystem/target authorization; a promoted or deleted item cannot be opened through its old queue scope. Frozen text, terminal, process and conversation context uses the existing snapshot preview. [Turn launcher](flower-turn-launcher.md) owns the single-line queue and shared editor. Existing references carry canonical identity into that editor; additions use the ordinary discovery/admission path, and removal never rebuilds opaque canonical resources from display labels.
+
 # Boundaries
 
 Search results and persisted paths are display and navigation metadata, not filesystem authorization. Discovery observes only what the current authorized host adapter returns under the current runtime and working directory. A reference does not read or attach file contents, grant future filesystem access, or substitute for an explicit attachment upload.
@@ -117,3 +121,5 @@ Before Send, Redeven does not persist the ordered editable reference snapshot. A
 - `redeven:internal/flower_ui/src/contextActionWire.test.ts` - Browser contract tests reject unknown envelope and item fields and preserve file/directory kind.
 - `redeven:internal/ai/context_action_floret_test.go:258` - Host tests map exact context items into typed Floret references.
 - `redeven:internal/ai/context_action_floret_test.go:361` - Canonical turn input retains references without persisting the host action envelope.
+
+- `redeven:internal/ai/queue_content_edit_test.go` - Full-content conflicts, exact resource retention/removal and current queued reference membership.

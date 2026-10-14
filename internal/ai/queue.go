@@ -130,6 +130,12 @@ func (s *Service) EditQueuedInput(ctx context.Context, meta *session.Meta, threa
 	if err := s.requireEndpointThreadAuthority(ctx, meta.EndpointID, threadID); err != nil {
 		return flruntime.ThreadView{}, err
 	}
+	if req.Content != nil {
+		if req.ExpectedText != nil || req.Text != "" {
+			return flruntime.ThreadView{}, errors.New("content edits cannot include text edit fields")
+		}
+		return s.editQueuedContent(ctxOrBackground(ctx), meta, threadID, queueID, req)
+	}
 	if err := validateInlineTurnText(req.Text); err != nil {
 		return flruntime.ThreadView{}, err
 	}

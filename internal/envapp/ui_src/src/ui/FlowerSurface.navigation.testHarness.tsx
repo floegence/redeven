@@ -215,7 +215,7 @@ vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => {
     );
   },
   FloatingWindow: (props: any) => {
-    if ((props.class?.includes('flower-context-preview-window') && typeof window.matchMedia === 'function') || props.class === 'flower-computer-stage' || (props.class === 'flower-subagent-detail-window' && typeof window.matchMedia === 'function')) {
+    if ((/flower-(?:chat-context|context|attachment)-preview-window/u.test(props.class ?? '') && typeof window.matchMedia === 'function') || props.class === 'flower-computer-stage' || (props.class === 'flower-subagent-detail-window' && typeof window.matchMedia === 'function')) {
       return <Dynamic component={actual.FloatingWindow} {...props} />;
     }
     const presence = actual.createFloatingPresence({

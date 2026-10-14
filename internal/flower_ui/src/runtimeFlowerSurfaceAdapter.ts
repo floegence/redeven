@@ -1,3 +1,4 @@
+import { flowerTurnAdmissionError } from './flowerTurnAdmission';
 import { isComputerSafetyAssistanceKind } from './computerAssistance';
 import type { FlowerModelCatalogDiscovery } from './contracts/flowerSurfaceContracts';
 import type {
@@ -21,6 +22,7 @@ import type {
   FlowerSubmitApprovalRequest,
   FlowerSubmitInputRequest,
   FlowerSurfaceAdapter,
+  FlowerQueuedTurnEditInput,
   FlowerSubmitInputReceipt,
   FlowerSurfaceRuntimeDescriptor,
   FlowerTerminalProcessSnapshot,
@@ -116,6 +118,7 @@ export type FlowerRuntimeTransport = Readonly<{
   movePinnedThread?(threadID: string, input: FlowerThreadPinPosition): Promise<{ pins: readonly RuntimeThreadPinMetadata[] }>;
   reorderQueuedTurns?(threadID: string, orderedQueueIDs: readonly string[]): Promise<unknown>;
   deleteQueuedTurn?(threadID: string, queueID: string): Promise<unknown>;
+  editQueuedTurn?(threadID: string, queueID: string, input: FlowerQueuedTurnEditInput): Promise<unknown>;
   sendQueuedTurnNow?(threadID: string, queueID: string): Promise<unknown>;
   forkThread(threadID: string, input: Readonly<{ client_request_id: string; title: string }>): Promise<LoadThreadResponse>;
   deleteThread?(threadID: string): Promise<void>;
@@ -170,6 +173,7 @@ export type RuntimeFlowerSurfaceAdapterOptions = Readonly<{
   openFileBrowser?: (request: FlowerFileOpenRequest) => Promise<void>;
   openFilePreview?: (request: FlowerFileOpenRequest) => Promise<void>;
   openCanonicalReference?: (request: FlowerCanonicalReferenceOpenRequest) => Promise<void>;
+  resolveCanonicalReference?: FlowerSurfaceAdapter['resolveCanonicalReference'];
   openLinkedFilePreview?: (request: FlowerLinkedContextPathOpenRequest) => Promise<void>;
   openWorkingDirectoryInFileBrowser?: FlowerSurfaceAdapter['openWorkingDirectoryInFileBrowser'];
   openWorkingDirectoryInTerminal?: FlowerSurfaceAdapter['openWorkingDirectoryInTerminal'];
@@ -434,6 +438,22 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
           return loadThread(tid);
         },
       } : {}),
+      ...(options.transport.editQueuedTurn ? {
+        editQueuedTurn: async (threadID: string, queueID: string, input: FlowerQueuedTurnEditInput) => {
+          const tid = trim(threadID), qid = trim(queueID);
+          if (!tid || !qid) throw new Error('Missing Flower queue edit identity.');
+          let commandConfirmed = false;
+          try {
+            await options.transport.editQueuedTurn!(tid, qid, input);
+            commandConfirmed = true;
+            return await loadThread(tid);
+          } catch (error) {
+            const failure = error as { status?: number; failureKind?: string };
+            const rejected = !commandConfirmed && (failure?.failureKind === 'response' || ((failure?.status ?? 0) >= 400 && (failure?.status ?? 0) < 500));
+            throw flowerTurnAdmissionError(rejected ? 'rejected' : 'unknown', error);
+          }
+        },
+      } : {}),
       ...(options.transport.sendQueuedTurnNow ? {
         sendQueuedTurnNow: async (threadID: string, queueID: string) => {
           const tid = trim(threadID);
@@ -545,6 +565,7 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
     ...(options.openFileBrowser ? { openFileBrowser: options.openFileBrowser } : {}),
     ...(options.openFilePreview ? { openFilePreview: options.openFilePreview } : {}),
     ...(options.openCanonicalReference ? { openCanonicalReference: options.openCanonicalReference } : {}),
+    ...(options.resolveCanonicalReference ? { resolveCanonicalReference: options.resolveCanonicalReference } : {}),
     ...(options.openLinkedFilePreview ? { openLinkedFilePreview: options.openLinkedFilePreview } : {}),
     ...(options.openWorkingDirectoryInFileBrowser ? { openWorkingDirectoryInFileBrowser: options.openWorkingDirectoryInFileBrowser } : {}),
     ...(options.openWorkingDirectoryInTerminal ? { openWorkingDirectoryInTerminal: options.openWorkingDirectoryInTerminal } : {}),

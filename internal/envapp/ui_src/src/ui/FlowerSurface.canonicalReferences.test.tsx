@@ -17,7 +17,8 @@ describe('Flower canonical reference navigation', () => {
 		const completion = deferred<void>();
 		const openCanonicalReference = vi.fn((_request: Readonly<{
 			thread_id: string;
-			turn_id: string;
+			turn_id?: string;
+      queue_id?: string;
 			reference_id: string;
 		}>) => completion.promise);
 		const canonicalThread = thread({

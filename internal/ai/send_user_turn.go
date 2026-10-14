@@ -217,7 +217,7 @@ func (s *Service) sendTypedExistingThread(ctx context.Context, meta *session.Met
 		if db == nil {
 			return finish(SendUserTurnResponse{}, errors.New("threads store not ready"))
 		}
-		if err := db.ClaimStagedUploadsToThread(ctx, meta.EndpointID, req.ThreadID, prepared.UploadIDs, prepared.AttachmentClaimPolicy, *prepared.StagingScope); err != nil {
+		if err := db.ClaimStagedUploadsToThread(ctx, meta.EndpointID, req.ThreadID, prepared.UploadIDs, prepared.AttachmentClaimPolicy, *prepared.StagingScope, false); err != nil {
 			return finish(SendUserTurnResponse{}, err)
 		}
 	}

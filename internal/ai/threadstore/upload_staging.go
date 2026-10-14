@@ -11,8 +11,9 @@ import (
 	"time"
 )
 
-// ClaimStagedUploadsToThread moves product-owned upload references from a
-// transport staging scope to their canonical thread. It does not create a turn,
+// ClaimStagedUploadsToThread binds product-owned uploads to their canonical
+// thread, retaining the exact staging claim when edit retries need it until
+// settlement. It does not create a turn,
 // queue item, admission receipt, or any other agent lifecycle state.
 func (s *Store) ClaimStagedUploadsToThread(
 	ctx context.Context,
@@ -21,6 +22,7 @@ func (s *Store) ClaimStagedUploadsToThread(
 	uploadIDs []string,
 	admission AttachmentClaimPolicy,
 	scope UploadStagingScope,
+	retainStagingClaim bool,
 ) error {
 	if s == nil || s.db == nil {
 		return errors.New("store not initialized")
@@ -47,8 +49,24 @@ func (s *Store) ClaimStagedUploadsToThread(
 		return err
 	}
 	refID := stagingUploadRefID(scope.OwnerUserHash, scope.StagingScopeID)
+	for _, uploadID := range uploadIDs {
+		var owns int
+		if err := tx.QueryRowContext(ctxOrBackground(ctx), `SELECT COUNT(1) FROM ai_upload_refs WHERE endpoint_id = ? AND upload_id = ? AND ref_kind = ? AND ref_id = ?`, endpointID, uploadID, UploadRefKindStaging, refID).Scan(&owns); err != nil {
+			return err
+		}
+		if owns != 1 {
+			return errors.New("attachment is not owned by the exact staging scope")
+		}
+	}
 	if err := bindUploadsToRefTx(ctxOrBackground(ctx), tx, endpointID, threadID, UploadRefKindThread, threadID, uploadIDs, UploadRefKindStaging, refID, scope.OwnerUserHash); err != nil {
 		return err
+	}
+	if retainStagingClaim {
+		for _, uploadID := range uploadIDs {
+			if _, err := tx.ExecContext(ctxOrBackground(ctx), `INSERT INTO ai_upload_refs(endpoint_id, upload_id, target_id, ref_kind, ref_id) VALUES(?, ?, ?, ?, ?) ON CONFLICT(endpoint_id, upload_id, ref_kind, ref_id) DO NOTHING`, endpointID, uploadID, scope.TargetID, UploadRefKindStaging, refID); err != nil {
+				return err
+			}
+		}
 	}
 	return tx.Commit()
 }
@@ -242,8 +260,8 @@ SELECT u.upload_id, u.endpoint_id, u.owner_user_hash, u.storage_relpath, u.name,
 FROM ai_uploads u
 JOIN ai_upload_refs r ON r.endpoint_id = u.endpoint_id AND r.upload_id = u.upload_id
 WHERE u.endpoint_id = ? AND u.owner_user_hash = ?
-	  AND u.upload_id = ? AND u.state = ? AND r.ref_kind = ? AND r.ref_id = ?
-`, strings.TrimSpace(endpointID), strings.ToLower(strings.TrimSpace(ownerUserHash)), strings.TrimSpace(uploadID), UploadStateStaged, UploadRefKindStaging, refID), &rec); err != nil {
+	  AND u.upload_id = ? AND u.state IN (?, ?) AND r.ref_kind = ? AND r.ref_id = ?
+`, strings.TrimSpace(endpointID), strings.ToLower(strings.TrimSpace(ownerUserHash)), strings.TrimSpace(uploadID), UploadStateStaged, UploadStateLive, UploadRefKindStaging, refID), &rec); err != nil {
 		return nil, err
 	}
 	return &rec, nil

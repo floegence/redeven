@@ -680,7 +680,14 @@
       },
       "citationSources": "出典",
       "citationCopySources": "出典をコピー",
-      "citationUnavailable": "出典を利用できません"
+      "citationUnavailable": "出典を利用できません",
+      "queuedEdit": "キューのメッセージを編集",
+      "queuedEditSave": "変更を保存",
+      "queuedEditRetry": "保存を再試行",
+      "queuedEditCancel": "下書きに戻る",
+      "queuedEditUnavailable": "キューのメッセージを編集できません。",
+      "queuedEditConflict": "このメッセージは変更されたか、実行が始まりました。編集内容は保持されています。",
+      "queuedEditUnknown": "保存結果を確認できません。同じ保存を再試行して結果を確認してください。"
     },
     "threadList": {
       "title": "会話",

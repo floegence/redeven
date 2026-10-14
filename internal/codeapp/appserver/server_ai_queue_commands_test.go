@@ -1,7 +1,9 @@
 package appserver
 
 import (
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -17,7 +19,7 @@ import (
 )
 
 func TestServerQueueCommandsPreserveCanonicalInputAndPublicProjection(t *testing.T) {
-	for _, action := range []string{"edit", "promote", "send-now"} {
+	for _, action := range []string{"edit", "edit-content", "promote", "send-now"} {
 		t.Run(action, func(t *testing.T) {
 			started := make(chan struct{}, 4)
 			provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -95,9 +97,17 @@ func TestServerQueueCommandsPreserveCanonicalInputAndPublicProjection(t *testing
 				}
 			}
 			method, body, commandPath, wantStatus := http.MethodPost, []byte(nil), path+"/"+action, http.StatusAccepted
-			if action == "edit" {
+			if action == "edit" || action == "edit-content" {
 				method, commandPath, wantStatus = http.MethodPatch, path, http.StatusOK
 				body = []byte(`{"client_request_id":"edit","expected_text":"Chosen queued input","text":"Edited chosen input"}`)
+				if action == "edit-content" {
+					current, err := svc.GetFlowerThreadDetail(t.Context(), &meta, thread.ThreadID)
+					if err != nil {
+						t.Fatal(err)
+					}
+					raw, _ := json.Marshal(current.Current.Queue[1].Input)
+					body = []byte(fmt.Sprintf(`{"client_request_id":"edit-content","content":{"expected_input_fingerprint":"%x","text":"Edited complete content","retained_attachment_ids":[],"retained_reference_ids":[],"context_action":{"schema_version":2,"action_id":"assistant.ask.flower","provider":"flower","target":{"target_id":"current","locality":"auto"},"source":{"surface":"flower_composer"},"context":[{"kind":"text_snapshot","title":"New context","content":"NEW_CONTEXT"}]}}}`, sha256.Sum256(raw)))
+				}
 			}
 			response := serveAIReadinessTestRequest(srv, origin, method, commandPath, body)
 			if response.Code != wantStatus {
@@ -115,7 +125,7 @@ func TestServerQueueCommandsPreserveCanonicalInputAndPublicProjection(t *testing
 			if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil || !payload.OK || payload.Data.ThreadID.String() != thread.ThreadID {
 				t.Fatalf("response=%+v error=%v", payload, err)
 			}
-			if action == "edit" {
+			if action == "edit" || action == "edit-content" {
 				if payload.Data.TurnID.String() != active.TurnID || len(payload.Data.Queue) != 2 || len(payload.Data.Queue[1].Input.References) != 1 || payload.Data.Queue[1].Input.References[0].ResourceRef != "" {
 					t.Fatalf("edited public queue=%+v", payload.Data.Queue)
 				}

@@ -142,3 +142,15 @@ describe('Local account lifecycle routes', () => {
     for (const path of [accounts + '?token=x', accounts + '/x', retry + '?account_id=x']) expect(() => runtimeFlowerPath(path)).toThrow();
   });
 });
+
+it('allows exact queue edit and canonical reference commands only through declared methods', () => {
+  for (const [path, method] of [
+    ['/_redeven_proxy/api/ai/threads/thread/queue/queue%3Afirst', 'PATCH'],
+    ['/_redeven_proxy/api/ai/threads/thread/reference-open-target', 'POST'],
+  ] as const) {
+    expect(runtimeFlowerPath(path)).toBe(path);
+    expect(runtimeFlowerMethodAllowed(path, method)).toBe(true);
+    expect(runtimeFlowerMethodAllowed(path, 'PUT')).toBe(false);
+    expect(() => runtimeFlowerPath(path + '?path=arbitrary')).toThrow();
+  }
+});

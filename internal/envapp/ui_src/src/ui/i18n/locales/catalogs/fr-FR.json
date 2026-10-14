@@ -5569,7 +5569,14 @@
       },
       "citationSources": "Sources",
       "citationCopySources": "Copier les sources",
-      "citationUnavailable": "Source indisponible"
+      "citationUnavailable": "Source indisponible",
+      "queuedEdit": "Modifier le message en attente",
+      "queuedEditSave": "Enregistrer les modifications",
+      "queuedEditRetry": "Réessayer l’enregistrement",
+      "queuedEditCancel": "Revenir au brouillon",
+      "queuedEditUnavailable": "La modification des messages en attente est indisponible.",
+      "queuedEditConflict": "Ce message a changé ou son exécution a commencé. Vos modifications sont conservées.",
+      "queuedEditUnknown": "Le résultat de l’enregistrement est inconnu. Réessayez le même enregistrement pour le vérifier."
     },
     "threadList": {
       "title": "Discussions",
