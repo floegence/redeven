@@ -15,6 +15,8 @@ import (
 	flruntime "github.com/floegence/floret/v7/runtime"
 	flstorage "github.com/floegence/floret/v7/storage"
 	fltools "github.com/floegence/floret/v7/tools"
+	openai "github.com/openai/openai-go/v3"
+	ooption "github.com/openai/openai-go/v3/option"
 )
 
 func TestChatGPTFloretToolHistoryRestartAndCompaction(t *testing.T) {
@@ -139,66 +141,83 @@ func TestChatGPTCompatibilityIdentityIncludesAuthentication(t *testing.T) {
 	}
 }
 
-func TestChatGPTFloretFailureDiagnosticsSurviveRestart(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("x-request-id", "req-restart-fixture")
-		w.WriteHeader(400)
-		fmt.Fprint(w, `{"error":{"message":"private prompt Bearer sk-secret","code":null,"param":"tools[0].parameters"}}`)
-	}))
-	defer server.Close()
-	raw, _ := newProviderAdapter("openai", server.URL, "fixture", nil)
-	provider := raw.(*openAIProvider)
-	provider.chatGPT = true
-	gateway := newFloretProviderAdapter(provider, "openai", "gpt-6.1-sol", ProviderControls{}, TurnBudgets{}, "")
-	gateway.identity, _ = redevenFloretGatewayIdentity("openai", "openai", server.URL, "gpt-6.1-sol", "responses", "chatgpt", "fixture")
-	agent, err := flruntime.NewAgent(flconfig.AgentConfig{Profile: flconfig.AgentProfile{ID: "test", Name: "Test"}, SystemPrompt: "Reply briefly.", Context: flconfig.ContextPolicy{ContextWindowTokens: 128000, CompactedContextTargetTokens: 2000, RecentTailTokens: 100, RecentUserTokens: 100, ReservedSummaryTokens: 1000}}, gateway)
-	if err != nil {
-		t.Fatal(err)
-	}
-	path := filepath.Join(t.TempDir(), "threads.sqlite")
-	open := func() (*flruntime.Host, flruntime.ThreadService) {
-		host, err := flruntime.Open(t.Context(), flruntime.Options{Storage: flstorage.SQLite(path)})
-		if err != nil {
-			t.Fatal(err)
-		}
-		service, err := host.ThreadService(flruntime.AgentFactoryFunc(func(context.Context, flruntime.AgentRequest) (*flruntime.Agent, error) { return agent, nil }))
-		if err != nil {
-			t.Fatal(err)
-		}
-		return host, service
-	}
-	host, service := open()
-	created, err := service.Create(t.Context(), flruntime.CreateThreadInput{RequestKey: "create"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = service.Send(t.Context(), flruntime.SendInput{ThreadID: created.ThreadID, RequestKey: "send", Input: flruntime.UserInput{Text: "hi"}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	first := waitDesktopContinuation(t, service, created.ThreadID)
-	if first.Failure == nil {
-		t.Fatal("provider failure missing")
-	}
-	code, message := projectFloretTurnFailure(first.Failure, runErrorCodeFloretEngineFailed)
-	detail := canonicalFailureDetail(first.Failure)
-	if code != runErrorCodeProviderRequestInvalid || !strings.Contains(detail, "req-restart-fixture") || !strings.Contains(detail, "tools[0].parameters") {
-		t.Fatalf("failure=%+v code=%s detail=%s", first.Failure, code, detail)
-	}
-	if strings.Contains(first.Failure.Message+message+detail, "sk-secret") || strings.Contains(first.Failure.Message, "private prompt") {
-		t.Fatal("canonical failure leaked upstream text")
-	}
-	if err := host.Shutdown(t.Context()); err != nil {
-		t.Fatal(err)
-	}
-	host, service = open()
-	defer host.Shutdown(context.Background())
-	restored, err := service.View(t.Context(), created.ThreadID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if restored.Failure == nil || restored.Failure.Message != first.Failure.Message || canonicalFailureDetail(restored.Failure) != detail {
-		t.Fatal("restart lost failure diagnostic")
+func TestFloretProviderFailureDiagnosticsSurviveRestart(t *testing.T) {
+	for _, tc := range []struct {
+		name, providerType, model, protocol, body, want, detail string
+		status                                                  int
+		chatGPT                                                 bool
+	}{
+		{"chatgpt", "openai", "gpt-6.1-sol", "responses", `{"error":{"message":"private prompt Bearer sk-secret","code":null,"param":"tools[0].parameters"}}`, runErrorCodeProviderRequestInvalid, "tools[0].parameters", 400, true},
+		{"openrouter", "openrouter", "google/gemma-4-31b-it:free", "chat_completions", openRouterSharedPoolFailure, runErrorCodeProviderUpstreamRateLimited, "upstream_provider_shared_pool", 429, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.Header().Set("x-request-id", "req-restart-fixture")
+				w.WriteHeader(tc.status)
+				fmt.Fprint(w, tc.body)
+			}))
+			defer server.Close()
+			raw, _ := newProviderAdapter(tc.providerType, server.URL, "fixture", nil)
+			provider := raw.(*openAIProvider)
+			provider.chatGPT = tc.chatGPT
+			provider.client = openai.NewClient(ooption.WithBaseURL(server.URL), ooption.WithMaxRetries(0))
+			gateway := newFloretProviderAdapter(provider, tc.providerType, tc.model, ProviderControls{}, TurnBudgets{}, "")
+			authIdentity := "api_key"
+			if tc.chatGPT {
+				authIdentity = "chatgpt"
+			}
+			gateway.identity, _ = redevenFloretGatewayIdentity(tc.providerType, tc.providerType, server.URL, tc.model, tc.protocol, authIdentity, "fixture")
+			agent, err := flruntime.NewAgent(flconfig.AgentConfig{Profile: flconfig.AgentProfile{ID: "test", Name: "Test"}, SystemPrompt: "Reply briefly.", Context: flconfig.ContextPolicy{ContextWindowTokens: 128000, CompactedContextTargetTokens: 2000, RecentTailTokens: 100, RecentUserTokens: 100, ReservedSummaryTokens: 1000}}, gateway)
+			if err != nil {
+				t.Fatal(err)
+			}
+			path := filepath.Join(t.TempDir(), "threads.sqlite")
+			open := func() (*flruntime.Host, flruntime.ThreadService) {
+				host, err := flruntime.Open(t.Context(), flruntime.Options{Storage: flstorage.SQLite(path)})
+				if err != nil {
+					t.Fatal(err)
+				}
+				service, err := host.ThreadService(flruntime.AgentFactoryFunc(func(context.Context, flruntime.AgentRequest) (*flruntime.Agent, error) { return agent, nil }))
+				if err != nil {
+					t.Fatal(err)
+				}
+				return host, service
+			}
+			host, service := open()
+			created, err := service.Create(t.Context(), flruntime.CreateThreadInput{RequestKey: "create"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = service.Send(t.Context(), flruntime.SendInput{ThreadID: created.ThreadID, RequestKey: "send", Input: flruntime.UserInput{Text: "hi"}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			first := waitDesktopContinuation(t, service, created.ThreadID)
+			if first.Failure == nil {
+				t.Fatal("provider failure missing")
+			}
+			code, message := projectFloretTurnFailure(first.Failure, runErrorCodeFloretEngineFailed)
+			detail := canonicalFailureDetail(first.Failure)
+			if code != tc.want || !strings.Contains(detail, "req-restart-fixture") || !strings.Contains(detail, tc.detail) {
+				t.Fatalf("failure=%+v code=%s detail=%s", first.Failure, code, detail)
+			}
+			if strings.Contains(first.Failure.Message+message+detail, "sk-secret") || strings.Contains(first.Failure.Message, "private prompt") {
+				t.Fatal("canonical failure leaked upstream text")
+			}
+			if err := host.Shutdown(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			host, service = open()
+			defer host.Shutdown(context.Background())
+			restored, err := service.View(t.Context(), created.ThreadID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			restoredCode, restoredMessage := projectFloretTurnFailure(restored.Failure, runErrorCodeFloretEngineFailed)
+			if restored.Failure == nil || restored.Failure.Message != first.Failure.Message || canonicalFailureDetail(restored.Failure) != detail || restoredCode != code || restoredMessage != message {
+				t.Fatal("restart lost failure diagnostic")
+			}
+		})
 	}
 }

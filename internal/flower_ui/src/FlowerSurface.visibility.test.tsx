@@ -263,7 +263,7 @@ describe('Flower workspace stream visibility', () => {
         turn_id: turnID,
         last_outcome: 'failed',
         error: 'Raw provider response must not be shown in the collapsed bar.',
-        run_error_code: 'provider_rate_limited',
+        run_error_code: 'provider_upstream_rate_limited',
       },
     });
     await waitFor(() => presences.some((presence) => presence.terminal_transition?.outcome === 'failed'));
@@ -284,6 +284,7 @@ describe('Flower workspace stream visibility', () => {
       unread_failed_count: 1,
     });
     expect(visibleFailure?.priority_thread_progress).toContain('rate limiting');
+    expect(visibleFailure?.priority_thread_progress).toContain('shared capacity');
     expect(visibleFailure?.priority_thread_progress).not.toContain('Raw provider response');
 
     stream.push({

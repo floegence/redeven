@@ -16,29 +16,30 @@ import (
 )
 
 const (
-	runErrorCodeChatGPTReview              = "chatgpt_review_required"
-	runErrorCodeChatGPTTemporary           = "chatgpt_temporarily_unavailable"
-	runErrorCodeChatGPTStorage             = "chatgpt_storage_unavailable"
-	runErrorCodeChatGPTUsage               = "chatgpt_usage_unavailable"
-	runErrorCodeChatGPTAuthorization       = "chatgpt_authorization_required"
-	runErrorCodeChatGPTPermission          = "chatgpt_plan_permission_required"
-	runErrorCodeProviderAuthFailed         = "provider_auth_failed"
-	runErrorCodeProviderMissingKey         = "provider_missing_key"
-	runErrorCodeProviderRateLimited        = "provider_rate_limited"
-	runErrorCodeProviderUnreachable        = "provider_unreachable"
-	runErrorCodeProviderStreamInterrupted  = "provider_stream_interrupted"
-	runErrorCodeProviderModelUnavailable   = "provider_model_unavailable"
-	runErrorCodeProviderRequestInvalid     = "provider_request_invalid"
-	runErrorCodeProviderRequestRejected    = "provider_request_rejected"
-	runErrorCodeModelGatewayContract       = "model_gateway_contract_failed"
-	runErrorCodeContextBudgetInvalid       = "context_budget_invalid"
-	runErrorCodeContextFixedOverhead       = "context_fixed_overhead"
-	runErrorCodeContextCompactionLimit     = "context_compaction_limit"
-	runErrorCodeFloretEngineFailed         = "floret_engine_failed"
-	runErrorCodeFloretControlContract      = "floret_control_contract_failed"
-	runErrorCodeFloretAdmissionBlocked     = "floret_thread_admission_blocked"
-	runErrorCodeFloretAuthorityConsistency = "floret_authority_consistency_failed"
-	runErrorCodeFloretEffectOutcomeUnknown = "floret_effect_outcome_unknown"
+	runErrorCodeChatGPTReview               = "chatgpt_review_required"
+	runErrorCodeChatGPTTemporary            = "chatgpt_temporarily_unavailable"
+	runErrorCodeChatGPTStorage              = "chatgpt_storage_unavailable"
+	runErrorCodeChatGPTUsage                = "chatgpt_usage_unavailable"
+	runErrorCodeChatGPTAuthorization        = "chatgpt_authorization_required"
+	runErrorCodeChatGPTPermission           = "chatgpt_plan_permission_required"
+	runErrorCodeProviderAuthFailed          = "provider_auth_failed"
+	runErrorCodeProviderMissingKey          = "provider_missing_key"
+	runErrorCodeProviderRateLimited         = "provider_rate_limited"
+	runErrorCodeProviderUpstreamRateLimited = "provider_upstream_rate_limited"
+	runErrorCodeProviderUnreachable         = "provider_unreachable"
+	runErrorCodeProviderStreamInterrupted   = "provider_stream_interrupted"
+	runErrorCodeProviderModelUnavailable    = "provider_model_unavailable"
+	runErrorCodeProviderRequestInvalid      = "provider_request_invalid"
+	runErrorCodeProviderRequestRejected     = "provider_request_rejected"
+	runErrorCodeModelGatewayContract        = "model_gateway_contract_failed"
+	runErrorCodeContextBudgetInvalid        = "context_budget_invalid"
+	runErrorCodeContextFixedOverhead        = "context_fixed_overhead"
+	runErrorCodeContextCompactionLimit      = "context_compaction_limit"
+	runErrorCodeFloretEngineFailed          = "floret_engine_failed"
+	runErrorCodeFloretControlContract       = "floret_control_contract_failed"
+	runErrorCodeFloretAdmissionBlocked      = "floret_thread_admission_blocked"
+	runErrorCodeFloretAuthorityConsistency  = "floret_authority_consistency_failed"
+	runErrorCodeFloretEffectOutcomeUnknown  = "floret_effect_outcome_unknown"
 )
 
 func userFacingRunError(code string, fallback string) string {
@@ -61,7 +62,9 @@ func userFacingRunError(code string, fallback string) string {
 	case runErrorCodeProviderMissingKey:
 		return "The selected AI provider is missing an API key. Open Settings and complete the Local AI Profile."
 	case runErrorCodeProviderRateLimited:
-		return "The selected AI provider is rate limiting this request. Try again after the provider limit resets."
+		return "The selected AI provider is rate limiting this request. Try again later or choose another model."
+	case runErrorCodeProviderUpstreamRateLimited:
+		return "The model's upstream provider is temporarily rate limiting OpenRouter's shared capacity. Try again shortly, choose another model, or connect your own provider API key in OpenRouter."
 	case runErrorCodeProviderUnreachable:
 		return "The selected AI provider could not be reached. Check the provider endpoint and network connection."
 	case runErrorCodeProviderStreamInterrupted:

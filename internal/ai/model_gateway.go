@@ -98,6 +98,13 @@ type openAIProvider struct {
 	chatGPTWatch     func(context.Context, func(error)) (func(), error)
 }
 
+func (p *openAIProvider) failureProviderType() string {
+	if p.chatGPT {
+		return "chatgpt"
+	}
+	return p.providerType
+}
+
 type parallelToolCallsWireMode string
 
 const (
@@ -473,7 +480,7 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 
 		case "response.incomplete":
 			if p.chatGPT {
-				return ModelGatewayResult{}, providerStreamFailure(event.RawJSON(), httpResponse, true)
+				return ModelGatewayResult{}, providerStreamFailure(event.RawJSON(), httpResponse, p.failureProviderType())
 			}
 			completed = event.Response
 			gotCompleted = true
@@ -494,11 +501,11 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 				hosted.item(item)
 			}
 		case "response.failed", "error":
-			return ModelGatewayResult{}, providerStreamFailure(event.RawJSON(), httpResponse, p.chatGPT)
+			return ModelGatewayResult{}, providerStreamFailure(event.RawJSON(), httpResponse, p.failureProviderType())
 		}
 	}
 	if err := stream.Err(); err != nil {
-		return ModelGatewayResult{}, providerRequestFailure(err, httpResponse, p.chatGPT)
+		return ModelGatewayResult{}, providerRequestFailure(err, httpResponse, p.failureProviderType())
 	}
 	if p.requireTerminal && !gotCompleted {
 		return ModelGatewayResult{}, errors.New("provider stream closed without terminal response")
@@ -861,7 +868,7 @@ func (p *openAIProvider) streamPreparedChatTurn(ctx context.Context, model strin
 		}
 	}
 	if err := stream.Err(); err != nil {
-		return ModelGatewayResult{}, providerRequestFailure(err, httpResponse, false)
+		return ModelGatewayResult{}, providerRequestFailure(err, httpResponse, p.failureProviderType())
 	}
 
 	sort.SliceStable(order, func(i, j int) bool { return order[i] < order[j] })
@@ -1139,7 +1146,7 @@ func (p *moonshotProvider) streamPreparedTurn(ctx context.Context, aliases provi
 		}
 	}
 	if err := stream.Err(); err != nil {
-		return ModelGatewayResult{}, providerRequestFailure(err, httpResponse, false)
+		return ModelGatewayResult{}, providerRequestFailure(err, httpResponse, "moonshot")
 	}
 
 	sort.SliceStable(order, func(i, j int) bool { return order[i] < order[j] })
@@ -1234,7 +1241,7 @@ func (p *moonshotProvider) Turn(ctx context.Context, req ModelGatewayRequest) (M
 	var httpResponse *http.Response
 	completion, err := p.client.Chat.Completions.New(ctx, params, ooption.WithResponseInto(&httpResponse))
 	if err != nil {
-		return ModelGatewayResult{}, providerRequestFailure(err, httpResponse, false)
+		return ModelGatewayResult{}, providerRequestFailure(err, httpResponse, "moonshot")
 	}
 	usage, err := turnUsageFromOpenAICompletion(completion.Usage)
 	if err != nil {

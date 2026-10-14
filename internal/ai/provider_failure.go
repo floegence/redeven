@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/floegence/redeven/internal/chatgpt"
@@ -20,12 +21,13 @@ const providerFailurePrefix = "redeven_provider_failure_v1:"
 // This bounded product-owned envelope survives Floret's canonical failure
 // message. Upstream prose, bodies, endpoints and credentials never enter it.
 type providerFailureDiagnostic struct {
-	Provider  string `json:"provider"`
-	Status    int    `json:"http_status,omitempty"`
-	Code      string `json:"code,omitempty"`
-	Param     string `json:"param,omitempty"`
-	RequestID string `json:"request_id,omitempty"`
-	Shape     string `json:"response_shape"`
+	Provider    string `json:"provider"`
+	Status      int    `json:"http_status,omitempty"`
+	Code        string `json:"code,omitempty"`
+	Param       string `json:"param,omitempty"`
+	RequestID   string `json:"request_id,omitempty"`
+	Shape       string `json:"response_shape"`
+	LimitSource string `json:"limit_source,omitempty"`
 }
 
 type providerFailure struct {
@@ -39,13 +41,15 @@ func (e *providerFailure) Error() string {
 }
 func (e *providerFailure) Unwrap() error { return e.cause }
 
-var diagnosticCodePattern = regexp.MustCompile(`^[a-z][a-z0-9_]{0,79}$`)
+var diagnosticCodePattern = regexp.MustCompile(`^([a-z][a-z0-9_]{0,79}|[45][0-9]{2})$`)
 var diagnosticParamPattern = regexp.MustCompile(`^(tools|input|messages|model|instructions|reasoning|text|temperature|top_p|max_output_tokens|stream|store|include)(\.[a-z_]+|\[[0-9]{1,4}\])*$`)
 var diagnosticRequestIDPattern = regexp.MustCompile(`^req[_-][A-Za-z0-9_-]{1,120}$`)
 
 func (d providerFailureDiagnostic) sanitized() providerFailureDiagnostic {
-	if d.Provider != "chatgpt" {
-		d.Provider = "openai"
+	switch d.Provider {
+	case "openai", "chatgpt", "openai_compatible", "openrouter", "xai", "groq", "ollama", "google", "chatglm", "qwen", "moonshot":
+	default:
+		d.Provider = "unknown"
 	}
 	if d.Status < 100 || d.Status > 599 {
 		d.Status = 0
@@ -59,12 +63,27 @@ func (d providerFailureDiagnostic) sanitized() providerFailureDiagnostic {
 	if !diagnosticRequestIDPattern.MatchString(d.RequestID) || strings.Contains(strings.ToLower(d.RequestID), "bearer") || strings.Contains(d.RequestID, "sk-") {
 		d.RequestID = ""
 	}
+	if d.Provider != "openrouter" || d.failureStatus() != http.StatusTooManyRequests || d.LimitSource != "upstream_provider_shared_pool" {
+		d.LimitSource = ""
+	}
 	switch d.Shape {
 	case "standard_error", "detail", "json_object", "json_array", "json_value", "empty", "non_json", "stream_error", "truncated":
 	default:
 		d.Shape = "empty"
 	}
 	return d
+}
+
+// Stream errors may carry an HTTP-style numeric code inside an HTTP 200
+// response. Preserve the transport status while classifying the explicit code.
+func (d providerFailureDiagnostic) failureStatus() int {
+	if d.Status >= 400 {
+		return d.Status
+	}
+	if status, err := strconv.Atoi(d.Code); err == nil && status >= 400 && status <= 599 {
+		return status
+	}
+	return d.Status
 }
 
 func parseProviderFailure(message string) (providerFailureDiagnostic, bool) {
@@ -116,9 +135,14 @@ func diagnosticFromBody(d providerFailureDiagnostic, raw []byte) providerFailure
 		}
 		if code, ok := fields["code"].(string); ok {
 			d.Code = code
+		} else if code, ok := fields["code"].(float64); ok && code >= 400 && code <= 599 && code == float64(int(code)) {
+			d.Code = strconv.Itoa(int(code))
 		}
 		if param, ok := fields["param"].(string); ok {
 			d.Param = param
+		}
+		if metadata, ok := fields["metadata"].(map[string]any); ok {
+			d.LimitSource, _ = metadata["limit_source"].(string)
 		}
 	case []any:
 		d.Shape = "json_array"
@@ -128,18 +152,15 @@ func diagnosticFromBody(d providerFailureDiagnostic, raw []byte) providerFailure
 	return d.sanitized()
 }
 
-func providerRequestFailure(err error, response *http.Response, isChatGPT bool) error {
+func providerRequestFailure(err error, response *http.Response, providerType string) error {
 	if err == nil {
 		return nil
 	}
 	var streamError *ssestream.StreamError
 	if errors.As(err, &streamError) {
-		return providerStreamFailure(string(streamError.Event.Data), response, isChatGPT)
+		return providerStreamFailure(string(streamError.Event.Data), response, providerType)
 	}
-	d := providerFailureDiagnostic{Provider: "openai"}
-	if isChatGPT {
-		d.Provider = "chatgpt"
-	}
+	d := providerFailureDiagnostic{Provider: providerType}
 	var upstream *openai.Error
 	if errors.As(err, &upstream) {
 		d.Status, d.Code, d.Param = upstream.StatusCode, upstream.Code, upstream.Param
@@ -156,22 +177,21 @@ func providerRequestFailure(err error, response *http.Response, isChatGPT bool) 
 		raw, _ = io.ReadAll(io.LimitReader(response.Body, (64<<10)+1))
 	}
 	d = diagnosticFromBody(d, raw)
-	if isChatGPT {
+	if providerType == "chatgpt" {
 		err = &chatgpt.RequestError{Status: d.Status, Code: d.Code, RequestID: d.RequestID, Body: raw}
 	}
 	return &providerFailure{diagnostic: d, cause: err}
 }
 
-func providerStreamFailure(raw string, response *http.Response, isChatGPT bool) error {
-	d := diagnosticFromBody(providerFailureDiagnostic{Provider: "openai", Shape: "stream_error"}, []byte(raw))
+func providerStreamFailure(raw string, response *http.Response, providerType string) error {
+	d := diagnosticFromBody(providerFailureDiagnostic{Provider: providerType, Shape: "stream_error"}, []byte(raw))
 	d.Shape = "stream_error"
 	if response != nil {
 		d.Status = response.StatusCode
 		d.RequestID = response.Header.Get("x-request-id")
 	}
 	var cause error = errors.New("provider response failed")
-	if isChatGPT {
-		d.Provider = "chatgpt"
+	if providerType == "chatgpt" {
 		cause = &chatgpt.RequestError{Status: d.Status, Code: d.Code, RequestID: d.RequestID}
 	}
 	return &providerFailure{diagnostic: d.sanitized(), cause: cause}
@@ -204,18 +224,23 @@ func providerFailureDetail(message string) string {
 }
 
 func providerDiagnosticRunCode(d providerFailureDiagnostic) string {
+	d = d.sanitized()
+	status := d.failureStatus()
 	if d.Provider == "chatgpt" {
 		if code := chatGPTRunFailureCode(d.Code); code != "" {
 			return code
 		}
-		if d.Status == 401 || d.Status == 403 {
+		if status == 401 || status == 403 {
 			return runErrorCodeChatGPTReview
 		}
-		if d.Status >= 500 {
+		if status >= 500 {
 			return runErrorCodeChatGPTTemporary
 		}
 	}
-	if code := providerHTTPStatusRunErrorCode(d.Status); code != "" {
+	if d.LimitSource == "upstream_provider_shared_pool" {
+		return runErrorCodeProviderUpstreamRateLimited
+	}
+	if code := providerHTTPStatusRunErrorCode(status); code != "" {
 		return code
 	}
 	if d.Code == "invalid_request_error" || d.Code == "invalid_function_parameters" {
