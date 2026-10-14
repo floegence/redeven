@@ -3,7 +3,7 @@ type: Interaction Contract
 title: Remote desktop viewer interaction
 description: Operate the remote desktop toolbar, input modes and ended-session recovery consistently in browsers and Desktop.
 tags: [desktop, viewer, interaction, input]
-timestamp: 2026-10-09T19:00:00Z
+timestamp: 2026-10-13T21:00:00Z
 ---
 # Summary
 
@@ -28,8 +28,11 @@ movement immediately in order. Raw pointer and ordinary pointer events share
 that owner, so browser event cadence cannot grow an input queue. Scroll remains
 accumulated per frame. Reset invalidates pending moves.
 
-The viewer defaults to the host input method, sending physical keys from a
-direct-input keyboard. Explicitly choosing Use local input method sends both
+The viewer defaults to the host input method through the published
+`physical-only` mode. Its non-editable desktop sends hardware key codes on
+keydown, including IME-labelled keys, without waiting for local text events or
+key release. The local composition editor stays disabled and empty. Explicitly
+choosing Use local input method sends both
 ordinary characters and locally confirmed composition through one ordered text
 path. Physical navigation and shortcuts retain their key semantics; pending
 modifiers never leak into a text paste. Mode changes cancel composition and

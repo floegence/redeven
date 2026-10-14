@@ -21,6 +21,7 @@ const backend = process.argv.includes('--macos') ? 'macos' : process.argv.includ
 const noVP9 = process.argv.includes('--no-vp9');
 const noAV1 = process.argv.includes('--no-av1');
 const codecOnly = process.argv.includes('--codec-only');
+const hostInputOnly = process.argv.includes('--host-input-only');
 const separateCursor = backend !== 'macos' && !process.argv.includes('--embedded-cursor');
 const controlCursor = separateCursor ? 'default' : 'none';
 const unsupportedReason = process.argv.includes('--unsupported-gpu') ? 'GPU_SCANOUT_UNSUPPORTED' : '';
@@ -232,7 +233,7 @@ try {
       expected, `${backend} ${method} must offer only client-supported codecs`);
     checkOffer('connect');
     paint();
-    await page.waitForFunction(() => !document.querySelector('.floe-remote-input').disabled);
+    await page.waitForFunction(() => document.querySelector('#desktop').hasAttribute('data-painted') && !document.querySelector('#shortcuts').disabled);
     await page.locator('#settings').click();
     await page.locator('#quality').selectOption('clarity');
     await page.waitForFunction(() => !document.querySelector('#quality').disabled);
@@ -257,6 +258,29 @@ try {
     assert.equal(connectionCount, tickets, 'retired codec probe acquired a new attachment ticket');
     assert.deepEqual(errors, []);
     console.log(JSON.stringify({ passed: true, backend, noVP9, checks: ['client codec offer', 'configuration offer', 'reconnect offer', 'retired asynchronous probe'] }));
+  } else if (hostInputOnly) {
+    await page.waitForFunction(() => document.querySelector('#connection').hidden);
+    paint();
+    await page.waitForFunction(() => document.querySelector('#desktop').hasAttribute('data-painted'));
+    await page.locator('#desktop').click();
+    const start = messages.length;
+    // No local text/input event or key release is needed to admit a host key.
+    await page.locator('#desktop').evaluate(canvas => {
+      canvas.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true, cancelable: true }));
+      canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'Process', code: 'KeyM', isComposing: true, bubbles: true, cancelable: true }));
+    });
+    for (let attempt = 0; messages.length < start + 2 && attempt < 20; attempt++) await page.waitForTimeout(10);
+    const inputs = messages.slice(start).filter(item => item.command.method === 'input').map(item => item.command.input);
+    assert(inputs.some(input => input.code === 'Space' && input.pressed), 'host Space must send on keydown without a local text event');
+    assert(inputs.some(input => input.code === 'KeyM' && input.pressed), 'host IME-labelled keys must retain their physical code');
+    assert(await page.locator('.floe-remote-input').isDisabled(), 'host input must keep the local text editor disabled');
+    await page.locator('#desktop').evaluate(canvas => {
+      for (const code of ['Space', 'KeyM']) canvas.dispatchEvent(new KeyboardEvent('keyup', { key: 'Process', code, bubbles: true }));
+    });
+    for (let attempt = 0; messages.slice(start).filter(item => item.command.input?.pressed === false).length < 2 && attempt < 20; attempt++) await page.waitForTimeout(10);
+    assert.equal(messages.slice(start).filter(item => item.command.input?.pressed === false).length, 2, 'every admitted host key must release');
+    assert(!messages.slice(start).some(item => ['paste', 'text'].includes(item.command.input?.kind)), 'host keys must never also send local text');
+    console.log(JSON.stringify({ passed: true, backend, checks: ['immediate host keydown', 'host IME ownership', 'physical release', 'local editor isolation'] }));
   } else {
   await page.waitForFunction(() => document.querySelector('#connection').hidden);
   const canvasCursor = () => page.locator('#desktop').evaluate(element => getComputedStyle(element).cursor);
@@ -285,7 +309,7 @@ try {
   await page.locator('#desktop').evaluate(canvas => canvas.dispatchEvent(new MouseEvent('pointerdown', {bubbles:true}))); await page.keyboard.press('a');
   assert.equal(messages.filter(item => item.command.method === 'input').length, 0, 'input before first paint');
   paint();
-  await page.waitForFunction(() => !document.querySelector('.floe-remote-input').disabled);
+  await page.waitForFunction(() => document.querySelector('#desktop').hasAttribute('data-painted') && !document.querySelector('#shortcuts').disabled);
   assert.equal(await canvasCursor(), controlCursor, 'control must use the painted frame cursor presentation');
   assert.equal(await page.locator('#settings').evaluate(element => getComputedStyle(element).cursor), 'pointer', 'desktop cursor policy must not hide toolbar cursors');
   // Leave the remote picture unchanged and hold client animation frames. Real
@@ -357,17 +381,17 @@ try {
     for (const [authorization, label] of [['restoring', 'Restoring sharing approval…'], ['needs_consent', 'Connecting to desktop…']]) {
       control.send(JSON.stringify({ version: 1, type: 'state', state: 'authorizing', authorization, generation: ++generation }));
       await page.waitForFunction(expected => document.querySelector('#status').textContent === expected, label);
-      assert(await page.locator('.floe-remote-input').isDisabled(), 'authorization enabled input before new paint');
+      assert(await page.locator('#shortcuts').isDisabled(), 'authorization enabled input before new paint');
       assert(await page.locator('#reconnect').isHidden(), 'pending portal request allowed competing reconnect');
     }
     for (const [code, label] of [['PORTAL_FAILED', 'Previous approval recovery did not finish'], ['AUTHORIZATION_PENDING', 'A sharing request is already in progress. Finish or cancel it on the host, then retry.']]) {
       control.send(JSON.stringify({ version: 1, type: 'error', code, authorization: 'unknown', generation }));
       await page.waitForFunction(expected => document.querySelector('#status').textContent === expected, label);
       assert(await page.locator('#reconnect').isVisible(), 'failed authorization had no retry action');
-      assert(await page.locator('.floe-remote-input').isDisabled(), 'failed authorization retained input');
+      assert(await page.locator('#shortcuts').isDisabled(), 'failed authorization retained input');
     }
     generation++; state(); paint();
-    await page.waitForFunction(() => !document.querySelector('.floe-remote-input').disabled);
+    await page.waitForFunction(() => document.querySelector('#desktop').hasAttribute('data-painted') && !document.querySelector('#shortcuts').disabled);
   }
   if (process.env.REDEVEN_DESKTOP_EVIDENCE_DIR) await page.screenshot({ path: path.join(process.env.REDEVEN_DESKTOP_EVIDENCE_DIR, `toolbar-${desktop ? 'electron' : 'browser'}.png`) });
   if (process.env.REDEVEN_DESKTOP_VISUAL_MATRIX === '1') {
@@ -447,7 +471,7 @@ try {
   await page.getByRole('button', { name: 'Lock host', exact: true }).evaluate(button => button.click());
   assert(await page.getByRole('button', { name: 'Lock host', exact: true }).isDisabled(), 'new authority reused an old confirmation');
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
-  await page.waitForFunction(() => !document.querySelector('.floe-remote-input').disabled);
+  await page.waitForFunction(() => document.querySelector('#desktop').hasAttribute('data-painted') && !document.querySelector('#shortcuts').disabled);
   assert.equal(messages.filter(item => item.command.method === 'lock').length, beforeRevokedLock, 'revoked confirmation sent a lock command');
   await page.locator('#desktop').click(); await page.keyboard.press('x');
   const compose = text => page.locator('.floe-remote-input').evaluate((element, text) => {
@@ -457,13 +481,15 @@ try {
   await compose('默认不提交');
   await page.waitForTimeout(80);
   assert(!messages.some(item => ['text', 'paste'].includes(item.command.input?.kind)), 'host input mode must not silently submit client text');
-  assert.match(await page.locator('#notice').textContent(), /Use local input method/, 'client composition needs an actionable mode hint');
+  assert(await page.locator('.floe-remote-input').isDisabled(), 'host mode must isolate the local composition editor');
+  assert.equal(await page.locator('.floe-remote-input').inputValue(), '', 'host mode retained client composition');
   await page.locator('#settings').click();
   assert.equal(await page.getByLabel('Text input', { exact: true }).inputValue(), 'host');
   assert.match(await page.locator('#text-input-hint').textContent(), /Finish or cancel composition on the host/);
   await page.getByLabel('Text input', { exact: true }).selectOption('paste');
   await page.keyboard.press('Escape');
   await page.locator('#desktop').click();
+  assert(await page.locator('.floe-remote-input').isEnabled(), 'explicit local input must enable its composition editor');
   await compose('中文办公😀');
   await page.waitForTimeout(80);
   assert(messages.some(item => item.command.input?.kind === 'paste' && item.command.input.text === '中文办公😀'), 'opted-in client composition must use explicit native paste');
@@ -480,7 +506,7 @@ try {
   await page.waitForFunction(() => document.querySelector('#clipboard-text').value === 'Task clipboard 中文');
   await page.locator('#clipboard-text').fill('fixture paste');
   await page.getByRole('button', { name: 'Paste to host', exact: true }).click();
-  await page.waitForTimeout(80);
+  for (let attempt = 0; !messages.some(item => item.command.method === 'set_clipboard' && item.command.text === 'fixture paste') && attempt < 100; attempt++) await page.waitForTimeout(20);
   const paste = messages.findLastIndex(item => item.command.method === 'set_clipboard' && item.command.text === 'fixture paste');
   assert(paste >= 0, 'panel must publish clipboard before native paste');
   assert(messages.slice(paste + 1).some(item => item.command.input?.code === 'KeyV' && item.command.input.pressed), 'panel paste missing native chord');
@@ -534,7 +560,8 @@ try {
   await page.locator('#display').selectOption('two');
   await page.waitForFunction(() => document.querySelector('#desktop').width === 640);
   await page.keyboard.press('Escape');
-  await page.waitForFunction(() => !document.querySelector('.floe-remote-input').disabled);
+  await page.waitForFunction(() => document.querySelector('#desktop').hasAttribute('data-painted') && !document.querySelector('#shortcuts').disabled);
+  await page.waitForFunction(expected => getComputedStyle(document.querySelector('#desktop')).cursor === expected, controlCursor);
   assert.equal(await canvasCursor(), controlCursor, 'display replacement must apply the control frame cursor presentation');
   await page.locator('#mode').selectOption('view');
   await page.waitForFunction(() => getComputedStyle(document.querySelector('#desktop')).cursor === 'none');
@@ -567,7 +594,7 @@ try {
   await page.locator('#mode').selectOption('control');
   assert(await page.getByRole('dialog').isVisible(), 'takeover missing confirmation');
   await page.getByRole('button', { name: 'Take control', exact: true }).click();
-  await page.waitForFunction(() => !document.querySelector('.floe-remote-input').disabled);
+  await page.waitForFunction(() => document.querySelector('#desktop').hasAttribute('data-painted') && !document.querySelector('#shortcuts').disabled);
   assert.equal(await canvasCursor(), controlCursor, 'taking control must apply the control frame cursor presentation');
   if (separateCursor) {
     assert(!await page.locator('#stage img[src^="data:image/png"]').isVisible(), 'new generation retained the previous host cursor');
@@ -648,35 +675,35 @@ try {
   state();
   generation++; state();
   await page.waitForFunction(() => document.querySelector('#unlock-bar').hidden);
-  assert(await page.locator('.floe-remote-input').isDisabled(), 'unlock successor reused the lock frame authority');
+  assert(await page.locator('#shortcuts').isDisabled(), 'unlock successor reused the lock frame authority');
   const beforePaint = messages.length;
   await page.keyboard.press('b');
   assert(!messages.slice(beforePaint).some(item => item.command.method === 'input'), 'successor input escaped before paint');
   paint();
-  await page.waitForFunction(() => !document.querySelector('.floe-remote-input').disabled);
+  await page.waitForFunction(() => document.querySelector('#desktop').hasAttribute('data-painted') && !document.querySelector('#shortcuts').disabled);
   control.send(JSON.stringify({ version: 1, type: 'state', state: 'suspended', code: 'locked', generation: ++generation }));
   await page.waitForFunction(() => document.querySelector('#status').textContent === 'Host is locked');
-  assert(await page.locator('.floe-remote-input').isDisabled(), 'locked host retained input');
+  assert(await page.locator('#shortcuts').isDisabled(), 'locked host retained input');
   assert.notEqual(await canvasCursor(), 'none', 'suspending capture must restore the local cursor');
   state(); paint();
-  await page.waitForFunction(() => !document.querySelector('.floe-remote-input').disabled);
+  await page.waitForFunction(() => document.querySelector('#desktop').hasAttribute('data-painted') && !document.querySelector('#shortcuts').disabled);
   control.send(JSON.stringify({ version: 1, type: 'state', state: 'suspended', code: 'permission_revoked', generation: ++generation }));
   await page.waitForFunction(() => document.querySelector('#status').textContent === 'Host authorization required');
   assert(await page.locator('#reconnect').isVisible(), 'permission recovery missing explicit reconnect');
   state(); paint();
-  await page.waitForFunction(() => !document.querySelector('.floe-remote-input').disabled);
+  await page.waitForFunction(() => document.querySelector('#desktop').hasAttribute('data-painted') && !document.querySelector('#shortcuts').disabled);
   control.send(JSON.stringify({ version: 1, type: 'state', state: 'suspended', code: 'DISPLAY_CHANGED', generation: ++generation }));
   control.send(JSON.stringify({ version: 1, type: 'displays', displays: [displays[0]] }));
-  await page.waitForFunction(() => document.querySelector('#desktop').width === 320 && !document.querySelector('.floe-remote-input').disabled);
+  await page.waitForFunction(() => document.querySelector('#desktop').width === 320 && document.querySelector('#desktop').hasAttribute('data-painted') && !document.querySelector('#shortcuts').disabled);
   assert.equal(messages.findLast(item => item.command.method === 'select_display').command.display_id, 'one', 'removed monitor must recover to primary');
   ticketFailures = 2;
   controls.at(-1).close();
   await page.waitForFunction(() => !document.querySelector('#connection').hidden);
   await page.waitForFunction(() => document.querySelector('#connection').hidden, null, { timeout: 10000 });
   assert(connectionCount >= 4, 'temporary ticket failures stopped automatic reconnect');
-  assert(await page.locator('.floe-remote-input').isDisabled(), 'reconnect reused prior paint');
+  assert(await page.locator('#shortcuts').isDisabled(), 'reconnect reused prior paint');
   assert.notEqual(await canvasCursor(), 'none', 'reconnect must retain the local cursor while awaiting fresh paint');
-  paint(); await page.waitForFunction(() => !document.querySelector('.floe-remote-input').disabled);
+  paint(); await page.waitForFunction(() => document.querySelector('#desktop').hasAttribute('data-painted') && !document.querySelector('#shortcuts').disabled);
   assert.equal(await canvasCursor(), controlCursor, 'reconnect must apply the fresh frame cursor presentation');
   assert.equal(await page.evaluate(() => window.qualificationAudioContext.state), 'running', 'reconnect closed enabled sound while the product still advertised it');
   await page.locator('#settings').click();
@@ -696,12 +723,12 @@ try {
   await page.waitForFunction(current => window.qualificationAudioSamples.some(sample => sample.generation === current && sample.frames > 0), generation);
   lockedNextConnect = true; controls.at(-1).close();
   await page.waitForFunction(() => document.querySelector('#status').textContent === 'Host is locked', null, { timeout: 3000 });
-  assert(await page.locator('.floe-remote-input').isDisabled(), 'initially locked host retained input');
+  assert(await page.locator('#shortcuts').isDisabled(), 'initially locked host retained input');
   assert(await page.locator('#reconnect').isVisible(), 'initially locked host cannot reconnect after local unlock');
   await page.locator('#reconnect').click();
   await page.waitForFunction(() => document.querySelector('#connection').hidden);
-  assert(await page.locator('.floe-remote-input').isDisabled(), 'unlock reconnect reused prior paint');
-  paint(); await page.waitForFunction(() => !document.querySelector('.floe-remote-input').disabled);
+  assert(await page.locator('#shortcuts').isDisabled(), 'unlock reconnect reused prior paint');
+  paint(); await page.waitForFunction(() => document.querySelector('#desktop').hasAttribute('data-painted') && !document.querySelector('#shortcuts').disabled);
   await page.locator('#fullscreen').click();
   try {
     await page.waitForFunction(() => document.documentElement.classList.contains('desktop-fullscreen') && !document.querySelector('#fullscreen').disabled, null, { timeout: 10000 });
@@ -739,8 +766,8 @@ try {
     assert.equal(connect.takeover, accept, 'native control conflict inferred takeover consent');
     paint();
     await page.waitForFunction(width => document.querySelector('#desktop').width === width, savedDisplay === 'removed' ? 320 : 640);
-    if (accept) await page.waitForFunction(() => !document.querySelector('.floe-remote-input').disabled);
-    else assert(await page.locator('.floe-remote-input').isDisabled(), 'declining takeover enabled input');
+    if (accept) await page.waitForFunction(() => document.querySelector('#desktop').hasAttribute('data-painted') && !document.querySelector('#shortcuts').disabled);
+    else assert(await page.locator('#shortcuts').isDisabled(), 'declining takeover enabled input');
   }
   await page.setViewportSize({ width: 360, height: 640 });
   assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'narrow window horizontal overflow');
@@ -767,13 +794,14 @@ try {
     connection.send(JSON.stringify({ version: 1, type: 'capabilities', capabilities }));
   });
   await refreshCapabilities({ backend: 'linux-drm-kms', displays, unlock: true, locked_screen: true, audio: false, clipboard: false, text_input: true });
-  await page.waitForFunction(() => document.querySelector('#desktop').hasAttribute('data-painted') && !document.querySelector('.floe-remote-input').disabled);
+  await page.waitForFunction(() => document.querySelector('#desktop').hasAttribute('data-painted') && !document.querySelector('#shortcuts').disabled);
   await page.locator('#settings').click();
   assert(await page.getByLabel('Text input', { exact: true }).isEnabled(), 'DRM client text was coupled to clipboard synchronization');
   assert(await page.locator('#clipboard').isDisabled(), 'client text enabled unsupported clipboard synchronization');
   await page.getByLabel('Text input', { exact: true }).selectOption('paste');
   await page.keyboard.press('Escape');
   await page.locator('#desktop').click();
+  assert(await page.locator('.floe-remote-input').isEnabled(), 'local text capability must enable its editor');
   const localTextStart = messages.length;
   await page.keyboard.type('abC$');
   await compose('中文😀');
@@ -822,7 +850,7 @@ try {
   await page.keyboard.press('Escape');
   clientTextOnly = false;
   await refreshCapabilities({ backend, displays, unlock: true, locked_screen: true, audio: true, clipboard: true });
-  await page.waitForFunction(() => document.querySelector('#desktop').hasAttribute('data-painted') && !document.querySelector('.floe-remote-input').disabled);
+  await page.waitForFunction(() => document.querySelector('#desktop').hasAttribute('data-painted') && !document.querySelector('#shortcuts').disabled);
   const catalogs = await page.evaluate(() => window.remoteDesktopCatalog);
   for (const [locale, catalog] of Object.entries(catalogs)) {
     await page.evaluate(locale => { document.documentElement.lang = locale; }, locale);
