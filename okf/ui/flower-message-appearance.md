@@ -22,8 +22,8 @@ published compact scale. Source destinations and copy follow
 
 ## Transcript reading scale
 
-Message bubbles use a `0.9375rem` body size and unitless `1.75` line height
-(15px and 26.25px at the standard 16px root). Markdown follows that message
+Message bubbles use a `0.875rem` body size and unitless `1.75` line height
+(14px and 24.5px at the standard 16px root). Markdown follows that message
 scale; headings use proportional sizes and line heights, paragraphs have
 `0.8em` separation, and list items have `0.4em` separation. The first rendered
 block keeps its top margin reset, including while streaming. Assistant prose
@@ -31,9 +31,16 @@ retains its 58rem maximum reading width. Code and tables use a smaller relative
 reading size and keep their own constrained horizontal scrolling.
 
 This scale belongs to transcript message bubbles, not a root theme token or
-whole-Flower zoom setting. Permission mode, model, reasoning controls and the
-composer editor retain their existing typography. Theme changes remain paint-
-only; they do not alter reading geometry or remount Markdown content.
+whole-Flower zoom setting. Permission mode, model and reasoning controls retain
+their existing compact typography. Desktop composer text and password editors
+use `0.875rem` with `1.6` line height; textarea minimum height and autosizing
+follow the editor line height. Existing touch-input rules retain the 16px
+minimum that prevents iOS Safari focus zoom. Theme changes remain paint-only;
+they do not alter reading geometry or remount Markdown content.
+
+Answered-question receipts inherit the message body size for both questions
+and answers, including redacted answers. Their `1.6` line height keeps wrapped
+content readable, while the status label uses `0.75rem` with `1.4` line height.
 
 ## Filled messages and content
 
@@ -84,3 +91,5 @@ layout, failed messages and forced colors. Code highlighting retains its indepen
 - [Shared message styles](../../internal/flower_ui/src/styles/flower.css)
 - [Shared transcript rendering](../../internal/flower_ui/src/FlowerSurface.tsx)
 - [Theme, contrast and selection acceptance](../../internal/envapp/ui_src/src/styles/flowerMessageContrast.browser.test.tsx)
+- [Rendered text scale and compact composer controls](../../internal/envapp/ui_src/src/ui/FlowerMarkdown.citations.browser.test.tsx)
+- [Answered-question receipt and composer acceptance](../../internal/envapp/ui_src/src/ui/FlowerSurface.inputResponse.browser.test.tsx)

@@ -82,14 +82,14 @@ describe('Flower canonical citations in Chromium', () => {
     setContent(content() + '\n```\n\n');
     await expect.poll(() => root.querySelectorAll('.flower-chat-source-card').length).toBe(2);
     const block = root.querySelector<HTMLElement>('.flower-chat-md-block')!;
-    expect(parseFloat(getComputedStyle(block).fontSize)).toBe(15);
-    expect(parseFloat(getComputedStyle(block).lineHeight)).toBeCloseTo(26.25);
+    expect(parseFloat(getComputedStyle(block).fontSize)).toBe(14);
+    expect(parseFloat(getComputedStyle(block).lineHeight)).toBeCloseTo(24.5);
     for (const control of root.querySelectorAll('.flower-permission-trigger, .flower-model-reasoning-model-trigger, .flower-reasoning-segment-button')) {
       expect(getComputedStyle(control).fontSize).toBe('10px');
     }
-    expect(getComputedStyle(root.querySelector('textarea')!).fontSize).toBe('12px');
+    expect(getComputedStyle(root.querySelector('textarea')!).fontSize).toBe('14px');
     const paragraphs = root.querySelectorAll('p');
-    expect(parseFloat(getComputedStyle(paragraphs[1]).marginTop)).toBeGreaterThanOrEqual(12);
+    expect(parseFloat(getComputedStyle(paragraphs[1]).marginTop)).toBeGreaterThanOrEqual(11);
     expect(root.querySelectorAll('.flower-chat-source-number')[1].textContent).toBe('14');
     expect(root.querySelectorAll('.flower-chat-source-card')[1].getAttribute('href')).toBe(bibliography.split('\n').at(-1));
     const write = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue();
