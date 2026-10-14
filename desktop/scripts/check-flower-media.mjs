@@ -27,6 +27,76 @@ let exited;
 let browser;
 let page;
 let envServer;
+const html = '<h1>Daily brief</h1><input aria-label="Reading note"><button onclick="this.textContent=\'Updated\'">Update report</button><a href="#economy">Economy</a><a href="https://example.com/news">News source</a><a href="javascript:alert(1)">Unsupported link</a><section id="economy" style="margin-top:1200px">Economy section</section>';
+
+async function qualifyHtmlPreview(surface) {
+  const sourceURL = page.url();
+  const inline = page.frameLocator('.chat-media-viewport iframe');
+  const original = await page.locator('.chat-media-viewport iframe').elementHandle();
+  await inline.getByRole('textbox', { name: 'Reading note' }).fill('Keep this reading state');
+  await inline.getByRole('button', { name: 'Update report' }).click();
+  await inline.getByRole('link', { name: 'Economy', exact: true }).click();
+  const frame = await original.contentFrame();
+  assert.equal(await frame.evaluate(() => location.href), 'about:srcdoc');
+  assert.ok(await frame.evaluate(() => scrollY > 500));
+  await inline.getByRole('link', { name: 'News source' }).click();
+  await page.waitForFunction(() => window.htmlPreviewURLs?.includes('https://example.com/news'));
+  await inline.getByRole('link', { name: 'Unsupported link' }).click();
+  await page.locator('.chat-media-viewport [role="alert"]').waitFor();
+  assert.equal(page.url(), sourceURL);
+
+  const trigger = page.locator('[data-media-kind="html"] [data-chat-media-action="preview"]');
+  await trigger.focus();
+  const scrollBefore = await trigger.evaluate(element => {
+    const positions = [];
+    for (let node = element; node; node = node.parentElement) positions.push(node.scrollTop);
+    return positions;
+  });
+  await page.keyboard.press('Enter');
+  const popup = page.locator('.chat-media-preview-window');
+  await popup.waitFor();
+  await page.waitForFunction(() => document.querySelector('.chat-media-preview-window')?.getAttribute('data-floating-presence') === 'open');
+  await popup.evaluate(async element => { await Promise.all(element.getAnimations({ subtree: true }).map(animation => animation.finished)); });
+  const copy = page.frameLocator('.chat-media-preview-window iframe');
+  assert.equal(await copy.getByRole('textbox', { name: 'Reading note' }).inputValue(), '');
+  assert.equal(await inline.getByRole('textbox', { name: 'Reading note' }).inputValue(), 'Keep this reading state');
+  assert.equal(await inline.getByRole('button').textContent(), 'Updated');
+  assert.equal(await page.locator('.chat-media-viewport iframe').evaluate((element, original) => element === original, original), true);
+  assert.deepEqual(await trigger.evaluate(element => {
+    const positions = [];
+    for (let node = element; node; node = node.parentElement) positions.push(node.scrollTop);
+    return positions;
+  }), scrollBefore);
+  await copy.getByRole('link', { name: 'Economy', exact: true }).focus();
+  await page.keyboard.press('Enter');
+  const popupFrame = await (await popup.locator('iframe').elementHandle()).contentFrame();
+  assert.equal(await popupFrame.evaluate(() => location.href), 'about:srcdoc');
+  assert.ok(await popupFrame.evaluate(() => scrollY > 500));
+  await popup.locator('[data-floe-floating-window-control="maximize"]').click();
+  await popup.locator('[data-floe-floating-window-control="maximize"]').click();
+  await popup.locator('[data-floe-floating-window-control="close"]').focus();
+  await page.keyboard.press('Enter');
+  await popup.waitFor({ state: 'detached' });
+  assert.equal(await trigger.evaluate(element => document.activeElement === element), true);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await trigger.scrollIntoViewIfNeeded();
+  const cdp = await browser.contexts()[0].newCDPSession(page);
+  const bounds = await trigger.boundingBox();
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 }] });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await popup.waitFor();
+  await page.waitForFunction(() => document.querySelector('.chat-media-preview-window')?.getAttribute('data-floating-presence') === 'open');
+  await popup.evaluate(async element => { await Promise.all(element.getAnimations({ subtree: true }).map(animation => animation.finished)); });
+  const narrow = await popup.boundingBox();
+  assert.ok(narrow.x >= 0 && narrow.y >= 0 && narrow.x + narrow.width <= 391 && narrow.y + narrow.height <= 845, JSON.stringify(narrow));
+  await page.screenshot({ path: path.join(output, `${surface}-html-narrow.png`) });
+  await popup.locator('[data-floe-floating-window-control="close"]').click();
+  await popup.waitFor({ state: 'detached' });
+  await cdp.detach();
+  await page.setViewportSize({ width: 1240, height: 900 });
+  return { sourceRetained: true, independentCopy: true, localAnchors: true, externalURL: true, errorsRetainSource: true, keyboard: true, touch: true, narrow };
+}
 try {
   const entry = path.join(state, 'main.cjs');
   await writeFile(entry, `const { app, BrowserWindow } = require('electron');
@@ -65,12 +135,15 @@ try {
     compatibility: 'compatible', open_readiness: { state: 'openable' }, ai_readiness: { state: 'inspecting' },
   } }));
   await page.addInitScript(snapshot => {
+    if (window.top !== window) return;
     window.navigationSnapshot = { ...snapshot, navigation_revision: 1 };
     const language = { preference: 'zh-CN', resolved_locale: 'zh-CN', source: 'explicit', system_candidates: [] };
     window.redevenDesktopLanguage = { getSnapshot: () => language, subscribe: () => () => {} };
+    window.htmlPreviewURLs = [];
+    window.redevenDesktopShell = { openExternalURL: async url => { window.htmlPreviewURLs.push(url); return { ok: true }; } };
   }, snapshot);
   await page.goto(new URL('flower-navigation.html?media=1', report.url).href);
-  await page.locator('.redeven-flower-topbar-button').click();
+  await page.getByRole('button', { name: 'Flower', exact: true }).click();
   await page.evaluate(() => window.navigationFixture.releaseRuntime());
   await page.locator('[data-thread-id="navigation-thread"] button').first().click();
   await page.waitForFunction(() => document.querySelector('.chat-media-image')?.naturalWidth > 0);
@@ -108,6 +181,7 @@ try {
   await page.locator('.chat-media-preview-window').waitFor();
   await page.keyboard.press('Escape');
   await page.locator('.chat-media-preview-window').waitFor({ state: 'detached' });
+  report.html = await qualifyHtmlPreview('welcome');
   const screenshotBytes = Buffer.from(await page.evaluate(async () => Array.from(new Uint8Array(
     await (await fetch(document.querySelector('.chat-media-image').src)).arrayBuffer(),
   ))));
@@ -121,7 +195,7 @@ try {
   const resourceRef = `computer://browser-main/${'a'.repeat(64)}`;
   const current = { thread_id: thread.thread_id, view_version: 1, activity: 'idle', queue: [], interactions: [],
     items: [{ id: 'env-reply', kind: 'assistant', turn_id: 'env-turn', run_id: 'env-run', ordinal: 1,
-      text: `Here is the workspace preview.\n\n![Workspace](${resourceRef})` }] };
+      text: `Here is the workspace preview.\n\n![Workspace](${resourceRef})\n\n\`\`\`html preview\n${html}\n\`\`\`` }] };
   const requests = [];
   const streams = new Set();
   envServer = await createBuiltDistServer({ accessReady: true, fileContinuity: true, tls,
@@ -147,6 +221,7 @@ try {
   report.envURL = envServer.baseURL;
   await trustBuiltDistWebTransport(page, tls);
   await page.addInitScript(() => {
+    if (window.top !== window) return;
     localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
     localStorage.setItem('redeven-envapp:env_local-activity-navigation', JSON.stringify({
       version: 1, target: { kind: 'builtin', page: 'ai' }, recentBuiltins: ['ai'],
@@ -180,6 +255,7 @@ try {
   assert.equal(report.envStability.reloads, 0);
   assert.deepEqual(report.envStability.extraRequests, []);
   await page.screenshot({ path: path.join(output, 'env-after.png') });
+  report.envHTML = await qualifyHtmlPreview('env');
   assert.deepEqual(report.errors, []);
   assert.equal(child.exitCode, null);
   assert.equal(child.signalCode, null, 'External termination is a visible verification failure');

@@ -18,6 +18,7 @@ export type FilePreviewContextValue = Readonly<{
   controller: FilePreviewController;
   openPreview: (item: FileItem, options?: FilePreviewOpenOptions) => Promise<void>;
   closePreview: () => void;
+  openHtmlLink?: (sourcePath: string, href: string, signal: AbortSignal) => Promise<void>;
 }>;
 
 export const FilePreviewContext = createContext<FilePreviewContextValue>();

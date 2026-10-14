@@ -12,6 +12,29 @@ const request = {
 };
 
 describe('Flower linked-context Env navigation', () => {
+  it('keeps the source preview until linked-file reads succeed and the frame remains active', async () => {
+    const openFilePreview = vi.fn(async () => undefined);
+    const checkFileReadable = vi.fn<(path: string, signal: AbortSignal) => Promise<void>>();
+    const navigation = createFlowerLinkedContextNavigation({ openFilePreview, checkFileReadable,
+      openFileBrowserAtPath: vi.fn(), notifyInvalidFilePath: vi.fn(), notifyInvalidDirectoryPath: vi.fn() });
+    for (const message of ['Permission denied', 'File not found']) {
+      checkFileReadable.mockRejectedValueOnce(new Error(message));
+      await expect(navigation.openMessageFile({ path: '/workspace/linked.pdf', action: 'preview', signal: new AbortController().signal })).rejects.toThrow(message);
+    }
+    expect(openFilePreview).not.toHaveBeenCalled();
+    let finish!: () => void;
+    checkFileReadable.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const controller = new AbortController();
+    const pending = navigation.openMessageFile({ path: '/workspace/linked.pdf', action: 'preview', signal: controller.signal });
+    controller.abort();
+    finish();
+    await expect(pending).rejects.toThrow();
+    expect(openFilePreview).not.toHaveBeenCalled();
+    checkFileReadable.mockResolvedValueOnce();
+    await navigation.openMessageFile({ path: '/workspace/linked.pdf', action: 'preview', signal: new AbortController().signal });
+    expect(openFilePreview).toHaveBeenCalledOnce();
+  });
+
   it('opens reauthorized canonical targets through the existing host controllers', async () => {
     const openFilePreview = vi.fn(async () => undefined);
     const openFileBrowserAtPath = vi.fn(async () => undefined);

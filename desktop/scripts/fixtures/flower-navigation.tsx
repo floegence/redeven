@@ -53,7 +53,9 @@ const thread = {
 };
 const mediaMode = new URLSearchParams(location.search).has('media');
 const mediaRef = `computer://browser-main/${'a'.repeat(64)}`;
-const current = { thread_id: thread.thread_id, view_version: 1, activity: 'idle', items: [{ id: 'navigation-input', kind: 'user', turn_id: 'navigation-turn', run_id: 'navigation-run', ordinal: 1, text: 'Inspect this workspace' }, { id: 'density-reading', kind: 'assistant', turn_id: 'navigation-turn', run_id: 'navigation-run', ordinal: 2, text: mediaMode ? `Here is the workspace preview.\n\n![Workspace](${mediaRef})\n\nReady for your next step.` : INTERFACE_DENSITY_MARKDOWN }], queue: [], interactions: [] };
+const mediaHTML = '<h1>Daily brief</h1><input aria-label="Reading note"><button onclick="this.textContent=\'Updated\'">Update report</button><a href="#economy">Economy</a><a href="https://example.com/news">News source</a><a href="javascript:alert(1)">Unsupported link</a><section id="economy" style="margin-top:1200px">Economy section</section>';
+
+const current = { thread_id: thread.thread_id, view_version: 1, activity: 'idle', items: [{ id: 'navigation-input', kind: 'user', turn_id: 'navigation-turn', run_id: 'navigation-run', ordinal: 1, text: 'Inspect this workspace' }, { id: 'density-reading', kind: 'assistant', turn_id: 'navigation-turn', run_id: 'navigation-run', ordinal: 2, text: mediaMode ? `Here is the workspace preview.\n\n![Workspace](${mediaRef})\n\n\`\`\`html preview\n${mediaHTML}\n\`\`\`\n\nReady for your next step.` : INTERFACE_DENSITY_MARKDOWN }], queue: [], interactions: [] };
 const settings: DesktopWelcomeRuntime['settings'] = {
   async load() { return { ok: false, error: 'No environment settings in this fixture.' }; },
   async save() { return { ok: false, error: 'No settings mutations in this fixture.' }; },

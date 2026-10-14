@@ -1481,3 +1481,13 @@ persistence, dispatch and explicit recovery. Preserve newer edits, request
 identity and canonical Floret queue ownership across confirmation races and
 surface remounts. See [Flower command and composer flow](ui/flower-turn-launcher.md)
 and [Flower timeline ordering](ui/flower-timeline-ordering.md).
+
+## 2026-10-14 — HTML preview windows and link navigation
+
+Adopt published Floe Webapp v0.86.32 for independent fenced-HTML preview windows
+and one isolated HTML link-intent boundary. Redeven resolves links against each
+source directory and uses its existing browser and authorized file-preview
+actions. Fragment navigation retains live document state; invalid or failed
+opens retain their source and show explicit localized feedback. See
+[Flower inline media](ui/flower-inline-media.md) and
+[HTML file preview](ui/file-preview-html.md).

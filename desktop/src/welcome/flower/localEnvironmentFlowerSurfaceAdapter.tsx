@@ -108,6 +108,7 @@ export type DesktopSettingsBridge = Readonly<{
 }>;
 
 export type LocalEnvironmentFlowerSurfaceAdapterOptions = Readonly<{
+  openMessageURL?: FlowerSurfaceAdapter['openMessageURL'];
   runtimeEnvironmentID?: string;
   modelReadResource?: FlowerModelReadResource;
   runtimeDisplayName?: string;
@@ -877,6 +878,7 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
       if (!(media.bytes instanceof Uint8Array)) throw new Error('File preview is unavailable.');
       return new Blob([new Uint8Array(media.bytes)], { type: media.mime_type });
     },
+    openMessageURL: options.openMessageURL,
     loadMessageAttachment: async ({ url, signal }) => {
       signal.throwIfAborted();
       const media = await runtimeJSON<RuntimeFlowerMedia>(bridge, 'GET', messageAttachmentPath(url), undefined, undefined, options.runtimeEnvironmentID);

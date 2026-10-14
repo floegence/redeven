@@ -5102,7 +5102,13 @@
         "collapse": "收起预览",
         "open": "打开原文件",
         "close": "关闭预览",
-        "previewHTML": "打开文件预览"
+        "previewHTML": "打开文件预览",
+        "previewHTMLWindow": "在窗口中预览",
+        "linkUnavailable": "无法在此预览中打开该链接。",
+        "anchorUnavailable": "未找到链接指向的栏目。",
+        "relativePathUnavailable": "无法确定相对路径：预览未绑定来源目录。",
+        "invalidLink": "此链接无效。",
+        "unsupportedLink": "不支持此链接协议。"
       },
       "webSearch": {
         "search": "搜索",

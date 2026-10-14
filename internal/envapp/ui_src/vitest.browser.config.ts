@@ -146,6 +146,28 @@ export default mergeConfig(viteConfig, defineConfig({
           await page.keyboard.press('ControlOrMeta+A');
           await page.keyboard.insertText(source);
         },
+        clickHtmlPreviewLink: async ({ page }, selector: string, name: string) => {
+          const host = await frameForSelector(page, selector);
+          const element = await host.locator(selector).elementHandle();
+          const preview = await element?.contentFrame();
+          if (!preview) throw new Error('HTML preview frame is unavailable');
+          await preview.getByRole('link', { name, exact: true }).click();
+          return preview.evaluate(() => ({ url: location.href, scrollY: window.scrollY }));
+        },
+        openHtmlPreviewWebLink: async ({ page }, selector: string) => {
+          const host = await frameForSelector(page, selector);
+          const preview = await (await host.locator(selector).elementHandle())?.contentFrame();
+          if (!preview) throw new Error('HTML preview frame is unavailable');
+          const destination = '**/__html_preview_destination__?html-link-acceptance=1';
+          await page.context().route(destination, route => route.fulfill({ contentType: 'text/html', body: '<h1>Browser destination</h1>' }));
+          const opened = page.waitForEvent('popup');
+          await preview.getByRole('link', { name: 'Browser destination', exact: true }).click();
+          const popup = await opened;
+          try {
+            await popup.waitForURL(/html-link-acceptance=1/);
+            return { url: popup.url(), openerIsNull: await popup.evaluate(() => window.opener === null) };
+          } finally { await popup.close(); await page.context().unroute(destination); }
+        },
         inspectHtmlFilePreview: async ({ page }, action: 'inspect' | 'click' | 'wheel' = 'inspect') => {
           const host = await frameForSelector(page, '.html-preview-frame');
           const element = await host.locator('iframe.html-preview-frame').elementHandle();

@@ -153,6 +153,7 @@ export type RuntimeFlowerSurfaceAdapterOptions = Readonly<{
   loadToolImage?: FlowerSurfaceAdapter['loadToolImage'];
   loadMessageAttachment?: FlowerSurfaceAdapter['loadMessageAttachment'];
   openMessageFile?: FlowerSurfaceAdapter['openMessageFile'];
+  openMessageURL?: FlowerSurfaceAdapter['openMessageURL'];
   loadMessageFile?: FlowerSurfaceAdapter['loadMessageFile'];
   computerFrameRate?: FlowerSurfaceAdapter['computerFrameRate'];
   computerManagement?: FlowerSurfaceAdapter['computerManagement'];
@@ -478,6 +479,7 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
     ...(options.loadToolImage ? { loadToolImage: options.loadToolImage } : {}),
     ...(options.loadMessageAttachment ? { loadMessageAttachment: options.loadMessageAttachment } : {}),
     ...(options.openMessageFile ? { openMessageFile: options.openMessageFile } : {}),
+    ...(options.openMessageURL ? { openMessageURL: options.openMessageURL } : {}),
     ...(options.loadMessageFile ? { loadMessageFile: options.loadMessageFile } : {}),
     ...(options.canMutate !== false && options.inputComputerControl ? { inputComputerControl: options.inputComputerControl } : {}),
     ...(options.setComputerViewer ? { setComputerViewer: options.setComputerViewer } : {}),

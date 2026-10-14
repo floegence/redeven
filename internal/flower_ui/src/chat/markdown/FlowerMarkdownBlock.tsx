@@ -32,6 +32,7 @@ export interface FlowerMarkdownBlockProps {
   codeCopiedLabel: string;
   mediaLabels?: MarkdownMediaLabels;
   resolveMedia?: MarkdownMediaProps['resolve'];
+  onOpenMediaLink?: MarkdownMediaProps['onOpenLink'];
   class?: string;
 }
 
@@ -197,7 +198,7 @@ export const FlowerMarkdownBlock: Component<FlowerMarkdownBlockProps> = (props) 
           const source = readMarkdownMediaPlaceholder(node);
           if (!source) continue;
           if (!committed) { node.textContent = source.title || source.src || mediaLabels.html; continue; }
-          media.set(node, render(() => <MarkdownMedia source={source} labels={resolvedMediaLabels()} resolve={props.resolveMedia} />, node));
+          media.set(node, render(() => <MarkdownMedia source={source} labels={resolvedMediaLabels()} resolve={props.resolveMedia} onOpenLink={props.onOpenMediaLink} />, node));
         }
       });
     });

@@ -79,6 +79,7 @@ import {
 import type {
   FlowerFileOpenRequest,
   FlowerCompanionPresenceProjection,
+  FlowerSurfaceAdapter,
   FlowerThreadFocusRequest,
   FlowerTurnLauncherAnchor,
   FlowerTurnLauncherIntent,
@@ -164,7 +165,10 @@ import { createFilePreviewController } from './widgets/createFilePreviewControll
 import { FileBrowserSurfaceContext } from './widgets/FileBrowserSurfaceContext';
 import { FilePreviewContext, type FilePreviewOpenOptions } from './widgets/FilePreviewContext';
 import { openFileBrowserSurface } from './widgets/openFileBrowserSurface';
-import { basenameFromAbsolutePath, normalizeAbsolutePath } from './utils/askFlowerPath';
+import { basenameFromAbsolutePath, dirnameAbsolute, normalizeAbsolutePath } from './utils/askFlowerPath';
+import { readFileBytesOnce } from './utils/fileStreamReader';
+import { openPreviewWebURL } from './services/openPreviewWebURL';
+import { openHtmlPreviewLink } from '../../../../flower_ui/src/chat/markdown/flowerMarkdownMedia';
 import { createClientId } from './utils/clientId';
 import { ENV_APP_FLOATING_LAYER } from './utils/envAppLayers';
 import { fileItemFromPath } from './utils/filePreviewItem';
@@ -2603,12 +2607,25 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   } = createFlowerLinkedContextNavigation({
     openFilePreview,
     openFileBrowserAtPath,
+    checkFileReadable: async (path, signal) => {
+      signal.throwIfAborted();
+      const client = protocol.status() === 'connected' ? protocol.session?.() : undefined;
+      if (!client) throw new Error(i18n.t('flowerSurface.threadList.workingDirectoryDisconnected'));
+      await readFileBytesOnce({ client, path, maxBytes: 1 });
+      signal.throwIfAborted();
+      if (protocol.session?.() !== client) throw new Error(i18n.t('flowerSurface.threadList.workingDirectoryDisconnected'));
+    },
     notifyInvalidFilePath: () => {
       notify.error(i18n.t('shell.notifications.previewUnavailableTitle'), i18n.t('shell.notifications.invalidFilePath'));
     },
     notifyInvalidDirectoryPath: () => {
       notify.error(i18n.t('shell.notifications.browseFilesUnavailableTitle'), i18n.t('shell.notifications.invalidDirectoryPath'));
     },
+  });
+
+  const openFlowerMessageURL: NonNullable<FlowerSurfaceAdapter['openMessageURL']> = ({ url, signal }) => openPreviewWebURL(url, signal, {
+    unavailable: i18n.t('flowerSurface.chat.media.linkUnavailable'),
+    popupBlocked: i18n.t('webServices.errors.popupBlocked'),
   });
 
   const closeFlowerTurnLauncher = (restoreOrigin = true) => {
@@ -2703,6 +2720,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       onSettingsChanged: () => { bumpSettingsSeq(); },
       revealHostApplication,
       openMessageFile: openFlowerMessageFile,
+      openMessageURL: openFlowerMessageURL,
       openFileBrowser: openFlowerFileBrowser,
       openFilePreview: openFlowerFilePreview,
       openCanonicalReferenceTarget: openFlowerCanonicalReferenceTarget,
@@ -4726,6 +4744,15 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     controller: filePreviewController,
     openPreview: async (item: FileItem, options?: FilePreviewOpenOptions) => openFilePreview(item, options),
     closePreview: filePreviewController.closePreview,
+    openHtmlLink: (sourcePath: string, href: string, signal: AbortSignal) => openHtmlPreviewLink(href, dirnameAbsolute(sourcePath), signal, {
+      adapter: { openMessageFile: openFlowerMessageFile, openMessageURL: openFlowerMessageURL },
+      copy: {
+        linkUnavailable: i18n.t('flowerSurface.chat.media.linkUnavailable'),
+        relativePathUnavailable: i18n.t('flowerSurface.chat.media.relativePathUnavailable'),
+        invalidLink: i18n.t('flowerSurface.chat.media.invalidLink'),
+        unsupportedLink: i18n.t('flowerSurface.chat.media.unsupportedLink'),
+      },
+    }),
   } as const;
   const fileBrowserSurfaceContextValue = {
     controller: fileBrowserSurfaceController,
@@ -5323,6 +5350,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
         openFilePreview,
         flowerWorkingDirectoryActions,
         openFlowerMessageFile,
+        openFlowerMessageURL,
         openFlowerFileBrowser,
         openFlowerFilePreview,
         openFlowerCanonicalReferenceTarget,

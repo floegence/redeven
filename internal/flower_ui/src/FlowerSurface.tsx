@@ -87,7 +87,7 @@ import { FlowerWorkingDirectoryControl } from './chat/FlowerWorkingDirectoryCont
 import { FlowerSetupWelcome } from './chat/FlowerSetupWelcome';
 import type { FlowerChatContextChip, FlowerChatContextSnapshotPreview } from './contracts/flowerChatContextTypes';
 import { FlowerMarkdownBlock } from './chat/markdown/FlowerMarkdownBlock';
-import { resolveFlowerMarkdownMedia } from './chat/markdown/flowerMarkdownMedia';
+import { htmlPreviewSourceDirectory, openHtmlPreviewLink, resolveFlowerMarkdownMedia } from './chat/markdown/flowerMarkdownMedia';
 import type { FlowerSubagentsCopy, FlowerSurfaceCopy } from './copy';
 import { DEFAULT_FLOWER_SURFACE_COPY } from './copy';
 import type {
@@ -2100,6 +2100,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   });
   const selectedThreadWorkingDirectory = createMemo(() => normalizeAbsolutePath(selectedThread()?.working_dir ?? ''));
   const resolveMessageMedia = createMemo<NonNullable<MarkdownMediaProps['resolve']>>(() => {
+    filesystemScopeKey();
     const adapter = props.adapter;
     const threadID = selectedThreadID();
     const workingDirectory = selectedThreadWorkingDirectory();
@@ -2107,6 +2108,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       adapter, threadID, workingDirectory, get copy() { return copy().chat.media; },
       onActionError: error => notifyThreadActionError(getErrorMessage(error)),
     });
+  });
+  const openMessageMediaLink = createMemo<NonNullable<MarkdownMediaProps['onOpenLink']>>(() => {
+    filesystemScopeKey();
+    const adapter = props.adapter;
+    const threadID = selectedThreadID();
+    const workingDirectory = selectedThreadWorkingDirectory();
+    return (source, href, signal) => {
+      if (!threadID) throw new Error(copy().chat.media.linkUnavailable);
+      return openHtmlPreviewLink(href, htmlPreviewSourceDirectory(source, workingDirectory), signal, {
+        adapter, get copy() { return copy().chat.media; },
+      });
+    };
   });
   const draftWorkingDirectory = createMemo(() => normalizeAbsolutePath(currentComposerSessionDraft().workingDirDraft ?? ''));
   const displayedWorkingDirectory = createMemo(() => {
@@ -9907,6 +9920,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           mediaLabels={message().role === 'assistant' ? copy().chat.media : undefined}
           mediaEnabled={message().role === 'assistant'}
           resolveMedia={resolveMessageMedia()}
+          onOpenMediaLink={openMessageMediaLink()}
           copyCodeLabel={copy().chat.copyCode}
           codeCopiedLabel={copy().chat.codeCopied}
         />

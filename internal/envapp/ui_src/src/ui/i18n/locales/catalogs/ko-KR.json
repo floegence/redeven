@@ -5102,7 +5102,13 @@
         "collapse": "미리보기 축소",
         "open": "원본 열기",
         "close": "미리보기 닫기",
-        "previewHTML": "파일 미리보기 열기"
+        "previewHTML": "파일 미리보기 열기",
+        "previewHTMLWindow": "창에서 미리보기",
+        "linkUnavailable": "이 미리보기에서 링크를 열 수 없습니다.",
+        "anchorUnavailable": "링크된 섹션을 찾을 수 없습니다.",
+        "relativePathUnavailable": "미리보기의 원본 디렉터리가 없어 상대 경로를 확인할 수 없습니다.",
+        "invalidLink": "유효하지 않은 링크입니다.",
+        "unsupportedLink": "지원하지 않는 링크 프로토콜입니다."
       },
       "webSearch": {
         "search": "검색",

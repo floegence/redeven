@@ -7,6 +7,7 @@ import { fileItemFromPath } from '../utils/filePreviewItem';
 
 type LinkedContextNavigationOptions = Readonly<{
   openFilePreview: (item: FileItem, options?: FilePreviewOpenOptions) => Promise<void>;
+  checkFileReadable?: (path: string, signal: AbortSignal) => Promise<void>;
   openFileBrowserAtPath: (
     path: string,
     options?: Readonly<{
@@ -54,7 +55,10 @@ export function createFlowerLinkedContextNavigation(options: LinkedContextNaviga
   };
 
   return {
-    openMessageFile: async ({ path, action }) => {
+    openMessageFile: async ({ path, action, signal }) => {
+      signal?.throwIfAborted();
+      if (action === 'preview' && signal) await options.checkFileReadable?.(path, signal);
+      signal?.throwIfAborted();
       if (action === 'preview') await openFilePath(path);
       else await openDirectoryPath(dirnameAbsolute(path));
     },

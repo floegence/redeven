@@ -17,6 +17,44 @@ export function flowerMarkdownFilePath(source: string, workingDirectory: string)
   return `/${parts.join('/')}`;
 }
 
+export function htmlPreviewSourceDirectory(source: MarkdownMediaSource, workingDirectory: string): string {
+  if (source.html !== undefined) return workingDirectory;
+  const path = flowerMarkdownFilePath(source.src ?? '', workingDirectory);
+  return path ? path.slice(0, path.lastIndexOf('/')) || '/' : '';
+}
+
+export async function openHtmlPreviewLink(
+  href: string,
+  directory: string,
+  signal: AbortSignal,
+  context: Readonly<{
+    adapter: Pick<FlowerSurfaceAdapter, 'openMessageFile' | 'openMessageURL'>;
+    copy: Pick<FlowerMarkdownMediaCopy, 'linkUnavailable' | 'relativePathUnavailable' | 'invalidLink' | 'unsupportedLink'>;
+  }>,
+): Promise<void> {
+  signal.throwIfAborted();
+  const raw = href.trim();
+  if (!raw || [...href].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127 || char === '\\')) {
+    throw new Error(context.copy.invalidLink);
+  }
+  const url = safeMarkdownMediaURL(raw);
+  if (url) {
+    if (!context.adapter.openMessageURL) throw new Error(context.copy.linkUnavailable);
+    await context.adapter.openMessageURL({ url, signal });
+    return;
+  }
+  if (/^[a-z][a-z0-9+.-]*:/i.test(raw)) throw new Error(context.copy.unsupportedLink);
+  if (raw.startsWith('//') || raw.startsWith('#')) throw new Error(context.copy.invalidLink);
+  if (!raw.startsWith('/') && !directory.startsWith('/')) throw new Error(context.copy.relativePathUnavailable);
+  let decoded: string;
+  try { decoded = decodeURIComponent(raw); } catch { throw new Error(context.copy.invalidLink); }
+  const path = flowerMarkdownFilePath(decoded, directory);
+  if (!path) throw new Error(context.copy.invalidLink);
+  if (!context.adapter.openMessageFile) throw new Error(context.copy.linkUnavailable);
+  signal.throwIfAborted();
+  await context.adapter.openMessageFile({ path, action: 'preview', signal });
+}
+
 export async function resolveFlowerMarkdownMedia(
   source: MarkdownMediaSource,
   signal: AbortSignal,
