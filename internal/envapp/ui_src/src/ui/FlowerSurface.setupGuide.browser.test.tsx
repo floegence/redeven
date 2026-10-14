@@ -133,7 +133,7 @@ describe('Flower setup browser presentation', () => {
     const iconStyle = getComputedStyle(icon);
 
     expect(runtime.querySelector('.flower-setup-guide')).toBeNull();
-    expect(setupInline.textContent).toContain('This model is unavailable. Refresh the list, select another model, or open settings.');
+    expect(setupInline.textContent).toContain('This model provider has no credentials configured. Add credentials in settings.');
     expect(emptyState.querySelector('.redeven-flower-soft-aura-glow')).toBeNull();
     expect(iconStyle.filter).toBe('none');
     expect(iconStyle.animationName).toBe('none');

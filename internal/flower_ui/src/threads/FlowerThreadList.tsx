@@ -17,7 +17,7 @@ import { filterFlowerThreadItems, flowerThreadIndicator, groupFlowerThreadItems,
 import { canForkThreadItem, canPinThreadItem, canRenameThreadItem, canStopThreadItem } from './threadListActions';
 
 type TimeGroup = FlowerThreadTimeGroup;
-export type FlowerThreadMenuAction = 'copy_thread_id' | 'fork' | 'copy_workdir' | 'stop' | 'pin' | 'rename' | 'delete' | 'browse_workdir' | 'terminal_workdir' | 'move_up' | 'move_down';
+export type FlowerThreadMenuAction = 'reference' | 'copy_thread_id' | 'fork' | 'copy_workdir' | 'stop' | 'pin' | 'rename' | 'delete' | 'browse_workdir' | 'terminal_workdir' | 'move_up' | 'move_down';
 export type { FlowerThreadGroup };
 
 type FlowerThreadRenderGroup = Readonly<{
@@ -200,6 +200,7 @@ type FlowerThreadContextMenuProps = Readonly<{
   x: number;
   y: number;
   copy: FlowerThreadListCopy;
+  referenceDisabledReason?: string;
   canFork: boolean;
   canRename: boolean;
   canPin: boolean;
@@ -229,13 +230,16 @@ const FlowerThreadContextMenu: Component<FlowerThreadContextMenuProps> = (props)
     label: string;
     icon: JSX.Element;
     disabled?: boolean;
+    disabledReason?: string;
   }> = (itemProps) => {
-    const disabled = createMemo(() => Boolean(itemProps.disabled || props.actionsBusy));
+    const disabled = createMemo(() => Boolean(itemProps.disabled || (itemProps.kind !== 'reference' && props.actionsBusy)));
     return <button
       type="button"
       role="menuitem"
       class={cn('flower-thread-menu-item', itemProps.kind === 'delete' && 'flower-thread-menu-item-destructive')}
       data-destructive={itemProps.kind === 'delete' ? 'true' : undefined}
+      title={itemProps.disabledReason}
+      aria-description={itemProps.disabledReason}
       aria-disabled={disabled() ? 'true' : undefined}
       aria-busy={props.busyAction === itemProps.kind ? 'true' : undefined}
       onClick={() => { if (!disabled()) action(itemProps.kind); }}
@@ -249,10 +253,11 @@ const FlowerThreadContextMenu: Component<FlowerThreadContextMenuProps> = (props)
       x={props.x}
       y={props.y}
       label={props.copy.contextMenuLabel(props.item.title.trim())}
-      height={340 + (props.item.pinned ? 72 : 0) + (props.showStopAction && canStopThreadItem(props.item) ? 44 : 0) + (props.showDeleteAction ? 44 : 0)}
+      height={384 + (props.item.pinned ? 72 : 0) + (props.showStopAction && canStopThreadItem(props.item) ? 44 : 0) + (props.showDeleteAction ? 44 : 0)}
       resolveRestore={props.resolveRestore}
       onClose={props.onClose}
     >
+      <ItemButton kind="reference" label={props.copy.referenceThread} icon={<MessageSquare class="h-3.5 w-3.5" />} disabled={!!props.referenceDisabledReason} disabledReason={props.referenceDisabledReason} />
       <ItemButton kind="copy_thread_id" label={props.copy.copyThreadID} icon={<Copy class="h-3.5 w-3.5" />} />
       <ItemButton kind="fork" label={props.copy.fork} icon={<GitBranch class="h-3.5 w-3.5" />} disabled={!props.canFork || !canForkThreadItem(props.item)} />
       <FlowerDirectoryMenuItems
@@ -296,6 +301,7 @@ export type FlowerThreadListProps = Readonly<{
   onMenuAction?: (action: FlowerThreadMenuAction, thread: FlowerThreadListItem, restore?: HTMLElement) => void;
   directoryActions?: FlowerDirectoryMenuAvailability;
   visible?: boolean;
+  referenceDisabledReason?: string;
   canFork?: boolean;
   canRename?: boolean;
   canPin?: boolean;
@@ -602,6 +608,7 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
             x={state().x}
             y={state().y}
             copy={copy()}
+            referenceDisabledReason={props.referenceDisabledReason}
             canFork={!!props.canFork}
             canRename={!!props.canRename}
             canPin={!!props.canPin}

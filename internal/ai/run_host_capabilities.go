@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/floegence/redeven/internal/config"
+	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/tessiven"
 )
 
@@ -13,6 +14,7 @@ import (
 // exact root-thread runtime. It intentionally contains no Service, Floret
 // bootstrap, lifecycle coordinator, or capability binder.
 type runHostCapabilities struct {
+	queryThreads              func(context.Context, *session.Meta, string, map[string]any) (any, error)
 	tessiven                  *tessiven.Service
 	tessivenResources         *tessiven.ResourceBackend
 	authorityThreadID         string
@@ -86,7 +88,13 @@ func (s *Service) bindExactRunExecutionCapabilities(endpointID string, execution
 	}
 	return runHostCapabilities{
 		authorityThreadID: effectAuthorityThreadID,
-		tessiven:          s.tessiven, tessivenResources: s.tessivenResources,
+		queryThreads: func(ctx context.Context, meta *session.Meta, name string, args map[string]any) (any, error) {
+			if meta == nil || strings.TrimSpace(meta.EndpointID) != endpointID {
+				return nil, errReadPermissionDenied
+			}
+			return s.execThreadQueryTool(ctx, meta, name, args)
+		},
+		tessiven: s.tessiven, tessivenResources: s.tessivenResources,
 		saveToolMedia: s.toolMedia.put, readToolMedia: s.resolveToolMedia,
 		terminal: terminal,
 	}, nil

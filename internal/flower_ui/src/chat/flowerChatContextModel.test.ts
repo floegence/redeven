@@ -27,6 +27,13 @@ const baseAction = {
 };
 
 describe('Flower chat linked context parser', () => {
+  it('previews a frozen thread snapshot only when the canonical target agrees', () => {
+    const snapshot = { runtime_id: 'env:local-environment', thread_id: 'thread-source', title: 'Frozen title', status: 'idle', working_dir: '/workspace', created_at_ms: 1, updated_at_ms: 2, captured_at_ms: 3 };
+    const reference = { reference_id: 'thread-ref', kind: 'thread' as const, referenced_thread_id: snapshot.thread_id, label: snapshot.title, text: JSON.stringify(snapshot) };
+    expect(parseChatMessageReferences([reference])?.chips[0]?.action).toMatchObject({ type: 'open_thread_preview', thread: snapshot });
+    expect(parseChatMessageReferences([{ ...reference, referenced_thread_id: 'other-thread' }])?.chips[0]?.action).toBeNull();
+    expect(parseChatMessageReferences([{ ...reference, text: '{invalid}' }])?.chips[0]?.action).toBeNull();
+  });
   it('projects ordered canonical references without accepting host ResourceRef fields', () => {
     const longUnicode = '引用内容'.repeat(80);
     const display = parseChatMessageReferences([

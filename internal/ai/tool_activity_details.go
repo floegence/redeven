@@ -14,6 +14,9 @@ import (
 // Map product tool facts directly to the published presentation contract. Code
 // must not pass through the smaller generic metadata/string projection first.
 func structuredToolInputs(toolName string, args map[string]any, spec aitools.ToolPresentationSpec) []fltools.StructuredActivityRow {
+	if isThreadQueryTool(toolName) {
+		return nil
+	}
 	if toolName == "computer.exec" {
 		if code, ok := args["code"].(string); ok && code != "" {
 			return []fltools.StructuredActivityRow{toolDetailRow("", "", code, fltools.StructuredActivityRowFormatCode, "javascript", false)}
@@ -97,6 +100,9 @@ func toolDetailRow(title, meta, content string, format fltools.StructuredActivit
 }
 
 func structuredToolResults(toolName string, data any, existing []fltools.StructuredActivityRow) []fltools.StructuredActivityRow {
+	if isThreadQueryTool(toolName) {
+		return nil
+	}
 	value, _ := normalizeJSONCompatibleToolPayload(data)
 	payload, _ := value.(map[string]any)
 	rows := []fltools.StructuredActivityRow{}

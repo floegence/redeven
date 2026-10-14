@@ -1,3 +1,4 @@
+import type { ThreadReferenceSnapshot } from '../contextActionWire';
 import type {
   FlowerAttachmentSource,
   FlowerAttachmentStagingScope,
@@ -36,7 +37,7 @@ export type FlowerComposerDraftReference = Readonly<{
   kind: FlowerComposerDraftReferenceKind;
   path: string;
   label: string;
-}> | (FlowerPageContextSnapshot & Readonly<{ local_id: string; kind: 'page_context' }>);
+}> | (FlowerPageContextSnapshot & Readonly<{ local_id: string; kind: 'page_context' }>) | Readonly<{ local_id: string; kind: 'thread'; label: string; thread: ThreadReferenceSnapshot }>;
 
 export type FlowerComposerDraftValue = Readonly<{
   text: string;

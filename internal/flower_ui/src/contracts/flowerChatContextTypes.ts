@@ -1,9 +1,11 @@
+import type { ThreadReferenceSnapshot } from '../contextActionWire';
 import type { FlowerTurnLauncherContextTone } from '../flowerTurnLauncherCopy';
 import type { FlowerLinkedContextSourceSurface } from './flowerSurfaceContracts';
 
 export type FlowerChatContextTone = FlowerTurnLauncherContextTone;
 
 export type FlowerChatContextSnapshotAction =
+  | Readonly<{ type: 'open_thread_preview'; title: string; subtitle: string; body: string; thread: ThreadReferenceSnapshot; context_index: number; truncated?: boolean }>
   | Readonly<{ type: 'open_text_preview'; title: string; subtitle: string; body: string; context_index: number; source_path?: string; truncated?: boolean }>
   | Readonly<{ type: 'open_process_preview'; title: string; subtitle: string; body: string; pid: number; context_index: number; truncated?: boolean }>;
 

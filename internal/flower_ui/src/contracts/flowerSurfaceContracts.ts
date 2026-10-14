@@ -225,6 +225,7 @@ export type FlowerChatMessageRole = 'user' | 'assistant' | 'system';
 export type FlowerChatMessageStatus = 'sending' | 'streaming' | 'error' | 'complete' | 'canceled';
 
 export type FlowerMessageReference =
+  | Readonly<{ reference_id: string; kind: 'thread'; referenced_thread_id: string; label: string; text: string; truncated?: boolean }>
   | Readonly<{ reference_id: string; kind: 'file' | 'directory'; label: string; truncated?: boolean }>
   | Readonly<{ reference_id: string; kind: 'text' | 'terminal' | 'process'; label: string; text?: string; truncated?: boolean }>;
 

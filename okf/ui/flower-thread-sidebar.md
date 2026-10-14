@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower conversation sidebar
 description: Select conversations clearly and reorder endpoint-owned pins without interrupting live interactions.
 tags: [flower, sidebar, navigation, pins, interaction]
-timestamp: 2026-10-12T00:00:00Z
+timestamp: 2026-10-13T00:00:00Z
 ---
 
 # Summary
@@ -37,6 +37,15 @@ Conversation selection, message reading and composing remain available during
 pin commands. Reordering does not select a conversation, acknowledge reads, load
 its transcript or reconnect transport. Ordinary conversations remain ordered by
 creation time descending, then ThreadID ascending.
+
+## Reference action
+
+The same ThreadID-owned menu serves right-click, More and Shift+F10. Reference
+this conversation appends a frozen basic snapshot to the current composer,
+closes the menu and focuses the editor. It does not select the source, load its
+transcript or send. Disabled editing states retain the action with an accessible
+explanation, while navigation remains available. [Conversation references](flower-thread-references.md)
+owns deduplication, preview, removal, admission and failure recovery.
 
 ## Pending replies and approvals
 

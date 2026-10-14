@@ -1,7 +1,7 @@
 import { Show, createMemo, type Component } from 'solid-js';
 import { Dynamic } from 'solid-js/web';
 import { FileItemIcon } from '@floegence/floe-webapp-core/file-browser';
-import { Activity, FileText, Terminal } from '@floegence/floe-webapp-core/icons';
+import { Activity, FileText, Terminal, MessageSquare } from '@floegence/floe-webapp-core/icons';
 import type { FlowerTurnLauncherContextTone } from '../flowerTurnLauncherCopy';
 
 /** A page frame with a quoted context marker, distinct from file references. */
@@ -18,7 +18,7 @@ export function FlowerContextIcon(props: {
   name: string;
 }) {
   const fileIdentity = () => ['file', 'directory', 'selection', 'attachment'].includes(props.tone);
-  const contextualIcon = createMemo(() => props.tone === 'page_context' ? FlowerPageContextIcon : props.tone === 'terminal'
+  const contextualIcon = createMemo(() => props.tone === 'thread' ? MessageSquare : props.tone === 'page_context' ? FlowerPageContextIcon : props.tone === 'terminal'
     ? Terminal
     : props.tone === 'environment' || props.tone === 'process' ? Activity : FileText);
   return <Show when={fileIdentity()} fallback={<Dynamic component={contextualIcon()} class="size-4 shrink-0" aria-hidden="true" />}>

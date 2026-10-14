@@ -111,6 +111,7 @@ describe('Flower canonical reference browser presentation', () => {
 
     const message = runtime.querySelector('[data-flower-message-id="entry-canonical-reference-browser"]') as HTMLElement;
     const bubble = message.querySelector('.flower-chat-context-unified-bubble') as HTMLElement;
+    bubble.setAttribute('data-testid', 'canonical-reference-bubble');
     const attachment = bubble.querySelector('.flower-message-file') as HTMLElement;
     const context = bubble.querySelector('.flower-chat-context-chips') as HTMLElement;
     const grid = context.querySelector('.flower-chat-context-chips-grid') as HTMLElement;
@@ -176,7 +177,7 @@ describe('Flower canonical reference browser presentation', () => {
         document.documentElement.classList.toggle('light', preset.mode === 'light');
         for (const [token, value] of Object.entries(preset.semanticTokens ?? {}))
           if (value) document.documentElement.style.setProperty(token, value);
-        await page.screenshot({ element: bubble, path: `./__screenshots__/flower-reference-icons-${name}.png` });
+        await page.screenshot({ element: page.getByTestId('canonical-reference-bubble'), path: `./__screenshots__/flower-reference-icons-${name}.png` });
       }
     } finally {
       document.documentElement.classList.remove('dark', 'light');

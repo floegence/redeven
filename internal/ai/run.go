@@ -2014,6 +2014,12 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 		}
 		return r.mcpManager.Call(ctx, toolName, args)
 	}
+	if strings.HasPrefix(toolName, "threads.") {
+		if r.host.queryThreads == nil {
+			return nil, errors.New("thread query is unavailable")
+		}
+		return r.host.queryThreads(ctx, meta, toolName, args)
+	}
 	if strings.HasPrefix(toolName, "tessiven.") {
 		return r.execTessivenTool(ctx, meta, toolName, args)
 	}

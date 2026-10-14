@@ -121,6 +121,7 @@ vi.mock('@floegence/floe-webapp-core/icons', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@floegence/floe-webapp-core/icons')>();
   const Icon = (props: any) => <span data-icon class={props.class} />;
   return {
+    ...actual,
     Activity: Icon,
     AlertCircle: Icon,
     AlertTriangle: Icon,
@@ -178,6 +179,7 @@ vi.mock('@floegence/floe-webapp-core/icons', async (importOriginal) => {
 vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@floegence/floe-webapp-core/ui')>();
   return {
+  ...actual,
   StableText: actual.StableText,
   FeedbackIndicator: actual.FeedbackIndicator,
   createFloatingPresence: actual.createFloatingPresence,
@@ -373,6 +375,16 @@ export async function waitFor(condition: () => boolean, timeoutMs = 1000): Promi
     if (condition()) return;
   }
   throw new Error('Timed out waiting for FlowerSurface condition.');
+}
+
+export async function composerModelTrigger(surface: HTMLElement): Promise<HTMLButtonElement> {
+  await waitFor(() => Boolean(surface.querySelector('.flower-model-reasoning-model-label')));
+  // JSDOM has no measured width, so controls use the normal overflow entry.
+  if (!surface.querySelector('button.flower-model-reasoning-model-trigger')) {
+    surface.querySelector<HTMLButtonElement>('.flower-composer-more-button')?.click();
+  }
+  await waitFor(() => Boolean(document.querySelector('button.flower-model-reasoning-model-trigger')));
+  return document.querySelector<HTMLButtonElement>('button.flower-model-reasoning-model-trigger')!;
 }
 
 export function settingsSnapshot(configured = true): FlowerSettingsSnapshot {

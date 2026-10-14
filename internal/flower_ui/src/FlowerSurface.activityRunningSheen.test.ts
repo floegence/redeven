@@ -101,7 +101,7 @@ describe('Flower activity status presentation', () => {
     expect(css).toContain('.flower-activity-inline-button-static');
     expect(css).not.toContain('flower-activity-running-sheen');
     const surface = fs.readFileSync(path.join(repoRoot, 'internal/flower_ui/src/FlowerSurface.tsx'), 'utf8');
-    expect(surface).toContain('data-floe-progress-shimmer={displayStatus() === \'running\' ? \'text\' : undefined}');
+    expect(surface).toContain('data-floe-progress-shimmer={livePresentationConfirmed() && displayStatus() === \'running\' ? \'text\' : undefined}');
     expect(css).not.toContain('.flower-activity-inline-row-running .flower-activity-inline-button::before');
     expect(css).not.toContain('.flower-activity-inline-row-waiting .flower-activity-inline-button::before');
     expect(titleRule).toContain('position: relative');
@@ -191,11 +191,12 @@ describe('Flower activity status presentation', () => {
     const dropdownRowHoverRule = cssRule(css, '.flower-subagent-dropdown-row:hover');
     const dropdownRunningStatusRule = cssRule(css, '.flower-subagent-dropdown-row-running .flower-subagent-dropdown-status-label');
     const runningTextRule = cssRule(css, '.flower-subagent-dropdown-row-running .flower-subagent-dropdown-name,\n.flower-subagent-status-label-running .flower-subagent-status-text');
-    const thinkingOrbRule = cssRule(css, '.flower-subagent-thinking-orb');
+    const avatarRule = cssRule(css, '.flower-subagent-avatar');
+    const runningIndicatorRule = cssRule(css, '.flower-subagent-status-indicator-running');
     const detailWindowRule = cssRule(css, '.flower-subagent-detail-window');
     const detailActiveRule = cssRule(css, ".flower-subagent-detail-window[data-floe-floating-window-state='active']");
     const detailOverviewRule = cssRule(css, '.flower-subagent-detail-overview');
-    const detailSignalRule = cssRule(css, '.flower-subagent-detail-signal');
+    const detailAvatarRule = cssRule(css, '.flower-subagent-detail-avatar');
     const runningStatusRule = cssRule(css, '.flower-subagent-status-label-running');
     const detailScrollRule = cssRule(css, '.flower-subagent-detail-scroll-to-latest');
 
@@ -210,9 +211,9 @@ describe('Flower activity status presentation', () => {
     expect(dropdownRule).toContain('background: var(--card)');
     expect(dropdownRule).not.toContain('box-shadow:');
     expect(dropdownRule).not.toContain('backdrop-filter:');
-    expect(dropdownRule).toContain('border-radius: 0.5rem');
+    expect(dropdownRule).toContain('border-radius: 0.875rem');
     expect(dropdownRule).toContain('animation: flower-subagents-dropdown-enter 220ms');
-    expect(dropdownRowRule).toContain('min-height: 3.875rem');
+    expect(dropdownRowRule).toContain('min-height: 4rem');
     expect(dropdownRowHoverRule).not.toContain('transform:');
     expect(dropdownRunningStatusRule).toContain('color: var(--primary)');
     expect(css).not.toContain('flower-running-text-shimmer');
@@ -221,15 +222,18 @@ describe('Flower activity status presentation', () => {
     expect(runningTextRule).not.toContain('background-clip:');
     expect(css).toContain(".flower-subagents-dropdown-metric[data-tone='completed']");
     expect(css).toContain('.flower-subagents-dropdown-group-header');
-    expect(css).not.toContain('.flower-subagent-status-indicator-running');
-    expect(thinkingOrbRule).toContain('width: 1.25rem');
-    expect(thinkingOrbRule).toContain('height: 1.25rem');
+    expect(avatarRule).toContain('width: 2.25rem');
+    expect(avatarRule).toContain('height: 2.25rem');
+    expect(avatarRule).not.toContain('animation:');
+    expect(runningIndicatorRule).toContain('background: currentColor');
+    expect(runningIndicatorRule).not.toContain('animation:');
+    expect(css).not.toContain('.flower-subagent-thinking-orb');
     expect(detailWindowRule).toContain('--flower-subagent-window-surface: var(--redeven-chat-surface)');
-    expect(detailWindowRule).toContain('--flower-subagent-window-surface-band: var(--redeven-code-chrome)');
+    expect(detailWindowRule).toContain('--flower-subagent-window-surface-soft: color-mix(in srgb, var(--redeven-chat-surface) 92%, var(--background) 8%)');
     expect(detailWindowRule).toContain('--flower-subagent-window-surface-raised: var(--redeven-chat-surface-raised)');
     expect(detailWindowRule).toContain('--flower-subagent-window-border: var(--redeven-stroke-panel)');
     expect(detailWindowRule).toContain('border: 1px solid var(--flower-subagent-window-border)');
-    expect(detailWindowRule).toContain('border-radius: 6px');
+    expect(detailWindowRule).toContain('border-radius: 0.875rem');
     expect(detailWindowRule).toContain('--flower-subagent-window-border:');
     expect(detailWindowRule).toContain('background: var(--flower-subagent-window-surface)');
     expect(detailWindowRule).not.toContain('box-shadow:');
@@ -237,8 +241,9 @@ describe('Flower activity status presentation', () => {
     expect(detailWindowRule).not.toContain('0 18px 46px');
     expect(detailActiveRule).toContain('border-color: var(--flower-subagent-window-border-active)');
     expect(detailActiveRule).not.toContain('box-shadow:');
-    expect(detailOverviewRule).toContain('background: var(--flower-subagent-window-surface-band)');
-    expect(detailSignalRule).toContain('border-radius: 9999px');
+    expect(detailOverviewRule).toContain('background: var(--flower-subagent-window-surface-soft)');
+    expect(detailAvatarRule).toContain('width: 2.75rem');
+    expect(detailAvatarRule).toContain('height: 2.75rem');
     expect(runningStatusRule).toContain('color: var(--primary)');
     expect(detailScrollRule).toContain('position: sticky');
     expect(css).not.toContain('.flower-subagent-detail-bottom-dock');
@@ -261,17 +266,15 @@ describe('Flower activity status presentation', () => {
     expect(src).not.toContain("[activeSubagentTitle(), subagentSummaryStatus()].filter(Boolean).join(' · ')");
   });
 
-  it('uses the Thinking Orbs composing state for running subagents without duplicating it in detail metadata', () => {
+  it('keeps stable thread avatars separate from the shared status indicator', () => {
     const surface = fs.readFileSync(new URL('./FlowerSurface.tsx', import.meta.url), 'utf8');
     const detail = fs.readFileSync(new URL('./SubagentDetailWindow.tsx', import.meta.url), 'utf8');
-    const orb = fs.readFileSync(new URL('./FlowerThinkingOrb.tsx', import.meta.url), 'utf8');
 
-    expect(orb).toContain("export const FLOWER_THINKING_ORB_STATE = 'composing'");
-    expect(surface).toContain('<FlowerThinkingOrb class="flower-subagent-thinking-orb" running />');
-    expect(detail).toContain('<FlowerThinkingOrb class="flower-subagent-detail-thinking-orb" running />');
-    expect(detail).toContain("when={props.status === 'running'}");
-    expect(detail).toContain('fallback={<Bot class="h-4 w-4" />}');
+    expect(surface).toContain('<SubagentAvatar threadID={item().threadID} />');
+    expect(surface).toContain('<span class="flower-subagent-status-indicator flower-subagent-status-indicator-running" aria-hidden="true" />');
+    expect(detail).toContain('<SubagentAvatar threadID={props.threadID} class="flower-subagent-detail-avatar" />');
+    expect(detail).toContain('{props.statusIndicator}');
+    expect(detail).not.toContain('FlowerThinkingOrb');
     expect(detail).not.toContain('data-text=');
-    expect(detail).toContain("<Show when={props.status !== 'running'}>{props.statusIndicator}</Show>");
   });
 });

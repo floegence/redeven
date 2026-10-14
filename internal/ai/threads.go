@@ -479,6 +479,9 @@ func (s *Service) threadSettingsForRead(ctx context.Context, meta *session.Meta,
 	if th == nil {
 		return nil, nil
 	}
+	if strings.TrimSpace(meta.NamespacePublicID) == "" || th.NamespacePublicID != strings.TrimSpace(meta.NamespacePublicID) {
+		return nil, sql.ErrNoRows
+	}
 	return th, nil
 }
 

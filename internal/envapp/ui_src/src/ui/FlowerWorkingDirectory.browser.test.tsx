@@ -29,7 +29,9 @@ async function fixture(width: number, dark = false, projected = false, presentat
     surface.style.transform = 'translate(30px, 12px) scale(0.8)';
     surface.style.transformOrigin = 'top left';
   }
-  await waitFor(() => surface.querySelector<HTMLButtonElement>('.flower-working-directory-select')?.title.includes(directory) === true);
+  await waitFor(() => presentation === 'companion'
+    ? Boolean(surface.querySelector('.flower-chat-header'))
+    : surface.querySelector<HTMLButtonElement>('.flower-working-directory-select')?.title.includes(directory) === true);
   expect(surface.querySelector('[data-flower-interaction-mode]')?.getAttribute('data-flower-interaction-mode')).toBe('desktop');
   await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
   return { surface, openFiles };
@@ -66,7 +68,7 @@ describe('Flower working directory presentation', () => {
   });
 
   it.each([
-    [320, 'full'], [720, 'full'], [1280, 'full'], [320, 'companion'], [720, 'companion'],
+    [320, 'full'], [720, 'full'], [1280, 'full'],
   ] as const)('keeps long directory controls within the real Flower layout at %s px in %s', async (width, presentation) => {
     const { surface, openFiles } = await fixture(width, false, false, presentation);
     const header = surface.querySelector<HTMLElement>('.flower-chat-header')!.getBoundingClientRect();
@@ -89,6 +91,17 @@ describe('Flower working directory presentation', () => {
     expect(surface.querySelector('[data-flower-composer-control="working_dir"]')).toBeNull();
     await userEvent.click(browse);
     expect(openFiles).toHaveBeenCalledExactlyOnceWith({ path: directory });
+  });
+
+  it.each([320, 720])('keeps the companion header compact without duplicate directory controls at %s px', async width => {
+    const { surface } = await fixture(width, false, false, 'companion');
+    const header = surface.querySelector<HTMLElement>('.flower-chat-header')!;
+    expect(surface.querySelector('.flower-new-working-directory')).toBeNull();
+    expect(surface.querySelector('.flower-working-directory-select')).toBeNull();
+    expect(surface.querySelector('.flower-working-directory-browse')).toBeNull();
+    expect(header.scrollWidth).toBeLessThanOrEqual(header.clientWidth + 1);
+    expect(surface.querySelector('textarea')).not.toBeNull();
+    expect(header.querySelector('button[aria-label="Flower settings"]')).not.toBeNull();
   });
 
   it.each([false, true])('distinguishes the editable directory with theme-aware blue in dark=%s', async (dark) => {

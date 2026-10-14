@@ -289,7 +289,7 @@
     "commandArgumentsInvalid": "The /compact command does not take arguments.",
     "commandUnknown": "Unknown Flower command: {command}",
     "composerMoreLabel": "More input options",
-    "composerReferencesLabel": "File and folder references",
+    "composerReferencesLabel": "References",
     "composerReferenceLoading": "Searching files and folders...",
     "composerReferenceEmpty": "No matching files or folders",
     "composerReferenceError": "Flower could not search this working directory.",
@@ -523,7 +523,22 @@
     },
     "modelUnavailableMissingKeys": "This model provider has no credentials configured. Add credentials in settings.",
     "modelUnavailableProviderDisabled": "This model provider is disabled. Enable it in settings or select another model.",
-    "modelUnavailableModelMissing": "This model is absent from the provider model list. Check its model ID in settings or select another model."
+    "modelUnavailableModelMissing": "This model is absent from the provider model list. Check its model ID in settings or select another model.",
+    "threadReference": {
+      "open": "Open conversation",
+      "unavailable": "This conversation is unavailable or you no longer have read access.",
+      "wrongRuntime": "This conversation belongs to another Runtime.",
+      "approval": "Resolve the approval before adding references.",
+      "input": "Finish answering the question before adding references.",
+      "readOnly": "This composer is read-only.",
+      "frozen": "Wait until the current input can be edited.",
+      "title": "Title",
+      "status": "Status",
+      "created": "Created",
+      "updated": "Updated",
+      "captured": "Captured",
+      "runtime": "Runtime"
+    }
   },
   "threadList": {
     "title": "Conversations",
@@ -596,7 +611,8 @@
     "movePinnedDown": "Move down",
     "clearSearchToReorder": "Clear search to reorder pinned conversations",
     "pinUpdateFailed": "Could not update pinned conversations.",
-    "pinRefreshFailed": "Pinned conversations were saved, but the list could not refresh. Refresh to see the latest order."
+    "pinRefreshFailed": "Pinned conversations were saved, but the list could not refresh. Refresh to see the latest order.",
+    "referenceThread": "Reference this conversation"
   },
   "emptyState": {
     "moreSuggestions": "More suggestions",

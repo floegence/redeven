@@ -100,6 +100,9 @@ func cleanStringList(values []string) []string {
 }
 
 var builtinDefinitions = map[string]Definition{
+	"threads.query":            {Name: "threads.query", Presentation: withPresentationOptions(presentation(ToolPresentationResearch, "readonly", "structured", "research"), operation("threads.query"))},
+	"threads.read":             {Name: "threads.read", Presentation: withPresentationOptions(presentation(ToolPresentationResearch, "readonly", "structured", "research"), operation("threads.read"))},
+	"threads.aggregate":        {Name: "threads.aggregate", Presentation: withPresentationOptions(presentation(ToolPresentationResearch, "readonly", "structured", "research"), operation("threads.aggregate"))},
 	"tessiven.runtimes":        {Name: "tessiven.runtimes", Presentation: withPresentationOptions(presentation(ToolPresentationContext, "readonly", "structured", "tessiven", "args", "result"), operation("runtimes"))},
 	"tessiven.runtime.inspect": {Name: "tessiven.runtime.inspect", Presentation: withPresentationOptions(presentation(ToolPresentationContext, "readonly", "structured", "tessiven", "args", "result"), operation("runtime.inspect"))},
 	"tessiven.runtime.action":  {Name: "tessiven.runtime.action", Mutating: true, RequiresApproval: true, Presentation: withPresentationOptions(presentation(ToolPresentationMutation, "approval", "structured", "tessiven", "args", "result"), operation("runtime.action"))},

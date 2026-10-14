@@ -5101,7 +5101,8 @@
         "expand": "Vorschau vergrößern",
         "collapse": "Vorschau verkleinern",
         "open": "Original öffnen",
-        "close": "Vorschau schließen"
+        "close": "Vorschau schließen",
+        "previewHTML": "Dateivorschau öffnen"
       },
       "webSearch": {
         "search": "Suchen",
@@ -5316,7 +5317,7 @@
       "commandArgumentsInvalid": "Der Befehl /compact akzeptiert keine Argumente.",
       "commandUnknown": "Unbekannter Flower-Befehl: {command}",
       "composerMoreLabel": "Weitere Eingabeoptionen",
-      "composerReferencesLabel": "Datei- und Ordnerverweise",
+      "composerReferencesLabel": "Verweise",
       "composerReferenceLoading": "Dateien und Ordner werden durchsucht...",
       "composerReferenceEmpty": "Keine passenden Dateien oder Ordner",
       "composerReferenceError": "Flower konnte dieses Arbeitsverzeichnis nicht durchsuchen.",
@@ -5542,7 +5543,22 @@
       },
       "modelUnavailableMissingKeys": "Für diesen Modellanbieter sind keine Zugangsdaten eingerichtet. Füge sie in den Einstellungen hinzu.",
       "modelUnavailableProviderDisabled": "Dieser Modellanbieter ist deaktiviert. Aktiviere ihn in den Einstellungen oder wähle ein anderes Modell.",
-      "modelUnavailableModelMissing": "Dieses Modell fehlt in der Modellliste des Anbieters. Prüfe seine Modell-ID in den Einstellungen oder wähle ein anderes Modell."
+      "modelUnavailableModelMissing": "Dieses Modell fehlt in der Modellliste des Anbieters. Prüfe seine Modell-ID in den Einstellungen oder wähle ein anderes Modell.",
+      "threadReference": {
+        "open": "Unterhaltung öffnen",
+        "unavailable": "Diese Unterhaltung ist nicht verfügbar oder Sie haben keinen Lesezugriff mehr.",
+        "wrongRuntime": "Diese Unterhaltung gehört zu einer anderen Laufzeitumgebung.",
+        "approval": "Bearbeiten Sie die Genehmigung, bevor Sie Verweise hinzufügen.",
+        "input": "Beantworten Sie die Frage vollständig, bevor Sie Verweise hinzufügen.",
+        "readOnly": "Dieses Eingabefeld ist schreibgeschützt.",
+        "frozen": "Warten Sie, bis die aktuelle Eingabe bearbeitet werden kann.",
+        "title": "Titel",
+        "status": "Status",
+        "created": "Erstellt",
+        "updated": "Aktualisiert",
+        "captured": "Erfasst",
+        "runtime": "Laufzeitumgebung"
+      }
     },
     "threadList": {
       "title": "Unterhaltungen",
@@ -5615,7 +5631,8 @@
       "groupToday": "Heute",
       "groupYesterday": "Gestern",
       "groupThisWeek": "Diese Woche",
-      "groupOlder": "Älter"
+      "groupOlder": "Älter",
+      "referenceThread": "Auf diese Unterhaltung verweisen"
     },
     "emptyState": {
       "moreSuggestions": "Mehr Vorschläge",

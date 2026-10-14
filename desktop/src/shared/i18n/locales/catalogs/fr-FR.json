@@ -419,7 +419,7 @@
       "commandArgumentsInvalid": "La commande /compact n'accepte aucun argument.",
       "commandUnknown": "Commande Flower inconnue : {command}",
       "composerMoreLabel": "Plus d’options de saisie",
-      "composerReferencesLabel": "Références de fichiers et de dossiers",
+      "composerReferencesLabel": "Références",
       "composerReferenceLoading": "Recherche de fichiers et de dossiers...",
       "composerReferenceEmpty": "Aucun fichier ou dossier correspondant",
       "composerReferenceError": "Flower n’a pas pu rechercher dans ce répertoire de travail.",
@@ -654,7 +654,22 @@
       },
       "modelUnavailableMissingKeys": "Aucun identifiant n’est configuré pour ce fournisseur de modèles. Ajoutez-les dans les réglages.",
       "modelUnavailableProviderDisabled": "Ce fournisseur de modèles est désactivé. Activez-le dans les réglages ou sélectionnez un autre modèle.",
-      "modelUnavailableModelMissing": "Ce modèle ne figure pas dans la liste du fournisseur. Vérifiez son ID dans les réglages ou sélectionnez un autre modèle."
+      "modelUnavailableModelMissing": "Ce modèle ne figure pas dans la liste du fournisseur. Vérifiez son ID dans les réglages ou sélectionnez un autre modèle.",
+      "threadReference": {
+        "open": "Ouvrir la conversation",
+        "unavailable": "Cette conversation est indisponible ou vous ne disposez plus du droit de lecture.",
+        "wrongRuntime": "Cette conversation appartient à un autre environnement d’exécution.",
+        "approval": "Traitez la demande d’approbation avant d’ajouter des références.",
+        "input": "Terminez de répondre à la question avant d’ajouter des références.",
+        "readOnly": "Ce champ de saisie est en lecture seule.",
+        "frozen": "Attendez de pouvoir modifier la saisie actuelle.",
+        "title": "Titre",
+        "status": "État",
+        "created": "Création",
+        "updated": "Mise à jour",
+        "captured": "Capture",
+        "runtime": "Environnement d’exécution"
+      }
     },
     "threadList": {
       "title": "Discussions",
@@ -727,7 +742,8 @@
       "movePinnedDown": "Descendre",
       "clearSearchToReorder": "Effacer la recherche pour réorganiser les conversations épinglées",
       "pinUpdateFailed": "Impossible de mettre à jour les conversations épinglées.",
-      "pinRefreshFailed": "Les conversations épinglées ont été enregistrées, mais la liste n’a pas pu être actualisée. Actualisez-la pour voir le nouvel ordre."
+      "pinRefreshFailed": "Les conversations épinglées ont été enregistrées, mais la liste n’a pas pu être actualisée. Actualisez-la pour voir le nouvel ordre.",
+      "referenceThread": "Référencer cette conversation"
     },
     "emptyState": {
       "moreSuggestions": "Plus de suggestions",

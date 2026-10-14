@@ -17,6 +17,27 @@ const terminalAction = (item: Record<string, unknown>) => ({
   source: { surface: 'terminal' },
 });
 
+describe('Thread reference snapshots', () => {
+  const thread = { runtime_id: 'env:local-environment', thread_id: 'thread-source', title: 'Review 中文 code', status: 'idle', working_dir: '/workspace', created_at_ms: 1, updated_at_ms: 2, captured_at_ms: 3 };
+  it('accepts exactly the frozen basic fields only from the composer', () => {
+    const item = { kind: 'thread_reference', thread };
+    expect(parseAskFlowerContextActionEnvelope(composerAction([item]))?.context).toEqual([item]);
+    expect(parseAskFlowerContextActionEnvelope({ ...composerAction([item]), source: { surface: 'file_browser' } })).toBeNull();
+  });
+  it.each([
+    { ...thread, preview: 'Private context' }, { ...thread, captured_at_ms: 0 },
+    { ...thread, created_at_ms: Number.MAX_SAFE_INTEGER + 1 }, { ...thread, runtime_id: ' env:test' },
+    { ...thread, thread_id: '../forged' }, { ...thread, title: 'Forged\nmetadata' }, { ...thread, title: 'Nul\0title' },
+  ])('rejects forged snapshot %j', snapshot => {
+    expect(parseAskFlowerContextActionEnvelope(composerAction([{ kind: 'thread_reference', thread: snapshot }]))).toBeNull();
+  });
+  it('rejects missing fields and parallel path authority', () => {
+    const { title: _title, ...missing } = thread;
+    expect(parseAskFlowerContextActionEnvelope(composerAction([{ kind: 'thread_reference', thread: missing }]))).toBeNull();
+    expect(parseAskFlowerContextActionEnvelope(composerAction([{ kind: 'thread_reference', thread, path: '/forged' }]))).toBeNull();
+  });
+});
+
 describe('Flower composer context action wire contract', () => {
   it.each([
     ['file', { kind: 'file_path', path: '/workspace/main.ts', is_directory: false }],

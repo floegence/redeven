@@ -46,6 +46,7 @@ const (
 	contextActionKindTerminal      = "terminal_selection"
 	contextActionKindProcess       = "process_snapshot"
 	contextActionKindText          = "text_snapshot"
+	contextActionKindThread        = "thread_reference"
 )
 
 type ContextActionEnvelope struct {
@@ -109,26 +110,27 @@ type ContextActionPresentation struct {
 }
 
 type ContextActionContextItem struct {
-	Kind           string   `json:"kind"`
-	CanvasID       string   `json:"canvas_id,omitempty"`
-	VersionID      int64    `json:"version_id,omitempty"`
-	ObjectRefs     []string `json:"object_refs,omitempty"`
-	Path           string   `json:"path,omitempty"`
-	IsDirectory    bool     `json:"is_directory,omitempty"`
-	RootLabel      string   `json:"root_label,omitempty"`
-	Selection      string   `json:"selection,omitempty"`
-	SelectionChars int      `json:"selection_chars,omitempty"`
-	WorkingDir     string   `json:"working_dir,omitempty"`
-	PID            int      `json:"pid,omitempty"`
-	Name           string   `json:"name,omitempty"`
-	Username       string   `json:"username,omitempty"`
-	CPUPercent     float64  `json:"cpu_percent,omitempty"`
-	MemoryBytes    int64    `json:"memory_bytes,omitempty"`
-	Platform       string   `json:"platform,omitempty"`
-	CapturedAtMs   int64    `json:"captured_at_ms,omitempty"`
-	Title          string   `json:"title,omitempty"`
-	Detail         string   `json:"detail,omitempty"`
-	Content        string   `json:"content,omitempty"`
+	Kind           string                   `json:"kind"`
+	Thread         *ThreadReferenceSnapshot `json:"thread,omitempty"`
+	CanvasID       string                   `json:"canvas_id,omitempty"`
+	VersionID      int64                    `json:"version_id,omitempty"`
+	ObjectRefs     []string                 `json:"object_refs,omitempty"`
+	Path           string                   `json:"path,omitempty"`
+	IsDirectory    bool                     `json:"is_directory,omitempty"`
+	RootLabel      string                   `json:"root_label,omitempty"`
+	Selection      string                   `json:"selection,omitempty"`
+	SelectionChars int                      `json:"selection_chars,omitempty"`
+	WorkingDir     string                   `json:"working_dir,omitempty"`
+	PID            int                      `json:"pid,omitempty"`
+	Name           string                   `json:"name,omitempty"`
+	Username       string                   `json:"username,omitempty"`
+	CPUPercent     float64                  `json:"cpu_percent,omitempty"`
+	MemoryBytes    int64                    `json:"memory_bytes,omitempty"`
+	Platform       string                   `json:"platform,omitempty"`
+	CapturedAtMs   int64                    `json:"captured_at_ms,omitempty"`
+	Title          string                   `json:"title,omitempty"`
+	Detail         string                   `json:"detail,omitempty"`
+	Content        string                   `json:"content,omitempty"`
 	wireFields     map[string]json.RawMessage
 }
 
@@ -144,7 +146,7 @@ func (item *ContextActionContextItem) UnmarshalJSON(data []byte) error {
 	}
 	for field := range fields {
 		switch field {
-		case "kind", "path", "is_directory", "root_label", "selection", "selection_chars", "working_dir",
+		case "kind", "thread", "path", "is_directory", "root_label", "selection", "selection_chars", "working_dir",
 			"pid", "name", "username", "cpu_percent", "memory_bytes", "platform", "captured_at_ms",
 			"title", "detail", "content", "canvas_id", "version_id", "object_refs":
 		default:
@@ -158,6 +160,11 @@ func (item *ContextActionContextItem) UnmarshalJSON(data []byte) error {
 
 func (item ContextActionContextItem) MarshalJSON() ([]byte, error) {
 	switch strings.TrimSpace(item.Kind) {
+	case contextActionKindThread:
+		return json.Marshal(struct {
+			Kind   string                   `json:"kind"`
+			Thread *ThreadReferenceSnapshot `json:"thread"`
+		}{item.Kind, item.Thread})
 	case contextActionKindTessiven:
 		refs := item.ObjectRefs
 		if refs == nil {
@@ -347,6 +354,9 @@ func canonicalReferencePathLabel(value string) string {
 }
 
 func contextActionComposerItemWireShapeAllowed(item ContextActionContextItem) bool {
+	if item.Kind == contextActionKindThread {
+		return item.wireFields == nil || (len(item.wireFields) == 2 && item.wireFields["kind"] != nil && item.wireFields["thread"] != nil)
+	}
 	if item.Kind == contextActionKindText {
 		if item.Detail != "" {
 			return false
@@ -403,7 +413,7 @@ func contextActionSurfaceAllowsKind(surface string, kind string) bool {
 	case contextActionSurfaceTessiven:
 		return kind == contextActionKindTessiven || kind == contextActionKindFilePath
 	case contextActionSurfaceComposer:
-		return kind == contextActionKindFilePath || kind == contextActionKindText
+		return kind == contextActionKindFilePath || kind == contextActionKindText || kind == contextActionKindThread
 	case contextActionSurfaceFile:
 		return kind == contextActionKindFilePath
 	case contextActionSurfacePreview, contextActionSurfaceEditor:
@@ -424,6 +434,24 @@ func contextActionSurfaceAllowsKind(surface string, kind string) bool {
 var tessivenContextID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`)
 
 func contextActionItemPayloadAllowed(item ContextActionContextItem) bool {
+	if item.Kind == contextActionKindThread {
+		if item.Thread == nil || !item.Thread.valid() {
+			return false
+		}
+		for key := range item.wireFields {
+			if key != "kind" && key != "thread" {
+				return false
+			}
+		}
+		return item.CanvasID == "" && item.VersionID == 0 && item.ObjectRefs == nil &&
+			item.Path == "" && item.Title == "" && item.Content == "" && item.Detail == "" &&
+			item.Selection == "" && item.WorkingDir == "" && item.RootLabel == "" && !item.IsDirectory &&
+			item.PID == 0 && item.SelectionChars == 0 && item.Name == "" && item.Username == "" &&
+			item.Platform == "" && item.CPUPercent == 0 && item.MemoryBytes == 0 && item.CapturedAtMs == 0
+	}
+	if item.Thread != nil {
+		return false
+	}
 	if item.Kind != contextActionKindTessiven && (item.CanvasID != "" || item.VersionID != 0 || item.ObjectRefs != nil) {
 		return false
 	}
@@ -545,6 +573,7 @@ func normalizeContextActionItems(items []ContextActionContextItem) []ContextActi
 	for _, item := range items {
 		normalized := ContextActionContextItem{
 			Kind:     strings.TrimSpace(item.Kind),
+			Thread:   item.Thread,
 			CanvasID: item.CanvasID, VersionID: item.VersionID, ObjectRefs: item.ObjectRefs,
 			Path:           strings.TrimSpace(item.Path),
 			IsDirectory:    item.IsDirectory,

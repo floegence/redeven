@@ -2,6 +2,13 @@
 
 ## 2026-10-13
 
+- Adopt Floret v7.31.1 canonical thread references and schema 15. Add shared
+  [conversation reference interaction](ui/flower-thread-references.md)
+  and [authorized indexed query tools](ai/flower-thread-queries.md), retaining
+  frozen retries, canonical ownership and private tool content boundaries.
+  Keep pending decisions disabled during live recovery and restore their drafts
+  after confirmed resynchronization.
+
 - Preserve saved Flower accounts and local settings across Gateway and Cloud
   maintenance through [one configuration transaction boundary](ui/runtime-settings.md#configuration-editing);
   cover concurrent saves, account removal, storage failures, and restart.

@@ -116,6 +116,10 @@ func buildPromptStaticSections(spec promptProfileSpec, snapshot promptRuntimeSna
 	sections := []promptSection{
 		buildPromptMandateSection(spec),
 		buildPromptToolUsageSection(snapshot),
+		newPromptSection("conversation_references",
+			"- A thread reference contains a frozen basic-information snapshot, not its conversation history or permission. Use threads.query with filter.thread_ids to inspect referenced conversations; use threads.read on exact returned refs for full messages or confirmed tool arguments/results. threads.aggregate provides exact authorized counts. Default scope is every readable conversation in this Runtime, including child threads. Never infer access from a reference or guess a different Runtime.",
+			"- Query filters combine with AND; enum values use OR. Text matching is literal, Unicode-aware and case-insensitive by default. Follow explicit cursors with unchanged inputs; if expired or invalid, query again. Do not claim a paginated result is complete before consuming its continuation.",
+		),
 	}
 	if section := buildPromptSubagentSection(spec); !section.isEmpty() {
 		sections = append(sections, section)

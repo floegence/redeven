@@ -4,6 +4,7 @@ import type {
 import { compact, basenameFromPath, truncatePath, formatBytes, processLabel, processSnapshotText } from './chat/contextItemUtils';
 
 export type FlowerTurnLauncherContextTone =
+  | 'thread'
   | 'environment'
   | 'file'
   | 'directory'
