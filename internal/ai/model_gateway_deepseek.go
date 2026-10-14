@@ -180,7 +180,7 @@ func (p *deepSeekPreparedTurn) StreamTurn(ctx context.Context, onEvent func(Stre
 			}
 		case flprovider.EventSources:
 			for _, source := range event.Sources {
-				result.Sources = append(result.Sources, SourceRef{Title: source.Title, URL: source.URL})
+				result.Sources = append(result.Sources, SourceRef{Title: source.Title, URL: source.URL, StartIndex: source.StartIndex, EndIndex: source.EndIndex})
 			}
 		case flprovider.EventUsage:
 			u := event.Usage

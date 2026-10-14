@@ -255,6 +255,8 @@ export const flowerSurfaceEnUS = {
     messageErrorFallback: 'This message failed before Flower produced visible text.',
     copyCode: 'Copy code',
     codeCopied: 'Copied',
+    citationSources: 'Sources',
+    citationUnavailable: 'Source unavailable',
     showFullCommand: 'Show full command',
     hideFullCommand: 'Hide full command',
     copyCommand: 'Copy command',

@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	anthropic "github.com/anthropics/anthropic-sdk-go"
 	aoption "github.com/anthropics/anthropic-sdk-go/option"
@@ -530,7 +531,7 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 
 	result = ModelGatewayResult{
 		FinishReason:    "unknown",
-		Text:            strings.TrimSpace(textBuf.String()),
+		Text:            textBuf.String(),
 		Reasoning:       reasoningBuf.String(),
 		RawProviderDiag: map[string]any{},
 	}
@@ -634,9 +635,21 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 	if len(result.ToolCalls) > 0 {
 		result.FinishReason = "tool_calls"
 	}
-	if result.Text == "" {
-		if gotCompleted {
-			result.Text = strings.TrimSpace(extractOpenAIResponseText(completed))
+	if gotCompleted {
+		finalText := extractOpenAIResponseText(completed)
+		if strings.HasPrefix(finalText, result.Text) {
+			// Complete only an exact streamed prefix; annotations address finalText.
+			if suffix := finalText[len(result.Text):]; suffix != "" {
+				textBuf.WriteString(suffix)
+				emitProviderEvent(onEvent, StreamEvent{Type: StreamEventTextDelta, Text: suffix})
+			}
+			result.Text = finalText
+		} else {
+			// Already emitted text cannot be rewritten. Keep the sources, but do
+			// not claim final-response offsets apply to a different transcript.
+			for i := range result.Sources {
+				result.Sources[i].StartIndex, result.Sources[i].EndIndex = nil, nil
+			}
 		}
 	}
 	if result.FinishReason == "unknown" && result.Text != "" {
@@ -3232,40 +3245,42 @@ func extractOpenAIResponseText(resp oresponses.Response) string {
 			if strings.TrimSpace(part.Type) != "output_text" {
 				continue
 			}
-			if sb.Len() > 0 {
-				sb.WriteString("\n")
-			}
-			sb.WriteString(strings.TrimSpace(part.Text))
+			sb.WriteString(part.Text)
 		}
 	}
 	return sb.String()
 }
 
 func extractOpenAIURLSources(resp oresponses.Response) []SourceRef {
-	out := make([]SourceRef, 0, 8)
-	seen := make(map[string]struct{}, 8)
+	var out []SourceRef
+	offset := 0
 	for _, item := range resp.Output {
-		if strings.TrimSpace(item.Type) != "message" {
+		if item.Type != "message" {
 			continue
 		}
 		for _, part := range item.Content {
-			if strings.TrimSpace(part.Type) != "output_text" {
+			if part.Type != "output_text" {
 				continue
 			}
+			count := utf8.RuneCountInString(part.Text)
 			for _, ann := range part.Annotations {
-				if strings.TrimSpace(ann.Type) != "url_citation" {
+				if ann.Type != "url_citation" {
 					continue
 				}
-				u := strings.TrimSpace(ann.URL)
-				if u == "" {
-					continue
+				source := SourceRef{Title: ann.Title, URL: ann.URL}
+				// JSON presence is required: missing offsets must not bind at zero.
+				var raw struct {
+					Start *int `json:"start_index"`
+					End   *int `json:"end_index"`
 				}
-				if _, ok := seen[u]; ok {
-					continue
+				_ = json.Unmarshal([]byte(ann.RawJSON()), &raw)
+				if raw.Start != nil && raw.End != nil && *raw.Start >= 0 && *raw.End > *raw.Start && *raw.End <= count {
+					start, end := offset+*raw.Start, offset+*raw.End
+					source.StartIndex, source.EndIndex = &start, &end
 				}
-				seen[u] = struct{}{}
-				out = append(out, SourceRef{Title: strings.TrimSpace(ann.Title), URL: u})
+				out = append(out, source)
 			}
+			offset += count
 		}
 	}
 	return out

@@ -1,6 +1,7 @@
 import type {
   FlowerActivityTimelineBlock,
   FlowerChatMessage,
+  FlowerCitationSource,
   FlowerInputRequest,
   FlowerQueuedTurn,
   FlowerTimelineDecoration,
@@ -18,6 +19,7 @@ export type FlowerRenderableMessageBlock =
     key: string;
     block_index: number;
     block_type: 'markdown' | 'text' | 'thinking';
+    sources?: readonly FlowerCitationSource[];
     content: string;
   }>
   | Readonly<{
@@ -134,7 +136,7 @@ export function messageBlockSignature(block: NonNullable<FlowerChatMessage['bloc
   if (block.type === 'input-response') return `input-response:${inputResponseSignature(block)}`;
   if (block.type === 'image') return `image:${block.src}:${block.alt ?? ''}`;
   if (block.type === 'file') return `file:${block.name}:${block.size}:${block.mimeType}:${block.url}`;
-  return `${block.type}:${block.content ?? ''}`;
+  return `${block.type}:${block.content ?? ''}:${JSON.stringify(block.sources ?? [])}`;
 }
 
 export function flowerMessageSignature(message: FlowerChatMessage): string {
@@ -142,6 +144,7 @@ export function flowerMessageSignature(message: FlowerChatMessage): string {
     message.id,
     message.role,
     message.content,
+    JSON.stringify(message.sources ?? []),
     message.status,
     String(message.created_at_ms),
     message.blocks?.map(messageBlockSignature).join('\x1d') ?? '',
@@ -192,19 +195,20 @@ function contentBlocksFromMessage(threadID: string, message: FlowerChatMessage):
         name: block.name, size: block.size, mimeType: block.mimeType, url: block.url,
       }];
     }
-    const content = trimString(block.content);
-    return content ? [{ type: 'content', key: `${message.id}:block:${index}`, block_index: index, block_type: block.type, content }] : [];
+    const content = String(block.content ?? '');
+    return content.trim() ? [{ type: 'content', key: `${message.id}:block:${index}`, block_index: index, block_type: block.type, content, sources: block.sources }] : [];
   });
   if (projectedBlocks.length > 0) return projectedBlocks;
 
-  const content = trimString(message.content);
-  return content
+  const content = String(message.content ?? '');
+  return content.trim()
     ? [{
       type: 'content',
       key: `${message.id}:content`,
       block_index: 0,
       block_type: 'markdown',
       content,
+      sources: message.sources,
     }]
     : [];
 }

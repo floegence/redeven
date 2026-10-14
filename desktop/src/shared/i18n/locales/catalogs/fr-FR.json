@@ -669,7 +669,9 @@
         "updated": "Mise à jour",
         "captured": "Capture",
         "runtime": "Environnement d’exécution"
-      }
+      },
+      "citationSources": "Sources",
+      "citationUnavailable": "Source indisponible"
     },
     "threadList": {
       "title": "Discussions",

@@ -669,7 +669,9 @@
         "updated": "수정 시간",
         "captured": "캡처 시간",
         "runtime": "런타임"
-      }
+      },
+      "citationSources": "출처",
+      "citationUnavailable": "출처를 사용할 수 없음"
     },
     "threadList": {
       "title": "대화",

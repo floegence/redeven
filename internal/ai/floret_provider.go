@@ -257,7 +257,7 @@ func (p *floretProviderAdapter) streamPreparedTurn(ctx context.Context, provider
 			sendFloretProviderEvent(ctx, out, flprovider.Event{Type: flprovider.EventError, Err: wrapped, Reason: wrapped.Error()})
 			return
 		}
-		if strings.TrimSpace(streamedText.String()) == "" && strings.TrimSpace(result.Text) != "" {
+		if streamedText.Len() == 0 && result.Text != "" {
 			sendFloretProviderEvent(ctx, out, flprovider.Event{Type: flprovider.EventDelta, Text: result.Text})
 		}
 		if strings.TrimSpace(streamedReasoning.String()) == "" && strings.TrimSpace(result.Reasoning) != "" {
@@ -391,8 +391,10 @@ func flowerSourcesToFloret(in []SourceRef) []flprovider.Source {
 			continue
 		}
 		out = append(out, flprovider.Source{
-			Title: strings.TrimSpace(src.Title),
-			URL:   strings.TrimSpace(src.URL),
+			Title:      strings.TrimSpace(src.Title),
+			URL:        src.URL,
+			StartIndex: src.StartIndex,
+			EndIndex:   src.EndIndex,
 		})
 	}
 	return out

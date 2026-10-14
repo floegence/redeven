@@ -669,7 +669,9 @@
         "updated": "更新時間",
         "captured": "擷取時間",
         "runtime": "執行環境"
-      }
+      },
+      "citationSources": "來源",
+      "citationUnavailable": "來源無法使用"
     },
     "threadList": {
       "title": "對話",

@@ -12,6 +12,8 @@ import { createFlowerMarkdownRenderer } from './markedConfig';
 import { normalizeMarkdownForDisplay } from './normalizeMarkdownForDisplay';
 import { createMarkdownRenderModel, type MarkdownRenderSnapshot } from './streamingMarkdownModel';
 import { StreamingMarkdownTail } from './StreamingMarkdownTail';
+import { prepareFlowerCitations } from './flowerCitations';
+import type { FlowerCitationSource } from '../../contracts/flowerSurfaceContracts';
 import {
   decorateFlowerMarkdownCodeBlocks,
   flowerMarkdownCodeTextForCopyButton,
@@ -19,6 +21,8 @@ import {
 
 export interface FlowerMarkdownBlockProps {
   content: string;
+  sources?: readonly FlowerCitationSource[];
+  citationLabels?: Readonly<{ sources: string; unavailable: string }>;
   streaming?: boolean;
   copyCodeLabel: string;
   codeCopiedLabel: string;
@@ -36,11 +40,24 @@ export const FlowerMarkdownBlock: Component<FlowerMarkdownBlockProps> = (props) 
   marked.use({ renderer: createFlowerMarkdownRenderer({ media: props.mediaLabels !== undefined }) });
 
   const [copiedButton, setCopiedButton] = createSignal<HTMLButtonElement | null>(null);
-  const displayContent = createMemo(() => normalizeMarkdownForDisplay(String(props.content ?? '')));
+  const citations = createMemo(() => props.citationLabels
+    ? prepareFlowerCitations(String(props.content ?? ''), props.sources ?? [], props.citationLabels.unavailable, props.streaming === true)
+    : { markdown: String(props.content ?? ''), html: [], remaining: [] });
+  marked.use({ extensions: [{
+    name: 'flowerCitation', level: 'inline',
+    start(source) { return source.indexOf('\uE200flower-citation:'); },
+    tokenizer(source) {
+      const match = /^\uE200flower-citation:(\d+)\uE201/.exec(source);
+      return match ? { type: 'flowerCitation', raw: match[0], index: Number(match[1]) } : undefined;
+    },
+    renderer(token) { return citations().html[Number(token.index)] ?? ''; },
+  }] });
+  const displayContent = createMemo(() => normalizeMarkdownForDisplay(citations().markdown));
   const renderMarkdown = createMarkdownRenderModel(marked);
   const snapshot = createMemo<MarkdownRenderSnapshot>(() => renderMarkdown(
     displayContent(),
     props.streaming === true,
+    JSON.stringify(citations().html),
   ));
   const segments = createMemo(() => new Map(snapshot().committedSegments.map((segment) => [segment.key, segment])));
   const segmentKeys = createMemo(() => [...segments().keys()]);
@@ -182,6 +199,12 @@ export const FlowerMarkdownBlock: Component<FlowerMarkdownBlockProps> = (props) 
     <div ref={(node) => { rootRef = node; }} class={cn('flower-chat-md-block', props.class)} onClick={handleClick}>
       <For each={segmentKeys()}>{(key) => <HtmlSegment segmentKey={key} />}</For>
       <Show when={snapshot().tail.kind !== 'empty'}><TailFrame /></Show>
+      <Show when={citations().remaining.length > 0 && props.streaming !== true}>
+        <aside class="flower-chat-source-list" aria-label={props.citationLabels?.sources}>
+          <div class="flower-chat-source-heading">{props.citationLabels?.sources}</div>
+          <ul><For each={citations().remaining}>{source => <li><a href={source.url} target="_blank" rel="noopener noreferrer">{source.title || new URL(source.url).hostname}</a></li>}</For></ul>
+        </aside>
+      </Show>
     </div>
   );
 };

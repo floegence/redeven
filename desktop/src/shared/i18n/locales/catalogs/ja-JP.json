@@ -669,7 +669,9 @@
         "updated": "更新日時",
         "captured": "取得日時",
         "runtime": "ランタイム"
-      }
+      },
+      "citationSources": "出典",
+      "citationUnavailable": "出典を利用できません"
     },
     "threadList": {
       "title": "会話",

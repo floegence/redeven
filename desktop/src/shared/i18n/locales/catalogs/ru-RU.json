@@ -684,7 +684,9 @@
         "updated": "Обновлён",
         "captured": "Снимок",
         "runtime": "Среда выполнения"
-      }
+      },
+      "citationSources": "Источники",
+      "citationUnavailable": "Источник недоступен"
     },
     "threadList": {
       "title": "Беседы",

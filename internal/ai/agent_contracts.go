@@ -154,8 +154,10 @@ type FlowerActivityFileAction struct {
 }
 
 type SourceRef struct {
-	Title string `json:"title,omitempty"`
-	URL   string `json:"url"`
+	StartIndex *int   `json:"start_index,omitempty"`
+	EndIndex   *int   `json:"end_index,omitempty"`
+	Title      string `json:"title,omitempty"`
+	URL        string `json:"url"`
 }
 
 type TurnUsage struct {

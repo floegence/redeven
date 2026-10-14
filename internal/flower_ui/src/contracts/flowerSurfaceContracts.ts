@@ -229,6 +229,14 @@ export type FlowerMessageReference =
   | Readonly<{ reference_id: string; kind: 'file' | 'directory'; label: string; truncated?: boolean }>
   | Readonly<{ reference_id: string; kind: 'text' | 'terminal' | 'process'; label: string; text?: string; truncated?: boolean }>;
 
+export type FlowerCitationSource = Readonly<{
+  title?: string;
+  url: string;
+  /** End-exclusive Unicode code-point indices in the exact assistant text. */
+  start_index?: number;
+  end_index?: number;
+}>;
+
 export type FlowerChatMessage = Readonly<{
   id: string;
   // Canonical root-thread and SubAgent messages always carry turn_id. Synthetic
@@ -238,6 +246,7 @@ export type FlowerChatMessage = Readonly<{
   run_id?: string;
   logical_request_id?: string;
   turn_ordinal?: number;
+  sources?: readonly FlowerCitationSource[];
   role: FlowerChatMessageRole;
   content: string;
   status: FlowerChatMessageStatus;
@@ -462,6 +471,7 @@ export type FlowerInputResponseBlock = Readonly<{
 export type FlowerChatMessageBlock =
   | Readonly<{
     type: 'markdown' | 'text' | 'thinking';
+    sources?: readonly FlowerCitationSource[];
     content?: string;
   }>
   | Readonly<{
@@ -703,6 +713,7 @@ export type FlowerRuntimeCurrentItem = Readonly<{
   run_id: string;
   ordinal: number;
   kind: 'user' | 'thinking' | 'assistant' | 'tool' | 'interaction';
+  sources?: readonly FlowerCitationSource[];
   text?: string;
   live?: boolean;
   created_at?: string;

@@ -25,8 +25,11 @@ type MarkdownParser = Pick<Marked<string, string>, 'lexer' | 'parser'>;
 export function createMarkdownRenderModel(markdown: MarkdownParser) {
   let previous: MarkdownRenderSnapshot | undefined;
   let previousLinks: Links | undefined;
+  let previousRenderingKey: string | undefined;
   let cache = new Map<string, { token: Token; html: string }>();
-  return (content: string, streaming: boolean): MarkdownRenderSnapshot => {
+  return (content: string, streaming: boolean, renderingKey = ''): MarkdownRenderSnapshot => {
+    if (previousRenderingKey !== renderingKey) cache.clear();
+    previousRenderingKey = renderingKey;
     const nextCache = new Map<string, { token: Token; html: string }>();
     const cachedParser: MarkdownParser = {
       lexer(source, options) {

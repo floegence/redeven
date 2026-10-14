@@ -19,7 +19,7 @@ counts and bounded reads without widening `ThreadService`. [Canonical thread
 queries](flower-thread-queries.md) defines the Redeven authorization mapping.
 
 
-Floret v7.31.1 preserves explicit canonical RunID and the permanent schema
+Floret v7.32.0 preserves explicit canonical RunID and the permanent schema
 13-to-14 migration, then appends the 14-to-15 thread-reference migration. Observation metadata never advances execution identity;
 historical tool activities resolve through their canonical invocation. Public
 current views are projected and sanitized before the response is encoded.
@@ -45,7 +45,7 @@ and remain user-controlled; effects and unknown outcomes are never replayed.
 
 Independent context compaction uses the optional public capability without widening ThreadService. Floret owns typed control-turn admission, atomic installation, terminal results, replay, and recovery. See [Model context usage and compaction](model-context-usage-and-compaction.md) for command and presentation contracts.
 
-Redeven consumes published Floret v7.31.1, preserving graceful-stop ownership
+Redeven consumes published Floret v7.32.0, preserving graceful-stop ownership
 when a projection write is canceled. The stop owner settles pending approvals,
 tool results, and the terminal together; a canceled write must not enter competing
 failure finalization. Genuine storage and unknown-effect failures retain their

@@ -7,6 +7,20 @@ import {
   mapFlowerThread,
   mergeFlowerContextUsage,
 } from './flowerLiveMapper';
+import { messageBlockSignature } from './flowerTimelineProjection';
+
+describe('Canonical assistant citations in historical pages', () => {
+  it('preserves block text, locations and metadata changes without a host source store', () => {
+    const text = ' 你好😀 \uE200cite\uE202turn1view5\uE201 ';
+    const source = { title: 'Reference', url: 'https://example.com/docs', start_index: 5, end_index: [...text].length - 1 };
+    const wire = { id: 'answer', thread_id: 'thread-a', turn_id: 'turn-a', run_id: 'run-a', role: 'assistant', status: 'complete', timestamp: 10, blocks: [{ type: 'markdown', content: text, sources: [source] }] };
+    const message = mapFlowerMessage(JSON.parse(JSON.stringify(wire)));
+    expect(message.blocks?.[0]).toEqual(wire.blocks[0]);
+    const renamed = mapFlowerMessage({ ...wire, blocks: [{ ...wire.blocks[0], sources: [{ ...source, title: 'Updated title' }] }] });
+    expect(messageBlockSignature(message.blocks![0])).not.toBe(messageBlockSignature(renamed.blocks![0]));
+    expect(mapFlowerMessage({ ...wire, blocks: undefined, content: text, sources: [source] })).toMatchObject({ content: text, sources: [source] });
+  });
+});
 
 describe('Canonical thread reference identity', () => {
   const message = { id: 'user-ref', thread_id: 'thread-target', turn_id: 'turn-target', run_id: 'run-target', role: 'user', status: 'complete', timestamp: 10 };

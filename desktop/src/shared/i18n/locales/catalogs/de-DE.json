@@ -669,7 +669,9 @@
         "updated": "Aktualisiert",
         "captured": "Erfasst",
         "runtime": "Laufzeitumgebung"
-      }
+      },
+      "citationSources": "Quellen",
+      "citationUnavailable": "Quelle nicht verfügbar"
     },
     "threadList": {
       "title": "Unterhaltungen",

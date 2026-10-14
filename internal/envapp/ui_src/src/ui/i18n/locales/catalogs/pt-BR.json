@@ -5558,7 +5558,9 @@
         "updated": "Atualização",
         "captured": "Captura",
         "runtime": "Ambiente de execução"
-      }
+      },
+      "citationSources": "Fontes",
+      "citationUnavailable": "Fonte indisponível"
     },
     "threadList": {
       "title": "Conversas",

@@ -11772,3 +11772,17 @@ button.flower-attachment-preview-trigger:disabled {
 }
 .flower-workspace-sync > span { flex: 1 1 12rem; min-width: 0; }
 .flower-workspace-sync > button { flex-shrink: 0; }
+
+.flower-chat-citations { display: inline; margin-inline: 0.2em; }
+.flower-chat-citation {
+  display: inline; font-size: 0.8em; line-height: 1.4;
+  border-radius: 0.25rem; padding-inline: 0.25em;
+  background: var(--muted); color: var(--muted-foreground);
+  text-decoration: none; cursor: pointer; overflow-wrap: anywhere;
+}
+.flower-chat-citation:hover { color: var(--foreground); text-decoration: underline; }
+.flower-chat-citation-unavailable { font-size: 0.8em; color: var(--muted-foreground); margin-inline: 0.2em; }
+.flower-chat-source-list { margin-top: 0.75rem; border-top: 1px solid var(--border); padding-top: 0.5rem; font-size: 0.85em; }
+.flower-chat-source-heading { color: var(--muted-foreground); font-weight: 500; }
+.flower-chat-source-list ul { margin-block: 0.25rem 0; padding-inline-start: 1.25rem; }
+.flower-chat-source-list a { cursor: pointer; overflow-wrap: anywhere; }

@@ -538,7 +538,9 @@
       "updated": "Updated",
       "captured": "Captured",
       "runtime": "Runtime"
-    }
+    },
+    "citationSources": "Sources",
+    "citationUnavailable": "Source unavailable"
   },
   "threadList": {
     "title": "Conversations",

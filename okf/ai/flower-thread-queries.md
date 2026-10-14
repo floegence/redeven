@@ -7,7 +7,7 @@ timestamp: 2026-10-13T00:00:00Z
 ---
 # Summary
 
-Floret v7.31.1 owns the canonical journal and its derived in-memory index.
+Floret v7.32.0 owns the canonical journal and its derived in-memory index.
 Redeven exposes `threads.query`, `threads.read` and `threads.aggregate` as
 read-only mappings to optional `runtime.ThreadQueryReader`. Every invocation
 rebuilds the current readable scope before search, sorting, counting or reading.

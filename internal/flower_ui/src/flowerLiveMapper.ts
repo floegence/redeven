@@ -1,3 +1,4 @@
+import { mapFlowerCitationSources } from './chat/markdown/flowerCitations';
 import { threadTitleSnapshot } from './threadTitleSnapshot';
 import type {
   FlowerActivityAttentionReason,
@@ -926,7 +927,7 @@ function mapMessageBlock(blockValue: unknown): FlowerMessageBlock | null {
   if (!block) return null;
   const type = trim(block?.type);
   if (type === 'markdown' || type === 'text' || type === 'thinking') {
-    return { type, content: typeof block.content === 'string' ? block.content : '' };
+    return { type, content: typeof block.content === 'string' ? block.content : '', ...(block.sources ? { sources: mapFlowerCitationSources(block.sources) } : {}) };
   }
   if (type === 'image') {
     const src = safeFlowerAttachmentURL(block.src);
@@ -1058,7 +1059,7 @@ export function mapFlowerMessage(raw: unknown): FlowerChatMessage {
   }
   const references = mapMessageReferences(message.references, id);
   const blockContent = blocks.map(messageBlockPreviewText).filter(Boolean).join('\n\n');
-  const content = blockContent || trim(message.content);
+  const content = blockContent || (typeof message.content === 'string' ? message.content : '');
   return {
     id,
     thread_id: threadID,
@@ -1066,6 +1067,7 @@ export function mapFlowerMessage(raw: unknown): FlowerChatMessage {
     run_id: runID,
     ...(logicalRequestID ? { logical_request_id: logicalRequestID } : {}),
     role,
+    ...(role === 'assistant' && message.sources ? { sources: mapFlowerCitationSources(message.sources) } : {}),
     content,
     status: mapMessageStatus(message.status),
     created_at_ms: unixMs(message.timestamp ?? message.created_at_ms ?? message.created_at_unix_ms, 'message.timestamp'),

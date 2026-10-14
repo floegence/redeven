@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/floegence/floret/v7/observation"
-	flprovider "github.com/floegence/floret/v7/provider"
 	flruntime "github.com/floegence/floret/v7/runtime"
 )
 
@@ -81,7 +80,6 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 	if r.acceptsFloretStreamAttempt(ev.Stream) {
 		r.applyFloretStreamObservation(ev.Stream)
 	}
-	r.applyFloretSourceObservation(ev.Sources)
 	r.applyFloretContextStatus(ev.ContextUsage, ev.ThreadUsageTotals)
 	r.recordFloretActivityEvent(ev)
 	switch ev.Type {
@@ -560,18 +558,6 @@ func (r *run) floretContractError() error {
 	r.muFloretContract.Lock()
 	defer r.muFloretContract.Unlock()
 	return r.floretContractErr
-}
-
-func (r *run) applyFloretSourceObservation(sources []flprovider.Source) {
-	if r == nil || len(sources) == 0 {
-		return
-	}
-	if !r.acceptsPresentationUpdates() {
-		return
-	}
-	for _, src := range sources {
-		r.addWebSource(strings.TrimSpace(src.Title), strings.TrimSpace(src.URL))
-	}
 }
 
 func (r *run) applyFloretStreamObservation(stream *flruntime.StreamObservation) {
