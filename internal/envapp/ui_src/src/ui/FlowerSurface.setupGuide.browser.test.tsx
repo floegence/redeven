@@ -54,12 +54,35 @@ describe('Flower setup browser presentation', () => {
     }
   });
 
-  it('opens the local provider editor directly from the first setup action', async () => {
-    const runtime = renderSurfaceWithAdapter({ ...adapter(), listThreads: async () => [],
+  it.each(['light', 'dark'])('keeps the local settings entry in the original card style in %s theme', async (theme) => {
+    await page.viewport(1440, 900);
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+    const surfaceAdapter = { ...adapter(), modelSourceRecovery: undefined, listThreads: async () => [],
       loadSettings: async () => ({ ...settingsSnapshot(), model_profile: null }),
+    };
+    const reference = renderSurfaceWithAdapter({ ...surfaceAdapter,
+      modelSourceRecovery: {
+        describe: () => '',
+        localSettings: { label: 'Configure in Desktop Flower settings', run: async () => undefined },
+        runtimeSettings: { label: 'Runtime settings', run: async () => undefined },
+        connectionCenter: { label: 'Connection center', run: async () => undefined },
+      },
     });
+    reference.hidden = true;
+    await waitFor(() => Boolean(reference.querySelector('[data-model-source-action="local_settings"]')));
+    const originalCard = reference.querySelector<HTMLElement>('[data-model-source-action="local_settings"]')!;
+    const runtime = renderSurfaceWithAdapter(surfaceAdapter);
     await waitFor(() => Boolean(runtime.querySelector('.flower-setup-welcome')));
-    runtime.querySelector<HTMLButtonElement>('.flower-setup-action')!.click();
+    const action = runtime.querySelector<HTMLButtonElement>('.flower-setup-action')!;
+    const actionStyle = getComputedStyle(action);
+    const originalStyle = getComputedStyle(originalCard);
+    for (const property of ['backgroundColor', 'borderTopColor', 'color', 'borderRadius', 'padding', 'fontWeight'] as const) {
+      expect(actionStyle[property], property).toBe(originalStyle[property]);
+    }
+    expect(getComputedStyle(action.querySelector('.flower-setup-action-arrow')!).color)
+      .toBe(getComputedStyle(originalCard.querySelector('.flower-setup-action-arrow')!).color);
+    expect(actionStyle.cursor).toBe('pointer');
+    action.click();
     await waitFor(() => Boolean(runtime.querySelector('.flower-settings-providers-section')));
     const add = [...runtime.querySelectorAll<HTMLButtonElement>('.flower-settings-providers-section button')]
       .find(button => button.textContent?.includes('Add provider'))!;
