@@ -1471,3 +1471,13 @@ Adopt published Floe Webapp v0.86.31 and its shared Markdown parser for CJK
 emphasis adjoining punctuation and prose. Preserve canonical message text,
 provider cache input, citations, code literals and stable streaming controls.
 See [Flower citations and Markdown presentation](ui/flower-citations.md).
+
+## 2026-10-14 — Message submission feedback and immediate queue capture
+
+Keep ordinary delivery loading on the published Floe Send button and retain its
+draft until exact admission confirmation. Capture queued input immediately with
+static feedback, using the existing ordered TransportOutbox for preparation,
+persistence, dispatch and explicit recovery. Preserve newer edits, request
+identity and canonical Floret queue ownership across confirmation races and
+surface remounts. See [Flower command and composer flow](ui/flower-turn-launcher.md)
+and [Flower timeline ordering](ui/flower-timeline-ordering.md).

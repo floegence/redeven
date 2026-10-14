@@ -36,22 +36,16 @@ function renderIndicator() {
 }
 
 describe('FlowerProgressIndicator', () => {
-  it('shows delivery under the real request identity without inventing a run', async () => {
+  it('renders only canonical run progress', async () => {
     const host = document.createElement('div');
     document.body.append(host);
-    const [pending, setPending] = createSignal<string | undefined>('client-1');
     const [progress, setProgress] = createSignal<FlowerProgressIndicatorState | null>(null);
-    disposers.push(render(() => <FlowerProgressIndicator progress={progress()} pendingRequestID={pending()} label="Sending" />, host));
-    const delivery = host.querySelector('.flower-model-status-indicator');
-    expect(delivery?.getAttribute('data-flower-progress-request-id')).toBe('client-1');
-    expect(delivery?.getAttribute('data-flower-progress-run-id')).toBeNull();
+    disposers.push(render(() => <FlowerProgressIndicator progress={progress()} label="Waiting for model response" />, host));
+    expect(host.querySelector('.flower-model-status-indicator')).toBeNull();
     setProgress({ kind: 'preparing', runID: 'run-1' });
     await flushEffects();
-    const running = host.querySelector('.flower-model-status-indicator');
-    expect(running).not.toBe(delivery);
-    expect(running?.getAttribute('data-flower-progress-run-id')).toBe('run-1');
-    expect(running?.getAttribute('data-flower-progress-request-id')).toBeNull();
-    batch(() => { setPending(undefined); setProgress(null); });
+    expect(host.querySelector('.flower-model-status-indicator')?.getAttribute('data-flower-progress-run-id')).toBe('run-1');
+    setProgress(null);
     await flushEffects();
     expect(host.querySelector('.flower-model-status-indicator')).toBeNull();
   });

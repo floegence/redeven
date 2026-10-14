@@ -9,6 +9,28 @@ afterEach(() => {
 });
 
 describe('TransportOutbox', () => {
+  it('restores captured preparation as recovery without pretending it was dispatched', async () => {
+    const entry = { requestId: 'captured', threadId: 'thread-a', presentation: 'queue', preparation: 'pending',
+      input: { client_request_id: 'captured', thread_id: 'thread-a', prompt: 'Keep this input' },
+      draftText: 'Keep this input', draftReferences: [], attachmentLabels: [], createdAtMs: Date.now(), delivery: 'pending' };
+    vi.stubGlobal('indexedDB', { open: () => {
+      const request = { result: {
+        objectStoreNames: { contains: () => true }, close: () => undefined,
+        transaction: () => ({ objectStore: () => ({ getAll: () => {
+          const read = { result: [structuredClone(entry)], onsuccess: null as null | (() => void) };
+          queueMicrotask(() => read.onsuccess?.()); return read;
+        } }) }),
+      }, onsuccess: null as null | (() => void) };
+      queueMicrotask(() => request.onsuccess?.()); return request;
+    } });
+    const restored = await restoreTransportOutbox();
+    expect(restored.entries.get('captured')).toMatchObject({
+      presentation: 'queue', preparation: 'pending', delivery: 'failed',
+      terminalError: 'preparation_unavailable_after_restart', draftText: 'Keep this input',
+    });
+    expect(restored.entries.get('captured')?.input).toEqual(entry.input);
+    restored.dispose();
+  });
   it('writes and deletes only the changed request instead of rewriting the store', async () => {
     const operations: string[] = [];
     vi.stubGlobal('indexedDB', { open: () => {

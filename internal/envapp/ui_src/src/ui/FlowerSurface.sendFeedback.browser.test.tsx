@@ -32,14 +32,15 @@ function mount(embedded: boolean) {
   host.style.cssText = 'position:absolute;inset:20px;width:calc(100% - 40px);height:700px';
   document.body.append(host);
   const base = canvasFlowerAdapter();
-  let accept!: (value: Awaited<ReturnType<FlowerSurfaceAdapter['launchTurn']>>) => void;
-  let reject!: (error: unknown) => void;
+  const pending: Array<{ accept: (value: Awaited<ReturnType<FlowerSurfaceAdapter['launchTurn']>>) => void; reject: (error: unknown) => void }> = [];
+  let preparation = Promise.resolve('storage-generation');
+  let resumePreparation = () => {};
   const sent = vi.fn((_input: Parameters<FlowerSurfaceAdapter['launchTurn']>[0]) => new Promise<Awaited<ReturnType<FlowerSurfaceAdapter['launchTurn']>>>((resolve, fail) => {
-    accept = resolve; reject = fail;
+    pending.push({ accept: resolve, reject: fail });
   }));
   const queued: FlowerLiveStreamEnvelope[] = [];
   let wake = () => {};
-  const adapter: FlowerSurfaceAdapter = { ...base, launchTurn: sent, connectLiveStream: async function* ({ signal }) {
+  const adapter: FlowerSurfaceAdapter = { ...base, launchTurn: sent, resolveStorageGeneration: () => preparation, connectLiveStream: async function* ({ signal }) {
     yield { schema_version: 1, kind: 'ready', summaries: [] };
     while (!signal.aborted) {
       const value = queued.shift();
@@ -60,18 +61,76 @@ function mount(embedded: boolean) {
       onRemoveReference={() => {}} onOpenConversation={() => {}}
       renderSurface={props => <Surface {...props} presentation="companion" />} /> : <Surface />}
   </LayoutProvider></FloeConfigProvider>, host);
-  return { sent, setRequest, accept: () => {
-    const input = sent.mock.calls[0][0];
-    accept({ client_request_id: input.client_request_id, thread_id: 'canvas-thread', current: {
-      thread_id: 'canvas-thread', view_version: 1, activity: 'active', turn_id: 'turn', run_id: 'run',
-      run_progress: { phase: 'waiting_response' }, queue: [], interactions: [],
-      items: [{ id: `user:${input.client_request_id}`, turn_id: 'turn', run_id: 'run', ordinal: 1, kind: 'user', text: input.prompt }],
+  let version = 0;
+  const canonicalQueue: Array<{ id: string; request_key: string; input: { text: string }; created_at: string }> = [];
+  return { sent, setRequest, pausePreparation: () => {
+    preparation = new Promise(resolve => { resumePreparation = () => resolve('storage-generation'); });
+  }, resumePreparation: () => resumePreparation(), accept: (index = 0, queued = false) => {
+    const input = sent.mock.calls[index][0];
+    const first = sent.mock.calls[0][0];
+    if (queued) canonicalQueue.push({ id: `queue:${input.client_request_id}`, request_key: input.client_request_id, input: { text: input.prompt }, created_at: new Date().toISOString() });
+    pending[index].accept({ client_request_id: input.client_request_id, thread_id: 'canvas-thread', current: {
+      thread_id: 'canvas-thread', view_version: ++version, activity: 'active', turn_id: 'turn', run_id: 'run',
+      run_progress: { phase: 'waiting_response' }, queue: [...canonicalQueue], interactions: [],
+      items: [{ id: `user:${first.client_request_id}`, turn_id: 'turn', run_id: 'run', ordinal: 1, kind: 'user', text: first.prompt }],
     } });
-  }, reject: () => reject(new Error('Runtime unavailable')), push: (event: FlowerLiveStreamEnvelope) => { queued.push(event); wake(); } };
+  }, reject: (index = 0) => pending[index].reject(new Error('Runtime unavailable')), push: (event: FlowerLiveStreamEnvelope) => { queued.push(event); wake(); } };
 }
 
 const editor = () => page.getByRole('textbox').last();
 for (const embedded of [false, true]) {
+  it(`preserves edits made before ordinary admission in ${embedded ? 'canvas replies' : 'full Flower'}`, async () => {
+    await page.viewport(1200, 800);
+    const runtime = mount(embedded);
+    await expect.element(editor()).toBeVisible();
+    await editor().fill('Original request');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect.poll(() => runtime.sent.mock.calls.length).toBe(1);
+    await editor().fill('Newer draft');
+    document.querySelector('textarea')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    expect(runtime.sent).toHaveBeenCalledTimes(1);
+    runtime.accept();
+    await expect.poll(() => document.querySelector('.flower-composer-submit')?.getAttribute('aria-busy')).not.toBe('true');
+    await expect.element(editor()).toHaveValue('Newer draft');
+    expect(runtime.sent.mock.calls[0][0].prompt).toBe('Original request');
+  });
+
+  it(`captures successive queued drafts before preparation or HTTP settles in ${embedded ? 'canvas replies' : 'full Flower'}`, async () => {
+    await page.viewport(1200, 800);
+    const runtime = mount(embedded);
+    await expect.element(editor()).toBeVisible();
+    await editor().fill('Start work');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect.poll(() => runtime.sent.mock.calls.length).toBe(1);
+    runtime.accept();
+    await expect.element(editor()).toHaveValue('');
+    runtime.pausePreparation();
+    await editor().fill('Queued A');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    const rows = () => [...document.querySelectorAll<HTMLElement>('[data-flower-queued-turn-dock-id]')];
+    await expect.poll(() => rows().length).toBe(1);
+    const firstRow = rows()[0];
+    expect(firstRow.textContent).toContain('Waiting to queue');
+    expect(firstRow.querySelector('.animate-spin, .motion-safe\\:animate-spin')).toBeNull();
+    await expect.element(editor()).toHaveValue('');
+    await editor().fill('Queued B');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect.poll(() => rows().length).toBe(2);
+    expect(rows().map(row => row.querySelector('.flower-queued-turn-label')?.textContent)).toEqual(['Queued A', 'Queued B']);
+    expect(runtime.sent).toHaveBeenCalledTimes(1);
+    await editor().fill('Keep editing');
+    runtime.resumePreparation();
+    await expect.poll(() => runtime.sent.mock.calls.length).toBe(2);
+    runtime.accept(1, true);
+    await expect.poll(() => runtime.sent.mock.calls.length).toBe(3);
+    expect(rows()[0]).toBe(firstRow);
+    expect(firstRow.getAttribute('data-flower-transport-outbox-id')).toBeNull();
+    expect(firstRow.getAttribute('aria-label')).toBe('Queued: Queued A');
+    runtime.accept(2, true);
+    await expect.poll(() => document.querySelectorAll('[data-flower-transport-outbox-id]').length).toBe(0);
+    await expect.element(editor()).toHaveValue('Keep editing');
+  });
+
   it(`shows immediate delivery feedback and continuous canonical progress in ${embedded ? 'canvas replies' : 'full Flower'}`, async () => {
     await page.viewport(1200, 800);
     const runtime = mount(embedded);
@@ -81,10 +140,10 @@ for (const embedded of [false, true]) {
     await expect.poll(() => runtime.sent.mock.calls.length).toBe(1);
     const boundary = embedded ? '.tessiven-flower-conversation' : '.flower-chat-bottom-dock';
     const indicator = () => document.querySelector<HTMLElement>(`${boundary} .flower-model-status-indicator`);
-    await expect.poll(() => indicator()?.textContent).toContain('Sending');
-    expect(indicator()?.dataset.flowerProgressRequestId).toBe(runtime.sent.mock.calls[0][0].client_request_id);
-    expect(indicator()?.dataset.flowerProgressRunId).toBeUndefined();
-    expect(indicator()?.getAnimations({ subtree: true }).some(animation => animation.playState === 'running')).toBe(true);
+    await expect.element(editor()).toHaveValue('Draw a service architecture');
+    expect(document.querySelector('.flower-composer-submit')?.getAttribute('aria-busy')).toBe('true');
+    expect(document.querySelector('[data-flower-transport-outbox-id]')).toBeNull();
+    expect(indicator()).toBeNull();
     runtime.accept();
     const userID = `user:${runtime.sent.mock.calls[0][0].client_request_id}`;
     await expect.poll(() => indicator()?.dataset.flowerProgressRunId).toBe('run');
@@ -140,13 +199,12 @@ it('clears delivery feedback after a rejected send without leaving an endless an
   await editor().fill('Draw this canvas');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   await expect.poll(() => runtime.sent.mock.calls.length).toBe(1);
-  await expect.poll(() => document.querySelector('.flower-model-status-indicator')).not.toBeNull();
+  await expect.poll(() => document.querySelector('.flower-composer-submit')?.getAttribute('aria-busy')).toBe('true');
   runtime.reject();
   await expect.poll(() => document.querySelector('.flower-model-status-indicator')).toBeNull();
-  await expect.element(editor()).toHaveValue('');
-  await expect.element(page.getByRole('button', { name: 'Restore to empty editor', exact: true })).toBeEnabled();
-  await page.getByRole('button', { name: 'Restore to empty editor', exact: true }).click();
   await expect.element(editor()).toHaveValue('Draw this canvas');
+  expect(document.querySelector('.flower-composer-submit')?.getAttribute('aria-busy')).not.toBe('true');
+  await expect.element(page.getByRole('button', { name: 'Retry send', exact: true })).toBeEnabled();
 });
 
 it('keeps pending delivery scoped to the originating canvas while another canvas remains editable', async () => {
@@ -156,15 +214,45 @@ it('keeps pending delivery scoped to the originating canvas while another canvas
   await editor().fill('Draw commerce');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   await expect.poll(() => runtime.sent.mock.calls.length).toBe(1);
-  await expect.poll(() => document.querySelector('.flower-model-status-indicator')).not.toBeNull();
+  await expect.poll(() => document.querySelector('.flower-composer-submit')?.getAttribute('aria-busy')).toBe('true');
   runtime.setRequest({ selection: { canvas_id: 'analytics', version_id: 1, object_refs: [] }, labels: {}, nonce: 1 });
   await expect.poll(() => document.querySelector('.flower-model-status-indicator')).toBeNull();
   await editor().fill('Analytics draft');
   runtime.setRequest({ selection: { canvas_id: 'commerce', version_id: 1, object_refs: [] }, labels: {}, nonce: 2 });
-  await expect.poll(() => document.querySelector('.flower-model-status-indicator')?.textContent).toContain('Sending');
+  await expect.poll(() => document.querySelector('.flower-composer-submit')?.getAttribute('aria-busy')).toBe('true');
+  await expect.element(editor()).toHaveValue('Draw commerce');
   expect(runtime.sent).toHaveBeenCalledTimes(1);
   runtime.reject();
   await expect.poll(() => document.querySelector('.flower-model-status-indicator')).toBeNull();
   runtime.setRequest({ selection: { canvas_id: 'analytics', version_id: 1, object_refs: [] }, labels: {}, nonce: 3 });
   await expect.element(editor()).toHaveValue('Analytics draft');
 });
+
+for (const embedded of [false, true]) {
+  it.each([1200, 390])(`keeps Send geometry and accessible loading stable in ${embedded ? 'canvas replies' : 'full Flower'} at %s px`, async width => {
+    await page.viewport(width, 800);
+    const runtime = mount(embedded);
+    await expect.element(editor()).toBeVisible();
+    await editor().fill('Preserve button size');
+    const button = () => document.querySelector<HTMLButtonElement>('.flower-composer-submit')!;
+    const size = () => { const rect = button().getBoundingClientRect(); return [rect.width, rect.height]; };
+    const originalSize = size();
+    expect(originalSize[0]).toBeGreaterThanOrEqual(28);
+    expect(originalSize[1]).toBeGreaterThanOrEqual(28);
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect.poll(() => runtime.sent.mock.calls.length).toBe(1);
+    expect(size()).toEqual(originalSize);
+    expect(button().getAttribute('aria-busy')).toBe('true');
+    expect(button().disabled).toBe(true);
+    expect(button().getAttribute('aria-label')).toBe('Sending');
+    await editor().fill('New editable draft');
+    expect(document.activeElement).toBe(document.querySelector('.flower-composer textarea'));
+    runtime.accept();
+    await expect.poll(() => button().getAttribute('aria-busy')).not.toBe('true');
+    expect(size()).toEqual(originalSize);
+    expect(button().disabled).toBe(false);
+    expect(button().getAttribute('aria-label')).toBe('Send');
+    await expect.element(editor()).toHaveValue('New editable draft');
+    if (width === 390) await page.screenshot({ element: host, path: `__screenshots__/flower-send-button-${embedded ? 'canvas' : 'full'}-narrow.png` });
+  });
+}

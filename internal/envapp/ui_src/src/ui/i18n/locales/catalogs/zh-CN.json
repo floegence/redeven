@@ -5326,6 +5326,8 @@
       "composerReferenceAdded": "已引用 {path}。",
       "composerReferenceExists": "{path} 已在引用列表中。",
       "pendingSending": "发送中",
+      "pendingQueueAdmission": "待入列",
+      "sendPreparationRecoveryDescription": "此消息在重启前尚未发送。请恢复到输入框后重新提交。",
       "pendingQueued": "已排队",
       "queuedSendNow": "立即发送",
       "queuedSendNowDescription": "停止当前回复并立即发送此排队消息",

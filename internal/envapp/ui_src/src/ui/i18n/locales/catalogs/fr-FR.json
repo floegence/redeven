@@ -5326,6 +5326,8 @@
       "composerReferenceAdded": "{path} ajouté aux références.",
       "composerReferenceExists": "{path} est déjà référencé.",
       "pendingSending": "Envoi en cours",
+      "pendingQueueAdmission": "En attente d’ajout à la file",
+      "sendPreparationRecoveryDescription": "Ce message n’a pas été envoyé avant le redémarrage. Restaurez-le dans le champ de saisie, puis envoyez-le à nouveau.",
       "pendingQueued": "En file d’attente",
       "queuedSendNow": "Envoyer maintenant",
       "queuedSendNowDescription": "Arrêter la réponse en cours et envoyer ce message en attente maintenant",

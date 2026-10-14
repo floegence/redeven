@@ -5326,6 +5326,8 @@
       "composerReferenceAdded": "{path} wurde als Verweis hinzugefügt.",
       "composerReferenceExists": "{path} ist bereits referenziert.",
       "pendingSending": "Wird gesendet",
+      "pendingQueueAdmission": "Wartet auf Aufnahme in die Warteschlange",
+      "sendPreparationRecoveryDescription": "Diese Nachricht wurde vor dem Neustart nicht gesendet. Stellen Sie sie im Eingabefeld wieder her und senden Sie sie erneut.",
       "pendingQueued": "In Warteschlange",
       "queuedSendNow": "Jetzt senden",
       "queuedSendNowDescription": "Aktuelle Antwort stoppen und diese wartende Nachricht jetzt senden",

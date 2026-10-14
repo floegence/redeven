@@ -5326,6 +5326,8 @@
       "composerReferenceAdded": "已引用 {path}。",
       "composerReferenceExists": "{path} 已在引用清單中。",
       "pendingSending": "傳送中",
+      "pendingQueueAdmission": "待加入佇列",
+      "sendPreparationRecoveryDescription": "此訊息在重新啟動前尚未傳送。請還原至輸入框後重新提交。",
       "pendingQueued": "已排入佇列",
       "queuedSendNow": "立即傳送",
       "queuedSendNowDescription": "停止目前回覆並立即傳送此排隊訊息",

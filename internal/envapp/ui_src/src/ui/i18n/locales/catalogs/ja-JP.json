@@ -5326,6 +5326,8 @@
       "composerReferenceAdded": "{path} を参照に追加しました。",
       "composerReferenceExists": "{path} はすでに参照されています。",
       "pendingSending": "送信中",
+      "pendingQueueAdmission": "キューへの追加待ち",
+      "sendPreparationRecoveryDescription": "このメッセージは再起動前に送信されていません。入力欄に復元して、もう一度送信してください。",
       "pendingQueued": "キュー済み",
       "queuedSendNow": "今すぐ送信",
       "queuedSendNowDescription": "現在の返信を停止して、この待機中のメッセージを今すぐ送信",
