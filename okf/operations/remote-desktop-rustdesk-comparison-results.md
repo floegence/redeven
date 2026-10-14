@@ -8,13 +8,15 @@ timestamp: 2026-10-13T09:04:00Z
 # Summary
 
 The primary qualification task owns this comparison contract. Complete RustDesk
-parity remains unaccepted. The current published DRM cadence candidate and
-its remaining latency, quality and resource failures are recorded in the
-[v0.22.43 diagnostics](remote-desktop-rustdesk-v43-results.md). The software VP9
-`v0.22.40` rounds below remain historical comparison evidence. Equal application
-window sizes do not establish equal content viewports. Lower quality, omitted
-SSH costs or failed samples cannot satisfy acceptance; each successor needs
-published-artifact validation and a fresh real-window comparison.
+parity remains unaccepted. Published native `v0.22.45` now dispatches default
+Host keys immediately and has been deployed to udesk26; the fresh paired
+measurements below show lower idle median latency and higher moving frame rate,
+but the dynamic P95 and long-tail stalls remain worse under the observed SSH
+Wi-Fi impairment. The current release therefore does not satisfy the target.
+The earlier VP9 and DRM cadence rounds remain historical comparison evidence.
+Equal application window sizes do not establish equal content viewports. Lower
+quality, omitted SSH costs or failed samples cannot satisfy acceptance; each
+successor needs published-artifact validation and a fresh real-window comparison.
 
 # Contract
 
@@ -82,6 +84,35 @@ Candidate first-round idle and motion P95 remain worse than the paired baseline.
 Higher FPS and matched median improvements do not establish every acceptance
 boundary. Earlier expired scenes, incomplete CUA batches and concurrent encoding
 remain invalid trials, including `r3-redeven-idle-retry6`.
+
+## Published v0.22.45 Host-Input Pair
+
+The current source commit is `79bdd9dc9`, consuming the released native module
+`v0.22.45`. The immutable udesk26 Runtime image is
+`5f8c6e6fe2c02d9debeabb7f6fd2083976424f3cbb6832a065a457c5dea31755`; the
+installed root service is bound to that image and the published v0.22.45 media
+archive. Both applications stayed in ordinary 1024 × 720 logical windows, and
+the RustDesk baseline remained direct LAN on port 24441. The paired window
+capture used fresh marker calibration and retained every source and observed
+input.
+
+| Product / workload | Matched inputs | P50 / P95 latency ms | Presented FPS | Gaps >250 ms |
+| --- | ---: | ---: | ---: | ---: |
+| RustDesk / idle | 100 / 100 | 108.52 / 149.71 | n/a | 0 |
+| Redeven / idle | 100 / 100 | 91.02 / 150.22 | n/a | 0 |
+| RustDesk / motion | 100 / 100 | 134.62 / 163.46 | 33.79 | 0 |
+| Redeven / motion | 99 / 100 | 136.81 / 254.98 | 44.58 | 3 |
+
+The Redeven idle median is 16% lower and moving FPS is 32% higher, while the
+moving P95 is 56% higher and one source input was unmatched. A second RustDesk
+round under the same changing Wi-Fi conditions measured 108.52/149.71 ms idle
+and 134.62/163.46 ms motion; it confirms the network varied during the run but
+does not erase the candidate's long-tail failure. A bounded two-frame credit
+diagnostic reduced one observed maximum presentation gap to 234 ms but reduced
+moving FPS to 33.17 and left P95 at 258.04 ms, so it was discarded and the
+published four-frame configuration was restored. Increasing the SSH HTTP/2
+receive window was also rejected after a controlled sample reached 11.48 FPS
+and 1626.74 ms P95. These experiments are retained as diagnostics only.
 
 ## Resource Boundary
 
