@@ -84,5 +84,18 @@ describe('Flower input response presentation', () => {
     expect(rows[2]?.textContent).toContain('Answer hidden');
     expect(receipt.querySelector('.flower-input-request-choice')).toBeNull();
     expect(receipt.textContent).not.toContain('secret-token');
+    expect(getComputedStyle(receipt).fontSize).toBe('14px');
+    expect(getComputedStyle(receipt.querySelector('.flower-input-response-status')!).fontSize).toBe('12px');
+    for (const content of receipt.querySelectorAll('.flower-input-response-question, .flower-input-response-answer')) {
+      expect(getComputedStyle(content).fontSize).toBe('14px');
+      expect(parseFloat(getComputedStyle(content).lineHeight)).toBeGreaterThanOrEqual(22);
+    }
+    const editor = runtime.querySelector<HTMLTextAreaElement>('.flower-composer textarea')!;
+    expect(getComputedStyle(editor).fontSize).toBe('14px');
+    expect(parseFloat(getComputedStyle(editor).lineHeight)).toBeGreaterThanOrEqual(22);
+    await page.screenshot({ element: runtime, path: '__screenshots__/flower-reading-14px-receipt.png' });
+    await page.viewport(375, 900);
+    await waitFor(() => receipt.getBoundingClientRect().width < 375);
+    expect(receipt.scrollWidth).toBeLessThanOrEqual(receipt.clientWidth + 1);
   });
 });

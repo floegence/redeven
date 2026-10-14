@@ -3363,7 +3363,7 @@
 }
 
 .flower-message-bubble {
-  --flower-message-font-size: 0.9375rem;
+  --flower-message-font-size: 0.875rem;
   --flower-message-line-height: 1.75;
   max-width: 100%;
   min-width: 0;
@@ -3432,9 +3432,9 @@
 
 .flower-input-response-status {
   color: color-mix(in srgb, var(--muted-foreground) 82%, var(--foreground) 18%);
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   font-weight: 750;
-  line-height: 1.2;
+  line-height: 1.4;
 }
 
 .flower-input-response-list {
@@ -3459,9 +3459,9 @@
 
 .flower-input-response-question {
   color: color-mix(in srgb, var(--muted-foreground) 88%, var(--foreground) 12%);
-  font-size: 0.75rem;
+  font-size: inherit;
   font-weight: 560;
-  line-height: 1.4;
+  line-height: 1.6;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
@@ -3470,9 +3470,9 @@
   min-width: 0;
   margin: 0;
   color: inherit;
-  font-size: var(--floe-type-body);
+  font-size: inherit;
   font-weight: 650;
-  line-height: 1.45;
+  line-height: 1.6;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
@@ -8617,13 +8617,13 @@ button.flower-composer-context-source:focus-visible,
 .flower-composer textarea,
 .flower-composer input[type='password'] {
   cursor: text;
+  font-size: 0.875rem;
+  line-height: 1.6;
 }
 
 .flower-composer textarea {
   display: block;
-  min-height: var(--floe-line-body);
-  font-size: var(--floe-type-body);
-  line-height: var(--floe-line-body);
+  min-height: 1.6em;
   resize: none;
 }
 
