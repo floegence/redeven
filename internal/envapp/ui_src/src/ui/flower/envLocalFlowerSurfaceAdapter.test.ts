@@ -132,6 +132,37 @@ it('loads authorized platform models without exposing editable provider credenti
   expect(fetchMock.mock.calls.some(([url]) => url === '/_redeven_proxy/api/ai/current_model')).toBe(true);
 });
 
+it('keeps ChatGPT account authentication unavailable in a remote Desktop session', async () => {
+  fetchMock.mockImplementation(async (url: string) => {
+    if (url === '/_redeven_proxy/api/settings') return jsonResponse({
+      ai: {
+        providers: [{
+          id: 'openai', type: 'openai', auth_method: 'chatgpt', account_id: 'saved-account',
+          models: [{ model_name: 'gpt-6.1-sol' }],
+        }],
+      },
+      auth_capabilities: { openai_chatgpt: { available: true, binding_id: 'stale-local-binding' } },
+      chatgpt_accounts: { openai: { account_id: 'saved-account', email: 'person@example.com', state: 'ready' } },
+    });
+    throw new Error(`Unexpected request: ${url}`);
+  });
+
+  const adapter = createEnvLocalFlowerSurfaceAdapter({
+    envPublicID: 'remote-env',
+    envLabel: 'Remote Environment',
+    rpc: { ai: {} } as any,
+    desktopSessionTargetRoute: 'remote_desktop',
+  });
+
+  const snapshot = await adapter.loadSettings();
+  expect(snapshot.auth_capabilities?.openai_chatgpt).toMatchObject({
+    available: false,
+    reason: 'local_host_required',
+  });
+  expect(snapshot.chatgpt_accounts).toBeUndefined();
+  expect(snapshot.model_profile?.providers[0]).toMatchObject({ auth_method: 'chatgpt' });
+});
+
 it('keeps platform synchronization failures silent and refreshes the current snapshot', async () => {
   let recovered = false;
   let modelReads = 0;

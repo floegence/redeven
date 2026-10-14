@@ -79,6 +79,23 @@ for (const [local, locale, width, dark] of [
   });
 }
 
+it('does not render a ChatGPT login panel for an existing remote account binding', async () => {
+  const provider: FlowerProviderDraft = {
+    id: 'openai',
+    type: 'openai',
+    auth_method: 'chatgpt',
+    account_id: 'saved-account',
+    chatgpt_account: { account_id: 'saved-account', email: 'person@example.com', state: 'ready', welcome_acknowledged: true },
+    models: [{ model_name: 'gpt-6.1-sol' }],
+  };
+  const { copy } = await mount(false, 'en-US', 1280, false, provider, undefined, 'edit');
+  const accountTab = page.getByRole('button', { name: copy.chatGPT.account, exact: true });
+  await expect.element(accountTab).toBeDisabled();
+  await expect.element(page.getByText(copy.chatGPT.localOnly, { exact: true })).toBeVisible();
+  expect(document.querySelector('.flower-provider-account')).toBeNull();
+  expect(document.body.textContent).not.toContain(copy.chatGPT.continue);
+});
+
 it('keeps draft selection, search and focus when a verified replacement account arrives', async () => {
   let finish!: (result: Awaited<ReturnType<FlowerChatGPTAuth>>) => void;
   const auth = vi.fn<FlowerChatGPTAuth>(async action => action === 'start' ? { id: 'new-attempt', state: 'waiting' } : action === 'status' ? new Promise(resolve => { finish = resolve; }) : {});
