@@ -98,7 +98,9 @@ const pointer = hostApplicationPointer.createRemotePointer({
 });
 function revoke() { stats = undefined; refreshStats(); painted = false; lockedFrame = 0; canvas.removeAttribute('data-painted'); pointer.reset(); input.bindTarget(null); }
 function updateTransitionControls() {
-  input.setTextInputMode(state === 'locked' ? 'physical-only' : state === 'active' && textInput === 'paste' && clientTextAvailable() ? 'text' : 'physical');
+  // The host owns its input method. Local composition is admitted only after
+  // explicitly choosing local text input; host keys never wait for text events.
+  input.setTextInputMode(state === 'active' && textInput === 'paste' && clientTextAvailable() ? 'text' : 'physical-only');
   player?.setInteraction(!panel.open && (authorized(generation) || unlockAuthorized(generation)));
   canvas.dataset.mode = session.mode;
   for (const id of ['display', 'mode', 'fit', 'pixels', 'quality', 'sound', 'text-input', 'volume']) {
