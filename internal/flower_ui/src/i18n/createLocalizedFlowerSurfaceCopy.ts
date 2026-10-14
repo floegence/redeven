@@ -872,6 +872,9 @@ function createLocalizedFlowerProviderDialogCopy(i18n: FlowerSurfaceTranslator):
     chatGPT: {
       changeAccount: t(i18n, k('dialogChatGPTChangeAccount')),
       savedAccounts: t(i18n, k('dialogChatGPTSavedAccounts')),
+      continueSetup: t(i18n, k('dialogChatGPTContinueSetup')),
+      unboundSignIn: t(i18n, k('dialogChatGPTUnboundSignIn')),
+      accountsUnavailable: t(i18n, k('dialogChatGPTAccountsUnavailable')),
       chooseAccount: t(i18n, k('dialogChatGPTChooseAccount')),
       savedSignIn: t(i18n, k('dialogChatGPTSavedSignIn')),
       usageUnavailable: t(i18n, k('dialogChatGPTUsageUnavailable')),

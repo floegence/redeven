@@ -7,7 +7,7 @@ import { render } from 'solid-js/web';
 import { page, userEvent } from 'vitest/browser';
 import { afterEach, expect, it, vi } from 'vitest';
 import { FlowerSettingsSurface } from '../../../../flower_ui/src/settings/FlowerSettingsSurface';
-import type { FlowerSettingsDraft, FlowerSettingsSnapshot } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import type { FlowerSettingsDraft, FlowerSettingsSnapshot, FlowerChatGPTAuth, FlowerSurfaceAdapter } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { createLocalizedFlowerSurfaceCopy } from '../../../../flower_ui/src/i18n/createLocalizedFlowerSurfaceCopy';
 import { createI18nHelpers } from './i18n/createI18n';
 import { loadEnvAppDictionary, type EnvAppTranslationKey } from './i18n/locales';
@@ -47,7 +47,7 @@ function settings(): FlowerSettingsSnapshot {
   };
 }
 
-async function mount(locale: RedevenLocale = 'en-US', width = 1000, dark = false, initial = settings()) {
+async function mount(locale: RedevenLocale = 'en-US', width = 1000, dark = false, initial = settings(), auth?: FlowerChatGPTAuth, loadAccounts?: FlowerSurfaceAdapter['loadChatGPTAccounts']) {
   await page.viewport(1280, 960);
   const i18n = createI18nHelpers(locale, await loadEnvAppDictionary(locale));
   const copy = createLocalizedFlowerSurfaceCopy({ locale,
@@ -79,7 +79,7 @@ async function mount(locale: RedevenLocale = 'en-US', width = 1000, dark = false
     onMount(() => theme.selectShellTheme(dark ? 'dark' : 'light', dark ? 'porcelain-dark' : 'porcelain-light'));
     return null;
   }
-  dispose = render(() => <FloeProvider config={{ theme: { shellPresets: builtInShellThemePresets } }}><SettingsTheme /><FlowerSettingsSurface snapshot={snapshot()} copy={copy.settings} computerCopy={copy.computer}
+  dispose = render(() => <FloeProvider config={{ theme: { shellPresets: builtInShellThemePresets } }}><SettingsTheme /><FlowerSettingsSurface snapshot={snapshot()} chatGPTAuth={auth} loadChatGPTAccounts={loadAccounts} copy={copy.settings} computerCopy={copy.computer}
     onSaveDefaultPermission={savePermission} onSaveComputerUseEnabled={saveComputer}
     onSaveAutoUpdateModelCatalog={saveModelUpdates}
     onSaveModelProfile={saveModel}
@@ -561,4 +561,48 @@ it('confirms final account removal as a draft and preserves it through account u
   setSnapshot({ ...initial, chatgpt_accounts: { openai: { ...initial.chatgpt_accounts!.openai, state: 'temporarily_unavailable' } } });
   expect(host.querySelectorAll('.flower-settings-provider-card')).toHaveLength(0);
   expect(saveModel.mock.calls).toHaveLength(0);
+});
+
+it('recovers a saved unbound login from empty settings without automatically saving a provider', async () => {
+  const saved = { account_id: 'saved-unbound', email: 'saved@example.com', state: 'plan_permission_required' as const, welcome_acknowledged: true };
+  const auth = vi.fn<FlowerChatGPTAuth>(async () => ({}));
+  const load = vi.fn(async () => ({ accounts: {}, saved_accounts: [saved] }));
+  const { copy, saveModel } = await mount('zh-CN', 1000, false, { defaults: { permission_type: 'approval_required' }, model_profile: null, provider_secrets: [], auth_capabilities: { openai_chatgpt: { available: true, binding_id: 'local' } } }, auth, load);
+  await expect.element(page.getByText(saved.email, { exact: true })).toBeVisible();
+  await userEvent.click(host.querySelector<HTMLButtonElement>('[data-flower-saved-account] button')!);
+  await expect.element(page.getByRole('dialog')).toBeVisible();
+  await expect.element(page.getByText(saved.email, { exact: true }).last()).toBeVisible();
+  await expect.element(page.getByRole('button', { name: copy.settings.dialog.chatGPT.reauthorize, exact: true })).toBeVisible();
+  expect(auth).not.toHaveBeenCalled();
+  expect(saveModel).not.toHaveBeenCalled();
+});
+
+it('shows account-list failures with retry and never leaks a previous local registry after capability loss', async () => {
+  const saved = { account_id: 'unbound', email: 'local@example.com', state: 'ready' as const, welcome_acknowledged: true };
+  let fail = true;
+  const load = vi.fn(async () => { if (fail) throw new Error('Unavailable'); return { accounts: {}, saved_accounts: [saved] }; });
+  const initial: FlowerSettingsSnapshot = { defaults: { permission_type: 'approval_required' }, model_profile: null, provider_secrets: [], auth_capabilities: { openai_chatgpt: { available: true, binding_id: 'local' } } };
+  const { copy, setSnapshot } = await mount('en-US', 340, false, initial, vi.fn(async () => ({})), load);
+  await expect.element(page.getByText(copy.settings.dialog.chatGPT.accountsUnavailable, { exact: true })).toBeVisible();
+  fail = false;
+  await userEvent.click(page.getByRole('button', { name: copy.settings.dialog.chatGPT.retry, exact: true }));
+  await expect.element(page.getByText(saved.email, { exact: true })).toBeVisible();
+  setSnapshot({ ...initial, auth_capabilities: { openai_chatgpt: { available: false } } });
+  await expect.poll(() => host.textContent).not.toContain(saved.email);
+  expect(host.querySelector('[data-flower-saved-account]')).toBeNull();
+});
+
+it('ignores a saved-account response from a replaced trusted binding', async () => {
+  type Accounts = Awaited<ReturnType<NonNullable<FlowerSurfaceAdapter['loadChatGPTAccounts']>>>;
+  let finish!: (result: Accounts) => void;
+  const load = vi.fn(() => new Promise<Accounts>(resolve => { finish = resolve; }));
+  const initial: FlowerSettingsSnapshot = { defaults: { permission_type: 'approval_required' }, model_profile: null, provider_secrets: [], auth_capabilities: { openai_chatgpt: { available: true, binding_id: 'first' } } };
+  const { setSnapshot } = await mount('en-US', 1000, false, initial, vi.fn(async () => ({})), load);
+  await expect.poll(() => load.mock.calls.length).toBe(1);
+  const first = finish;
+  setSnapshot({ ...initial, auth_capabilities: { openai_chatgpt: { available: true, binding_id: 'second' } } });
+  await expect.poll(() => load.mock.calls.length).toBe(2);
+  first({ accounts: {}, saved_accounts: [{ account_id: 'old', email: 'stale@example.com', state: 'ready', welcome_acknowledged: true }] });
+  await new Promise(resolve => setTimeout(resolve, 0));
+  expect(host.textContent).not.toContain('stale@example.com');
 });

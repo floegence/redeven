@@ -141,6 +141,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => ({
   Key: icon('Key'),
   Layers: icon('Layers'),
   Link: icon('Link'),
+  Check: icon('Check'),
   CheckCircle: icon('CheckCircle'),
   Download: icon('Download'),
   Package: icon('Package'),
@@ -214,6 +215,11 @@ vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => ({
       ))}
     </select>
   ),
+}));
+
+vi.mock('../primitives/EnvAppModal', () => ({
+  ConfirmDialog: (props: any) => <Show when={props.open}><div role="dialog"><h2>{props.title}</h2>{props.children}<button onClick={props.onConfirm}>{props.confirmText}</button></div></Show>,
+  Dialog: () => null,
 }));
 
 vi.mock('@floegence/floe-webapp-protocol', () => ({
@@ -348,15 +354,16 @@ vi.mock('./EnvDebugConsoleSettingsPanel', () => ({
   EnvDebugConsoleSettingsPanel: () => <div>Debug Console Panel</div>,
 }));
 
-vi.mock('./settings/AIProviderDialog', () => ({
-  AIProviderDialog: (props: any) => (
+vi.mock('../../../../../flower_ui/src/settings/FlowerProviderDialog', () => ({
+  FlowerProviderDialog: (props: any) => (
     <div
       data-testid="ai-provider-dialog"
       data-open={props.open ? 'true' : 'false'}
-      data-provider-key-set={props.keySet ? 'true' : 'false'}
-      data-web-search-key-set={props.webSearchKeySet ? 'true' : 'false'}
+      data-provider-key-set={props.keyConfigured ? 'true' : 'false'}
+      data-web-search-key-set={props.webSearchKeyConfigured ? 'true' : 'false'}
     >
-      <button type="button" onClick={props.onConfirm} disabled={!props.open || !props.canInteract || !props.canAdmin || props.aiSaving}>
+      <span>{props.error}</span>
+      <button type="button" onClick={() => props.onConfirm(props.provider)} disabled={!props.open || props.disabled || props.saving}>
         Confirm provider
       </button>
     </div>
@@ -909,8 +916,8 @@ describe('EnvSettingsPage', () => {
     });
 
     const flowerCard = host.querySelector('[data-settings-card="Flower"]');
-    expect(flowerCard?.textContent).toContain('OpenAI / gpt-5.4');
-    expect(flowerCard?.textContent).toContain('Add Provider');
+    await vi.waitFor(() => expect(flowerCard?.textContent).toContain('gpt-5.4'));
+    expect(flowerCard?.textContent).toContain('Add provider');
     expect(flowerCard?.querySelectorAll('[role="radio"]')).toHaveLength(3);
     expect(flowerCard?.textContent).not.toContain('Local AI Profile on this Mac');
   });
@@ -1145,7 +1152,7 @@ describe('EnvSettingsPage', () => {
     confirmButton?.click();
 
     await vi.waitFor(() => {
-      expect(notificationMocks.error).toHaveBeenCalledWith('Save failed', 'current_model_id is not in providers[].models[]: missing/provider-model');
+      expect(host.textContent).toContain('current_model_id is not in providers[].models[]: missing/provider-model');
     });
     expect(localApiMocks.fetchLocalApiJSON).not.toHaveBeenCalledWith(
       '/_redeven_proxy/api/ai/provider_bundle',

@@ -52,6 +52,7 @@ export type FlowerProviderDialogProps = Readonly<{
   webSearchKeyConfigured: boolean;
   error?: string;
   saving?: boolean;
+  disabled?: boolean;
   onOpenChange: (open: boolean) => void;
   onConfirm: (draft: FlowerProviderDraft) => void | Promise<void>;
 }>;
@@ -81,7 +82,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
   onCleanup(invalidateDiscovery);
   const discover = async () => {
     const draft = store.draft;
-    if (!props.open || !draft || !props.onDiscoverModels || loading()) return;
+    if (!props.open || props.disabled || !draft || !props.onDiscoverModels || loading()) return;
     const sequence = ++discoverySequence;
     const identity = discoveryIdentity(draft);
     lastDiscoveryIdentity = identity;
@@ -153,7 +154,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
   const [accountsLoading, setAccountsLoading] = createSignal(false);
   const [accountsError, setAccountsError] = createSignal('');
   let accountsSequence = 0;
-  const refreshSavedAccounts = async () => {
+  const performSavedAccountsRefresh = async () => {
     const load = props.loadChatGPTAccounts;
     if (!load || !props.open || !chatGPTEnabled()) return;
     const sequence = ++accountsSequence;
@@ -166,11 +167,18 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
       const selected = result.saved_accounts.find(item => item.account_id === store.draft?.account_id);
       if (selected) updateProvider({ chatgpt_account: selected });
     } catch {
-      if (sequence === accountsSequence && props.open) setAccountsError(copy().chatGPT.storageUnavailable);
+      if (sequence === accountsSequence && props.open) setAccountsError(copy().chatGPT.accountsUnavailable);
     } finally { if (sequence === accountsSequence) setAccountsLoading(false); }
   };
+  let accountsRequest: Promise<void> | undefined;
+  const refreshSavedAccounts = (): Promise<void> => {
+    if (accountsRequest) return accountsRequest;
+    const request = performSavedAccountsRefresh().finally(() => { if (accountsRequest === request) accountsRequest = undefined; });
+    accountsRequest = request;
+    return request;
+  };
   createEffect(on(() => [props.open, props.chatGPTBindingID, chatGPTEnabled()] as const, () => {
-    accountsSequence++; setSavedAccounts([]); setAccountsError(''); setAccountsLoading(false);
+    accountsSequence++; accountsRequest = undefined; setSavedAccounts([]); setAccountsError(''); setAccountsLoading(false);
     if (props.open && chatGPTEnabled()) void refreshSavedAccounts();
   }));
   createEffect(on(() => props.chatGPTAccounts, next => {
@@ -225,7 +233,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
   const signOut = async () => {
     const id = store.draft?.account_id;
     const auth = props.chatGPTAuth;
-    if (!id || !auth || accountBusy()) return;
+    if (!id || !auth || props.disabled || accountBusy()) return;
     cancelAuthorization(); setSigningOut(true); setAuthError(''); setConfirmSignOut(false);
     try {
       const result = await auth('sign-out', { scope_id: crypto.randomUUID(), account_id: id });
@@ -252,7 +260,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
   const welcomeMotion = createFlowerActivityDisclosureMotion(showWelcome);
   const startAuthorization = async (newAccount = false) => {
     const auth = props.chatGPTAuth;
-    if (!auth || !chatGPTEnabled() || !props.open || accountBusy()) return;
+    if (!auth || !chatGPTEnabled() || props.disabled || !props.open || accountBusy()) return;
     const prior = pendingAttempt;
     authSequence++; clearTimeout(pollTimer); setAuthError('');
     const sequence = authSequence;
@@ -310,7 +318,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
   createEffect(() => {
     const auth = props.chatGPTAuth, binding = props.chatGPTBindingID;
     const open = props.open, enabled = chatGPTEnabled();
-    if (auth !== currentAuth || binding !== currentBinding || !open || !enabled) cancelAuthorization();
+    if (auth !== currentAuth || binding !== currentBinding || !open || !enabled || props.disabled) cancelAuthorization();
     if (!open || bindingObserved && binding !== currentBinding) {
       invalidateDiscovery();
     }
@@ -336,13 +344,16 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
     if (props.open) {
       cancelAuthorization();
       invalidateDiscovery(); lastDiscoveryIdentity = undefined;
-      const initial = untrack(() => props.provider ? { ...props.provider, model_defaults: props.providerDefaults?.[props.provider.type] ?? props.provider.model_defaults, chatgpt_account: props.chatGPTAccount } : null);
+      const initial = untrack(() => props.provider ? { ...props.provider, model_defaults: props.providerDefaults?.[props.provider.type] ?? props.provider.model_defaults, chatgpt_account: props.chatGPTAccount ?? props.provider.chatgpt_account } : null);
       if (initial && props.mode === 'create' && initial.type === 'openai' && !initial.auth_method) initial.auth_method = untrack(chatGPTEnabled) ? 'chatgpt' : 'api_key';
       setStore('draft', reconcile(initial));
       setAuthError('');
       setCustomModelName(''); setQuery(''); setDiscoveryError('');
       setEditingModelName('');
-      setSelectedProviderType(props.mode === 'edit' && initial ? initial.type : null);
+      setSelectedProviderType(initial && (props.mode === 'edit' || initial.auth_method === 'chatgpt' && initial.account_id) ? initial.type : null);
+      if (props.mode === 'create' && initial?.auth_method === 'chatgpt' && initial.chatgpt_account?.state === 'ready') {
+        queueMicrotask(() => { if (props.open && store.draft?.id === initial.id) void discover(); });
+      }
     }
   }));
 
@@ -486,8 +497,8 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
             variant="default"
             icon={Save}
             loading={props.saving}
-            disabled={!selectedProviderType() || props.saving || Boolean(missingCredential()) || incompleteModel() || Boolean(store.draft?.model_selection && !store.draft.model_selection.selected_models)}
-            onClick={() => { if (selectedProviderType() && store.draft && !missingCredential() && !incompleteModel()) void props.onConfirm(store.draft); }}
+            disabled={props.disabled || !selectedProviderType() || props.saving || Boolean(missingCredential()) || incompleteModel() || Boolean(store.draft?.model_selection && !store.draft.model_selection.selected_models)}
+            onClick={() => { if (!props.disabled && !props.saving && selectedProviderType() && store.draft && !missingCredential() && !incompleteModel()) void props.onConfirm(store.draft); }}
           >
             {copy().saveProvider}
           </Button>
@@ -495,7 +506,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
       )}
     >
       <Show when={store.draft} fallback={<div class="flower-body-copy text-muted-foreground">{copy().providerRemoved}</div>}>
-        <div class="flower-provider-workspace">
+        <fieldset class="flower-provider-workspace" disabled={props.disabled || props.saving}>
           <nav class="flower-provider-picker" aria-label={copy().providerTypeTitle} data-flower-skip-discovery>
             <h3 class="flower-provider-picker-title">{copy().providerTypeTitle}</h3>
             <div class="flower-provider-picker-options">
@@ -548,7 +559,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                             disabled={authorizing() || accountBusy() || accountsLoading()} onSelect={selectAccount} />
                         </div>
                       </Show>
-                      <Show when={accountsError()}><div role="alert" class="flower-provider-account-error">{accountsError()}<Button size="sm" variant="ghost" onClick={() => void refreshSavedAccounts()}>{copy().chatGPT.retry}</Button></div></Show>
+                      <Show when={accountsError()}><div role="alert" class="flower-provider-account-error flex flex-wrap items-center gap-3"><p>{accountsError()}</p><Button size="sm" variant="ghost" onClick={() => void refreshSavedAccounts()}>{copy().chatGPT.retry}</Button></div></Show>
                       <div class="flower-provider-account" data-connected={connected() || undefined} data-state={authorizing() ? authProgress() : authError() ? 'failed' : account()?.state === 'ready' ? 'connected' : 'idle'}>
                         <div class="flower-provider-account-heading">
                           <div class="flower-provider-account-symbol" aria-hidden="true">
@@ -557,8 +568,14 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                             </Show>
                           </div>
                           <div class="flower-provider-account-identity" aria-live="polite" aria-atomic="true">
-                            <h4>{authorizing() ? copy().chatGPT[authProgress()] : account()?.email || copy().chatGPT.connectTitle}</h4>
-                            <p class="flower-provider-account-description">{authorizing() ? authProgress() === 'waiting' ? copy().chatGPT.waitingDescription : copy().chatGPT.progressDescription : accountDescription()}</p>
+                            <Show when={authorizing()} fallback={<><h4>{account()?.email || copy().chatGPT.connectTitle}</h4><p class="flower-provider-account-description">{accountDescription()}</p></>}>
+                              <div class="flower-provider-auth-progress">
+                                <For each={['preparing', 'waiting', 'verifying'] as const}>{phase => <div aria-hidden={authProgress() !== phase} style={{ visibility: authProgress() === phase ? 'visible' : 'hidden' }}>
+                                  <h4>{copy().chatGPT[phase]}</h4>
+                                  <p class="flower-provider-account-description">{phase === 'waiting' ? copy().chatGPT.waitingDescription : copy().chatGPT.progressDescription}</p>
+                                </div>}</For>
+                              </div>
+                            </Show>
                           </div>
                           <Show when={!authorizing() && account()?.state === 'ready'}><span class="flower-provider-account-connected"><Check class="h-3 w-3" aria-hidden="true" />{copy().chatGPT.connected}</span></Show>
                         </div>
@@ -844,7 +861,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
               </div>
             </Show>
           </div>
-        </div>
+        </fieldset>
       </Show>
     </Dialog>
     <ConfirmDialog open={confirmSignOut() && props.open} onOpenChange={setConfirmSignOut} title={copy().chatGPT.signOut}

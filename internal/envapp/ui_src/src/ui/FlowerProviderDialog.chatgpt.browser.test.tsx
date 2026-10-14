@@ -26,6 +26,7 @@ async function mount(local: boolean, locale: RedevenLocale, width: number, dark:
   }).settings.dialog;
   const onConfirm = vi.fn();
   const [open, setOpen] = createSignal(true);
+  const [available, setAvailable] = createSignal(local);
   const [account, setAccount] = createSignal(provider?.chatgpt_account);
   const [registry, setRegistry] = createSignal<readonly FlowerChatGPTAccount[] | undefined>();
   const [binding, setBinding] = createSignal('verified-local-channel');
@@ -33,7 +34,7 @@ async function mount(local: boolean, locale: RedevenLocale, width: number, dark:
   function Theme() { const theme = useTheme(); onMount(() => theme.selectShellTheme(dark ? 'dark' : 'light', dark ? 'porcelain-dark' : 'porcelain-light')); return null; }
   dispose = render(() => <FloeProvider config={{ theme: { shellPresets: builtInShellThemePresets } }}><Theme /><FlowerProviderDialog
     open={open()} mode={mode ?? (provider ? 'edit' : 'create')} provider={provider ?? { id: 'openai', type: 'openai', models: [] }}
-    copy={copy} chatGPTAvailable={local} chatGPTBindingID={binding()} chatGPTAccount={account()} chatGPTAccounts={registry()}
+    copy={copy} chatGPTAvailable={available()} chatGPTBindingID={binding()} chatGPTAccount={account()} chatGPTAccounts={registry()}
     loadChatGPTAccounts={loadAccounts}
     chatGPTAuth={auth ?? vi.fn(async () => ({ id: 'attempt', state: 'waiting' }))}
     onDiscoverModels={async () => ({ models: provider?.catalog_models ?? [{ model_name: 'gpt-6.1-sol', context_window: 1050000, input_modalities: ['text', 'image'] }] })}
@@ -41,7 +42,7 @@ async function mount(local: boolean, locale: RedevenLocale, width: number, dark:
   await expect.element(page.getByRole('dialog')).toBeVisible();
   if (!provider || mode === 'create') await userEvent.click(document.querySelector<HTMLButtonElement>('[aria-controls=flower-provider-type-openai]')!);
   await expect.poll(() => document.querySelector('[role=dialog]')!.getAnimations({ subtree: true }).every(animation => animation.playState !== 'running')).toBe(true);
-  return { copy, setOpen, setBinding, setAccount, setRegistry, open, onConfirm };
+  return { copy, setOpen, setAvailable, setBinding, setAccount, setRegistry, open, onConfirm };
 }
 
 for (const [local, locale, width, dark] of [
@@ -268,4 +269,38 @@ it('reports unconfirmed cleanup of a failed new sign-in without claiming the exi
   await expect.element(page.getByRole('link', { name: copy.chatGPT.disconnectApps })).toBeVisible();
   await expect.element(page.getByText(copy.chatGPT.connected, { exact: true })).toBeVisible();
   expect(document.body.textContent).not.toContain(copy.chatGPT.revocationUnconfirmed);
+});
+
+for (const [locale, width] of [['zh-CN', 390], ['de-DE', 320], ['en-US', 1280]] as const) {
+  it(`keeps authorization progress geometry and focus stable in ${locale}`, async () => {
+    let status: 'preparing' | 'waiting' | 'verifying' = 'preparing';
+    const auth = vi.fn<FlowerChatGPTAuth>(async action => action === 'start' ? { id: 'progress', state: status } : action === 'status' ? { id: 'progress', state: status } : {});
+    const { copy, setRegistry } = await mount(true, locale, width, false, undefined, auth);
+    await userEvent.click(page.getByRole('button', { name: copy.chatGPT.continue, exact: true }));
+    await expect.poll(() => auth.mock.calls.filter(([action]) => action === 'status').length).toBeGreaterThan(0);
+    const panel = document.querySelector<HTMLElement>('.flower-provider-account')!;
+    const primary = panel.querySelector<HTMLButtonElement>('.flower-provider-account-primary')!;
+    const cancel = page.getByRole('button', { name: copy.chatGPT.cancel, exact: true }).element() as HTMLButtonElement;
+    cancel.focus();
+    const rect = () => [panel.getBoundingClientRect().top, panel.getBoundingClientRect().height, primary.getBoundingClientRect().top, primary.getBoundingClientRect().width];
+    const initial = rect();
+    for (const phase of ['waiting', 'verifying', 'waiting'] as const) {
+      status = phase; setRegistry([]);
+      await expect.poll(() => panel.dataset.state).toBe(phase);
+      expect(rect()).toEqual(initial);
+      expect(panel.querySelector('.flower-provider-account-primary')).toBe(primary);
+      expect(document.activeElement).toBe(cancel);
+    }
+  });
+}
+
+it('cancels an active login and removes account controls when verified capability is revoked', async () => {
+  const auth = vi.fn<FlowerChatGPTAuth>(async action => action === 'start' ? { id: 'revoked', state: 'waiting' } : { state: 'waiting' });
+  const { copy, setAvailable } = await mount(true, 'en-US', 1280, false, undefined, auth);
+  await userEvent.click(page.getByRole('button', { name: copy.chatGPT.continue, exact: true }));
+  await expect.poll(() => auth.mock.calls.some(([action]) => action === 'status')).toBe(true);
+  setAvailable(false);
+  await expect.element(page.getByRole('button', { name: copy.chatGPT.account, exact: true })).toBeDisabled();
+  await expect.poll(() => document.querySelector('.flower-provider-account')).toBeNull();
+  await expect.poll(() => auth.mock.calls.some(([action]) => action === 'cancel')).toBe(true);
 });

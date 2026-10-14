@@ -4335,8 +4335,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (!props.adapter.loadChatGPTAccounts || !snapshot()?.auth_capabilities?.openai_chatgpt.available) return Promise.resolve();
     const binding = snapshot()?.auth_capabilities?.openai_chatgpt.binding_id;
     const request = props.adapter.loadChatGPTAccounts().then(result => {
-      if (!surfaceDisposed && binding === snapshot()?.auth_capabilities?.openai_chatgpt.binding_id) {
-        setSnapshot(previous => previous ? { ...previous, chatgpt_accounts: result.accounts, saved_chatgpt_accounts: result.saved_accounts, account_sign_outs: result.account_sign_outs } : previous);
+      if (!surfaceDisposed && snapshot()?.auth_capabilities?.openai_chatgpt.available === true && binding === snapshot()?.auth_capabilities?.openai_chatgpt.binding_id) {
+        setSnapshot(previous => {
+          if (!previous || JSON.stringify([previous.chatgpt_accounts, previous.saved_chatgpt_accounts, previous.account_sign_outs]) === JSON.stringify([result.accounts, result.saved_accounts, result.account_sign_outs])) return previous;
+          return { ...previous, chatgpt_accounts: result.accounts, saved_chatgpt_accounts: result.saved_accounts, account_sign_outs: result.account_sign_outs };
+        });
       }
     }).catch(() => undefined).finally(() => { if (accountRefresh === request) accountRefresh = null; });
     accountRefresh = request;
@@ -4345,7 +4348,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const accountAction: NonNullable<FlowerSurfaceAdapter['chatGPTAuth']> = async (action, input) => {
     if (!props.adapter.chatGPTAuth) throw new Error('Account actions are unavailable.');
     try { return await props.adapter.chatGPTAuth(action, input); }
-    finally { void refreshAccounts(); }
+    finally { if (action !== 'status' && action !== 'start') void refreshAccounts(); }
   };
   const refreshDirectory = () => props.adapter.loadModelDirectory?.(true).then(directory => { if (!surfaceDisposed) { setModelDirectory(directory); setSnapshot(previous => previous ? withFlowerModelDirectory(previous, directory) : previous); } }).catch(() => undefined);
   const loadSurface = async () => {

@@ -100,7 +100,10 @@ frame is at most 860px, with a 25px title and 40px side padding that contracts t
 16px below 760 CSS pixels. Provider rows share a 14px-radius divided group.
 
 Desktop Flower, embedded Env Flower, and Env App global settings share
-`FlowerModelSettings`; hosts retain persistence and authorization ownership.
+`FlowerModelSettings` and the provider editor described in
+[provider configuration](flower-provider-configuration.md); hosts retain
+persistence and authorization ownership. Saved unbound ChatGPT registrations
+have a Continue setup entry even before the first provider is saved.
 The model group presents identity above evenly sized columns for inputs, context,
 output, and default reasoning. Columns use the full width and become two columns
 on narrow screens. The edit action opens a searchable Floe dialog, grouped by enabled provider.

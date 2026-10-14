@@ -8,7 +8,7 @@ timestamp: 2026-10-05T00:00:00Z
 
 # Summary
 
-Redeven owns provider configuration, credential requirements, and Flower readiness. Ollama and custom OpenAI-compatible endpoints can send without a stored key; other local-profile providers require one. Both editors and the provider-bundle API enforce configuration completeness without inventing stored secrets. Invalid saves leave configuration and credentials unchanged; network or authentication failures remain execution errors. Floret's published thread-runtime contract is unchanged.
+Redeven owns provider configuration, credential requirements, and Flower readiness. Ollama and custom OpenAI-compatible endpoints can send without a stored key; other local-profile providers require one. All settings entrypoints and the provider-bundle API enforce configuration completeness without inventing stored secrets. Invalid saves leave configuration and credentials unchanged; network or authentication failures remain execution errors. Floret's published thread-runtime contract is unchanged.
 
 # Contract
 
@@ -16,7 +16,7 @@ Redeven owns provider configuration, credential requirements, and Flower readine
 
 The shared Flower composer follows the same credential contract as provider execution: a selected Ollama inventory model or configured OpenAI-compatible model can start or continue a conversation without a stored API key. Other local-profile provider types require their configured key. Credential snapshots report actual secret presence; readiness must not manufacture a configured secret or bypass catalog membership. Explicit optional credentials still apply to discovery and execution. Without a key, these endpoints receive no Authorization header and never inherit the host process OpenAI API key. An endpoint that requires authentication still needs its real credential; rejection by that endpoint remains an execution error.
 
-Both provider editors block saving missing required credentials and identify the missing key. The provider-bundle API validates the resulting credential state before changing configuration or secrets, including retained credentials, replacements, explicit deletion, and the last update when a key appears more than once. Blank editor inputs preserve stored keys. Required keys cannot be removed while saving an enabled provider; an optional endpoint key can be removed. A missing Brave key blocks saving a provider with Brave search enabled, but does not disable ordinary chat for a previously saved profile. Invalid structural fields also reject the bundle before writes. These checks validate configuration completeness, not remote service reachability or credential validity.
+The shared provider editor blocks saving missing required credentials and identify the missing key. The provider-bundle API validates the resulting credential state before changing configuration or secrets, including retained credentials, replacements, explicit deletion, and the last update when a key appears more than once. Blank editor inputs preserve stored keys. Required keys cannot be removed while saving an enabled provider; an optional endpoint key can be removed. A missing Brave key blocks saving a provider with Brave search enabled, but does not disable ordinary chat for a previously saved profile. Invalid structural fields also reject the bundle before writes. These checks validate configuration completeness, not remote service reachability or credential validity.
 
 A valid connection may be saved without selected models or a current default. This is a configured connection awaiting explicit model selection; saving does not fabricate a default or contact a supplier. Unknown discovered models require explicit capabilities before they become runnable.
 
@@ -47,4 +47,4 @@ The Go configuration package owns the optional-key policy used by provider execu
 - `redeven:internal/flower_ui/src/providerCredentials.ts` - Shared product readiness and editor credential policy.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.providerReadiness.test.shared.tsx` - New and existing chat sending in DOM and browser tests.
 - `redeven:internal/envapp/ui_src/src/ui/pages/settings/FlowerProviderDialog.test.tsx` - Shared editor credential requirements.
-- `redeven:internal/envapp/ui_src/src/ui/pages/settings/AIProviderDialog.test.tsx` - Environment editor credential requirements.
+- `redeven:internal/envapp/ui_src/src/ui/pages/settings/FlowerSection.browser.test.tsx` - Environment editor credential preservation, replacement and explicit-save failure recovery.

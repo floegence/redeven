@@ -208,7 +208,6 @@ export type AIProviderPreset = Readonly<{
   models: readonly AIProviderModelPreset[];
 }>;
 
-export type AIProviderDialogMode = 'create' | 'edit';
 
 export type AIPreservedUIFields = {
   permission_type?: AIPermissionType;

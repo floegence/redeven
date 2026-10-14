@@ -3,11 +3,12 @@ type: UI Contract
 title: Flower provider configuration
 description: Configure provider access before choosing models, with stable navigation and explicit authentication states.
 tags: [ai, flower, settings, authentication]
-timestamp: 2026-10-13T10:48:00Z
+timestamp: 2026-10-14T00:00:00Z
 ---
 # Summary
 
-The shared Flower dialog and global Env provider editor own provider configuration.
+One shared Flower provider dialog owns provider configuration in Desktop,
+embedded Flower and global Env settings; hosts own admission and persistence.
 Users choose a provider, supply required connection access, and then configure
 models. Unready ChatGPT authorization exposes connection actions only. Provider
 navigation, authentication selection, and model rows retain stable geometry and
@@ -41,8 +42,9 @@ surviving row identity and focus; loading, authorization, errors, and empty sear
 results have distinct visible feedback. Provider changes retain the existing
 authentication cancellation and discovery identity boundaries.
 
-Global Env settings retain their type, connection, models, and advanced sections,
-with the same flat picker and catalog treatment. The catalog includes selected
+Global Env settings use the same provider picker, connection controls and model
+catalog as the other Flower settings entrypoints. Advanced parameters remain
+available through each model's explicit edit control. The catalog includes selected
 custom models and is the single model-selection list; it does not repeat selected
 models in another section. Host permission checks and persistence remain unchanged.
 
@@ -52,7 +54,14 @@ The shared dialog offers ChatGPT account and API key methods. Verified local
 OpenAI drafts default to ChatGPT; existing drafts retain their method. Remote
 settings keep ChatGPT disabled with persistent guidance and no login panel.
 Verification preserves model choices, search and focus. The verified sign-in
-is saved independently of connection editing; a saved-account picker includes
+is saved independently of connection editing. Both settings entrypoints show
+saved unbound registrations even when no providers exist, with an explicit
+Continue setup action. It opens a new connection draft selecting the saved
+account, without starting OAuth, saving a provider or replacing an existing
+binding. A ready account synchronizes its catalog; models remain unselected
+until chosen. Discard, page reentry and failed provider saves retain account
+discoverability. Account-list failures expose retry instead of claiming that
+the user is signed out. A saved-account picker includes
 signed-out registrations and distinguishes same-email entries. Explicitly adding
 another account starts a new registration. Account persistence, renewal and
 cancellation belong to the [account lifecycle](../ai/chatgpt-account-lifecycle.md);
@@ -62,7 +71,11 @@ local admission belongs to the
 The connection panel groups account identity, state guidance, and actions. Initial
 sign-in has one prominent browser action. Runtime-reported preparation, browser
 authorization, and verification have distinct status text; waiting explains how
-to finish in the browser, and cancellation remains available. Ready accounts use a
+to finish in the browser, and cancellation remains available. All in-progress localized messages occupy
+one reserved grid area, so preparation, waiting and verification do not resize
+the panel or move the actions. Polling reads attempt status only; saved-account
+reads are coalesced and occur on opening, terminal changes and existing lifecycle
+events. Identical account facts do not replace the settings snapshot. Ready accounts use a
 compact summary with the account identity, plan source, one connected status, and
 an aligned toolbar for usage and account actions. Reauthorization remains a quiet
 secondary action after connection. The first-use explanation is a separate notice;
@@ -90,13 +103,20 @@ retain their entry prompt and existing readiness requirements.
 Credential entry makes API model configuration available; it does not claim that
 the service has verified the key. ChatGPT requires a verified ready account.
 Authentication authority and cancellation remain owned by the local authentication
-contract. The editors preserve host permission checks and save explicitly;
+contract. The dialog preserves host permission checks, disables all form controls when
+administration or interaction is unavailable, and saves explicitly. A failed
+explicit save retains the dialog draft and error without scheduling an implicit
+provider save. The nullable credential patch still means remove, while omitted
+or blank replacement drafts preserve saved secrets;
 catalog synchronization never selects newly discovered models automatically.
 
 # Evidence
 
 - `redeven:internal/flower_ui/src/settings/FlowerProviderDialog.tsx` - Shared provider selection, credential readiness, authentication actions, and catalog ownership.
-- `redeven:internal/envapp/ui_src/src/ui/pages/settings/AIProviderDialog.tsx` - Global Env provider navigation and connection readiness.
+- `redeven:internal/envapp/ui_src/src/ui/pages/settings/sections/FlowerSection.tsx` - Global Env admission, shared dialog integration and atomic provider/credential saves.
+- `redeven:internal/flower_ui/src/settings/FlowerSavedChatGPTAccounts.tsx` - Shared saved unbound account recovery, read errors and trusted-binding response guards.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.chatgpt.browser.test.tsx` - Attempt polling without account-list reloads.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSettingsSurface.presentation.browser.test.tsx` - Empty settings recovery, account-read retry and stale-binding rejection.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerProviderDialog.chatgpt.browser.test.tsx` - Local and remote authorization, localized responsive layouts, and provider-picker stability through authentication and catalog search.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerProviderDialog.controls.browser.test.tsx` - Actual Desktop and Env styles, brand alignment, authentication contrast, and connection-before-model interaction.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerProviderDialog.selection.browser.test.tsx` - Stable scroll, model row identity, focus, discovery metadata, and parameter editing.

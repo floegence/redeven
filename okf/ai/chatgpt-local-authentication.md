@@ -3,7 +3,7 @@ type: Authentication Contract
 title: Local ChatGPT plan authentication
 description: Admit official ChatGPT sign-in only through verified local host access and preserve provider history, credentials and billing choice.
 tags: [ai, flower, authentication, openai, desktop, security]
-timestamp: 2026-10-13T00:00:00Z
+timestamp: 2026-10-14T00:00:00Z
 ---
 
 # Summary
@@ -43,6 +43,12 @@ HttpOnly, same-site cookie bound to that exact authority. The existing access
 gate and authenticated session are still required. The in-memory proof expires
 and disappears on Runtime restart; it is never restored from durable session
 metadata. Opening an arbitrary localhost URL does not grant local authentication.
+
+The remote Desktop Env adapter removes account callbacks, saved-account facts
+and the local binding even if a stale settings response claims availability.
+Global Env settings apply the same route restriction. Capability loss cancels
+in-progress dialog authorization; account-list responses are scoped to the
+current trusted binding.
 
 Remote conversations may use the existing Desktop model source. That source
 executes against the local account store; the remote settings page exposes no

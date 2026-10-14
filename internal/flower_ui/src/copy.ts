@@ -206,6 +206,9 @@ export type FlowerProviderDialogCopy = Readonly<{
     savedAccounts: string;
     chooseAccount: string;
     savedSignIn: string;
+    continueSetup: string;
+    unboundSignIn: string;
+    accountsUnavailable: string;
     usageUnavailable: string;
     authentication: string;
     account: string;
@@ -1463,6 +1466,9 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       },
       chatGPT: {
         changeAccount: 'Add another account',
+        continueSetup: 'Continue setup',
+        unboundSignIn: 'Signed in on this device. Choose models and save a provider to use this account in Flower.',
+        accountsUnavailable: 'Saved ChatGPT accounts could not be loaded. Try again.',
         savedAccounts: 'Saved ChatGPT accounts',
         chooseAccount: 'Choose an account',
         savedSignIn: 'This account is saved on this device. Closing this dialog keeps you signed in.',
