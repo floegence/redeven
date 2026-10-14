@@ -325,6 +325,43 @@ describe('runtime placement HTTP/2 session lifecycle', () => {
     }
   });
 
+  it('negotiates larger bulk frames while preserving ordered data and independent streams', async () => {
+    const payload = Buffer.alloc(512 * 1024);
+    for (let index = 0; index < payload.length; index++) payload[index] = index % 251;
+    let peerFrameLimit = 0;
+    const command = await createMockBridgeCommand({
+      onConnect: (stream, authority) => {
+        peerFrameLimit = stream.session?.remoteSettings.maxFrameSize ?? 0;
+        stream.respond({ ':status': 200 });
+        stream.on('data', () => undefined);
+        stream.once('end', () => stream.end(authority === 'local-ui' ? payload : Buffer.from('pong')));
+        return true;
+      },
+    });
+    const session = await startLocalSession(command);
+    try {
+      const bulk = session.openStream('local_ui');
+      const fast = session.openStream('runtime_control');
+      const read = (stream: typeof bulk) => new Promise<Buffer>((resolve, reject) => {
+        const chunks: Buffer[] = [];
+        stream.onData(chunk => { chunks.push(chunk); });
+        stream.onClose(() => resolve(Buffer.concat(chunks)));
+        stream.onError(reject);
+      });
+      const bulkResponse = read(bulk);
+      const fastResponse = read(fast);
+      await bulk.closeWrite?.();
+      await fast.write(Buffer.from('ping'));
+      await fast.closeWrite?.();
+      await expect(fastResponse).resolves.toEqual(Buffer.from('pong'));
+      await expect(bulkResponse).resolves.toEqual(payload);
+      expect(peerFrameLimit).toBe(64 * 1024);
+      expect(hostAccessMocks.spawnLocalRuntimeHostCommand).toHaveBeenCalledTimes(1);
+    } finally {
+      await session.disconnect();
+    }
+  });
+
   it('recovers GOAWAY with exactly one new exec and preserves the loopback URL', async () => {
     const first = await createMockBridgeCommand();
     const second = await createMockBridgeCommand();
