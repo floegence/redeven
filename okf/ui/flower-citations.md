@@ -30,6 +30,8 @@ unbound title/URL pairs appear once. Split streamed markers stay hidden until
 complete metadata arrives. Invalid URLs never become links, and metadata changes
 invalidate Markdown HTML without remounting stable code controls.
 
+# Boundaries
+
 Marked continues to own GFM/CommonMark syntax. Fenced code, code spans, HTML,
 links, images and escaped literal marker examples remain unchanged. The message
 copy action removes prose markers while code-block copy preserves literal code.
