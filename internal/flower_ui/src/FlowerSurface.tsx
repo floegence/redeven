@@ -9845,7 +9845,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         <FlowerMarkdownBlock
           content={block().content}
           sources={message().role === 'assistant' ? block().sources : undefined}
-          citationLabels={message().role === 'assistant' ? { sources: copy().chat.citationSources, unavailable: copy().chat.citationUnavailable } : undefined}
+          citationLabels={message().role === 'assistant' ? { sources: copy().chat.citationSources, unavailable: copy().chat.citationUnavailable, copy: copy().chat.citationCopySources } : undefined}
           streaming={streaming()}
           mediaLabels={message().role === 'assistant' ? copy().chat.media : undefined}
           resolveMedia={resolveMessageMedia()}

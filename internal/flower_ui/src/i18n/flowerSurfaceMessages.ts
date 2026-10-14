@@ -256,6 +256,7 @@ export const flowerSurfaceEnUS = {
     copyCode: 'Copy code',
     codeCopied: 'Copied',
     citationSources: 'Sources',
+    citationCopySources: 'Copy sources',
     citationUnavailable: 'Source unavailable',
     showFullCommand: 'Show full command',
     hideFullCommand: 'Hide full command',

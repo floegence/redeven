@@ -671,6 +671,7 @@
         "runtime": "运行时"
       },
       "citationSources": "来源",
+      "citationCopySources": "复制来源",
       "citationUnavailable": "来源不可用"
     },
     "threadList": {

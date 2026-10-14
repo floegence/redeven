@@ -540,6 +540,7 @@
       "runtime": "Runtime"
     },
     "citationSources": "Sources",
+    "citationCopySources": "Copy sources",
     "citationUnavailable": "Source unavailable"
   },
   "threadList": {

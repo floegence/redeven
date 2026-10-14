@@ -5560,6 +5560,7 @@
         "runtime": "ランタイム"
       },
       "citationSources": "出典",
+      "citationCopySources": "出典をコピー",
       "citationUnavailable": "出典を利用できません"
     },
     "threadList": {

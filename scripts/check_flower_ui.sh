@@ -160,6 +160,7 @@ main() {
       internal/flower_ui/src/chat/flowerChatContextModel.test.ts \
       internal/flower_ui/src/chat/markdown/streamingMarkdownModel.test.ts \
       internal/flower_ui/src/chat/markdown/flowerCitations.test.ts \
+      internal/flower_ui/src/chat/markdown/flowerSourceCards.test.ts \
       internal/flower_ui/src/FlowerSurface.activityRunningSheen.test.ts \
       internal/flower_ui/src/FlowerSurface.approvalCommand.test.ts \
       internal/flower_ui/src/FlowerSurface.modelStatusIndicator.test.ts \

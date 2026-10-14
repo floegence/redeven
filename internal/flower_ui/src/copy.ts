@@ -576,6 +576,7 @@ export type FlowerSurfaceCopy = Readonly<{
     copyCode: string;
     codeCopied: string;
     citationSources: string;
+    citationCopySources: string;
     citationUnavailable: string;
     showFullCommand: string;
     hideFullCommand: string;
@@ -961,6 +962,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     copyCode: 'Copy code',
     codeCopied: 'Copied',
     citationSources: 'Sources',
+    citationCopySources: 'Copy sources',
     citationUnavailable: 'Source unavailable',
     showFullCommand: 'Show full command',
     hideFullCommand: 'Hide full command',

@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower message appearance
 description: Recognize sent user messages and keep their text, references and native selections readable in every shell theme.
 tags: [flower, themes, accessibility, selection]
-timestamp: 2026-10-11T00:00:00Z
+timestamp: 2026-10-14T00:00:00Z
 ---
 
 # Summary
@@ -14,8 +14,26 @@ theme's text-selection accent with readable foreground text. Native selection
 must remain visible within a filled bubble and its insets. Theme changes alter
 paint only, preserving message DOM, geometry and active selection. Queued input
 keeps its quieter pending presentation; forced colors use system roles.
+Transcript reading typography has its own scale; composer controls retain the
+published compact scale. Source destinations and copy follow
+[Flower citations](flower-citations.md), including safe authored bibliographies.
 
 # Contract
+
+## Transcript reading scale
+
+Message bubbles use a `0.9375rem` body size and unitless `1.75` line height
+(15px and 26.25px at the standard 16px root). Markdown follows that message
+scale; headings use proportional sizes and line heights, paragraphs have
+`0.8em` separation, and list items have `0.4em` separation. The first rendered
+block keeps its top margin reset, including while streaming. Assistant prose
+retains its 58rem maximum reading width. Code and tables use a smaller relative
+reading size and keep their own constrained horizontal scrolling.
+
+This scale belongs to transcript message bubbles, not a root theme token or
+whole-Flower zoom setting. Permission mode, model, reasoning controls and the
+composer editor retain their existing typography. Theme changes remain paint-
+only; they do not alter reading geometry or remount Markdown content.
 
 ## Filled messages and content
 
