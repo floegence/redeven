@@ -277,4 +277,22 @@ describe('Flower activity status presentation', () => {
     expect(detail).not.toContain('FlowerThinkingOrb');
     expect(detail).not.toContain('data-text=');
   });
+
+  it('keeps the SubAgent overview on one line and adapts it inside narrow windows', () => {
+    const css = flowerStyles();
+    const overviewRule = cssRule(css, '.flower-subagent-detail-overview');
+    const copyRule = cssRule(css, '.flower-subagent-detail-overview-copy');
+    const metaRule = cssRule(css, '.flower-subagent-detail-overview-meta');
+    const descriptionRule = cssRule(css, '.flower-subagent-detail-description');
+
+    expect(overviewRule).toContain('align-items: center');
+    expect(copyRule).toContain('display: flex');
+    expect(copyRule).toContain('align-items: center');
+    expect(metaRule).toContain('flex-wrap: nowrap');
+    expect(metaRule).toContain('overflow: hidden');
+    expect(descriptionRule).toContain('text-overflow: ellipsis');
+    expect(descriptionRule).toContain('white-space: nowrap');
+    expect(css).toContain('@container flower-subagent-window (max-width: 560px)');
+    expect(css).toContain('.flower-subagent-detail-agent-type {\n    display: none;');
+  });
 });

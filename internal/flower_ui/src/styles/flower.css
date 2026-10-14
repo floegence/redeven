@@ -9863,6 +9863,7 @@ button.flower-attachment-preview-trigger:disabled {
   border-radius: 0.875rem;
   background: var(--flower-subagent-window-surface);
   color: var(--flower-subagent-window-text);
+  container: flower-subagent-window / inline-size;
 }
 
 .flower-subagent-detail-window[data-floe-floating-window-state='active'] {
@@ -9909,7 +9910,7 @@ button.flower-attachment-preview-trigger:disabled {
   min-width: 0;
   flex: 0 0 auto;
   grid-template-columns: 2.75rem minmax(0, 1fr);
-  align-items: start;
+  align-items: center;
   gap: 0.875rem;
   border-bottom: 1px solid var(--flower-subagent-window-border-soft);
   background: var(--flower-subagent-window-surface-soft);
@@ -9923,16 +9924,20 @@ button.flower-attachment-preview-trigger:disabled {
 }
 
 .flower-subagent-detail-overview-copy {
-  display: grid;
+  display: flex;
   min-width: 0;
-  gap: 0.5rem;
+  align-items: center;
+  gap: 0.75rem;
 }
 
 .flower-subagent-detail-overview-meta {
   display: flex;
   min-width: 0;
+  max-width: 100%;
+  flex: 0 1 auto;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow: hidden;
   gap: 0.4rem 0.65rem;
   color: var(--flower-subagent-window-muted);
   font-size: 0.6875rem;
@@ -9987,17 +9992,25 @@ button.flower-attachment-preview-trigger:disabled {
 }
 
 .flower-subagent-detail-description {
-  display: -webkit-box;
   min-width: 0;
   margin: 0;
-  color: color-mix(in srgb, var(--flower-subagent-window-text) 84%, var(--flower-subagent-window-muted) 16%);
+  flex: 1 1 auto;
   overflow: hidden;
+  color: color-mix(in srgb, var(--flower-subagent-window-text) 84%, var(--flower-subagent-window-muted) 16%);
   font-size: var(--floe-type-body);
   font-weight: 500;
-  line-height: 1.5;
-  overflow-wrap: anywhere;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  line-height: 1.35;
+  overflow-wrap: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flower-subagent-detail-overview-meta > * {
+  flex: 0 0 auto;
+}
+
+.flower-subagent-detail-description[title] {
+  cursor: default;
 }
 
 .flower-subagent-detail-loading {
@@ -10483,6 +10496,29 @@ button.flower-attachment-preview-trigger:disabled {
     padding-right: 1.35rem;
   }
 
+}
+
+/* Window-local adaptation also applies when a narrow window sits inside a
+ * wide browser viewport. */
+@container flower-subagent-window (max-width: 560px) {
+  .flower-subagent-detail-overview {
+    grid-template-columns: 2.25rem minmax(0, 1fr);
+    gap: 0.75rem;
+    padding: 0.875rem 0.7rem;
+  }
+
+  .flower-subagent-detail-avatar {
+    width: 2.25rem;
+    height: 2.25rem;
+  }
+
+  .flower-subagent-detail-overview-copy {
+    gap: 0.5rem;
+  }
+
+  .flower-subagent-detail-agent-type {
+    display: none;
+  }
 }
 
 @media (hover: none) {
