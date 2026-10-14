@@ -60,6 +60,24 @@ describe('createFlowerMarkdownRenderer', () => {
     expect(marked.parse('```html\n<button>Code only</button>\n```')).not.toContain('data-floe-markdown-media');
     expect(marked.parse('![unsafe](javascript:alert(1))')).not.toContain('data-floe-markdown-media');
   });
+
+  it('keeps external HTML pages navigable instead of creating an unsupported preview', () => {
+    const marked = createMarkdownParser({ gfm: true });
+    marked.use({ renderer: createFlowerMarkdownRenderer({ media: true }) });
+    for (const url of ['https://example.com/announcement.html', 'http://example.com/report.htm?lang=en#details', 'https://example.com/REPORT.HTML']) {
+      for (const prefix of ['', '!']) {
+        const html = marked.parse(`${prefix}[Announcement](${url})`);
+        expect(html).not.toContain('data-floe-markdown-media');
+        expect(html).toContain(`href="${url}"`);
+        expect(html).toContain('target="_blank" rel="noopener noreferrer"');
+        expect(html).not.toContain('<svg');
+      }
+    }
+    for (const url of ['/project/report.html', './report.htm', 'https://example.com/demo.mp4', 'https://example.com/chart.png']) {
+      expect(marked.parse(`[Preview](${url})`)).toContain('data-floe-markdown-media');
+    }
+  });
+
   it('escapes raw html and script content', () => {
     const html = createMarked().parse('<script>alert(1)</script>\n\n<div onclick="x">text</div>');
 

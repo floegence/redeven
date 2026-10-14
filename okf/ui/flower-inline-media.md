@@ -20,7 +20,11 @@ preview error without interrupting the conversation.
 ## Authoring and interaction
 
 - `![Title](source)` displays image, video, or audio. Ordinary HTTP(S) links stay
-  navigable. Links whose filename identifies media or HTML display inline media.
+  navigable. External `.html` / `.htm` URLs stay navigable even with image syntax.
+  Links whose filename identifies image, video, or audio display inline media;
+  local HTML links display interactive previews. Navigable prose, source cards,
+  and web Activity links use blue underlined text. Prose links expose visible
+  keyboard focus; user bubbles retain their contrast ink.
 - Local sources use absolute Runtime paths; relative paths resolve against the
   selected thread's working directory. Local files always cross the authenticated
   filesystem scope. They are never interpreted as application routes.
@@ -31,7 +35,8 @@ preview error without interrupting the conversation.
   media adapter. Preview failure offers retry; it never reopens the source file.
 - An `html preview` fence or a local `.html` / `.htm` link renders an interactive
   preview. Ordinary `html` fences remain copyable source code. Raw HTML remains
-  escaped. External HTML pages must be saved locally before inline preview.
+  escaped. External HTML pages open through links and do not mount a preview or
+  offer a retry that cannot load them. Inline HTML preview requires a local file.
 - Media displays without outer cards or title bars, with a single rounded edge,
   quiet captions, and named actions on hover or keyboard focus (always
   visible on touch). Loading and retry states use the active locale.

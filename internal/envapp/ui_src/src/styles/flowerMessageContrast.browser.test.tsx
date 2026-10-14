@@ -6,6 +6,7 @@ import { render } from 'solid-js/web';
 import { commands, page, userEvent } from 'vitest/browser';
 import { afterEach, expect, it } from 'vitest';
 import { FlowerMarkdownBlock } from '../../../../flower_ui/src/chat/markdown/FlowerMarkdownBlock';
+import { markdownMediaEnUS } from '../../../../flower_ui/src/chat/markdown/mediaCopy';
 
 let dispose: (() => void) | undefined;
 const media = commands as unknown as {
@@ -68,6 +69,7 @@ function mount() {
       </div>
       <div class="flower-message-bubble flower-message-bubble-assistant flower-message-bubble-plain">
         <span data-copy>Review the proposed change.</span>
+        <FlowerMarkdownBlock content={'[Google Cloud source](https://example.com/cloud.html)\n\n![Android Agent announcement](https://example.com/android.htm?lang=en#details)\n\n[Read `the guide`](https://example.com/guide) and [details](#details).'} copyCodeLabel="Copy code" codeCopiedLabel="Copied" mediaLabels={markdownMediaEnUS} />
       </div>
       <div class="flower-message-row flower-message-row-user">
         <div class="flower-message-bubble flower-message-bubble-framed flower-message-bubble-user">
@@ -124,6 +126,9 @@ it.each(['standard', 'soft-neumorphic'])('keeps sent messages and selected text 
       const style = getComputedStyle(node);
       const nodeFace = background(node);
       const paint = rgb(style.color);
+      if (node.matches('.flower-chat-md-link') && !node.closest('.flower-message-bubble-user')) {
+        expect.soft(paint[2], `${label}: blue navigation text`).toBeGreaterThan(paint[0] + 40);
+      }
       paint[3] *= Number(style.opacity);
       const text = mix(paint, nodeFace);
       expect.soft(contrast(text, nodeFace), `${label}: ${node.textContent}`).toBeGreaterThanOrEqual(4.5);
@@ -133,7 +138,7 @@ it.each(['standard', 'soft-neumorphic'])('keeps sent messages and selected text 
       expect.soft(contrast(mix(rgb(selected.color), selectionFace), selectionFace), `${label}: selected ${node.textContent}`).toBeGreaterThanOrEqual(4.5);
       expect.soft(contrast(selectionFace, nodeFace), `${label}: visible selection ${node.textContent}`).toBeGreaterThanOrEqual(1.5);
     }
-    const link = host.querySelector<HTMLAnchorElement>('.flower-chat-md-link')!;
+    const link = bubble.querySelector<HTMLAnchorElement>('.flower-chat-md-link')!;
     await userEvent.hover(link);
     expect.soft(contrast(rgb(getComputedStyle(link).color), face), `${label} hovered link`).toBeGreaterThanOrEqual(4.5);
     link.focus();
@@ -152,6 +157,36 @@ it.each(['standard', 'soft-neumorphic'])('keeps sent messages and selected text 
     expect.soft(summary.getBoundingClientRect().width, `${label} hover preserves geometry`).toBe(width);
     await userEvent.unhover(summary);
   }
+});
+
+it('keeps external pages compact, visibly navigable and keyboard accessible at mobile width', async () => {
+  await page.viewport(390, 800);
+  applyTheme(builtInShellThemePresets.find(preset => preset.name === 'paper')!, 'standard');
+  const host = mount();
+  const assistant = host.querySelector<HTMLElement>('.flower-message-bubble-assistant')!;
+  await expect.element(page.getByRole('link', { name: 'Google Cloud source', exact: true })).toBeVisible();
+  const links = assistant.querySelectorAll<HTMLAnchorElement>('a');
+  expect(links.length).toBe(4);
+  expect(assistant.querySelector('.chat-media')).toBeNull();
+  expect(assistant.querySelector('iframe')).toBeNull();
+  expect(assistant.textContent).not.toContain('Preview unavailable');
+  for (const link of links) {
+    expect(link.querySelector('svg')).toBeNull();
+    expect(getComputedStyle(link).cursor).toBe('pointer');
+    expect(getComputedStyle(link).textDecorationLine).toContain('underline');
+  }
+  const link = links[0];
+  await userEvent.keyboard('{Tab}');
+  expect(document.activeElement).toBe(host.querySelector('.flower-turn-summary-button'));
+  await userEvent.keyboard('{Tab}');
+  expect(document.activeElement).toBe(link);
+  expect(parseFloat(getComputedStyle(link).outlineWidth)).toBeGreaterThanOrEqual(2);
+  expect(link.target).toBe('_blank');
+  expect(link.rel).toBe('noopener noreferrer');
+  const code = assistant.querySelector<HTMLElement>('a code')!;
+  expect(getComputedStyle(code).color).toBe(getComputedStyle(code.closest('a')!).color);
+  expect(host.scrollWidth).toBeLessThanOrEqual(390);
+  await page.screenshot({ element: assistant, path: '__screenshots__/flower-external-links-paper.png' });
 });
 
 it('preserves native selection and message geometry when changing themes at mobile width', async () => {

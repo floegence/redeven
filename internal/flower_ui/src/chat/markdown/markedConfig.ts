@@ -89,6 +89,10 @@ function safeMediaReference(href: string): boolean {
     && (!/^[a-z][a-z0-9+.-]*:/i.test(href) || /^(https?:\/\/|computer:\/\/)/i.test(href));
 }
 
+function isExternalHTMLPage(href: string): boolean {
+  return markdownMediaKind(href) === 'html' && /^https?:/i.test(href.trim());
+}
+
 export function createFlowerMarkdownRenderer(options: { media?: boolean; sourceFence?: (token: Tokens.Code) => string | null } = {}): RendererObject<string, string> {
   return {
     html(token: { text?: string; raw?: string }) {
@@ -96,7 +100,11 @@ export function createFlowerMarkdownRenderer(options: { media?: boolean; sourceF
     },
     link(token: MarkdownLinkToken) {
       const kind = markdownMediaKind(token.href);
-      if (options.media && kind && safeMediaReference(token.href)) return markdownMediaPlaceholder({ kind, src: token.href, title: token.text });
+      // HTML previews are host-authorized local files. An external HTML page
+      // stays a normal link because the isolated media preview cannot load it.
+      if (options.media && kind && !isExternalHTMLPage(token.href) && safeMediaReference(token.href)) {
+        return markdownMediaPlaceholder({ kind, src: token.href, title: token.text });
+      }
       return renderLink(token);
     },
     codespan(token: { text: string }) {
@@ -116,6 +124,7 @@ export function createFlowerMarkdownRenderer(options: { media?: boolean; sourceF
       return `<blockquote class="flower-chat-md-blockquote">${this.parser.parse(token.tokens)}</blockquote>`;
     },
     image(token: { href: string; title?: string | null; text: string }) {
+      if (options.media && isExternalHTMLPage(token.href)) return renderLink(token);
       if (!options.media) {
         const href = safeFlowerMarkdownHref(token.href);
         const titleAttr = token.title ? ` title="${escapeFlowerMarkdownHtml(token.title)}"` : '';
