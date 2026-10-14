@@ -241,7 +241,7 @@ describe('Flower inline media', () => {
     await page.viewport(1200, 950);
     const ref = `computer://browser-main/${'a'.repeat(64)}`;
     const seed = thread({ thread_id: 'rich-media', title: 'Visual report', messages: [{ id: 'reply', role: 'assistant', status: 'complete', turn_id: 'turn-1', created_at_ms: 2,
-      content: `Here is the result.\n\n![Workspace overview](${ref})\n\n[Interactive report](/workspace/redeven/report.html)\n\n[Read the guide](https://example.com/guide)` }] });
+      content: `Here is the result.\n\n![Workspace overview](${ref})\n\n[Interactive report](/workspace/redeven/report.html)\n\n[Read the guide](https://example.com/guide.html)` }] });
     const loadComputerFrame = vi.fn(async () => imageBlob());
     const loadMessageFile = vi.fn(async () => new Blob(['<style>body{padding:20px;background:#f5f7f4;color:#213c31}h1{font-size:28px;margin:10px 0}p{color:#64796d}button{background:#315f49;color:white;border:0;border-radius:8px;padding:10px 18px;cursor:pointer}</style><small>WORKSPACE INSIGHTS</small><h1>Ready for your next idea.</h1><p>A self-contained preview, directly in the conversation.</p><button onclick="this.textContent=\'Updated\'">Update report</button>'], { type: 'text/plain; charset=utf-8' }));
     const runtime = renderSurfaceWithAdapter({ ...adapter(true), listThreads: async () => [seed], loadThread: async () => liveBootstrap(seed, 1), loadComputerFrame, loadMessageFile });
@@ -261,7 +261,11 @@ describe('Flower inline media', () => {
       expect(getComputedStyle(element).borderWidth).toBe('0px');
     }
     expect(getComputedStyle(image.closest('.chat-media')!).backgroundColor).toBe('rgba(0, 0, 0, 0)');
-    expect(runtime.querySelector<HTMLAnchorElement>('a[href="https://example.com/guide"]')!.rel).toBe('noopener noreferrer');
+    const link = runtime.querySelector<HTMLAnchorElement>('a[href="https://example.com/guide.html"]')!;
+    expect(link.rel).toBe('noopener noreferrer');
+    expect(link.querySelector('svg')).toBeNull();
+    expect(runtime.querySelectorAll('[data-media-kind="html"]').length).toBe(1);
+    expect(loadMessageFile).toHaveBeenCalledTimes(1);
     const transcript = runtime.querySelector<HTMLElement>('.flower-chat-transcript')!;
     transcript.dispatchEvent(new WheelEvent('wheel', { deltaY: -100, bubbles: true }));
     transcript.scrollTop = 0;
