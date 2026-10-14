@@ -5,8 +5,9 @@ import {chromium} from '../../internal/envapp/ui_src/node_modules/playwright/ind
 import {createSSHSettingsPreviewServer} from './ssh-settings-preview.mjs';
 
 const supportedLocales=['en-US','zh-CN','zh-TW','ja-JP','ko-KR','de-DE','fr-FR','es-ES','pt-BR','ru-RU'];
-// Optional locale arguments restrict focused iteration; no arguments runs the complete matrix.
-const locales=process.argv.slice(2);
+// Setup-only mode checks representative SSH enrollment independently of card and route qualification.
+const setupOnly=process.argv.includes('--setup-only');
+const locales=process.argv.slice(2).filter(argument=>argument!=='--setup-only');
 assert.ok(locales.every(locale=>supportedLocales.includes(locale)),'arguments must be supported locale codes');
 const localGateway={gateway_id:'local-gateway',display_name:'Office Gateway',local_enabled:true,connection_kind:'local_host',
  management_capability:'managed_local_host',capabilities:[],status:'online',trust_state:'paired',listener_running:true,
@@ -72,6 +73,7 @@ try {
  for(const locale of locales.length ? locales : supportedLocales) {
   const i18n=createDesktopI18n(locale);
   for(const width of [430,1280]) {
+   if(!setupOnly) {
    const {snapshot,memberships,inputs:fixtureInputs}=runtimeConnectionFixture({cloudManagement:false,gatewayWindow:true,
     cloudDirectoryAccessPointOrigin:'https://rotated-region.example.invalid'});
    snapshot.gateway_sources=[...snapshot.gateway_sources,localGateway];
@@ -142,6 +144,9 @@ try {
     await dialog.getByRole('button',{name:i18n.t('common.cancel'),exact:true}).click();await dialog.waitFor({state:'detached'});
     await toggle.click();await page.getByRole('menu').getByRole('menuitem',{name:i18n.t('gatewayJoin.menuAction'),exact:true}).click();
     const join=page.getByRole('dialog');await join.waitFor();
+    assert.equal(await join.getByRole('button',{name:i18n.t('gatewayJoin.connectAndContinue'),exact:true})
+     .evaluate(button=>!!button.closest('.redeven-gateway-connect-stage')),true,'connect stays with its guidance');
+    assert.deepEqual(await join.locator('.redeven-gateway-join-actions button').allTextContents(),[i18n.t('common.cancel')]);
     const initialLayout=await wizardLayout(join);
     await assertWizardTypography(join);
     await holdAction(page);
@@ -150,6 +155,8 @@ try {
     await assertStableWizard(join,initialLayout,'connecting');
     await releaseAction(page);
     const inputs=join.locator('input');await inputs.nth(0).fill('https://draft.internal:7443');await inputs.nth(1).fill('TEST-ONLY-CODE');
+    assert.equal(await join.getByRole('button',{name:i18n.t('gatewayJoin.verify'),exact:true})
+     .evaluate(button=>!!button.closest('.redeven-gateway-join-scroll')),true,'verify stays with its fields');
     await assertStableWizard(join,initialLayout,'invitation');
     await assertWizardTypography(join);
     await page.screenshot({path:`${output}/${locale}-${width}-invitation.png`});
@@ -163,6 +170,8 @@ try {
     await assertStableWizard(join,initialLayout,'verifying');
     await releaseAction(page);
     await join.getByRole('button',{name:i18n.t('gatewayJoin.confirmEnable'),exact:true}).waitFor();
+    assert.equal(await join.getByRole('button',{name:i18n.t('gatewayJoin.confirmEnable'),exact:true})
+     .evaluate(button=>!!button.closest('.redeven-gateway-join-scroll')),true,'consent stays with the reviewed details');
     await assertStableWizard(join,initialLayout,'confirmation');
     await assertWizardTypography(join);
     report.layouts.push({locale,width,initial:initialLayout,confirmation:await wizardLayout(join)});
@@ -194,13 +203,14 @@ try {
     }
     report.cases.push(`${locale}/${width}: original tabs, upward menu, explicit target, Cloud impact, retained draft and independent pairing`);
    } finally {await context.close();}
-   for(const kind of ['local','ssh','wsl','local_container','ssh_container']) {
+   }
+   for(const kind of setupOnly ? ['ssh'] : ['local','ssh','wsl','local_container','ssh_container']) {
     const startedAtUnixMS=Date.now()-120000;
     const fixtures=Object.fromEntries(['unknown','stopped','control_missing','connection_required','ready','update_required','management_unavailable']
       .map(state=>[state,runtimeGatewayAccessFixture(kind,state,startedAtUnixMS)]));
     for(const fixture of Object.values(fixtures))fixture.snapshot.gateway_sources=[...fixture.snapshot.gateway_sources,localGateway];
     const runtime=fixtures.ready.environment;
-    const context=await browser.newContext({viewport:{width,height:1050},reducedMotion:'reduce',hasTouch:locale==='zh-TW' && width===430});
+    const context=await browser.newContext({viewport:{width,height:1050},reducedMotion:'reduce',colorScheme:width===1280?'dark':'light',hasTouch:locale==='zh-TW' && width===430});
     try {
      const page=await context.newPage();page.on('pageerror',error=>report.errors.push(error.message));
      await page.addInitScript(({snapshot,locale})=>{
@@ -244,6 +254,8 @@ try {
      assert.equal(await entry.isDisabled(),false);await entry.click();
      const dialog=page.getByRole('dialog');await dialog.waitFor();
      await dialog.locator('[data-gateway-preparation="not_started"]').waitFor();
+     assert.equal(await dialog.getByRole('button',{name:i18n.t('gatewayJoin.startAndContinue'),exact:true})
+      .evaluate(button=>!!button.closest('.redeven-gateway-connect-stage')),true,'preparation stays with its guidance');
      const initialLayout=await wizardLayout(dialog);
      const observer=await runtimeGatewayBackgroundProbeFixture(kind,'ready',startedAtUnixMS);
      async function assertBackgroundContinuity(stage) {
@@ -251,7 +263,7 @@ try {
       await page.evaluate(async()=>{await document.fonts.ready;await new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done)));});
       await dialog.evaluate(panel=>{
        const inputs=[...panel.querySelectorAll('input')];
-       const buttons=[...panel.querySelectorAll('.redeven-gateway-join-actions button')].filter(button=>button.checkVisibility());
+       const buttons=[...panel.querySelectorAll('.redeven-gateway-step-actions button, .redeven-gateway-join-actions button')].filter(button=>button.checkVisibility());
        window.gatewayContinuity={panel,inputs,buttons,labels:buttons.map(button=>button.textContent),disabled:buttons.map(button=>button.disabled),
         focus:document.activeElement,selection:inputs.map(input=>[input.selectionStart,input.selectionEnd]),values:inputs.map(input=>input.value),
         step:panel.querySelector('[data-gateway-step]').dataset.gatewayStep,scroll:panel.querySelector('.redeven-gateway-join-scroll').scrollTop};
@@ -260,7 +272,7 @@ try {
        const errors=await page.evaluate(()=>{
         const old=window.gatewayContinuity,panel=document.querySelector('[role="dialog"]');
         const inputs=[...panel.querySelectorAll('input')];
-        const buttons=[...panel.querySelectorAll('.redeven-gateway-join-actions button')].filter(button=>button.checkVisibility());
+        const buttons=[...panel.querySelectorAll('.redeven-gateway-step-actions button, .redeven-gateway-join-actions button')].filter(button=>button.checkVisibility());
         return [panel===old.panel,inputs.every((input,index)=>input===old.inputs[index]),buttons.length===old.buttons.length,
          buttons.every((button,index)=>button===old.buttons[index] && button.textContent===old.labels[index] && button.disabled===old.disabled[index]),
          document.activeElement===old.focus,JSON.stringify(inputs.map(input=>input.value))===JSON.stringify(old.values),
@@ -293,6 +305,8 @@ try {
      await page.screenshot({path:`${output}/${locale}-${width}-${kind}-preparation.png`});
      await dialog.getByRole('button',{name:i18n.t('gatewayJoin.startAndContinue'),exact:true}).click();
      const inputs=dialog.locator('input');await inputs.nth(0).waitFor({state:'visible'});
+     assert.equal(await dialog.getByRole('button',{name:i18n.t('gatewayJoin.verify'),exact:true})
+      .evaluate(button=>!!button.closest('.redeven-gateway-join-scroll')),true,'verify stays with its fields');
      await dialog.locator('[data-gateway-suggestion="local-gateway"]').waitFor();
      await assertStableWizard(dialog,initialLayout,'startup');
      await inputs.nth(0).fill('https://office.example:7443');await inputs.nth(1).fill('DRAFT-CODE');
@@ -302,6 +316,8 @@ try {
      assert.equal(await inputs.nth(1).evaluate(element=>element===document.activeElement),true);
      await dialog.getByRole('button',{name:i18n.t('gatewayJoin.verify'),exact:true}).click();
      await dialog.getByRole('button',{name:i18n.t('gatewayJoin.confirmEnable'),exact:true}).waitFor();
+     assert.equal(await dialog.getByRole('button',{name:i18n.t('gatewayJoin.confirmEnable'),exact:true})
+      .evaluate(button=>!!button.closest('.redeven-gateway-join-scroll')),true,'consent stays with the reviewed details');
      await assertStableWizard(dialog,initialLayout,'verified preview');
      await assertBackgroundContinuity('confirmation');
      const publish=async state=>page.evaluate(({snapshot,state})=>{
@@ -359,6 +375,8 @@ try {
      await dialog.getByRole('button',{name:i18n.t('gatewayJoin.back'),exact:true}).click();
      await publish('connection_required');
      await dialog.getByRole('button',{name:i18n.t('gatewayJoin.connectAndContinue'),exact:true}).waitFor();
+     assert.equal(await dialog.getByRole('button',{name:i18n.t('gatewayJoin.connectAndContinue'),exact:true})
+      .evaluate(button=>!!button.closest('.redeven-gateway-connect-stage')),true,'connect stays with its guidance');
      assert.equal(await inputs.nth(0).isVisible(),false);
      await assertBackgroundContinuity('connection');
      await page.screenshot({path:`${output}/${locale}-${width}-${kind}-connect.png`});
@@ -390,12 +408,18 @@ try {
        assert.equal(await scroll.evaluate(element=>element.scrollTop),scrollTop,'same-target snapshots retain the reading position');
        const copyBounds=await scroll.locator('section:visible > p').last().boundingBox();
        assert.ok(copyBounds.y+copyBounds.height<=shortLayout.actions.y+1,'final guidance remains reachable above actions');
+       const primaryBounds=await scroll.locator('.redeven-gateway-step-actions > button').last().boundingBox();
+       assert.ok(primaryBounds.y>=shortLayout.scroll.y && primaryBounds.y+primaryBounds.height<=shortLayout.actions.y+1,
+        'the primary action remains reachable in the scrolling body');
        for(const step of ['invitation','connection']) {
         await dialog.getByRole('button',{name:i18n.t('gatewayJoin.back'),exact:true}).click();
         await assertStableWizard(dialog,shortLayout,`short window ${step}`);
         await assertWizardTypography(dialog);
         if(step==='connection')assert.equal(await scroll.evaluate(element=>element.scrollTop),0,'the connection step starts at the top');
        }
+       await page.keyboard.press('Tab');
+       assert.equal(await dialog.getByRole('button',{name:i18n.t('gatewayJoin.connectAndContinue'),exact:true})
+        .evaluate(button=>button===document.activeElement),true,'Tab moves from connection guidance to its primary action');
        await dialog.getByRole('button',{name:i18n.t('gatewayJoin.connectAndContinue'),exact:true}).click();
        await dialog.getByRole('button',{name:i18n.t('gatewayJoin.confirmEnable'),exact:true}).waitFor();
        await assertStableWizard(dialog,shortLayout,'short window reconnection');

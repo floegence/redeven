@@ -47,13 +47,19 @@ it.each(['ssh', 'wsl', 'local_container', 'ssh_container'] as const)('connects t
   expect(document.body.textContent).not.toContain(i18n.t('gatewayJoin.channelHelp'));
   expect(perform).not.toHaveBeenCalled(); expect(recover).not.toHaveBeenCalled();
   expect(document.querySelector('input')?.closest('[hidden]')).not.toBeNull();
+  const connection = button('gatewayJoin.connectAndContinue');
+  expect(connection.closest('.redeven-gateway-connect-stage')).not.toBeNull();
+  expect(button('common.settings').closest('.redeven-gateway-connect-stage')).not.toBeNull();
+  expect(document.querySelector('.redeven-gateway-join-actions')?.textContent?.trim()).toBe(i18n.t('common.cancel'));
   button('gatewayJoin.connectAndContinue').click(); await settle();
   expect(button('gatewayJoin.connecting').hasAttribute('disabled')).toBe(true);
+  expect(button('gatewayJoin.connecting')).toBe(connection);
   expect(document.querySelector('[data-gateway-step]')?.getAttribute('data-gateway-step')).toBe('0');
   expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'manage_runtime_gateway', runtime_target_id: selected.provider_runtime_link_target!.id, operation: 'status' });
   complete({ ok: true, gateway_membership: { joined: false, phase: 'not_joined' } }); await settle();
   expect(document.querySelector('[data-gateway-step]')?.getAttribute('data-gateway-step')).toBe('1');
   expect(document.querySelector('input')?.closest('[hidden]')).toBeNull();
+  expect(button('gatewayJoin.verify').closest('.redeven-gateway-join-scroll')).not.toBeNull();
   expect(document.activeElement).toBe(document.querySelector('input'));
   expect(recover).not.toHaveBeenCalled();
 });
@@ -67,6 +73,8 @@ it('keeps connection failure in the first step with Retry and settings, then con
   dispose = render(() => <RuntimeGatewaySetupDialog environment={selected} i18n={i18n} refresh={refresh} recover={vi.fn()} edit={edit} close={() => {}} />, root);
   await settle(); button('gatewayJoin.connectAndContinue').click(); await settle();
   expect(document.querySelector('[role="alert"]')?.textContent).toBe(i18n.t('gatewayJoin.connectFailed'));
+  expect(document.querySelector('[role="alert"]')?.closest('.redeven-gateway-connect-stage')).not.toBeNull();
+  expect(button('common.retry').closest('.redeven-gateway-connect-stage')).not.toBeNull();
   expect(document.querySelector('[data-gateway-step]')?.getAttribute('data-gateway-step')).toBe('0');
   expect(button('common.settings').hasAttribute('disabled')).toBe(false);
   button('common.retry').click(); await settle();
@@ -90,7 +98,9 @@ it('separates invitation entry from consent and preserves the draft when navigat
   button('gatewayJoin.verify').click(); await settle();
   expect(document.querySelector('[data-gateway-step]')?.getAttribute('data-gateway-step')).toBe('2');
   expect(inputs[0].closest('[hidden]')).not.toBeNull();
-  expect(document.activeElement).toBe(button('gatewayJoin.confirmEnable'));
+  expect(document.activeElement?.tagName).toBe('H3');
+  expect(document.activeElement?.textContent).toBe(i18n.t('gatewayJoin.confirmAccess'));
+  expect(button('gatewayJoin.confirmEnable').closest('.redeven-gateway-join-scroll')).not.toBeNull();
   button('gatewayJoin.back').click(); await settle();
   expect(inputs[0].closest('[hidden]')).toBeNull();
   expect(inputs.map(input => input.value)).toEqual(['https://office.example:7443', 'draft-code']);
@@ -126,6 +136,7 @@ it('starts the selected Runtime, verifies an administrator code, then requires l
   dispose = render(() => <RuntimeGatewaySetupDialog environment={current()} i18n={i18n} refresh={refresh} recover={start} edit={() => {}} close={() => setCurrent(undefined)} />, root);
   await settle();
   expect(perform).not.toHaveBeenCalled(); expect(start).not.toHaveBeenCalled();
+  expect(button('gatewayJoin.startAndContinue').closest('.redeven-gateway-connect-stage')).not.toBeNull();
   button('gatewayJoin.startAndContinue').click(); await settle();
   expect(start).toHaveBeenCalledExactlyOnceWith(environment, 'start');
   expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'manage_runtime_gateway', runtime_target_id: target.id, operation: 'status' });

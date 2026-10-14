@@ -3,7 +3,7 @@ type: Interaction Contract
 title: Gateway Desktop interactions
 description: Invite Runtime members and manage policy with explicit consent, retained drafts and truthful status.
 tags: [gateway, desktop, interaction, validation]
-timestamp: 2026-10-13T00:00:00Z
+timestamp: 2026-10-14T00:00:00Z
 ---
 # Summary
 
@@ -55,7 +55,11 @@ Locales have explicit translations. Controls expose pointer, keyboard, focus and
 
 Card menu actions share icon geometry/label alignment. Restart's power-cycle icon differs from Refresh; menu, card and confirmation use one reactive projection. Destructive/disabled styling, keyboard navigation and lifecycle confirmation stay consistent.
 
-Settings/setup wizard use fixed, viewport-bounded panels. Tabs preserve state/geometry. Setup retains outer bounds across steps, loading and errors, with pinned header/steps/actions and a scrolling body. Step labels reserve two lines; action groups reflow whole buttons. Short windows respect the Desktop titlebar; long guidance remains reachable. Target, suggestions and fields use shared compact body/control typography with distinct headings and usable text scaling/touch inputs. New steps start at the top, preserving focused-field visibility. Cloud shares typography/spacing. Client/address rows stay compact; transport metadata stays internal. Motion respects reduced-motion preferences.
+Settings/setup wizard use fixed, viewport-bounded panels. Tabs preserve state/geometry. Setup retains outer bounds across steps, loading and errors, with pinned header/steps/navigation and a scrolling body.
+
+Each enrollment step places its primary action beside the relevant guidance or fields inside the body. The connection card groups Connect, lifecycle preparation or Retry with settings and inline failures; the footer contains only Back and Cancel. Verification and final consent follow the information they act on. Connection and confirmation focus their headings without scrolling past guidance; invitation entry focuses the address field. New steps start at the top, and keyboard navigation brings body actions into view.
+
+Step labels reserve two lines; action groups reflow whole buttons. Short windows respect the Desktop titlebar; long guidance remains reachable. Target, suggestions and fields use shared compact body/control typography with distinct headings and usable text scaling/touch inputs. Cloud shares typography/spacing. Client/address rows stay compact; transport metadata stays internal. Motion respects reduced-motion preferences.
 
 Retired configurations are rejected read-only with guidance to create a new state root and register again. They are never silently rewritten.
 

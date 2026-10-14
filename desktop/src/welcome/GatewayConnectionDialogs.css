@@ -540,7 +540,7 @@
   gap: .75rem;
 }
 
-.redeven-gateway-wizard-dialog .redeven-gateway-join-section > h3 {
+.redeven-gateway-wizard-dialog .redeven-gateway-join-section h3 {
   font-size: .8125rem;
   font-weight: 600;
   line-height: 1.5;
@@ -578,7 +578,45 @@
 }
 
 .redeven-gateway-wizard-dialog .redeven-gateway-connect-stage {
-  padding: 0;
+  gap: 1rem;
+  border: 1px solid color-mix(in srgb, var(--primary) 14%, var(--border));
+  border-radius: .75rem;
+  background: color-mix(in srgb, var(--muted) 18%, var(--background));
+  padding: 1.125rem;
+}
+
+.redeven-gateway-connect-heading {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+}
+
+.redeven-gateway-connect-icon {
+  display: grid;
+  flex: none;
+  width: 2.25rem;
+  height: 2.25rem;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--primary) 16%, var(--border));
+  border-radius: .625rem;
+  background: color-mix(in srgb, var(--primary) 8%, var(--background));
+  color: var(--primary);
+}
+
+.redeven-gateway-step-actions {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5rem;
+}
+
+.redeven-gateway-step-actions > button {
+  max-width: 100%;
+}
+
+.redeven-gateway-connect-stage > .redeven-gateway-step-actions {
+  padding-top: .25rem;
 }
 
 .redeven-gateway-join-content {
@@ -639,6 +677,7 @@
 
 .redeven-gateway-join-section {
   display: flex;
+  flex: none;
   flex-direction: column;
   gap: .875rem;
 }
@@ -681,7 +720,6 @@
   margin: 0;
 }
 .redeven-gateway-wizard-steps [data-floe-surface-part='step'] { box-shadow: none; }
-.redeven-gateway-connect-stage { padding-block: .5rem 1rem; }
 
 .redeven-gateway-connect-progress {
   display: flex;
@@ -904,7 +942,7 @@
     min-height: 32px;
     margin-block: 0;
   }
-  .redeven-gateway-wizard-dialog .redeven-gateway-join-actions button {
+  .redeven-gateway-wizard-dialog :is(.redeven-gateway-join-actions, .redeven-gateway-step-actions) button {
     height: auto;
     min-height: 32px;
     padding-block: .25rem;

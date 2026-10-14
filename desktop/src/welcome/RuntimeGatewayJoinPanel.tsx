@@ -33,7 +33,9 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
   const currentStep = createMemo(() => props.wizard ? step() : preview() ? 2 : 1);
   const [now, setNow] = createSignal(Date.now());
   let generation = 0, statusGeneration = 0;
-  let trigger: HTMLButtonElement | undefined, addressInput: HTMLInputElement | undefined, codeInput: HTMLInputElement | undefined, connectButton: HTMLButtonElement | undefined, confirmButton: HTMLButtonElement | undefined;
+  let trigger: HTMLButtonElement | undefined, addressInput: HTMLInputElement | undefined, codeInput: HTMLInputElement | undefined, confirmButton: HTMLButtonElement | undefined;
+  let connectionHeading: HTMLHeadingElement | undefined, confirmationHeading: HTMLHeadingElement | undefined;
+  const focusConfirmation = () => props.wizard ? confirmationHeading?.focus({ preventScroll: true }) : confirmButton?.focus();
   let scrollViewport: HTMLDivElement | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let lastConnectionRequest = 0;
@@ -65,7 +67,7 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
   const close = () => { invalidate(); statusGeneration++; clearTimeout(timer); setCode(''); setStep(0); setOpen(false); props.onClose?.();
     queueMicrotask(() => trigger?.isConnected ? trigger.focus() : props.focusOwner?.()); };
   onCleanup(() => { generation++; statusGeneration++; clearTimeout(timer); clearInterval(expiryTimer); });
-  const openDialog = () => { setOpen(true); if (!blocked() && !props.wizard) void refresh(); queueMicrotask(() => { if (!blocked()) { if (props.wizard) connectButton?.focus(); else addressInput?.focus(); } }); };
+  const openDialog = () => { setOpen(true); if (!blocked() && !props.wizard) void refresh(); queueMicrotask(() => { if (props.wizard) connectionHeading?.focus({ preventScroll: true }); else if (!blocked()) addressInput?.focus(); }); };
   let observedRuntimeStart = props.runtimeStartedAtUnixMS;
   createEffect(on(runtimeStart, value => {
     if (!value) return;
@@ -97,7 +99,7 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
       if (!result?.ok || !result.gateway_membership) { setStatusError(text('gatewayJoin.connectFailed')); return; }
       if (preview() && preview()!.expires_at_unix_ms <= Date.now()) { setPreview(undefined); setError(text('gatewayJoin.expired')); }
       setStep(preview() ? 2 : 1);
-      queueMicrotask(() => preview() ? confirmButton?.focus() : addressInput?.focus());
+      queueMicrotask(() => preview() ? focusConfirmation() : addressInput?.focus());
     } catch { if (current === statusGeneration) setStatusError(text('gatewayJoin.connectFailed')); }
     finally { if (current === statusGeneration) setPending(null); }
   }
@@ -126,7 +128,7 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
       if (start && runtimeStart() && start !== runtimeStart()) { setError(text('gatewayJoin.changed')); return; }
       if (!result?.ok || !result.gateway_preview) { setError(errorText(result && !result.ok ? result.gateway_error_code : undefined)); return; }
       setPreview(result.gateway_preview); setNow(Date.now()); if (props.wizard) setStep(2);
-      queueMicrotask(() => confirmButton?.focus());
+      queueMicrotask(focusConfirmation);
     } catch { if (current === generation) setError(text('gatewayJoin.unreachable')); }
     finally { if (current === generation) setPending(null); }
   }
@@ -164,11 +166,21 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
     <div ref={scrollViewport} class="redeven-gateway-join-scroll">
         <div class="redeven-gateway-join-target"><Monitor class="h-4 w-4 shrink-0" /><span class="shrink-0 text-muted-foreground">{text('gatewayJoin.targetRuntime')}</span><strong class="truncate font-medium" title={props.targetLabel ?? props.targetID}>{props.targetLabel ?? props.targetID}</strong></div>
         <Show when={currentStep() === 0}>
-          <section class="redeven-gateway-join-section redeven-gateway-connect-stage">
-          <h3>{text('gatewayJoin.connectEnvironment')}</h3>
-          <Show when={canConnect()} fallback={props.preparation}>
-            <p class="text-sm text-muted-foreground">{text('gatewayJoin.connectHelp')}</p>
-            {props.preparation}</Show>
+          <section class="redeven-gateway-join-section redeven-gateway-connect-stage" aria-busy={busy()}>
+            <div class="redeven-gateway-connect-heading">
+              <span class="redeven-gateway-connect-icon" aria-hidden="true"><Monitor class="h-5 w-5" /></span>
+              <h3 ref={connectionHeading} tabIndex={-1}>{text('gatewayJoin.connectEnvironment')}</h3>
+            </div>
+            <Show when={canConnect()}><p class="text-sm text-muted-foreground">{text('gatewayJoin.connectHelp')}</p></Show>
+            {props.preparation}
+            <Show when={statusError()}><p role="alert" class="text-sm text-error">{statusError()}</p></Show>
+            <div class="redeven-gateway-step-actions">
+              <Show when={canConnect()} fallback={props.preparationActions}>
+                <Button class="cursor-pointer whitespace-nowrap" disabled={busy() || blocked()}
+                  onClick={() => void connect()}><StableText reserve={[text('gatewayJoin.connectAndContinue'), text('gatewayJoin.connecting'), text('common.retry')]}>{text(pending() === 'connecting' ? 'gatewayJoin.connecting' : statusError() ? 'common.retry' : 'gatewayJoin.connectAndContinue')}</StableText><ArrowRight class="h-4 w-4 shrink-0" aria-hidden="true" /></Button>
+              </Show>
+              {props.settingsAction}
+            </div>
           </section>
         </Show>
         <section class="redeven-gateway-join-section" hidden={props.wizard && currentStep() !== 1}>
@@ -193,7 +205,7 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
             onInput={event => { invalidate(); setCode(event.currentTarget.value); }} onKeyDown={event => { if (event.key === 'Enter' && !blocked() && !busy() && address().trim() && code().trim()) { event.preventDefault(); void verify(); } }} /></label>
         </section>
         <Show when={preview()}>{value => <section class="redeven-gateway-join-section" hidden={props.wizard && currentStep() !== 2}>
-          <Show when={props.wizard}><h3>{text('gatewayJoin.confirmAccess')}</h3></Show>
+          <Show when={props.wizard}><h3 ref={confirmationHeading} tabIndex={-1}>{text('gatewayJoin.confirmAccess')}</h3></Show>
           <p class="font-medium text-primary">{text('gatewayJoin.verified')}</p>
           <dl class="redeven-gateway-join-summary"><div><span>{text('gatewayJoin.gateway')}</span><strong>{value().gateway_name}</strong></div><div><span>{text('gatewayJoin.targetRuntime')}</span><strong>{props.targetLabel ?? value().target_runtime_id}</strong></div><div><span>{text('gatewayJoin.expiry')}</span><strong>{new Date(value().expires_at_unix_ms).toLocaleTimeString(props.i18n.locale)}</strong></div></dl>
           <p class="text-sm text-muted-foreground">{text(purpose() === 'update-endpoints' ? 'gatewayJoin.endpointsHelp' : 'gatewayJoin.accessImpact')}</p>
@@ -204,21 +216,17 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
         {props.preparation}
         <Button class="cursor-pointer whitespace-nowrap" variant="outline" disabled={busy()} onClick={() => { setStep(0); setStatusError(''); }}>{text('gatewayJoin.restoreConnection')}</Button>
       </div></Show>
-      <Show when={error() || statusError()}><p role="alert" class="text-sm text-error">{error() || statusError()}</p></Show>
-    </div>
-    <div class="redeven-gateway-join-actions flex-wrap">
-      <Button class="cursor-pointer whitespace-nowrap" variant="ghost" onClick={close}>{text('common.cancel')}</Button>
-      <Show when={props.wizard && currentStep() === 0}>{props.settingsAction}</Show>
-      <Show when={props.wizard && currentStep() > 0}><Button class="cursor-pointer whitespace-nowrap" variant="outline" disabled={busy()}
-        onClick={() => { setStep(currentStep() - 1); setError(''); setStatusError(''); queueMicrotask(() => { if (currentStep() === 1) addressInput?.focus(); else connectButton?.focus(); }); }}>{text('gatewayJoin.back')}</Button></Show>
-      <Show when={!props.wizard || currentStep() > 0 || canConnect()} fallback={props.preparationActions}>
-        <Show when={!props.wizard || currentStep() > 0} fallback={<Button ref={connectButton} class="cursor-pointer whitespace-nowrap" disabled={busy() || blocked()}
-          onClick={() => void connect()}><StableText reserve={[text('gatewayJoin.connectAndContinue'), text('gatewayJoin.connecting'), text('common.retry')]}>{text(pending() === 'connecting' ? 'gatewayJoin.connecting' : statusError() ? 'common.retry' : 'gatewayJoin.connectAndContinue')}</StableText></Button>}>
+      <Show when={error() || (currentStep() !== 0 && statusError())}><p role="alert" class="text-sm text-error">{error() || statusError()}</p></Show>
+      <Show when={!props.wizard || currentStep() > 0}><div class="redeven-gateway-step-actions">
         <Show when={preview() && (!props.wizard || currentStep() === 2)} fallback={<Button class="cursor-pointer whitespace-nowrap" disabled={busy() || blocked() || !address().trim() || !code().trim()} onClick={() => void verify()}><StableText reserve={[text('gatewayJoin.verify'),text('gatewayJoin.verifying')]}>{text(pending() === 'verifying' ? 'gatewayJoin.verifying' : 'gatewayJoin.verify')}</StableText></Button>}>
           <Button ref={confirmButton} class="cursor-pointer whitespace-nowrap" disabled={busy() || blocked() || preview()!.expires_at_unix_ms <= now()} onClick={() => void act(purpose())}>{text('gatewayJoin.confirmEnable')}</Button>
         </Show>
-        </Show>
-      </Show>
+      </div></Show>
+    </div>
+    <div class="redeven-gateway-join-actions">
+      <Show when={props.wizard && currentStep() > 0}><Button class="cursor-pointer whitespace-nowrap" variant="outline" disabled={busy()}
+        onClick={() => { setStep(currentStep() - 1); setError(''); setStatusError(''); queueMicrotask(() => { if (currentStep() === 1) addressInput?.focus(); else connectionHeading?.focus({ preventScroll: true }); }); }}>{text('gatewayJoin.back')}</Button></Show>
+      <Button class="cursor-pointer whitespace-nowrap" variant="ghost" onClick={close}>{text('common.cancel')}</Button>
     </div>
   </div>;
   return <Show when={props.embedded} fallback={<><Show when={!props.hideTrigger}><Button ref={trigger} class="mt-2 cursor-pointer" size="sm" variant="outline" disabled={props.disabled} onClick={openDialog}>{text('gatewayJoin.title')}</Button></Show>
