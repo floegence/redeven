@@ -234,6 +234,8 @@ export function createRuntimeReconnectController(args: CreateRuntimeReconnectCon
       ...current,
       state: 'failed',
       phase: 'failed',
+      next_retry_at_unix_ms: undefined,
+      retry_not_before_unix_ms: undefined,
       failure,
       secure_session: failure.code === 'secure_session_failed' || failure.code === 'authentication_failed'
         ? 'failed'
@@ -303,6 +305,12 @@ export function createRuntimeReconnectController(args: CreateRuntimeReconnectCon
       return;
     }
     if (desktop.phase === 'failed') {
+      // Terminal native transport failure also cancels SDK acquisition retries.
+      // Presentation alone must not keep contacting a retired Runtime endpoint.
+      if (currentSnapshot.desktop_transport?.phase !== 'failed') {
+        stopOperation = Promise.resolve().then(() => args.stopRetry());
+        void stopOperation.catch(() => undefined);
+      }
       failRecovery({
         code: desktop.failure?.code === 'authentication_failed' ? 'authentication_failed' : 'transport_unavailable',
         retryable: false,

@@ -277,6 +277,7 @@ describe('createRuntimeReconnectController', () => {
   });
 
   it('keeps a terminal Desktop failure as the final snapshot', async () => {
+    const stopRetry = vi.fn();
     const [desktopTransport] = createSignal({
       generation: 3,
       revision: 7,
@@ -294,7 +295,7 @@ describe('createRuntimeReconnectController', () => {
     const dispose = createRoot((disposeRoot) => {
       controller = createRuntimeReconnectController({
         reconnect: async () => undefined,
-        stopRetry: () => undefined,
+        stopRetry,
         enabled: () => true,
         desktopTransport,
         retryProtocolNow: () => true,
@@ -304,6 +305,7 @@ describe('createRuntimeReconnectController', () => {
     });
     await flushAsync();
 
+    expect(stopRetry).toHaveBeenCalledOnce();
     expect(controller.snapshot()).toMatchObject({
       state: 'failed',
       phase: 'failed',
@@ -315,6 +317,33 @@ describe('createRuntimeReconnectController', () => {
     controller.noteProtocolConnected();
     controller.noteSecureSession('ready');
     expect(controller.snapshot()).toBe(terminalSnapshot);
+    dispose();
+  });
+
+  it('cancels scheduled protocol retry once when the native listener becomes unavailable', async () => {
+    const [desktopTransport, setDesktopTransport] = createSignal<DesktopTransportRecoverySnapshot | null>(null);
+    const stopRetry = vi.fn();
+    let controller!: RuntimeReconnectController;
+    const dispose = createRoot(disposeRoot => {
+      controller = createRuntimeReconnectController({
+        enabled: () => true, desktopTransport, stopRetry,
+        reconnect: async () => undefined, retryProtocolNow: () => true,
+        requestDesktopRecoveryNow: async () => false,
+      });
+      return disposeRoot;
+    });
+    controller.activateWaiting(OFFLINE_FAILURE, { attempt: 1, terminal: false, nextRetryAtUnixMs: Date.now() + 30_000 });
+    setDesktopTransport({ generation: 1, revision: 1, phase: 'failed', attempt_count: 0,
+      failure: { code: 'transport_unavailable', error_name: 'LocalRuntimeBridgeUnavailable', technical_detail: 'Connection refused.' },
+      actions: ['open_connection_center'],
+    });
+    await flushAsync();
+    expect(controller.snapshot()).toMatchObject({ state: 'failed', failure: { retryable: false } });
+    expect(controller.snapshot().next_retry_at_unix_ms).toBeUndefined();
+    expect(stopRetry).toHaveBeenCalledOnce();
+    setDesktopTransport({ ...desktopTransport()!, revision: 2 });
+    await flushAsync();
+    expect(stopRetry).toHaveBeenCalledOnce();
     dispose();
   });
 
