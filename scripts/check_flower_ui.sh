@@ -146,6 +146,7 @@ main() {
       internal/flower_ui/src/flowerScrollTail.test.ts \
       internal/flower_ui/src/flowerTurnPresentation.test.ts \
       internal/flower_ui/src/flowerTurnDisclosure.test.ts \
+      internal/flower_ui/src/subagentAvatarCatalog.test.ts \
       internal/flower_ui/src/flowerPendingTurns.test.ts \
       internal/flower_ui/src/flowerTerminalOutput.test.ts \
       internal/flower_ui/src/FlowerSurface.references.test.ts \
@@ -207,6 +208,7 @@ main() {
         src/ui/FlowerSurface.settings.browser.test.tsx \
         src/ui/FlowerSettingsSurface.presentation.browser.test.tsx \
         src/ui/FlowerSurface.subagentDisclosure.browser.test.tsx \
+        src/ui/FlowerSurface.subagentAppearance.browser.test.tsx \
         src/ui/FlowerSurface.reasoningSelection.browser.test.tsx \
         src/ui/FlowerSurface.terminalActivity.browser.test.tsx \
         src/ui/FlowerSurface.webSearch.browser.test.tsx \

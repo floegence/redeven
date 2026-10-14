@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower subagent detail presentation
 description: Parent header membership, canonical thread routing, and read-only child execution detail.
 tags: [ai, flower, subagents, ui]
-timestamp: 2026-10-08T00:00:00Z
+timestamp: 2026-10-14T00:00:00Z
 ---
 # Summary
 
@@ -21,6 +21,8 @@ Thread-level child membership comes from Floret v7 `ThreadRuntime.List` scoped b
 SubAgent tool rows are action-first. One localized formatter combines the typed operation action with the Activity lifecycle and outcome counts, so spawn, wait, list, inspect, send-input, close, and close-all never collapse to the ambiguous title “Subagents.” A collapsed multi-target row shows the first two task names plus the remaining count; expanded detail preserves every requested target in request order. Unknown or invalid operation data uses a neutral operation title and never guesses from a generic label.
 
 The dropdown is a compact accessible floating surface over the parent thread. Active and ended groups stay visible, rows sort by canonical status and update time, and keyboard navigation supports arrows, Home, End, Enter, and Escape. Selecting a row synchronously creates one stable detail selection and opens its read-only floating window with a loading skeleton. A boolean-equality projection of selection presence is the only window-visibility input; current-view, summary, request, and error updates cannot restart the floating-window presence animation. There is no second writable open state. The window does not wait for HTTP, select a sidebar child thread, or create a child composer. Temporary inventory omission cannot close it; only explicit close, parent-thread selection change, or leaving Flower can do so. Initial failure stays visible with an in-place retry.
+
+Child identity uses one original vector avatar catalog: 99 animal-and-accessory portraits with 36 color combinations. Canonical child `thread_id` deterministically selects the same portrait and palette in the dropdown and detail overview, independently of task text, status, row order, or live updates. Avatars are decorative; localized status text and a separate static indicator convey lifecycle. These surfaces never use a thinking orb for child identity or running status. The overview leads with the delegated task description above compact status, role, and duration metadata; the transcript has no full-height decorative guide line.
 
 The detail GET returns exactly `{ summary, current }` and accepts no paging query. `current` is the complete Floret child `ThreadView`; Redeven has no detail timeline DTO, page merger, load-more path, or second transcript. The parent-scoped workspace stream carries child updates as optional `thread.batch.subagent_current`: envelope `thread_id` names the parent and `subagent_current.thread_id` names the child. Every coalesced current is forwarded, while lifecycle boundaries separately refresh the complete membership list.
 
@@ -46,5 +48,6 @@ Flower must not recover a missing child identity from activity sidecars, a title
 - `redeven:internal/flower_ui/src/flowerSubagentDetailThread.ts` - Child detail requires canonical summary identity and task name.
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Owns the stable detail selection, monotonic HTTP/SSE receiver, and explicit parent and child activity viewport scopes.
 - `redeven:internal/flower_ui/src/SubagentDetailWindow.tsx` - Reconciles ledger groups and nested entries by stable semantic key without a second open-state or sync path.
+- `redeven:internal/flower_ui/src/subagentAvatarCatalog.ts` - Owns the 99 static portraits, 36 artwork palettes, and deterministic child identity selection.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.finalArchitecture.browser.test.tsx` - Proves streamed current replacement preserves the window, activity row, terminal viewport, disclosure motion, and parent scroll isolation.
 - `redeven:internal/flower_ui/src/flowerActivityPresentation.ts` - Formats localized operation titles and exact ordered target summaries.

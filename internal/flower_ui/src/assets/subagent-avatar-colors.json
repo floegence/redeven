@@ -1,0 +1,7 @@
+{
+  "ink": "#293347",
+  "paper": "#fff9ee",
+  "faces": ["#f5cb85", "#f0b2a1", "#d2bce9", "#a6cfc2", "#abcce4", "#d6c4a7"],
+  "backdrops": ["#daeae3", "#dfe9f4", "#ebe2f2", "#f2dfdc", "#f3e9d2", "#e5ead7"],
+  "accents": ["#478d79", "#547fa8", "#9773ad", "#bd746f", "#b58b44", "#7f9453"]
+}

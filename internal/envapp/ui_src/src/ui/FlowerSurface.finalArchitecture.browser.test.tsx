@@ -349,10 +349,11 @@ describe('Flower final thread cache and workspace transport', () => {
     trigger.click();
     await waitFor(() => Boolean(document.querySelector(`[data-flower-subagent-row="0"]`)));
     const subagentRow = document.querySelector(`[data-flower-subagent-row="0"]`) as HTMLButtonElement;
-    const rowOrb = subagentRow.querySelector<HTMLCanvasElement>('[data-thinking-orb-state="composing"]');
+    const rowAvatar = subagentRow.querySelector<HTMLElement>('[data-flower-subagent-avatar]');
     const rowTitle = subagentRow.querySelector('.flower-subagent-dropdown-name') as HTMLElement;
-    expect(rowOrb).not.toBeNull();
-    expect(rowOrb?.classList.contains('flower-subagent-thinking-orb')).toBe(true);
+    expect(rowAvatar).not.toBeNull();
+    expect(rowAvatar?.querySelector('svg')).not.toBeNull();
+    expect(subagentRow.querySelector('canvas')).toBeNull();
     expect(getComputedStyle(rowTitle).animationName).toBe('none');
     expect(getComputedStyle(rowTitle).backgroundImage).toBe('none');
     expect(getComputedStyle(rowTitle).webkitTextFillColor).not.toBe('rgba(0, 0, 0, 0)');
@@ -360,16 +361,16 @@ describe('Flower final thread cache and workspace transport', () => {
     await waitFor(() => Boolean(document.querySelector('[data-flower-subagent-detail="open"]')));
 
     const detail = document.querySelector('[data-flower-subagent-detail="open"]') as HTMLElement;
-    const detailSignal = detail.querySelector('.flower-subagent-detail-signal') as HTMLElement;
-    const detailOrb = detailSignal.querySelector<HTMLCanvasElement>('[data-thinking-orb-state="composing"]');
+    const detailAvatar = detail.querySelector('[data-flower-subagent-avatar]') as HTMLElement;
     const statusText = detail.querySelector('.flower-subagent-status-text') as HTMLElement;
     const detailWindow = document.querySelector<HTMLElement>('[data-floe-geometry-surface="floating-window"]');
     expect(detailWindow).not.toBeNull();
     await waitFor(() => detailWindow?.dataset.floatingPresence === 'open');
     await waitFor(() => getComputedStyle(detailWindow!).opacity === '1');
-    expect(detailOrb).not.toBeNull();
-    expect(detailSignal.querySelector('svg')).toBeNull();
-    expect(getComputedStyle(detailSignal).borderRadius).toBe('9999px');
+    expect(detailAvatar.querySelector('svg')).not.toBeNull();
+    expect(detailAvatar.dataset.flowerSubagentAvatar).toBe(rowAvatar?.dataset.flowerSubagentAvatar);
+    expect(detailAvatar.dataset.flowerSubagentAvatarPalette).toBe(rowAvatar?.dataset.flowerSubagentAvatarPalette);
+    expect(detail.querySelector('canvas[data-thinking-orb-state]')).toBeNull();
     expect(statusText.textContent).toBe('Running');
     expect(getComputedStyle(statusText).animationName).toBe('none');
     expect(getComputedStyle(statusText).backgroundImage).toBe('none');
