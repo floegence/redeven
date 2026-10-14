@@ -873,6 +873,9 @@ function createLocalizedFlowerProviderDialogCopy(i18n: FlowerSurfaceTranslator):
   return {
     chatGPT: {
       changeAccount: t(i18n, k('dialogChatGPTChangeAccount')),
+      signInAgain: t(i18n, k('dialogChatGPTSignInAgain')),
+      signInAgainHint: t(i18n, k('dialogChatGPTSignInAgainHint')),
+      signInAgainDescription: t(i18n, k('dialogChatGPTSignInAgainDescription')),
       loadingAccounts: t(i18n, k('dialogChatGPTLoadingAccounts')),
       chooseAccountHint: t(i18n, k('dialogChatGPTChooseAccountHint')),
       newRegistrationDescription: t(i18n, k('dialogChatGPTNewRegistrationDescription')),

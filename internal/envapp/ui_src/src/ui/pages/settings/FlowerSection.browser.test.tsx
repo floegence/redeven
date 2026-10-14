@@ -308,7 +308,7 @@ it('offers ChatGPT directly from Env settings and recovers login after discard, 
   expect(document.body.textContent).not.toContain('new@example.com');
   await userEvent.click(page.getByRole('button', { name: 'Add provider', exact: true }));
   await userEvent.click(document.querySelector<HTMLButtonElement>('[aria-controls=flower-provider-type-openai]')!);
-  await expect.element(page.getByRole('button', { name: 'Saved ChatGPT accounts', exact: true })).toHaveTextContent('new@example.com');
+  await expect.element(page.getByRole('button', { name: 'Signed-in ChatGPT accounts', exact: true })).toHaveTextContent('new@example.com');
   await expect.element(page.getByRole('dialog')).toBeVisible();
   // A saved registration is selected without starting another authorization.
   expect(request.mock.calls.filter(([url]) => url.endsWith('/chatgpt/start'))).toHaveLength(1);

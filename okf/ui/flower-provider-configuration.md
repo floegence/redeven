@@ -59,16 +59,33 @@ settings keep ChatGPT disabled with persistent guidance and no login panel.
 Verification preserves model choices, search and focus. The verified sign-in
 is saved independently of connection editing. The settings overview contains only
 models and providers; it neither lists saved accounts nor reads the registry for
-account cards. The OpenAI editor's dropdown owns saved-account selection, including
-signed-out registrations and unbound sign-ins. One saved registration is reused
-for new connections; multiple registrations require an explicit choice. Selecting
+account cards. The OpenAI editor's primary dropdown lists signed-in accounts,
+including unbound sign-ins and sessions needing renewal or local repair. Signed-out,
+authorization-required and signing-out records are excluded. A sole signed-in
+registration is selected for new connections even when signed-out history exists;
+multiple signed-in registrations require an explicit choice. Selecting
 an entry never starts OAuth or saves a provider. Existing bindings are preserved.
+Editable account snapshots are isolated from the canonical list, so resetting a
+draft cannot relabel or duplicate another registration in the picker.
 A ready selection synchronizes its catalog while leaving models unselected until
 chosen. Discard, page reentry and failed provider saves retain discoverability in
 the dropdown. Loading or failed account reads block sign-in and expose recovery.
 
+Sign in again opens a separate previous-connection chooser. It reuses the chosen
+registration and commits a new draft binding only after verified OAuth success.
+Cancellation or failure preserves the previous binding and model choices; retries
+retain the recovery attempt's account identity. With no signed-in accounts,
+Continue with ChatGPT reauthorizes the sole previous connection or opens the
+chooser when several exist. This never silently creates a new registration.
+An existing provider bound to a signed-out account keeps its explicit status and
+direct reauthorization action without adding it to the signed-in dropdown or
+switching to another account. Successful local sign-out removes its picker entry
+immediately; cleanup and remote-revocation failures remain actionable. Distinct
+previous connections remain available only in the explicit recovery chooser.
+
 Same-email registrations have distinct stable connection labels derived from
-opaque account IDs; the UI never invents workspace names. An independent Add
+opaque account IDs when their emails collide in the displayed list; the UI never
+invents workspace names. An independent Add
 account or workspace action opens a confirmation explaining how to reuse an
 existing entry. Only confirmation sends explicit new-registration intent. All
 OAuth-start controls use Continue with ChatGPT. Retrying a failed new exchange

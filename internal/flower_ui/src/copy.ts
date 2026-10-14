@@ -203,6 +203,9 @@ export type FlowerSettingsCopy = Readonly<{
 export type FlowerProviderDialogCopy = Readonly<{
   chatGPT: Readonly<{
     changeAccount: string;
+    signInAgain: string;
+    signInAgainHint: string;
+    signInAgainDescription: string;
     loadingAccounts: string;
     chooseAccountHint: string;
     newRegistrationDescription: string;
@@ -1472,13 +1475,16 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       },
       chatGPT: {
         changeAccount: "Add account or workspace",
+        signInAgain: 'Sign in again',
+        signInAgainHint: 'Continue with ChatGPT to sign in again using a previous connection.',
+        signInAgainDescription: 'Choose a previous connection to sign in again. Its authorization will be reused; other accounts stay signed in.',
         loadingAccounts: "Loading saved accounts…",
-        chooseAccountHint: "Choose a saved account above to continue. Each connection keeps its own authorization.",
-        newRegistrationDescription: "For an account already listed, cancel and select its saved connection. Continue only to add another account or workspace; this creates a separate authorization.",
+        chooseAccountHint: "Choose a signed-in account above to continue. Each connection keeps its own authorization.",
+        newRegistrationDescription: "Use an account from the signed-in list, or choose Sign in again for a previous connection. Continue only to add another account or workspace; this creates a separate authorization.",
         useSavedAccounts: "Use saved accounts",
         registrationLabel: (id) => `Connection ${id}`,
         accountsUnavailable: 'Saved ChatGPT accounts could not be loaded. Try again.',
-        savedAccounts: 'Saved ChatGPT accounts',
+        savedAccounts: 'Signed-in ChatGPT accounts',
         chooseAccount: 'Choose an account',
         savedSignIn: 'This account is saved on this device. Closing this dialog keeps you signed in.',
         usageUnavailable: "ChatGPT plan usage is unavailable for this request. Manage your usage or try again later.",
