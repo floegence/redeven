@@ -45,7 +45,7 @@ const mocks = vi.hoisted(() => {
     text: `Transcript for ${threadId}`,
     created_at: '1970-01-01T00:00:10Z',
   }]);
-  const fetchLocalApiJSONMock = vi.fn(async (url: string, init?: RequestInit) => {
+  const fetchLocalApiJSONMock = vi.fn(async (url: string, init?: RequestInit): Promise<Record<string, unknown>> => {
     if (url === '/_redeven_proxy/api/ai/storage-generation' && init?.method === 'GET') {
       return { storage_generation: 'b'.repeat(32) };
     }
@@ -205,6 +205,7 @@ const mocks = vi.hoisted(() => {
   const openFlowerFileBrowserMock = vi.fn(async () => undefined);
   const openFlowerFilePreviewMock = vi.fn(async () => undefined);
   const consumeAIThreadFocusRequestMock = vi.fn(() => undefined);
+  const openSettingsMock = vi.fn();
   const notificationMock = {
     error: vi.fn(),
     info: vi.fn(),
@@ -220,6 +221,7 @@ const mocks = vi.hoisted(() => {
     openFlowerFileBrowserMock,
     openFlowerFilePreviewMock,
     notificationMock,
+    openSettingsMock,
     sendUserTurnMock,
     state,
     subscribeThreadMock,
@@ -406,6 +408,7 @@ vi.mock('./EnvContext', () => ({
     openFilePreview: mocks.openFilePreviewMock,
     openFlowerFileBrowser: mocks.openFlowerFileBrowserMock,
     openFlowerFilePreview: mocks.openFlowerFilePreviewMock,
+    openSettings: mocks.openSettingsMock,
   }),
 }));
 
@@ -577,6 +580,7 @@ export function registerEnvAIPageSendTests() {
       mocks.notificationMock.info.mockClear();
       mocks.notificationMock.success.mockClear();
       mocks.consumeAIThreadFocusRequestMock.mockClear();
+      mocks.openSettingsMock.mockClear();
       mocks.state.currentItems = null;
       mocks.state.currentInteractions = [];
       mocks.state.omitReadState = false;
@@ -593,6 +597,70 @@ export function registerEnvAIPageSendTests() {
 
     afterEach(() => {
       document.body.innerHTML = '';
+    });
+
+    it.each([
+      { route: 'local_host' as const, actions: ['local_settings'] },
+      { route: 'remote_desktop' as const, actions: ['local_settings', 'remote_settings'] },
+      { route: undefined, actions: [] },
+    ])('offers setup destinations for the $route session', async ({ route, actions }) => {
+      const original = mocks.fetchLocalApiJSONMock.getMockImplementation()!;
+      const originalContext = window.redevenDesktopSessionContext;
+      const originalShell = window.redevenDesktopShell;
+      const openDesktopSettings = vi.fn(async () => undefined);
+      if (route) {
+        window.redevenDesktopSessionContext = {
+          getSnapshot: () => ({
+            local_environment_id: 'env-1',
+            renderer_storage_scope_id: 'env-1',
+            target_route: route,
+          }),
+          notifyAppReady: () => undefined,
+        };
+        window.redevenDesktopShell = { openFlowerSettings: openDesktopSettings };
+      } else {
+        delete window.redevenDesktopSessionContext;
+        delete window.redevenDesktopShell;
+      }
+      mocks.fetchLocalApiJSONMock.mockImplementation(async (url, init) => {
+        if (url.includes('/api/settings')) return { ai: null, ai_secrets: {} };
+        if (url.includes('/api/ai/models')) return { directory: { models: [], sources: [] } };
+        if (url.includes('/api/ai/threads?')) return { threads: [] };
+        return original(url, init);
+      });
+      const { host, dispose } = await renderPage(false);
+      try {
+        await vi.waitFor(() => expect(host.querySelector('.flower-setup-welcome')).toBeTruthy());
+        const welcome = host.querySelector('.flower-setup-welcome')!;
+        expect([...welcome.querySelectorAll('[data-model-source-action]')]
+          .map(action => action.getAttribute('data-model-source-action'))).toEqual(actions);
+        if (route) {
+          const desktopAction = welcome.querySelector<HTMLButtonElement>('[data-model-source-action="local_settings"]')!;
+          expect(desktopAction.textContent).toContain('Configure in Desktop Flower settings');
+          desktopAction.click();
+          await vi.waitFor(() => expect(openDesktopSettings).toHaveBeenCalledOnce());
+          if (route === 'remote_desktop') {
+            welcome.querySelector<HTMLButtonElement>('[data-model-source-action="remote_settings"]')!.click();
+            await vi.waitFor(() => expect(mocks.openSettingsMock).toHaveBeenCalledWith('ai', {
+              origin: { kind: 'flower', returnSurfaceId: 'ai' },
+            }));
+          } else {
+            expect(welcome.textContent).not.toContain('remote environment');
+            expect(mocks.openSettingsMock).not.toHaveBeenCalled();
+          }
+        } else {
+          welcome.querySelector<HTMLButtonElement>('.flower-setup-action')!.click();
+          await vi.waitFor(() => expect(host.querySelector('.flower-settings-providers-section')).toBeTruthy());
+          expect(openDesktopSettings).not.toHaveBeenCalled();
+        }
+      } finally {
+        dispose();
+        mocks.fetchLocalApiJSONMock.mockImplementation(original);
+        if (originalContext) window.redevenDesktopSessionContext = originalContext;
+        else delete window.redevenDesktopSessionContext;
+        if (originalShell) window.redevenDesktopShell = originalShell;
+        else delete window.redevenDesktopShell;
+      }
     });
 
     it('rereads the local directory when the connection authorization generation changes', async () => {

@@ -86,6 +86,7 @@ export function EnvAIPage(props: EnvAIPageProps) {
   const filesystemPicker = useEnvFilesystemPicker();
   const i18n = useI18n();
   const notification = useNotification();
+  const desktopSessionTargetRoute = readDesktopSessionContextSnapshot()?.target_route;
   const modelReadRevision = () => (env.settingsSeq?.() ?? 0) + (env.resourceCacheAccess?.().generation ?? 0);
   const readinessController = env.aiReadinessController ?? createAIReadinessController();
   const surfaceCopy = createMemo(() => createEnvFlowerSurfaceCopy(i18n, i18n.locale()));
@@ -97,7 +98,7 @@ export function EnvAIPage(props: EnvAIPageProps) {
   const adapter = createMemo(() => createEnvLocalFlowerSurfaceAdapter({
     envPublicID: trim(env.env_id()),
     envLabel: trim(env.env()?.name) || trim(env.env_id()) || i18n.t('flower.currentEnvironmentFallback'),
-    desktopSessionTargetRoute: readDesktopSessionContextSnapshot()?.target_route,
+    desktopSessionTargetRoute,
     rpc,
     settingsRevision: modelReadRevision,
     modelReadResource: env.flowerModelReadResource,
@@ -130,7 +131,7 @@ export function EnvAIPage(props: EnvAIPageProps) {
     openLinkedFilePreview: env.openFlowerLinkedFilePreview,
     openLinkedDirectoryBrowser: env.openFlowerLinkedDirectoryBrowser,
     retryModelSource: retryDesktopModels,
-    modelSourceRecovery: {
+    modelSourceRecovery: desktopSessionTargetRoute ? {
       describe: (status) => {
         if (status.state === 'missing_keys') {
           return i18n.t('flowerSettings.localAIProfileMissingKeys', {
@@ -158,12 +159,12 @@ export function EnvAIPage(props: EnvAIPageProps) {
           }
         },
       },
-      remoteSettings: {
+      remoteSettings: desktopSessionTargetRoute === 'remote_desktop' ? {
         label: i18n.t('flowerSettings.remoteFlowerSettingsAction'),
         run: async () => {
           env.openSettings('ai', { origin: { kind: 'flower', returnSurfaceId: props.settingsReturnSurfaceId ?? 'ai' } });
         },
-      },
+      } : undefined,
       runtimeSettings: {
         label: i18n.t('settings.runtimeTitle'),
         run: async () => {
@@ -178,7 +179,7 @@ export function EnvAIPage(props: EnvAIPageProps) {
           }
         },
       },
-    },
+    } : undefined,
   }));
 
   return (

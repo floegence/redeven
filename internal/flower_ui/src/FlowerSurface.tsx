@@ -2904,16 +2904,22 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const recovery = props.adapter.modelSourceRecovery;
     return source && recovery ? trimString(recovery.describe(source)) : '';
   });
+  const noModelProfileSetupActions = createMemo(() => {
+    const recovery = props.adapter.modelSourceRecovery;
+    const source = modelSource();
+    if (!recovery || snapshot()?.model_profile || (source && source.state !== 'not_configured' && source.state !== 'empty')) return [];
+    return [
+      { id: 'local_settings' as const, action: recovery.localSettings },
+      ...(recovery.remoteSettings ? [{ id: 'remote_settings' as const, action: recovery.remoteSettings }] : []),
+    ];
+  });
   const modelSourceRecoveryAction = (
     status: UnavailableFlowerModelSourceStatus,
   ): readonly Readonly<{ id: FlowerModelSourceRecoveryActionID; action: FlowerSurfaceAction }>[] => {
     const recovery = props.adapter.modelSourceRecovery;
     if (!recovery) return [];
-    if ((status.state === 'not_configured' || status.state === 'empty') && !snapshot()?.model_profile && recovery.remoteSettings) {
-      return [
-        { id: 'local_settings', action: recovery.localSettings },
-        { id: 'remote_settings', action: recovery.remoteSettings },
-      ];
+    if ((status.state === 'not_configured' || status.state === 'empty') && !snapshot()?.model_profile) {
+      return noModelProfileSetupActions();
     }
     if (status.state === 'unsupported') {
       return [{ id: 'runtime_settings', action: recovery.runtimeSettings }];
@@ -2921,15 +2927,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (status.state === 'missing_keys') return [{ id: 'local_settings', action: recovery.localSettings }];
     return [{ id: 'connection_center', action: recovery.connectionCenter }];
   };
-  const noModelProfileSetupActions = createMemo(() => {
-    const recovery = props.adapter.modelSourceRecovery;
-    const source = modelSource();
-    if (!recovery || !recovery.remoteSettings || snapshot()?.model_profile || (source && source.state !== 'not_configured' && source.state !== 'empty')) return [];
-    return [
-      { id: 'local_settings' as const, action: recovery.localSettings },
-      { id: 'remote_settings' as const, action: recovery.remoteSettings },
-    ];
-  });
   const currentHandlerDecision = createMemo(() => {
     const state = handlerState();
     return 'decision' in state ? state.decision : null;
