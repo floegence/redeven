@@ -228,23 +228,25 @@ try {
     console.log(JSON.stringify({ passed: true, backend: 'linux-drm-kms', checks: ['unsupported scanout reason', 'input disabled', 'unlock hidden', 'no misleading retry', 'no connect command'] }));
   } else if (codecOnly) {
     await page.waitForFunction(() => document.querySelector('#connection').hidden);
-    const expected = backend === 'macos' ? undefined : [...(noAV1 ? [] : ['av1']), ...(noVP9 ? [] : ['vp9']), 'h264'];
-    const checkOffer = method => assert.deepEqual(messages.findLast(item => item.command.method === method)?.command.picture.codecs,
-      expected, `${backend} ${method} must offer only client-supported codecs`);
+    const probed = backend === 'macos' ? undefined : [...(noAV1 ? [] : ['av1']), ...(noVP9 ? [] : ['vp9']), 'h264'];
+    const expected = backend === 'macos' ? undefined : noVP9 ? probed : ['vp9'];
+    const checkOffer = (method, codecs = expected) => assert.deepEqual(messages.findLast(item => item.command.method === method)?.command.picture.codecs,
+      codecs, `${backend} ${method} must offer only client-supported codecs`);
     checkOffer('connect');
     paint();
     await page.waitForFunction(() => document.querySelector('#desktop').hasAttribute('data-painted') && !document.querySelector('#shortcuts').disabled);
     await page.locator('#settings').click();
     await page.locator('#quality').selectOption('clarity');
     await page.waitForFunction(() => !document.querySelector('#quality').disabled);
-    checkOffer('configure');
+    assert.deepEqual(messages.findLast(item => item.command.method === 'configure')?.command.picture.codecs,
+      probed, `${backend} clarity must retain the full client-supported codec set`);
     await page.keyboard.press('Escape');
     const before = connectionCount;
     control.close();
     for (let attempt = 0; connectionCount === before && attempt < 100; attempt++) await page.waitForTimeout(20);
     await page.waitForFunction(() => document.querySelector('#connection').hidden);
     assert(connectionCount > before, 'codec negotiation prevented reconnect');
-    checkOffer('connect');
+    checkOffer('connect', probed);
     // A pending decoder probe must not obtain a ticket after explicit disconnect.
     await page.evaluate(() => { VideoDecoder.isConfigSupported = () => new Promise(resolve => { window.finishCodecProbe = resolve; }); });
     control.close();
