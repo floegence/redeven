@@ -300,11 +300,15 @@ it('offers ChatGPT directly from Env settings and recovers login after discard, 
   await userEvent.click(page.getByRole('button', { name: 'Continue with ChatGPT', exact: true }));
   await expect.element(page.getByText('new@example.com', { exact: true }).last()).toBeVisible();
   await userEvent.click(page.getByRole('button', { name: 'Discard', exact: true }));
-  await expect.element(page.getByText('new@example.com', { exact: true }).last()).toBeVisible();
+  await expect.poll(() => document.querySelector('.flower-provider-dialog')).toBeNull();
+  expect(document.body.textContent).not.toContain('new@example.com');
   expect(bundles).toHaveLength(0);
   setOpen(false); setOpen(true);
-  await expect.element(page.getByText('new@example.com', { exact: true }).last()).toBeVisible();
-  await userEvent.click(page.getByRole('button', { name: 'Continue setup', exact: true }));
+  await expect.poll(() => document.querySelector('.flower-provider-dialog')).toBeNull();
+  expect(document.body.textContent).not.toContain('new@example.com');
+  await userEvent.click(page.getByRole('button', { name: 'Add provider', exact: true }));
+  await userEvent.click(document.querySelector<HTMLButtonElement>('[aria-controls=flower-provider-type-openai]')!);
+  await expect.element(page.getByRole('button', { name: 'Saved ChatGPT accounts', exact: true })).toHaveTextContent('new@example.com');
   await expect.element(page.getByRole('dialog')).toBeVisible();
   // A saved registration is selected without starting another authorization.
   expect(request.mock.calls.filter(([url]) => url.endsWith('/chatgpt/start'))).toHaveLength(1);
@@ -318,7 +322,8 @@ it('offers ChatGPT directly from Env settings and recovers login after discard, 
   await new Promise(resolve => setTimeout(resolve, 800));
   expect(bundles).toHaveLength(1);
   await userEvent.click(page.getByRole('button', { name: 'Discard', exact: true }));
-  await expect.element(page.getByText('new@example.com', { exact: true }).last()).toBeVisible();
+  await expect.poll(() => document.querySelector('.flower-provider-dialog')).toBeNull();
+  expect(document.body.textContent).not.toContain('new@example.com');
 });
 
 for (const local of [false, true]) it(`protects an open ${local ? 'local account' : 'API key'} editor immediately when administration is revoked`, async () => {

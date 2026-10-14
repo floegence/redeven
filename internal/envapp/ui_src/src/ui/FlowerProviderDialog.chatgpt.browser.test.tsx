@@ -35,7 +35,7 @@ async function mount(local: boolean, locale: RedevenLocale, width: number, dark:
   dispose = render(() => <FloeProvider config={{ theme: { shellPresets: builtInShellThemePresets } }}><Theme /><FlowerProviderDialog
     open={open()} mode={mode ?? (provider ? 'edit' : 'create')} provider={provider ?? { id: 'openai', type: 'openai', models: [] }}
     copy={copy} chatGPTAvailable={available()} chatGPTBindingID={binding()} chatGPTAccount={account()} chatGPTAccounts={registry()}
-    loadChatGPTAccounts={loadAccounts}
+    loadChatGPTAccounts={loadAccounts ?? (async () => ({ accounts: {}, saved_accounts: [] }))}
     chatGPTAuth={auth ?? vi.fn(async () => ({ id: 'attempt', state: 'waiting' }))}
     onDiscoverModels={async () => ({ models: provider?.catalog_models ?? [{ model_name: 'gpt-6.1-sol', context_window: 1050000, input_modalities: ['text', 'image'] }] })}
     keyConfigured={false} webSearchKeyConfigured={false} onOpenChange={setOpen} onConfirm={onConfirm} /></FloeProvider>, host);
@@ -44,6 +44,48 @@ async function mount(local: boolean, locale: RedevenLocale, width: number, dark:
   await expect.poll(() => document.querySelector('[role=dialog]')!.getAnimations({ subtree: true }).every(animation => animation.playState !== 'running')).toBe(true);
   return { copy, setOpen, setAvailable, setBinding, setAccount, setRegistry, open, onConfirm };
 }
+
+it('reuses the only saved registration without starting OAuth or saving a provider', async () => {
+  const saved: FlowerChatGPTAccount = { account_id: 'only-saved', email: 'saved@example.com', state: 'ready', welcome_acknowledged: true };
+  const auth = vi.fn<FlowerChatGPTAuth>(async () => ({}));
+  const { copy, onConfirm, setOpen } = await mount(true, 'en-US', 1000, false, undefined, auth, undefined, async () => ({ accounts: {}, saved_accounts: [saved] }));
+  await expect.element(page.getByRole('button', { name: copy.chatGPT.savedAccounts, exact: true })).toHaveTextContent(saved.email);
+  await expect.element(page.getByRole('checkbox', { name: 'gpt-6.1-sol', exact: true })).not.toBeChecked();
+  expect(auth).not.toHaveBeenCalled();
+  expect(onConfirm).not.toHaveBeenCalled();
+  await userEvent.click(page.getByRole('button', { name: copy.discard, exact: true }));
+  setOpen(true);
+  await userEvent.click(document.querySelector<HTMLButtonElement>('[aria-controls=flower-provider-type-openai]')!);
+  await expect.element(page.getByRole('button', { name: copy.chatGPT.savedAccounts, exact: true })).toHaveTextContent(saved.email);
+  expect(auth).not.toHaveBeenCalled();
+});
+
+it('requires explicit account selection and confirmation before adding another registration', async () => {
+  const saved: FlowerChatGPTAccount[] = ['first', 'second'].map(account_id => ({ account_id, email: 'same@example.com', state: 'ready', welcome_acknowledged: true }));
+  const auth = vi.fn<FlowerChatGPTAuth>(async action => action === 'start' ? { id: 'explicit', state: 'waiting' } : {});
+  const { copy } = await mount(true, 'en-US', 1000, false, undefined, auth, undefined, async () => ({ accounts: {}, saved_accounts: saved }));
+  await expect.element(page.getByRole('button', { name: copy.chatGPT.continue, exact: true })).toBeDisabled();
+  await userEvent.click(page.getByRole('button', { name: copy.chatGPT.changeAccount, exact: true }));
+  await expect.element(page.getByRole('dialog', { name: copy.chatGPT.changeAccount, exact: true })).toBeVisible();
+  expect(auth).not.toHaveBeenCalled();
+  await userEvent.click(page.getByRole('dialog', { name: copy.chatGPT.changeAccount, exact: true }).getByRole('button', { name: copy.chatGPT.useSavedAccounts, exact: true }));
+  await expect.element(page.getByRole('dialog', { name: copy.chatGPT.changeAccount, exact: true })).not.toBeInTheDocument();
+  await userEvent.click(page.getByRole('button', { name: copy.chatGPT.changeAccount, exact: true }));
+  await userEvent.click(page.getByRole('dialog', { name: copy.chatGPT.changeAccount, exact: true }).getByRole('button', { name: copy.chatGPT.continue, exact: true }));
+  expect(auth.mock.calls.find(([action]) => action === 'start')?.[1]).toMatchObject({ new_registration: true });
+  expect(auth.mock.calls.find(([action]) => action === 'start')?.[1].account_id).toBeUndefined();
+});
+
+it('blocks new registration while the canonical account list is loading or unavailable', async () => {
+  let fail!: (error: Error) => void;
+  const auth = vi.fn<FlowerChatGPTAuth>(async () => ({}));
+  const { copy } = await mount(true, 'en-US', 1000, false, undefined, auth, undefined, () => new Promise((_, reject) => { fail = reject; }));
+  await expect.element(page.getByRole('button', { name: copy.chatGPT.continue, exact: true })).toBeDisabled();
+  fail(new Error('Unavailable'));
+  await expect.element(page.getByRole('alert')).toHaveTextContent(copy.chatGPT.accountsUnavailable);
+  await expect.element(page.getByRole('button', { name: copy.chatGPT.continue, exact: true })).toBeDisabled();
+  expect(auth).not.toHaveBeenCalled();
+});
 
 for (const [local, locale, width, dark] of [
   [true, 'en-US', 1280, false], [true, 'zh-CN', 390, true], [true, 'de-DE', 320, true],
@@ -105,6 +147,7 @@ it('keeps draft selection, search and focus when a verified replacement account 
   await userEvent.click(page.getByRole('button', { name: copy.chatGPT.account, exact: true }));
   await expect.element(page.getByText('old@example.com', { exact: true })).toBeVisible();
   await userEvent.click(page.getByRole('button', { name: copy.chatGPT.changeAccount, exact: true }));
+  await userEvent.click(page.getByRole('dialog', { name: copy.chatGPT.changeAccount, exact: true }).getByRole('button', { name: copy.chatGPT.continue, exact: true }));
   await expect.poll(() => auth.mock.calls.some(([action]) => action === 'status')).toBe(true);
   const search = document.querySelector<HTMLInputElement>('input[placeholder="' + copy.catalog.search + '"]')!;
   await userEvent.fill(search, 'gpt'); search.focus();
@@ -197,7 +240,7 @@ it('confirms shared task impact and disables repeated sign-out while Runtime com
   await expect.element(page.getByRole('link', { name: copy.chatGPT.disconnectApps, exact: true })).toHaveAttribute('href', 'https://chatgpt.com/#settings');
 });
 
-for (const [locale, width] of [['zh-CN', 390], ['de-DE', 320]] as const) {
+for (const [locale, width] of [['en-US', 1280], ['zh-CN', 390], ['zh-TW', 320], ['de-DE', 320], ['es-ES', 320], ['fr-FR', 320], ['ja-JP', 320], ['ko-KR', 320], ['pt-BR', 320], ['ru-RU', 320]] as const) {
 it(`selects a saved signed-out registration without registering a new client and distinguishes equal emails (${locale})`, async () => {
   const saved = [
     { account_id: 'chatgpt_11111111', email: 'same@example.com', state: 'signed_out' as const, welcome_acknowledged: true },
@@ -212,13 +255,27 @@ it(`selects a saved signed-out registration without registering a new client and
   await expect.element(page.getByRole('menuitem', { name: /22222222/ })).toBeVisible();
   await userEvent.click(page.getByRole('menuitem', { name: /11111111/ }));
   expect(auth).not.toHaveBeenCalled();
-  await expect.element(page.getByRole('button', { name: copy.chatGPT.reauthorize, exact: true })).toBeVisible();
+  await expect.element(page.getByRole('button', { name: copy.chatGPT.continue, exact: true })).toBeVisible();
   await expect.poll(() => document.querySelector('[role=menu]') === null).toBe(true);
   await expect.poll(() => document.querySelector('[role=dialog]')!.getAnimations({ subtree: true }).every(animation => animation.playState !== 'running')).toBe(true);
   const panel = document.getElementById('flower-provider-type-openai')!;
   expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth);
+  for (const button of panel.querySelectorAll('button')) {
+    if (!button.getClientRects().length) continue;
+    expect(button.scrollWidth, button.textContent ?? '').toBeLessThanOrEqual(button.clientWidth + 1);
+  }
   if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: document.querySelector<HTMLElement>('.flower-provider-dialog')!, path: `__screenshots__/flower-chatgpt-saved-${locale}-${width}.png` });
-  await userEvent.click(page.getByRole('button', { name: copy.chatGPT.reauthorize, exact: true }));
+  await userEvent.click(page.getByRole('button', { name: copy.chatGPT.changeAccount, exact: true }));
+  const confirmation = page.getByRole('dialog', { name: copy.chatGPT.changeAccount, exact: true });
+  await expect.element(confirmation.getByText(copy.chatGPT.newRegistrationDescription, { exact: true })).toBeVisible();
+  const confirmationElement = confirmation.element() as HTMLElement;
+  expect(confirmationElement.scrollWidth).toBeLessThanOrEqual(confirmationElement.clientWidth);
+  for (const button of confirmationElement.querySelectorAll('button')) expect(button.scrollWidth).toBeLessThanOrEqual(button.clientWidth + 1);
+  expect(auth).not.toHaveBeenCalled();
+  if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: confirmationElement, path: `__screenshots__/flower-chatgpt-add-confirmation-${locale}-${width}.png` });
+  await userEvent.click(confirmation.getByRole('button', { name: copy.chatGPT.useSavedAccounts, exact: true }));
+  await expect.element(confirmation).not.toBeInTheDocument();
+  await userEvent.click(page.getByRole('button', { name: copy.chatGPT.continue, exact: true }));
   expect(auth.mock.calls[0][1]).toMatchObject({ account_id: saved[0].account_id });
   expect(auth.mock.calls[0][1].previous_attempt_id).toBeUndefined();
 });
@@ -265,6 +322,7 @@ it('reports unconfirmed cleanup of a failed new sign-in without claiming the exi
   const { copy } = await mount(true, 'en-US', 1280, false, draft, auth);
   await userEvent.click(page.getByRole('button', { name: copy.chatGPT.account, exact: true }));
   await userEvent.click(page.getByRole('button', { name: copy.chatGPT.changeAccount, exact: true }));
+  await userEvent.click(page.getByRole('dialog', { name: copy.chatGPT.changeAccount, exact: true }).getByRole('button', { name: copy.chatGPT.continue, exact: true }));
   await expect.element(page.getByRole('alert')).toHaveTextContent(copy.chatGPT.signInCleanupUnconfirmed);
   await expect.element(page.getByRole('link', { name: copy.chatGPT.disconnectApps })).toBeVisible();
   await expect.element(page.getByText(copy.chatGPT.connected, { exact: true })).toBeVisible();
@@ -303,4 +361,34 @@ it('cancels an active login and removes account controls when verified capabilit
   await expect.element(page.getByRole('button', { name: copy.chatGPT.account, exact: true })).toBeDisabled();
   await expect.poll(() => document.querySelector('.flower-provider-account')).toBeNull();
   await expect.poll(() => auth.mock.calls.some(([action]) => action === 'cancel')).toBe(true);
+});
+
+
+it('retries an explicit new registration using its issued attempt while preserving the previous account', async () => {
+  const saved: FlowerChatGPTAccount = { account_id: 'existing', email: 'same@example.com', state: 'ready', welcome_acknowledged: true };
+  const draft: FlowerProviderDraft = { id: 'openai', type: 'openai', auth_method: 'chatgpt', account_id: saved.account_id, chatgpt_account: saved, models: [{ model_name: 'gpt-6.1-sol' }] };
+  let starts = 0;
+  const auth = vi.fn<FlowerChatGPTAuth>(async action => action === 'start' ? { id: `explicit-${++starts}`, state: 'waiting' } : action === 'status' ? { state: starts === 1 ? 'failed' : 'waiting', error_code: 'invalid_grant' } : {});
+  const { copy } = await mount(true, 'en-US', 1000, false, draft, auth, undefined, async () => ({ accounts: {}, saved_accounts: [saved] }));
+  await userEvent.click(page.getByRole('button', { name: copy.chatGPT.changeAccount, exact: true }));
+  await userEvent.click(page.getByRole('dialog', { name: copy.chatGPT.changeAccount, exact: true }).getByRole('button', { name: copy.chatGPT.continue, exact: true }));
+  await expect.element(page.getByRole('alert')).toHaveTextContent(copy.chatGPT.signInFailed);
+  await expect.element(page.getByRole('button', { name: copy.chatGPT.savedAccounts, exact: true })).toHaveTextContent(saved.email);
+  await userEvent.click(page.getByRole('button', { name: copy.chatGPT.continue, exact: true }));
+  const requests = auth.mock.calls.filter(([action]) => action === 'start');
+  expect(requests[0][1].new_registration).toBe(true);
+  expect(requests[1][1]).toMatchObject({ previous_attempt_id: 'explicit-1', scope_id: requests[0][1].scope_id });
+  expect(requests[1][1].new_registration).toBeUndefined();
+  expect(requests[1][1].account_id).toBeUndefined();
+});
+
+it('refreshes the picker when another window saves a registration before sign-in starts', async () => {
+  const saved: FlowerChatGPTAccount = { account_id: 'peer', email: 'peer@example.com', state: 'ready', welcome_acknowledged: true };
+  let reads = 0;
+  const auth = vi.fn<FlowerChatGPTAuth>(async () => { throw new Error('account_selection_required'); });
+  const { copy } = await mount(true, 'en-US', 1000, false, undefined, auth, undefined, async () => ({ accounts: {}, saved_accounts: ++reads === 1 ? [] : [saved] }));
+  await userEvent.click(page.getByRole('button', { name: copy.chatGPT.continue, exact: true }));
+  await expect.element(page.getByRole('button', { name: copy.chatGPT.savedAccounts, exact: true })).toHaveTextContent(saved.email);
+  await expect.element(page.getByText(copy.chatGPT.connected, { exact: true })).toBeVisible();
+  expect(auth.mock.calls).toHaveLength(1);
 });

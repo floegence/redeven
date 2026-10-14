@@ -871,9 +871,12 @@ function createLocalizedFlowerProviderDialogCopy(i18n: FlowerSurfaceTranslator):
   return {
     chatGPT: {
       changeAccount: t(i18n, k('dialogChatGPTChangeAccount')),
+      loadingAccounts: t(i18n, k('dialogChatGPTLoadingAccounts')),
+      chooseAccountHint: t(i18n, k('dialogChatGPTChooseAccountHint')),
+      newRegistrationDescription: t(i18n, k('dialogChatGPTNewRegistrationDescription')),
+      useSavedAccounts: t(i18n, k('dialogChatGPTUseSavedAccounts')),
+      registrationLabel: id => t(i18n, k('dialogChatGPTRegistrationLabel'), { id }),
       savedAccounts: t(i18n, k('dialogChatGPTSavedAccounts')),
-      continueSetup: t(i18n, k('dialogChatGPTContinueSetup')),
-      unboundSignIn: t(i18n, k('dialogChatGPTUnboundSignIn')),
       accountsUnavailable: t(i18n, k('dialogChatGPTAccountsUnavailable')),
       chooseAccount: t(i18n, k('dialogChatGPTChooseAccount')),
       savedSignIn: t(i18n, k('dialogChatGPTSavedSignIn')),
@@ -889,7 +892,6 @@ function createLocalizedFlowerProviderDialogCopy(i18n: FlowerSurfaceTranslator):
       localOnly: t(i18n, k('dialogChatGPTLocalOnly')),
       continue: t(i18n, k('dialogChatGPTContinue')),
       waiting: t(i18n, k('dialogChatGPTWaiting')),
-      reauthorize: t(i18n, k('dialogChatGPTReauthorize')),
       cancel: t(i18n, k('dialogChatGPTCancel')),
       planSource: t(i18n, k('dialogChatGPTPlanSource')),
       planPermission: t(i18n, k('dialogChatGPTPlanPermission')),

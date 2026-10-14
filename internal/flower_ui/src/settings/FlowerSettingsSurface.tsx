@@ -1,4 +1,3 @@
-import { FlowerSavedChatGPTAccounts } from './FlowerSavedChatGPTAccounts';
 import { computerUseEnUS, type FlowerComputerCopy } from '../computerUseCopy';
 import { flowerProviderAPIKeyOptional, missingFlowerProviderCredential } from '../providerCredentials';
 import { secureRandomUUID } from '@floegence/floe-webapp-core';
@@ -583,14 +582,6 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
             </div>
           </header>
 
-          <FlowerSavedChatGPTAccounts enabled={props.snapshot?.auth_capabilities?.openai_chatgpt.available === true && Boolean(props.chatGPTAuth)}
-            bindingID={props.snapshot?.auth_capabilities?.openai_chatgpt.binding_id} refreshKey={providerDialogOpen()}
-            load={props.loadChatGPTAccounts} boundAccountIDs={providers().map(provider => provider.account_id ?? '')}
-            copy={copy().dialog.chatGPT} disabled={props.saving} onContinue={account => {
-              setProviderDialogIndex(null); setProviderDialogMode('create'); setProviderDialogError('');
-              setProviderDialogProvider({ ...newProviderDraft(), auth_method: 'chatgpt', account_id: account.account_id, chatgpt_account: account });
-              setProviderDialogOpen(true);
-            }} />
           <FlowerModelSettings copy={copy()} providers={providers()} currentModelID={currentModelID()}
             disabled={props.saving || providerToggleSaving()}
             providerReady={provider => provider.auth_method === 'chatgpt'

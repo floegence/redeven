@@ -3,11 +3,12 @@
   "release_review": {
     "release_version": "v0.13.12",
     "previous_release": "v0.13.11",
-    "reviewed_at": "2026-10-13",
-    "review_id": "runtime-cloud-route-unification-v5",
-    "summary": "Epoch 58 separates Cloud authorization from Gateway route selection and requires RCPP v5, Gateway local v6 and Gateway Cloud v3. Runtime and Desktop share one connection owner, explicit route operations and independent machine recovery.",
+    "reviewed_at": "2026-10-14",
+    "review_id": "flower-chatgpt-registration-intent-v1",
+    "summary": "Epoch 59 requires explicit new ChatGPT registration intent once accounts are saved. Desktop and Env App share the OpenAI account picker, default registration reuse and guarded authorization requests; all epoch 58 Cloud and route contracts remain intact.",
     "same_window_rationale": "",
     "checked_surfaces": [
+      "Epoch 59: ChatGPT start adds new_registration and refuses unselected registration when saved accounts exist. Issued-client retries and selected-account reauthorization preserve identity and credentials. Shared Desktop and Env App settings keep accounts inside the OpenAI editor, reuse a sole saved registration and require explicit selection for multiple registrations. Desktop attach/start, Local UI health, startup reports, sys.ping, Env App maintenance and SSH bootstrap require the canonical epoch. Runtime Service protocol, secrets schema and Floret API remain unchanged.",
       "Epoch 58: Desktop attach/start, Runtime Service, Local UI health, startup reports, sys.ping, Env App maintenance and SSH bootstrap preserve separate Cloud approval, connection and route facts. Route preflight, confirmation, operation queries and cancellation use durable Runtime results; old config is rejected read-only. Gateway revocation affects its route only; Cloud revocation requires a Runtime closure receipt.",
       "Epoch 57: Runtime and Desktop model-source tool DTOs preserve strict intent. OpenAI Responses, Chat Completions and ChatGPT namespaces compile strict schemas and restore synthetic nulls with request-owned rules. Native web search uses the current web_search contract; completed streamed items preserve native output before terminal success. Desktop, Env App and companion share concise provider errors with sanitized diagnostics and no permanent plan notice. Runtime Service protocol, Floret API, domain schema and canonical tool validation are unchanged. Desktop attach/start, Local UI health, startup reports, sys.ping, Env App maintenance and SSH bootstrap require the canonical epoch.",
       "Epoch 56: Runtime commits verified OAuth accounts before connection editing, identity-only grants remain saved, failed code exchanges reuse the issued client ID with fresh PKCE, canceled exchanges revoke minted credentials, and local account selection includes signed-out unbound registrations. Desktop and Env App remove draft credential receipts and discover models through the canonical account resolver. Runtime renewal includes every saved sign-in. Desktop attach/start, Local UI health, startup reports, sys.ping, Env App maintenance and SSH bootstrap consume the canonical epoch. Protected secrets schema, Runtime protocol and Floret API remain unchanged.",
@@ -104,7 +105,7 @@
     ]
   },
   "runtime_protocol_version": "redeven-runtime-v2",
-  "compatibility_epoch": 58,
+  "compatibility_epoch": 59,
   "upgrade_from_runtime_epochs": [
     9,
     10,
@@ -153,7 +154,9 @@
     53,
     54,
     55,
-    56
+    56,
+    57,
+    58
   ],
   "minimum_desktop_version": "v0.13.0",
   "minimum_runtime_version": "v0.13.0"

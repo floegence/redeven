@@ -482,7 +482,7 @@ func TestLateUnboundOAuthDraftCannotUndoLogout(t *testing.T) {
 		t.Fatalf("logout fact lost: %+v", s)
 	}
 	// A new intentional attempt reuses the retained issued registration.
-	attempt, err := c.Start("owner", a.ID(), false)
+	attempt, err := c.Start("owner", SignInOptions{AccountID: a.ID()})
 	if err != nil {
 		t.Fatal(err)
 	}
