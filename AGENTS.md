@@ -1252,11 +1252,15 @@ running, interrupted, malformed and obsolete results never count as passed.
 The failure cursor resumes that group, continues in original order and wraps
 to the start; only matching passed groups may be skipped. An entire profile
 passes only when every group remains valid for the same tree, test definitions,
-installed dependency contents, toolchain and relevant environment. Source
+installed dependency and embedded UI contents, toolchain and relevant environment. Source
 changes conservatively invalidate every group; scoped environment inputs
 invalidate their owning groups. Diff-dependent checks include the base commit.
 
-Use `--force` for a complete rerun in original order. `--group <id>` is focused
+Passed results are retained by complete input fingerprint, so returning to a
+previously validated tree and environment reuses its original result. Another
+run does not overwrite that evidence. `--force` discards historical passes for
+the selected groups and reruns them in original order; a failed forced run
+cannot restore an older pass. `--group <id>` is focused
 validation and does not certify the full profile. Logs identify execution,
 skips, invalidation reasons and the cursor without persisting raw environment
 values or credentials. Never forge or edit passed state to avoid checks. CI

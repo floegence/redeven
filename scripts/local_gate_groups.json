@@ -119,7 +119,9 @@
         "paths": [
           "desktop/node_modules",
           "internal/envapp/ui_src/node_modules",
-          "internal/codeapp/ui_src/node_modules"
+          "internal/codeapp/ui_src/node_modules",
+          "internal/envapp/ui/dist",
+          "internal/codeapp/ui/dist"
         ]
       }
     },

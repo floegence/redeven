@@ -99,6 +99,18 @@ class LocalGateTests(unittest.TestCase):
         self.assertIn("differs from the staged", self.gate("--mode", "staged", expected=1))
         self.assertEqual(self.trace(), [])
 
+    def test_staged_checks_use_the_same_alternate_index_as_the_commit(self):
+        self.manifest["groups"][0]["staged_diff"] = True
+        self.manifest["groups"][0]["command"] = [sys.executable, "-c", "import subprocess; from pathlib import Path; Path('trace').write_text(subprocess.check_output(['git', 'write-tree'], text=True))"]
+        self.write_manifest()
+        (self.root / "source").write_text("alternate index version\n")
+        self.env["GIT_INDEX_FILE"] = str(Path(self.temp.name) / "alternate-index")
+        self.git("read-tree", "HEAD")
+        self.git("add", ".")
+        expected = self.git("write-tree")
+        self.gate("--group", "A", "--mode", "staged")
+        self.assertEqual(self.trace(), [expected])
+
     def test_failure_resume_rotates_and_reuses_valid_passes(self):
         (self.root / "fail-C").touch()
         self.gate(expected=7)
@@ -151,6 +163,37 @@ class LocalGateTests(unittest.TestCase):
         (self.root / "fail-probe").unlink()
         self.clear_trace()
         self.assertIn("cursor=C", self.gate())
+        self.assertEqual(self.trace(), list("CDE"))
+
+    def test_returning_to_a_passed_environment_reuses_its_original_result(self):
+        self.manifest["groups"][2]["environment"] = {"paths": ["environment"]}
+        self.write_manifest()
+        self.gate()
+        (self.root / "environment").write_text("another environment")
+        self.clear_trace()
+        self.gate()
+        self.assertEqual(self.trace(), ["C"])
+        (self.root / "environment").unlink()
+        self.clear_trace()
+        self.assertEqual(self.gate().count("SKIP "), 5)
+        self.assertEqual(self.trace(), [])
+
+    def test_returning_to_a_passed_tree_reuses_its_original_result(self):
+        self.gate()
+        (self.root / "source").write_text("another version\n")
+        self.gate()
+        (self.root / "source").write_text("original\n")
+        self.clear_trace()
+        self.assertEqual(self.gate().count("SKIP "), 5)
+        self.assertEqual(self.trace(), [])
+
+    def test_failed_force_run_cannot_restore_an_old_pass(self):
+        self.gate()
+        (self.root / "fail-C").touch()
+        self.gate("--force", expected=7)
+        (self.root / "fail-C").unlink()
+        self.clear_trace()
+        self.gate()
         self.assertEqual(self.trace(), list("CDE"))
 
     def test_test_and_dependency_configuration_changes_invalidate(self):
