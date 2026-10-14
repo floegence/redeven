@@ -671,6 +671,7 @@
         "runtime": "런타임"
       },
       "citationSources": "출처",
+      "citationCopySources": "출처 복사",
       "citationUnavailable": "출처를 사용할 수 없음"
     },
     "threadList": {

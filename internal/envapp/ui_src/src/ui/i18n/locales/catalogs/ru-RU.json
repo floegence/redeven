@@ -5669,6 +5669,7 @@
         "runtime": "Среда выполнения"
       },
       "citationSources": "Источники",
+      "citationCopySources": "Копировать источники",
       "citationUnavailable": "Источник недоступен"
     },
     "threadList": {

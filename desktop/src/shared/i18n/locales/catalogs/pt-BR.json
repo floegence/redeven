@@ -671,6 +671,7 @@
         "runtime": "Ambiente de execução"
       },
       "citationSources": "Fontes",
+      "citationCopySources": "Copiar fontes",
       "citationUnavailable": "Fonte indisponível"
     },
     "threadList": {

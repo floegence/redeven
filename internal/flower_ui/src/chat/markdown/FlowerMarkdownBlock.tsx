@@ -13,6 +13,7 @@ import { normalizeMarkdownForDisplay } from './normalizeMarkdownForDisplay';
 import { createMarkdownRenderModel, type MarkdownRenderSnapshot } from './streamingMarkdownModel';
 import { StreamingMarkdownTail } from './StreamingMarkdownTail';
 import { prepareFlowerCitations } from './flowerCitations';
+import { parseFlowerSourceFence, renderFlowerSourceCards } from './flowerSourceCards';
 import type { FlowerCitationSource } from '../../contracts/flowerSurfaceContracts';
 import {
   decorateFlowerMarkdownCodeBlocks,
@@ -22,7 +23,7 @@ import {
 export interface FlowerMarkdownBlockProps {
   content: string;
   sources?: readonly FlowerCitationSource[];
-  citationLabels?: Readonly<{ sources: string; unavailable: string }>;
+  citationLabels?: Readonly<{ sources: string; unavailable: string; copy?: string }>;
   streaming?: boolean;
   copyCodeLabel: string;
   codeCopiedLabel: string;
@@ -37,7 +38,14 @@ export const FlowerMarkdownBlock: Component<FlowerMarkdownBlockProps> = (props) 
     breaks: false,
     pedantic: false,
   });
-  marked.use({ renderer: createFlowerMarkdownRenderer({ media: props.mediaLabels !== undefined }) });
+  marked.use({ renderer: createFlowerMarkdownRenderer({
+    media: props.mediaLabels !== undefined,
+    sourceFence: token => {
+      if (!props.citationLabels) return null;
+      const sources = parseFlowerSourceFence(token);
+      return sources ? renderFlowerSourceCards(sources, props.citationLabels, token.text) : null;
+    },
+  }) });
 
   const [copiedButton, setCopiedButton] = createSignal<HTMLButtonElement | null>(null);
   const citations = createMemo(() => props.citationLabels
@@ -57,10 +65,15 @@ export const FlowerMarkdownBlock: Component<FlowerMarkdownBlockProps> = (props) 
   const snapshot = createMemo<MarkdownRenderSnapshot>(() => renderMarkdown(
     displayContent(),
     props.streaming === true,
-    JSON.stringify(citations().html),
+    JSON.stringify([citations().html, props.citationLabels]),
   ));
   const segments = createMemo(() => new Map(snapshot().committedSegments.map((segment) => [segment.key, segment])));
   const segmentKeys = createMemo(() => [...segments().keys()]);
+  const remainingSourcesHTML = createMemo(() => props.citationLabels ? renderFlowerSourceCards(
+    citations().remaining,
+    props.citationLabels,
+    citations().remaining.map((source, index) => `[${index + 1}] ${source.title || new URL(source.url).hostname}\n${source.url}`).join('\n\n'),
+  ) : '');
   let rootRef: HTMLDivElement | undefined;
   let copiedResetTimer: number | undefined;
   const iconCleanups = new WeakMap<HTMLButtonElement, () => void>();
@@ -80,8 +93,9 @@ export const FlowerMarkdownBlock: Component<FlowerMarkdownBlockProps> = (props) 
     const button = copiedButton();
     if (!button) return;
     button.dataset.copied = 'false';
-    button.setAttribute('aria-label', props.copyCodeLabel);
-    button.setAttribute('title', props.copyCodeLabel);
+    const label = copyLabel(button);
+    button.setAttribute('aria-label', label);
+    button.setAttribute('title', label);
     setCopiedButton(null);
   };
 
@@ -104,13 +118,16 @@ export const FlowerMarkdownBlock: Component<FlowerMarkdownBlockProps> = (props) 
     };
   };
 
+  const copyLabel = (button: HTMLButtonElement) => button.hasAttribute('data-flower-source-copy')
+    ? props.citationLabels?.copy ?? props.copyCodeLabel : props.copyCodeLabel;
+
   const handleClick = (event: MouseEvent) => {
     const target = event.target;
     if (!(target instanceof Element)) return;
     const button = target.closest('button.flower-chat-md-code-copy');
     if (!(button instanceof HTMLButtonElement)) return;
     if (!rootRef?.contains(button)) return;
-    const code = flowerMarkdownCodeTextForCopyButton(button);
+    const code = button.dataset.flowerSourceCopy ?? flowerMarkdownCodeTextForCopyButton(button);
     if (!code) return;
     event.preventDefault();
     event.stopPropagation();
@@ -150,7 +167,14 @@ export const FlowerMarkdownBlock: Component<FlowerMarkdownBlockProps> = (props) 
         for (const button of buttons) {
           if (!root.contains(button)) release(button);
         }
-        buttons = decorateFlowerMarkdownCodeBlocks(root, labels, mountCopyIcons);
+        const sourceButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('button[data-flower-source-copy]'));
+        for (const button of sourceButtons) {
+          mountCopyIcons(button);
+          const label = button.dataset.copied === 'true' ? props.codeCopiedLabel : copyLabel(button);
+          button.setAttribute('aria-label', label);
+          button.setAttribute('title', label);
+        }
+        buttons = [...decorateFlowerMarkdownCodeBlocks(root, labels, mountCopyIcons), ...sourceButtons];
         for (const [node, dispose] of highlighted) {
           if (!root.contains(node)) { dispose(); highlighted.delete(node); }
         }
@@ -195,15 +219,18 @@ export const FlowerMarkdownBlock: Component<FlowerMarkdownBlockProps> = (props) 
     return <div ref={element} class="flower-chat-md-tail-frame"><StreamingMarkdownTail tail={tail()} /></div>;
   };
 
+  const RemainingSources: Component = () => {
+    let element!: HTMLDivElement;
+    decorateRegion(() => element, remainingSourcesHTML);
+    return <div ref={element} innerHTML={remainingSourcesHTML()} />;
+  };
+
   return (
     <div ref={(node) => { rootRef = node; }} class={cn('flower-chat-md-block', props.class)} onClick={handleClick}>
       <For each={segmentKeys()}>{(key) => <HtmlSegment segmentKey={key} />}</For>
       <Show when={snapshot().tail.kind !== 'empty'}><TailFrame /></Show>
       <Show when={citations().remaining.length > 0 && props.streaming !== true}>
-        <aside class="flower-chat-source-list" aria-label={props.citationLabels?.sources}>
-          <div class="flower-chat-source-heading">{props.citationLabels?.sources}</div>
-          <ul><For each={citations().remaining}>{source => <li><a href={source.url} target="_blank" rel="noopener noreferrer">{source.title || new URL(source.url).hostname}</a></li>}</For></ul>
-        </aside>
+        <RemainingSources />
       </Show>
     </div>
   );

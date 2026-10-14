@@ -671,6 +671,7 @@
         "runtime": "執行環境"
       },
       "citationSources": "來源",
+      "citationCopySources": "複製來源",
       "citationUnavailable": "來源無法使用"
     },
     "threadList": {

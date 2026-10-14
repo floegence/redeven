@@ -3323,7 +3323,7 @@
               "selection",
               "themes"
             ],
-            "summary": "Flower owns transcript message presentation in the shared Env App and Desktop\nUI. Published Floe theme tokens own the palette. Sent user messages use the\ntheme's text-selection accent with readable foreground text. Native selection\nmust remain visible within a filled bubble and its insets. Theme changes alter\npaint only, preserving message DOM, geometry and active selection. Queued input\nkeeps its quieter pending presentation; forced colors use system roles.",
+            "summary": "Flower owns transcript message presentation in the shared Env App and Desktop\nUI. Published Floe theme tokens own the palette. Sent user messages use the\ntheme's text-selection accent with readable foreground text. Native selection\nmust remain visible within a filled bubble and its insets. Theme changes alter\npaint only, preserving message DOM, geometry and active selection. Queued input\nkeeps its quieter pending presentation; forced colors use system roles.\nTranscript reading typography has its own scale; composer controls retain the\npublished compact scale. Source destinations and copy follow\n[Flower citations](flower-citations.md), including safe authored bibliographies.",
             "section_count": 3
           },
           {
@@ -3414,7 +3414,7 @@
               "flower",
               "markdown"
             ],
-            "summary": "- Authority: published Floret v7.32.0 assistant messages own durable sources; Flower reads current views and historical pages through the existing thread projection.\n- Outcome: provider citation markers in prose become readable links with source titles. Copying a message removes those markers.\n- Invariants: ranges use end-exclusive Unicode code-point indices in the exact assistant text. URLs must be HTTP(S), without credentials, whitespace or control characters. Marker identifiers never establish a URL.\n- Failure boundary: unmatched sources appear at the end of the completed message. Historical markers without stored sources show localized unavailable text; Flower never reconstructs missing facts.",
+            "summary": "- Authority: published Floret v7.32.0 assistant messages own durable sources; Flower reads current views and historical pages through the existing thread projection.\n- Outcome: provider citation markers in prose become readable links with source titles. Copying a message removes those markers.\n- Invariants: ranges use end-exclusive Unicode code-point indices in the exact assistant text. URLs must be HTTP(S), without credentials, whitespace or control characters. Marker identifiers never establish a URL.\n- Failure boundary: unmatched sources appear at the end of the completed message. Historical provider markers without stored sources show localized unavailable text; Flower never reconstructs missing provider facts. Explicit Markdown bibliographies remain authored content.",
             "section_count": 2
           },
           {
@@ -33108,22 +33108,22 @@
         "title": "Flower citations",
         "type": "UI Contract"
       },
-      "body_length": 3169,
-      "summary": "- Authority: published Floret v7.32.0 assistant messages own durable sources; Flower reads current views and historical pages through the existing thread projection.\n- Outcome: provider citation markers in prose become readable links with source titles. Copying a message removes those markers.\n- Invariants: ranges use end-exclusive Unicode code-point indices in the exact assistant text. URLs must be HTTP(S), without credentials, whitespace or control characters. Marker identifiers never establish a URL.\n- Failure boundary: unmatched sources appear at the end of the completed message. Historical markers without stored sources show localized unavailable text; Flower never reconstructs missing facts.",
+      "body_length": 4843,
+      "summary": "- Authority: published Floret v7.32.0 assistant messages own durable sources; Flower reads current views and historical pages through the existing thread projection.\n- Outcome: provider citation markers in prose become readable links with source titles. Copying a message removes those markers.\n- Invariants: ranges use end-exclusive Unicode code-point indices in the exact assistant text. URLs must be HTTP(S), without credentials, whitespace or control characters. Marker identifiers never establish a URL.\n- Failure boundary: unmatched sources appear at the end of the completed message. Historical provider markers without stored sources show localized unavailable text; Flower never reconstructs missing provider facts. Explicit Markdown bibliographies remain authored content.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Provider annotations preserve title, URL and optional positions through the\nmodel gateway and Floret provider adapter. OpenAI final text completes an exact\nstreamed prefix only. If final text differs from already emitted text, sources\nretain their URLs but lose positional claims. Floret validates sources, binds\nthem to canonical assistant fragments and supplies the same facts in current\nand detail projections. Redeven does not collect a second source inventory from\nobservation events or web tool results. Schema ownership stays with\n[the Floret thread runtime](../ai/floret-thread-runtime.md).\n\nFlower binds a citation only when its safe source range exactly covers a prose\nmarker. A grouped marker can carry several exact source annotations. Remaining\nsources appear in a compact source list after streaming finishes; repeated\nunbound title/URL pairs appear once. Split streamed markers stay hidden until\ncomplete metadata arrives. Invalid URLs never become links, and metadata changes\ninvalidate Markdown HTML without remounting stable code controls.",
-          "char_count": 1057
+          "body": "Provider annotations preserve title, URL and optional positions through the\nmodel gateway and Floret provider adapter. OpenAI final text completes an exact\nstreamed prefix only. If final text differs from already emitted text, sources\nretain their URLs but lose positional claims. Floret validates sources, binds\nthem to canonical assistant fragments and supplies the same facts in current\nand detail projections. Redeven does not collect a second source inventory from\nobservation events or web tool results. Schema ownership stays with\n[the Floret thread runtime](../ai/floret-thread-runtime.md).\n\nFlower binds a citation only when its safe source range exactly covers a prose\nmarker. A grouped marker can carry several exact source annotations. Remaining\nsources appear in a source-card list after streaming finishes; repeated\nunbound title/URL pairs appear once. Split streamed markers stay hidden until\ncomplete metadata arrives. Invalid URLs never become links, and metadata changes\ninvalidate Markdown HTML without remounting stable code controls.",
+          "char_count": 1054
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Marked continues to own GFM/CommonMark syntax. Fenced code, code spans, HTML,\nlinks, images and escaped literal marker examples remain unchanged. The message\ncopy action removes prose markers while code-block copy preserves literal code.\nFlower does not repair malformed emphasis or alter ordinary Markdown/media\nsemantics. Citation copy is localized in every supported Env App and Desktop\ncatalog. New messages preserve complete sources; old records lacking sources\nremain readable without rewriting historical data.",
-          "char_count": 517
+          "body": "Marked continues to own GFM/CommonMark syntax. Code spans, HTML, links, images\nand escaped literal marker examples remain unchanged. The message\ncopy action removes prose markers while code-block copy preserves literal code.\nFlower does not repair malformed emphasis or alter ordinary Markdown/media\nsemantics. Citation copy is localized in every supported Env App and Desktop\ncatalog. New messages preserve complete sources; old records lacking sources\nremain readable without rewriting historical data.\n\n## Source-card presentation\n\nSource cards show a numbered badge, complete title, source hostname, a compact\nURL preview and an external-link affordance. The whole row is a keyboard-\nfocusable HTTP(S) link; the exact destination remains in its `href` and native\ntooltip. Long titles wrap and URL previews truncate within the card. The list\nuses two columns when space permits and one column on narrow surfaces, without\nhorizontal scrolling. Copy sources preserves the full bibliography text and\nuses localized copy/completion labels. Inline provider citations retain their\nsource titles, with a quiet bordered treatment and visible keyboard focus.\n\nAssistant Markdown can already contain an explicit bibliography inside an\nunlabelled, `text` or `plaintext` fence. A closed fence consisting entirely of\npositive, uniquely numbered title/HTTP(S)-URL pairs receives the same cards,\npreserving authored numbers and exact copied text. This is display-only authored\ncontent: it neither fabricates canonical source annotations nor binds numeric\nprose references to provider metadata. Other code languages, indented code,\nmixed prose, unsafe URLs, duplicate numbers and incomplete fences retain the\nordinary code presentation. A streamed bibliography becomes cards only after\nits closing fence arrives. User messages and fetched external Markdown do not\nenable this assistant-specific presentation.",
+          "char_count": 1895
         }
       ],
       "snippet": "- Authority: published Floret v7.32.0 assistant messages own durable sources; Flower reads current views and historical pages through the existing thread projection. - Outcome: provider citation markers in prose become readable links with s",
@@ -33140,6 +33140,12 @@
           "label": "Redeven OKF Bundle",
           "path": "index.md",
           "title": "Redeven OKF Bundle"
+        },
+        {
+          "label": "Flower message appearance",
+          "path": "ui/flower-message-appearance.md",
+          "concept_id": "ui.flower-message-appearance",
+          "title": "Flower message appearance"
         }
       ]
     },
@@ -34419,7 +34425,7 @@
         "selection",
         "themes"
       ],
-      "timestamp": "2026-10-11T00:00:00Z",
+      "timestamp": "2026-10-14T00:00:00Z",
       "frontmatter": {
         "description": "Recognize sent user messages and keep their text, references and native selections readable in every shell theme.",
         "tags": [
@@ -34428,19 +34434,19 @@
           "selection",
           "themes"
         ],
-        "timestamp": "2026-10-11T00:00:00Z",
+        "timestamp": "2026-10-14T00:00:00Z",
         "title": "Flower message appearance",
         "type": "UI Contract"
       },
-      "body_length": 3014,
-      "summary": "Flower owns transcript message presentation in the shared Env App and Desktop\nUI. Published Floe theme tokens own the palette. Sent user messages use the\ntheme's text-selection accent with readable foreground text. Native selection\nmust remain visible within a filled bubble and its insets. Theme changes alter\npaint only, preserving message DOM, geometry and active selection. Queued input\nkeeps its quieter pending presentation; forced colors use system roles.",
+      "body_length": 4094,
+      "summary": "Flower owns transcript message presentation in the shared Env App and Desktop\nUI. Published Floe theme tokens own the palette. Sent user messages use the\ntheme's text-selection accent with readable foreground text. Native selection\nmust remain visible within a filled bubble and its insets. Theme changes alter\npaint only, preserving message DOM, geometry and active selection. Queued input\nkeeps its quieter pending presentation; forced colors use system roles.\nTranscript reading typography has its own scale; composer controls retain the\npublished compact scale. Source destinations and copy follow\n[Flower citations](flower-citations.md), including safe authored bibliographies.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Filled messages and content\n\nSent user content, context bubbles and answered-question receipts use\n`selection-bg` and `selection-fg`. Classic Light's bright selection accent uses\ndark ink derived from the theme foreground to meet body-text contrast without\nchanging the accent. Queued bubbles retain their soft theme-derived background\nand ordinary foreground.\n\nFailed user messages retain the error surface with its icon and heading. Their\ntext and selection use the inset reading roles so the error background cannot\nleave selection-colored message text unreadable.\n\nLinks retain underlines and use the bubble foreground in idle, hover and focus\nstates. Keyboard focus has a visible outline. Quotes, receipt labels and\nreference labels inherit the bubble foreground. Reference chips retain their\nsource text and actions with a transparent face, readable detail text and a\nforeground-derived boundary. Tables and code retain separate theme-colored\ninsets; their text derives from the theme foreground with bounded lightness.\n\n## Native text selection\n\nFilled bubble text uses Floe's contrasting `selection-on-primary` pair. Code,\ntable-header insets and queued input use the theme's dark/light reading roles\nin reverse, keeping selection distinct from their own faces. Selecting text\nnever changes parsing, content, copy behavior or transport state.",
-          "char_count": 1353
+          "body": "## Transcript reading scale\n\nMessage bubbles use a `0.9375rem` body size and unitless `1.75` line height\n(15px and 26.25px at the standard 16px root). Markdown follows that message\nscale; headings use proportional sizes and line heights, paragraphs have\n`0.8em` separation, and list items have `0.4em` separation. The first rendered\nblock keeps its top margin reset, including while streaming. Assistant prose\nretains its 58rem maximum reading width. Code and tables use a smaller relative\nreading size and keep their own constrained horizontal scrolling.\n\nThis scale belongs to transcript message bubbles, not a root theme token or\nwhole-Flower zoom setting. Permission mode, model, reasoning controls and the\ncomposer editor retain their existing typography. Theme changes remain paint-\nonly; they do not alter reading geometry or remount Markdown content.\n\n## Filled messages and content\n\nSent user content, context bubbles and answered-question receipts use\n`selection-bg` and `selection-fg`. Classic Light's bright selection accent uses\ndark ink derived from the theme foreground to meet body-text contrast without\nchanging the accent. Queued bubbles retain their soft theme-derived background\nand ordinary foreground.\n\nFailed user messages retain the error surface with its icon and heading. Their\ntext and selection use the inset reading roles so the error background cannot\nleave selection-colored message text unreadable.\n\nLinks retain underlines and use the bubble foreground in idle, hover and focus\nstates. Keyboard focus has a visible outline. Quotes, receipt labels and\nreference labels inherit the bubble foreground. Reference chips retain their\nsource text and actions with a transparent face, readable detail text and a\nforeground-derived boundary. Tables and code retain separate theme-colored\ninsets; their text derives from the theme foreground with bounded lightness.\n\n## Native text selection\n\nFilled bubble text uses Floe's contrasting `selection-on-primary` pair. Code,\ntable-header insets and queued input use the theme's dark/light reading roles\nin reverse, keeping selection distinct from their own faces. Selecting text\nnever changes parsing, content, copy behavior or transport state.",
+          "char_count": 2213
         },
         {
           "id": "boundaries",
@@ -34464,6 +34470,12 @@
           "path": "desktop/desktop-shell-theme-state.md",
           "concept_id": "desktop.desktop-shell-theme-state",
           "title": "Desktop shell theme state"
+        },
+        {
+          "label": "Flower citations",
+          "path": "ui/flower-citations.md",
+          "concept_id": "ui.flower-citations",
+          "title": "Flower citations"
         },
         {
           "label": "stable-content contract",
@@ -40019,5 +40031,5 @@
       ]
     }
   ],
-  "source_sha256": "255ac72489908a0c55c12b1598eada3f8a56591ccf59699e3bf553a1cc64a6c8"
+  "source_sha256": "7be26902957c83d93496a7a60ba2eeddc8edca809cc8705cd294dfa0db59416e"
 }

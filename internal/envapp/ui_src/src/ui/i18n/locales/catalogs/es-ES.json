@@ -5560,6 +5560,7 @@
         "runtime": "Entorno de ejecución"
       },
       "citationSources": "Fuentes",
+      "citationCopySources": "Copiar fuentes",
       "citationUnavailable": "Fuente no disponible"
     },
     "threadList": {

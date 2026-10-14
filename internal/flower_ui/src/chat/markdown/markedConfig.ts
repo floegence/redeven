@@ -89,7 +89,7 @@ function safeMediaReference(href: string): boolean {
     && (!/^[a-z][a-z0-9+.-]*:/i.test(href) || /^(https?:\/\/|computer:\/\/)/i.test(href));
 }
 
-export function createFlowerMarkdownRenderer(options: { media?: boolean } = {}): RendererObject<string, string> {
+export function createFlowerMarkdownRenderer(options: { media?: boolean; sourceFence?: (token: Tokens.Code) => string | null } = {}): RendererObject<string, string> {
   return {
     html(token: { text?: string; raw?: string }) {
       return escapeFlowerMarkdownHtml(String(token.text ?? token.raw ?? ''));
@@ -102,7 +102,9 @@ export function createFlowerMarkdownRenderer(options: { media?: boolean } = {}):
     codespan(token: { text: string }) {
       return `<code class="flower-chat-md-inline-code">${escapeFlowerMarkdownHtml(token.text)}</code>`;
     },
-    code(token: { text: string; lang?: string }) {
+    code(token: Tokens.Code) {
+      const sources = options.sourceFence?.(token);
+      if (sources) return sources;
       if (options.media && token.lang?.trim().toLowerCase() === 'html preview') {
         return markdownMediaPlaceholder({ kind: 'html', html: token.text, title: '' });
       }
