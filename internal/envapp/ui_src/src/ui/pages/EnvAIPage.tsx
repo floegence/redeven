@@ -131,7 +131,7 @@ export function EnvAIPage(props: EnvAIPageProps) {
     openLinkedFilePreview: env.openFlowerLinkedFilePreview,
     openLinkedDirectoryBrowser: env.openFlowerLinkedDirectoryBrowser,
     retryModelSource: retryDesktopModels,
-    modelSourceRecovery: desktopSessionTargetRoute ? {
+    modelSourceRecovery: desktopSessionTargetRoute === 'remote_desktop' ? {
       describe: (status) => {
         if (status.state === 'missing_keys') {
           return i18n.t('flowerSettings.localAIProfileMissingKeys', {
@@ -159,12 +159,12 @@ export function EnvAIPage(props: EnvAIPageProps) {
           }
         },
       },
-      remoteSettings: desktopSessionTargetRoute === 'remote_desktop' ? {
+      remoteSettings: {
         label: i18n.t('flowerSettings.remoteFlowerSettingsAction'),
         run: async () => {
           env.openSettings('ai', { origin: { kind: 'flower', returnSurfaceId: props.settingsReturnSurfaceId ?? 'ai' } });
         },
-      } : undefined,
+      },
       runtimeSettings: {
         label: i18n.t('settings.runtimeTitle'),
         run: async () => {
