@@ -41,3 +41,6 @@ internal/envapp/ui_src/src/**/__screenshots__/
 
 # Claude session state
 .claude/
+# Local validation bytecode; results live outside the checkout in the Git common directory.
+scripts/__pycache__/
+scripts/tests/__pycache__/

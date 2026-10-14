@@ -54,7 +54,7 @@ while read -r local_ref local_oid remote_ref remote_oid; do
     fail "local main contains merge commits; integrate the rebased feature with git merge --ff-only"
   fi
 
-  # IMPORTANT: Heavy local integration coverage runs only for the exact main
-  # tip accepted by the remote pre-push handshake, never for routine commits.
+  # The exact-main runner reuses only matching tree and environment results;
+  # stale or interrupted groups still execute before the push can proceed.
   ./scripts/check_final_integration.sh --base "$remote_oid" --tip "$local_oid"
 done
