@@ -2,10 +2,10 @@ import { FeedbackIndicator, Button, FloatingWindow } from '@floegence/floe-webap
 import type { Accessor, JSX } from 'solid-js';
 import { For, Show, createMemo, createSignal } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { AlertTriangle, Bot, ChevronDown, Clock, Refresh } from '@floegence/floe-webapp-core/icons';
+import { AlertTriangle, ChevronDown, Clock, Refresh } from '@floegence/floe-webapp-core/icons';
 
 import type { FlowerSubagentsCopy } from './copy';
-import { FlowerThinkingOrb } from './FlowerThinkingOrb';
+import { SubagentAvatar } from './SubagentAvatar';
 import type { FlowerTimelineEntry } from './flowerTimelineProjection';
 import {
   projectSubagentLedgerItems,
@@ -30,7 +30,6 @@ export type SubagentDetailWindowProps = Readonly<{
   status: FlowerSubagentPanelStatus;
   statusLabel: string;
   statusIndicator: JSX.Element;
-  liveConfirmed?: boolean;
   syncNotice?: JSX.Element;
   agentTypeLabel: string;
   elapsedLabel: string;
@@ -287,16 +286,15 @@ export function SubagentDetailWindow(props: SubagentDetailWindowProps): JSX.Elem
         data-flower-subagent-status={props.status}
       >
         <header ref={overview} tabIndex={-1} class="flower-subagent-detail-overview">
-          <div class={cn('flower-subagent-detail-signal', `flower-subagent-detail-signal-${props.status}`)} aria-hidden="true">
-            <Show when={props.status === 'running'} fallback={<Bot class="h-4 w-4" />}>
-              <FlowerThinkingOrb class="flower-subagent-detail-thinking-orb" running={props.liveConfirmed !== false} />
-            </Show>
-          </div>
+          <SubagentAvatar threadID={props.threadID} class="flower-subagent-detail-avatar" />
           <div class="flower-subagent-detail-overview-copy">
+            <Show when={props.description}>
+              <p class="flower-subagent-detail-description" title={props.description}>{props.description}</p>
+            </Show>
             <div class="flower-subagent-detail-overview-meta">
               <FeedbackIndicator label={props.title} closeLabel={props.copy.feedbackClose} restoreFocus={() => overview} entries={props.detailAvailable && props.error ? [{ id: 'detail', severity: 'error', summary: props.error, actions: <Button size="sm" variant="outline" disabled={props.loading} onClick={props.onRetryLoad}>{props.copy.detailRetry}</Button> }] : []} />
               <span class={cn('flower-subagent-status-label', `flower-subagent-status-label-${props.status}`)}>
-                <Show when={props.status !== 'running'}>{props.statusIndicator}</Show>
+                {props.statusIndicator}
                 <span class="flower-subagent-status-text">
                   {props.statusLabel}
                 </span>
@@ -311,9 +309,6 @@ export function SubagentDetailWindow(props: SubagentDetailWindowProps): JSX.Elem
                 </span>
               </Show>
             </div>
-            <Show when={props.description}>
-              <p class="flower-subagent-detail-description">{props.description}</p>
-            </Show>
           </div>
         </header>
         {props.syncNotice}

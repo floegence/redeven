@@ -71,7 +71,7 @@ import {
 } from './flowerTurnAdmission';
 import { FlowerContextCompactionDivider } from './chat/FlowerContextCompactionDivider';
 import { compactionDividerDetail } from './chat/flowerContextPresentation';
-import { FlowerThinkingOrb } from './FlowerThinkingOrb';
+import { SubagentAvatar } from './SubagentAvatar';
 import { FlowerThinkingDisclosure } from './FlowerThinkingDisclosure';
 import { FlowerTurnTimeline } from './FlowerTurnTimeline';
 import { createFlowerTurnDisclosureStore } from './flowerTurnDisclosure';
@@ -10433,7 +10433,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       case 'queued':
         return <Clock class="flower-subagent-status-indicator flower-subagent-status-indicator-queued h-3.5 w-3.5" aria-hidden="true" />;
       case 'running':
-        return <FlowerThinkingOrb class="flower-subagent-thinking-orb" running={livePresentationConfirmed()} />;
+        return <span class="flower-subagent-status-indicator flower-subagent-status-indicator-running" aria-hidden="true" />;
       case 'waiting_input':
         return <AlertCircle class="flower-subagent-status-indicator flower-subagent-status-indicator-waiting h-3.5 w-3.5" aria-hidden="true" />;
       case 'completed':
@@ -10526,7 +10526,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   title={[title(), description(), subagentsCopy().openThread].filter(Boolean).join('\n')}
                   onClick={() => void openSubagentDetail(item())}
                 >
-                  <span class="flower-subagent-dropdown-status">{subagentStatusIndicator(item().status)}</span>
+                  <SubagentAvatar threadID={item().threadID} />
                   <span class="flower-subagent-dropdown-copy">
                     <span class="flower-subagent-dropdown-name">{title()}</span>
                     <Show when={description()}>
@@ -10534,7 +10534,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     </Show>
                   </span>
                   <span class="flower-subagent-dropdown-meta">
-                    <span class="flower-subagent-dropdown-status-label">{subagentStatusLabel(item().status)}</span>
+                    <span class="flower-subagent-dropdown-status-label">
+                      {subagentStatusIndicator(item().status)}
+                      <span>{subagentStatusLabel(item().status)}</span>
+                    </span>
                     <Show when={elapsed()}>
                       {(value) => <span class="flower-subagent-dropdown-duration">{value()}</span>}
                     </Show>
@@ -10623,7 +10626,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const subagentDetailMounted = createMemo<boolean>((mounted) => mounted || subagentDetailOpen(), false);
   const subagentDetailDialog = () => (
     <SubagentDetailWindow
-      liveConfirmed={livePresentationConfirmed()}
       syncNotice={workspaceSyncNotice()}
       open={subagentDetailOpen()}
       onOpenChange={(open) => {
