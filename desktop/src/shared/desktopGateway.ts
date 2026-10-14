@@ -56,6 +56,7 @@ export type DesktopGatewayServiceState = Readonly<{
   service_target_id?: string;
   service_state_root?: string;
   message?: string;
+  error_code?: string;
   checked_at_unix_ms?: number;
   lifecycle_operation_key?: string;
 }>;

@@ -1962,6 +1962,8 @@
     "gatewayGuidanceReadyTitle": "网关已准备好",
     "gatewayGuidanceReadyDetail": "Desktop 可以刷新此网关目录。从“环境”选项卡打开其环境。",
     "gatewayGuidanceReviewSettingsDetail": "检查网关设置，然后在目标可达时再次刷新。",
+    "gatewayGuidanceHostMaintenanceTitle": "网关需要在主机上维护",
+    "gatewayGuidanceStateRecoveryDetail": "请在网关主机上修复文件访问权限或重建本地配置，然后刷新。你可以停用此连接以继续使用 Desktop；云端授权会保留。",
     "gatewayGuidanceCatalogAvailableTitle": "网关目录可用",
     "gatewayGuidanceCatalogAvailableDetail": "刷新此网关以获取目录更改；其环境在“环境”选项卡中单独列出。",
     "gatewayPanelActionNeedsAttention": "网关操作问题",

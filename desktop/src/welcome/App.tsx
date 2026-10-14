@@ -756,6 +756,7 @@ function localizedEnvironmentStatusLabel(i18n: DesktopI18n, label: string): stri
     'Not started': 'environmentStatus.stopped',
     'Update available': 'environmentCenter.gatewayNeedsUpdate',
     'Reinstall required': 'environmentStatus.reinstallRequired',
+    'Gateway requires host maintenance': 'environmentCenter.gatewayGuidanceHostMaintenanceTitle',
     'Service ready': 'progress.gatewayServiceReady',
     Refreshing: 'environmentCenter.gatewayActionSyncing',
   });
@@ -859,8 +860,9 @@ function localizedGatewaySourceText(i18n: DesktopI18n, value: string): string {
     'Update before continuing': 'environmentCenter.gatewayGuidanceUpdateTitle',
     'Install the Gateway service update, then Desktop can pair and refresh the environments this Gateway exposes.': 'environmentCenter.gatewayGuidanceUpdateDetail',
     'Gateway reinstall required': 'environmentStatus.reinstallRequired',
+    'Gateway requires host maintenance': 'environmentCenter.gatewayGuidanceHostMaintenanceTitle',
     'Gateway pairing required': 'environmentStatus.pairingRequired',
-    'This Standalone Gateway has incompatible state. Repair or reinstall it on its own host, then refresh it here.': 'environmentCenter.gatewayGuidanceReviewSettingsDetail',
+    'Correct file access or recreate this Gateway’s local configuration on its host, then refresh. Disable this connection to keep using Desktop; Cloud authorizations are preserved.': 'environmentCenter.gatewayGuidanceStateRecoveryDetail',
     'Reinstall completed. The new Environment is ready.': 'confirm.reinstallCompleted',
     'Preparing Gateway': 'environmentCenter.gatewayGuidancePreparingTitle',
     'Gateway is stopped': 'environmentCenter.gatewayGuidanceStoppedTitle',
@@ -967,8 +969,9 @@ function localizedGatewayActionPanelText(i18n: DesktopI18n, value: string): stri
     'Gateway is stopped': 'environmentCenter.gatewayGuidanceStoppedTitle',
     'Gateway update required': 'environmentCenter.gatewayPanelUpdateRequiredTitle',
     'Gateway reinstall required': 'environmentStatus.reinstallRequired',
+    'Gateway requires host maintenance': 'environmentCenter.gatewayGuidanceHostMaintenanceTitle',
     'Gateway pairing required': 'environmentStatus.pairingRequired',
-    'This Standalone Gateway has incompatible state. Repair or reinstall it on its own host, then refresh it here.': 'environmentCenter.gatewayGuidanceReviewSettingsDetail',
+    'Correct file access or recreate this Gateway’s local configuration on its host, then refresh. Disable this connection to keep using Desktop; Cloud authorizations are preserved.': 'environmentCenter.gatewayGuidanceStateRecoveryDetail',
     'Reinstall completed. The new Environment is ready.': 'confirm.reinstallCompleted',
     'Reinstall Redeven': 'environmentAction.reinstallRedeven',
     'Gateway protocol check failed': 'environmentCenter.gatewayPanelProtocolCheckFailedTitle',
@@ -11101,6 +11104,9 @@ function GatewaySourceCard(props: Readonly<{
   });
   const visibleGatewayProgress = createMemo(() => {
     const progress = selectedGatewayOperationProgress();
+    if (progress && launcherActionProgressIsTerminal(progress) && props.gateway.service_state?.status === 'needs_reinstall') {
+      return null;
+    }
     return progress;
   });
   const activeGatewayLifecycleProgress = createMemo(() => selectForegroundGatewayProgress(
@@ -11128,7 +11134,7 @@ function GatewaySourceCard(props: Readonly<{
     const foreground = foregroundAction();
     const diagnosisResult = visibleGatewayDiagnosisResult();
     const showDiagnosisResult = diagnosisResult !== null || foregroundDiagnosisBelongsToRefresh();
-    const presentationGateway = diagnosisResult?.gateway
+    const presentationGateway = props.gateway.service_state?.status === 'needs_reinstall' ? props.gateway : diagnosisResult?.gateway
       ?? (showDiagnosisResult
       ? props.gateway
       : foreground?.gateway ?? props.gateway);
@@ -11138,14 +11144,17 @@ function GatewaySourceCard(props: Readonly<{
       active_progress: visibleGatewayProgress()?.status === 'running' || visibleGatewayProgress()?.status === 'canceling' || visibleGatewayProgress()?.status === 'cleanup_running'
         ? visibleGatewayProgress()
         : null,
-      retained_failure: visibleGatewayProgress()?.status === 'failed' || visibleGatewayProgress()?.status === 'cleanup_failed'
-        ? visibleGatewayProgress()
+      retained_failure: selectedGatewayOperationProgress()?.status === 'failed' || selectedGatewayOperationProgress()?.status === 'cleanup_failed'
+        ? selectedGatewayOperationProgress()
         : null,
       affected_sessions: affectedSessions(),
       show_diagnosis_result: showDiagnosisResult,
     });
   });
   const visiblePanelModel = createMemo(() => {
+    if (props.gateway.service_state?.status === 'needs_reinstall' && !visibleGatewayProgress()) {
+      return currentActionPresentation();
+    }
     const progress = visibleGatewayProgress();
     if (progress && !launcherActionProgressIsTerminal(progress)) {
       return currentActionPresentation();
@@ -11195,6 +11204,7 @@ function GatewaySourceCard(props: Readonly<{
       return true;
     }
     return foregroundPendingProgress() !== null
+      || props.gateway.service_state?.status === 'needs_reinstall'
       || visibleGatewayDiagnosisResult() !== null
       || gatewayProgressNeedsAttention(visibleGatewayProgress());
   });

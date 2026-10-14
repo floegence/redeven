@@ -1962,6 +1962,8 @@
     "gatewayGuidanceReadyTitle": "ゲートウェイの準備ができています。",
     "gatewayGuidanceReadyDetail": "Desktop は、このゲートウェイ カタログを更新できます。 「環境」タブから環境を開きます。",
     "gatewayGuidanceReviewSettingsDetail": "ゲートウェイ設定を確認し、ターゲットに到達可能になったら再度更新します。",
+    "gatewayGuidanceHostMaintenanceTitle": "Gateway ホストのメンテナンスが必要です",
+    "gatewayGuidanceStateRecoveryDetail": "Gateway ホストでファイルへのアクセスを修正するかローカル設定を再作成してから、更新してください。この接続を無効にすると Desktop を引き続き使用できます。Cloud の認可は保持されます。",
     "gatewayGuidanceCatalogAvailableTitle": "ゲートウェイ カタログが利用可能です",
     "gatewayGuidanceCatalogAvailableDetail": "このゲートウェイを更新して、カタログの変更を取得します。その環境は、[環境] タブに個別にリストされます。",
     "gatewayPanelActionNeedsAttention": "ゲートウェイ アクションの問題",

@@ -1143,6 +1143,8 @@ export const enUS = {
     gatewayGuidanceReadyTitle: 'Gateway is ready',
     gatewayGuidanceReadyDetail: 'Desktop can refresh this Gateway catalog. Open its environments from the Environments tab.',
     gatewayGuidanceReviewSettingsDetail: 'Review the Gateway settings, then refresh again when the target is reachable.',
+    gatewayGuidanceHostMaintenanceTitle: 'Gateway requires host maintenance',
+    gatewayGuidanceStateRecoveryDetail: 'Correct file access or recreate this Gateway’s local configuration on its host, then refresh. Disable this connection to keep using Desktop; Cloud authorizations are preserved.',
     gatewayGuidanceCatalogAvailableTitle: 'Gateway catalog available',
     gatewayGuidanceCatalogAvailableDetail: 'Refresh this Gateway to pick up catalog changes; its environments are listed separately in the Environments tab.',
     gatewayPanelActionNeedsAttention: 'Gateway action issue',

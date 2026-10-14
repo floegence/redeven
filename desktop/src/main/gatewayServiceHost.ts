@@ -21,6 +21,7 @@ import {
 } from './runtimePackageCache';
 import { createLocalRuntimeHostExecutor, createSSHRuntimeHostExecutor, type RuntimeHostAccessExecutor } from './runtimeHostAccess';
 import type { DesktopSSHTransportManager } from './sshTransportManager';
+import { redactGatewayDiagnosticText } from '../shared/gatewayDiagnostics';
 import {
   buildDesktopSSHReleaseAssetURL,
   desktopSSHReleasePackageName,
@@ -55,6 +56,8 @@ export type GatewayServiceProbe = Readonly<{
   pid?: number;
   listen?: string;
   package_status?: GatewayServicePackageProbeStatus;
+  error_code?: string;
+  recovery?: string;
 }>;
 
 export type GatewayServiceDeepProbe = Readonly<{
@@ -130,7 +133,26 @@ type GatewayServiceCommandStatus = Readonly<{
   state_root?: string;
   executable?: string;
   error_message?: string;
+  error_code?: string;
+  recovery?: string;
 }>;
+
+export class GatewayServiceStartError extends Error {
+  readonly requiresStateRecovery: boolean;
+  constructor(readonly status: GatewayServiceCommandStatus) {
+    super(redactGatewayDiagnosticText([status.error_message || 'Gateway service did not report ready.', status.recovery].filter(Boolean).join(' ')));
+    this.name = 'GatewayServiceStartError';
+    this.requiresStateRecovery = gatewayStateRecoveryRequired(status.error_code);
+  }
+}
+
+function gatewayStateRecoveryRequired(code: string | undefined): boolean {
+  return code === 'gateway_state_unsupported' || code === 'gateway_state_invalid' || code === 'gateway_state_unavailable';
+}
+
+export function gatewayStartupFailureMessage(error: unknown): string {
+  return redactGatewayDiagnosticText(error instanceof Error ? error.message : String(error));
+}
 
 const MANAGED_GATEWAY_STAMP_FILENAME = 'managed-gateway.stamp';
 const MANAGED_GATEWAY_STAMP_SCHEMA_VERSION = 3;
@@ -435,8 +457,9 @@ function gatewayServiceStatusScript(rootShell: string): string {
     'fi',
     'if "$binary" service-status --state-root "$state_root"; then',
     '  exit 0',
+    'else',
+    '  code="$?"',
     'fi',
-    'code="$?"',
     'if [ "$code" = "1" ]; then',
     '  exit 0',
     'fi',
@@ -449,7 +472,14 @@ function gatewayServiceStartScript(rootShell: string): string {
     'set -eu',
     rootShell,
     managedGatewayPathShell(),
-    'exec "$binary" service-start --state-root "$state_root"',
+    'if "$binary" service-start --state-root "$state_root"; then',
+    '  exit 0',
+    'else',
+    '  code="$?"',
+    'fi',
+    // Exit one carries a structured startup result, not a transport failure.
+    'if [ "$code" = "1" ]; then exit 0; fi',
+    'exit "$code"',
   ].join('\n');
 }
 
@@ -696,6 +726,8 @@ function parseGatewayServiceCommandStatus(raw: string, stateRoot: string): Gatew
     state_root: compact(record.state_root) || stateRoot,
     executable: compact(record.executable) || undefined,
     error_message: compact(record.error_message) || undefined,
+    error_code: compact(record.error_code) || undefined,
+    recovery: compact(record.recovery) || undefined,
   };
 }
 
@@ -845,8 +877,10 @@ async function probeManagedGatewayServiceStatusWithExecutor(
     };
   }
   return {
-    status: 'failed',
-    message: status.error_message || `Gateway service reported ${status.status}.`,
+    status: gatewayStateRecoveryRequired(status.error_code) ? 'needs_reinstall' : 'failed',
+    message: redactGatewayDiagnosticText([status.error_message || `Gateway service reported ${status.status}.`, status.recovery].filter(Boolean).join(' ')),
+    error_code: status.error_code,
+    recovery: status.recovery,
     binary_path: packageProbe.binary_path,
     state_root: status.state_root ?? options.stateRoot,
     package_status: packageProbe.status,
@@ -912,11 +946,13 @@ export async function ensureManagedGatewayServiceReady(options: GatewayServiceHo
       detail: `Desktop is starting Redeven Gateway ${releaseTag} on the target.`,
     });
     const rootShell = rootShellForPlacement(options.placement);
-    await executor.run(commandForPlacement(options.placement, gatewayServiceStartScript(rootShell), [
+    const result = await executor.run(commandForPlacement(options.placement, gatewayServiceStartScript(rootShell), [
       options.placement.runtime_root,
       options.stateRoot,
       releaseTag,
     ]), { signal: options.signal });
+    const status = parseGatewayServiceCommandStatus(result.stdout, options.stateRoot);
+    if (status.status !== 'running' || !status.pid || !status.listen) throw new GatewayServiceStartError(status);
     options.onProgress?.({
       phase: 'gateway_ready',
       title: 'Gateway service ready',

@@ -1962,6 +1962,8 @@
     "gatewayGuidanceReadyTitle": "o gateway de rede está pronto",
     "gatewayGuidanceReadyDetail": "Desktop pode atualizar este catálogo de gateway de rede. Abra seus ambientes na guia ambientes.",
     "gatewayGuidanceReviewSettingsDetail": "Revise as configurações do gateway e atualize novamente quando o destino estiver acessível.",
+    "gatewayGuidanceHostMaintenanceTitle": "O Gateway requer manutenção no host",
+    "gatewayGuidanceStateRecoveryDetail": "Corrija o acesso aos arquivos ou recrie a configuração local do Gateway no host e atualize. Desative esta conexão para continuar usando o Desktop; as autorizações do Cloud são preservadas.",
     "gatewayGuidanceCatalogAvailableTitle": "Catálogo do gateway disponível",
     "gatewayGuidanceCatalogAvailableDetail": "Atualize este gateway para obter alterações no catálogo; seus ambientes são listados separadamente na guia Ambientes.",
     "gatewayPanelActionNeedsAttention": "Problema de ação do gateway",

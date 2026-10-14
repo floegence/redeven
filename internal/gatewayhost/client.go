@@ -49,6 +49,8 @@ type ServiceRecord struct {
 	Executable             string `json:"executable,omitempty"`
 	ProcessStartedAtUnixMS int64  `json:"process_started_at_unix_ms,omitempty"`
 	ErrorMessage           string `json:"error_message,omitempty"`
+	ErrorCode              string `json:"error_code,omitempty"`
+	Recovery               string `json:"recovery,omitempty"`
 }
 
 func Open(root string) (*Client, error) {

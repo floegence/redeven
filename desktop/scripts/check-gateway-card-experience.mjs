@@ -169,8 +169,8 @@ try {
     await card.getByRole('button', { name: i18n.t('environmentCenter.moreActionsForLabel', { label: 'Gateway-local' }), exact: true }).click();
     await page.getByRole('menuitem', { name: i18n.t('environmentCenter.gatewayActionOpenSettings'), exact: true }).click();
     const setup = page.getByRole('dialog');
-    await setup.getByText(i18n.t('gatewayMembers.permissionBoundary'), { exact: true }).waitFor();
-    assert.equal(await setup.getByRole('checkbox', { name: i18n.t('gatewayMembers.manageMembers'), exact: true }).isChecked(), false);
+    await setup.getByText(i18n.t('gatewayClients.hostVerification'), { exact: true }).waitFor();
+    assert.equal(await setup.getByRole('tablist').count(), 0, 'Unverified host registration cannot expose member management');
     await setup.evaluate(async el => { await Promise.all(el.getAnimations({ subtree: true }).filter(a => a.effect?.getTiming().iterations !== Infinity).map(a => a.finished)); });
     await page.screenshot({ path: `${output}/permission-${width}.png` });
     await page.keyboard.press('Escape'); await setup.waitFor({ state: 'detached' });

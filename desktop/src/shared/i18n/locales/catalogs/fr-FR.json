@@ -1962,6 +1962,8 @@
     "gatewayGuidanceReadyTitle": "est prête.",
     "gatewayGuidanceReadyDetail": "Desktop peut actualiser ce catalogue de passerelle. Ouvrez ses environnements depuis l'onglet Environnements.",
     "gatewayGuidanceReviewSettingsDetail": "Vérifiez les paramètres de la passerelle, puis actualisez-les à nouveau lorsque la cible est accessible.",
+    "gatewayGuidanceHostMaintenanceTitle": "Le Gateway nécessite une maintenance sur son hôte",
+    "gatewayGuidanceStateRecoveryDetail": "Corrigez l’accès aux fichiers ou recréez la configuration locale du Gateway sur son hôte, puis actualisez. Désactivez cette connexion pour continuer à utiliser Desktop ; les autorisations Cloud sont conservées.",
     "gatewayGuidanceCatalogAvailableTitle": "Catalogue de passerelle disponible",
     "gatewayGuidanceCatalogAvailableDetail": "Actualisez cette passerelle pour récupérer les modifications du catalogue ; ses environnements sont répertoriés séparément dans l'onglet Environnements.",
     "gatewayPanelActionNeedsAttention": "Problème d'action de passerelle",

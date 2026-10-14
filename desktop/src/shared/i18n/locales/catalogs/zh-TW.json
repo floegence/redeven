@@ -1962,6 +1962,8 @@
     "gatewayGuidanceReadyTitle": "閘道已準備好",
     "gatewayGuidanceReadyDetail": "Desktop 可以刷新此網關目錄。從“環境”選項卡開啟其環境。",
     "gatewayGuidanceReviewSettingsDetail": "檢查網關設置，然後在目標可達時再次刷新。",
+    "gatewayGuidanceHostMaintenanceTitle": "閘道需要在主機上維護",
+    "gatewayGuidanceStateRecoveryDetail": "請在閘道主機上修復檔案存取權限或重建本機設定，然後重新整理。你可以停用此連線以繼續使用 Desktop；雲端授權會保留。",
     "gatewayGuidanceCatalogAvailableTitle": "網關目錄可用",
     "gatewayGuidanceCatalogAvailableDetail": "刷新此網關以取得目錄變更；其環境在「環境」標籤中單獨列出。",
     "gatewayPanelActionNeedsAttention": "閘道操作問題",

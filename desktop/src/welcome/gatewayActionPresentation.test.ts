@@ -179,7 +179,7 @@ describe('buildGatewayActionPresentation', () => {
       show_diagnosis_result: true,
     });
     expect(managed).toMatchObject({ title: 'Gateway requires host maintenance' });
-    expect(managed.primary_action).toBeUndefined();
+    expect(managed.primary_action?.intent).toBe('disable_gateway');
 
     const accessOnly = buildGatewayActionPresentation({
       gateway: gateway({
@@ -202,6 +202,18 @@ describe('buildGatewayActionPresentation', () => {
     expect(accessOnly.continuation_action?.kind).not.toBe('reinstall_target');
     expect(JSON.stringify(accessOnly)).not.toContain('PRIVATE KEY');
     expect(JSON.stringify(accessOnly)).not.toContain('X-Redeven-Request-Signature');
+  });
+
+  it('keeps state recovery actionable after a failed Start without requiring a previous Refresh', () => {
+    const source = gateway({ connection_kind: 'local_host', management_capability: 'managed_local_host',
+      service_state: { status: 'needs_reinstall', can_start: false, can_stop: false, can_restart: false,
+        can_update: false, can_pair_after_start: false, error_code: 'gateway_state_unsupported',
+        message: 'members.json: unsupported schema_version 4; expected 5' } });
+    const panel = buildGatewayActionPresentation({ gateway: source, clicked_action: action('refresh_gateway') });
+    expect(panel.title).toBe('Gateway requires host maintenance');
+    expect(panel.primary_action?.intent).toBe('disable_gateway');
+    expect(panel.detail).toContain('Cloud authorizations are preserved');
+    expect(panel.detail).not.toContain('reinstall');
   });
 
   it('keeps pairing as an explicit Refresh action for an unpaired URL Gateway', () => {

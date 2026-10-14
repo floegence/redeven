@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -23,6 +24,7 @@ import (
 	"github.com/floegence/redeven/internal/gatewaycloud"
 	gc "github.com/floegence/redeven/internal/gatewaycloud/protocol"
 	"github.com/floegence/redeven/internal/gatewayhost"
+	"github.com/floegence/redeven/internal/gatewaymembership"
 	"github.com/floegence/redeven/internal/gatewayservice"
 	"github.com/floegence/redeven/internal/gatewaystate"
 	"github.com/floegence/redeven/internal/lockfile"
@@ -51,10 +53,13 @@ type cli struct {
 type serviceStatus = gatewayhost.ServiceRecord
 
 type gatewayStartupFailure struct {
-	SchemaVersion int    `json:"schema_version"`
-	Code          string `json:"code"`
-	Reason        string `json:"reason"`
-	Recovery      string `json:"recovery,omitempty"`
+	SchemaVersion    int    `json:"schema_version"`
+	PID              int    `json:"pid,omitempty"`
+	Code             string `json:"code"`
+	Reason           string `json:"reason"`
+	Recovery         string `json:"recovery,omitempty"`
+	StateFile        string `json:"state_file,omitempty"`
+	StateFingerprint string `json:"state_fingerprint,omitempty"`
 }
 
 func main() {
@@ -280,22 +285,18 @@ func (c *cli) serviceStartCmd(args []string) int {
 	}
 	exe, err := os.Executable()
 	if err != nil {
-		writeError(c.stderr, fmt.Sprintf("service-start failed: %v", err))
-		return 1
+		return c.failServiceStart(stateRootValue, err)
 	}
 	logPath := filepath.Join(stateRootValue, "gateway-service.log")
 	if err := os.MkdirAll(stateRootValue, 0o700); err != nil {
-		writeError(c.stderr, fmt.Sprintf("service-start failed: %v", err))
-		return 1
+		return c.failServiceStart(stateRootValue, err)
 	}
 	if _, err := ensureManagedBridgeToken(stateRootValue); err != nil {
-		writeError(c.stderr, fmt.Sprintf("service-start failed: %v", err))
-		return 1
+		return c.failServiceStart(stateRootValue, err)
 	}
 	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
-		writeError(c.stderr, fmt.Sprintf("service-start failed: %v", err))
-		return 1
+		return c.failServiceStart(stateRootValue, err)
 	}
 	defer logFile.Close()
 	cmdArgs := gatewayServiceServeArgs(stateRootValue, strings.TrimSpace(*listen))
@@ -311,19 +312,40 @@ func (c *cli) serviceStartCmd(args []string) int {
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
 	_ = removePIDFile(stateRootValue)
+	_ = os.Remove(gatewayStartupFailurePath(stateRootValue))
 	if err := cmd.Start(); err != nil {
-		writeError(c.stderr, fmt.Sprintf("service-start failed: %v", err))
-		return 1
+		return c.failServiceStart(stateRootValue, err)
 	}
 	childPID := cmd.Process.Pid
-	_ = cmd.Process.Release()
-	status, err := waitServiceReady(stateRootValue, childPID)
+	// Reap failed children. Signal zero also succeeds for zombies and cannot
+	// distinguish an exited Gateway from one still preparing its listeners.
+	exited := make(chan struct{})
+	go func() { _ = cmd.Wait(); close(exited) }()
+	status, err := waitServiceReady(stateRootValue, childPID, exited, gatewayServiceReadyWait)
 	if err != nil {
+		_ = cmd.Process.Kill()
+		select {
+		case <-exited:
+		case <-time.After(time.Second):
+		}
+		failure := gatewayStartupFailureForError(err)
+		failure.PID = childPID
+		_ = writeGatewayStartupFailure(stateRootValue, failure)
+		_ = json.NewEncoder(c.stdout).Encode(startupFailureStatus(stateRootValue, failure))
 		writeError(c.stderr, fmt.Sprintf("service-start failed: %v", err))
 		return 1
 	}
 	_ = json.NewEncoder(c.stdout).Encode(status)
 	return 0
+}
+
+func (c *cli) failServiceStart(root string, err error) int {
+	failure := gatewayStartupFailureForError(err)
+	failure.PID = 0
+	_ = writeGatewayStartupFailure(root, failure)
+	_ = json.NewEncoder(c.stdout).Encode(startupFailureStatus(root, failure))
+	writeError(c.stderr, fmt.Sprintf("service-start failed: %v", err))
+	return 1
 }
 
 func gatewayServiceServeArgs(stateRoot string, listen string) []string {
@@ -493,17 +515,87 @@ func (c *cli) runGatewayService(ctx context.Context, stateRoot string, listen st
 
 func (c *cli) failGatewayStartup(stateRoot string, err error) int {
 	failure := gatewayStartupFailureForError(err)
+	if failure.StateFile != "" {
+		failure.StateFingerprint = startupStateFingerprint(stateRoot, failure.StateFile)
+	}
 	_ = writeGatewayStartupFailure(stateRoot, failure)
 	writeError(c.stderr, fmt.Sprintf("serve failed: %v", err))
 	return 1
 }
 
 func gatewayStartupFailureForError(err error) gatewayStartupFailure {
-	failure := gatewayStartupFailure{SchemaVersion: 1, Code: "gateway_startup_failed"}
+	failure := gatewayStartupFailure{SchemaVersion: 1, PID: os.Getpid(), Code: "gateway_startup_failed"}
 	if err != nil {
 		failure.Reason = err.Error()
 	}
+	var startup *gatewayStartupError
+	var state *gatewaystate.ReadError
+	switch {
+	case errors.As(err, &startup):
+		return startup.failure
+	case errors.As(err, &state):
+		failure.Code = state.Code
+		failure.StateFile = state.File
+	case errors.Is(err, gatewaymembership.ErrState):
+		failure.Code = "gateway_state_invalid"
+		failure.StateFile = "members.json"
+	}
+	switch failure.Code {
+	case "gateway_state_unsupported", "gateway_state_invalid":
+		failure.Recovery = "Stop Gateway and recreate its local configuration on its host, then enroll members again. Preserve the machine identity. Cloud authorizations are unchanged."
+	case "gateway_state_unavailable":
+		failure.Recovery = "Correct access to the Gateway state directory, then retry. Existing state was not changed."
+	}
 	return failure
+}
+
+type gatewayStartupError struct{ failure gatewayStartupFailure }
+
+func (e *gatewayStartupError) Error() string {
+	message := e.failure.Code + ": " + e.failure.Reason
+	if e.failure.Recovery != "" {
+		message += " Recovery: " + e.failure.Recovery
+	}
+	return message
+}
+
+func startupFailureStatus(root string, failure gatewayStartupFailure) serviceStatus {
+	return serviceStatus{Status: "error", StateRoot: root, ErrorCode: failure.Code, ErrorMessage: failure.Reason, Recovery: failure.Recovery}
+}
+
+func stoppedServiceStatus(root string) serviceStatus {
+	if failure := readGatewayStartupFailure(root); failure.Code != "" {
+		// A repaired or deliberately recreated file invalidates its diagnostic.
+		// Status inspection stays read-only and never repairs the private state.
+		if failure.StateFile != "" && failure.StateFingerprint != startupStateFingerprint(root, failure.StateFile) {
+			return serviceStatus{Status: "not_running", StateRoot: root}
+		}
+		return startupFailureStatus(root, failure)
+	}
+	return serviceStatus{Status: "not_running", StateRoot: root}
+}
+
+func startupStateFingerprint(root, name string) string {
+	if filepath.Base(name) != name {
+		return "invalid-path"
+	}
+	file := filepath.Join(root, name)
+	hash := sha256.New()
+	info, err := os.Lstat(file)
+	if err != nil {
+		return fmt.Sprintf("%x", sha256.Sum256([]byte(fmt.Sprintf("stat:%T:%v", err, err))))
+	}
+	fmt.Fprintf(hash, "mode:%d:size:%d:", info.Mode(), info.Size())
+	if info.Mode().IsRegular() {
+		reader, err := os.Open(file)
+		if err != nil {
+			fmt.Fprintf(hash, "open:%T:%v", err, err)
+		} else {
+			_, _ = io.Copy(hash, io.LimitReader(reader, (64<<20)+1))
+			_ = reader.Close()
+		}
+	}
+	return fmt.Sprintf("%x", hash.Sum(nil))
 }
 
 func normalizeStateRoot(raw string) string {
@@ -625,7 +717,7 @@ func randomTokenB64u(n int) (string, error) {
 func readServiceStatus(stateRoot string) serviceStatus {
 	body, err := os.ReadFile(pidFilePath(stateRoot))
 	if err != nil {
-		return serviceStatus{Status: "not_running", StateRoot: stateRoot}
+		return stoppedServiceStatus(stateRoot)
 	}
 	var status serviceStatus
 	if err := json.Unmarshal(body, &status); err != nil {
@@ -633,7 +725,7 @@ func readServiceStatus(stateRoot string) serviceStatus {
 	}
 	status.StateRoot = stateRoot
 	if status.PID <= 0 || !serviceProcessMatchesEventually(status, 3, 10*time.Millisecond, serviceProcessMatches) {
-		return serviceStatus{Status: "not_running", StateRoot: stateRoot}
+		return stoppedServiceStatus(stateRoot)
 	}
 	if strings.TrimSpace(status.Listen) == "" || strings.TrimSpace(status.Listen) == "127.0.0.1:0" {
 		return serviceStatus{Status: "not_running", StateRoot: stateRoot, ErrorMessage: "Gateway service has not published a listen address yet."}
@@ -698,38 +790,47 @@ func serviceProcessMatches(status serviceStatus) bool {
 	return filepath.Clean(status.Executable) == filepath.Clean(actual)
 }
 
-func waitServiceReady(stateRoot string, expectedPID int) (serviceStatus, error) {
-	deadline := time.Now().Add(gatewayServiceReadyWait)
-	for time.Now().Before(deadline) {
+func waitServiceReady(stateRoot string, expectedPID int, exited <-chan struct{}, timeout time.Duration) (serviceStatus, error) {
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	exitFailure := func() (serviceStatus, error) {
+		failure := readGatewayStartupFailure(stateRoot)
+		if failure.PID != expectedPID || failure.Code == "" || failure.Reason == "" {
+			failure = gatewayStartupFailure{SchemaVersion: 1, PID: expectedPID, Code: "gateway_startup_failed", Reason: "Gateway service exited before it became ready."}
+		}
+		return serviceStatus{}, &gatewayStartupError{failure: failure}
+	}
+	for {
+		// Check exit before accepting a ready record written just before a crash.
+		select {
+		case <-exited:
+			return exitFailure()
+		default:
+		}
 		status := readServiceStatus(stateRoot)
 		if status.Status == "running" && status.PID == expectedPID && strings.TrimSpace(status.Listen) != "" {
 			return status, nil
 		}
-		if expectedPID > 0 && !pidRunning(expectedPID) {
-			if failure := readGatewayStartupFailure(stateRoot); strings.TrimSpace(failure.Code) != "" && strings.TrimSpace(failure.Reason) != "" {
-				message := failure.Code + ": " + failure.Reason
-				if strings.TrimSpace(failure.Recovery) != "" {
-					message += " Recovery: " + failure.Recovery
-				}
-				return serviceStatus{}, errors.New(message)
-			}
-			return serviceStatus{}, errors.New("gateway service exited before it became ready")
+		select {
+		case <-deadline.C:
+			return serviceStatus{}, &gatewayStartupError{failure: gatewayStartupFailure{SchemaVersion: 1, PID: expectedPID, Code: "gateway_startup_timeout", Reason: "Gateway service did not become ready before the startup timeout."}}
+		case <-exited:
+			return exitFailure()
+		case <-ticker.C:
 		}
-		time.Sleep(100 * time.Millisecond)
 	}
-	return serviceStatus{}, errors.New("gateway service did not become ready before the startup timeout")
 }
 
+// Service identity checks also verify executable and process start time. This
+// preliminary existence probe is never used to wait for a child startup result.
 func pidRunning(pid int) bool {
 	if pid <= 0 {
 		return false
 	}
 	process, err := os.FindProcess(pid)
-	if err != nil {
-		return false
-	}
-	err = process.Signal(syscall.Signal(0))
-	return err == nil
+	return err == nil && process.Signal(syscall.Signal(0)) == nil
 }
 
 func managedDesktopBridgeService() bool {
