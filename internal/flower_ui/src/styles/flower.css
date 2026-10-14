@@ -9666,7 +9666,7 @@ button.flower-attachment-preview-trigger:disabled {
   height: 2.25rem;
   flex: 0 0 auto;
   overflow: hidden;
-  border-radius: 0.75rem;
+  border-radius: 50%;
   background: var(--avatar-background);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--foreground) 8%, transparent) inset;
 }
@@ -9903,7 +9903,7 @@ button.flower-attachment-preview-trigger:disabled {
 .flower-subagent-detail-avatar {
   width: 2.75rem;
   height: 2.75rem;
-  border-radius: 0.9375rem;
+  border-radius: 50%;
 }
 
 .flower-subagent-detail-overview-copy {
@@ -10440,7 +10440,7 @@ button.flower-attachment-preview-trigger:disabled {
   .flower-subagent-detail-avatar {
     width: 2.25rem;
     height: 2.25rem;
-    border-radius: 0.75rem;
+    border-radius: 50%;
   }
 
   .flower-subagent-ledger {
