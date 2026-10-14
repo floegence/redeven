@@ -184,6 +184,7 @@
       "media": {
         "image": "Imagen",
         "previewImage": "Ver imagen",
+        "previewHTML": "Abrir vista previa del archivo",
         "revealInFolder": "Abrir carpeta contenedora",
         "video": "Vídeo",
         "audio": "Audio",

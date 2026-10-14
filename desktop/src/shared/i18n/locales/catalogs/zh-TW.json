@@ -184,6 +184,7 @@
       "media": {
         "image": "圖片",
         "previewImage": "預覽圖片",
+        "previewHTML": "開啟檔案預覽",
         "revealInFolder": "開啟所在資料夾",
         "video": "影片",
         "audio": "音訊",
