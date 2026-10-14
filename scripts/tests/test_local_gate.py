@@ -141,6 +141,18 @@ class LocalGateTests(unittest.TestCase):
         self.assertEqual(self.trace(), ["C"])
         self.assertIn("INVALIDATE C: environment", output)
 
+    def test_probe_failure_persists_cursor_before_initialization(self):
+        self.manifest["groups"][2]["environment"] = {"probes": [[sys.executable, "-c", "from pathlib import Path; import sys; sys.exit(Path('fail-probe').exists())"]]}
+        self.write_manifest()
+        (self.root / "fail-probe").touch()
+        self.gate(expected=1)
+        self.assertEqual(self.state()["cursor"], "C")
+        self.assertEqual(self.trace(), list("AB"))
+        (self.root / "fail-probe").unlink()
+        self.clear_trace()
+        self.assertIn("cursor=C", self.gate())
+        self.assertEqual(self.trace(), list("CDE"))
+
     def test_test_and_dependency_configuration_changes_invalidate(self):
         self.gate()
         for name in ("scripts/group.py", "package-lock.json", "config.json"):
