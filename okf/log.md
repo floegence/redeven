@@ -1423,3 +1423,10 @@ canonical live state from connection confirmation, and scope completion facts to
 the root or SubAgent thread that owns the message.
 
 - 2026-10-13: Document browser-native URL navigation, temporary target/URL approvals, portable locator matching and partial Computer Use execution facts.
+
+## 2026-10-13 — HTML preview file actions
+
+Adopt published Floe Webapp v0.86.28 in Desktop and Env App for distinct inline
+HTML expansion controls and host file-preview actions. Local HTML uses the
+existing file-preview window and containing-folder navigation; browser acceptance
+checks the published components and preserves the original inline iframe.

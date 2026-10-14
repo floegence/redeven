@@ -182,6 +182,61 @@ describe('Flower inline media', () => {
     expect(folder.getBoundingClientRect().right).toBeLessThanOrEqual(media.getBoundingClientRect().right);
   });
 
+  it('opens a local HTML file in the existing floating preview and distinguishes expansion states', async () => {
+    await page.viewport(1200, 900);
+    removeUIStorageItem(floatingWindowStorageKey('file-preview'));
+    const html = '<h1>Interactive report</h1><button>Update report</button>';
+    const [item, setItem] = createSignal<FileItem>();
+    const [open, setOpen] = createSignal(false);
+    const previewHost = document.createElement('div');
+    document.body.appendChild(previewHost);
+    const dispose = render(() => <FloeConfigProvider><LayoutProvider>
+      <FilePreviewSurface open={open()} onOpenChange={setOpen} item={item()} descriptor={{ mode: 'html' }} text={html}
+        onCopyPath={async () => true} onDownload={vi.fn()} onAskFlower={vi.fn()} />
+    </LayoutProvider></FloeConfigProvider>, previewHost);
+    onTestFinished(() => { dispose(); previewHost.remove(); removeUIStorageItem(floatingWindowStorageKey('file-preview')); });
+    const openFilePreview = vi.fn(async (file: FileItem) => { setItem(file); setOpen(true); });
+    const openFileBrowserAtPath = vi.fn(async () => undefined);
+    const navigation = createFlowerLinkedContextNavigation({
+      openFilePreview, openFileBrowserAtPath, notifyInvalidFilePath: vi.fn(), notifyInvalidDirectoryPath: vi.fn(),
+    });
+    const seed = thread({ thread_id: 'html-actions', title: 'Interactive report', messages: [{
+      id: 'html-reply', role: 'assistant', status: 'complete', turn_id: 'html-turn', created_at_ms: 2,
+      content: '[Interactive report](/workspace/reports/report.html)',
+    }] });
+    const runtime = renderSurfaceWithAdapter({ ...adapter(true), listThreads: async () => [seed],
+      loadThread: async () => liveBootstrap(seed, 1), loadMessageFile: async () => new Blob([html], { type: 'text/plain' }),
+      openMessageFile: navigation.openMessageFile,
+    });
+    runtime.style.height = '850px';
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="html-actions"] button')));
+    runtime.querySelector<HTMLButtonElement>('[data-thread-id="html-actions"] button')!.click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-media-kind="html"] iframe')));
+    const media = runtime.querySelector<HTMLElement>('[data-media-kind="html"]')!;
+    const frame = media.querySelector('iframe');
+    const expansion = media.querySelector<HTMLButtonElement>('button[aria-label="Expand preview"]')!;
+    const expandIcon = expansion.querySelector('svg')!.innerHTML;
+    await userEvent.click(expansion);
+    expect(expansion.getAttribute('aria-expanded')).toBe('true');
+    expect(expansion.getAttribute('aria-label')).toBe('Collapse preview');
+    expect(expansion.querySelector('svg')!.innerHTML).not.toBe(expandIcon);
+    expect(media.querySelector('iframe')).toBe(frame);
+    await userEvent.click(expansion);
+    expect(expansion.getAttribute('aria-expanded')).toBe('false');
+    const preview = media.querySelector<HTMLButtonElement>('button[aria-label="Open file preview"]')!;
+    await userEvent.click(preview);
+    await waitFor(() => Boolean(document.querySelector('.file-preview-floating-window iframe.html-preview-frame')));
+    const window = document.querySelector<HTMLElement>('.file-preview-floating-window')!;
+    expect(openFilePreview).toHaveBeenLastCalledWith(expect.objectContaining({ path: '/workspace/reports/report.html' }), { focus: true, reusePolicy: 'same_file_or_create' });
+    expect(window.querySelector('h2')!.textContent).toBe('report.html');
+    expect(media.querySelector('iframe')).toBe(frame);
+    await page.screenshot({ path: './__screenshots__/redeven-flower-html-preview-window.png' });
+    window.querySelector<HTMLButtonElement>('[data-floe-floating-window-control="close"]')!.click();
+    await waitFor(() => !document.querySelector('.file-preview-floating-window'));
+    await userEvent.click(media.querySelector<HTMLButtonElement>('button[aria-label="Open containing folder"]')!);
+    expect(openFileBrowserAtPath).toHaveBeenCalledWith('/workspace/reports', { title: 'reports', openStrategy: 'focus_latest_or_create' });
+  });
+
   it('renders an assistant screenshot, file preview, and web link through the real conversation surface', async () => {
     await page.viewport(1200, 950);
     const ref = `computer://browser-main/${'a'.repeat(64)}`;

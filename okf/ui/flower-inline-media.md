@@ -41,7 +41,9 @@ preview error without interrupting the conversation.
   and hosts without file navigation use Floe's shared floating preview; they do
   not expose a fabricated folder action or a raw blob link. Labels follow the
   active locale. Video/audio use native playback controls without autoplay.
-  HTML expands without recreating its iframe.
+  Local HTML exposes the same host file-preview and containing-folder actions.
+  HTML expands without recreating its iframe; expansion and collapse use distinct
+  icons and accessible names.
 - Only stable Markdown segments mount media. An unfinished streaming tail stays
   inert, and later reply text does not reload committed previews. Media near the
   viewport loads lazily. Disposal aborts pending observation and revokes blob URLs.
