@@ -5101,7 +5101,8 @@
         "expand": "放大預覽",
         "collapse": "收合預覽",
         "open": "開啟原始檔案",
-        "close": "關閉預覽"
+        "close": "關閉預覽",
+        "previewHTML": "開啟檔案預覽"
       },
       "webSearch": {
         "search": "搜尋",
@@ -5316,7 +5317,7 @@
       "commandArgumentsInvalid": "/compact 指令不接受參數。",
       "commandUnknown": "未知的 Flower 指令：{command}",
       "composerMoreLabel": "更多輸入選項",
-      "composerReferencesLabel": "檔案與資料夾引用",
+      "composerReferencesLabel": "引用",
       "composerReferenceLoading": "正在搜尋檔案與資料夾…",
       "composerReferenceEmpty": "找不到相符的檔案或資料夾",
       "composerReferenceError": "Flower 無法搜尋此工作目錄。",
@@ -5542,7 +5543,22 @@
       },
       "modelUnavailableMissingKeys": "此模型的模型供應商尚未設定憑證。請在設定中新增憑證。",
       "modelUnavailableProviderDisabled": "此模型的模型供應商已停用。請在設定中啟用，或選擇其他模型。",
-      "modelUnavailableModelMissing": "模型供應商的模型清單中沒有此模型。請在設定中檢查模型 ID，或選擇其他模型。"
+      "modelUnavailableModelMissing": "模型供應商的模型清單中沒有此模型。請在設定中檢查模型 ID，或選擇其他模型。",
+      "threadReference": {
+        "open": "開啟此對話",
+        "unavailable": "此對話已無法使用，或你已失去讀取權限。",
+        "wrongRuntime": "此對話屬於另一個執行環境。",
+        "approval": "請先處理核准要求，再新增引用。",
+        "input": "請先完成問題回答，再新增引用。",
+        "readOnly": "目前輸入框為唯讀。",
+        "frozen": "請等待目前輸入恢復可編輯狀態。",
+        "title": "標題",
+        "status": "狀態",
+        "created": "建立時間",
+        "updated": "更新時間",
+        "captured": "擷取時間",
+        "runtime": "執行環境"
+      }
     },
     "threadList": {
       "title": "對話",
@@ -5615,7 +5631,8 @@
       "groupToday": "今天",
       "groupYesterday": "昨天",
       "groupThisWeek": "本週",
-      "groupOlder": "更早"
+      "groupOlder": "更早",
+      "referenceThread": "引用此對話"
     },
     "emptyState": {
       "moreSuggestions": "更多建議",

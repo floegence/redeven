@@ -2,6 +2,7 @@ import type { FlowerChatContextChip, FlowerChatContextDisplay, FlowerChatContext
 import type { FlowerMessageReference } from '../contracts/flowerSurfaceContracts';
 import {
   parseAskFlowerContextActionEnvelope,
+  parseThreadReferenceSnapshot,
   type ContextActionContextItem,
 } from '../contextActionWire';
 import { basenameFromPath, compact, formatBytes, processLabel, processSnapshotText } from './contextItemUtils';
@@ -10,6 +11,7 @@ const REFERENCE_DETAIL_CODE_POINTS = 96;
 
 function referenceTone(kind: FlowerMessageReference['kind']): FlowerChatContextTone {
   switch (kind) {
+    case 'thread': return 'thread';
     case 'text': return 'selection';
     case 'file': return 'file';
     case 'directory': return 'directory';
@@ -30,6 +32,15 @@ function buildCanonicalReferenceChip(
   reference: FlowerMessageReference,
   index: number,
 ): FlowerChatContextChip {
+  if (reference.kind === 'thread') {
+    let snapshot = null;
+    try { snapshot = parseThreadReferenceSnapshot(JSON.parse(reference.text)); } catch { /* Invalid snapshots have no navigation action. */ }
+    return {
+      id: reference.reference_id, kind: reference.kind, tone: 'thread', label: reference.label, detail: '',
+      action: snapshot && snapshot.thread_id === reference.referenced_thread_id ? { type: 'open_thread_preview', title: reference.label,
+        subtitle: '', body: reference.text, thread: snapshot, context_index: index } : null,
+    };
+  }
   const visibleText = 'text' in reference ? reference.text : undefined;
   const preview = visibleText
     ? referenceTextPreview(visibleText)
@@ -151,6 +162,11 @@ function buildTextSnapshotChip(item: Extract<ContextActionContextItem, { kind: '
 
 function buildChip(item: ContextActionContextItem, index: number): FlowerChatContextChip {
   switch (item.kind) {
+    case 'thread_reference': return {
+      id: `ctx-${index}-thread`, kind: item.kind, tone: 'thread', label: item.thread.title || item.thread.thread_id, detail: '',
+      action: { type: 'open_thread_preview', title: item.thread.title || item.thread.thread_id, subtitle: '',
+        body: JSON.stringify(item.thread), thread: item.thread, context_index: index },
+    };
     case 'tessiven_selection': return buildTextSnapshotChip({ kind: 'text_snapshot', title: 'Tessiven', detail: `${item.canvas_id} · v${item.version_id}`, content: JSON.stringify(item) }, index);
     case 'file_path': return buildFilePathChip(item, index);
     case 'terminal_selection': return buildTerminalSelectionChip(item, index);

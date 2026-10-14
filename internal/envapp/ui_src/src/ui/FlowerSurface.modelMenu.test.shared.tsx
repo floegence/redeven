@@ -1,6 +1,6 @@
 import { expect, it, vi } from 'vitest';
 import type { FlowerModelDirectory, FlowerSettingsDraft } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
-import { adapter, renderSurfaceWithAdapter, settingsSnapshot, waitFor } from './FlowerSurface.navigation.testHarness';
+import { adapter, composerModelTrigger, renderSurfaceWithAdapter, settingsSnapshot, waitFor } from './FlowerSurface.navigation.testHarness';
 
 it.each(['ready', 'unavailable'] as const)('preserves the selected model and menu focus when background metadata becomes %s', async state => {
   const directory: FlowerModelDirectory = { current_model_id: 'static/agent',
@@ -15,7 +15,7 @@ it.each(['ready', 'unavailable'] as const)('preserves the selected model and men
     listThreads: async () => [],
   });
   await waitFor(() => surface.querySelector('.flower-model-reasoning-model-label')?.textContent?.includes('Agent') === true);
-  const trigger = surface.querySelector<HTMLButtonElement>('button.flower-model-reasoning-model-trigger')!;
+  const trigger = await composerModelTrigger(surface);
   expect(trigger.querySelector('[class*="animate-spin"]')).toBeNull();
   expect(trigger.hasAttribute('aria-busy')).toBe(false);
   expect(trigger.getAttribute('aria-label')).toContain('Current provider / Agent');
@@ -47,7 +47,7 @@ it('searches a bounded menu, preserves a selected alias, and opens model managem
   }] } };
   const surface = renderSurfaceWithAdapter({ ...adapter(), loadSettings: async () => snapshot, listThreads: async () => [] });
   await waitFor(() => surface.querySelector('.flower-model-reasoning-model-label')?.textContent?.includes('agent-q8') === true);
-  surface.querySelector<HTMLButtonElement>('.flower-model-reasoning-model-trigger')!.click();
+  (await composerModelTrigger(surface)).click();
   await waitFor(() => Boolean(document.querySelector('.flower-model-menu input')));
   const menu = document.querySelector<HTMLElement>('.flower-model-menu')!;
   expect(menu.querySelectorAll('.flower-model-menu-item')).toHaveLength(8);

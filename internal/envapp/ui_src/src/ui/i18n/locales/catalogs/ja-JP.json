@@ -5101,7 +5101,8 @@
         "expand": "プレビューを拡大",
         "collapse": "プレビューを縮小",
         "open": "元のファイルを開く",
-        "close": "プレビューを閉じる"
+        "close": "プレビューを閉じる",
+        "previewHTML": "ファイルプレビューを開く"
       },
       "webSearch": {
         "search": "検索",
@@ -5316,7 +5317,7 @@
       "commandArgumentsInvalid": "/compact コマンドに引数は指定できません。",
       "commandUnknown": "不明な Flower コマンド: {command}",
       "composerMoreLabel": "その他の入力オプション",
-      "composerReferencesLabel": "ファイルとフォルダーの参照",
+      "composerReferencesLabel": "参照",
       "composerReferenceLoading": "ファイルとフォルダーを検索しています...",
       "composerReferenceEmpty": "一致するファイルまたはフォルダーがありません",
       "composerReferenceError": "Flower はこの作業ディレクトリを検索できませんでした。",
@@ -5542,7 +5543,22 @@
       },
       "modelUnavailableMissingKeys": "このモデルプロバイダーの認証情報が設定されていません。設定で認証情報を追加してください。",
       "modelUnavailableProviderDisabled": "このモデルプロバイダーは無効です。設定で有効にするか、別のモデルを選択してください。",
-      "modelUnavailableModelMissing": "このモデルはプロバイダーのモデル一覧にありません。設定でモデル ID を確認するか、別のモデルを選択してください。"
+      "modelUnavailableModelMissing": "このモデルはプロバイダーのモデル一覧にありません。設定でモデル ID を確認するか、別のモデルを選択してください。",
+      "threadReference": {
+        "open": "会話を開く",
+        "unavailable": "この会話は利用できないか、読み取り権限がありません。",
+        "wrongRuntime": "この会話は別のランタイムに属しています。",
+        "approval": "承認の処理を完了してから参照を追加してください。",
+        "input": "質問への回答を完了してから参照を追加してください。",
+        "readOnly": "この入力欄は読み取り専用です。",
+        "frozen": "現在の入力を編集できるようになるまでお待ちください。",
+        "title": "タイトル",
+        "status": "状態",
+        "created": "作成日時",
+        "updated": "更新日時",
+        "captured": "取得日時",
+        "runtime": "ランタイム"
+      }
     },
     "threadList": {
       "title": "会話",
@@ -5615,7 +5631,8 @@
       "groupToday": "今日",
       "groupYesterday": "昨日",
       "groupThisWeek": "今週",
-      "groupOlder": "以前"
+      "groupOlder": "以前",
+      "referenceThread": "この会話を参照"
     },
     "emptyState": {
       "moreSuggestions": "提案をもっと見る",

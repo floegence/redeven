@@ -814,7 +814,7 @@ describe('FlowerSurface navigation', () => {
     expect(runtime.querySelector('.flower-chat-header-title')?.textContent).toBe('Ask Flower');
     expect(runtime.querySelector('.flower-empty-state')).toBeTruthy();
     expect(runtime.querySelector('.flower-setup-guide')).toBeNull();
-    expect(runtime.querySelector('.flower-setup-inline')?.textContent).toContain('This model is unavailable.');
+    expect(runtime.querySelector('.flower-setup-inline')?.textContent).toContain('This model provider has no credentials configured.');
     expect(runtime.querySelector('.flower-handler-error')).toBeNull();
     expect(runtime.textContent).not.toContain(retiredHandlerUnavailableCopy());
 

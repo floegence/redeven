@@ -218,6 +218,33 @@ func nonNegativeInt64(v int64) int64 {
 	return v
 }
 
+// ReadableThreadIDs returns product ownership metadata, including child threads.
+// Canonical conversation content remains exclusively owned by Floret.
+func (s *Store) ReadableThreadIDs(ctx context.Context, endpointID, namespacePublicID string) ([]string, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("store not initialized")
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	namespacePublicID = strings.TrimSpace(namespacePublicID)
+	if endpointID == "" || namespacePublicID == "" {
+		return nil, errors.New("missing thread authority")
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT thread_id FROM ai_thread_settings WHERE endpoint_id = ? AND namespace_public_id = ? ORDER BY thread_id`, endpointID, namespacePublicID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	ids := []string{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
 func (s *Store) ListThreadSettings(ctx context.Context, endpointID string, limit int, cursor ThreadsCursor) ([]ThreadSettings, string, error) {
 	if s == nil || s.db == nil {
 		return nil, "", errors.New("store not initialized")

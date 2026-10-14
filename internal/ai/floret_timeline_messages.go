@@ -318,7 +318,7 @@ func publicFloretMessageReferences(references []flruntime.MessageReference) ([]p
 		if reference.Kind == flruntime.MessageReferenceFile || reference.Kind == flruntime.MessageReferenceDirectory {
 			text = ""
 		}
-		out = append(out, FlowerMessageReference{ReferenceID: reference.ReferenceID, Kind: string(reference.Kind), Label: reference.Label, Text: text, Truncated: reference.Truncated})
+		out = append(out, FlowerMessageReference{ReferencedThreadID: reference.ReferencedThreadID.String(), ReferenceID: reference.ReferenceID, Kind: string(reference.Kind), Label: reference.Label, Text: text, Truncated: reference.Truncated})
 	}
 	return out, nil
 }

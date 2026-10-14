@@ -74,6 +74,7 @@ export type FlowerThreadListCopy = Readonly<{
   deletePendingNotification: string;
   deleteFailedNotification: string;
   contextMenuLabel: (title: string) => string;
+  referenceThread: string;
   copyThreadID: string;
   copyWorkingDirectory: string;
   browseWorkingDirectory: string;
@@ -506,6 +507,11 @@ export type FlowerSurfaceCopy = Readonly<{
     commandArgumentsInvalid: string;
     commandUnknown: (command: string) => string;
     composerMoreLabel: string;
+    threadReference: Readonly<{
+      open: string; unavailable: string; wrongRuntime: string;
+      approval: string; input: string; readOnly: string; frozen: string;
+      title: string; status: string; created: string; updated: string; captured: string; runtime: string;
+    }>;
     composerReferencesLabel: string;
     composerReferenceLoading: string;
     composerReferenceEmpty: string;
@@ -882,7 +888,14 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     commandArgumentsInvalid: 'The /compact command does not take arguments.',
     commandUnknown: (command) => `Unknown Flower command: ${command}`,
     composerMoreLabel: 'More input options',
-    composerReferencesLabel: 'File and folder references',
+    threadReference: {
+      open: 'Open conversation', unavailable: 'This conversation is unavailable or you no longer have read access.',
+      wrongRuntime: 'This conversation belongs to another Runtime.',
+      approval: 'Resolve the approval before adding references.', input: 'Finish answering the question before adding references.',
+      readOnly: 'This composer is read-only.', frozen: 'Wait until the current input can be edited.',
+      title: 'Title', status: 'Status', created: 'Created', updated: 'Updated', captured: 'Captured', runtime: 'Runtime',
+    },
+    composerReferencesLabel: 'References',
     composerReferenceLoading: 'Searching files and folders...',
     composerReferenceEmpty: 'No matching files or folders',
     composerReferenceError: 'Flower could not search this working directory.',
@@ -1130,6 +1143,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     deletePendingNotification: 'Deletion was accepted and will continue in the background. The conversation has been removed from this view.',
     deleteFailedNotification: 'This conversation has been retired and cannot be used, but deletion is incomplete. Repair the Local Environment data, then restart Redeven.',
     contextMenuLabel: (title) => `Actions for ${title}`,
+    referenceThread: 'Reference this conversation',
     copyThreadID: 'Copy thread id',
     copyWorkingDirectory: 'Copy working directory',
     browseWorkingDirectory: 'Browse working directory',

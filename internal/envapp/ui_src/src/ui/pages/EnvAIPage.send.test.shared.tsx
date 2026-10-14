@@ -615,7 +615,9 @@ export function registerEnvAIPageSendTests() {
         oldRead.resolve(await original('/_redeven_proxy/api/ai/models'));
         await flush();
         expect(host.querySelector('.flower-model-reasoning-model-label')?.textContent).toContain('gpt-5.2');
-        expect(host.querySelector('button.flower-model-reasoning-model-trigger')?.hasAttribute('aria-busy')).toBe(false);
+        if (!host.querySelector('button.flower-model-reasoning-model-trigger')) host.querySelector<HTMLButtonElement>('.flower-composer-more-button')?.click();
+        await flush();
+        expect(document.querySelector('button.flower-model-reasoning-model-trigger')?.hasAttribute('aria-busy')).toBe(false);
       } finally { dispose(); mocks.fetchLocalApiJSONMock.mockImplementation(original); }
     });
 

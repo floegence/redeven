@@ -1,7 +1,7 @@
 import type { Component } from 'solid-js';
 import { Show, createMemo } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { FloatingWindow } from '@floegence/floe-webapp-core/ui';
+import { Button, FloatingWindow } from '@floegence/floe-webapp-core/ui';
 
 export type FlowerContextSnapshotPreviewProps = Readonly<{
   title: string;
@@ -11,6 +11,10 @@ export type FlowerContextSnapshotPreviewProps = Readonly<{
   truncated?: boolean;
   truncatedLabel: string;
   zIndex?: number;
+  actionLabel?: string;
+  onAction?: () => void;
+  actionDisabled?: boolean;
+  statusMessage?: string;
   onClose: () => void;
 }>;
 
@@ -36,6 +40,7 @@ function resolveSizing(viewport: { width: number; height: number }) {
 
 /** Default snapshot host for consumers without a product preview window. */
 export const FlowerChatContextPreview: Component<FlowerContextSnapshotPreviewProps> = (props) => {
+  let previewBody: HTMLDivElement | undefined;
   const viewport = createMemo(() => currentViewportSize());
   const sizing = createMemo(() => resolveSizing(viewport()));
   return (
@@ -51,9 +56,16 @@ export const FlowerChatContextPreview: Component<FlowerContextSnapshotPreviewPro
       zIndex={props.zIndex ?? 162}
     >
       <div class="flower-chat-context-preview-surface">
-        <div class="flower-chat-context-preview-body">
+        <div ref={previewBody} tabIndex={-1} class="flower-chat-context-preview-body">
           <div class="flower-chat-context-preview-title">{props.title}</div>
           <Show when={props.subtitle}><div class="flower-chat-context-preview-subtitle">{props.subtitle}</div></Show>
+          <Show when={props.actionLabel && props.onAction}>
+            <Button size="sm" class="mb-3 cursor-pointer" disabled={props.actionDisabled} onClick={() => {
+              previewBody?.focus({ preventScroll: true });
+              props.onAction?.();
+            }}>{props.actionLabel}</Button>
+          </Show>
+          <Show when={props.statusMessage}><p role="status" class="mb-3 text-xs text-muted-foreground">{props.statusMessage}</p></Show>
           <pre class="flower-chat-context-preview-content">{props.body}</pre>
           <Show when={props.truncated}><span class="flower-chat-context-preview-truncated" role="note">{props.truncatedLabel}</span></Show>
         </div>

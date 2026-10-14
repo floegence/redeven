@@ -419,7 +419,7 @@
       "commandArgumentsInvalid": "El comando /compact no acepta argumentos.",
       "commandUnknown": "Comando de Flower desconocido: {command}",
       "composerMoreLabel": "Más opciones de entrada",
-      "composerReferencesLabel": "Referencias de archivos y carpetas",
+      "composerReferencesLabel": "Referencias",
       "composerReferenceLoading": "Buscando archivos y carpetas...",
       "composerReferenceEmpty": "No hay archivos ni carpetas coincidentes",
       "composerReferenceError": "Flower no pudo buscar en este directorio de trabajo.",
@@ -654,7 +654,22 @@
       },
       "modelUnavailableMissingKeys": "Este proveedor de modelos no tiene credenciales configuradas. Añádelas en la configuración.",
       "modelUnavailableProviderDisabled": "Este proveedor de modelos está desactivado. Actívalo en la configuración o selecciona otro modelo.",
-      "modelUnavailableModelMissing": "Este modelo no aparece en la lista del proveedor. Comprueba su ID en la configuración o selecciona otro modelo."
+      "modelUnavailableModelMissing": "Este modelo no aparece en la lista del proveedor. Comprueba su ID en la configuración o selecciona otro modelo.",
+      "threadReference": {
+        "open": "Abrir conversación",
+        "unavailable": "Esta conversación no está disponible o ya no tienes permiso de lectura.",
+        "wrongRuntime": "Esta conversación pertenece a otro entorno de ejecución.",
+        "approval": "Resuelve la solicitud de aprobación antes de añadir referencias.",
+        "input": "Termina de responder a la pregunta antes de añadir referencias.",
+        "readOnly": "Este campo de entrada es de solo lectura.",
+        "frozen": "Espera hasta que se pueda editar la entrada actual.",
+        "title": "Título",
+        "status": "Estado",
+        "created": "Creación",
+        "updated": "Actualización",
+        "captured": "Captura",
+        "runtime": "Entorno de ejecución"
+      }
     },
     "threadList": {
       "title": "Conversaciones",
@@ -727,7 +742,8 @@
       "movePinnedDown": "Bajar",
       "clearSearchToReorder": "Borrar la búsqueda para reordenar las conversaciones fijadas",
       "pinUpdateFailed": "No se pudieron actualizar las conversaciones fijadas.",
-      "pinRefreshFailed": "Las conversaciones fijadas se guardaron, pero no se pudo actualizar la lista. Actualízala para ver el orden más reciente."
+      "pinRefreshFailed": "Las conversaciones fijadas se guardaron, pero no se pudo actualizar la lista. Actualízala para ver el orden más reciente.",
+      "referenceThread": "Referenciar esta conversación"
     },
     "emptyState": {
       "moreSuggestions": "Más sugerencias",

@@ -1,3 +1,5 @@
+import { flowerDraftReferenceIdentity, flowerDraftReferenceContextItem, flowerDraftReferenceDescription } from './composer/flowerDraftReferenceModel';
+import type { ThreadReferenceSnapshot } from './contextActionWire';
 import { withFlowerModelDirectory } from './modelDirectory';
 import { FileItemIcon } from '@floegence/floe-webapp-core/file-browser';
 import { flowerMenuModels } from './modelMenu';
@@ -4077,6 +4079,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   });
 
   const handleThreadMenuAction = async (action: FlowerThreadMenuAction, item: FlowerThreadListItem, restore?: HTMLElement) => {
+    if (action === 'reference') { addThreadReference(item); return; }
     if (action === 'pin') { toggleThreadPin(item); restoreThreadMenuFocus(restore); return; }
     if (action === 'browse_workdir' || action === 'terminal_workdir' || action === 'copy_workdir') {
       await handleDirectoryMenuAction(action, { thread_id: item.thread_id, path: item.working_dir }, restore);
@@ -4549,10 +4552,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         error,
         current.view_version,
       );
-      if (source === 'live_current') throw error;
       if (threadID === selectedThreadID()) {
         setThreadLoadError(threadDetailUserError(error));
       }
+      if (source === 'live_current') throw error;
       return false;
     }
   };
@@ -4705,6 +4708,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             return;
           }
         }
+        if (!unknown && entry.draftReferences?.some(reference => reference.kind === 'thread')) outboxDraftRestorers.get(entry.requestId)?.();
         setTransportOutbox(outbox => outbox.put({ ...retained, delivery: unknown ? 'unknown' : 'failed', deliveryError: getErrorMessage(error) }));
         if (!isPendingDraftKey(retained.threadId)) void requestThreadDetail(retained.threadId, 'background_refresh', true).catch(() => undefined);
       }).finally(() => {
@@ -5285,8 +5289,20 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const stagingScopeID = launchController.snapshot().staging_scope?.staging_scope_id;
       const scopeStillPending = stagingScopeID && [...transportOutbox().entries.values()].some(entry => entry.requestId !== clientRequestID && entry.input.staging_scope?.staging_scope_id === stagingScopeID);
       if (launchController.snapshot().items.length === 0 && !scopeStillPending) releaseAttachmentStagingScope(moveDraft ? canonicalSessionKey : launchSessionKey);
+      const session = submissionSession();
+      const snapshot = session.snapshot();
+      const consumesRestoredText = restoredSubmissionSnapshot?.text_revision === snapshot.text_revision
+        && snapshot.value.text === promptInput;
+      if (restoredSubmissionSnapshot) attachmentControllerFor(submissionScopeKey()).consumeReady(consumedAttachmentLocalIDs);
+      const accepted = session.mutate(value => ({ ...value,
+        text: consumesRestoredText ? '' : value.text,
+        references: value.references.filter(reference => !frozenDraft.references.some(submitted => submitted.local_id === reference.local_id)),
+        ...(restoredSubmissionSnapshot ? { attachments: flowerComposerDraftAttachments(attachmentControllerFor(submissionScopeKey()).snapshot().items) } : {}),
+      }));
+      updateComposerSessionDraft(submissionScopeKey(), draft => ({ ...draft, chatDraft: accepted.snapshot.value.text, references: accepted.snapshot.value.references }));
       notifyEmbeddedAccepted?.({ client_request_id: clientRequestID, thread_id: canonicalThreadID });
     };
+    let restoredSubmissionSnapshot: FlowerComposerDraftSnapshot | undefined;
     let handedToOutbox = false;
     try {
       let attachmentSnapshot = launchController.snapshot();
@@ -5413,9 +5429,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         }
         if (!submissionCurrent()) return;
         if (!submissionCurrent()) return;
-        const referenceItems: ContextActionEnvelope['context'] = frozenReferences.map(reference => reference.kind === 'page_context'
-          ? { kind: 'text_snapshot', title: reference.title, content: reference.content }
-          : { kind: 'file_path', path: reference.path, is_directory: reference.kind === 'directory' });
+        const referenceItems: ContextActionEnvelope['context'] = frozenReferences.map(flowerDraftReferenceContextItem);
         const contextAction: ContextActionEnvelope | undefined = frozenContextAction
           ? { ...frozenContextAction, context: [...frozenContextAction.context, ...referenceItems] }
           : referenceItems.length > 0 ? {
@@ -5481,10 +5495,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         handedToOutbox = true;
         const submittedFiles = launchController.localFiles().filter(file => consumedAttachmentLocalIDs.includes(file.local_id));
         const submittedAttachments = flowerComposerDraftAttachments(readyItems);
+        const retainedThreadReferences = frozenDraft.references.filter(reference => reference.kind === 'thread');
         outboxDraftRestorers.set(clientRequestID, () => {
           const sessionKey = transportOutbox().entries.get(clientRequestID)?.threadId ?? launchSessionKey;
           const value = draftSessionFor(sessionKey).snapshot().value;
-          if (value.text || value.references.length || value.attachments.length) return false;
+          if (value.text || value.attachments.length || value.references.length !== retainedThreadReferences.length
+            || value.references.some((reference, index) => reference.local_id !== retainedThreadReferences[index]?.local_id)) return false;
           const controller = attachmentControllerFor(sessionKey);
           const localFileIDs = new Set(submittedFiles.map(file => file.local_id));
           batch(() => {
@@ -5494,8 +5510,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               ...(!localFileIDs.has(item.local_id) && item.staged ? { staged: item.staged } : {}),
             })));
             controller.restoreLocalFiles(submittedFiles);
-            draftSessionFor(sessionKey).mutate(current => ({ ...current, text: promptInput, references: frozenDraft.references,
-              attachments: flowerComposerDraftAttachments(controller.snapshot().items), mode: 'ordinary', client_request_id: undefined }));
+            restoredSubmissionSnapshot = draftSessionFor(sessionKey).mutate(current => ({ ...current, text: promptInput, references: frozenDraft.references,
+              attachments: flowerComposerDraftAttachments(controller.snapshot().items), mode: 'ordinary', client_request_id: undefined })).snapshot;
             updateComposerSessionDraft(sessionKey, draft => ({ ...draft, chatDraft: promptInput, references: frozenDraft.references }));
           });
           return true;
@@ -5506,7 +5522,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         submittedSession.mutate(value => value.client_request_id === clientRequestID ? {
           ...value,
           text: ownsSubmittedText ? '' : value.text,
-          references: value.references.filter(reference => !frozenDraft.references.some(submitted => submitted.local_id === reference.local_id)),
+          references: value.references.filter(reference => reference.kind === 'thread' || !frozenDraft.references.some(submitted => submitted.local_id === reference.local_id)),
           attachments: flowerComposerDraftAttachments(launchController.snapshot().items),
           mode: 'ordinary', client_request_id: undefined,
           prepared_long_text_local_id: undefined, prepared_long_text_attachment_id: undefined,
@@ -7276,9 +7292,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const composerReferences = createMemo(() => currentComposerSessionDraft().references);
   const composerHasReferences = createMemo(() => composerReferences().length > 0);
   const composerHasExplicitReferences = createMemo(() => composerReferences().some(reference => reference.kind !== 'page_context'));
-  const [pageContextPreviewID, setPageContextPreviewID] = createSignal('');
-  const pageContextPreview = createMemo(() => composerReferences().find((reference): reference is Extract<FlowerComposerDraftReference, { kind: 'page_context' }> => reference.local_id === pageContextPreviewID() && reference.kind === 'page_context'));
-  createEffect(() => { if (pageContextPreviewID() && !pageContextPreview()) setPageContextPreviewID(''); });
+  const [composerSnapshotPreviewID, setComposerSnapshotPreviewID] = createSignal('');
+  const composerSnapshotPreview = createMemo(() => composerReferences().find((reference): reference is Extract<FlowerComposerDraftReference, { kind: 'page_context' | 'thread' }> => reference.local_id === composerSnapshotPreviewID() && (reference.kind === 'page_context' || reference.kind === 'thread')));
+  createEffect(() => { if (composerSnapshotPreviewID() && !composerSnapshotPreview()) setComposerSnapshotPreviewID(''); });
 
   type CompanionEntry = Readonly<{
     kind: 'pending' | 'status' | 'editor' | 'inspect';
@@ -7478,7 +7494,86 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
   };
 
-  const composerReferenceRemovalAllowed = createMemo(() => composerAttachmentEditingAllowed() && !composerTextareaDisabled());
+  const composerReferenceRemovalAllowed = createMemo(() => composerAttachmentEditingAllowed() && !composerTextareaDisabled() && !composerSendPreparing());
+  const threadReferenceDisabledReason = createMemo(() => {
+    const labels = copy().chat.threadReference;
+    if (selectedThreadReadOnly()) return labels.readOnly;
+    if (selectedComposerApprovalDisplayAction()) return labels.approval;
+    if (selectedInputRequest()) return labels.input;
+    if (!composerReferenceRemovalAllowed() || draftSubmissionActive(currentComposerDraftOperation().session.snapshot().value)) return labels.frozen;
+    return '';
+  });
+  const addThreadReference = (item: FlowerThreadListItem) => {
+    if (threadReferenceDisabledReason()) return;
+    const operation = currentComposerDraftOperation();
+    const reference: FlowerComposerDraftReference = {
+      local_id: createComposerReferenceLocalID(), kind: 'thread', label: item.title || copy().chat.titleFallback,
+      thread: { runtime_id: props.adapter.runtime.runtime_id, thread_id: item.thread_id, title: item.title,
+        status: item.status, working_dir: item.working_dir, created_at_ms: item.created_at_ms,
+        updated_at_ms: item.updated_at_ms, captured_at_ms: Date.now() },
+    };
+    const identity = flowerDraftReferenceIdentity(reference);
+    const existing = operation.session.snapshot().value.references.some(item => flowerDraftReferenceIdentity(item) === identity);
+    const result = operation.session.mutate(value => ({ ...value,
+      references: existing ? value.references : [...value.references, reference],
+    }));
+    updateComposerSessionDraft(operation.sessionKey, draft => ({ ...draft, references: result.snapshot.value.references }));
+    setComposerReferenceAnnouncement(existing ? copy().chat.composerReferenceExists(reference.label) : copy().chat.composerReferenceAdded(reference.label));
+    setThreadNavigationOpen(false);
+    returnToChat();
+    focusComposerAt(composerSelection().start, true);
+  };
+  let snapshotPreviewOpener: HTMLElement | null = null;
+  const [referenceOpenBusy, setReferenceOpenBusy] = createSignal(false);
+  const [referenceOpenError, setReferenceOpenError] = createSignal('');
+  let referencePreviewGeneration = 0;
+  const captureSnapshotPreviewFocus = () => {
+    referencePreviewGeneration++;
+    snapshotPreviewOpener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setReferenceOpenError(''); setReferenceOpenBusy(false);
+  };
+  const closeSnapshotPreview = () => {
+    referencePreviewGeneration++;
+    const restore = snapshotPreviewOpener;
+    setComposerSnapshotPreviewID(''); setContextSnapshotPreview(null);
+    setReferenceOpenBusy(false); setReferenceOpenError('');
+    queueMicrotask(() => { if (restore?.isConnected) restore.focus({ preventScroll: true }); });
+  };
+  const threadSnapshotBody = (thread: ThreadReferenceSnapshot): string => {
+    const labels = copy().chat.threadReference;
+    const statuses = copy().threadList.statuses;
+    const date = (ms: number) => new Date(ms).toLocaleString();
+    return [
+      `${labels.title}: ${thread.title || copy().chat.titleFallback}`,
+      `${copy().threadList.threadIDLabel}: ${thread.thread_id}`,
+      `${labels.status}: ${Object.hasOwn(statuses, thread.status) ? statuses[thread.status as keyof typeof statuses] : thread.status}`,
+      `${copy().threadList.workingDirectoryLabel}: ${thread.working_dir}`,
+      `${labels.created}: ${date(thread.created_at_ms)}`, `${labels.updated}: ${date(thread.updated_at_ms)}`,
+      `${labels.captured}: ${date(thread.captured_at_ms)}`, `${labels.runtime}: ${thread.runtime_id}`,
+    ].join('\n');
+  };
+  const referencedThreadUnavailable = (thread: ThreadReferenceSnapshot): string => (
+    thread.runtime_id !== props.adapter.runtime.runtime_id ? copy().chat.threadReference.wrongRuntime
+      : retiredThreadIDs.has(thread.thread_id) ? copy().chat.threadReference.unavailable : ''
+  );
+  const openReferencedThread = async (thread: ThreadReferenceSnapshot) => {
+    if (referenceOpenBusy() || referencedThreadUnavailable(thread)) return;
+    const generation = referencePreviewGeneration, selectedID = selectedThreadID();
+    const epoch = liveTransport.connectionEpoch();
+    setReferenceOpenBusy(true); setReferenceOpenError('');
+    try {
+      const detail = await readDetail(() => props.adapter.loadThread(thread.thread_id), new AbortController().signal);
+      if (surfaceDisposed || generation !== referencePreviewGeneration || selectedID !== selectedThreadID() || epoch !== liveTransport.connectionEpoch()) return;
+      if (detail.thread.thread_id !== thread.thread_id || retiredThreadIDs.has(thread.thread_id)) throw new Error('Referenced conversation unavailable');
+      receiveThreadView(detail, 'user_action', epoch);
+      closeSnapshotPreview();
+      await loadAndSelectThread(thread.thread_id);
+    } catch {
+      if (generation === referencePreviewGeneration && !surfaceDisposed) setReferenceOpenError(copy().chat.threadReference.unavailable);
+    } finally {
+      if (generation === referencePreviewGeneration && !surfaceDisposed) setReferenceOpenBusy(false);
+    }
+  };
   const composerReferenceEditingAllowed = createMemo(() => (
     composerReferenceRemovalAllowed()
     && Boolean(displayedWorkingDirectory())
@@ -7609,12 +7704,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const before = operation.session.snapshot();
       if (before.value.text !== localDraft.chatDraft) return;
       const existing = before.value.references.some((reference) => (
-        reference.kind !== 'page_context' && `${reference.kind}\0${normalizeFlowerComposerReferencePath(reference.path)}` === identity
+        flowerDraftReferenceIdentity(reference) === identity
       ));
       const result = operation.session.mutate((value) => {
         if (value.text !== localDraft.chatDraft) return value;
         const alreadyExists = value.references.some((reference) => (
-          reference.kind !== 'page_context' && `${reference.kind}\0${normalizeFlowerComposerReferencePath(reference.path)}` === identity
+          flowerDraftReferenceIdentity(reference) === identity
         ));
         return {
           ...value,
@@ -10087,7 +10182,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const action = chip.action;
       const display = contextDisplay();
       if (!action || !display) return;
-      if (action.type === 'open_text_preview' || action.type === 'open_process_preview') {
+      if (action.type === 'open_text_preview' || action.type === 'open_process_preview' || action.type === 'open_thread_preview') {
+        captureSnapshotPreviewFocus();
         setContextSnapshotPreview({
           title: chip.label,
           action,
@@ -10241,7 +10337,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const display = contextDisplay();
       if (!action || !display) return;
       const entryID = `queued:${turn().queue_id}`;
-      if (action.type === 'open_text_preview' || action.type === 'open_process_preview') {
+      if (action.type === 'open_text_preview' || action.type === 'open_process_preview' || action.type === 'open_thread_preview') {
+        captureSnapshotPreviewFocus();
         setContextSnapshotPreview({
           title: chip.label,
           action,
@@ -11882,18 +11979,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                         <div
                           class="flower-composer-reference-chip"
                           role="listitem"
-                          title={reference.kind === 'page_context' ? reference.title : reference.path}
+                          title={flowerDraftReferenceDescription(reference)}
                           data-reference-kind={reference.kind}
                         >
-                          <Show when={reference.kind === 'page_context'} fallback={<>
+                          <Show when={reference.kind === 'page_context' || reference.kind === 'thread'} fallback={<>
                             <span class="flower-composer-reference-chip-icon" aria-hidden="true">
                               <FileItemIcon size={18} item={{ name: reference.label, type: reference.kind === 'directory' ? 'folder' : 'file' }} class="size-[18px] shrink-0" />
                             </span>
                             <span class="flower-composer-reference-chip-label">{reference.label}</span>
                           </>}>
                             <button type="button" class="flower-composer-reference-chip-preview" title={reference.label}
-                              onClick={() => setPageContextPreviewID(reference.local_id)}>
-                              <FlowerContextIcon tone="page_context" name={reference.label} />
+                              onClick={() => { captureSnapshotPreviewFocus(); setComposerSnapshotPreviewID(reference.local_id); }}>
+                              <FlowerContextIcon tone={reference.kind === 'thread' ? 'thread' : 'page_context'} name={reference.label} />
                               <span class="flower-composer-reference-chip-label">{reference.label}</span>
                             </button>
                           </Show>
@@ -11904,8 +12001,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                             }}
                             type="button"
                             class="flower-composer-reference-chip-remove"
-                            aria-label={copy().chat.composerReferenceRemove(reference.kind === 'page_context' ? reference.label : reference.path)}
-                            title={copy().chat.composerReferenceRemove(reference.kind === 'page_context' ? reference.label : reference.path)}
+                            aria-label={copy().chat.composerReferenceRemove(flowerDraftReferenceDescription(reference))}
+                            title={copy().chat.composerReferenceRemove(flowerDraftReferenceDescription(reference))}
                             disabled={composerReferenceMutationCount() > 0 || !composerReferenceRemovalAllowed()}
                             onClick={() => void removeComposerReference(reference, index())}
                           >
@@ -12170,18 +12267,28 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         }}
         permissionLabel={composerPermissionCopy()?.label} onEditPermissionMode={() => { queueMicrotask(() => openPermissionMenu()); }}
         threadID={selectedThreadID()} fullAccess={selectedThread()?.permission_type === 'full_access'} adapter={props.adapter} copy={copy().computer} requested={requestedComputerAccess()} />
-      <Show when={pageContextPreview()} keyed>{reference => (
+      <Show when={composerSnapshotPreview()} keyed>{reference => (
         <Dynamic component={props.renderContextSnapshotPreview ?? FlowerChatContextPreview}
-          title={reference.label} subtitle={reference.title} body={reference.content}
+          title={reference.label} subtitle={reference.kind === 'page_context' ? reference.title : ''}
+          body={reference.kind === 'thread' ? threadSnapshotBody(reference.thread) : reference.content}
+          actionLabel={reference.kind === 'thread' ? copy().chat.threadReference.open : undefined}
+          onAction={reference.kind === 'thread' ? () => void openReferencedThread(reference.thread) : undefined}
+          actionDisabled={referenceOpenBusy() || (reference.kind === 'thread' && !!referencedThreadUnavailable(reference.thread))}
+          statusMessage={referenceOpenError() || (reference.kind === 'thread' ? referencedThreadUnavailable(reference.thread) : '')}
           truncatedLabel={copy().chat.truncatedLabel} zIndex={FLOWER_SURFACE_LAYER.contextPreview}
-          onClose={() => setPageContextPreviewID('')} />
+          onClose={closeSnapshotPreview} />
       )}</Show>
       <Show when={contextSnapshotPreview()} keyed>{preview => (
         <Dynamic component={props.renderContextSnapshotPreview ?? FlowerChatContextPreview}
-          title={preview.title} subtitle={preview.action.subtitle} body={preview.action.body}
-          sourcePath={preview.action.type === 'open_text_preview' ? preview.action.source_path : `process://${preview.action.pid}`}
+          title={preview.title} subtitle={preview.action.subtitle}
+          body={preview.action.type === 'open_thread_preview' ? threadSnapshotBody(preview.action.thread) : preview.action.body}
+          actionLabel={preview.action.type === 'open_thread_preview' ? copy().chat.threadReference.open : undefined}
+          onAction={preview.action.type === 'open_thread_preview' ? () => { if (preview.action.type === 'open_thread_preview') void openReferencedThread(preview.action.thread); } : undefined}
+          actionDisabled={referenceOpenBusy() || (preview.action.type === 'open_thread_preview' && !!referencedThreadUnavailable(preview.action.thread))}
+          statusMessage={referenceOpenError() || (preview.action.type === 'open_thread_preview' ? referencedThreadUnavailable(preview.action.thread) : '')}
+          sourcePath={preview.action.type === 'open_text_preview' ? preview.action.source_path : preview.action.type === 'open_process_preview' ? `process://${preview.action.pid}` : undefined}
           truncated={preview.action.truncated} truncatedLabel={copy().chat.truncatedLabel}
-          zIndex={FLOWER_SURFACE_LAYER.contextPreview} onClose={() => setContextSnapshotPreview(null)} />
+          zIndex={FLOWER_SURFACE_LAYER.contextPreview} onClose={closeSnapshotPreview} />
       )}</Show>
       <FlowerAttachmentPreviewWindow
         source={attachmentPreview()}
@@ -12297,6 +12404,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           onQueryChange={setHistoryFilter}
           onRefresh={() => void refreshThreads()}
           onSelect={selectThread}
+          referenceDisabledReason={threadReferenceDisabledReason()}
           canFork={!!props.adapter.forkThread}
           canRename={!!props.adapter.renameThread}
           canPin={!!props.adapter.setThreadPinned}

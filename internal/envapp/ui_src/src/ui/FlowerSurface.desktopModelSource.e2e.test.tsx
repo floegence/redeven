@@ -7,6 +7,7 @@ import { buildSSHDesktopTarget } from '../../../../../desktop/src/main/desktopTa
 import { createEnvLocalFlowerSurfaceAdapter } from './flower/envLocalFlowerSurfaceAdapter';
 import { modelDirectoryWireFixture } from '../test/modelDirectoryWireFixture';
 import {
+  composerModelTrigger,
   renderSurfaceWithAdapter,
   waitFor,
 } from './FlowerSurface.navigation.testHarness';
@@ -47,21 +48,8 @@ function liveBootstrap(threadID: string, modelID: string) {
     read_status: readStatus('running'),
   };
   return {
-    schema_version: 1,
-    endpoint_id: 'env-gzcom',
-    thread_id: threadID,
-    cursor: 1,
-    retained_from_seq: 1,
-    thread,
-    timeline_messages: [],
-    live_state: {
-      thread_patch: {},
-      runs: {},
-      approval_actions: {},
-      input_requests: {},
-    },
-    read_status: thread.read_status,
-    generated_at_ms: 10_000,
+    thread: { ...thread, title_status: 'ready', title_generation: 1, settings_revision: 1 },
+    current: { thread_id: threadID, view_version: 1, activity: 'active', turn_id: 'turn-desktop', run_id: 'run-desktop', run_progress: { phase: 'preparing' }, items: [], interactions: [], queue: [] },
   };
 }
 
@@ -106,6 +94,7 @@ describe('Flower Desktop model source E2E', () => {
               context_window: 950000,
               max_output_tokens: 384000,
               input_modalities: ['text'],
+              default_reasoning_selection: { level: 'high' },
               reasoning_capability: {
                 kind: 'effort',
                 supported_levels: ['high', 'max'],
@@ -150,7 +139,7 @@ describe('Flower Desktop model source E2E', () => {
           kind: 'start',
         });
       }
-      const bootstrapMatch = /^\/_redeven_proxy\/api\/ai\/threads\/([^/]+)\/live\/bootstrap$/u.exec(url);
+      const bootstrapMatch = /^\/_redeven_proxy\/api\/ai\/threads\/([^/]+)$/u.exec(url);
       if (bootstrapMatch && init?.method === 'GET') {
         return jsonResponse(liveBootstrap(decodeURIComponent(bootstrapMatch[1]!), deepSeekModelID));
       }
@@ -196,12 +185,13 @@ describe('Flower Desktop model source E2E', () => {
       } as any,
     }));
 
-    const modelControl = () => surface.querySelector('[data-flower-composer-control="model_reasoning"]') as HTMLElement | null;
+    const trigger = await composerModelTrigger(surface);
+    const modelControl = () => trigger.closest('[data-flower-composer-control="model_reasoning"]') as HTMLElement | null;
     await waitFor(() => modelControl()?.getAttribute('data-has-reasoning') === 'true');
     expect(surface.querySelector('.flower-model-reasoning-model-trigger')?.textContent).toContain('deepseek-v4-pro');
-    expect(surface.querySelector('.flower-reasoning-segment-button')?.textContent).toContain('High');
+    expect(modelControl()?.querySelector('.flower-reasoning-segment-button')?.textContent).toContain('High');
 
-    (surface.querySelector('.flower-model-reasoning-model-trigger') as HTMLButtonElement).click();
+    trigger.click();
     await waitFor(() => document.querySelectorAll('.flower-model-menu-item').length === 2);
     expect(Array.from(document.querySelectorAll('.flower-model-menu-item')).map((item) => item.textContent)).toEqual([
       expect.stringContaining('deepseek-v4-pro'),

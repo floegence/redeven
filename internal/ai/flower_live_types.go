@@ -300,11 +300,12 @@ type FlowerTimelineMessage struct {
 }
 
 type FlowerMessageReference struct {
-	ReferenceID string `json:"reference_id"`
-	Kind        string `json:"kind"`
-	Label       string `json:"label"`
-	Text        string `json:"text,omitempty"`
-	Truncated   bool   `json:"truncated,omitempty"`
+	ReferencedThreadID string `json:"referenced_thread_id,omitempty"`
+	ReferenceID        string `json:"reference_id"`
+	Kind               string `json:"kind"`
+	Label              string `json:"label"`
+	Text               string `json:"text,omitempty"`
+	Truncated          bool   `json:"truncated,omitempty"`
 }
 
 type SubmitFlowerApprovalRequest struct {

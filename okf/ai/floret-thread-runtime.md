@@ -14,8 +14,13 @@ Floret v7 `ThreadService` is the sole owner of active and canonical thread lifec
 
 ## Typed runtime
 
-Floret v7.29.2 owns explicit canonical RunID and the permanent domain schema
-13-to-14 migration. Observation metadata never advances execution identity;
+The optional published `ThreadQueryReader` owns indexed canonical queries, exact
+counts and bounded reads without widening `ThreadService`. [Canonical thread
+queries](flower-thread-queries.md) defines the Redeven authorization mapping.
+
+
+Floret v7.31.1 preserves explicit canonical RunID and the permanent schema
+13-to-14 migration, then appends the 14-to-15 thread-reference migration. Observation metadata never advances execution identity;
 historical tool activities resolve through their canonical invocation. Public
 current views are projected and sanitized before the response is encoded.
 Encoding failures retain the internal cause and safe identity/version diagnostics;
@@ -40,7 +45,7 @@ and remain user-controlled; effects and unknown outcomes are never replayed.
 
 Independent context compaction uses the optional public capability without widening ThreadService. Floret owns typed control-turn admission, atomic installation, terminal results, replay, and recovery. See [Model context usage and compaction](model-context-usage-and-compaction.md) for command and presentation contracts.
 
-Redeven consumes published Floret v7.29.2, preserving graceful-stop ownership
+Redeven consumes published Floret v7.31.1, preserving graceful-stop ownership
 when a projection write is canceled. The stop owner settles pending approvals,
 tool results, and the terminal together; a canceled write must not enter competing
 failure finalization. Genuine storage and unknown-effect failures retain their
@@ -162,7 +167,7 @@ Restart hydration restores accepted input, queue items, unresolved interactions,
 logical retry input, and canonical outputs, then resumes provider-safe work
 from the last canonical boundary. Before the Host becomes available, every
 legacy dispatching, retrying, or unknown effect is closed in one terminal failed
-Turn. Floret owns the permanent domain migration lineage from v2 through v13.
+Turn. Floret owns the permanent domain migration lineage from v2 through v15.
 Version 6 stores the manifest, root index, threads, entries, artifacts, and
 supporting records separately, so one child admission writes only affected
 records. Version 7 restores RunID, converges unknown effects, and drops

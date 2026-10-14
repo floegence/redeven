@@ -419,7 +419,7 @@
       "commandArgumentsInvalid": "/compact コマンドに引数は指定できません。",
       "commandUnknown": "不明な Flower コマンド: {command}",
       "composerMoreLabel": "その他の入力オプション",
-      "composerReferencesLabel": "ファイルとフォルダーの参照",
+      "composerReferencesLabel": "参照",
       "composerReferenceLoading": "ファイルとフォルダーを検索しています...",
       "composerReferenceEmpty": "一致するファイルまたはフォルダーがありません",
       "composerReferenceError": "Flower はこの作業ディレクトリを検索できませんでした。",
@@ -654,7 +654,22 @@
       },
       "modelUnavailableMissingKeys": "このモデルプロバイダーの認証情報が設定されていません。設定で認証情報を追加してください。",
       "modelUnavailableProviderDisabled": "このモデルプロバイダーは無効です。設定で有効にするか、別のモデルを選択してください。",
-      "modelUnavailableModelMissing": "このモデルはプロバイダーのモデル一覧にありません。設定でモデル ID を確認するか、別のモデルを選択してください。"
+      "modelUnavailableModelMissing": "このモデルはプロバイダーのモデル一覧にありません。設定でモデル ID を確認するか、別のモデルを選択してください。",
+      "threadReference": {
+        "open": "会話を開く",
+        "unavailable": "この会話は利用できないか、読み取り権限がありません。",
+        "wrongRuntime": "この会話は別のランタイムに属しています。",
+        "approval": "承認の処理を完了してから参照を追加してください。",
+        "input": "質問への回答を完了してから参照を追加してください。",
+        "readOnly": "この入力欄は読み取り専用です。",
+        "frozen": "現在の入力を編集できるようになるまでお待ちください。",
+        "title": "タイトル",
+        "status": "状態",
+        "created": "作成日時",
+        "updated": "更新日時",
+        "captured": "取得日時",
+        "runtime": "ランタイム"
+      }
     },
     "threadList": {
       "title": "会話",
@@ -727,7 +742,8 @@
       "movePinnedDown": "下に移動",
       "clearSearchToReorder": "検索をクリアしてピン留めした会話を並べ替え",
       "pinUpdateFailed": "ピン留めした会話を更新できませんでした。",
-      "pinRefreshFailed": "ピン留めした会話は保存されましたが、一覧を更新できませんでした。再読み込みして最新の順序を確認してください。"
+      "pinRefreshFailed": "ピン留めした会話は保存されましたが、一覧を更新できませんでした。再読み込みして最新の順序を確認してください。",
+      "referenceThread": "この会話を参照"
     },
     "emptyState": {
       "moreSuggestions": "提案をもっと見る",

@@ -48,7 +48,33 @@ export type ContextActionPresentation = Readonly<{
   disabled_reason?: string;
 }>;
 
+export type ThreadReferenceSnapshot = Readonly<{
+  runtime_id: string;
+  thread_id: string;
+  title: string;
+  status: string;
+  working_dir: string;
+  created_at_ms: number;
+  updated_at_ms: number;
+  captured_at_ms: number;
+}>;
+
+export const THREAD_REFERENCE_FIELDS = ['runtime_id', 'thread_id', 'title', 'status', 'working_dir', 'created_at_ms', 'updated_at_ms', 'captured_at_ms'] as const;
+
+export function parseThreadReferenceSnapshot(value: unknown): ThreadReferenceSnapshot | null {
+  if (!isRecord(value) || Object.keys(value).length !== THREAD_REFERENCE_FIELDS.length || !hasOnlyKeys(value, THREAD_REFERENCE_FIELDS)) return null;
+  for (const key of ['runtime_id', 'thread_id', 'title', 'status', 'working_dir'] as const) {
+    const text = value[key];
+    if (typeof text !== 'string' || new TextEncoder().encode(text).length > 8192 || text.includes('\0') || /[\r\n]/u.test(text)) return null;
+  }
+  if (!validNonEmptyString(value.runtime_id) || value.runtime_id !== value.runtime_id.trim() || !validNonEmptyString(value.status)
+    || typeof value.thread_id !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u.test(value.thread_id)) return null;
+  for (const key of ['created_at_ms', 'updated_at_ms', 'captured_at_ms'] as const) if (!Number.isSafeInteger(value[key]) || Number(value[key]) <= 0) return null;
+  return { ...value } as ThreadReferenceSnapshot;
+}
+
 export type ContextActionContextItem =
+  | Readonly<{ kind: 'thread_reference'; thread: ThreadReferenceSnapshot }>
   | Readonly<{ kind: 'tessiven_selection'; canvas_id: string; version_id: number; object_refs: string[] }>
   | Readonly<{
       kind: 'file_path';
@@ -126,6 +152,7 @@ const ASK_FLOWER_SESSION_SOURCES: readonly NonNullable<ContextActionExecutionCon
 ];
 
 const KNOWN_CONTEXT_KINDS = new Set([
+  'thread_reference',
   'tessiven_selection',
   'file_path',
   'terminal_selection',
@@ -182,6 +209,11 @@ function parseContextItem(value: unknown): ContextActionContextItem | null {
   if (!isRecord(value)) return null;
   const kind = typeof value.kind === 'string' ? value.kind : '';
   switch (kind) {
+    case 'thread_reference': {
+      if (!hasOnlyKeys(value, ['kind', 'thread'])) return null;
+      const thread = parseThreadReferenceSnapshot(value.thread);
+      return thread ? { kind, thread } : null;
+    }
     case 'tessiven_selection': {
       const validID = (id: unknown): id is string => typeof id === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(id);
       if (!hasOnlyKeys(value, ['kind', 'canvas_id', 'version_id', 'object_refs']) || !validID(value.canvas_id) || !Number.isSafeInteger(value.version_id) || Number(value.version_id) <= 0 || !Array.isArray(value.object_refs) || value.object_refs.length > 100 || !value.object_refs.every(validID)) return null;
@@ -250,7 +282,7 @@ function surfaceAllowsKind(surface: ContextActionSurface, kind: string): boolean
     case 'monitoring': return kind === 'process_snapshot';
     case 'git_browser':
     case 'desktop_welcome_environment_card': return kind === 'text_snapshot';
-    case 'flower_composer': return kind === 'file_path' || kind === 'text_snapshot';
+    case 'flower_composer': return kind === 'file_path' || kind === 'text_snapshot' || kind === 'thread_reference';
     case 'file_browser':
     case 'file_preview':
     case 'editor_preview': return kind === 'file_path';
@@ -293,7 +325,7 @@ export function parseAskFlowerContextActionEnvelope(value: unknown): ContextActi
   for (const rawItem of value.context) {
     if (value.source.surface === 'flower_composer') {
       if (!isRecord(rawItem)) return null;
-      const fields = rawItem.kind === 'text_snapshot' ? ['kind', 'title', 'content'] : ['kind', 'path', 'is_directory'];
+      const fields = rawItem.kind === 'thread_reference' ? ['kind', 'thread'] : rawItem.kind === 'text_snapshot' ? ['kind', 'title', 'content'] : ['kind', 'path', 'is_directory'];
       if (!hasOnlyKeys(rawItem, fields)) return null;
     }
     if (value.source.surface === 'tessiven' && isRecord(rawItem) && rawItem.kind === 'file_path' && !hasOnlyKeys(rawItem, ['kind', 'path', 'is_directory'])) return null;

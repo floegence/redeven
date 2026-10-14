@@ -47,7 +47,7 @@ async function setup(options: { request?: FlowerInputRequest; canMutate?: boolea
   const type = (text: string) => { input().value = text; input().dispatchEvent(new Event('input', { bubbles: true })); };
   const submit = () => (runtime.querySelector('.flower-composer-continue') as HTMLButtonElement).click();
   const emit = (current: ReturnType<typeof runtimeCurrentView>) => stream.push({ schema_version: 1, kind: 'thread.batch', thread_id: waiting.thread_id, current });
-  return { waiting, other, request, drafts, response, submitInput, runtime, select, type, submit, input, emit };
+  return { waiting, other, request, drafts, response, submitInput, runtime, select, type, submit, input, emit, stream };
 }
 
 it('guards repeated submission and keeps edits made while a failed request is pending', async () => {
@@ -177,8 +177,17 @@ it('disables the old decision when a malformed current view enters recovery', as
   s.type('draft remains available for recovery');
   const current = runtimeCurrentView(s.waiting, 2);
   s.emit({ ...current, interactions: [...current.interactions!, { ...current.interactions![0], id: 'ambiguous-input' }] });
-  await waitFor(() => !!s.runtime.querySelector('.flower-thread-sync-error'));
+  await waitFor(() => !!s.runtime.querySelector('[data-flower-sync-state="failed"]'));
+  expect(s.runtime.querySelector('.flower-thread-sync-error')).not.toBeNull();
   s.submit();
   expect(s.submitInput).not.toHaveBeenCalled();
   expect(s.input().value).toBe('draft remains available for recovery');
+  const resync = s.runtime.querySelector<HTMLButtonElement>('[data-flower-sync-state="failed"] button')!;
+  s.stream.push({ schema_version: 1, kind: 'ready', summaries: [s.waiting, s.other] });
+  resync.click();
+  await waitFor(() => !s.runtime.querySelector<HTMLButtonElement>('.flower-composer-continue')!.disabled);
+  expect(s.runtime.querySelector('.flower-thread-sync-error')).toBeNull();
+  expect(s.input().value).toBe('draft remains available for recovery');
+  s.submit();
+  expect(s.submitInput).toHaveBeenCalledTimes(1);
 });

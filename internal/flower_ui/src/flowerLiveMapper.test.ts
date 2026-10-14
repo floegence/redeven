@@ -8,6 +8,20 @@ import {
   mergeFlowerContextUsage,
 } from './flowerLiveMapper';
 
+describe('Canonical thread reference identity', () => {
+  const message = { id: 'user-ref', thread_id: 'thread-target', turn_id: 'turn-target', run_id: 'run-target', role: 'user', status: 'complete', timestamp: 10 };
+  const reference = { reference_id: 'thread-ref', kind: 'thread', referenced_thread_id: 'thread-source', label: 'Source', text: '{"frozen":"snapshot"}' };
+  it('preserves the explicit target and frozen snapshot', () => {
+    expect(mapFlowerMessage({ ...message, references: [reference] }).references).toEqual([reference]);
+  });
+  it.each([
+    { ...reference, referenced_thread_id: undefined }, { ...reference, referenced_thread_id: '../forged' },
+    { ...reference, kind: 'text' }, { ...reference, text: '' }, { ...reference, resource_ref: 'private-authority' },
+  ])('rejects malformed or parallel reference authority %j', value => {
+    expect(() => mapFlowerMessage({ ...message, references: [value] })).toThrow('Flower contract error');
+  });
+});
+
 describe('Flower context usage contract', () => {
   const confirmed = { phase: 'provider_usage', pressure_status: 'stable', input_tokens: 71872, context_window_tokens: 950000, updated_at_ms: 10 };
   const estimate = { ...confirmed, phase: 'projected_request', input_tokens: 82346, updated_at_ms: 11 };

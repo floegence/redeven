@@ -195,6 +195,7 @@ main() {
         src/ui/FlowerSurface.canonicalReferences.browser.test.tsx \
         src/ui/FlowerSurface.composerAttachments.browser.test.tsx \
         src/ui/FlowerSurface.composerReferences.browser.test.tsx \
+        src/ui/FlowerSurface.threadReferences.browser.test.tsx \
         src/ui/FlowerSurface.inputHistory.browser.test.tsx \
         src/ui/FlowerSurface.companionEntry.browser.test.tsx \
         src/ui/FlowerSurface.decisionSurface.browser.test.tsx \

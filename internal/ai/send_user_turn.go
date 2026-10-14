@@ -245,6 +245,9 @@ func (s *Service) sendTypedExistingThread(ctx context.Context, meta *session.Met
 		if err != nil {
 			return finish(SendUserTurnResponse{}, err)
 		}
+		if err := s.authorizeThreadReferences(ctx, meta, effect.req.Input.ContextAction); err != nil {
+			return finish(SendUserTurnResponse{}, err)
+		}
 		projection, projectionErr := floretContextProjectionForInput(effect.req.Input, effect.builder.canonicalReferenceAuthority, tessivenContextResolver(ctx, s.tessiven))
 		if projectionErr != nil {
 			return finish(SendUserTurnResponse{}, projectionErr)

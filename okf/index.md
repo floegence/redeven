@@ -217,6 +217,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Plugin surfaces](ui/plugin-surfaces.md) - Review exact plugin inventory and place SDK surfaces in Activity windows or Workbench widgets.
 - [Flower turn launcher](ui/flower-turn-launcher.md) - Use one strict turn endpoint, connection-local composer state, typed admission outcomes, and host handoff responsibilities.
 - [Flower Activity origin page references](ui/flower-page-context.md) - Capture once from the actual Activity page, inspect the frozen reference and remove it without replenishment.
+- [Flower conversation references](ui/flower-thread-references.md) - Add frozen conversation snapshots, preview basic facts and open authorized threads without losing drafts.
 - [Flower composer references](ui/flower-composer-references.md) - Working-directory @ discovery, editable draft chips, strict composer wire data, and ordered admission into Floret.
 - [Flower input history](ui/flower-input-history.md) - Recall previous user text with arrow keys while preserving drafts, input methods and completion ownership.
 - [Absolute filesystem directory selection](ui/filesystem-picker-navigation.md) - Select runtime-authorized absolute paths with shared navigation and independent product forms.
@@ -297,6 +298,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Flower Ollama context qualification](operations/flower-ollama-context-qualification.md) - Verify the selected installed model's real compaction, token accounting, live context, and restart recovery in isolated state.
 - [Flower Ollama task qualification](operations/flower-ollama-task-qualification.md) - Exercise real selected-model tasks, interruption, queue controls, approvals, restart, checkpoint retry, and child-agent handoffs.
 - [DeepSeek Responses](ai/deepseek-responses.md) - Share Floret stateless transport and enforce documented web tool limits.
+- [Flower canonical thread queries](ai/flower-thread-queries.md) - Authorize active-path search, exact counts and bounded content reads through released Floret tools.
 - [Floret thread runtime integration](ai/floret-thread-runtime.md) - Read canonical overviews, titles, structured attachments, and admitted lifecycle through published Floret APIs.
 - [Floret Redeven adapter and projection](ai/floret-redeven-adapter-and-projection.md) - Authorize, sanitize, and project Floret views without a second lifecycle.
 - [Flower subagent runtime](ai/subagent-runtime.md) - Use Floret-owned child threads, bounded status previews, canonical membership, and complete handoffs.

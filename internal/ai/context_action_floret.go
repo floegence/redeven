@@ -12,6 +12,7 @@ import (
 
 	"github.com/floegence/redeven/internal/tessiven"
 
+	"github.com/floegence/floret/v7/identity"
 	flruntime "github.com/floegence/floret/v7/runtime"
 )
 
@@ -57,6 +58,17 @@ func floretContextProjectionForInput(input RunInput, authority *flowerCanonicalR
 		title := nonEmptyString(item.Title, "Submitted context")
 		instruction := "Facts supplied with this reference (routing hints do not establish execution location):"
 		switch strings.TrimSpace(item.Kind) {
+		case contextActionKindThread:
+			raw, marshalErr := json.Marshal(item.Thread)
+			if marshalErr != nil {
+				return floretContextProjection{}, marshalErr
+			}
+			reference = flruntime.MessageReference{ReferenceID: floretContextReferenceID(index), Kind: flruntime.MessageReferenceThread, ReferencedThreadID: identity.ThreadID(item.Thread.ThreadID), Label: nonEmptyString(item.Thread.Title, "Conversation"), Text: string(raw)}
+			if err := reference.Validate(); err != nil {
+				return floretContextProjection{}, err
+			}
+			projection.References = append(projection.References, reference)
+			continue
 		case contextActionKindTessiven:
 			if resolver == nil {
 				return floretContextProjection{}, errors.New("tessiven context resolver is unavailable")

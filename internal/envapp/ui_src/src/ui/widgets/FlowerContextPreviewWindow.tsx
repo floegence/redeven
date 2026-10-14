@@ -25,6 +25,7 @@ export type FlowerContextPreviewState = Readonly<{
   helper?: string;
   actionLabel?: string;
   onAction?: () => void;
+  actionDisabled?: boolean;
 }>;
 
 /** One preview presentation for Ask Flower and composer/chat snapshots. */
@@ -65,7 +66,9 @@ export function FlowerContextPreviewWindow(props: { preview: FlowerContextPrevie
               size="sm"
               variant="default"
               class="cursor-pointer"
-              onClick={() => {
+              disabled={props.preview?.actionDisabled}
+              onClick={(event) => {
+                event.currentTarget.closest('.flower-context-preview-window')?.querySelector<HTMLButtonElement>('[data-flower-context-preview-close]')?.focus({ preventScroll: true });
                 props.preview?.onAction?.();
               }}
             >
@@ -114,7 +117,8 @@ export function FlowerContextSnapshotPreview(props: FlowerContextSnapshotPreview
     descriptor: FALLBACK_TEXT_FILE_PREVIEW_DESCRIPTOR,
     text: props.body,
     truncated: props.truncated,
-    helper: props.truncated ? props.truncatedLabel : undefined,
+    helper: props.statusMessage || (props.truncated ? props.truncatedLabel : undefined),
+    actionLabel: props.actionLabel, onAction: props.onAction, actionDisabled: props.actionDisabled,
   }));
   return <FlowerContextPreviewWindow preview={preview()} onClose={props.onClose} />;
 }

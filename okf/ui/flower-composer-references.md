@@ -3,12 +3,12 @@ type: UI Contract
 title: Flower composer references
 description: Show Ask Flower context inside the input and admit exact ordered composer references to Floret.
 tags: [ui, flower, composer, references, floret]
-timestamp: 2026-10-12T00:00:00Z
+timestamp: 2026-10-13T00:00:00Z
 ---
 # Summary
 
 - Authority: Redeven owns reference discovery and unadmitted draft editing; Floret is the sole canonical source after admission.
-- Outcome: Ask Flower shows its exact linked context inside the input; `@` adds a file or directory reference, and a new desktop Activity conversation can include its frozen origin page as a removable reference.
+- Outcome: The input shows linked context, `@` files, frozen conversation references and optional origin-page facts.
 - Invariants: discovery uses the host's authorized filesystem adapter, all visible placements in one connection share one in-memory scope, and one strict context action preserves the frozen order and directory kind.
 - Failure boundary: stale search generations, malformed wire data, or admission mismatches fail without discarding the connection-local editor, creating a different queued command, or writing canonical Floret state.
 
@@ -63,6 +63,12 @@ without transferring draft or canonical-reference authority; Env App reuses the
 right-click Ask Flower preview window and text viewer for both editable and
 submitted snapshots.
 
+## Conversation references
+
+[Conversation reference interaction](flower-thread-references.md) owns frozen
+basic snapshots, menu entry points, preview, removal and submission recovery.
+The same draft owner and type dispatch support thread, page and file references.
+
 ## Bounded discovery
 
 Discovery searches the current thread's immutable working directory or the new-thread working-directory draft. `FlowerSurfaceAdapter.listWorkingDirectoryEntries` is the only search capability: Env App and Desktop implement it through their existing authenticated runtime filesystem bridges. The shared UI does not read a local path directly.
@@ -71,7 +77,7 @@ The index bounds recursion depth, listed directories, entries per directory, tot
 
 ## Draft and admission
 
-The connection-local composer stores ordered file/directory and page-context chips with a product-local identity and host-derived label. File paths are opaque normalized paths; page facts are frozen text. This editable draft is never written to Redeven, Floret, local storage, IndexedDB, or another connection. The first-release product v1 baseline has no server draft, draft migration, or compatibility reader; [Flower storage ownership and migrations](../ai/flower-storage-ownership-and-migrations.md) defines that boundary.
+The connection-local composer stores ordered file/directory, page-context and thread chips with a product-local identity and host-derived label. File paths are opaque normalized paths; page facts are frozen text. This editable draft is never written to Redeven, Floret, local storage, IndexedDB, or another connection. The first-release product v1 baseline has no server draft, draft migration, or compatibility reader; [Flower storage ownership and migrations](../ai/flower-storage-ownership-and-migrations.md) defines that boundary.
 
 Send freezes the ordered references with the text, attachments, model, and stable product request identity. It creates one strict Ask Flower action whose source surface is `flower_composer` for the ordinary chat. An embedded Tessiven conversation preserves its exact `tessiven` selection envelope and appends the frozen file references to that same action; each file context item contains exactly `kind=file_path`, `path`, and `is_directory`. Unknown envelope, target, source, presentation, execution-context, or item fields are invalid. The action never accepts a client-authored root, display label, TurnID, or RunID. The typed Send mapping converts that one frozen action into canonical Floret references whether the runtime accepts an immediate turn or canonical queue input.
 

@@ -5101,7 +5101,8 @@
         "expand": "放大预览",
         "collapse": "收起预览",
         "open": "打开原文件",
-        "close": "关闭预览"
+        "close": "关闭预览",
+        "previewHTML": "打开文件预览"
       },
       "webSearch": {
         "search": "搜索",
@@ -5316,7 +5317,7 @@
       "commandArgumentsInvalid": "/compact 命令不接受参数。",
       "commandUnknown": "未知的 Flower 命令：{command}",
       "composerMoreLabel": "更多输入选项",
-      "composerReferencesLabel": "文件和文件夹引用",
+      "composerReferencesLabel": "引用",
       "composerReferenceLoading": "正在搜索文件和文件夹...",
       "composerReferenceEmpty": "未找到匹配的文件或文件夹",
       "composerReferenceError": "Flower 无法搜索此工作目录。",
@@ -5542,7 +5543,22 @@
       },
       "modelUnavailableMissingKeys": "此模型的模型提供商尚未配置凭据。请在设置中添加凭据。",
       "modelUnavailableProviderDisabled": "此模型的模型提供商已停用。请在设置中启用，或选择其他模型。",
-      "modelUnavailableModelMissing": "模型提供商的模型列表中没有此模型。请在设置中检查模型 ID，或选择其他模型。"
+      "modelUnavailableModelMissing": "模型提供商的模型列表中没有此模型。请在设置中检查模型 ID，或选择其他模型。",
+      "threadReference": {
+        "open": "打开此对话",
+        "unavailable": "此对话已不可用，或你已失去读取权限。",
+        "wrongRuntime": "此对话属于另一个运行时。",
+        "approval": "请先处理审批，再添加引用。",
+        "input": "请先完成问题回答，再添加引用。",
+        "readOnly": "当前输入框为只读。",
+        "frozen": "请等待当前输入恢复可编辑状态。",
+        "title": "标题",
+        "status": "状态",
+        "created": "创建时间",
+        "updated": "更新时间",
+        "captured": "捕获时间",
+        "runtime": "运行时"
+      }
     },
     "threadList": {
       "title": "对话",
@@ -5615,7 +5631,8 @@
       "groupToday": "今天",
       "groupYesterday": "昨天",
       "groupThisWeek": "本周",
-      "groupOlder": "更早"
+      "groupOlder": "更早",
+      "referenceThread": "引用此对话"
     },
     "emptyState": {
       "moreSuggestions": "更多建议",

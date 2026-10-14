@@ -970,7 +970,7 @@ function mapMessageReferences(raw: unknown, messageID: string): FlowerChatMessag
     if (!reference) {
       throw new Error(`Flower contract error: timeline message ${messageID} reference ${index} must be an object.`);
     }
-    const allowedFields = new Set(['reference_id', 'kind', 'label', 'text', 'truncated']);
+    const allowedFields = new Set(['reference_id', 'kind', 'label', 'text', 'truncated', 'referenced_thread_id']);
     for (const field of Object.keys(reference)) {
       if (!allowedFields.has(field)) {
         throw new Error(`Flower contract error: timeline message ${messageID} reference ${index} contains forbidden field ${field}.`);
@@ -979,7 +979,7 @@ function mapMessageReferences(raw: unknown, messageID: string): FlowerChatMessag
     const referenceID = trim(reference.reference_id);
     const kind = trim(reference.kind) as NonNullable<FlowerChatMessage['references']>[number]['kind'];
     const label = trim(reference.label);
-    if (!referenceID || !label || !['text', 'file', 'directory', 'terminal', 'process'].includes(kind)) {
+    if (!referenceID || !label || !['thread', 'text', 'file', 'directory', 'terminal', 'process'].includes(kind)) {
       throw new Error(`Flower contract error: timeline message ${messageID} reference ${index} is invalid.`);
     }
     if (seen.has(referenceID)) {
@@ -991,6 +991,14 @@ function mapMessageReferences(raw: unknown, messageID: string): FlowerChatMessag
     if (reference.truncated !== undefined && typeof reference.truncated !== 'boolean') {
       throw new Error(`Flower contract error: timeline message ${messageID} reference ${referenceID} truncated must be a boolean.`);
     }
+    if (kind === 'thread') {
+      if (typeof reference.referenced_thread_id !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u.test(reference.referenced_thread_id)
+        || typeof reference.text !== 'string' || !reference.text) throw new Error('Flower contract error: invalid thread reference.');
+      seen.add(referenceID);
+      return { reference_id: referenceID, kind, referenced_thread_id: reference.referenced_thread_id, label, text: reference.text,
+        ...(reference.truncated === true ? { truncated: true } : {}) };
+    }
+    if (reference.referenced_thread_id !== undefined) throw new Error('Flower contract error: unexpected referenced thread identity.');
     const fileLike = kind === 'file' || kind === 'directory';
     if (fileLike && Object.prototype.hasOwnProperty.call(reference, 'text')) {
       throw new Error(`Flower contract error: timeline message ${messageID} reference ${referenceID} must not carry host path text.`);
