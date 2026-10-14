@@ -201,6 +201,35 @@ describe('presentFlowerActivityItem', () => {
     expect(presentation.detailBlocks).toEqual([]);
   });
 
+  it('keeps historical operation results independent of later child completion and reruns', () => {
+    const operation = item({ tool_name: 'subagents', renderer: 'subagent_operation',
+      payload: { action: 'wait', targets: [{ thread_id: 'child-thread-1' }], requested_count: 1, completed_count: 0, timed_out: true },
+    });
+    const completed = presentFlowerActivityItem(operation, undefined, {
+      subagentSummaries: [subagentSummary({ status: 'completed', created_at_ms: 1000, updated_at_ms: 5000 })],
+    });
+    const rerunning = presentFlowerActivityItem(operation, undefined, {
+      subagentSummaries: [subagentSummary({ status: 'running', created_at_ms: 1000, updated_at_ms: 65_000 })],
+    });
+    expect(completed.label).toBe('Wait timed out · 0/1 completed');
+    expect(completed).toEqual(rerunning);
+    expect(JSON.stringify(completed)).not.toContain('updated_at_ms');
+  });
+
+  it('preserves saved target status while current inventory only supplies missing task identity', () => {
+    const operation = item({ tool_name: 'subagents', renderer: 'subagent_operation',
+      payload: { action: 'spawn', targets: [{ thread_id: 'child-thread-1', status: 'running' }] },
+    });
+    const presentation = presentFlowerActivityItem(operation, undefined, {
+      subagentSummaries: [subagentSummary({ status: 'completed', created_at_ms: 1000, updated_at_ms: 5000 })],
+    });
+    expect(presentation.label).toBe('Created subagent · Review API boundary');
+    const detail = presentation.detailBlocks.find(block => block.kind === 'subagents');
+    expect(detail).toMatchObject({ subagents: { items: [{ raw_status: 'running', open_messages: { thread_id: 'child-thread-1' } }] } });
+    expect(JSON.stringify(detail)).not.toContain('elapsed_mode');
+    expect(JSON.stringify(detail)).not.toContain('created_at_ms');
+  });
+
   it('projects the matching approval command for a waiting activity item', () => {
     const command = pendingApprovalCommandForActivityItem(item({
       status: 'waiting',

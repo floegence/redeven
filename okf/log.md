@@ -1,5 +1,12 @@
 # Redeven OKF Update Log
 
+## 2026-10-14: Canonical management operation timing
+
+- Adopt published Floret v7.32.1 dispatch/result timing. Define
+  [historical Subagent operation rows](ui/flower-subagent-detail.md) as invocation
+  snapshots, remove child-clock and whole-turn duration substitutes, and keep
+  current child lifecycle in the dropdown and detail overview.
+
 ## 2026-10-14: Local conversation reference admission
 
 - Share the canonical local runtime identity across Desktop and Env App adapter,

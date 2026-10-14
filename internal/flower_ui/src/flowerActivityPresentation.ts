@@ -188,9 +188,6 @@ export type FlowerActivitySubagentDetailItem = Readonly<{
   raw_status: string;
   status: string;
   show_status: boolean;
-  started_at_ms?: number;
-  created_at_ms?: number;
-  updated_at_ms?: number;
   open_messages?: FlowerActivitySubagentMessageAction;
 }>;
 
@@ -198,7 +195,6 @@ export type FlowerActivitySubagentsDetail = Readonly<{
   action: string;
   status: string;
   task_preview: string;
-  elapsed_mode: 'none' | 'running' | 'final';
   items: readonly FlowerActivitySubagentDetailItem[];
 }>;
 
@@ -782,9 +778,6 @@ function subagentDetailItemFromRecord(
     raw_status: normalizedStatus,
     status,
     show_status: item.renderer === 'subagent_operation' ? Boolean(status) : shouldShowSubagentStatus(rawStatus),
-    ...(optionalNumericValue(record.started_at_ms) ? { started_at_ms: optionalNumericValue(record.started_at_ms) } : {}),
-    ...(optionalNumericValue(record.created_at_ms) ? { created_at_ms: optionalNumericValue(record.created_at_ms) } : {}),
-    ...(optionalNumericValue(record.updated_at_ms) ? { updated_at_ms: optionalNumericValue(record.updated_at_ms) } : {}),
     ...(threadID ? {
       open_messages: {
         thread_id: threadID,
@@ -793,15 +786,12 @@ function subagentDetailItemFromRecord(
   };
 }
 
-function subagentSummaryRecord(summary: FlowerSubagentSummary): Readonly<Record<string, unknown>> {
+function subagentTaskRecord(summary: FlowerSubagentSummary): Readonly<Record<string, unknown>> {
   return {
     thread_id: summary.thread_id,
     task_name: summary.task_name,
     task_description: summary.task_description,
     agent_type: summary.agent_type,
-    status: summary.status,
-    created_at_ms: summary.created_at_ms,
-    updated_at_ms: summary.updated_at_ms,
   };
 }
 
@@ -829,7 +819,7 @@ function subagentsDetailItemsFromPayload(
     subagentActionItems(item, payload)
       .map((record) => {
         const summary = summariesByThreadID.get(subagentThreadID(record));
-        const resolved = summary ? { ...subagentSummaryRecord(summary), ...record } : record;
+        const resolved = summary ? { ...subagentTaskRecord(summary), ...record } : record;
         return subagentDetailItemFromRecord(resolved, item, payload, copy);
       })
       .filter((entry): entry is FlowerActivitySubagentDetailItem => entry !== null),
@@ -909,15 +899,6 @@ function subagentMetaText(items: readonly FlowerActivitySubagentDetailItem[]): s
   return [item.name, item.description].filter(Boolean).join(' · ');
 }
 
-function subagentsElapsedMode(action: string, items: readonly FlowerActivitySubagentDetailItem[]): FlowerActivitySubagentsDetail['elapsed_mode'] {
-  const hasTiming = items.some((entry) => entry.started_at_ms || entry.created_at_ms);
-  if (!hasTiming) return 'none';
-  if (trimString(action) === 'wait' || items.some((entry) => entry.raw_status === 'running' || entry.raw_status === 'queued')) {
-    return 'running';
-  }
-  return 'final';
-}
-
 function subagentsDetailFromPayload(item: FlowerActivityItem, payload: Readonly<Record<string, unknown>>, copy?: FlowerActivityPresentationCopy): FlowerActivitySubagentsDetail {
   const action = payloadValue(payload, 'action');
   const items = subagentsDetailItemsFromPayload(item, payload, copy);
@@ -926,7 +907,6 @@ function subagentsDetailFromPayload(item: FlowerActivityItem, payload: Readonly<
     action,
     status: subagentNeedsAttention(items) ? firstStatus : '',
     task_preview: subagentTaskPreview(items, copy),
-    elapsed_mode: subagentsElapsedMode(action, items),
     items,
   };
 }

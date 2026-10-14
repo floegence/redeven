@@ -9407,22 +9407,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     presentation.detailBlocks.find((block): block is Extract<FlowerActivityDetailBlock, { kind: 'subagents' }> => block.kind === 'subagents')?.subagents
   );
 
-  const subagentElapsedText = (agent: FlowerActivitySubagentDetailItem, mode: 'none' | 'running' | 'final'): string => {
-    const startedAt = agent.started_at_ms || agent.created_at_ms || 0;
-    if (!startedAt || mode === 'none') return '';
-    const endAt = mode === 'final' && agent.updated_at_ms ? agent.updated_at_ms : activityClockNow();
-    const label = formatActivityDuration(Math.max(0, endAt - startedAt));
-    if (!label) return '';
-    return mode === 'running' ? `running ${label}` : label;
-  };
-
-  const subagentInlineElapsed = (presentation: FlowerActivityPresentation): string => {
-    const detail = subagentsDetailForPresentation(presentation);
-    if (!detail || detail.elapsed_mode === 'none') return '';
-    const first = detail.items.find((agent) => agent.started_at_ms || agent.created_at_ms);
-    return first ? subagentElapsedText(first, detail.elapsed_mode) : '';
-  };
-
   const openSubagentMessages = (agent: FlowerActivitySubagentDetailItem) => {
     const action = agent.open_messages;
     if (!action?.thread_id) return;
@@ -9438,9 +9422,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       action: 'inspect',
       canOpen: true,
       parentThreadID: selectedThreadID(),
-      startedAtMs: agent.started_at_ms || agent.created_at_ms || 0,
-      createdAtMs: agent.created_at_ms || agent.started_at_ms || 0,
-      updatedAtMs: agent.updated_at_ms || agent.started_at_ms || agent.created_at_ms || activityClockNow(),
+      startedAtMs: 0,
+      createdAtMs: 0,
+      updatedAtMs: 0,
       itemStatus: 'success',
     });
   };
@@ -9497,9 +9481,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                           </button>
                         </Show>
                       </span>
-                      <span class="flower-activity-subagents-item-meta">
-                        {[agent().show_status ? agent().status : '', subagentElapsedText(agent(), detail().elapsed_mode)].filter(Boolean).join(' · ')}
-                      </span>
+                      <Show when={agent().show_status}>
+                        <span class="flower-activity-subagents-item-meta">{agent().status}</span>
+                      </Show>
                     </div>
                     <Show when={agent().description}>
                       {(description) => <div class="flower-activity-subagents-item-task">{description()}</div>}
@@ -9637,12 +9621,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       && trimString(item().metadata?.control_error_code) === 'control_error'
     ));
     const duration = createMemo(() => {
-      const subagentDuration = subagentInlineElapsed(presentation());
-      if (subagentDuration) return subagentDuration;
       const value = item();
-      return formatActivityDuration((value.started_at_unix_ms && value.ended_at_unix_ms
-        ? value.ended_at_unix_ms - value.started_at_unix_ms
-        : undefined) ?? timeline().summary.duration_ms);
+      const start = value.started_at_unix_ms;
+      if (!start) return '';
+      const end = value.ended_at_unix_ms;
+      if (end) return formatActivityDuration(end - start);
+      if (value.status !== 'running' && value.status !== 'waiting') return '';
+      return formatActivityDuration(activityClockNow() - start);
     });
     const activityRowContent = () => (
       <>
