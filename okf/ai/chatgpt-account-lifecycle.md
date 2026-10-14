@@ -62,8 +62,12 @@ client IDs, token hints, PKCE secrets, subjects or authorization URLs.
 The trusted local account list projects all saved registrations separately from
 provider-bound statuses, including signed-out accounts after the last connection
 is removed. Same-email registrations remain distinct by opaque account ID and
-are labeled distinctly in the picker. Choosing a saved registration does not
-start OAuth; a signed-out selection reauthorizes with its retained client ID.
+are labeled distinctly when shown together. The primary provider picker projects
+only signed-in registrations; signed-out and authorization-required records are
+retained for the explicit Sign in again chooser. These UI projections do not
+delete registration identities or credentials. Choosing a signed-in registration
+does not start OAuth. Recovery reauthorizes with the retained client ID and fresh
+OAuth attempt values; only verified success changes the provider draft binding.
 The start request rejects a missing account choice with `account_selection_required`
 once any registration is saved, including signed-out entries. Only explicit
 `new_registration` intent may start dynamic registration then; combining it with
@@ -127,10 +131,10 @@ Registration and stable host ID remain. UI closure does not cancel accepted logo
 
 Configuration validates canonical accounts before writing, preserves its existing
 configuration/API-key rollback, and never reinstalls OAuth credentials. Failed
-connection saves leave verified sign-ins available in the saved account picker.
+connection saves leave verified sign-ins available in the signed-in account picker.
 Only successful saves sign out orphaned old accounts; removing one shared binding
 or pausing connections retains login. Final removal retains the registration for
-future account selection and reauthorization.
+future explicit reauthorization, without listing it as signed in.
 An explicit empty provider list can clear the final connection. Removal clears
 the selected draft model when it belonged to that connection; absent providers
 remain invalid.

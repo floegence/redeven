@@ -102,8 +102,9 @@ frame is at most 860px, with a 25px title and 40px side padding that contracts t
 Desktop Flower, embedded Env Flower, and Env App global settings share
 `FlowerModelSettings` and the provider editor described in
 [provider configuration](flower-provider-configuration.md); hosts retain
-persistence and authorization ownership. Saved ChatGPT registrations remain
+persistence and authorization ownership. Signed-in ChatGPT accounts remain
 available in the OpenAI editor dropdown before the first provider is saved;
+signed-out connections use its explicit Sign in again chooser;
 the overview presents models and providers without account cards.
 The model group presents identity above evenly sized columns for inputs, context,
 output, and default reasoning. Columns use the full width and become two columns
