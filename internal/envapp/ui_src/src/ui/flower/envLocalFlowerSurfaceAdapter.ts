@@ -385,6 +385,26 @@ function mapProvider(provider: NonNullable<AIConfig['providers']>[number]): Flow
   };
 }
 
+function restrictChatGPTForRemoteDesktop(snapshot: FlowerSettingsSnapshot, remoteDesktop: boolean): FlowerSettingsSnapshot {
+  if (!remoteDesktop) return snapshot;
+  const capability = snapshot.auth_capabilities?.openai_chatgpt;
+  return {
+    ...snapshot,
+    ...(snapshot.auth_capabilities ? {
+      auth_capabilities: {
+        ...snapshot.auth_capabilities,
+        openai_chatgpt: {
+          ...capability,
+          available: false,
+          reason: 'local_host_required',
+        },
+      },
+    } : {}),
+    chatgpt_accounts: undefined,
+    saved_chatgpt_accounts: undefined,
+  };
+}
+
 export function mapEnvFlowerSettings(settings: AgentSettingsResponse): FlowerSettingsSnapshot {
   const ai = settings.ai;
   const modelProfile = ai && (ai.providers ?? []).length > 0
@@ -532,7 +552,8 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
   const loadSettings = async () => {
     const snapshot = await resource.loadSettings();
     if (options.isAvailable?.() === false) throw new DOMException('Flower settings load cancelled.', 'AbortError');
-    return snapshot.model_directory ? withFlowerModelDirectory(snapshot, directoryForSurface(snapshot.model_directory)) : snapshot;
+    const guarded = restrictChatGPTForRemoteDesktop(snapshot, options.desktopSessionTargetRoute === 'remote_desktop');
+    return guarded.model_directory ? withFlowerModelDirectory(guarded, directoryForSurface(guarded.model_directory)) : guarded;
   };
 
   return createRuntimeFlowerSurfaceAdapter({
