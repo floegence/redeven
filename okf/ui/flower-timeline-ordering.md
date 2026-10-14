@@ -1,13 +1,13 @@
 ---
 type: UI Contract
 title: Flower timeline ordering
-description: Canonical typed views, optimistic transport input, and stable row identity.
+description: Canonical typed views, separate submission feedback, and stable row identity.
 tags: [ui, flower, timeline, ordering]
-timestamp: 2026-10-13T00:00:00Z
+timestamp: 2026-10-14T00:00:00Z
 ---
 # Summary
 
-Flower renders the ordered items in Floret's typed current view. Canonical stable IDs plus each item's exact TurnID and RunID determine user, assistant, tool, interaction, queue, and terminal rows. A short-lived transport outbox may show an unconfirmed user input at its final transcript position, but matching request-key confirmation atomically replaces it with the canonical row. Summaries never write timeline detail.
+Flower renders the ordered items in Floret's typed current view. Canonical stable IDs plus each item's exact TurnID and RunID determine user, assistant, tool, interaction, queue, and terminal rows. Ordinary unconfirmed input remains in the composer with Send button loading. A short-lived transport outbox shows queued submissions only in the queue dock; matching canonical request-key confirmation updates that same row without duplicating the transcript. Summaries never write timeline detail.
 
 # Contract
 
@@ -17,7 +17,7 @@ Thinking is presentation state over the same canonical current view. While a thi
 
 The thinking disclosure chevron points right when collapsed and down whenever content is visible, including the live preview and full expansion. Its direction follows the same open state exposed by the button's `aria-expanded` attribute across full, embedded and child-detail timelines.
 
-Queued input is canonical Floret state and appears exactly once in the queue lane. An idle Send appears as the user row; a busy Send appears directly in the queue. Flower never guesses ordering from timestamps, prompt equality, or a local operation reducer.
+Queued input is canonical Floret state and appears exactly once in the queue lane. Admission may produce a user row or canonical queue item. Local queue feedback is static Waiting to queue until that admission, and never determines the canonical result. Flower never guesses ordering from timestamps, prompt equality, or a local operation reducer.
 
 ThreadCache accepts detail only from detail GET and LiveCurrent after the complete timeline validates. It rejects missing or conflicting execution identity and an older view version, and retains cached A and B views across A-to-B-to-A selection. One coordinator deduplicates a cold selection with summary-driven loading, coalesces an advancing summary to one latest request, and never retries a failed revision without a new display cycle or explicit user action. Summary refresh, disconnect, hidden-page recovery, and slow responses cannot clear messages. Cancel and Reject update the corresponding turn or tool row without a global failure card.
 
@@ -27,7 +27,7 @@ Stable row identity and order come only from the published Floret current view. 
 
 # Evidence
 
-- `redeven:go.mod` - Pins the published Floret v7.29.1 current-item identity and turn presentation contract.
+- `redeven:go.mod` - Pins the published Floret current-item identity and turn presentation contract.
 - `redeven:internal/ai/floret_timeline_messages_test.go` - Proves Redeven preserves public ordered items and live markers from the typed view.
 - `redeven:internal/flower_ui/src/runtimeCurrentView.ts` - Current-view projection.
 - `redeven:internal/flower_ui/src/threadCache.ts` - Versioned bounded detail cache.

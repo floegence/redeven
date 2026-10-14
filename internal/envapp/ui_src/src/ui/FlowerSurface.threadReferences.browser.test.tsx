@@ -232,7 +232,7 @@ describe('Flower thread references', () => {
     await expect.poll(() => document.activeElement).toBe(chip);
   });
 
-  it('queues references in a running conversation and consumes only submitted references at confirmation', async () => {
+  it('consumes queued references immediately and preserves later references at confirmation', async () => {
     await page.viewport(1280, 900);
     const source = referenceAdapter(), pending = deferred<Awaited<ReturnType<typeof source.launchTurn>>>();
     const running = thread({ status: 'running' });
@@ -246,7 +246,7 @@ describe('Flower thread references', () => {
     const editor = surface.querySelector<HTMLTextAreaElement>('textarea')!;
     await userEvent.fill(editor, 'Queued reference'); await userEvent.keyboard('{Enter}');
     await waitFor(() => vi.mocked(source.launchTurn).mock.calls.length === 1);
-    expect(surface.querySelectorAll('[data-reference-kind="thread"]')).toHaveLength(1);
+    expect(surface.querySelectorAll('[data-reference-kind="thread"]')).toHaveLength(0);
     await userEvent.fill(editor, 'New draft stays');
     await userEvent.click(await reference(surface, 'thread-1'));
     const input = vi.mocked(source.launchTurn).mock.calls[0]![0];
@@ -276,7 +276,7 @@ describe('Flower thread references', () => {
     await waitFor(() => surface.querySelector('[data-thread-id="thread-2"]')?.getAttribute('data-flower-thread-active') === 'true');
   });
 
-  it('keeps frozen-input menu feedback and navigation available during send preparation', async () => {
+  it('allows reference edits and navigation while ordinary request preparation is pending', async () => {
     await page.viewport(1280, 900);
     const source = referenceAdapter(), generation = deferred<string>();
     const surface = renderSurfaceWithAdapter({ ...source, resolveStorageGeneration: () => generation.promise });
@@ -285,10 +285,11 @@ describe('Flower thread references', () => {
     await userEvent.keyboard('{Enter}');
     await waitFor(() => surface.querySelector('[data-flower-primary-action="send"]')?.getAttribute('aria-busy') === 'true');
     const item = await reference(surface, 'thread-1');
-    expect(item.getAttribute('aria-disabled')).toBe('true');
-    expect(item.title).toBe('Wait until the current input can be edited.');
-    expect(surface.querySelector<HTMLButtonElement>('.flower-composer-reference-chip-remove')!.disabled).toBe(true);
-    await userEvent.keyboard('{Escape}');
+    expect(item.getAttribute('aria-disabled')).not.toBe('true');
+    expect(surface.querySelector<HTMLButtonElement>('.flower-composer-reference-chip-remove')!.disabled).toBe(false);
+    await userEvent.click(item);
+    await userEvent.click(surface.querySelector<HTMLButtonElement>('.flower-composer-reference-chip-remove')!);
+    expect(surface.querySelector('[data-reference-kind="thread"]')!.textContent).toContain('Deploy plan');
     await userEvent.click(surface.querySelector<HTMLButtonElement>('[data-thread-id="thread-1"] .flower-thread-card-select-button')!);
     await waitFor(() => surface.querySelector('[data-thread-id="thread-1"]')?.getAttribute('data-flower-thread-active') === 'true');
     generation.resolve('a'.repeat(32));

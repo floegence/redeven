@@ -35,9 +35,11 @@ draft intact. Historical snapshots remain readable after source deletion.
 Question, approval, read-only and preparing/frozen input states keep the menu
 item visible with a localized disabled explanation. Navigation and New remain
 available. An ordinary running thread can receive references through its normal
-queue. Thread references remain in the editor until canonical confirmation;
-confirmation removes only submitted local IDs. A definite transport failure
-restores submitted text and files when the original scope has no newer edits.
+queue. Ordinary sends retain references in the editor until admission; queued
+sends consume the frozen references immediately with the submitted draft.
+Consumption matches both local ID and full snapshot value, preserving newer
+reference edits. A definite transport failure restores queued text, references
+and files only when the original scope has no newer draft.
 Otherwise the existing frozen outbox and recovery controls retain the submission.
 A retry resends the frozen input rather than refreshing source metadata.
 

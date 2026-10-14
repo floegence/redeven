@@ -58,22 +58,23 @@ function queuedCurrent(threadID: string, requestID: string, prompt: string, vers
 
 it('retains the preparing draft and exposes the preparation guard', async () => {
   const generation = deferred<string>();
-  const s = await setup({ generation: generation.promise });
+  const s = await setup({ idle: true, generation: generation.promise });
   s.type('Preparing input'); s.submit(); s.submit();
   await waitFor(() => s.runtime.querySelector('[data-flower-primary-action="send"]')?.getAttribute('aria-busy') === 'true');
   expect(s.editor().value).toBe('Preparing input');
-  expect(s.runtime.querySelector('[data-flower-primary-action="send"]')?.getAttribute('aria-label')).toContain('Preparing message');
+  expect(s.runtime.querySelector('[data-flower-primary-action="send"]')?.getAttribute('aria-label')).toContain('Sending');
   expect(s.launch).not.toHaveBeenCalled();
   generation.resolve('b'.repeat(32));
   await waitFor(() => s.launch.mock.calls.length === 1);
-  expect(s.editor().value).toBe('');
-  expect(s.rows()).toHaveLength(1);
-  expect(s.rows()[0].textContent).toContain('Sending');
+  expect(s.editor().value).toBe('Preparing input');
+  expect(s.rows()).toHaveLength(0);
+  s.receipt(0);
+  await waitFor(() => s.editor().value === '');
 });
 
 it('preserves text edited away and back to the submitted value during preparation', async () => {
   const generation = deferred<string>();
-  const s = await setup({ generation: generation.promise });
+  const s = await setup({ idle: true, generation: generation.promise });
   s.type('Original A'); s.submit();
   await waitFor(() => s.runtime.querySelector('[data-flower-primary-action="send"]')?.getAttribute('aria-busy') === 'true');
   s.type('Edited B'); s.type('Original A');
@@ -82,27 +83,32 @@ it('preserves text edited away and back to the submitted value during preparatio
   expect(s.launch.mock.calls[0][0].prompt).toBe('Original A');
   expect(s.editor().value).toBe('Original A');
   s.receipt(0);
-  await waitFor(() => s.rows()[0].dataset.flowerTransportDelivery === 'accepted');
+  await waitFor(() => s.runtime.querySelector('[data-flower-primary-action="send"]')?.getAttribute('aria-busy') !== 'true');
+  expect(s.rows()).toHaveLength(0);
   expect(s.editor().value).toBe('Original A');
 });
 
-it.each(['receipt', 'current'] as const)('binds a preparing second new-chat input when the first %s arrives', async confirmation => {
+it.each(['receipt', 'current'] as const)('binds follow-up preparation after the first new-chat %s arrives', async confirmation => {
   const secondGeneration = deferred<string>();
   let generationRequests = 0;
   const s = await setup({ newThread: true, generation: () => ++generationRequests === 1 ? Promise.resolve('a'.repeat(32)) : secondGeneration.promise });
   s.type('Create A'); s.submit(); await waitFor(() => s.launch.mock.calls.length === 1);
   s.type('Follow-up B'); s.submit();
-  await waitFor(() => generationRequests === 2);
+  expect(generationRequests).toBe(1);
+  expect(s.rows()).toHaveLength(0);
   if (confirmation === 'receipt') s.receipt(0);
   else s.emit(queuedCurrent(s.initial.thread_id, s.launch.mock.calls[0][0].client_request_id, 'Create A'));
   await waitFor(() => s.runtime.querySelector(`[data-thread-id="${s.initial.thread_id}"]`)?.getAttribute('data-flower-thread-active') === 'true');
   expect(s.editor().value).toBe('Follow-up B');
-  expect(s.runtime.querySelector('[data-flower-primary-action="send"]')?.getAttribute('aria-busy')).toBe('true');
+  s.submit();
+  await waitFor(() => generationRequests === 2);
+  expect(s.editor().value).toBe('');
+  expect(s.rows().at(-1)?.textContent).toContain('Waiting to queue');
   secondGeneration.resolve('a'.repeat(32));
   await waitFor(() => s.launch.mock.calls.length === 2);
   expect(s.launch.mock.calls[1][0].thread_id).toBe(s.initial.thread_id);
+  expect(s.launch.mock.calls[1][0].decision).toBeNull();
   expect(s.launch.mock.calls[1][0].prompt).toBe('Follow-up B');
-  expect(s.editor().value).toBe('');
   s.type('Continue C'); s.submit(); await waitFor(() => s.rows().length >= 2);
   s.receipt(1);
   await waitFor(() => s.launch.mock.calls.length === 3);
@@ -186,9 +192,12 @@ it('restores a failed request only into an empty draft', async () => {
 it('binds successive new-chat input to the accepted conversation', async () => {
   const s = await setup({ newThread: true }); s.type('Create conversation'); s.submit();
   await waitFor(() => s.launch.mock.calls.length === 1);
-  s.type('Continue conversation'); s.submit(); await waitFor(() => s.rows().length === 2);
+  s.type('Continue conversation'); s.submit();
+  expect(s.rows()).toHaveLength(0);
   expect(s.launch.mock.calls[0][0].thread_id).toBeUndefined();
   s.receipt(0);
+  await waitFor(() => s.runtime.querySelector(`[data-thread-id="${s.initial.thread_id}"]`)?.getAttribute('data-flower-thread-active') === 'true');
+  s.submit();
   await waitFor(() => s.launch.mock.calls.length === 2);
   expect(s.launch.mock.calls[1][0].thread_id).toBe(s.initial.thread_id);
   s.type('Draft after creation'); s.receipt(1);
@@ -216,7 +225,7 @@ it('keeps queue feedback below 100 ms at P95 while the server response is delaye
 
 it('keeps references selected during preparation and restores the frozen references on failure', async () => {
   const generation = deferred<string>();
-  const s = await setup({ generation: generation.promise });
+  const s = await setup({ idle: true, generation: generation.promise });
   const submitted = { local_id: 'submitted-image', kind: 'file' as const, path: '/workspace/chart.png', label: 'chart.png' };
   const newer = { ...submitted, local_id: 'new-selection' };
   s.drafts.open(s.initial.thread_id).mutate(value => ({ ...value, references: [submitted] }));
@@ -230,6 +239,7 @@ it('keeps references selected during preparation and restores the frozen referen
   s.requests[0].reject(flowerTurnAdmissionError('rejected', new Error('Try again')));
   await waitFor(() => s.rows()[0].dataset.flowerTransportDelivery === 'failed');
   s.drafts.open(s.initial.thread_id).mutate(value => ({ ...value, references: [] }));
+  s.type('');
   await waitFor(() => !s.rows()[0].querySelector<HTMLButtonElement>('[aria-label="Restore to empty editor"]')?.disabled);
   s.rows()[0].querySelector<HTMLButtonElement>('[aria-label="Restore to empty editor"]')!.click();
   await waitFor(() => s.rows().length === 0);
@@ -247,7 +257,8 @@ it('keeps another thread usable while the first thread awaits confirmation', asy
   s.type('Independent message'); s.submit();
   await waitFor(() => s.launch.mock.calls.length === 2);
   expect(s.launch.mock.calls[1][0].thread_id).toBe(s.other.thread_id);
-  expect(s.rows()).toHaveLength(1);
+  expect(s.rows()).toHaveLength(0);
+  expect(s.editor().value).toBe('Independent message');
 });
 
 it('waits for an in-flight later send before retrying an older definite failure', async () => {
@@ -397,4 +408,182 @@ it('shows unknown compaction with same-ID recovery while later ordinary input wa
   expect(s.launch.mock.calls[0][0].prompt).toBe('Next ordinary input');
   expect(s.rows()).toHaveLength(1);
   expect(s.rows()[0].textContent).not.toContain('Compact context');
+});
+
+
+it('releases ordinary loading on a receipt without current and retries unchanged failures with the same identity', async () => {
+  const s = await setup({ idle: true });
+  s.type('Ordinary request'); s.submit();
+  await waitFor(() => s.launch.mock.calls.length === 1);
+  s.requests[0].reject(flowerTurnAdmissionError('rejected', new Error('Rejected')));
+  await waitFor(() => s.rows()[0]?.dataset.flowerTransportDelivery === 'failed');
+  expect(s.editor().value).toBe('Ordinary request');
+  s.submit();
+  await waitFor(() => s.launch.mock.calls.length === 2);
+  expect(s.launch.mock.calls[1][0]).toEqual(s.launch.mock.calls[0][0]);
+  s.receipt(1);
+  await waitFor(() => s.editor().value === '');
+  expect(s.runtime.querySelector('[data-flower-primary-action="send"]')?.getAttribute('aria-busy')).not.toBe('true');
+  expect(s.rows()).toHaveLength(0);
+});
+
+it('assigns edited rejected input a fresh identity and retains edited references after confirmation', async () => {
+  const s = await setup({ idle: true });
+  const reference = { local_id: 'same-reference', kind: 'file' as const, path: '/workspace/first.txt', label: 'first.txt' };
+  s.drafts.open(s.initial.thread_id).mutate(value => ({ ...value, references: [reference] }));
+  s.type('Original'); s.submit();
+  await waitFor(() => s.launch.mock.calls.length === 1);
+  s.requests[0].reject(flowerTurnAdmissionError('rejected', new Error('Rejected')));
+  await waitFor(() => s.rows()[0]?.dataset.flowerTransportDelivery === 'failed');
+  s.type('Edited'); s.submit();
+  await waitFor(() => s.launch.mock.calls.length === 2);
+  expect(s.launch.mock.calls[1][0].client_request_id).not.toBe(s.launch.mock.calls[0][0].client_request_id);
+  const updated = { ...reference, path: '/workspace/second.txt', label: 'second.txt' };
+  s.drafts.open(s.initial.thread_id).mutate(value => ({ ...value, references: [updated] }));
+  s.receipt(1);
+  await waitFor(() => s.editor().value === '');
+  expect(s.drafts.read(s.initial.thread_id).value.references).toEqual([updated]);
+});
+
+it('captures input after an ordinary unknown result and freezes its generation while delivery is paused', async () => {
+  let generation = 'a'.repeat(32);
+  const s = await setup({ idle: true, generation: async () => generation });
+  s.type('Unknown ordinary'); s.submit();
+  await waitFor(() => s.launch.mock.calls.length === 1);
+  s.requests[0].reject(flowerTurnAdmissionError('unknown', new Error('Connection lost')));
+  await waitFor(() => s.rows()[0]?.dataset.flowerTransportDelivery === 'unknown');
+  s.submit();
+  expect(s.launch).toHaveBeenCalledTimes(1);
+  s.type('Queued behind unknown'); s.submit();
+  await waitFor(() => s.rows().length === 2);
+  expect(s.rows()[1].textContent).toContain('Waiting to queue');
+  expect(s.editor().value).toBe('');
+  generation = 'b'.repeat(32);
+  s.rows()[0].querySelector<HTMLButtonElement>('[aria-label="Retry send"]')!.click();
+  await waitFor(() => s.launch.mock.calls.length === 2);
+  expect(s.launch.mock.calls[1][0]).toEqual(s.launch.mock.calls[0][0]);
+  s.receipt(1);
+  await waitFor(() => s.launch.mock.calls.length === 3);
+  expect(s.launch.mock.calls[2][0].storage_generation).toBe('a'.repeat(32));
+});
+
+it('shows captured preparation after restart as explicit recovery without replay', async () => {
+  const original = createTransportOutbox().put({
+    presentation: 'queue', preparation: 'pending', delivery: 'pending',
+    requestId: 'captured-preparation', threadId: 'delivery-thread',
+    input: { client_request_id: 'captured-preparation', thread_id: 'delivery-thread', prompt: 'Recover preparation' },
+    draftText: 'Recover preparation', attachmentLabels: [], createdAtMs: Date.now(),
+  });
+  await original.flushPersistence(); original.dispose();
+  const s = await setup();
+  await waitFor(() => s.rows().length === 1);
+  expect(s.rows()[0].textContent).toContain('This message was not sent before restart');
+  expect(s.rows()[0].querySelector('[aria-label="Retry send"]')).toBeNull();
+  expect(s.launch).not.toHaveBeenCalled();
+  s.type('New draft');
+  expect(s.rows()[0].querySelector<HTMLButtonElement>('[aria-label="Restore to empty editor"]')).toBeDisabled();
+  s.type('');
+  s.rows()[0].querySelector<HTMLButtonElement>('[aria-label="Restore to empty editor"]')!.click();
+  await waitFor(() => s.rows().length === 0);
+  expect(s.editor().value).toBe('Recover preparation');
+  expect(s.launch).not.toHaveBeenCalled();
+});
+
+it.each([false, true])('settles a remounted ordinary draft without removing newer edits (%s)', async edited => {
+  const original = createTransportOutbox().put({
+    presentation: 'composer', delivery: 'pending', requestId: 'remounted-input', threadId: 'delivery-thread',
+    input: { client_request_id: 'remounted-input', thread_id: 'delivery-thread', prompt: 'Original draft' },
+    draftText: 'Original draft', draftTextRevision: 1, attachmentLabels: [], createdAtMs: Date.now(),
+  });
+  await original.flushPersistence(); original.dispose();
+  const s = await setup({ idle: true });
+  await waitFor(() => s.rows()[0]?.dataset.flowerTransportDelivery === 'unknown');
+  s.drafts.open(s.initial.thread_id).mutate(value => ({ ...value, text: 'Original draft', client_request_id: 'remounted-input' }));
+  if (edited) { s.type('Newer'); s.type('Original draft'); }
+  s.emit(queuedCurrent(s.initial.thread_id, 'remounted-input', 'Original draft'));
+  await waitFor(() => s.rows().length === 0);
+  expect(s.editor().value).toBe(edited ? 'Original draft' : '');
+  expect(s.drafts.read(s.initial.thread_id).value.client_request_id).toBeUndefined();
+  expect(s.launch).not.toHaveBeenCalled();
+});
+
+it('captures both queue rows while IndexedDB persistence is paused', async () => {
+  const s = await setup();
+  const storage = deferred<void>();
+  const originalTransaction = IDBDatabase.prototype.transaction;
+  const transaction = vi.spyOn(IDBDatabase.prototype, 'transaction').mockImplementation(function (this: IDBDatabase, storeNames, mode, options) {
+    const result = originalTransaction.call(this, storeNames, mode, options);
+    if (mode === 'readwrite') {
+      let complete: ((event: Event) => void) | null = null;
+      Object.defineProperty(result, 'oncomplete', {
+        get: () => complete,
+        set: value => { complete = value; },
+      });
+      result.addEventListener('complete', event => { void storage.promise.then(() => complete?.(event)); });
+    }
+    return result;
+  });
+  try {
+    s.type('Stored A'); s.submit();
+    await waitFor(() => s.rows().length === 1);
+    s.type('Stored B'); s.submit();
+    await waitFor(() => s.rows().length === 2);
+    expect(s.rows().map(row => row.querySelector('.flower-queued-turn-label')?.textContent)).toEqual(['Stored A', 'Stored B']);
+    expect(s.editor().value).toBe('');
+    expect(s.launch).not.toHaveBeenCalled();
+    storage.resolve();
+    await waitFor(() => s.launch.mock.calls.length === 1);
+    s.receipt(0);
+    await waitFor(() => s.launch.mock.calls.length === 2);
+    expect(s.launch.mock.calls.map(([input]) => input.prompt)).toEqual(['Stored A', 'Stored B']);
+  } finally { storage.resolve(); transaction.mockRestore(); }
+});
+
+it('lets canonical current display a queued submission that instead starts after the previous run ends', async () => {
+  const s = await setup();
+  s.type('Next turn'); s.submit();
+  await waitFor(() => s.launch.mock.calls.length === 1);
+  const requestID = s.launch.mock.calls[0][0].client_request_id;
+  s.emit({ thread_id: s.initial.thread_id, view_version: 2, activity: 'idle', items: [], queue: [], interactions: [] });
+  s.receipt(0, { thread_id: s.initial.thread_id, view_version: 3, activity: 'active', turn_id: 'next-turn', run_id: 'next-run',
+    run_progress: { phase: 'waiting_response' }, queue: [], interactions: [],
+    items: [{ id: `user:${requestID}`, kind: 'user', turn_id: 'next-turn', run_id: 'next-run', ordinal: 1, text: 'Next turn' }] });
+  await waitFor(() => s.rows().length === 0);
+  expect(s.runtime.querySelectorAll('[data-flower-queued-turn-dock-id]')).toHaveLength(0);
+  expect(s.runtime.querySelectorAll(`[data-flower-message-id="user:${requestID}"]`)).toHaveLength(1);
+});
+
+it.each([false, true])('preserves long-text cancellation before outbox capture and admits the later explicit submission (idle=%s)', async idle => {
+  const capability: FlowerAttachmentCapability = {
+    model_id: 'openai/gpt-5.2', revision: 'long-text-delivery', enabled: true, supports_long_text: true,
+    max_attachments: 4, max_file_size_bytes: 1_000_000, max_total_size_bytes: 2_000_000,
+    routes: { 'text/plain': 'tool_read' },
+  };
+  const uploadAttachment = vi.fn(async (input: Parameters<NonNullable<FlowerSurfaceAdapter['uploadAttachment']>>[0]) => {
+    if (uploadAttachment.mock.calls.length === 1) await new Promise<void>((_resolve, reject) => {
+      input.signal.addEventListener('abort', () => reject(new DOMException('Cancelled', 'AbortError')), { once: true });
+    });
+    return { attachment_id: 'upl_long_text', name: input.file.name, mime_type: input.file.type, size_bytes: input.file.size,
+      digest_sha256: 'e'.repeat(64), locator: 'attachment://v1/upl_long_text/message.txt', source: input.source,
+      capability_revision: capability.revision };
+  });
+  const s = await setup({ idle, overrides: { loadAttachmentCapability: vi.fn(async () => capability), uploadAttachment } });
+  const longText = 'L'.repeat(50_001);
+  s.type(longText);
+  await waitFor(() => !s.runtime.querySelector<HTMLButtonElement>('[data-flower-primary-action="send"]')!.disabled);
+  s.submit();
+  await waitFor(() => uploadAttachment.mock.calls.length === 1);
+  expect(s.rows()).toHaveLength(0);
+  expect(s.launch).not.toHaveBeenCalled();
+  s.runtime.querySelector<HTMLButtonElement>('[data-flower-primary-action="cancel_long_text"]')!.click();
+  await waitFor(() => s.runtime.querySelector('[data-flower-primary-action="send"]') !== null);
+  expect(s.editor().value).toBe(longText);
+  expect(s.launch).not.toHaveBeenCalled();
+  s.submit();
+  await waitFor(() => s.launch.mock.calls.length === 1);
+  expect(s.launch.mock.calls[0][0]).toMatchObject({ prompt: '', attachment_ids: ['upl_long_text'] });
+  expect(s.editor().value).toBe(idle ? longText : '');
+  s.receipt(0);
+  await waitFor(() => s.editor().value === '');
+  expect(s.drafts.read(s.initial.thread_id).value.attachments).toEqual([]);
 });

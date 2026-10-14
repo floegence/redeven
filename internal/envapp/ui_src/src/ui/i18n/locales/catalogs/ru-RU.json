@@ -5429,6 +5429,8 @@
       "composerReferenceAdded": "Добавлена ссылка на {path}.",
       "composerReferenceExists": "Ссылка на {path} уже добавлена.",
       "pendingSending": "Отправка",
+      "pendingQueueAdmission": "Ожидает добавления в очередь",
+      "sendPreparationRecoveryDescription": "Это сообщение не было отправлено до перезапуска. Восстановите его в поле ввода и отправьте снова.",
       "pendingQueued": "В очереди",
       "queuedSendNow": "Отправить сейчас",
       "queuedSendNowDescription": "Остановить текущий ответ и отправить это сообщение из очереди сейчас",

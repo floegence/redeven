@@ -333,6 +333,8 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
       removeRecoveryCopy: t(i18n, k('chat.removeRecoveryCopy')),
       removeRecoveryCopyDescription: t(i18n, k('chat.removeRecoveryCopyDescription')),
       pendingSending: t(i18n, k('chat.pendingSending')),
+      pendingQueueAdmission: t(i18n, k('chat.pendingQueueAdmission')),
+      sendPreparationRecoveryDescription: t(i18n, k('chat.sendPreparationRecoveryDescription')),
       pendingQueued: t(i18n, k('chat.pendingQueued')),
       queuedSendNow: t(i18n, k('chat.queuedSendNow')),
       queuedSendNowDescription: t(i18n, k('chat.queuedSendNowDescription')),

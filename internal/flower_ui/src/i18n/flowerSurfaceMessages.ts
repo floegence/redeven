@@ -217,6 +217,8 @@ export const flowerSurfaceEnUS = {
     removeRecoveryCopy: "Remove local recovery copy",
     removeRecoveryCopyDescription: "Remove this local recovery copy and resume later messages. This does not cancel the original server request.",
     pendingSending: 'Sending',
+    pendingQueueAdmission: 'Waiting to queue',
+    sendPreparationRecoveryDescription: 'This message was not sent before restart. Restore it to the editor and submit it again.',
     pendingQueued: 'Queued',
     queuedSendNow: 'Send now',
     queuedSendNowDescription: 'Stop the current reply and send this queued message now',

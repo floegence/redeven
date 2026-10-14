@@ -4,7 +4,7 @@ import type {
   FlowerRuntimeCurrentView,
   FlowerTurnLaunchInput,
 } from './contracts/flowerSurfaceContracts';
-import type { FlowerComposerDraftReference } from './composer/createFlowerComposerDraftCoordinator';
+import type { FlowerComposerDraftAttachment, FlowerComposerDraftReference } from './composer/createFlowerComposerDraftCoordinator';
 
 export type TransportOutboxInput = FlowerTurnLaunchInput;
 
@@ -16,6 +16,10 @@ export type TransportOutboxProvisionalThreadSettings = Readonly<{
 }>;
 
 export type TransportOutboxEntry = Readonly<{
+  /** Submission feedback only; canonical current decides execution and queue admission. */
+  presentation?: 'composer' | 'queue';
+  /** Captured input cannot dispatch until the transport owner completes preparation. */
+  preparation?: 'pending';
   operation?: 'context_compaction';
   requestId: string;
   threadId: string;
@@ -23,11 +27,14 @@ export type TransportOutboxEntry = Readonly<{
   attachmentLabels: readonly string[];
   /** Unadmitted composer references available for explicit draft recovery. */
   draftReferences?: readonly FlowerComposerDraftReference[];
+  draftText?: string;
+  draftTextRevision?: number;
+  draftAttachments?: readonly FlowerComposerDraftAttachment[];
   createdAtMs: number;
   /** Frozen effective settings for provisional UI only; never authorization evidence. */
   provisionalThreadSettings?: TransportOutboxProvisionalThreadSettings;
   /** A durable terminal state that must not be retried automatically. */
-  terminalError?: 'attachments_unavailable_after_restart' | 'storage_restored';
+  terminalError?: 'attachments_unavailable_after_restart' | 'preparation_unavailable_after_restart' | 'storage_restored';
   /** Request delivery only; canonical current remains the queue authority. */
   delivery?: 'pending' | 'accepted' | 'failed' | 'unknown';
   deliveryError?: string;
@@ -232,7 +239,7 @@ function create(
         threadId: clean(entry.threadId),
         input: { ...entry.input, client_request_id: requestId },
         attachmentLabels: entry.attachmentLabels.map(clean).filter(Boolean),
-        terminalError: (entry.terminalError === 'attachments_unavailable_after_restart' || entry.terminalError === 'storage_restored')
+        terminalError: (entry.terminalError === 'attachments_unavailable_after_restart' || entry.terminalError === 'preparation_unavailable_after_restart' || entry.terminalError === 'storage_restored')
           ? entry.terminalError
           : undefined,
       });
@@ -334,11 +341,11 @@ export async function restoreTransportOutbox(options: TransportOutboxOptions = {
       requestId,
       threadId: clean(entry.threadId),
       input,
-      ...(entry.terminalError ? {} : { delivery: entry.delivery === 'accepted' || entry.delivery === 'failed' ? entry.delivery : 'unknown' }),
+      ...(entry.preparation === 'pending' ? { delivery: 'failed' as const } : entry.terminalError ? {} : { delivery: entry.delivery === 'accepted' || entry.delivery === 'failed' ? entry.delivery : 'unknown' }),
       attachmentLabels: Array.isArray(entry.attachmentLabels)
         ? entry.attachmentLabels.map(clean).filter(Boolean)
         : Array.isArray(legacy.attachmentNames) ? legacy.attachmentNames.map(clean).filter(Boolean) : [],
-      terminalError: (entry.terminalError === 'attachments_unavailable_after_restart' || entry.terminalError === 'storage_restored') ? entry.terminalError : (
+      terminalError: entry.preparation === 'pending' ? 'preparation_unavailable_after_restart' : (entry.terminalError === 'attachments_unavailable_after_restart' || entry.terminalError === 'preparation_unavailable_after_restart' || entry.terminalError === 'storage_restored') ? entry.terminalError : (
         (Array.isArray(input.attachment_ids) && input.attachment_ids.length > 0)
           ? 'attachments_unavailable_after_restart'
           : undefined

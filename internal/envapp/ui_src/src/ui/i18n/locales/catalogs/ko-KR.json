@@ -5326,6 +5326,8 @@
       "composerReferenceAdded": "{path}을(를) 참조에 추가했습니다.",
       "composerReferenceExists": "{path}은(는) 이미 참조되어 있습니다.",
       "pendingSending": "보내는 중",
+      "pendingQueueAdmission": "대기열에 추가 대기 중",
+      "sendPreparationRecoveryDescription": "이 메시지는 다시 시작하기 전에 전송되지 않았습니다. 입력란으로 복원한 후 다시 제출하세요.",
       "pendingQueued": "대기열에 추가됨",
       "queuedSendNow": "지금 보내기",
       "queuedSendNowDescription": "현재 응답을 중지하고 대기 중인 메시지를 지금 보내기",

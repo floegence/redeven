@@ -79,7 +79,9 @@ describe('Flower workspace synchronization recovery', () => {
     editor.dispatchEvent(new InputEvent('input', { bubbles: true }));
     await waitFor(() => !surface.querySelector<HTMLButtonElement>('.flower-composer-submit')!.disabled);
     surface.querySelector<HTMLButtonElement>('.flower-composer-submit')!.click();
-    await waitFor(() => surface.querySelector('[data-flower-transport-delivery="accepted"]') !== null);
+    await waitFor(() => launchTurn.mock.calls.length === 1 && editor.value === ''
+      && surface.querySelector<HTMLButtonElement>('.flower-composer-submit')?.getAttribute('aria-busy') !== 'true');
+    expect(surface.querySelector('[data-flower-transport-delivery="accepted"]')).toBeNull();
     expect(launchTurn).toHaveBeenCalledTimes(1);
     expect(surface.querySelector('[data-flower-sync-state="failed"]')?.textContent).toContain(syncFailure);
     expect(stream.connectLiveStream).toHaveBeenCalledTimes(1);
