@@ -36,13 +36,6 @@ Linux picture requests offer AV1 and VP9 only after the published player's posit
 WebCodecs probe; H.264 remains available. The same offer applies to connect,
 configuration and reconnect. A retired asynchronous probe cannot acquire a
 successor attachment ticket. macOS retains its native picture contract.
-The interactive **Smooth** mode narrows a Linux offer to probed VP9 when
-available. The released media component otherwise selects AV1 whenever it is
-offered, and its encode tail is less predictable during motion. **Clarity** and
-**Low bandwidth** retain the complete positive codec offer, while clients
-without VP9 fall back to their probed set. This preference changes codec
-selection only; it does not lower the configured frame-rate or picture-size
-limits.
 Native NVIDIA/Rockchip H.264 stays preferred. Intel VA-API selects AV1 when both
 the client probe and synthetic hardware encode succeed; its H.264 path remains
 available to older clients. The software path prefers supported VP9 after hardware

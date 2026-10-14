@@ -142,15 +142,8 @@ function waitForPicture() {
     status('disconnected', 'failure'); $('reconnect').hidden = false; updateTransitionControls();
   }, 10000);
 }
-function picture() {
-  // Smooth is the interactive default. The released Linux media component
-  // selects AV1 whenever it is offered, but its long encode tail is visible
-  // during motion. VP9 keeps the bounded low-delay path used by the earlier
-  // qualification while clarity/data retain the full probed codec set.
-  const codecs = quality === 'smooth' && videoCodecs.includes('vp9') ? ['vp9'] : videoCodecs;
-  return { mode: quality, max_dimension: quality === 'data' ? 1920 : 2560, frame_rate: quality === 'data' ? 30 : 60, audio, native_pixels: original,
-    ...(['x11', 'wayland', 'linux-drm-kms'].includes(backend) ? { codecs } : {}) };
-}
+function picture() { return { mode: quality, max_dimension: quality === 'data' ? 1920 : 2560, frame_rate: quality === 'data' ? 30 : 60, audio, native_pixels: original,
+  ...(['x11', 'wayland', 'linux-drm-kms'].includes(backend) ? { codecs: videoCodecs } : {}) }; }
 function configure() { if (state !== 'active') return; changeDesktop('configure', { picture: picture() }); }
 async function setAudio(enabled) {
   if (audioRequest || awaitingState || state !== 'active') return;
