@@ -182,6 +182,7 @@ func (g *Server) handleChatGPTAuth(w http.ResponseWriter, r *http.Request) {
 		PreviousAttemptID string `json:"previous_attempt_id,omitempty"`
 		AccountID         string `json:"account_id,omitempty"`
 		Reconsent         bool   `json:"reconsent,omitempty"`
+		NewRegistration   bool   `json:"new_registration,omitempty"`
 		ScopeID           string `json:"scope_id"`
 	}
 	if r.Method != http.MethodPost {
@@ -199,7 +200,7 @@ func (g *Server) handleChatGPTAuth(w http.ResponseWriter, r *http.Request) {
 	var err error
 	switch r.URL.Path {
 	case "/_redeven_proxy/api/ai/auth/chatgpt/start":
-		out, err = g.chatGPT.StartRetry(owner, body.AccountID, body.Reconsent, body.PreviousAttemptID)
+		out, err = g.chatGPT.Start(owner, chatgpt.SignInOptions{AccountID: body.AccountID, Reconsent: body.Reconsent, PreviousAttemptID: body.PreviousAttemptID, NewRegistration: body.NewRegistration})
 	case "/_redeven_proxy/api/ai/auth/chatgpt/status":
 		out, err = g.chatGPT.Poll(owner, body.AttemptID)
 	case "/_redeven_proxy/api/ai/auth/chatgpt/cancel":

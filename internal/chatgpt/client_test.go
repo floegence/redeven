@@ -93,7 +93,7 @@ func testClient(t *testing.T) (*Client, *url.URL, func(string, string, string, s
 		nonce = authorization.Query().Get("nonce")
 		return err
 	}
-	initial, e := client.Start("owner", "", false)
+	initial, e := client.Start("owner", SignInOptions{})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -267,7 +267,10 @@ func TestDisconnectCancelsSignInWhileCredentialStoreIsBusy(t *testing.T) {
 	var opened atomic.Int32
 	c.openBrowser = func(context.Context, string) error { opened.Add(1); return nil }
 	result := make(chan error, 1)
-	go func() { _, err := c.Start("verified:channel:dialog", "", false); result <- err }()
+	go func() {
+		_, err := c.Start("verified:channel:dialog", SignInOptions{})
+		result <- err
+	}()
 	deadline := time.Now().Add(time.Second)
 	for time.Now().Before(deadline) {
 		c.mu.Lock()
@@ -296,7 +299,7 @@ func TestSavedAccountReconsentUsesIssuedRegistration(t *testing.T) {
 		nextURL, err = url.Parse(address)
 		return err
 	}
-	next, err := c.Start("owner", ready.Account.AccountID, true)
+	next, err := c.Start("owner", SignInOptions{AccountID: ready.Account.AccountID, Reconsent: true})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,4 +1,3 @@
-import { FlowerSavedChatGPTAccounts } from '../../../../../../../flower_ui/src/settings/FlowerSavedChatGPTAccounts';
 import { readDesktopSessionContextSnapshot } from '../../../services/desktopSessionContext';
 import { readFlowerModelDirectory } from '../../../../../../../flower_ui/src/modelDirectory';
 import { flowerProviderAPIKeyOptional } from '../../../../../../../flower_ui/src/providerCredentials';
@@ -424,13 +423,6 @@ export function FlowerSection() {
           { id: 'health', label: i18n.t('settingsDesign.healthAndStorage') },
         ]} aria-label={i18n.t('aiChrome.flowerTitle')} />
         <div hidden={activeTab() !== 'models'} data-flower-settings-panel="models" class="flower-settings-model-sections">
-          <FlowerSavedChatGPTAccounts enabled={chatGPTAvailable()} bindingID={ctx.settings()?.auth_capabilities?.openai_chatgpt.binding_id}
-            refreshKey={providerDialogOpen()} load={loadChatGPTAccounts} boundAccountIDs={providers().map(provider => provider.account_id ?? '')}
-            copy={settingsCopy().dialog.chatGPT} disabled={!canEdit() || saving()} onContinue={account => {
-              const draft = newAIProviderDraft();
-              setProviderDialogProvider({ ...draft, auth_method: 'chatgpt', account_id: account.account_id, chatgpt_account: account });
-              setProviderDialogMode('create'); setProviderDialogIndex(null); setProviderDialogError(''); setProviderDialogOpen(true);
-            }} />
           <FlowerModelSettings copy={settingsCopy()} providers={providers().map(provider => ({ ...provider, web_search: provider.web_search ? { mode: provider.web_search.mode ?? 'disabled' } : undefined }))} currentModelID={currentModelID()} disabled={!canEdit() || saving()}
             providerReady={provider => provider.auth_method === 'chatgpt' ? ctx.settings()?.chatgpt_accounts?.[provider.id]?.state === 'ready' : (flowerProviderAPIKeyOptional(provider.type) || !!providerKeySet()[provider.id]) && (provider.web_search?.mode !== 'brave' || !!webSearchKeySet()[provider.id])}
             onChooseModel={id => {

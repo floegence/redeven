@@ -563,45 +563,55 @@ it('confirms final account removal as a draft and preserves it through account u
   expect(saveModel.mock.calls).toHaveLength(0);
 });
 
-it('recovers a saved unbound login from empty settings without automatically saving a provider', async () => {
+it('keeps saved accounts out of the overview and recovers them only inside the OpenAI editor', async () => {
   const saved = { account_id: 'saved-unbound', email: 'saved@example.com', state: 'plan_permission_required' as const, welcome_acknowledged: true };
   const auth = vi.fn<FlowerChatGPTAuth>(async () => ({}));
   const load = vi.fn(async () => ({ accounts: {}, saved_accounts: [saved] }));
   const { copy, saveModel } = await mount('zh-CN', 1000, false, { defaults: { permission_type: 'approval_required' }, model_profile: null, provider_secrets: [], auth_capabilities: { openai_chatgpt: { available: true, binding_id: 'local' } } }, auth, load);
-  await expect.element(page.getByText(saved.email, { exact: true })).toBeVisible();
-  await userEvent.click(host.querySelector<HTMLButtonElement>('[data-flower-saved-account] button')!);
-  await expect.element(page.getByRole('dialog')).toBeVisible();
-  await expect.element(page.getByText(saved.email, { exact: true }).last()).toBeVisible();
-  await expect.element(page.getByRole('button', { name: copy.settings.dialog.chatGPT.reauthorize, exact: true })).toBeVisible();
+  expect(host.textContent).not.toContain(saved.email);
+  expect(load).not.toHaveBeenCalled();
+  for (let reopen = 0; reopen < 2; reopen++) {
+    await userEvent.click(page.getByRole('button', { name: copy.settings.addProvider, exact: true }));
+    await userEvent.click(document.querySelector<HTMLButtonElement>('[aria-controls=flower-provider-type-openai]')!);
+    await expect.element(page.getByRole('button', { name: copy.settings.dialog.chatGPT.savedAccounts, exact: true })).toHaveTextContent(saved.email);
+    await expect.element(page.getByRole('button', { name: copy.settings.dialog.chatGPT.continue, exact: true })).toBeEnabled();
+    await userEvent.click(page.getByRole('button', { name: copy.settings.dialog.discard, exact: true }));
+    expect(host.textContent).not.toContain(saved.email);
+  }
   expect(auth).not.toHaveBeenCalled();
   expect(saveModel).not.toHaveBeenCalled();
 });
 
-it('shows account-list failures with retry and never leaks a previous local registry after capability loss', async () => {
+it('keeps account-list failure and recovery within the editor and clears it after capability loss', async () => {
   const saved = { account_id: 'unbound', email: 'local@example.com', state: 'ready' as const, welcome_acknowledged: true };
   let fail = true;
   const load = vi.fn(async () => { if (fail) throw new Error('Unavailable'); return { accounts: {}, saved_accounts: [saved] }; });
   const initial: FlowerSettingsSnapshot = { defaults: { permission_type: 'approval_required' }, model_profile: null, provider_secrets: [], auth_capabilities: { openai_chatgpt: { available: true, binding_id: 'local' } } };
   const { copy, setSnapshot } = await mount('en-US', 340, false, initial, vi.fn(async () => ({})), load);
+  expect(load).not.toHaveBeenCalled();
+  await userEvent.click(page.getByRole('button', { name: copy.settings.addProvider, exact: true }));
+  await userEvent.click(document.querySelector<HTMLButtonElement>('[aria-controls=flower-provider-type-openai]')!);
   await expect.element(page.getByText(copy.settings.dialog.chatGPT.accountsUnavailable, { exact: true })).toBeVisible();
   fail = false;
   await userEvent.click(page.getByRole('button', { name: copy.settings.dialog.chatGPT.retry, exact: true }));
-  await expect.element(page.getByText(saved.email, { exact: true })).toBeVisible();
+  await expect.element(page.getByRole('button', { name: copy.settings.dialog.chatGPT.savedAccounts, exact: true })).toHaveTextContent(saved.email);
   setSnapshot({ ...initial, auth_capabilities: { openai_chatgpt: { available: false } } });
-  await expect.poll(() => host.textContent).not.toContain(saved.email);
-  expect(host.querySelector('[data-flower-saved-account]')).toBeNull();
+  await expect.poll(() => document.querySelector('.flower-provider-account')).toBeNull();
 });
 
-it('ignores a saved-account response from a replaced trusted binding', async () => {
+it('ignores a saved-account response when the trusted binding changes while the editor is open', async () => {
   type Accounts = Awaited<ReturnType<NonNullable<FlowerSurfaceAdapter['loadChatGPTAccounts']>>>;
   let finish!: (result: Accounts) => void;
   const load = vi.fn(() => new Promise<Accounts>(resolve => { finish = resolve; }));
   const initial: FlowerSettingsSnapshot = { defaults: { permission_type: 'approval_required' }, model_profile: null, provider_secrets: [], auth_capabilities: { openai_chatgpt: { available: true, binding_id: 'first' } } };
-  const { setSnapshot } = await mount('en-US', 1000, false, initial, vi.fn(async () => ({})), load);
+  const { copy, setSnapshot } = await mount('en-US', 1000, false, initial, vi.fn(async () => ({})), load);
+  expect(load).not.toHaveBeenCalled();
+  await userEvent.click(page.getByRole('button', { name: copy.settings.addProvider, exact: true }));
+  await userEvent.click(document.querySelector<HTMLButtonElement>('[aria-controls=flower-provider-type-openai]')!);
   await expect.poll(() => load.mock.calls.length).toBe(1);
   const first = finish;
   setSnapshot({ ...initial, auth_capabilities: { openai_chatgpt: { available: true, binding_id: 'second' } } });
-  await expect.poll(() => load.mock.calls.length).toBe(2);
+  await expect.poll(() => document.querySelector('.flower-provider-dialog')).toBeNull();
   first({ accounts: {}, saved_accounts: [{ account_id: 'old', email: 'stale@example.com', state: 'ready', welcome_acknowledged: true }] });
   await new Promise(resolve => setTimeout(resolve, 0));
   expect(host.textContent).not.toContain('stale@example.com');

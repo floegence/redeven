@@ -9,7 +9,9 @@ timestamp: 2026-10-14T00:00:00Z
 # Summary
 
 Redeven's canonical protected account store owns verified ChatGPT registrations
-and sessions. OAuth completion persists sign-in independently of connection
+and sessions. Returning setup reuses saved registrations; only explicit new-account
+or workspace intent creates another. Email is never a registration or workspace
+key. OAuth completion persists sign-in independently of connection
 editing; identity-only grants never admit inference. Retry reuses issued client
 identity with fresh OAuth inputs. Renewal and logout serialize rotating tokens.
 Cancellation never installs usable credentials after its commit boundary, and
@@ -62,11 +64,17 @@ provider-bound statuses, including signed-out accounts after the last connection
 is removed. Same-email registrations remain distinct by opaque account ID and
 are labeled distinctly in the picker. Choosing a saved registration does not
 start OAuth; a signed-out selection reauthorizes with its retained client ID.
-Adding another account explicitly creates a new registration. Saved unbound
-accounts support the same local sign-out, acknowledgement and retry actions.
-The shared [provider configuration UI](../ui/flower-provider-configuration.md)
-keeps unbound sign-ins visible outside the editor and restores configuration
-without creating a second account or an implicit provider binding.
+The start request rejects a missing account choice with `account_selection_required`
+once any registration is saved, including signed-out entries. Only explicit
+`new_registration` intent may start dynamic registration then; combining it with
+a selected account or previous attempt is rejected. Issued-client retries retain
+their registration. A returning callback updates the exact issuer, verified
+subject and issued-client record; it never appends a duplicate of that identity.
+Different registrations remain independent even when their emails match, as
+required by OpenAI. Opaque token metadata is never decoded for workspace labels.
+Saved unbound accounts support the same local sign-out, acknowledgement and
+retry actions through the shared
+[provider configuration UI](../ui/flower-provider-configuration.md).
 
 The protected secrets file migrates contiguously from version 0 to 1 to 2 to 3,
 retaining API keys and verified registration; future schemas fail without mutation.
@@ -128,8 +136,11 @@ the selected draft model when it belonged to that connection; absent providers
 remain invalid.
 The local account API enforces the
 [verified-host admission contract](chatgpt-local-authentication.md#local-host-admission).
-Compatibility epoch 56 covers the additive shared UI and private Desktop source
-contracts; Floret's public API and domain migration remain unchanged.
+Compatibility epoch 59 pairs the explicit registration-intent request with the
+shared Desktop and Env App account picker. Earlier Desktop clients cannot silently
+create registrations against this Runtime; the canonical epoch gate requires an
+update. The Runtime Service protocol, secrets schema, Floret public API and domain
+migration remain unchanged.
 
 # Boundaries
 

@@ -57,17 +57,24 @@ The shared dialog offers ChatGPT account and API key methods. Verified local
 OpenAI drafts default to ChatGPT; existing drafts retain their method. Remote
 settings keep ChatGPT disabled with persistent guidance and no login panel.
 Verification preserves model choices, search and focus. The verified sign-in
-is saved independently of connection editing. Both settings entrypoints show
-saved unbound registrations even when no providers exist, with an explicit
-Continue setup action. It opens a new connection draft selecting the saved
-account, without starting OAuth, saving a provider or replacing an existing
-binding. A ready account synchronizes its catalog; models remain unselected
-until chosen. Discard, page reentry and failed provider saves retain account
-discoverability. Account-list failures expose retry instead of claiming that
-the user is signed out. A saved-account picker includes
-signed-out registrations and distinguishes same-email entries. Explicitly adding
-another account starts a new registration. Account persistence, renewal and
-cancellation belong to the [account lifecycle](../ai/chatgpt-account-lifecycle.md);
+is saved independently of connection editing. The settings overview contains only
+models and providers; it neither lists saved accounts nor reads the registry for
+account cards. The OpenAI editor's dropdown owns saved-account selection, including
+signed-out registrations and unbound sign-ins. One saved registration is reused
+for new connections; multiple registrations require an explicit choice. Selecting
+an entry never starts OAuth or saves a provider. Existing bindings are preserved.
+A ready selection synchronizes its catalog while leaving models unselected until
+chosen. Discard, page reentry and failed provider saves retain discoverability in
+the dropdown. Loading or failed account reads block sign-in and expose recovery.
+
+Same-email registrations have distinct stable connection labels derived from
+opaque account IDs; the UI never invents workspace names. An independent Add
+account or workspace action opens a confirmation explaining how to reuse an
+existing entry. Only confirmation sends explicit new-registration intent. All
+OAuth-start controls use Continue with ChatGPT. Retrying a failed new exchange
+retains its issued client even while the previous binding remains selected.
+Account persistence, renewal and cancellation belong to the
+[account lifecycle](../ai/chatgpt-account-lifecycle.md);
 local admission belongs to the
 [authentication contract](../ai/chatgpt-local-authentication.md).
 
@@ -117,9 +124,8 @@ catalog synchronization never selects newly discovered models automatically.
 
 - `redeven:internal/flower_ui/src/settings/FlowerProviderDialog.tsx` - Shared provider selection, credential readiness, authentication actions, and catalog ownership.
 - `redeven:internal/envapp/ui_src/src/ui/pages/settings/sections/FlowerSection.tsx` - Global Env admission, shared dialog integration and atomic provider/credential saves.
-- `redeven:internal/flower_ui/src/settings/FlowerSavedChatGPTAccounts.tsx` - Shared saved unbound account recovery, read errors and trusted-binding response guards.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.chatgpt.browser.test.tsx` - Attempt polling without account-list reloads.
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSettingsSurface.presentation.browser.test.tsx` - Empty settings recovery, account-read retry and stale-binding rejection.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSettingsSurface.presentation.browser.test.tsx` - Overview privacy, editor-only recovery, account-read retry and stale-binding rejection.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerProviderDialog.chatgpt.browser.test.tsx` - Local and remote authorization, localized responsive layouts, and provider-picker stability through authentication and catalog search.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerProviderDialog.controls.browser.test.tsx` - Actual Desktop and Env styles, brand alignment, authentication contrast, and connection-before-model interaction.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerProviderDialog.selection.browser.test.tsx` - Stable scroll, model row identity, focus, discovery metadata, and parameter editing.

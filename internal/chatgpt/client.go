@@ -122,19 +122,26 @@ func random() (string, error) {
 	_, err := rand.Read(b)
 	return base64.RawURLEncoding.EncodeToString(b), err
 }
-func (c *Client) Start(owner, accountID string, reconsent bool) (AttemptStatus, error) {
-	return c.start(owner, accountID, reconsent, nil)
+
+type SignInOptions struct {
+	AccountID         string
+	Reconsent         bool
+	PreviousAttemptID string
+	NewRegistration   bool
 }
 
-// StartRetry starts fresh PKCE/state/nonce while retaining a client ID issued by
-// an earlier failed exchange. Completed sign-ins use the canonical account store.
-func (c *Client) StartRetry(owner, accountID string, reconsent bool, previousAttemptID string) (AttemptStatus, error) {
-	if previousAttemptID == "" {
-		return c.Start(owner, accountID, reconsent)
+// Start reuses a selected registration or a failed exchange's issued client ID.
+// Once a registration is saved, creating another requires explicit intent.
+func (c *Client) Start(owner string, options SignInOptions) (AttemptStatus, error) {
+	if options.NewRegistration && (options.AccountID != "" || options.PreviousAttemptID != "") {
+		return AttemptStatus{}, Failure("invalid_authorization_request")
+	}
+	if options.PreviousAttemptID == "" {
+		return c.start(owner, options, nil)
 	}
 	c.mu.Lock()
-	a := c.attempts[previousAttemptID]
-	if a == nil || a.owner != owner || a.status.State != "failed" || time.Now().After(a.expires) || a.returning.Subject != "" && a.returning.ID() != accountID {
+	a := c.attempts[options.PreviousAttemptID]
+	if a == nil || a.owner != owner || a.status.State != "failed" || time.Now().After(a.expires) || a.returning.Subject != "" && a.returning.ID() != options.AccountID || a.returning.Subject == "" && options.AccountID != "" {
 		c.mu.Unlock()
 		return AttemptStatus{}, Failure("attempt_expired")
 	}
@@ -142,11 +149,16 @@ func (c *Client) StartRetry(owner, accountID string, reconsent bool, previousAtt
 	registration.ClientID = a.clientID
 	c.mu.Unlock()
 	if registration.Subject != "" {
-		return c.Start(owner, accountID, reconsent)
+		return c.start(owner, options, nil)
 	}
-	return c.start(owner, accountID, reconsent, &registration)
+	// A browser failure before an issued client ID is known still follows the
+	// initial-registration guard; only an issued ID can bypass it on retry.
+	if registration.ClientID == "dynamic_agent_client" {
+		return c.start(owner, options, nil)
+	}
+	return c.start(owner, options, &registration)
 }
-func (c *Client) start(owner, accountID string, reconsent bool, registration *settings.ChatGPTAccount) (AttemptStatus, error) {
+func (c *Client) start(owner string, options SignInOptions, registration *settings.ChatGPTAccount) (AttemptStatus, error) {
 	if owner == "" {
 		return AttemptStatus{}, errors.New("missing local access owner")
 	}
@@ -215,15 +227,23 @@ func (c *Client) start(owner, accountID string, reconsent bool, registration *se
 	if registration != nil {
 		a.returning = *registration
 		a.clientID = registration.ClientID
-	} else if accountID != "" {
+	} else {
 		accounts, err := c.Store.ChatGPTAccounts(ctx)
-		old, ok := accounts[accountID]
-		if err != nil || !ok || old.Lifecycle == "signing_out" {
-			cancel()
-			return AttemptStatus{}, Failure("authorization_required")
+		if err != nil {
+			return AttemptStatus{}, Failure("storage_unavailable")
 		}
-		a.returning = old
-		a.clientID = old.ClientID
+		if options.AccountID == "" {
+			if len(accounts) > 0 && !options.NewRegistration {
+				return AttemptStatus{}, Failure("account_selection_required")
+			}
+		} else {
+			old, ok := accounts[options.AccountID]
+			if !ok || old.Lifecycle == "signing_out" {
+				return AttemptStatus{}, Failure("authorization_required")
+			}
+			a.returning = old
+			a.clientID = old.ClientID
+		}
 	}
 	c.mu.Lock()
 	active := c.attempts[a.status.ID] == a && ctx.Err() == nil
@@ -246,7 +266,7 @@ func (c *Client) start(owner, accountID string, reconsent bool, registration *se
 			q.Set("login_hint", a.returning.Email)
 		}
 	}
-	if reconsent {
+	if options.Reconsent {
 		q.Set("prompt", "consent")
 	}
 	// Authorization URLs can contain an ID-token hint. Never return or log them.

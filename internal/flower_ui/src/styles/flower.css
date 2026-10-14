@@ -11870,7 +11870,3 @@ button.flower-attachment-preview-trigger:disabled {
 .flower-provider-auth-progress { display: grid; }
 .flower-provider-auth-progress > div { grid-area: 1 / 1; }
 fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width: 0; }
-.flower-saved-accounts { display: grid; gap: 0.75rem; padding-block: 1rem; }
-.flower-saved-accounts > h3 { font-size: 0.875rem; font-weight: 600; }
-.flower-saved-account { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 1rem; border: 1px solid var(--border); border-radius: 0.75rem; }
-.flower-saved-account > div { flex: 1 1 15rem; }

@@ -203,11 +203,14 @@ export type FlowerSettingsCopy = Readonly<{
 export type FlowerProviderDialogCopy = Readonly<{
   chatGPT: Readonly<{
     changeAccount: string;
+    loadingAccounts: string;
+    chooseAccountHint: string;
+    newRegistrationDescription: string;
+    useSavedAccounts: string;
+    registrationLabel: (id: string) => string;
     savedAccounts: string;
     chooseAccount: string;
     savedSignIn: string;
-    continueSetup: string;
-    unboundSignIn: string;
     accountsUnavailable: string;
     usageUnavailable: string;
     authentication: string;
@@ -221,7 +224,6 @@ export type FlowerProviderDialogCopy = Readonly<{
     localOnly: string;
     continue: string;
     waiting: string;
-    reauthorize: string;
     cancel: string;
     planSource: string;
     planPermission: string;
@@ -1465,9 +1467,12 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
         openai_compatible: 'Custom endpoint',
       },
       chatGPT: {
-        changeAccount: 'Add another account',
-        continueSetup: 'Continue setup',
-        unboundSignIn: 'Signed in on this device. Choose models and save a provider to use this account in Flower.',
+        changeAccount: "Add account or workspace",
+        loadingAccounts: "Loading saved accounts…",
+        chooseAccountHint: "Choose a saved account above to continue. Each connection keeps its own authorization.",
+        newRegistrationDescription: "For an account already listed, cancel and select its saved connection. Continue only to add another account or workspace; this creates a separate authorization.",
+        useSavedAccounts: "Use saved accounts",
+        registrationLabel: (id) => `Connection ${id}`,
         accountsUnavailable: 'Saved ChatGPT accounts could not be loaded. Try again.',
         savedAccounts: 'Saved ChatGPT accounts',
         chooseAccount: 'Choose an account',
@@ -1484,7 +1489,6 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
         localOnly: "ChatGPT sign-in is available only on this device’s Desktop or local Runtime.",
         continue: "Continue with ChatGPT",
         waiting: "Waiting for authorization",
-        reauthorize: "Authorize again",
         cancel: "Cancel sign-in",
         planSource: "Uses your ChatGPT plan allowance.",
         planPermission: "Allow access to your ChatGPT plan to enable models.",

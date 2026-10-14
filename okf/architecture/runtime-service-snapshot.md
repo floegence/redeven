@@ -34,6 +34,15 @@ database migration lineages remain unchanged. See the
 [reasoning selection contract](../ui/flower-reasoning-selection.md) for model
 capability and control semantics.
 
+# ChatGPT registration compatibility
+
+Epoch 59 pairs Runtime authorization requests with the shared Desktop and Env App
+OpenAI account picker. A saved registry requires an account selection or explicit
+new-registration intent; old Desktop clients must update before Flower access.
+The upgrade window retains earlier reviewed epochs and includes 57 and 58.
+Runtime Service wire protocol and storage schemas do not change. Registration
+semantics belong to the [ChatGPT account lifecycle](../ai/chatgpt-account-lifecycle.md).
+
 # Evidence
 
 - `redeven:internal/runtimeservice/snapshot.go:1` - Runtime Service snapshot and independent protocol identifier.

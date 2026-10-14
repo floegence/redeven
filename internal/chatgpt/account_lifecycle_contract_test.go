@@ -45,7 +45,7 @@ func TestIssuedClientSurvivesCodeExchangeFailure(t *testing.T) {
 		retryURL, err = url.Parse(address)
 		return err
 	}
-	next, retryErr := c.StartRetry("owner", "", false, initialID)
+	next, retryErr := c.Start("owner", SignInOptions{PreviousAttemptID: initialID})
 	if retryErr != nil {
 		t.Fatalf("issued registration cannot resume OAuth after code exchange invalid_grant: %v", retryErr)
 	}
@@ -63,7 +63,7 @@ func TestIssuedClientSurvivesCodeExchangeFailure(t *testing.T) {
 	if response.StatusCode != http.StatusBadRequest {
 		t.Fatal("retry unexpectedly completed")
 	}
-	final, err := c.StartRetry("owner", "", false, next.ID)
+	final, err := c.Start("owner", SignInOptions{PreviousAttemptID: next.ID})
 	if err != nil {
 		t.Fatalf("second retry discarded issued client: %v", err)
 	}
@@ -96,6 +96,87 @@ func TestIdentityOnlyRegistrationSurvivesDialogClose(t *testing.T) {
 	}
 	if !exists || account.ClientID != "issued" {
 		t.Fatal("valid identity-only sign-in and issued registration disappear when dialog closes")
+	}
+}
+
+func TestSavedRegistrationRequiresSelectionBeforeStartingAnother(t *testing.T) {
+	c, address, _, _ := testClient(t)
+	ready := finishTestLogin(t, c, address)
+	opened := 0
+	c.openBrowser = func(context.Context, string) error { opened++; return nil }
+	for _, lifecycle := range []string{"", "signed_out"} {
+		if err := c.Store.UpdateChatGPTAccount(t.Context(), ready.Account.AccountID, func(a *settings.ChatGPTAccount) error {
+			a.Lifecycle = lifecycle
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+		next, err := c.Start("another-dialog", SignInOptions{})
+		if err == nil {
+			c.Cancel("another-dialog", next.ID)
+			t.Fatal("unselected login created another registration instead of requiring account selection")
+		}
+	}
+	if opened != 0 {
+		t.Fatal("unselected login opened the browser")
+	}
+}
+
+func TestReturningLoginReusesOneRecordAndExplicitWorkspaceKeepsSeparateCredentials(t *testing.T) {
+	c, address, _, _ := testClient(t)
+	ready := finishTestLogin(t, c, address)
+	previous, _, _ := c.Store.ChatGPTAccount(ready.Account.AccountID)
+	open := c.openBrowser
+	var nextURL *url.URL
+	c.openBrowser = func(ctx context.Context, address string) error {
+		var err error
+		nextURL, err = url.Parse(address)
+		if err != nil {
+			return err
+		}
+		return open(ctx, address)
+	}
+	for range 2 {
+		next, err := c.Start("owner", SignInOptions{AccountID: ready.Account.AccountID})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if nextURL.Query().Get("client_id") != "issued" || nextURL.Query().Get("login_hint") != previous.Email {
+			t.Fatal("returning login discarded registration hints")
+		}
+		out := finishTestLogin(t, c, nextURL)
+		if out.ID != next.ID || out.Account.AccountID != ready.Account.AccountID {
+			t.Fatal("returning login created another account")
+		}
+		accounts, err := c.Store.ChatGPTAccounts(t.Context())
+		if err != nil || len(accounts) != 1 {
+			t.Fatal("returning login duplicated the canonical record")
+		}
+	}
+	if _, err := c.Start("owner", SignInOptions{AccountID: ready.Account.AccountID, NewRegistration: true}); err == nil {
+		t.Fatal("ambiguous selected-account and new-registration intent was admitted")
+	}
+	before, _, _ := c.Store.ChatGPTAccount(ready.Account.AccountID)
+	next, err := c.Start("owner", SignInOptions{NewRegistration: true})
+	if err != nil || nextURL.Query().Get("client_id") != "dynamic_agent_client" {
+		t.Fatalf("explicit new registration was rejected: %v", err)
+	}
+	defer c.Cancel("owner", next.ID)
+	callback, _ := url.Parse(nextURL.Query().Get("redirect_uri"))
+	callback.RawQuery = url.Values{"state": {nextURL.Query().Get("state")}, "code": {"code"}, "client_id": {"another-workspace"}}.Encode()
+	response, err := http.Get(callback.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	response.Body.Close()
+	out, err := c.Poll("owner", next.ID)
+	accounts, readErr := c.Store.ChatGPTAccounts(t.Context())
+	after := accounts[ready.Account.AccountID]
+	if response.StatusCode != http.StatusOK || err != nil || readErr != nil || len(accounts) != 2 || out.Account == nil || out.Account.AccountID == ready.Account.AccountID || out.Account.Email != previous.Email {
+		t.Fatal("explicit same-email workspace lost its separate registration")
+	}
+	if after.SessionRevision != before.SessionRevision || after.ClientID != before.ClientID || after.IDToken != before.IDToken || after.RefreshToken != before.RefreshToken {
+		t.Fatal("new workspace overwrote the existing registration")
 	}
 }
 
@@ -310,4 +391,11 @@ func TestCancelDoesNotWaitForBusyCredentialFileDuringCommit(t *testing.T) {
 	}
 	lock.Release()
 	<-done
+	// Closing the listener can finish the browser request before the accepted
+	// exchange finishes its independent credential cleanup. Await that outcome
+	// before TempDir cleanup removes the protected store.
+	id := (settings.ChatGPTAccount{Issuer: c.issuer, Subject: "subject", ClientID: "issued"}).ID()
+	awaitAccount(t, c, id, func(account settings.ChatGPTAccount) bool {
+		return account.Lifecycle == "signed_out" && account.AccessToken == "" && account.RefreshToken == ""
+	})
 }

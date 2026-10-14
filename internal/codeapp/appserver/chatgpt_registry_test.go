@@ -94,6 +94,15 @@ func TestSavedUnboundAccountsHaveDistinctIdentityAndLocalManagement(t *testing.T
 						t.Fatal("account projection leaked credentials")
 					}
 				}
+				for _, input := range []struct{ body, code string }{
+					{`{"scope_id":"unselected"}`, "account_selection_required"},
+					{`{"scope_id":"ambiguous","new_registration":true,"account_id":"` + a.ID() + `"}`, "invalid_authorization_request"},
+				} {
+					start := performServerRequest(srv, http.MethodPost, "/_redeven_proxy/api/ai/auth/chatgpt/start", envOriginWithChannel("registry"), input.body)
+					if start.Code != http.StatusBadRequest || !strings.Contains(start.Body.String(), `"error_code":"`+input.code+`"`) {
+						t.Fatalf("registration intent was not enforced: %s", start.Body.String())
+					}
+				}
 			}
 			response = performServerRequest(srv, http.MethodPost, "/_redeven_proxy/api/ai/auth/chatgpt/sign-out", envOriginWithChannel("registry"), `{"scope_id":"dialog","account_id":"`+a.ID()+`"}`)
 			stored, _, _ := srv.secrets.ChatGPTAccount(a.ID())
