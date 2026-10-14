@@ -101,13 +101,24 @@ bytes, while canonical tool arguments and replay fingerprints use restored
 values; restart, continuation and compaction retain one canonical meaning.
 
 HTTP and stream errors become a bounded `redeven_provider_failure_v1` envelope
-before entering Floret's existing failure record. It retains sanitized status,
-code, parameter path, request ID and response shape, never upstream prose,
-credentials, request payloads or response bodies. Standard API errors, detail
+before entering Floret's existing failure record. It retains the actual adapter
+provider type, sanitized transport status, code, parameter path, request ID and
+response shape, never upstream prose, credentials, request payloads or response
+bodies. Standard API errors, detail
 objects, empty/non-JSON bodies and SDK stream errors share this boundary. One
 product projection reads canonical failures after live updates or restart,
 classifies recovery actions and publishes collapsed, copyable diagnostics. Old
 uncoded failures receive controlled guidance without fabricated evidence.
+
+OpenRouter's explicit `upstream_provider_shared_pool` limit source is retained
+only for a 429 failure from that provider. Its localized guidance identifies
+shared upstream capacity and offers a deliberate retry, another model, or a
+user-owned provider key connected in OpenRouter. A numeric 400–599 error code
+inside an HTTP 200 stream is classified as a failure without rewriting the
+transport status. An HTTP failure status takes precedence over a conflicting
+body code. Unknown limit sources remain generic; neither upstream prose nor
+an unspecified 429 establishes an exhausted account quota or a reset time.
+Metadata prose, upstream names, remedy URLs and user identifiers stay private.
 
 The composer has no permanent plan-allowance notice. Provider settings retain
 [Manage usage](https://chatgpt.com/settings/usage), and the initial account

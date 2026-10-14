@@ -549,6 +549,7 @@ export type FlowerSurfaceCopy = Readonly<{
       providerAuthFailed: string;
       providerMissingKey: string;
       providerRateLimited: string;
+      providerUpstreamRateLimited: string;
       providerUnreachable: string;
       providerStreamInterrupted: string;
       providerModelUnavailable: string;
@@ -926,7 +927,8 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       contextCompactionLimit: "The conversation still exceeds the model's context limit after compression. Shorten the input or choose a model with more context, then retry.",
       providerAuthFailed: 'The selected AI provider rejected the saved credentials. Open Settings and update the Local AI Profile key.',
       providerMissingKey: 'The selected AI provider is missing an API key. Open Settings and complete the Local AI Profile.',
-      providerRateLimited: 'The selected AI provider is rate limiting this request. Try again after the provider limit resets.',
+      providerRateLimited: 'The selected AI provider is rate limiting this request. Try again later or choose another model.',
+      providerUpstreamRateLimited: "The model's upstream provider is temporarily rate limiting OpenRouter's shared capacity. Try again shortly, choose another model, or connect your own provider API key in OpenRouter.",
       providerUnreachable: 'The selected AI provider could not be reached. Check the provider endpoint and network connection.',
       providerStreamInterrupted: 'The selected AI provider ended the response stream unexpectedly. Try again, or check the provider endpoint if this keeps happening.',
       providerModelUnavailable: 'The selected model is not available from this provider. Choose another model in the Local AI Profile.',

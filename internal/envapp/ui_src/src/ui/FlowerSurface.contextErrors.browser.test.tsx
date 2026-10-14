@@ -41,12 +41,12 @@ it.each([['zh-CN', 390, 'light'], ['en-US', 1100, 'dark']] as const)('keeps %s p
   document.documentElement.classList.toggle('dark', theme === 'dark');
   const i18n = createTestI18nHelpers(locale);
   const copy = createLocalizedFlowerSurfaceCopy({ locale, t: (key, params) => i18n.t(key as EnvAppTranslationKey, params), tn: (key, count, params) => i18n.tn(key as EnvAppTranslationKey, count, params) });
-  const failed = thread({ status: 'failed', error: { code: 'provider_request_invalid', message: 'private provider text', detail: '{"provider":"chatgpt","http_status":400,"request_id":"req-fixture","response_shape":"detail"}' } });
+  const failed = thread({ status: 'failed', error: { code: 'provider_upstream_rate_limited', message: 'private provider text', detail: '{"provider":"openrouter","http_status":429,"code":"429","limit_source":"upstream_provider_shared_pool","response_shape":"standard_error"}' } });
   const surface = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: vi.fn(async () => [failed]), loadThread: vi.fn(async () => liveBootstrap(failed)) }, { copy, focusThreadRequest: { request_id: 'provider-layout', thread_id: failed.thread_id } });
   surface.style.cssText = `width:${width}px;height:850px;position:relative;`;
   await waitFor(() => Boolean(surface.querySelector('.flower-error-card')));
   const card = surface.querySelector<HTMLElement>('.flower-error-card')!;
-  expect(card.querySelector('.flower-error-message')?.textContent).toBe(copy.chat.runErrors.providerRequestInvalid);
+  expect(card.querySelector('.flower-error-message')?.textContent).toBe(copy.chat.runErrors.providerUpstreamRateLimited);
   const disclosure = card.querySelector<HTMLDetailsElement>('details')!;
   disclosure.querySelector('summary')!.focus();
   await userEvent.keyboard('{Enter}');

@@ -534,26 +534,32 @@ func TestFlowerCancellationFactIsSharedBySummaryCurrentAndPublication(t *testing
 	}
 }
 
-func TestContextBudgetDiagnosticMatchesCurrentAndSummary(t *testing.T) {
-	outcome := flruntime.TurnOutcomeFailed
-	failure := &flruntime.ThreadTurnFailure{Code: flruntime.ThreadTurnFailureContextBudgetInvalid, Message: "context_window_tokens=3891 reserved_output_tokens=4096 request_safe_limit=-205"}
-	current := flruntime.ThreadView{ThreadID: identity.ThreadID("context-budget"), LastOutcome: &outcome, Failure: failure}
-	raw, err := flowerCurrentJSON(current)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var decoded map[string]any
-	if err := json.Unmarshal(raw, &decoded); err != nil {
-		t.Fatal(err)
-	}
-	view := ThreadView{}
-	applyFlowerThreadRuntimeProjection(&view, flowerThreadRuntimeProjection{LastOutcome: &outcome, Failure: failure})
-	if decoded["run_error_code"] != view.RunErrorCode || decoded["run_error_detail"] != view.RunErrorDetail || view.RunErrorDetail != canonicalFailureDetail(failure) {
-		t.Fatalf("current=%s summary=%#v", raw, view)
-	}
-	applyFlowerThreadRuntimeProjection(&view, flowerThreadRuntimeProjection{Activity: flruntime.ThreadActivityActive})
-	if view.RunErrorDetail != "" || view.RunError != "" {
-		t.Fatal("retry retained obsolete budget failure")
+func TestFailureDiagnosticMatchesCurrentAndSummary(t *testing.T) {
+	for _, failure := range []*flruntime.ThreadTurnFailure{
+		{Code: flruntime.ThreadTurnFailureContextBudgetInvalid, Message: "context_window_tokens=3891 reserved_output_tokens=4096 request_safe_limit=-205"},
+		{Code: flruntime.ThreadTurnFailureProvider, Message: (&providerFailure{diagnostic: diagnosticFromBody(providerFailureDiagnostic{Provider: "openrouter", Status: 429}, []byte(openRouterSharedPoolFailure))}).Error()},
+	} {
+		t.Run(string(failure.Code), func(t *testing.T) {
+			outcome := flruntime.TurnOutcomeFailed
+			current := flruntime.ThreadView{ThreadID: identity.ThreadID("failure-diagnostic"), LastOutcome: &outcome, Failure: failure}
+			raw, err := flowerCurrentJSON(current)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var decoded map[string]any
+			if err := json.Unmarshal(raw, &decoded); err != nil {
+				t.Fatal(err)
+			}
+			view := ThreadView{}
+			applyFlowerThreadRuntimeProjection(&view, flowerThreadRuntimeProjection{LastOutcome: &outcome, Failure: failure})
+			if decoded["run_error_code"] != view.RunErrorCode || decoded["error"] != view.RunError || decoded["run_error_detail"] != view.RunErrorDetail || view.RunErrorDetail != canonicalFailureDetail(failure) {
+				t.Fatalf("current=%s summary=%#v", raw, view)
+			}
+			applyFlowerThreadRuntimeProjection(&view, flowerThreadRuntimeProjection{Activity: flruntime.ThreadActivityActive})
+			if view.RunErrorDetail != "" || view.RunError != "" {
+				t.Fatal("retry retained obsolete failure")
+			}
+		})
 	}
 }
 

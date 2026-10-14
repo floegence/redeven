@@ -2415,6 +2415,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         return copy().chat.runErrors.providerMissingKey;
       case 'provider_rate_limited':
         return copy().chat.runErrors.providerRateLimited;
+      case 'provider_upstream_rate_limited':
+        return copy().chat.runErrors.providerUpstreamRateLimited;
       case 'provider_unreachable':
         return copy().chat.runErrors.providerUnreachable;
       case 'provider_stream_interrupted':
@@ -6638,7 +6640,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     ) : undefined;
     const action = () => code === 'chatgpt_usage_unavailable' ? (
       <a href="https://chatgpt.com/settings/usage" target="_blank" rel="noopener noreferrer" class="cursor-pointer whitespace-nowrap text-sm font-medium text-primary hover:underline">{copy().settings.dialog.chatGPT.manageUsage}</a>
-    ) : code === 'chatgpt_temporarily_unavailable' || code === 'provider_rate_limited' || code === 'provider_request_invalid' || code === 'provider_request_rejected' ? (
+    ) : code === 'chatgpt_temporarily_unavailable' || code === 'provider_rate_limited' || code === 'provider_upstream_rate_limited' || code === 'provider_request_invalid' || code === 'provider_request_rejected' ? (
       <Button size="sm" variant="outline" icon={Refresh} disabled={retryPending()} onClick={() => void retryContinuation()}>{copy().chat.retryReply}</Button>
     ) : contextFailure ? (
       <>
