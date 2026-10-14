@@ -285,7 +285,7 @@ describe('Flower inline media', () => {
     const [content, setContent] = createSignal(`${prefix}Working`);
     const [streaming, setStreaming] = createSignal(true);
     const resolve = vi.fn(async () => ({ src: previewVideo }));
-    const dispose = render(() => <FlowerMarkdownBlock content={content()} streaming={streaming()} copyCodeLabel="Copy code" codeCopiedLabel="Copied" mediaLabels={markdownMediaEnUS} resolveMedia={resolve} />, root);
+    const dispose = render(() => <FlowerMarkdownBlock content={content()} streaming={streaming()} mediaEnabled copyCodeLabel="Copy code" codeCopiedLabel="Copied" mediaLabels={markdownMediaEnUS} resolveMedia={resolve} />, root);
     onTestFinished(() => { dispose(); root.remove(); });
     await waitFor(() => Boolean(root.querySelector('video')) && Boolean(root.querySelector('iframe')));
     const video = root.querySelector('video')!; const frame = root.querySelector('iframe');
@@ -304,11 +304,109 @@ describe('Flower inline media', () => {
     expect(resolve).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps media semantics and mounted nodes stable while labels become ready', async () => {
+    const root = document.createElement('div'); document.body.appendChild(root);
+    const [labels, setLabels] = createSignal<typeof markdownMediaEnUS>();
+    let completeHTML!: (html: string) => void;
+    const resolve = vi.fn(async () => ({ loadHTML: () => new Promise<string>(done => { completeHTML = done; }) }));
+    const dispose = render(() => <FlowerMarkdownBlock content="[Report](/Users/demo/report.html)" mediaEnabled
+      copyCodeLabel="Copy code" codeCopiedLabel="Copied" mediaLabels={labels()} resolveMedia={resolve} />, root);
+    onTestFinished(() => { dispose(); root.remove(); });
+    expect(root.querySelector('a')).toBeNull();
+    expect(root.querySelector('[data-floe-markdown-media]')).toBeTruthy();
+    await waitFor(() => resolve.mock.calls.length === 1);
+    const media = root.querySelector<HTMLElement>('.chat-media')!;
+    expect(media.textContent).toContain(markdownMediaEnUS.loading);
+    expect(media.querySelector('a, button, iframe')).toBeNull();
+    setLabels({ ...markdownMediaEnUS, loading: 'Preparing preview…', html: 'HTML preview' });
+    await waitFor(() => media.textContent?.includes('Preparing preview…') === true);
+    expect(root.querySelector('.chat-media')).toBe(media);
+    expect(root.querySelector('a')).toBeNull();
+    expect(resolve).toHaveBeenCalledTimes(1);
+    completeHTML('<h1>Ready</h1>');
+    await waitFor(() => Boolean(media.querySelector('iframe')));
+    expect(root.querySelector('.chat-media')).toBe(media);
+    expect(media.textContent).toContain('HTML preview');
+    expect(resolve).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['/Users/tangjianyin/Downloads/code/test/pelican-ride.html', './pelican-ride.html'])(
+    'keeps the chat document and scroll position while HTML preview %s loads', async (source) => {
+    await page.viewport(1200, 900);
+    let resolveFile!: (value: Blob) => void;
+    const loadMessageFile = vi.fn(() => new Promise<Blob>(resolve => { resolveFile = resolve; }));
+    const openMessageFile = vi.fn(async () => undefined);
+    const seed = thread({ thread_id: 'html-loading', title: 'Loading report', working_dir: '/Users/tangjianyin/Downloads/code/test', messages: [{
+      id: 'html-loading-reply', role: 'assistant', status: 'complete', turn_id: 'html-loading-turn', created_at_ms: 2,
+      content: `${'Report details.\n\n'.repeat(30)}[Interactive report](${source})\n\n${'More report details.\n\n'.repeat(30)}`,
+    }] });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true), listThreads: async () => [seed], loadThread: async () => liveBootstrap(seed, 1), loadMessageFile, openMessageFile,
+    });
+    runtime.style.height = '850px';
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="html-loading"] button')));
+    runtime.querySelector<HTMLButtonElement>('[data-thread-id="html-loading"] button')!.click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-media-kind="html"]')));
+    const media = runtime.querySelector<HTMLElement>('[data-media-kind="html"]')!;
+    media.scrollIntoView();
+    await waitFor(() => loadMessageFile.mock.calls.length === 1);
+    expect(media.querySelector('a')).toBeNull();
+    expect(media.textContent).toContain('Loading preview');
+    expect(media.querySelector('button, iframe')).toBeNull();
+    const transcript = runtime.querySelector<HTMLElement>('.flower-chat-transcript')!;
+    transcript.dispatchEvent(new WheelEvent('wheel', { deltaY: -1, bubbles: true }));
+    await new Promise<void>(done => requestAnimationFrame(() => requestAnimationFrame(() => done())));
+    const initialURL = window.location.href;
+    const initialRoot = document.documentElement;
+    const initialScroll = transcript.scrollTop;
+    expect(initialScroll).toBeGreaterThan(0);
+    const loadingHeight = media.querySelector('.chat-media-viewport')!.getBoundingClientRect().height;
+    await userEvent.click(media.querySelector<HTMLElement>('.chat-media-title')!);
+    expect(window.location.href).toBe(initialURL);
+    expect(document.documentElement).toBe(initialRoot);
+    expect(runtime.isConnected).toBe(true);
+    expect(runtime.querySelector('.flower-chat-transcript')).toBe(transcript);
+    expect(transcript.scrollTop).toBe(initialScroll);
+    expect(openMessageFile).not.toHaveBeenCalled();
+    expect(loadMessageFile).toHaveBeenCalledWith(expect.objectContaining({ path: '/Users/tangjianyin/Downloads/code/test/pelican-ride.html' }));
+
+    resolveFile(new Blob(['<h1>Ready</h1>'], { type: 'text/plain' }));
+    await waitFor(() => Boolean(media.querySelector('iframe')));
+    expect(media.querySelector('a')).toBeNull();
+    expect(media.querySelector('.chat-media-viewport')!.getBoundingClientRect().height).toBe(loadingHeight);
+    expect(media.querySelector<HTMLButtonElement>('button[aria-label="Expand preview"]')).toBeTruthy();
+    await userEvent.click(media.querySelector<HTMLButtonElement>('button[aria-label="Open file preview"]')!);
+    expect(openMessageFile).toHaveBeenCalledWith({ path: '/Users/tangjianyin/Downloads/code/test/pelican-ride.html', action: 'preview' });
+  });
+
+  it('retries a failed HTML file in place and restores its preview', async () => {
+    const loadMessageFile = vi.fn().mockRejectedValueOnce(new Error('Unavailable'))
+      .mockResolvedValueOnce(new Blob(['<h1>Recovered</h1>'], { type: 'text/plain' }));
+    const seed = thread({ thread_id: 'html-retry', messages: [{ id: 'html-retry-reply', role: 'assistant', status: 'complete',
+      turn_id: 'html-retry-turn', created_at_ms: 2, content: '[Report](./report.html)' }] });
+    const runtime = renderSurfaceWithAdapter({ ...adapter(true), listThreads: async () => [seed],
+      loadThread: async () => liveBootstrap(seed, 1), loadMessageFile });
+    runtime.style.height = '850px';
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="html-retry"] button')));
+    runtime.querySelector<HTMLButtonElement>('[data-thread-id="html-retry"] button')!.click();
+    await waitFor(() => Boolean(runtime.querySelector('.chat-media-retry')));
+    const media = runtime.querySelector<HTMLElement>('[data-media-kind="html"]')!;
+    expect(media.querySelector('a, iframe')).toBeNull();
+    expect(media.querySelectorAll('button')).toHaveLength(1);
+    const initialURL = window.location.href;
+    await userEvent.click(media.querySelector<HTMLButtonElement>('.chat-media-retry')!);
+    await waitFor(() => Boolean(media.querySelector('iframe')));
+    expect(window.location.href).toBe(initialURL);
+    expect(runtime.querySelector('[data-media-kind="html"]')).toBe(media);
+    expect(media.querySelector('a, .chat-media-retry')).toBeNull();
+    expect(loadMessageFile).toHaveBeenCalledTimes(2);
+  });
+
   it('offers retry after a failed load and does not dispatch incomplete streaming references', async () => {
     const root = document.createElement('div'); document.body.appendChild(root);
     const [content, setContent] = createSignal('![Screenshot](/project/image.png)');
     const resolve = vi.fn(async () => { throw new Error('unavailable'); });
-    const dispose = render(() => <FlowerMarkdownBlock content={content()} streaming copyCodeLabel="Copy code" codeCopiedLabel="Copied" mediaLabels={markdownMediaEnUS} resolveMedia={resolve} />, root);
+    const dispose = render(() => <FlowerMarkdownBlock content={content()} streaming mediaEnabled copyCodeLabel="Copy code" codeCopiedLabel="Copied" mediaLabels={markdownMediaEnUS} resolveMedia={resolve} />, root);
     onTestFinished(() => { dispose(); root.remove(); });
     await new Promise<void>(done => requestAnimationFrame(() => done()));
     expect(resolve).not.toHaveBeenCalled();

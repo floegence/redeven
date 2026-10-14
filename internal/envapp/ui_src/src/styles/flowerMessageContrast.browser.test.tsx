@@ -69,7 +69,7 @@ function mount() {
       </div>
       <div class="flower-message-bubble flower-message-bubble-assistant flower-message-bubble-plain">
         <span data-copy>Review the proposed change.</span>
-        <FlowerMarkdownBlock content={'[Google Cloud source](https://example.com/cloud.html)\n\n![Android Agent announcement](https://example.com/android.htm?lang=en#details)\n\n[Read `the guide`](https://example.com/guide) and [details](#details).'} copyCodeLabel="Copy code" codeCopiedLabel="Copied" mediaLabels={markdownMediaEnUS} />
+        <FlowerMarkdownBlock content={'[Google Cloud source](https://example.com/cloud.html)\n\n![Android Agent announcement](https://example.com/android.htm?lang=en#details)\n\n[Read `the guide`](https://example.com/guide) and [details](#details).'} mediaEnabled copyCodeLabel="Copy code" codeCopiedLabel="Copied" mediaLabels={markdownMediaEnUS} />
       </div>
       <div class="flower-message-row flower-message-row-user">
         <div class="flower-message-bubble flower-message-bubble-framed flower-message-bubble-user">

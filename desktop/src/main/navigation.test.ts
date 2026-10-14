@@ -4,6 +4,7 @@ import {
   desktopLoopbackBrowserDisplayURL,
   desktopLoopbackProtectedRouteURL,
   isAllowedAppNavigation,
+  sessionRootNavigationAction,
   isAllowedWebServiceWindowNavigation,
   isPortForwardURLForForward,
   isDesktopLoopbackWebServiceURL,
@@ -34,6 +35,36 @@ describe('navigation', () => {
   it('allows loopback urls on the Local UI port', () => {
     expect(isAllowedAppNavigation('http://127.0.0.1:43123/_redeven_proxy/env/', 'http://127.0.0.1:43123/')).toBe(true);
     expect(isAllowedAppNavigation('http://localhost:43123/cs/demo/', 'http://127.0.0.1:43123/')).toBe(true);
+  });
+
+  it('keeps filesystem paths from replacing the Env App shell', () => {
+    const entry = 'http://127.0.0.1:43123/_redeven_proxy/env/';
+    const base = 'http://127.0.0.1:43123/';
+    for (const target of [base, entry, `${base}_redeven_proxy/env`, `${entry}index.html`, `${entry}workbench?q=one#latest`, `${entry}?tab=activity#latest`, `${entry}?surface=tessiven&window=service-canvas`, 'http://localhost:43123/_redeven_proxy/env/#latest']) {
+      expect(sessionRootNavigationAction(target, base, entry)).toBe('allow');
+    }
+    for (const target of [
+      `${base}Users/tangjianyin/Downloads/code/test/pelican-ride.html`,
+      `${base}missing.html`, `${entry}pelican-ride.html`, `${entry}pelican-ride%2ehtml`, `${base}_redeven_proxy/api/health`,
+      `${entry}assets/index.js`, `${entry}browser/?instance=fixture`,
+      'http://localhost:43123/Users/demo/report.html', 'file:///Users/demo/report.html',
+      'file:///missing.html', 'javascript:alert(1)', 'invalid URL',
+    ]) {
+      expect(sessionRootNavigationAction(target, base, entry)).toBe('block');
+    }
+    expect(sessionRootNavigationAction('https://example.com/guide', base, entry)).toBe('external');
+    expect(sessionRootNavigationAction('mailto:help@example.com', base, entry)).toBe('external');
+    // Child CodeSpace routes retain the existing session-family policy.
+    expect(isAllowedAppNavigation(`${base}cs/demo/`, base)).toBe(true);
+  });
+
+  it('preserves the provider bootstrap and Env App routes without accepting other same-origin paths', () => {
+    const base = 'https://env-0123456789abcdef0123456789abcdef.sg.redeven.online/';
+    const entry = `${base}_redeven_boot/#redeven=fixture`;
+    expect(sessionRootNavigationAction(entry, base, entry)).toBe('allow');
+    expect(sessionRootNavigationAction(`${base}_redeven_proxy/env/?tab=files#latest`, base, entry)).toBe('allow');
+    expect(sessionRootNavigationAction(`${base}Users/demo/report.html`, base, entry)).toBe('block');
+    expect(sessionRootNavigationAction('https://cs-workbench.sg.redeven.online/', base, entry)).toBe('allow');
   });
 
   it('allows explicit local interface navigation only for the reported host', () => {

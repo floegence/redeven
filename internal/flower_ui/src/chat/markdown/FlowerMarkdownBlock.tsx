@@ -19,12 +19,15 @@ import {
   decorateFlowerMarkdownCodeBlocks,
   flowerMarkdownCodeTextForCopyButton,
 } from './codeBlockCopy';
+import { markdownMediaEnUS } from './mediaCopy';
 
 export interface FlowerMarkdownBlockProps {
   content: string;
   sources?: readonly FlowerCitationSource[];
   citationLabels?: Readonly<{ sources: string; unavailable: string; copy?: string }>;
   streaming?: boolean;
+  /** Keep media references inert even while localized media labels are loading. */
+  mediaEnabled?: boolean;
   copyCodeLabel: string;
   codeCopiedLabel: string;
   mediaLabels?: MarkdownMediaLabels;
@@ -39,7 +42,7 @@ export const FlowerMarkdownBlock: Component<FlowerMarkdownBlockProps> = (props) 
     pedantic: false,
   });
   marked.use({ renderer: createFlowerMarkdownRenderer({
-    media: props.mediaLabels !== undefined,
+    media: props.mediaEnabled === true,
     sourceFence: token => {
       if (!props.citationLabels) return null;
       const sources = parseFlowerSourceFence(token);
@@ -78,6 +81,7 @@ export const FlowerMarkdownBlock: Component<FlowerMarkdownBlockProps> = (props) 
   let copiedResetTimer: number | undefined;
   const iconCleanups = new WeakMap<HTMLButtonElement, () => void>();
   const mountedButtons = new Set<HTMLButtonElement>();
+  const resolvedMediaLabels = () => props.mediaLabels ?? markdownMediaEnUS;
 
   onCleanup(() => {
     if (copiedResetTimer !== undefined) {
@@ -187,12 +191,13 @@ export const FlowerMarkdownBlock: Component<FlowerMarkdownBlockProps> = (props) 
         for (const [node, dispose] of media) {
           if (!root.contains(node)) { dispose(); media.delete(node); }
         }
+        const mediaLabels = resolvedMediaLabels();
         for (const node of root.querySelectorAll<HTMLElement>('[data-floe-markdown-media]')) {
-          if (media.has(node) || !props.mediaLabels) continue;
+          if (media.has(node)) continue;
           const source = readMarkdownMediaPlaceholder(node);
           if (!source) continue;
-          if (!committed) { node.textContent = source.title || source.src || props.mediaLabels.html; continue; }
-          media.set(node, render(() => <MarkdownMedia source={source} labels={props.mediaLabels!} resolve={props.resolveMedia} />, node));
+          if (!committed) { node.textContent = source.title || source.src || mediaLabels.html; continue; }
+          media.set(node, render(() => <MarkdownMedia source={source} labels={resolvedMediaLabels()} resolve={props.resolveMedia} />, node));
         }
       });
     });

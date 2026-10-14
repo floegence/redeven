@@ -51,9 +51,10 @@ describe('createFlowerMarkdownRenderer', () => {
   it('opts assistant media into inert placeholders and leaves ordinary HTML code alone', () => {
     const marked = createMarkdownParser({ gfm: true, breaks: false });
     marked.use({ renderer: createFlowerMarkdownRenderer({ media: true }) });
-    for (const input of ['![Screenshot](computer://browser/' + 'a'.repeat(64) + ')', '![Clip](/project/demo.mp4)', '[Report](/project/report.html)', '```html preview\n<button>Try me</button>\n```']) {
+    for (const input of ['![Screenshot](computer://browser/' + 'a'.repeat(64) + ')', '![Clip](/project/demo.mp4)', '[Audio](./clip.mp3)', '[Image](./image.png)', '[Report](/project/report.html)', '[Absolute report](/Users/tangjianyin/Downloads/code/test/pelican-ride.html)', '[Relative report](./pelican-ride.html)', '```html preview\n<button>Try me</button>\n```']) {
       const html = marked.parse(input);
       expect(html).toContain('data-floe-markdown-media');
+      expect(html).not.toContain('<a ');
       expect(html).not.toContain('<iframe');
       expect(html).not.toContain('<button>');
     }
@@ -78,6 +79,17 @@ describe('createFlowerMarkdownRenderer', () => {
     }
   });
 
+  it('does not expose incomplete streaming HTML references as links', () => {
+    const marked = createMarkdownParser({ gfm: true });
+    marked.use({ renderer: createFlowerMarkdownRenderer({ media: true }) });
+    const reference = '[Report](/Users/tangjianyin/Downloads/code/test/pelican-ride.html)';
+    for (let length = 1; length < reference.length; length++) {
+      const html = marked.parse(reference.slice(0, length));
+      expect(html).not.toContain('<a ');
+      expect(html).not.toContain('data-floe-markdown-media');
+    }
+    expect(marked.parse(reference)).toContain('data-floe-markdown-media');
+  });
   it('escapes raw html and script content', () => {
     const html = createMarked().parse('<script>alert(1)</script>\n\n<div onclick="x">text</div>');
 

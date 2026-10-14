@@ -25,6 +25,11 @@ preview error without interrupting the conversation.
   local HTML links display interactive previews. Navigable prose, source cards,
   and web Activity links use blue underlined text. Prose links expose visible
   keyboard focus; user bubbles retain their contrast ink.
+- Assistant media capability is fixed at Markdown mount independently of label
+  readiness. Preview references always produce inert placeholders. Missing labels
+  use the English catalog until localized copy arrives without remounting or
+  reloading the preview. Loading reserves the bounded media viewport and exposes
+  no link or preview action; failure offers only an in-place Retry.
 - Local sources use absolute Runtime paths; relative paths resolve against the
   selected thread's working directory. Local files always cross the authenticated
   filesystem scope. They are never interpreted as application routes.
@@ -89,5 +94,6 @@ Canonical Floret messages remain the durable display source. Resource routes ret
 - [Runtime preview checks](../../internal/codeapp/appserver/server_fs_file_test.go)
 - [Desktop transport](../../desktop/src/main/runtimeFlowerHTTP.ts)
 - [Conversation browser acceptance](../../internal/envapp/ui_src/src/ui/FlowerSurface.richMedia.browser.test.tsx)
+- [Desktop shell navigation boundary](../desktop/desktop-runtime-bridge.md)
 - [Streaming ownership](flower-streaming-stability.md)
 - [Computer media authority](../ai/computer-use-media.md)

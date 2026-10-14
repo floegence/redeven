@@ -312,6 +312,7 @@ import {
   desktopLoopbackBrowserDisplayURL,
   desktopLoopbackProtectedRouteURL,
   isAllowedAppNavigation,
+  sessionRootNavigationAction,
   isAllowedWebServiceWindowNavigation,
   isDesktopLoopbackWebServiceURL,
   resolveDesktopLoopbackBrowserAddress,
@@ -9518,11 +9519,11 @@ function createSessionRootWindow(
         });
         return;
       }
-      if (isAllowedSessionNavigation(sessionKey, nextURL)) {
-        return;
-      }
+      const record = sessionsByKey.get(sessionKey);
+      const action = record ? sessionRootNavigationAction(nextURL, record.allowed_base_url, record.entry_url) : 'block';
+      if (action === 'allow') return;
       event.preventDefault();
-      openExternal(nextURL);
+      if (action === 'external') openExternal(nextURL);
     },
   });
   return rootWindow;

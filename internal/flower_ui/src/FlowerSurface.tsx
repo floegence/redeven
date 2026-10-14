@@ -9851,6 +9851,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           citationLabels={message().role === 'assistant' ? { sources: copy().chat.citationSources, unavailable: copy().chat.citationUnavailable, copy: copy().chat.citationCopySources } : undefined}
           streaming={streaming()}
           mediaLabels={message().role === 'assistant' ? copy().chat.media : undefined}
+          mediaEnabled={message().role === 'assistant'}
           resolveMedia={resolveMessageMedia()}
           copyCodeLabel={copy().chat.copyCode}
           codeCopiedLabel={copy().chat.codeCopied}
