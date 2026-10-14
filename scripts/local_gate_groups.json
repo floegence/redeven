@@ -1,0 +1,145 @@
+{
+  "environment": {
+    "probes": [
+      [
+        "go",
+        "version"
+      ],
+      [
+        "node",
+        "--version"
+      ],
+      [
+        "git",
+        "config",
+        "--list"
+      ]
+    ]
+  },
+  "profiles": {
+    "commit": [
+      "gate-tests",
+      "commit-checks"
+    ],
+    "full": [
+      "gate-tests",
+      "integration-source",
+      "integration-dependencies",
+      "integration-releases",
+      "integration-runtime",
+      "integration-hygiene"
+    ]
+  },
+  "groups": [
+    {
+      "id": "gate-tests",
+      "command": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "scripts/tests",
+        "-p",
+        "test_local_gate*.py"
+      ]
+    },
+    {
+      "id": "commit-checks",
+      "command": [
+        "bash",
+        "scripts/local_gate_commit_checks.sh"
+      ],
+      "staged_diff": true,
+      "environment": {
+        "paths": [
+          "desktop/node_modules",
+          "internal/envapp/ui_src/node_modules",
+          "internal/codeapp/ui_src/node_modules"
+        ],
+        "probes": [
+          [
+            "gitleaks",
+            "version"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "integration-source",
+      "command": [
+        "bash",
+        "scripts/check_final_integration.sh",
+        "--group",
+        "source"
+      ],
+      "context": [
+        "base"
+      ]
+    },
+    {
+      "id": "integration-dependencies",
+      "command": [
+        "bash",
+        "scripts/check_final_integration.sh",
+        "--group",
+        "dependencies"
+      ],
+      "context": [],
+      "environment": {
+        "paths": [
+          "desktop/node_modules",
+          "internal/envapp/ui_src/node_modules",
+          "internal/codeapp/ui_src/node_modules"
+        ]
+      }
+    },
+    {
+      "id": "integration-releases",
+      "command": [
+        "bash",
+        "scripts/check_final_integration.sh",
+        "--group",
+        "releases"
+      ],
+      "context": []
+    },
+    {
+      "id": "integration-runtime",
+      "command": [
+        "bash",
+        "scripts/check_final_integration.sh",
+        "--group",
+        "runtime"
+      ],
+      "context": [
+        "base"
+      ],
+      "environment": {
+        "paths": [
+          "desktop/node_modules",
+          "internal/envapp/ui_src/node_modules",
+          "internal/codeapp/ui_src/node_modules"
+        ]
+      }
+    },
+    {
+      "id": "integration-hygiene",
+      "command": [
+        "bash",
+        "scripts/check_final_integration.sh",
+        "--group",
+        "hygiene"
+      ],
+      "context": [],
+      "environment": {
+        "probes": [
+          [
+            "gitleaks",
+            "version"
+          ]
+        ]
+      }
+    }
+  ]
+}

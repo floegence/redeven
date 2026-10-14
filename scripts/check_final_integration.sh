@@ -7,6 +7,7 @@ ROOT_DIR=$(cd -- "$SCRIPT_DIR/.." >/dev/null 2>&1 && pwd)
 usage() {
   cat <<'USAGE'
 Usage: ./scripts/check_final_integration.sh --base <commit> --tip <commit>
+       ./scripts/check_final_integration.sh --base <commit> --tip <commit> --force
 
 Runs the bounded main gate for one exact rebased commit. The pre-push hook
 supplies the remote main commit as --base and the local main tip as --tip.
@@ -15,8 +16,18 @@ USAGE
 
 base=""
 tip=""
+group=""
+force=0
 while [ "$#" -gt 0 ]; do
   case "$1" in
+    --group)
+      group="${2:?group required}"
+      shift 2
+      ;;
+    --force)
+      force=1
+      shift
+      ;;
     --base)
       [ "$#" -ge 2 ] || { usage >&2; exit 2; }
       base="$2"
@@ -38,10 +49,21 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
-[ -n "$base" ] && [ -n "$tip" ] || { usage >&2; exit 2; }
+if [[ -n "$group" ]]; then
+  [[ "${LOCAL_GATE_ACTIVE:-}" == 1 ]] || { echo '[ERROR] select groups through scripts/local_gate.py' >&2; exit 2; }
+  base="${LOCAL_GATE_BASE:-}"
+  case "$group" in source|dependencies|releases|runtime|hygiene) ;; *) echo '[ERROR] unknown integration group' >&2; exit 2 ;; esac
+  tip="$(git -C "$ROOT_DIR" rev-parse HEAD)"
+else
+  [ -n "$base" ] && [ -n "$tip" ] || { usage >&2; exit 2; }
+  cd "$ROOT_DIR"
+  gate_args=(--profile full --mode committed --base "$base" --tip "$tip")
+  if [[ "$force" == 1 ]]; then gate_args+=(--force); fi
+  exec python3 scripts/local_gate.py "${gate_args[@]}"
+fi
 
 cd "$ROOT_DIR"
-base="$(git rev-parse --verify "${base}^{commit}")"
+if [[ -n "$base" ]]; then base="$(git rev-parse --verify "${base}^{commit}")"; fi
 tip="$(git rev-parse --verify "${tip}^{commit}")"
 head_oid="$(git rev-parse HEAD)"
 
@@ -49,7 +71,7 @@ if [ "$head_oid" != "$tip" ]; then
   echo "[ERROR] final integration gate tip does not match HEAD" >&2
   exit 1
 fi
-if ! git merge-base --is-ancestor "$base" "$tip"; then
+if [[ -n "$base" ]] && ! git merge-base --is-ancestor "$base" "$tip"; then
   echo "[ERROR] final integration gate tip is not based on the supplied main commit" >&2
   exit 1
 fi
@@ -159,6 +181,7 @@ check_focused_changed_tests() {
   fi
 }
 
+if [[ "$group" == source ]]; then
 run_step "checking final rebased diff" git diff --check "${base}...${tip}"
 run_step "checking Go formatting" check_go_formatting
 run_step "checking shell syntax" check_shell_syntax
@@ -171,12 +194,16 @@ run_step "testing README localization contract" node --test scripts/check_readme
 run_step "testing JavaScript lock inventory" node --test scripts/javascript_lock_inventory.test.mjs
 run_step "checking synchronized README localizations" node scripts/check_readme_localizations.mjs
 run_step "testing Git hook contracts" ./scripts/test_git_hooks.sh
+fi
+if [[ "$group" == dependencies ]]; then
 run_step "testing Floeterm dependency consistency" node --test scripts/check_floeterm_dependency_consistency.test.mjs
 run_step "checking Floeterm dependency consistency" node scripts/check_floeterm_dependency_consistency.mjs
 run_step "testing native Runtime build and relink contracts" node --test scripts/floeterm_native_build_contract.test.mjs scripts/build_runtime_binary.test.mjs scripts/collect_runtime_relink.test.mjs
 run_step "testing release note generation" ./scripts/test_generate_release_notes.sh
 run_step "checking Runtime compatibility source" ./scripts/check_runtime_compatibility_contract.sh --source-only
 run_step "checking ReDevPlugin dependency boundary" ./scripts/check_redevplugin_dependency_boundary.sh --ci
+fi
+if [[ "$group" == releases ]]; then
 run_step "testing controlled release archive extraction" ./scripts/safe_extract_tar.py --self-test
 run_step "testing controlled Desktop runtime extraction" ./scripts/extract_desktop_runtime.py --self-test
 run_step "testing Desktop bundle source identity" node --test scripts/desktop_bundle_build_contract.test.mjs scripts/verify_desktop_runtime_source.test.mjs scripts/desktop_signed_manifest.test.mjs
@@ -188,6 +215,8 @@ run_step "testing public installer runtime contract" node --test scripts/install
 run_step "testing ReDevPlugin release artifact verifier" ./scripts/check_redevplugin_release_artifacts.sh --self-test
 run_step "testing ReDevPlugin consumption gate" ./scripts/check_redevplugin_consumption_gate.sh --self-test
 run_step "testing ReDevPlugin artifact staging" ./scripts/stage_redevplugin_release_artifacts.sh --self-test
+fi
+if [[ "$group" == runtime ]]; then
 run_step "checking ReDevPlugin integration" ./scripts/check_plugin_integration.sh --ci
 run_step "checking Desktop plugin opening smoke syntax" node --check scripts/smoke_desktop_plugin_opening.mjs
 run_step "checking Desktop plugin startup smoke syntax" node --check scripts/smoke_desktop_plugin_startup.mjs
@@ -198,10 +227,13 @@ run_step "checking model search review contracts" python3 scripts/model-catalog/
 run_step "checking generated Agent model catalog" python3 scripts/model-catalog/generate.py --check
 run_step "checking Flower live protocol" ./scripts/check_flower_live_protocol.sh
 run_step "testing focused changed-package contracts" check_focused_changed_tests
+fi
+if [[ "$group" == hygiene ]]; then
 run_step "checking open-source hygiene" ./scripts/open_source_hygiene_check.sh --all
 run_step "checking OKF source integrity" ./scripts/okf/check_source_integrity.sh
 run_step "checking OKF content quality" ./scripts/okf/check_content_quality.sh --strict
 run_step "verifying OKF bundle" ./scripts/build_okf_bundle.sh --verify-only
+fi
 
 if [ -n "$(git status --porcelain)" ]; then
   echo "[ERROR] final integration gate changed the worktree" >&2

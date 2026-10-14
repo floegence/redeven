@@ -1235,6 +1235,33 @@ migration lifecycle, or substitute cache deletion for an upstream migration.
 
 ## Local Quality Gate
 
+`scripts/local_gate.py` and `scripts/local_gate_groups.json` own resumable local
+test groups. The existing fast commit checks and bounded main integration
+checks retain their coverage. Run `python3 scripts/local_gate.py --profile commit
+--mode staged` manually to share the same results with pre-commit; run
+`./scripts/check_final_integration.sh --base <remote-main> --tip <HEAD>` to share
+exact-main results with pre-push. Post-commit associates the commit with its
+validated Git tree. Pre-commit rejects working sources that differ from the
+staged tree, including partial staging, so tested source cannot be attributed
+to another version.
+
+Results live in the Git common directory under `local-gate/`, outside tracked
+source. A repository-wide nonblocking exclusive lock prevents concurrent
+runners from overwriting each other. State writes use fsync and atomic replace;
+running, interrupted, malformed and obsolete results never count as passed.
+The failure cursor resumes that group, continues in original order and wraps
+to the start; only matching passed groups may be skipped. An entire profile
+passes only when every group remains valid for the same tree, test definitions,
+installed dependency contents, toolchain and relevant environment. Source
+changes conservatively invalidate every group; scoped environment inputs
+invalidate their owning groups. Diff-dependent checks include the base commit.
+
+Use `--force` for a complete rerun in original order. `--group <id>` is focused
+validation and does not certify the full profile. Logs identify execution,
+skips, invalidation reasons and the cursor without persisting raw environment
+values or credentials. Never forge or edit passed state to avoid checks. CI
+is independent of local results; the runner forces execution under CI.
+
 Validation has three explicit levels:
 
 `.node-version` is the single source of truth for the first-party Node.js toolchain.
@@ -1257,17 +1284,16 @@ must select Node 26 without older-major fallbacks.
   exact base and tip commits. Other branch and tag pushes do not run the full
   gate.
 
-`scripts/check_final_integration.sh` is the single executable source of truth
-for the complete local gate. It requires a clean worktree and exact `HEAD`, then
-runs diff validation, shell syntax, notices, README localization enforcement,
-Git-hook contracts, UI lint and behavior checks, release and compatibility
-contracts, dependency boundaries, embedded asset generation, ReDevPlugin and
-Gateway integration, Flower checks, full Desktop Vitest coverage and build,
-Docker Runtime E2E, repository hygiene, OKF verification, Go tests, and
-golangci-lint. Local Go package tests run serially with the test cache disabled
-before the heavier UI and Desktop stages, so wall-clock-sensitive integration
-tests do not compete with other Go packages and failures stop the gate early. It
-fails if any check changes the worktree.
+`scripts/check_final_integration.sh` is the exact-main local integration entry
+point. It requires a clean worktree and exact `HEAD`, and delegates its existing
+43 checks to independently runnable source, dependency, release-contract,
+Runtime-contract and hygiene groups. Coverage includes formatting, shell
+syntax, workflow lint, localization, hooks, official dependency boundaries,
+artifact and compatibility contracts, Gateway/Flower source contracts,
+focused changed-package checks and OKF verification. It fails if a check
+changes the worktree. Broad UI, Desktop, Docker, stress and performance
+qualification remains separate from this bounded main gate; result caching
+does not remove any qualification requirement.
 
 Commands with explicit full modes, especially
 `./scripts/check_desktop.sh --full`, belong only in the final integration script
