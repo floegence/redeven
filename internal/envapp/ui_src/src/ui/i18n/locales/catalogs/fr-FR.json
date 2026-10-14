@@ -5102,7 +5102,13 @@
         "collapse": "Réduire l’aperçu",
         "open": "Ouvrir l’original",
         "close": "Fermer l’aperçu",
-        "previewHTML": "Ouvrir l’aperçu du fichier"
+        "previewHTML": "Ouvrir l’aperçu du fichier",
+        "previewHTMLWindow": "Ouvrir l’aperçu dans une fenêtre",
+        "linkUnavailable": "Ce lien ne peut pas être ouvert dans cet aperçu.",
+        "anchorUnavailable": "La section liée est introuvable.",
+        "relativePathUnavailable": "Impossible de résoudre ce chemin relatif sans dossier source pour l’aperçu.",
+        "invalidLink": "Ce lien est invalide.",
+        "unsupportedLink": "Le protocole de ce lien n’est pas pris en charge."
       },
       "webSearch": {
         "search": "Rechercher",

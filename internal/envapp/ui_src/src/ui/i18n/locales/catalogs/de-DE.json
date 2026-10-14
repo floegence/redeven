@@ -5102,7 +5102,13 @@
         "collapse": "Vorschau verkleinern",
         "open": "Original öffnen",
         "close": "Vorschau schließen",
-        "previewHTML": "Dateivorschau öffnen"
+        "previewHTML": "Dateivorschau öffnen",
+        "previewHTMLWindow": "Vorschau im Fenster öffnen",
+        "linkUnavailable": "Dieser Link kann in dieser Vorschau nicht geöffnet werden.",
+        "anchorUnavailable": "Der verlinkte Abschnitt wurde nicht gefunden.",
+        "relativePathUnavailable": "Der relative Pfad kann ohne Quellverzeichnis der Vorschau nicht aufgelöst werden.",
+        "invalidLink": "Dieser Link ist ungültig.",
+        "unsupportedLink": "Dieses Linkprotokoll wird nicht unterstützt."
       },
       "webSearch": {
         "search": "Suchen",

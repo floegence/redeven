@@ -169,6 +169,7 @@ export type EnvContextValue = {
   ) => Promise<void>;
   flowerWorkingDirectoryActions?: FlowerWorkingDirectoryNavigation;
   openFlowerMessageFile?: FlowerSurfaceAdapter['openMessageFile'];
+  openFlowerMessageURL?: FlowerSurfaceAdapter['openMessageURL'];
   openFlowerFileBrowser: (request: FlowerFileOpenRequest) => Promise<void>;
   openFlowerFilePreview: (request: FlowerFileOpenRequest) => Promise<void>;
   openFlowerCanonicalReferenceTarget?: (target: FlowerCanonicalReferenceNavigationTarget) => Promise<void>;

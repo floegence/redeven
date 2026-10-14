@@ -13,6 +13,10 @@ import { FilePreviewContent } from './FilePreviewContent';
 import { createFilePreviewController, type FilePreviewController } from './createFilePreviewController';
 import { removeUIStorageItem } from '../services/uiStorage';
 import { floatingWindowStorageKey } from './PersistentFloatingWindow';
+import { FilePreviewContext } from './FilePreviewContext';
+import { openHtmlPreviewLink } from '../../../../../flower_ui/src/chat/markdown/flowerMarkdownMedia';
+import { markdownMediaEnUS } from '../../../../../flower_ui/src/chat/markdown/mediaCopy';
+import { openPreviewWebURL } from '../services/openPreviewWebURL';
 
 const sample = `<!doctype html><html lang="en"><head><title>Report</title>
   <style>body{margin:24px;background:#f5f7f4;color:#213c31}h1{color:rgb(12,80,48)}button{cursor:pointer}section{height:1800px}</style>
@@ -35,6 +39,8 @@ type HtmlInspection = {
   scrollY: number; viewportWidth: number;
 };
 const htmlCommands = commands as unknown as {
+  openHtmlPreviewWebLink: (selector: string) => Promise<{ url: string; openerIsNull: boolean }>;
+  clickHtmlPreviewLink: (selector: string, name: string) => Promise<{ url: string; scrollY: number }>;
   pasteFilePreviewSource: (source: string) => Promise<void>;
   inspectHtmlFilePreview: (action?: 'inspect' | 'click' | 'wheel') => Promise<HtmlInspection>;
 };
@@ -56,6 +62,55 @@ function mount(view: () => JSX.Element) {
 }
 
 describe('HTML file page preview', () => {
+  it('opens a real browser destination without exposing the opener or replacing the preview', async () => {
+    const url = `${location.origin}/__html_preview_destination__?html-link-acceptance=1`;
+    mount(() => <FilePreviewContext.Provider value={{
+      controller: createFilePreviewController({ client: () => undefined, rpc: () => undefined, canWrite: () => false }),
+      openPreview: async () => undefined, closePreview: () => undefined,
+      openHtmlLink: (_sourcePath, href, signal) => openPreviewWebURL(href, signal, { unavailable: 'Open unavailable', popupBlocked: 'Popup blocked' }),
+    }}><FilePreviewSurface open onOpenChange={() => undefined} item={file}
+      descriptor={describeFilePreview(file.name)} text={`<a href="${url}">Browser destination</a>`} />
+    </FilePreviewContext.Provider>);
+    await vi.waitFor(() => expect(document.querySelector('iframe.html-preview-frame')).toBeTruthy());
+    const frame = document.querySelector('iframe.html-preview-frame');
+    expect(await htmlCommands.openHtmlPreviewWebLink('iframe.html-preview-frame')).toEqual({ url, openerIsNull: true });
+    expect(document.querySelector('iframe.html-preview-frame')).toBe(frame);
+  });
+
+  it('binds links to the source directory and retains the page when opening fails', async () => {
+    await page.viewport(1200, 900);
+    const openMessageFile = vi.fn(async () => { throw new Error('Permission denied: /workspace/details.html'); });
+    const openMessageURL = vi.fn(async () => undefined);
+    mount(() => <FilePreviewContext.Provider value={{
+      controller: createFilePreviewController({ client: () => undefined, rpc: () => undefined, canWrite: () => false }),
+      openPreview: async () => undefined, closePreview: () => undefined,
+      openHtmlLink: (sourcePath, href, signal) => openHtmlPreviewLink(href, sourcePath.slice(0, sourcePath.lastIndexOf('/')), signal, {
+        adapter: { openMessageFile, openMessageURL }, copy: markdownMediaEnUS,
+      }),
+    }}><FilePreviewSurface open onOpenChange={() => undefined} item={file}
+      descriptor={describeFilePreview(file.name)} text={'<h1>Local report</h1><a href="./details.html">Related file</a><a href="https://example.com/report">Report source</a>'} />
+    </FilePreviewContext.Provider>);
+    await vi.waitFor(() => expect(document.querySelector('iframe.html-preview-frame')).toBeTruthy());
+    const frame = document.querySelector('iframe.html-preview-frame');
+    await htmlCommands.clickHtmlPreviewLink('iframe.html-preview-frame', 'Related file');
+    await vi.waitFor(() => expect(openMessageFile).toHaveBeenCalledWith(expect.objectContaining({ path: '/workspace/details.html', action: 'preview' })));
+    await vi.waitFor(() => expect(document.querySelector('iframe.html-preview-frame + [role="alert"]')?.textContent).toContain('Permission denied'));
+    expect(document.querySelector('iframe.html-preview-frame')).toBe(frame);
+    await htmlCommands.clickHtmlPreviewLink('iframe.html-preview-frame', 'Report source');
+    await vi.waitFor(() => expect(openMessageURL).toHaveBeenCalledWith(expect.objectContaining({ url: 'https://example.com/report' })));
+    expect(document.querySelector('iframe.html-preview-frame')).toBe(frame);
+  });
+
+  it('keeps fragment links inside the original file document', async () => {
+    await page.viewport(1200, 900);
+    mount(() => <FilePreviewSurface open onOpenChange={() => undefined} item={file}
+      descriptor={describeFilePreview(file.name)} text={'<h1>Local report</h1><a href="#economy">Economy</a><section id="economy" style="margin-top:1200px">Economy section</section>'} />);
+    await vi.waitFor(() => expect(document.querySelector('iframe.html-preview-frame')).toBeTruthy());
+    const result = await htmlCommands.clickHtmlPreviewLink('iframe.html-preview-frame', 'Economy');
+    expect(result.url).toBe('about:srcdoc');
+    expect(result.scrollY).toBeGreaterThan(500);
+  });
+
   it('opens a styled interactive page in the floating preview and preserves explicit source editing', async () => {
     await page.viewport(1200, 900);
     let controller!: FilePreviewController;

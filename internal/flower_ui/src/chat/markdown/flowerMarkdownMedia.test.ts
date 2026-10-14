@@ -1,9 +1,54 @@
 import { describe, expect, it, vi } from 'vitest';
-import { flowerMarkdownFilePath, resolveFlowerMarkdownMedia } from './flowerMarkdownMedia';
+import { flowerMarkdownFilePath, htmlPreviewSourceDirectory, openHtmlPreviewLink, resolveFlowerMarkdownMedia } from './flowerMarkdownMedia';
 import { markdownMediaEnUS } from './mediaCopy';
 import type { FlowerSurfaceAdapter } from '../../contracts/flowerSurfaceContracts';
 
 describe('Flower Markdown resource resolution', () => {
+  it('routes HTML links using the bound source directory without an application URL', async () => {
+    const openMessageFile = vi.fn(async () => undefined);
+    const openMessageURL = vi.fn(async () => undefined);
+    const signal = new AbortController().signal;
+    const context = { adapter: { openMessageFile, openMessageURL }, copy: markdownMediaEnUS };
+    const fenceDirectory = htmlPreviewSourceDirectory({ kind: 'html', html: '<h1>Report</h1>', title: '' }, '/workspace/thread');
+    const fileDirectory = htmlPreviewSourceDirectory({ kind: 'html', src: './reports/index.html', title: '' }, '/workspace/thread');
+    expect(fenceDirectory).toBe('/workspace/thread');
+    expect(fileDirectory).toBe('/workspace/thread/reports');
+    await openHtmlPreviewLink('./details.html', fenceDirectory, signal, context);
+    await openHtmlPreviewLink('../report%20one.pdf', fileDirectory, signal, context);
+    await openHtmlPreviewLink('/runtime/absolute.html', '', signal, context);
+    await openHtmlPreviewLink('https://example.com/news#economy', '', signal, context);
+    expect(openMessageFile.mock.calls).toEqual([
+      [{ path: '/workspace/thread/details.html', action: 'preview', signal }],
+      [{ path: '/workspace/thread/report one.pdf', action: 'preview', signal }],
+      [{ path: '/runtime/absolute.html', action: 'preview', signal }],
+    ]);
+    expect(openMessageURL).toHaveBeenCalledWith({ url: 'https://example.com/news#economy', signal });
+  });
+
+  it('rejects unsafe, unbound, unavailable, cancelled and failed HTML opens explicitly', async () => {
+    const openMessageFile = vi.fn(async () => undefined);
+    const openMessageURL = vi.fn(async () => undefined);
+    const controller = new AbortController();
+    const context = { adapter: { openMessageFile, openMessageURL }, copy: markdownMediaEnUS };
+    for (const href of ['javascript:alert(1)', 'data:text/html,hello', 'file:///secret', 'https://user:password@example.com']) {
+      await expect(openHtmlPreviewLink(href, '/workspace', controller.signal, context)).rejects.toThrow(markdownMediaEnUS.unsupportedLink);
+    }
+    for (const href of ['//other-host/path', '#economy', '\\secret', 'bad%zz.html', '\u0000file.html']) {
+      await expect(openHtmlPreviewLink(href, '/workspace', controller.signal, context)).rejects.toThrow(markdownMediaEnUS.invalidLink);
+    }
+    await expect(openHtmlPreviewLink('./details.html', '', controller.signal, context)).rejects.toThrow(markdownMediaEnUS.relativePathUnavailable);
+    expect(openMessageFile).not.toHaveBeenCalled();
+    expect(openMessageURL).not.toHaveBeenCalled();
+    await expect(openHtmlPreviewLink('/workspace/a.html', '', controller.signal, { adapter: {}, copy: markdownMediaEnUS })).rejects.toThrow(markdownMediaEnUS.linkUnavailable);
+    for (const message of ['Permission denied', 'File not found', 'Browser failed']) {
+      openMessageFile.mockRejectedValueOnce(new Error(message));
+      await expect(openHtmlPreviewLink('/workspace/a.html', '', controller.signal, context)).rejects.toThrow(message);
+    }
+    controller.abort();
+    await expect(openHtmlPreviewLink('https://example.com', '', controller.signal, context)).rejects.toThrow();
+    expect(openMessageURL).not.toHaveBeenCalled();
+  });
+
   it('loads a canonical tool image through thread membership and never reopens the source file', async () => {
     const loadToolImage = vi.fn(async () => new Blob(['pixels'], { type: 'image/jpeg' }));
     const loadMessageFile = vi.fn();

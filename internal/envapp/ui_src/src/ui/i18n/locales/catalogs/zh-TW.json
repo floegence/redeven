@@ -5102,7 +5102,13 @@
         "collapse": "收合預覽",
         "open": "開啟原始檔案",
         "close": "關閉預覽",
-        "previewHTML": "開啟檔案預覽"
+        "previewHTML": "開啟檔案預覽",
+        "previewHTMLWindow": "在視窗中預覽",
+        "linkUnavailable": "無法在此預覽中開啟此連結。",
+        "anchorUnavailable": "找不到連結指向的章節。",
+        "relativePathUnavailable": "無法解析相對路徑：預覽未綁定來源目錄。",
+        "invalidLink": "此連結無效。",
+        "unsupportedLink": "不支援此連結協定。"
       },
       "webSearch": {
         "search": "搜尋",

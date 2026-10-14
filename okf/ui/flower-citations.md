@@ -32,7 +32,7 @@ invalidate Markdown HTML without remounting stable code controls.
 
 # Boundaries
 
-The published Floe Webapp v0.86.31 `createMarkdownParser` owns GFM syntax with
+The published Floe Webapp v0.86.32 `createMarkdownParser` owns GFM syntax with
 CJK-aware emphasis boundaries for completed and streamed text. Code spans, HTML,
 links, images and escaped literal marker examples retain their existing behavior. The message
 copy action removes prose markers while code-block copy preserves literal code.

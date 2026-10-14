@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower inline media
 description: Display assistant media through released Floe previews and authorized Runtime resources.
 tags: [flower, media, preview, security]
-timestamp: 2026-09-20T00:00:00Z
+timestamp: 2026-10-14T00:00:00Z
 ---
 
 # Summary
@@ -41,7 +41,7 @@ preview error without interrupting the conversation.
 - An `html preview` fence or a local `.html` / `.htm` link renders an interactive
   preview. Ordinary `html` fences remain copyable source code. Raw HTML remains
   escaped. External HTML pages open through links and do not mount a preview or
-  offer a retry that cannot load them. Inline HTML preview requires a local file.
+  offer a retry that cannot load them.
 - Media displays without outer cards or title bars, with a single rounded edge,
   quiet captions, and named actions on hover or keyboard focus (always
   visible on touch). Loading and retry states use the active locale.
@@ -54,11 +54,23 @@ preview error without interrupting the conversation.
   Local HTML exposes the same host file-preview and containing-folder actions.
   HTML expands without recreating its iframe; expansion and collapse use distinct
   icons and accessible names.
+- Fenced HTML also offers an independent floating copy of the same source
+  snapshot. Floe's existing window owns dragging, resizing, maximization, narrow
+  layout, dismissal, and focus return. The inline iframe and chat position stay
+  intact; each copy has its own script and form state.
+- Fragment links scroll within their current document. Other real link clicks
+  pass their raw href through Floe's private lifecycle-bound port. Redeven binds
+  the thread, filesystem scope, adapter, and working directory; file HTML uses
+  its source directory while fences use the bound thread directory. Web links
+  use the existing browser entry, and file links use authorized reads and file
+  preview. Missing directories, unsupported protocols, permission failures,
+  missing files, and opening failures retain the source with explicit feedback.
+  A host without the relevant opening capability reports it as unavailable.
 - Only stable Markdown segments mount media. An unfinished streaming tail stays
   inert, and later reply text does not reload committed previews. Media near the
   viewport loads lazily. Disposal aborts pending observation and revokes blob URLs.
-- The resolver identity changes only with the adapter, selected thread, or working
-  directory. Published Floe owns request cancellation and ignores reactive reads
+- The resolver identity changes only with the adapter, filesystem scope, selected
+  thread, or working directory. Published Floe owns request cancellation and ignores reactive reads
   inside the resolver. Health snapshots, labels, and ordinary thread updates do
   not reload a ready preview; a real context change cancels stale work.
 
@@ -77,6 +89,10 @@ styles/scripts and embedded data images work; shell/storage access, network
 fetches, external scripts, frames, and forms do not. HTML bytes are never mounted
 in the trusted shell. HTML previews are self-contained and do not resolve sibling
 assets. Existing local SVG serving remains unavailable.
+The link port carries intent only. Page scripts cannot forge the private port,
+synthetic clicks cannot open targets, and other or retired iframe channels are
+rejected. No credentials, file-reading interface, or automatic sibling-resource
+loading is exposed to HTML. Asynchronous opens honor the frame's abort signal.
 
 Only assistant Markdown opts into resource resolution. Fetched web content and
 user messages cannot use this adapter to read local files. Presentation creates

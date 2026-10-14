@@ -5102,7 +5102,13 @@
         "collapse": "プレビューを縮小",
         "open": "元のファイルを開く",
         "close": "プレビューを閉じる",
-        "previewHTML": "ファイルプレビューを開く"
+        "previewHTML": "ファイルプレビューを開く",
+        "previewHTMLWindow": "ウィンドウでプレビュー",
+        "linkUnavailable": "このプレビューではリンクを開けません。",
+        "anchorUnavailable": "リンク先のセクションが見つかりません。",
+        "relativePathUnavailable": "プレビューの参照元ディレクトリがないため、相対パスを解決できません。",
+        "invalidLink": "このリンクは無効です。",
+        "unsupportedLink": "このリンクのプロトコルはサポートされていません。"
       },
       "webSearch": {
         "search": "検索",

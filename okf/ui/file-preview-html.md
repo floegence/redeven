@@ -3,7 +3,7 @@ type: UI Contract
 title: HTML file preview
 description: Open HTML files as isolated interactive pages while retaining explicit source editing.
 tags: [ui, files, preview, html, security]
-timestamp: 2026-10-01T00:00:00Z
+timestamp: 2026-10-14T00:00:00Z
 ---
 # Summary
 
@@ -24,13 +24,24 @@ previews. The existing authorized byte stream supplies complete UTF-8 content;
 the 2 MiB text limit rejects oversized or truncated HTML instead of executing a
 partial document. Loading and read failures retain the existing preview states.
 
-Floe's published `sandboxedMarkdownHtml` owns document construction and CSP.
-Redeven places that document in an opaque `allow-scripts`, no-referrer iframe;
+Floe's published `SandboxedHtmlFrame` owns document construction, CSP, and the
+user-link channel. It renders an opaque `allow-scripts`, no-referrer iframe;
 it never inserts file HTML into the trusted shell or navigates to an authenticated
 file endpoint. As with [Flower inline media](flower-inline-media.md), inline
 styles, scripts, and embedded data work; shell DOM/storage access, network
 requests, external scripts, sibling assets, nested frames, and forms are blocked.
 This is a self-contained page preview, not a local website server.
+
+Fragment links scroll inside the live document without changing its URL or
+resetting script and form state. Other real user link activations carry only
+their original href through Floe's private per-document port. Redeven validates
+protocols, resolves file links against the source file's directory, and uses the
+existing browser or authorized file preview entry. Absolute Runtime paths remain
+file paths. Missing source directories fail explicitly; the shell URL never
+supplies a base. A bounded authorized read checks file availability before the
+existing preview is changed. Read, permission, and opening errors appear beside
+the retained source document. The current Activity file preview and Workbench
+same-file reuse rules still own placement.
 
 ## Placement and interaction
 
@@ -52,8 +63,12 @@ read-only and show the attached bytes rather than re-reading the live file.
 
 [Window actions](file-preview-window-actions.md) owns shared file actions and
 draft dismissal. [Workbench input ownership](workbench-input-ownership.md) owns
-selection and wheel routing. HTML placement does not add a document bridge,
-credential access, resource proxy, or a separate editor lifecycle.
+selection and wheel routing. The narrow link-intent channel grants no read
+capability, credentials, shell commands, or resource proxy. Synthetic clicks,
+forged messages, sibling iframes, and retired documents cannot invoke its host
+handler. Source replacement and disposal abort pending opens. User-activated file
+navigation does not authorize automatic loading of neighboring assets or add a
+separate editor lifecycle.
 
 # Evidence
 

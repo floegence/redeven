@@ -159,6 +159,7 @@ import {
   type FlowerTurnLauncherSubmitInput,
   type FlowerThreadFocusRequest,
   type FlowerSurfaceWarmupState,
+  type FlowerSurfaceAdapter,
 } from '../../../internal/flower_ui/src';
 import { desktopEntryKindSupportsDirectRuntimeOperations } from '../shared/environmentManagementPrinciples';
 import {
@@ -2938,6 +2939,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   onCleanup(() => flowerModelReadResource.invalidate());
   const flowerSettingsChanged = async () => { setFlowerModelSettingsRevision(value => value + 1); await refreshSnapshot(); };
   const flowerSurfaceCopy = createMemo(() => createDesktopFlowerSurfaceCopy(i18n()));
+  const openFlowerMessageURL: NonNullable<FlowerSurfaceAdapter['openMessageURL']> = async ({ url, signal }) => {
+    signal.throwIfAborted();
+    const result = await window.redevenDesktopShell?.openExternalURL?.(url);
+    if (!result?.ok) throw new Error(result?.message || flowerSurfaceCopy().chat.media.linkUnavailable);
+  };
   const flowerRuntimeLifecycleProgress = createMemo(() => {
     const environment = localEnvironmentEntry();
     return environment
@@ -6438,6 +6444,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           <TessivenPage locale={languageSnapshot().resolved_locale} openRequest={tessivenOpenRequest()} transport={tessivenTransport} t={(key, values) => tessivenCopy()(key, values)} visible={tessivenVisible()} canWrite
             renderFlower={surface => {
               const adapter = createLocalEnvironmentFlowerSurfaceAdapter(props.runtime.settings, {
+                openMessageURL: openFlowerMessageURL,
                 get runtimeDisplayName() { return i18n().t('flowerSurface.runtime.localEnvironment'); },
                 get runtimeSubtitle() { return i18n().t('flowerSurface.runtime.subtitle'); },
                 onSettingsChanged: flowerSettingsChanged,
@@ -6463,6 +6470,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             <Show keyed when={flowerRuntimeEnvironment()?.id || 'default'}>
               {(environmentID) => {
                 const adapter = createLocalEnvironmentFlowerSurfaceAdapter(props.runtime.settings, {
+                  openMessageURL: openFlowerMessageURL,
                   runtimeEnvironmentID: environmentID === 'default' ? undefined : environmentID,
                   get runtimeDisplayName() { return i18n().t('flowerSurface.runtime.localEnvironment'); },
                   get runtimeSubtitle() { return i18n().t('flowerSurface.runtime.subtitle'); },

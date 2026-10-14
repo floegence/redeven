@@ -5102,7 +5102,13 @@
         "collapse": "Reducir vista previa",
         "open": "Abrir original",
         "close": "Cerrar vista previa",
-        "previewHTML": "Abrir vista previa del archivo"
+        "previewHTML": "Abrir vista previa del archivo",
+        "previewHTMLWindow": "Abrir vista previa en una ventana",
+        "linkUnavailable": "No se puede abrir este enlace en esta vista previa.",
+        "anchorUnavailable": "No se encontró la sección enlazada.",
+        "relativePathUnavailable": "No se puede resolver la ruta relativa porque la vista previa no tiene un directorio de origen.",
+        "invalidLink": "Este enlace no es válido.",
+        "unsupportedLink": "El protocolo de este enlace no es compatible."
       },
       "webSearch": {
         "search": "Buscar",

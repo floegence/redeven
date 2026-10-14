@@ -4,7 +4,7 @@ import previewVideo from '../../scripts/fixtures/media/preview.mp4?url';
 import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
-import { page, userEvent } from 'vitest/browser';
+import { commands, page, userEvent } from 'vitest/browser';
 import { FloeConfigProvider, LayoutProvider } from '@floegence/floe-webapp-core';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import { createFlowerLinkedContextNavigation } from './flower/linkedContextNavigation';
@@ -34,6 +34,46 @@ async function imageBlob(): Promise<Blob> {
 }
 
 describe('Flower inline media', () => {
+  it('opens a fenced HTML copy and routes links with the bound thread directory', async () => {
+    await page.viewport(1200, 900);
+    const html = '<h1>Daily brief</h1><a href="#economy">Economy</a><a href="https://example.com/news">News source</a><a href="./details.html">Related file</a><a href="javascript:alert(1)">Unsupported link</a><section id="economy" style="margin-top:1200px">Economy</section>';
+    const seed = thread({ thread_id: 'html-links', title: 'Daily brief', working_dir: '/workspace/news', messages: [{
+      id: 'reply', role: 'assistant', status: 'complete', turn_id: 'turn', created_at_ms: 2,
+      content: `\`\`\`html preview\n${html}\n\`\`\``,
+    }] });
+    const openMessageFile = vi.fn(async () => undefined);
+    const openMessageURL = vi.fn(async () => undefined);
+    const runtime = renderSurfaceWithAdapter({ ...adapter(true), listThreads: async () => [seed],
+      loadThread: async () => liveBootstrap(seed, 1), openMessageFile, openMessageURL,
+    });
+    runtime.style.height = '850px';
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="html-links"] button')));
+    runtime.querySelector<HTMLButtonElement>('[data-thread-id="html-links"] button')!.click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-media-kind="html"] iframe')));
+    const frame = runtime.querySelector('iframe');
+    const trigger = runtime.querySelector<HTMLButtonElement>('[data-chat-media-action="preview"]');
+    expect(trigger, 'Fenced HTML needs an independent preview action').toBeTruthy();
+    const clickLink = (commands as unknown as { clickHtmlPreviewLink: (selector: string, name: string) => Promise<{ url: string; scrollY: number }> }).clickHtmlPreviewLink;
+    const anchor = await clickLink('.chat-media-viewport iframe', 'Economy');
+    expect(anchor.url).toBe('about:srcdoc');
+    expect(anchor.scrollY).toBeGreaterThan(500);
+    await clickLink('.chat-media-viewport iframe', 'News source');
+    await vi.waitFor(() => expect(openMessageURL).toHaveBeenCalledWith(expect.objectContaining({ url: 'https://example.com/news' })));
+    await clickLink('.chat-media-viewport iframe', 'Related file');
+    await vi.waitFor(() => expect(openMessageFile).toHaveBeenCalledWith(expect.objectContaining({ path: '/workspace/news/details.html', action: 'preview' })));
+    await clickLink('.chat-media-viewport iframe', 'Unsupported link');
+    await vi.waitFor(() => expect(runtime.querySelector('[role="alert"]')?.textContent).toContain('protocol'));
+    expect(runtime.querySelector('iframe')).toBe(frame);
+    await userEvent.click(trigger!);
+    await waitFor(() => Boolean(document.querySelector('.chat-media-preview-window iframe')));
+    expect(runtime.querySelector('iframe')).toBe(frame);
+    await clickLink('.chat-media-preview-window iframe', 'Related file');
+    await vi.waitFor(() => expect(openMessageFile).toHaveBeenCalledTimes(2));
+    document.querySelector<HTMLButtonElement>('.chat-media-preview-window [data-floe-floating-window-control="close"]')!.click();
+    await waitFor(() => !document.querySelector('.chat-media-preview-window'));
+    expect(document.activeElement).toBe(trigger);
+  });
+
   it('retains ready media for thirty seconds of host updates and reloads for thread, directory, and adapter changes', async () => {
     await page.viewport(1200, 900);
     const blob = await imageBlob();

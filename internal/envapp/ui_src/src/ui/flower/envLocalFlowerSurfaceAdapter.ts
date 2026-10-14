@@ -86,6 +86,7 @@ type EnvLocalFlowerSurfaceAdapterOptions = Readonly<{
   onSettingsChanged?: () => void | Promise<unknown>;
   uploadAttachment?: FlowerSurfaceAdapter['uploadAttachment'];
   openMessageFile?: FlowerSurfaceAdapter['openMessageFile'];
+  openMessageURL?: FlowerSurfaceAdapter['openMessageURL'];
   openFileBrowser?: FlowerSurfaceAdapter['openFileBrowser'];
   openFilePreview?: FlowerSurfaceAdapter['openFilePreview'];
   openCanonicalReferenceTarget?: (target: FlowerCanonicalReferenceNavigationTarget) => Promise<void>;
@@ -912,6 +913,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
     missingThreadID: copy.missingThreadID,
     failedToCreateThread: copy.failedToCreateChat,
     ...(options.openMessageFile ? { openMessageFile: options.openMessageFile } : {}),
+    ...(options.openMessageURL ? { openMessageURL: options.openMessageURL } : {}),
     ...(options.openFileBrowser ? { openFileBrowser: options.openFileBrowser } : {}),
     ...(options.openFilePreview ? { openFilePreview: options.openFilePreview } : {}),
     ...(openCanonicalReference ? { openCanonicalReference } : {}),
