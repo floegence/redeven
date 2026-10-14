@@ -11025,13 +11025,11 @@ button.flower-attachment-preview-trigger:disabled {
   transition: background-color 120ms ease, border-color 120ms ease;
 }
 
-.flower-setup-action > span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flower-setup-action:only-child { width: fit-content; max-width: 100%; justify-self: center; }
+.flower-setup-action-label { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .flower-setup-action-icon { width: 1.125rem; height: 1.125rem; flex: none; color: var(--muted-foreground); }
 .flower-setup-action-arrow { width: 1rem; height: 1rem; flex: none; color: var(--muted-foreground); }
 .flower-setup-action:hover { border-color: color-mix(in srgb, var(--primary) 45%, var(--border)); background: color-mix(in srgb, var(--primary) 6%, var(--card)); }
-.flower-setup-action-primary { background: var(--primary); border-color: var(--primary); color: var(--primary-foreground); }
-.flower-setup-action-primary > svg { color: inherit; }
-.flower-setup-action-primary:hover { background: color-mix(in srgb, var(--primary) 90%, var(--background)); }
 
 .flower-setup-refresh {
   display: inline-flex;

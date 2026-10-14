@@ -1,5 +1,5 @@
 import { For, Show, type Component } from 'solid-js';
-import { ChevronRight, Globe, MonitorPointer, Refresh, Settings } from '@floegence/floe-webapp-core/icons';
+import { ChevronRight, Globe, MonitorPointer, Refresh } from '@floegence/floe-webapp-core/icons';
 import type { FlowerSurfaceAction } from '../contracts/flowerSurfaceContracts';
 import type { FlowerSurfaceCopy } from '../copy';
 import { FlowerIcon } from '../icons/FlowerIcon';
@@ -18,9 +18,9 @@ export const FlowerSetupWelcome: Component<{
     <p class="flower-setup-description">{props.copy.chat.configureProviderBeforeChat}</p>
     <div class="flower-setup-actions">
       <For each={props.actions} fallback={(
-        <button type="button" class="flower-setup-action flower-setup-action-primary" onClick={props.onOpenSettings}>
-          <Settings class="flower-setup-action-icon" aria-hidden="true" />
-          <span>{props.copy.chat.settingsLabel}</span>
+        <button type="button" class="flower-setup-action" onClick={props.onOpenSettings}>
+          <MonitorPointer class="flower-setup-action-icon" aria-hidden="true" />
+          <span class="flower-setup-action-label">{props.copy.chat.settingsLabel}</span>
           <ChevronRight class="flower-setup-action-arrow" aria-hidden="true" />
         </button>
       )}>
@@ -30,7 +30,7 @@ export const FlowerSetupWelcome: Component<{
             <Show when={item.id === 'local_settings'} fallback={<Globe class="flower-setup-action-icon" aria-hidden="true" />}>
               <MonitorPointer class="flower-setup-action-icon" aria-hidden="true" />
             </Show>
-            <span>{item.action.label}</span>
+            <span class="flower-setup-action-label">{item.action.label}</span>
             <ChevronRight class="flower-setup-action-arrow" aria-hidden="true" />
           </button>
         )}

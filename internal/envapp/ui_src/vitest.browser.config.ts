@@ -684,9 +684,11 @@ export default mergeConfig(viteConfig, defineConfig({
           const frame = await readinessFrame(page);
           const frameElement = await frame.frameElement();
           await frameElement.evaluate((element, nextSize) => {
+            (element.parentElement as HTMLElement).style.transform = 'none';
             Object.assign((element as HTMLElement).style, {
               position: 'fixed',
               inset: '0',
+              transform: 'none',
               width: `${nextSize.width}px`,
               height: `${nextSize.height}px`,
               zIndex: '2147483647',
