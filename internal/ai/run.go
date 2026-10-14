@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -191,9 +190,6 @@ type run struct {
 	webSearch                 config.AIWebSearchResolution
 	attachmentToolReadEnabled bool
 
-	collectedWebSources     map[string]SourceRef // url -> source
-	collectedWebSourceOrder []string
-
 	subagentDepth               int
 	allowSubagentDelegate       bool
 	toolAllowlist               map[string]struct{}
@@ -350,8 +346,6 @@ func newRun(opts runOptions) *run {
 		idleTimeout:                 opts.IdleTimeout,
 		executionAdmissions:         make(map[uint64]context.CancelCauseFunc),
 		lifecycleMinEmitGap:         600 * time.Millisecond,
-		collectedWebSources:         make(map[string]SourceRef),
-		collectedWebSourceOrder:     make([]string, 0, 8),
 		webSearch:                   opts.WebSearch,
 		subagentRuntime:             opts.SubagentRuntime,
 		currentThinkingBlockIndex:   -1,
@@ -1657,11 +1651,6 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		outcome.inputRequired = fltools.CloneInputRequest(target.inputRequired)
 	}
 
-	if toolName == "web.search" {
-		if parsed, ok := parseWebSearchResult(result); ok {
-			r.recordWebSearchSources(parsed)
-		}
-	}
 	r.debug("ai.run.tool.result",
 		"tool_id", toolID,
 		"tool_name", toolName,
@@ -1898,107 +1887,6 @@ func toAnySlice(value any) []any {
 		return out
 	default:
 		return nil
-	}
-}
-
-func parseWebSearchResult(result any) (websearch.SearchResult, bool) {
-	if result == nil {
-		return websearch.SearchResult{}, false
-	}
-	switch v := result.(type) {
-	case websearch.SearchResult:
-		return v, true
-	case *websearch.SearchResult:
-		if v == nil {
-			return websearch.SearchResult{}, false
-		}
-		return *v, true
-	default:
-		// Best-effort: tool outputs are persisted as JSON-compatible values.
-		b, err := json.Marshal(v)
-		if err != nil || len(b) == 0 {
-			return websearch.SearchResult{}, false
-		}
-		var out websearch.SearchResult
-		if err := json.Unmarshal(b, &out); err != nil {
-			return websearch.SearchResult{}, false
-		}
-		if strings.TrimSpace(out.Provider) == "" && strings.TrimSpace(out.Query) == "" && len(out.Results) == 0 && len(out.Sources) == 0 {
-			return websearch.SearchResult{}, false
-		}
-		return out, true
-	}
-}
-
-func normalizeWebURL(raw string) (string, bool) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return "", false
-	}
-	// Guard against accidental non-URL "sources" like command output.
-	if strings.ContainsAny(raw, " \t\r\n") {
-		return "", false
-	}
-	u, err := url.Parse(raw)
-	if err != nil {
-		return "", false
-	}
-	scheme := strings.ToLower(strings.TrimSpace(u.Scheme))
-	if scheme != "http" && scheme != "https" {
-		return "", false
-	}
-	if strings.TrimSpace(u.Host) == "" {
-		return "", false
-	}
-	return u.String(), true
-}
-
-func (r *run) addWebSource(title string, rawURL string) {
-	if r == nil {
-		return
-	}
-	url, ok := normalizeWebURL(rawURL)
-	if !ok {
-		return
-	}
-	title = strings.TrimSpace(title)
-	title = strings.ReplaceAll(title, "\n", " ")
-	title = strings.ReplaceAll(title, "\r", " ")
-	title = strings.TrimSpace(title)
-	if title == "" {
-		title = url
-	}
-
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	if r.collectedWebSources == nil {
-		r.collectedWebSources = make(map[string]SourceRef)
-	}
-	if existing, ok := r.collectedWebSources[url]; ok {
-		if existing.Title == "" || existing.Title == existing.URL {
-			if title != url {
-				existing.Title = title
-				r.collectedWebSources[url] = existing
-			}
-		}
-		return
-	}
-	r.collectedWebSources[url] = SourceRef{Title: title, URL: url}
-	r.collectedWebSourceOrder = append(r.collectedWebSourceOrder, url)
-}
-
-func (r *run) recordWebSearchSources(res websearch.SearchResult) {
-	if r == nil {
-		return
-	}
-	// Prefer explicit sources, fall back to results.
-	items := res.Sources
-	if len(items) == 0 {
-		items = res.Results
-	}
-	for _, item := range items {
-		r.addWebSource(item.Title, item.URL)
 	}
 }
 

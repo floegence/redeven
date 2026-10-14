@@ -1,5 +1,7 @@
 package ai
 
+import flprovider "github.com/floegence/floret/v7/provider"
+
 // persistedMessage and block helpers build transient Flower timeline JSON from
 // Floret snapshots. Redeven does not persist these message projections.
 
@@ -15,8 +17,9 @@ type persistedMessage struct {
 }
 
 type persistedMarkdownBlock struct {
-	Type    string `json:"type"` // "markdown"
-	Content string `json:"content"`
+	Sources []flprovider.Source `json:"sources,omitempty"`
+	Type    string              `json:"type"` // "markdown"
+	Content string              `json:"content"`
 }
 
 type persistedThinkingBlock struct {

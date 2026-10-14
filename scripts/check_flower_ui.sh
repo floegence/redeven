@@ -159,6 +159,7 @@ main() {
       internal/flower_ui/src/chat/flowerContextPresentation.test.ts \
       internal/flower_ui/src/chat/flowerChatContextModel.test.ts \
       internal/flower_ui/src/chat/markdown/streamingMarkdownModel.test.ts \
+      internal/flower_ui/src/chat/markdown/flowerCitations.test.ts \
       internal/flower_ui/src/FlowerSurface.activityRunningSheen.test.ts \
       internal/flower_ui/src/FlowerSurface.approvalCommand.test.ts \
       internal/flower_ui/src/FlowerSurface.modelStatusIndicator.test.ts \
@@ -185,6 +186,7 @@ main() {
         src/ui/FlowerSurface.turnProcess.browser.test.tsx \
         src/ui/FlowerSurface.thinkingDisclosure.browser.test.tsx \
         src/ui/FlowerMarkdown.streamingStability.browser.test.tsx \
+        src/ui/FlowerMarkdown.citations.browser.test.tsx \
         src/ui/FlowerMarkdown.highlight.browser.test.tsx \
         src/ui/FlowerStatusAndThreadMenu.browser.test.tsx \
         src/ui/FlowerCompactPresentation.browser.test.tsx \

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { FlowerRuntimeCurrentView, FlowerThreadSnapshot } from './contracts/flowerSurfaceContracts';
-import { buildFlowerTimelineEntries } from './flowerTimelineProjection';
+import { buildFlowerTimelineEntries, flowerMessageSignature } from './flowerTimelineProjection';
 import { applyFlowerRuntimeCurrentView } from './runtimeCurrentView';
 
 const summary = (): FlowerThreadSnapshot => ({
@@ -12,6 +12,23 @@ const summary = (): FlowerThreadSnapshot => ({
 });
 
 describe('applyFlowerRuntimeCurrentView', () => {
+  it('keeps Unicode citation positions relative to exact text and invalidates late metadata', () => {
+    const text = ' 你好😀 \uE200cite\uE202turn1view5\uE201 ';
+    const sources = [{ title: 'Reference', url: 'https://example.com/docs', start_index: 5, end_index: [...text].length - 1 }];
+    const view: FlowerRuntimeCurrentView = {
+      thread_id: 'thread-a', view_version: 1, activity: 'idle', items: [
+        { id: 'answer', kind: 'assistant', text, turn_id: 'turn-a', run_id: 'run-a', ordinal: 1 },
+      ],
+    };
+    const before = applyFlowerRuntimeCurrentView(summary(), view);
+    const after = applyFlowerRuntimeCurrentView(before, { ...view, view_version: 2, items: [{ ...view.items![0], sources }] });
+    expect(after.messages[0].content).toBe(text);
+    expect(after.messages[0].sources).toEqual(sources);
+    expect(flowerMessageSignature(after.messages[0])).not.toBe(flowerMessageSignature(before.messages[0]));
+    const entry = buildFlowerTimelineEntries(after)[0];
+    expect(entry.type).toBe('message');
+    if (entry.type === 'message') expect(entry.blocks[0]).toMatchObject({ type: 'content', content: text, sources });
+  });
   it('preserves safe context diagnostics across a current refresh and clears them after retry', () => {
     const failed = applyFlowerRuntimeCurrentView(summary(), {
       thread_id: 'thread-a', view_version: 8, activity: 'idle', turn_id: 'turn-a', run_id: 'run-a',

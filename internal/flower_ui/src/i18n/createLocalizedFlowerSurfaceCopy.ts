@@ -376,6 +376,8 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
       messageErrorFallback: t(i18n, k('chat.messageErrorFallback')),
       copyCode: t(i18n, k('chat.copyCode')),
       codeCopied: t(i18n, k('chat.codeCopied')),
+      citationSources: t(i18n, k('chat.citationSources')),
+      citationUnavailable: t(i18n, k('chat.citationUnavailable')),
       showFullCommand: t(i18n, k('chat.showFullCommand')),
       hideFullCommand: t(i18n, k('chat.hideFullCommand')),
       copyCommand: t(i18n, k('chat.copyCommand')),

@@ -669,7 +669,9 @@
         "updated": "Actualización",
         "captured": "Captura",
         "runtime": "Entorno de ejecución"
-      }
+      },
+      "citationSources": "Fuentes",
+      "citationUnavailable": "Fuente no disponible"
     },
     "threadList": {
       "title": "Conversaciones",

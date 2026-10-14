@@ -1,3 +1,4 @@
+import { flowerMessageTextForCopy } from './chat/markdown/flowerCitations';
 import { flowerDraftReferenceIdentity, flowerDraftReferenceContextItem, flowerDraftReferenceDescription } from './composer/flowerDraftReferenceModel';
 import type { ThreadReferenceSnapshot } from './contextActionWire';
 import { withFlowerModelDirectory } from './modelDirectory';
@@ -6772,7 +6773,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       ))
       .filter(Boolean)
       .join('\n\n');
-    return trimString(blockText || message.content);
+    const text = blockText || message.content;
+    return trimString(message.role === 'assistant' ? flowerMessageTextForCopy(text) : text);
   };
 
   const messageCopyActionKey = (message: FlowerChatMessage): string => `message:${message.id}:copy`;
@@ -9857,6 +9859,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       >
         <FlowerMarkdownBlock
           content={block().content}
+          sources={message().role === 'assistant' ? block().sources : undefined}
+          citationLabels={message().role === 'assistant' ? { sources: copy().chat.citationSources, unavailable: copy().chat.citationUnavailable } : undefined}
           streaming={streaming()}
           mediaLabels={message().role === 'assistant' ? copy().chat.media : undefined}
           resolveMedia={resolveMessageMedia()}

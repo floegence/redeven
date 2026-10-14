@@ -669,7 +669,9 @@
         "updated": "更新时间",
         "captured": "捕获时间",
         "runtime": "运行时"
-      }
+      },
+      "citationSources": "来源",
+      "citationUnavailable": "来源不可用"
     },
     "threadList": {
       "title": "对话",

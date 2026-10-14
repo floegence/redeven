@@ -115,15 +115,15 @@ func typedThreadItemMessage(threadID string, item flruntime.ThreadItem) (json.Ra
 	default:
 		return nil, false, nil
 	}
-	text := strings.TrimSpace(item.Text)
-	if text == "" {
+	text := item.Text
+	if strings.TrimSpace(text) == "" {
 		return nil, false, nil
 	}
 	status := "complete"
 	if item.Live {
 		status = "streaming"
 	}
-	blocks := []any{persistedMarkdownBlock{Type: "markdown", Content: text}}
+	blocks := []any{persistedMarkdownBlock{Type: "markdown", Content: text, Sources: item.Sources}}
 	content := text
 	activeCursor := item.Live
 	if item.Kind == flruntime.ThreadItemThinking {

@@ -247,6 +247,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Asynchronous layout stability](ui/asynchronous-layout-stability.md) - Keep controls, retained lists, feedback, and media stationary through asynchronous state changes.
 - [Shared interface scale](ui/interface-scale.md) - Align desktop text, controls, and spacing while preserving touch targets and content-viewer scale.
 - [Flower approval surface](ui/flower-approval-surface.md) - Review bounded approval queues, inspect commands, and decide exact one-time batches.
+- [Flower citations](ui/flower-citations.md) - Render canonical assistant sources safely and keep private provider markers out of prose and copied messages.
 - [Flower subagent detail presentation](ui/flower-subagent-detail.md) - Render parent-owned membership and read-only child execution detail.
 
 ## AI

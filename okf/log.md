@@ -7,6 +7,12 @@
   through the real UI/HTTP adapter and backend authorization without weakening
   namespace or runtime permissions or rewriting frozen retries.
 
+## 2026-10-14: Canonical assistant citations
+
+- Adopt published Floret v7.32.0 canonical assistant citations. Document
+  [citation presentation](ui/flower-citations.md), exact Unicode ranges, safe
+  links, historical unavailable sources, and removal of host source collection.
+
 ## 2026-10-13
 
 - Adopt Floret v7.31.1 canonical thread references and schema 15. Add shared

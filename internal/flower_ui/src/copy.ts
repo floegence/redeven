@@ -575,6 +575,8 @@ export type FlowerSurfaceCopy = Readonly<{
     messageErrorFallback: string;
     copyCode: string;
     codeCopied: string;
+    citationSources: string;
+    citationUnavailable: string;
     showFullCommand: string;
     hideFullCommand: string;
     copyCommand: string;
@@ -958,6 +960,8 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     messageErrorFallback: 'This message failed before Flower produced visible text.',
     copyCode: 'Copy code',
     codeCopied: 'Copied',
+    citationSources: 'Sources',
+    citationUnavailable: 'Source unavailable',
     showFullCommand: 'Show full command',
     hideFullCommand: 'Hide full command',
     copyCommand: 'Copy command',
