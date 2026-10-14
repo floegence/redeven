@@ -32,11 +32,13 @@ invalidate Markdown HTML without remounting stable code controls.
 
 # Boundaries
 
-Marked continues to own GFM/CommonMark syntax. Code spans, HTML, links, images
-and escaped literal marker examples remain unchanged. The message
+The published Floe Webapp v0.86.31 `createMarkdownParser` owns GFM syntax with
+CJK-aware emphasis boundaries for completed and streamed text. Code spans, HTML,
+links, images and escaped literal marker examples retain their existing behavior. The message
 copy action removes prose markers while code-block copy preserves literal code.
-Flower does not repair malformed emphasis or alter ordinary Markdown/media
-semantics. Citation copy is localized in every supported Env App and Desktop
+CJK labels and quoted phrases may touch surrounding prose without added spaces.
+Whitespace inside emphasis delimiters and unmatched delimiters remain literal.
+Display parsing never writes back to canonical messages or provider cache input. Citation copy is localized in every supported Env App and Desktop
 catalog. New messages preserve complete sources; old records lacking sources
 remain readable without rewriting historical data.
 
@@ -75,5 +77,6 @@ enable this assistant-specific presentation.
 - [Current-view projection regression](../../internal/flower_ui/src/runtimeCurrentView.test.ts)
 - [History mapper regression](../../internal/flower_ui/src/flowerLiveMapper.test.ts)
 - [Citation and Markdown fixtures](../../internal/flower_ui/src/chat/markdown/flowerCitations.test.ts)
+- [CJK emphasis, literal code and stable streaming controls](../../internal/envapp/ui_src/src/ui/FlowerMarkdown.emphasis.browser.test.tsx)
 - [Chromium streaming and layout evidence](../../internal/envapp/ui_src/src/ui/FlowerMarkdown.citations.browser.test.tsx)
 - [Flower UI checks](../../scripts/check_flower_ui.sh)

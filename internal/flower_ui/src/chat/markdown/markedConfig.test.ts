@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { Marked } from 'marked';
+import type { Marked } from 'marked';
+import { createMarkdownParser } from '@floegence/floe-webapp-core/markdown';
 
 import { createFlowerMarkdownRenderer } from './markedConfig';
 
 function createMarked(): Marked<string, string> {
-  const marked = new Marked<string, string>({
+  const marked = createMarkdownParser({
     gfm: true,
     breaks: false,
     pedantic: false,
@@ -14,6 +15,31 @@ function createMarked(): Marked<string, string> {
 }
 
 describe('createFlowerMarkdownRenderer', () => {
+  it('renders report labels and quoted CJK emphasis', () => {
+    const content = '**为什么值得关注：**这不是单纯增加模型支持。\n\n**注意：**该版本汇总此前补丁周期的改动。\n\n这是**“调用工具”**的例子。';
+    const html = createMarked().parse(content);
+    expect(html).toContain('<strong>为什么值得关注：</strong>这不是单纯增加模型支持。');
+    expect(html).toContain('<strong>注意：</strong>该版本汇总此前补丁周期的改动。');
+    expect(html).toContain('这是<strong>“调用工具”</strong>的例子。');
+  });
+
+  it('preserves safe nested links and code literals inside CJK text', () => {
+    const html = createMarked().parse('这是**“[来源](https://example.com)”**的例子。\n\n**“[危险](javascript:alert(1))”**继续。\n\n`**注意：**正文`\n\n\\*\\*注意：\\*\\*正文');
+    expect(html).toContain('这是<strong>“<a href="https://example.com"');
+    expect(html).not.toContain('javascript:');
+    expect(html).toContain('<strong>“危险”</strong>继续。');
+    expect(html).toContain('<code class="flower-chat-md-inline-code">**注意：**正文</code>');
+    expect(html).toContain('<p>**注意：**正文</p>');
+  });
+
+  it('keeps invalid whitespace delimiters and existing strikethrough semantics', () => {
+    const html = createMarked().parse('**注意： **正文\n\n~~注意： ~~正文\n\n~~deleted~~');
+    expect(html).toContain('<p>**注意： **正文</p>');
+    expect(html).toContain('<p>~~注意： ~~正文</p>');
+    expect(html).toContain('<del>deleted</del>');
+    expect(html).not.toContain('<strong>');
+  });
+
   it('preserves the first fence language for highlighting, including aliases and escaped input', () => {
     for (const [info, language] of [['Python title=weather.py', 'python'], ['c++', 'c++'], ['c#', 'c#'], ['ts {1,2}', 'ts']]) {
       expect(createMarked().parse('```' + info + '\ncode\n```')).toContain(`data-flower-code-language="${language}"`);
@@ -23,7 +49,7 @@ describe('createFlowerMarkdownRenderer', () => {
     expect(escaped).not.toContain(' onmouseover=');
   });
   it('opts assistant media into inert placeholders and leaves ordinary HTML code alone', () => {
-    const marked = new Marked<string, string>({ gfm: true });
+    const marked = createMarkdownParser({ gfm: true, breaks: false });
     marked.use({ renderer: createFlowerMarkdownRenderer({ media: true }) });
     for (const input of ['![Screenshot](computer://browser/' + 'a'.repeat(64) + ')', '![Clip](/project/demo.mp4)', '[Report](/project/report.html)', '```html preview\n<button>Try me</button>\n```']) {
       const html = marked.parse(input);

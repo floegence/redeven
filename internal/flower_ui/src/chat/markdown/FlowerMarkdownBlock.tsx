@@ -1,7 +1,7 @@
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from 'solid-js';
 import type { Accessor, Component } from 'solid-js';
 import { render } from 'solid-js/web';
-import { Marked } from 'marked';
+import { createMarkdownParser } from '@floegence/floe-webapp-core/markdown';
 import { cn } from '@floegence/floe-webapp-core';
 import { Check, Copy } from '@floegence/floe-webapp-core/icons';
 import { enhanceCodeBlock } from '@floegence/floe-webapp-core/code-highlight';
@@ -33,7 +33,7 @@ export interface FlowerMarkdownBlockProps {
 }
 
 export const FlowerMarkdownBlock: Component<FlowerMarkdownBlockProps> = (props) => {
-  const marked = new Marked<string, string>({
+  const marked = createMarkdownParser({
     gfm: true,
     breaks: false,
     pedantic: false,

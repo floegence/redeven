@@ -1457,3 +1457,10 @@ Adopt published Floe Webapp v0.86.28 in Desktop and Env App for distinct inline
 HTML expansion controls and host file-preview actions. Local HTML uses the
 existing file-preview window and containing-folder navigation; browser acceptance
 checks the published components and preserves the original inline iframe.
+
+## 2026-10-14 — Flower CJK Markdown emphasis
+
+Adopt published Floe Webapp v0.86.31 and its shared Markdown parser for CJK
+emphasis adjoining punctuation and prose. Preserve canonical message text,
+provider cache input, citations, code literals and stable streaming controls.
+See [Flower citations and Markdown presentation](ui/flower-citations.md).
