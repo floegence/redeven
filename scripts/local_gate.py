@@ -234,6 +234,10 @@ def run(root, manifest, state, state_path, args):
     extra_env = {"LOCAL_GATE_ACTIVE": "1", "LOCAL_GATE_TREE": tree, "LOCAL_GATE_BASE": args.base or "", "LOCAL_GATE_TIP": args.tip or ""}
     for group in ordered:
         name = group["id"]
+        state["cursors"][profile] = name
+        state["cursor"] = name
+        state["rounds"].pop(profile, None)
+        atomic_write(state_path, state)
         if source_tree(root, args.mode, args.tip) != tree:
             raise RuntimeError("source changed during validation; the round cannot pass")
         current = components(root, group, manifest, tree, args, {})
