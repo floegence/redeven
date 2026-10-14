@@ -129,6 +129,14 @@ Second-pair idle CPU is concentrated in DRM Python capture (43.15%) and its
 GPU converter (26.34%). The half-second capture grace overlaps inputs spaced
 420 ms apart; a separately qualified upstream cadence change is still required.
 
+# Boundaries
+
+These observations apply only to the recorded hardware, published candidate
+and measured paths. Diagnostic runs, incomplete pairs and missing samples
+do not establish RustDesk parity or support unmeasured quality, recovery
+or resource claims. The acceptance results and unresolved cases above remain
+authoritative.
+
 # Evidence
 
 - Task-owned `redeven-udesk26-rustdesk-baseline/published-v42-paired`: raw pixels, inputs, source events, TCP counters, failed preparations and combined `resources-three-rounds.json` diagnostic output.

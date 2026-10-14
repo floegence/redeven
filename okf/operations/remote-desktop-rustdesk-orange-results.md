@@ -62,6 +62,14 @@ Raw captures, source inputs, process identities and failed attempts live in the
 task's `v37-paired-20261012` evidence set; it is an interim record, not completed
 three-round acceptance.
 
+# Boundaries
+
+These observations apply only to the recorded hardware, published candidate
+and measured paths. Diagnostic runs, incomplete pairs and missing samples
+do not establish RustDesk parity or support unmeasured quality, recovery
+or resource claims. The acceptance results and unresolved cases above remain
+authoritative.
+
 # Evidence
 
 - [Official RustDesk 1.5.0 release](https://github.com/rustdesk/rustdesk/releases/tag/1.5.0): baseline artifacts.
