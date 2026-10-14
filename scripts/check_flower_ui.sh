@@ -211,6 +211,7 @@ main() {
         src/ui/FlowerSurface.settings.browser.test.tsx \
         src/ui/FlowerSettingsSurface.presentation.browser.test.tsx \
         src/ui/FlowerSurface.subagentDisclosure.browser.test.tsx \
+        src/ui/FlowerSurface.activityTiming.browser.test.tsx \
         src/ui/FlowerSurface.subagentAppearance.browser.test.tsx \
         src/ui/FlowerSurface.reasoningSelection.browser.test.tsx \
         src/ui/FlowerSurface.terminalActivity.browser.test.tsx \
