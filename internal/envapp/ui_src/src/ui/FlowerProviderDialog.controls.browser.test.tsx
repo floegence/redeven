@@ -84,7 +84,7 @@ for (const surface of ['desktop', 'env'] as const) {
     expect(actions.getBoundingClientRect().height).toBeLessThanOrEqual(48);
     const primary = account.querySelector<HTMLButtonElement>('.flower-provider-account-primary')!;
     if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: dialog, path: `__screenshots__/flower-connected-${surface}-notice-zh-CN.png` });
-    confirm.focus(); confirm.click();
+    confirm.focus(); await userEvent.click(confirm);
     expect(document.activeElement).toBe(primary);
     const viewport = dialog.querySelector<HTMLElement>('.flower-provider-account-notice')!;
     expect(viewport.getAttribute('aria-hidden')).toBe('true');
@@ -163,7 +163,7 @@ for (const surface of ['desktop', 'env'] as const) {
     await screenshot('preparing');
     start({ id: 'attempt', state: 'waiting' });
     await expect.poll(() => panel.dataset.state).toBe('waiting');
-    expect(panel.querySelector('.flower-provider-account-description')?.textContent).toBe(localized.chatGPT.waitingDescription);
+    expect(panel.querySelector('.flower-provider-auth-progress > [aria-hidden="false"] .flower-provider-account-description')?.textContent).toBe(localized.chatGPT.waitingDescription);
     await screenshot('waiting');
     await expect.poll(() => typeof status).toBe('function');
     const firstStatus = status;

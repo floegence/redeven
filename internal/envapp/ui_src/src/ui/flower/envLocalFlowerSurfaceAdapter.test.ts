@@ -160,6 +160,9 @@ it('keeps ChatGPT account authentication unavailable in a remote Desktop session
     reason: 'local_host_required',
   });
   expect(snapshot.chatgpt_accounts).toBeUndefined();
+  expect(snapshot.auth_capabilities?.openai_chatgpt.binding_id).toBeUndefined();
+  expect(adapter.chatGPTAuth).toBeUndefined();
+  expect(adapter.loadChatGPTAccounts).toBeUndefined();
   expect(snapshot.model_profile?.providers[0]).toMatchObject({ auth_method: 'chatgpt' });
 });
 
@@ -2282,4 +2285,15 @@ it('maps a disabled provider without replacing its saved default', () => {
   const snapshot = mapEnvFlowerSettings({ ai: { current_model_id: 'local/agent', providers: [{ id: 'local', type: 'openai_compatible', enabled: false, base_url: 'http://localhost:1234/v1', models: [{ model_name: 'agent' }] }] } } as AgentSettingsResponse);
   expect(snapshot.model_profile?.providers[0].enabled).toBe(false);
   expect(snapshot.model_profile?.current_model_id).toBe('local/agent');
+});
+
+it('preserves backend-verified browser admission without requiring a Desktop bridge or a hostname heuristic', async () => {
+  fetchMock.mockImplementation(async (url: string) => {
+    if (url.endsWith('/settings')) return jsonResponse({ ai: { providers: [] }, auth_capabilities: { openai_chatgpt: { available: true, binding_id: 'native-browser-handoff' } } });
+    if (url.endsWith('/accounts')) return jsonResponse({ accounts: {}, saved_accounts: [] });
+    throw new Error(`Unexpected request: ${url}`);
+  });
+  const adapter = createEnvLocalFlowerSurfaceAdapter({ envPublicID: 'local', envLabel: 'Local', rpc: { ai: {} } as any });
+  expect((await adapter.loadSettings()).auth_capabilities?.openai_chatgpt).toEqual({ available: true, binding_id: 'native-browser-handoff' });
+  expect(await adapter.loadChatGPTAccounts?.()).toEqual({ accounts: {}, saved_accounts: [] });
 });

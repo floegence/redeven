@@ -3,7 +3,7 @@ type: Authentication Contract
 title: ChatGPT account lifecycle
 description: Persist verified local sign-ins, reuse issued registrations and complete renewal, cancellation and logout independently of connection editing.
 tags: [ai, flower, authentication, openai, runtime, security]
-timestamp: 2026-10-13T00:00:00Z
+timestamp: 2026-10-14T00:00:00Z
 ---
 
 # Summary
@@ -64,6 +64,9 @@ are labeled distinctly in the picker. Choosing a saved registration does not
 start OAuth; a signed-out selection reauthorizes with its retained client ID.
 Adding another account explicitly creates a new registration. Saved unbound
 accounts support the same local sign-out, acknowledgement and retry actions.
+The shared [provider configuration UI](../ui/flower-provider-configuration.md)
+keeps unbound sign-ins visible outside the editor and restores configuration
+without creating a second account or an implicit provider binding.
 
 The protected secrets file migrates contiguously from version 0 to 1 to 2 to 3,
 retaining API keys and verified registration; future schemas fail without mutation.

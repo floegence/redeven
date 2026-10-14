@@ -2,16 +2,12 @@ import '../index.css';
 import './flower-feature.css';
 
 import { FloeProvider } from '@floegence/floe-webapp-core';
-import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, expect, it, vi } from 'vitest';
 import { page, userEvent } from 'vitest/browser';
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../../../../flower_ui/src/copy';
 import { FlowerProviderDialog } from '../../../../flower_ui/src/settings/FlowerProviderDialog';
-import { flowerProviderModelChoices, setFlowerModelsEnabled } from '../../../../flower_ui/src/settings/modelSelection';
 import type { FlowerProviderDraft, FlowerModelCatalogDiscovery } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
-import { AIProviderDialog } from './pages/settings/AIProviderDialog';
-import type { AIProviderRow, AIProviderModelPreset } from './pages/settings/types';
 
 let dispose: (() => void) | undefined;
 let host: HTMLDivElement;
@@ -69,56 +65,6 @@ for (const [count, width, initiallySelected] of [[4, 1280, false], [40, 1280, fa
       expect(modelRows.map(row => row.getBoundingClientRect().height), 'selection must not reflow any model row').toEqual(rowHeights);
       expect(panel.scrollWidth).toBe(panel.clientWidth);
     }
-  });
-}
-
-for (const width of [1280, 390]) {
-  it(`preserves environment dialog scroll and focus through draft replacement at ${width}px`, async () => {
-    await page.viewport(width, 900);
-    createHost();
-    const [draft, setDraft] = createSignal(provider(40));
-    const change = (name: string, enabled: boolean) => setDraft((current) => setFlowerModelsEnabled(current,
-      flowerProviderModelChoices(current).filter((model) => model.model_name === name), enabled));
-    dispose = render(() => <FloeProvider><AIProviderDialog open mode="edit" title="Edit provider" provider={draft() as AIProviderRow}
-      canInteract canAdmin aiSaving={false} keySet={false} keyDraft="" keySaving={false} webSearchKeySet={false} webSearchKeyDraft="" webSearchKeySaving={false}
-      recommendedModels={flowerProviderModelChoices(draft()) as readonly AIProviderModelPreset[]} onOpenChange={vi.fn()} onConfirm={vi.fn()} onClearModels={vi.fn()}
-      onChangeName={vi.fn()} onChangeType={vi.fn()} onChangeBaseURL={vi.fn()} onChangeKeyDraft={vi.fn()} onChangeWebSearchMode={vi.fn()}
-      onChangeWebSearchKeyDraft={vi.fn()} onApplyAllPresets={vi.fn()} onAddSelectedPreset={(name) => change(name!, true)}
-      onRemoveRecommendedPreset={(name) => change(name, false)} onAddCustomModel={vi.fn()} onChangeModelName={vi.fn()}
-      onChangeModelNumber={vi.fn()} onChangeModelImageInput={vi.fn()} onRemoveModel={vi.fn()} /></FloeProvider>, host);
-    await settledDialog();
-    await userEvent.click(document.querySelector<HTMLButtonElement>('[data-provider-dialog-step="models"]')!);
-    await settledDialog();
-    await frame();
-    const row = [...document.querySelectorAll<HTMLElement>('.flower-provider-model-row')].find((node) => node.textContent?.startsWith('agent-12'))!;
-    const button = row.querySelector<HTMLButtonElement>('button')!;
-    button.scrollIntoView({ block: 'center' });
-    await frame();
-    let scroller = row.parentElement!;
-    while (scroller.scrollHeight <= scroller.clientHeight || !/auto|scroll/.test(getComputedStyle(scroller).overflowY)) scroller = scroller.parentElement!;
-    const initialTop = scroller.scrollTop;
-    const rowHeight = row.getBoundingClientRect().height;
-    const buttonWidth = button.getBoundingClientRect().width;
-    expect(initialTop).toBeGreaterThan(0);
-    for (let index = 0; index < 4; index++) {
-      if (index < 2) await userEvent.click(button);
-      else await userEvent.keyboard(' ');
-      await frame();
-      expect.soft(scroller.scrollTop).toBeCloseTo(initialTop, 0);
-      expect.soft(row.getBoundingClientRect().height).toBe(rowHeight);
-      expect.soft(button.getBoundingClientRect().width).toBe(buttonWidth);
-      expect(button.isConnected).toBe(true);
-      expect.soft(document.activeElement === button).toBe(true);
-      expect(draft().models.some((model) => model.model_name === 'agent-12')).toBe(index % 2 === 0);
-    }
-    setDraft(current => ({ ...current, catalog_models: current.catalog_models!.filter(model => model.model_name !== 'agent-1')
-      .map(model => model.model_name === 'agent-12' ? { ...model, display_name: 'Updated model', quantization: 'Q4_K_M', unavailable: true } : { ...model }) }));
-    await frame();
-    expect(button.isConnected).toBe(true);
-    expect(row.textContent).toContain('Updated model');
-    expect(row.textContent).toContain('Q4_K_M');
-    expect(row.textContent).not.toContain('Q8_0');
-    expect(button.disabled).toBe(true);
   });
 }
 

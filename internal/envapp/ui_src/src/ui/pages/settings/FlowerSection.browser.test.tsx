@@ -21,9 +21,13 @@ async function mount(width = 1000, canAdmin = true, locale: RedevenLocale = 'en-
   ai?: AIConfig;
   directory?: Promise<unknown>;
   enterFromOtherPage?: boolean;
+  local?: boolean;
+  accounts?: import('../../../../../../flower_ui/src/contracts/flowerSurfaceContracts').FlowerChatGPTAccount[];
 } = {}) {
   await page.viewport(1280, 960);
   writeStoredLanguagePreference(locale);
+  const [admin, setAdmin] = createSignal(canAdmin);
+  let registry = options.accounts ?? [];
   const [settings, setSettings] = createSignal<AgentSettingsResponse>({
     config_path: '/config.json', connection: { access_point_origin: '', environment_id: 'environment', agent_instance_id: 'agent', direct: { artifact_provisioned: false, expires_at_unix_s: 0 } },
     logging: { log_format: 'plain', log_level: 'info' }, codespaces: { code_server_port_min: 0, code_server_port_max: 0 }, permission_policy: null,
@@ -34,6 +38,7 @@ async function mount(width = 1000, canAdmin = true, locale: RedevenLocale = 'en-
       ...(account ? [{ id: 'account', type: 'openai' as const, auth_method: 'chatgpt' as const, account_id: 'saved-account', models: [{ model_name: 'gpt-5.5', context_window: 400000 }] }] : []),
     ] },
     ai_secrets: { provider_api_key_set: { deepseek: true }, web_search_provider_api_key_set: brave ? { deepseek: true } : {} },
+    auth_capabilities: { openai_chatgpt: { available: options.local === true, binding_id: options.local ? 'verified-local-channel' : undefined } },
     chatgpt_accounts: { account: { account_id: 'saved-account', email: 'person@example.com', state: 'ready', welcome_acknowledged: true } },
   });
   const initialAI = options.ai;
@@ -42,6 +47,14 @@ async function mount(width = 1000, canAdmin = true, locale: RedevenLocale = 'en-
   let failNextSave = false;
   const bundles: Record<string, unknown>[] = [];
   request.mockImplementation(async (url: string, init?: RequestInit) => {
+    if (url.endsWith('/chatgpt/accounts')) return { accounts: {}, saved_accounts: registry };
+    if (url.endsWith('/chatgpt/start')) return { id: 'new-login', state: 'waiting' };
+    if (url.endsWith('/chatgpt/status')) {
+      registry = [{ account_id: 'new-account', email: 'new@example.com', state: 'ready', welcome_acknowledged: true }];
+      return { id: 'new-login', state: 'ready', account: registry[0] };
+    }
+    if (url.endsWith('/chatgpt/cancel')) return {};
+    if (url.endsWith('/ai/model_catalog')) return { models: [{ model_name: 'gpt-6.1-sol', context_window: 128000 }] };
     if (url.endsWith('/ai/models')) return options.directory ?? { models: [] };
     if (url.endsWith('/current_model')) {
       const body = JSON.parse(String(init?.body));
@@ -57,7 +70,7 @@ async function mount(width = 1000, canAdmin = true, locale: RedevenLocale = 'en-
   });
   const ready = { state: 'ready', reason_code: '', retryable: false, safe_to_retry: false };
   const ctx = {
-    settings, mutateSettings: setSettings, canInteract: () => true, canAdmin: () => canAdmin,
+    settings, mutateSettings: setSettings, canInteract: () => true, canAdmin: admin,
     notify: { error: vi.fn(), success: vi.fn() },
     env: { env_id: () => 'environment', env: () => null, bumpSettingsSeq: vi.fn(), aiReadinessController: {
       snapshot: () => ready, loading: () => false, retryPending: () => false, busyStartedAt: () => null,
@@ -74,7 +87,7 @@ async function mount(width = 1000, canAdmin = true, locale: RedevenLocale = 'en-
     </ErrorBoundary>
   </EnvSettingsPageCtx.Provider></I18nProvider></FloeProvider>, host);
   if (!options.enterFromOtherPage) await expect.poll(() => host.querySelector('.flower-settings-model-name')?.textContent).toBe('DeepSeek V4 Flash Vision Exp');
-  return { settings, bundles, failSave: () => { failNextSave = true; } };
+  return { settings, bundles, setAdmin, setOpen, failSave: () => { failNextSave = true; } };
 }
 
 for (const catalogFailure of [false, true]) {
@@ -198,12 +211,10 @@ it('uses one searchable model list in the polished global Env provider dialog', 
     : handleRequests(url, init));
   await userEvent.click(host.querySelector<HTMLButtonElement>('.flower-settings-provider-actions button:not([role="switch"])')!);
   await expect.element(page.getByRole('dialog')).toBeVisible();
-  const dialog = document.querySelector<HTMLElement>('.redeven-provider-dialog')!;
-  await userEvent.click(dialog.querySelector<HTMLButtonElement>('[data-provider-dialog-step="connection"]')!);
+  const dialog = document.querySelector<HTMLElement>('.flower-provider-dialog')!;
   await expect.poll(() => dialog.getAnimations({ subtree: true }).every(animation => animation.playState !== 'running')).toBe(true);
   expect(dialog.scrollWidth).toBe(dialog.clientWidth);
   if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: dialog, path: '__screenshots__/flower-env-provider-connection.png' });
-  await userEvent.click(dialog.querySelector<HTMLButtonElement>('[data-provider-dialog-step="models"]')!);
   const search = page.getByRole('textbox', { name: '搜索模型', exact: true });
   await userEvent.fill(search, 'deepseek-v4-flash-vision-exp');
   await expect.poll(() => dialog.querySelectorAll('.flower-provider-model-row').length).toBe(1);
@@ -220,9 +231,8 @@ it('shows a saved key as dots and preserves it when a replacement draft is clear
   const openConnection = async () => {
     await userEvent.click(host.querySelector<HTMLButtonElement>('.flower-settings-provider-actions button:not([role="switch"])')!);
     await expect.element(page.getByRole('dialog')).toBeVisible();
-    const dialog = document.querySelector<HTMLElement>('.redeven-provider-dialog')!;
-    await userEvent.click(dialog.querySelector<HTMLButtonElement>('[data-provider-dialog-step="connection"]')!);
-    await expect.poll(() => dialog.getAnimations({ subtree: true }).every(animation => animation.playState !== 'running')).toBe(true);
+    const dialog = document.querySelector<HTMLElement>('.flower-provider-dialog')!;
+      await expect.poll(() => dialog.getAnimations({ subtree: true }).every(animation => animation.playState !== 'running')).toBe(true);
     return dialog;
   };
   const dialog = await openConnection();
@@ -237,7 +247,7 @@ it('shows a saved key as dots and preserves it when a replacement draft is clear
     expect(key.getAttribute('aria-description')).toBe('保存后将替换现有密钥');
     expect(key.matches(':placeholder-shown')).toBe(false);
     await userEvent.fill(key, '');
-    expect(key.getAttribute('aria-description')).toBe('保存的密钥将保留');
+    expect(key.getAttribute('aria-description')).toBe('将保留存储的密钥');
     expect(key.matches(':placeholder-shown')).toBe(true);
   }
   if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: dialog, path: '__screenshots__/flower-saved-key-global-env.png' });
@@ -245,7 +255,7 @@ it('shows a saved key as dots and preserves it when a replacement draft is clear
   await expect.poll(() => bundles.length).toBe(1);
   expect(bundles[0].provider_api_key_patches).toEqual([]);
   expect(bundles[0].web_search_provider_key_patches).toEqual([]);
-  await expect.poll(() => document.querySelector('.redeven-provider-dialog')).toBeNull();
+  await expect.poll(() => document.querySelector('.flower-provider-dialog')).toBeNull();
   const reopened = await openConnection();
   const replacements = [...reopened.querySelectorAll<HTMLInputElement>('input[type=password]')];
   await userEvent.fill(replacements[0], 'replacement-api-key');
@@ -255,4 +265,46 @@ it('shows a saved key as dots and preserves it when a replacement draft is clear
   await expect.poll(() => bundles.length).toBe(2);
   expect(bundles[1].provider_api_key_patches).toEqual([{ provider_id: 'deepseek', api_key: 'replacement-api-key' }]);
   expect(bundles[1].web_search_provider_key_patches).toEqual([{ provider_id: 'deepseek', api_key: 'replacement-brave-key' }]);
+});
+
+it('offers ChatGPT directly from Env settings and recovers login after discard, failed provider save and page reentry', async () => {
+  const { bundles, failSave, setOpen } = await mount(1000, true, 'en-US', false, false, { local: true });
+  await userEvent.click(page.getByRole('button', { name: 'Add provider', exact: true }));
+  await userEvent.click(document.querySelector<HTMLButtonElement>('[aria-controls=flower-provider-type-openai]')!);
+  await expect.element(page.getByRole('button', { name: 'ChatGPT account', exact: true })).toBeEnabled();
+  await userEvent.click(page.getByRole('button', { name: 'Continue with ChatGPT', exact: true }));
+  await expect.element(page.getByText('new@example.com', { exact: true }).last()).toBeVisible();
+  await userEvent.click(page.getByRole('button', { name: 'Discard', exact: true }));
+  await expect.element(page.getByText('new@example.com', { exact: true }).last()).toBeVisible();
+  expect(bundles).toHaveLength(0);
+  setOpen(false); setOpen(true);
+  await expect.element(page.getByText('new@example.com', { exact: true }).last()).toBeVisible();
+  await userEvent.click(page.getByRole('button', { name: 'Continue setup', exact: true }));
+  await expect.element(page.getByRole('dialog')).toBeVisible();
+  // A saved registration is selected without starting another authorization.
+  expect(request.mock.calls.filter(([url]) => url.endsWith('/chatgpt/start'))).toHaveLength(1);
+  await userEvent.click(page.getByRole('button', { name: 'Sync model list', exact: true }));
+  await userEvent.click((page.getByRole('checkbox', { name: 'gpt-6.1-sol', exact: true }).element() as HTMLInputElement).closest('label')!);
+  failSave();
+  await userEvent.click(page.getByRole('button', { name: 'Save provider', exact: true }));
+  await expect.element(page.getByText('Provider save unavailable', { exact: true })).toBeVisible();
+  await expect.element(page.getByRole('dialog')).toBeVisible();
+  expect(bundles).toHaveLength(1);
+  await new Promise(resolve => setTimeout(resolve, 800));
+  expect(bundles).toHaveLength(1);
+  await userEvent.click(page.getByRole('button', { name: 'Discard', exact: true }));
+  await expect.element(page.getByText('new@example.com', { exact: true }).last()).toBeVisible();
+});
+
+for (const local of [false, true]) it(`protects an open ${local ? 'local account' : 'API key'} editor immediately when administration is revoked`, async () => {
+  const { setAdmin, bundles } = await mount(1000, true, 'en-US', false, false, { local });
+  await userEvent.click(page.getByRole('button', { name: 'Add provider', exact: true }));
+  await userEvent.click(document.querySelector<HTMLButtonElement>('[aria-controls=flower-provider-type-openai]')!);
+  setAdmin(false);
+  if (local) await expect.poll(() => document.querySelector('.flower-provider-workspace')).toBeNull();
+  else {
+    await expect.element(page.getByRole('button', { name: 'Save provider', exact: true })).toBeDisabled();
+    expect(document.querySelector<HTMLElement>('.flower-provider-workspace')!.matches(':disabled')).toBe(true);
+  }
+  expect(bundles).toHaveLength(0);
 });

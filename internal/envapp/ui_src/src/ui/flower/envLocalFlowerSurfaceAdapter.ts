@@ -387,14 +387,12 @@ function mapProvider(provider: NonNullable<AIConfig['providers']>[number]): Flow
 
 function restrictChatGPTForRemoteDesktop(snapshot: FlowerSettingsSnapshot, remoteDesktop: boolean): FlowerSettingsSnapshot {
   if (!remoteDesktop) return snapshot;
-  const capability = snapshot.auth_capabilities?.openai_chatgpt;
   return {
     ...snapshot,
     ...(snapshot.auth_capabilities ? {
       auth_capabilities: {
         ...snapshot.auth_capabilities,
         openai_chatgpt: {
-          ...capability,
           available: false,
           reason: 'local_host_required',
         },
@@ -636,8 +634,8 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
     loadModelDirectory: async refresh => directoryForSurface(await resource.loadDirectory(refresh)),
     recoverModelSource: options.retryModelSource,
     subscribeModelDirectory: listener => resource.subscribe(directory => listener(directoryForSurface(directory))),
-    loadChatGPTAccounts: () => fetchLocalApiJSON('/_redeven_proxy/api/ai/auth/chatgpt/accounts', { method: 'GET' }),
-    chatGPTAuth: async (action, input) => {
+    loadChatGPTAccounts: options.desktopSessionTargetRoute === 'remote_desktop' ? undefined : () => fetchLocalApiJSON('/_redeven_proxy/api/ai/auth/chatgpt/accounts', { method: 'GET' }),
+    chatGPTAuth: options.desktopSessionTargetRoute === 'remote_desktop' ? undefined : async (action, input) => {
       const result = await fetchLocalApiJSON<Awaited<ReturnType<NonNullable<FlowerSurfaceAdapter['chatGPTAuth']>>>>(`/_redeven_proxy/api/ai/auth/chatgpt/${action}`, { method: 'POST', body: JSON.stringify(input) });
       if (action === 'sign-out' || action === 'retry') {
         resource.invalidate();
