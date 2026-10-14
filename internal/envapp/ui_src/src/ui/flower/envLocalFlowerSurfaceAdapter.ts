@@ -47,6 +47,7 @@ import type {
 } from '../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import type { FlowerCanonicalReferenceNavigationTarget } from './linkedContextNavigation';
 import { requireAskFlowerContextActionEnvelope } from '../contextActions/protocol';
+import { flowerRuntimeIDForEnvironment } from '../../../../../flower_ui/src/flowerRuntimeIdentity';
 import {
   createRuntimeFlowerSurfaceAdapter,
   type RuntimeThreadPatchResponse,
@@ -426,7 +427,7 @@ function envLiveMapperOptions(options: EnvLocalFlowerSurfaceAdapterOptions) {
   const envID = trim(options.envPublicID) || 'current';
   const envLabel = trim(options.envLabel) || copy.currentEnvironment;
   return {
-    runtimeID: `env:${envID}`,
+    runtimeID: flowerRuntimeIDForEnvironment(envID),
     runtimeKind: 'env_local' as const,
     sourceLabel: envLabel,
     targetLabels: [envLabel],
@@ -445,7 +446,7 @@ function decision(options: EnvLocalFlowerSurfaceAdapterOptions): FlowerRouterDec
     route: 'env_local',
     reason_code: 'current_env_only',
     selected_handler: {
-      handler_id: `env:${envID}`,
+      handler_id: flowerRuntimeIDForEnvironment(envID),
       handler_kind: 'env_local',
       display_name: envLabel,
       carrier_kind: 'runtime',
@@ -466,7 +467,7 @@ function decision(options: EnvLocalFlowerSurfaceAdapterOptions): FlowerRouterDec
     },
     runtime_presence: {
       schema_version: 1,
-      runtime_id: `env:${envID}`,
+      runtime_id: flowerRuntimeIDForEnvironment(envID),
       runtime_kind: 'env_local',
       carrier_kind: 'runtime',
       display_name: envLabel,
@@ -536,7 +537,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
 
   return createRuntimeFlowerSurfaceAdapter({
     runtime: {
-      runtime_id: `env:${trim(options.envPublicID) || 'current'}`,
+      runtime_id: flowerRuntimeIDForEnvironment(options.envPublicID),
       runtime_kind: 'env_local',
       carrier_kind: 'runtime',
       display_name: trim(options.envLabel) || copy.currentEnvironment,

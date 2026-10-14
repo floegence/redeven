@@ -1,4 +1,5 @@
 import { flowerExtensionsAdapter } from '../../../../internal/flower_ui/host/extensionsAdapter';
+import { LOCAL_ENVIRONMENT_FLOWER_RUNTIME_ID as LOCAL_ENVIRONMENT_RUNTIME_ID } from '../../../../internal/flower_ui/src/flowerRuntimeIdentity';
 import type { DesktopSecurityRequest, SecurityResult } from '../../shared/runtimeSecurity';
 import { computerManagementAdapter } from '../../../../internal/flower_ui/host/computerUseAdapter';
 import { computerFramePath } from '../../../../internal/flower_ui/host/computerFramePath';
@@ -173,7 +174,6 @@ type RuntimeFSEntry = Readonly<{
   modifiedAt?: number;
 }>;
 
-const LOCAL_ENVIRONMENT_RUNTIME_ID = 'env:local-environment';
 const LOCAL_ENVIRONMENT_LABEL = 'Local Environment';
 const LOCAL_ENVIRONMENT_SUBTITLE = 'Uses the Local AI Profile on this Mac';
 

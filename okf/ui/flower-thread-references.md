@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower conversation references
 description: Add frozen conversation facts to the current draft and preview or navigate without losing user input.
 tags: [flower, composer, references, interaction]
-timestamp: 2026-10-13T00:00:00Z
+timestamp: 2026-10-14T00:00:00Z
 ---
 # Summary
 
@@ -43,7 +43,11 @@ A retry resends the frozen input rather than refreshing source metadata.
 
 Only `flower_composer` accepts `thread_reference` with a strict nested `thread`
 snapshot. First admission checks readable source metadata in the current runtime
-and namespace. Replay compares canonical frozen input even after rename or
+and namespace. Local UI endpoint `env_local` has one reference/runtime identity,
+`env:local-environment`, shared by Desktop and Env App; remote identities remain
+`env:<endpoint_id>`. The shared UI identity owner supplies adapter, router and
+live-mapper identities so the carrier cannot change reference admission.
+Replay compares canonical frozen input even after rename or
 delete. One Floret `MessageReferenceThread` stores the target ID, label and JSON
 snapshot; there is no parallel context copy. References supply facts, never
 permission. [Canonical thread queries](../ai/flower-thread-queries.md) owns how
@@ -61,4 +65,5 @@ interaction, and [thread queries](../ai/flower-thread-queries.md) owns content a
 
 - [Shared surface](../../internal/flower_ui/src/FlowerSurface.tsx), [reference type dispatch](../../internal/flower_ui/src/composer/flowerDraftReferenceModel.ts) and [thread menu](../../internal/flower_ui/src/threads/FlowerThreadList.tsx).
 - [Strict context action](../../internal/flower_ui/src/contextActionWire.ts) and [admission authorization](../../internal/ai/thread_reference.go).
+- [Shared runtime identity](../../internal/flower_ui/src/flowerRuntimeIdentity.ts) and [Env App adapter regression](../../internal/envapp/ui_src/src/ui/flower/envLocalFlowerSurfaceAdapter.test.ts).
 - [Browser interaction tests](../../internal/envapp/ui_src/src/ui/FlowerSurface.threadReferences.browser.test.tsx) and [canonical replay tests](../../internal/ai/thread_reference_query_test.go).

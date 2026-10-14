@@ -59,6 +59,8 @@ func TestThreadReferenceStrictProjection(t *testing.T) {
 func TestThreadReferenceAdmissionAndFrozenReplay(t *testing.T) {
 	svc := newRealtimeTestService(t, time.Minute)
 	meta := testSendTurnMeta()
+	meta.EndpointID = "env_local"
+	meta.NamespacePublicID = "ns_local"
 	source, err := svc.CreateThread(t.Context(), meta, "Source", "", "", "")
 	if err != nil {
 		t.Fatal(err)
@@ -67,7 +69,9 @@ func TestThreadReferenceAdmissionAndFrozenReplay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	action := threadReferenceAction(flowerThreadReferenceRuntimeID(meta.EndpointID), source.ThreadID)
+	// This is the shared Desktop/Env App wire identity for Local UI, not a
+	// value derived from the authorization helper being tested.
+	action := threadReferenceAction("env:local-environment", source.ThreadID)
 	req := SendUserTurnRequest{ThreadID: target.ThreadID, ClientRequestID: "thread-ref", Input: RunInput{ContextAction: action}}
 	accepted, err := svc.SendUserTurn(t.Context(), meta, req)
 	if err != nil {
@@ -104,6 +108,37 @@ func TestThreadReferenceAdmissionAndFrozenReplay(t *testing.T) {
 	denied.NamespacePublicID = "other_namespace"
 	if err := svc.authorizeThreadReferences(t.Context(), &denied, threadReferenceAction(flowerThreadReferenceRuntimeID(meta.EndpointID), target.ThreadID)); err == nil {
 		t.Fatal("foreign namespace reference accepted")
+	}
+}
+
+func TestThreadReferenceRuntimeAuthorization(t *testing.T) {
+	for _, tc := range []struct{ endpointID, runtimeID string }{
+		{"env_local", "env:local-environment"},
+		{"env_remote", "env:env_remote"},
+	} {
+		t.Run(tc.endpointID, func(t *testing.T) {
+			svc := newRealtimeTestService(t, time.Minute)
+			meta := testSendTurnMeta()
+			meta.EndpointID = tc.endpointID
+			source, err := svc.CreateThread(t.Context(), meta, "Source", "", "", "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			action := threadReferenceAction(tc.runtimeID, source.ThreadID)
+			if err := svc.authorizeThreadReferences(t.Context(), meta, action); err != nil {
+				t.Fatal(err)
+			}
+			for _, deniedRuntime := range []string{"env:other", "env:env_local"} {
+				if err := svc.authorizeThreadReferences(t.Context(), meta, threadReferenceAction(deniedRuntime, source.ThreadID)); !errors.Is(err, errReadPermissionDenied) {
+					t.Fatalf("runtime %q: %v", deniedRuntime, err)
+				}
+			}
+			denied := *meta
+			denied.CanRead = false
+			if err := svc.authorizeThreadReferences(t.Context(), &denied, action); !errors.Is(err, errReadPermissionDenied) {
+				t.Fatalf("revoked read permission: %v", err)
+			}
+		})
 	}
 }
 

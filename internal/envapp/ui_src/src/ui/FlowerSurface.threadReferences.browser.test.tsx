@@ -4,9 +4,10 @@ import { ThemeProvider } from '@floegence/floe-webapp-core';
 import { page, userEvent } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { flowerTurnAdmissionError } from '../../../../flower_ui/src/flowerTurnAdmission';
-import { parseAskFlowerContextActionEnvelope } from '../../../../flower_ui/src/contextActionWire';
+import { parseAskFlowerContextActionEnvelope, type ContextActionEnvelope } from '../../../../flower_ui/src/contextActionWire';
 import type { FlowerAttachmentCapability, FlowerSurfaceAdapter } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { FlowerContextSnapshotPreview } from './widgets/FlowerContextPreviewWindow';
+import { createEnvLocalFlowerSurfaceAdapter } from './flower/envLocalFlowerSurfaceAdapter';
 import { adapter, deferred, inputRequest, launchReceipt, liveBootstrap, renderSurfaceWithAdapter, renderSurfaceWithAdapterProps, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 
 function referenceAdapter() {
@@ -29,6 +30,38 @@ async function reference(surface: HTMLElement, threadID: string, mode: 'more' | 
 }
 
 describe('Flower thread references', () => {
+  it('sends an Env App local reference through the real HTTP adapter and consumes it only after acceptance', async () => {
+    const runtimeAdapter = createEnvLocalFlowerSurfaceAdapter({ envPublicID: 'env_local', envLabel: 'Local', rpc: { ai: {} } as never });
+    const requests: { client_request_id: string; input: { context_action: ContextActionEnvelope } }[] = [];
+    const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async (_url, init) => {
+      if (init?.method !== 'POST') return new Response('{}', { status: 404 });
+      const body = JSON.parse(String(init?.body));
+      requests.push(body);
+      if (body.input.context_action.context[0].thread.runtime_id !== 'env:local-environment') {
+        return new Response(JSON.stringify({ ok: false, error: 'read permission denied' }), { status: 403 });
+      }
+      return new Response(JSON.stringify({ client_request_id: body.client_request_id, thread_id: 'thread-1' }));
+    });
+    try {
+      await page.viewport(1280, 900);
+      const source = { ...referenceAdapter(), runtime: runtimeAdapter.runtime, launchTurn: runtimeAdapter.launchTurn };
+      const surface = renderSurfaceWithAdapter(source);
+      await waitFor(() => Boolean(surface.querySelector('[data-thread-id="thread-1"]')));
+      await userEvent.click(surface.querySelector<HTMLButtonElement>('[data-thread-id="thread-1"] .flower-thread-card-select-button')!);
+      await waitFor(() => Boolean(surface.querySelector('textarea:not(:disabled)')));
+      await userEvent.click(await reference(surface, 'thread-2', 'right'));
+      const editor = surface.querySelector<HTMLTextAreaElement>('textarea')!;
+      await userEvent.fill(editor, 'What did this conversation investigate?');
+      await userEvent.keyboard('{Enter}');
+      await expect.poll(() => ({ sent: requests.length,
+        error: surface.querySelector('[data-flower-transport-delivery="failed"]')?.getAttribute('title') ?? '' })).toEqual({ sent: 1, error: '' });
+      expect(requests[0]!.input.context_action.context[0]).toMatchObject({ kind: 'thread_reference',
+        thread: { runtime_id: 'env:local-environment', thread_id: 'thread-2' } });
+      await expect.poll(() => surface.querySelector('[data-reference-kind="thread"]')).toBeNull();
+      expect(editor.value).toBe('');
+    } finally { fetch.mockRestore(); }
+  });
+
   it('adds to the current draft through all menu entries, deduplicates and allows self-reference', async () => {
     await page.viewport(1280, 900);
     const source = referenceAdapter(), surface = renderSurfaceWithAdapter(source);

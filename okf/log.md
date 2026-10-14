@@ -1,5 +1,12 @@
 # Redeven OKF Update Log
 
+## 2026-10-14: Local conversation reference admission
+
+- Share the canonical local runtime identity across Desktop and Env App adapter,
+  router and live-mapper facts. Verify [conversation reference sends](ui/flower-thread-references.md)
+  through the real UI/HTTP adapter and backend authorization without weakening
+  namespace or runtime permissions or rewriting frozen retries.
+
 ## 2026-10-13
 
 - Adopt Floret v7.31.1 canonical thread references and schema 15. Add shared
