@@ -162,6 +162,14 @@ without deleting those original results. Fractional compositor rasterization,
 resampling and unequal delivered extents limit pixel metrics; they alone cannot
 establish perceptual detail parity.
 
+# Boundaries
+
+These observations apply only to the recorded hardware, published candidate
+and measured paths. Diagnostic runs, incomplete pairs and missing samples
+do not establish RustDesk parity or support unmeasured quality, recovery
+or resource claims. The acceptance results and unresolved cases above remain
+authoritative.
+
 # Evidence
 
 - Task-owned `redeven-udesk26-rustdesk-baseline/published-v40-paired`: immutable raw inputs, window captures, exact source matches, calibrated receipts and `resources-three-rounds.json`; invalid attempts retain separate validity records.

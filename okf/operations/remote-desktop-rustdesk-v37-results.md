@@ -104,6 +104,14 @@ These synthetic measurements identify candidates, not presentation acceptance.
 No production encoder or transport behavior changes during these probes. Three
 alternating pairs are recorded; they establish a failing baseline, not parity.
 
+# Boundaries
+
+These observations apply only to the recorded hardware, published candidate
+and measured paths. Diagnostic runs, incomplete pairs and missing samples
+do not establish RustDesk parity or support unmeasured quality, recovery
+or resource claims. The acceptance results and unresolved cases above remain
+authoritative.
+
 # Evidence
 
 - [Official RustDesk 1.5.0 release](https://github.com/rustdesk/rustdesk/releases/tag/1.5.0): baseline artifacts.

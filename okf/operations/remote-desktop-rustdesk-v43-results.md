@@ -137,6 +137,14 @@ completing input. `r1-redeven-idle` has no input and cannot supply idle latency.
 `r2-redeven-quality` matches ten static frame-zero snapshots; its separate static
 analysis cannot qualify moving quality.
 
+# Boundaries
+
+These observations apply only to the recorded hardware, published candidate
+and measured paths. Diagnostic runs, incomplete pairs and missing samples
+do not establish RustDesk parity or support unmeasured quality, recovery
+or resource claims. The acceptance results and unresolved cases above remain
+authoritative.
+
 # Evidence
 
 - Task-owned `redeven-udesk26-rustdesk-baseline/published-v43-paired`: original inputs, pixels, source logs and explicit validity records.

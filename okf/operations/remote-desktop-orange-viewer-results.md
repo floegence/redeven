@@ -7,18 +7,15 @@ timestamp: 2026-10-12T10:32:00Z
 ---
 # Summary
 
-Env App owns permanent desktop updates and executable admission. Orange now
-runs published native `v0.22.37` through that product flow; all thirteen owning
-release qualification jobs pass. Real Viewer local paste, mixed Unicode,
-physical lock, wrong-password rejection, correct unlock and successor input
-pass. A scoped native media connection failure recovers automatically and
-accepts successor text. The operator explicitly defers Mac local Pinyin;
-host Pinyin also remains unvalidated. Two current paired rounds show lower matched latency tails and higher delivered
-motion FPS, but seven first-round idle responses are missing and SSH carrier
-recovery fails. A third RustDesk half records severe tails and disconnects.
-The operator moves the comparison to udesk26 after measured Orange LAN loss.
-RustDesk parity remains unqualified until complete paired evidence proves equal
-or better delivered performance at comparable quality and resource cost.
+Orange runs published native `v0.22.37` through Env App update and executable
+admission; all thirteen release qualification jobs pass. Real Viewer checks pass
+Unicode paste, physical lock, wrong-password rejection, unlock, successor input
+and scoped media recovery. Mac local Pinyin is deferred; host Pinyin remains
+unvalidated. Two paired rounds improve matched latency tails and motion FPS,
+but missing idle responses and failed SSH carrier recovery prevent RustDesk
+parity. A third RustDesk half has severe tails and disconnects. Comparison moves
+to udesk26 after measured Orange LAN loss; complete quality and resource
+evidence is still required.
 
 # Contract
 
@@ -128,6 +125,14 @@ but missing responses, failed SSH carrier recovery and incomplete resource/quali
 evidence prevent parity. After independent LAN loss and SSH timeouts, the operator
 requests udesk26 for the remaining comparison. Orange results
 remain evidence for Orange only; no hardware-wide parity claim is supported.
+
+# Boundaries
+
+These observations apply only to the recorded hardware, published candidate
+and measured paths. Diagnostic runs, incomplete pairs and missing samples
+do not establish RustDesk parity or support unmeasured quality, recovery
+or resource claims. The acceptance results and unresolved cases above remain
+authoritative.
 
 # Evidence
 
