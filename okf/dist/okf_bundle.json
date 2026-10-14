@@ -35644,7 +35644,7 @@
         "interaction",
         "references"
       ],
-      "timestamp": "2026-10-13T00:00:00Z",
+      "timestamp": "2026-10-14T00:00:00Z",
       "frontmatter": {
         "description": "Add frozen conversation facts to the current draft and preview or navigate without losing user input.",
         "tags": [
@@ -35653,19 +35653,19 @@
           "interaction",
           "references"
         ],
-        "timestamp": "2026-10-13T00:00:00Z",
+        "timestamp": "2026-10-14T00:00:00Z",
         "title": "Flower conversation references",
         "type": "UI Contract"
       },
-      "body_length": 3735,
+      "body_length": 4232,
       "summary": "The existing composer draft owner stores unadmitted thread references; Floret owns\nadmitted snapshots. Reference this conversation appends only basic facts to the\ncurrent editor, preserves selection and input, and never sends automatically.\nThread identity includes its runtime. Authorized Open selects only after a valid\nread. Failed or canceled reads retain the preview and draft; frozen transport\nretries retain the original snapshot after source rename or deletion.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "The list's right-click, More and keyboard menu append a thread reference to the\ncurrent draft without selecting the source or sending. With no selection, the\nnew-conversation draft owns it. The draft keeps its text, files and other\nreferences. Identity is `(runtime_id, thread_id)`; repeated selection does not\nrefresh the frozen snapshot, and self-reference is supported.\n\nExactly eight fields are captured: runtime and thread identity, title, status,\nworking directory, creation, update and capture timestamps. Message previews and\nhistory are excluded. The shared type dispatch owns identity, serialization and\nvisible description; a thread is never treated as a filesystem path. The chip\nshows a conversation icon, title and remove button. Preview uses the existing\nsnapshot window, with localized basic information and Open conversation. Close\nrestores its opener's focus. Open performs an authorized read before selection;\na failed read or closed pending preview leaves the current conversation and\ndraft intact. Historical snapshots remain readable after source deletion.\n\nQuestion, approval, read-only and preparing/frozen input states keep the menu\nitem visible with a localized disabled explanation. Navigation and New remain\navailable. An ordinary running thread can receive references through its normal\nqueue. Thread references remain in the editor until canonical confirmation;\nconfirmation removes only submitted local IDs. A definite transport failure\nrestores submitted text and files when the original scope has no newer edits.\nOtherwise the existing frozen outbox and recovery controls retain the submission.\nA retry resends the frozen input rather than refreshing source metadata.\n\nOnly `flower_composer` accepts `thread_reference` with a strict nested `thread`\nsnapshot. First admission checks readable source metadata in the current runtime\nand namespace. Replay compares canonical frozen input even after rename or\ndelete. One Floret `MessageReferenceThread` stores the target ID, label and JSON\nsnapshot; there is no parallel context copy. References supply facts, never\npermission. [Canonical thread queries](../ai/flower-thread-queries.md) owns how\nFlower reads further information through authorized tools.",
-          "char_count": 2233
+          "body": "The list's right-click, More and keyboard menu append a thread reference to the\ncurrent draft without selecting the source or sending. With no selection, the\nnew-conversation draft owns it. The draft keeps its text, files and other\nreferences. Identity is `(runtime_id, thread_id)`; repeated selection does not\nrefresh the frozen snapshot, and self-reference is supported.\n\nExactly eight fields are captured: runtime and thread identity, title, status,\nworking directory, creation, update and capture timestamps. Message previews and\nhistory are excluded. The shared type dispatch owns identity, serialization and\nvisible description; a thread is never treated as a filesystem path. The chip\nshows a conversation icon, title and remove button. Preview uses the existing\nsnapshot window, with localized basic information and Open conversation. Close\nrestores its opener's focus. Open performs an authorized read before selection;\na failed read or closed pending preview leaves the current conversation and\ndraft intact. Historical snapshots remain readable after source deletion.\n\nQuestion, approval, read-only and preparing/frozen input states keep the menu\nitem visible with a localized disabled explanation. Navigation and New remain\navailable. An ordinary running thread can receive references through its normal\nqueue. Thread references remain in the editor until canonical confirmation;\nconfirmation removes only submitted local IDs. A definite transport failure\nrestores submitted text and files when the original scope has no newer edits.\nOtherwise the existing frozen outbox and recovery controls retain the submission.\nA retry resends the frozen input rather than refreshing source metadata.\n\nOnly `flower_composer` accepts `thread_reference` with a strict nested `thread`\nsnapshot. First admission checks readable source metadata in the current runtime\nand namespace. Local UI endpoint `env_local` has one reference/runtime identity,\n`env:local-environment`, shared by Desktop and Env App; remote identities remain\n`env:\u003cendpoint_id\u003e`. The shared UI identity owner supplies adapter, router and\nlive-mapper identities so the carrier cannot change reference admission.\nReplay compares canonical frozen input even after rename or\ndelete. One Floret `MessageReferenceThread` stores the target ID, label and JSON\nsnapshot; there is no parallel context copy. References supply facts, never\npermission. [Canonical thread queries](../ai/flower-thread-queries.md) owns how\nFlower reads further information through authorized tools.",
+          "char_count": 2532
         },
         {
           "id": "boundaries",
@@ -39922,5 +39922,5 @@
       ]
     }
   ],
-  "source_sha256": "52aee38326e6681f6fcf676aad374224a01ab99130131390547310983c5bdd6b"
+  "source_sha256": "ecf2e233070fe15507f50338517250e77785a874b48b2b6a866b468594e1b2da"
 }

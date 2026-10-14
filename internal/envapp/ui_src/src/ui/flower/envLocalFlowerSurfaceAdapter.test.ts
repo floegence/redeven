@@ -59,6 +59,38 @@ function errorResponse(code: string, data: unknown): Response {
 
 const DESKTOP_MODEL_ID = `desktop:model_${'a'.repeat(64)}`;
 
+it.each([
+  ['env_local', 'env:local-environment'],
+  ['env_remote', 'env:env_remote'],
+])('submits conversation references with the admission identity for %s', async (envPublicID, runtimeID) => {
+  const adapter = createEnvLocalFlowerSurfaceAdapter({ envPublicID, envLabel: 'Environment', rpc: { ai: {} } as never });
+  const decision = await adapter.resolveHandler();
+  expect(adapter.runtime.runtime_id).toBe(runtimeID);
+  expect(decision.selected_handler?.handler_id).toBe(runtimeID);
+  expect(decision.runtime_presence?.runtime_id).toBe(runtimeID);
+  const snapshot = { runtime_id: adapter.runtime.runtime_id, thread_id: 'thread_source', title: 'Review 中文',
+    status: 'idle', working_dir: '/workspace', created_at_ms: 1, updated_at_ms: 2, captured_at_ms: 3 };
+  const action = { schema_version: 2 as const, action_id: 'assistant.ask.flower' as const, provider: 'flower' as const,
+    target: { target_id: 'current', locality: 'auto' as const }, source: { surface: 'flower_composer' as const },
+    context: [{ kind: 'thread_reference' as const, thread: snapshot }], presentation: { label: 'Conversation', priority: 100 } };
+  fetchMock.mockImplementation(async (_url: string, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body));
+    // Match the runtime authority used by the real admission boundary, rather
+    // than deriving the expected identity from the adapter under test.
+    expect(body.input.context_action.context[0].thread.runtime_id).toBe(runtimeID);
+    expect(body.input.context_action).toEqual(action);
+    return jsonResponse({ client_request_id: body.client_request_id ?? body.create.client_request_id,
+      thread_id: 'thread_target' });
+  });
+  for (const [index, prompt] of ['', 'What did this conversation investigate?'].entries()) {
+    await expect(adapter.launchTurn({ client_request_id: `reference_${index}`, prompt, model_id: 'default/agent',
+      ...(index ? { thread_id: 'thread_target' } : {}), context_action: action })).resolves.toMatchObject({ thread_id: 'thread_target' });
+  }
+  expect(fetchMock.mock.calls.map(call => call[0])).toEqual([
+    '/_redeven_proxy/api/ai/turns', '/_redeven_proxy/api/ai/threads/thread_target/turns',
+  ]);
+});
+
 async function loadSettingsWithDirectory(adapter: FlowerSurfaceAdapter) {
   await adapter.loadSettings();
   await adapter.loadModelDirectory!();
