@@ -48,6 +48,30 @@ describe('Flower Markdown resource resolution', () => {
     controller.abort();
     await expect(resolveFlowerMarkdownMedia({ kind: 'html', title: '', src: '/project/a.html' }, controller.signal, context)).rejects.toThrow();
   });
+  it('exposes preview and reveal actions for local HTML files', async () => {
+    const openMessageFile = vi.fn(async () => undefined);
+    const controller = new AbortController();
+    const adapter = {
+      loadMessageFile: vi.fn(async () => new Blob(['<main>preview</main>'], { type: 'text/plain' })),
+      openMessageFile,
+    } as unknown as FlowerSurfaceAdapter;
+    const resolved = await resolveFlowerMarkdownMedia({ kind: 'html', title: 'Report', src: './report.html' }, controller.signal, {
+      adapter,
+      threadID: 'thread-a',
+      workingDirectory: '/project',
+      copy: markdownMediaEnUS,
+      onActionError: vi.fn(),
+    });
+
+    expect(resolved.preview?.label).toBe(markdownMediaEnUS.previewHTML);
+    expect(resolved.reveal?.label).toBe(markdownMediaEnUS.revealInFolder);
+    resolved.preview?.onSelect();
+    resolved.reveal?.onSelect();
+    expect(openMessageFile.mock.calls).toEqual([
+      [{ path: '/project/report.html', action: 'preview' }],
+      [{ path: '/project/report.html', action: 'reveal' }],
+    ]);
+  });
   it('opens an authorized local file or its folder through distinct host actions', async () => {
     const openMessageFile = vi.fn(async () => undefined);
     const onActionError = vi.fn();

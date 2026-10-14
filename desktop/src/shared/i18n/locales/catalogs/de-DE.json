@@ -184,6 +184,7 @@
       "media": {
         "image": "Bild",
         "previewImage": "Bildvorschau öffnen",
+        "previewHTML": "Dateivorschau öffnen",
         "revealInFolder": "Übergeordneten Ordner öffnen",
         "video": "Video",
         "audio": "Audio",

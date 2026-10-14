@@ -53,6 +53,7 @@
     "media": {
       "image": "Image",
       "previewImage": "Preview image",
+      "previewHTML": "Open file preview",
       "revealInFolder": "Open containing folder",
       "video": "Video",
       "audio": "Audio",

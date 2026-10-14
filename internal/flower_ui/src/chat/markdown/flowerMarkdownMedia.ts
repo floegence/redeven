@@ -41,19 +41,25 @@ export async function resolveFlowerMarkdownMedia(
     filePath = path;
   }
   signal.throwIfAborted();
-  if (source.kind === 'html') {
-    if (!blob.type.startsWith('text/plain') || blob.size > 1_000_000) throw new Error('Invalid HTML preview');
-    return { loadHTML: async () => blob.text() };
-  }
-  if (!blob.type.startsWith(`${source.kind}/`)) throw new Error('Media type does not match the preview');
-  const src = URL.createObjectURL(blob);
-  signal.addEventListener('abort', () => URL.revokeObjectURL(src), { once: true });
   const openFile = context.adapter.openMessageFile;
   const path = filePath;
   const select = (action: 'preview' | 'reveal') => {
     if (!path || !openFile || signal.aborted) return;
     void openFile({ path, action }).catch(context.onActionError);
   };
+  if (source.kind === 'html') {
+    if (!blob.type.startsWith('text/plain') || blob.size > 1_000_000) throw new Error('Invalid HTML preview');
+    return {
+      loadHTML: async () => blob.text(),
+      ...(path && openFile ? {
+        preview: { get label() { return context.copy.previewHTML; }, onSelect: () => select('preview') },
+        reveal: { get label() { return context.copy.revealInFolder; }, onSelect: () => select('reveal') },
+      } : {}),
+    };
+  }
+  if (!blob.type.startsWith(`${source.kind}/`)) throw new Error('Media type does not match the preview');
+  const src = URL.createObjectURL(blob);
+  signal.addEventListener('abort', () => URL.revokeObjectURL(src), { once: true });
   return {
     src,
     ...(source.kind !== 'image' ? { openURL: src } : {}),

@@ -184,6 +184,7 @@
       "media": {
         "image": "图片",
         "previewImage": "预览图片",
+        "previewHTML": "打开文件预览",
         "revealInFolder": "打开所在目录",
         "video": "视频",
         "audio": "音频",

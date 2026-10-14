@@ -1,10 +1,15 @@
 import type { MarkdownMediaLabels } from '@floegence/floe-webapp-core/chat';
 
-export type FlowerMarkdownMediaCopy = MarkdownMediaLabels & { previewImage: string; revealInFolder: string };
+export type FlowerMarkdownMediaCopy = MarkdownMediaLabels & {
+  previewImage: string;
+  previewHTML: string;
+  revealInFolder: string;
+};
 
 export const markdownMediaEnUS = {
   "image": "Image",
   "previewImage": "Preview image",
+  "previewHTML": "Open file preview",
   "revealInFolder": "Open containing folder",
   "video": "Video",
   "audio": "Audio",
