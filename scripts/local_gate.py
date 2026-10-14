@@ -155,14 +155,15 @@ def locked(path):
 def load_state(path):
     try:
         state = json.loads(path.read_text())
-        if state.get("schema") != SCHEMA or not all(isinstance(state.get(k), dict) for k in ("groups", "cursors", "commits", "rounds")):
+        state.setdefault("passes", {})
+        if state.get("schema") != SCHEMA or not all(isinstance(state.get(k), dict) for k in ("groups", "cursors", "commits", "rounds", "passes")):
             raise ValueError("invalid state")
         return state
     except FileNotFoundError:
         pass
     except (ValueError, TypeError, AttributeError):
         log("INVALIDATE all: unreadable or obsolete state; no cached pass is trusted")
-    return {"schema": SCHEMA, "groups": {}, "cursors": {}, "commits": {}, "rounds": {}}
+    return {"schema": SCHEMA, "groups": {}, "cursors": {}, "commits": {}, "rounds": {}, "passes": {}}
 
 
 class Interrupted(Exception):
@@ -170,9 +171,10 @@ class Interrupted(Exception):
 
 
 def execute(root, command, extra_env):
-    env = dict(os.environ, **extra_env)
+    env = dict(os.environ)
     for name in git(root, "rev-parse", "--local-env-vars").splitlines():
         env.pop(name, None)
+    env.update(extra_env)
     process = subprocess.Popen(command, cwd=root, env=env, start_new_session=os.name != "nt")
     try:
         return process.wait()
@@ -228,12 +230,16 @@ def run(root, manifest, state, state_path, args):
     if force:
         for group in selected:
             state["groups"].pop(group["id"], None)
+            state["passes"].pop(group["id"], None)
         state["rounds"].pop(profile, None)
         atomic_write(state_path, state)
     log("tree=" + tree + " profile=" + profile + " cursor=" + cursor + (" FORCE full rerun" if force else ""))
     extra_env = {"LOCAL_GATE_ACTIVE": "1", "LOCAL_GATE_TREE": tree, "LOCAL_GATE_BASE": args.base or "", "LOCAL_GATE_TIP": args.tip or ""}
     for group in ordered:
         name = group["id"]
+        group_env = dict(extra_env)
+        if group.get("staged_diff") and os.environ.get("GIT_INDEX_FILE"):
+            group_env["GIT_INDEX_FILE"] = str((root / Path(os.environ["GIT_INDEX_FILE"])).resolve())
         state["cursors"][profile] = name
         state["cursor"] = name
         state["rounds"].pop(profile, None)
@@ -242,7 +248,10 @@ def run(root, manifest, state, state_path, args):
             raise RuntimeError("source changed during validation; the round cannot pass")
         current = components(root, group, manifest, tree, args, {})
         previous = state["groups"].get(name, {})
-        if not force and previous.get("status") == "passed" and previous.get("inputs") == current:
+        cached = state["passes"].get(name, {}).get(digest(current), {})
+        if not force and cached.get("status") == "passed" and cached.get("inputs") == current:
+            state["groups"][name] = dict(cached)
+            atomic_write(state_path, state)
             log("SKIP " + name + ": matching passed tree, test inputs and environment; cursor=" + cursor)
             continue
         reasons = [k for k in current if previous.get("inputs", {}).get(k) != current[k]]
@@ -263,7 +272,7 @@ def run(root, manifest, state, state_path, args):
         try:
             if group.get("prepare"):
                 log("PREPARE " + name)
-                result = execute(root, group["prepare"], extra_env)
+                result = execute(root, group["prepare"], group_env)
                 if result:
                     raise RuntimeError("group initialization failed")
                 if source_tree(root, args.mode, args.tip) != tree:
@@ -272,7 +281,7 @@ def run(root, manifest, state, state_path, args):
                 state["groups"][name]["inputs"] = current
                 atomic_write(state_path, state)
             log("EXECUTE " + name + "; cursor=" + name)
-            result = execute(root, group["command"], extra_env)
+            result = execute(root, group["command"], group_env)
             if source_tree(root, args.mode, args.tip) != tree:
                 log("FAIL " + name + ": tested source changed")
                 result = 1
@@ -292,6 +301,7 @@ def run(root, manifest, state, state_path, args):
             record["duration_seconds"] = round(time.monotonic() - started, 3)
             if result == 0 and not interrupted:
                 record["inputs"] = after
+                state["passes"].setdefault(name, {})[digest(after)] = dict(record)
             atomic_write(state_path, state)
         if interrupted:
             return 130
