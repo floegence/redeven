@@ -600,7 +600,7 @@ export function registerEnvAIPageSendTests() {
     });
 
     it.each([
-      { route: 'local_host' as const, actions: ['local_settings'] },
+      { route: 'local_host' as const, actions: [] },
       { route: 'remote_desktop' as const, actions: ['local_settings', 'remote_settings'] },
       { route: undefined, actions: [] },
     ])('offers setup destinations for the $route session', async ({ route, actions }) => {
@@ -608,6 +608,7 @@ export function registerEnvAIPageSendTests() {
       const originalContext = window.redevenDesktopSessionContext;
       const originalShell = window.redevenDesktopShell;
       const openDesktopSettings = vi.fn(async () => undefined);
+      const openWindow = vi.fn(async () => undefined);
       if (route) {
         window.redevenDesktopSessionContext = {
           getSnapshot: () => ({
@@ -617,7 +618,7 @@ export function registerEnvAIPageSendTests() {
           }),
           notifyAppReady: () => undefined,
         };
-        window.redevenDesktopShell = { openFlowerSettings: openDesktopSettings };
+        window.redevenDesktopShell = { openFlowerSettings: openDesktopSettings, openWindow };
       } else {
         delete window.redevenDesktopSessionContext;
         delete window.redevenDesktopShell;
@@ -634,24 +635,32 @@ export function registerEnvAIPageSendTests() {
         const welcome = host.querySelector('.flower-setup-welcome')!;
         expect([...welcome.querySelectorAll('[data-model-source-action]')]
           .map(action => action.getAttribute('data-model-source-action'))).toEqual(actions);
-        if (route) {
+        if (route === 'remote_desktop') {
           const desktopAction = welcome.querySelector<HTMLButtonElement>('[data-model-source-action="local_settings"]')!;
           expect(desktopAction.textContent).toContain('Configure in Desktop Flower settings');
           desktopAction.click();
           await vi.waitFor(() => expect(openDesktopSettings).toHaveBeenCalledOnce());
-          if (route === 'remote_desktop') {
-            welcome.querySelector<HTMLButtonElement>('[data-model-source-action="remote_settings"]')!.click();
-            await vi.waitFor(() => expect(mocks.openSettingsMock).toHaveBeenCalledWith('ai', {
-              origin: { kind: 'flower', returnSurfaceId: 'ai' },
-            }));
-          } else {
-            expect(welcome.textContent).not.toContain('remote environment');
-            expect(mocks.openSettingsMock).not.toHaveBeenCalled();
-          }
+          welcome.querySelector<HTMLButtonElement>('[data-model-source-action="remote_settings"]')!.click();
+          await vi.waitFor(() => expect(mocks.openSettingsMock).toHaveBeenCalledWith('ai', {
+            origin: { kind: 'flower', returnSurfaceId: 'ai' },
+          }));
         } else {
+          const editor = host.querySelector<HTMLTextAreaElement>('textarea')!;
+          editor.value = 'Keep this conversation draft';
+          editor.dispatchEvent(new InputEvent('input', { bubbles: true }));
+          expect(welcome.querySelectorAll('.flower-setup-action')).toHaveLength(1);
           welcome.querySelector<HTMLButtonElement>('.flower-setup-action')!.click();
           await vi.waitFor(() => expect(host.querySelector('.flower-settings-providers-section')).toBeTruthy());
+          const settingsPanel = host.querySelector<HTMLElement>('[data-flower-panel="settings"]')!;
+          expect(settingsPanel.hidden).toBe(false);
           expect(openDesktopSettings).not.toHaveBeenCalled();
+          expect(openWindow).not.toHaveBeenCalled();
+          expect(welcome.textContent).not.toContain('remote environment');
+          expect(mocks.openSettingsMock).not.toHaveBeenCalled();
+          settingsPanel.querySelector<HTMLButtonElement>('button[aria-label="Back to chat"]')!.click();
+          expect(settingsPanel.hidden).toBe(true);
+          expect(host.querySelector('textarea')).toBe(editor);
+          expect(editor.value).toBe('Keep this conversation draft');
         }
       } finally {
         dispose();

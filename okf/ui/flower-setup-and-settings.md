@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower setup and settings
 description: First-time model setup, actionable starter tasks, and shared provider, permission, and computer settings.
 tags: [ai, flower, settings, onboarding]
-timestamp: 2026-10-14T08:48:00Z
+timestamp: 2026-10-14T09:31:00Z
 ---
 # Summary
 
@@ -23,8 +23,9 @@ input, or acknowledge reads; settings save progress and errors survive hiding.
 The welcome replaces disabled suggestions only when no thread is selected, no
 provider is configured, no model is usable, and the Desktop source is absent,
 `not_configured`, or `empty`. It identifies Flower and offers a visible settings
-action. In a Desktop `local_host` session, the sole destination is Desktop Flower
-settings; it must not identify the local environment as remote. In a Desktop
+action. In a Desktop `local_host` session, the sole destination is the current
+Flower surface's settings panel; it must not open or focus another
+Welcome window or identify the local environment as remote. In a Desktop
 `remote_desktop` session, Desktop Flower settings and the current remote
 environment's Flower settings appear as separate, fully readable buttons. An
 ordinary browser session opens the surface's environment settings without
@@ -188,7 +189,7 @@ Settings fields follow the shared [product field treatment](runtime-settings.md#
 - `redeven:internal/flower_ui/src/chat/FlowerSetupWelcome.tsx:7` - Setup destinations and model refresh presentation.
 - `redeven:internal/flower_ui/src/settings/FlowerSettingsSurface.tsx` - Shared settings actions and save controllers.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.setupGuide.browser.test.tsx:20` - Narrow setup actions and transition back to the existing draft.
-- `redeven:internal/envapp/ui_src/src/ui/pages/EnvAIPage.send.test.shared.tsx` - Local, remote, and browser setup destinations and their click behavior.
+- `redeven:internal/envapp/ui_src/src/ui/pages/EnvAIPage.send.test.shared.tsx` - Local, remote, and browser setup destinations, current-surface settings navigation, and click behavior.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSettingsSurface.presentation.browser.test.tsx:63` - Real controls, localized container layouts, themes, and keyboard saving.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.settings.browser.test.tsx` - Browser discovery, explicit connection, and retained failed-connection input.
 - `redeven:internal/flower_ui/src/settings/FlowerModelSettings.tsx` - Shared model/provider presentation and transient edit ownership.
