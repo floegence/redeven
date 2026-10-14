@@ -882,7 +882,10 @@ func writeText(w io.Writer, text string) {
 }
 
 func writeErrorWithHelp(w io.Writer, message string, detailLines []string, helpText string) {
-	lines := make([]string, 0, 1+len(detailLines))
+	// Detail lines are diagnostic input. Keep a small bounded initial capacity;
+	// appending still preserves every line without turning its length into an
+	// allocation-size calculation.
+	lines := make([]string, 0, 8)
 	if strings.TrimSpace(message) != "" {
 		lines = append(lines, strings.TrimSpace(message))
 	}

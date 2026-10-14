@@ -8,10 +8,10 @@ require (
 	github.com/bodgit/sevenzip v1.6.1
 	github.com/coreos/go-oidc/v3 v3.21.0
 	github.com/creack/pty v1.1.24
-	github.com/floegence/floe-native-apps v0.22.45
+	github.com/floegence/floe-native-apps v0.22.46
 	github.com/floegence/floeterm/terminal-go v0.19.2
 	github.com/floegence/floret/v7 v7.33.0
-	github.com/floegence/flowersec/flowersec-go/v5 v5.11.0
+	github.com/floegence/flowersec/flowersec-go/v5 v5.11.1
 	github.com/floegence/redeven-service-templates v0.7.0
 	github.com/floegence/redevplugin/v3 v3.0.35
 	github.com/godbus/dbus/v5 v5.2.2

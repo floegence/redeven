@@ -29,8 +29,13 @@ bounded backpressure retires the attachment instead of blocking input release.
 The published player draws every current decoded picture immediately. A cumulative
 paint receipt names only the latest picture unchanged across a rendering opportunity
 and its following task. Replaced pictures do not receive individual paint receipts;
-reset cancels retired authority. PNG refinement decoding cannot serialize later
-video decoding. Encoded reference dependencies remain ordered and bounded.
+reset cancels retired authority. Continuous presentation coalesces confirmed
+receipts at most once per 50 ms; first and idle updates send immediately, and a
+settled followup sends by its pending deadline. Drawing and local paint feedback
+remain immediate, while receipts never include a newer unconfirmed picture.
+Reset, recovery and close discard pending confirmations and cumulative credit
+from the retired epoch. PNG refinement decoding cannot serialize later video
+decoding. Encoded reference dependencies remain ordered and bounded.
 
 Linux picture requests offer AV1 and VP9 only after the published player's positive
 WebCodecs probe; H.264 remains available. The same offer applies to connect,
