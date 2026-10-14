@@ -3415,7 +3415,7 @@
               "markdown"
             ],
             "summary": "- Authority: published Floret v7.32.0 assistant messages own durable sources; Flower reads current views and historical pages through the existing thread projection.\n- Outcome: provider citation markers in prose become readable links with source titles. Copying a message removes those markers.\n- Invariants: ranges use end-exclusive Unicode code-point indices in the exact assistant text. URLs must be HTTP(S), without credentials, whitespace or control characters. Marker identifiers never establish a URL.\n- Failure boundary: unmatched sources appear at the end of the completed message. Historical markers without stored sources show localized unavailable text; Flower never reconstructs missing facts.",
-            "section_count": 1
+            "section_count": 2
           },
           {
             "concept_id": "ui.flower-subagent-detail",
@@ -33108,15 +33108,22 @@
         "title": "Flower citations",
         "type": "UI Contract"
       },
-      "body_length": 3155,
+      "body_length": 3169,
       "summary": "- Authority: published Floret v7.32.0 assistant messages own durable sources; Flower reads current views and historical pages through the existing thread projection.\n- Outcome: provider citation markers in prose become readable links with source titles. Copying a message removes those markers.\n- Invariants: ranges use end-exclusive Unicode code-point indices in the exact assistant text. URLs must be HTTP(S), without credentials, whitespace or control characters. Marker identifiers never establish a URL.\n- Failure boundary: unmatched sources appear at the end of the completed message. Historical markers without stored sources show localized unavailable text; Flower never reconstructs missing facts.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Provider annotations preserve title, URL and optional positions through the\nmodel gateway and Floret provider adapter. OpenAI final text completes an exact\nstreamed prefix only. If final text differs from already emitted text, sources\nretain their URLs but lose positional claims. Floret validates sources, binds\nthem to canonical assistant fragments and supplies the same facts in current\nand detail projections. Redeven does not collect a second source inventory from\nobservation events or web tool results. Schema ownership stays with\n[the Floret thread runtime](../ai/floret-thread-runtime.md).\n\nFlower binds a citation only when its safe source range exactly covers a prose\nmarker. A grouped marker can carry several exact source annotations. Remaining\nsources appear in a compact source list after streaming finishes; repeated\nunbound title/URL pairs appear once. Split streamed markers stay hidden until\ncomplete metadata arrives. Invalid URLs never become links, and metadata changes\ninvalidate Markdown HTML without remounting stable code controls.\n\nMarked continues to own GFM/CommonMark syntax. Fenced code, code spans, HTML,\nlinks, images and escaped literal marker examples remain unchanged. The message\ncopy action removes prose markers while code-block copy preserves literal code.\nFlower does not repair malformed emphasis or alter ordinary Markdown/media\nsemantics. Citation copy is localized in every supported Env App and Desktop\ncatalog. New messages preserve complete sources; old records lacking sources\nremain readable without rewriting historical data.",
-          "char_count": 1576
+          "body": "Provider annotations preserve title, URL and optional positions through the\nmodel gateway and Floret provider adapter. OpenAI final text completes an exact\nstreamed prefix only. If final text differs from already emitted text, sources\nretain their URLs but lose positional claims. Floret validates sources, binds\nthem to canonical assistant fragments and supplies the same facts in current\nand detail projections. Redeven does not collect a second source inventory from\nobservation events or web tool results. Schema ownership stays with\n[the Floret thread runtime](../ai/floret-thread-runtime.md).\n\nFlower binds a citation only when its safe source range exactly covers a prose\nmarker. A grouped marker can carry several exact source annotations. Remaining\nsources appear in a compact source list after streaming finishes; repeated\nunbound title/URL pairs appear once. Split streamed markers stay hidden until\ncomplete metadata arrives. Invalid URLs never become links, and metadata changes\ninvalidate Markdown HTML without remounting stable code controls.",
+          "char_count": 1057
+        },
+        {
+          "id": "boundaries",
+          "title": "Boundaries",
+          "level": 1,
+          "body": "Marked continues to own GFM/CommonMark syntax. Fenced code, code spans, HTML,\nlinks, images and escaped literal marker examples remain unchanged. The message\ncopy action removes prose markers while code-block copy preserves literal code.\nFlower does not repair malformed emphasis or alter ordinary Markdown/media\nsemantics. Citation copy is localized in every supported Env App and Desktop\ncatalog. New messages preserve complete sources; old records lacking sources\nremain readable without rewriting historical data.",
+          "char_count": 517
         }
       ],
       "snippet": "- Authority: published Floret v7.32.0 assistant messages own durable sources; Flower reads current views and historical pages through the existing thread projection. - Outcome: provider citation markers in prose become readable links with s",
@@ -40012,5 +40019,5 @@
       ]
     }
   ],
-  "source_sha256": "0656a092ec988fc8efd1c9fc7cad4353e83b189e251ab63c63e3ac4aba25f7ac"
+  "source_sha256": "255ac72489908a0c55c12b1598eada3f8a56591ccf59699e3bf553a1cc64a6c8"
 }
