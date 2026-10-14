@@ -51,6 +51,8 @@ horizontal scrolling. Copy sources preserves the full bibliography text and
 uses localized copy/completion labels. Inline provider citations retain their
 source titles, with a quiet bordered treatment and visible keyboard focus.
 
+## Authored bibliography
+
 Assistant Markdown can already contain an explicit bibliography inside an
 unlabelled, `text` or `plaintext` fence. A closed fence consisting entirely of
 positive, uniquely numbered title/HTTP(S)-URL pairs receives the same cards,
