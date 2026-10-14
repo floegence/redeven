@@ -1962,6 +1962,8 @@
     "gatewayGuidanceReadyTitle": "Netzwerk-Gateway ist bereit.",
     "gatewayGuidanceReadyDetail": "Desktop kann diesen Netzwerk-Gateway-Katalog aktualisieren. Öffnen Sie die Umgebungen über die Registerkarte „Umgebungen“.",
     "gatewayGuidanceReviewSettingsDetail": "Überprüfen Sie die Netzwerk-Gateway-Einstellungen und aktualisieren Sie sie erneut, wenn das Ziel erreichbar ist.",
+    "gatewayGuidanceHostMaintenanceTitle": "Gateway erfordert Wartung auf dem Host",
+    "gatewayGuidanceStateRecoveryDetail": "Korrigieren Sie den Dateizugriff oder erstellen Sie die lokale Gateway-Konfiguration auf dem Host neu und aktualisieren Sie anschließend. Deaktivieren Sie diese Verbindung, um Desktop weiter zu nutzen. Cloud-Berechtigungen bleiben erhalten.",
     "gatewayGuidanceCatalogAvailableTitle": "Netzwerk-Gateway-Katalog verfügbar",
     "gatewayGuidanceCatalogAvailableDetail": "Aktualisieren Sie dieses Netzwerk-Gateway, um Katalogänderungen zu übernehmen; Seine Umgebungen werden separat auf der Registerkarte „Umgebungen“ aufgeführt.",
     "gatewayPanelActionNeedsAttention": "Netzwerk-Gateway-Aktionsproblem",

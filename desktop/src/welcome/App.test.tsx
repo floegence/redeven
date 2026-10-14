@@ -994,7 +994,7 @@ describe('DesktopWelcomeShell', () => {
       "if (progress?.action === 'refresh_gateway' && progress.status === 'succeeded') {\n      return null;\n    }",
     );
     expect(appSrc).toContain(
-      'const visibleGatewayProgress = createMemo(() => {\n    const progress = selectedGatewayOperationProgress();\n    return progress;\n  });',
+      'const visibleGatewayProgress = createMemo(() => {\n    const progress = selectedGatewayOperationProgress();',
     );
     expect(appSrc).toContain('const labelsByStepID: Readonly<Record<string, DesktopTranslationKey>> = {');
     expect(appSrc).toContain('const stepIDKey = labelsByStepID[cleanStepID];');
@@ -1047,9 +1047,9 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('const guidePanelHasState = createMemo(() => (');
     expect(appSrc).toContain('&& guidePanelHasState()');
     expect(appSrc).toContain('const foregroundCanShowGuidePanel = createMemo(() => {');
-    expect(appSrc).toContain(
-      'foregroundPendingProgress() !== null\n      || visibleGatewayDiagnosisResult() !== null\n      || gatewayProgressNeedsAttention(visibleGatewayProgress())',
-    );
+    expect(appSrc).toContain('return foregroundPendingProgress() !== null');
+    expect(appSrc).toContain('|| visibleGatewayDiagnosisResult() !== null');
+    expect(appSrc).toContain('|| gatewayProgressNeedsAttention(visibleGatewayProgress())');
     expect(appSrc).toContain(
       'function gatewayProgressNeedsAttention(progress: DesktopLauncherActionProgress | null | undefined): boolean',
     );

@@ -2,11 +2,14 @@ package gatewayservice
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/floegence/redeven/internal/gatewaystate"
 )
 
 func TestGatewayDoesNotExposeRuntimeLifecycleRoutes(t *testing.T) {
@@ -19,6 +22,27 @@ func TestGatewayDoesNotExposeRuntimeLifecycleRoutes(t *testing.T) {
 	server.Handler().ServeHTTP(response, request)
 	if response.Code != http.StatusNotFound {
 		t.Fatalf("runtime lifecycle route status = %d, want %d", response.Code, http.StatusNotFound)
+	}
+}
+
+func TestRejectedGatewayConfigurationDoesNotCreateOrRewriteState(t *testing.T) {
+	for _, name := range []string{"membership-migration.json", "environments.json", "members.json"} {
+		root := t.TempDir()
+		file := filepath.Join(root, name)
+		body := []byte(`{"schema_version":4,"retired_secret":"do-not-expose"}`)
+		if err := os.WriteFile(file, body, 0600); err != nil {
+			t.Fatal(err)
+		}
+		_, err := New(Options{StateRoot: root})
+		var rejected *gatewaystate.ReadError
+		if !errors.As(err, &rejected) || rejected.Code != "gateway_state_unsupported" {
+			t.Fatalf("%s: error = %v", name, err)
+		}
+		entries, _ := os.ReadDir(root)
+		after, _ := os.ReadFile(file)
+		if len(entries) != 1 || string(after) != string(body) {
+			t.Fatalf("%s: rejected configuration changed state", name)
+		}
 	}
 }
 

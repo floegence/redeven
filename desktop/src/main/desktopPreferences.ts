@@ -1,6 +1,6 @@
 import { normalizeEnvironmentAccessPreferences, type EnvironmentAccessPreferences } from './environmentAccess';
 import { parseLocalUIProtocol } from '../shared/settingsIPC';
-import { migrateDesktopCloudState } from './cloudStateMigration';
+import { validateDesktopCloudState } from './cloudStateValidation';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -2244,7 +2244,7 @@ function serializeCloudEnvironmentCatalog(
 
 export async function loadDesktopPreferences(paths: DesktopPreferencesPaths, codec: DesktopSecretCodec): Promise<DesktopPreferences> {
   const cloudCatalogPaths = defaultDesktopCatalogPaths(paths.stateRoot);
-  await migrateDesktopCloudState({
+  await validateDesktopCloudState({
     ...paths,
     localEnvironmentFile: cloudCatalogPaths.localEnvironmentFile,
     cloudDirectories: [cloudCatalogPaths.providersDir, cloudCatalogPaths.providerEnvironmentsDir],

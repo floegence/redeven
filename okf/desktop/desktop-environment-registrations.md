@@ -3,7 +3,7 @@ type: Desktop Contract
 title: Desktop Environment registration ownership
 description: Single registration owners, versioned connection records, serialized persistence, and generation-safe removal.
 tags: [desktop, environments, persistence, ssh, wsl, runtime, launcher]
-timestamp: 2026-09-19T00:00:00Z
+timestamp: 2026-10-14T00:00:00Z
 ---
 # Summary
 
@@ -16,6 +16,8 @@ Registered Runtime, URL, and Gateway action surfaces carry an explicit `Environm
 Provider Environment entries retain their Provider-specific action and pin owner; a visual pairing grants no registration or lifecycle authority. Relationship grouping never merges persisted records. Pinning or removing one registration does not mutate its counterpart, and unlinking deletes neither owner nor remote data. The active access perspective selects the action owner without changing storage. Switching perspectives never rebinds an already-open settings or Flower session. Signing out of the official Redeven Cloud account clears only its Desktop authorization and Cloud cache; Runtime registrations and binding identity remain intact, as defined by [RCPP account sign-out](../protocol/rcpp-v5-provider-api.md). Display rules are owned by [Environment library](desktop-environment-library.md).
 
 Preferences mutations form one serialized queue. Each mutation reads the latest committed value and writes only its owner fields. Long-running Open, probe, and lifecycle work may update health, operation, or `last_used_at` only while the registration still exists. Removal advances the Launcher subject generation before background cleanup, so results from an earlier generation cannot reintroduce a card. Pinning and use-time updates never upsert a missing registration.
+
+Saved Cloud registrations accept RCPP v5 only. Cloud validation runs before preference normalization or persistence. Retired fields, unsupported protocol versions, malformed state and retired Cloud migration journals fail read-only with the exact file and recovery instructions. Desktop never converts v3/v4 registrations, replays a Cloud journal or silently discards an invalid Cloud account. Recreate the obsolete local registration and its saved credentials, or explicitly choose a new profile, then sign in and enroll again. Cloud authorization and unrelated Runtime, Gateway and SSH data are independent of this local cleanup.
 
 Connection records are explicitly versioned. Desktop reads existing v1 Local, URL, and SSH records without eagerly rewriting or deleting them; new WSL records require v2 and preserve the exact distribution name plus confirmed Linux user. `default_flower_runtime_target_id` references one registered Runtime Target. The first WSL registration fills an empty default, explicit selection replaces it, and deleting that target clears the reference in the same preference mutation.
 

@@ -5524,7 +5524,10 @@ function gatewaySyncRecordFromError(
   const message = error instanceof Error ? error.message : String(error);
   const previous = gatewaySyncStateByID.get(record.gateway_id) ?? defaultGatewaySyncRecord(record);
   const errorState = gatewaySyncStateForError(error);
-  const errorSourceBase = gatewayRecordToSourceWithError(record, message, code);
+  const sourceWithError = gatewayRecordToSourceWithError(record, message, code);
+  const errorSourceBase = error instanceof GatewayReinstallRequiredError
+    ? { ...sourceWithError, status: 'error' as const, status_message: message }
+    : sourceWithError;
   const invalidateCatalog = gatewayErrorInvalidatesCatalog(error, serviceState);
   const errorSource = errorState === 'pairing_failed'
     ? {
@@ -6119,6 +6122,9 @@ function gatewayActionFailure(record: GatewayRecord, error: unknown, gatewayEnvi
 }
 
 function gatewayServiceFailureCode(error: unknown): DesktopLauncherActionFailureCode {
+  if (error instanceof GatewayReinstallRequiredError) {
+    return 'gateway_reinstall_required';
+  }
   if (error instanceof GatewayServiceUnavailableError) {
     return error.code;
   }
@@ -6247,7 +6253,7 @@ function gatewayFailureTitleKeyForDiagnosis(
     case 'needs_update':
       return 'environmentCenter.gatewayPanelUpdateRequiredTitle';
     case 'needs_reinstall':
-      return 'environmentStatus.reinstallRequired';
+      return 'environmentCenter.gatewayGuidanceHostMaintenanceTitle';
     default:
       return undefined;
   }
@@ -6328,6 +6334,7 @@ function gatewayDiagnosisForServiceState(
     checked_at_unix_ms: Date.now(),
     manageable,
     service_state: serviceState,
+    ...(serviceState?.error_code ? { error_code: serviceState.error_code, error_message: serviceState.message } : {}),
     trust_state: gatewayRecordToSource(record).trust_state,
   };
   switch (status) {
@@ -6350,7 +6357,7 @@ function gatewayDiagnosisForServiceState(
         ...base,
         classification: 'needs_reinstall',
         summary: 'Gateway requires host maintenance',
-        detail: serviceState?.message || 'This Standalone Gateway has incompatible state. Repair or reinstall it on its own host, then refresh it here.',
+        detail: serviceState?.message || 'Correct file access or recreate this Gateway’s local configuration on its host, then refresh. Disable this connection to keep using Desktop; Cloud authorizations are preserved.',
       };
     case 'ssh_unreachable':
       return {
@@ -7002,6 +7009,12 @@ async function runGatewayServiceActionFromLauncher(
     return launcherActionSuccess(selected.outcome);
   } catch (error) {
     const canceled = isAbortLikeError(error) || signal?.aborted;
+    const currentOperation = launcherOperations.get(operationKey);
+    if (!canceled && error instanceof GatewayReinstallRequiredError
+      && launcherOperationMatchesAttempt(currentOperation, owner) && !currentOperation?.deleted_subject) {
+      setGatewaySyncRecord(record, gatewaySyncRecordFromError(record, error, operation.started_at_unix_ms, error.service_state));
+      setGatewayDiagnosis(record, gatewayDiagnosisForServiceState(record, error.service_state));
+    }
     const failure = desktopFailureFromError(error, { code: 'operation_failed', title: selected.title,
       summary: error instanceof Error ? error.message : String(error), targetLabel: record.display_name });
     launcherOperations.finishCurrentAttempt(operationKey, owner, canceled ? 'canceled' : 'failed', {

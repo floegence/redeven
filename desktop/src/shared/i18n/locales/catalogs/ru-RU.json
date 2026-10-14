@@ -1977,6 +1977,8 @@
     "gatewayGuidanceReadyTitle": "Шлюз готов.",
     "gatewayGuidanceReadyDetail": "Desktop может обновить этот каталог шлюзов. Откройте его среду на вкладке «Среды».",
     "gatewayGuidanceReviewSettingsDetail": "Проверьте настройки шлюза, затем обновите их еще раз, когда цель станет доступна.",
+    "gatewayGuidanceHostMaintenanceTitle": "Gateway требует обслуживания на хосте",
+    "gatewayGuidanceStateRecoveryDetail": "Исправьте доступ к файлам или заново создайте локальную конфигурацию Gateway на его хосте, затем обновите. Отключите это соединение, чтобы продолжить работу в Desktop; разрешения Cloud сохраняются.",
     "gatewayGuidanceCatalogAvailableTitle": "Доступен каталог шлюза",
     "gatewayGuidanceCatalogAvailableDetail": "Обновите этот шлюз, чтобы увидеть изменения в каталоге; его среды перечислены отдельно на вкладке «Среды».",
     "gatewayPanelActionNeedsAttention": "Проблема с действием шлюза",

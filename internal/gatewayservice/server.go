@@ -82,6 +82,17 @@ func New(options Options) (*Server, error) {
 	if root == "" {
 		root = filepath.Join(defaultStateRoot(), "gateways", "default", "state")
 	}
+	// Reject retired configuration before creating identities or member state.
+	for _, name := range []string{"environments.json", "membership-migration.json"} {
+		if _, err := os.Lstat(filepath.Join(root, name)); err == nil {
+			return nil, &gatewaystate.ReadError{Code: "gateway_state_unsupported", File: name, Message: "retired Gateway configuration; recreate local state and register again; existing files were not changed"}
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return nil, &gatewaystate.ReadError{Code: "gateway_state_unavailable", File: name, Message: "configuration could not be inspected; check file access"}
+		}
+	}
+	if err := gatewaymembership.CheckStateFile(filepath.Join(root, "members.json")); err != nil {
+		return nil, err
+	}
 	trust := gatewaytrust.NewStore(filepath.Join(root, "gateway-trust.json"))
 	if err := trust.Initialize(); err != nil {
 		return nil, err
@@ -154,13 +165,6 @@ func New(options Options) (*Server, error) {
 		return nil, err
 	}
 	server := &Server{cloud: cloud, version: options.Version, stateRoot: root, hostAdminToken: options.HostAdminToken, trust: trust, auth: gatewayauth.NewVerifier(trust), members: members, connections: connections, memberListener: listener, hooks: hooks}
-	for _, name := range []string{"environments.json", "membership-migration.json"} {
-		if _, err := os.Lstat(filepath.Join(root, name)); err == nil {
-			return nil, errors.New("retired Gateway configuration; create a new state root and register again; existing files were not changed")
-		} else if !errors.Is(err, os.ErrNotExist) {
-			return nil, err
-		}
-	}
 	return server, nil
 }
 

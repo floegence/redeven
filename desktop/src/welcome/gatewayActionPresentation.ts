@@ -109,7 +109,7 @@ function serviceStatusLabel(status: string): string {
     case 'service_needs_update':
       return 'Update required';
     case 'needs_reinstall':
-      return 'Reinstall required';
+      return 'Gateway requires host maintenance';
     case 'bridge_unavailable':
       return 'Bridge unavailable';
     case 'error':
@@ -385,6 +385,11 @@ function gatewayRefreshRecoveryPlan(
   }
 
   const service = gateway.service_state;
+  if (service?.status === 'needs_reinstall') {
+    return { title: 'Gateway requires host maintenance',
+      detail: 'Correct file access or recreate this Gateway’s local configuration on its host, then refresh. Disable this connection to keep using Desktop; Cloud authorizations are preserved.',
+      aria_label: 'Gateway host maintenance', primary_action: gatewaySourceAction('disable_gateway', 'Disable', 'outline', true) };
+  }
   if (gateway.connection_kind !== 'url' && (service?.can_start || service?.status === 'service_needs_update')) {
     const action = service.can_start ? gatewaySourceAction('start_gateway', 'Start Gateway', 'default', true)
       : gatewaySourceAction('update_gateway', 'Update Gateway', 'default', true);
@@ -433,8 +438,9 @@ function gatewayRefreshRecoveryPlan(
     case 'needs_reinstall':
       return {
         title: 'Gateway requires host maintenance',
-        detail: 'This Standalone Gateway has incompatible state. Repair or reinstall it on its own host, then refresh it here.',
+        detail: 'Correct file access or recreate this Gateway’s local configuration on its host, then refresh. Disable this connection to keep using Desktop; Cloud authorizations are preserved.',
         aria_label: 'Standalone Gateway maintenance required',
+        primary_action: gatewaySourceAction('disable_gateway', 'Disable', 'outline', true),
       };
     case 'ssh_unreachable':
     case 'container_unavailable':

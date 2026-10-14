@@ -20,6 +20,7 @@ import { GatewayTrustError, type GatewaySecretStore } from './gatewayTrust';
 import type { DesktopGatewayServiceState } from '../shared/desktopGateway';
 import {
   ensureManagedGatewayServiceReady,
+  GatewayServiceStartError,
   manageGatewayCloud,
   gatewayServiceBinaryPath,
   probeManagedGatewayServiceDeep,
@@ -81,7 +82,7 @@ export class GatewayServiceUnavailableError extends DesktopOperationFailureError
 export class GatewayReinstallRequiredError extends Error {
   readonly code = 'gateway_needs_reinstall';
 
-  constructor(readonly service_state: DesktopGatewayServiceState, message = 'This Gateway has incompatible state and must be reinstalled.') {
+  constructor(readonly service_state: DesktopGatewayServiceState, message = 'This Gateway requires local configuration maintenance on its host.') {
     super(message);
     this.name = 'GatewayReinstallRequiredError';
   }
@@ -242,6 +243,7 @@ export class GatewayLifecycleManager {
           serviceTargetID: targetID,
           serviceStateRoot: probe.state_root,
           message: probe.message,
+          errorCode: probe.error_code,
         });
       }
       return manageableServiceState(record, 'error', {
@@ -604,6 +606,12 @@ export class GatewayLifecycleManager {
         onProgress: (progress) => this.emitFromServiceProgress(options.onProgress, progress),
       });
     } catch (error) {
+      if (error instanceof GatewayServiceStartError && error.requiresStateRecovery) {
+        throw new GatewayReinstallRequiredError(manageableServiceState(record, 'needs_reinstall', {
+          serviceTargetID: gatewayLifecycleTargetID(record), serviceStateRoot: gatewayServiceStateRoot(record),
+          message: error.message, errorCode: error.status.error_code,
+        }), error.message);
+      }
       throw new GatewayServiceUnavailableError(
         record.connection.kind === 'ssh_container' || record.connection.kind === 'local_container'
           ? 'gateway_container_unavailable'
@@ -766,6 +774,7 @@ function manageableServiceState(
     serviceTargetID: string;
     serviceStateRoot: string;
     message?: string;
+    errorCode?: string;
   }>,
 ): DesktopGatewayServiceState {
   const canStart = status === 'not_started';
@@ -776,10 +785,11 @@ function manageableServiceState(
     can_stop: isReady,
     can_restart: isReady || status === 'service_needs_update',
     can_update: record.connection.kind !== 'url' && (isReady || status === 'service_needs_update'),
-    can_pair_after_start: record.connection.kind !== 'url' && status !== 'ssh_unreachable' && status !== 'container_unavailable',
+    can_pair_after_start: record.connection.kind !== 'url' && status !== 'ssh_unreachable' && status !== 'container_unavailable' && status !== 'needs_reinstall',
     service_target_id: options.serviceTargetID,
     service_state_root: options.serviceStateRoot,
     ...(options.message ? { message: options.message } : {}),
+    ...(options.errorCode ? { error_code: options.errorCode } : {}),
     checked_at_unix_ms: Date.now(),
   };
 }

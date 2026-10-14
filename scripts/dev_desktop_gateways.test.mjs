@@ -77,17 +77,44 @@ test('every launch forces current-source installation with a fresh session cache
   await assert.rejects(readFile(path.join(root, 'desktop/dev-gateways-v1.json')), { code: 'ENOENT' });
 });
 
-test('a partial startup records ownership before starting, keeps failures visible, and can be stopped without compiled Desktop code', async context => {
+test('failed Gateways keep diagnostics and ownership while healthy Gateways can still start', async context => {
   const { root, save, record } = await fixture(context);
-  await save([record('local')]);
-  await assert.rejects(runDevelopmentGateways({
-    mode: 'start', stateRoot: root, sourceRoot: '/missing-source', log: () => {},
-    dependencies: { ensureManagedGatewayServiceReady: async () => { throw new Error('build failed'); } },
-  }), /build failed/u);
+  await save([record('local'), record('healthy')]);
+  const calls = [], messages = [];
+  await runDevelopmentGateways({
+    mode: 'start', stateRoot: root, sourceRoot: '/missing-source', log: message => messages.push(message),
+    dependencies: {
+      gatewayStartupFailureMessage: error => error.message,
+      ensureManagedGatewayServiceReady: async input => {
+        calls.push(input.gatewayID);
+        if (input.gatewayID === 'local') throw new Error('members.json: unsupported schema_version 4');
+      },
+    },
+  });
+  assert.deepEqual(calls, ['local', 'healthy']);
+  assert.ok(messages.some(message => message.includes('unsupported schema_version 4')));
+  assert.ok(messages.some(message => message.includes('Desktop will open')));
   const ledger = JSON.parse(await readFile(path.join(root, 'desktop/dev-gateways-v1.json'), 'utf8'));
   assert.equal(ledger[0].gatewayID, 'local');
+  assert.equal(ledger[1].gatewayID, 'healthy');
   await save([]);
   await runDevelopmentGateways({ mode: 'stop', stateRoot: root, sourceRoot: '/missing-source', log: () => {} });
+});
+
+test('cancellation still prevents starting another Gateway or reporting recoverable failure', async context => {
+  const { root, save, record } = await fixture(context);
+  await save([record('first'), record('second')]);
+  const controller = new AbortController();
+  const calls = [], messages = [];
+  await assert.rejects(runDevelopmentGateways({
+    mode: 'start', stateRoot: root, sourceRoot: '/source', signal: controller.signal,
+    log: message => messages.push(message), dependencies: {
+      ensureManagedGatewayServiceReady: async input => { calls.push(input.gatewayID); controller.abort(); throw new Error('canceled'); },
+      gatewayStartupFailureMessage: error => error.message,
+    },
+  }), { name: 'AbortError' });
+  assert.deepEqual(calls, ['first']);
+  assert.equal(messages.some(message => message.includes('Desktop will open')), false);
 });
 
 test('cleanup refuses an inventory that does not match an exact saved Gateway service location', async context => {

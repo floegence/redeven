@@ -41,6 +41,7 @@ import { desktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
 import { RuntimeLifecycleCoordinator, RuntimeLifecycleInProgressError } from './runtimeLifecycleCoordinator';
 import type { DesktopSSHTransportManager } from './sshTransportManager';
 import { DesktopOperationFailureError, desktopOperationFailurePresentation } from './desktopOperationFailure';
+import { GatewayServiceStartError } from './gatewayServiceHost';
 
 function fakeSSHTransportManager(): DesktopSSHTransportManager {
   return {
@@ -758,6 +759,19 @@ describe('GatewayLifecycleManager', () => {
     expect(lifecycleMocks.ensureManagedGatewayServiceReady).not.toHaveBeenCalled();
     expect(lifecycleMocks.startRuntimePlacementBridgeSession).not.toHaveBeenCalled();
     expect(lifecycleMocks.stopManagedGatewayService).not.toHaveBeenCalled();
+  });
+
+  it('exposes state recovery when startup fails and never opens a bridge', async () => {
+    lifecycleMocks.ensureManagedGatewayServiceReady.mockRejectedValueOnce(new GatewayServiceStartError({
+      status: 'error', error_code: 'gateway_state_unsupported', error_message: 'members.json: unsupported schema_version 4; expected 5',
+    }));
+    await expect(manager().startGateway(sshGateway())).rejects.toMatchObject({
+      name: 'GatewayReinstallRequiredError', service_state: {
+        status: 'needs_reinstall', error_code: 'gateway_state_unsupported', can_start: false,
+        can_restart: false, can_update: false, can_pair_after_start: false,
+      },
+    });
+    expect(lifecycleMocks.startRuntimePlacementBridgeSession).not.toHaveBeenCalled();
   });
 
   it('does not allow Desktop to manage URL Gateways as local services', async () => {

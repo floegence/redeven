@@ -102,7 +102,7 @@ export async function runDevelopmentGateways({ mode, stateRoot, sourceRoot, sign
       await writeFile(temporaryLedger, JSON.stringify([...owned.values()]), { mode: 0o600 });
       await rename(temporaryLedger, ledgerPath);
       log(`Building and starting development Gateway: ${target.gatewayID}`);
-      await services.ensureManagedGatewayServiceReady({
+      try { await services.ensureManagedGatewayServiceReady({
         sshTransportManager: transport, sshCredentialScope: target.gatewayID,
         hostAccess: { kind: 'local_host' }, placement: { kind: 'host_process', runtime_root: target.runtimeRoot },
         stateRoot: target.stateRoot, gatewayID: target.gatewayID,
@@ -110,7 +110,11 @@ export async function runDevelopmentGateways({ mode, stateRoot, sourceRoot, sign
         targetCommit: process.env.REDEVEN_DESKTOP_BUNDLE_COMMIT,
         releaseBaseURL: '', sourceRuntimeRoot: sourceRoot,
         assetCacheRoot: cacheRoot, tempRoot, forceUpdate: true, signal,
-      });
+      }); } catch (error) {
+        signal?.throwIfAborted();
+        log(`Development Gateway unavailable (${target.gatewayID}): ${services.gatewayStartupFailureMessage(error)}`);
+        log('Desktop will open. Use Gateways → Refresh for diagnostics, or disable/remove this connection while repairing its local state.');
+      }
     }
   } finally {
     await transport?.dispose();

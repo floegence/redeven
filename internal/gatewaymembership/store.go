@@ -118,12 +118,26 @@ type Store struct {
 	onCommit func([]MemberRecord, gp.GatewayPolicy)
 }
 
+// CheckStateFile rejects incompatible persisted contracts before a service
+// initializes any identity or other state. Missing state means a new Gateway.
+func CheckStateFile(path string) error {
+	var state memberState
+	err := gatewaystate.ReadVersioned(path, &state, 5)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return errors.Join(ErrState, err)
+	}
+	return nil
+}
+
 func NewStore(path string, identity GatewayIdentity, endpointURL, listen string, hooks *PolicyHooks) (*Store, error) {
 	if path == "" || !validID(identity.ID) || len(identity.PrivateKey) != ed25519.PrivateKeySize || hooks == nil {
 		return nil, ErrState
 	}
 	s := &Store{path: path, identity: GatewayIdentity{ID: identity.ID, DisplayName: identity.DisplayName, PrivateKey: append(ed25519.PrivateKey(nil), identity.PrivateKey...)}, hooks: hooks}
-	err := gatewaystate.Read(path, &s.state)
+	err := gatewaystate.ReadVersioned(path, &s.state, 5)
 	if errors.Is(err, os.ErrNotExist) {
 		confirmedURL := endpointURL
 		if endpointURL == "" {
@@ -142,7 +156,7 @@ func NewStore(path string, identity GatewayIdentity, endpointURL, listen string,
 			return nil, err
 		}
 	} else if err != nil {
-		return nil, err
+		return nil, errors.Join(ErrState, err)
 	}
 	if s.state.Endpoint.AllowedHosts == nil || s.state.SchemaVersion != 5 || s.state.GatewayID != identity.ID || s.state.Revision < 1 || s.state.Policy.Revision < 1 || s.state.Members == nil || s.state.Invitations == nil {
 		return nil, ErrState

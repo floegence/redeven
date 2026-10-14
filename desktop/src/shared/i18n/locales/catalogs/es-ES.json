@@ -1962,6 +1962,8 @@
     "gatewayGuidanceReadyTitle": "La puerta de enlace está lista",
     "gatewayGuidanceReadyDetail": "Desktop puede actualizar este catálogo de puerta de enlace de red. Abra sus entornos desde la pestaña de entornos.",
     "gatewayGuidanceReviewSettingsDetail": "Revise la configuración de la puerta de enlace y luego actualice nuevamente cuando se pueda alcanzar el objetivo.",
+    "gatewayGuidanceHostMaintenanceTitle": "El Gateway requiere mantenimiento en el host",
+    "gatewayGuidanceStateRecoveryDetail": "Corrige el acceso a los archivos o vuelve a crear la configuración local del Gateway en su host y actualiza. Desactiva esta conexión para seguir usando Desktop; las autorizaciones de Cloud se conservan.",
     "gatewayGuidanceCatalogAvailableTitle": "Catálogo de puerta de enlace disponible",
     "gatewayGuidanceCatalogAvailableDetail": "Actualice esta puerta de enlace para recoger los cambios del catálogo; sus entornos se enumeran por separado en la pestaña Entornos.",
     "gatewayPanelActionNeedsAttention": "Problema de acción de puerta de enlace",

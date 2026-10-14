@@ -47,6 +47,8 @@ Build and start Redeven Desktop, its local Runtime, and enabled local Gateways
 saved in this development profile from the current uncommitted source tree.
 Exiting the session stops these development services together. Remote, container,
 URL, and unsaved Gateway services retain their independent lifecycle.
+One failed local Gateway does not prevent Desktop from opening. Review its
+diagnostics in Gateways, or disable/remove the connection while repairing it.
 Saved local Gateways can use the default host directory or a custom location.
 The embedded Env App Plugin UI is enabled for this development launch.
 After building, keep the three newest development bundles plus the selected

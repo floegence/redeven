@@ -3,7 +3,7 @@ type: Gateway Contract
 title: Gateway service
 description: Manage Runtime-initiated membership without acquiring Runtime lifecycle authority.
 tags: [gateway, desktop, access, identity]
-timestamp: 2026-10-13T00:00:00Z
+timestamp: 2026-10-14T00:00:00Z
 ---
 # Summary
 
@@ -34,6 +34,10 @@ The separate Gateway archive and state root contain no Runtime lifecycle data. D
 Host administration and URL client access are separate, request-verified paths. See [Gateway client access](gateway-client-access.md) for host proof, enrollment, revocation and trust migration.
 
 Gateway updates prepare the complete package before stopping the existing service or replacing its Desktop bridge. A package preparation failure leaves both intact. Restart reuses a matching package; a stale package follows the same prepare-before-stop path. Source-built Gateway archives compile the standalone Gateway command without building Runtime frontend assets. Successful replacement retains the state root, Gateway identity, members and client access grants. Preparation diagnostics retain a bounded redacted log head and tail so the compiler cause remains inspectable.
+
+Managed startup waits for the child process's actual exit and reaps failed children. A rejected state file reports its basename, stable reason code and recovery guidance immediately; process existence alone cannot establish readiness. Status retains the startup diagnostic until the implicated file changes or a new service starts. Unsupported schema and retired configuration fail read-only before identity initialization. There is no old-state reader, automatic conversion or automatic reset.
+
+A failed local Gateway does not prevent `dev_desktop.sh` from opening Desktop or preparing other Gateways. Desktop shows host maintenance, blocks ineffective restart/update/pair actions, and offers Refresh, settings, Disable and Remove. Operators repair file access or stop the Gateway and recreate its local configuration, preserve the machine identity, then enroll members again. Disabling a Desktop connection preserves Cloud authorization and other Gateways. Cancellation still stops development startup and exact owned-process cleanup remains required.
 
 ## Address changes and upgrade
 
@@ -67,6 +71,9 @@ Gateway owns membership, policy, invitations, and restricted forwarding. Runtime
 - `redeven:internal/localui/gateway_multiple_connections_test.go` — Two real TLS Gateways, independent reconnect and targeted removal.
 - `redeven:internal/config/gateway_connections_test.go` — Independent member updates preserve Cloud association and selected route.
 - `redeven:desktop/src/main/gatewayLifecycleManager.ts` — Independent Gateway process owner.
+- `redeven:cmd/redeven-gateway/main_test.go` — Immediate startup exit, bounded timeout and repaired-state diagnostic invalidation.
+- `redeven:desktop/src/main/gatewayServiceHost.test.ts` — Structured command failures, readiness and repair recovery across a real host executor.
+- `redeven:scripts/dev_desktop_gateways.test.mjs` — Independent Gateway preparation, cancellation and retained cleanup inventory.
 - `redeven:desktop/scripts/check-gateway-local-update.mjs` — Real local update/restart, stable identity and failed-package service/bridge preservation.
 
 ## Operational observations

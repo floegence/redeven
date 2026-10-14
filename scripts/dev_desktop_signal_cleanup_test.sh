@@ -53,7 +53,7 @@ printf '%s\n' \
   '  exit 0' \
   '}' \
   'trap on_signal INT TERM' \
-  'if [ "$FAKE_SESSION_CASE" = normal ]; then sleep 0.2; exit 0; fi' \
+  'if [ "$FAKE_SESSION_CASE" = normal ] || [ "$FAKE_SESSION_CASE" = gateway-failure ]; then sleep 0.2; exit 0; fi' \
   'while :; do sleep 0.05; done' > "$FAKE_ELECTRON_PATH"
 chmod 700 "$FAKE_ELECTRON_PATH"
 
@@ -92,6 +92,7 @@ exports.ensureManagedGatewayServiceReady = async options => {
     });
   }
 };
+exports.gatewayStartupFailureMessage = error => error.message;
 JS
 printf '%s\n' 'exports.DefaultDesktopSSHTransportManager = class { async dispose() {} };' > "$FAKE_DESKTOP/dist/main/sshTransportManager.js"
 node -e 'require("node:fs").writeFileSync(process.argv[1], JSON.stringify({ schema_version: 4, gateways: [{ gateway_id: "fixture", local_enabled: true, connection: { kind: "local_host", runtime_root: process.argv[2] } }] }))' \
@@ -133,16 +134,14 @@ SESSION_PID="$(node -e '
   process.stdout.write(String(child.pid));
 ' "$FAKE_SCRIPTS/dev_desktop.sh" "$TEST_ROOT/session.log" --no-devtools)"
 for _ in $(seq 1 100); do
-  if [ "$FAKE_SESSION_CASE" = gateway-failure ]; then
-    [ -f "$FAKE_GATEWAY_STOPPED" ] && break
-  elif [ "$FAKE_SESSION_CASE" = gateway-interrupt ]; then
+  if [ "$FAKE_SESSION_CASE" = gateway-interrupt ]; then
     [ -f "$FAKE_GATEWAY_PREPARING" ] && break
   else
     [ -f "$FAKE_ELECTRON_STARTED" ] && break
   fi
   sleep 0.05
 done
-if [ "$FAKE_SESSION_CASE" != gateway-failure ] && [ "$FAKE_SESSION_CASE" != gateway-interrupt ] && [ ! -f "$FAKE_ELECTRON_STARTED" ]; then
+if [ "$FAKE_SESSION_CASE" != gateway-interrupt ] && [ ! -f "$FAKE_ELECTRON_STARTED" ]; then
   cat "$TEST_ROOT/session.log" >&2
   printf 'dev Desktop did not reach the Electron process\n' >&2
   exit 1
@@ -177,8 +176,12 @@ if [ ! -f "$FAKE_GATEWAY_STOPPED" ] || ! rg -Fq -- "service-stop --state-root $S
   printf 'Session exit did not stop the exact development Gateway\n' >&2
   exit 1
 fi
-if { [ "$FAKE_SESSION_CASE" = gateway-failure ] || [ "$FAKE_SESSION_CASE" = gateway-interrupt ]; } && [ -f "$FAKE_ELECTRON_STARTED" ]; then
-  printf 'Desktop started despite Gateway preparation failure\n' >&2
+if [ "$FAKE_SESSION_CASE" = gateway-interrupt ] && [ -f "$FAKE_ELECTRON_STARTED" ]; then
+  printf 'Desktop started despite cancellation during Gateway preparation\n' >&2
+  exit 1
+fi
+if [ "$FAKE_SESSION_CASE" = gateway-failure ] && ! rg -Fq 'Development Gateway unavailable (fixture): Gateway startup failed' "$TEST_ROOT/session.log"; then
+  printf 'Desktop launch lost the Gateway failure diagnostic\n' >&2
   exit 1
 fi
 if [ "$FAKE_SESSION_CASE" = normal ]; then

@@ -2552,6 +2552,9 @@ function gatewaySourcePrimaryAction(gateway: DesktopGatewaySource): GatewaySourc
   if (desktopGatewayCanManageService(gateway) && gateway.service_state?.status === 'service_needs_update') {
     return gatewaySourceAction('update_gateway', 'Update Gateway', 'default');
   }
+  if (gateway.service_state?.status === 'needs_reinstall') {
+    return gatewaySourceAction('refresh_gateway', 'Refresh', 'default');
+  }
   if (gateway.status === 'pairing_required' || gateway.trust_state === 'unpaired') {
     return gatewaySourceAction('pair_gateway', 'Pair Gateway', 'default');
   }
@@ -2678,7 +2681,7 @@ function gatewaySourceGuidance(gateway: DesktopGatewaySource): GatewaySourceGuid
   if (runtimeStatus === 'needs_reinstall') {
     return {
       title: 'Gateway requires host maintenance',
-      detail: 'This Standalone Gateway has incompatible state. Repair or reinstall it on its own host, then refresh it here.',
+      detail: 'Correct file access or recreate this Gateway’s local configuration on its host, then refresh. Disable this connection to keep using Desktop; Cloud authorizations are preserved.',
       tone: 'warning',
     };
   }
@@ -2776,7 +2779,7 @@ export function buildGatewaySourceRowModel(
       : runtimeStatus === 'service_needs_update'
         ? 'Update available'
         : runtimeStatus === 'needs_reinstall'
-          ? 'Reinstall required'
+          ? 'Needs attention'
         : runtimeStatus === 'ready' && gateway.status !== 'online'
           ? 'Service ready'
         : gateway.background_sync_running === true
