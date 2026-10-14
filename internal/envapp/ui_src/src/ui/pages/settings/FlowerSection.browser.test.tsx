@@ -223,6 +223,31 @@ it('uses one searchable model list in the polished global Env provider dialog', 
   if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: dialog, path: '__screenshots__/flower-env-provider-models.png' });
 });
 
+it('retains provider type editing and stored credentials in global Env settings', async () => {
+  const { settings, bundles } = await mount(1000, true, 'en-US', false, true);
+  const handleRequests = request.getMockImplementation()!;
+  request.mockImplementation((url: string, init?: RequestInit) => url.endsWith('/ai/model_catalog')
+    ? Promise.resolve({ models: [{ model_name: 'claude-test', context_window: 128000, max_output_tokens: 8192, supports_tools: true }] })
+    : handleRequests(url, init));
+  await userEvent.click(host.querySelector<HTMLButtonElement>('.flower-settings-provider-actions button:not([role="switch"])')!);
+  await expect.element(page.getByRole('dialog')).toBeVisible();
+  const dialog = document.querySelector<HTMLElement>('.flower-provider-dialog')!;
+  const nextType = dialog.querySelector<HTMLButtonElement>('[aria-controls=flower-provider-type-anthropic]');
+  expect(nextType).not.toBeNull();
+  await userEvent.click(nextType!);
+  expect(dialog.querySelector('[aria-controls=flower-provider-type-anthropic]')?.getAttribute('aria-current')).toBe('true');
+  expect(dialog.querySelector<HTMLInputElement>('input[data-stored-secret]')?.value).toBe('');
+  await userEvent.click(page.getByRole('button', { name: 'Sync model list', exact: true }));
+  await userEvent.click((page.getByRole('checkbox', { name: 'claude-test', exact: true }).element() as HTMLInputElement).closest('label')!);
+  await userEvent.click(page.getByRole('button', { name: 'Save provider', exact: true }));
+  await expect.poll(() => bundles.length).toBe(1);
+  await expect.poll(() => settings().ai?.providers?.[0]?.type).toBe('anthropic');
+  expect(settings().ai?.providers?.[0]?.id).toBe('deepseek');
+  expect(bundles[0].provider_api_key_patches).toEqual([]);
+  expect(bundles[0].web_search_provider_key_patches).toEqual([]);
+  expect((bundles[0].model_profile as AIModelProfile).providers[0].model_selection?.selected_models).toEqual(['claude-test']);
+});
+
 it('shows a saved key as dots and preserves it when a replacement draft is cleared', async () => {
   const { settings, bundles } = await mount(1000, true, 'zh-CN', false, true);
   const handleRequests = request.getMockImplementation()!;

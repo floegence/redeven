@@ -44,6 +44,7 @@ export type FlowerProviderDialogProps = Readonly<{
   onDiscoverModels?: FlowerModelCatalogDiscovery;
   open: boolean;
   mode: FlowerProviderDialogMode;
+  allowTypeChange?: boolean;
   provider: FlowerProviderDraft | null;
   catalogModels?: readonly FlowerProviderModel[];
   providerDefaults?: Readonly<Partial<Record<FlowerProviderType, readonly FlowerProviderModel[]>>>;
@@ -69,6 +70,7 @@ function modelSelected(provider: FlowerProviderDraft, modelName: string): boolea
 
 export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
   const copy = () => props.copy ?? DEFAULT_FLOWER_SURFACE_COPY.settings.dialog;
+  const canChangeType = () => props.mode === 'create' || props.allowTypeChange === true;
   const [query, setQuery] = createSignal('');
   const [loading, setLoading] = createSignal(false);
   const [discoveryError, setDiscoveryError] = createSignal('');
@@ -413,7 +415,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
       name: providerTypeLabel(type),
       base_url: defaultBaseURLForFlowerProviderType(type),
       web_search: flowerProviderNeedsWebSearchConfig(type) ? { mode: 'disabled' } : undefined,
-      web_search_api_key: null,
+      web_search_api_key: undefined,
       provider_api_key: undefined,
       models: nextModels,
       model_selection: undefined,
@@ -423,7 +425,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
   };
 
   const selectProviderType = (type: FlowerProviderType) => {
-    if (props.mode === 'edit') return;
+    if (props.disabled || !canChangeType()) return;
     setSelectedProviderType(type);
     if (store.draft?.type !== type) changeProviderType(type);
     discoverNewConnection();
@@ -510,7 +512,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
           <nav class="flower-provider-picker" aria-label={copy().providerTypeTitle} data-flower-skip-discovery>
             <h3 class="flower-provider-picker-title">{copy().providerTypeTitle}</h3>
             <div class="flower-provider-picker-options">
-              <For each={props.mode === 'edit' ? FLOWER_PROVIDER_TYPES.filter((item) => item.value === store.draft?.type) : FLOWER_PROVIDER_TYPES}>
+              <For each={canChangeType() ? FLOWER_PROVIDER_TYPES : FLOWER_PROVIDER_TYPES.filter((item) => item.value === store.draft?.type)}>
                 {(item) => (
                   <button
                     type="button"

@@ -25,7 +25,10 @@ connection controls, and searchable model catalog without pushing other provider
 choices below a long expanded form. Icon, label, and selection slots keep every
 brand aligned. Selecting the current provider retains its pane and draft;
 changing type clears transient search, discovery, and entered credentials.
-Existing shared-provider edits retain their type.
+Existing Desktop and embedded Flower provider edits retain their type. Global
+Env settings retain their provider-type editing action through the shared
+dialog; changing type preserves the provider identity and stored credentials,
+while clearing the unsaved credential drafts and obsolete model selections.
 Narrow screens move the picker above the form and use the dialog body as the only
 vertical scroller; wide layouts scroll the picker and configuration independently.
 

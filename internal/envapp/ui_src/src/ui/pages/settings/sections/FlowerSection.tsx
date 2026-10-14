@@ -475,6 +475,7 @@ export function FlowerSection() {
         chatGPTAccount={ctx.settings()?.chatgpt_accounts?.[providerDialogProvider()?.id ?? ''] ?? providerDialogProvider()?.chatgpt_account}
         open={providerDialogOpen()}
         mode={providerDialogMode()}
+        allowTypeChange
         provider={providerDialogProvider() as FlowerProviderDraft | null}
         copy={settingsCopy().dialog}
         keyConfigured={!!providerKeySet()?.[String(providerDialogProvider()?.id ?? '').trim()]}
