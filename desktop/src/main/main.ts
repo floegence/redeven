@@ -9355,6 +9355,34 @@ function sessionTransportRecoveryFailed(sessionRecord: DesktopSessionRecord): bo
   return sessionRecord.transport_recovery_snapshot?.phase === 'failed';
 }
 
+function failNativeLocalSessionTransport(
+  record: DesktopSessionRecord,
+  request: Readonly<{ url: string; error: string }>,
+): void {
+  if (record.closing || record.transport.kind !== 'native_local_bridge'
+    || record.transport_recovery_snapshot?.phase === 'failed'
+    || request.error !== 'net::ERR_CONNECTION_REFUSED') return;
+  try {
+    if (new URL(request.url).origin !== new URL(record.transport.allowedBaseURL).origin) return;
+  } catch {
+    return;
+  }
+  // A refused trusted listener cannot recover at this document's old port.
+  // A new Runtime identity must come from the existing native lifecycle owner.
+  record.transport_recovery_snapshot = {
+    generation: (record.transport_recovery_snapshot?.generation ?? 0) + 1,
+    revision: (record.transport_recovery_snapshot?.revision ?? 0) + 1,
+    phase: 'failed', attempt_count: 0,
+    failure: {
+      code: 'transport_unavailable', error_name: 'LocalRuntimeBridgeUnavailable',
+      technical_detail: 'The trusted Local Runtime bridge refused the connection. Reopen this Environment from Connection Center to restore the Runtime and workspace.',
+    },
+    actions: ['open_connection_center'],
+  };
+  void record.diagnostics.recordLifecycle('native_local_transport_unavailable', 'Local Runtime bridge is no longer available');
+  sendSessionTransportRecoverySnapshot(record);
+}
+
 function failGatewaySessionTransport(record: DesktopSessionRecord, error: GatewayClientError): void {
   if (record.closing || record.target.kind !== 'gateway_environment') return;
   if (record.transport_recovery_snapshot?.failure?.code === 'gateway_member_removed') return;
@@ -14422,6 +14450,14 @@ async function openLocalEnvironmentRecord(
   const target = buildLocalEnvironmentDesktopTarget(environment, {
     route: 'local_host',
   });
+  const existingSession = liveSession(target.session_key);
+  if (existingSession && sessionTransportRecoveryFailed(existingSession)) {
+    const openTarget = localHostOpenTarget(environment);
+    return runEnvironmentRuntimeLifecycleFromLauncher({
+      kind: 'restart_environment_runtime', environment_id: environment.id, label: environment.label,
+      runtime_target_id: openTarget.targetID, host_access: openTarget.hostAccess, placement: openTarget.placement,
+    });
+  }
   const operationKey = `${localHostOpenTarget(environment).targetID}:open`;
   const lifecycleTargetKey = localHostRuntimeLifecycleTargetKey(environment);
   try {
@@ -17982,6 +18018,12 @@ async function focusEnvironmentWindow(sessionKey: string): Promise<DesktopLaunch
       environmentID: sessionRecord.target.environment_id,
     });
   }
+  if (sessionRecord?.transport.kind === 'native_local_bridge'
+    && sessionTransportRecoveryFailed(sessionRecord)) {
+    return openLocalEnvironmentFromLauncher({
+      kind: 'open_local_environment', environment_id: sessionRecord.target.environment_id, route: 'local_host',
+    });
+  }
   if (!focusEnvironmentSession(cleanSessionKey, { stealAppFocus: true })) {
     return launcherActionFailure(
       'session_stale',
@@ -19042,6 +19084,7 @@ function installDesktopDiagnosticsHooks(
       url: details.url,
       error: details.error,
     });
+    failNativeLocalSessionTransport(sessionRecord, details);
   });
 }
 
