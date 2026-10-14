@@ -3263,7 +3263,7 @@
     "connectEnvironment": "连接环境",
     "gatewayInvitation": "验证邀请",
     "confirmAccess": "确认接入",
-    "connectHelp": "先确认可以连接此环境，再填写 Gateway 地址和邀请码。此步骤只检查运行时，不会加入 Gateway。",
+    "connectHelp": "先连接此环境，再验证 Gateway 地址和邀请码。确认接入信息后，即可启用访问。",
     "connectAndContinue": "连接并继续",
     "connecting": "正在连接…",
     "connectFailed": "无法连接此环境。请重试或检查环境的连接设置。",

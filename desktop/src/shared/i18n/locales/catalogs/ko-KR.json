@@ -3263,7 +3263,7 @@
     "connectEnvironment": "환경 연결",
     "gatewayInvitation": "초대 검증",
     "confirmAccess": "접근 확인",
-    "connectHelp": "Gateway 주소와 초대 코드를 입력하기 전에 이 환경에 연결할 수 있는지 확인하세요. 이 단계에서는 런타임만 확인하며 Gateway에 가입하지 않습니다.",
+    "connectHelp": "먼저 이 환경에 연결하세요. 그런 다음 Gateway 주소와 초대 코드를 검증하고, 세부 정보를 확인한 후 접근을 활성화하세요.",
     "connectAndContinue": "연결 후 계속",
     "connecting": "연결 중…",
     "connectFailed": "이 환경에 연결하지 못했습니다. 다시 시도하거나 환경의 연결 설정을 확인하세요.",

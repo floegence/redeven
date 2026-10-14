@@ -3269,7 +3269,7 @@
     "connectEnvironment": "Conectar entorno",
     "gatewayInvitation": "Verificar invitación",
     "confirmAccess": "Confirmar acceso",
-    "connectHelp": "Confirme la conexión a este entorno antes de introducir la dirección del Gateway y el código de invitación. Este paso solo comprueba el entorno de ejecución; no lo une a ningún Gateway.",
+    "connectHelp": "Primero, conéctese a este entorno. Después, verifique la dirección de Gateway y el código de invitación y revise los detalles antes de habilitar el acceso.",
     "connectAndContinue": "Conectar y continuar",
     "connecting": "Conectando…",
     "connectFailed": "No se pudo conectar a este entorno. Reintente o revise sus ajustes de conexión.",

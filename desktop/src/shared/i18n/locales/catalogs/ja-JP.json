@@ -3263,7 +3263,7 @@
     "connectEnvironment": "環境に接続",
     "gatewayInvitation": "招待を検証",
     "confirmAccess": "アクセスを確認",
-    "connectHelp": "Gateway のアドレスと招待コードを入力する前に、この環境への接続を確認します。この手順ではランタイムの確認のみを行い、Gateway には参加しません。",
+    "connectHelp": "まずこの環境に接続します。次に Gateway のアドレスと招待コードを検証し、内容を確認してからアクセスを有効にします。",
     "connectAndContinue": "接続して次へ",
     "connecting": "接続中…",
     "connectFailed": "この環境に接続できませんでした。再試行するか、環境の接続設定を確認してください。",

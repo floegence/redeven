@@ -3263,7 +3263,7 @@
     "connectEnvironment": "連線環境",
     "gatewayInvitation": "驗證邀請",
     "confirmAccess": "確認接入",
-    "connectHelp": "先確認可以連線至此環境，再填寫 Gateway 位址和邀請碼。此步驟只檢查執行階段，不會加入 Gateway。",
+    "connectHelp": "先連線至此環境，再驗證 Gateway 位址與邀請碼。確認接入資訊後，即可啟用存取。",
     "connectAndContinue": "連線並繼續",
     "connecting": "正在連線…",
     "connectFailed": "無法連線至此環境。請重試或檢查環境的連線設定。",

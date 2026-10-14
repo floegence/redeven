@@ -109,7 +109,7 @@ export const enUS = {
     connectEnvironment: "Connect environment",
     gatewayInvitation: "Gateway invitation",
     confirmAccess: "Confirm access",
-    connectHelp: "Confirm the connection to this environment before entering the Gateway address and invitation code. This only checks the Runtime; it does not join a Gateway.",
+    connectHelp: "Connect to this environment first. Then verify the Gateway address and invitation code, and review the details before enabling access.",
     connectAndContinue: "Connect and continue",
     connecting: "Connecting…",
     connectFailed: "Could not connect to this environment. Retry or check its connection settings.",
