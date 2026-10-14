@@ -45,6 +45,17 @@ Successful Env App shell and entry-asset validation may be reused only inside th
 
 `desktopSessionTransport` resolves the immutable transport kind, base URL, entry URL, display URL, navigation boundary, proxy policy, and partition before a session window exists. Native Local Environment and SSH/container placements use session-scoped non-persistent Electron partitions configured with `setProxy({ mode: 'direct' })` before the first load. Root, child, and access-gate windows share that partition, and session closure clears its storage. [Gateway access sessions](../gateway/gateway-access-sessions.md) owns Gateway's isolated partition and fixed proxy policy; [CodeSpace native access](codespace-native-access.md) owns the editor's separate persistent partition. Provider remote and external Local UI sessions continue to use the default Session and system proxy policy.
 
+Session-root navigation on the entry origin, including equivalent loopback hosts,
+is limited to the original entry pathname and Runtime-owned Env App shell routes,
+including the root redirect, index document, and extensionless routes under
+`/_redeven_proxy/env/`, with query and hash changes preserved. Asset and Browser
+documents have separate owners. Same-origin file paths, missing routes, and `file:`
+URLs are blocked without replacing the document or opening the system browser.
+External web links keep their existing external-open policy. Child windows retain
+their existing session-family or product route policy. This defense complements
+[inert assistant media references](../ui/flower-inline-media.md); it grants no
+filesystem authorization.
+
 WebRequest diagnostics are installed idempotently for every Electron Session that Desktop uses. An opening root document with final HTTP status 400 or greater fails immediately with transport and status diagnostics; Chromium failures remain immediate through `did-fail-load`. The readiness timeout is reserved for a loaded document that never reports an interactive password gate or connected Runtime state. Renderer projections, Welcome snapshots, persisted preferences, and user diagnostics omit both private bridge fields. The main process projects only `desktop_private_bridge_v2` through the session-context preload for private documents. Env App selects `flowersec-private-loopback/1` only with that exact provenance. Public HTTP uses the separate released HTTPDirect profile; public HTTPS retains normal `flowersec/3` WSS. Placement HTTP/2 is outside Flowersec and cannot weaken its admission, lease, or E2EE rules. [Local UI network exposure](../security/local-ui-network-exposure.md) owns these protocol boundaries.
 
 Worker requests without a window identity resolve their Runtime owner through

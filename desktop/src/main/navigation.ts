@@ -1,4 +1,4 @@
-import { isLoopbackHost, isSupportedLocalHostname } from './localUIURL';
+import { LOCAL_UI_ENV_APP_ENTRY_PATH, isLoopbackHost, isSupportedLocalHostname } from './localUIURL';
 
 type RemoteSessionFamily =
   | Readonly<{
@@ -197,6 +197,33 @@ export function isAllowedAppNavigation(input: string, allowedBaseURL: string): b
     return isAllowedRemoteSessionNavigation(candidate, allowed);
   } catch {
     return false;
+  }
+}
+
+function isEnvAppShellPath(pathname: string): boolean {
+  const path = decodeURIComponent(pathname).replace(/\/$/u, '');
+  const root = LOCAL_UI_ENV_APP_ENTRY_PATH.slice(0, -1);
+  if (!path || path === root || path === `${root}/index.html`) return true;
+  if (!path.startsWith(`${root}/`)) return false;
+  const route = path.slice(root.length + 1);
+  // Match the Runtime's shell routes; assets and the Browser surface are separate documents.
+  return !/^(assets|browser)(\/|$)/u.test(route) && !route.split('/').at(-1)!.includes('.');
+}
+
+/** Session roots retain their shell; product windows keep their own route policy. */
+export function sessionRootNavigationAction(input: string, allowedBaseURL: string, entryURL: string): 'allow' | 'block' | 'external' {
+  try {
+    const entry = new URL(entryURL);
+    const candidate = new URL(input);
+    if (!isAllowedAppNavigation(input, allowedBaseURL)) {
+      return ['http:', 'https:', 'mailto:'].includes(candidate.protocol) ? 'external' : 'block';
+    }
+    if (candidate.origin === entry.origin || (isLoopbackHost(candidate.hostname) && isLoopbackHost(entry.hostname))) {
+      return candidate.pathname === entry.pathname || isEnvAppShellPath(candidate.pathname) ? 'allow' : 'block';
+    }
+    return 'allow';
+  } catch {
+    return 'block';
   }
 }
 

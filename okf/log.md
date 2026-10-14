@@ -1,5 +1,12 @@
 # Redeven OKF Update Log
 
+## 2026-10-14: Inert HTML preview loading
+
+- Separate [assistant media capability](ui/flower-inline-media.md) from label
+  readiness, preserve bounded loading and in-place retry, and restrict
+  [Desktop session-root navigation](desktop/desktop-runtime-bridge.md) so local
+  file paths cannot replace the chat document.
+
 ## 2026-10-14: Canonical management operation timing
 
 - Adopt published Floret v7.32.1 dispatch/result timing. Define
