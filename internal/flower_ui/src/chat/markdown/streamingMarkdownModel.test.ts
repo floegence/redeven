@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
-import { Marked } from 'marked';
+import type { Marked } from 'marked';
+import { createMarkdownParser } from '@floegence/floe-webapp-core/markdown';
 
 import { createFlowerMarkdownRenderer } from './markedConfig';
 import { buildMarkdownRenderSnapshot, createMarkdownRenderModel } from './streamingMarkdownModel';
 
 function createMarked(): Marked<string, string> {
-  const marked = new Marked<string, string>({
+  const marked = createMarkdownParser({
     gfm: true,
     breaks: false,
     pedantic: false,

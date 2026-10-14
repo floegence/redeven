@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Marked } from 'marked';
+import { createMarkdownParser } from '@floegence/floe-webapp-core/markdown';
 import { flowerMessageTextForCopy, mapFlowerCitationSources, prepareFlowerCitations } from './flowerCitations';
 import { createFlowerMarkdownRenderer } from './markedConfig';
 const cite = '\uE200cite\uE202turn1view5\uE201';
@@ -41,7 +41,7 @@ describe('canonical Flower citations', () => {
     const raw = `**bold** [normal](https://example.com)\n\n\`${cite}\`\n\n\`\`\`text\n${cite}\n\`\`\`\n\\${cite}`;
     expect(prepareFlowerCitations(raw, [], 'Unavailable', false).markdown).toBe(raw);
     expect(flowerMessageTextForCopy(raw)).toBe(raw);
-    const marked = new Marked({ gfm: true });
+    const marked = createMarkdownParser({ gfm: true, breaks: false });
     marked.use({ renderer: createFlowerMarkdownRenderer() });
     expect(marked.parse('**我的阅读评价： **')).toContain('**我的阅读评价： **');
   });
