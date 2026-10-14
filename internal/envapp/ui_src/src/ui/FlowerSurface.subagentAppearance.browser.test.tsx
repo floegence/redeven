@@ -49,8 +49,11 @@ describe('Subagent identity and reading surfaces', () => {
       await waitFor(() => document.querySelectorAll('[data-flower-subagent-row]').length === 4);
       const rows = [...document.querySelectorAll<HTMLButtonElement>('[data-flower-subagent-row]')];
       expect(rows.every((row) => row.querySelector('svg') && !row.querySelector('canvas'))).toBe(true);
+      expect(rows.every((row) => getComputedStyle(row.querySelector<HTMLElement>('[data-flower-subagent-avatar]')!).borderRadius === '50%')).toBe(true);
       const first = rows.find((row) => row.dataset.flowerSubagentStatus === 'running')!;
       const identity = first.querySelector<HTMLElement>('[data-flower-subagent-avatar]')!;
+      expect(identity.querySelector('svg')?.innerHTML).toContain('<circle cx="32" cy="32" r="32"');
+      expect(identity.querySelector('svg')?.innerHTML).not.toContain('<rect width="64" height="64" rx="20"');
       await page.screenshot({ element: document.querySelector('.flower-subagents-dropdown')!, path: `__screenshots__/subagent-appearance/list-${theme}.png` });
       first.click();
       await waitFor(() => Boolean(document.querySelector('.flower-subagent-detail-transcript')));
@@ -58,6 +61,7 @@ describe('Subagent identity and reading surfaces', () => {
       const avatar = windowSurface.querySelector<HTMLElement>('[data-flower-subagent-avatar]')!;
       expect(avatar.dataset.flowerSubagentAvatar).toBe(identity.dataset.flowerSubagentAvatar);
       expect(avatar.dataset.flowerSubagentAvatarPalette).toBe(identity.dataset.flowerSubagentAvatarPalette);
+      expect(getComputedStyle(avatar).borderRadius).toBe('50%');
       expect(windowSurface.querySelector('canvas[data-thinking-orb-state]')).toBeNull();
       const ledger = windowSurface.querySelector<HTMLElement>('.flower-subagent-ledger')!;
       expect(getComputedStyle(ledger, '::before').content).toBe('none');

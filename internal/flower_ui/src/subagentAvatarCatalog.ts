@@ -74,5 +74,5 @@ export function subagentAvatarArtwork(portraitIndex: number): string {
   const eyes = `<g fill="${ink}"><circle cx="${wideEyes ? 21 : 24}" cy="${wideEyes ? 31 : 37}" r="2"/><circle cx="${wideEyes ? 43 : 40}" cy="${wideEyes ? 31 : 37}" r="2"/></g>`;
   const muzzle = ['owl', 'frog', 'penguin', 'axolotl', 'koala'].includes(animal.name)
     ? '' : `<path d="m29 43 3 3 3-3Z" fill="${ink}"/><path d="M32 46v2m-4 0q4 4 8 0" fill="none" stroke="${ink}" stroke-width="1.5"/>`;
-  return `<rect width="64" height="64" rx="20" fill="var(--avatar-background)"/><path d="M17 64v-4q15-14 30 0v4" fill="${accent}"/><g stroke-linecap="round" stroke-linejoin="round">${animal.art}${eyes}${muzzle}${accessory.art}</g>`;
+  return `<circle cx="32" cy="32" r="32" fill="var(--avatar-background)"/><path d="M17 64v-4q15-14 30 0v4" fill="${accent}"/><g stroke-linecap="round" stroke-linejoin="round">${animal.art}${eyes}${muzzle}${accessory.art}</g>`;
 }

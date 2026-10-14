@@ -17,7 +17,8 @@ describe('Subagent avatar catalog', () => {
       const threadID = `thread-${index}`;
       const identity = subagentAvatarIdentity(threadID);
       expect(subagentAvatarIdentity(threadID)).toEqual(identity);
-      expect(subagentAvatarArtwork(identity.portrait)).toContain('<rect');
+      expect(subagentAvatarArtwork(identity.portrait)).toContain('<circle cx="32" cy="32" r="32" fill="var(--avatar-background)"/>');
+      expect(subagentAvatarArtwork(identity.portrait)).not.toContain('<rect width="64" height="64" rx="20"');
       portraits.add(identity.portrait);
       palettes.add(identity.palette);
     }
