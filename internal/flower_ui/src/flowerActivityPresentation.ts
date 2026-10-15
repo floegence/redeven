@@ -1,7 +1,7 @@
 import { toolActivityEnUS, type FlowerToolActivityCopy } from './toolActivityCopy';
 import type {
   FlowerApprovalAction,
-  FlowerActivityFileAction as FlowerActivityFileActionRecord,
+  FlowerActivityTargetRef,
   FlowerActivityItem,
   FlowerActivityRenderer,
   FlowerSubagentSummary,
@@ -23,6 +23,7 @@ export type FlowerActivityStructuredRow = Readonly<{
   format: 'text' | 'markdown' | 'code';
   language?: string;
   truncated?: boolean;
+  target?: FlowerActivityTargetRef;
 }>;
 
 export type FlowerActivityTodoStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled';
@@ -52,13 +53,13 @@ export type FlowerActivityTitle =
   }>;
 
 export type FlowerActivityFileAction = Readonly<{
-  action_id: string;
+  path: string;
+  target_kind: string;
   display_name: string;
   can_preview: boolean;
   can_browse_directory: boolean;
 }>;
 
-export type FlowerActivityFileActions = Readonly<Record<string, FlowerActivityFileActionRecord>>;
 
 /**
  * Approval queue items are authoritative for the command while a tool waits.
@@ -464,16 +465,15 @@ function actionFromPayload(
   payload: Readonly<Record<string, unknown>> | undefined,
   verb: 'Read' | 'Edit' | 'Delete',
   label: string,
-  fileActions?: FlowerActivityFileActions,
-  actionID = '',
 ): FlowerActivityFileAction {
-  const registered = actionID ? fileActions?.[actionID] : undefined;
-  const displayName = displayFileName(registered?.display_name ?? '') || displayNameFromPayload(payload, label);
+  const target = asRecord(payload?.target);
+  const path = trimString(typeof target.path === 'string' ? target.path : '');
+  const kind = trimString(typeof target.kind === 'string' ? target.kind : '');
   return {
-    action_id: actionID,
-    display_name: displayName,
-    can_browse_directory: registered?.can_browse_directory === true,
-    can_preview: registered?.can_preview === true && verb !== 'Delete',
+    path, target_kind: kind,
+    display_name: displayNameFromPayload(payload, label),
+    can_browse_directory: Boolean(path && (kind === 'file' || kind === 'directory')),
+    can_preview: Boolean(path && kind === 'file' && verb !== 'Delete'),
   };
 }
 
@@ -633,7 +633,7 @@ function structuredRowsFromPayload(payload: Readonly<Record<string, unknown>> | 
     const content = typeof record.content === 'string' ? record.content : '';
     const format = typeof record.format === 'string' ? trimString(record.format) : 'text';
     if ((!title && !meta && !content) || (format !== 'text' && format !== 'markdown' && format !== 'code')) return [];
-    return [{ title, meta, content, format, ...(typeof record.language === 'string' ? { language: record.language } : {}), ...(record.truncated === true ? { truncated: true } : {}) }];
+    return [{ title, meta, content, format, ...(asRecord(record.target).path ? { target: record.target as FlowerActivityTargetRef } : {}), ...(typeof record.language === 'string' ? { language: record.language } : {}), ...(record.truncated === true ? { truncated: true } : {}) }];
   });
 }
 
@@ -958,15 +958,14 @@ function diffFileFromMutation(
   item: FlowerActivityItem,
   mutation: Readonly<Record<string, unknown>>,
   defaultDisplayName: string,
-  fileActions?: FlowerActivityFileActions,
-  actionID = '',
 ): FlowerActivityDiffFile | null {
   const hasMutationDetail = mutation.change_type === 'noop' || ['additions', 'deletions', 'unified_diff', 'diff_unavailable_reason']
     .some((key) => mutation[key] !== undefined);
   if (!hasMutationDetail) return null;
   const changeType = payloadValue(mutation, 'change_type') || operationFromPayload(item.payload) || 'update';
   const verb = fileVerbForOperation(changeType);
-  const action = actionFromPayload(mutation, verb, displayNameFromPayload(mutation, defaultDisplayName), fileActions, actionID);
+  const target = mutation.target ?? (item.renderer === 'file' ? item.target_refs?.find(ref => ref.path && ['file','directory'].includes(ref.kind)) : undefined);
+  const action = actionFromPayload({...mutation, target}, verb, displayNameFromPayload(mutation, defaultDisplayName));
   const displayName = trimString(action.display_name) || defaultDisplayName;
   return {
     display_name: displayName,
@@ -982,21 +981,11 @@ function diffFileFromMutation(
   };
 }
 
-function fileActionIDs(item: FlowerActivityItem): readonly string[] {
-  return (item.target_refs ?? []).flatMap((target) => {
-    const kind = trimString(target.kind);
-    return kind.startsWith('file_action:') && kind.length > 'file_action:'.length
-      ? [kind.slice('file_action:'.length)]
-      : [];
-  });
-}
-
-function diffFilesFromPayload(item: FlowerActivityItem, fileActions?: FlowerActivityFileActions): readonly FlowerActivityDiffFile[] {
+function diffFilesFromPayload(item: FlowerActivityItem): readonly FlowerActivityDiffFile[] {
   const payload = item.payload ?? {};
   const defaultDisplayName = payloadValue(payload, 'display_name') || trimString(item.label);
   const mutationSource = asArray(payload.mutations).length > 0 ? asArray(payload.mutations) : [payload];
-  const actionIDs = fileActionIDs(item);
-  return mutationSource.map((entry, index) => diffFileFromMutation(item, asRecord(entry), defaultDisplayName, fileActions, actionIDs[index]))
+  return mutationSource.map((entry) => diffFileFromMutation(item, asRecord(entry), defaultDisplayName))
     .filter((file): file is FlowerActivityDiffFile => file !== null && trimString(file.display_name) !== '');
 }
 
@@ -1012,11 +1001,11 @@ function titleForPatchItem(item: FlowerActivityItem, files: readonly FlowerActiv
   return { kind: 'file', verb: 'Edit', display_name: (fallbackName && fallbackName !== 'apply_patch' ? fallbackName : 'files') };
 }
 
-function presentationForFile(item: FlowerActivityItem, fileActions?: FlowerActivityFileActions): FlowerActivityPresentation {
+function presentationForFile(item: FlowerActivityItem): FlowerActivityPresentation {
   const payload = item.payload ?? {};
   const operation = operationFromPayload(payload) || 'edit';
   const verb = fileVerbForOperation(operation);
-  const action = actionFromPayload(payload, verb, trimString(item.label), fileActions, fileActionIDs(item)[0]);
+  const action = actionFromPayload({ ...payload, target: item.target_refs?.find(target => target.path && (target.kind === 'file' || target.kind === 'directory')) }, verb, trimString(item.label));
   let displayName = action.display_name || trimString(item.label) || defaultLabelForItem(item);
   if (displayName === 'read_files') displayName = 'files';
   if (displayName === 'apply_patch') displayName = 'files';
@@ -1035,7 +1024,7 @@ function presentationForFile(item: FlowerActivityItem, fileActions?: FlowerActiv
       truncated: boolValue(payload.truncated),
     });
   } else if (verb !== 'Read') {
-    files = diffFilesFromPayload(item, fileActions);
+    files = diffFilesFromPayload(item);
     if (files.length > 0) {
       detailBlocks.push({ kind: 'file_diff', files });
     }
@@ -1057,8 +1046,8 @@ function presentationForFile(item: FlowerActivityItem, fileActions?: FlowerActiv
   };
 }
 
-function presentationForPatch(item: FlowerActivityItem, fileActions?: FlowerActivityFileActions): FlowerActivityPresentation {
-  const files = diffFilesFromPayload(item, fileActions);
+function presentationForPatch(item: FlowerActivityItem): FlowerActivityPresentation {
+  const files = diffFilesFromPayload(item);
   const title = titleForPatchItem(item, files);
   const payload = item.payload ?? {};
   const detailBlocks: FlowerActivityDetailBlock[] = [];
@@ -1292,7 +1281,7 @@ export function safeWebFetchURL(value: string): string {
 
 function webFetchTargetRefURL(item: FlowerActivityItem): string {
   for (const target of item.target_refs ?? []) {
-    if (trimString(target.kind).toLowerCase() !== 'url') continue;
+    if (trimString(typeof target.kind === 'string' ? target.kind : '').toLowerCase() !== 'url') continue;
     const uri = trimString(target.uri);
     if (safeWebFetchURL(uri)) return uri;
   }
@@ -1440,7 +1429,6 @@ function titleForGenericItem(item: FlowerActivityItem, renderer: FlowerActivityR
 }
 
 type FlowerActivityRendererContext = Readonly<{
-  fileActions?: FlowerActivityFileActions;
   copy?: FlowerActivityPresentationCopy;
 }>;
 
@@ -1578,14 +1566,14 @@ function presentationForStructured(item: FlowerActivityItem, copy?: FlowerActivi
     detailBlocks.sort((a, b) => Number(a.kind === 'structured_rows' && a.section === 'inputs') - Number(b.kind === 'structured_rows' && b.section === 'inputs'));
     if (errorBlock) { const index = detailBlocks.indexOf(errorBlock); detailBlocks.splice(index, 1); detailBlocks.push(errorBlock); }
   }
-  return { label: titleText(title), title, meta, detailLines, detailBlocks, ...(computer ? { suppressEmptyDisclosure: item.payload?.rows_provided === true } : {}) };
+  return { label: titleText(title), title, meta, detailLines, detailBlocks, primaryAction: actionFromPayload({ target: item.target_refs?.find(target => target.path) }, 'Read', trimString(item.label)), ...(computer ? { suppressEmptyDisclosure: item.payload?.rows_provided === true } : {}) };
 }
 
 const FLOWER_ACTIVITY_RENDERERS: Readonly<Record<FlowerActivityRenderer, FlowerActivityRendererHandler>> = {
   structured: (item, context) => presentationForStructured(item, context.copy),
   terminal: (item, context) => presentationForTerminal(item, context.copy),
-  file: (item, context) => presentationForFile(item, context.fileActions),
-  patch: (item, context) => presentationForPatch(item, context.fileActions),
+  file: (item) => presentationForFile(item),
+  patch: (item) => presentationForPatch(item),
   web_search: (item, context) => presentationForWebSearch(item, context.copy),
   web_fetch: (item) => presentationForWebFetch(item),
   todos: (item) => presentationForTodos(item),
@@ -1596,9 +1584,9 @@ const FLOWER_ACTIVITY_RENDERERS: Readonly<Record<FlowerActivityRenderer, FlowerA
   browser: (item, context) => presentationForStructured(item, context.copy),
 };
 
-export function presentFlowerActivityItem(item: FlowerActivityItem, fileActions?: FlowerActivityFileActions, copy?: FlowerActivityPresentationCopy): FlowerActivityPresentation {
+export function presentFlowerActivityItem(item: FlowerActivityItem, copy?: FlowerActivityPresentationCopy): FlowerActivityPresentation {
   const renderer = rendererForItem(item);
-  const result = FLOWER_ACTIVITY_RENDERERS[renderer](item, { fileActions, copy });
+  const result = FLOWER_ACTIVITY_RENDERERS[renderer](item, { copy });
   const words = copy?.tools ?? toolActivityEnUS;
   if (result.title.kind === 'file') {
     const verb = words[result.title.verb === 'Read' ? 'read' : result.title.verb === 'Delete' ? 'delete' : 'edit'];

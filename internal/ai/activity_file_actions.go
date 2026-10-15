@@ -1,171 +1,14 @@
 package ai
 
 import (
-	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"os"
 	"strings"
 	"unicode/utf8"
 
-	"github.com/floegence/floret/v7/identity"
 	"github.com/floegence/floret/v7/observation"
-	flruntime "github.com/floegence/floret/v7/runtime"
 	fltools "github.com/floegence/floret/v7/tools"
-	"github.com/floegence/redeven/internal/filesystemscope"
-	"github.com/floegence/redeven/internal/session"
 )
-
-var (
-	ErrFlowerFileActionInvalid  = errors.New("flower file action is invalid")
-	ErrFlowerFileActionNotFound = errors.New("flower file action was not found")
-)
-
-type FlowerFileActionOpenRequest struct {
-	ThreadID   string `json:"thread_id,omitempty"`
-	MessageID  string `json:"message_id"`
-	BlockIndex int    `json:"block_index"`
-	ItemID     string `json:"item_id"`
-	ActionID   string `json:"action_id"`
-	Action     string `json:"action"`
-}
-
-type FlowerFileActionOpenTarget struct {
-	ActionID string `json:"action_id"`
-	Action   string `json:"action"`
-	Path     string `json:"path"`
-}
-
-func (s *Service) ResolveFlowerFileActionOpenTarget(ctx context.Context, meta *session.Meta, req FlowerFileActionOpenRequest) (FlowerFileActionOpenTarget, error) {
-	if s == nil {
-		return FlowerFileActionOpenTarget{}, errors.New("nil service")
-	}
-	if err := requireRWX(meta); err != nil {
-		return FlowerFileActionOpenTarget{}, err
-	}
-	threadID := strings.TrimSpace(req.ThreadID)
-	messageID := strings.TrimSpace(req.MessageID)
-	itemID := strings.TrimSpace(req.ItemID)
-	actionID := strings.TrimSpace(req.ActionID)
-	action := strings.TrimSpace(req.Action)
-	if action != "preview" && action != "browse_directory" {
-		return FlowerFileActionOpenTarget{}, ErrFlowerFileActionInvalid
-	}
-	if threadID == "" || messageID == "" || req.BlockIndex < 0 || itemID == "" || actionID == "" {
-		return FlowerFileActionOpenTarget{}, ErrFlowerFileActionInvalid
-	}
-	endpointID := strings.TrimSpace(meta.EndpointID)
-	if endpointID == "" {
-		return FlowerFileActionOpenTarget{}, errors.New("missing endpoint_id")
-	}
-	if s.threadRuntime == nil || s.threadsDB == nil || s.scope == nil {
-		return FlowerFileActionOpenTarget{}, ErrFlowerFileActionNotFound
-	}
-	settings, err := s.threadsDB.GetThreadSettings(ctxOrBackground(ctx), endpointID, threadID)
-	if err != nil || settings == nil || (strings.TrimSpace(meta.NamespacePublicID) != "" && strings.TrimSpace(settings.NamespacePublicID) != "" && strings.TrimSpace(meta.NamespacePublicID) != strings.TrimSpace(settings.NamespacePublicID)) {
-		return FlowerFileActionOpenTarget{}, ErrFlowerFileActionNotFound
-	}
-	current, err := s.threadRuntime.View(ctxOrBackground(ctx), identity.ThreadID(threadID))
-	if err != nil {
-		return FlowerFileActionOpenTarget{}, ErrFlowerFileActionNotFound
-	}
-	var item flruntime.ThreadItem
-	for _, candidate := range current.Items {
-		if candidate.ID == messageID && candidate.Kind == flruntime.ThreadItemTool && candidate.Activity != nil && candidate.Activity.ItemID == itemID {
-			item = candidate
-			break
-		}
-	}
-	if item.ID == "" || req.BlockIndex != 0 || item.Activity == nil {
-		return FlowerFileActionOpenTarget{}, ErrFlowerFileActionNotFound
-	}
-	ordinal := -1
-	fileActionOrdinal := 0
-	for _, ref := range item.Activity.Presentation.TargetRefs {
-		refAction, ok := strings.CutPrefix(strings.TrimSpace(ref.Kind), "file_action:")
-		if !ok {
-			continue
-		}
-		if strings.TrimSpace(refAction) == actionID {
-			if ordinal >= 0 {
-				return FlowerFileActionOpenTarget{}, ErrFlowerFileActionNotFound
-			}
-			ordinal = fileActionOrdinal
-		}
-		fileActionOrdinal++
-	}
-	if ordinal < 0 || item.Activity.ToolID == "" || item.Activity.ToolName == "" {
-		return FlowerFileActionOpenTarget{}, ErrFlowerFileActionNotFound
-	}
-	reader, ok := s.threadRuntime.(flruntime.ThreadToolResultReader)
-	if !ok {
-		return FlowerFileActionOpenTarget{}, ErrFlowerFileActionNotFound
-	}
-	result, ok, err := reader.LookupToolResult(ctxOrBackground(ctx), flruntime.LookupToolResultInput{ThreadID: identity.ThreadID(threadID), TurnID: item.TurnID, RunID: item.RunID, ToolCallID: item.Activity.ToolID})
-	if err != nil || !ok || result.ToolName != item.Activity.ToolName || result.Status != "success" {
-		return FlowerFileActionOpenTarget{}, ErrFlowerFileActionNotFound
-	}
-	if s.toolTargetPolicy.requiresExplicitTarget() {
-		return FlowerFileActionOpenTarget{}, ErrFlowerFileActionNotFound
-	}
-	path, err := flowerFileActionPathFromCanonicalResult(result.Content, result.ToolName, ordinal, action)
-	if err != nil || path == "" {
-		return FlowerFileActionOpenTarget{}, ErrFlowerFileActionNotFound
-	}
-	resolved, err := s.scope.Resolve(path, filesystemscope.ResolveOptions{RequireExisting: true, RequireDir: action == "browse_directory"})
-	if err != nil {
-		return FlowerFileActionOpenTarget{}, ErrFlowerFileActionNotFound
-	}
-	info, err := os.Stat(resolved.RealAbs)
-	if err != nil || (action == "preview" && (info.IsDir() || !info.Mode().IsRegular())) || (action == "browse_directory" && !info.IsDir()) {
-		return FlowerFileActionOpenTarget{}, ErrFlowerFileActionNotFound
-	}
-	return FlowerFileActionOpenTarget{ActionID: actionID, Action: action, Path: resolved.RealAbs}, nil
-}
-
-func flowerFileActionPathFromCanonicalResult(content, toolName string, ordinal int, action string) (string, error) {
-	var payload struct {
-		Status string          `json:"status"`
-		Data   json.RawMessage `json:"data"`
-	}
-	if err := json.Unmarshal([]byte(content), &payload); err != nil || payload.Status != "success" || len(payload.Data) == 0 {
-		return "", ErrFlowerFileActionNotFound
-	}
-	var data map[string]any
-	if err := json.Unmarshal(payload.Data, &data); err != nil {
-		return "", err
-	}
-	if toolName == "file.read" {
-		if ordinal != 0 {
-			return "", ErrFlowerFileActionNotFound
-		}
-		return fileActionPathForAction(anyToString(data["file_path"]), "", "", "", action), nil
-	}
-	if toolName == "apply_patch" {
-		mutations, ok := data["mutations"].([]any)
-		if !ok || ordinal < 0 || ordinal >= len(mutations) {
-			return "", ErrFlowerFileActionNotFound
-		}
-		mutation, ok := mutations[ordinal].(map[string]any)
-		if !ok {
-			return "", ErrFlowerFileActionNotFound
-		}
-		return fileActionPathForAction(anyToString(mutation["file_path"]), anyToString(mutation["old_path"]), anyToString(mutation["new_path"]), anyToString(mutation["change_type"]), action), nil
-	}
-	if ordinal != 0 {
-		return "", ErrFlowerFileActionNotFound
-	}
-	return fileActionPathForAction(anyToString(data["file_path"]), anyToString(data["old_path"]), anyToString(data["new_path"]), anyToString(data["change_type"]), action), nil
-}
-
-func fileActionPathForAction(filePath, oldPath, newPath, changeType, action string) string {
-	path := mutationActionPath(filePath, oldPath, newPath, changeType)
-	if action == "browse_directory" {
-		return mutationDirectoryPath(path, oldPath, newPath)
-	}
-	return path
-}
 
 func SanitizeActivityTimelineMessageJSON(raw string) (json.RawMessage, error) {
 	raw = strings.TrimSpace(raw)
@@ -226,34 +69,6 @@ func SanitizeActivityTimelineBlockValue(value any) (any, error) {
 	return out, nil
 }
 
-func ResolveFlowerFileActionOpenTargetFromMessages(values []any, req FlowerFileActionOpenRequest) (FlowerFileActionOpenTarget, bool, error) {
-	for _, value := range values {
-		raw, err := rawMessageBytes(value)
-		if err != nil {
-			return FlowerFileActionOpenTarget{}, false, err
-		}
-		var record struct {
-			ID     string            `json:"id"`
-			Blocks []json.RawMessage `json:"blocks"`
-		}
-		if err := json.Unmarshal(raw, &record); err != nil {
-			return FlowerFileActionOpenTarget{}, false, fmt.Errorf("parse message JSON: %w", err)
-		}
-		if strings.TrimSpace(record.ID) != strings.TrimSpace(req.MessageID) {
-			continue
-		}
-		if req.BlockIndex < 0 || req.BlockIndex >= len(record.Blocks) {
-			return FlowerFileActionOpenTarget{}, false, nil
-		}
-		target, ok, err := resolveFlowerFileActionOpenTargetFromBlock(record.Blocks[req.BlockIndex], req)
-		if err != nil || ok {
-			return target, ok, err
-		}
-		return FlowerFileActionOpenTarget{}, false, nil
-	}
-	return FlowerFileActionOpenTarget{}, false, nil
-}
-
 func rawMessageBytes(value any) ([]byte, error) {
 	switch v := value.(type) {
 	case json.RawMessage:
@@ -269,62 +84,6 @@ func rawMessageBytes(value any) ([]byte, error) {
 		}
 		return b, nil
 	}
-}
-
-func resolveFlowerFileActionOpenTargetFromBlock(raw json.RawMessage, req FlowerFileActionOpenRequest) (FlowerFileActionOpenTarget, bool, error) {
-	var timeline ActivityTimelineBlock
-	if err := json.Unmarshal(raw, &timeline); err != nil {
-		return FlowerFileActionOpenTarget{}, false, err
-	}
-	if strings.TrimSpace(timeline.Type) != activityTimelineBlockType {
-		return FlowerFileActionOpenTarget{}, false, nil
-	}
-	if !activityTimelineItemReferencesAction(timeline.Items, req.ItemID, req.ActionID) {
-		return FlowerFileActionOpenTarget{}, false, nil
-	}
-	action := timeline.FileActions[strings.TrimSpace(req.ActionID)]
-	if strings.TrimSpace(action.ActionID) != strings.TrimSpace(req.ActionID) {
-		return FlowerFileActionOpenTarget{}, false, nil
-	}
-	path := ""
-	switch strings.TrimSpace(req.Action) {
-	case "preview":
-		path = strings.TrimSpace(action.PreviewPath)
-	case "browse_directory":
-		path = strings.TrimSpace(action.DirectoryPath)
-	}
-	if path == "" {
-		return FlowerFileActionOpenTarget{}, false, nil
-	}
-	return FlowerFileActionOpenTarget{
-		ActionID: strings.TrimSpace(req.ActionID),
-		Action:   strings.TrimSpace(req.Action),
-		Path:     path,
-	}, true, nil
-}
-
-func activityTimelineItemReferencesAction(items []observation.ActivityItem, itemID string, actionID string) bool {
-	itemID = strings.TrimSpace(itemID)
-	actionID = strings.TrimSpace(actionID)
-	if itemID == "" || actionID == "" {
-		return false
-	}
-	for _, item := range items {
-		if strings.TrimSpace(item.ItemID) != itemID {
-			continue
-		}
-		if item.Presentation == nil {
-			return false
-		}
-		for _, target := range item.Presentation.TargetRefs {
-			targetActionID, ok := strings.CutPrefix(strings.TrimSpace(target.Kind), "file_action:")
-			if ok && strings.TrimSpace(targetActionID) == actionID {
-				return true
-			}
-		}
-		return false
-	}
-	return false
 }
 
 func activityPayloadMap(payload fltools.ActivityPayload) map[string]any {
@@ -375,36 +134,6 @@ func sanitizeActivityTimelineBlockRecord(block map[string]any) error {
 			item["presentation"] = presentation
 		}
 	}
-	actions, ok := block["file_actions"].(map[string]any)
-	if !ok || len(actions) == 0 {
-		delete(block, "file_actions")
-		sanitizeActivityTimelineBlockTopLevel(block)
-		return nil
-	}
-	publicActions := make(map[string]any, len(actions))
-	for key, value := range actions {
-		record, ok := value.(map[string]any)
-		if !ok {
-			continue
-		}
-		actionID := activityMapString(record, "action_id")
-		displayName := activityMapString(record, "display_name")
-		if strings.TrimSpace(key) == "" || strings.TrimSpace(key) != actionID || actionID == "" || displayName == "" {
-			continue
-		}
-		publicActions[actionID] = map[string]any{
-			"action_id":            actionID,
-			"display_name":         displayName,
-			"can_preview":          activityMapString(record, "preview_path") != "",
-			"can_browse_directory": activityMapString(record, "directory_path") != "",
-		}
-	}
-	if len(publicActions) == 0 {
-		delete(block, "file_actions")
-		sanitizeActivityTimelineBlockTopLevel(block)
-		return nil
-	}
-	block["file_actions"] = publicActions
 	sanitizeActivityTimelineBlockTopLevel(block)
 	return nil
 }
@@ -463,6 +192,11 @@ func sanitizeActivityTargetRefsValue(value any) []any {
 			}
 			if allowed {
 				next["resource_ref"] = resource
+			}
+		}
+		if kind == "file" || kind == "directory" {
+			if target := fileActivityTarget(anyToString(ref["path"]), kind); target != nil {
+				next["path"] = target.Path
 			}
 		}
 		if line, ok := activityPublicLineNumber(ref["line"]); ok {
@@ -641,6 +375,9 @@ func sanitizeStructuredActivityRows(value any) []any {
 		if record["truncated"] == true {
 			row["truncated"] = true
 		}
+		if target := sanitizeActivityNavigationTarget(record["target"]); target != nil {
+			row["target"] = target
+		}
 		if len(row) > 1 {
 			out = append(out, row)
 		}
@@ -769,6 +506,12 @@ func sanitizeActivityPayloadMutations(value any) []any {
 		next := make(map[string]any, len(record))
 		for key, value := range record {
 			key = strings.TrimSpace(key)
+			if key == "target" {
+				if target := sanitizeActivityNavigationTarget(value); target != nil {
+					next[key] = target
+				}
+				continue
+			}
 			if _, ok := allowed[key]; ok {
 				next[key] = sanitizeActivityPublicValue(value)
 			}
@@ -885,7 +628,7 @@ func activitySubagentsPayloadAllowedKeys() map[string]struct{} {
 }
 
 func activityTimelineBlockAllowedKeys() map[string]struct{} {
-	return stringSet("type", "schema_version", "run_id", "thread_id", "turn_id", "trace_id", "summary", "items", "file_actions")
+	return stringSet("type", "schema_version", "run_id", "thread_id", "turn_id", "trace_id", "summary", "items")
 }
 
 func activitySubagentsItemAllowedKeys() map[string]struct{} {
@@ -942,4 +685,20 @@ func activityPublicLineNumber(value any) (int, bool) {
 		}
 	}
 	return 0, false
+}
+
+func sanitizeActivityNavigationTarget(value any) map[string]any {
+	record, ok := value.(map[string]any)
+	if !ok {
+		return nil
+	}
+	kind := activityMapString(record, "kind")
+	if kind != "file" && kind != "directory" {
+		return nil
+	}
+	target := fileActivityTarget(anyToString(record["path"]), kind)
+	if target == nil {
+		return nil
+	}
+	return map[string]any{"kind": kind, "label": target.Label, "path": target.Path}
 }

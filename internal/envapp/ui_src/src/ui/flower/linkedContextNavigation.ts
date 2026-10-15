@@ -31,12 +31,15 @@ export function createFlowerLinkedContextNavigation(options: LinkedContextNaviga
   openLinkedFilePreview: (request: FlowerLinkedContextPathOpenRequest) => Promise<void>;
   openLinkedDirectoryBrowser: (request: FlowerLinkedContextPathOpenRequest) => Promise<void>;
 }> {
-  const openFilePath = async (rawPath: string): Promise<void> => {
+  const openFilePath = async (rawPath: string, signal = new AbortController().signal): Promise<void> => {
     const path = normalizeAbsolutePath(rawPath);
     if (!path) {
       options.notifyInvalidFilePath();
       return;
     }
+    signal.throwIfAborted();
+    await options.checkFileReadable?.(path, signal);
+    signal.throwIfAborted();
     await options.openFilePreview(fileItemFromPath(path), {
       focus: true,
       reusePolicy: 'same_file_or_create',
@@ -55,12 +58,10 @@ export function createFlowerLinkedContextNavigation(options: LinkedContextNaviga
   };
 
   return {
-    openMessageFile: async ({ path, action, signal }) => {
+    openMessageFile: async ({ path, action, kind, signal }) => {
       signal?.throwIfAborted();
-      if (action === 'preview' && signal) await options.checkFileReadable?.(path, signal);
-      signal?.throwIfAborted();
-      if (action === 'preview') await openFilePath(path);
-      else await openDirectoryPath(dirnameAbsolute(path));
+      if (action === 'preview') await openFilePath(path, signal);
+      else await openDirectoryPath(kind === 'directory' ? path : dirnameAbsolute(path));
     },
     openCanonicalReferenceTarget: async (target) => {
       if (target.kind === 'file') {

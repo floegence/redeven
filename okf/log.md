@@ -1,5 +1,11 @@
 # Redeven OKF Update Log
 
+## 2026-10-15: Confirmed file targets and recovery
+
+- Restore [file Activity navigation](ui/flower-file-activity.md) with direct per-resource targets and canonical history enrichment.
+- Add [preview recovery](ui/file-preview-window-actions.md) for unavailable files, typed failures, stable retry focus, and authorized media diagnosis.
+- Adopt published Floret v7.41.0; remove action-ID resolution without rewriting historical data.
+
 ## 2026-10-15: Terminal failure and manual recovery
 
 - Adopt published Floret v7.40.3 for typed Provider timeout classification and retained finalization diagnostics.

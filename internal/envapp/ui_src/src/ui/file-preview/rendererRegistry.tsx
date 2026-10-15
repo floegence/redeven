@@ -39,6 +39,11 @@ export type RedevenFilePreviewRenderProps = Readonly<{
   message?: string;
   objectUrl?: string;
   resourceUrl?: string;
+  onRetry?: () => void;
+  onOpenParent?: () => void | Promise<void>;
+  onCopyPath?: () => boolean | Promise<boolean>;
+  onRenderError?: (path: string, message?: string) => void;
+  onResourceError?: (path:string,source:string) => void;
   bytes?: Uint8Array<ArrayBuffer> | null;
   truncated?: boolean;
   loading?: boolean;
@@ -86,7 +91,7 @@ function renderTextPreview(props: RedevenFilePreviewRenderProps): JSX.Element {
 }
 
 function renderImagePreview(props: RedevenFilePreviewRenderProps): JSX.Element {
-  return <ImagePreviewPane item={props.item} descriptor={props.descriptor} objectUrl={props.objectUrl} surface={props.surface} allowLocalWheel={props.allowLocalWheel} />;
+  return <ImagePreviewPane onRenderError={() => props.onRenderError?.(props.item?.path ?? '')} item={props.item} descriptor={props.descriptor} objectUrl={props.objectUrl} surface={props.surface} allowLocalWheel={props.allowLocalWheel} />;
 }
 
 function renderVideoPreview(props: RedevenFilePreviewRenderProps): JSX.Element {
@@ -97,6 +102,7 @@ function renderVideoPreview(props: RedevenFilePreviewRenderProps): JSX.Element {
         src={props.resourceUrl}
         controls
         preload="metadata"
+        onError={() => props.onResourceError?.(props.item?.path ?? '',props.resourceUrl ?? '')}
         class="h-full max-h-full w-full max-w-full cursor-pointer object-contain"
       >
         {props.item?.name ?? i18n.t('uiCopy.preview.videoFallback')}
@@ -113,6 +119,7 @@ function renderAudioPreview(props: RedevenFilePreviewRenderProps): JSX.Element {
         src={props.resourceUrl}
         controls
         preload="metadata"
+        onError={() => props.onResourceError?.(props.item?.path ?? '',props.resourceUrl ?? '')}
         class="m-auto w-full max-w-2xl shrink-0 cursor-pointer"
       >
         {props.item?.name ?? i18n.t('uiCopy.preview.audioFallback')}
@@ -157,6 +164,11 @@ function renderUnavailablePreview(props: RedevenFilePreviewRenderProps): JSX.Ele
     <FilePreviewErrorState
       errorType="unsupported"
       message={props.message}
+      path={props.item?.path}
+      onRetry={props.onRetry}
+      onOpenParent={props.item?.path && props.item.path !== '/' ? props.onOpenParent : undefined}
+      onCopyPath={props.onCopyPath}
+      busy={props.loading}
     />
   );
 }
@@ -187,13 +199,13 @@ export const REDEVEN_FILE_PREVIEW_RENDERERS: readonly RedevenFilePreviewRenderer
     modes: ['pdf'],
     render: (props) => {
       const i18n = useI18n();
-      return <Suspense fallback={<RedevenLoadingCurtain visible eyebrow={i18n.t('uiCopy.preview.eyebrow')} message={i18n.t('uiCopy.preview.loadingPdf')} />}><PdfPreviewPane bytes={props.bytes} surface={props.surface} editing={props.editing} saving={props.saving} bindPdfEditor={props.bindPdfEditor} onSelectionChange={props.onSelectionChange} /></Suspense>;
+      return <Suspense fallback={<RedevenLoadingCurtain visible eyebrow={i18n.t('uiCopy.preview.eyebrow')} message={i18n.t('uiCopy.preview.loadingPdf')} />}><PdfPreviewPane onRenderError={message => props.onRenderError?.(props.item?.path ?? '', message)} bytes={props.bytes} surface={props.surface} editing={props.editing} saving={props.saving} bindPdfEditor={props.bindPdfEditor} onSelectionChange={props.onSelectionChange} /></Suspense>;
     },
   },
   {
     id: 'docx',
     modes: ['docx'],
-    render: (props) => <DocxPreviewPane bytes={props.bytes} surface={props.surface} />,
+    render: (props) => <DocxPreviewPane onRenderError={message => props.onRenderError?.(props.item?.path ?? '', message)} bytes={props.bytes} surface={props.surface} />,
   },
   {
     id: 'xlsx',

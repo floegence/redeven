@@ -76,7 +76,7 @@ func assertWebSearchPublicProjection(t *testing.T, presentation *fltools.Activit
 	// sanitizer. Include the wire round trip consumed by the Flower mapper.
 	for name, projected := range map[string]observation.ActivityItem{
 		"live item": publicActivityItem(item),
-		"timeline":  newActivityTimelineBlock(observation.ActivityTimeline{Items: []observation.ActivityItem{item}}, nil).Items[0],
+		"timeline":  newActivityTimelineBlock(observation.ActivityTimeline{Items: []observation.ActivityItem{item}}).Items[0],
 	} {
 		raw, err := json.Marshal(projected)
 		if err != nil {

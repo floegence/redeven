@@ -2247,16 +2247,14 @@ describe('Env local Flower surface adapter', () => {
   });
 
   it('exposes queued linked-context host capabilities without changing activity file actions', async () => {
-    const openFilePreview = vi.fn(async () => undefined);
-    const openFileBrowser = vi.fn(async () => undefined);
+    const openMessageFile = vi.fn(async () => undefined);
     const openLinkedFilePreview = vi.fn(async () => undefined);
     const openLinkedDirectoryBrowser = vi.fn(async () => undefined);
     const adapter = createEnvLocalFlowerSurfaceAdapter({
       envPublicID: 'env_a',
       envLabel: 'Demo Env',
       rpc: { ai: {} } as any,
-      openFilePreview,
-      openFileBrowser,
+      openMessageFile,
       openLinkedFilePreview,
       openLinkedDirectoryBrowser,
     });
@@ -2274,8 +2272,7 @@ describe('Env local Flower surface adapter', () => {
 
     expect(openLinkedFilePreview).toHaveBeenCalledWith(linkedRequest);
     expect(openLinkedDirectoryBrowser).toHaveBeenCalledWith({ ...linkedRequest, path: '/workspace/src' });
-    expect(openFilePreview).not.toHaveBeenCalled();
-    expect(openFileBrowser).not.toHaveBeenCalled();
+    expect(openMessageFile).not.toHaveBeenCalled();
   });
 });
 

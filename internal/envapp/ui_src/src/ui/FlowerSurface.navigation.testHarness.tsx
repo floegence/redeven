@@ -694,7 +694,6 @@ export function activityTimeline(args: {
   severity?: 'quiet' | 'normal' | 'warning' | 'error' | 'blocking';
   needs_attention?: boolean;
   items: readonly FlowerActivityItem[];
-  file_actions?: FlowerActivityTimelineBlock['file_actions'];
 }): FlowerActivityTimelineBlock {
   const status = args.status ?? 'success';
   const severity = args.severity ?? (status === 'success' ? 'quiet' : status === 'error' ? 'error' : 'normal');
@@ -732,7 +731,6 @@ export function activityTimeline(args: {
       counts,
     },
     items: args.items,
-    ...(args.file_actions ? { file_actions: args.file_actions } : {}),
   };
 }
 

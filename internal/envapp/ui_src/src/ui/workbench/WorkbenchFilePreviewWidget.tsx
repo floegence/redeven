@@ -1,3 +1,4 @@
+import { dirnameAbsolute } from '../utils/askFlowerPath';
 import { Show, batch, createEffect, createSignal, onCleanup, untrack } from 'solid-js';
 import { useNotification, useResizeObserver } from '@floegence/floe-webapp-core';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
@@ -486,6 +487,11 @@ export function WorkbenchFilePreviewWidget(props: WorkbenchWidgetBodyProps) {
         truncated={controller.truncated()}
         loading={controller.loading()}
         error={controller.error()}
+        errorType={controller.errorType()}
+        onRetry={() => void controller.retry()}
+        onRenderError={controller.reportRenderError}
+      onResourceError={(path,source) => void controller.reportResourceError(path,source)}
+        onOpenParent={() => env.openFileBrowserAtPath(dirnameAbsolute(controller.item()?.path ?? ''),{openStrategy:'focus_latest_or_create'})}
         xlsxSheetName={controller.xlsxSheetName()}
         xlsxRows={controller.xlsxRows()}
         onCopyPath={handleCopyPath}

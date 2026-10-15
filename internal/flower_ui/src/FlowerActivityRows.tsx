@@ -1,13 +1,15 @@
 import { CodeBlock } from '@floegence/floe-webapp-core/chat';
 import { ChevronDown, ChevronRight } from '@floegence/floe-webapp-core/icons';
-import { Index, Show, createSignal, createUniqueId, type Component } from 'solid-js';
+import { Index, Show, createSignal, createUniqueId, type JSX, type Component } from 'solid-js';
 import type { FlowerActivityDetailBlock } from './flowerActivityPresentation';
+import type { FlowerActivityTargetRef } from './contracts/flowerSurfaceContracts';
 import type { FlowerSurfaceCopy } from './copy';
 import { FlowerMarkdownBlock } from './chat/markdown/FlowerMarkdownBlock';
 
 export const FlowerActivityRows: Component<{
   block: Extract<FlowerActivityDetailBlock, { kind: 'structured_rows' }>;
   copy: FlowerSurfaceCopy['chat'];
+  renderTargetActions?: (target: FlowerActivityTargetRef) => JSX.Element;
 }> = (props) => (
   <section class="flower-activity-structured-rows" data-activity-section={props.block.section}>
     <Show when={props.block.notice}>
@@ -25,6 +27,7 @@ export const FlowerActivityRows: Component<{
               <div class="flower-activity-structured-row-heading">
                 <Show when={row().title}><strong>{row().title}</strong></Show>
                 <Show when={row().meta}><span>{row().meta}</span></Show>
+                <Show when={row().target}>{target => props.renderTargetActions?.(target())}</Show>
               </div>
             </Show>
             <Show when={script()}>

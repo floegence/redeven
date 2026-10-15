@@ -361,6 +361,11 @@ func (s *Service) SubscribeFlowerLiveStream(ctx context.Context, meta *session.M
 				continue
 			}
 			copy := current
+			copy.Items, viewErr = s.hydrateFileActivityTargets(ctx, meta, summary.ThreadID, copy.Items)
+			if viewErr != nil {
+				closeFlowerLiveSubscription(s, subscriber)
+				return nil, viewErr
+			}
 			if !retainInitial(newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{
 				SchemaVersion: FlowerLiveSchemaVersion,
 				Kind:          FlowerLiveStreamThreadBatch,

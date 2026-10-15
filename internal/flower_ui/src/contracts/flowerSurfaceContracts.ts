@@ -464,6 +464,7 @@ export type FlowerActivityChip = Readonly<{
 }>;
 
 export type FlowerActivityTargetRef = Readonly<{
+  path?: string;
   kind: string;
   label: string;
   uri?: string;
@@ -494,12 +495,6 @@ export type FlowerActivityItem = Readonly<{
   metadata?: Readonly<Record<string, string>>;
 }>;
 
-export type FlowerActivityFileAction = Readonly<{
-  action_id: string;
-  display_name: string;
-  can_preview: boolean;
-  can_browse_directory: boolean;
-}>;
 
 export type FlowerActivityTimelineBlock = Readonly<{
   type: 'activity-timeline';
@@ -527,7 +522,6 @@ export type FlowerActivityTimelineBlock = Readonly<{
     duration_ms?: number;
   }>;
   items: readonly FlowerActivityItem[];
-  file_actions?: Readonly<Record<string, FlowerActivityFileAction>>;
 }>;
 
 export type FlowerInputResponseBlock = Readonly<{
@@ -1296,14 +1290,6 @@ export type FlowerWorkingDirectoryActionAvailability = Readonly<{
   terminal: Readonly<{ enabled: boolean; reason?: string }>;
 }>;
 
-export type FlowerFileOpenRequest = Readonly<{
-  thread_id?: string;
-  message_id: string;
-  block_index: number;
-  item_id: string;
-  action_id: string;
-}>;
-
 export type FlowerLinkedContextPathOpenRequest = Readonly<{
   path: string;
   thread_id?: string;
@@ -1520,7 +1506,7 @@ export type FlowerSurfaceAdapter = Readonly<{
   loadComputerFrame?: (input: FlowerComputerFrameSource & Readonly<{ signal: AbortSignal }>) => Promise<Blob>;
   loadToolImage?: (input: Readonly<{ thread_id: string; resource_ref: string; signal: AbortSignal }>) => Promise<Blob>;
   loadMessageAttachment?: (input: Readonly<{ url: string; signal: AbortSignal }>) => Promise<Blob>;
-  openMessageFile?: (input: Readonly<{ path: string; action: 'preview' | 'reveal'; signal?: AbortSignal }>) => Promise<void>;
+  openMessageFile?: (input: Readonly<{ path: string; action: 'preview' | 'reveal'; kind?: 'file' | 'directory'; signal?: AbortSignal }>) => Promise<void>;
   openMessageURL?: (input: Readonly<{ url: string; signal: AbortSignal }>) => Promise<void>;
   loadMessageFile?: (input: Readonly<{ path: string; signal: AbortSignal }>) => Promise<Blob>;
   computerFrameRate?: Readonly<{ read: () => number; write: (fps: number) => void }>;
@@ -1540,8 +1526,6 @@ export type FlowerSurfaceAdapter = Readonly<{
   readTerminalProcess?: (input: FlowerTerminalProcessReadRequest) => Promise<FlowerTerminalProcessSnapshot>;
   getWorkingDirectoryPathContext?: () => Promise<FlowerWorkingDirectoryPathContext>;
   listWorkingDirectoryEntries?: (input: FlowerWorkingDirectoryListInput) => Promise<readonly FlowerWorkingDirectoryEntry[]>;
-  openFileBrowser?: (request: FlowerFileOpenRequest) => Promise<void>;
-  openFilePreview?: (request: FlowerFileOpenRequest) => Promise<void>;
   openCanonicalReference?: (request: FlowerCanonicalReferenceOpenRequest) => Promise<void>;
   resolveCanonicalReference?: (request: FlowerCanonicalReferenceOpenRequest) => Promise<Readonly<{ kind: 'file' | 'directory'; label: string; path: string }>>;
   openLinkedFilePreview?: (request: FlowerLinkedContextPathOpenRequest) => Promise<void>;

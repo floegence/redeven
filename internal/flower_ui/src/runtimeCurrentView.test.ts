@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { FlowerRuntimeCurrentView, FlowerThreadSnapshot, FlowerToolCallPreview } from './contracts/flowerSurfaceContracts';
 import { buildFlowerTimelineEntries, flowerMessageSignature } from './flowerTimelineProjection';
 import { applyFlowerRuntimeCurrentView } from './runtimeCurrentView';
+import { createThreadCache } from './threadCache';
 
 const summary = (): FlowerThreadSnapshot => ({
   thread_id: 'thread-a', title: 'Product title', title_status: 'ready', title_generation: 1, model_id: 'deepseek/chat', working_dir: '/',
@@ -62,6 +63,54 @@ describe('streamed tool argument presentation', () => {
     }
     const generated = applyFlowerRuntimeCurrentView(summary(), current);
     expect(applyFlowerRuntimeCurrentView(generated, { ...current, view_version: 2, tool_call_previews: [] }).messages).toEqual([]);
+  });
+});
+
+
+
+describe('historical file navigation during live updates', () => {
+  it.each(['file', 'structured', 'patch'])('retains only proven targets for equal %s facts', renderer => {
+    const target = { kind: 'file', label: 'a.txt', path: '/unmounted/a.txt' };
+    const entry = renderer === 'structured' ? { title: 'a.txt', content: 'historical snapshot', format: 'code', language: 'text' }
+      : renderer === 'patch' ? { display_name: 'a.txt', change_type: 'modify', unified_diff: 'historical diff' }
+        : { display_name: 'a.txt', content: 'historical snapshot' };
+    const field = renderer === 'structured' ? 'rows' : 'mutations';
+    const payload = renderer === 'file' ? entry : { [field]: [entry] };
+    const enriched = renderer === 'file' ? payload : { [field]: [{ ...entry, target }] };
+    const name = renderer === 'structured' ? 'read_files' : renderer === 'patch' ? 'apply_patch' : 'read_file';
+    const rawActivity = {
+      item_id: 'canonical', tool_id: 'call', tool_name: name, kind: 'tool', status: 'success',
+      presentation: { renderer, payload: enriched, ...(renderer === 'file' ? { target_refs: [target] } : {}) },
+    };
+    const item = { id: 'historical', turn_id: 'turn-old', run_id: 'run-old', ordinal: 1, kind: 'tool' as const, activity: rawActivity };
+    const current: FlowerRuntimeCurrentView = { thread_id: 'thread-a', view_version: 1, activity: 'idle', items: [item] };
+    const hydrated = applyFlowerRuntimeCurrentView(summary(), current);
+    const plainItem = { ...item, activity: { ...rawActivity, presentation: { renderer, payload } } };
+    const plain: FlowerRuntimeCurrentView = { ...current, view_version: 2, items: [plainItem] };
+    const activity = (thread: FlowerThreadSnapshot) => {
+      const block = thread.messages[0].blocks![0];
+      if (block.type !== 'activity-timeline') throw new Error('Expected activity');
+      return block.items[0];
+    };
+    expect(activity(applyFlowerRuntimeCurrentView(hydrated, plain))).toEqual(activity(hydrated));
+    for (const version of [1, 2]) {
+      const live = applyFlowerRuntimeCurrentView(summary(), plain);
+      const cached = createThreadCache().receiveCurrent({ version: 2, thread: live }).cache;
+      const received = cached.receiveView({ version, thread: hydrated });
+      expect(activity(received.cache.views.get('thread-a')!.thread as FlowerThreadSnapshot)).toEqual(activity(hydrated));
+      expect(received.cache.views.get('thread-a')!.version).toBe(2);
+      expect(received.runtimeState).toBe(version === 2 ? 'unchanged' : 'stale');
+    }
+
+    // Full identity and immutable facts govern retention, never basename or position.
+    for (const changed of [
+      { ...plainItem, run_id: 'different-run' },
+      { ...plainItem, activity: { ...plainItem.activity, tool_id: 'different-call' } },
+      { ...plainItem, activity: { ...plainItem.activity, presentation: { renderer, payload: { ...payload, summary: 'changed' } } } },
+    ]) {
+      expect(JSON.stringify(activity(applyFlowerRuntimeCurrentView(hydrated, { ...plain, items: [changed] })))).not.toContain('/unmounted/a.txt');
+    }
+    expect(rawActivity.presentation.payload).toBe(enriched);
   });
 });
 
@@ -682,8 +731,8 @@ describe('applyFlowerRuntimeCurrentView', () => {
           status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false,
           presentation: {
             label: 'app.ts', renderer: 'file',
-            target_refs: [{ kind: 'file_action:read_app', label: 'app.ts' }],
-            payload: { operation: 'read', display_name: 'app.ts', file_action_id: 'read_app' },
+            target_refs: [{ kind: 'file', label: 'app.ts', path:'/workspace/app.ts' }],
+            payload: { operation: 'read', display_name: 'app.ts' },
           },
         },
       }],
@@ -693,9 +742,7 @@ describe('applyFlowerRuntimeCurrentView', () => {
 
     expect(result.messages[0]).toMatchObject({ id: 'tool-entry-a' });
     expect(result.messages[0]?.blocks?.[0]).toMatchObject({
-      file_actions: {
-        read_app: { action_id: 'read_app', display_name: 'app.ts', can_preview: true, can_browse_directory: true },
-      },
+      items: [{target_refs:[{kind:'file',label:'app.ts',path:'/workspace/app.ts'}]}],
     });
   });
 

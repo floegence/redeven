@@ -532,11 +532,11 @@ func TestFloretFileActivitiesPreserveTypedReadAndMutationDetails(t *testing.T) {
 				t.Fatal(err)
 			}
 			test.assert(t, presentation.Payload)
+			if len(presentation.TargetRefs) != 1 || presentation.TargetRefs[0].Kind != "file" || presentation.TargetRefs[0].Path == "" {
+				t.Fatalf("file target refs = %#v", presentation.TargetRefs)
+			}
 			if test.toolName == "read_file" {
 				return
-			}
-			if len(presentation.TargetRefs) != 1 || !strings.HasPrefix(presentation.TargetRefs[0].Kind, "file_action:") {
-				t.Fatalf("file target refs = %#v", presentation.TargetRefs)
 			}
 			for _, chip := range presentation.Chips {
 				if chip.Kind == "operation" || chip.Kind == "display_name" || chip.Kind == "change_type" {
@@ -571,8 +571,13 @@ func TestFloretPatchActivityPreservesAllTypedMutations(t *testing.T) {
 	if (*payload.Mutations)[1].DisplayName != "new.ts" || (*payload.Mutations)[1].UnifiedDiff == "" {
 		t.Fatalf("patch mutations = %#v", *payload.Mutations)
 	}
-	if len(presentation.TargetRefs) != 2 {
-		t.Fatalf("patch target refs = %#v", presentation.TargetRefs)
+	for index, expected := range []string{"/workspace/app.ts", "/workspace/new.ts"} {
+		if target := (*payload.Mutations)[index].Target; target == nil || target.Kind != "file" || target.Path != expected {
+			t.Fatalf("mutation %d target = %#v", index, target)
+		}
+	}
+	if len(presentation.TargetRefs) != 0 {
+		t.Fatalf("patch retained shared target refs = %#v", presentation.TargetRefs)
 	}
 }
 
@@ -810,7 +815,7 @@ func TestRecordFloretActivityEventDoesNotAppendAggregateTimelineAfterText(t *tes
 					Status:   observation.ActivityStatusRunning,
 					Severity: observation.ActivitySeverityNormal,
 				}},
-			}, nil),
+			}),
 			&persistedMarkdownBlock{Type: "markdown", Content: "answer after tool"},
 		},
 		onStreamEvent: func(ev any) {
@@ -921,13 +926,6 @@ func TestActivityTimelineBlockJSONUsesSnakeCase(t *testing.T) {
 				Payload:  activityPayloadForRenderer(fltools.ActivityRendererTerminal, map[string]any{"command": "npm test", "exit_code": 0}),
 			},
 		}},
-	}, map[string]FlowerActivityFileAction{
-		"file_action_json": {
-			ActionID:      "file_action_json",
-			DisplayName:   "package.json",
-			PreviewPath:   "/workspace/package.json",
-			DirectoryPath: "/workspace",
-		},
 	})
 
 	raw, err := json.Marshal(block)
@@ -938,7 +936,7 @@ func TestActivityTimelineBlockJSONUsesSnakeCase(t *testing.T) {
 	if err := json.Unmarshal(raw, &decoded); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
-	for _, key := range []string{"schema_version", "summary", "items", "file_actions"} {
+	for _, key := range []string{"schema_version", "summary", "items"} {
 		if _, ok := decoded[key]; !ok {
 			t.Fatalf("missing key %q in %s", key, raw)
 		}
@@ -951,13 +949,6 @@ func TestActivityTimelineBlockJSONUsesSnakeCase(t *testing.T) {
 	for _, value := range []string{"run_json", "thread_json", "msg_json", "trace_json"} {
 		if strings.Contains(string(raw), value) {
 			t.Fatalf("public activity block leaked private identity %q in %s", value, raw)
-		}
-	}
-	fileActions := decoded["file_actions"].(map[string]any)
-	action := fileActions["file_action_json"].(map[string]any)
-	for _, key := range []string{"action_id", "display_name", "preview_path", "directory_path"} {
-		if _, ok := action[key]; !ok {
-			t.Fatalf("missing file action key %q in %s", key, raw)
 		}
 	}
 	item := decoded["items"].([]any)[0].(map[string]any)
@@ -1008,7 +999,7 @@ func TestPublicActivityTimelinePreservesTodoItems(t *testing.T) {
 				},
 			},
 		}},
-	}, nil)
+	})
 
 	if len(block.Items) != 1 || block.Items[0].Presentation == nil {
 		t.Fatalf("public activity item=%+v", block.Items)

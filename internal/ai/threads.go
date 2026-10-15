@@ -501,6 +501,10 @@ func (s *Service) GetFlowerThreadDetail(ctx context.Context, meta *session.Meta,
 	if err != nil {
 		return nil, fmt.Errorf("read thread runtime view: %w", err)
 	}
+	current.Items, err = s.hydrateFileActivityTargets(ctx, meta, current.ThreadID.String(), current.Items)
+	if err != nil {
+		return nil, err
+	}
 	summary, err := threadSummaryFromRuntime(ctxOrBackground(ctx), runtime, current.ThreadID)
 	if err != nil {
 		return nil, err
@@ -1364,7 +1368,10 @@ func (s *Service) ListThreadMessages(ctx context.Context, meta *session.Meta, th
 		return nil, errors.New("missing thread_id")
 	}
 
-	msgs, nextBeforeID, hasMore, err := s.listThreadTimelineMessages(ctx, meta.EndpointID, threadID, limit, beforeID)
+	if _, err := s.threadSettingsForRead(ctx, meta, threadID); err != nil {
+		return nil, err
+	}
+	msgs, nextBeforeID, hasMore, err := s.listThreadTimelineMessages(ctx, meta, threadID, limit, beforeID)
 	if err != nil {
 		return nil, err
 	}

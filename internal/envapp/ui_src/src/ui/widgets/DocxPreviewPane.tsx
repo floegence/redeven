@@ -57,7 +57,7 @@ function DocxDocument(props: {
   return <><div ref={styles} class="hidden" aria-hidden="true" /><div ref={body} class="docx-preview-pane__document" /></>;
 }
 
-export interface DocxPreviewPaneProps { surface?: FilePreviewSurface; bytes?: Uint8Array<ArrayBuffer> | null }
+export interface DocxPreviewPaneProps { onRenderError?: (message: string) => void; surface?: FilePreviewSurface; bytes?: Uint8Array<ArrayBuffer> | null }
 
 export function DocxPreviewPane(props: DocxPreviewPaneProps) {
   const [error, setError] = createSignal('');
@@ -80,7 +80,7 @@ export function DocxPreviewPane(props: DocxPreviewPaneProps) {
           <div class="relative grid place-items-center" style={{ width: `${Math.max(width(), zoom.viewportSize()?.width ?? 0)}px`, height: `${Math.max(height(), zoom.viewportSize()?.height ?? 0)}px` }}>
             <div data-preview-zoom-content class="docx-preview-pane__frame relative" style={{ width: `${width()}px`, height: `${height()}px` }}>
               <div class="docx-preview-pane__content absolute left-0 top-0 origin-top-left" style={{ width: layout() ? `${layout()!.width}px` : 'max-content', transform: `scale(${zoom.scale() ?? 1})`, visibility: layout() && zoom.scale() !== null ? 'visible' : 'hidden' }}>
-                <Show when={props.bytes} keyed>{bytes => <DocxDocument bytes={bytes} onLayout={setLayout} onError={setError} />}</Show>
+                <Show when={props.bytes} keyed>{bytes => <DocxDocument bytes={bytes} onLayout={setLayout} onError={message => {setError(message);props.onRenderError?.(message);}} />}</Show>
               </div>
             </div>
           </div>

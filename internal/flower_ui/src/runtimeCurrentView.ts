@@ -18,6 +18,7 @@ import { mapFlowerActivityItem } from './flowerLiveMapper';
 import { flowerAttachmentDisplayKind, safeFlowerAttachmentURL } from './attachments/flowerAttachmentPresentation';
 import { inputResponseBlockFromInteraction, inputResponseVisibleText } from './inputResponse';
 import { retainThreadPresentation } from './presentationIdentity';
+import { retainThreadFileActivityTargets } from './fileActivityTargets';
 
 type ResolvedApprovalState = Exclude<FlowerActivityApprovalState, 'requested'>;
 
@@ -200,18 +201,6 @@ function activityBlock(base: FlowerThreadSnapshot, view: FlowerRuntimeCurrentVie
   if (preview?.preview && ['pending', 'running', 'waiting'].includes(activity.status)) {
     activity = { ...activity, argument_preview: preview.preview };
   }
-  const fileActions = Object.fromEntries((activity.target_refs ?? []).flatMap((target) => {
-    const actionID = trim(target.kind).startsWith('file_action:')
-      ? trim(target.kind).slice('file_action:'.length)
-      : '';
-    if (!actionID) return [];
-    return [[actionID, {
-      action_id: actionID,
-      display_name: trim(target.label) || actionID,
-      can_preview: true,
-      can_browse_directory: true,
-    }]];
-  }));
   return {
     type: 'activity-timeline',
     schema_version: 1,
@@ -226,7 +215,6 @@ function activityBlock(base: FlowerThreadSnapshot, view: FlowerRuntimeCurrentVie
       counts: { [activity.status]: 1 },
     },
     items: [activity],
-    ...(Object.keys(fileActions).length > 0 ? { file_actions: fileActions } : {}),
   };
 }
 
@@ -492,7 +480,7 @@ export function applyFlowerRuntimeCurrentView(
       ? { code: trim(current.run_error_code) || 'floret_turn_failed', message: trim(current.error), ...(trim(current.run_error_detail) ? { detail: trim(current.run_error_detail) } : {}) }
       : undefined,
   };
-  return retainThreadPresentation(base, projected);
+  return retainThreadPresentation(base, retainThreadFileActivityTargets(base, projected));
 }
 
 function validateFlowerRuntimeTurns(current: FlowerRuntimeCurrentView) {

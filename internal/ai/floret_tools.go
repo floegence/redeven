@@ -1060,11 +1060,6 @@ func activityPayloadFieldValue(r *run, field string, source map[string]any) (any
 		if displayName := displayNameForFilePath(path); displayName != "" {
 			return displayName, true
 		}
-	case "file_action_id":
-		actionID := activityFileActionIDFromPayload(r, source)
-		if actionID != "" {
-			return actionID, true
-		}
 	case "results_count":
 		if count := len(toAnySlice(source["results"])); count > 0 {
 			return count, true
@@ -1138,7 +1133,6 @@ func activityMutationPayloads(r *run, mutations []any) []any {
 		}
 		clean := activityPayloadFromFieldListWithRegistry(r, []string{
 			"display_name",
-			"file_action_id",
 			"change_type",
 			"additions",
 			"deletions",
@@ -1276,7 +1270,7 @@ func floretActivityForToolResult(r *run, result ToolResult) (*fltools.ActivityPr
 		Label:      activityResultLabel(toolName, spec, hasSpec, renderer, payload),
 		Renderer:   renderer,
 		Chips:      activityChipsFromSpec(spec, payload),
-		TargetRefs: activityFileActionTargetRefs(payload),
+		TargetRefs: nil,
 		Payload:    activityPayloadForRenderer(renderer, payload),
 	}
 	if structured, ok := activity.Payload.(fltools.StructuredActivityPayload); ok {
@@ -1284,6 +1278,9 @@ func floretActivityForToolResult(r *run, result ToolResult) (*fltools.ActivityPr
 		structured.Rows = structuredToolResults(toolName, result.Data, structured.Rows)
 		structured.RowsProvided = true
 		activity.Payload = structured
+	}
+	if status == toolResultStatusSuccess && (r == nil || !r.shouldRouteTargetTool(toolName)) {
+		applyFileActivityTargets(activity, toolName, result.Data)
 	}
 	if isComputerUseTool(toolName) {
 		activity.Label = activityPresentationLabel(anyToString(result.activityInput["description"]))
@@ -1589,29 +1586,6 @@ func contractSafeActivityPresentationForTool(toolName string, activity *fltools.
 	return activity
 }
 
-func activityFileActionTargetRefs(payload map[string]any) []fltools.ActivityTargetRef {
-	seen := map[string]struct{}{}
-	refs := make([]fltools.ActivityTargetRef, 0)
-	add := func(value any, label string) {
-		actionID := strings.TrimSpace(anyToString(value))
-		if actionID == "" {
-			return
-		}
-		if _, ok := seen[actionID]; ok {
-			return
-		}
-		seen[actionID] = struct{}{}
-		label = firstNonEmptyString(label, "file")
-		refs = append(refs, fltools.ActivityTargetRef{Kind: "file_action:" + actionID, Label: label})
-	}
-	add(payload["file_action_id"], firstNonEmptyString(anyToString(payload["display_name"]), anyToString(payload["path"])))
-	for _, mutation := range toAnySlice(payload["mutations"]) {
-		record, _ := mutation.(map[string]any)
-		add(record["file_action_id"], firstNonEmptyString(anyToString(record["display_name"]), anyToString(record["path"])))
-	}
-	return refs
-}
-
 func activityPayloadForRenderer(renderer fltools.ActivityRenderer, payload map[string]any) fltools.ActivityPayload {
 	status := strings.TrimSpace(anyToString(payload["status"]))
 	summary := firstNonEmptyString(anyToString(payload["summary"]), anyToString(payload["result"]))
@@ -1675,15 +1649,7 @@ func activityPayloadForRenderer(renderer fltools.ActivityRenderer, payload map[s
 			if !ok {
 				continue
 			}
-			mutations = append(mutations, fltools.FileMutationActivityPayload{
-				DisplayName:           strings.TrimSpace(anyToString(record["display_name"])),
-				ChangeType:            strings.TrimSpace(anyToString(record["change_type"])),
-				Additions:             readIntField(record, "additions"),
-				Deletions:             readIntField(record, "deletions"),
-				UnifiedDiff:           anyToString(record["unified_diff"]),
-				DiffUnavailableReason: strings.TrimSpace(anyToString(record["diff_unavailable_reason"])),
-				Truncated:             readBoolField(record, "truncated"),
-			})
+			mutations = append(mutations, fileMutationActivityPayload(record))
 		}
 		var typedMutations *fltools.FileMutationActivityPayloads
 		if len(mutations) > 0 {
@@ -2123,36 +2089,6 @@ func compactJSONForActivityPayload(value any) string {
 		return string(raw)
 	}
 	return strings.TrimSpace(fmt.Sprint(value))
-}
-
-func activityFileActionIDFromPayload(r *run, payload map[string]any) string {
-	filePath := anyToString(payload["file_path"])
-	oldPath := anyToString(payload["old_path"])
-	newPath := anyToString(payload["new_path"])
-	changeType := anyToString(payload["change_type"])
-	displayName := firstNonEmptyString(anyToString(payload["display_name"]), displayNameForFilePath(firstNonEmptyString(newPath, filePath, oldPath)))
-	previewPath := mutationActionPath(filePath, oldPath, newPath, changeType)
-	if previewPath == "" && oldPath == "" && newPath == "" {
-		previewPath = filePath
-	}
-	return registerFlowerActivityFileAction(r, displayName, previewPath, mutationDirectoryPath(previewPath, oldPath, newPath))
-}
-
-func registerFlowerActivityFileAction(r *run, displayName string, previewPath string, directoryPath string) string {
-	if r == nil {
-		return ""
-	}
-	displayName = strings.TrimSpace(displayName)
-	previewPath = strings.TrimSpace(previewPath)
-	directoryPath = strings.TrimSpace(directoryPath)
-	if displayName == "" || (previewPath == "" && directoryPath == "") {
-		return ""
-	}
-	r.muAssistant.Lock()
-	defer r.muAssistant.Unlock()
-	r.activityFileActionSeq++
-	actionID := fmt.Sprintf("file_action_%d", r.activityFileActionSeq)
-	return actionID
 }
 
 func mapWithOperation(in map[string]any, operation string) map[string]any {

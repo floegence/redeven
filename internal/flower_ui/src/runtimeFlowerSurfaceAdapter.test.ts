@@ -656,8 +656,7 @@ describe('runtime Flower surface adapter read state', () => {
 
     expect(openLinkedFilePreview).toHaveBeenCalledWith(request);
     expect(openLinkedDirectoryBrowser).toHaveBeenCalledWith({ ...request, path: '/workspace/src' });
-    expect(adapter.openFilePreview).toBeUndefined();
-    expect(adapter.openFileBrowser).toBeUndefined();
+    expect(adapter.openMessageFile).toBeUndefined();
   });
 
   it('delegates current model updates through the host option', async () => {

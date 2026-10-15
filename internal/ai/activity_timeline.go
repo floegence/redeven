@@ -12,8 +12,7 @@ import (
 const activityTimelineBlockType = "activity-timeline"
 
 type ActivityTimelineBlock struct {
-	Type        string                              `json:"type"`
-	FileActions map[string]FlowerActivityFileAction `json:"file_actions,omitempty"`
+	Type string `json:"type"`
 	observation.ActivityTimeline
 }
 
@@ -24,18 +23,17 @@ type activityTimelinePublicIdentity struct {
 	TraceID  string
 }
 
-func newActivityTimelineBlock(timeline observation.ActivityTimeline, fileActions map[string]FlowerActivityFileAction) ActivityTimelineBlock {
-	return newActivityTimelineBlockWithPublicIdentity(timeline, fileActions, activityTimelinePublicIdentity{})
+func newActivityTimelineBlock(timeline observation.ActivityTimeline) ActivityTimelineBlock {
+	return newActivityTimelineBlockWithPublicIdentity(timeline, activityTimelinePublicIdentity{})
 }
 
-func newActivityTimelineBlockWithPublicIdentity(timeline observation.ActivityTimeline, fileActions map[string]FlowerActivityFileAction, publicIdentity activityTimelinePublicIdentity) ActivityTimelineBlock {
+func newActivityTimelineBlockWithPublicIdentity(timeline observation.ActivityTimeline, publicIdentity activityTimelinePublicIdentity) ActivityTimelineBlock {
 	if timeline.SchemaVersion <= 0 {
 		timeline.SchemaVersion = observation.ActivityTimelineSchemaVersion
 	}
 	timeline = publicActivityTimelineForBlock(timeline, publicIdentity)
 	return ActivityTimelineBlock{
 		Type:             activityTimelineBlockType,
-		FileActions:      cloneFlowerActivityFileActions(fileActions),
 		ActivityTimeline: timeline,
 	}
 }
@@ -88,31 +86,6 @@ func publicActivityItem(item observation.ActivityItem) observation.ActivityItem 
 	var out observation.ActivityItem
 	if err := json.Unmarshal(safe, &out); err != nil {
 		return observation.ActivityItem{}
-	}
-	return out
-}
-
-func cloneFlowerActivityFileActions(in map[string]FlowerActivityFileAction) map[string]FlowerActivityFileAction {
-	if len(in) == 0 {
-		return nil
-	}
-	out := make(map[string]FlowerActivityFileAction, len(in))
-	for key, value := range in {
-		key = strings.TrimSpace(key)
-		if key == "" {
-			continue
-		}
-		value.ActionID = strings.TrimSpace(value.ActionID)
-		value.DisplayName = strings.TrimSpace(value.DisplayName)
-		value.PreviewPath = strings.TrimSpace(value.PreviewPath)
-		value.DirectoryPath = strings.TrimSpace(value.DirectoryPath)
-		if value.ActionID == "" || value.DisplayName == "" {
-			continue
-		}
-		out[key] = value
-	}
-	if len(out) == 0 {
-		return nil
 	}
 	return out
 }

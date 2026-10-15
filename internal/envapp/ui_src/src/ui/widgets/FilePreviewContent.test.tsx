@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { render } from 'solid-js/web';
+import { createSignal } from 'solid-js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FilePreviewContent } from './FilePreviewContent';
 
@@ -243,4 +244,32 @@ describe('FilePreviewContent', () => {
     expect(host.querySelector('[data-testid="pdf-preview-pane"]')).toBeTruthy();
     expect(host.querySelector('iframe[title="PDF preview"]')).toBeNull();
   });
+});
+
+
+it('retains retry focus, selectable path and recovery actions during a failed retry', async () => {
+  const [busy,setBusy] = createSignal(false);
+  const [error,setError] = createSignal('missing');
+  const onRetry=vi.fn(()=>setBusy(true));
+  const onOpenParent=vi.fn();
+  const onCopyPath=vi.fn(async()=>true);
+  const host=document.createElement('div');document.body.appendChild(host);
+  const dispose=render(()=><FilePreviewContent item={{id:'/gone/file.txt',name:'file.txt',path:'/gone/file.txt',type:'file'}} descriptor={{mode:'text',language:'text',textPresentation:'code',wrapText:false}} error={error()} errorType="not_found" loading={busy()} onRetry={onRetry} onOpenParent={onOpenParent} onCopyPath={onCopyPath}/>,host);
+  try {
+    const panel=host.querySelector('[data-testid="file-preview-recovery"]')!;
+    const retry=Array.from(panel.querySelectorAll('button')).find(button=>button.textContent?.trim()==='Retry')!;
+    retry.focus();retry.click();await flushAsync();
+    expect(host.querySelector('[data-testid="file-preview-recovery"]')).toBe(panel);
+    expect(document.activeElement).toBe(retry);
+    expect(retry.getAttribute('aria-busy')).toBe('true');
+    retry.click();expect(onRetry).toHaveBeenCalledOnce();
+    setError('still missing');setBusy(false);await flushAsync();
+    expect(document.activeElement).toBe(retry);
+    expect(panel.querySelector('code')?.classList.contains('select-text')).toBe(true);
+    const parent=Array.from(panel.querySelectorAll('button')).find(button=>button.textContent?.includes('parent'))!;
+    parent.click();expect(onOpenParent).toHaveBeenCalledOnce();
+    const copy=panel.querySelector<HTMLButtonElement>('button[aria-label="Copy path"]')!;
+    copy.click();await flushAsync();expect(onCopyPath).toHaveBeenCalledOnce();
+    expect(panel.textContent).toContain('/gone/file.txt');
+  } finally {dispose();}
 });

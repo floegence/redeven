@@ -35,6 +35,19 @@ describe('Flower linked-context Env navigation', () => {
     expect(openFilePreview).toHaveBeenCalledOnce();
   });
 
+  it.each([404, 403, 409, 503])('rejects unavailable Activity targets before opening a preview (%s)', async code => {
+    const error = Object.assign(new Error('Specific file error'), { code });
+    const openFilePreview = vi.fn(async () => undefined);
+    const checkFileReadable = vi.fn(async () => { throw error; });
+    const navigation = createFlowerLinkedContextNavigation({
+      openFilePreview, checkFileReadable, openFileBrowserAtPath: vi.fn(),
+      notifyInvalidFilePath: vi.fn(), notifyInvalidDirectoryPath: vi.fn(),
+    });
+    await expect(navigation.openMessageFile({ path: '/workspace/gone.txt', action: 'preview' })).rejects.toBe(error);
+    await expect(navigation.openLinkedFilePreview({ ...request, path: '/workspace/gone.txt' })).rejects.toBe(error);
+    expect(openFilePreview).not.toHaveBeenCalled();
+  });
+
   it('opens reauthorized canonical targets through the existing host controllers', async () => {
     const openFilePreview = vi.fn(async () => undefined);
     const openFileBrowserAtPath = vi.fn(async () => undefined);

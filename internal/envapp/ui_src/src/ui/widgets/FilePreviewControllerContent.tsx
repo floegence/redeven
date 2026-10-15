@@ -2,7 +2,7 @@ import type { FilePreviewContentProps } from './FilePreviewContent';
 import { FilePreviewContent } from './FilePreviewContent';
 import type { FilePreviewController } from './createFilePreviewController';
 
-export interface FilePreviewControllerContentProps extends Pick<FilePreviewContentProps, 'contentRef' | 'onCopyPath' | 'showHeader' | 'surface'> {
+export interface FilePreviewControllerContentProps extends Pick<FilePreviewContentProps, 'contentRef' | 'onCopyPath' | 'showHeader' | 'surface' | 'onOpenParent'> {
   controller: FilePreviewController;
 }
 
@@ -27,6 +27,11 @@ export function FilePreviewControllerContent(props: FilePreviewControllerContent
       truncated={props.controller.truncated()}
       loading={props.controller.loading()}
       error={props.controller.error()}
+      errorType={props.controller.errorType()}
+      onRetry={() => void props.controller.retry()}
+      onRenderError={props.controller.reportRenderError}
+      onResourceError={(path,source) => void props.controller.reportResourceError(path,source)}
+      onOpenParent={props.onOpenParent}
       xlsxSheetName={props.controller.xlsxSheetName()}
       xlsxRows={props.controller.xlsxRows()}
       onCopyPath={props.onCopyPath}

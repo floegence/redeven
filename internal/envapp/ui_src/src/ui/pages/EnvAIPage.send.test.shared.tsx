@@ -52,14 +52,6 @@ const mocks = vi.hoisted(() => {
     if (url === '/_redeven_proxy/api/ai/readiness') {
       return { state: 'ready', reason_code: '', retryable: false, safe_to_retry: false };
     }
-    if (url.includes('/file-action-open-target')) {
-      const body = typeof init?.body === 'string' ? JSON.parse(init.body) as Record<string, unknown> : {};
-      return {
-        path: body.action === 'browse_directory'
-          ? '/workspace/env-flower/src'
-          : '/workspace/env-flower/src/app.ts',
-      };
-    }
     if (url.includes('/_redeven_proxy/api/settings')) {
       await state.settingsGate;
       return {
@@ -200,10 +192,8 @@ const mocks = vi.hoisted(() => {
     kind: 'start',
   }));
   const subscribeThreadMock = vi.fn(async (_input: { threadId: string }) => ({ runId: 'run-subscribe' }));
-  const openFileBrowserAtPathMock = vi.fn(async () => undefined);
-  const openFilePreviewMock = vi.fn(async () => undefined);
-  const openFlowerFileBrowserMock = vi.fn(async () => undefined);
-  const openFlowerFilePreviewMock = vi.fn(async () => undefined);
+  const openFileBrowserAtPathMock = vi.fn(async (..._args: unknown[]) => undefined);
+  const openFilePreviewMock = vi.fn(async (..._args: unknown[]) => undefined);
   const consumeAIThreadFocusRequestMock = vi.fn(() => undefined);
   const openSettingsMock = vi.fn();
   const notificationMock = {
@@ -218,8 +208,6 @@ const mocks = vi.hoisted(() => {
     currentItemsMock,
     openFileBrowserAtPathMock,
     openFilePreviewMock,
-    openFlowerFileBrowserMock,
-    openFlowerFilePreviewMock,
     notificationMock,
     openSettingsMock,
     sendUserTurnMock,
@@ -406,8 +394,10 @@ vi.mock('./EnvContext', () => ({
     consumeAIThreadFocusRequest: mocks.consumeAIThreadFocusRequestMock,
     openFileBrowserAtPath: mocks.openFileBrowserAtPathMock,
     openFilePreview: mocks.openFilePreviewMock,
-    openFlowerFileBrowser: mocks.openFlowerFileBrowserMock,
-    openFlowerFilePreview: mocks.openFlowerFilePreviewMock,
+    openFlowerMessageFile: async ({ path, action, kind }: { path: string; action: string; kind?: string }) => {
+      if (action === 'preview') await mocks.openFilePreviewMock({id:path,name:path.split('/').pop(),path,type:'file'},{focus:true,reusePolicy:'same_file_or_create'});
+      else await mocks.openFileBrowserAtPathMock(kind === 'directory' ? path : path.slice(0,path.lastIndexOf('/')) || '/', {openStrategy:'focus_latest_or_create'});
+    },
     openSettings: mocks.openSettingsMock,
   }),
 }));
@@ -574,8 +564,6 @@ export function registerEnvAIPageSendTests() {
       mocks.currentItemsMock.mockClear();
       mocks.openFileBrowserAtPathMock.mockClear();
       mocks.openFilePreviewMock.mockClear();
-      mocks.openFlowerFileBrowserMock.mockClear();
-      mocks.openFlowerFilePreviewMock.mockClear();
       mocks.notificationMock.error.mockClear();
       mocks.notificationMock.info.mockClear();
       mocks.notificationMock.success.mockClear();
@@ -935,7 +923,6 @@ export function registerEnvAIPageSendTests() {
     });
 
     it.each([
-      ['path', { path: '/workspace/env-flower/src/app.ts' }],
       ['file_path', { file_path: '/workspace/env-flower/src/app.ts' }],
       ['preview_path', { preview_path: '/workspace/env-flower/src/app.ts' }],
       ['root_dir', { root_dir: '/workspace/env-flower' }],
@@ -964,8 +951,8 @@ export function registerEnvAIPageSendTests() {
     });
 
     it.each([
-      ['cwd', { cwd: '/workspace/env-flower' }],
       ['path', { path: '/workspace/env-flower/src/app.ts' }],
+      ['cwd', { cwd: '/workspace/env-flower' }],
       ['rootDir', { rootDir: '/workspace/skills/frontend-design' }],
     ])('rejects nested Env-local activity payload %s fields that belong to host-only data', async (field, result) => {
       mockCurrentItems([{
@@ -995,9 +982,9 @@ export function registerEnvAIPageSendTests() {
           status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false,
           presentation: {
             label: 'app.ts', renderer: 'file',
-            target_refs: [{ kind: 'file_action:read_app', label: 'app.ts' }],
+            target_refs: [{ kind: 'file', label: 'app.ts', path: '/workspace/src/app.ts' }],
             payload: {
-              operation: 'read', display_name: 'app.ts', file_action_id: 'read_app',
+              operation: 'read', display_name: 'app.ts',
               content: 'export const app = true;\n', line_offset: 1, line_count: 1, total_lines: 1,
             },
           },
@@ -1021,17 +1008,8 @@ export function registerEnvAIPageSendTests() {
         browse?.click();
         preview?.click();
         await flush();
-        const request = {
-          thread_id: 'thread-1',
-          message_id: 'msg-file-read',
-          block_index: 0,
-          item_id: 'tool-file-read',
-          action_id: 'read_app',
-        };
-        expect(mocks.openFlowerFileBrowserMock).toHaveBeenCalledWith(request);
-        expect(mocks.openFlowerFilePreviewMock).toHaveBeenCalledWith(request);
-        expect(mocks.openFileBrowserAtPathMock).not.toHaveBeenCalled();
-        expect(mocks.openFilePreviewMock).not.toHaveBeenCalled();
+        expect(mocks.openFileBrowserAtPathMock).toHaveBeenCalledWith('/workspace/src', expect.objectContaining({openStrategy:'focus_latest_or_create'}));
+        expect(mocks.openFilePreviewMock).toHaveBeenCalledWith(expect.objectContaining({path:'/workspace/src/app.ts'}), expect.objectContaining({reusePolicy:'same_file_or_create'}));
       } finally {
         dispose();
       }
@@ -1078,11 +1056,11 @@ export function registerEnvAIPageSendTests() {
           status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false,
           presentation: {
             label: 'apply_patch', renderer: 'patch',
-            target_refs: [{ kind: 'file_action:patch_app', label: 'src/app.ts' }],
+            target_refs: [{ kind: 'file', label: 'src/app.ts', path: '/workspace/src/app.ts' }],
             payload: {
               operation: 'apply_patch',
               mutations: [{
-                display_name: 'src/app.ts', file_action_id: 'patch_app', change_type: 'update', additions: 1, deletions: 1,
+                display_name: 'src/app.ts', target: {kind:'file',label:'app.ts',path:'/workspace/src/app.ts'}, change_type: 'update', additions: 1, deletions: 1,
                 unified_diff: [
                   '--- a/src/app.ts', '+++ b/src/app.ts', '@@ -1,2 +1,2 @@',
                   '-export const oldValue = 1;', '+export const newValue = 2;', ' shared();',
@@ -1109,17 +1087,8 @@ export function registerEnvAIPageSendTests() {
         browse?.click();
         preview?.click();
         await flush();
-        const request = {
-          thread_id: 'thread-1',
-          message_id: 'msg-patch',
-          block_index: 0,
-          item_id: 'tool-patch',
-          action_id: 'patch_app',
-        };
-        expect(mocks.openFlowerFileBrowserMock).toHaveBeenCalledWith(request);
-        expect(mocks.openFlowerFilePreviewMock).toHaveBeenCalledWith(request);
-        expect(mocks.openFileBrowserAtPathMock).not.toHaveBeenCalled();
-        expect(mocks.openFilePreviewMock).not.toHaveBeenCalled();
+        expect(mocks.openFileBrowserAtPathMock).toHaveBeenCalledWith('/workspace/src', expect.objectContaining({openStrategy:'focus_latest_or_create'}));
+        expect(mocks.openFilePreviewMock).toHaveBeenCalledWith(expect.objectContaining({path:'/workspace/src/app.ts'}), expect.objectContaining({reusePolicy:'same_file_or_create'}));
       } finally {
         dispose();
       }

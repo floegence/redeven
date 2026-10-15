@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/floegence/redeven/internal/accessgate"
-	"github.com/floegence/redeven/internal/filesystemscope"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/sessionrpc"
 )
@@ -94,78 +93,28 @@ func (s *Service) ServeReadFileStreamWithAccessGate(ctx context.Context, stream 
 
 	realPath, _, err := s.resolveReadableFilePath(req.Path)
 	if err != nil {
-		if errors.Is(err, filesystemscope.ErrPathOutsideScope) {
-			_ = writeJSONFrame(stream, fsReadFileStreamRespMeta{
-				Ok: false,
-				Error: &fsStreamError{
-					Code:    403,
-					Message: "path outside filesystem scope",
-				},
-			})
-			return
-		}
-		if errors.Is(err, filesystemscope.ErrReadDenied) {
-			_ = writeJSONFrame(stream, fsReadFileStreamRespMeta{
-				Ok: false,
-				Error: &fsStreamError{
-					Code:    403,
-					Message: "read permission denied",
-				},
-			})
-			return
-		}
-		if os.IsNotExist(err) {
-			_ = writeJSONFrame(stream, fsReadFileStreamRespMeta{
-				Ok: false,
-				Error: &fsStreamError{
-					Code:    404,
-					Message: "not found",
-				},
-			})
-			return
-		}
-		if errors.Is(err, errFSPathIsDirectory) {
-			_ = writeJSONFrame(stream, fsReadFileStreamRespMeta{
-				Ok: false,
-				Error: &fsStreamError{
-					Code:    400,
-					Message: "path is a directory",
-				},
-			})
-			return
-		}
-		_ = writeJSONFrame(stream, fsReadFileStreamRespMeta{
-			Ok: false,
-			Error: &fsStreamError{
-				Code:    400,
-				Message: "invalid path",
-			},
-		})
+		failure := readFileRPCError(err)
+		_ = writeJSONFrame(stream, fsReadFileStreamRespMeta{Error: &fsStreamError{Code: int(failure.Code), Message: failure.Message}})
 		return
 	}
 
 	f, err := os.Open(realPath)
 	if err != nil {
-		_ = writeJSONFrame(stream, fsReadFileStreamRespMeta{
-			Ok: false,
-			Error: &fsStreamError{
-				Code:    404,
-				Message: "not found",
-			},
-		})
+		failure := readFileRPCError(err)
+		_ = writeJSONFrame(stream, fsReadFileStreamRespMeta{Error: &fsStreamError{Code: int(failure.Code), Message: failure.Message}})
 		return
 	}
 	defer func() { _ = f.Close() }()
 
 	info, err := f.Stat()
 	if err != nil {
-		_ = writeJSONFrame(stream, fsReadFileStreamRespMeta{
-			Ok: false,
-			Error: &fsStreamError{
-				Code:    500,
-				Message: "stat failed",
-			},
-		})
+		failure := readFileRPCError(err)
+		_ = writeJSONFrame(stream, fsReadFileStreamRespMeta{Error: &fsStreamError{Code: int(failure.Code), Message: failure.Message}})
+		return
+	}
+
+	if info.IsDir() {
+		_ = writeJSONFrame(stream, fsReadFileStreamRespMeta{Error: &fsStreamError{Code: 400, Message: "path is a directory"}})
 		return
 	}
 

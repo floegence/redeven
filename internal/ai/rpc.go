@@ -232,11 +232,8 @@ func RegisterRPCServiceProviderWithAccessGate(r *sessionrpc.Router, meta *sessio
 			return nil, &sessionrpc.Error{Code: 503, Message: "threads store not ready"}
 		}
 
-		// Ensure thread exists (consistent with other endpoints).
-		if th, err := db.GetThreadSettings(ctx, strings.TrimSpace(meta.EndpointID), threadID); err != nil {
-			return nil, &sessionrpc.Error{Code: 400, Message: err.Error()}
-		} else if th == nil {
-			return nil, &sessionrpc.Error{Code: 404, Message: "thread not found"}
+		if _, err := service.threadSettingsForRead(ctx, meta, threadID); err != nil {
+			return nil, toAIRPCError(err)
 		}
 
 		limit := req.Limit
@@ -247,8 +244,7 @@ func RegisterRPCServiceProviderWithAccessGate(r *sessionrpc.Router, meta *sessio
 			limit = 500
 		}
 
-		endpointID := strings.TrimSpace(meta.EndpointID)
-		msgs, nextAfter, hasMore, err := service.listThreadTimelineMessagesAfter(ctx, endpointID, threadID, limit, req.AfterRowID, req.Tail)
+		msgs, nextAfter, hasMore, err := service.listThreadTimelineMessagesAfter(ctx, meta, threadID, limit, req.AfterRowID, req.Tail)
 		if err != nil {
 			return nil, toAIRPCError(err)
 		}

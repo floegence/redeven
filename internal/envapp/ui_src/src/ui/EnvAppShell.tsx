@@ -77,7 +77,6 @@ import {
   type OpenTerminalInDirectoryRequest,
 } from './pages/EnvContext';
 import type {
-  FlowerFileOpenRequest,
   FlowerCompanionPresenceProjection,
   FlowerSurfaceAdapter,
   FlowerThreadFocusRequest,
@@ -89,6 +88,7 @@ import { createFlowerComposerDraftCoordinator } from '../../../../flower_ui/src/
 import { captureSessionRestartState, desktopSessionRestartBridge, restoreSessionRestartState, type RestartWorkspace } from './services/sessionRestart';
 import type { ContextActionExecutionContext } from './contextActions/protocol';
 import { createFlowerWorkingDirectoryNavigation } from './flower/workingDirectoryNavigation';
+import { classifyFilePreviewError, getFilePreviewErrorMeta } from './widgets/filePreviewErrorUtils';
 import { createFlowerLinkedContextNavigation } from './flower/linkedContextNavigation';
 import { createAIReadinessController } from './flower/aiReadiness';
 import { buildPluginPanelModel } from './plugins/pluginInventoryProjection';
@@ -171,7 +171,6 @@ import { openPreviewWebURL } from './services/openPreviewWebURL';
 import { openHtmlPreviewLink } from '../../../../flower_ui/src/chat/markdown/flowerMarkdownMedia';
 import { createClientId } from './utils/clientId';
 import { ENV_APP_FLOATING_LAYER } from './utils/envAppLayers';
-import { fileItemFromPath } from './utils/filePreviewItem';
 import { reloadCurrentPage } from './utils/windowNavigation';
 import { resolveEnvSidebarVisibilityMotion, shouldEnvTabOpenSidebar } from './envSidebarVisibilityMotion';
 import { createUIPresentationEventRecorder } from './services/uiPresentationTransactions';
@@ -362,10 +361,6 @@ function createActivityPluginWindow(
   const [target, setTarget] = createSignal({ ...initialTarget });
   return { instanceID, targetKey, target, setTarget };
 }
-
-type FlowerFileActionOpenTarget = Readonly<{
-  path?: string;
-}>;
 
 class AccessResumeTimeoutError extends Error {
   constructor(message: string) {
@@ -2519,11 +2514,10 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     openTerminalInDirectory,
   });
 
-  const openFilePreview = async (
+  const openCheckedFilePreview = async (
     item: FileItem,
     options?: FilePreviewOpenOptions,
   ): Promise<void> => {
-    setFilePreviewHostRequested(true);
     const normalizedPath = normalizeAbsolutePath(item?.path ?? '');
     if (!normalizedPath) {
       notify.error(i18n.t('shell.notifications.previewUnavailableTitle'), i18n.t('shell.notifications.invalidFilePath'));
@@ -2534,6 +2528,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       return;
     }
 
+    setFilePreviewHostRequested(true);
     const normalizedItem: FileItem = {
       ...item,
       id: String(item?.id ?? '').trim() || normalizedPath,
@@ -2559,44 +2554,38 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     await filePreviewController.openPreview(normalizedItem);
   };
 
-  const resolveFlowerFileActionPath = async (
-    request: FlowerFileOpenRequest,
-    action: 'preview' | 'browse_directory',
-  ): Promise<string> => {
-    const threadID = String(request.thread_id ?? '').trim();
-    if (!threadID) return '';
-    const target = await fetchLocalApiJSON<FlowerFileActionOpenTarget>(
-      `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/file-action-open-target`,
-      {
-        method: 'POST',
-        body: JSON.stringify({
-          message_id: String(request.message_id ?? '').trim(),
-          block_index: Math.floor(Number(request.block_index)),
-          item_id: String(request.item_id ?? '').trim(),
-          action_id: String(request.action_id ?? '').trim(),
-          action,
-        }),
-      },
-    );
-    return String(target.path ?? '').trim();
+  const checkFileReadable = async (path: string, signal: AbortSignal) => {
+    signal.throwIfAborted();
+    const client = protocol.status() === 'connected' ? protocol.session?.() : undefined;
+    if (!client) throw new Error(i18n.t('filePreview.errorConnectionTitle') + '\n' + path);
+    try {
+      await readFileBytesOnce({ client, path, maxBytes: 1 });
+    } catch (error) {
+      signal.throwIfAborted();
+      const failure = getFilePreviewErrorMeta(classifyFilePreviewError(error));
+      throw new Error(i18n.t(failure.titleKey) + '\n' + path, { cause: error });
+    }
+    signal.throwIfAborted();
+    if (protocol.session?.() !== client) throw new Error(i18n.t('filePreview.errorConnectionTitle') + '\n' + path);
   };
 
-  const openFlowerFileBrowser = async (request: FlowerFileOpenRequest): Promise<void> => {
-    const path = await resolveFlowerFileActionPath(request, 'browse_directory');
-    if (!path) return;
-    await openFileBrowserAtPath(path, {
-      title: 'Flower file context',
-      openStrategy: 'focus_latest_or_create',
-    });
-  };
-
-  const openFlowerFilePreview = async (request: FlowerFileOpenRequest): Promise<void> => {
-    const path = await resolveFlowerFileActionPath(request, 'preview');
-    if (!path) return;
-    await openFilePreview(fileItemFromPath(path), {
-      focus: true,
-      reusePolicy: 'same_file_or_create',
-    });
+  const pendingFileOpens = new Map<string, Promise<void>>();
+  const openFilePreview = (item: FileItem, options?: FilePreviewOpenOptions): Promise<void> => {
+    const path = normalizeAbsolutePath(item?.path ?? '');
+    const pending = pendingFileOpens.get(path);
+    if (pending) return pending;
+    const open = (async () => {
+      try {
+        if (!path) throw new Error(i18n.t('shell.notifications.invalidFilePath'));
+        await checkFileReadable(path, new AbortController().signal);
+        await openCheckedFilePreview(item, options);
+      } catch (error) {
+        notify.error(i18n.t('shell.notifications.previewUnavailableTitle'), getErrorMessage(error));
+      }
+    })();
+    pendingFileOpens.set(path, open);
+    void open.finally(() => { if (pendingFileOpens.get(path) === open) pendingFileOpens.delete(path); });
+    return open;
   };
 
   const {
@@ -2605,16 +2594,9 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     openLinkedFilePreview: openFlowerLinkedFilePreview,
     openLinkedDirectoryBrowser: openFlowerLinkedDirectoryBrowser,
   } = createFlowerLinkedContextNavigation({
-    openFilePreview,
+    openFilePreview: openCheckedFilePreview,
     openFileBrowserAtPath,
-    checkFileReadable: async (path, signal) => {
-      signal.throwIfAborted();
-      const client = protocol.status() === 'connected' ? protocol.session?.() : undefined;
-      if (!client) throw new Error(i18n.t('flowerSurface.threadList.workingDirectoryDisconnected'));
-      await readFileBytesOnce({ client, path, maxBytes: 1 });
-      signal.throwIfAborted();
-      if (protocol.session?.() !== client) throw new Error(i18n.t('flowerSurface.threadList.workingDirectoryDisconnected'));
-    },
+    checkFileReadable,
     notifyInvalidFilePath: () => {
       notify.error(i18n.t('shell.notifications.previewUnavailableTitle'), i18n.t('shell.notifications.invalidFilePath'));
     },
@@ -2721,8 +2703,6 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       revealHostApplication,
       openMessageFile: openFlowerMessageFile,
       openMessageURL: openFlowerMessageURL,
-      openFileBrowser: openFlowerFileBrowser,
-      openFilePreview: openFlowerFilePreview,
       openCanonicalReferenceTarget: openFlowerCanonicalReferenceTarget,
       openLinkedFilePreview: openFlowerLinkedFilePreview,
       openLinkedDirectoryBrowser: openFlowerLinkedDirectoryBrowser,
@@ -5356,8 +5336,6 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
         flowerWorkingDirectoryActions,
         openFlowerMessageFile,
         openFlowerMessageURL,
-        openFlowerFileBrowser,
-        openFlowerFilePreview,
         openFlowerCanonicalReferenceTarget,
         openFlowerLinkedFilePreview,
         openFlowerLinkedDirectoryBrowser,

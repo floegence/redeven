@@ -95,6 +95,33 @@ retain the runtime-file download path. Saving disables document editing and disc
 close and file replacement retain the controller's unsaved-change confirmation.
 No browser-only blob download bypasses the product download manager.
 
+## Unavailable targets and recovery
+
+Navigation opens the current filesystem object, while historical tool results,
+diffs, and image snapshots retain their original content. Opening checks current
+readability first. A missing or inaccessible file produces one specific entry
+error without opening a window or replacing the current preview. A target that
+fails after opening uses a compact panel with Retry and Open parent folder.
+The path occupies one selectable, truncated line with a copy icon; expanding
+details exposes its complete value. Technical details begin collapsed. Permissions, connection,
+type changes, unsupported formats, and renderer failures remain distinct.
+
+The existing preview controller owns loading, retry, cancellation, dirty drafts,
+and errors. Retry preserves the recovery panel and button nodes, uses local busy
+state, and ignores duplicate input. Success replaces the panel with content.
+Closing or switching targets invalidates delayed responses; retry never reruns
+the original editing tool or polls for file restoration. Audio/video failure
+uses an authorized HEAD request to classify missing, denied, disconnected, and
+changed-type resources without downloading media. Accessible resources with
+playback failure show a renderer error. Image, PDF, and DOCX rendering failures
+join the same controller-owned recovery surface.
+
+Preflight and window-opening failures use one entry notification. Failures after
+opening belong to the target surface without a duplicate notification. Files keeps its established recovery behavior:
+failed navigation preserves a valid directory, missing initial/current directories
+show recovery instead of an empty list, transient refresh failure preserves
+usable content, and parent/Home jumps remain explicit and authorized.
+
 # Boundaries
 
 Preview loading and error presentation remain in the body. Save errors and
@@ -121,3 +148,4 @@ Preview scale, content bounds, and asynchronous renderer ownership follow the
 - `redeven:internal/envapp/ui_src/src/ui/workbench/WorkbenchFilePreviewWidget.browser.test.tsx` - Verifies reading space, responsive actions, selection, and local menu input on the published Workbench.
 - `redeven:internal/envapp/ui_src/src/ui/widgets/createFilePreviewController.test.ts` - Binary saves, failed writes, stale bindings and permission changes during serialization.
 - `redeven:internal/envapp/ui_src/src/ui/downloads/runtimeDownloadSource.test.ts` - PDF draft byte preservation and cancellation without a runtime connection.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/FilePreviewRecovery.browser.test.tsx` - Narrow layouts, full paths, keyboard focus, duplicate retry, and recovery controls.

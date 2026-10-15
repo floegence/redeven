@@ -3,6 +3,7 @@ import type {
 } from './contracts/flowerSurfaceContracts';
 import { mergeThreadTitle, threadTitleSnapshot, type ThreadTitleSnapshot } from './threadTitleSnapshot';
 import { retainEqualValue, retainThreadPresentation } from './presentationIdentity';
+import { retainThreadFileActivityTargets } from './fileActivityTargets';
 
 type ThreadDetail = Omit<FlowerThreadSnapshot, keyof ThreadTitleSnapshot>;
 type ThreadDetailView = Readonly<{ thread: ThreadDetail; version: number }>;
@@ -242,7 +243,10 @@ function createCache(
       activityState: 'stale',
       settingsState: 'stale',
     };
-    const current = views.get(id)?.view;
+    const stored = views.get(id)?.view;
+    const enriched = stored ? retainThreadFileActivityTargets(view.thread, stored.thread) : undefined;
+    const navigationChanged = !!stored && enriched !== stored.thread;
+    const current = stored && navigationChanged ? { ...stored, thread: enriched! } : stored;
     const runtimeState = classifyThreadView(current, view);
     const activityState = classifyThreadActivity(current, view);
     const settingsState = classifyThreadSettings(current, view);
@@ -250,7 +254,7 @@ function createCache(
     const acceptedTitle = title ? mergeThreadTitle(currentSummary, title) : threadTitleSnapshot(currentSummary ?? { title: '', title_status: 'unset', title_generation: 0 });
     const titleState = !currentSummary || acceptedTitle.title_generation !== currentSummary.title_generation
       || acceptedTitle.title_status !== currentSummary.title_status || acceptedTitle.title !== currentSummary.title ? 'accepted' : 'unchanged';
-    const state = aggregateAcceptance(runtimeState, activityState, settingsState, titleState);
+    const state = navigationChanged ? 'accepted' : aggregateAcceptance(runtimeState, activityState, settingsState, titleState);
     if (state !== 'accepted') return {
       cache,
       state,
