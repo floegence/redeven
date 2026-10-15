@@ -290,7 +290,7 @@ describe('Flower workspace synchronization recovery', () => {
     });
     await waitFor(() => surface.querySelector(`[data-thread-id="${parent.thread_id}"] button`) !== null);
     selectThread(surface, parent.thread_id);
-    await waitFor(() => surface.querySelector('button[aria-controls="flower-subagents-dropdown"]') !== null);
+    await waitFor(() => surface.querySelector('button[aria-controls="flower-subagents-dropdown"] .flower-header-icon-badge')?.textContent === '1');
     (surface.querySelector('button[aria-controls="flower-subagents-dropdown"]') as HTMLButtonElement).click();
     await waitFor(() => document.querySelector('[data-flower-subagent-row="0"]') !== null);
     (document.querySelector('[data-flower-subagent-row="0"]') as HTMLButtonElement).click();
@@ -338,6 +338,12 @@ describe('Canonical managed facts on the existing workspace transport', () => {
   await flush(); publish.resolve(); await flush();
   expect(surface.querySelector('.flower-model-context-details')?.textContent ?? '').not.toContain('Background catalog changed');
   selectThread(surface, second.thread_id);
+  await waitFor(() => !surface.querySelector('.flower-thread-loading') && Boolean(surface.querySelector('.flower-model-context-details summary')));
+  await flush();
+  const contextTrigger = surface.querySelector('[role="progressbar"]') as HTMLElement;
+  contextTrigger.focus();
+  (surface.querySelector('.flower-model-context-details summary') as HTMLElement).click();
+  expect(document.activeElement).toBe(contextTrigger);
   await waitFor(() => surface.querySelector('.flower-model-context-details')?.textContent?.includes('Background catalog changed') ?? false);
   expect(surface.querySelectorAll('.flower-user-message')).toHaveLength(0);
   expect(connectLiveStream).toHaveBeenCalledTimes(1);
@@ -367,6 +373,8 @@ describe('Canonical managed facts on the existing workspace transport', () => {
   (document.querySelector('[data-flower-subagent-row="0"]') as HTMLButtonElement).click();
   await waitFor(() => Boolean(document.querySelector('[data-flower-subagent-detail="open"]')));
   await flush();publish.resolve();
+  await waitFor(() => Boolean(document.querySelector('[data-flower-subagent-detail="open"] .flower-model-context-details summary')));
+  (document.querySelector('[data-flower-subagent-detail="open"] .flower-model-context-details summary') as HTMLElement).click();
   await waitFor(() => document.querySelector('[data-flower-subagent-detail="open"] .flower-model-context-details')?.textContent?.includes('Current child catalog') ?? false);
   expect(surface.querySelector('.flower-composer .flower-model-context-details')).toBeNull();
  });

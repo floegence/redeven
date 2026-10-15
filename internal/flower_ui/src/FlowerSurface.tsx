@@ -7843,7 +7843,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (event.button !== 0 || event.defaultPrevented) return;
     const target = event.target;
     if (!(target instanceof Element)) return;
-    if (target.closest('textarea, input, label, button, a, select, [role="button"], [role="option"], [contenteditable="true"]')) return;
+    if (target.closest('textarea, input, label, button, a, select, [role="button"], [role="option"], [contenteditable="true"], .flower-composer-context-indicator')) return;
     if (companionCollapsed()) {
       activateCompanionEntry(event);
       return;
@@ -9001,7 +9001,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return true;
   };
 
-  const activityItemAriaLabel = (item: FlowerActivityItem, timeline: FlowerActivityTimelineBlock): string => (
+  const activityItemAriaLabel = (item: FlowerActivityItem): string => (
     [
       presentFlowerActivityItem(item, {
         tools: copy().chat.toolActivity,
@@ -10016,7 +10016,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         data-flower-activity-approval-state={item().approval_state}
         data-flower-control-error={controlError() ? 'true' : undefined}
         data-state={disclosure.state()}
-        aria-label={activityItemAriaLabel(item(), timeline())}
+        aria-label={activityItemAriaLabel(item())}
       >
         <div class="flower-activity-inline-line">
           <Show
