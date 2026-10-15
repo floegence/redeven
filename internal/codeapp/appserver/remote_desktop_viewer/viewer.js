@@ -143,6 +143,7 @@ function waitForPicture() {
   }, 10000);
 }
 function picture() { return { mode: quality, max_dimension: quality === 'data' ? 1920 : 2560, frame_rate: quality === 'data' ? 30 : 60, audio, native_pixels: original,
+  ...(capabilities.frame_window === 6 ? { frame_window: 6 } : {}),
   ...(['x11', 'wayland', 'linux-drm-kms'].includes(backend) ? { codecs: videoCodecs } : {}) }; }
 function configure() { if (state !== 'active') return; changeDesktop('configure', { picture: picture() }); }
 async function setAudio(enabled) {
@@ -220,7 +221,7 @@ function updateState(message) {
   awaitingState = false;
   if (state === 'active') session.mode = message.mode ?? session.mode;
   $('mode').value = session.mode;
-  if (changed || state !== 'active' && state !== 'locked') { revoke(); player.reset(generation); }
+  if (changed || state !== 'active' && state !== 'locked') { revoke(); player.reset(generation, capabilities.frame_window === 6 ? 6 : 4); }
   if ($('view-hint')) $('view-hint').hidden = session.mode === 'control';
   if (state !== 'active' || session.mode !== 'control') clearClipboard();
   const permission = /permission|authorization|host_action/i.test(state + ' ' + reason);

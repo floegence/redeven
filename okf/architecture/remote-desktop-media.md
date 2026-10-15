@@ -47,7 +47,15 @@ available to older clients. The software path prefers supported VP9 after hardwa
 candidates fail their capability probes. Codec selection is observable and does not certify
 hardware decoding or RustDesk performance parity.
 
-Four cumulative frame credits bound unacknowledged pictures. Encoder timestamps
+The native adapter advertises its maximum `frame_window`; absence preserves the
+protocol-v1 four-frame contract. Linux supports an explicit six-frame picture
+offer. The viewer requests it only after that capability, and Runtime validates
+the offer before forwarding it. The selected capacity is fixed for the attachment
+and bounds its offered-frame set; a configure cannot shrink the bound while old
+media drains. Reconnect renegotiates and an absent offer restores four. The player
+resets its matching video bounds with the generation. macOS retains four;
+Windows physical capture remains unsupported. Audio and PNG refinement bounds
+are independent. Cumulative frame credits bound unacknowledged pictures. Encoder timestamps
 advance by one configured frame period per submitted frame, even after credits
 stall submission; capture telemetry retains the actual monotonic capture time.
 Idle transport time cannot inflate the next frame's codec budget. Encoder reset

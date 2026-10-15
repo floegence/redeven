@@ -46,41 +46,13 @@ Retain confirmed cumulative credit, generation fences, bounded queues and
 authorization when changing scheduling. A carrier-only result cannot qualify
 RustDesk parity; a trace must isolate a previously unresolved interval.
 
-# Stage Evidence And Limits
+# Further Diagnostics
 
-P01, existing post-v42/v45 tracing: source-to-capture medians45-47 ms,
-descriptor about8 ms, pool1.6-1.7 ms, encode12-13 ms, receive-to-draw1-3 ms.
-Publication-to-ACK has tails above400 ms; some intervals wait capture-to-submit.
-Sources: B/`lan-capture-phase-stages.json`,
-`proxy-frame-coalescing/marker-stages.json`. Instrumentation and cross-host clock
-uncertainty remain explicit. Another trace must name an interval these cannot
-answer. TCP retransmissions occur in both products, without sole-cause proof.
-
-P02, 2026-10-14 PDT temporary v47 timestamp overlay (not native v0.22.48):
-consumer `56b7275da`, base native `99fa004`, diagnostic media archive SHA-256
-`4e9caa61179857033bb7ffdf54839f234ca35fe7ea557244e1a056ad41e859e3`.
-Question: do long publication gaps follow encode stalls or blocked frame credit?
-Bounded capture/media timestamps were the only changes. Service PID876399 used
-systemd PrivateTmp; no marker decoding was added, so source-to-capture latency
-cannot be inferred from this overlay.
-
-- r1: 50/50, P50/P95 128.90/159.64 ms, 46.11 FPS, zero gaps. Encode median/P95
-  13.71/18.97 ms; publish-to-ACK35.16/60.55 ms; maximum publish gap67.73 ms.
-  No tail reproduced; short diagnostic, not acceptance.
-- r2: 52/52, P50/P95 96.95/125.73 ms, 43.27 FPS, three gaps. Initial CUA batch
-  interrupted by app change; two clicks23 ms apart then50 regular clicks.
-  Retain as diagnostic with this validity caveat, not a clean100-input trial.
-- Port-scoped120 s pcap:24018 packets, zero kernel drops. Simple overlapping
-  TCP-sequence classifier finds48 retransmission packets/142724 bytes; not an
-  exhaustive cause classifier. Frame4340 has248.91 ms publication gap, ACK at
-  +233.47 ms and next submit+233.50 ms. Several stalls overlap retransmissions;
-  frame4803 has217.75 ms gap/ACK+207.16 ms with none in its narrow window.
-
-Decision: unresolved credit/return-path ownership. This narrows stalls but does
-not isolate historical regression or Wi-Fi. Do not repeat unchanged tracing;
-first complete C01 or state a new discriminating timing question. Raw scripts
-`prepare-v48-trace.py`, `v48-trace-runner.py`, outputs `v48-trace-paired`,
-`v48-trace-export`, `v48-bridge.pcap`, `v48-clock.json`, `analyze-v48-gaps.py`.
+The [stage tracing record](remote-desktop-lan-stage-tracing.md) owns P01-P04,
+including clock validity and outbound boundaries. The
+[window comparison](remote-desktop-lan-window-c04.md) owns rejected C03/T11 and
+six-frame C04/T12. Consult those records before repeating receipt or capacity
+experiments. Both retain their invalid attempts and complete adverse rounds.
 
 # Evidence
 

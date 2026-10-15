@@ -21,6 +21,7 @@ const backend = process.argv.includes('--macos') ? 'macos' : process.argv.includ
 const noVP9 = process.argv.includes('--no-vp9');
 const noAV1 = process.argv.includes('--no-av1');
 const codecOnly = process.argv.includes('--codec-only');
+let offeredFrameWindow = backend === 'macos' || process.argv.includes('--legacy-window') ? 0 : 6;
 const hostInputOnly = process.argv.includes('--host-input-only');
 const separateCursor = backend !== 'macos' && !process.argv.includes('--embedded-cursor');
 const controlCursor = separateCursor ? 'default' : 'none';
@@ -113,9 +114,11 @@ server.on('upgrade', (request, socket, head) => {
       control = connection; controls.push(connection);
       connection.on('message', data => {
         const packet = JSON.parse(data); const command = packet.command; messages.push(packet);
+        if (['connect', 'configure'].includes(command.method)) assert.equal(command.picture.frame_window,
+          offeredFrameWindow || undefined, 'window must be explicitly offered; legacy/macOS omit the field');
         if (command.method === 'probe') connection.send(JSON.stringify({ version: 1, type: 'capabilities', capabilities: unsupportedReason
           ? { backend: 'linux-drm-kms', state: 'unavailable', reason: unsupportedReason, screen: false, input: false, unlock: false, locked_screen: false, audio: false, clipboard: false, displays: [] }
-          : { backend, displays, unlock: true, locked_screen: true, audio: true, clipboard: !clientTextOnly, text_input: clientTextOnly } }));
+          : { backend, ...(offeredFrameWindow ? { frame_window: offeredFrameWindow } : {}), displays, unlock: true, locked_screen: true, audio: true, clipboard: !clientTextOnly, text_input: clientTextOnly } }));
         if (command.method === 'connect') {
           if (holdConnect) return;
           if (lockedNextConnect) {
@@ -229,8 +232,11 @@ try {
   } else if (codecOnly) {
     await page.waitForFunction(() => document.querySelector('#connection').hidden);
     const expected = backend === 'macos' ? undefined : [...(noAV1 ? [] : ['av1']), ...(noVP9 ? [] : ['vp9']), 'h264'];
-    const checkOffer = method => assert.deepEqual(messages.findLast(item => item.command.method === method)?.command.picture.codecs,
-      expected, `${backend} ${method} must offer only client-supported codecs`);
+    const checkOffer = method => {
+      const picture = messages.findLast(item => item.command.method === method)?.command.picture;
+      assert.deepEqual(picture.codecs, expected, `${backend} ${method} must offer only client-supported codecs`);
+      assert.equal(picture.frame_window, offeredFrameWindow || undefined, 'reconnect must retire the previous window offer');
+    };
     checkOffer('connect');
     paint();
     await page.waitForFunction(() => document.querySelector('#desktop').hasAttribute('data-painted') && !document.querySelector('#shortcuts').disabled);
@@ -240,6 +246,7 @@ try {
     checkOffer('configure');
     await page.keyboard.press('Escape');
     const before = connectionCount;
+    offeredFrameWindow = 0; // Reconnect to a legacy adapter with no extended window.
     control.close();
     for (let attempt = 0; connectionCount === before && attempt < 100; attempt++) await page.waitForTimeout(20);
     await page.waitForFunction(() => document.querySelector('#connection').hidden);
@@ -791,7 +798,9 @@ try {
       connection.off('message', connected); paint(); resolve();
     };
     connection.on('message', connected);
-    connection.send(JSON.stringify({ version: 1, type: 'capabilities', capabilities }));
+    connection.send(JSON.stringify({ version: 1, type: 'capabilities', capabilities: {
+      ...(offeredFrameWindow ? { frame_window: offeredFrameWindow } : {}), ...capabilities,
+    } }));
   });
   await refreshCapabilities({ backend: 'linux-drm-kms', displays, unlock: true, locked_screen: true, audio: false, clipboard: false, text_input: true });
   await page.waitForFunction(() => document.querySelector('#desktop').hasAttribute('data-painted') && !document.querySelector('#shortcuts').disabled);

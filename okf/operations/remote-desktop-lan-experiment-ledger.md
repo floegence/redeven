@@ -85,6 +85,23 @@ trial is retained, with no favorable replacement. Zero-wait B is not adopted;
 it does not recover the historical cadence. Exact A and the released service
 are restored. No production implementation or dependency was downgraded.
 
+# Window Capacity Comparison
+
+[C03/C04](remote-desktop-lan-window-c04.md) retains the rejected exhausted-window
+timer candidate and the four/six-frame A/B/A/B comparison. Four-frame controls
+produce 45.98/44.66 FPS; six-frame rounds produce 52.30/53.48 FPS with
+100/100 inputs and P95 143.13/119.13 ms. Six-frame B1 still has one long gap;
+B2 has none. This supports an optional capacity contract, not complete recovery
+or RustDesk parity. The [stage record](remote-desktop-lan-stage-tracing.md)
+separates outbound timing from confirmed-paint and receipt delays. Candidate
+native v0.22.48 is tagged at `2b40002`; publication and consumer qualification
+remain pending. Current security and platform boundaries remain mandatory.
+
+[C05: published qualification](remote-desktop-lan-published-c05.md) predeclares
+three alternating pairs, equal content viewports, source-associated inputs,
+moving detail and complete resource lineage. It retains release qualification
+failures and the udesk26 reboot as preparation boundaries, not performance data.
+
 # Boundaries
 
 Historical performance is not restored in the current product. C01's late v40
