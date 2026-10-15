@@ -555,6 +555,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
     <Dialog
       open={props.open}
       onOpenChange={props.onOpenChange}
+      escapeKeyPhase="bubble"
       title={props.mode === 'create' ? copy().addTitle : copy().editTitle}
       class="flower-provider-dialog w-[min(72rem,96vw)] max-w-[96vw]"
       contentClass="flower-provider-dialog-body"
@@ -618,7 +619,9 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
             <Show when={selectedProviderType()} fallback={<div class="flower-provider-introduction"><p>{copy().providerTypeDescription}</p></div>}>
               <div id={`flower-provider-type-${store.draft!.type}`} class="flower-provider-editor">
                 <div class="flower-provider-identity">
-                  <FlowerProviderBrandIcon type={store.draft!.type} class="h-6 w-6 shrink-0" />
+                  <span class="flower-provider-identity-mark" title={providerTypeLabel(store.draft!.type)}>
+                    <FlowerProviderBrandIcon type={store.draft!.type} class="h-6 w-6" />
+                  </span>
                   <div class="flower-provider-identity-name" classList={{ 'flower-provider-identity-name--editing': editingProviderName() }}>
                     <Show when={editingProviderName()} fallback={<h2 title={flowerProviderDisplayName(store.draft!, providerTypeLabel(store.draft!.type))}>{flowerProviderDisplayName(store.draft!, providerTypeLabel(store.draft!.type))}</h2>}>
                       <Input ref={providerNameInput} value={store.draft!.name ?? ''}
@@ -631,10 +634,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                             finishProviderNameEdit(event.key === 'Enter', true);
                           }
                         }}
-                        aria-label={copy().connectionName} placeholder={providerTypeLabel(store.draft!.type)} maxLength={80} size="sm" class="w-full" />
-                    </Show>
-                    <Show when={store.draft!.name?.trim() && store.draft!.name?.trim() !== providerTypeLabel(store.draft!.type)}>
-                      <span class="flower-provider-identity-type">{providerTypeLabel(store.draft!.type)}</span>
+                        aria-label={copy().connectionName} placeholder={providerTypeLabel(store.draft!.type)} maxLength={80} size="md" class="flower-provider-name-input w-full" disabled={props.disabled || props.saving} />
                     </Show>
                   </div>
                   <Show when={!editingProviderName()}>

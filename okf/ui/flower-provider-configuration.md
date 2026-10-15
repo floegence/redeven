@@ -67,6 +67,9 @@ field in place. Enter or leaving the field accepts the draft; Escape restores th
 prior name, and an empty alias falls back to the brand. Provider galleries and
 model selectors use the same alias. Saving preserves it without changing the
 provider ID, authentication binding, credentials, endpoint or model identities.
+The editor presents the brand mark, connection name and pencil on one centered
+row without a duplicate brand subtitle. Renaming keeps the row height stable;
+long names truncate while retaining their full tooltip and the edit control.
 
 Global Env settings use the same provider picker, connection controls and model
 catalog as the other Flower settings entrypoints. Advanced parameters remain

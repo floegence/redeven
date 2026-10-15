@@ -1,5 +1,12 @@
 # Redeven OKF Update Log
 
+## 2026-10-14: Refined provider connection identity
+
+- Present the [provider connection identity](ui/flower-provider-configuration.md)
+  as one aligned row with a framed brand mark and inline name editing.
+- Remove the duplicate brand subtitle, keep editing height stable, and align
+  credential and endpoint fields across light, dark and narrow layouts.
+
 ## 2026-10-15: Native provider state reader recovery
 
 - Adopt published Floret v7.34.0 to reopen schema-15 stores carrying optional

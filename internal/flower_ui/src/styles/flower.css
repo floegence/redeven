@@ -144,22 +144,46 @@
 .flower-provider-identity {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.625rem;
+  min-height: 2.25rem;
   margin-bottom: 1.5rem;
 }
 
-.flower-provider-identity h2 {
+.flower-provider-identity-mark {
+  display: grid;
+  place-items: center;
+  flex: 0 0 2.25rem;
+  height: 2.25rem;
+  border: 1px solid var(--flower-provider-divider);
+  border-radius: 0.625rem;
+  background: color-mix(in srgb, var(--muted) 30%, var(--card));
+}
+
+.flower-provider-identity h2,
+.flower-provider-identity input.flower-provider-name-input {
   font-size: 1.125rem;
+  line-height: 1.5;
   font-weight: 600;
   letter-spacing: -0.02em;
+}
+
+.flower-provider-identity h2 {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.flower-provider-identity-name { min-width: 0; }
-.flower-provider-identity-name--editing { flex: 1; max-width: 24rem; }
-.flower-provider-identity-type { display: block; color: var(--muted-foreground); font-size: 0.75rem; }
+.flower-provider-identity-name {
+  min-width: 0;
+}
+
+.flower-provider-identity-name--editing {
+  flex: 0 1 24rem;
+}
+
+.flower-provider-name-edit {
+  margin-left: -0.25rem;
+}
 
 .flower-provider-connection {
   display: grid;
@@ -309,6 +333,12 @@
 
 .flower-provider-connection-fields > :only-child {
   grid-column: 1 / -1;
+}
+
+.flower-provider-connection-fields > div > label {
+  min-height: 1.125rem;
+  line-height: 1.125rem;
+  align-items: baseline;
 }
 
 .flower-provider-secret-input[data-stored-secret='true']::placeholder {
