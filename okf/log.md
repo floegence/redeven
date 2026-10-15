@@ -1,5 +1,11 @@
 # Redeven OKF Update Log
 
+## 2026-10-14: Consistent command activity icons
+
+- Command execution and output reads share the terminal glyph and restore the
+  existing four-square running animation in the shared
+  [Activity presentation](ui/flower-activity-interaction.md).
+
 ## 2026-10-14: Refined provider connection identity
 
 - Present the [provider connection identity](ui/flower-provider-configuration.md)

@@ -62,7 +62,17 @@ const AnimatedGlyph: Component<{ recipe: FlowerToolMotionRecipe; running: boolea
 };
 
 export const FlowerToolIcon: Component<{ toolName?: string; source?: string; running: boolean }> = (props) => {
+  const runningCommand = () => props.running && (props.toolName === 'terminal.exec' || props.toolName === 'terminal.read');
   const recipe = createMemo(() => flowerToolMotion[props.toolName ?? '']
     ?? flowerToolMotion[props.source === 'mcp' || props.toolName?.startsWith('mcp_') ? 'mcp' : 'unknown']);
-  return <Show when={recipe()} keyed>{value => <AnimatedGlyph recipe={value} running={props.running} />}</Show>;
+  return <Show when={runningCommand()} fallback={
+    <Show when={recipe()} keyed>{value => <AnimatedGlyph recipe={value} running={props.running} />}</Show>
+  }>
+    <span class="flower-activity-inline-loader" aria-hidden="true">
+      <span class="flower-activity-inline-loader-square" />
+      <span class="flower-activity-inline-loader-square" />
+      <span class="flower-activity-inline-loader-square" />
+      <span class="flower-activity-inline-loader-square" />
+    </span>
+  </Show>;
 };
