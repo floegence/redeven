@@ -1,11 +1,11 @@
 package appserver
 
 import (
- flruntime "github.com/floegence/floret/v7/runtime"
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	flruntime "github.com/floegence/floret/v7/runtime"
 	"io"
 	"log/slog"
 	"net/http"
@@ -36,7 +36,7 @@ func TestServerAIInitialTurnCreateIsIdempotentAndCanonicallyReadable(t *testing.
 	stateDir := t.TempDir()
 	aiService, err := ai.NewService(ai.Options{
 		Logger: logger, StateDir: stateDir, AgentHomeDir: stateDir, Shell: "bash", Config: cfg,
-		PersistOpTimeout: 2 * time.Second, ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration:2 * time.Second, FirstOutputTimeout:time.Second, IdleTimeout:time.Second},
+		PersistOpTimeout: 2 * time.Second, ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration: 2 * time.Second, FirstOutputTimeout: time.Second, IdleTimeout: time.Second},
 		ResolveProviderAPIKey: func(string) (string, bool, error) { return "sk-initial-http-test", true, nil },
 	})
 	if err != nil {

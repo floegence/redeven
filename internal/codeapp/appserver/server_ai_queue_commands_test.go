@@ -35,8 +35,8 @@ func TestServerQueueCommandsPreserveCanonicalInputAndPublicProjection(t *testing
 				Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: dir, AgentHomeDir: dir, Shell: "/bin/sh",
 				Config: &config.AIConfig{CurrentModelID: "openai/gpt-5-mini", Providers: []config.AIProvider{{ID: "openai", Type: "openai", BaseURL: provider.URL,
 					Models: []config.AIProviderModel{{ModelName: "gpt-5-mini"}}}}},
-				ResolveProviderAPIKey: func(string) (string, bool, error) { return "fixture", true, nil },
-				ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration:time.Minute, FirstOutputTimeout:time.Minute, IdleTimeout:time.Minute},
+				ResolveProviderAPIKey:        func(string) (string, bool, error) { return "fixture", true, nil },
+				ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration: time.Minute, FirstOutputTimeout: time.Minute, IdleTimeout: time.Minute},
 			})
 			if err != nil {
 				t.Fatal(err)
