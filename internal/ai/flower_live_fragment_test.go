@@ -194,7 +194,6 @@ func TestFlowerLiveFragmentsCoalesceOnlyUnsentPureTextGrowth(t *testing.T) {
 				}
 				queued := len(sub.subscriber.queue)
 				if initializing {
-					queued = len(sub.subscriber.buffered)
 					svc.mu.Lock()
 					finalizeFlowerLiveSubscriberInitializationLocked(svc, sub.subscriber)
 					svc.mu.Unlock()
@@ -395,7 +394,7 @@ func TestFlowerLiveFragmentsAccountLatestAndActiveMediaWithoutLifecycleInterfere
 	}
 }
 
-func TestFlowerLiveFragmentsInitializationCoalescesOnlyPureTextTail(t *testing.T) {
+func TestFlowerLiveFragmentsInitializationCoalescesOnlyPureTextGrowth(t *testing.T) {
 	svc, sub := subscribeFlowerFragmentTest(t)
 	current := largeFlowerLiveCurrent()
 	current.Items = current.Items[len(current.Items)-1:]
@@ -409,14 +408,14 @@ func TestFlowerLiveFragmentsInitializationCoalescesOnlyPureTextTail(t *testing.T
 		latest = newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamThreadBatch, Current: &current})
 		enqueueFlowerFragmentTest(t, svc, sub, latest)
 	}
-	if sub.subscriber.closed || len(sub.subscriber.buffered) != 1 || sub.subscriber.queuedBytes != len(latest.data) || svc.flowerLiveQueuedBytes != len(latest.data) {
+	if sub.subscriber.closed || len(sub.subscriber.queue) != 1 || sub.subscriber.queuedBytes != len(latest.data) || svc.flowerLiveQueuedBytes != len(latest.data) {
 		t.Fatal("pure text growth exhausted initialization count or retained stale bytes")
 	}
 	current.ViewVersion++
 	current.Activity = flruntime.ThreadActivityIdle
 	terminal := newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamThreadBatch, Current: &current})
 	enqueueFlowerFragmentTest(t, svc, sub, terminal)
-	if len(sub.subscriber.buffered) != 2 || svc.flowerLiveQueuedBytes != len(latest.data)+len(terminal.data) {
+	if len(sub.subscriber.queue) != 2 || svc.flowerLiveQueuedBytes != len(latest.data)+len(terminal.data) {
 		t.Fatal("initialization text coalescing erased a terminal boundary")
 	}
 	svc.mu.Lock()
@@ -426,6 +425,6 @@ func TestFlowerLiveFragmentsInitializationCoalescesOnlyPureTextTail(t *testing.T
 		t.Fatal("initialization delivered text and terminal boundaries out of order")
 	}
 	if svc.flowerLiveQueuedBytes != 0 {
-		t.Fatal("initialization tail coalescing leaked retained bytes")
+		t.Fatal("initialization text coalescing leaked retained bytes")
 	}
 }

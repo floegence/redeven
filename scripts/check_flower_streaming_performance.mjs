@@ -37,9 +37,9 @@ try {
       },
       transform(code, id) {
         if (!id.endsWith('/chat/markdown/FlowerMarkdownBlock.tsx')) return;
-        const marker = /marked\.use\(\{\s*renderer:\s*createFlowerMarkdownRenderer\(\)\s*\}\);/;
+        const marker = /const renderMarkdown = createMarkdownRenderModel\(marked\);/;
         if (!marker.test(code)) throw new Error('Markdown instrumentation boundary changed');
-        return code.replace(marker, (matched) => `${matched}\nfor (const [method, count] of [['parser', 'parses'], ['lexer', 'lexes']]) { const original = marked[method].bind(marked); marked[method] = (...args) => { globalThis.__flowerPerfCounts[count] += 1; return original(...args); }; }`);
+        return code.replace(marker, (matched) => `for (const [method, count] of [['parser', 'parses'], ['lexer', 'lexes']]) { const original = marked[method].bind(marked); marked[method] = (...args) => { globalThis.__flowerPerfCounts[count] += 1; return original(...args); }; }\n${matched}`);
       },
     }],
     build: { outDir: dist, emptyOutDir: true, cssCodeSplit: false, rollupOptions: { input: { performance: path.join(root, 'internal/flower_ui/testing/performance/main.tsx') }, output: { entryFileNames: 'performance.js' } } },
@@ -100,11 +100,12 @@ try {
           const result = await page.evaluate(() => window.flowerPerformance.stop());
           if (pageErrors.length) throw new AggregateError(pageErrors, 'Flower renderer failed during measurement');
           const after = await cdp.send('Performance.getMetrics');
+          const continuity = await page.evaluate(() => window.flowerPerformance.checkContinuity());
           const metric = (data, key) => data.metrics.find((value) => value.name === key)?.value ?? 0;
-          const run = { runtime, messages, tools, hz, seconds, processID: application?.process().pid, url, stateDirectory: runtime === 'desktop' ? path.join(temporary, name) : undefined, ...result, layoutMs: 1000 * (metric(after, 'LayoutDuration') - metric(before, 'LayoutDuration')), styleMs: 1000 * (metric(after, 'RecalcStyleDuration') - metric(before, 'RecalcStyleDuration')), layoutCount: metric(after, 'LayoutCount') - metric(before, 'LayoutCount') };
+          const run = { runtime, messages, tools, hz, seconds, processID: application?.process().pid, url, stateDirectory: runtime === 'desktop' ? path.join(temporary, name) : undefined, ...result, continuity, layoutMs: 1000 * (metric(after, 'LayoutDuration') - metric(before, 'LayoutDuration')), styleMs: 1000 * (metric(after, 'RecalcStyleDuration') - metric(before, 'RecalcStyleDuration')), layoutCount: metric(after, 'LayoutCount') - metric(before, 'LayoutCount') };
           evidence.runs.push(run);
           await page.screenshot({ path: path.join(artifacts, `${name}.png`) });
-          console.log(JSON.stringify({ runtime, messages, tools, hz, frameP95: run.frameP95, clickP95: run.clickP95, maxLongTask: run.maxLongTask, protectedChanges: run.protectedChanges, parses: run.parsers.parses, layoutMs: run.layoutMs }));
+          console.log(JSON.stringify({ runtime, messages, tools, hz, frameP95: run.frameP95, clickP95: run.clickP95, maxLongTask: run.maxLongTask, protectedChanges: run.protectedChanges, parses: run.parsers.parses, layoutMs: run.layoutMs, continuity }));
           await writeFile(path.join(artifacts, 'metrics.json'), JSON.stringify(evidence, null, 2));
         } finally {
           if (recording) await recording.send('Page.stopScreencast').catch(() => undefined);
@@ -114,7 +115,7 @@ try {
       }
     }
   }
-  evidence.acceptance = evidence.runs.every((run) => run.protectedChanges === 0 && run.clicks.length > 0 && run.clickP95 <= 100 && (run.messages === 72 ? run.frameP95 <= 20 : run.maxLongTask < 100));
+  evidence.acceptance = evidence.runs.every((run) => run.continuity.flashes === 0 && run.continuity.stableMessage && run.continuity.stableSelection && run.continuity.draftPreserved && run.continuity.loads === 3 && run.continuity.baselines === 72 && run.protectedChanges === 0 && run.clicks.length > 0 && run.clickP95 <= 100 && (run.messages === 72 ? run.frameP95 <= 20 : run.maxLongTask < 100));
   await writeFile(path.join(artifacts, 'metrics.json'), JSON.stringify(evidence, null, 2));
   console.log(`Evidence: ${artifacts}`);
   if (!reference && !evidence.acceptance) throw new Error('Flower streaming performance acceptance failed; inspect metrics.json');

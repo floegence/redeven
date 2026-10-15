@@ -683,13 +683,9 @@
       "citationSources": "Fuentes",
       "citationCopySources": "Copiar fuentes",
       "citationUnavailable": "Fuente no disponible",
-      "queuedEdit": "Editar mensaje en cola",
-      "queuedEditSave": "Guardar cambios",
-      "queuedEditRetry": "Reintentar guardado",
-      "queuedEditCancel": "Volver al borrador",
-      "queuedEditUnavailable": "La edición de mensajes en cola no está disponible.",
-      "queuedEditConflict": "Este mensaje cambió o empezó a ejecutarse. Tus cambios se conservan.",
-      "queuedEditUnknown": "El resultado del guardado es desconocido. Reintenta el mismo guardado para comprobarlo."
+      "queuedEdit": "Volver al cuadro de texto",
+      "queueTakeBackConflict": "Este mensaje ya ha empezado a ejecutarse o ha cambiado. Actualiza e inténtalo de nuevo.",
+      "queueTakeBackUnknown": "El mensaje está en el cuadro de texto, pero no se pudo confirmar su retirada de la cola. Revisa la cola antes de enviarlo."
     },
     "threadList": {
       "title": "Conversaciones",

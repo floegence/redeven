@@ -32,6 +32,36 @@ function receive(
 }
 
 describe('ThreadCache', () => {
+  it.each([15, 24])('retains the selected detail through %i reconnect baselines within the cache bound', (count) => {
+    let cache = receive(createThreadCache(), view('selected', 27, 'Retained transcript')).select('selected');
+    const summaries = [thread('selected', 1, ''), ...Array.from({ length: count - 1 }, (_, index) => thread(`background-${index}`, 1, ''))];
+    for (let cycle = 0; cycle < 3; cycle++) {
+      cache = cache.invalidateRuntimeVersions().resetRootSummaries(summaries);
+      expect(cache.views.get('selected')?.thread.messages[0]?.content).toBe(cycle ? 'Current transcript' : 'Retained transcript');
+      for (const summary of summaries) {
+        cache = receive(cache, view(summary.thread_id, cycle + 1, 'Current transcript'));
+        expect(cache.selectedId).toBe('selected');
+        expect(cache.views.has('selected')).toBe(true);
+        expect(cache.views.size).toBeLessThanOrEqual(12);
+      }
+    }
+    cache = cache.select('background-0').select('selected').evict('selected');
+    expect(cache.selectedId).toBeNull();
+    expect(cache.views.has('selected')).toBe(false);
+  });
+
+  it('uses user visits for eviction priority rather than background refresh frequency', () => {
+    let cache = receive(createThreadCache(), view('visited', 1, 'Visited')).select('visited');
+    cache = receive(cache, view('selected', 1, 'Selected')).select('selected');
+    for (let index = 0; index < 10; index++) cache = receive(cache, view(`background-${index}`, 1, 'Background'));
+    cache = receive(cache, view('background-0', 2, 'Frequent background update'));
+    cache = receive(cache, view('new-background', 1, 'New background'));
+    expect(cache.views.has('visited')).toBe(true);
+    expect(cache.views.has('selected')).toBe(true);
+    expect(cache.views.has('background-0')).toBe(false);
+    expect(cache.views.size).toBe(12);
+  });
+
   it('retains presentation but resets process-local ordering at a transport boundary', () => {
     const before = receive(createThreadCache(), view('a', 27, 'previous pixels'));
     const reset = before.invalidateRuntimeVersions();

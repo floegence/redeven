@@ -9,6 +9,32 @@ const envelope = (version: number, text = 'x'.repeat(version)): FlowerLiveStream
 });
 
 describe('live frame queue', () => {
+  it('coalesces child text with the same rules while preserving parent, child and semantic boundaries', () => {
+    const child = (version: number): FlowerLiveStreamEnvelope => {
+      const { current, ...outer } = envelope(version);
+      return { ...outer, thread_id: 'parent', subagent_current: current };
+    };
+    expect(flowerLiveTextAppend(child(1), child(2))).toBe(true);
+    expect(flowerLiveTextAppend(child(1), { ...child(2), thread_id: 'other-parent' })).toBe(false);
+    expect(flowerLiveTextAppend(child(1), { ...child(2), subagent_current: { ...child(2).subagent_current!, thread_id: 'other-child' } })).toBe(false);
+    expect(flowerLiveTextAppend(child(1), envelope(2))).toBe(false);
+    expect(flowerLiveTextAppend(child(1), { ...child(2), current: envelope(2).current })).toBe(false);
+    const apply = vi.fn(); let scheduled: FrameRequestCallback | undefined;
+    const validateAppend = vi.fn(() => true);
+    const queue = createFlowerLiveFrameQueue({ apply, validateAppend,
+      requestFrame: callback => { scheduled = callback; return 1; }, cancelFrame: vi.fn() });
+    queue.push(child(1)); queue.push(child(2)); queue.push(child(3));
+    expect(apply).toHaveBeenCalledTimes(1);
+    scheduled!(0);
+    expect(apply).toHaveBeenLastCalledWith(child(3), 0);
+    queue.push(child(4));
+    const terminal = { ...child(5), subagent_current: { ...child(5).subagent_current!, activity: 'idle' as const, last_outcome: 'completed' as const } };
+    queue.push(terminal);
+    expect(apply.mock.calls.map(([value]) => value.subagent_current.view_version)).toEqual([1, 3, 4, 5]);
+    expect(validateAppend).toHaveBeenCalledTimes(3);
+    queue.dispose();
+  });
+
   it('validates all 300 appends, applies once per frame, and flushes before semantic boundaries', () => {
     const callbacks = new Map<number, FrameRequestCallback>(); let id = 0;
     const apply = vi.fn(); const validateAppend = vi.fn(() => true);

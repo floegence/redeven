@@ -132,6 +132,9 @@ event timestamp to two animation frames, long tasks, DOM additions/removals,
 protected queue mutations, lexer/parser calls, request starts, and CDP layout/style
 cost. Each run records hardware, runtime, process/profile identity where available,
 final screenshots, and continuous browser video or Electron frame sequences.
+After each scenario, three 24-thread reconnect baselines verify zero loading
+insertions, stable message nodes and text selection, preserved composer drafts,
+and exactly one selected-detail refresh per reconnect in both renderers.
 
 The current-source command fails if protected queue nodes change, click P95 exceeds
 100 ms, normal-load frame P95 exceeds 20 ms, or a stress run contains a long task

@@ -683,13 +683,9 @@
       "citationSources": "来源",
       "citationCopySources": "复制来源",
       "citationUnavailable": "来源不可用",
-      "queuedEdit": "编辑排队消息",
-      "queuedEditSave": "保存修改",
-      "queuedEditRetry": "重试保存",
-      "queuedEditCancel": "返回草稿",
-      "queuedEditUnavailable": "暂时无法编辑排队消息。",
-      "queuedEditConflict": "此排队消息已变更或开始执行，你的修改已保留。",
-      "queuedEditUnknown": "保存结果尚未确认，请重试本次保存以确认结果。"
+      "queuedEdit": "取回到输入框",
+      "queueTakeBackConflict": "这条排队消息已开始执行或发生变化，请刷新后重试。",
+      "queueTakeBackUnknown": "消息已放回输入框，但尚未确认退出队列，请检查队列后再发送。"
     },
     "threadList": {
       "title": "对话",

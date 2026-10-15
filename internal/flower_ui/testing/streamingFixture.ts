@@ -37,8 +37,10 @@ export function streamingFixture(messageCount = 72, toolCount = 20) {
   };
   const settings: FlowerSettingsSnapshot = { defaults: { permission_type: 'approval_required' }, model_profile: { schema_version: 1, current_model_id: 'fixture/model', providers: [{ id: 'fixture', name: 'Fixture', type: 'openai', models: [{ model_name: 'model', context_window: 400_000, input_modalities: ['text'] }] }] }, provider_secrets: [{ provider_id: 'fixture', provider_api_key_configured: true, web_search_api_key_configured: false }] };
   const pending: FlowerLiveStreamEnvelope[] = [];
+  let summaries = [thread];
+  let streamRevision = 0;
   let wake: (() => void) | undefined;
-  const calls = { connections: 0, loads: 0, terminal: 0, preview: 0, delete: 0 };
+  const calls = { connections: 0, baselines: 0, loads: 0, terminal: 0, preview: 0, delete: 0 };
   const emit = (value: FlowerLiveStreamEnvelope) => { pending.push(value); wake?.(); };
   const unavailable = async (): Promise<never> => { throw new Error('Action is outside the streaming fixture'); };
   const adapter: FlowerSurfaceAdapter = {
@@ -47,12 +49,27 @@ export function streamingFixture(messageCount = 72, toolCount = 20) {
     markThreadRead: async (_threadID, snapshot) => ({ is_unread: false, snapshot, read_state: { last_seen_activity_revision: snapshot.activity_revision } }),
     runtime: { runtime_id: 'fixture', runtime_kind: 'env_local', carrier_kind: 'runtime', display_name: 'Local fixture', subtitle: 'Deterministic streaming' },
     loadSettings: async () => settings, saveDefaultPermission: async () => settings, saveModelProfile: async () => settings,
-    listThreads: async () => [thread], loadThread: async () => { calls.loads += 1; return { thread: applyFlowerRuntimeCurrentView(thread, current), current }; },
+    listThreads: async () => summaries, loadThread: async (requestedID) => {
+      calls.loads += 1;
+      const summary = summaries.find(value => value.thread_id === requestedID) ?? thread;
+      const view = { ...current, thread_id: summary.thread_id };
+      return { thread: applyFlowerRuntimeCurrentView(summary, view), current: view };
+    },
     keepLiveWhenHidden: true,
     async *connectLiveStream({ signal }) {
       calls.connections += 1;
+      const revision = streamRevision;
       const abort = () => wake?.(); signal.addEventListener('abort', abort, { once: true });
-      try { while (!signal.aborted) { const value = pending.shift(); if (value) yield value; else await new Promise<void>((resolve) => { wake = resolve; }); } }
+      try {
+        yield { schema_version: 1, kind: 'ready', summaries };
+        if (revision > 0) {
+          for (const summary of summaries) {
+            yield { schema_version: 1, kind: 'thread.batch', thread_id: summary.thread_id, current: { ...current, thread_id: summary.thread_id } };
+            calls.baselines++;
+          }
+        }
+        while (!signal.aborted && revision === streamRevision) { const value = pending.shift(); if (value) yield value; else await new Promise<void>((resolve) => { wake = resolve; }); }
+      }
       finally { signal.removeEventListener('abort', abort); }
     },
     deleteQueuedTurn: async (_threadID, queueID) => { calls.delete += 1; current = { ...current, view_version: current.view_version + 1, queue: current.queue?.filter((item) => item.id !== queueID) }; return { thread: applyFlowerRuntimeCurrentView(thread, current), current }; },
@@ -60,6 +77,12 @@ export function streamingFixture(messageCount = 72, toolCount = 20) {
     readTerminalProcess: async () => { calls.terminal += 1; return new Promise(() => undefined); },
   };
   return { adapter, thread, calls, emit, current: () => current,
+    reconnect(baselineCount = 24) {
+      summaries = [thread, ...Array.from({ length: baselineCount - 1 }, (_, index) => ({ ...thread, thread_id: `fixture-background-${index}`, title: `Background ${index}` }))];
+      pending.length = 0;
+      streamRevision++;
+      wake?.();
+    },
     replace(next: FlowerRuntimeCurrentView, extras: Partial<FlowerLiveStreamEnvelope> = {}) { current = next; emit({ schema_version: 1, kind: 'thread.batch', thread_id: threadID, current, ...extras }); },
     append(text: string) { current = { ...current, view_version: current.view_version + 1, items: current.items?.map((item) => item.id === 'streaming-tail' ? { ...item, text: `${item.text}${text}` } : item) }; emit({ schema_version: 1, kind: 'thread.batch', thread_id: threadID, current: structuredClone(current) }); },
   };
