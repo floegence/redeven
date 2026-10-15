@@ -45,6 +45,16 @@ surviving row identity and focus; loading, authorization, errors, and empty sear
 results have distinct visible feedback. Provider changes retain the existing
 authentication cancellation and discovery identity boundaries.
 
+Discovered models with incomplete capabilities expose a labeled Configure
+capabilities action in their selected row and in the footer beside the first
+incomplete model's name. Save remains actionable: it clears a hiding search,
+opens that model's editor, scrolls to and focuses its first missing field, and
+does not call the host save until every selected model is complete. The editor
+explains missing endpoint metadata and marks context and output capacity as
+required. Tool support uses an explicit unknown/supported/unsupported choice;
+unknown never appears as an unchecked boolean. Deselecting an incomplete model
+removes its save requirement without inventing capabilities.
+
 Global Env settings use the same provider picker, connection controls and model
 catalog as the other Flower settings entrypoints. Advanced parameters remain
 available through each model's explicit edit control. The catalog includes selected
@@ -146,5 +156,6 @@ catalog synchronization never selects newly discovered models automatically.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerProviderDialog.chatgpt.browser.test.tsx` - Local and remote authorization, localized responsive layouts, and provider-picker stability through authentication and catalog search.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerProviderDialog.controls.browser.test.tsx` - Actual Desktop and Env styles, brand alignment, authentication contrast, and connection-before-model interaction.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerProviderDialog.selection.browser.test.tsx` - Stable scroll, model row identity, focus, discovery metadata, and parameter editing.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerProviderDialog.capabilities.browser.test.tsx` - Compatible discovery, missing-field navigation, explicit tool support, save/reopen, hidden selections and narrow-screen behavior in Desktop and Env styles.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerProviderDialog.credentials.browser.test.tsx` - Saved credential placeholders, focus, replacement, and empty-key guidance in actual Desktop and Env styles.
 - `redeven:internal/envapp/ui_src/src/ui/pages/settings/FlowerSection.browser.test.tsx` - Global Env credential preservation and replacement request payloads.

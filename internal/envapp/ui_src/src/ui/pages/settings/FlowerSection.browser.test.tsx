@@ -248,6 +248,36 @@ it('retains provider type editing and stored credentials in global Env settings'
   expect((bundles[0].model_profile as AIModelProfile).providers[0].model_selection?.selected_models).toEqual(['claude-test']);
 });
 
+it('saves discovered compatible models only after explicit capability completion and retains them on reopen', async () => {
+  const { settings, bundles } = await mount(1000, true, 'en-US', false, true);
+  const handleRequests = request.getMockImplementation()!;
+  request.mockImplementation((url: string, init?: RequestInit) => url.endsWith('/ai/model_catalog')
+    ? Promise.resolve({ models: [{ model_name: 'compatible-agent', status: 'needs_configuration', input_modalities: ['text'] }] }) : handleRequests(url, init));
+  const openConnection = async () => {
+    await userEvent.click(host.querySelector<HTMLButtonElement>('.flower-settings-provider-actions button:not([role="switch"])')!);
+    await expect.element(page.getByRole('dialog')).toBeVisible();
+  };
+  await openConnection();
+  await userEvent.click(page.getByRole('button', { name: 'Sync model list', exact: true }));
+  await userEvent.click(page.getByRole('checkbox', { name: 'compatible-agent', exact: true }).element().closest('label')!);
+  await userEvent.click(page.getByRole('button', { name: 'Save provider', exact: true }));
+  expect(bundles).toHaveLength(0);
+  await userEvent.fill(page.getByRole('spinbutton', { name: 'Context window', exact: true }), '32768');
+  await userEvent.fill(page.getByRole('spinbutton', { name: 'Max output', exact: true }), '4096');
+  await userEvent.selectOptions(page.getByRole('combobox', { name: 'Tool calls', exact: true }), 'supported');
+  await userEvent.click(page.getByRole('button', { name: 'Save provider', exact: true }));
+  await expect.poll(() => bundles.length).toBe(1);
+  expect(bundles[0].provider_api_key_patches).toEqual([]);
+  expect(bundles[0].web_search_provider_key_patches).toEqual([]);
+  expect(settings().ai?.providers?.[0]?.models).toContainEqual(expect.objectContaining({ model_name: 'compatible-agent', context_window: 32768, max_output_tokens: 4096, supports_tools: true }));
+  await expect.poll(() => document.querySelector('.flower-provider-dialog')).toBeNull();
+  await openConnection();
+  await expect.element(page.getByRole('checkbox', { name: 'compatible-agent', exact: true })).toBeChecked();
+  await userEvent.click(page.getByRole('button', { name: 'Save provider', exact: true }));
+  await expect.poll(() => bundles.length).toBe(2);
+  expect((bundles[1].model_profile as AIModelProfile).providers[0].models).toContainEqual(expect.objectContaining({ model_name: 'compatible-agent', context_window: 32768, max_output_tokens: 4096, supports_tools: true }));
+});
+
 it('shows a saved key as dots and preserves it when a replacement draft is cleared', async () => {
   const { settings, bundles } = await mount(1000, true, 'zh-CN', false, true);
   const handleRequests = request.getMockImplementation()!;
