@@ -32,6 +32,8 @@ axes. Neither lower CPU nor a panel peak can substitute for complete presented
 latency, unique FPS, gaps, source matches and delivered-detail evidence.
 
 Evidence root `B` is `/private/tmp/redeven-udesk26-rustdesk-baseline`.
+Durable C01/C02 copies and scripts are under the artifact archive
+`redeven-lan-performance-20261014/crossover-20261015`, with checksums.
 All dates below refer to the 2026-10-11 through 2026-10-14 PDT campaign unless
 specified. Missing exact consumer hashes or timestamps remain unknown, not
 inferred from a directory name. Original scripts and receipts under B retain
@@ -62,11 +64,47 @@ it, exclude the whole attempt and use its complete retry. All valid rounds count
 # Controlled Historical Comparison
 
 [C01: historical candidate crossover](remote-desktop-lan-historical-c01.md) owns
-the matched 47/40/42 then 42/40/47 sequence, fixture failures and all raw rounds.
-The first pass completed 100/100 inputs for every candidate: v47 44.60 FPS/P95
-135.88 ms/zero gaps; v40 42.77 FPS/P95 212.21 ms/one gap; v42 41.73 FPS/P95
-300.15 ms/one gap. Historical throughput has not yet reappeared. Complete the
-predeclared reverse pass before a software-causality or recovery claim.
+the matched candidate crossover, fixture validity and all raw rounds.
+Two valid rounds per candidate are complete, with a declared order deviation.
+FPS pairs are v47 44.60/41.22, v40 42.77/49.53 and v42 41.73/47.86. The late v40
+round has P95 161.60 ms and zero gaps, approaching historical performance;
+three-round repeatability and causality remain unresolved. Inactive clients and
+Runtimes are disclosed background limitations. All valid and invalid trials count
+in their proper scope. C02 isolates confirmed-receipt batching in current code
+with an A/B/A sequence and unchanged safeguards.
+
+# Confirmed Receipt Comparison
+
+[C02: confirmed receipt crossover](remote-desktop-lan-receipt-c02.md) records the
+predeclared A/B/A interval-only diagnostic, exact one-byte artifacts and rejected
+preparation fixture. A1/B1 have 100/100 source inputs, 37.74/39.60 FPS and
+P95 283.54/346.19 ms. Restored A2 completes 100 local clicks but delivers 99 to
+the scene, at 44.22 FPS and zero gaps. Its ordinal P95 is affected by sequence
+misassociation after input loss and cannot qualify latency. The full adverse
+trial is retained, with no favorable replacement. Zero-wait B is not adopted;
+it does not recover the historical cadence. Exact A and the released service
+are restored. No production implementation or dependency was downgraded.
+
+# Current Decision And Remaining Evidence
+
+Historical performance is not restored in the current product. C01's late v40
+49.53 FPS/P95 161.60 ms/zero gaps approaches the historical range, while its
+other valid round remains weaker. Version, order/time and background effects
+are not isolated. Codec choice, Wi-Fi and outer window size are not established
+causes. C02 does not demonstrate that removing receipt batching fixes the loss.
+The [transport ledger](remote-desktop-lan-transport-experiments.md) owns the
+publication/credit evidence and the segment timing needed before another trace.
+
+Keep current security, authorization, input, generation/order and recovery
+fixes. Do not release an old package or select a diagnostic peak. Remaining
+qualification includes repeatable throughput/tails, exact delivered detail,
+client memory, input completeness and paired RustDesk acceptance. C02 owns the
+newly verified input association limitation and retry boundaries. The source
+count audit verifies all six C01 rounds and C02 A1/B1, so that defect is not a
+reason to discard older valid results. M03 requires matched quality evidence before another rate/detail trial.
+The archive retains cleanup and restoration receipts. The final GitHub snapshot
+for `floegence/floe-native-apps` has zero open PRs and zero open Dependabot,
+CodeQL and secret-scanning alerts; this is a dated snapshot, not a future guarantee.
 
 # Evidence
 

@@ -3,7 +3,7 @@ type: Qualification Record
 title: Physical desktop RustDesk comparison
 description: Check current paired presentation, resource and quality evidence before accepting RustDesk parity.
 tags: [desktop, performance, qualification]
-timestamp: 2026-10-13T09:04:00Z
+timestamp: 2026-10-15T06:00:00Z
 ---
 # Summary
 
@@ -167,18 +167,19 @@ establish perceptual detail parity.
 
 ## Matched Historical C01
 
-The controlled crossover uses the same udesk26 1920 × 1280/60 Hz source, scene
-v8, 1152 × 768 source allocation, 1024 × 720 Viewer, Smooth, Host input,
-2048 MiB compositor budget and 100-click workload. It confirms VP9 for v40 and
-hardware AV1 for v42 in the Viewer. The first complete pass measured v47 at
-44.60 FPS/P95 135.88 ms/zero long gaps, v40 at 42.77 FPS/P95 212.21 ms/one
-long gap, and v42 at 41.73 FPS/P95 300.15 ms/one long gap. Reverse v42 and v40
-attempts were invalid for named window/input/frame-capture reasons and remain
-excluded. These matched results rule out a simple “AV1 is inherently slow” or
-“current VP9 selection alone explains v47” conclusion, but do not yet isolate
-which later capture, queue, acknowledgement, compositor or client-path change
-caused the historical decline. See [C01 ledger](remote-desktop-lan-historical-c01.md).
-
+C01 holds the udesk26 1920 x 1280/60 Hz source, scene v8 allocation 1152 x 768,
+1024 x 720 Viewer, Smooth, Host input, 2048 MiB compositor budget and 100-click
+workload fixed. Two complete rounds per candidate measure v47 at 44.60/41.22
+FPS, v40 at 42.77/49.53 and v42 at 41.73/47.86. All six have 100 measured
+source inputs. Actual valid order 47/40/42/47/42/40 deviates from the planned
+counterbalancing; every invalid attempt and its reason remain retained. The late
+v40 round reaches P95 161.60 ms with zero long gaps, approaching its historical
+range, but repeatability and causality remain unresolved. See the
+[C01 ledger](remote-desktop-lan-historical-c01.md) for all tails and limitations.
+The subsequent [C02 receipt diagnostic](remote-desktop-lan-receipt-c02.md)
+does not establish recovery by removing local receipt waiting; its restored-A
+trial also identifies an input-loss/ordinal-association limitation. Neither
+experiment qualifies current RustDesk parity or supports a product downgrade.
 
 # Boundaries
 

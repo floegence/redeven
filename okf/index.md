@@ -53,6 +53,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Physical desktop RustDesk comparison](operations/remote-desktop-rustdesk-comparison-results.md) - Check paired presentation, quality and resource evidence before accepting latency and performance parity.
 - [LAN experiment decision ledger](operations/remote-desktop-lan-experiment-ledger.md) - Consult complete historical candidates, current deficits and controlled retry conditions before another performance experiment.
 - [Historical LAN desktop crossover C01](operations/remote-desktop-lan-historical-c01.md): Inspect matched historical/current candidates, fixture validity and all crossover results.
+- [Confirmed receipt crossover C02](operations/remote-desktop-lan-receipt-c02.md) - Inspect the interval-only diagnostic, unproven recovery change and verified input association failure.
 - [LAN codec and capture experiments](operations/remote-desktop-lan-codec-experiments.md) - Check adopted and rejected codec, rate, quantization and capture tradeoffs against their raw evidence.
 - [LAN transport and tracing experiments](operations/remote-desktop-lan-transport-experiments.md) - Check credit, receipts, HTTP2, SSH and stage diagnostics before repeating a latency hypothesis.
 - [udesk26 hardware AV1 comparison](operations/remote-desktop-rustdesk-v42-results.md) - Inspect published AV1 diagnostic latency, complete resources and unresolved parity failures.
