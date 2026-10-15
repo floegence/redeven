@@ -112,7 +112,7 @@ func TestCollectPromptRepositoryState_ReportsLinkedWorktree(t *testing.T) {
 	}
 }
 
-func TestCollectPromptRepoRuleFiles_DiscoversAndTruncates(t *testing.T) {
+func TestCollectPromptRepoRuleFiles_DiscoversScopedSources(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -123,25 +123,28 @@ func TestCollectPromptRepoRuleFiles_DiscoversAndTruncates(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "AGENTS.md"), []byte("root instructions\n"), 0o644); err != nil {
 		t.Fatalf("write AGENTS.md: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(root, ".develop.md"), []byte(strings.Repeat("a", promptRepoRulePerFileBytes+64)), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, ".develop.md"), []byte(strings.Repeat("a", 5000)), 0o644); err != nil {
 		t.Fatalf("write .develop.md: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(root, "nested", "CLAUDE.md"), []byte("nested instructions\n"), 0o644); err != nil {
 		t.Fatalf("write CLAUDE.md: %v", err)
 	}
 
-	files := collectPromptRepoRuleFiles(nested, root)
+	files, err := newRun(runOptions{AgentHomeDir: root, WorkingDir: nested}).collectPromptRepoRuleFiles(nested, root)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(files) != 3 {
 		t.Fatalf("repo rule file count=%d, want 3", len(files))
 	}
-	if files[0].Label != "AGENTS.md" {
-		t.Fatalf("first rule label=%q, want AGENTS.md", files[0].Label)
+	if files[0].Path != filepath.Join(root, "AGENTS.md") {
+		t.Fatalf("first rule label=%q, want AGENTS.md", files[0].Path)
 	}
-	if files[1].Label != ".develop.md" || !files[1].Truncated {
-		t.Fatalf("expected truncated .develop.md rule file, got %+v", files[1])
+	if files[1].Path != filepath.Join(root, ".develop.md") || files[1].ReadError != "" {
+		t.Fatalf("expected readable .develop.md source, got %+v", files[1])
 	}
-	if files[2].Label != filepath.Join("nested", "CLAUDE.md") {
-		t.Fatalf("third rule label=%q, want %q", files[2].Label, filepath.Join("nested", "CLAUDE.md"))
+	if files[2].Path != filepath.Join(root, "nested", "CLAUDE.md") {
+		t.Fatalf("third rule label=%q, want %q", files[2].Path, filepath.Join(root, "nested", "CLAUDE.md"))
 	}
 }
 
@@ -227,9 +230,8 @@ func TestBuildPromptWorkspaceContextSection_RendersStructuredFacts(t *testing.T)
 		},
 		RepoRules: []promptRepoRuleFile{
 			{
-				Label:     "AGENTS.md",
-				Content:   "Follow repo rules.",
-				Truncated: true,
+				Path:     "/workspace/repo/AGENTS.md",
+				ScopeDir: "/workspace/repo",
 			},
 		},
 		Delegation: promptDelegationState{
@@ -253,12 +255,11 @@ func TestBuildPromptWorkspaceContextSection_RendersStructuredFacts(t *testing.T)
 		"- Shell: /bin/zsh",
 		"- Filesystem roots: Home=/workspace/home (read-write); Computer=/ (read-only)",
 		"- Permission type: approval_required",
-		"- Tool approval policy: shell and mutation tools require confirmation",
 		"### Repository State",
 		"- Repository root: /workspace/repo",
 		"### Repository Rules",
-		"#### AGENTS.md",
-		"truncated to stay within the prompt budget",
+		"/workspace/repo/AGENTS.md",
+		"readable; contents not loaded",
 		"### Delegation State",
 		"Rule sync -- objective: Sync repo rules",
 	} {
@@ -272,8 +273,11 @@ func TestFloretTurnRuntimeContextCarriesMutableFactsOutsideSystemPrompt(t *testi
 	t.Parallel()
 
 	workingDir := t.TempDir()
-	r := newRun(runOptions{WorkingDir: workingDir, AgentHomeDir: t.TempDir(), Shell: "/bin/zsh"})
-	item := r.floretTurnRuntimeContext()
+	r := newRun(runOptions{WorkingDir: workingDir, AgentHomeDir: workingDir, Shell: "/bin/zsh"})
+	item, err := r.floretTurnRuntimeContext()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if item.Kind != "runtime_context" || item.Title != "Tool execution environment" {
 		t.Fatalf("runtime context item=%#v", item)
 	}

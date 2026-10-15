@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"github.com/floegence/redeven/internal/config"
 	"io"
 	"log/slog"
 	"strings"
@@ -9,25 +10,25 @@ import (
 
 func buildPromptForToolRoutingTest(t *testing.T) string {
 	t.Helper()
-	tools := []ToolDef{{Name: "terminal.exec"}, {Name: "file.read"}, {Name: "okf.index"}, {Name: "okf.search"}, {Name: "okf.open"}, {Name: "web.search"}, {Name: "web_fetch", Visibility: ToolVisibilitySharedReadonly}}
-	return buildPromptForToolSetTest(t, FlowerPermissionApprovalRequired, tools)
+	return buildPromptForPermissionTest(t, FlowerPermissionApprovalRequired)
 }
 
 func buildReadonlyPromptForToolRoutingTest(t *testing.T) string {
 	t.Helper()
-	tools := []ToolDef{
-		{Name: "read_file", Visibility: ToolVisibilityReadonlyExclusive},
-		{Name: "read_files", Visibility: ToolVisibilityReadonlyExclusive},
-		{Name: "rgrep", Visibility: ToolVisibilityReadonlyExclusive},
-		{Name: "find", Visibility: ToolVisibilityReadonlyExclusive},
-		{Name: "web_fetch", Visibility: ToolVisibilitySharedReadonly},
-		{Name: "okf.index", Visibility: ToolVisibilitySharedReadonly},
-		{Name: "okf.search", Visibility: ToolVisibilitySharedReadonly},
-		{Name: "okf.open", Visibility: ToolVisibilitySharedReadonly},
-		{Name: "web.search", Visibility: ToolVisibilitySharedReadonly},
-		{Name: "subagents", Visibility: ToolVisibilityDelegationControl},
+	return buildPromptForPermissionTest(t, FlowerPermissionReadonly)
+}
+
+func buildPromptForPermissionTest(t *testing.T, permission FlowerPermissionType) string {
+	t.Helper()
+	r := newRun(runOptions{
+		AgentHomeDir: t.TempDir(),
+		WebSearch:    config.AIWebSearchResolution{AIWebSearchAvailability: config.AIWebSearchAvailability{Status: "available"}, Mode: config.AIWebSearchBrave},
+	})
+	surface, err := r.buildRunToolSurface(runToolSurfaceConfig{}, permission)
+	if err != nil {
+		t.Fatal(err)
 	}
-	return buildPromptForToolSetTest(t, FlowerPermissionReadonly, tools)
+	return surface.SystemPrompt
 }
 
 func buildPromptForToolSetTest(t *testing.T, permission FlowerPermissionType, tools []ToolDef) string {
@@ -38,7 +39,7 @@ func buildPromptForToolSetTest(t *testing.T, permission FlowerPermissionType, to
 	})
 	r.permissionType = permission
 	contract := resolveRunCapabilityContract(r, tools, nil, false)
-	return r.buildLayeredSystemPrompt(permissionTypeString(permission), tools, contract)
+	return r.buildLayeredSystemPrompt(permissionTypeString(permission), contract)
 }
 
 func assertPromptContains(t *testing.T, prompt string, want string) {
@@ -60,11 +61,11 @@ func TestBuildLayeredSystemPrompt_RoutesOKFToRedevenRepositoryKnowledgeOnly(t *t
 
 	prompt := buildPromptForToolRoutingTest(t)
 	assertPromptContains(t, prompt, "Information source routing:")
-	assertPromptContains(t, prompt, "Redeven maintained repository knowledge -> okf.index, okf.search, and okf.open.")
+	assertPromptContains(t, prompt, "Use okf.open before relying on OKF for detailed facts")
 	assertPromptContains(t, prompt, "Use okf.index to discover OKF areas for broad Redeven-internal questions.")
 	assertPromptContains(t, prompt, "Use okf.search to find candidate concepts; keep broad searches short, usually max_results=3.")
 	assertPromptContains(t, prompt, "open the relevant concept Summary, then open the relevant section")
-	assertPromptContains(t, prompt, "Source-level conclusions require file or terminal verification after OKF navigation.")
+	assertPromptContains(t, prompt, "Verify source-level conclusions against actual files or command results.")
 }
 
 func TestBuildLayeredSystemPromptRefreshesToolAvailabilityAfterPermissionChanges(t *testing.T) {
@@ -73,7 +74,7 @@ func TestBuildLayeredSystemPromptRefreshesToolAvailabilityAfterPermissionChanges
 		assertPromptContains(t, prompt, "Use the tool definitions supplied with this request as the current capability list")
 		assertPromptContains(t, prompt, "earlier messages and runtime-context snapshots describe their own time")
 		assertPromptContains(t, prompt, "submit the intended tool call: the runtime asks the user before executing its effect")
-		assertPromptContains(t, prompt, "Pending or unrequested approval is not denial")
+		assertPromptContains(t, prompt, "pending or unrequested approval is not a denial")
 	}
 	for _, permission := range []FlowerPermissionType{FlowerPermissionFullAccess, FlowerPermissionReadonly, FlowerPermissionApprovalRequired} {
 		tools := []ToolDef{{Name: "read_file"}}
@@ -90,7 +91,7 @@ func TestBuildLayeredSystemPrompt_ExcludesOKFFromExternalResearch(t *testing.T) 
 	t.Parallel()
 
 	prompt := buildPromptForToolRoutingTest(t)
-	assertPromptContains(t, prompt, "External/current/recent/news/third-party/general web facts -> follow Online Research Capability")
+	assertPromptContains(t, prompt, "authoritative external sources for external/current/recent facts")
 	assertPromptContains(t, prompt, "OKF does not access the internet and is not a fallback for external or current facts.")
 	assertPromptContains(t, prompt, "Use curl only when web_fetch cannot express required authentication, custom headers, a non-GET request, or a binary download.")
 	assertPromptContains(t, prompt, "Never use curl for URL discovery or to bypass a target blocked by web_fetch.")
@@ -159,7 +160,7 @@ func TestBuildLayeredSystemPrompt_ComputerUseDoesNotFallbackSilently(t *testing.
 	prompt := buildPromptForToolSetTest(t, FlowerPermissionApprovalRequired, []ToolDef{{Name: "computer.screenshot"}, {Name: "computer.click"}, {Name: "web_fetch"}})
 	assertPromptContains(t, prompt, "Use the typed Redeven computer and browser functions")
 	assertPromptContains(t, prompt, "Do not retry the same computer action indefinitely")
-	assertPromptContains(t, prompt, "web_fetch only when the user explicitly accepts a read-only text-page alternative")
+	assertPromptContains(t, prompt, "When replacing an explicitly requested interactive GUI task")
 }
 
 func TestBuildLayeredSystemPrompt_RemovesOKFFirstDomainBackgroundRule(t *testing.T) {
@@ -174,7 +175,7 @@ func TestBuildLayeredSystemPrompt_UsesGenericSkillRoutingInsteadOfRedevenEnvSpec
 	t.Parallel()
 
 	prompt := buildPromptForToolRoutingTest(t)
-	assertPromptContains(t, prompt, "Skill routing:")
+	assertPromptContains(t, prompt, "a request clearly matches an available skill")
 	assertPromptContains(t, prompt, "activate it with use_skill before acting")
 	assertPromptNotContains(t, prompt, "Redeven environment lifecycle operations:")
 	assertPromptNotContains(t, prompt, "Use `execution_context.current_target_id` as the primary target")
@@ -195,7 +196,7 @@ func TestBuildLayeredSystemPrompt_UsesCanonicalToolNamesAndTerminalLimits(t *tes
 	assertPromptNotContains(t, prompt, "compatibility alias for yield_ms")
 	assertPromptContains(t, prompt, "terminal.terminate(process_id, description) only when stopping is intentional")
 	assertPromptContains(t, prompt, "description must use the user's language and clearly name the command or task being stopped")
-	assertPromptContains(t, prompt, "file.read")
+	assertPromptNotContains(t, prompt, "file.read")
 	assertPromptNotContains(t, prompt, "file_read")
 }
 
@@ -248,7 +249,7 @@ func TestBuildLayeredSystemPrompt_ReadonlyRoutesThroughReadonlyExclusiveTools(t 
 	t.Parallel()
 
 	prompt := buildReadonlyPromptForToolRoutingTest(t)
-	assertPromptContains(t, prompt, "Use read_file/read_files, rgrep, and find")
+	assertPromptContains(t, prompt, "Use read_file for bounded file inspection")
 	assertPromptContains(t, prompt, "use web.search only to discover an unknown authoritative URL, then use web_fetch")
 	assertPromptContains(t, prompt, "Default rgrep:")
 	assertPromptNotContains(t, prompt, "terminal.exec")

@@ -3116,8 +3116,8 @@ func readAnyInt(raw any) int {
 	}
 }
 
-func (r *run) buildLayeredSystemPrompt(permissionType string, tools []ToolDef, capability runCapabilityContract) string {
-	snapshot := buildPromptRuntimeSnapshot(r, permissionType, tools, capability)
+func (r *run) buildLayeredSystemPrompt(permissionType string, capability runCapabilityContract) string {
+	snapshot := buildPromptRuntimeSnapshot(permissionType, capability)
 	document := buildPromptDocument(snapshot)
 	return document.render()
 }
@@ -3181,7 +3181,7 @@ func buildSkillCatalogPrompt(skills []SkillMeta) string {
 	}
 	var sb strings.Builder
 	sb.WriteString("## Skills\n")
-	sb.WriteString("Use use_skill(name) when a request clearly matches one of the skills below.\n")
+	sb.WriteString("Skill catalog at admission. Follow the current request's capability policy for activation.\n")
 	for _, skill := range skills {
 		name := strings.TrimSpace(skill.Name)
 		desc := strings.TrimSpace(skill.Description)

@@ -3,7 +3,7 @@ type: AI Runtime Contract
 title: AI model and context runtime
 description: Model-source ownership, provider mapping, token limits, context usage, and compaction contracts.
 tags: [ai, models, context, providers]
-timestamp: 2026-10-08T00:00:00Z
+timestamp: 2026-10-15T00:00:00Z
 quality_exception: Unified model-context contract linking provider mapping, immutable provider checkpoints, usage accounting, compaction, and Desktop source compatibility.
 ---
 # Summary
@@ -30,6 +30,11 @@ Final model-gateway ToolCalls also use one completeness rule across direct provi
 
 Provider tool-call generation has a private `omit` or `enable` wire mode. `enable` serializes `parallel_tool_calls:true`; it allows a provider model to return more than one call but does not require the model to do so and is never read by the executor. Redeven enables it only for known HTTPS official OpenAI Responses/Chat, Qwen DashScope, OpenRouter, xAI, and Groq endpoints. Anthropic, DeepSeek, Moonshot, ChatGLM, Ollama, generic `openai_compatible`, Desktop opaque sources, proxies, and custom base URLs omit the field. No request path sends a false value. Hosted-turn diagnostics record the selected wire mode, and Floret lifecycle audit events carry batch index, batch size, event type, and observation time so operators can distinguish model serialization, provider single-call output, approval wait, dispatch, and completion without feeding diagnostics back into scheduling.
 
+## Prompt and repository rule sources
+
+[Flower prompt and rule sources](flower-prompt-and-rule-sources.md) owns task,
+interaction, recovery, complete rule reading, and runtime-context admission policy.
+
 ## Related provider history
 
 Provider-visible history, render lineage, and unavailable-tool continuity are owned by [Model provider surface and history](model-provider-surface-and-history.md).
@@ -47,7 +52,7 @@ Redeven owns model preferences, credentials, gateway selection, and the one-shot
 - `redeven:internal/ai/floret_provider.go:55` - Provider stream deltas are sent to Floret as model events rather than mutating Flower state directly.
 - `redeven:internal/ai/floret_runtime.go` - Flower creates each new hosted Agent from the current System Prompt, tools, model, reasoning, and context policy.
 - `redeven:internal/ai/prompt_builder.go` - Stable persona, policy, and capability System Prompt without mutable objective or runtime overlays.
-- `redeven:internal/ai/prompt_workspace_context.go` - Mutable environment facts are accepted as one durable per-turn context snapshot.
+- `redeven:internal/ai/prompt_workspace_context.go` - Authorized rule-source manifests and complete runtime snapshots use public Floret validation.
 - `redeven:internal/ai/floret_bootstrap.go` - Restart work uses Floret's exact canonical Turn input instead of the current continuation input.
 - `redeven:internal/ai/model_gateway.go:37` - Redeven's remaining hard execution protection is the tool-call count constant.
 - `redeven:internal/ai/model_gateway.go:3189` - One collision-detecting alias owner maps canonical tool names to OpenAI wire names and back.

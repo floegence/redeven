@@ -137,9 +137,6 @@ func (f DefaultPermissionToolFilter) FilterTools(permissionType FlowerPermission
 }
 
 func toolVisibleForPermission(permissionType FlowerPermissionType, tool ToolDef) bool {
-	if strings.TrimSpace(tool.Name) == "file.read" {
-		return false
-	}
 	switch permissionType {
 	case FlowerPermissionReadonly:
 		switch tool.Visibility {

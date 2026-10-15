@@ -2,8 +2,8 @@ package ai
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -12,16 +12,13 @@ import (
 	"time"
 
 	flruntime "github.com/floegence/floret/v7/runtime"
+	"github.com/floegence/redeven/internal/filesystemscope"
 	"github.com/floegence/redeven/internal/gitutil"
 )
 
 const (
-	floretRuntimeContextTextRunes = 16_384
-	promptRepoRuleMaxFiles        = 6
-	promptRepoRulePerFileBytes    = 4096
-	promptRepoRuleTotalBytes      = 12288
-	promptDelegationPreviewItems  = 3
-	promptGitProbeTimeout         = 3 * time.Second
+	promptDelegationPreviewItems = 3
+	promptGitProbeTimeout        = 3 * time.Second
 )
 
 var promptRepoRuleCandidateNames = []string{
@@ -32,20 +29,20 @@ var promptRepoRuleCandidateNames = []string{
 }
 
 type promptWorkspaceContext struct {
-	Environment promptEnvironmentFacts
-	Repository  promptRepositoryState
-	RepoRules   []promptRepoRuleFile
-	Delegation  promptDelegationState
+	Environment    promptEnvironmentFacts
+	Repository     promptRepositoryState
+	RepoRules      []promptRepoRuleFile
+	RepoRulesError error
+	Delegation     promptDelegationState
 }
 
 type promptEnvironmentFacts struct {
-	WorkingDir             string
-	AgentHomeDir           string
-	FilesystemRoots        []promptFilesystemRootFact
-	Shell                  string
-	UserInteractionEnabled bool
-	PermissionType         FlowerPermissionType
-	SubagentDelegation     bool
+	WorkingDir         string
+	AgentHomeDir       string
+	FilesystemRoots    []promptFilesystemRootFact
+	Shell              string
+	PermissionType     FlowerPermissionType
+	SubagentDelegation bool
 }
 
 type promptFilesystemRootFact struct {
@@ -73,9 +70,8 @@ type promptRepositoryState struct {
 
 type promptRepoRuleFile struct {
 	Path      string
-	Label     string
-	Content   string
-	Truncated bool
+	ScopeDir  string
+	ReadError string
 }
 
 type promptDelegationState struct {
@@ -99,20 +95,18 @@ type promptDelegationItem struct {
 	Objective string
 }
 
-func collectPromptWorkspaceContext(r *run, capability runCapabilityContract) promptWorkspaceContext {
+func collectPromptWorkspaceContext(r *run) promptWorkspaceContext {
 	ctx := promptWorkspaceContext{
-		Environment: collectPromptEnvironmentFacts(r, capability),
+		Environment: collectPromptEnvironmentFacts(r),
 	}
 	ctx.Repository = collectPromptRepositoryState(ctx.Environment.WorkingDir)
-	ctx.RepoRules = collectPromptRepoRuleFiles(ctx.Environment.WorkingDir, ctx.Repository.RepoRoot)
+	ctx.RepoRules, ctx.RepoRulesError = r.collectPromptRepoRuleFiles(ctx.Environment.WorkingDir, ctx.Repository.RepoRoot)
 	ctx.Delegation = collectPromptDelegationState(r)
 	return ctx
 }
 
-func collectPromptEnvironmentFacts(r *run, capability runCapabilityContract) promptEnvironmentFacts {
-	out := promptEnvironmentFacts{
-		UserInteractionEnabled: capability.AllowUserInteraction,
-	}
+func collectPromptEnvironmentFacts(r *run) promptEnvironmentFacts {
+	out := promptEnvironmentFacts{}
 	if r == nil {
 		return out
 	}
@@ -249,71 +243,60 @@ func parsePromptGitStatusCounts(raw string) (staged int, unstaged int, untracked
 	return staged, unstaged, untracked
 }
 
-func collectPromptRepoRuleFiles(workingDir string, repoRoot string) []promptRepoRuleFile {
-	paths := discoverPromptRepoRulePaths(workingDir, repoRoot)
-	if len(paths) == 0 {
-		return []promptRepoRuleFile{}
+func (r *run) collectPromptRepoRuleFiles(workingDir, repoRoot string) ([]promptRepoRuleFile, error) {
+	if r == nil || strings.TrimSpace(workingDir) == "" {
+		return nil, nil
 	}
-	remainingBudget := promptRepoRuleTotalBytes
-	files := make([]promptRepoRuleFile, 0, len(paths))
-	for _, path := range paths {
-		if len(files) >= promptRepoRuleMaxFiles || remainingBudget <= 0 {
-			break
-		}
-		perFileBudget := promptRepoRulePerFileBytes
-		if remainingBudget < perFileBudget {
-			perFileBudget = remainingBudget
-		}
-		content, truncated, ok := readPromptRepoRuleContent(path, perFileBudget)
-		if !ok || strings.TrimSpace(content) == "" {
-			continue
-		}
-		files = append(files, promptRepoRuleFile{
-			Path:      filepath.Clean(path),
-			Label:     promptRepoRuleLabel(path, repoRoot),
-			Content:   content,
-			Truncated: truncated,
-		})
-		remainingBudget -= len([]byte(content))
+	scope, err := r.runPathScope()
+	if err != nil {
+		return nil, errors.New("repository rule discovery requires an authorized working directory")
 	}
-	return files
-}
-
-func discoverPromptRepoRulePaths(workingDir string, repoRoot string) []string {
-	workingDir = strings.TrimSpace(workingDir)
-	if workingDir == "" {
-		return []string{}
-	}
-	searchDirs := promptRuleSearchDirs(workingDir, repoRoot)
-	seen := map[string]struct{}{}
-	paths := make([]string, 0, len(searchDirs)*len(promptRepoRuleCandidateNames))
-	for _, dir := range searchDirs {
+	files := []promptRepoRuleFile{}
+	for _, dir := range promptRuleSearchDirs(workingDir, repoRoot) {
+		resolvedDir, err := scope.Registry.Resolve(dir, filesystemscope.ResolveOptions{RequireExisting: true, RequireDir: true})
+		if err != nil {
+			return files, fmt.Errorf("cannot inspect repository rule directory %q within authorized filesystem roots", dir)
+		}
+		entries, err := os.ReadDir(resolvedDir.RealAbs)
+		if err != nil {
+			return files, fmt.Errorf("repository rule directory %q is unreadable", dir)
+		}
+		names := make(map[string]bool, len(entries))
+		for _, entry := range entries {
+			names[entry.Name()] = true
+		}
 		for _, name := range promptRepoRuleCandidateNames {
-			path := filepath.Join(dir, name)
-			info, err := os.Stat(path)
-			if err != nil || info.IsDir() {
+			if !names[name] {
 				continue
 			}
-			cleaned := filepath.Clean(path)
-			if _, ok := seen[cleaned]; ok {
-				continue
+			file := promptRepoRuleFile{Path: filepath.Join(dir, name), ScopeDir: dir}
+			resolved, err := scope.Registry.Resolve(file.Path, filesystemscope.ResolveOptions{RequireExisting: true})
+			if err != nil {
+				file.ReadError = "path is not readable within authorized filesystem roots"
+			} else if info, err := os.Stat(resolved.RealAbs); err != nil || !info.Mode().IsRegular() {
+				file.ReadError = "source is not an accessible regular file"
+			} else if handle, err := os.Open(resolved.RealAbs); err != nil {
+				file.ReadError = "file is unreadable"
+			} else {
+				_ = handle.Close()
 			}
-			seen[cleaned] = struct{}{}
-			paths = append(paths, cleaned)
+			files = append(files, file)
 		}
 	}
-	return paths
+	return files, nil
 }
 
 func promptRuleSearchDirs(workingDir string, repoRoot string) []string {
-	workingDir = filepath.Clean(strings.TrimSpace(workingDir))
-	repoRoot = filepath.Clean(strings.TrimSpace(repoRoot))
+	workingDir = strings.TrimSpace(workingDir)
+	repoRoot = strings.TrimSpace(repoRoot)
 	if workingDir == "" {
 		return []string{}
 	}
+	workingDir = filepath.Clean(workingDir)
 	if repoRoot == "" {
 		return []string{workingDir}
 	}
+	repoRoot = filepath.Clean(repoRoot)
 	rel, err := filepath.Rel(repoRoot, workingDir)
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return []string{workingDir}
@@ -335,46 +318,6 @@ func promptRuleSearchDirs(workingDir string, repoRoot string) []string {
 		dirs = append(dirs, reversed[i])
 	}
 	return dirs
-}
-
-func readPromptRepoRuleContent(path string, budget int) (string, bool, bool) {
-	if budget <= 0 {
-		return "", false, false
-	}
-	f, err := os.Open(path)
-	if err != nil {
-		return "", false, false
-	}
-	defer f.Close()
-
-	buf, err := io.ReadAll(io.LimitReader(f, int64(budget+1)))
-	if err != nil {
-		return "", false, false
-	}
-	truncated := len(buf) > budget
-	if truncated {
-		buf = buf[:budget]
-	}
-	content := strings.ReplaceAll(string(buf), "\r\n", "\n")
-	content = strings.TrimSpace(content)
-	if content == "" {
-		return "", false, false
-	}
-	return content, truncated, true
-}
-
-func promptRepoRuleLabel(path string, repoRoot string) string {
-	path = filepath.Clean(strings.TrimSpace(path))
-	repoRoot = filepath.Clean(strings.TrimSpace(repoRoot))
-	if path == "" {
-		return ""
-	}
-	if repoRoot != "" {
-		if rel, err := filepath.Rel(repoRoot, path); err == nil {
-			return filepath.Clean(rel)
-		}
-	}
-	return filepath.Base(path)
 }
 
 func collectPromptDelegationState(r *run) promptDelegationState {
@@ -445,7 +388,7 @@ func buildPromptWorkspaceContextSection(workspace promptWorkspaceContext) prompt
 		lines = append(lines, "### Repository State")
 		lines = append(lines, repoLines...)
 	}
-	if ruleLines := renderPromptRepoRuleLines(workspace.RepoRules); len(ruleLines) > 0 {
+	if ruleLines := renderPromptRepoRuleLines(workspace.RepoRules, workspace.RepoRulesError); len(ruleLines) > 0 {
 		lines = append(lines, "### Repository Rules")
 		lines = append(lines, ruleLines...)
 	}
@@ -456,8 +399,7 @@ func buildPromptWorkspaceContextSection(workspace promptWorkspaceContext) prompt
 	return newPromptSection("workspace_context", lines...)
 }
 
-func (r *run) floretTurnRuntimeContext() flruntime.MessageContextItem {
-	capability := runCapabilityContract{AllowUserInteraction: r == nil || !r.noUserInteraction}
+func (r *run) floretTurnRuntimeContext() (flruntime.MessageContextItem, error) {
 	runtimeLines := []string{"Tool execution environment: terminal.exec runs on the AI runtime host. A user-selected device may be different; selection does not route a command."}
 	if r != nil && strings.TrimSpace(r.endpointID) != "" {
 		runtimeLines = append(runtimeLines, "Runtime endpoint ID: "+strings.TrimSpace(r.endpointID))
@@ -465,17 +407,20 @@ func (r *run) floretTurnRuntimeContext() flruntime.MessageContextItem {
 	sections := []promptSection{
 		newPromptSection("tool_execution_environment", runtimeLines...),
 		newPromptSection("current_context", buildBasicPromptCurrentContextLines(promptWorkingDirForRun(r), currentPromptLocalTimeContext(time.Now))...),
-		buildPromptWorkspaceContextSection(collectPromptWorkspaceContext(r, capability)),
+		buildPromptWorkspaceContextSection(collectPromptWorkspaceContext(r)),
 	}
 	if r != nil {
 		if catalog := newPromptSectionFromText("available_skills", buildSkillCatalogPrompt(r.listSkills())); !catalog.isEmpty() {
 			sections = append(sections, catalog)
 		}
 	}
-	text := truncateRunes(renderPromptSections(sections), floretRuntimeContextTextRunes)
-	return flruntime.MessageContextItem{
-		Kind: "runtime_context", Title: "Tool execution environment", Text: text,
+	item := flruntime.MessageContextItem{
+		Kind: "runtime_context", Title: "Tool execution environment", Text: renderPromptSections(sections),
 	}
+	if err := item.Validate(); err != nil {
+		return flruntime.MessageContextItem{}, fmt.Errorf("tool execution context cannot be admitted: %w", err)
+	}
+	return item, nil
 }
 
 func renderPromptEnvironmentFactsLines(env promptEnvironmentFacts) []string {
@@ -509,15 +454,7 @@ func renderPromptEnvironmentFactsLines(env promptEnvironmentFacts) []string {
 	}
 	permissionType := env.PermissionType
 	lines = append(lines, fmt.Sprintf("- Permission type: %s", permissionTypeString(permissionType)))
-	switch permissionType {
-	case FlowerPermissionReadonly:
-		lines = append(lines, "- Tool approval policy: shell and mutation tools are unavailable")
-	case FlowerPermissionApprovalRequired:
-		lines = append(lines, "- Tool approval policy: shell and mutation tools require confirmation")
-	case FlowerPermissionFullAccess:
-		lines = append(lines, "- Tool approval policy: no per-tool confirmation")
-	}
-	lines = append(lines, fmt.Sprintf("- Subagent delegation available: %t", env.SubagentDelegation))
+	lines = append(lines, fmt.Sprintf("- Subagent delegation configured at admission: %t", env.SubagentDelegation))
 	return lines
 }
 
@@ -554,34 +491,27 @@ func renderPromptRepositoryStateLines(repo promptRepositoryState) []string {
 	return lines
 }
 
-func renderPromptRepoRuleLines(files []promptRepoRuleFile) []string {
-	if len(files) == 0 {
-		return []string{"- Repository rule files loaded: none"}
-	}
-	lines := []string{fmt.Sprintf("- Repository rule files loaded: %d", len(files))}
+func renderPromptRepoRuleLines(files []promptRepoRuleFile, discoveryErr error) []string {
+	lines := []string{fmt.Sprintf("- Repository rule sources discovered: %d; contents not loaded", len(files))}
 	for _, file := range files {
-		label := strings.TrimSpace(file.Label)
-		if label == "" {
-			label = strings.TrimSpace(file.Path)
+		status := "readable; contents not loaded"
+		if file.ReadError != "" {
+			status = "unreadable: " + file.ReadError
 		}
-		if label == "" {
-			continue
-		}
-		lines = append(lines, fmt.Sprintf("#### %s", label))
-		lines = append(lines, indentPromptBlock(file.Content, "    ")...)
-		if file.Truncated {
-			lines = append(lines, "- Note: this rule file excerpt was truncated to stay within the prompt budget.")
-		}
+		lines = append(lines, fmt.Sprintf("- Source %q; applies to %q and its descendants; %s", file.Path, file.ScopeDir, status))
+	}
+	if discoveryErr != nil {
+		lines = append(lines, "- Rule discovery incomplete: "+discoveryErr.Error()+". Pause affected operations until the applicable rules can be inspected.")
 	}
 	return lines
 }
 
 func renderPromptDelegationLines(state promptDelegationState) []string {
 	if !state.Enabled {
-		return []string{"- Subagent delegation enabled for this run: false"}
+		return []string{"- Subagent delegation configured at admission: false"}
 	}
 	lines := []string{
-		"- Subagent delegation enabled for this run: true",
+		"- Subagent delegation configured at admission: true",
 		fmt.Sprintf("- Subagent counts: active=%d, queued=%d, running=%d, waiting_input=%d, completed=%d, failed=%d, canceled=%d, timed_out=%d", state.ActiveCount, state.QueuedCount, state.RunningCount, state.WaitingCount, state.CompletedCount, state.FailedCount, state.CanceledCount, state.TimedOutCount),
 	}
 	if len(state.Items) == 0 {
@@ -599,21 +529,6 @@ func renderPromptDelegationLines(state promptDelegationState) []string {
 		case title != "":
 			lines = append(lines, fmt.Sprintf("- Active subagent [%s/%s] %s", item.AgentType, item.Status, title))
 		}
-	}
-	return lines
-}
-
-func indentPromptBlock(text string, prefix string) []string {
-	text = strings.TrimSpace(strings.ReplaceAll(text, "\r\n", "\n"))
-	if text == "" {
-		return []string{}
-	}
-	if prefix == "" {
-		prefix = "    "
-	}
-	lines := []string{}
-	for _, line := range strings.Split(text, "\n") {
-		lines = append(lines, prefix+line)
 	}
 	return lines
 }

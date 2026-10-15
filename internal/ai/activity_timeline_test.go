@@ -192,9 +192,9 @@ func TestToolStartActivityPresentationUsesFriendlyNonTerminalLabels(t *testing.T
 	}{
 		{
 			name:      "file read",
-			toolName:  "file.read",
-			args:      map[string]any{"file_path": "/workspace/app.ts"},
-			label:     "app.ts",
+			toolName:  "read_file",
+			args:      map[string]any{"path": "/workspace/app.ts"},
+			label:     "/workspace/app.ts",
 			renderer:  fltools.ActivityRendererFile,
 			operation: "read",
 		},
@@ -502,7 +502,7 @@ func TestFloretFileActivitiesPreserveTypedReadAndMutationDetails(t *testing.T) {
 	}{
 		{
 			name:     "read",
-			toolName: "file.read",
+			toolName: "read_file",
 			data:     FileReadResult{FilePath: "/workspace/app.ts", DisplayName: "app.ts", Content: "const value = 1;\n", LineOffset: 7, LineCount: 1, TotalLines: 42, Truncated: true},
 			assert: func(t *testing.T, value fltools.ActivityPayload) {
 				payload, ok := value.(fltools.FileActivityPayload)
@@ -532,6 +532,9 @@ func TestFloretFileActivitiesPreserveTypedReadAndMutationDetails(t *testing.T) {
 				t.Fatal(err)
 			}
 			test.assert(t, presentation.Payload)
+			if test.toolName == "read_file" {
+				return
+			}
 			if len(presentation.TargetRefs) != 1 || !strings.HasPrefix(presentation.TargetRefs[0].Kind, "file_action:") {
 				t.Fatalf("file target refs = %#v", presentation.TargetRefs)
 			}

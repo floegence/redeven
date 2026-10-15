@@ -20,6 +20,13 @@
 
 - Replace the separate queue editor with [take-back to the input box](ui/flower-turn-launcher.md), overwriting the current draft with complete text, references and staged attachment copies. Adopt published Floret v7.35.0 conditional queue removal; preserve captured snapshots and isolate delayed completion to its original conversation.
 
+## 2026-10-15: Consistent Flower prompt and rule sources
+
+- Unify [task, interaction and recovery guidance](ai/flower-prompt-and-rule-sources.md)
+  around the actual request surface, with complete authorized rule-source manifests
+  and explicit overflow rejection that leaves input correctable.
+- Document [worktree authorization and tool recovery](ai/flower-prompt-and-rule-sources.md),
+  remove unreachable file-reader instructions, and preserve Floret lifecycle ownership.
 
 ## 2026-10-14: Reactive message copy feedback
 

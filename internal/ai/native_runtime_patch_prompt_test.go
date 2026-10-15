@@ -8,19 +8,9 @@ import (
 func TestBuildLayeredSystemPrompt_DocumentsCanonicalPatchUsage(t *testing.T) {
 	t.Parallel()
 
-	r := newRun(runOptions{
-		AgentHomeDir: t.TempDir(),
-		WorkingDir:   t.TempDir(),
-		Shell:        "bash",
-	})
+	prompt := buildPromptForToolRoutingTest(t)
 
-	prompt := r.buildLayeredSystemPrompt(
-		permissionTypeString(FlowerPermissionApprovalRequired),
-		[]ToolDef{{Name: "terminal.exec"}, {Name: "file.read"}, {Name: "file.edit"}, {Name: "file.write"}, {Name: "apply_patch"}},
-		runCapabilityContract{},
-	)
-
-	if !strings.Contains(prompt, "Use the available file tools for file inspection and mutation, apply_patch for patch-shaped edits") {
+	if !strings.Contains(prompt, "Prefer apply_patch for patch-shaped edits inside the run working directory") {
 		t.Fatalf("prompt missing file mutation workflow guidance: %q", prompt)
 	}
 	if !strings.Contains(prompt, "send exactly one canonical patch document from `*** Begin Patch` to `*** End Patch`") {
@@ -32,7 +22,7 @@ func TestBuildLayeredSystemPrompt_DocumentsCanonicalPatchUsage(t *testing.T) {
 	if !strings.Contains(prompt, "prefix every new content line with `+`") {
 		t.Fatalf("prompt missing add-file content-line prefix guidance: %q", prompt)
 	}
-	if !strings.Contains(prompt, "re-read the current file contents and regenerate a fresh canonical Begin/End Patch once") {
+	if !strings.Contains(prompt, "re-read the current file contents and regenerate a fresh canonical patch") {
 		t.Fatalf("prompt missing apply_patch recovery guidance: %q", prompt)
 	}
 	if !strings.Contains(prompt, "do NOT fall back to shell redirection or ad-hoc file overwrite commands for normal edits") {

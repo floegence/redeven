@@ -197,19 +197,6 @@ var builtinDefinitions = map[string]Definition{
 			chipFields("operation", "name", "truncated"),
 		),
 	},
-	"file.read": {
-		Name:             "file.read",
-		Mutating:         false,
-		RequiresApproval: false,
-		Presentation: withPresentationOptions(
-			presentation(ToolPresentationContext, "readonly", "file", "context", "args", "result"),
-			operation("read"),
-			labelFields("display_name"),
-			callPayloadFields("offset", "limit"),
-			resultPayloadFields("display_name", "file_action_id", "content", "line_offset", "line_count", "total_lines", "truncated"),
-			chipFields("truncated"),
-		),
-	},
 	"read_file": {
 		Name:             "read_file",
 		Mutating:         false,

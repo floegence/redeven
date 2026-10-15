@@ -8,7 +8,7 @@ func visibilityForToolName(toolName string) ToolVisibilityClass {
 	switch strings.TrimSpace(toolName) {
 	case "computer.screenshot":
 		return ToolVisibilitySharedReadonly
-	case "read_file", "read_files", "rgrep", "find", "file.read":
+	case "read_file", "read_files", "rgrep", "find":
 		return ToolVisibilityReadonlyExclusive
 	case "web_fetch", "web.search", "okf.index", "okf.search", "okf.open", "attachment.read", "image.read":
 		return ToolVisibilitySharedReadonly
@@ -35,7 +35,7 @@ func capabilitiesForToolName(toolName string) []ToolCapabilityClass {
 		return []ToolCapabilityClass{ToolCapabilityShell, ToolCapabilityOpenWorld}
 	case "file.edit", "file.write", "apply_patch":
 		return []ToolCapabilityClass{ToolCapabilityMutation}
-	case "read_file", "read_files", "rgrep", "find", "file.read", "okf.index", "okf.search", "okf.open", "attachment.read", "image.read":
+	case "read_file", "read_files", "rgrep", "find", "okf.index", "okf.search", "okf.open", "attachment.read", "image.read":
 		return []ToolCapabilityClass{ToolCapabilityReadonlyLocal}
 	case "web_fetch", "web.search":
 		return []ToolCapabilityClass{ToolCapabilityReadonlyNetwork, ToolCapabilityOpenWorld}

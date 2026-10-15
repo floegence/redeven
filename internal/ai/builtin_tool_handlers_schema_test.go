@@ -208,7 +208,6 @@ func TestBuiltInToolDefinitions_TargetScopedToolsExposeTargetID(t *testing.T) {
 	t.Parallel()
 
 	targetScoped := map[string]bool{
-		"file.read":   true,
 		"file.edit":   true,
 		"file.write":  true,
 		"apply_patch": true,

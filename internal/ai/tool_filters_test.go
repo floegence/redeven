@@ -15,7 +15,6 @@ func TestPermissionToolFilter_VisibilityMatrix(t *testing.T) {
 		{Name: "rgrep", Visibility: ToolVisibilityReadonlyExclusive},
 		{Name: "find", Visibility: ToolVisibilityReadonlyExclusive},
 		{Name: "web_fetch", Visibility: ToolVisibilitySharedReadonly},
-		{Name: "file.read", Visibility: ToolVisibilityReadonlyExclusive},
 		{Name: "web.search", Visibility: ToolVisibilitySharedReadonly},
 		{Name: "okf.index", Visibility: ToolVisibilitySharedReadonly},
 		{Name: "okf.search", Visibility: ToolVisibilitySharedReadonly},

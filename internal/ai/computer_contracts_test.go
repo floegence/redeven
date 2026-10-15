@@ -68,7 +68,7 @@ func TestComputerNavigationDefinitionMatchesRuntimeAndPrompt(t *testing.T) {
 		if urlSchema["enum"] != nil || urlSchema["pattern"] != nil || urlSchema["maxLength"] != float64(maxComputerNavigationURLLength) {
 			t.Fatalf("navigation schema narrows native URLs: %+v", urlSchema)
 		}
-		prompt := renderPromptSections([]promptSection{buildPromptComputerUseCapabilitySection(promptRuntimeSnapshot{AvailableToolNames: "computer.screenshot"})})
+		prompt := renderPromptSections([]promptSection{buildPromptComputerUseCapabilitySection(promptRuntimeSnapshot{AvailableToolNames: "computer.screenshot,computer.targets,computer.select_target,computer.observe,computer.exec,browser.navigate"})})
 		for _, term := range []string{"file://", "Approval Required", "observe"} {
 			if !strings.Contains(strings.ToLower(definition.Description), strings.ToLower(term)) {
 				t.Fatalf("definition omits %q", term)
