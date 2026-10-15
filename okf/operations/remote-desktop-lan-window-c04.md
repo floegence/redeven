@@ -16,6 +16,13 @@ Incomplete fixtures and adverse complete rounds remain evidence. Restore a
 rejected diagnostic rather than treating its peak as a release result.
 The [decision index](remote-desktop-lan-experiment-ledger.md) owns acceptance.
 
+# Contract
+
+Compare receipt timing and offered capacity as separate variables. Preserve
+security, generation/order fences, confirmed presentation and finite admission.
+Diagnostic artifacts cannot qualify a release; published C05 consumer checks
+own adoption compatibility. Read the decision ledger before any retry.
+
 # Exhausted Window Receipt Candidate C03
 
 C03 / T11 is predeclared after P03/P04 and the rejected interval-only C02 and
@@ -124,6 +131,12 @@ confirmed paint, receipt timing, input authority and generation/order fences rem
 No published-product parity claim follows from this diagnostic. Retry C04 only
 for a named fixture defect or new capacity evidence; qualify the published pair
 separately rather than repeating this overlay.
+
+# Boundaries
+
+The controlled capacity gain applies to the recorded fixture and does not prove
+full historical recovery or RustDesk parity. Keep adverse complete intervals
+and invalid attempts. Do not expand platform support from a Linux diagnostic.
 
 # Evidence
 

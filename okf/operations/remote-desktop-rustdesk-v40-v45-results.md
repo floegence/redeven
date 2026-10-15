@@ -14,6 +14,13 @@ current product acceptance. The [comparison contract](remote-desktop-rustdesk-co
 owns acceptance; later security, platform and recovery fixes must be preserved.
 A failed or incomplete trial remains retained with its own validity boundary.
 
+# Contract
+
+Read these results as retained historical evidence. The current comparison
+contract owns acceptance. Preserve original valid and invalid trials, published
+identities, source receipts and limitations. Historical speed never authorizes
+reverting later security or functionality fixes.
+
 # Results
 
 ## Published v0.22.40 Identity And Conditions
@@ -133,6 +140,12 @@ text PSNR/MAE is 13.23/24.56, 13.22/24.56 and 13.23/24.48 for RustDesk, versus
 without deleting those original results. Fractional compositor rasterization,
 resampling and unequal delivered extents limit pixel metrics; they alone cannot
 establish perceptual detail parity.
+
+# Boundaries
+
+The original window extents, source clocks and incomplete resource roots limit
+the claims stated here. These historical results cannot qualify the current
+product or justify silently replacing adverse current trials.
 
 # Evidence
 
