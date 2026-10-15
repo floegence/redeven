@@ -890,7 +890,21 @@
         },
         "agentsCount": "{count} 個代理"
       },
-      "feedbackClose": "關閉回饋詳情"
+      "feedbackClose": "關閉回饋詳情",
+      "input": {
+        "queueTitle": "佇列中的指令",
+        "steerNow": "立即引導",
+        "remove": "移除",
+        "resend": "重新傳送",
+        "pending": "正在引導…",
+        "applied": "已加入上下文",
+        "cancelled": "未生效",
+        "stopped": "任務已停止，這條指令尚未生效。",
+        "unknown": "工具執行結果不明，無法在此重試這條指令。",
+        "ended": "任務已結束，這條指令尚未生效。",
+        "failed": "無法確認操作結果。請重新整理詳情後重試。",
+        "changed": "這條輸入已變更或已使用，詳情已重新整理。"
+      }
     },
     "settings": {
       "title": "Flower 設定",
