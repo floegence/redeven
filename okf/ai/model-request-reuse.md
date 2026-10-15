@@ -15,11 +15,13 @@ Runtime/Desktop epoch 61 and model-source RPC v2 preserve Floret's effective req
 
 Official OpenAI requests derive a bounded, non-secret cache key from that namespace and provider/account routing identity. ChatGPT authentication on the official Responses route defaults to WebSocket; other authentication and custom endpoints retain HTTP. Runtime Service and Desktop executor each own a bounded process-local pool (16 connections, five-minute idle expiry, 55-minute rotation between requests). Connections isolate provider, endpoint, account, model and prompt scope. A socket processes one request at a time; its last successful response is usable only when the next canonical PreviousState, complete rendered input prefix, native output order and fixed settings match. Otherwise it sends full input from the same prepared request. Full input always owns estimates and fingerprints.
 
-HTTP and WebSocket use one Responses event consumer. An unsupported upgrade before command dispatch permits one HTTP fallback; an explicit stale-response rejection before generation permits one full-input resend. Authentication, rate-limit and invalid-request errors retain their classifications. Uncertain delivery or partial-output disconnect closes the socket and uses ordinary canonical failure/retry. Stop, timeout, logout, Desktop RPC disconnect and shutdown abort connections. Supplemental context closes the scope's reusable connection, sends no application cache/continuation hints and retains no native state. No network retry layer, persistent transport history or alternate UI waiting state exists.
-
 ## Cache usage presentation
 
 The existing context tooltip shows the latest completed request and cumulative session cache hit rates. Both use disjoint ordinary-input, cache-read and cache-write buckets with one formatter; absent valid input displays “—”, while measured zero hits display “0%”. Recent counters project Floret's canonical confirmed usage directly and clear with its existing model/compaction boundaries. They are not inferred from context-window occupancy or persisted in a host statistics store. OpenAI ordinary input subtracts both SDK cache-read and cache-write tokens from total input; invalid, negative or excessive cached counts fail explicitly using overflow-safe bounds. Historical cumulative usage is neither rewritten nor backfilled.
+
+# Boundaries
+
+HTTP and WebSocket use one Responses event consumer. An unsupported upgrade before command dispatch permits one HTTP fallback; an explicit stale-response rejection before generation permits one full-input resend. Authentication, rate-limit and invalid-request errors retain their classifications. Uncertain delivery or partial-output disconnect closes the socket and uses ordinary canonical failure/retry. Stop, timeout, logout, Desktop RPC disconnect and shutdown abort connections. Supplemental context closes the scope's reusable connection, sends no application cache/continuation hints and retains no native state. No network retry layer, persistent transport history or alternate UI waiting state exists.
 
 # Evidence
 
