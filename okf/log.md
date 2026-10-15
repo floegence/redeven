@@ -1,11 +1,13 @@
 # Redeven OKF Update Log
 
+## 2026-10-15: Unified provider recovery
+
+- Document published Floret provider recovery ownership, frozen adapter replay and shared Flower retry progress.
+
 ## 2026-10-15: SubAgent failure reasons reach the parent
 
 - Expose canonical Floret failure codes and messages through [SubAgent list, wait, and inspect](ai/subagent-runtime.md), preserving complete diagnostics in model output and clearing old reasons when the canonical child retries.
 - Keep successful handoffs separate and guide parents against inferred causes or automatic retries of unknown effects.
-
-- 2026-10-15: Document published Floret provider recovery ownership, frozen adapter replay and shared Flower retry progress.
 
 ## 2026-10-15 — OpenAI request reuse
 
