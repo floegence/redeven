@@ -176,7 +176,7 @@ it('keeps already sealed thinking closed when a later segment fails', async () =
   await waitFor(() => Boolean(disclosure(root, 'thinking-next')));
   toggle(root, 'thinking-next').click();
   live.push(sealed(live.current(), { view_version: 4, activity: 'idle', last_outcome: 'failed', turns: [turn('failed')] }));
-  await waitFor(() => Boolean(root.querySelector('.flower-turn-ended')));
+  await waitFor(() => Boolean(root.querySelector('.flower-run-error')));
   expect(disclosure(root).dataset.flowerThinkingView).toBe('collapsed');
   expect(disclosure(root, 'thinking-next').dataset.flowerThinkingView).toBe('expanded');
 });
@@ -190,7 +190,9 @@ it('does not attribute a later failed run to older thinking in the same turn', a
   live.setCurrent(resumed);
   root.querySelector<HTMLButtonElement>('.flower-workspace-sync button')!.click();
   await waitFor(() => disclosure(root).dataset.flowerThinkingView === 'collapsed');
-  expect(root.querySelector('.flower-turn-ended')?.textContent).toContain('Flower could not complete this turn.');
+  expect(root.querySelectorAll('.flower-run-error')).toHaveLength(1);
+  expect(root.querySelector('.flower-run-error')?.textContent).toContain('Flower could not finish this reply.');
+  expect(root.querySelector('.flower-turn-ended')).toBeNull();
 });
 
 it('preserves live thinking when exact cancellation is canonical before the terminal outcome', async () => {

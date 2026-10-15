@@ -1048,10 +1048,11 @@ describe('Flower bottom decision surface', () => {
     });
     const stopResponse = deferred<void>();
     const stopThread = vi.fn(() => stopResponse.promise);
+    const loadThread = vi.fn(async () => liveBootstrap(approvalThread, 21));
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [approvalThread]),
-      loadThread: vi.fn(async () => liveBootstrap(approvalThread, 21)),
+      loadThread,
       stopThread,
     });
     await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${approvalThread.thread_id}"] button`)));
@@ -1069,10 +1070,13 @@ describe('Flower bottom decision surface', () => {
     await waitFor(() => !stop.disabled);
     expect(stop.getAttribute('aria-label')).toBe('Stop');
     expect(stopThread).toHaveBeenCalledTimes(1);
-    expect(flowerSurfaceNotifications()).toEqual([{ tone: 'error', message: 'Could not stop this turn. Try Stop again.' }]);
+    expect(flowerSurfaceNotifications()).toEqual([{ tone: 'error', message: 'Stop status is unconfirmed. Resync before trying again.' }]);
     expect(runtime.querySelector('[data-flower-bottom-mode="approval"]')).not.toBeNull();
+    const canonicalReads = loadThread.mock.calls.length;
     stop.click();
     await waitFor(() => stopThread.mock.calls.length === 2);
+    expect(loadThread.mock.calls.length).toBeGreaterThan(canonicalReads);
+    expect(loadThread.mock.invocationCallOrder.at(-1)).toBeLessThan(stopThread.mock.invocationCallOrder[1]);
   });
 
   it('does not steal focus when the user leaves the approval surface during submission', async () => {

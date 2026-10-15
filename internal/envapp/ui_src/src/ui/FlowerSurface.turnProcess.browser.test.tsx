@@ -135,7 +135,8 @@ describe('completed turn process disclosure', () => {
     const { root, live } = await mount();
     expect(root.querySelector('[data-flower-thinking-view="preview"]')).not.toBeNull();
     live.push(current(true, { last_outcome: outcome, turns: [turn({ outcome, final_item_ids: [], final_boundary_complete: false })] }));
-    await waitFor(() => Boolean(root.querySelector('.flower-turn-ended')));
+    const outcomeNotice = () => root.querySelector(outcome === 'cancelled' ? '.flower-turn-ended' : '.flower-run-error');
+    await waitFor(() => Boolean(outcomeNotice()));
     expect(summary(root)?.getAttribute('aria-expanded')).toBe('true');
     expect(hidden(root, 'progress')).toBe(false);
     expect(root.querySelector('[data-flower-thinking-view="preview"]')).not.toBeNull();
@@ -144,7 +145,8 @@ describe('completed turn process disclosure', () => {
     expect(hidden(root, 'tool')).toBe(true);
     expect(hidden(root, 'progress')).toBe(false);
     expect(hidden(root, 'final-a')).toBe(false);
-    expect(root.querySelector('.flower-turn-ended')?.textContent).toBeTruthy();
+    expect(outcomeNotice()?.textContent).toBeTruthy();
+    expect(root.querySelectorAll('.flower-run-error')).toHaveLength(outcome === 'cancelled' ? 0 : 1);
   });
   it.each(['selection', 'focus', 'tool', 'pointer', 'keyboard', 'menu', 'reading'] as const)('protects %s inspection once at completion', async (protection) => {
     const { root, live } = await mount();
