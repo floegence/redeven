@@ -274,6 +274,8 @@
       "permissionSelectorSaving": "Salvando permissão...",
       "permissionSelectorErrorTitle": "O Flower não pôde salvar a permissão.",
       "terminalCommandActions": "Ações do comando",
+      "terminalOutputLabel": "Saída",
+      "terminalExitCodeLabel": "Código de saída {code}",
       "terminalWaitingOutput": "Aguardando saída…",
       "terminalStartedNoOutput": "Comando iniciado. Nenhuma saída retornada ainda.",
       "terminalFinishedNoOutput": "O comando terminou sem gerar saída.",

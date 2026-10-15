@@ -457,6 +457,8 @@ export type FlowerSurfaceCopy = Readonly<{
     permissionSelectorSaving: string;
     permissionSelectorErrorTitle: string;
     terminalCommandActions: string;
+    terminalOutputLabel: string;
+    terminalExitCodeLabel: (code: number) => string;
     terminalWaitingOutput: string;
     terminalStartedNoOutput: string;
     terminalFinishedNoOutput: string;
@@ -836,6 +838,8 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     permissionSelectorSaving: 'Saving permission...',
     permissionSelectorErrorTitle: 'Flower could not save permission.',
     terminalCommandActions: "Command actions",
+    terminalOutputLabel: 'Output',
+    terminalExitCodeLabel: (code) => `Exit code ${code}`,
     terminalWaitingOutput: "Waiting for output…",
     terminalStartedNoOutput: "Command started. No output returned yet.",
     terminalFinishedNoOutput: "Command finished without output.",

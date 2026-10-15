@@ -5179,6 +5179,8 @@
       "permissionSelectorSaving": "正在保存权限...",
       "permissionSelectorErrorTitle": "Flower 未能保存权限。",
       "terminalCommandActions": "命令操作",
+      "terminalOutputLabel": "输出",
+      "terminalExitCodeLabel": "退出码 {code}",
       "terminalWaitingOutput": "正在等待输出…",
       "terminalStartedNoOutput": "命令已启动，暂未返回输出。",
       "terminalFinishedNoOutput": "命令已结束，没有输出。",

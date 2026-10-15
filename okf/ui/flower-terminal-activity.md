@@ -33,12 +33,15 @@ Historical output without sequence metadata is an unsequenced static snapshot; l
 
 Details are read-only, offer localized icon actions to reveal and copy the command, and cap output at five visual lines with independent scrolling. Execution and settlement belong to [Terminal tool runtime](../ai/terminal-tool-runtime.md) and [Floret thread runtime integration](../ai/floret-thread-runtime.md).
 
-Expanded terminal details use one quiet theme-derived gradient fading into the
-transcript. The command header, full command and output have transparent faces,
-without an outer frame, internal divider lines or a panel shadow. The gradient
-applies only to the background; text, selection, scrollbars and controls remain
-fully visible. Command highlighting, keyboard disclosure, copy feedback and
-the five-line output viewport retain their existing interaction contracts.
+Expanded terminal details have no outer frame, divider lines, shadow, blur or
+edge fading. The command alone has a quiet theme-derived fill and rounded
+corners; syntax colors stay crisp. The same command node wraps to two preview
+lines and reveals its complete text in place, without a duplicated command
+panel. Copy and disclosure controls remain visible and keyboard accessible.
+Output sits directly on the transcript canvas, separated by spacing and a
+localized output label. A compact zero exit code appears only when canonical
+facts confirm a successful exit, never from a successful read alone. The
+five-line independently scrolling output viewport retains its existing owner.
 
 ## Interaction boundary
 

@@ -5179,6 +5179,8 @@
       "permissionSelectorSaving": "Berechtigung wird gespeichert...",
       "permissionSelectorErrorTitle": "Flower konnte die Berechtigung nicht speichern.",
       "terminalCommandActions": "Befehlsaktionen",
+      "terminalOutputLabel": "Ausgabe",
+      "terminalExitCodeLabel": "Exit-Code {code}",
       "terminalWaitingOutput": "Warten auf Ausgabe…",
       "terminalStartedNoOutput": "Befehl gestartet. Noch keine Ausgabe zurückgegeben.",
       "terminalFinishedNoOutput": "Befehl ohne Ausgabe beendet.",

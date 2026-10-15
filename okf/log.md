@@ -1,5 +1,10 @@
 # Redeven OKF Update Log
 
+## 2026-10-15: Crisp expanded command surfaces
+
+- Give [terminal commands](ui/flower-terminal-activity.md) a subtle borderless highlight and open output on the transcript canvas, without gradients or blur.
+- Keep one selectable command node, visible copy and disclosure controls, localized output labels, truthful exit facts and bounded output scrolling.
+
 ## 2026-10-15: Animated edit argument generation
 
 - Animate existing edit icons during confirmed live [argument generation](ui/flower-output-progress.md), respecting reduced motion and keeping approval waits and completed results static.

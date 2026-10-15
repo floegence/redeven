@@ -5282,6 +5282,8 @@
       "permissionSelectorSaving": "Сохранение разрешения...",
       "permissionSelectorErrorTitle": "Flower не удалось сохранить разрешение.",
       "terminalCommandActions": "Действия с командой",
+      "terminalOutputLabel": "Вывод",
+      "terminalExitCodeLabel": "Код завершения {code}",
       "terminalWaitingOutput": "Ожидание вывода…",
       "terminalStartedNoOutput": "Команда запущена. Вывода пока нет.",
       "terminalFinishedNoOutput": "Команда завершилась без вывода.",

@@ -6628,13 +6628,13 @@ button.flower-composer-context-source:focus-visible,
 
 .flower-activity-terminal-panel {
   --flower-activity-terminal-font: Iosevka, 'JetBrains Mono', 'IBM Plex Mono', SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', ui-monospace, monospace;
+  --flower-activity-terminal-command-surface: color-mix(in srgb, var(--foreground) 7%, var(--flower-chat-surface));
   display: grid;
   min-width: 0;
   overflow: hidden;
   border: 0;
-  border-radius: 0.5rem;
-  /* Fade the surface, never the selectable command or output. */
-  background: radial-gradient(ellipse at 50% 0%, color-mix(in srgb, var(--foreground) 5%, transparent), transparent 80%);
+  border-radius: 0;
+  background: transparent;
   color: var(--redeven-chat-text);
   box-shadow: none;
 }
@@ -6642,31 +6642,42 @@ button.flower-composer-context-source:focus-visible,
 .flower-activity-terminal-header {
   display: flex;
   min-width: 0;
-  align-items: center;
-  gap: 0.4375rem;
+  align-items: flex-start;
+  gap: 0.625rem;
   border: 0;
-  background: transparent;
-  padding: 0.5rem 0.75rem;
+  border-radius: 0.625rem;
+  background: var(--flower-activity-terminal-command-surface);
+  padding: 0.875rem 0.75rem;
 }
 
 .flower-activity-terminal-prompt {
   flex: 0 0 auto;
-  color: var(--redeven-chat-accent);
+  color: var(--redeven-chat-muted);
   font-family: var(--flower-activity-terminal-font);
-  font-size: 0.6875rem;
-  font-weight: 800;
+  font-size: 0.75rem;
+  line-height: 1.75;
+  padding-top: 0.1875rem;
 }
 
 .flower-activity-terminal-command {
   min-width: 0;
   flex: 1 1 auto;
+  display: -webkit-box;
   overflow: hidden;
   color: var(--redeven-code-foreground);
   font-family: var(--flower-activity-terminal-font);
-  font-size: 0.6875rem;
-  line-height: 1.45;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: 0.75rem;
+  line-height: 1.75;
+  padding-top: 0.1875rem;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.flower-activity-terminal-command-expanded {
+  display: block;
+  -webkit-line-clamp: unset;
 }
 
 .flower-activity-terminal-command-code {
@@ -6680,7 +6691,7 @@ button.flower-composer-context-source:focus-visible,
 
 .flower-activity-terminal-command-token-command {
   color: var(--redeven-code-token-command);
-  font-weight: 700;
+  font-weight: 500;
 }
 
 .flower-activity-terminal-command-token-flag {
@@ -6715,69 +6726,71 @@ button.flower-composer-context-source:focus-visible,
   height: 1.75rem;
   align-items: center;
   justify-content: center;
-  border: 1px solid transparent;
+  border: 0;
   border-radius: 0.375rem;
   background: transparent;
   color: var(--redeven-chat-muted);
   cursor: pointer;
-  opacity: 0;
-  pointer-events: none;
-  padding: 0;
-  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
-}
-
-.flower-activity-terminal-panel:hover .flower-activity-terminal-action-button,
-.flower-activity-terminal-panel:focus-within .flower-activity-terminal-action-button,
-.flower-activity-terminal-action-button-active,
-.flower-activity-terminal-action-button-copied {
   opacity: 1;
-  pointer-events: auto;
-}
-
-@media (hover: none) {
-  .flower-activity-terminal-action-button {
-    opacity: 1;
-    pointer-events: auto;
-  }
+  padding: 0;
+  transition: background 120ms ease, color 120ms ease;
 }
 
 .flower-activity-terminal-action-button:hover,
 .flower-activity-terminal-action-button:focus-visible,
 .flower-activity-terminal-action-button-active {
-  border-color: var(--redeven-status-info-border);
-  background: var(--redeven-status-info-soft);
+  background: color-mix(in srgb, var(--foreground) 7%, var(--flower-activity-terminal-command-surface));
   color: var(--redeven-code-foreground);
-  outline: none;
+}
+
+.flower-activity-terminal-action-button:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
 }
 
 .flower-activity-terminal-action-button-copied {
-  border-color: var(--redeven-status-success-border);
-  background: var(--redeven-status-success-soft);
   color: var(--redeven-status-success-foreground);
 }
 
-.flower-activity-terminal-command-panel {
-  border: 0;
-  background: transparent;
-  padding: 0.375rem 0.75rem 0.625rem;
+.flower-activity-terminal-output-heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.875rem 0.75rem 0;
+  color: var(--redeven-chat-muted);
+  font-size: 0.6875rem;
+  line-height: 1.5;
 }
 
-.flower-activity-terminal-command-full {
-  margin: 0;
-  color: var(--redeven-code-foreground);
-  font-family: var(--flower-activity-terminal-font);
-  font-size: 0.71875rem;
-  line-height: 1.55;
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
+.flower-activity-terminal-exit {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
 }
 
-.flower-activity-terminal-command-full-code {
-  color: inherit;
-  font-family: inherit;
-  font-size: inherit;
-  line-height: inherit;
-  white-space: inherit;
+.flower-activity-terminal-exit svg {
+  color: var(--redeven-status-success-foreground);
+}
+
+@media (pointer: coarse) {
+  .flower-activity-terminal-header {
+    flex-wrap: wrap;
+  }
+
+  .flower-activity-terminal-command {
+    flex-basis: calc(100% - 2rem);
+  }
+
+  .flower-activity-terminal-actions {
+    flex-basis: 100%;
+  }
+
+  .flower-activity-terminal-action-button {
+    width: 2.75rem;
+    height: 2.75rem;
+  }
 }
 
 .flower-activity-web-chip,
