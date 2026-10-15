@@ -903,7 +903,8 @@
         "unknown": "Das Ergebnis eines Werkzeugs ist unbekannt. Diese Anweisung kann hier nicht erneut versucht werden.",
         "ended": "Die Aufgabe wurde beendet, bevor diese Anweisung wirksam wurde.",
         "failed": "Der Vorgang konnte nicht bestätigt werden. Aktualisieren Sie die Details und versuchen Sie es erneut.",
-        "changed": "Diese Eingabe wurde geändert oder bereits verarbeitet. Die Details wurden aktualisiert."
+        "changed": "Diese Eingabe wurde geändert oder bereits verarbeitet. Die Details wurden aktualisiert.",
+        "busy": "Der Subagent wird gerade beendet oder komprimiert seinen Kontext. Versuche es danach erneut."
       }
     },
     "settings": {

@@ -346,7 +346,7 @@ export type FlowerSubagentsCopy = Readonly<{
   detailActivityLabel: (count: number) => string;
   detailOutcomeLabel: string;
   detailRetry: string;
-  input: Readonly<Record<'queueTitle' | 'steerNow' | 'remove' | 'resend' | 'pending' | 'applied' | 'cancelled' | 'stopped' | 'unknown' | 'ended' | 'failed' | 'changed', string>>;
+  input: Readonly<Record<'queueTitle' | 'steerNow' | 'remove' | 'resend' | 'pending' | 'applied' | 'cancelled' | 'stopped' | 'unknown' | 'ended' | 'failed' | 'changed' | 'busy', string>>;
   feedbackClose: string;
   unavailableThread: string;
   readOnlyComposerLabel: string;
@@ -1276,19 +1276,20 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     detailOutcomeLabel: 'Outcome',
     detailRetry: 'Retry',
     input: {
-      "queueTitle": "Queued instructions",
-      "steerNow": "Steer now",
-      "remove": "Remove",
-      "resend": "Send again",
-      "pending": "Steering…",
-      "applied": "Added to context",
-      "cancelled": "Not applied",
-      "stopped": "The task stopped before this instruction took effect.",
-      "unknown": "A tool’s outcome is unknown. This instruction cannot be retried here.",
-      "ended": "The task ended before this instruction took effect.",
-      "failed": "Could not confirm the operation. Refresh the details and try again.",
-      "changed": "This input changed or was already consumed. The details have been refreshed."
-},
+      queueTitle: 'Queued instructions',
+      steerNow: 'Steer now',
+      remove: 'Remove',
+      resend: 'Send again',
+      pending: 'Steering…',
+      applied: 'Added to context',
+      cancelled: 'Not applied',
+      stopped: 'The task stopped before this instruction took effect.',
+      unknown: 'A tool’s outcome is unknown. This instruction cannot be retried here.',
+      ended: 'The task ended before this instruction took effect.',
+      failed: 'Could not confirm the operation. Refresh the details and try again.',
+      changed: 'This input changed or was already consumed. The details have been refreshed.',
+      busy: 'The subagent is stopping or compacting context. Try again when it finishes.',
+    },
     feedbackClose: 'Close feedback',
     unavailableThread: 'Thread not available',
     readOnlyComposerLabel: 'Read only · Managed by parent thread',

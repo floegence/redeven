@@ -5330,8 +5330,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       setSubagentInputCommands((commands) => { const next = { ...commands }; delete next[key]; return next; });
     } catch (error) {
       if (!stillSelected()) return;
-      const status = (error as { status?: number })?.status;
-      const text = status === 409 ? subagentsCopy().input.changed : subagentsCopy().input.failed;
+      const code = (error as { code?: string })?.code;
+      const text = code === 'subagent_input_busy' ? subagentsCopy().input.busy
+        : code === 'subagent_input_conflict' ? subagentsCopy().input.changed : subagentsCopy().input.failed;
       setSubagentInputCommands((commands) => ({ ...commands, [key]: { ...command, busy: false, error: text } }));
       void refreshActiveSubagentDetail();
     } finally {

@@ -903,7 +903,8 @@
         "unknown": "O resultado de uma ferramenta é desconhecido. Esta instrução não pode ser tentada novamente aqui.",
         "ended": "A tarefa terminou antes de esta instrução entrar em vigor.",
         "failed": "Não foi possível confirmar a operação. Atualize os detalhes e tente novamente.",
-        "changed": "Esta entrada mudou ou já foi processada. Os detalhes foram atualizados."
+        "changed": "Esta entrada mudou ou já foi processada. Os detalhes foram atualizados.",
+        "busy": "O subagente está parando ou compactando o contexto. Tente novamente quando terminar."
       }
     },
     "settings": {

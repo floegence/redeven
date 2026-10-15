@@ -5792,7 +5792,8 @@
         "unknown": "Le résultat d’un outil est inconnu. Cette instruction ne peut pas être réessayée ici.",
         "ended": "La tâche s’est terminée avant que cette instruction prenne effet.",
         "failed": "Impossible de confirmer l’opération. Actualisez les détails et réessayez.",
-        "changed": "Cette saisie a été modifiée ou déjà traitée. Les détails ont été actualisés."
+        "changed": "Cette saisie a été modifiée ou déjà traitée. Les détails ont été actualisés.",
+        "busy": "Le sous-agent s’arrête ou compacte son contexte. Réessayez une fois l’opération terminée."
       }
     },
     "settings": {

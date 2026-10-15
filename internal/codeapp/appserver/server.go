@@ -5144,7 +5144,13 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			}
 			detail, err := aiSvc.OperateFlowerSubagentInput(r.Context(), meta, threadID, strings.TrimSpace(parts[2]), body)
 			if err != nil {
-				writeJSON(w, aiThreadActionHTTPStatus(err), apiResp{OK: false, Error: err.Error()})
+				code := ""
+				if errors.Is(err, flruntime.ErrThreadBusy) {
+					code = "subagent_input_busy"
+				} else if errors.Is(err, flruntime.ErrRequestConflict) {
+					code = "subagent_input_conflict"
+				}
+				writeJSON(w, aiThreadActionHTTPStatus(err), apiResp{OK: false, Error: err.Error(), ErrorCode: code})
 				return
 			}
 			writeJSON(w, http.StatusAccepted, apiResp{OK: true, Data: map[string]any{"detail": detail}})
