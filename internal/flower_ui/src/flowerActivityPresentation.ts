@@ -1498,7 +1498,8 @@ function presentationForStructured(item: FlowerActivityItem, copy?: FlowerActivi
   const words = copy?.tools ?? toolActivityEnUS;
   const title = structuredTitle(item, words);
   const errorBlock = errorDetailBlockForItem(item, item.payload);
-  const rows = structuredRowsFromPayload(item.payload);
+  const rows = structuredRowsFromPayload(item.payload).map(row =>
+    item.tool_name === 'use_skill' && row.format === 'markdown' ? { ...row, title: '', meta: '' } : row);
   const inputs = structuredRowsFromPayload(item.payload, 'inputs').map(row => ({
     ...row, title: TOOL_INPUT_LABELS[row.title] ? words[TOOL_INPUT_LABELS[row.title]] : row.title,
   }));
