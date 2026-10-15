@@ -91,11 +91,8 @@ function approvalTarget(value: unknown): { kind: string; label: string } | null 
   return { kind, label };
 }
 
-function messageStatus(view: FlowerRuntimeCurrentView, item: FlowerRuntimeCurrentItem): FlowerChatMessage['status'] {
-  if (item.live) return 'streaming';
-  if (view.last_outcome === 'cancelled' && item.turn_id === view.turn_id) return 'canceled';
-  if ((view.last_outcome === 'interrupted' || view.last_outcome === 'failed') && item.turn_id === view.turn_id) return 'error';
-  return 'complete';
+function messageStatus(item: FlowerRuntimeCurrentItem): FlowerChatMessage['status'] {
+  return item.live ? 'streaming' : 'complete';
 }
 
 function itemCreatedAt(item: FlowerRuntimeCurrentItem, fallback: number): number {
@@ -276,7 +273,7 @@ function runtimeMessages(base: FlowerThreadSnapshot, view: FlowerRuntimeCurrentV
     if (item.kind === 'thinking') {
       messages.push({
         id: itemID, thread_id: base.thread_id, turn_id: identity.turnID, run_id: identity.runID, role: 'assistant',
-        content: '', status: messageStatus(view, item), created_at_ms: createdAtMs,
+        content: '', status: messageStatus(item), created_at_ms: createdAtMs,
         blocks: [{ type: 'thinking', content: String(item.text ?? '') }],
         ...(item.live ? { live: true } : {}),
         ...(references ? { references } : {}),
@@ -288,7 +285,7 @@ function runtimeMessages(base: FlowerThreadSnapshot, view: FlowerRuntimeCurrentV
       role: item.kind === 'user' || item.kind === 'steering' ? 'user' : 'assistant',
       ...(item.steering ? { steering: item.steering } : {}), content: String(item.text ?? ''),
       ...(item.kind === 'assistant' && item.sources?.length ? { sources: mapFlowerCitationSources(item.sources) } : {}),
-      status: messageStatus(view, item), created_at_ms: createdAtMs,
+      status: messageStatus(item), created_at_ms: createdAtMs,
       ...(attachmentBlocks.length > 0 ? { blocks: attachmentBlocks } : {}),
       ...(item.live ? { live: true, active_cursor: item.kind === 'assistant' } : {}),
       ...(references ? { references } : {}),

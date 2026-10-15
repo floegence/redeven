@@ -507,7 +507,6 @@ export type FlowerSurfaceCopy = Readonly<{
     stopping: string;
     stopOutcomeUnknownTitle: string;
     stopOutcomeUnknownDescription: string;
-    stopRequestFailed: string;
     commandMenuLabel: string;
     commandCompactContext: string;
     compactContext: string;
@@ -591,8 +590,6 @@ export type FlowerSurfaceCopy = Readonly<{
       floretEffectOutcomeUnknown: string;
       runtimeRestarted: string;
     }>;
-    messageErrorTitle: string;
-    messageErrorFallback: string;
     copyCode: string;
     codeCopied: string;
     citationSources: string;
@@ -911,7 +908,6 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     stopping: 'Stopping...',
     stopOutcomeUnknownTitle: "Stopped with unconfirmed results",
     stopOutcomeUnknownDescription: "Some operations may have completed. Check their results before continuing. This turn will not be replayed automatically.",
-    stopRequestFailed: "Could not stop this turn. Try Stop again.",
     commandMenuLabel: 'Flower commands',
     commandCompactContext: 'Compact this conversation context',
     compactContext: 'Compact context',
@@ -997,8 +993,6 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       floretEffectOutcomeUnknown: 'Some operations may have completed, but their results could not be confirmed. The task was stopped to avoid duplicate execution.',
       runtimeRestarted: 'The local runtime restarted before this reply finished. Start a new reply when the runtime is ready.',
     },
-    messageErrorTitle: 'Message failed',
-    messageErrorFallback: 'This message failed before Flower produced visible text.',
     copyCode: 'Copy code',
     codeCopied: 'Copied',
     citationSources: 'Sources',
@@ -1022,7 +1016,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     syncAuthorization: "Live updates require authorization. Restore access, then resync. Displayed state may be outdated.",
     syncLocked: "Live updates are locked. Unlock access, then resync. Displayed state may be outdated.",
     syncResync: "Resync",
-    stopUnconfirmed: "Stop submitted; status has not synchronized. Resync to confirm.",
+    stopUnconfirmed: "Stop status is unconfirmed. Resync before trying again.",
     syncTimeout: "Synchronization timed out after 15 seconds. Try again.",
     composerErrorTitle: 'Flower could not send.',
     turnProcess: {

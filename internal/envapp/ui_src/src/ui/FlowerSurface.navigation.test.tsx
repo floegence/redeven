@@ -334,11 +334,11 @@ describe('FlowerSurface navigation', () => {
 
       await openStopMenu();
       await waitFor(() => stopThread.mock.calls.length === 1);
-      expect(flowerSurfaceNotifications().at(-1)?.message).toBe('Could not stop this turn. Try Stop again.');
+      expect(flowerSurfaceNotifications().at(-1)?.message).toBe('Stop status is unconfirmed. Resync before trying again.');
 
       await openStopMenu();
       await waitFor(() => stopThread.mock.calls.length === 2);
-      expect(flowerSurfaceNotifications().at(-1)?.message).toBe('Could not stop this turn. Try Stop again.');
+      expect(flowerSurfaceNotifications().at(-1)?.message).toBe('Stop status is unconfirmed. Resync before trying again.');
       expect(diagnostic).toHaveBeenCalledTimes(2);
     } finally {
       diagnostic.mockRestore();
@@ -1549,7 +1549,7 @@ describe('FlowerSurface navigation', () => {
     expect((runtime.querySelector('.flower-composer textarea') as HTMLTextAreaElement).value).toBe('New draft while the previous reply stops');
   });
 
-  it('renders run and message errors as structured error cards', async () => {
+  it('keeps admitted messages normal and presents one turn-level failure', async () => {
     const failedThread = thread({
       thread_id: 'thread-failed',
       title: 'Failed reply',
@@ -1561,6 +1561,7 @@ describe('FlowerSurface navigation', () => {
         message: 'Run failed: provider rejected request.',
       },
       messages: [
+        { id: 'm-accepted', role: 'user', content: 'continue', status: 'error', created_at_ms: 7_100 },
         {
           id: 'm-failed',
           role: 'assistant',
@@ -1580,7 +1581,10 @@ describe('FlowerSurface navigation', () => {
     (runtime.querySelector('[data-thread-id="thread-failed"] button') as HTMLButtonElement).click();
     await waitFor(() => runtime.querySelectorAll('.flower-error-card').length > 0);
 
-    expect(runtime.querySelector('.flower-message-bubble-error')?.textContent).toContain('Message failed');
+    expect(runtime.querySelector('.flower-message-bubble-error')).toBeNull();
+    expect(runtime.querySelector('.flower-message-error-kicker')).toBeNull();
+    expect(runtime.querySelector('[data-flower-message-id="m-accepted"]')?.textContent).toContain('continue');
+    expect(runtime.querySelector('[data-flower-message-id="m-failed"]')?.textContent).toContain('The provider rejected this request.');
     expect(runtime.querySelectorAll('.flower-error-card')).toHaveLength(1);
     expect(runtime.querySelector('.flower-error-card')?.textContent).toContain('Flower could not finish this reply.');
     expect(runtime.querySelector('.flower-error-card')?.textContent).toContain('Run failed: provider rejected request.');
@@ -1729,7 +1733,7 @@ describe('FlowerSurface navigation', () => {
     expect(runtime.querySelector('.flower-error-card')?.textContent).toContain('Run failed before any assistant text was produced.');
   });
 
-  it('renders an empty failed message bubble when there is no run-level error', async () => {
+  it('uses one turn-level fallback when a failed turn has no error detail', async () => {
     const failedThread = thread({
       thread_id: 'thread-message-only-failure',
       title: 'Message failure',
@@ -1755,11 +1759,11 @@ describe('FlowerSurface navigation', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-message-only-failure"] button')));
     (runtime.querySelector('[data-thread-id="thread-message-only-failure"] button') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(runtime.querySelector('.flower-message-bubble-error')));
+    await waitFor(() => Boolean(runtime.querySelector('.flower-error-card')));
 
-    expect(runtime.querySelector('.flower-message-bubble-error')?.textContent).toContain('Message failed');
-    expect(runtime.querySelector('.flower-message-bubble-error')?.textContent).toContain('This message failed before Flower produced visible text.');
-    expect(runtime.querySelectorAll('.flower-error-card')).toHaveLength(0);
+    expect(runtime.querySelector('[data-flower-message-id="m-message-only-failed"]')).toBeNull();
+    expect(runtime.querySelectorAll('.flower-error-card')).toHaveLength(1);
+    expect(runtime.querySelector('.flower-error-card')?.textContent).toContain('Flower could not finish this reply.');
   });
 
   it('leaves the sidebar skeleton and offers retry when the conversation inventory times out', async () => {

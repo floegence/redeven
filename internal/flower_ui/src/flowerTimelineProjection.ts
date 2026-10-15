@@ -372,7 +372,7 @@ function messageSegmentEntry(
   segmentIndex: number,
   totalSegments: number,
 ): Extract<FlowerTimelineEntry, { type: 'message' }> | null {
-  if (blocks.length === 0 && !message.references?.length && message.status !== 'error' && message.active_cursor !== true) return null;
+  if (blocks.length === 0 && !message.references?.length && message.active_cursor !== true) return null;
   const activity = blocks.find((block) => block.type === 'activity' || block.type === 'tool_preview');
   return {
     type: 'message',
@@ -406,7 +406,7 @@ function messageTimelineEntries(
   };
   const flushMessageSegment = () => {
     flushActivity();
-    if (currentBlocks.length > 0 || message.references?.length || message.status === 'error' || message.active_cursor === true) {
+    if (currentBlocks.length > 0 || message.references?.length || message.active_cursor === true) {
       rawEntries.push(currentBlocks);
       currentBlocks = [];
     }
@@ -473,6 +473,7 @@ const timelineProjections = new WeakMap<readonly FlowerChatMessage[], Readonly<{
   queued: FlowerThreadSnapshot['queued_turns'];
   input: FlowerThreadSnapshot['input_request'];
   error: FlowerThreadSnapshot['error'];
+  status: FlowerThreadSnapshot['status'];
   entries: readonly FlowerTimelineEntry[];
 }>>();
 const queueProjections = new WeakMap<FlowerQueuedTurn, Readonly<{ threadID: string; entry: FlowerTimelineEntry }>>();
@@ -488,7 +489,7 @@ export function buildFlowerTimelineEntries(thread: FlowerThreadSnapshot | null |
   const previous = timelineProjections.get(thread.messages);
   if (previous && previous.threadID === thread.thread_id && previous.cursorID === activeCursorMessageID
     && previous.decorations === sourceDecorations && previous.queued === thread.queued_turns
-    && previous.input === input && previous.error === thread.error) return previous.entries;
+    && previous.input === input && previous.error === thread.error && previous.status === thread.status) return previous.entries;
   let decorations = decorationProjections.get(sourceDecorations);
   if (!decorations) {
     decorations = decorationsByTimelineAnchor(sourceDecorations);
@@ -539,16 +540,17 @@ export function buildFlowerTimelineEntries(thread: FlowerThreadSnapshot | null |
       request: thread.input_request,
     });
   }
-  if (thread.error && trimString(thread.error.message)) {
+  const error = thread.error ?? (thread.status === 'failed' ? { message: '' } : null);
+  if (error && (thread.status === 'failed' || trimString(error.message))) {
     entries.push({
       type: 'error',
-      key: `error:${thread.error.code ?? 'run'}:${thread.error.message}`,
-      error: thread.error,
+      key: `error:${error.code ?? 'run'}:${error.message}`,
+      error,
     });
   }
   timelineProjections.set(thread.messages, {
     threadID: thread.thread_id, cursorID: activeCursorMessageID, decorations: sourceDecorations,
-    queued: thread.queued_turns, input, error: thread.error, entries,
+    queued: thread.queued_turns, input, error: thread.error, status: thread.status, entries,
   });
   return entries;
 }

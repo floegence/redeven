@@ -308,28 +308,15 @@ function messageHasUserRejectedTool(message: FlowerChatMessage): boolean {
   ));
 }
 
-function threadHasUserRejectedTool(
-  thread: FlowerThreadSnapshot | null | undefined,
-  runID = '',
-  turnID = '',
-): boolean {
-  return (thread?.messages ?? []).some((message) => (
-    (!runID || trimString(message.run_id) === trimString(runID))
-    && (!turnID || trimString(message.turn_id) === trimString(turnID))
-    && messageHasUserRejectedTool(message)
-  ));
-}
-
 function latestThreadFailureIsUserRejectedTool(thread: FlowerThreadSnapshot | null | undefined): boolean {
-  const latestFailedMessage = [...(thread?.messages ?? [])].reverse().find((message) => (
-    message.role === 'assistant' && message.status === 'error'
-  ));
-  return latestFailedMessage ? messageHasUserRejectedTool(latestFailedMessage) : false;
+  const latestAssistantMessage = [...(thread?.messages ?? [])].reverse().find(message => message.role === 'assistant');
+  return latestAssistantMessage ? messageHasUserRejectedTool(latestAssistantMessage) : false;
 }
 
 function runErrorNoticeVisible(thread: FlowerThreadSnapshot | null | undefined, error = thread?.error): boolean {
   const code = trimString(error?.code);
-  return Boolean(trimString(error?.message)) && code !== 'runtime_restarted' && code !== 'floret_turn_interrupted'
+  return (Boolean(trimString(error?.message)) || thread?.status === 'failed')
+    && code !== 'runtime_restarted' && code !== 'floret_turn_interrupted'
     && !(code === 'floret_engine_failed' && latestThreadFailureIsUserRejectedTool(thread));
 }
 
@@ -2255,7 +2242,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const modelErrorMessage = (error: unknown) => (
     error && typeof error === 'object' && 'code' in error && error.code === 'thread_image_model_unsupported'
       ? copy().settings.imageModelRequired
-      : getErrorMessage(error) || copy().chat.messageErrorFallback
+      : getErrorMessage(error) || copy().settings.autoSave.saveFailed
   );
   const handleModelTriggerKeyDown = (event: KeyboardEvent) => {
     if (event.key === 'Enter' || event.key === ' ' || event.key === 'ArrowDown' || event.key === 'ArrowUp') {
@@ -2336,7 +2323,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         } catch (error) {
           setSnapshot(previousSnapshot);
           if (selectedThreadDetailMatches(threadID)) {
-            notifyFutureDefaultModelError(getErrorMessage(error) || copy().chat.messageErrorFallback);
+            notifyFutureDefaultModelError(getErrorMessage(error) || copy().settings.autoSave.saveFailed);
           }
         }
       }
@@ -2379,7 +2366,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       ));
     } catch (error) {
       if (selectedThreadDetailMatches(threadID)) {
-        notifyComposerError(getErrorMessage(error) || copy().chat.messageErrorFallback);
+        notifyComposerError(getErrorMessage(error) || copy().settings.autoSave.saveFailed);
       }
     } finally {
       setPendingReasoningThreadIDs((current) => {
@@ -2576,12 +2563,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         return includeUnmappedMessage ? trimString(error?.message) : '';
     }
   };
-  const selectedThreadRunErrorMessage = createMemo(() => {
-    const thread = selectedThread();
-    const error = thread?.error;
-    if (trimString(error?.code) === 'floret_engine_failed' && latestThreadFailureIsUserRejectedTool(thread)) return '';
-    return presentRunError(error);
-  });
   const threadItemCache = new Map<string, { item: ReturnType<typeof projectFlowerThreadListItem>; sig: string }>();
   type ThreadDetailSource =
     | 'initial_load'
@@ -5801,8 +5782,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (flowerThreadIsStopping(threadCache().views.get(stoppingThreadID)?.thread ?? threadCache().summaries.get(stoppingThreadID))) return Promise.resolve();
     updateThreadIDMembership(setStoppingThreadIDs, stoppingThreadID, true);
     const request = (async () => {
+      const requestEpoch = liveTransport.connectionEpoch();
       try {
-        await props.adapter.stopThread(stoppingThreadID);
+        if (unconfirmedStops().has(stoppingThreadID)) {
+          beginThreadDetailDisplayCycle(stoppingThreadID);
+          const current = await requestThreadDetail(stoppingThreadID, 'user_action', true, true);
+          if (!current || surfaceDisposed || requestEpoch !== liveTransport.connectionEpoch()
+            || current.cancellation || !flowerThreadHasActiveTurnEvidence(current)) return;
+        }
+        await withFlowerRequestDeadline(() => props.adapter.stopThread(stoppingThreadID), copy().chat.stopUnconfirmed);
+        if (surfaceDisposed || requestEpoch !== liveTransport.connectionEpoch()) return;
         beginThreadDetailDisplayCycle(stoppingThreadID);
         const confirmed = await requestThreadDetail(stoppingThreadID, 'user_action', true, true);
         if (!confirmed || (!confirmed.cancellation && flowerThreadHasActiveTurnEvidence(confirmed))) {
@@ -5819,7 +5808,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         console.error('Flower stop request failed.', { threadID: stoppingThreadID, error });
         updateThreadIDMembership(setStoppingThreadIDs, stoppingThreadID, false);
         const current = threadCache().views.get(stoppingThreadID)?.thread;
-        if (!current?.cancellation) notifyThreadActionError(copy().chat.stopRequestFailed);
+        if (!surfaceDisposed && requestEpoch === liveTransport.connectionEpoch()
+          && !current?.cancellation && (!current || flowerThreadHasActiveTurnEvidence(current))) {
+          updateThreadIDMembership(setUnconfirmedStops, stoppingThreadID, true);
+          notifyThreadActionError(copy().chat.stopUnconfirmed);
+        }
       } finally {
         updateThreadIDMembership(setStoppingThreadIDs, stoppingThreadID, false);
         stopThreadRequests.delete(stoppingThreadID);
@@ -6988,7 +6981,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       setRetryingThreads(previous => new Set([...previous, threadID]));
       try {
         const requestEpoch = liveTransport.connectionEpoch();
-        if (selectedThread()?.current_execution?.turn_kind === 'context_compaction') {
+        const selectionSequence = threadLoadSequence;
+        beginThreadDetailDisplayCycle(threadID);
+        const current = await requestThreadDetail(threadID, 'user_action', true);
+        if (!current || surfaceDisposed || requestEpoch !== liveTransport.connectionEpoch()
+          || selectionSequence !== threadLoadSequence || selectedThreadID() !== threadID
+          || current.status !== 'failed' || current.error?.code === 'floret_effect_outcome_unknown') return;
+        if (current.current_execution?.turn_kind === 'context_compaction') {
           await executeCompactContextCommand();
           return;
         }
@@ -7017,7 +7016,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         <Button size="sm" variant="ghost" disabled={retryBlocked()} onClick={() => void retryContinuation()}>{copy().chat.retryReply}</Button>
         <Show when={code === 'chatgpt_usage_unavailable'}><a href="https://chatgpt.com/settings/usage" target="_blank" rel="noopener noreferrer" class="cursor-pointer whitespace-nowrap text-sm font-medium text-primary hover:underline">{copy().settings.dialog.chatGPT.manageUsage}</a></Show>
       </>
-    ) : code === 'model_context_unavailable' ? (
+    ) : code === 'model_context_unavailable' || code === 'floret_engine_failed' ? (
       <Button size="sm" variant="ghost" disabled={retryBlocked()} onClick={() => void retryContinuation()}>{copy().chat.retryReply}</Button>
     ) : contextFailure ? (
       <>
@@ -7029,6 +7028,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         <Button
           size="sm"
           variant="ghost"
+          disabled={retryBlocked()}
           onClick={() => void retryContinuation()}
         >
           {copy().chat.retryReply}
@@ -10181,7 +10181,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     message: Accessor<FlowerChatMessage>,
     block: Accessor<Extract<FlowerRenderableMessageBlock, { type: 'content' }>>,
     streaming: Accessor<boolean>,
-    failed: Accessor<boolean>,
     showCopyAction: Accessor<boolean>,
     copyText: Accessor<string>,
     thread: Accessor<FlowerThreadSnapshot | null | undefined>,
@@ -10249,14 +10248,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               ? 'flower-message-bubble-user'
               : 'flower-message-bubble-assistant',
             streaming() && 'flower-message-bubble-streaming',
-            failed() && 'flower-message-bubble-error',
           )}>
-            <Show when={failed()}>
-              <div class="flower-message-error-kicker">
-                <AlertTriangle class="h-3.5 w-3.5" />
-                <span>{copy().chat.messageErrorTitle}</span>
-              </div>
-            </Show>
             <StableContentBody />
           </div>
         )}
@@ -10419,7 +10411,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     message: Accessor<FlowerChatMessage>,
     block: Accessor<FlowerRenderableMessageBlock>,
     streamingBlockKey: Accessor<string>,
-    failed: Accessor<boolean>,
     copyText: Accessor<string>,
     assistantCopyBlockKey: Accessor<string>,
     viewportScope: FlowerScrollTailController,
@@ -10449,7 +10440,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 const showCopyAction = () => message().role === 'assistant'
                   && contentBlock().key === assistantCopyBlockKey();
                 const streaming = () => streamingBlockKey() === contentBlock().key;
-                return messageContentBubble(message, contentBlock, streaming, failed, showCopyAction, copyText, thread);
+                return messageContentBubble(message, contentBlock, streaming, showCopyAction, copyText, thread);
               }}
           </Show>
         )}
@@ -10476,36 +10467,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       && message().role === 'assistant'
       && message().active_cursor === true
     ));
-    const failed = createMemo(() => (
-      message().status === 'error'
-      && !messageHasUserRejectedTool(message())
-      && !threadHasUserRejectedTool(selectedThread(), message().run_id, message().turn_id)
-    ));
     const hasRenderableBlock = createMemo(() => entry().blocks.length > 0);
     const contextDisplay = createMemo(() => {
       const msg = message();
       if (msg.role !== 'user') return null;
       return parseChatMessageReferences(msg.references);
     });
-    const visible = createMemo(() => {
-      if (hasRenderableBlock()) return true;
-      if (contextDisplay()) return true;
-      if (activeCursor()) return true;
-      if (!failed()) return false;
-      return !selectedThreadRunErrorMessage();
-    });
-    const blocks = createMemo((): readonly FlowerRenderableMessageBlock[] => {
-      const placeholderBlock: FlowerRenderableMessageBlock | null = !hasRenderableBlock() && failed()
-        ? {
-            type: 'content',
-            key: `${message().id}:placeholder`,
-            block_index: -1,
-            block_type: 'text',
-            content: copy().chat.messageErrorFallback,
-          }
-        : null;
-      return placeholderBlock ? [placeholderBlock] : entry().blocks;
-    });
+    const visible = createMemo(() => hasRenderableBlock() || Boolean(contextDisplay()) || activeCursor());
+    const blocks = createMemo(() => entry().blocks);
     const blockKeys = createMemo(() => blocks().map((block) => block.key));
     const blocksByKey = createMemo(() => new Map(blocks().map((block) => [block.key, block] as const)));
     const streamingBlockKey = createMemo(() => activeCursor() ? lastContentBlockKey(blocks()) : '');
@@ -10603,7 +10572,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                           message,
                           value,
                           streamingBlockKey,
-                          failed,
                           copyText,
                           assistantCopyBlockKey,
                           viewportScope,

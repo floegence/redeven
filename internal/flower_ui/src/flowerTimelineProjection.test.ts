@@ -1003,6 +1003,15 @@ describe('buildFlowerTimelineEntries', () => {
     }
   });
 
+  it('keeps failure at turn level and invalidates a cached status-only transition', () => {
+    const messages = [{ id: 'empty', role: 'assistant' as const, content: '', status: 'error' as const, created_at_ms: 2 }];
+    const initial = thread({ messages, status: 'success' });
+    expect(buildFlowerTimelineEntries(initial)).toEqual([]);
+    const failed = buildFlowerTimelineEntries({ ...initial, status: 'failed' });
+    expect(failed.map(entry => entry.type)).toEqual(['error']);
+    expect(buildFlowerTimelineEntries(initial)).toEqual([]);
+  });
+
   it('appends waiting input and thread errors as transcript entries', () => {
     const entries = buildFlowerTimelineEntries(thread({
       status: 'waiting_user',

@@ -1,5 +1,11 @@
 # Redeven OKF Update Log
 
+## 2026-10-15: Terminal failure and manual recovery
+
+- Adopt published Floret v7.40.3 for typed Provider timeout classification and retained finalization diagnostics.
+- Keep admitted messages normal and present one turn-level failure with recovery; preserve separate unadmitted send recovery.
+- Bound [Stop confirmation](ai/floret-thread-runtime.md), retain navigation and drafts, and expose canonical [manual recovery](ui/flower-failure-recovery.md) for historical engine failures without replaying unknown effects.
+
 ## 2026-10-15: Contextual tool failure details
 
 - Show operation content and available results before one [tool failure detail](ui/flower-terminal-activity.md), without repeating the error in row summaries or empty-output notices.
