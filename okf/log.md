@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-15: Animated edit argument generation
+
+- Animate existing edit icons during confirmed live [argument generation](ui/flower-output-progress.md), respecting reduced motion and keeping approval waits and completed results static.
+
 ## 2026-10-15: Quieter Flower reading surfaces
 
 - Use transparent [Markdown tables](ui/flower-message-appearance.md) with horizontal separators and preserved column alignment and local scrolling.

@@ -64,6 +64,12 @@ failures, refusal, cancellation or missing actual statistics never inherit
 preview counts. A typed `noop` result renders zero even when JSON omits zero
 integer fields.
 
+While live presentation is confirmed, argument-generation rows animate the
+tool's existing semantic icon. This is generation feedback, not an Activity
+running status or evidence of dispatch. Reduced-motion preferences suppress
+the animation. Unconfirmed live transport, approval waits and settled results
+keep static icons; confirmed execution uses the normal running animation.
+
 Floret's thread actor owns the sole current preview snapshot. Reconnect and
 canonical refresh retain valid in-memory observations; restart does not recover
 them. [Live current publication](flower-live-timeline.md) retains its sole 50 ms
