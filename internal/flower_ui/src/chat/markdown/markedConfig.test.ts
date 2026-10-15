@@ -40,6 +40,14 @@ describe('createFlowerMarkdownRenderer', () => {
     expect(html).not.toContain('<strong>');
   });
 
+  it('keeps relative local report links available for host preview interception', () => {
+    const html = createMarked().parse('[Full report](./report.md) and [notes](../notes.txt)');
+
+    expect(html).toContain('href="./report.md"');
+    expect(html).toContain('href="../notes.txt"');
+    expect(html).not.toContain('target="_blank"');
+  });
+
   it('preserves the first fence language for highlighting, including aliases and escaped input', () => {
     for (const [info, language] of [['Python title=weather.py', 'python'], ['c++', 'c++'], ['c#', 'c#'], ['ts {1,2}', 'ts']]) {
       expect(createMarked().parse('```' + info + '\ncode\n```')).toContain(`data-flower-code-language="${language}"`);

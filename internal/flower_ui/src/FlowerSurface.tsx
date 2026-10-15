@@ -10086,6 +10086,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           mediaEnabled={message().role === 'assistant'}
           resolveMedia={resolveMessageMedia()}
           onOpenMediaLink={openMessageMediaLink()}
+          onOpenMediaLinkError={error => notifyThreadActionError(getErrorMessage(error))}
           copyCodeLabel={copy().chat.copyCode}
           codeCopiedLabel={copy().chat.codeCopied}
         />

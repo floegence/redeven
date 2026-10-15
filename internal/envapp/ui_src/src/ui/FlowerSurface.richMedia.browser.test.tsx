@@ -319,6 +319,27 @@ describe('Flower inline media', () => {
     await page.screenshot({ path: './__screenshots__/redeven-flower-rich-media-mobile.png' });
   });
 
+  it('opens local Markdown report links through the host file-preview window', async () => {
+    await page.viewport(1200, 900);
+    const reportPath = '/workspace/reports/openai-cache-audit/report.md';
+    const seed = thread({ thread_id: 'markdown-report-link', title: 'Markdown report', working_dir: '/workspace/reports/openai-cache-audit', messages: [{
+      id: 'report-reply', role: 'assistant', status: 'complete', turn_id: 'report-turn', created_at_ms: 2,
+      content: '[View the full report](./report.md)',
+    }] });
+    const openMessageFile = vi.fn(async () => undefined);
+    const runtime = renderSurfaceWithAdapter({ ...adapter(true), listThreads: async () => [seed],
+      loadThread: async () => liveBootstrap(seed, 1), openMessageFile,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="markdown-report-link"] button')));
+    runtime.querySelector<HTMLButtonElement>('[data-thread-id="markdown-report-link"] button')!.click();
+    await waitFor(() => Boolean(runtime.querySelector('a.flower-chat-md-link')));
+    const link = runtime.querySelector<HTMLAnchorElement>('a.flower-chat-md-link')!;
+    await userEvent.click(link);
+    await vi.waitFor(() => expect(openMessageFile).toHaveBeenCalledWith(expect.objectContaining({ path: reportPath, action: 'preview' })));
+    expect(link.getAttribute('href')).toBe('./report.md');
+  });
+
   it('keeps media nodes and their resource resolution stable through streaming and completion', async () => {
     const root = document.createElement('div'); document.body.appendChild(root);
     const prefix = '![Clip](/project/demo.mp4)\n\n```html preview\n<button>Preview</button>\n```\n\n';
