@@ -4976,6 +4976,19 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       requestFrame: requestTranscriptAnimationFrame,
       cancelFrame: cancelTranscriptAnimationFrame,
       validateAppend: (envelope) => {
+        if (envelope.subagent_current) {
+          const active = untrack(activeSubagentDetail);
+          if (!active?.detail || active.parentThreadID !== envelope.thread_id
+            || active.childThreadID !== envelope.subagent_current.thread_id) return false;
+          try {
+            const projected = projectSubagentDetailThread({ ...active.detail, current: envelope.subagent_current });
+            if (!projected) return false;
+            buildFlowerTimelineEntries(projected);
+            return true;
+          } catch {
+            return false;
+          }
+        }
         const current = envelope.current;
         const base = current ? threadCache().views.get(current.thread_id)?.thread : undefined;
         if (!base || !current) return false;
@@ -11054,8 +11067,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         </div>
       );
     }
-    if (selectedThreadLoading() || (selectedThreadID() && !selectedThread())) return threadLoadingState();
     if (selectedThread()) return threadEmptyState();
+    if (selectedThreadLoading() || selectedThreadID()) return threadLoadingState();
     if (props.embeddedConversation?.emptyContent && !needsSetup() && !surfaceWarmupActive()) return props.embeddedConversation.emptyContent;
     if (showSetupWelcome()) return (
       <FlowerSetupWelcome copy={copy()} actions={noModelProfileSetupActions()} onOpenSettings={openSettings}

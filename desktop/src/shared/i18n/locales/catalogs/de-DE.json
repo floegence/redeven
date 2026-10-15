@@ -683,13 +683,9 @@
       "citationSources": "Quellen",
       "citationCopySources": "Quellen kopieren",
       "citationUnavailable": "Quelle nicht verfügbar",
-      "queuedEdit": "Nachricht in Warteschlange bearbeiten",
-      "queuedEditSave": "Änderungen speichern",
-      "queuedEditRetry": "Speichern erneut versuchen",
-      "queuedEditCancel": "Zurück zum Entwurf",
-      "queuedEditUnavailable": "Nachrichten in der Warteschlange können derzeit nicht bearbeitet werden.",
-      "queuedEditConflict": "Diese Nachricht wurde geändert oder ihre Ausführung hat begonnen. Ihre Änderungen bleiben erhalten.",
-      "queuedEditUnknown": "Das Speicherergebnis ist unklar. Wiederholen Sie denselben Speichervorgang, um das Ergebnis zu prüfen."
+      "queuedEdit": "Ins Eingabefeld zurückholen",
+      "queueTakeBackConflict": "Diese Nachricht wurde bereits gestartet oder geändert. Aktualisiere die Ansicht und versuche es erneut.",
+      "queueTakeBackUnknown": "Die Nachricht ist wieder im Eingabefeld. Das Entfernen aus der Warteschlange konnte nicht bestätigt werden. Prüfe die Warteschlange vor dem Senden."
     },
     "threadList": {
       "title": "Unterhaltungen",

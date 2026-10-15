@@ -1,14 +1,13 @@
 package ai
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
-	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -232,6 +231,19 @@ type flowerLiveEncodedBatch struct {
 	id                  string
 	err                 error
 	encodingDiagnostics *flowerLiveEncodingDiagnostics
+	current             *flowerLiveCurrentComparison
+}
+
+// Comparison data is frozen once, outside subscriber fanout and its lock. The
+// fingerprint includes every public field except version and growing text.
+type flowerLiveCurrentComparison struct {
+	threadID    string
+	routeID     string
+	subagent    bool
+	version     uint64
+	fingerprint [sha256.Size]byte
+	texts       []string
+	independent bool
 }
 
 type flowerLiveEncodingDiagnostics struct {
@@ -258,13 +270,11 @@ type flowerLiveSubscriber struct {
 	id              uint64
 	endpointID      string
 	userPublicID    string
-	queue           chan *flowerLiveEncodedBatch
+	queue           []*flowerLiveEncodedBatch
 	media           chan *flowerLiveEncodedBatch
-	queueLimit      int
 	queuedBytes     int
 	mediaBytes      int
 	initializing    bool
-	buffered        []*flowerLiveEncodedBatch
 	initial         []*flowerLiveEncodedBatch
 	active          *flowerLiveEncodedBatch
 	activeIndex     int
@@ -310,7 +320,7 @@ func (s *Service) SubscribeFlowerLiveStream(ctx context.Context, meta *session.M
 		observerID: rand.Text(), observerContext: ctx,
 		id: s.flowerLiveSubscriberSeq, endpointID: endpointID, userPublicID: userPublicID,
 		media: make(chan *flowerLiveEncodedBatch, 1), wake: make(chan struct{}, 1),
-		queue: make(chan *flowerLiveEncodedBatch, flowerLiveSubscriberBatchLimit), queueLimit: flowerLiveSubscriberBatchLimit, initializing: true,
+		initializing: true,
 	}
 	s.flowerLiveSubscribers[subscriber.id] = subscriber
 	s.flowerLiveSubscribersByEndpoint[endpointID]++
@@ -424,23 +434,9 @@ func finalizeFlowerLiveSubscriberInitializationLocked(service *Service, subscrib
 	if service == nil || subscriber == nil || subscriber.closed {
 		return
 	}
-	// Initialization preserves its complete baseline before buffered live work.
-	// All of these envelopes were budgeted when retained, rather than after the
-	// potentially large baseline had already been built.
-	initialQueueCapacity := len(subscriber.initial) + len(subscriber.buffered)
-	if initialQueueCapacity > cap(subscriber.queue) {
-		subscriber.queue = make(chan *flowerLiveEncodedBatch, initialQueueCapacity)
-	}
-	for _, batch := range subscriber.initial {
-		subscriber.queue <- batch
-	}
-	for _, batch := range subscriber.buffered {
-		subscriber.queue <- batch
-	}
-	subscriber.initial = nil
-	subscriber.buffered = nil
+	// The complete, byte-budgeted baseline remains a prefix. Concurrent live
+	// work uses the same bounded FIFO during and after initialization.
 	subscriber.initializing = false
-	subscriber.queueLimit = flowerLiveSubscriberBatchLimit
 	wakeFlowerLiveSubscriberLocked(subscriber)
 }
 
@@ -631,7 +627,52 @@ func newFlowerLiveEncodedBatch(envelope FlowerLiveStreamEnvelope) *flowerLiveEnc
 			},
 		}
 	}
-	return &flowerLiveEncodedBatch{kind: envelope.Kind, data: data, id: rand.Text()}
+	return &flowerLiveEncodedBatch{kind: envelope.Kind, data: data, id: rand.Text(), current: compareFlowerLiveCurrent(envelope)}
+}
+
+func compareFlowerLiveCurrent(envelope FlowerLiveStreamEnvelope) *flowerLiveCurrentComparison {
+	if envelope.Kind != FlowerLiveStreamThreadBatch || (envelope.Current == nil) == (envelope.SubagentCurrent == nil) {
+		return nil
+	}
+	current := envelope.Current
+	if current == nil {
+		current = envelope.SubagentCurrent
+	}
+	comparison := &flowerLiveCurrentComparison{
+		threadID: current.ThreadID.String(), routeID: envelope.ThreadID, subagent: envelope.SubagentCurrent != nil,
+		version: current.ViewVersion,
+		independent: envelope.ObserverID == "" && envelope.Summaries == nil && envelope.Subagents == nil &&
+			envelope.ContextUsage == nil && envelope.ContextCompactions == nil && envelope.TimelineDecorations == nil &&
+			envelope.ReadStatus == nil && envelope.ComputerFrame == nil && envelope.ComputerStatus == nil,
+	}
+	if current.ThreadID == "" || current.Activity != flruntime.ThreadActivityActive || current.TurnID == "" || current.RunID == "" ||
+		current.ViewVersion == 0 || current.ViewVersion > 1<<53-1 {
+		return comparison
+	}
+	normalized := *current
+	normalized.ViewVersion = 0
+	normalized.Items = append([]flruntime.ThreadItem(nil), current.Items...)
+	for index, item := range current.Items {
+		if !item.Live || item.TurnID != current.TurnID || item.RunID != current.RunID ||
+			(item.Kind != flruntime.ThreadItemAssistant && item.Kind != flruntime.ThreadItemThinking) || item.Text == "" {
+			continue
+		}
+		comparison.texts = append(comparison.texts, item.Text)
+		// Keep the eligible positions distinct from absent/empty text fields.
+		normalized.Items[index].Text = "\x00"
+	}
+	if comparison.subagent {
+		envelope.SubagentCurrent = &normalized
+	} else {
+		envelope.Current = &normalized
+	}
+	data, err := json.Marshal(envelope)
+	if err != nil {
+		comparison.texts = nil
+		return comparison
+	}
+	comparison.fingerprint = sha256.Sum256(data)
+	return comparison
 }
 
 func flowerLiveCurrentEncodingContext(current *flruntime.ThreadView) *flowerLiveCurrentEncodingDiagnostics {
@@ -736,53 +777,35 @@ func enqueueFlowerLiveSubscriberLocked(service *Service, subscriber *flowerLiveS
 	if !validateFlowerLiveBatchLocked(service, subscriber, batch) {
 		return false
 	}
-	if subscriber.initializing {
-		if count := len(subscriber.buffered); count > 0 && flowerLiveTextAppend(subscriber.buffered[count-1], batch) {
-			releaseFlowerLiveBatchLocked(service, subscriber, subscriber.buffered[count-1])
-			subscriber.buffered = subscriber.buffered[:count-1]
+	// Remove an unsent predecessor only across independent thread currents.
+	// Same-thread semantic changes and auxiliary messages are ordering barriers.
+	for index := len(subscriber.queue) - 1; index >= 0; index-- {
+		previous := subscriber.queue[index]
+		if flowerLiveTextAppend(previous, batch) {
+			releaseFlowerLiveBatchLocked(service, subscriber, previous)
+			copy(subscriber.queue[index:], subscriber.queue[index+1:])
+			last := len(subscriber.queue) - 1
+			subscriber.queue[last] = nil
+			subscriber.queue = subscriber.queue[:last]
+			break
 		}
-		if len(subscriber.buffered) >= flowerLiveSubscriberBatchLimit {
-			closeFlowerLiveSubscriberLocked(service, subscriber, flowerLiveSubscriberCloseInitQueueLimit)
-			return false
+		if previous.current == nil || batch.current == nil || !previous.current.independent || !batch.current.independent ||
+			previous.current.threadID == batch.current.threadID {
+			break
 		}
-		if !retainFlowerLiveBatchLocked(service, subscriber, batch) {
-			return false
+	}
+	if len(subscriber.queue) >= flowerLiveSubscriberBatchLimit {
+		reason := flowerLiveSubscriberCloseBatchQueueLimit
+		if subscriber.initializing {
+			reason = flowerLiveSubscriberCloseInitQueueLimit
 		}
-		subscriber.buffered = append(subscriber.buffered, batch)
-		return true
-	}
-	return enqueueFlowerLiveSubscriberDirectLocked(service, subscriber, batch)
-}
-
-func enqueueFlowerLiveSubscriberDirectLocked(service *Service, subscriber *flowerLiveSubscriber, batch *flowerLiveEncodedBatch) bool {
-	if !validateFlowerLiveBatchLocked(service, subscriber, batch) {
-		return false
-	}
-	queueLimit := subscriber.queueLimit
-	if queueLimit <= 0 {
-		queueLimit = flowerLiveSubscriberBatchLimit
-	}
-	// Only the unsent tail can be replaced. Next consumes this channel under the
-	// same lock, so an envelope whose first fragment was sent is never changed.
-	queued := make([]*flowerLiveEncodedBatch, 0, len(subscriber.queue))
-	for len(subscriber.queue) > 0 {
-		queued = append(queued, <-subscriber.queue)
-	}
-	if len(queued) > 0 && flowerLiveTextAppend(queued[len(queued)-1], batch) {
-		releaseFlowerLiveBatchLocked(service, subscriber, queued[len(queued)-1])
-		queued = queued[:len(queued)-1]
-	}
-	for _, pending := range queued {
-		subscriber.queue <- pending
-	}
-	if len(queued) >= queueLimit {
-		closeFlowerLiveSubscriberLocked(service, subscriber, flowerLiveSubscriberCloseBatchQueueLimit)
+		closeFlowerLiveSubscriberLocked(service, subscriber, reason)
 		return false
 	}
 	if !retainFlowerLiveBatchLocked(service, subscriber, batch) {
 		return false
 	}
-	subscriber.queue <- batch
+	subscriber.queue = append(subscriber.queue, batch)
 	wakeFlowerLiveSubscriberLocked(subscriber)
 	return true
 }
@@ -790,64 +813,27 @@ func enqueueFlowerLiveSubscriberDirectLocked(service *Service, subscriber *flowe
 // Text growth may be coalesced only when every other public envelope field is
 // unchanged. Tool, interaction, lifecycle and first-item boundaries stay ordered.
 func flowerLiveTextAppend(previous, next *flowerLiveEncodedBatch) bool {
-	if previous.kind != FlowerLiveStreamThreadBatch || next.kind != FlowerLiveStreamThreadBatch {
-		return false
-	}
-	var before, after map[string]any
-	decode := func(data []byte, value *map[string]any) error {
-		decoder := json.NewDecoder(bytes.NewReader(data))
-		decoder.UseNumber()
-		return decoder.Decode(value)
-	}
-	if decode(previous.data, &before) != nil || decode(next.data, &after) != nil || before["subagent_current"] != nil || after["subagent_current"] != nil {
-		return false
-	}
-	oldCurrent, oldOK := before["current"].(map[string]any)
-	newCurrent, newOK := after["current"].(map[string]any)
-	if !oldOK || !newOK || newCurrent["activity"] != "active" || newCurrent["turn_id"] == nil || newCurrent["run_id"] == nil {
-		return false
-	}
-	oldNumber, oldOK := oldCurrent["view_version"].(json.Number)
-	newNumber, newOK := newCurrent["view_version"].(json.Number)
-	oldVersion, oldErr := oldNumber.Int64()
-	newVersion, newErr := newNumber.Int64()
-	if !oldOK || !newOK || oldErr != nil || newErr != nil || newVersion <= oldVersion || newVersion > 1<<53-1 {
-		return false
-	}
-	oldItems, oldOK := oldCurrent["items"].([]any)
-	newItems, newOK := newCurrent["items"].([]any)
-	if !oldOK || !newOK || len(oldItems) != len(newItems) {
+	before, after := previous.current, next.current
+	if before == nil || after == nil || len(before.texts) == 0 || len(before.texts) != len(after.texts) ||
+		before.threadID != after.threadID || before.routeID != after.routeID || before.subagent != after.subagent ||
+		after.version <= before.version || before.fingerprint != after.fingerprint {
 		return false
 	}
 	changed := false
-	for index, value := range newItems {
-		oldItem, oldOK := oldItems[index].(map[string]any)
-		newItem, newOK := value.(map[string]any)
-		if !oldOK || !newOK {
+	for index, text := range after.texts {
+		if !strings.HasPrefix(text, before.texts[index]) {
 			return false
 		}
-		if oldItem["text"] == newItem["text"] {
-			continue
-		}
-		oldText, oldOK := oldItem["text"].(string)
-		newText, newOK := newItem["text"].(string)
-		if !oldOK || !newOK || !strings.HasPrefix(newText, oldText) || newItem["live"] != true ||
-			(newItem["kind"] != "assistant" && newItem["kind"] != "thinking") ||
-			newItem["turn_id"] != newCurrent["turn_id"] || newItem["run_id"] != newCurrent["run_id"] {
-			return false
-		}
-		newItem["text"] = oldText
-		changed = true
+		changed = changed || text != before.texts[index]
 	}
-	newCurrent["view_version"] = oldNumber
-	return changed && reflect.DeepEqual(before, after)
+	return changed
 }
 
 func closeFlowerLiveSubscriberLocked(service *Service, subscriber *flowerLiveSubscriber, reason flowerLiveSubscriberCloseReason, failedBatch ...*flowerLiveEncodedBatch) {
 	if subscriber == nil || subscriber.closed {
 		return
 	}
-	queuedBatches := len(subscriber.queue) + len(subscriber.buffered) + len(subscriber.initial)
+	queuedBatches := len(subscriber.queue) + len(subscriber.initial)
 	queuedBytes := subscriber.queuedBytes + subscriber.mediaBytes
 	subscriber.closed = true
 	if subscriber.viewerCancel != nil {
@@ -861,12 +847,9 @@ func closeFlowerLiveSubscriberLocked(service *Service, subscriber *flowerLiveSub
 	service.flowerLiveQueuedBytes -= subscriber.queuedBytes + subscriber.mediaBytes
 	subscriber.queuedBytes = 0
 	subscriber.mediaBytes = 0
-	subscriber.buffered = nil
 	subscriber.initial = nil
 	subscriber.active = nil
-	for len(subscriber.queue) > 0 {
-		<-subscriber.queue
-	}
+	subscriber.queue = nil
 	delete(service.flowerLiveSubscribers, subscriber.id)
 	if service.flowerLiveSubscribersByEndpoint[subscriber.endpointID] > 0 {
 		service.flowerLiveSubscribersByEndpoint[subscriber.endpointID]--
@@ -900,7 +883,6 @@ func closeFlowerLiveSubscriberLocked(service *Service, subscriber *flowerLiveSub
 	case <-subscriber.media:
 	default:
 	}
-	close(subscriber.queue)
 	wakeFlowerLiveSubscriberLocked(subscriber)
 }
 
@@ -966,8 +948,15 @@ func (s *FlowerLiveStreamSubscription) Next(ctx context.Context) (*FlowerLiveStr
 		}
 		if subscriber.active == nil {
 			// Lifecycle work always wins over optional lossy media.
-			if len(subscriber.queue) > 0 {
-				subscriber.active = <-subscriber.queue
+			if len(subscriber.initial) > 0 {
+				subscriber.active = subscriber.initial[0]
+				subscriber.initial[0] = nil
+				subscriber.initial = subscriber.initial[1:]
+				subscriber.activeAccounted = true
+			} else if len(subscriber.queue) > 0 {
+				subscriber.active = subscriber.queue[0]
+				subscriber.queue[0] = nil
+				subscriber.queue = subscriber.queue[1:]
 				subscriber.activeAccounted = true
 			} else {
 				select {

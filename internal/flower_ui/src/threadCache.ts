@@ -268,9 +268,13 @@ function createCache(
       )),
     };
     const next = new Map(views);
-    next.set(id, { view: mergedView, usedAt: clock + 1 });
+    // Live traffic is not a user visit. Background updates cannot displace
+    // the displayed thread or outrank previously visited conversations.
+    next.set(id, { view: mergedView, usedAt: views.get(id)?.usedAt ?? (id === selectedId ? clock + 1 : 0) });
     while (next.size > MAX_VIEWS) {
-      const oldest = [...next.entries()].sort((left, right) => left[1].usedAt - right[1].usedAt)[0];
+      const oldest = [...next.entries()]
+        .filter(([candidateID]) => candidateID !== selectedId)
+        .sort((left, right) => left[1].usedAt - right[1].usedAt)[0];
       if (!oldest) break;
       next.delete(oldest[0]);
     }
@@ -346,7 +350,6 @@ function createCache(
       next.set(threadID, {
         ...current,
         view: { ...current.view, thread: retainThreadPresentation(current.view.thread, adjunctOnly(update(current.view.thread))) },
-        usedAt: clock + 1,
       });
       return createCache(selectedId, summaries, next, clock + 1);
     },

@@ -1,5 +1,11 @@
 # Redeven OKF Update Log
 
+## 2026-10-15: Continuous Flower presentation during live recovery
+
+- Protect selected details in the bounded [thread cache](ui/flower-live-timeline.md), retain valid empty conversations during refresh, and separate baseline bytes from the live queue count.
+- Unify root and child unsent text coalescing across independent currents while retaining semantic barriers, started fragments, and bounded overload recovery. Add repeated reconnect checks to the browser and isolated Electron [renderer evidence](ui/flower-streaming-stability.md).
+- Align Desktop queued-message take-back catalogs with the shared source and Env App, as required by the cross-renderer localization contract.
+
 ## 2026-10-15: Queued messages return to the ordinary composer
 
 - Replace the separate queue editor with [take-back to the input box](ui/flower-turn-launcher.md), overwriting the current draft with complete text, references and staged attachment copies. Adopt published Floret v7.35.0 conditional queue removal; preserve captured snapshots and isolate delayed completion to its original conversation.

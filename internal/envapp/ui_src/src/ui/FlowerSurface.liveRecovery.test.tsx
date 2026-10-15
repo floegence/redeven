@@ -49,6 +49,57 @@ function failedStream(summaries: readonly FlowerThreadSnapshot[]) {
 }
 
 describe('Flower workspace synchronization recovery', () => {
+  it('retains the displayed transcript while a reconnect delivers more baselines than the detail cache', async () => {
+    const selected = thread({ thread_id: 'thread-selected-baseline', status: 'running' });
+    const summaries = [selected, ...Array.from({ length: 23 }, (_, index) => thread({ thread_id: `thread-background-${index}`, title: `Background ${index}`, status: 'running' }))];
+    const disconnect = deferred<void>(); const publishBaselines = deferred<void>(); const refresh = deferred<ReturnType<typeof liveBootstrap>>();
+    let connections = 0;
+    const loadThread = vi.fn(async () => connections > 1 ? refresh.promise : liveBootstrap(selected, 9));
+    const surface = renderSurfaceWithAdapter({
+      ...adapter(true), listThreads: vi.fn(async () => summaries), loadThread,
+      connectLiveStream: async function* (input): AsyncIterable<FlowerLiveStreamEnvelope> {
+        const connection = ++connections;
+        yield { schema_version: 1, kind: 'ready', summaries };
+        if (connection === 1) { await disconnect.promise; return; }
+        await publishBaselines.promise;
+        for (const summary of summaries) yield { schema_version: 1, kind: 'thread.batch', thread_id: summary.thread_id, current: runtimeCurrentView(summary, 10) };
+        await waitForAbort(input);
+      },
+    });
+    await waitFor(() => Boolean(surface.querySelector(`[data-thread-id="${selected.thread_id}"] button`)));
+    selectThread(surface, selected.thread_id);
+    await waitFor(() => surface.textContent?.includes('Plan deploy') ?? false);
+    const message = surface.querySelector('[data-flower-message-id]');
+    disconnect.resolve();
+    await waitFor(() => connections === 2);
+    publishBaselines.resolve();
+    await flush(); await flush();
+    expect(surface.querySelector('.flower-thread-loading')).toBeNull();
+    expect(surface.textContent).toContain('Plan deploy');
+    expect(surface.querySelector('[data-flower-message-id]')).toBe(message);
+    refresh.resolve(liveBootstrap(selected, 10));
+    await flush();
+    expect(loadThread).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps a valid empty conversation visible during a pending background refresh', async () => {
+    const empty = thread({ thread_id: 'thread-empty-refresh', messages: [], status: 'idle', active_run_id: undefined });
+    const stream = failedStream([empty]);
+    const refresh = deferred<ReturnType<typeof liveBootstrap>>();
+    const loadThread = vi.fn(async () => stream.attempts.length > 1 ? refresh.promise : liveBootstrap(empty, 9));
+    const surface = renderSurfaceWithAdapter({ ...adapter(true), listThreads: vi.fn(async () => [empty]), loadThread, connectLiveStream: stream.connectLiveStream });
+    await waitFor(() => Boolean(surface.querySelector(`[data-thread-id="${empty.thread_id}"] button`)));
+    selectThread(surface, empty.thread_id);
+    await waitFor(() => loadThread.mock.calls.length === 1 && !surface.querySelector('.flower-thread-loading'));
+    stream.fail();
+    await waitFor(() => Boolean(surface.querySelector('.flower-workspace-sync button')));
+    (surface.querySelector('.flower-workspace-sync button') as HTMLButtonElement).click();
+    await waitFor(() => loadThread.mock.calls.length === 2);
+    expect(surface.querySelector('.flower-thread-loading')).toBeNull();
+    expect(surface.querySelector<HTMLTextAreaElement>('.flower-composer textarea')?.disabled).toBe(false);
+    refresh.resolve(liveBootstrap(empty, 10));
+  });
+
   it('keeps a workspace failure visible without selection and through successful detail reads and navigation', async () => {
     const first = thread({ thread_id: 'thread-sync-first', title: 'First conversation' });
     const second = thread({ thread_id: 'thread-sync-second', title: 'Second conversation' });

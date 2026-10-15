@@ -31,7 +31,7 @@ func TestFlowerLiveEncodingFailureRetainsCauseAndLogsSafeCurrentContext(t *testi
 			var logs bytes.Buffer
 			svc.log = slog.New(slog.NewJSONHandler(&logs, nil))
 			subscriber := &flowerLiveSubscriber{
-				id: 1, endpointID: "env-encoding-diagnostic", queue: make(chan *flowerLiveEncodedBatch, flowerLiveSubscriberBatchLimit),
+				id: 1, endpointID: "env-encoding-diagnostic", queue: make([]*flowerLiveEncodedBatch, 0, flowerLiveSubscriberBatchLimit),
 			}
 			svc.flowerLiveSubscribers[subscriber.id] = subscriber
 			svc.flowerLiveSubscribersByEndpoint[subscriber.endpointID] = 1
@@ -1005,12 +1005,12 @@ func TestFlowerLiveStreamGlobalQueuedReferenceBudget(t *testing.T) {
 	svc := newFlowerLiveMemoryTestService()
 	batch := &flowerLiveEncodedBatch{data: make([]byte, 1<<20)}
 	for index := 0; index < flowerLiveGlobalQueuedByteLimit/(1<<20); index++ {
-		subscriber := &flowerLiveSubscriber{queue: make(chan *flowerLiveEncodedBatch, flowerLiveSubscriberBatchLimit)}
+		subscriber := &flowerLiveSubscriber{queue: make([]*flowerLiveEncodedBatch, 0, flowerLiveSubscriberBatchLimit)}
 		if !enqueueFlowerLiveSubscriberLocked(svc, subscriber, batch) {
 			t.Fatalf("enqueue %d was rejected before the global budget", index+1)
 		}
 	}
-	overflow := &flowerLiveSubscriber{queue: make(chan *flowerLiveEncodedBatch, flowerLiveSubscriberBatchLimit)}
+	overflow := &flowerLiveSubscriber{queue: make([]*flowerLiveEncodedBatch, 0, flowerLiveSubscriberBatchLimit)}
 	if enqueueFlowerLiveSubscriberLocked(svc, overflow, batch) {
 		t.Fatal("enqueue beyond the global queued reference budget succeeded")
 	}
@@ -1022,8 +1022,7 @@ func TestFlowerLiveStreamGlobalQueuedReferenceBudget(t *testing.T) {
 func TestFlowerLiveStreamOversizedEnvelopeStopsInvalidReconnect(t *testing.T) {
 	svc := newFlowerLiveMemoryTestService()
 	subscriber := &flowerLiveSubscriber{
-		id: 1, endpointID: "env_live_oversized", queue: make(chan *flowerLiveEncodedBatch, flowerLiveSubscriberBatchLimit),
-		queueLimit: flowerLiveSubscriberBatchLimit,
+		id: 1, endpointID: "env_live_oversized", queue: make([]*flowerLiveEncodedBatch, 0, flowerLiveSubscriberBatchLimit),
 	}
 	svc.flowerLiveSubscribers[subscriber.id] = subscriber
 	svc.flowerLiveSubscribersByEndpoint[subscriber.endpointID] = 1
@@ -1046,8 +1045,7 @@ func TestFlowerLiveStreamInitializationKeepsLargeBaselineBeforeReady(t *testing.
 	svc := newFlowerLiveMemoryTestService()
 	subscriber := &flowerLiveSubscriber{
 		id: 1, endpointID: "env_live_large_baseline", initializing: true,
-		queue:      make(chan *flowerLiveEncodedBatch, flowerLiveSubscriberBatchLimit),
-		queueLimit: flowerLiveSubscriberBatchLimit,
+		queue: make([]*flowerLiveEncodedBatch, 0, flowerLiveSubscriberBatchLimit),
 	}
 	ready := newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamReady})
 	baselines := make([]*flowerLiveEncodedBatch, 24)
@@ -1070,10 +1068,10 @@ func TestFlowerLiveStreamInitializationKeepsLargeBaselineBeforeReady(t *testing.
 	if subscriber.closed || subscriber.initializing {
 		t.Fatal("large baseline initialization closed or left subscriber initializing")
 	}
-	if got, want := len(subscriber.queue), 1+len(baselines); got != want {
+	if got, want := len(subscriber.initial), 1+len(baselines); got != want {
 		t.Fatalf("queued initialization frames=%d, want %d", got, want)
 	}
-	if first := <-subscriber.queue; first != ready {
+	if first := subscriber.initial[0]; first != ready {
 		t.Fatal("ready frame was not retained as the first initialization frame")
 	}
 }
@@ -1281,11 +1279,11 @@ func TestComputerViewerRejectsAnotherObserverOwner(t *testing.T) {
 func TestModelDirectoryNotificationContainsNoScopedMetadata(t *testing.T) {
 	svc := newFlowerLiveMemoryTestService()
 	for i := uint64(1); i <= 2; i++ {
-		svc.flowerLiveSubscribers[i] = &flowerLiveSubscriber{id: i, endpointID: fmt.Sprint(i), queue: make(chan *flowerLiveEncodedBatch, flowerLiveSubscriberBatchLimit)}
+		svc.flowerLiveSubscribers[i] = &flowerLiveSubscriber{id: i, endpointID: fmt.Sprint(i), queue: make([]*flowerLiveEncodedBatch, 0, flowerLiveSubscriberBatchLimit)}
 	}
 	svc.publishModelDirectoryChanged()
 	for _, subscriber := range svc.flowerLiveSubscribers {
-		batch := <-subscriber.queue
+		batch := subscriber.queue[0]
 		var decoded map[string]any
 		if err := json.Unmarshal(batch.data, &decoded); err != nil {
 			t.Fatal(err)

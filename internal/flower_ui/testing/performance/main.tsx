@@ -17,7 +17,8 @@ function setup() {
   const fixture = streamingFixture(Number(query.get('messages') || 72), Number(query.get('tools') || 20));
   const root = document.getElementById('root')!;
   root.style.height = '100vh';
-  const dispose = render(() => <FloeProvider><FlowerSurface adapter={fixture.adapter} draftCoordinator={createFlowerComposerDraftCoordinator()} focusThreadRequest={{ request_id: 'fixture-focus', thread_id: fixture.thread.thread_id }} /></FloeProvider>, root);
+  const drafts = createFlowerComposerDraftCoordinator();
+  const dispose = render(() => <FloeProvider><FlowerSurface adapter={fixture.adapter} draftCoordinator={drafts} focusThreadRequest={{ request_id: 'fixture-focus', thread_id: fixture.thread.thread_id }} /></FloeProvider>, root);
   let running = false;
   let interval: ReturnType<typeof setInterval> | undefined;
   let raf = 0;
@@ -44,6 +45,37 @@ function setup() {
   root.addEventListener('click', clicked, true);
   let callsBefore = { ...fixture.calls };
   return {
+    async checkContinuity() {
+      const message = root.querySelector('[data-flower-message-id="message-0"]');
+      if (!message) throw new Error('The selected production transcript is missing.');
+      drafts.open(fixture.thread.thread_id).mutate(value => ({ ...value, text: 'Preserve the reconnect draft' }));
+      const range = document.createRange(); range.selectNodeContents(message.querySelector('p') ?? message);
+      const selection = window.getSelection()!; selection.removeAllRanges(); selection.addRange(range);
+      const selectedText = selection.toString();
+      const beforeLoads = fixture.calls.loads;
+      let flashes = 0; let stableMessage = true; let stableSelection = true;
+      const observer = new MutationObserver(records => {
+        for (const record of records) for (const node of record.addedNodes) {
+          if (node instanceof Element && (node.matches('.flower-thread-loading') || node.querySelector('.flower-thread-loading'))) flashes++;
+        }
+      });
+      observer.observe(root, { childList: true, subtree: true });
+      try {
+        for (let cycle = 0; cycle < 3; cycle++) {
+          fixture.reconnect();
+          const deadline = performance.now() + 15_000;
+          while (fixture.calls.baselines < (cycle + 1) * 24) {
+            if (performance.now() > deadline) throw new Error('Reconnect baseline did not finish.');
+            await new Promise(resolve => setTimeout(resolve, 20));
+          }
+          await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+          stableMessage = stableMessage && root.querySelector('[data-flower-message-id="message-0"]') === message;
+          stableSelection = stableSelection && selection.toString() === selectedText;
+        }
+        return { flashes, stableMessage, stableSelection, loads: fixture.calls.loads - beforeLoads, baselines: fixture.calls.baselines,
+          draftPreserved: root.querySelector<HTMLTextAreaElement>('.flower-composer textarea')?.value === 'Preserve the reconnect draft' };
+      } finally { observer.disconnect(); }
+    },
     start(hz: number) {
       window.__flowerPerfCounts.parses = 0; window.__flowerPerfCounts.lexes = 0;
       callsBefore = { ...fixture.calls };

@@ -3,12 +3,16 @@ import { retainEqualValue } from './presentationIdentity';
 
 /** Only text may differ; every other current and envelope field is compared. */
 export function flowerLiveTextAppend(previous: FlowerLiveStreamEnvelope, next: FlowerLiveStreamEnvelope): boolean {
-  const before = previous.current;
-  const after = next.current;
-  if (previous.kind !== 'thread.batch' || next.kind !== 'thread.batch' || !before || !after) return false;
-  if (!Number.isSafeInteger(after.view_version) || after.view_version <= before.view_version) return false;
+  if (previous.kind !== 'thread.batch' || next.kind !== 'thread.batch') return false;
+  if (Boolean(previous.current) === Boolean(previous.subagent_current)
+    || Boolean(next.current) === Boolean(next.subagent_current)) return false;
+  const field = previous.current ? 'current' : 'subagent_current';
+  const before = previous[field];
+  const after = next[field];
+  if (!before || !after) return false;
+  if (!Number.isSafeInteger(before.view_version) || before.view_version <= 0
+    || !Number.isSafeInteger(after.view_version) || after.view_version <= before.view_version) return false;
   if (after.activity !== 'active' || !after.turn_id || !after.run_id) return false;
-  if (previous.subagent_current || next.subagent_current) return false;
   const oldItems = before.items;
   const newItems = after.items;
   if (!oldItems || !newItems || oldItems.length !== newItems.length) return false;
@@ -26,7 +30,7 @@ export function flowerLiveTextAppend(previous: FlowerLiveStreamEnvelope, next: F
     comparable.push({ ...newItem, text: oldItem.text });
   }
   return changed && retainEqualValue(previous, {
-    ...next, current: { ...after, view_version: before.view_version, items: comparable },
+    ...next, [field]: { ...after, view_version: before.view_version, items: comparable },
   }) === previous;
 }
 

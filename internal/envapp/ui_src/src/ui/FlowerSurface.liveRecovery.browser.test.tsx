@@ -3,6 +3,7 @@ import './flower-feature.css';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { page, userEvent } from 'vitest/browser';
 import { createFlowerComposerDraftCoordinator } from '../../../../flower_ui/src';
+import { streamingFixture } from '../../../../flower_ui/testing/streamingFixture';
 import type { FlowerLiveStreamConnectInput, FlowerLiveStreamEnvelope, FlowerThreadSnapshot } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import {
   adapter,
@@ -15,6 +16,40 @@ import {
 } from './FlowerSurface.navigation.testHarness';
 
 beforeEach(() => page.viewport(1280, 800));
+
+it('never replaces the selected transcript with loading across repeated 24-thread reconnect baselines', async () => {
+  const fixture = streamingFixture();
+  const drafts = createFlowerComposerDraftCoordinator();
+  const runtime = renderSurfaceWithDraftCoordinator(fixture.adapter, drafts);
+  await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${fixture.thread.thread_id}"] button`)));
+  (runtime.querySelector(`[data-thread-id="${fixture.thread.thread_id}"] button`) as HTMLButtonElement).click();
+  await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="message-0"]')));
+  drafts.open(fixture.thread.thread_id).mutate(value => ({ ...value, text: 'Keep this unfinished draft' }));
+  const message = runtime.querySelector('[data-flower-message-id="message-0"]')!;
+  const range = document.createRange(); range.selectNodeContents(message.querySelector('p') ?? message);
+  const selection = window.getSelection()!; selection.removeAllRanges(); selection.addRange(range);
+  const selectedText = selection.toString();
+  let flashes = 0;
+  const observer = new MutationObserver(records => {
+    for (const record of records) for (const node of record.addedNodes) {
+      if (node instanceof Element && (node.matches('.flower-thread-loading') || node.querySelector('.flower-thread-loading'))) flashes++;
+    }
+  });
+  observer.observe(runtime, { childList: true, subtree: true });
+  try {
+    for (let cycle = 0; cycle < 3; cycle++) {
+      fixture.reconnect();
+      await waitFor(() => fixture.calls.connections === cycle + 2 && fixture.calls.baselines === (cycle + 1) * 24, 15_000);
+      await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      expect(runtime.querySelector('[data-flower-message-id="message-0"]')).toBe(message);
+      expect(runtime.querySelector('.flower-thread-loading')).toBeNull();
+      expect(runtime.querySelector<HTMLTextAreaElement>('.flower-composer textarea')?.value).toBe('Keep this unfinished draft');
+      expect(selection.toString()).toBe(selectedText);
+    }
+    expect(flashes).toBe(0);
+    expect(fixture.calls.loads).toBe(4);
+  } finally { observer.disconnect(); }
+});
 
 function terminalStream(summaries: readonly FlowerThreadSnapshot[], recoveredSummaries = summaries) {
   const failure = deferred<void>();

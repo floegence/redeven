@@ -18,7 +18,7 @@ stream.
 
 # Contract
 
-`ThreadCache` owns selected ID, summary map, and a bounded LRU of typed detail views. Summary updates are stripped of messages and interaction detail and can never overwrite a cached view. HTTP detail, state-bearing action responses, and `LiveCurrent` all use one receiver. Floret's monotonic `view_version` orders runtime content; Redeven's activity revision orders update and read metadata; Redeven's monotonic `settings_revision` orders product settings. The receiver merges those authorities independently. Canonical title text, status, and generation have one owner in the summary record; cached details store no title and compose it from that record when read. An unchanged runtime view cannot discard newer product metadata or titles.
+`ThreadCache` owns selected ID, summary map, and at most 12 typed detail views. The selected detail is protected from eviction. User selection determines access priority; background currents and adjunct updates never promote an entry, and never-visited details are evicted first. Summary updates are stripped of messages and interaction detail and can never overwrite a cached view. HTTP detail, state-bearing action responses, and `LiveCurrent` all use one receiver. Floret's monotonic `view_version` orders runtime content; Redeven's activity revision orders update and read metadata; Redeven's monotonic `settings_revision` orders product settings. The receiver merges those authorities independently. Canonical title text, status, and generation have one owner in the summary record; cached details store no title and compose it from that record when read. An unchanged runtime view cannot discard newer product metadata or titles. Reconnect retains accepted content, including a valid empty conversation; only missing detail shows the initial loading state.
 
 Canonical per-turn outcomes, timing and explicit final boundaries also belong exclusively to accepted detail. Summary updates strip `turns`; reconnect does not change outcomes or interface disclosure choices. The presentation boundary is [Flower terminal turn process disclosure](flower-turn-process-disclosure.md).
 
@@ -125,6 +125,9 @@ paginates the complete workspace summary inventory and includes current views
 for active and waiting threads, even when the inventory exceeds one catalog
 page or the ordinary live-frame count. A missing, repeated, or non-advancing
 page cursor fails the subscription before `ready`.
+The byte-budgeted baseline stays a prefix ahead of one bounded live FIFO, both
+during initialization and while sending. Only the live FIFO counts toward its
+16-envelope limit; a large unfinished baseline cannot consume that allowance.
 
 Every final sanitized public envelope uses the same transport-fragment shape:
 `envelope_id`, zero-based `fragment_index`, `fragment_count`, `total_bytes`, and
@@ -134,9 +137,15 @@ limit is 32 MiB, separate from the 1 MiB pending-frame budget and the existing
 queue-count limit. Initialization, queued and actively transmitted envelope
 bytes remain subject to the 32 MiB global retained-byte limit. The server
 produces only the next requested fragment; it never enqueues all fragments.
-Only unsent current views with pure text growth may coalesce. Tool, interaction,
-identity, lifecycle and terminal changes preserve order; slow observers cannot
-block Flower execution.
+Only unsent root or child currents with cumulative live assistant/thinking text
+growth may coalesce. The actual ThreadID and parent route must match. A newer
+current removes its older unsent predecessor across independent other-thread
+currents, then appends at the FIFO tail. Same-thread semantic changes and
+auxiliary envelopes are barriers. Encoding freezes the eligible text and a
+fingerprint of every other public field once, outside subscriber fanout; queue
+operations never decode full snapshots. Started envelopes are immutable. Tool,
+interaction, identity, lifecycle and terminal changes preserve order; slow
+observers cannot block Flower execution.
 
 One connection assembles one envelope at a time and validates identity, order,
 counts, Base64, byte bounds, complete UTF-8 and JSON before the existing mapper,
