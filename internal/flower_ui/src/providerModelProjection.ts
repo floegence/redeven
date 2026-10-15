@@ -7,8 +7,8 @@ export function flowerProviderModelCatalog(provider: FlowerProvider): readonly F
 }
 
 export function cloneFlowerModel(model: FlowerProviderModel): FlowerProviderModel {
-  const { supports_tools, model_digest, quantization, unavailable, web_search, model_name, display_name, status, wire_model_name, context_window, max_output_tokens, effective_context_window_percent, input_modalities, reasoning_capability, default_reasoning_selection } = model;
-  return JSON.parse(JSON.stringify({ supports_tools, model_digest, quantization, unavailable, web_search, model_name, display_name, status, wire_model_name, context_window, max_output_tokens, effective_context_window_percent, input_modalities, reasoning_capability, default_reasoning_selection }));
+  const { supports_tools, model_digest, quantization, unavailable, web_search, web_search_enabled, model_name, display_name, status, wire_model_name, context_window, max_output_tokens, effective_context_window_percent, input_modalities, reasoning_capability, default_reasoning_selection } = model;
+  return JSON.parse(JSON.stringify({ supports_tools, model_digest, quantization, unavailable, web_search, web_search_enabled, model_name, display_name, status, wire_model_name, context_window, max_output_tokens, effective_context_window_percent, input_modalities, reasoning_capability, default_reasoning_selection }));
 }
 
 export function applyModelOverride(model: FlowerProviderModel, override?: FlowerProviderModel): FlowerProviderModel {
@@ -17,6 +17,7 @@ export function applyModelOverride(model: FlowerProviderModel, override?: Flower
     merged.model_name = override.model_name;
     if (override.wire_model_name) merged.wire_model_name = override.wire_model_name;
     if (override.display_name) merged.display_name = override.display_name;
+    if (override.web_search_enabled !== undefined) merged.web_search_enabled = override.web_search_enabled;
     if (override.supports_tools != null) merged.supports_tools = override.supports_tools;
     for (const key of ['context_window', 'max_output_tokens', 'effective_context_window_percent'] as const) {
       if (override[key]) merged[key] = override[key];

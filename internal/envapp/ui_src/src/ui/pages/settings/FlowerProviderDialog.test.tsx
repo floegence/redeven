@@ -326,7 +326,7 @@ describe('shared Flower provider dialog', () => {
   it('blocks Brave search without its separate key', () => {
     const dialog = mountDialog('edit');
     try {
-      dialog.setProvider({ id: 'provider', type: 'openai_compatible', base_url: 'https://example.com/v1', web_search: { mode: 'brave' },
+      dialog.setProvider({ id: 'provider', type: 'openai_compatible', base_url: 'https://example.com/v1', web_search: { enabled: true, source: 'brave' },
         models: [{ model_name: 'agent', context_window: 32768 }] });
       expect(dialog.button('Save provider').disabled).toBe(true);
       expect(dialog.host.textContent).toContain('Needs Brave key');

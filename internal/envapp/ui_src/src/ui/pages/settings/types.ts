@@ -22,11 +22,7 @@ export type AIProviderModel = FlowerProviderModel;
 
 export type AIInputModality = 'text' | 'image';
 
-export type AIProviderWebSearchMode = 'disabled' | 'openai_builtin' | 'brave';
-
-export type AIProviderWebSearch = Readonly<{
-  mode?: AIProviderWebSearchMode;
-}>;
+export type AIProviderWebSearch = import('../../../../../../flower_ui/src/contracts/flowerSurfaceContracts').FlowerProvider['web_search'];
 
 export type AIProvider = Readonly<{
   enabled?: boolean;
@@ -38,6 +34,7 @@ export type AIProvider = Readonly<{
   base_url?: string;
   responses_continuation?: boolean;
   web_search?: AIProviderWebSearch;
+  search_policy?: import('../../../../../../flower_ui/src/contracts/flowerSurfaceContracts').FlowerWebSearchPolicy;
   models?: AIProviderModel[];
   model_selection?: FlowerModelSelection;
 }>;
@@ -154,6 +151,7 @@ export type AIProviderModelRow = {
   quantization?: string;
   unavailable?: boolean;
   web_search?: FlowerWebSearchAvailability;
+  web_search_enabled?: boolean;
   display_name?: string;
   status?: string;
   model_name: string;
@@ -177,6 +175,7 @@ export type AIProviderRow = {
   base_url: string;
   responses_continuation?: boolean;
   web_search?: AIProviderWebSearch;
+  search_policy?: import('../../../../../../flower_ui/src/contracts/flowerSurfaceContracts').FlowerWebSearchPolicy;
   models: AIProviderModelRow[];
   model_selection?: FlowerModelSelection;
   model_defaults?: readonly import('../../../../../../flower_ui/src/contracts/flowerSurfaceContracts').FlowerProviderModel[];
@@ -189,6 +188,7 @@ export type AIProviderModelPreset = Readonly<{
   quantization?: string;
   unavailable?: boolean;
   web_search?: FlowerWebSearchAvailability;
+  web_search_enabled?: boolean;
   display_name?: string;
   status?: string;
   model_name: string;
@@ -207,6 +207,7 @@ export type AIProviderPreset = Readonly<{
   name: string;
   default_base_url: string;
   web_search?: AIProviderWebSearch;
+  search_policy?: import('../../../../../../flower_ui/src/contracts/flowerSurfaceContracts').FlowerWebSearchPolicy;
   models: readonly AIProviderModelPreset[];
 }>;
 

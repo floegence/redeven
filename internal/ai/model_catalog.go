@@ -36,7 +36,8 @@ type ModelCatalogModel struct {
 
 func modelCatalogView(provider config.AIProvider, model config.AIProviderModel) ModelCatalogModel {
 	model.EffectiveContextWindowPercent = model.EffectiveContextWindowPercentValue()
-	return ModelCatalogModel{AIProviderModel: model, WebSearch: config.ResolveAIWebSearch(provider, model.EffectiveWireModelName(), false).AIWebSearchAvailability}
+	provider.Models = append(append([]config.AIProviderModel(nil), provider.Models...), model)
+	return ModelCatalogModel{AIProviderModel: model, WebSearch: config.ResolveAIWebSearch(provider, model.ModelName, false).AIWebSearchAvailability}
 }
 
 type ModelCatalogResponse struct {

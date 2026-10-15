@@ -17,12 +17,10 @@ import type {
   FlowerReasoningSelection,
   FlowerSettingsDraft,
   FlowerSettingsSnapshot,
-  FlowerWebSearchMode,
 } from '../contracts/flowerSurfaceContracts';
 import {
   defaultBaseURLForFlowerProviderType,
   flowerModelID,
-  flowerProviderNeedsWebSearchConfig,
   flowerProviderPresetForType,
   flowerProviderTypeLabel,
   flowerProviderTypeRequiresBaseURL,
@@ -99,7 +97,6 @@ function normalizeSecretPatch(value: string | null | undefined): string | null |
 }
 
 function normalizeProviderForSave(provider: FlowerProviderDraft): FlowerProviderDraft {
-  const webSearchMode = (provider.web_search?.mode ?? 'disabled') as FlowerWebSearchMode;
   const providerKey = normalizeSecretPatch(provider.provider_api_key);
   const webSearchKey = normalizeSecretPatch(provider.web_search_api_key);
   return {
@@ -109,13 +106,14 @@ function normalizeProviderForSave(provider: FlowerProviderDraft): FlowerProvider
     model_selection: provider.model_selection,
     catalog_models: provider.catalog_models,
     model_defaults: provider.model_defaults,
+    search_policy: provider.search_policy,
     id: trim(provider.id),
     name: trim(provider.name),
     type: provider.type,
     base_url: trim(provider.base_url),
     ...(provider.type === 'openai' && provider.auth_method !== 'chatgpt' && provider.responses_continuation === true
       ? { responses_continuation: true } : {}),
-    web_search: flowerProviderNeedsWebSearchConfig(provider.type) ? { mode: webSearchMode } : undefined,
+    web_search: provider.web_search,
     ...(providerKey !== undefined ? { provider_api_key: providerKey } : {}),
     ...(webSearchKey !== undefined ? { web_search_api_key: webSearchKey } : {}),
     models: provider.models.map((model) => ({
@@ -123,6 +121,7 @@ function normalizeProviderForSave(provider: FlowerProviderDraft): FlowerProvider
       model_name: trim(model.model_name),
       wire_model_name: model.wire_model_name, display_name: model.display_name, status: model.status,
       supports_tools: model.supports_tools,
+      web_search_enabled: model.web_search_enabled,
       ...(normalizeFlowerPositiveInteger(model.context_window) ? { context_window: normalizeFlowerPositiveInteger(model.context_window) } : {}),
       ...(normalizeFlowerPositiveInteger(model.max_output_tokens) ? { max_output_tokens: normalizeFlowerPositiveInteger(model.max_output_tokens) } : {}),
       ...(normalizeFlowerEffectiveContextPercent(model.effective_context_window_percent) ? { effective_context_window_percent: normalizeFlowerEffectiveContextPercent(model.effective_context_window_percent) } : {}),
@@ -138,6 +137,8 @@ export type FlowerSettingsSurfaceProps = Readonly<{
   loadChatGPTAccounts?: import('../contracts/flowerSurfaceContracts').FlowerSurfaceAdapter['loadChatGPTAccounts'];
   onDiscoverModels?: FlowerModelCatalogDiscovery;
   snapshot: FlowerSettingsSnapshot | null;
+  providerFocusRequest?: Readonly<{ providerID: string; modelName: string; sequence: number }>;
+  onProviderRecoveryFinished?: () => void;
   onSaveDefaultPermission: (permissionType: FlowerPermissionType) => Promise<FlowerSettingsSnapshot>;
   onSaveComputerUseEnabled?: (enabled: boolean) => Promise<FlowerSettingsSnapshot>;
   onSaveAutoUpdateModelCatalog?: (enabled: boolean) => Promise<FlowerSettingsSnapshot>;
@@ -179,6 +180,8 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
   const [providerDialogMode, setProviderDialogMode] = createSignal<FlowerProviderDialogMode>('create');
   const [providerDialogProvider, setProviderDialogProvider] = createSignal<FlowerProviderDraft | null>(null);
   const [providerDialogError, setProviderDialogError] = createSignal('');
+  const [providerDialogSaving, setProviderDialogSaving] = createSignal(false);
+  let providerDialogIdentity = 0;
   const permissionDescriptionID = createUniqueId();
   const modelCatalogDisclosureID = createUniqueId();
   const permissionButtonRefs = new Map<FlowerPermissionType, HTMLButtonElement>();
@@ -295,6 +298,8 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
   };
 
   const openAddProviderDialog = () => {
+    providerDialogIdentity++;
+    setRecoveryModelName(''); setRecoveryProviderID('');
     setProviderDialogMode('create');
     setProviderDialogIndex(null);
     setProviderDialogProvider(newProviderDraft());
@@ -302,9 +307,11 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
     setProviderDialogOpen(true);
   };
 
-  const openEditProviderDialog = (index: number) => {
+  const openEditProviderDialog = (index: number, recovery = false) => {
+    if (!recovery) { setRecoveryModelName(''); setRecoveryProviderID(''); }
     const provider = providers()[index];
     if (!provider) return;
+    providerDialogIdentity++;
     setProviderDialogMode('edit');
     setProviderDialogIndex(index);
     setProviderDialogProvider({
@@ -313,6 +320,35 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
     });
     setProviderDialogError('');
     setProviderDialogOpen(true);
+  };
+
+  let consumedProviderFocus = 0;
+  const [recoveryModelName, setRecoveryModelName] = createSignal('');
+  const [recoveryProviderID, setRecoveryProviderID] = createSignal('');
+  createEffect(() => {
+    const request = props.providerFocusRequest;
+    if (!request || request.sequence <= consumedProviderFocus || !props.snapshot) return;
+    const index = providers().findIndex(provider => provider.id === request.providerID);
+    consumedProviderFocus = request.sequence;
+    if (index < 0) return;
+    untrack(() => {
+      setRecoveryModelName(request.modelName);
+      setRecoveryProviderID(request.providerID);
+      openEditProviderDialog(index, true);
+    });
+  });
+
+  createEffect(() => {
+    if (!recoveryProviderID() || props.providerFocusRequest) return;
+    providerDialogIdentity++;
+    setProviderDialogOpen(false);
+    setRecoveryProviderID(''); setRecoveryModelName('');
+  });
+
+  const settingsError = () => {
+    const request = props.providerFocusRequest;
+    if (request && props.snapshot && !providers().some(provider => provider.id === request.providerID)) return copy().dialog.providerRemoved;
+    return localError() || props.saveError;
   };
 
   const buildSettingsDraft = (
@@ -401,6 +437,7 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
   };
 
   const confirmProviderDialog = async (draft: FlowerProviderDraft) => {
+    if (props.saving || providerDialogSaving()) return;
     setProviderDialogError('');
     const normalized = normalizeProviderForSave(draft);
     const index = providerDialogIndex();
@@ -414,18 +451,23 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
       setProviderDialogError(result.error);
       return;
     }
+    const dialogIdentity = providerDialogIdentity;
+    setProviderDialogSaving(true);
     try {
       const saved = await saveBuiltDraft(result);
-      if (!saved) return;
+      if (!saved || dialogIdentity !== providerDialogIdentity) return;
       const savedProviders = (saved.model_profile?.providers ?? []).map(provider => ({ ...cloneProviderForForm(provider), chatgpt_account: saved.chatgpt_accounts?.[provider.id] }));
       setProviders(savedProviders);
       setCurrentModelID(trim(saved.model_profile?.current_model_id));
       setProviderDialogOpen(false);
       setProviderDialogProvider(null);
       setProviderDialogIndex(null);
+      if (recoveryProviderID() === draft.id) { setRecoveryProviderID(''); props.onProviderRecoveryFinished?.(); }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      setProviderDialogError(message);
+      if (dialogIdentity === providerDialogIdentity) setProviderDialogError(message);
+    } finally {
+      setProviderDialogSaving(false);
     }
   };
 
@@ -574,7 +616,7 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
                   dirty={dirty() || permissionDirty()}
                   copy={copy().autoSave}
                   saving={props.saving || providerToggleSaving() || permissionSaving()}
-                  error={localError() || permissionError() || props.saveError}
+                  error={settingsError() || permissionError()}
                   savedAt={Math.max(props.savedAt ?? 0, permissionSavedAt() ?? 0) || null}
                 />
               </div>
@@ -586,12 +628,12 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
             disabled={props.saving || providerToggleSaving()}
             providerReady={provider => provider.auth_method === 'chatgpt'
               ? props.snapshot?.chatgpt_accounts?.[provider.id]?.state === 'ready'
-              : (flowerProviderAPIKeyOptional(provider.type) || providerSecretConfigured(props.snapshot, provider.id)) && (provider.web_search?.mode !== 'brave' || providerWebSearchSecretConfigured(props.snapshot, provider.id))}
+              : (flowerProviderAPIKeyOptional(provider.type) || providerSecretConfigured(props.snapshot, provider.id)) && (!provider.web_search?.enabled || provider.web_search.source !== 'brave' || providerWebSearchSecretConfigured(props.snapshot, provider.id))}
             onChooseModel={id => { setCurrentModelID(id); markDirty(); }} onChangeReasoning={updateCurrentModelReasoning}
-            onAddProvider={openAddProviderDialog} onEditProvider={openEditProviderDialog} onRemoveProvider={index => removeProvider(index)}
+            onAddProvider={openAddProviderDialog} onEditProvider={index => openEditProviderDialog(index)} onRemoveProvider={index => removeProvider(index)}
             onToggleProvider={toggleProvider} />
-          <Show when={localError() || props.saveError}>
-            <p role="alert" class="flower-settings-model-notice text-destructive">{localError() || props.saveError}</p>
+          <Show when={settingsError()}>
+            <p role="alert" class="flower-settings-model-notice text-destructive">{settingsError()}</p>
           </Show>
 
           <For each={props.snapshot?.account_sign_outs?.filter(result => !result.local_cleanup_complete || !result.revocation_confirmed)}>{result => (
@@ -702,6 +744,8 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
 
       <FlowerProviderDialog
         providerDefaults={props.snapshot?.model_directory?.provider_defaults}
+        searchPolicies={props.snapshot?.model_directory?.search_policies}
+        initialModelName={recoveryModelName()}
         onDiscoverModels={props.onDiscoverModels}
         chatGPTAuth={props.chatGPTAuth}
         loadChatGPTAccounts={props.loadChatGPTAccounts}
@@ -716,8 +760,15 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
         keyConfigured={providerSecretConfigured(props.snapshot, providerDialogProvider()?.id ?? '')}
         webSearchKeyConfigured={providerWebSearchSecretConfigured(props.snapshot, providerDialogProvider()?.id ?? '')}
         error={providerDialogError()}
-        saving={props.saving}
-        onOpenChange={(open) => setProviderDialogOpen(open)}
+        saving={props.saving || providerDialogSaving()}
+        onOpenChange={open => {
+          if (!open) providerDialogIdentity++;
+          setProviderDialogOpen(open);
+          if (!open && recoveryProviderID()) {
+            setRecoveryProviderID(''); setRecoveryModelName('');
+            props.onProviderRecoveryFinished?.();
+          }
+        }}
         catalogModels={props.snapshot?.model_profile?.providers.find(provider => provider.id === providerDialogProvider()?.id)?.catalog_models}
         onConfirm={(draft) => void confirmProviderDialog(draft)}
       />

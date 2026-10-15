@@ -13,7 +13,8 @@ export type FlowerProviderType =
   | 'ollama'
   | 'openai_compatible';
 
-export type FlowerWebSearchMode = 'disabled' | 'openai_builtin' | 'brave';
+export type FlowerWebSearchSource = 'native' | 'brave';
+export type FlowerWebSearchPolicy = Readonly<{ editable: boolean; default_enabled: boolean; default_model_enabled: boolean; enabled: boolean; source: FlowerWebSearchSource; supported_sources: readonly FlowerWebSearchSource[] }>;
 
 export type FlowerReasoningLevel = 'default' | 'off' | 'on' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
@@ -41,7 +42,7 @@ export type FlowerReasoningCapability = Readonly<{
   fixture?: string;
 }>;
 
-export type FlowerWebSearchAvailability = Readonly<{ status: 'available' | 'unavailable'; reason: string }>;
+export type FlowerWebSearchAvailability = Readonly<{ status: 'available' | 'unavailable'; reason: string; recommended_enabled?: boolean; model_enabled?: boolean }>;
 
 export type FlowerProviderModel = Readonly<{
   supports_tools?: boolean;
@@ -49,6 +50,7 @@ export type FlowerProviderModel = Readonly<{
   quantization?: string;
   unavailable?: boolean;
   web_search?: FlowerWebSearchAvailability;
+  web_search_enabled?: boolean;
   display_name?: string;
   status?: string;
   model_name: string;
@@ -75,7 +77,8 @@ export type FlowerProvider = Readonly<{
   type: FlowerProviderType;
   base_url?: string;
   responses_continuation?: boolean;
-  web_search?: Readonly<{ mode: FlowerWebSearchMode }>;
+  web_search?: Readonly<{ enabled: boolean; source: FlowerWebSearchSource }>;
+  search_policy?: FlowerWebSearchPolicy;
   auth_method?: 'api_key' | 'chatgpt';
   account_id?: string;
   models: readonly FlowerProviderModel[];
@@ -137,6 +140,8 @@ export type FlowerModelDirectoryModel = FlowerModelSourceModel & Readonly<{
 }>;
 
 export type FlowerModelDirectory = Readonly<{
+  search_policies?: Readonly<Partial<Record<FlowerProviderType, FlowerWebSearchPolicy>>>;
+  provider_search_policies?: Readonly<Record<string, FlowerWebSearchPolicy>>;
   provider_defaults?: Readonly<Partial<Record<FlowerProviderType, readonly FlowerProviderModel[]>>>;
   provider_catalogs?: Readonly<Record<string, readonly FlowerProviderModel[]>>;
   current_model_id: string;
@@ -1475,7 +1480,7 @@ export type FlowerSurfaceAdapter = Readonly<{
   chatGPTAuth?: FlowerChatGPTAuth;
   loadChatGPTAccounts?: () => Promise<Readonly<{ accounts: Readonly<Record<string, FlowerChatGPTAccount>>; saved_accounts: readonly FlowerChatGPTAccount[]; account_sign_outs?: readonly FlowerAccountSignOutResult[] }>>;
   discoverProviderModels?: FlowerModelCatalogDiscovery;
-  loadSettings: () => Promise<FlowerSettingsSnapshot>;
+  loadSettings: (refresh?: boolean) => Promise<FlowerSettingsSnapshot>;
   loadModelDirectory?: (refresh?: boolean) => Promise<FlowerModelDirectory>;
   subscribeModelDirectory?: (listener: (directory: FlowerModelDirectory) => void) => () => void;
   saveDefaultPermission: (permissionType: FlowerPermissionType) => Promise<FlowerSettingsSnapshot>;

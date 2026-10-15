@@ -1838,11 +1838,9 @@ func appendWebSearchSecretCleanupPatches(
 	if err != nil {
 		return nil, err
 	}
-	braveProviders := make(map[string]struct{}, len(providers))
+	retainedProviders := make(map[string]struct{}, len(providers))
 	for _, provider := range providers {
-		if provider.WebSearch != nil && strings.TrimSpace(provider.WebSearch.Mode) == config.AIProviderWebSearchModeBrave {
-			braveProviders[strings.TrimSpace(provider.ID)] = struct{}{}
-		}
+		retainedProviders[strings.TrimSpace(provider.ID)] = struct{}{}
 	}
 	patched := make(map[string]struct{}, len(patches))
 	for _, patch := range patches {
@@ -1854,7 +1852,7 @@ func appendWebSearchSecretCleanupPatches(
 		if !hasKey {
 			continue
 		}
-		if _, ok := braveProviders[id]; ok {
+		if _, ok := retainedProviders[id]; ok {
 			continue
 		}
 		if _, ok := patched[id]; ok {

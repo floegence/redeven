@@ -8,7 +8,7 @@ export function modelDirectoryWireFixture(settings: Pick<AgentSettingsResponse, 
   const directory = modelDirectoryFixture({
     defaults: { permission_type: 'approval_required' },
     model_profile: settings.ai?.current_model_id ? { schema_version: 1, current_model_id: settings.ai.current_model_id,
-      providers: (settings.ai.providers ?? []).map(provider => ({ ...provider, models: provider.models ?? [], web_search: provider.web_search ? { mode: provider.web_search.mode ?? 'disabled' } : undefined })),
+      providers: (settings.ai.providers ?? []).map(provider => ({ ...provider, models: provider.models ?? [], web_search: provider.web_search ? { ...provider.web_search } : undefined })),
     } : null,
     provider_secrets: (settings.ai?.providers ?? []).map(provider => ({ provider_id: provider.id,
       provider_api_key_configured: settings.ai_secrets?.provider_api_key_set?.[provider.id] === true,

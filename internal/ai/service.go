@@ -1111,7 +1111,7 @@ func (s *Service) listModels(cfg *config.AIConfig, sourceSnapshot *DesktopModelS
 	}
 	if cfg != nil {
 		for _, provider := range cfg.Providers {
-			if !provider.IsEnabled() || config.ResolveAIWebSearch(provider, "", false).Mode != config.AIWebSearchBrave {
+			if !provider.IsEnabled() || config.ResolveAIWebSearchPolicy(provider).Source != config.AIWebSearchSourceBrave {
 				continue
 			}
 			configured := false
@@ -1124,7 +1124,7 @@ func (s *Service) listModels(cfg *config.AIConfig, sourceSnapshot *DesktopModelS
 			}
 			for i := range configModels {
 				if strings.HasPrefix(configModels[i].ID, provider.ID+"/") {
-					configModels[i].WebSearch = config.ResolveAIWebSearch(provider, "", configured).AIWebSearchAvailability
+					configModels[i].WebSearch = config.ResolveAIWebSearch(provider, strings.TrimPrefix(configModels[i].ID, provider.ID+"/"), configured).AIWebSearchAvailability
 				}
 			}
 		}
@@ -1277,7 +1277,7 @@ func configModelView(id string, label string, provider config.AIProvider, m conf
 	return Model{
 		AliasGroup:                modelAliasGroup(provider, m),
 		Quantization:              m.Quantization,
-		WebSearch:                 config.ResolveAIWebSearch(provider, m.EffectiveWireModelName(), false).AIWebSearchAvailability,
+		WebSearch:                 config.ResolveAIWebSearch(provider, m.ModelName, false).AIWebSearchAvailability,
 		ID:                        strings.TrimSpace(id),
 		Label:                     strings.TrimSpace(label),
 		BillingSource:             chatGPTBillingSource(provider),

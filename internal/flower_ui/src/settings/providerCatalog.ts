@@ -1,10 +1,9 @@
-import type { FlowerProvider, FlowerProviderType, FlowerWebSearchMode } from '../contracts/flowerSurfaceContracts';
+import type { FlowerProvider, FlowerProviderType } from '../contracts/flowerSurfaceContracts';
 
 type FlowerProviderPreset = Readonly<{
   type: FlowerProviderType;
   name: string;
   default_base_url: string;
-  web_search?: Readonly<{ mode: FlowerWebSearchMode }>;
 }>;
 
 export const FLOWER_PROVIDER_TYPES: readonly { value: FlowerProviderType; label: string; hint: string }[] = [
@@ -38,7 +37,7 @@ export const FLOWER_PROVIDER_PRESETS: Record<FlowerProviderType, FlowerProviderP
   xai: { type: 'xai', name: 'xAI', default_base_url: 'https://api.x.ai/v1' },
   groq: { type: 'groq', name: 'Groq', default_base_url: 'https://api.groq.com/openai/v1' },
   ollama: { type: 'ollama', name: 'Ollama', default_base_url: 'http://127.0.0.1:11434/v1' },
-  openai_compatible: { type: 'openai_compatible', name: 'OpenAI compatible', default_base_url: 'https://api.example.com/v1', web_search: { mode: 'disabled' } },
+  openai_compatible: { type: 'openai_compatible', name: 'OpenAI compatible', default_base_url: 'https://api.example.com/v1' },
 };
 
 export function flowerProviderPresetForType(type: FlowerProviderType): FlowerProviderPreset {
@@ -55,10 +54,6 @@ export function flowerProviderTypeRequiresBaseURL(type: FlowerProviderType): boo
 
 export function flowerProviderSupportsCustomModels(type: FlowerProviderType): boolean {
   return type !== 'ollama';
-}
-
-export function flowerProviderNeedsWebSearchConfig(type: FlowerProviderType): boolean {
-  return type === 'openai_compatible';
 }
 
 export function flowerProviderDisplayName(provider: Pick<FlowerProvider, 'name' | 'type'>, fallback = flowerProviderTypeLabel(provider.type)): string {

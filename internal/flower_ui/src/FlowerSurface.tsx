@@ -4,6 +4,7 @@ import { flowerMessageTextForCopy } from './chat/markdown/flowerCitations';
 import { flowerDraftReferenceIdentity, flowerDraftReferenceContextItem, flowerDraftReferenceDescription } from './composer/flowerDraftReferenceModel';
 import type { ThreadReferenceSnapshot } from './contextActionWire';
 import { withFlowerModelDirectory } from './modelDirectory';
+import { withFlowerRequestDeadline } from './requestDeadline';
 import { FileItemIcon } from '@floegence/floe-webapp-core/file-browser';
 import { flowerMenuModels } from './modelMenu';
 import { flowerDirectoryDesktopStatus } from './modelDirectory';
@@ -4442,7 +4443,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       if (surfaceDisposed) return;
       const generation = settingsRefreshGeneration;
       try {
-        const next = await props.adapter.loadSettings();
+        const next = await props.adapter.loadSettings(invalidateInFlight);
         if (surfaceDisposed) return;
         if (generation !== settingsRefreshGeneration) return refreshSettingsForRevision();
         setSnapshot(next);
@@ -5089,7 +5090,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     setSaveError('');
     setSettingsSaving(true);
     try {
-      const next = await mutation();
+      const next = await withFlowerRequestDeadline(mutation, copy().settings.dialog.catalog.settingsSaveTimedOut);
       setSnapshot(next);
       if (next.model_directory) setModelDirectory(next.model_directory);
       void refreshDirectory();
@@ -5131,6 +5132,23 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const returnToChat = () => {
     setSidePanel('chat');
+    setProviderFocusRequest(undefined);
+  };
+
+  const [providerFocusRequest, setProviderFocusRequest] = createSignal<{ providerID: string; modelName: string; sequence: number; threadID: string }>();
+  const [retryingThreads, setRetryingThreads] = createSignal<ReadonlySet<string>>(new Set());
+  createEffect(() => {
+    const request = providerFocusRequest();
+    if (request && request.threadID !== trimString(selectedThreadID())) setProviderFocusRequest(undefined);
+  });
+  let providerFocusSequence = 0;
+  const configureCurrentProvider = async () => {
+    const modelID = trimString(selectedThread()?.model_id) || selectedComposerModelID();
+    const slash = modelID.indexOf('/');
+    const request = { providerID: slash > 0 ? modelID.slice(0, slash) : '', modelName: slash > 0 ? modelID.slice(slash + 1) : '', threadID: trimString(selectedThreadID()), sequence: ++providerFocusSequence };
+    setProviderFocusRequest(undefined);
+    await openSettings();
+    if (request.sequence === providerFocusSequence && request.threadID === trimString(selectedThreadID()) && sidePanel() === 'settings') setProviderFocusRequest(request);
   };
 
   const openSettings = () => {
@@ -5138,6 +5156,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     closeSubagentOverlays();
     setSidePanel('settings');
     setSettingsOpened(true);
+    return refreshSettingsForRevision(true).catch(() => undefined);
   };
 
   createEffect(() => {
@@ -6946,7 +6965,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const runErrorNotice = (error: FlowerThreadSnapshot['error']) => {
     const code = trimString(error?.code);
     const contextFailure = code === 'context_budget_invalid' || code === 'context_fixed_overhead' || code === 'context_compaction_limit';
-    const [retryPending, setRetryPending] = createSignal(false);
+    const retryPending = () => retryingThreads().has(trimString(selectedThreadID()));
+    const retryBlocked = () => retryPending() || ['running', 'waiting_approval', 'waiting_user'].includes(selectedThread()?.status ?? '');
     const [detailsCopied, setDetailsCopied] = createSignal(false);
     const stoppedUnknown = () => code === 'floret_effect_outcome_unknown' && selectedThread()?.cancellation?.source === 'user_stop';
     const continuationFailure = createMemo(() => (
@@ -6964,21 +6984,21 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       || code === 'model_gateway_contract_failed';
     const retryContinuation = async () => {
       const threadID = trimString(selectedThreadID());
-      if (!threadID || retryPending() || selectedThread()?.status === 'running') return;
-      setRetryPending(true);
+      if (!threadID || retryBlocked()) return;
+      setRetryingThreads(previous => new Set([...previous, threadID]));
       try {
         const requestEpoch = liveTransport.connectionEpoch();
         if (selectedThread()?.current_execution?.turn_kind === 'context_compaction') {
           await executeCompactContextCommand();
           return;
         }
-        const live = await props.adapter.retryThread(threadID);
+        const live = await withFlowerRequestDeadline(() => props.adapter.retryThread(threadID), copy().settings.dialog.catalog.retryTimedOut);
         receiveThreadView(live, 'user_action', requestEpoch);
       } catch (error) {
         reportThreadDetailDiagnostic(threadID, 'request_or_mapping', 'user_action', error);
         notifyThreadActionError(getErrorMessage(error));
       } finally {
-        setRetryPending(false);
+        setRetryingThreads(previous => { const next = new Set(previous); next.delete(threadID); return next; });
       }
     };
     const providerFailure = code.startsWith('provider_') || code.startsWith('chatgpt_');
@@ -6991,14 +7011,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         }}><StableText reserve={[copy().chat.messageCopied, copy().chat.runErrorCopyDetails]}>{detailsCopied() ? copy().chat.messageCopied : copy().chat.runErrorCopyDetails}</StableText></Button>
       </details>
     ) : undefined;
-    const action = () => code === 'chatgpt_usage_unavailable' ? (
-      <a href="https://chatgpt.com/settings/usage" target="_blank" rel="noopener noreferrer" class="cursor-pointer whitespace-nowrap text-sm font-medium text-primary hover:underline">{copy().settings.dialog.chatGPT.manageUsage}</a>
-    ) : code === 'chatgpt_temporarily_unavailable' || code === 'provider_server_error' || code === 'provider_rate_limited' || code === 'provider_upstream_rate_limited' || code === 'provider_request_invalid' || code === 'provider_request_rejected' || code === 'model_context_unavailable' ? (
-      <Button size="sm" variant="ghost" disabled={retryPending()} onClick={() => void retryContinuation()}>{copy().chat.retryReply}</Button>
+    const action = () => providerFailure ? (
+      <>
+        <Button size="sm" variant="ghost" disabled={retryBlocked()} onClick={() => void configureCurrentProvider()}>{copy().settings.dialog.catalog.searchConfigure}</Button>
+        <Button size="sm" variant="ghost" disabled={retryBlocked()} onClick={() => void retryContinuation()}>{copy().chat.retryReply}</Button>
+        <Show when={code === 'chatgpt_usage_unavailable'}><a href="https://chatgpt.com/settings/usage" target="_blank" rel="noopener noreferrer" class="cursor-pointer whitespace-nowrap text-sm font-medium text-primary hover:underline">{copy().settings.dialog.chatGPT.manageUsage}</a></Show>
+      </>
+    ) : code === 'model_context_unavailable' ? (
+      <Button size="sm" variant="ghost" disabled={retryBlocked()} onClick={() => void retryContinuation()}>{copy().chat.retryReply}</Button>
     ) : contextFailure ? (
       <>
         <Button size="sm" variant="ghost" onClick={openSettings}>{copy().chat.runErrorActions.openSettings}</Button>
-        <Button size="sm" variant="ghost" disabled={retryPending()} onClick={() => void retryContinuation()}>{copy().chat.retryReply}</Button>
+        <Button size="sm" variant="ghost" disabled={retryBlocked()} onClick={() => void retryContinuation()}>{copy().chat.retryReply}</Button>
       </>
     ) : continuationFailure()
       ? (
@@ -12811,6 +12835,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 chatGPTAuth={props.adapter.chatGPTAuth ? accountAction : undefined}
                 loadChatGPTAccounts={props.adapter.loadChatGPTAccounts}
                 snapshot={snapshot()}
+                providerFocusRequest={providerFocusRequest()}
+                onProviderRecoveryFinished={() => {
+                  if (providerFocusRequest()?.threadID === trimString(selectedThreadID())) returnToChat();
+                  setProviderFocusRequest(undefined);
+                }}
                 copy={copy().settings}
                 onSaveDefaultPermission={saveDefaultPermission}
                 onSaveComputerUseEnabled={props.adapter.saveComputerUseEnabled ? saveComputerUseEnabled : undefined}

@@ -49,7 +49,7 @@ func validateAIProviderBundleCredentials(profile config.AIModelProfile, store *s
 				return fmt.Errorf("provider %q requires an api key", id)
 			}
 		}
-		if provider.WebSearch != nil && strings.EqualFold(strings.TrimSpace(provider.WebSearch.Mode), "brave") {
+		if provider.WebSearch != nil && provider.WebSearch.Enabled && provider.WebSearch.Source == config.AIWebSearchSourceBrave {
 			configured, err := hasKey(id, webUpdates, store.HasWebSearchProviderAPIKey)
 			if err != nil {
 				return fmt.Errorf("read provider %q web search credential: %w", id, err)

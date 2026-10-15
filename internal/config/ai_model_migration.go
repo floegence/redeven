@@ -42,6 +42,10 @@ func loadConfigForStartup(path string, persistence configPersistence, discover .
 		return cfg, nil
 	}
 	// Work on a detached value so a failed write cannot publish a partial upgrade.
+	legacySearch := false
+	for _, p := range cfg.AI.Providers {
+		legacySearch = legacySearch || p.WebSearch != nil && p.WebSearch.legacy
+	}
 	raw, err := json.Marshal(cfg)
 	if err != nil {
 		return nil, err
@@ -50,7 +54,8 @@ func loadConfigForStartup(path string, persistence configPersistence, discover .
 	if err = json.Unmarshal(raw, &next); err != nil {
 		return nil, err
 	}
-	if !migrateAIModelSelection(next.AI, discover...) {
+	selectionChanged := migrateAIModelSelection(next.AI, discover...)
+	if !selectionChanged && !legacySearch {
 		return cfg, nil
 	}
 	if err = saveConfig(path, &next, persistence); err != nil {
@@ -134,6 +139,10 @@ func migrateAIModelSelection(cfg *AIConfig, discover ...ModelCatalogResolver) bo
 
 func aiModelDifference(model, base AIProviderModel) AIProviderModel {
 	out := AIProviderModel{ModelName: model.ModelName}
+	if model.WebSearchEnabled != nil {
+		value := *model.WebSearchEnabled
+		out.WebSearchEnabled = &value
+	}
 	if model.WireModelName != "" && model.WireModelName != base.WireModelName {
 		out.WireModelName = model.WireModelName
 	}

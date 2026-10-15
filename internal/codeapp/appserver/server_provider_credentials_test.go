@@ -97,7 +97,7 @@ func TestServer_AIProviderBundleCredentialRequirements(t *testing.T) {
 				provider.BaseURL = "http://127.0.0.1:11434/v1"
 			}
 			if tc.brave {
-				provider.WebSearch = &config.AIProviderWebSearch{Mode: "brave"}
+				provider.WebSearch = &config.AIProviderWebSearch{Enabled: true, Source: "brave"}
 			}
 			switch tc.invalidField {
 			case "legacy selection":

@@ -99,3 +99,21 @@ func TestModelDirectoryResolvesAPIKeyByProviderIdentity(t *testing.T) {
 		t.Fatalf("configured API-key source was unavailable: %+v", out.Directory)
 	}
 }
+
+func TestModelDirectorySearchProjectionMatchesExplicitAliasIntent(t *testing.T) {
+	for _, providerEnabled := range []bool{false, true} {
+		for _, modelEnabled := range []bool{false, true} {
+			p := config.AIProvider{ID: "proxy", Type: "openai", BaseURL: "https://flow-node.com/v1", WebSearch: &config.AIProviderWebSearch{Enabled: providerEnabled, Source: config.AIWebSearchSourceNative}, ModelSelection: &config.AIModelSelection{SelectedModels: []string{"agent"}, ModelOverrides: []config.AIProviderModel{{ModelName: "agent", WireModelName: "gpt-6.1-sol", WebSearchEnabled: &modelEnabled}}}}
+			model := p.ModelMetadata("agent")
+			out := &ModelsResponse{Models: []Model{configModelView("proxy/agent", "Agent", p, model)}, Runtime: &AIRuntimeStatus{}}
+			directory := (&Service{}).projectModelDirectory(&config.AIConfig{Providers: []config.AIProvider{p}}, out, nil)
+			expected := config.ResolveAIWebSearch(p, "agent", false)
+			if len(directory.Models) != 1 || directory.Models[0].WebSearch != expected.AIWebSearchAvailability || directory.ProviderSearchPolicies[p.ID].Enabled != providerEnabled || expected.HostedTool() != (providerEnabled && modelEnabled) {
+				t.Fatalf("provider=%v model=%v: %+v", providerEnabled, modelEnabled, directory)
+			}
+			if catalog := modelCatalogView(p, model); catalog.WebSearch != expected.AIWebSearchAvailability {
+				t.Fatalf("alias catalog differs from runtime: %+v", catalog)
+			}
+		}
+	}
+}

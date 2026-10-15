@@ -574,10 +574,8 @@ func (p *floretProviderAdapter) requestWebSearchMode(hosted []flprovider.HostedT
 			return "", errors.New("invalid web search wire shape")
 		}
 	}
-	supported := map[string]string{"openai": config.AIWebSearchOpenAI, "openai_compatible": config.AIWebSearchOpenAI, platformGatewayProviderType: config.AIWebSearchOpenAI,
-		"moonshot": config.AIWebSearchKimi,
-		"chatglm":  config.AIWebSearchGLM, "qwen": config.AIWebSearchQwen}
-	if mode == "" || supported[p.providerType] != mode {
+
+	if mode == "" || config.NativeAIWebSearchMode(p.providerType) != mode {
 		return "", fmt.Errorf("unsupported %s hosted search mode %q", p.providerType, mode)
 	}
 	return mode, nil

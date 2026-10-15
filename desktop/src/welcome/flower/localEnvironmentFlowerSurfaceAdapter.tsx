@@ -357,7 +357,8 @@ function normalizePermissionType(raw: unknown): FlowerPermissionType {
 
 function mapProviderModel(model: NonNullable<NonNullable<AIConfig['providers']>[number]['models']>[number]): FlowerProviderModel {
   return {
-    model_name: trim(model.model_name), supports_tools: model.supports_tools,
+    model_name: trim(model.model_name),
+    web_search_enabled: model.web_search_enabled, supports_tools: model.supports_tools,
     display_name: model.display_name, status: model.status,
     model_digest: model.model_digest, quantization: model.quantization, unavailable: model.unavailable,
     ...(trim(model.wire_model_name) ? { wire_model_name: trim(model.wire_model_name) } : {}),
@@ -378,7 +379,7 @@ function mapProvider(provider: NonNullable<AIConfig['providers']>[number]): Flow
     type: provider.type,
     ...(trim(provider.base_url) ? { base_url: trim(provider.base_url) } : {}),
     ...(provider.responses_continuation === true ? { responses_continuation: true } : {}),
-    ...(provider.web_search ? { web_search: { mode: provider.web_search.mode ?? 'disabled' } } : {}),
+    ...(provider.web_search ? { web_search: { ...provider.web_search } } : {}),
     model_selection: provider.model_selection,
     auth_method: provider.auth_method, account_id: provider.account_id,
     models: (provider.models ?? []).map(mapProviderModel).filter(model => model.model_name),
@@ -719,7 +720,7 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
   options: LocalEnvironmentFlowerSurfaceAdapterOptions = {},
 ): FlowerSurfaceAdapter {
   const resource = options.modelReadResource ?? createDesktopFlowerModelReadResource(bridge, () => options.runtimeEnvironmentID ?? 'default', options.runtimeEnvironmentID);
-  const loadSettings = () => resource.loadSettings();
+  const loadSettings = (refresh = false) => resource.loadSettings(refresh);
   const reloadSettings = () => { resource.invalidate(); return loadSettings(); };
   return createRuntimeFlowerSurfaceAdapter({
     runtime: {
@@ -922,6 +923,7 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
     setComputerViewer: async (input) => { await runtimeJSON(bridge, 'PUT', '/_redeven_proxy/api/ai/computer/view', input); },
     computerManagement: { ...computerManagementAdapter((method, path, body) => runtimeJSON(bridge, method, path, body, undefined, options.runtimeEnvironmentID), `desktop:${options.runtimeEnvironmentID ?? 'default'}`) },
     saveModelProfile: async (draft) => {
+      resource.invalidate();
       const result = await runtimeJSON<{ account_sign_outs?: FlowerSettingsSnapshot['account_sign_outs'] }>(bridge, 'PUT', '/_redeven_proxy/api/ai/provider_bundle', mapFlowerSettingsDraftToRuntimeBundle(draft));
       return { ...await reloadSettings(), account_sign_outs: result.account_sign_outs };
     },

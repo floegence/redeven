@@ -1,3 +1,4 @@
+import { withFlowerRequestDeadline } from '../../../../../../../flower_ui/src/requestDeadline';
 import { readDesktopSessionContextSnapshot } from '../../../services/desktopSessionContext';
 import { readFlowerModelDirectory } from '../../../../../../../flower_ui/src/modelDirectory';
 import { flowerProviderAPIKeyOptional } from '../../../../../../../flower_ui/src/providerCredentials';
@@ -129,6 +130,7 @@ export function FlowerSection() {
   const [permissionSavedAt, setPermissionSavedAt] = createSignal<number | null>(null);
   const [currentModelID, setCurrentModelID] = createSignal('');
   const [providers, setProviders] = createSignal<AIProviderRow[]>([]);
+  const [searchPolicies, setSearchPolicies] = createSignal<import('../../../../../../../flower_ui/src/contracts/flowerSurfaceContracts').FlowerModelDirectory['search_policies']>();
   const [providerDefaults, setProviderDefaults] = createSignal<import('../../../../../../../flower_ui/src/contracts/flowerSurfaceContracts').FlowerModelDirectory['provider_defaults']>();
   const providerKeySet = createMemo(() => ctx.settings()?.ai_secrets?.provider_api_key_set ?? {});
   const webSearchKeySet = createMemo(() => ctx.settings()?.ai_secrets?.web_search_provider_api_key_set ?? {});
@@ -151,7 +153,7 @@ export function FlowerSection() {
         ...provider, chatgpt_account: s.chatgpt_accounts?.[provider.id],
       }));
       const projectProviders = (directory?: FlowerModelDirectory) => configured.map(provider => {
-        const row = { ...provider, model_defaults: directory?.provider_defaults?.[provider.type], catalog_models: directory?.provider_catalogs?.[provider.id] };
+        const row = { ...provider, search_policy: directory?.provider_search_policies?.[provider.id], model_defaults: directory?.provider_defaults?.[provider.type], catalog_models: directory?.provider_catalogs?.[provider.id] };
         return normalizeAIProviderRowDraft({ ...row, models: resolveFlowerProviderModels(row as FlowerProvider, row.catalog_models) } as AIProviderRow);
       });
       setProviders(projectProviders());
@@ -159,7 +161,7 @@ export function FlowerSection() {
       const load = resource ? resource.loadDirectory(true) : fetchLocalApiJSON('/_redeven_proxy/api/ai/models', { method: 'GET' }).then(readFlowerModelDirectory);
       void load.then(directory => {
         if (ctx.settings() !== s) return;
-        setProviderDefaults(directory.provider_defaults);
+        setProviderDefaults(directory.provider_defaults); setSearchPolicies(directory.search_policies);
         if (ctx.settings() === s && !dirty()) {
           setProviders(projectProviders(directory));
         }
@@ -191,8 +193,8 @@ export function FlowerSection() {
     const resource = ctx.env.flowerModelReadResource;
     if (!resource) return;
     const unsubscribe = resource.subscribe(directory => {
-      setProviderDefaults(directory.provider_defaults);
-      setProviders(rows => rows.map(provider => applyFlowerModelDiscovery({ ...provider, model_defaults: directory.provider_defaults?.[provider.type] } as FlowerProviderDraft, directory.provider_catalogs?.[provider.id] ?? provider.catalog_models ?? []) as AIProviderRow));
+      setProviderDefaults(directory.provider_defaults); setSearchPolicies(directory.search_policies);
+      setProviders(rows => rows.map(provider => applyFlowerModelDiscovery({ ...provider, search_policy: directory.provider_search_policies?.[provider.id], model_defaults: directory.provider_defaults?.[provider.type] } as FlowerProviderDraft, directory.provider_catalogs?.[provider.id] ?? provider.catalog_models ?? []) as AIProviderRow));
     });
     onCleanup(unsubscribe);
   });
@@ -264,12 +266,12 @@ export function FlowerSection() {
     try {
       const profile = buildAIValueFromRows(rows, current);
       validateAIValue({ ...profile, providers: rows } as AIConfig, i18n);
-      const saved = await fetchLocalApiJSON<SettingsUpdateResponse>('/_redeven_proxy/api/ai/provider_bundle', {
+      const saved = await withFlowerRequestDeadline(() => fetchLocalApiJSON<SettingsUpdateResponse>('/_redeven_proxy/api/ai/provider_bundle', {
         method: 'PUT', body: JSON.stringify({ auth_schema_version: 1, model_profile: profile,
           provider_api_key_patches: secretPatches(draft.id, draft.provider_api_key),
           web_search_provider_key_patches: secretPatches(draft.id, draft.web_search_api_key),
         }),
-      });
+      }), settingsCopy().dialog.catalog.settingsSaveTimedOut);
       ctx.mutateSettings(saved.settings); ctx.env.bumpSettingsSeq();
       setProviders(rows); setCurrentModelID(current); setSavedAt(Date.now()); setDirty(false); setFailure(null);
       ctx.notify.success(i18n.t('flowerSettings.autosavedTitle'), i18n.t('flowerSettings.providerSaved'));
@@ -303,8 +305,10 @@ export function FlowerSection() {
 
   const addAIProviderAndOpenDialog = () => { if (!canEdit() || saving()) return; setProviderDialogError(''); const d = { ...newAIProviderDraft(), model_defaults: providerDefaults()?.openai }; setProviderDialogProvider(d); setProviderDialogIndex(null); setProviderDialogMode('create'); setProviderDialogOpen(true); };
   const openAIProviderDialog = (i: number) => { if (!canEdit() || saving()) return; const p = providers()[i]; if (!p) return; setProviderDialogError(''); setProviderDialogProvider(cloneAIProviderRow(p)); setProviderDialogIndex(i); setProviderDialogMode('edit'); setProviderDialogOpen(true); };
-  const closeAIProviderDialog = () => { setProviderDialogOpen(false); setProviderDialogProvider(null); setProviderDialogIndex(null); };
+  let providerDialogIdentity = 0;
+  const closeAIProviderDialog = () => { providerDialogIdentity++; setProviderDialogOpen(false); setProviderDialogProvider(null); setProviderDialogIndex(null); };
   const confirmAIProviderDialog = (draft: FlowerProviderDraft) => {
+    const dialogIdentity = providerDialogIdentity;
     const d = normalizeAIProviderRowDraft(draft as AIProviderRow);
     const idx = providerDialogIndex();
     const nps = idx != null
@@ -312,7 +316,7 @@ export function FlowerSection() {
       : normalizeAIProviders([...providers(), d]);
     const current = String(currentModelID() ?? '').trim();
     const nid = current || collectAIModelOptions(nps)[0]?.id || '';
-    void saveAIProviderBundle(nps, nid, draft).then((s) => { if (s) closeAIProviderDialog(); });
+    void saveAIProviderBundle(nps, nid, draft).then((s) => { if (s && dialogIdentity === providerDialogIdentity) closeAIProviderDialog(); });
   };
   const discoverDialogModels: FlowerModelCatalogDiscovery = input => {
     if (!canEdit()) return Promise.reject(new Error('Provider editing is unavailable.'));
@@ -423,8 +427,8 @@ export function FlowerSection() {
           { id: 'health', label: i18n.t('settingsDesign.healthAndStorage') },
         ]} aria-label={i18n.t('aiChrome.flowerTitle')} />
         <div hidden={activeTab() !== 'models'} data-flower-settings-panel="models" class="flower-settings-model-sections">
-          <FlowerModelSettings copy={settingsCopy()} providers={providers().map(provider => ({ ...provider, web_search: provider.web_search ? { mode: provider.web_search.mode ?? 'disabled' } : undefined }))} currentModelID={currentModelID()} disabled={!canEdit() || saving()}
-            providerReady={provider => provider.auth_method === 'chatgpt' ? ctx.settings()?.chatgpt_accounts?.[provider.id]?.state === 'ready' : (flowerProviderAPIKeyOptional(provider.type) || !!providerKeySet()[provider.id]) && (provider.web_search?.mode !== 'brave' || !!webSearchKeySet()[provider.id])}
+          <FlowerModelSettings copy={settingsCopy()} providers={providers().map(provider => ({ ...provider, web_search: provider.web_search ? { ...provider.web_search } : undefined }))} currentModelID={currentModelID()} disabled={!canEdit() || saving()}
+            providerReady={provider => provider.auth_method === 'chatgpt' ? ctx.settings()?.chatgpt_accounts?.[provider.id]?.state === 'ready' : (flowerProviderAPIKeyOptional(provider.type) || !!providerKeySet()[provider.id]) && (!provider.web_search?.enabled || provider.web_search.source !== 'brave' || !!webSearchKeySet()[provider.id])}
             onChooseModel={id => {
               if (!canEdit() || saving()) return;
               const previous = currentModelID();
@@ -458,6 +462,7 @@ export function FlowerSection() {
 
       <FlowerProviderDialog
         providerDefaults={providerDefaults()}
+        searchPolicies={searchPolicies()}
         catalogModels={providers().find(provider => provider.id === providerDialogProvider()?.id)?.catalog_models}
         onDiscoverModels={discoverDialogModels}
         chatGPTAuth={chatGPTAuth}

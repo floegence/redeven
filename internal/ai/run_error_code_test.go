@@ -228,7 +228,7 @@ func TestProjectContextBudgetFailuresProvidesActionableCopyAndSafeDetails(t *tes
 			t.Fatal("numeric budget diagnostic lost")
 		}
 	}
-	for _, code := range []flruntime.ThreadTurnFailureCode{flruntime.ThreadTurnFailureProvider, flruntime.ThreadTurnFailureStorage, flruntime.ThreadTurnFailureEngineContract, flruntime.ThreadTurnFailureEffectOutcomeUnknown} {
+	for _, code := range []flruntime.ThreadTurnFailureCode{flruntime.ThreadTurnFailureStorage, flruntime.ThreadTurnFailureEngineContract, flruntime.ThreadTurnFailureEffectOutcomeUnknown} {
 		if detail := canonicalFailureDetail(&flruntime.ThreadTurnFailure{Code: code, Message: "private provider data"}); detail != "" {
 			t.Fatalf("private diagnostic exposed: %q", detail)
 		}
@@ -239,5 +239,19 @@ func TestContextBudgetDetailExcludesJoinedPrivateErrors(t *testing.T) {
 	detail := canonicalFailureDetail(&flruntime.ThreadTurnFailure{Code: flruntime.ThreadTurnFailureContextBudgetInvalid, Message: "invalid context budget: context_window_tokens=3891 reserved_output_tokens=4096 request_safe_limit=-205\nprivate cleanup secret=abc endpoint=https://private.invalid/?key=secret fixed_input_tokens=not-a-number"})
 	if detail != "context_window_tokens=3891\nreserved_output_tokens=4096\nrequest_safe_limit=-205" {
 		t.Fatalf("unsafe diagnostic: %q", detail)
+	}
+}
+
+func TestUnknownCanonicalProviderFailureRetainsProviderRecoveryClassification(t *testing.T) {
+	for _, message := range []string{"provider returned hosted tool web_search without declaration", "future provider protocol failure", "private provider data"} {
+		failure := &flruntime.ThreadTurnFailure{Code: flruntime.ThreadTurnFailureProvider, Message: message}
+		code, display := projectFloretTurnFailure(failure, runErrorCodeFloretEngineFailed)
+		if code != runErrorCodeProviderRequestRejected || strings.Contains(display, "orchestration engine") || strings.Contains(display, message) {
+			t.Fatalf("lost typed provider classification: %s %s", code, display)
+		}
+		detail := canonicalFailureDetail(failure)
+		if !strings.Contains(detail, code) || strings.Contains(detail, message) {
+			t.Fatalf("unsafe or missing provider diagnostic: %s", detail)
+		}
 	}
 }

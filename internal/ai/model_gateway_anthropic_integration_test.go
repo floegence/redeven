@@ -384,7 +384,7 @@ func TestIntegration_ModelGateway_Anthropic_ContentFilterFails(t *testing.T) {
 	if got := strings.TrimSpace(view.RunStatus); got != string(RunStateFailed) {
 		t.Fatalf("run_status=%q, want %q", got, RunStateFailed)
 	}
-	if view.RunError != "provider output was content filtered" {
+	if view.RunErrorCode != runErrorCodeProviderRequestRejected || view.RunError != "provider output was content filtered" || !strings.Contains(view.RunErrorDetail, "content_filter") {
 		t.Fatalf("run_error=%q, want canonical provider failure", view.RunError)
 	}
 

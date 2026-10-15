@@ -1,70 +1,84 @@
 ---
 type: AI Capability Contract
 title: Model web search
-description: Resolve reviewed model search capabilities consistently across settings, admission, and provider transport.
+description: Resolve provider and model search intent once for settings, admission, and provider transport.
 tags: [ai, models, search, providers]
-timestamp: 2026-10-05T00:00:00Z
+timestamp: 2026-10-15T00:00:00Z
 ---
 
 # Summary
 
-Redeven owns reviewed model search availability, endpoint and credential policy, and admission mapping into published Floret hosted tools. UI badges and actual tools must resolve through the same authority. Unsupported or unintegrated models cannot inherit search from their provider brand; provider rejection stays an execution error without a substitute implementation. Floret preserves the admitted Turn's canonical provider state.
+Redeven owns provider and model search preferences. One backend resolver supplies
+settings projections and Turn preparation; the final tool surface drives prompts
+and wire declarations. Floret v7.40.2 validates hosted events against the actual
+frozen provider request. Undeclared hosted execution remains a provider failure
+because its remote effects cannot be assumed absent.
 
 # Contract
 
-Search reviews in `scripts/model-catalog/overrides.json` enumerate wire model IDs,
-status (`supported`, `unsupported`, or `not_integrated`), official source URLs,
-and a review date. Supported entries identify an existing adapter protocol.
-`unsupported` requires explicit supplier evidence; an unimplemented integration
-uses `not_integrated`. Generation rejects missing reviews, unknown or mismatched
-protocols, duplicate IDs, and missing evidence. No newly shipped model silently
-inherits a disabled search default. Review the complete tool compatibility table;
-accepting Responses syntax or HTTP 200 does not prove hosted execution. Before
-marking a new search integration supported, qualify a real search result or
-hosted event through normal Turn admission. If that fails, resolve the discrepancy
-before enabling the capability. DeepSeek explicitly ignores built-in search, so
-its reviewed models use `unsupported` and its adapter cannot declare hosted search. Extra reviewed snapshot IDs preserve already
-supported Qwen configurations. User-owned OpenAI models retain the existing
-official-endpoint search contract; compatible endpoints retain their explicit
-`disabled`, `openai_builtin`, and `brave` choices.
+Provider configuration is web_search with enabled and source fields; source is
+native or brave. Model intent is optional web_search_enabled in existing model
+overrides or custom-model configuration. Both switches must be enabled. Missing
+model intent uses the backend recommendation; explicit true or false wins without
+another catalog allowlist. Authenticated account membership, adapter availability,
+credentials, tool restrictions and permissions still apply.
 
-`config.ResolveAIWebSearch` is the pure authority for catalog, wire identity,
-endpoint, configuration, and Brave credential presence. `/api/ai/models` and
-`/api/ai/model_catalog` expose only readonly `web_search.status` and
-`web_search.reason`. Stable unavailable reasons distinguish `unsupported`,
-`not_integrated`, `not_configured`, `needs_credentials`, and
-`endpoint_not_supported`. Protocol names belong in internal diagnostics.
+OpenAI, including custom endpoints, Moonshot, Z.ai and Qwen default provider search
+on. Generic OpenAI-compatible defaults off and alone supports Brave. Unintegrated
+adapters stay off and cannot be enabled. Reviewed supported models default on;
+other reviewed models default off. Unknown custom OpenAI/compatible models default
+on, while other custom models default off. The reviewed catalog records supplier
+evidence and adapter protocols; it supplies recommendations rather than overriding
+explicit preferences. DeepSeek has no hosted-search adapter.
 
-Turn preparation uses the same resolution to build its tools. All native search
-modes become Floret `HostedToolDefinition`; Brave remains a local tool under
-existing permission and credential checks. The prompt reads this final local and
-hosted tool surface, distinguishing URL discovery from `web_fetch`. Adapters
-render only the request's tools. Transport selection is independent of search in
-one request, so automatic titles omit search without changing protocol. Attachment
-routing shares that transport decision. Floret owns immutable provider checkpoints. Model, reasoning and hosted search
-retain their Turn configuration across continuation and recovery; local tools
-and permission instructions refresh from current thread policy. A new Turn
-resolves current configuration.
-Floret canonical user retry admits a new Turn, so it also resolves current
-configuration. A restored native wire shape retains its required transport even
-if search settings changed while the earlier Turn was waiting.
-Provider rejection remains a real error, without a substitute search implementation.
-A native tool returned as a local function call fails explicitly before local
-dispatch. Tool restrictions apply to both local and hosted definitions.
+config.ResolveAIWebSearchPolicy supplies provider defaults and editor capability;
+config.ResolveAIWebSearch resolves the configured model identity, aliases,
+provider/model intent and Brave key presence. Directory responses include provider
+policies and model web_search projections with status, reason,
+recommended_enabled and model_enabled. Reasons identify provider or model
+disablement, missing credentials, unsupported and unintegrated adapters. Frontends
+do not infer support from brands, endpoints or model names. Draft changes show a
+pending badge until the backend projects the saved state.
 
-Both hosts use the shared badge, availability type, and localized reason labels.
-Settings aggregate actual model projections; brands and label existence never
-imply support. Missing search credentials do not prevent ordinary chat or model
-switching. Readonly projections are stripped from persisted selection preferences.
-`web_search.config` records model and wire identity, reviewed and effective state,
-mode, transport, and the disabling reason using the existing diagnostic channel.
+Only configuration decoding accepts the released mode shape. Startup atomically
+writes the canonical shape before publishing configuration; failed persistence
+publishes no upgraded configuration. Migration preserves explicit disablement,
+Brave selection, keys, model selection and overrides. Runtime has one decision
+path. Disabling search or changing its source retains stored keys. Only explicit
+key deletion or removal of the provider deletes a stored key.
+
+Turn preparation freezes native search as Floret HostedToolDefinition; Brave is
+a local tool under existing permission checks. The prompt reads the final local
+and hosted tools. Browser search is an alternative only when computer/browser
+tools are present and the existing authorized target discovery and selection
+protocol permits it. URL fetching alone cannot discover URLs. Missing local tools
+receive paired model feedback; the model chooses an available alternative. The
+host does not add a fallback scheduler. Permission denial, blocked URLs and
+unknown tool effects retain their stop boundaries.
+
+Waiting and running Turns keep their frozen provider configuration through
+continuation and restart. New Turns and manual canonical retries resolve current
+settings. Titles omit hosted tools without changing the selected Turn transport;
+attachment routing uses the same transport decision. Adapters declare only the
+request's hosted tools, and native events absent from that request are rejected.
+They are never accepted as missing local tools or automatically replayed.
+
+Canonical provider failures, including unrecognized messages and historical
+failures, receive provider recovery actions. Settings targets the selected
+thread's current provider/model; save or cancel returns to that chat. Save failure
+retains the draft; repeated save/retry clicks coalesce while pending. Retrying is
+manual through Floret canonical retry, preserving confirmed results. Unknown
+effects never receive this retry action. Diagnostics expose reviewed structured
+fields or a safe typed classification, never arbitrary upstream error text.
 
 # Boundaries
 
-Model discovery and user-selected membership remain owned by [Model directory and selection](model-directory-and-selection.md).
+Model inventory and selected membership belong to [Model directory and selection](model-directory-and-selection.md).
+Shared controls and keyboard/touch behavior belong to [Flower provider configuration](../ui/flower-provider-configuration.md).
 
 # Evidence
 
-- `redeven:internal/config/ai_web_search.go` - Search resolution and stable protocol selection.
-- `redeven:internal/ai/web_search_turn_integration_test.go` - Normal admission through captured provider HTTP, including Vision image search and aliases.
-- `redeven:scripts/model-catalog/test_generate.py` - New-model and invalid-review rejection.
+- redeven:internal/config/ai_web_search.go - Provider policy and effective model resolver.
+- redeven:internal/config/ai_web_search_controls_test.go - Switch matrix, aliases, defaults and atomic migration.
+- redeven:internal/ai/web_search_turn_integration_test.go - Captured wire tools, restart, frozen waiting Turn and current-settings retry.
+- redeven:internal/envapp/ui_src/src/ui/FlowerSurface.providerRecovery.browser.test.tsx - Configure, cancel, failed save, saved preference and deliberate retry.

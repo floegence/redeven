@@ -252,3 +252,17 @@ it('uses actual target capabilities when a saved wire override points to an unkn
   const provider = { id: 'brand', type: 'deepseek' as const, models: [], model_selection: { selected_models: ['known'], model_overrides: [{ model_name: 'known', wire_model_name: 'target' }] } };
   expect(resolveFlowerProviderModels(provider, inventory)).toEqual([expect.objectContaining({ model_name: 'known', wire_model_name: 'target', status: 'needs_configuration' })]);
 });
+
+it('persists explicit search choices through refresh and clears them on reset', () => {
+  const catalog = [{ ...model('agent'), max_output_tokens: 4096, web_search: { status: 'available' as const, reason: 'catalog_supported', recommended_enabled: true, model_enabled: true } }];
+  for (const enabled of [false, true]) {
+    const provider: FlowerProviderDraft = { id: 'proxy', type: 'openai', catalog_models: catalog, models: [{ ...catalog[0], web_search_enabled: enabled }], model_selection: { selected_models: ['agent'] } };
+    const saved = serializeFlowerProvider(provider);
+    expect(saved.model_selection!.model_overrides![0].web_search_enabled).toBe(enabled);
+    const refreshed = applyFlowerModelDiscovery({ ...saved, models: resolveFlowerProviderModels(saved, catalog), catalog_models: catalog }, catalog);
+    expect(refreshed.models[0].web_search_enabled).toBe(enabled);
+    const reset = serializeFlowerProvider({ ...refreshed, models: [{ ...refreshed.models[0], web_search_enabled: undefined }] });
+    expect(reset.model_selection!.model_overrides).toEqual([]);
+    expect(resolveFlowerProviderModels({ ...reset, catalog_models: catalog }, catalog)[0].web_search_enabled).toBeUndefined();
+  }
+});

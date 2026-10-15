@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net"
 	"net/http"
@@ -237,7 +238,10 @@ func projectFloretTurnFailure(failure *flruntime.ThreadTurnFailure, fallbackCode
 	case flruntime.ThreadTurnFailureModelContextUnavailable:
 		return runErrorCodeModelContextUnavailable, userFacingRunError(runErrorCodeModelContextUnavailable, message)
 	case flruntime.ThreadTurnFailureProvider:
-		return projectRunFailure(message, fallbackCode)
+		if message == "provider output was content filtered" {
+			return runErrorCodeProviderRequestRejected, message
+		}
+		return projectRunFailure(message, runErrorCodeProviderRequestRejected)
 	case flruntime.ThreadTurnFailureContextBudgetInvalid:
 		return runErrorCodeContextBudgetInvalid, userFacingRunError(runErrorCodeContextBudgetInvalid, "")
 	case flruntime.ThreadTurnFailureContextFixedOverhead:
@@ -325,15 +329,24 @@ func providerHTTPStatusFromSDKError(text string) (int, bool) {
 	return status, true
 }
 
-// Only validated provider envelopes and typed numeric budget failures cross
-// the diagnostic presentation boundary. Raw upstream bodies stay private.
+// Only validated provider envelopes, engine-authored content-filter copy and
+// typed failure fields cross this boundary. Raw upstream bodies stay private.
 func canonicalFailureDetail(failure *flruntime.ThreadTurnFailure) string {
 	if failure == nil {
 		return ""
 	}
 	switch failure.Code {
 	case flruntime.ThreadTurnFailureProvider:
-		return providerFailureDetail(failure.Message)
+		if detail := providerFailureDetail(failure.Message); detail != "" {
+			return detail
+		}
+		code, _ := projectFloretTurnFailure(failure, runErrorCodeProviderRequestRejected)
+		diagnostic := providerFailureDiagnostic{Provider: "unknown", Code: code, Shape: "empty"}
+		if failure.Message == "provider output was content filtered" {
+			diagnostic.Code, diagnostic.Message = "content_filter", "provider output was content filtered"
+		}
+		raw, _ := json.MarshalIndent(diagnostic, "", "  ")
+		return string(raw)
 	case flruntime.ThreadTurnFailureContextBudgetInvalid,
 		flruntime.ThreadTurnFailureContextFixedOverhead,
 		flruntime.ThreadTurnFailureContextCompactionLimit:

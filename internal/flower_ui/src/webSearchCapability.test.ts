@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { FlowerProvider, FlowerSettingsSnapshot } from './contracts/flowerSurfaceContracts';
-import { flowerProviderSearchSummary, flowerWebSearchLabel, withFlowerWebSearchAvailability } from './webSearchCapability';
+import type { FlowerProvider } from './contracts/flowerSurfaceContracts';
+import { flowerProviderSearchSummary, flowerWebSearchLabel } from './webSearchCapability';
+import { withFlowerModelDirectory } from './modelDirectory';
 import { modelCatalogCopy } from './settings/modelCatalogCopy';
 import { applyFlowerModelDiscovery, cloneFlowerModel, serializeFlowerProvider } from './settings/modelSelection';
 
@@ -9,10 +10,10 @@ const missingKey = { status: 'unavailable', reason: 'needs_credentials' } as con
 
 describe('server-owned search capability', () => {
   const provider: FlowerProvider = { id: 'openai', type: 'openai', models: [{ model_name: 'vision-alias', wire_model_name: 'gpt-5.5' }, { model_name: 'another' }] };
-  const snapshot: FlowerSettingsSnapshot = { defaults: { permission_type: 'readonly' }, model_profile: { schema_version: 1, current_model_id: 'openai/vision-alias', providers: [provider] }, provider_secrets: [] };
+  const snapshot = { defaults: { permission_type: 'readonly' as const }, model_profile: { schema_version: 1 as const, current_model_id: 'openai/vision-alias', providers: [provider] }, provider_secrets: [] };
 
   it('joins by exact local identity and never treats a provider brand as enabled', () => {
-    const next = withFlowerWebSearchAvailability(snapshot, [{ id: 'openai/vision-alias', web_search: available }]);
+    const next = withFlowerModelDirectory(snapshot, { current_model_id: 'openai/vision-alias', sources: [], models: [{ id: 'openai/vision-alias', label: 'Vision', source: 'runtime_config', state: 'ready', web_search: available }] });
     const models = next.model_profile!.providers[0].models;
     expect(models[0].web_search).toEqual(available);
     expect(models[1].web_search).toBeUndefined();

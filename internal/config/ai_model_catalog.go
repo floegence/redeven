@@ -68,6 +68,10 @@ type AIModelSelection struct {
 func cloneAIModels(models []AIProviderModel) []AIProviderModel {
 	out := slices.Clone(models)
 	for i := range out {
+		if out[i].WebSearchEnabled != nil {
+			value := *out[i].WebSearchEnabled
+			out[i].WebSearchEnabled = &value
+		}
 		if out[i].SupportsTools != nil {
 			value := *out[i].SupportsTools
 			out[i].SupportsTools = &value
@@ -270,6 +274,9 @@ func (p AIProvider) ModelMetadata(name string) AIProviderModel {
 }
 
 func applyAIModelOverride(model, override AIProviderModel) AIProviderModel {
+	if override.WebSearchEnabled != nil {
+		model.WebSearchEnabled = override.WebSearchEnabled
+	}
 	if override.WireModelName != "" {
 		model.WireModelName = override.WireModelName
 	}

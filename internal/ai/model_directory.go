@@ -31,10 +31,12 @@ type ModelDirectorySource struct {
 }
 
 type ModelDirectory struct {
-	ProviderDefaults map[string][]ModelCatalogModel `json:"provider_defaults"`
-	ProviderCatalogs map[string][]ModelCatalogModel `json:"provider_catalogs"`
-	Models           []ModelDirectoryModel          `json:"models"`
-	Sources          []ModelDirectorySource         `json:"sources"`
+	SearchPolicies         map[string]config.AIWebSearchPolicy `json:"search_policies"`
+	ProviderSearchPolicies map[string]config.AIWebSearchPolicy `json:"provider_search_policies"`
+	ProviderDefaults       map[string][]ModelCatalogModel      `json:"provider_defaults"`
+	ProviderCatalogs       map[string][]ModelCatalogModel      `json:"provider_catalogs"`
+	Models                 []ModelDirectoryModel               `json:"models"`
+	Sources                []ModelDirectorySource              `json:"sources"`
 }
 
 // RuntimeStatusSnapshot reads local observation only. Settings and baseline
@@ -109,6 +111,11 @@ func (s *Service) readModelDirectory(ctx context.Context, meta *session.Meta, _ 
 
 func (s *Service) projectModelDirectory(cfg *config.AIConfig, out *ModelsResponse, desktopSnapshot *DesktopModelSourceModelSnapshot) ModelDirectory {
 	directory := ModelDirectory{ProviderCatalogs: map[string][]ModelCatalogModel{}, Models: []ModelDirectoryModel{}, Sources: []ModelDirectorySource{}}
+	directory.SearchPolicies = map[string]config.AIWebSearchPolicy{}
+	directory.ProviderSearchPolicies = map[string]config.AIWebSearchPolicy{}
+	for _, kind := range []string{"openai", "openai_compatible", "moonshot", "chatglm", "qwen", "anthropic", "google", "deepseek", "openrouter", "xai", "groq", "ollama"} {
+		directory.SearchPolicies[kind] = config.ResolveAIWebSearchPolicy(config.AIProvider{Type: kind})
+	}
 	directory.ProviderDefaults = make(map[string][]ModelCatalogModel)
 	for kind, models := range config.AIProviderCatalogs() {
 		defaults := make([]ModelCatalogModel, 0, len(models))
@@ -126,6 +133,7 @@ func (s *Service) projectModelDirectory(cfg *config.AIConfig, out *ModelsRespons
 		if p.Type == platformGatewayProviderType {
 			continue
 		}
+		directory.ProviderSearchPolicies[p.ID] = config.ResolveAIWebSearchPolicy(p)
 		directory.ProviderCatalogs[p.ID] = []ModelCatalogModel{}
 		for _, m := range p.CatalogModels() {
 			directory.ProviderCatalogs[p.ID] = append(directory.ProviderCatalogs[p.ID], modelCatalogView(p, m))

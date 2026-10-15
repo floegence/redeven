@@ -11,17 +11,16 @@ import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, untra
 import { createStore, reconcile } from 'solid-js/store';
 import { cn } from '@floegence/floe-webapp-core';
 import { Check, ChevronDown, ExternalLink, Info, Pencil, Save } from '@floegence/floe-webapp-core/icons';
-import { Button, Checkbox, ConfirmDialog, Dialog, Dropdown, Input, Select, StableText } from '@floegence/floe-webapp-core/ui';
+import { Button, Checkbox, ConfirmDialog, Dialog, Dropdown, Input, Select, StableText, Tooltip } from '@floegence/floe-webapp-core/ui';
 
 import { defaultFlowerProviderModels } from './modelSelection';
 import type { FlowerProviderDialogCopy } from '../copy';
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../copy';
 import { createFlowerActivityDisclosureMotion } from '../activityDisclosure';
-import type { FlowerProviderDraft, FlowerProviderModel, FlowerProviderType, FlowerWebSearchMode } from '../contracts/flowerSurfaceContracts';
+import type { FlowerProviderDraft, FlowerProviderModel, FlowerProviderType, FlowerWebSearchPolicy } from '../contracts/flowerSurfaceContracts';
 import {
   FLOWER_PROVIDER_TYPES,
   defaultBaseURLForFlowerProviderType,
-  flowerProviderNeedsWebSearchConfig,
   flowerProviderSupportsCustomModels,
   flowerProviderTypeRequiresBaseURL,
   flowerProviderDisplayName,
@@ -47,6 +46,8 @@ export type FlowerProviderDialogProps = Readonly<{
   allowTypeChange?: boolean;
   provider: FlowerProviderDraft | null;
   catalogModels?: readonly FlowerProviderModel[];
+  searchPolicies?: Readonly<Partial<Record<FlowerProviderType, FlowerWebSearchPolicy>>>;
+  initialModelName?: string;
   providerDefaults?: Readonly<Partial<Record<FlowerProviderType, readonly FlowerProviderModel[]>>>;
   copy?: FlowerProviderDialogCopy;
   keyConfigured: boolean;
@@ -70,6 +71,11 @@ function modelSelected(provider: FlowerProviderDraft, modelName: string): boolea
 
 export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
   const copy = () => props.copy ?? DEFAULT_FLOWER_SURFACE_COPY.settings.dialog;
+  const searchPolicy = () => store.draft?.type === props.provider?.type && store.draft?.search_policy
+    ? store.draft.search_policy : props.searchPolicies?.[store.draft?.type ?? 'openai'];
+  const providerSearch = () => store.draft?.web_search ?? (searchPolicy() ? { enabled: searchPolicy()!.enabled, source: searchPolicy()!.source } : undefined);
+  const recommended = (enabled: boolean) => enabled ? copy().catalog.searchRecommendedOn : copy().catalog.searchRecommendedOff;
+  const SearchInfo = (info: { text: string }) => <Tooltip content={info.text} placement="bottom" delay={0} class="!whitespace-normal w-64 max-w-[75vw]"><button type="button" class="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded text-muted-foreground hover:text-foreground" aria-label={copy().webSearch} onClick={event => event.currentTarget.focus()} on:keydown={event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); event.currentTarget.blur(); } }}><Info class="h-3.5 w-3.5" aria-hidden="true" /></button></Tooltip>;
   const canChangeType = () => props.mode === 'create' || props.allowTypeChange === true;
   const [query, setQuery] = createSignal('');
   const [loading, setLoading] = createSignal(false);
@@ -422,7 +428,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
       setStore('draft', reconcile(initial));
       setAuthError('');
       setCustomModelName(''); setQuery(''); setDiscoveryError('');
-      setEditingModelName('');
+      setEditingModelName(props.initialModelName ?? '');
       setEditingProviderName(false);
       setSelectedProviderType(initial && (props.mode === 'edit' || initial.auth_method === 'chatgpt' && initial.account_id) ? initial.type : null);
       if (props.mode === 'create' && initial?.auth_method === 'chatgpt' && initial.chatgpt_account?.state === 'ready') {
@@ -467,8 +473,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
       const next = { ...draft, ...patch };
       // Draft reconciliation must never mutate the canonical account-list snapshot.
       if (patch.chatgpt_account) next.chatgpt_account = { ...patch.chatgpt_account };
-      if ('base_url' in patch || 'web_search' in patch || 'web_search_api_key' in patch) {
-        next.models = next.models.map((model) => ({ ...model, web_search: undefined }));
+      if ('base_url' in patch) {
         next.catalog_models = undefined;
       }
       if (discoveryIdentity(next) !== discoveryIdentity(draft)) invalidateDiscovery();
@@ -490,7 +495,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
       account_id: undefined, chatgpt_account: undefined,
       name: providerTypeLabel(type),
       base_url: defaultBaseURLForFlowerProviderType(type),
-      web_search: flowerProviderNeedsWebSearchConfig(type) ? { mode: 'disabled' } : undefined,
+      web_search: props.searchPolicies?.[type] ? { enabled: props.searchPolicies[type]!.default_enabled, source: props.searchPolicies[type]!.source } : undefined,
       web_search_api_key: undefined,
       provider_api_key: undefined,
       models: nextModels,
@@ -548,7 +553,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
     const rawCatalog = flowerProviderModelCatalog(store.draft);
     const raw = rawCatalog.find(entry => entry.model_name === preset.model_name || (entry.wire_model_name || entry.model_name) === (preset.wire_model_name || preset.model_name)) ?? preset;
     const selected = store.draft.models[index];
-    setModels(store.draft.models.map((model, modelIndex) => modelIndex === index ? cloneModel({ ...raw, model_name: selected.model_name, wire_model_name: selected.wire_model_name || raw.wire_model_name }) : model));
+    setModels(store.draft.models.map((model, modelIndex) => modelIndex === index ? cloneModel({ ...raw, web_search_enabled: undefined, model_name: selected.model_name, wire_model_name: selected.wire_model_name || raw.wire_model_name }) : model));
   };
 
   return (
@@ -562,6 +567,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
       contentClass="flower-provider-dialog-body"
       footer={(
         <div class="flex flex-wrap items-center justify-end gap-2">
+          <Show when={props.saving}><span role="status" class="mr-auto text-sm text-muted-foreground">{copy().catalog.settingsSavePending}</span></Show>
           <Show when={selectedProviderType() && missingCredential() && !chatGPTSelected()}>
             <span role="status" class="mr-auto text-sm text-muted-foreground">
               {missingCredential() === 'provider' ? copy().needsKey : copy().needsBraveKey}
@@ -572,7 +578,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
             <Button size="sm" variant="outline" disabled={props.disabled || props.saving} onClick={() => configureModel(model().model_name)}>{copy().catalog.configure}</Button>
           </div>}</Show>
           <Button size="sm" variant="outline" data-flower-skip-discovery onClick={() => props.onOpenChange(false)}>
-            {copy().discard}
+            {props.saving ? copy().catalog.settingsCloseSaving : copy().discard}
           </Button>
           <Button
             size="sm"
@@ -783,25 +789,18 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                         </div>
                       </Show>
                     </Show>
-                    <Show when={flowerProviderNeedsWebSearchConfig(store.draft!.type)}>
-                      <div>
-                        <FlowerFieldLabel>{copy().webSearch}</FlowerFieldLabel>
-                        <Select
-                          value={store.draft!.web_search?.mode ?? 'disabled'}
-                          onChange={(value) => updateProvider({
-                            web_search: { mode: value as FlowerWebSearchMode },
-                            ...(value === 'brave' ? {} : { web_search_api_key: null }),
-                          })}
-                          options={[
-                            { value: 'disabled', label: copy().disabled },
-                            { value: 'openai_builtin', label: copy().openAIBuiltIn },
-                            { value: 'brave', label: copy().braveSearch },
-                          ]}
-                          class="w-full"
-                        />
+                    <div data-flower-provider-search>
+                      <div class="flex items-center gap-1">
+                        <Checkbox checked={providerSearch()?.enabled ?? false} disabled={!searchPolicy()?.editable} label={copy().webSearch} size="sm" onChange={enabled => updateProvider({ web_search: { enabled, source: providerSearch()?.source ?? 'native' } })} />
+                        <SearchInfo text={copy().catalog.searchProviderHint + ' ' + recommended(searchPolicy()?.default_enabled ?? false)} />
                       </div>
-                    </Show>
-                    <Show when={(store.draft!.web_search?.mode ?? 'disabled') === 'brave'}>
+                      <Show when={!searchPolicy()?.editable}><p class="flower-body-copy text-muted-foreground">{copy().catalog.searchNotIntegrated}</p></Show>
+                      <Show when={searchPolicy()?.supported_sources?.length && searchPolicy()!.supported_sources.length > 1}>
+                        <Select value={providerSearch()?.source ?? 'native'} onChange={value => updateProvider({ web_search: { enabled: providerSearch()?.enabled ?? false, source: value as 'native' | 'brave' } })}
+                          options={[{ value: 'native', label: copy().openAIBuiltIn }, { value: 'brave', label: copy().braveSearch }]} class="mt-2 w-full" />
+                      </Show>
+                    </div>
+                    <Show when={providerSearch()?.source === 'brave'}>
                       <div>
                         <FlowerFieldLabel hint={braveKeyHint()}>
                           {copy().braveAPIKey}
@@ -866,7 +865,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                                 <div class="min-w-0 flex-1">
                                   <div class="flex flex-wrap items-center gap-2">
                                     <span class={cn('break-all flower-body-copy font-medium', enabled() ? 'text-foreground' : 'text-muted-foreground')}>{preset().display_name || modelName()}</span>
-                                    <WebSearchCapabilityBadge availability={model().web_search} copy={copy().catalog} />
+                                    <WebSearchCapabilityBadge availability={JSON.stringify([store.draft?.web_search, model().web_search_enabled]) === JSON.stringify([props.provider?.web_search, props.provider?.models.find(saved => saved.model_name === modelName())?.web_search_enabled]) ? model().web_search : undefined} copy={copy().catalog} />
                                     <Show when={preset().unavailable}><FlowerSettingsPill>{copy().catalog.unavailableModel}</FlowerSettingsPill></Show>
                                     <Show when={preset().quantization}><FlowerSettingsPill>{preset().quantization}</FlowerSettingsPill></Show>
                                     <Show when={model().status}><FlowerSettingsPill>{model().status === 'needs_configuration' ? copy().catalog.needsConfiguration : model().status === 'unsupported' ? copy().catalog.unavailableModel : model().status === 'experimental' ? copy().catalog.experimental : copy().catalog.preview}</FlowerSettingsPill></Show>
@@ -933,6 +932,15 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                                     <Show when={preset().status === 'needs_configuration' || model().status === 'needs_configuration' || model().supports_tools !== undefined || model().reasoning_capability?.fixture === 'manual_provider_capability'}>
                                       <ManualModelCapabilities model={model()} type={store.draft!.type} baseURL={store.draft!.base_url || defaultBaseURLForFlowerProviderType(store.draft!.type)} copy={copy().catalog} onChange={patch => { if (modelIndex() >= 0) updateModel(modelIndex(), patch); }} />
                                     </Show>
+                                    <div class="md:col-span-4" data-flower-model-search>
+                                      <div class="flex items-center gap-1">
+                                        <Checkbox label={copy().webSearch} size="sm" disabled={!searchPolicy()?.editable}
+                                          checked={model().web_search_enabled ?? model().web_search?.recommended_enabled ?? searchPolicy()?.default_model_enabled ?? false}
+                                          onChange={web_search_enabled => { if (modelIndex() >= 0) updateModel(modelIndex(), { web_search_enabled }); }} />
+                                        <SearchInfo text={copy().catalog.searchModelHint + ' ' + recommended(model().web_search?.recommended_enabled ?? searchPolicy()?.default_model_enabled ?? false)} />
+                                      </div>
+                                      <Show when={!searchPolicy()?.editable} fallback={<Show when={!providerSearch()?.enabled}><p class="flower-body-copy text-muted-foreground">{copy().catalog.searchProviderOff}</p></Show>}><p class="flower-body-copy text-muted-foreground">{copy().catalog.searchNotIntegrated}</p></Show>
+                                    </div>
                                     <div class="md:col-span-3">
                                       <Checkbox checked={flowerModelSupportsImage(model().input_modalities)} onChange={(enabled) => { if (modelIndex() >= 0) updateModel(modelIndex(), { input_modalities: enabled ? ['text', 'image'] : ['text'] }); }} label={copy().imageInput} size="sm" />
                                     </div>

@@ -535,7 +535,7 @@ func TestAIConfigValidate_ProviderScopedWebSearch(t *testing.T) {
 				Name:      "Compat",
 				Type:      "openai_compatible",
 				BaseURL:   "https://example.com/v1",
-				WebSearch: &AIProviderWebSearch{Mode: AIProviderWebSearchModeBrave},
+				WebSearch: &AIProviderWebSearch{Enabled: true, Source: AIWebSearchSourceBrave},
 				Models:    []AIProviderModel{{ModelName: "custom-model", ContextWindow: 128000}},
 			},
 		},
@@ -544,24 +544,25 @@ func TestAIConfigValidate_ProviderScopedWebSearch(t *testing.T) {
 		t.Fatalf("Validate openai_compatible brave web_search: %v", err)
 	}
 
-	cfg.Providers[0].WebSearch.Mode = AIProviderWebSearchModeOpenAIBuiltin
+	cfg.Providers[0].WebSearch.Source = AIWebSearchSourceNative
 	if err := cfg.Validate(); err != nil {
-		t.Fatalf("Validate openai_compatible openai_builtin web_search: %v", err)
+		t.Fatalf("Validate openai_compatible native web_search: %v", err)
 	}
 
-	cfg.Providers[0].WebSearch.Mode = "auto"
+	cfg.Providers[0].WebSearch.Source = "auto"
 	if err := cfg.Validate(); err == nil {
-		t.Fatalf("expected validation error for invalid provider web_search.mode")
+		t.Fatalf("expected validation error for invalid provider web_search.source")
 	}
 
 	cfg.Providers[0].Type = "openai"
 	cfg.Providers[0].BaseURL = "https://api.openai.com/v1"
-	cfg.Providers[0].WebSearch.Mode = AIProviderWebSearchModeBrave
+	cfg.Providers[0].WebSearch.Source = AIWebSearchSourceBrave
 	if err := cfg.Validate(); err == nil {
-		t.Fatalf("expected validation error for native provider web_search.mode")
+		t.Fatalf("expected validation error for Brave source on a native provider")
 	}
 
-	cfg.Providers[0].WebSearch.Mode = AIProviderWebSearchModeDisabled
+	cfg.Providers[0].WebSearch.Source = AIWebSearchSourceNative
+	cfg.Providers[0].WebSearch.Enabled = false
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("Validate disabled native provider web_search: %v", err)
 	}
