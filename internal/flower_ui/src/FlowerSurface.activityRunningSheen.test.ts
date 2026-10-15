@@ -32,6 +32,7 @@ describe('Flower activity status presentation', () => {
     expect(panelRule).toContain('--flower-activity-terminal-font');
     expect(panelRule).toContain('background: transparent');
     expect(panelRule).not.toContain('gradient');
+    expect(panelRule).not.toContain('opacity:');
     expect(headerRule).toContain('background: var(--flower-activity-terminal-command-surface)');
     expect(headerRule).toContain('border: 0');
     expect(commandRule).toContain('font-family: var(--flower-activity-terminal-font)');
