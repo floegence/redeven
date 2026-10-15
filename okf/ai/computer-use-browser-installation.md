@@ -1,7 +1,7 @@
 ---
 type: Runtime and Product Contract
 title: Optional built-in browser installation
-description: Confirm browser acquisition, persist the environment capability switch, and resume through the canonical Flower input request.
+description: Confirm browser acquisition, persist the environment capability switch, and keep setup separate from canonical Flower questions.
 tags: [ai, computer-use, browser, installation, desktop]
 timestamp: 2026-10-08T00:00:00Z
 ---
@@ -18,12 +18,6 @@ becomes a second conversation lifecycle. Failed verification never publishes a
 partial package, and failures offer an explicit retry or alternative source.
 
 # Contract
-
-Installation input prompts must satisfy the published Floret `InputRequest`
-contract, including its 400-character question limit. The setup panel owns
-detailed instructions. Prompt validation and a production continuation test
-must both pass; invalid input must never turn an installation prerequisite into
-an unknown-effect failure.
 
 ## User contract
 
@@ -57,16 +51,16 @@ the authoritative manager; neither a missing manager nor Playwright's cache
 provides an implicit executable fallback. Tests and local debugging prepare an
 explicit qualified installation fixture.
 
-A first managed-browser use without a package returns a canonical `browser_install`
-InputRequest with a provenance-bound Activity target reference. The task's setup
-action opens this installation panel. A successful installation initiated by that
-panel may acknowledge that same pending request once; merely opening a settings
-page with an installed browser does not resume work. Closing the panel or changing
-the selected interaction retires continuation. An explicitly disabled browser can
-continue the task without this capability. Runtime validates installed/enabled
-or disabled state again before accepting either answer. No agent installation
-tool, shell fallback, automatic re-enable, target substitution, or new Floret API
-is introduced. Existing account requirements and private-control boundaries hold.
+A first managed-browser use without a package returns failed setup facts. Flower
+may independently ask the user to install or choose another approach, citing the
+tool call. The canonical [interaction boundary](computer-use-takeover.md) supplies
+the setup action; the installer never creates a question. Independent questions
+remain answerable without completed installation, and answers never certify
+readiness or disable the browser. Opening, closing or completing their setup
+panel does not submit an answer. Existing tool-origin setup interactions retain
+scoped acknowledgement from the initiating panel; delayed completion cannot
+continue a different question or conversation. No agent installation tool,
+automatic re-enable, shell fallback or target substitution is introduced.
 
 ## Distribution and state
 
@@ -163,7 +157,7 @@ Discovery, settings and agent execution cannot initiate installation. Disabling 
 - `redeven:internal/browserinstall/catalog.json` - official pinned package identities.
 - `redeven:internal/browserinstall/helpers.go` - release-suite helper preparation.
 - `redeven:internal/browserinstall/manager_test.go` - consent, cancellation, verification, repair and real browser launch.
-- `redeven:internal/ai/computer_browser_installation_integration_test.go` - production Floret wait and validated continuation.
+- `redeven:internal/ai/computer_browser_installation_integration_test.go` - failed setup facts and independent Floret continuation.
 - `redeven:internal/flower_ui/src/FlowerManagedBrowser.tsx` - shared switch and source confirmation.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerManagedBrowser.browser.test.tsx` - browser interaction and layout acceptance.
 - `redeven:scripts/stage_computer_resources.test.mjs` - relocated thin helpers with explicit browser executable.

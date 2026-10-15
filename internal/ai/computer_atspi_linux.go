@@ -217,8 +217,8 @@ func (c *atspiClient) safety(ctx context.Context) (*InteractionSafetyDecision, e
 			break
 		}
 	}
-	if len(queue) > 0 {
-		reasons = append(reasons, "unknown")
+	if len(queue) > 0 && len(reasons) == 0 {
+		return nil, errors.New("TARGET_OBSERVATION_UNAVAILABLE")
 	}
 	if len(reasons) > 0 {
 		return &InteractionSafetyDecision{Level: "takeover", ReasonCodes: reasons}, nil

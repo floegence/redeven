@@ -380,7 +380,10 @@ func requestUserInputPromptFromCurrent(current flruntime.ThreadView) *RequestUse
 				break
 			}
 		}
+		assistance := computerAssistanceFromEvidence(current, interaction)
 		return &RequestUserInputPrompt{
+			ComputerAssistance: assistance, ReasonCode: interaction.Input.ReasonCode,
+			RequiredFromUser: append([]string(nil), interaction.Input.RequiredFromUser...), EvidenceRefs: append([]string(nil), interaction.Input.EvidenceRefs...),
 			PromptID: interaction.ID, MessageID: interaction.TurnID.String(), ToolID: interaction.ToolCallID,
 			ToolName: toolName, Questions: questions, PublicSummary: interaction.Input.Summary, ContainsSecret: containsSecret,
 		}

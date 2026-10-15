@@ -407,6 +407,7 @@
       "handlerStartFailedTitle": "Flower konnte nicht starten",
       "handlerStillStarting": "Flower wird noch gestartet.",
       "computerViewLastScreenshot": "Letzten Screenshot ansehen",
+      "computerScreenshotLoadFailed": "Screenshot konnte nicht geladen werden",
       "computerResumeControl": "Steuerung fortsetzen",
       "computerStageTitle": "Computer",
       "computerStageMaximize": "Ansicht maximieren",

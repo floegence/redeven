@@ -10,6 +10,7 @@ export type FlowerActivityDisclosureController = Readonly<{
 
 export type FlowerActivityDisclosureControllerOptions = Readonly<{
   manualOpen: Accessor<boolean | null | undefined>;
+  defaultOpen?: Accessor<boolean>;
   onManualOpenChange: (open: boolean) => void;
 }>;
 
@@ -22,7 +23,7 @@ function prefersReducedMotion(): boolean {
 export function createFlowerActivityDisclosureController(
   options: FlowerActivityDisclosureControllerOptions,
 ): FlowerActivityDisclosureController {
-  const open = createMemo(() => options.manualOpen() ?? false);
+  const open = createMemo(() => options.manualOpen() ?? options.defaultOpen?.() ?? false);
 
   return {
     open,

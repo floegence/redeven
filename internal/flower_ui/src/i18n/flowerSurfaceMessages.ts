@@ -148,6 +148,7 @@ export const flowerSurfaceEnUS = {
     handlerStartFailedTitle: 'Flower could not start',
     handlerStillStarting: 'Flower is still starting.',
     computerViewLastScreenshot: "View last screenshot",
+    computerScreenshotLoadFailed: "Screenshot could not be loaded",
     computerResumeControl: "Resume control",
     computerStageTitle: "Computer",
     computerStageMaximize: "Maximize viewer",

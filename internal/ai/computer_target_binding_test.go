@@ -10,7 +10,20 @@ import (
 
 type bindingTestExecutor struct {
 	recordingTargetExecutor
-	readinessErr error
+	readinessErr    error
+	frameBytes      []byte
+	frameAttachment TargetToolAttachment
+}
+
+func (e *bindingTestExecutor) ExecuteTargetTool(ctx context.Context, call TargetToolCall) (TargetToolResult, error) {
+	result, err := e.recordingTargetExecutor.ExecuteTargetTool(ctx, call)
+	if call.ToolName == "computer.screenshot" && len(e.frameBytes) > 0 {
+		attachment := e.frameAttachment
+		attachment.ResourceRef = "computer://" + call.TargetID + "/" + attachment.SHA256
+		result.Attachments = []TargetToolAttachment{attachment}
+		result.frameBytes = e.frameBytes
+	}
+	return result, err
 }
 
 func (e *bindingTestExecutor) EnsureTargetReady(context.Context, string) error { return e.readinessErr }
@@ -18,7 +31,8 @@ func (e *bindingTestExecutor) EnsureTargetReady(context.Context, string) error {
 func computerBindingFixture(t *testing.T) (*ComputerUseRuntime, *bindingTestExecutor, *threadstore.Store, string) {
 	t.Helper()
 	registry := NewTargetRegistry()
-	executor := &bindingTestExecutor{}
+	body, attachment := computerFrameFixture(t)
+	executor := &bindingTestExecutor{frameBytes: body, frameAttachment: attachment}
 	for _, target := range []TargetDescriptor{
 		{ID: "browser-main", Kind: "browser.managed"},
 		{ID: "desktop-main", Kind: "desktop.screen"},
@@ -139,8 +153,8 @@ func TestComputerTargetRejectedSelectionDoesNotChangeBinding(t *testing.T) {
 			result, err := r.execTargetTool(ctx, "rejected", "computer.click", map[string]any{"target": "desktop.screen", "x": 10, "y": 10})
 			if reason == "takeover" {
 				paused, ok := result.(toolExecutionOutput)
-				if err != nil || !ok || paused.inputRequired == nil {
-					t.Fatalf("takeover did not request canonical input: %v", err)
+				if err == nil || !ok || paused.Payload == nil {
+					t.Fatalf("takeover did not preserve failure facts: %v", err)
 				}
 			} else if err == nil {
 				t.Fatal("rejected target action did not fail")

@@ -130,3 +130,56 @@ func TestComputerRuntimeDropsUnsafeFramesBeforeStorageOrViewing(t *testing.T) {
 		})
 	}
 }
+
+func TestComputerScreenshotRequiresSavedImageForExactTarget(t *testing.T) {
+	for _, variant := range []string{"missing", "corrupt", "wrong-target", "wrong-reference", "save-failure"} {
+		t.Run(variant, func(t *testing.T) {
+			body, attachment := computerFrameFixture(t)
+			result := TargetToolResult{TargetID: "target", frameBytes: body, Attachments: []TargetToolAttachment{attachment}, Result: map[string]any{"action_executed": false}}
+			dir := t.TempDir()
+			switch variant {
+			case "missing":
+				result.Attachments, result.frameBytes = nil, nil
+			case "corrupt":
+				result.frameBytes = []byte("invalid PNG")
+			case "wrong-target":
+				result.TargetID = "other"
+			case "wrong-reference":
+				result.Attachments[0].ResourceRef = "computer://other/" + attachment.SHA256
+			case "save-failure":
+				dir = filepath.Join(dir, "file")
+				if err := os.WriteFile(dir, []byte("not a directory"), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			executor := &unsafeComputerFrameExecutor{result: result}
+			runtime := NewComputerUseRuntime(NewTargetRegistry(), map[string]TargetToolExecutor{"target": executor}, dir)
+			t.Cleanup(func() { _ = runtime.Close() })
+			got, err := runtime.ExecuteTargetTool(t.Context(), TargetToolCall{TargetID: "target", ToolName: "computer.screenshot"})
+			if err == nil || len(got.Attachments) != 0 {
+				t.Fatalf("unsaved screenshot accepted: %+v %v", got, err)
+			}
+			if variant != "missing" && !executor.released {
+				t.Fatal("transient frame leaked")
+			}
+			if _, err := runtime.ResolveTargetToolAttachment(t.Context(), attachment.ResourceRef); err == nil {
+				t.Fatal("invalid screenshot persisted")
+			}
+		})
+	}
+}
+
+func TestComputerMediaSaveFailurePreservesCompletedAction(t *testing.T) {
+	body, attachment := computerFrameFixture(t)
+	executor := &unsafeComputerFrameExecutor{result: TargetToolResult{TargetID: "target", frameBytes: body, Attachments: []TargetToolAttachment{attachment}, Result: map[string]any{"action_executed": true}}}
+	dir := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(dir, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	runtime := NewComputerUseRuntime(NewTargetRegistry(), map[string]TargetToolExecutor{"target": executor}, dir)
+	t.Cleanup(func() { _ = runtime.Close() })
+	result, err := runtime.ExecuteTargetTool(t.Context(), TargetToolCall{TargetID: "target", ToolName: "computer.click"})
+	if err == nil || takeoverResult(result, err) || result.Result.(map[string]any)["action_executed"] != true || len(result.Attachments) != 0 || !executor.released {
+		t.Fatalf("lost confirmed progress or leaked media: %+v %v", result, err)
+	}
+}

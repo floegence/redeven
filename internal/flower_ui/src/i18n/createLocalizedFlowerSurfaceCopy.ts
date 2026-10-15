@@ -285,6 +285,7 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
       handlerStartFailedTitle: t(i18n, k('chat.handlerStartFailedTitle')),
       handlerStillStarting: t(i18n, k('chat.handlerStillStarting')),
       computerViewLastScreenshot: t(i18n, k('chat.computerViewLastScreenshot')),
+      computerScreenshotLoadFailed: t(i18n, k('chat.computerScreenshotLoadFailed')),
       computerResumeControl: t(i18n, k('chat.computerResumeControl')),
       computerStageTitle: t(i18n, k('chat.computerStageTitle')),
       computerStageMaximize: t(i18n, k('chat.computerStageMaximize')),

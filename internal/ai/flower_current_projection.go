@@ -59,12 +59,34 @@ func flowerCurrentJSONAt(current flruntime.ThreadView, sampledAt time.Time) (jso
 	if current.RunProgress != nil && current.RunProgress.Request != nil && !sampledAt.IsZero() {
 		root["sampled_at_ms"] = sampledAt.UnixMilli()
 	}
+	// Product actions derive from the same canonical evidence resolver as host
+	// commands. The browser consumes this projection instead of parsing questions.
+	assistance := make(map[string]*ComputerInputAssistance)
+	for _, interaction := range current.Interactions {
+		if value := computerAssistanceFromEvidence(current, interaction); value != nil {
+			assistance[interaction.ID] = value
+		}
+	}
+	if interactions, ok := root["interactions"].([]any); ok {
+		for _, value := range interactions {
+			if item, ok := value.(map[string]any); ok {
+				if entry := assistance[anyToString(item["id"])]; entry != nil {
+					item["computer_assistance"] = entry
+				}
+			}
+		}
+	}
 	threadID := strings.TrimSpace(current.ThreadID.String())
 	if items, ok := root["items"].([]any); ok {
 		for index, value := range items {
 			item, ok := value.(map[string]any)
 			if !ok || index >= len(current.Items) {
 				continue
+			}
+			if interaction, ok := item["interaction"].(map[string]any); ok {
+				if entry := assistance[anyToString(interaction["id"])]; entry != nil {
+					interaction["computer_assistance"] = entry
+				}
 			}
 			turnID := strings.TrimSpace(current.Items[index].TurnID.String())
 			projectCurrentAttachmentURLs(item, current.Items[index].Attachments, threadID, turnID, "")

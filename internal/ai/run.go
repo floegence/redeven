@@ -1270,8 +1270,6 @@ func isMutatingInvocation(toolName string, args map[string]any) bool {
 }
 
 type toolCallOutcome struct {
-	inputRequired *fltools.InputRequest
-
 	cancellationConfirmed bool
 	dispatchErr           error
 	Success               bool
@@ -1285,8 +1283,6 @@ type toolCallOutcome struct {
 }
 
 type toolExecutionOutput struct {
-	inputRequired *fltools.InputRequest
-
 	TargetID    string
 	Payload     any
 	Attachments []ToolAttachment
@@ -1624,7 +1620,6 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		}
 		result = target.Payload
 		outcome.Attachments = append([]ToolAttachment(nil), target.Attachments...)
-		outcome.inputRequired = fltools.CloneInputRequest(target.inputRequired)
 	}
 
 	r.debug("ai.run.tool.result",
@@ -3004,31 +2999,22 @@ func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string
 	if runID == "" || threadID == "" || turnID == "" || strings.TrimSpace(toolID) == "" {
 		return nil, errors.New("target tool canonical execution identity is unavailable")
 	}
-	// Every admitted computer operation uses this one pause boundary, including
-	// discovery/selection and pre-dispatch checks after a viewer detected safety.
 	defer func() {
 		if errors.Is(outputErr, browserinstall.ErrInstallRequired) {
-			output = computerInstallExecution()
-			outputErr = nil
+			output = toolExecutionOutput{Payload: map[string]any{"browser_installation_required": true, "action_executed": false}}
+			outputErr = &targetToolPolicyError{code: "target_setup_required", tool: toolName, repairAction: "install_managed_browser"}
 			return
 		}
 		var failure *targetToolPolicyError
-		if !errors.As(outputErr, &failure) || failure.code != "interaction_takeover_required" {
-			return
-		}
-		target := TargetDescriptor{ID: failure.target}
-		if r.targetResolver != nil {
-			if observed, err := r.targetResolver.ResolveTarget(ctx, failure.target); err == nil {
-				target = observed
+		if errors.As(outputErr, &failure) && failure.code == "interaction_takeover_required" && output == nil {
+			target := TargetDescriptor{ID: failure.target}
+			if r.targetResolver != nil {
+				if resolved, err := r.targetResolver.ResolveTarget(ctx, failure.target); err == nil {
+					target = resolved
+				}
 			}
+			output, outputErr = computerBlockedExecution(TargetToolCall{ThreadID: threadID, TurnID: turnID, RunID: runID, ToolCallID: toolID, ToolName: toolName}, target, computerPauseSafety(TargetToolResult{}, outputErr))
 		}
-		call := TargetToolCall{ThreadID: threadID, TurnID: turnID, RunID: runID, ToolCallID: toolID, ToolName: toolName, TargetID: target.ID}
-		var completed []TargetToolResult
-		if prior, ok := output.(toolExecutionOutput); ok {
-			completed = []TargetToolResult{{TargetID: prior.TargetID, Result: prior.Payload}}
-		}
-		output = computerTakeoverExecution(call, target, computerPauseSafety(TargetToolResult{}, outputErr), completed...)
-		outputErr = nil
 	}()
 	if isComputerManagementTool(toolName) {
 		return r.execComputerManagement(ctx, toolID, toolName, args)
@@ -3149,13 +3135,16 @@ func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string
 	decision, safetyErr := gate.AssessInteraction(ctx, call, target)
 	if safetyErr != nil {
 		if errors.Is(safetyErr, ErrInteractionTakeoverRequired) {
-			return computerTakeoverExecution(call, target, decision), nil
+			return computerBlockedExecution(call, target, decision)
 		}
 		return nil, safetyErr
 	}
 	call.bindSelection = isComputerUseTool(toolName)
 
 	result, err := r.targetToolExecutor.ExecuteTargetTool(ctx, call)
+	if takeoverResult(result, err) {
+		return computerBlockedExecution(call, target, computerPauseSafety(result, err), result)
+	}
 	if err != nil {
 		if result.Result != nil {
 			if result.TargetName == "" {
@@ -3164,9 +3153,6 @@ func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string
 			return toolExecutionOutput{TargetID: targetID, Payload: targetToolResultPayload(result, targetID, target), Attachments: toolAttachmentsFromTarget(result.Attachments)}, err
 		}
 		return nil, err
-	}
-	if result.Safety != nil && result.Safety.Level == "takeover" {
-		return computerTakeoverExecution(call, target, *result.Safety, result), nil
 	}
 	if decision.ActionID == "" {
 		decision.ActionID = strings.TrimSpace(toolID)

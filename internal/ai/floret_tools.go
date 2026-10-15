@@ -793,16 +793,15 @@ func floretToolResultFromFlower(r *run, result ToolResult) (fltools.Result, erro
 	}
 	attachments := floretToolAttachments(result.Attachments)
 	return fltools.Result{
-		CallID:        strings.TrimSpace(result.ToolID),
-		Name:          strings.TrimSpace(result.ToolName),
-		Text:          string(text),
-		Structured:    structured,
-		Metadata:      metadata,
-		Activity:      activity,
-		Attachments:   attachments,
-		InputRequired: fltools.CloneInputRequest(result.inputRequired),
-		IsError:       isError,
-		DispatchErr:   dispatchErr,
+		CallID:      strings.TrimSpace(result.ToolID),
+		Name:        strings.TrimSpace(result.ToolName),
+		Text:        string(text),
+		Structured:  structured,
+		Metadata:    metadata,
+		Activity:    activity,
+		Attachments: attachments,
+		IsError:     isError,
+		DispatchErr: dispatchErr,
 	}, nil
 }
 
@@ -1312,10 +1311,7 @@ func floretActivityForToolResult(r *run, result ToolResult) (*fltools.ActivityPr
 		if mode := anyToString(rawPayload["execution_mode"]); mode == "foreground" || mode == "background" {
 			activity.Chips = append(activity.Chips, fltools.ActivityChip{Kind: "execution_mode", Label: "mode", Value: mode})
 		}
-		if result.inputRequired != nil {
-			if len(result.inputRequired.Questions) > 0 {
-				activity.Description = result.inputRequired.Questions[0].Prompt
-			}
+		if rawPayload["browser_installation_required"] == true || rawPayload["connection_required"] == true || rawPayload["safety"] != nil {
 			if rawPayload["browser_installation_required"] == true {
 				activity.TargetRefs = append(activity.TargetRefs, fltools.ActivityTargetRef{Kind: "computer_browser_install", ResourceRef: "managed", Label: "Built-in browser"})
 				activity.Chips = append(activity.Chips, fltools.ActivityChip{Kind: "computer_assistance", Label: "Required step", Value: "installation", Tone: "info"})
@@ -1323,15 +1319,13 @@ func floretActivityForToolResult(r *run, result ToolResult) (*fltools.ActivityPr
 				activity.TargetRefs = append(activity.TargetRefs, fltools.ActivityTargetRef{Kind: "computer_browser_source", ResourceRef: "system", Label: "System browser"})
 				activity.Chips = append(activity.Chips, fltools.ActivityChip{Kind: "computer_assistance", Label: "Required step", Value: "connection", Tone: "warning"})
 			} else {
-				activity.TargetRefs = append(activity.TargetRefs, fltools.ActivityTargetRef{
-					Kind: "computer_control", ResourceRef: strings.TrimSpace(anyToString(rawPayload["target_id"])),
-					Label: firstNonEmptyString(anyToString(rawPayload["target_name"]), "Computer"),
-				})
+
 				// These refs are display facts from the completed tool. Only an
 				// authenticated user command can turn them into product grants.
 				var safety InteractionSafetyDecision
 				body, _ := json.Marshal(rawPayload["safety"])
-				if json.Unmarshal(body, &safety) == nil {
+				if json.Unmarshal(body, &safety) == nil && safety.Level == "takeover" && computerAssistanceKind(safety) != "inspection" {
+					activity.TargetRefs = append(activity.TargetRefs, fltools.ActivityTargetRef{Kind: "computer_control", ResourceRef: strings.TrimSpace(anyToString(rawPayload["target_id"])), Label: firstNonEmptyString(anyToString(rawPayload["target_name"]), "Computer")})
 					activity.Chips = append(activity.Chips, fltools.ActivityChip{Kind: "computer_assistance", Label: "Required step", Value: computerAssistanceKind(safety), Tone: "warning"})
 					if safety.RequiredOrigin != "" {
 						activity.TargetRefs = append(activity.TargetRefs, fltools.ActivityTargetRef{Kind: "computer_origin", ResourceRef: safety.RequiredOrigin, Label: safety.RequiredOrigin})

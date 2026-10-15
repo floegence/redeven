@@ -571,7 +571,7 @@ func (r *run) execComputerManagement(ctx context.Context, toolID, toolName strin
 			return nil, err
 		}
 		if inventory.ConnectionRequired {
-			return computerConnectionExecution(), nil
+			return toolExecutionOutput{Payload: map[string]any{"connection_required": true, "browser_source": "system", "action_executed": false}}, &targetToolPolicyError{code: "target_connection_required", tool: toolName, repairAction: "connect_current_browser"}
 		}
 		return inventory, nil
 	}

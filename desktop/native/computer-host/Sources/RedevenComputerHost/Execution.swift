@@ -66,3 +66,12 @@ struct NativePendingInput {
         return events
     }
 }
+
+// A completed input is never replayed because its following read failed. Failures
+// during input dispatch retain the unknown-effect boundary.
+func nativeFailureCode(_ code: String, observing: Bool, effectStarted: Bool) -> String {
+    if code == "TARGET_OBSERVATION_UNAVAILABLE" || (observing && ["FRAME_UNAVAILABLE", "TARGET_NOT_READY"].contains(code)) {
+        return "TARGET_OBSERVATION_UNAVAILABLE"
+    }
+    return effectStarted ? "EFFECT_OUTCOME_UNKNOWN" : code
+}

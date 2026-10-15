@@ -491,6 +491,7 @@ export type FlowerSurfaceCopy = Readonly<{
     handlerStartFailedTitle: string;
     handlerStillStarting: string;
     computerViewLastScreenshot: string;
+    computerScreenshotLoadFailed: string;
     computerResumeControl: string;
     computerStageTitle: string;
     computerStageMaximize: string;
@@ -882,6 +883,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     handlerStartFailedTitle: 'Flower could not start',
     handlerStillStarting: 'Flower is still starting.',
     computerViewLastScreenshot: "View last screenshot",
+    computerScreenshotLoadFailed: "Screenshot could not be loaded",
     computerResumeControl: "Resume control",
     computerStageTitle: "Computer",
     computerStageMaximize: "Maximize viewer",

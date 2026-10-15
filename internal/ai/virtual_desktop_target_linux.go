@@ -364,7 +364,7 @@ func (e *XvfbTargetExecutor) execute(ctx context.Context, call TargetToolCall, p
 	if !private {
 		safety, err := e.atspi.safety(ctx)
 		if err != nil {
-			return result, computerTargetFailure(call, "TARGET_NOT_READY")
+			return computerObservationFailure(call, map[string]any{"action_executed": false, "observation_stage": "safety_scan"}, result.ExecutionLocation)
 		}
 		result.Safety = safety
 		if safety.Level == "takeover" {
@@ -465,7 +465,7 @@ func (e *XvfbTargetExecutor) execute(ctx context.Context, call TargetToolCall, p
 	if !private {
 		safety, err := e.atspi.safety(ctx)
 		if err != nil {
-			return result, computerTargetFailure(call, "TARGET_NOT_READY")
+			return computerObservationFailure(call, map[string]any{"action_executed": dispatched, "observation_stage": "safety_scan"}, result.ExecutionLocation)
 		}
 		result.Safety = safety
 		if safety.Level == "takeover" {
@@ -476,7 +476,7 @@ func (e *XvfbTargetExecutor) execute(ctx context.Context, call TargetToolCall, p
 	if tool == "computer.screenshot" || (!private && ((tool == "computer.observe" && args["screenshot"] == true) || (tool != "computer.observe" && !call.scriptOperation))) {
 		body, attachment, err := e.capture(ctx, call.TargetID)
 		if err != nil {
-			return result, computerTargetFailure(call, "FRAME_UNAVAILABLE")
+			return computerObservationFailure(call, map[string]any{"action_executed": dispatched, "observation_stage": "capture"}, result.ExecutionLocation)
 		}
 		if private {
 			result.frameBytes = body
@@ -484,7 +484,7 @@ func (e *XvfbTargetExecutor) execute(ctx context.Context, call TargetToolCall, p
 		}
 		safety, err := e.atspi.safety(ctx)
 		if err != nil {
-			return result, computerTargetFailure(call, "FRAME_UNAVAILABLE")
+			return computerObservationFailure(call, map[string]any{"action_executed": dispatched, "observation_stage": "safety_scan"}, result.ExecutionLocation)
 		}
 		result.Safety = safety
 		if safety.Level == "takeover" {

@@ -585,6 +585,7 @@ export type FlowerInputRequestQuestion = Readonly<{
 }>;
 
 export type FlowerInputRequest = Readonly<{
+  computer_assistance?: Readonly<{ kind: string; target_id?: string; tool_call_id: string }>;
   prompt_id: string;
   message_id: string;
   tool_id: string;
@@ -829,6 +830,7 @@ export type FlowerRuntimeCurrentItem = Readonly<{
 }>;
 
 export type FlowerRuntimeInteraction = Readonly<{
+  computer_assistance?: FlowerInputRequest['computer_assistance'];
   id: string;
   turn_id: string;
   run_id: string;
@@ -847,6 +849,9 @@ export type FlowerRuntimeInteraction = Readonly<{
     tool_call_id: string;
   }>;
   input?: Readonly<{
+    reason_code?: string;
+    required_from_user?: readonly string[];
+    evidence_refs?: readonly string[];
     summary: string;
     questions: readonly Readonly<{
       id: string;

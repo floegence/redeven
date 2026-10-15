@@ -5898,15 +5898,7 @@ button.flower-composer-context-source:focus-visible,
   overflow-wrap: anywhere;
 }
 
-.flower-activity-computer-block {
-  display: grid;
-  gap: 0.35rem;
-  margin-top: 0.35rem;
-}
-
-.flower-activity-computer-block[hidden] {
-  display: none;
-}
+.flower-activity-screenshot .chat-media-heading { display: none; }
 
 .flower-computer-stage { min-width: 0; min-height: 0; }
 .flower-computer-stage [data-floe-floating-window-content] { display: flex; flex-direction: column; min-width: 0; min-height: 0; padding: 0; overflow: hidden; }

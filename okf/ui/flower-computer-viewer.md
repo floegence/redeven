@@ -87,8 +87,9 @@ does not permanently reduce the saved window size. Composer growth adjusts only
 the launcher's safe boundary. Below a 560px Flower surface boundary the viewer
 fills the safe region and hides desktop drag,
 resize and maximize controls. Narrow transcripts reserve a launcher gutter.
-Thread selection resets presentation and clears old pixels. The viewer starts
-closed; a frame or semantic target Activity enables its entry. Activity, the header Computer entry,
+Thread selection resets presentation and clears old pixels. The Stage starts
+closed; dedicated screenshot Activity opens its inline image by default, as
+defined by the media contract; a frame or semantic target Activity enables its entry. The header Computer entry
 and the launcher can restore it; close returns focus to the restoring entry.
 Terminal execution stops sampling and collapses the viewer. Historical viewing
 has no FPS, input carrier or launcher, and retains zoom, close, keyboard and

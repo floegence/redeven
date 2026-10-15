@@ -5315,6 +5315,7 @@
       "handlerStartFailedTitle": "Flower 启动失败",
       "handlerStillStarting": "Flower 仍在启动。",
       "computerViewLastScreenshot": "查看最后截图",
+      "computerScreenshotLoadFailed": "截图无法加载",
       "computerResumeControl": "恢复控制",
       "computerStageTitle": "电脑",
       "computerStageMaximize": "最大化查看器",

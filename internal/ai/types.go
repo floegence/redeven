@@ -37,7 +37,16 @@ type Model struct {
 	ReasoningCapability       config.AIReasoningCapability   `json:"reasoning_capability,omitempty"`
 }
 
+// ComputerInputAssistance is derived from authorized canonical tool evidence.
+// It describes product actions; it never grants permission or owns waiting state.
+type ComputerInputAssistance struct {
+	Kind       string `json:"kind"`
+	TargetID   string `json:"target_id,omitempty"`
+	ToolCallID string `json:"tool_call_id"`
+}
+
 type RequestUserInputPrompt struct {
+	ComputerAssistance *ComputerInputAssistance    `json:"computer_assistance,omitempty"`
 	PromptID           string                      `json:"prompt_id"`
 	MessageID          string                      `json:"message_id"`
 	ToolID             string                      `json:"tool_id"`

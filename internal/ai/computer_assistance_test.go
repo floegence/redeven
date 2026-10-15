@@ -9,43 +9,26 @@ import (
 	"github.com/floegence/floret/v7/observation"
 )
 
-func TestComputerAssistanceExplainsTheRequiredStep(t *testing.T) {
-	for _, tc := range []struct {
-		name   string
-		safety InteractionSafetyDecision
-		want   string
-	}{
-		{"site", InteractionSafetyDecision{RequiredOrigin: "https://www.google.com", ReasonCodes: []string{"site_permission"}}, "https://www.google.com"},
-		{"captcha", InteractionSafetyDecision{ReasonCodes: []string{"captcha"}}, "CAPTCHA"},
-		{"otp", InteractionSafetyDecision{ReasonCodes: []string{"otp", "secret_input"}}, "verification code"},
-		{"login", InteractionSafetyDecision{ReasonCodes: []string{"login", "secret_input"}}, "Sign in"},
-		{"unknown", InteractionSafetyDecision{ReasonCodes: []string{"unknown"}}, "could not safely inspect"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			result := computerTakeoverExecution(TargetToolCall{ToolCallID: "step"}, TargetDescriptor{ID: "browser-main", DisplayName: "Task browser"}, tc.safety)
-			prompt := result.inputRequired.Summary + " " + result.inputRequired.Questions[0].Prompt
-			if !strings.Contains(prompt, tc.want) {
-				t.Fatalf("missing specific guidance %q: %s", tc.want, prompt)
-			}
-			if tc.name == "site" && strings.Contains(prompt, "return control") {
-				t.Fatal("site permission requires a fictitious handoff")
-			}
-		})
-	}
-}
-
-func TestComputerAssistanceSurvivesCanonicalActivityProjection(t *testing.T) {
-	for _, reason := range []string{"captcha", "otp", "login", "secret_input", "target_permission", "unknown"} {
+func TestComputerBlockingFactsDoNotCreateQuestionsOrSuccess(t *testing.T) {
+	for _, reason := range []string{"captcha", "otp", "login", "secret_input", "user_control"} {
 		t.Run(reason, func(t *testing.T) {
 			safety := InteractionSafetyDecision{ReasonCodes: []string{reason}}
-			execution := computerTakeoverExecution(TargetToolCall{ToolCallID: "inspect"}, TargetDescriptor{ID: "browser-main"}, safety)
-			presentation, err := floretActivityForToolResult(nil, ToolResult{ToolID: "inspect", ToolName: "computer.observe", Status: toolResultStatusSuccess, Data: execution.Payload, inputRequired: execution.inputRequired})
+			execution, failure := computerBlockedExecution(TargetToolCall{ToolCallID: "inspect"}, TargetDescriptor{ID: "browser-main"}, safety,
+				TargetToolResult{Result: map[string]any{"action_executed": true, "completed_actions": []string{"click"}}})
+			if !takeoverResult(TargetToolResult{}, failure) {
+				t.Fatal("blocking result reported success")
+			}
+			data := execution.Payload.(map[string]any)
+			if data["action_executed"] != true || len(data["completed_actions"].([]string)) != 1 {
+				t.Fatal("completed effect lost")
+			}
+			presentation, err := floretActivityForToolResult(nil, ToolResult{ToolID: "inspect", ToolName: "computer.observe", Status: toolResultStatusError, Data: execution.Payload})
 			if err != nil {
 				t.Fatal(err)
 			}
-			public := publicActivityItem(observation.ActivityItem{ItemID: "step", ToolID: "inspect", ToolName: "computer.observe", Kind: observation.ActivityKindTool, Status: observation.ActivityStatusSuccess, Presentation: presentation})
-			if public.Presentation == nil || public.Presentation.Description != execution.inputRequired.Questions[0].Prompt {
-				t.Fatal("required step disappeared from public activity")
+			public := publicActivityItem(observation.ActivityItem{ItemID: "step", ToolID: "inspect", ToolName: "computer.observe", Kind: observation.ActivityKindTool, Status: observation.ActivityStatusError, Presentation: presentation})
+			if public.Presentation == nil {
+				t.Fatal("facts lost")
 			}
 			found := false
 			for _, chip := range public.Presentation.Chips {
@@ -54,7 +37,7 @@ func TestComputerAssistanceSurvivesCanonicalActivityProjection(t *testing.T) {
 				}
 			}
 			if !found {
-				t.Fatalf("reason lost across canonical projection: %+v", public.Presentation)
+				t.Fatalf("reason lost: %+v", public.Presentation)
 			}
 		})
 	}

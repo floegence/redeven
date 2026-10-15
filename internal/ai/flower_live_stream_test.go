@@ -251,7 +251,7 @@ func TestFlowerWorkspaceStreamBaselinesAndBroadcastsCanonicalComputerStatus(t *t
 		Items: []flruntime.ThreadItem{{
 			ID: callID, TurnID: turnID, RunID: runID, Kind: flruntime.ThreadItemTool,
 			Activity: &observation.ActivityItem{ItemID: callID, ToolID: callID, ToolName: "browser.navigate", Kind: observation.ActivityKindTool,
-				Status: observation.ActivityStatusSuccess, Presentation: &tools.ActivityPresentation{TargetRefs: []tools.ActivityTargetRef{{Kind: "computer_control", Label: "Browser", ResourceRef: "browser-main"}}}},
+				Status: observation.ActivityStatusSuccess, Presentation: &tools.ActivityPresentation{Chips: []tools.ActivityChip{{Kind: "computer_assistance", Value: "login"}}, TargetRefs: []tools.ActivityTargetRef{{Kind: "computer_control", Label: "Browser", ResourceRef: "browser-main"}}}},
 		}},
 		Interactions: []flruntime.ThreadInteraction{{
 			ID: interactionID, TurnID: turnID, RunID: runID, Kind: flruntime.ThreadInteractionInput, ToolCallID: callID,

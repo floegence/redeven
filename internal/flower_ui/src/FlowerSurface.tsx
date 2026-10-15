@@ -173,6 +173,7 @@ import {
   presentFlowerActivityItem,
   safeWebFetchURL,
   type FlowerActivityDetailBlock,
+  computerActivityResource,
   type FlowerActivityDiffFile,
   type FlowerActivityFileAction,
   type FlowerActivityPresentation,
@@ -6108,11 +6109,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [computerDialog, setComputerDialog] = createSignal<'settings' | 'connection' | 'installation' | null>(null);
   createEffect(on([selectedThreadID, () => selectedInputRequest()?.prompt_id], () => setComputerDialog(null), { defer: true }));
   const [computerStageOpen, setComputerStageOpen] = createSignal(false);
-  const [computerFrameSelection, setComputerFrameSelection] = createSignal<{ frame: string; threadID: string; runID?: string }>();
-  const selectedComputerFrame = createMemo(() => {
-    const selection = computerFrameSelection();
-    return selection?.threadID === selectedThreadID() && selection.runID === selectedThread()?.active_run_id ? selection.frame : undefined;
-  });
   const [computerStageRestoreFocus, setComputerStageRestoreFocus] = createSignal<HTMLElement>();
   const restoreComputerStage = (source: HTMLElement) => {
     if (!computerStageOpen()) setComputerStageRestoreFocus(source);
@@ -6149,18 +6145,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     setComputerControlReady(false); setComputerViewerRetry(value => value + 1);
   });
   const takeComputerControl = (source: HTMLElement) => batch(() => {
-    setComputerFrameSelection(undefined);
     restoreComputerStage(source); setPrivateControlRequested(true); resumeComputerViewer();
   });
   const [computerControlError, setComputerControlError] = createSignal(false);
-  const isComputerInput = (request: FlowerInputRequest | null | undefined) => Boolean(request
-    && (request.tool_name.startsWith('computer.') || request.tool_name.startsWith('browser.'))
-    && request.questions.some((question) => question.id === 'computer_control'));
-  const isBrowserConnectionInput = (request: FlowerInputRequest | null | undefined) => Boolean(request
-    && request.tool_name === 'computer.targets' && request.questions.length === 1 && request.questions[0].id === 'browser_connection');
-  const isBrowserInstallInput = (request: FlowerInputRequest | null | undefined) => Boolean(request
-    && (request.tool_name.startsWith('computer.') || request.tool_name.startsWith('browser.')) && request.questions.length === 1 && request.questions[0].id === 'browser_install');
-  const isComputerAssistanceInput = (request: FlowerInputRequest | null | undefined) => isComputerInput(request) || isBrowserConnectionInput(request) || isBrowserInstallInput(request);
+  const isComputerInput = (request: FlowerInputRequest | null | undefined) => Boolean(request?.computer_assistance?.target_id);
+  const isBrowserConnectionInput = (request: FlowerInputRequest | null | undefined) => request?.computer_assistance?.kind === 'connection';
+  const isBrowserInstallInput = (request: FlowerInputRequest | null | undefined) => request?.computer_assistance?.kind === 'installation';
+  const isComputerAssistanceInput = (request: FlowerInputRequest | null | undefined) => Boolean(request?.computer_assistance);
+  const isToolOriginComputerInput = (request: FlowerInputRequest | null | undefined) => isComputerAssistanceInput(request) && Boolean(request?.prompt_id.startsWith('tool-input:'));
   let computerInputQueue = Promise.resolve();
   let computerInputCount = 0;
   let computerInputGeneration = 0;
@@ -6223,8 +6215,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           const toolName = item?.tool_name || '';
           if (toolName[0] !== 'c' && toolName[0] !== 'b') continue;
           const presentation = presentFlowerActivityItem(item, { tools: copy().chat.toolActivity });
-          const detail = presentation.detailBlocks.find((candidate) => candidate.kind === 'computer');
-          if (!detail || detail.kind !== 'computer') continue;
+          const detail = computerActivityResource(item);
+          if (!detail.target_id && !detail.frame) continue;
           candidates.push({
             item,
             runID: block.block.run_id,
@@ -6241,12 +6233,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const pending = selectedInputRequest();
     if (isComputerInput(pending)) {
       const execution = selectedThread()?.current_execution;
-      const control = candidates.find(candidate => candidate.turnID === execution?.turn_id && candidate.runID === execution?.run_id && candidate.item.tool_id === pending?.tool_call_id);
+      const control = candidates.find(candidate => candidate.turnID === execution?.turn_id && candidate.item.tool_id === pending?.computer_assistance?.tool_call_id);
       if (control) return control;
     }
-    const chosenFrame = selectedComputerFrame();
-    const chosen = chosenFrame && candidates.find(candidate => candidate.frame === chosenFrame);
-    if (chosen) return chosen;
     const execution = selectedThread()?.current_execution;
     const active = candidates.find(candidate => candidate.turnID === execution?.turn_id
       && candidate.runID === execution?.run_id && Boolean(candidate.targetID));
@@ -6264,7 +6253,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   });
   const computerStageHistorical = createMemo(() => {
     const status = computerStageExecution()?.status;
-    return Boolean(selectedComputerFrame()) || (status !== 'running' && status !== 'waiting_user' && status !== 'waiting_approval');
+    return (status !== 'running' && status !== 'waiting_user' && status !== 'waiting_approval');
   });
   const selectedComputerAssistance = createMemo(() => {
     if (isBrowserInstallInput(selectedInputRequest())) return computerAssistance(undefined, copy().computer, { kind: 'installation' });
@@ -6308,7 +6297,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   createEffect(() => {
     selectedThreadID();
     setComputerLiveFrame(undefined);
-    setComputerFrameSelection(undefined);
     setComputerStageRestoreFocus(undefined);
     setComputerStageOpen(false);
   });
@@ -6331,7 +6319,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   });
   const computerViewerKey = createMemo(() => {
     const stage = selectedComputerStage();
-    if (!computerCurrentVerified() || computerStageHistorical() || computerControlDisconnected() || computerResourceStatus()?.state === 'unavailable' || selectedComputerFrame() || !computerStageOpen() || !documentVisible() || !computerObserverID() || !stage?.targetID || computerResponseCommitting() || computerViewFailed()) return '';
+    if (!computerCurrentVerified() || computerStageHistorical() || computerControlDisconnected() || computerResourceStatus()?.state === 'unavailable' || !computerStageOpen() || !documentVisible() || !computerObserverID() || !stage?.targetID || computerResponseCommitting() || computerViewFailed()) return '';
     const interaction = privateControlRequested() && isComputerInput(selectedInputRequest()) ? selectedInputRequest()?.prompt_id : '';
     if (!interaction && (!stage.runID || stage.runID !== selectedThread()?.active_run_id || selectedThread()?.status !== 'running')) return '';
     return JSON.stringify([computerObserverID(), selectedThreadID(), stage.targetID, interaction || '', viewerFPS(), computerViewerRetry()]);
@@ -7690,7 +7678,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (bottomActionMode() !== 'chat') {
       const question = activeInputQuestion();
       const publicQuestion = bottomActionMode() === 'input_request' && question && !question.is_secret
-        && !isComputerAssistanceInput(selectedInputRequest());
+        && !isToolOriginComputerInput(selectedInputRequest());
       return { kind: 'pending', targetThreadID, text: publicQuestion
         ? trimString(selectedInputRequest()?.public_summary) || trimString(question.question) || actionLabel
         : actionLabel };
@@ -7720,7 +7708,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const currentQuestionFocusTarget = () => {
     const surface = composerSurfaceRef;
     const region = surface?.querySelector<HTMLElement>('.flower-input-request-surface');
-    if (isComputerAssistanceInput(selectedInputRequest())) return region;
+    if (isToolOriginComputerInput(selectedInputRequest())) return region;
     return surface?.querySelector<HTMLElement>('textarea:not(:disabled), input:not([type="radio"]):not(:disabled)')
       ?? surface?.querySelector<HTMLElement>('[role="radio"][aria-checked="true"]:not(:disabled), input[role="radio"]:checked:not(:disabled)')
       ?? surface?.querySelector<HTMLElement>('[role="radio"]:not(:disabled)')
@@ -7756,7 +7744,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         return;
       }
       if (event.detail !== 0 || entry.kind !== 'pending') return;
-      if (bottomActionMode() === 'input_request' && !isComputerAssistanceInput(selectedInputRequest())) {
+      if (bottomActionMode() === 'input_request' && !isToolOriginComputerInput(selectedInputRequest())) {
         try { await FlowerInputChoices.preload(); }
         catch { return; } // The existing lazy surface owns load-error presentation; keep reading focus.
       }
@@ -8622,7 +8610,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           tabIndex={composerSurface ? -1 : undefined}
           aria-label={chatCopyValue('inputRequestTitle', 'Waiting for your reply')}
         >
-          <Show when={isComputerAssistanceInput(inputRequest())} fallback={<>
+          <Show when={!isToolOriginComputerInput(inputRequest())}>
           <Show when={!composerSurface}>
           <div class="flower-input-request-heading">
             <span class="flower-input-request-heading-icon" aria-hidden="true">
@@ -8727,7 +8715,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               </button>
             </nav>
           </Show>
-          </>}>
+          </Show>
+          <Show when={isComputerAssistanceInput(inputRequest())}>
             <div class="flower-computer-control-heading">
               <span class="flower-computer-control-icon" aria-hidden="true"><MonitorPointer class="h-4 w-4" /></span>
               <div class="flower-computer-control-copy">
@@ -8746,7 +8735,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               </div>
             </Show>
             <div class="flower-computer-control-footer">
-              <Show when={composerSurface}>
+              <Show when={composerSurface && isToolOriginComputerInput(inputRequest())}>
                 <Button variant="ghost" icon={FlowerStopIcon} class="flower-composer-stop flower-computer-control-stop"
                   aria-label={selectedThreadStopLabel()} title={selectedThreadStopLabel()}
                   disabled={!selectedThreadCanStop() || selectedThreadStopPending()} loading={selectedThreadStopPending()}
@@ -8760,7 +8749,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               </Show>
               <Show when={selectedComputerAssistance().kind === 'installation'}><Button variant="primary" disabled={!selectedDecisionAvailable() || inputRequestIsSubmitting()} onClick={() => setComputerDialog('installation')}>{copy().computer.browserInstallTitle}</Button></Show>
               <Show when={selectedComputerAssistance().kind === 'connection'}><Button variant="primary" disabled={!selectedDecisionAvailable() || inputRequestIsSubmitting()} onClick={() => setComputerDialog('connection')}>{copy().computer.connectionTitle}</Button></Show>
-              <Show when={selectedComputerAssistance().kind !== 'connection' && selectedComputerAssistance().kind !== 'installation'}><Button variant="primary" icon={selectedComputerAssistance().kind === 'access' || selectedComputerAssistance().kind === 'authorized' ? Check : Refresh} data-computer-control-action={selectedComputerAssistance().kind === 'access' ? 'grant' : 'return'} disabled={!selectedDecisionAvailable() || inputRequestIsSubmitting() || (selectedComputerAssistance().kind === 'access' && !props.adapter.computerManagement)} loading={inputRequestIsSubmitting()} onClick={() => {
+              <Show when={isToolOriginComputerInput(inputRequest()) && selectedComputerAssistance().kind !== 'connection' && selectedComputerAssistance().kind !== 'installation'}><Button variant="primary" icon={selectedComputerAssistance().kind === 'access' || selectedComputerAssistance().kind === 'authorized' ? Check : Refresh} data-computer-control-action={selectedComputerAssistance().kind === 'access' ? 'grant' : 'return'} disabled={!selectedDecisionAvailable() || inputRequestIsSubmitting() || (selectedComputerAssistance().kind === 'access' && !props.adapter.computerManagement)} loading={inputRequestIsSubmitting()} onClick={() => {
                 const question = inputRequest().questions.find((question) => question.id === 'computer_control');
                 const choice = question?.choices?.[0];
                 if (!question || !choice) return;
@@ -9012,11 +9001,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return true;
   };
 
-  const activityWaitingForComputer = (item: FlowerActivityItem, timeline: FlowerActivityTimelineBlock) => {
-    const request = selectedInputRequest(), execution = selectedThread()?.current_execution;
-    return isComputerAssistanceInput(request) && request?.tool_call_id === item.tool_id
-      && timeline.turn_id === execution?.turn_id && timeline.run_id === execution?.run_id;
-  };
   const activityItemAriaLabel = (item: FlowerActivityItem, timeline: FlowerActivityTimelineBlock): string => (
     [
       presentFlowerActivityItem(item, {
@@ -9032,7 +9016,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           terminateCommand: copy().chat.toolActivityTerminateCommand,
         },
       }).label,
-      copy().chat.toolStatuses[activityWaitingForComputer(item, timeline) ? 'waiting' : item.status],
+      copy().chat.toolStatuses[item.status],
     ].filter(Boolean).join('. ')
   );
 
@@ -9171,21 +9155,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         )}
       </For>
     </>
-  );
-
-  const computerBlock = (block: Accessor<Extract<FlowerActivityDetailBlock, { kind: 'computer' }>>) => (
-    <div class="flower-activity-computer-block" data-computer-target={block().target} hidden={!block().frame}>
-      <Show when={block().frame}>
-        <button type="button" class="flower-activity-detail-expand" aria-expanded={computerStageOpen()} onClick={(event) => {
-          const frame = block().frame;
-          if (frame) setComputerFrameSelection({ frame, threadID: selectedThreadID(), runID: selectedThread()?.active_run_id });
-          setComputerViewFailed(false);
-          restoreComputerStage(event.currentTarget);
-        }}>
-          {copy().chat.computerViewLastScreenshot}
-        </button>
-      </Show>
-    </div>
   );
 
   const normalizeTerminalSnapshotStatus = (raw: unknown): FlowerActivityStatus | '' => {
@@ -9843,10 +9812,22 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   const ActivityDetailBlock: Component<{
+    threadID: string;
     block: FlowerNonTerminalDetailBlock;
   }> = (detailProps) => {
     const blockOfKind = <K extends FlowerNonTerminalDetailBlock['kind']>(_kind: K) =>
       () => detailProps.block as Extract<FlowerNonTerminalDetailBlock, { kind: K }>;
+    const resolveActivityMedia = createMemo<NonNullable<MarkdownMediaProps['resolve']>>(() => {
+      const threadID = detailProps.threadID;
+      const workingDirectory = selectedThreadWorkingDirectory();
+      return (source, signal) => {
+        if (threadID !== selectedThreadID()) throw new DOMException('Conversation changed', 'AbortError');
+        return resolveFlowerMarkdownMedia(source, signal, {
+          adapter: props.adapter, threadID, workingDirectory, get copy() { return copy().chat.media; },
+          onActionError: error => notifyThreadActionError(getErrorMessage(error)),
+        });
+      };
+    });
     return <Switch>
       <Match when={detailProps.block.kind === 'error'}>{errorDetailBlock(blockOfKind('error'))}</Match>
       <Match when={detailProps.block.kind === 'structured_rows'}>
@@ -9854,8 +9835,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           <FlowerActivityPreview block={blockOfKind('structured_rows')()} copy={copy().chat} />
         </Show>
       </Match>
-      <Match when={detailProps.block.kind === 'image'}><MarkdownMedia source={{ kind: 'image', src: blockOfKind('image')().resource_ref, title: blockOfKind('image')().name }} labels={copy().chat.media} resolve={resolveMessageMedia()} /></Match>
-      <Match when={detailProps.block.kind === 'computer'}>{computerBlock(blockOfKind('computer'))}</Match>
+      <Match when={detailProps.block.kind === 'image'}><MarkdownMedia class={blockOfKind('image')().resource_ref.startsWith('computer://') ? 'flower-activity-screenshot' : undefined} source={{ kind: 'image', src: blockOfKind('image')().resource_ref, title: blockOfKind('image')().name }} labels={{ ...copy().chat.media, unavailable: blockOfKind('image')().resource_ref.startsWith('computer://') ? copy().chat.computerScreenshotLoadFailed : copy().chat.media.unavailable }} resolve={resolveActivityMedia()} /></Match>
       <Match when={detailProps.block.kind === 'subagents'}>{subagentsDetailBlock(blockOfKind('subagents'))}</Match>
       <Match when={detailProps.block.kind === 'web_search'}>{webSearchBlock(blockOfKind('web_search'))}</Match>
       <Match when={detailProps.block.kind === 'web_fetch'}>{webFetchBlock(blockOfKind('web_fetch'))}</Match>
@@ -9954,13 +9934,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     });
     const disclosureControl = createFlowerActivityDisclosureController({
       manualOpen: () => openActivityRuns()[disclosureKey()],
+      defaultOpen: () => item().tool_name === 'computer.screenshot' && Boolean(computerActivityResource(item()).frame),
       onManualOpenChange: (open) => {
         const key = disclosureKey();
         setOpenActivityRuns((current) => ({ ...current, [key]: open }));
       },
     });
     const subagentsDetail = createMemo(() => subagentsDetailForPresentation(presentation()));
-    const hasDetails = createMemo(() => presentation().detailBlocks.some(block => block.kind !== 'computer' || Boolean(block.frame)));
+    const hasDetails = createMemo(() => presentation().detailBlocks.length > 0);
     const expandable = createMemo(() => (presentation().suppressEmptyDisclosure
       || item().renderer === 'web_search' && !item().tool_name?.startsWith('okf.')) ? hasDetails() : item().kind === 'tool' || hasDetails());
     const open = () => expandable() && disclosureControl.open();
@@ -9993,7 +9974,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         ? attachmentPreviewTargetForActivity(item(), timeline(), title.display_name)
         : null;
     });
-    const displayStatus = createMemo(() => activityWaitingForComputer(item(), timeline()) ? 'waiting' : item().status);
+    const displayStatus = createMemo(() => item().status);
     const controlError = createMemo(() => (
       item().kind === 'control'
       && trimString(item().metadata?.control_error_code) === 'control_error'
@@ -10091,7 +10072,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     </p>
                   </div>
                 </Show>
-                <For each={detailKeys()}>
+                {/* Keep the script input in a stable section when new results arrive. */}
+                <For each={[false, true]}>{inputs => <For each={detailKeys().filter(key => {
+                  const block = detailsByKey().get(key);
+                  return (block?.kind === 'structured_rows' && block.section === 'inputs') === inputs;
+                })}>
                   {(detailKey) => {
                     const block = createMemo(() => detailsByKey().get(detailKey)!);
                     const terminalBlock = createMemo(() => (
@@ -10122,12 +10107,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                           )}
                         </Show>
                         <Show when={!terminalBlock()}>
-                          <ActivityDetailBlock block={block() as FlowerNonTerminalDetailBlock} />
+                          <ActivityDetailBlock threadID={timeline().thread_id ?? ''} block={block() as FlowerNonTerminalDetailBlock} />
                         </Show>
                       </>
                     );
                   }}
-                </For>
+                </For>}</For>
               </div>
             </div>
           </div>
@@ -12233,7 +12218,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     <Show when={activeInputQuestionUsesTextEditor()}>
                       {composerTextEditor()}
                     </Show>
-                    <Show when={!isComputerAssistanceInput(selectedInputRequest())}><div class="flower-decision-actions flower-input-request-actions">
+                    <Show when={!isToolOriginComputerInput(selectedInputRequest())}><div class="flower-decision-actions flower-input-request-actions">
                       <Show when={selectedThreadReadOnly()}>
                         <span class="flower-decision-readonly-status flower-composer-readonly-chip" role="status">
                           {selectedThreadReadOnlyDisplay()}
@@ -12250,7 +12235,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                         loading={selectedThreadStopPending()}
                         onClick={() => void stopSelectedThreadFromComposer()}
                       />
-                      <Show when={!isComputerAssistanceInput(selectedInputRequest())}><Button
+                      <Button
                         variant="primary"
                         icon={ArrowUp}
                         class="flower-composer-continue rounded-full"
@@ -12259,7 +12244,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                         onClick={() => void submitChat()}
                       >
                         {chatCopyValue('inputRequestSubmit', 'Continue')}
-                      </Button></Show>
+                      </Button>
                     </div></Show>
                   </Match>
                   <Match when={bottomActionMode() === 'chat'}>
@@ -12478,7 +12463,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       run: source => {
         if (isBrowserInstallInput(selectedInputRequest())) { setComputerDialog('installation'); return; }
         if (isBrowserConnectionInput(selectedInputRequest())) { setComputerDialog('connection'); return; }
-        if (selectedThread()?.status === 'running') setComputerFrameSelection(undefined);
         restoreComputerStage(source);
       } },
     { id: 'new-conversation', visible: () => presentation() === 'companion' && !props.embeddedConversation,
@@ -12605,6 +12589,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         connectionOnly={computerDialog() === 'connection'} installationOnly={computerDialog() === 'installation'} onContinue={async (enabled) => {
           const request = selectedInputRequest();
           if ((!isBrowserConnectionInput(request) && !isBrowserInstallInput(request)) || !request) return;
+          setComputerDialog(null);
+          if (!isToolOriginComputerInput(request)) return;
           const question = request.questions[0], choice = question.choices?.[isBrowserInstallInput(request) && enabled === false ? 1 : 0];
           if (!choice) return;
           selectInputChoice(question, choice);
@@ -13083,7 +13069,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               } : undefined}
               historical={computerStageHistorical()}
               frame={computerStageFrame()}
-              retainLiveFrame={!selectedComputerFrame() && !computerViewerKey()}
+              retainLiveFrame={!computerViewerKey()}
               loading={Boolean(computerViewerKey()) && !computerViewFailed()}
               blocked={Boolean((computerViewerAssistance() || isComputerInput(selectedInputRequest())) && !privateControlRequested())}
               emptyMessage={computerViewerAssistance() && !privateControlRequested() ? computerAssistance(undefined, copy().computer, { kind: computerViewerAssistance()! }).title : computerViewFailed() ? copy().computer.frameDisconnected : computerViewerKey() ? copy().computer.frameConnecting : copy().computer.noFrame}
