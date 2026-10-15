@@ -1,11 +1,11 @@
 import '../index.css';
 import './flower-feature.css';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
-import { page, userEvent } from 'vitest/browser';
+import { commands, page, userEvent } from 'vitest/browser';
 import type { FlowerLiveStreamEnvelope, FlowerRuntimeCurrentView, FlowerSurfaceAdapter } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { applyFlowerRuntimeCurrentView } from '../../../../flower_ui/src/runtimeCurrentView';
 import { streamingFixture } from '../../../../flower_ui/testing/streamingFixture';
-import { adapter, inputRequest, liveBootstrap, renderSurfaceWithAdapter, runtimeCurrentView, subagentSummary, thread, waitFor } from './FlowerSurface.navigation.testHarness';
+import { adapter, deferred, inputRequest, liveBootstrap, renderSurfaceWithAdapter, runtimeCurrentView, subagentSummary, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 
 function liveStream() {
   const values: FlowerLiveStreamEnvelope[] = [];
@@ -104,13 +104,60 @@ async function unrelatedUpdates(fixture: ReturnType<typeof streamingFixture>, co
 }
 
 describe('Flower complete interaction subtree stability', () => {
-  it('keeps one edit row through argument generation, approval and actual zero changes', async () => {
+  it('animates edit previews only while live presentation is confirmed', async () => {
+    await page.viewport(1280, 900);
+    const fixture = streamingFixture(8, 0);
+    const base = fixture.current();
+    const request = { logical_request_id: 'preview-request', attempt_id: 'preview-attempt', attempt_epoch: 1,
+      started_at: new Date().toISOString(), first_output_at: new Date().toISOString(), estimated_output_tokens: 128 };
+    fixture.replace({ ...base, view_version: 2, sampled_at_ms: Date.now(), run_progress: { phase: 'streaming', request },
+      tool_call_previews: ['file.edit', 'file.write', 'apply_patch'].map((name) => ({
+        thread_id: base.thread_id, turn_id: base.turn_id!, run_id: base.run_id!,
+        logical_request_id: request.logical_request_id, attempt_id: request.attempt_id, attempt_epoch: request.attempt_epoch, call_id: name, name,
+        arguments_complete: false, preview: { display_name: 'example.ts', additions: 8 },
+      })),
+    });
+    const ready = deferred<void>();
+    const disconnected = deferred<void>();
+    let connections = 0;
+    onTestFinished(() => { ready.resolve(); disconnected.resolve(); });
+    const runtime = await mountFixture(fixture, {
+      async *connectLiveStream({ signal }) {
+        const connection = ++connections;
+        if (connection > 1) await ready.promise;
+        if (signal.aborted) return;
+        yield { schema_version: 1, kind: 'ready', summaries: [fixture.thread] };
+        if (connection === 1) {
+          await disconnected.promise;
+          if (!signal.aborted) throw Object.assign(new Error('Test live transport disconnected'), { code: 'envelope_encoding_failed' });
+        } else if (!signal.aborted) {
+          await new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true }));
+        }
+      },
+    });
+    const icons = [...runtime.querySelectorAll('.flower-activity-inline-row-generating .flower-tool-icon')];
+    expect(icons).toHaveLength(3);
+    expect(icons.every(icon => icon.getAnimations({ subtree: true }).length > 0)).toBe(true);
+    disconnected.resolve();
+    await waitFor(() => icons.every(icon => icon.getAnimations({ subtree: true }).length === 0));
+    expect(icons.every(icon => icon.isConnected)).toBe(true);
+    runtime.querySelector<HTMLButtonElement>('.flower-workspace-sync button')!.click();
+    await waitFor(() => connections === 2);
+    expect(icons.every(icon => icon.getAnimations({ subtree: true }).length === 0)).toBe(true);
+    ready.resolve();
+    await waitFor(() => icons.every(icon => icon.getAnimations({ subtree: true }).length > 0));
+  });
+
+  it.each(['file.edit', 'file.write', 'apply_patch'])('keeps one animated %s row through argument generation, approval and actual zero changes', async (toolName) => {
+    const media = commands as unknown as { emulateMediaPreferences: (preferences: { reducedMotion: 'reduce' | 'no-preference' }) => Promise<void> };
+    onTestFinished(() => media.emulateMediaPreferences({ reducedMotion: 'no-preference' }));
     onTestFinished(() => page.viewport(1280, 900));
+    await media.emulateMediaPreferences({ reducedMotion: 'no-preference' });
     await page.viewport(1280, 900);
     const fixture = streamingFixture(8, 0);
     const base = fixture.current();
     const call = { thread_id: base.thread_id, turn_id: base.turn_id!, run_id: base.run_id!, logical_request_id: 'output-request', attempt_id: 'output-attempt', attempt_epoch: 1,
-      call_id: 'edit-preview', name: 'file.write', arguments_complete: false, preview: { display_name: 'example.ts', additions: 8 } };
+      call_id: 'edit-preview', name: toolName, arguments_complete: false, preview: { display_name: 'example.ts', additions: 8 } };
     const startedAt = Date.now() - 4000;
     const request = { logical_request_id: call.logical_request_id, attempt_id: call.attempt_id, attempt_epoch: 1,
       started_at: new Date(startedAt).toISOString(), estimated_output_tokens: 0 };
@@ -121,8 +168,14 @@ describe('Flower complete interaction subtree stability', () => {
     fixture.replace({ ...base, view_version: 3, sampled_at_ms: Date.now(), run_progress: { phase: 'streaming', request: { ...request, first_output_at: new Date().toISOString(), estimated_output_tokens: 128 } }, tool_call_previews: [call] });
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-argument-generation]')));
     const row = runtime.querySelector('[data-flower-tool-row-identity]')!;
+    const icon = row.querySelector('.flower-tool-icon')!;
+    expect(icon.getAnimations({ subtree: true }).length).toBeGreaterThan(0);
     expect(row.textContent).toContain('+8');
     expect(row.querySelector('button')).toBeNull();
+    await media.emulateMediaPreferences({ reducedMotion: 'reduce' });
+    await waitFor(() => icon.getAnimations({ subtree: true }).length === 0);
+    await media.emulateMediaPreferences({ reducedMotion: 'no-preference' });
+    await waitFor(() => icon.getAnimations({ subtree: true }).length > 0);
     expect(fixture.calls.preview).toBe(0);
     expect(runtime.querySelector('.flower-model-status-indicator')).toBe(indicator);
     expect(runtime.querySelector('.flower-model-status-metric')?.textContent).toContain('128 tokens');
@@ -137,13 +190,19 @@ describe('Flower complete interaction subtree stability', () => {
     await waitFor(() => Boolean(row.querySelector('[data-flower-activity-status="waiting"]')));
     expect(runtime.querySelector('[data-flower-tool-row-identity]')).toBe(row);
     expect(row.textContent).toContain('+8');
+    expect(row.querySelector('.flower-tool-icon')!.getAnimations({ subtree: true })).toHaveLength(0);
     expect(runtime.querySelectorAll('[data-flower-tool-row-identity]')).toHaveLength(1);
-    fixture.replace({ ...base, view_version: 5, run_progress: { phase: 'tool_execution' }, tool_call_previews: [], items: [...base.items!, { ...tool, activity: { ...tool.activity, status: 'success', presentation: { renderer: 'file', payload: { operation: 'write', display_name: 'example.ts', change_type: 'noop' } } } }] });
+    fixture.replace({ ...base, view_version: 5, run_progress: { phase: 'tool_execution' }, tool_call_previews: [{ ...call, arguments_complete: true }], items: [...base.items!, { ...tool, activity: { ...tool.activity, status: 'running' } }] });
+    await waitFor(() => Boolean(row.querySelector('[data-flower-activity-status="running"]')));
+    expect(runtime.querySelector('[data-flower-tool-row-identity]')).toBe(row);
+    expect(row.querySelector('.flower-tool-icon')!.getAnimations({ subtree: true }).length).toBeGreaterThan(0);
+    fixture.replace({ ...base, view_version: 6, run_progress: { phase: 'tool_execution' }, tool_call_previews: [], items: [...base.items!, { ...tool, activity: { ...tool.activity, status: 'success', presentation: { renderer: 'file', payload: { operation: 'write', display_name: 'example.ts', change_type: 'noop' } } } }] });
     await waitFor(() => row.textContent?.includes('+0') === true);
     expect(row.textContent).toContain('−0');
     expect(row.textContent).not.toContain('+8');
     expect(runtime.querySelector('[data-flower-tool-row-identity]')).toBe(row);
     expect(runtime.querySelectorAll('[data-flower-tool-row-identity]')).toHaveLength(1);
+    expect(row.querySelector('.flower-tool-icon')!.getAnimations({ subtree: true })).toHaveLength(0);
   });
 
   it('keeps queue drag ownership and row nodes through 300 updates and a real reorder', async () => {

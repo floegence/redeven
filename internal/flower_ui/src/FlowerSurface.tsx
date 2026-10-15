@@ -9873,7 +9873,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     <div class="flower-activity-inline-row flower-activity-inline-row-generating" data-flower-tool-call-id={block().call.call_id} data-flower-argument-generation="true">
       <div class="flower-activity-inline-line">
         <div class="flower-activity-inline-button flower-activity-inline-button-static">
-          <span class="flower-activity-inline-icon"><FlowerToolIcon toolName={block().call.name} running={false} /></span>
+          <span class="flower-activity-inline-icon"><FlowerToolIcon toolName={block().call.name} running={livePresentationConfirmed()} /></span>
           <span class="flower-activity-inline-copy">
             <span class="flower-activity-inline-title" data-floe-progress-shimmer={livePresentationConfirmed() ? 'text' : undefined}>
               {block().call.name === 'apply_patch' ? copy().chat.toolActivity.patch : copy().chat.toolActivity.edit}
