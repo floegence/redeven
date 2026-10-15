@@ -5779,7 +5779,21 @@
         },
         "agentsCount": "{count} 个代理"
       },
-      "feedbackClose": "关闭反馈详情"
+      "feedbackClose": "关闭反馈详情",
+      "input": {
+        "queueTitle": "排队中的指令",
+        "steerNow": "立即引导",
+        "remove": "移除",
+        "resend": "重新发送",
+        "pending": "正在引导…",
+        "applied": "已送入上下文",
+        "cancelled": "未生效",
+        "stopped": "任务已停止，这条指令尚未生效。",
+        "unknown": "工具执行结果不明，无法在此重试这条指令。",
+        "ended": "任务已结束，这条指令尚未生效。",
+        "failed": "无法确认操作结果。请刷新详情后重试。",
+        "changed": "这条输入已更改或已被消费，详情已刷新。"
+      }
     },
     "settings": {
       "title": "Flower 设置",

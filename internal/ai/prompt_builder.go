@@ -349,7 +349,7 @@ func buildPromptSubagentSection(spec promptProfileSpec) promptSection {
 		"- Use subagents(action=\"wait\", ids:[\"<thread_id>\"], timeout_ms:60000) when you need a child result before deciding.",
 		"- Read completed child results only from handoffs[].content returned by wait or inspect. last_message_preview is status context, never the child result.",
 		"- Use subagents(action=\"list\") for bounded status previews and subagents(action=\"inspect\", target:\"<thread_id>\") to recover the exact completed handoff.",
-		"- Use subagents(action=\"send_input\", target:\"<thread_id>\", message:\"...\", interrupt:true|false) to steer a child; interrupt only for a real change in direction.",
+		"- Use subagents(action=\"send_input\", target:\"<thread_id>\", message:\"...\") to immediately guide a child while preserving its current task.",
 		"- Use subagents(action=\"close\", target:\"<thread_id>\") or close_all when delegated work is no longer useful.",
 		"- Always inspect or wait for relevant subagents before relying on their output, and integrate their results into the parent thread's final reasoning.",
 	)

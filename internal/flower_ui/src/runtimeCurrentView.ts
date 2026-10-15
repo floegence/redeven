@@ -271,7 +271,8 @@ function runtimeMessages(base: FlowerThreadSnapshot, view: FlowerRuntimeCurrentV
     }
     messages.push({
       id: itemID, thread_id: base.thread_id, turn_id: identity.turnID, run_id: identity.runID,
-      role: item.kind === 'user' ? 'user' : 'assistant', content: String(item.text ?? ''),
+      role: item.kind === 'user' || item.kind === 'steering' ? 'user' : 'assistant',
+      ...(item.steering ? { steering: item.steering } : {}), content: String(item.text ?? ''),
       ...(item.kind === 'assistant' && item.sources?.length ? { sources: mapFlowerCitationSources(item.sources) } : {}),
       status: messageStatus(view, item), created_at_ms: createdAtMs,
       ...(attachmentBlocks.length > 0 ? { blocks: attachmentBlocks } : {}),

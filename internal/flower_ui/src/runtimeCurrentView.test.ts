@@ -835,3 +835,16 @@ describe('canonical turn facts', () => {
     expect(() => applyFlowerRuntimeCurrentView(summary(), { ...source, turns: [source.turns![0], { ...source.turns![1], ...change }] })).toThrow(/canonical turn presentation/);
   });
 });
+
+
+it('retains one user message identity while canonical steering settles', () => {
+  const base: FlowerRuntimeCurrentView = { thread_id: 'thread-a', view_version: 1, activity: 'idle', items: [
+    { id: 'steer-a', kind: 'steering', text: 'Change the scope', turn_id: 'turn-a', run_id: 'run-a', ordinal: 2, steering: { status: 'pending' } },
+  ] };
+  const pending = applyFlowerRuntimeCurrentView(summary(), base);
+  const applied = applyFlowerRuntimeCurrentView(pending, { ...base, view_version: 2, items: [{ ...base.items![0], steering: { status: 'applied' } }] });
+  expect(pending.messages).toHaveLength(1);
+  expect(pending.messages[0]).toMatchObject({ id: 'steer-a', role: 'user', content: 'Change the scope', steering: { status: 'pending' } });
+  expect(applied.messages[0]).toMatchObject({ id: 'steer-a', role: 'user', steering: { status: 'applied' } });
+  expect(flowerMessageSignature(pending.messages[0])).not.toBe(flowerMessageSignature(applied.messages[0]));
+});

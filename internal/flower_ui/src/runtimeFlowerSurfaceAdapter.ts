@@ -19,6 +19,7 @@ import type {
   FlowerSettingsDraft,
   FlowerSettingsSnapshot,
   FlowerSubagentDetail,
+  FlowerSubagentInputOperation,
   FlowerSubmitApprovalRequest,
   FlowerSubmitInputRequest,
   FlowerSurfaceAdapter,
@@ -114,6 +115,7 @@ export type FlowerRuntimeTransport = Readonly<{
   loadThread(threadID: string): Promise<unknown>;
   connectLiveStream?: (input: FlowerLiveStreamConnectInput) => AsyncIterable<FlowerLiveTransportFrame>;
   loadSubagentDetail(parentThreadID: string, childThreadID: string): Promise<LoadSubagentDetailResponse>;
+  operateSubagentInput?(parentThreadID: string, childThreadID: string, input: FlowerSubagentInputOperation): Promise<LoadSubagentDetailResponse>;
   readTerminalProcess?(runID: string, processID: string, input: { after_seq: number }): Promise<FlowerTerminalProcessSnapshot>;
   markThreadRead(threadID: string, input: MarkThreadReadInput): Promise<MarkThreadReadResponse>;
   patchThread(threadID: string, input: ThreadPatchInput): Promise<RuntimeThreadPatchResponse>;
@@ -371,6 +373,13 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
       if (!parentID || !childID) throw new Error(missingThreadIDMessage(options));
       return mapSubagentDetail(await options.transport.loadSubagentDetail(parentID, childID));
     },
+    ...(options.canMutate !== false && options.transport.operateSubagentInput ? {
+      operateSubagentInput: async (parentThreadID: string, childThreadID: string, input: FlowerSubagentInputOperation) => {
+        const parentID = trim(parentThreadID), childID = trim(childThreadID);
+        if (!parentID || !childID) throw new Error(missingThreadIDMessage(options));
+        return mapSubagentDetail(await options.transport.operateSubagentInput!(parentID, childID, input));
+      },
+    } : {}),
     markThreadRead,
     ...(options.canMutate === false ? {} : {
       renameThread: async (threadID: string, title: string) => {

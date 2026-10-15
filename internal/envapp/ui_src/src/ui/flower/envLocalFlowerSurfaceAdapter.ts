@@ -589,6 +589,10 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
           { method: 'GET' },
         );
       },
+      operateSubagentInput: (parentThreadID, childThreadID, input) => fetchLocalApiJSON(
+        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(parentThreadID)}/subagents/${encodeURIComponent(childThreadID)}/input`,
+        { method: 'POST', body: JSON.stringify(input) },
+      ),
       markThreadRead: (threadID, body) => fetchLocalApiJSON<MarkThreadReadResponse>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/read`, {
         method: 'POST',
         body: JSON.stringify(body),

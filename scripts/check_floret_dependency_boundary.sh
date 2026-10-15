@@ -22,8 +22,8 @@ require_source() {
 }
 
 echo "[INFO] checking published Floret v7 dependency"
-rg -q '^\s*github\.com/floegence/floret/v7 v7\.35\.0$' go.mod \
-  || fail "go.mod must consume github.com/floegence/floret/v7 v7.35.0"
+rg -q '^\s*github\.com/floegence/floret/v7 v7\.36\.1$' go.mod \
+  || fail "go.mod must consume github.com/floegence/floret/v7 v7.36.1"
 redeven_go_version=$(GOWORK=off go list -m -f '{{.GoVersion}}')
 floret_go_version=$(GOWORK=off go list -m -f '{{.GoVersion}}' github.com/floegence/floret/v7)
 [[ "$redeven_go_version" == "$floret_go_version" ]] \
@@ -81,6 +81,11 @@ require_source internal/ai/service.go 's.threadRuntime.Subscribe'
 require_source internal/ai/floret_runtime.go 'floretEffectAuthorizationGateForRun'
 require_source internal/ai/floret_runtime.go 'flruntime.WithAgentRunLabels(labels)'
 require_source internal/ai/subagents_floret.go 'ThreadScope{ParentID:'
+require_source internal/ai/subagents_floret.go 'controller.Steer('
+require_source internal/ai/subagent_input_operations.go 'controller.SteerQueued('
+if rg -n 'args\["interrupt"\]|"interrupt":' internal/ai/subagents_floret.go internal/ai/builtin_tool_handlers.go; then
+  fail "SubAgent input must use the single canonical steering path"
+fi
 
 legacy_pattern='TurnAdmissionReceipt|ExecuteAdmission|AdmitTurn|authority.?barrier|RecoveryHandle|ProjectionDelta|PendingToolRecovery|approval.?generation|admission.?handoff|receipt.?observation|ensureCanonicalPermissionSnapshotPersisted|pendingCommandID'
 if rg -n -i --pcre2 --glob '*.go' --glob '!**/*_test.go' "$legacy_pattern" internal/ai; then

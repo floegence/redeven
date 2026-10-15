@@ -414,14 +414,7 @@ func TestInvocationPolicies_Subagents(t *testing.T) {
 		},
 		{
 			name:     "send input is delegation control",
-			args:     map[string]any{"action": "send_input", "interrupt": false},
-			approval: false,
-			risk:     "delegation",
-			detail:   "send_input",
-		},
-		{
-			name:     "interrupt is delegation control",
-			args:     map[string]any{"action": "send_input", "interrupt": "true"},
+			args:     map[string]any{"action": "send_input"},
 			approval: false,
 			risk:     "delegation",
 			detail:   "send_input",

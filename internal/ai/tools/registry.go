@@ -464,7 +464,7 @@ var builtinDefinitions = map[string]Definition{
 			presentation(ToolPresentationDelegation, "readonly", "subagent_operation", "delegation", "args", "result", "error"),
 			operation("subagents"),
 			labelFields("task_name", "action"),
-			callPayloadFields("action", "task_name", "task_description", "agent_type", "context_mode", "target", "thread_id", "ids", "interrupt", "limit", "running_only"),
+			callPayloadFields("action", "task_name", "task_description", "agent_type", "context_mode", "target", "thread_id", "ids", "limit", "running_only"),
 			resultPayloadFields("action", "status", "task_name", "task_description", "agent_type", "context_mode", "target", "thread_id", "ids", "target_ids", "requested_ids", "affected_ids", "accepted", "closed", "stopped", "closed_count", "stopped_count", "agent_count", "total", "running_only", "counts", "requested_count", "found_count", "missing_count", "items", "timed_out"),
 			chipFields("action", "agent_type", "status", "agent_count", "total", "timed_out", "closed_count"),
 		),

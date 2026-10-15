@@ -144,6 +144,7 @@ export function flowerMessageSignature(message: FlowerChatMessage): string {
     message.id,
     message.role,
     message.content,
+    JSON.stringify(message.steering ?? null),
     JSON.stringify(message.sources ?? []),
     message.status,
     String(message.created_at_ms),

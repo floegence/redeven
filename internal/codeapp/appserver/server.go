@@ -5127,6 +5127,29 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: view})
 			return
 
+		case action == "subagents" && r.Method == http.MethodPost && len(parts) == 4 && strings.TrimSpace(parts[3]) == "input":
+			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
+			if !ok {
+				return
+			}
+			var body ai.SubagentInputOperation
+			dec := json.NewDecoder(r.Body)
+			dec.DisallowUnknownFields()
+			if r.URL.RawQuery != "" || dec.Decode(&body) != nil || dec.Decode(&struct{}{}) != io.EOF {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid subagent input operation"})
+				return
+			}
+			if !g.requireAIService(w, aiSvc) {
+				return
+			}
+			detail, err := aiSvc.OperateFlowerSubagentInput(r.Context(), meta, threadID, strings.TrimSpace(parts[2]), body)
+			if err != nil {
+				writeJSON(w, aiThreadActionHTTPStatus(err), apiResp{OK: false, Error: err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusAccepted, apiResp{OK: true, Data: map[string]any{"detail": detail}})
+			return
+
 		case action == "subagents" && r.Method == http.MethodGet && len(parts) == 4 && strings.TrimSpace(parts[3]) == "detail":
 			meta, ok := g.requirePermission(w, r, requiredPermissionRead)
 			if !ok {

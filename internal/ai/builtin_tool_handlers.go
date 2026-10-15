@@ -389,7 +389,6 @@ func subagentsToolInputSchema() map[string]any {
 			},
 			"timeout_ms":   map[string]any{"type": "integer", "minimum": 10000, "maximum": 1200000},
 			"target":       map[string]any{"type": "string"},
-			"interrupt":    map[string]any{"type": "boolean"},
 			"scope":        map[string]any{"type": "string", "enum": []string{"current_run"}},
 			"running_only": map[string]any{"type": "boolean"},
 			"limit":        map[string]any{"type": "integer", "minimum": 1, "maximum": 200},
@@ -761,7 +760,7 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:         "subagents",
-			Description:  "Manage parent-owned subagents. Use spawn with a short 1-5 word English Title Case task_name such as Safety Review, required task_description, agent_type, and message to start a durable child thread. Never use snake_case or kebab-case names. Use wait/list/inspect to observe children, send_input to steer or interrupt, and close/close_all to stop child threads.",
+			Description:  "Manage parent-owned subagents. Use spawn with a short 1-5 word English Title Case task_name such as Safety Review, required task_description, agent_type, and message to start a durable child thread. Never use snake_case or kebab-case names. Use wait/list/inspect to observe children, send_input to immediately guide a child, and close/close_all to stop child threads.",
 			InputSchema:  toSchema(subagentsToolInputSchema()),
 			Mutating:     false,
 			Visibility:   ToolVisibilityDelegationControl,
