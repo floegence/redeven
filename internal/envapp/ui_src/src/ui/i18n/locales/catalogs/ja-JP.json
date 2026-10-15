@@ -5179,6 +5179,8 @@
       "permissionSelectorSaving": "権限を保存中...",
       "permissionSelectorErrorTitle": "Flower は権限を保存できませんでした。",
       "terminalCommandActions": "コマンド操作",
+      "terminalOutputLabel": "出力",
+      "terminalExitCodeLabel": "終了コード {code}",
       "terminalWaitingOutput": "出力を待っています…",
       "terminalStartedNoOutput": "コマンドを開始しました。まだ出力はありません。",
       "terminalFinishedNoOutput": "コマンドは出力なしで終了しました。",

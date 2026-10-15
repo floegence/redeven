@@ -135,6 +135,8 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
       permissionSelectorSaving: t(i18n, k('chat.permissionSelectorSaving')),
       permissionSelectorErrorTitle: t(i18n, k('chat.permissionSelectorErrorTitle')),
       terminalCommandActions: t(i18n, k('chat.terminalCommandActions')),
+      terminalOutputLabel: t(i18n, k('chat.terminalOutputLabel')),
+      terminalExitCodeLabel: (code) => t(i18n, k('chat.terminalExitCodeLabel'), { code }),
       terminalWaitingOutput: t(i18n, k('chat.terminalWaitingOutput')),
       terminalStartedNoOutput: t(i18n, k('chat.terminalStartedNoOutput')),
       terminalFinishedNoOutput: t(i18n, k('chat.terminalFinishedNoOutput')),

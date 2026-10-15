@@ -274,6 +274,8 @@
       "permissionSelectorSaving": "Enregistrement de l’autorisation...",
       "permissionSelectorErrorTitle": "Flower n’a pas pu enregistrer l’autorisation.",
       "terminalCommandActions": "Actions de la commande",
+      "terminalOutputLabel": "Sortie",
+      "terminalExitCodeLabel": "Code de sortie {code}",
       "terminalWaitingOutput": "En attente de sortie…",
       "terminalStartedNoOutput": "Commande lancée. Aucune sortie pour le moment.",
       "terminalFinishedNoOutput": "La commande s’est terminée sans sortie.",

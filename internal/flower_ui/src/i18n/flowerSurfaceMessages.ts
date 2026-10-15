@@ -90,6 +90,8 @@ export const flowerSurfaceEnUS = {
     permissionSelectorSaving: 'Saving permission...',
     permissionSelectorErrorTitle: 'Flower could not save permission.',
     terminalCommandActions: "Command actions",
+    terminalOutputLabel: 'Output',
+    terminalExitCodeLabel: 'Exit code {code}',
     terminalWaitingOutput: "Waiting for output…",
     terminalStartedNoOutput: "Command started. No output returned yet.",
     terminalFinishedNoOutput: "Command finished without output.",

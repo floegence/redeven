@@ -274,6 +274,8 @@
       "permissionSelectorSaving": "권한 저장 중...",
       "permissionSelectorErrorTitle": "Flower가 권한을 저장하지 못했습니다.",
       "terminalCommandActions": "명령 작업",
+      "terminalOutputLabel": "출력",
+      "terminalExitCodeLabel": "종료 코드 {code}",
       "terminalWaitingOutput": "출력을 기다리는 중…",
       "terminalStartedNoOutput": "명령이 시작되었습니다. 아직 출력이 없습니다.",
       "terminalFinishedNoOutput": "명령이 출력 없이 종료되었습니다.",

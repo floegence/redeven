@@ -9373,7 +9373,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         <Show when={command()}>
           <div class="flower-activity-terminal-header">
             <span class="flower-activity-terminal-prompt" aria-hidden="true">$</span>
-            <span class="flower-activity-terminal-command">
+            <span
+              id={commandPanelID()}
+              class={cn('flower-activity-terminal-command', commandExpanded() && 'flower-activity-terminal-command-expanded')}
+            >
               <FlowerShellCommandHighlight
                 command={terminal().command}
                 class="flower-activity-terminal-command-code"
@@ -9415,22 +9418,20 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             </div>
           </div>
         </Show>
-        <Show when={command() && commandExpanded()}>
-          <div id={commandPanelID()} class="flower-activity-terminal-command-panel">
-            <pre class="flower-activity-terminal-command-full">
-              <FlowerShellCommandHighlight
-                command={command()}
-                class="flower-activity-terminal-command-full-code"
-                tokenClassPrefix="flower-activity-terminal-command-token"
-              />
-            </pre>
-          </div>
-        </Show>
         <Show when={terminal().operation !== 'write' && visibleOutput().trim()} fallback={
           <Show when={emptyOutputNotice()}>
             {(notice) => <p class="flower-activity-terminal-notice">{notice()}</p>}
           </Show>
         }>
+          <div class="flower-activity-terminal-output-heading">
+            <span>{copy().chat.terminalOutputLabel}</span>
+            <Show when={terminal().exit_code === 0 && displayStatus() === 'success' && !terminal().timed_out && !terminal().terminated && !displayUserRejected()}>
+              <span class="flower-activity-terminal-exit">
+                <Check class="h-3 w-3" aria-hidden="true" />
+                {copy().chat.terminalExitCodeLabel(0)}
+              </span>
+            </Show>
+          </div>
           <div
             ref={outputViewport.bind}
             class="flower-activity-terminal-output"

@@ -64,7 +64,7 @@ const rowFor = (runtime: HTMLElement, id: string) => runtime.querySelector(`[dat
 const toggleFor = (runtime: HTMLElement, id: string) => rowFor(runtime, id).querySelector<HTMLButtonElement>('.flower-activity-inline-button')!;
 
 describe('SSH terminal activity', () => {
-  it.each(['classic-light', 'classic-dark'])('blends expanded commands into %s while preserving copy and scroll', async theme => {
+  it.each(['classic-light', 'classic-dark'])('highlights crisp borderless commands with open output in %s', async theme => {
     document.documentElement.classList.toggle('dark', theme === 'classic-dark');
     document.documentElement.dataset.floeShellTheme = theme;
     const command = 'date +%s; sleep 10; date +%s; echo "no files changed"';
@@ -78,33 +78,106 @@ describe('SSH terminal activity', () => {
     const panelStyle = getComputedStyle(panel);
     expect(panelStyle.borderWidth).toBe('0px');
     expect(panelStyle.boxShadow).toBe('none');
-    expect(panelStyle.backgroundImage).toContain('radial-gradient');
+    expect(panelStyle.backgroundImage).toBe('none');
+    expect(panelStyle.backgroundColor).toBe('rgba(0, 0, 0, 0)');
+    const header = panel.querySelector<HTMLElement>('.flower-activity-terminal-header')!;
+    expect(getComputedStyle(header).backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
+    expect(getComputedStyle(header).borderWidth).toBe('0px');
+    const highlight = panel.querySelector<HTMLElement>('.flower-activity-terminal-command-token-command')!;
+    expect(getComputedStyle(highlight).color).not.toBe(getComputedStyle(header).color);
     const buttons = panel.querySelectorAll<HTMLButtonElement>('.flower-activity-terminal-actions button');
+    expect(getComputedStyle(buttons[0]).opacity).toBe('1');
+    expect(getComputedStyle(buttons[1]).opacity).toBe('1');
+    for (const button of buttons) {
+      expect(getComputedStyle(button).visibility).toBe('visible');
+      expect(button.getBoundingClientRect().width).toBeGreaterThanOrEqual(28);
+      expect(button.querySelector('svg')).not.toBeNull();
+    }
     buttons[0].focus();
     expect(getComputedStyle(buttons[0]).opacity).toBe('1');
     await userEvent.keyboard('{Enter}');
     await waitFor(() => buttons[0].getAttribute('aria-expanded') === 'true');
-    expect(panel.querySelector('.flower-activity-terminal-command-full')?.textContent).toBe(command);
-    for (const node of panel.querySelectorAll('.flower-activity-terminal-header, .flower-activity-terminal-command-panel, .flower-activity-terminal-output')) {
+    expect(panel.querySelector('.flower-activity-terminal-command-expanded')?.textContent).toBe(command);
+    expect(panel.querySelectorAll('.flower-activity-terminal-command-code')).toHaveLength(1);
+    expect(panel.querySelector('.flower-activity-terminal-output-heading')?.textContent).toBe('Output');
+    for (const node of panel.querySelectorAll('.flower-activity-terminal-header, .flower-activity-terminal-command, .flower-activity-terminal-output')) {
       const style = getComputedStyle(node);
       expect(style.borderBottomWidth).toBe('0px');
-      expect(style.backgroundColor).toBe('rgba(0, 0, 0, 0)');
       expect(style.opacity).toBe('1');
       expect(style.maskImage).toBe('none');
+      expect(style.filter).toBe('none');
     }
+    expect(getComputedStyle(panel.querySelector('.flower-activity-terminal-output')!).backgroundColor).toBe('rgba(0, 0, 0, 0)');
+    expect(panel.querySelector('.flower-activity-terminal-command')?.textContent).toBe(command);
+    buttons[0].blur();
+    await page.screenshot({ element: runtime, path: `__screenshots__/flower-terminal-surface-${theme}.png` });
+    await page.viewport(390, 844);
+    expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth + 1);
+    await page.screenshot({ element: runtime, path: `__screenshots__/flower-terminal-surface-mobile-${theme}.png` });
     const clipboard = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue();
     buttons[1].click();
     await expect.poll(() => clipboard.mock.calls[0]?.[0]).toBe(command);
+    await waitFor(() => buttons[1].getAttribute('data-copied') === 'true');
+    expect(buttons[1].querySelector('svg')).not.toBeNull();
     clipboard.mockRestore();
     const viewport = panel.querySelector<HTMLElement>('.flower-activity-terminal-output')!;
     expect(viewport.scrollHeight).toBeGreaterThan(viewport.clientHeight);
     expect(viewport.clientHeight).toBeLessThanOrEqual(107);
     viewport.scrollTop = viewport.scrollHeight;
     expect(viewport.scrollTop).toBeGreaterThan(0);
-    await page.screenshot({ element: runtime, path: `__screenshots__/flower-terminal-surface-${theme}.png` });
+  });
+
+  it('expands a long command in place without disturbing selection or the output viewport', async () => {
+    const command = Array.from({ length: 14 }, (_, index) => `printf "Diagnostic line ${index + 1}"`).join(' && ');
+    const result = activityItem({ ...read(), payload: { operation: 'read', command, output: 'GPU ready' } });
+    const { runtime } = await mount([write(), result]);
     await page.viewport(390, 844);
-    expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth + 1);
-    await page.screenshot({ element: runtime, path: `__screenshots__/flower-terminal-surface-mobile-${theme}.png` });
+    toggleFor(runtime, 'read').click();
+    await waitFor(() => rowFor(runtime, 'read').querySelector('.flower-activity-inline-details')?.getAttribute('data-state') === 'open');
+    const panel = rowFor(runtime, 'read').querySelector<HTMLElement>('[data-flower-activity-terminal-panel]')!;
+    const commandNode = panel.querySelector<HTMLElement>('.flower-activity-terminal-command')!;
+    const output = panel.querySelector('.flower-activity-terminal-output');
+    const button = panel.querySelector<HTMLButtonElement>('.flower-activity-terminal-actions button')!;
+    const collapsedHeight = commandNode.getBoundingClientRect().height;
+    await userEvent.click(commandNode);
+    const range = document.createRange();
+    range.selectNodeContents(commandNode);
+    const selection = window.getSelection()!;
+    selection.removeAllRanges();
+    selection.addRange(range);
+    try {
+      button.click();
+      await waitFor(() => button.getAttribute('aria-expanded') === 'true');
+      expect(document.getElementById(button.getAttribute('aria-controls')!)).toBe(commandNode);
+      expect(panel.querySelector('.flower-activity-terminal-command')).toBe(commandNode);
+      expect(selection.toString()).toBe(command);
+      expect(commandNode.getBoundingClientRect().height).toBeGreaterThan(collapsedHeight);
+      expect(panel.querySelectorAll('.flower-activity-terminal-command-code')).toHaveLength(1);
+      expect(panel.querySelector('.flower-activity-terminal-output')).toBe(output);
+      expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth + 1);
+      button.click();
+      await waitFor(() => button.getAttribute('aria-expanded') === 'false');
+      expect(commandNode.getBoundingClientRect().height).toBe(collapsedHeight);
+    } finally {
+      selection.removeAllRanges();
+    }
+  });
+
+  it.each([
+    { name: 'confirmed exit', operation: 'exec', status: 'success', facts: { exit_code: 0 }, visible: true },
+    { name: 'read without exit', operation: 'read', status: 'success', facts: {}, visible: false },
+    { name: 'running process', operation: 'exec', status: 'running', facts: { exit_code: 0 }, visible: false },
+    { name: 'failed process', operation: 'exec', status: 'error', facts: { exit_code: 2 }, visible: false },
+    { name: 'timed out process', operation: 'exec', status: 'success', facts: { exit_code: 0, timed_out: true }, visible: false },
+    { name: 'stopped process', operation: 'terminate', status: 'success', facts: { exit_code: 0, terminated: true }, visible: false },
+  ] as const)('shows a success exit label only for $name', async ({ operation, status, facts, visible }) => {
+    const result = activityItem({ ...read(), status, payload: { operation, command: 'date +%s', output: '1792042868', ...facts } });
+    const { runtime } = await mount([write(), result]);
+    toggleFor(runtime, 'read').click();
+    await waitFor(() => rowFor(runtime, 'read').querySelector('.flower-activity-terminal-output') !== null);
+    const exit = rowFor(runtime, 'read').querySelector('.flower-activity-terminal-exit');
+    expect(Boolean(exit)).toBe(visible);
+    if (visible) expect(exit?.textContent).toBe('Exit code 0');
   });
 
   it('puts returned output directly below the command without repeating intent or exposing transport metadata', async () => {
@@ -123,7 +196,8 @@ describe('SSH terminal activity', () => {
     for (const hidden of ['Purpose', 'Status', 'Done', 'Output sequence', 'Output bytes', 'Execution location', 'local_runtime', 'private-process-id']) {
       expect(panel.textContent).not.toContain(hidden);
     }
-    expect(panel.querySelector('.flower-activity-terminal-header')?.nextElementSibling?.classList.contains('flower-activity-terminal-output')).toBe(true);
+    expect(panel.querySelector('.flower-activity-terminal-header')?.nextElementSibling?.classList.contains('flower-activity-terminal-output-heading')).toBe(true);
+    expect(panel.querySelector('.flower-activity-terminal-output-heading')?.nextElementSibling?.classList.contains('flower-activity-terminal-output')).toBe(true);
   });
 
   it.each([
