@@ -364,7 +364,9 @@
         "sources": "檢視來源",
         "fetch": "取得網頁",
         "patch": "套用變更",
-        "copy": "複製"
+        "copy": "複製",
+        "waitingResult": "正在執行，結果將在此顯示。",
+        "previewUnavailable": "此工具未提供結果預覽。"
       },
       "toolActivityDetailsPending": "正在等待工具詳細資訊",
       "toolActivityNoAdditionalDetails": "沒有更多詳細資訊",

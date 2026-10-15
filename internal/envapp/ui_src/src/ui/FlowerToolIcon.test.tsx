@@ -1,0 +1,46 @@
+// @vitest-environment jsdom
+import { createSignal } from 'solid-js';
+import { render } from 'solid-js/web';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { FlowerToolIcon } from '../../../../flower_ui/src/FlowerToolIcon';
+import { flowerToolMotion } from '../../../../flower_ui/src/flowerToolMotion';
+
+if (!SVGElement.prototype.animate) SVGElement.prototype.animate = (() => ({cancel() {}, finished: Promise.resolve()})) as unknown as typeof Element.prototype.animate;
+
+const disposers: (() => void)[] = [];
+afterEach(() => { disposers.splice(0).forEach(dispose => dispose()); vi.restoreAllMocks(); document.body.replaceChildren(); });
+
+describe('semantic tool icons', () => {
+ it('validates every animation against the actual icon parts', () => {
+  for (const name of Object.keys(flowerToolMotion)) {
+   const host=document.createElement('div');
+   const dispose=render(() => <FlowerToolIcon toolName={name} source={name === 'mcp' ? 'mcp' : undefined} running={false} />,host);
+   expect(host.querySelector('svg'),name).not.toBeNull(); dispose();
+  }
+ });
+ it('keeps the glyph and removes all running effects on completion', () => {
+  const cancel = vi.fn();
+  const animate = vi.spyOn(SVGElement.prototype, 'animate').mockReturnValue({ cancel, finished: Promise.resolve() } as unknown as Animation);
+  const [running, setRunning] = createSignal(true);
+  const host = document.createElement('div'); document.body.append(host);
+  disposers.push(render(() => <FlowerToolIcon toolName="file.edit" running={running()} />, host));
+  const svg = host.querySelector('svg');
+  expect(svg?.querySelectorAll('g').length).toBeGreaterThan(0);
+  expect(animate).toHaveBeenCalled();
+  setRunning(false);
+  expect(host.querySelector('svg')).toBe(svg);
+  expect(cancel).toHaveBeenCalled();
+  expect([...host.querySelectorAll('g')].every(group => !group.style.strokeDasharray && !group.style.opacity)).toBe(true);
+ });
+ it('honors reduced motion and cancels animations on unmount', () => {
+  const cancel = vi.fn();
+  const animate = vi.spyOn(SVGElement.prototype, 'animate').mockReturnValue({ cancel, finished: Promise.resolve() } as unknown as Animation);
+  let reduce = false; let change = () => {};
+  vi.spyOn(window, 'matchMedia').mockImplementation(() => ({get matches(){return reduce;},addEventListener: (_: string, listener: () => void) => { change=listener; }, removeEventListener: vi.fn()}) as unknown as MediaQueryList);
+  const host=document.createElement('div'); document.body.append(host);
+  const dispose=render(() => <FlowerToolIcon toolName="terminal.exec" running />,host);
+  expect(animate).toHaveBeenCalled(); reduce=true; change(); expect(cancel).toHaveBeenCalled();
+  const count=animate.mock.calls.length; change(); expect(animate).toHaveBeenCalledTimes(count);
+  dispose();
+ });
+});

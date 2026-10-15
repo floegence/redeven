@@ -60,13 +60,13 @@ describe('Flower activity status presentation', () => {
     const css = flowerStyles();
     const previewRule = cssRule(css, '.flower-activity-web-fetch-preview');
     const linkRule = cssRule(css, '.flower-activity-web-fetch-open');
-    const iconRule = cssRule(css, '.flower-activity-web-fetch-searching-orb');
+    const iconRule = cssRule(css, '.flower-tool-icon');
 
     expect(previewRule).toContain('max-height: 15rem');
     expect(previewRule).toContain('overflow: auto');
     expect(linkRule).toContain('cursor: pointer');
-    expect(iconRule).toContain('width: 1.25rem');
-    expect(iconRule).toContain('height: 1.25rem');
+    expect(iconRule).toContain('width: 1rem');
+    expect(iconRule).toContain('height: 1rem');
   });
 
   it('uses upstream glyph-only progress without a tool-row background sweep', () => {
@@ -74,8 +74,8 @@ describe('Flower activity status presentation', () => {
     const activityInlineRule = cssRule(css, '.flower-activity-inline');
     const buttonRule = cssRule(css, '.flower-activity-inline-button');
     const buttonHoverRule = cssRule(css, '.flower-activity-inline-button:is(button):hover,\n.flower-activity-inline-button:is(button):focus-visible');
-    const loaderRule = cssRule(css, '.flower-activity-inline-loader');
-    const loaderSquareRule = cssRule(css, '.flower-activity-inline-loader-square');
+    const iconRule = cssRule(css, '.flower-tool-icon');
+    expect(iconRule).toContain('overflow: visible');
     const titleRule = cssRule(css, '.flower-activity-inline-title');
     const titleVerbRule = cssRule(css, '.flower-activity-inline-title-verb');
     const detailRule = cssRule(css, '.flower-activity-inline-detail');
@@ -130,10 +130,6 @@ describe('Flower activity status presentation', () => {
     expect(activityInlineRule).toContain('--flower-activity-tool-row-error: var(--redeven-status-error-foreground)');
     expect(failedIconRule).toContain('color: var(--flower-activity-tool-row-error)');
     expect(canceledIconRule).toContain('color: var(--destructive)');
-    expect(css).toContain('@keyframes flower-activity-loader-square');
-    expect(loaderRule).toContain('grid-template-columns: repeat(2, 0.3rem)');
-    expect(loaderSquareRule).toContain('animation: flower-activity-loader-square 1.35s ease-in-out infinite');
-    expect(css).toContain('.flower-activity-inline-loader-square {');
     expect(css).not.toContain('.flower-activity-inline-details::before');
     expect(css).not.toContain('.flower-activity-inline-row-running::before');
   });

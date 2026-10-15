@@ -1,4 +1,7 @@
 export const toolActivityEnUS = {
+  "previewUnavailable": "This tool did not provide a result preview.",
+  "waitingResult": "Running; the result will appear here.",
+
   "copy": "Copy",
   "inputs": "Input",
   "results": "Result",

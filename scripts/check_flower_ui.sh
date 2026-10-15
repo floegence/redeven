@@ -79,7 +79,8 @@ main() {
       src/ui/FlowerSurface.canonicalReferences.test.tsx \
       src/ui/flower/FlowerChatContextChips.test.tsx \
       src/ui/flower/FlowerAttachmentLane.test.tsx \
-      src/ui/flower/WebFetchSearchingOrb.test.tsx \
+      src/ui/FlowerToolIcon.test.tsx \
+      src/ui/FlowerActivityPreview.test.tsx \
       src/ui/flower/AIReadinessBoundary.test.tsx \
       src/ui/flower/aiReadiness.test.ts \
       src/ui/flower/aiReadinessPresentation.test.ts \
@@ -111,6 +112,7 @@ main() {
     ui_pkg_log ""
     ui_pkg_log "Flower UI: shared timeline projection contracts..."
     ui_pkg_run_pnpm exec vitest run --root "$ROOT_DIR" --config "$dir/vite.config.ts" --environment=node --maxWorkers=2 --testTimeout=10000 \
+      internal/flower_ui/src/flowerToolMotion.test.ts \
       internal/flower_ui/src/webSearchCapability.test.ts \
       internal/flower_ui/src/threadCache.test.ts \
       internal/flower_ui/src/threadTitleSnapshot.test.ts \
@@ -182,6 +184,7 @@ main() {
       ui_pkg_run_pnpm run test:browser -- \
         src/ui/EnvAppShell.flowerCompanion.browser.test.tsx \
         src/ui/flowerCompanionTailMotion.browser.test.tsx \
+        src/ui/FlowerSurface.toolPresentation.browser.test.tsx \
         src/ui/FlowerSurface.finalArchitecture.browser.test.tsx \
         src/ui/FlowerSurface.streamingStability.browser.test.tsx \
         src/ui/FlowerSurface.liveRecovery.browser.test.tsx \

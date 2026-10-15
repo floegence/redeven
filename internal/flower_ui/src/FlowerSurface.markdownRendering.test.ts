@@ -52,7 +52,6 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(mountedDisclosure).toBeGreaterThan(detailDispatch);
     expect(detailRender).toBeGreaterThan(mountedDisclosure);
     expect(src).toContain('toolActivityExternalContentNotice');
-    expect(src).toContain('<WebFetchSearchingOrb running={livePresentationConfirmed() && displayStatus() === \'running\'} />');
     expect(src).not.toContain('flower-activity-web-fetch-title-icon');
     expect(src).not.toContain('site_icon_data_url');
   });
@@ -77,26 +76,10 @@ describe('FlowerSurface markdown rendering boundary', () => {
 
     expect(src).toContain("`flower-activity-inline-row-${displayStatus()}`");
     expect(src).toContain('data-flower-activity-status={displayStatus()}');
-    expect(src).toContain('fallback={statusIcon(displayStatus())}');
-    expect(src).toContain("item().renderer === 'web_fetch' || trimString(item().tool_name) === 'web_fetch'");
     expect(src).not.toContain('flower-activity-inline-status-${displayStatus()}');
     expect(src).toContain("copy().chat.toolStatuses[activityWaitingForComputer(item, timeline) ? 'waiting' : item.status]");
     expect(src).not.toContain('payload.status');
     expect(src).not.toContain("payload['status']");
-  });
-
-  it('keeps one Web Fetch indicator and restores the shared error icon on failure', () => {
-    const src = surfaceSource();
-
-    expect(src).toContain('flower-activity-inline-loader');
-    expect(src).toContain('flower-activity-inline-loader-square');
-    expect(src).toContain("case 'running':");
-    expect(src).toContain("case 'error':\n        return <AlertTriangle");
-    expect(src).toContain("import { WebFetchSearchingOrb } from './WebFetchSearchingOrb';");
-    expect(src).toContain("when={webFetchActivity() && displayStatus() !== 'error'}");
-    expect(src).toContain('fallback={statusIcon(displayStatus())}');
-    expect(src).toContain('<WebFetchSearchingOrb running={livePresentationConfirmed() && displayStatus() === \'running\'} />');
-    expect(src).not.toContain("case 'running':\n        return <Terminal");
   });
 
   it('uses one cancellable live stream without polling fallbacks', () => {

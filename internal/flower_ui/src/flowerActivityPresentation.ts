@@ -207,6 +207,7 @@ export type FlowerActivityDetailBlock =
   | Readonly<{
     kind: 'structured_rows';
     section?: 'inputs' | 'results';
+    preview?: boolean;
     notice?: string;
     rows: readonly FlowerActivityStructuredRow[];
   }>
@@ -1528,6 +1529,26 @@ function presentationForStructured(item: FlowerActivityItem, copy?: FlowerActivi
       const notice = { kind: 'structured_rows' as const, section: 'results' as const, rows, notice: words.screenshotUnavailable };
       if (index >= 0) detailBlocks[index] = notice;
       else detailBlocks.push(notice);
+    }
+  }
+  const missingPresenter = ['threads.query', 'threads.read', 'threads.aggregate', 'computer.targets',
+    'tessiven.runtimes', 'tessiven.runtime.inspect', 'tessiven.runtime.action', 'tessiven.inspect', 'tessiven.action'].includes(item.tool_name ?? '');
+  if (missingPresenter) {
+    const secondaryInputs = new Set(['object', 'limit', 'group_by', 'roles', 'statuses', 'version', 'expected_version', 'before']);
+    for (let index = detailBlocks.length - 1; index >= 0; index--) {
+      const block = detailBlocks[index];
+      if (block.kind !== 'structured_rows') continue;
+      const visibleRows = block.section === 'inputs'
+        ? block.rows.filter(row => !secondaryInputs.has(row.title) && row.title !== words.inputLimit && row.title !== words.inputOffset)
+        : block.rows.filter(row => row.title !== 'total' || block.rows.length === 1);
+      if (block.section === 'inputs' && !visibleRows.length) detailBlocks.splice(index, 1);
+      else if (block.section === 'results' && !visibleRows.length && (errorBlock || detailLines.length)) detailBlocks.splice(index, 1);
+      else detailBlocks[index] = { ...block, rows: visibleRows, preview: true,
+        ...(!visibleRows.length ? { notice: active ? words.waitingResult : words.previewUnavailable } : {}),
+      };
+    }
+    if (active && !detailBlocks.some(block => block.kind === 'structured_rows' && block.section === 'results')) {
+      detailBlocks.push({ kind: 'structured_rows', section: 'results', rows: [], preview: true, notice: words.waitingResult });
     }
   }
   return { label: titleText(title), title, meta, detailLines, detailBlocks };

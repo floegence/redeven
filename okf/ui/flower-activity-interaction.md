@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower activity disclosure interaction
 description: Keep native tool activation, disclosure state, viewport following, and floating controls consistent during live updates.
 tags: [ai, flower, activity, interaction, accessibility]
-timestamp: 2026-10-08T00:00:00Z
+timestamp: 2026-10-14T00:00:00Z
 ---
 # Summary
 
@@ -31,13 +31,29 @@ The existing manual-open map is the only disclosure authority. All tool details
 start closed, including pending, waiting, running, completed, and failed calls.
 Status and attention facts never open a panel. Running tools show the existing
 title sweep while collapsed; settlement stops the sweep without changing the
-user's choice. Failures keep their lifecycle indicator and an actionable error in the expanded details. Current replacements
+user's choice. Failures keep their static type icon and an actionable error in the expanded details. Current replacements
 and navigation within the same Flower surface preserve manual choices. This
 state does not require a backend migration or survive a browser restart.
 
 Triggers expose a pointer cursor, focus indication, `aria-expanded`, and
 `aria-controls`. Enter and Space retain native activation. Before closing a
 panel containing focus, the trigger receives focus with `preventScroll`.
+
+## Semantic tool icons
+
+Collapsed rows retain their compact geometry. Each registered tool, the hosted
+web-search activity, source activity, MCP extension, and unknown extension has
+an explicit type glyph. Running motion animates the meaningful parts of that
+same glyph. Successful and failed calls retain the full static glyph with the
+existing status color; no badge obscures it. Canonical status remains available
+to assistive technology without repeating it in the expanded content.
+
+The pinned Lucide glyph order and 58 independent motion recipes form one
+presentation catalog. Status changes cancel every animation and remove running
+base styles without replacing the SVG. Unmount cancels all work. The system
+reduced-motion preference keeps complete static glyphs, including when it changes
+during execution. Historical running rows animate only after live presentation
+is confirmed. Both Desktop and Env App consume the same component.
 
 ## Intent, inputs and results
 
@@ -49,7 +65,7 @@ counters do not become primary reading content.
 
 Structured `inputs`, result `rows`, `rows_provided`, row `language` and
 `truncated` facts were introduced in published Floret v7.14.0 and remain owned by
-the current Floret v7.25.2 runtime. Input rows are recorded at call time and
+the published Floret runtime. Input rows are recorded at call time and
 survive result-only updates. Redeven maps actual bounded tool data once, then
 uses the same sanitizer and wire mapper for live and historical views. Searches,
 multi-file reads, skills and saved sources retain meaningful content. Computer
@@ -57,11 +73,19 @@ and browser activities use this common path, with authorized target/frame refs
 as supplemental controls. Text is never an attachment capability.
 
 Expanded inputs and results preserve literal whitespace. The current Floe Webapp
-v0.86.5's
+v0.86.32's
 public `CodeBlock` owns highlighting, clipboard writes and accessible copy
 feedback; Flower owns bounded layout and stable disclosure. Scripts start as one
 compact command-style preview with a copy action; clicking expands the complete
-code. Output follows without redundant section or language headers, and an
+code. Existing terminal, editing, search, script, and other detail presenters
+retain their layout, copy actions, and independent scrolling. Only the previously
+missing thread-query, Computer target-discovery, and Tessiven runtime/service
+presenters use compact previews. They foreground the query or operation, omit
+parameter and status noise, and start with three entries and two-line text
+previews. One localized disclosure reveals the remaining supplied content.
+Absent preview data is stated explicitly and never mistaken for an empty tool
+result. These are frontend choices over existing Activity; no tool-result
+mapping or storage contract changes. An
 actionable failure suppresses the duplicate partial-output notice. English and
 all shipped locales provide action labels, missing-data notices and copy feedback. Model descriptions, filenames, scripts and actual output remain
 literal. Stable section keys and row slots retain DOM selection and expansion
@@ -145,3 +169,7 @@ file, process, or approval actions. Live transport continues during interaction.
 Desktop and Runtime negotiate compatibility epoch 21 because older strict Activity
 decoders reject the new optional fields. The existing minimum v0.13.0 pair is
 the unreleased product window; epoch 20 remains an admitted upgrade source.
+
+- `redeven:internal/flower_ui/src/FlowerToolIcon.tsx` - Semantic glyph animation lifecycle and reduced-motion cleanup.
+- `redeven:internal/flower_ui/src/flowerToolMotion.test.ts` - Coverage of the registered tool catalog.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.toolPresentation.browser.test.tsx` - Real glyphs, stable settlement and compact desktop/mobile disclosure.

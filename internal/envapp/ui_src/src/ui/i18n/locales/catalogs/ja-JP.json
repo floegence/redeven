@@ -5262,7 +5262,9 @@
         "sources": "出典を表示",
         "fetch": "ページを取得",
         "patch": "変更を適用",
-        "copy": "コピー"
+        "copy": "コピー",
+        "waitingResult": "実行中です。結果はここに表示されます。",
+        "previewUnavailable": "このツールは結果のプレビューを提供していません。"
       },
       "toolActivityDetailsPending": "ツールの詳細を待っています",
       "toolActivityNoAdditionalDetails": "追加の詳細はありません",

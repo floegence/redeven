@@ -5262,7 +5262,9 @@
         "sources": "Ver fontes",
         "fetch": "Obter página",
         "patch": "Aplicar alterações",
-        "copy": "Copiar"
+        "copy": "Copiar",
+        "waitingResult": "Em execução. O resultado aparecerá aqui.",
+        "previewUnavailable": "Esta ferramenta não forneceu uma prévia do resultado."
       },
       "toolActivityDetailsPending": "Aguardando detalhes da ferramenta",
       "toolActivityNoAdditionalDetails": "Nenhum detalhe adicional",
