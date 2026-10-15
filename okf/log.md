@@ -1,5 +1,11 @@
 # Redeven OKF Update Log
 
+## 2026-10-14: Reactive message copy feedback
+
+- Keep [message copy controls](ui/flower-streaming-stability.md) mounted across
+  live text updates, read the latest content on activation, and retain successful
+  clipboard feedback through completion and its timed reset.
+
 ## 2026-10-14: Consistent command activity icons
 
 - Command execution and output reads share the terminal glyph and restore the

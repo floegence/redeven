@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower streaming stability
 description: Preserve interactive subtree identity and bound streaming rendering work in the shared Flower UI.
 tags: [flower, streaming, performance, interaction]
-timestamp: 2026-09-17T00:00:00Z
+timestamp: 2026-10-14T00:00:00Z
 ---
 
 # Summary
@@ -60,6 +60,7 @@ The shared Surface is used by Desktop and the Env App.
 | Terminal reader and output viewport | Repaired: execution/process/eligibility scalar dependencies; canonical snapshot effect does not track live output | No extra read starts during 300 updates; terminal identity, delta, status, internal scrolling and disposal tests |
 | Disclosure motion and geometry | Repaired: 180/140 ms motion, natural open height, observer only while opening, one viewport frame | 300 notifications produce one read/write pass; motion deadline, native press, wheel, cancellation and reduced-motion tests |
 | Markdown and code-copy controls | Repaired: full lexer plus complete-token/reference-aware HTML reuse, local copy decoration | 300 updates retain completed code/copy controls; parser count and reference/replacement/finalization tests |
+| Message copy actions | Stable components read current message text at activation; visibility uses boolean conditions | Browser tests verify latest streamed text, retained button and checkmark, completion, reset and clipboard failure |
 | Raw code tail | Repaired: one appendable Text node and reactive raw/HTML/empty branch | 10,000 separately flushed appends, selection, early-prefix replacement, final content and copy checks |
 | Progress, usage, timers and observers | Repaired progress/usage values; retained mount/visibility/query-driven timers, resource loading and menu listeners | Source dependency inspection, no new requests/observers/animations in stability regression, visibility and resource tests |
 | Transport, outbox and restored inputs | Retained single workspace connection and canonical request settlement; repaired frame coalescing and abort-listener cleanup | Per-input validation, ordered semantic/reconnect boundaries, disposal; architecture, admission and storage recovery tests |
@@ -70,6 +71,12 @@ search depends on draft query and root. Menu listeners depend on visibility;
 terminal output rendering depends on output/status. Thinking indicators depend on
 their visible running state. These owners do not subscribe to arbitrary current
 view object identity. Their existing cleanup remains in place.
+
+Message copy shows its checkmark only after the clipboard write succeeds and
+resets after 1.6 seconds. Text updates and stream completion preserve the button
+and its feedback subscription. A failed write reports the error without claiming
+success. Rendered nodes must not serve as conditional visibility values: updating
+the condition can dispose their subscriptions while an earlier node stays visible.
 
 ## Bounded streaming work
 
@@ -168,6 +175,7 @@ pre-push gate; the focused and timing results do not replace that gate.
 - [Current-view stability](../../internal/flower_ui/src/runtimeCurrentView.stability.test.ts)
 - [Browser streaming stability](../../internal/envapp/ui_src/src/ui/FlowerSurface.streamingStability.browser.test.tsx)
 - [Markdown streaming stability](../../internal/envapp/ui_src/src/ui/FlowerMarkdown.streamingStability.browser.test.tsx)
+- [Message copy interaction](../../internal/envapp/ui_src/src/ui/FlowerSurface.messageCopy.browser.test.tsx)
 - [Frame boundary validation](../../internal/flower_ui/src/flowerLiveFrameQueue.test.ts)
 - [Production performance runner](../../scripts/check_flower_streaming_performance.mjs)
 - [Activity interaction contract](flower-activity-interaction.md)
