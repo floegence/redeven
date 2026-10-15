@@ -150,7 +150,10 @@ describe('Activity disclosure interaction', () => {
     await userEvent.keyboard(' ');
     await waitFor(() => rowFor(runtime, 'early').textContent?.includes('Waiting for tool details') === true);
     expect(toggleFor(runtime, 'file').getAttribute('aria-expanded')).toBe('false');
-    expect(rowFor(runtime, 'file').textContent).toContain('Access denied');
+    expect(rowFor(runtime, 'file').textContent).not.toContain('Access denied');
+    await userEvent.click(toggleFor(runtime, 'file'));
+    await waitFor(() => rowFor(runtime, 'file').textContent?.includes('Access denied') === true);
+    await userEvent.click(toggleFor(runtime, 'file'));
     const ready = { ...early, status: 'success' as const, payload: { operation: 'use_skill', rows: [{ title: 'Guide loaded', content: 'Ready for diagnostics', format: 'text' }] } };
     live.push({ schema_version: 1, kind: 'thread.batch', thread_id: 'terminal-activity', current: currentFor([write(), ready, file], 3) });
     await waitFor(() => rowFor(runtime, 'early').textContent?.includes('Ready for diagnostics') === true);
