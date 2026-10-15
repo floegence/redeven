@@ -48,14 +48,17 @@ provider execution has no such timeout.
 Connection errors are separate from detail errors. The workspace notice remains
 visible without a selected thread, in approvals and in Companion; history and
 drafts remain available. Unconfirmed live animations stop without changing the
-canonical lifecycle. Stop submits once, reads canonical confirmation and always
-releases request busy state. Failed confirmation shows an explicit submitted-but-
-unconfirmed notice with resync. Conflicted decisions refresh canonical detail
-and remain user-controlled; effects and unknown outcomes are never replayed.
+canonical lifecycle. Stop uses the shared 120-second request deadline, then the
+existing 15-second canonical detail reader. Timeout or response loss releases busy ownership and
+shows an unconfirmed-status notice with Resync; it never proves backend success
+or resends automatically. Another manual attempt reads canonical state first.
+Late responses obey the connection epoch, detail version and selection guards.
+Conflicted decisions refresh canonical detail and remain user-controlled; effects and unknown outcomes are never replayed.
 
 Independent context compaction uses the optional public capability without widening ThreadService. Floret owns typed control-turn admission, atomic installation, terminal results, replay, and recovery. See [Model context usage and compaction](model-context-usage-and-compaction.md) for command and presentation contracts.
 
-Redeven consumes published Floret v7.33.0, preserving graceful-stop ownership
+Redeven consumes published Floret v7.40.3, preserving typed Provider failures
+when a request times out while execution remains active, and graceful-stop ownership
 when a projection write is canceled. The stop owner settles pending approvals,
 tool results, and the terminal together; a canceled write must not enter competing
 failure finalization. Genuine storage and unknown-effect failures retain their

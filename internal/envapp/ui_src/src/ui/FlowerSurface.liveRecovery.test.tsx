@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { createSignal } from 'solid-js';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import type { FlowerLiveStreamConnectInput, FlowerLiveStreamEnvelope, FlowerRuntimeCurrentView, FlowerSubagentDetail, FlowerThreadSnapshot, FlowerTurnLaunchInput } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
@@ -18,7 +19,7 @@ import {
 } from './FlowerSurface.navigation.testHarness';
 
 const syncFailure = 'Live updates stopped because data could not be read or applied. Displayed state may be outdated.';
-const stopUnconfirmed = 'Stop submitted; status has not synchronized. Resync to confirm.';
+const stopUnconfirmed = 'Stop status is unconfirmed. Resync before trying again.';
 
 function encodingFailure(): Error & { code: string } {
   return Object.assign(new Error('internal encoding diagnostic'), { code: 'envelope_encoding_failed' });
@@ -369,4 +370,76 @@ describe('Canonical managed facts on the existing workspace transport', () => {
   await waitFor(() => document.querySelector('[data-flower-subagent-detail="open"] .flower-model-context-details')?.textContent?.includes('Current child catalog') ?? false);
   expect(surface.querySelector('.flower-composer .flower-model-context-details')).toBeNull();
  });
+});
+
+
+it('bounds a stalled Stop, preserves navigation and drafts, and confirms before another attempt', async () => {
+  onTestFinished(() => vi.restoreAllMocks());
+  const running = thread({ thread_id: 'thread-stalled-stop', status: 'running' });
+  const other = thread({ thread_id: 'thread-other', title: 'Other chat' });
+  const pending = deferred<void>();
+  const stopThread = vi.fn(() => pending.promise);
+  const loadThread = vi.fn(async (id: string) => liveBootstrap(id === other.thread_id ? other : running, 9));
+  const [focus, setFocus] = createSignal({ request_id: 'initial', thread_id: running.thread_id });
+  const surface = renderSurfaceWithAdapterProps({ ...adapter(),
+    listThreads: vi.fn(async () => [running, other]), loadThread, stopThread,
+  }, { get focusThreadRequest() { return focus(); } });
+  await waitFor(() => surface.querySelector<HTMLButtonElement>('.flower-composer-submit')?.getAttribute('aria-label') === 'Stop');
+  let expire!: () => void;
+  const nativeSetTimeout = globalThis.setTimeout;
+  vi.spyOn(globalThis, 'setTimeout').mockImplementation((handler, timeout, ...args) => {
+    if (timeout === 120_000) { expire = () => (handler as () => void)(); }
+    return nativeSetTimeout(handler, timeout, ...args);
+  });
+  surface.querySelector<HTMLButtonElement>('.flower-composer-submit')!.click();
+  await waitFor(() => stopThread.mock.calls.length === 1 && Boolean(expire));
+  setFocus({ request_id: 'leave', thread_id: other.thread_id });
+  await waitFor(() => surface.textContent?.includes('Other chat') === true);
+  const editor = surface.querySelector<HTMLTextAreaElement>('.flower-composer textarea')!;
+  editor.value = 'Keep my draft';
+  editor.dispatchEvent(new InputEvent('input', { bubbles: true }));
+  expire();
+  await waitFor(() => surface.querySelector('.flower-workspace-sync')?.textContent?.includes(stopUnconfirmed) === true);
+  pending.resolve();
+  await flush();
+  expect(surface.textContent).toContain('Other chat');
+  expect(editor.value).toBe('Keep my draft');
+  expect(stopThread).toHaveBeenCalledTimes(1);
+  setFocus({ request_id: 'back', thread_id: running.thread_id });
+  await waitFor(() => surface.querySelector<HTMLButtonElement>('.flower-composer-submit')?.getAttribute('aria-label') === 'Stop');
+  expect(surface.querySelector<HTMLButtonElement>('.flower-composer-submit')!.disabled).toBe(false);
+  const stopped = thread({ ...running, status: 'idle', active_run_id: undefined, run_progress: undefined, current_execution: undefined });
+  loadThread.mockImplementation(async (id: string) => liveBootstrap(id === running.thread_id ? stopped : other, 10));
+  surface.querySelector<HTMLButtonElement>('.flower-composer-submit')!.click();
+  await waitFor(() => surface.querySelector<HTMLButtonElement>('.flower-composer-submit')?.getAttribute('aria-label') !== 'Stop');
+  expect(stopThread).toHaveBeenCalledTimes(1);
+});
+
+
+it('bounds Stop confirmation reads and ignores their late terminal detail', async () => {
+  onTestFinished(() => vi.restoreAllMocks());
+  const running = thread({ thread_id: 'thread-stop-detail-timeout', status: 'running' });
+  const confirmation = deferred<ReturnType<typeof liveBootstrap>>();
+  let stopped = false;
+  const loadThread = vi.fn(async () => stopped ? confirmation.promise : liveBootstrap(running, 9));
+  const stopThread = vi.fn(async () => { stopped = true; });
+  const surface = renderSurfaceWithAdapterProps({ ...adapter(), listThreads: vi.fn(async () => [running]), loadThread, stopThread },
+    { focusThreadRequest: { request_id: 'detail-timeout', thread_id: running.thread_id } });
+  await waitFor(() => surface.querySelector<HTMLButtonElement>('.flower-composer-submit')?.getAttribute('aria-label') === 'Stop');
+  let expire!: () => void;
+  const nativeSetTimeout = globalThis.setTimeout;
+  vi.spyOn(globalThis, 'setTimeout').mockImplementation((handler, timeout, ...args) => {
+    if (timeout === 15_000) expire = () => (handler as () => void)();
+    return nativeSetTimeout(handler, timeout, ...args);
+  });
+  surface.querySelector<HTMLButtonElement>('.flower-composer-submit')!.click();
+  await waitFor(() => stopThread.mock.calls.length === 1 && Boolean(expire));
+  expire();
+  await waitFor(() => surface.querySelector('.flower-workspace-sync')?.textContent?.includes(stopUnconfirmed) === true);
+  expect(surface.querySelector<HTMLButtonElement>('.flower-composer-submit')!.disabled).toBe(false);
+  expect(surface.querySelector('.flower-workspace-sync button')?.textContent).toBe('Resync');
+  confirmation.resolve(liveBootstrap(thread({ ...running, status: 'success', error: undefined }), 10));
+  await flush();
+  expect(surface.querySelector<HTMLButtonElement>('.flower-composer-submit')?.getAttribute('aria-label')).toBe('Stop');
+  expect(stopThread).toHaveBeenCalledTimes(1);
 });

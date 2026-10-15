@@ -78,7 +78,8 @@ it.each([[1100, 'stop'], [420, 'stop'], [1100, 'success'], [420, 'failure']] as 
     expect(reopened.querySelectorAll('.flower-error-card')).toHaveLength(1);
     expect(reopened.querySelector('[data-flower-progress-kind="retrying"]')).toBeNull();
     expect(reopened.textContent).toContain('Last unfinished fragment');
-    expect(reopened.querySelector('[data-flower-message-status="error"]')?.textContent).toContain('Last unfinished fragment');
+    expect(reopened.querySelector('.flower-message-bubble-error')).toBeNull();
+    expect(reopened.querySelector('[data-flower-message-status="complete"]')?.textContent).toContain('Last unfinished fragment');
     const retryButton = [...reopened.querySelectorAll<HTMLButtonElement>('.flower-error-card button')].find(button => button.textContent?.includes('Retry'));
     expect(retryButton).toBeDefined();
     retryButton!.click();

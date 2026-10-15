@@ -3680,34 +3680,6 @@
   box-shadow: none;
 }
 
-.flower-message-bubble-error {
-  border: 1px solid color-mix(in srgb, var(--destructive) 30%, var(--flower-chat-surface-border));
-  border-radius: 0.5rem;
-  border-color: color-mix(in srgb, var(--destructive) 30%, var(--flower-chat-surface-border));
-  background: color-mix(in srgb, var(--destructive) 7%, var(--flower-chat-surface-elevated));
-  padding: 0.625rem 0.75rem;
-}
-
-.flower-message-bubble-user.flower-message-bubble-error {
-  color: var(--flower-user-inset-foreground);
-}
-
-.flower-message-bubble-user.flower-message-bubble-error .flower-message-error-kicker {
-  color: inherit;
-}
-
-.flower-message-error-kicker {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  margin-bottom: 0.35rem;
-  color: var(--destructive);
-  font-size: 0.6875rem;
-  font-weight: 750;
-  letter-spacing: 0;
-  text-transform: uppercase;
-}
-
 .flower-message-placeholder {
   display: inline-block;
   width: 0.25rem;
@@ -5328,8 +5300,6 @@ button.flower-composer-context-source:focus-visible,
 /* Theme-colored insets need a selection distinct from their own surface. */
 .flower-message-bubble-user :is(.flower-chat-md-inline-code, .flower-chat-md-code-block)::selection,
 .flower-message-bubble-user :is(.flower-chat-md-inline-code, .flower-chat-md-code-block) ::selection,
-.flower-message-bubble-user.flower-message-bubble-error::selection,
-.flower-message-bubble-user.flower-message-bubble-error ::selection,
 .flower-queued-turn-bubble::selection,
 .flower-queued-turn-bubble ::selection {
   background: var(--flower-user-inset-foreground);
@@ -5366,16 +5336,8 @@ button.flower-composer-context-source:focus-visible,
     forced-color-adjust: auto;
   }
 
-  .flower-message-bubble-user.flower-message-bubble-error {
-    background: Canvas;
-    color: CanvasText;
-    forced-color-adjust: auto;
-  }
-
   .flower-message-bubble-user :is(.flower-chat-md-inline-code, .flower-chat-md-code-block)::selection,
   .flower-message-bubble-user :is(.flower-chat-md-inline-code, .flower-chat-md-code-block) ::selection,
-  .flower-message-bubble-user.flower-message-bubble-error::selection,
-  .flower-message-bubble-user.flower-message-bubble-error ::selection,
   .flower-queued-turn-bubble::selection,
   .flower-queued-turn-bubble ::selection {
     background: Highlight;
@@ -10448,11 +10410,6 @@ button.flower-attachment-preview-trigger:disabled {
   line-height: 1.62;
 }
 
-.flower-subagent-ledger-entry-body .flower-message-bubble-error {
-  box-shadow: none;
-}
-
-.flower-subagent-ledger-entry-body .flower-message-error-kicker,
 .flower-subagent-ledger-entry-body .flower-message-time {
   display: none;
 }

@@ -17,7 +17,7 @@ not apply responses from a changed provider or trusted connection.
 
 # Contract
 
-## Search preferences and failure recovery
+## Search preferences
 
 Provider and model search switches use backend policies from the model directory.
 Both must be on; model preferences remain editable while provider search is off.
@@ -28,20 +28,7 @@ removes the model override. Search source changes and disablement preserve keys.
 The editor marks changed availability pending until a saved backend projection.
 See [the search contract](../ai/model-web-search.md) for defaults and migration.
 
-Provider failures expose Configure current provider, Retry reply and diagnostics.
-Configuration opens the current provider and model directly. Cancel and successful
-save return to the originating chat; saving does not retry automatically. Save
-errors retain the dialog and draft, pending actions prevent duplicate dispatch,
-and retry failures leave another deliberate attempt available. Navigating to a
-different chat cannot be undone by a late save. A deleted provider leaves a clear
-settings error and the ordinary back/navigation controls. Saving keeps a Close
-control available with an explicit notice that the request continues. Closing
-invalidates only that dialog's completion target. Both settings entrypoints use
-one bounded request deadline; timeout releases controls without replaying a mutation
-or claiming rollback. Reopening Flower settings refreshes canonical configuration
-before another deliberate attempt. Unknown tool effects retain their no-retry
-boundary. Manual retry uses the same deadline without dispatching another
-command automatically.
+Failure and manual retry behavior follows [Flower failure recovery](flower-failure-recovery.md).
 
 ## Layout and connection readiness
 

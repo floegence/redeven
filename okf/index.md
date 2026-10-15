@@ -244,6 +244,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Flower model and navigation presentation](ui/flower-model-navigation.md) - Keep model-source controls, notifications, and staged thread selection explicit.
 - [Flower setup and settings](ui/flower-setup-and-settings.md) - Configure Flower through clear setup destinations and flat settings sections while preserving drafts and permission ownership.
 - [Flower provider configuration](ui/flower-provider-configuration.md) - Complete provider access before configuring models, with clear authentication selection and stable catalog interaction.
+- [Flower failure recovery](ui/flower-failure-recovery.md) - One turn-level failure and bounded canonical recovery.
 - [Flower composer attachments](ui/flower-composer-attachments.md) - Stage files and long text through one shared connection-local composer workflow.
 - [Flower file activity presentation](ui/flower-file-activity.md) - Show typed file-change statistics and unified diffs without protocol metadata or reconstructed state.
 - [Flower activity disclosure interaction](ui/flower-activity-interaction.md) - Keep tool clicks, reading position, and floating controls stable during streaming.

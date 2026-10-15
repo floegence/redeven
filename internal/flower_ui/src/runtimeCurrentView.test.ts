@@ -387,14 +387,18 @@ describe('applyFlowerRuntimeCurrentView', () => {
     ]);
   });
 
-  it.each(['interrupted', 'failed'] as const)('projects %s output as a visible failed turn', (outcome) => {
+  it.each(['interrupted', 'failed', 'cancelled'] as const)('keeps admitted messages normal after a %s turn', (outcome) => {
     const result = applyFlowerRuntimeCurrentView(summary(), {
       thread_id: 'thread-a', view_version: 8, activity: 'idle', turn_id: 'turn-a', last_outcome: outcome,
-    items: [{ id: 'assistant:turn-a:1', turn_id: 'turn-a', run_id: 'run-a', ordinal: 1, kind: 'assistant', text: 'partial output' }],
+      items: [
+        { id: 'user:turn-a', turn_id: 'turn-a', run_id: 'run-a', ordinal: 1, kind: 'user', text: 'continue' },
+        { id: 'assistant:turn-a:1', turn_id: 'turn-a', run_id: 'run-a', ordinal: 2, kind: 'assistant', text: 'partial output' },
+        { id: 'thinking:turn-a:1', turn_id: 'turn-a', run_id: 'run-a', ordinal: 3, kind: 'thinking', text: 'retained reasoning' },
+      ],
     });
 
-    expect(result.status).toBe('failed');
-    expect(result.messages[0]).toMatchObject({ id: 'assistant:turn-a:1', status: 'error' });
+    expect(result.status).toBe(outcome === 'cancelled' ? 'canceled' : 'failed');
+    expect(result.messages.map(message => message.status)).toEqual(['complete', 'complete', 'complete']);
   });
 
   it('uses the explicit live item marker as the only streaming authority', () => {

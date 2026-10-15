@@ -1481,7 +1481,7 @@ describe('Flower final thread cache and workspace transport', () => {
     const toggle = row.querySelector<HTMLButtonElement>('button.flower-activity-inline-button')!;
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
     expect(row.textContent).toContain('Inspect environment status');
-    expect(row.textContent).toContain('Terminal process exited with code 127');
+    expect(row.textContent).not.toContain('Terminal process exited with code 127');
     expect(row.querySelector('[data-flower-activity-terminal-panel]')).toBeNull();
     toggle.click();
     await waitFor(() => toggle.getAttribute('aria-expanded') === 'true');
