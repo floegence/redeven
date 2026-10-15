@@ -219,6 +219,15 @@ func providerStreamFailure(raw string, response *http.Response, providerType str
 	if response != nil {
 		d.Status = response.StatusCode
 		d.RequestID = response.Header.Get("x-request-id")
+	} else {
+		// WebSocket request errors carry status in the event envelope instead
+		// of an HTTP response. Preserve it for recovery and account observation.
+		var envelope struct {
+			Status int `json:"status"`
+		}
+		if len(raw) <= 64<<10 && json.Unmarshal([]byte(raw), &envelope) == nil && envelope.Status >= 400 && envelope.Status <= 599 {
+			d.Status = envelope.Status
+		}
 	}
 	var cause error = errors.New("provider response failed")
 	if providerType == "chatgpt" {

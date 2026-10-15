@@ -696,8 +696,10 @@ func (c *desktopModelSourceRuntimeConn) readLoop(ctx context.Context) error {
 			return err
 		}
 		frame.ProtocolVersion = strings.TrimSpace(frame.ProtocolVersion)
-		if frame.ProtocolVersion != "" && frame.ProtocolVersion != DesktopModelSourceProtocolVersion {
-			continue
+		if frame.ProtocolVersion != DesktopModelSourceProtocolVersion {
+			err := fmt.Errorf("%w: unsupported version %q", errDesktopModelSourceProtocol, frame.ProtocolVersion)
+			c.closeWithError(err)
+			return err
 		}
 		frame.Type = strings.TrimSpace(frame.Type)
 		switch frame.Type {
@@ -1092,7 +1094,7 @@ func (e *desktopModelSourceExecutor) serve(ctx context.Context, ws *websocket.Co
 			return err
 		}
 		frame.ProtocolVersion = strings.TrimSpace(frame.ProtocolVersion)
-		if frame.ProtocolVersion != "" && frame.ProtocolVersion != DesktopModelSourceProtocolVersion {
+		if frame.ProtocolVersion != DesktopModelSourceProtocolVersion {
 			return fmt.Errorf("%w: unsupported version %q", errDesktopModelSourceProtocol, frame.ProtocolVersion)
 		}
 		frame.ID = strings.TrimSpace(frame.ID)

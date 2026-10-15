@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	flprovider "github.com/floegence/floret/v7/provider"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -16,6 +15,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	flprovider "github.com/floegence/floret/v7/provider"
 
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
 	"github.com/floegence/redeven/internal/config"
@@ -39,6 +40,61 @@ func TestDesktopModelSourceConnectionErrorRetryability(t *testing.T) {
 	}
 	if desktopModelSourceConnectionErrorRetryable(fmt.Errorf("%w: mismatched version", errDesktopModelSourceProtocol)) {
 		t.Fatal("protocol errors must fail immediately")
+	}
+}
+
+func TestDesktopModelSourceRejectsIncompatibleFramesWithoutWaiting(t *testing.T) {
+	for _, peer := range []string{"runtime", "executor"} {
+		for _, version := range []string{"", "redeven-desktop-model-source-rpc-v1"} {
+			t.Run(peer+"/"+version, func(t *testing.T) {
+				served := make(chan error, 1)
+				ready := make(chan struct{})
+				pending := make(chan DesktopModelSourceRPCFrame, 1)
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					conn, err := (&websocket.Upgrader{}).Upgrade(w, r, nil)
+					if err != nil {
+						served <- err
+						return
+					}
+					defer conn.Close()
+					if peer == "runtime" {
+						runtimeConn := newDesktopModelSourceRuntimeConn(conn)
+						if err := runtimeConn.addPending("waiting", pending); err != nil {
+							served <- err
+							return
+						}
+						close(ready)
+						served <- runtimeConn.readLoop(t.Context())
+					} else {
+						close(ready)
+						served <- (&desktopModelSourceExecutor{}).serve(t.Context(), conn)
+					}
+				}))
+				defer server.Close()
+				conn, _, err := websocket.DefaultDialer.Dial(strings.Replace(server.URL, "http://", "ws://", 1), nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer conn.Close()
+				<-ready
+				if err := conn.WriteJSON(DesktopModelSourceRPCFrame{ProtocolVersion: version, Type: "result", ID: "waiting", Result: json.RawMessage(`{}`)}); err != nil {
+					t.Fatal(err)
+				}
+				select {
+				case err := <-served:
+					if !errors.Is(err, errDesktopModelSourceProtocol) {
+						t.Fatalf("protocol failure=%v", err)
+					}
+				case <-time.After(time.Second):
+					t.Fatal("incompatible peer left the connection waiting")
+				}
+				if peer == "runtime" {
+					if frame, open := <-pending; open {
+						t.Fatalf("incompatible frame reached pending request: %+v", frame)
+					}
+				}
+			})
+		}
 	}
 }
 
