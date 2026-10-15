@@ -39,7 +39,7 @@ export function classifyFilePreviewError(error: unknown): FilePreviewErrorType {
 
   if (status === 400 && !['path is a directory', 'path is not a directory'].includes(msg)) return 'generic_error';
   if (!msg) return 'generic_error';
-  if (msg.includes('not a file') || msg.includes('must reference a file') || msg.includes('is a directory')) return 'type_changed';
+  if (msg.includes('not a file') || msg.includes('must reference a file') || msg.includes('is a directory') || msg.includes('is not a directory')) return 'type_changed';
 
   if (msg.includes('not found') || msg.includes('404') || msg.includes('no such file')) {
     return 'not_found';
