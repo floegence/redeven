@@ -348,6 +348,7 @@ func buildPromptSubagentSection(spec promptProfileSpec) promptSection {
 		"- Track child thread_id values returned by spawn; thread_id is the identity for send_input, wait, inspect, and close.",
 		"- Use subagents(action=\"wait\", ids:[\"<thread_id>\"], timeout_ms:60000) when you need a child result before deciding.",
 		"- Read completed child results only from handoffs[].content returned by wait or inspect. last_message_preview is status context, never the child result.",
+		"- Read child failure reasons from items[].failure.code and items[].failure.message returned by list, wait, or inspect. A missing failure means no reason was provided; do not infer a cause from last_message_preview or automatically retry effect_outcome_unknown.",
 		"- Use subagents(action=\"list\") for bounded status previews and subagents(action=\"inspect\", target:\"<thread_id>\") to recover the exact completed handoff.",
 		"- Use subagents(action=\"send_input\", target:\"<thread_id>\", message:\"...\") to immediately guide a child while preserving its current task.",
 		"- Use subagents(action=\"close\", target:\"<thread_id>\") or close_all when delegated work is no longer useful.",

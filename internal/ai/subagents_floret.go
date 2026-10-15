@@ -73,6 +73,7 @@ type subagentSnapshot struct {
 	AgentType          string
 	ContextMode        string
 	Status             string
+	Failure            *flruntime.ThreadTurnFailure
 	LatestTurnID       string
 	LastMessagePreview string
 	WaitingPrompt      string
@@ -687,7 +688,7 @@ func subagentSnapshotFromThread(summary flruntime.ThreadSummary, view flruntime.
 		ThreadID: summary.ID.String(), TaskName: summary.TaskName, TaskDescription: summary.TaskDescription,
 		ParentThreadID: summary.ParentThreadID.String(), ParentTurnID: summary.ParentTurnID.String(),
 		AgentType: normalizeSubagentAgentType(summary.HostProfileRef), ContextMode: normalizeSubagentContextMode(summary.ForkMode),
-		Status: status, LatestTurnID: view.TurnID.String(), LastMessagePreview: truncateRunes(lastMessage, 160), WaitingPrompt: waitingPrompt,
+		Status: status, Failure: view.Failure, LatestTurnID: view.TurnID.String(), LastMessagePreview: truncateRunes(lastMessage, 160), WaitingPrompt: waitingPrompt,
 		QueuedInputs: len(view.Queue), CreatedAtMS: timeUnixMS(summary.CreatedAt), UpdatedAtMS: timeUnixMS(summary.UpdatedAt),
 		Closed: closed, CanSendInput: !closed, CanInterrupt: view.Activity == flruntime.ThreadActivityActive,
 		CanClose: !closed,
@@ -890,7 +891,7 @@ func isSubagentTerminalStatus(status string) bool {
 }
 
 func subagentSnapshotPayload(snapshot subagentSnapshot) map[string]any {
-	return map[string]any{
+	payload := map[string]any{
 		"id": snapshot.ThreadID, "thread_id": snapshot.ThreadID, "agent_type": snapshot.AgentType,
 		"context_mode": snapshot.ContextMode, "task_name": snapshot.TaskName,
 		"task_description": snapshot.TaskDescription, "status": snapshot.Status,
@@ -902,11 +903,17 @@ func subagentSnapshotPayload(snapshot subagentSnapshot) map[string]any {
 		"can_send_input": snapshot.CanSendInput, "can_interrupt": snapshot.CanInterrupt,
 		"can_close": snapshot.CanClose,
 	}
+	if snapshot.Failure != nil {
+		payload["failure"] = map[string]any{
+			"code": string(snapshot.Failure.Code), "message": snapshot.Failure.Message,
+		}
+	}
+	return payload
 }
 
 func subagentListPayload(snapshot subagentSnapshot) map[string]any {
 	payload := subagentSnapshotPayload(snapshot)
-	return map[string]any{
+	item := map[string]any{
 		"thread_id": payload["thread_id"], "task_name": payload["task_name"],
 		"task_description": payload["task_description"], "agent_type": payload["agent_type"],
 		"context_mode": payload["context_mode"], "status": payload["status"],
@@ -914,6 +921,10 @@ func subagentListPayload(snapshot subagentSnapshot) map[string]any {
 		"can_send_input": payload["can_send_input"], "can_interrupt": payload["can_interrupt"],
 		"can_close": payload["can_close"],
 	}
+	if failure, exists := payload["failure"]; exists {
+		item["failure"] = failure
+	}
+	return item
 }
 
 func subagentModelStatusCounts(items []map[string]any) map[string]int {

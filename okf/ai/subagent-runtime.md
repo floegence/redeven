@@ -17,6 +17,8 @@ Every tool call and result uses Floret's typed `subagent_operation` Activity ren
 
 List and each result `items` entry expose `last_message_preview` only for bounded status context. Wait and inspect prove membership through the parent-scoped list, then read every selected completed child through typed `View`. They return one ordered `handoffs` array containing the exact final non-live Assistant text from the current Turn together with its `ThreadID`, `TurnID`, and `RunID`. A timed-out wait still returns handoffs for completed children and status only for active children. A failed View read, identity mismatch, changed completion state, or completed Turn without a final Assistant item fails explicitly; preview text never substitutes for a handoff.
 
+List, wait, and inspect also expose `items[].failure` when the canonical child summary contains a failure. Its exact `code` and `message` come from Floret's typed `ThreadTurnFailure`, including interruption and unknown-effect reasons; Redeven does not infer them from status or preview text. Failure text remains subject to Floret's standard tool-output projection rather than preview truncation. An absent canonical failure omits the field, and subsequent reads reflect the current summary after retry without retaining the old reason. Child failures do not make a successful management read fail or enter the completed `handoffs` array. The parent must not automatically retry `effect_outcome_unknown`.
+
 Model-visible handoff content bypasses Redeven's Activity-size sanitizer and remains subject only to Floret's standard tool-output projection. The Activity projection reads its own bounded status allowlist and never copies or scans handoff content, so a long report cannot create a false Activity truncation state.
 
 Redeven calls published Floret v7 typed Create/Fork, Send, Steer, View, List, and Delete operations. Floret allocates the canonical child `ThreadID`; that id is used in model results, Flower summaries, detail routes, interactions, and activity. There is no public or persisted `subagent_id`, publication receipt, provisional child identity, or recovery handle.
@@ -41,6 +43,7 @@ Task labels and previews are presentation, not identity or results. Redeven must
 - `redeven:internal/ai/subagents_floret.go` - Adapts subagent operations to typed Floret v7 child Thread methods.
 - `redeven:internal/ai/floret_tools.go` - Maps SubAgent calls and results into the typed operation Activity without losing action or target order.
 - `redeven:internal/ai/subagents_handoff_test.go` - Proves complete handoffs, timeout behavior, identity failures, and Activity separation.
+- `redeven:internal/ai/subagents_failure_test.go` - Proves canonical failure delivery to the parent model across list, wait, inspect, and retry.
 - `redeven:internal/ai/subagent_input_operations_test.go` - Proves immediate provider interruption, task identity, queue consumption, and authorization failures.
 - `redeven:internal/ai/types.go` - Exposes canonical child `thread_id` in product views.
 - `redeven:internal/flower_ui/src/flowerSubagentProjection.ts` - Projects canonical child activity for Flower.
