@@ -11,6 +11,13 @@ const disposers: (() => void)[] = [];
 afterEach(() => { disposers.splice(0).forEach(dispose => dispose()); vi.restoreAllMocks(); document.body.replaceChildren(); });
 
 describe('semantic tool icons', () => {
+ it.each(['file.edit', 'file.write', 'apply_patch', 'tessiven.edit'])('gives %s a pencil and synchronized writing stroke', name => {
+  const host = document.createElement('div');
+  disposers.push(render(() => <FlowerToolIcon toolName={name} running={false} />, host));
+  expect(host.querySelector('[data-flower-writing-part="pencil"]'), name).not.toBeNull();
+  expect(host.querySelector('[data-flower-writing-part="ink"]'), name).not.toBeNull();
+  expect(flowerToolMotion[name].tracks).toHaveLength(2);
+ });
  it('uses the same terminal glyph for starting a command and reading its output', () => {
   const host = document.createElement('div');
   disposers.push(render(() => <><FlowerToolIcon toolName="terminal.exec" running={false} /><FlowerToolIcon toolName="terminal.read" running={false} /></>, host));
@@ -40,12 +47,12 @@ describe('semantic tool icons', () => {
    expect(host.querySelector('svg'),name).not.toBeNull(); dispose();
   }
  });
- it('keeps the glyph and removes all running effects on completion', () => {
+ it.each(['file.edit', 'file.write', 'apply_patch', 'tessiven.edit'])('keeps the %s pencil and removes all running effects on completion', name => {
   const cancel = vi.fn();
   const animate = vi.spyOn(SVGElement.prototype, 'animate').mockReturnValue({ cancel, finished: Promise.resolve() } as unknown as Animation);
   const [running, setRunning] = createSignal(true);
   const host = document.createElement('div'); document.body.append(host);
-  disposers.push(render(() => <FlowerToolIcon toolName="file.edit" running={running()} />, host));
+  disposers.push(render(() => <FlowerToolIcon toolName={name} running={running()} />, host));
   const svg = host.querySelector('svg');
   expect(svg?.querySelectorAll('g').length).toBeGreaterThan(0);
   expect(animate).toHaveBeenCalled();

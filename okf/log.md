@@ -1,5 +1,10 @@
 # Redeven OKF Update Log
 
+## 2026-10-15: Pencil writing feedback
+
+- Give file edit, write, patch and Tessiven edit one [pencil-and-stroke icon](ui/flower-activity-interaction.md) with synchronized writing, lift and return motion in the existing 16px slot.
+- Preserve live confirmation, reduced-motion preferences, static settlement and the same shared rendering in Desktop and Env App.
+
 ## 2026-10-15: Crisp expanded command surfaces
 
 - Give [terminal commands](ui/flower-terminal-activity.md) a subtle borderless highlight and open output on the transcript canvas, without gradients or blur.

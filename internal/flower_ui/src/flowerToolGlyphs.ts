@@ -12,11 +12,8 @@ import {
   Compass,
   Database,
   Earth,
-  FileDiff,
   FileInput,
   FileOutput,
-  FilePenLine,
-  FilePlus,
   FileText,
   Files,
   FolderSearch2,
@@ -46,7 +43,6 @@ import {
   Search,
   Server,
   SquareMousePointer,
-  SquarePen,
   SquarePlay,
   SquareTerminal,
   TextCursorInput,
@@ -55,6 +51,7 @@ import {
   WandSparkles,
   Wrench
 } from 'lucide-solid';
+import { FlowerWritingPencil } from './FlowerWritingPencil';
 
 export const flowerToolGlyphs = {
   'arrow-left': ArrowLeft,
@@ -70,11 +67,8 @@ export const flowerToolGlyphs = {
   'compass': Compass,
   'database': Database,
   'earth': Earth,
-  'file-diff': FileDiff,
   'file-input': FileInput,
   'file-output': FileOutput,
-  'file-pen-line': FilePenLine,
-  'file-plus': FilePlus,
   'file-text': FileText,
   'files': Files,
   'folder-search-2': FolderSearch2,
@@ -104,7 +98,6 @@ export const flowerToolGlyphs = {
   'search': Search,
   'server': Server,
   'square-mouse-pointer': SquareMousePointer,
-  'square-pen': SquarePen,
   'square-play': SquarePlay,
   'square-terminal': SquareTerminal,
   'text-cursor-input': TextCursorInput,
@@ -112,4 +105,5 @@ export const flowerToolGlyphs = {
   'timer': Timer,
   'wand-sparkles': WandSparkles,
   'wrench': Wrench,
+  'writing-pencil': FlowerWritingPencil,
 } as const;
