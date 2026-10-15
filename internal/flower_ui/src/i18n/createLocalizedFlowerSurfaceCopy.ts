@@ -139,6 +139,8 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
       terminalTimedOut: t(i18n, k('chat.terminalTimedOut')),
       terminalNoNewOutput: t(i18n, k('chat.terminalNoNewOutput')),
       toolActivity: {
+        waitingResult: t(i18n, k('chat.toolActivity.waitingResult')),
+        previewUnavailable: t(i18n, k('chat.toolActivity.previewUnavailable')),
         inputQuery: t(i18n, k('chat.toolActivity.inputQuery')),
         inputPaths: t(i18n, k('chat.toolActivity.inputPaths')),
         inputName: t(i18n, k('chat.toolActivity.inputName')),

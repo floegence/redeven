@@ -364,7 +364,9 @@
         "sources": "Voir les sources",
         "fetch": "Récupérer la page",
         "patch": "Appliquer les modifications",
-        "copy": "Copier"
+        "copy": "Copier",
+        "waitingResult": "Exécution en cours. Le résultat s’affichera ici.",
+        "previewUnavailable": "Cet outil n’a pas fourni d’aperçu du résultat."
       },
       "toolActivityDetailsPending": "En attente des détails de l’outil",
       "toolActivityNoAdditionalDetails": "Aucun détail supplémentaire",

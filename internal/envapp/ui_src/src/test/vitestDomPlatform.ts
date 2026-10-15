@@ -68,8 +68,8 @@ if (typeof window !== 'undefined' && typeof window.matchMedia !== 'function') {
   })) as typeof window.matchMedia;
 }
 
-if (typeof HTMLElement !== 'undefined' && typeof HTMLElement.prototype.animate !== 'function') {
-  HTMLElement.prototype.animate = function animate(
+if (typeof Element !== 'undefined' && typeof Element.prototype.animate !== 'function') {
+  Element.prototype.animate = function animate(
     _keyframes: Keyframe[] | PropertyIndexedKeyframes | null,
     options?: number | KeyframeAnimationOptions,
   ): Animation {

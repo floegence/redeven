@@ -5262,7 +5262,9 @@
         "sources": "출처 보기",
         "fetch": "페이지 가져오기",
         "patch": "변경 사항 적용",
-        "copy": "복사"
+        "copy": "복사",
+        "waitingResult": "실행 중입니다. 결과가 여기에 표시됩니다.",
+        "previewUnavailable": "이 도구는 결과 미리보기를 제공하지 않았습니다."
       },
       "toolActivityDetailsPending": "도구 세부 정보를 기다리는 중",
       "toolActivityNoAdditionalDetails": "추가 세부 정보 없음",

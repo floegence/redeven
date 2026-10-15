@@ -31,6 +31,9 @@
       ],
       "vitest": [
         "node_modules/vitest"
+      ],
+      "lucide-solid": [
+        "node_modules/lucide-solid"
       ]
     },
     "jsx": "preserve",

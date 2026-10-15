@@ -80,7 +80,8 @@ import { FlowerThinkingDisclosure } from './FlowerThinkingDisclosure';
 import { FlowerTurnTimeline } from './FlowerTurnTimeline';
 import { createFlowerTurnDisclosureStore } from './flowerTurnDisclosure';
 import type { FlowerComputerStageSessionState, FlowerComputerStageSnapshot } from './FlowerComputerStage';
-import { WebFetchSearchingOrb } from './WebFetchSearchingOrb';
+import { FlowerToolIcon } from './FlowerToolIcon';
+import { FlowerActivityPreview } from './FlowerActivityPreview';
 import { FlowerComposerContextIndicator } from './chat/FlowerComposerContextIndicator';
 import { FlowerMessageImage } from './chat/FlowerMessageImage';
 import { FlowerEmptyState } from './chat/FlowerEmptyState';
@@ -8837,34 +8838,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     </Show>
   );
 
-  const activityInlineLoader = (className = '') => (
-    <span class={cn('flower-activity-inline-loader', className)} aria-hidden="true">
-      <span class="flower-activity-inline-loader-square" />
-      <span class="flower-activity-inline-loader-square" />
-      <span class="flower-activity-inline-loader-square" />
-      <span class="flower-activity-inline-loader-square" />
-    </span>
-  );
-
-  const statusIcon = (status: FlowerActivityStatus) => {
-    switch (status) {
-      case 'success':
-        return <Check class="h-3.5 w-3.5" />;
-      case 'error':
-        return <AlertTriangle class="h-3.5 w-3.5" />;
-      case 'declined':
-        return <span class="flower-activity-declined-marker" aria-hidden="true">-</span>;
-      case 'canceled':
-        return <AlertTriangle class="h-3.5 w-3.5" />;
-      case 'waiting':
-        return <span class="flower-activity-waiting-clock" aria-hidden="true" />;
-      case 'pending':
-        return <Clock class="h-3.5 w-3.5" />;
-      case 'running':
-        return livePresentationConfirmed() ? activityInlineLoader() : <Clock class="h-3.5 w-3.5" />;
-    }
-  };
-
   const todoStatusLabel = (status: FlowerActivityTodoStatus): string => {
     switch (status) {
       case 'completed':
@@ -9787,7 +9760,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       () => detailProps.block as Extract<FlowerNonTerminalDetailBlock, { kind: K }>;
     return <Switch>
       <Match when={detailProps.block.kind === 'error'}>{errorDetailBlock(blockOfKind('error'))}</Match>
-      <Match when={detailProps.block.kind === 'structured_rows'}><FlowerActivityRows block={blockOfKind('structured_rows')()} copy={copy().chat} /></Match>
+      <Match when={detailProps.block.kind === 'structured_rows'}>
+        <Show when={blockOfKind('structured_rows')().preview} fallback={<FlowerActivityRows block={blockOfKind('structured_rows')()} copy={copy().chat} />}>
+          <FlowerActivityPreview block={blockOfKind('structured_rows')()} copy={copy().chat} />
+        </Show>
+      </Match>
       <Match when={detailProps.block.kind === 'image'}><MarkdownMedia source={{ kind: 'image', src: blockOfKind('image')().resource_ref, title: blockOfKind('image')().name }} labels={copy().chat.media} resolve={resolveMessageMedia()} /></Match>
       <Match when={detailProps.block.kind === 'computer'}>{computerBlock(blockOfKind('computer'))}</Match>
       <Match when={detailProps.block.kind === 'subagents'}>{subagentsDetailBlock(blockOfKind('subagents'))}</Match>
@@ -9892,9 +9869,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         : null;
     });
     const displayStatus = createMemo(() => activityWaitingForComputer(item(), timeline()) ? 'waiting' : item().status);
-    const webFetchActivity = createMemo(() => (
-      item().renderer === 'web_fetch' || trimString(item().tool_name) === 'web_fetch'
-    ));
     const controlError = createMemo(() => (
       item().kind === 'control'
       && trimString(item().metadata?.control_error_code) === 'control_error'
@@ -9911,15 +9885,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const activityRowContent = () => (
       <>
         <span class="flower-activity-inline-icon">
-          <Show
-            when={webFetchActivity() && displayStatus() !== 'error'}
-            fallback={statusIcon(displayStatus())}
-          >
-            <WebFetchSearchingOrb running={livePresentationConfirmed() && displayStatus() === 'running'} />
-          </Show>
-          <Show when={item().approval_state === 'rejected'}>
-            <span class="flower-activity-user-rejected-marker" aria-hidden="true">-</span>
-          </Show>
+          <FlowerToolIcon toolName={item().tool_name} source={item().metadata?.source} running={livePresentationConfirmed() && displayStatus() === 'running'} />
         </span>
         <span class="flower-activity-inline-copy">
           <span class="flower-activity-inline-title" data-floe-progress-shimmer={livePresentationConfirmed() && displayStatus() === 'running' ? 'text' : undefined}>{activityTitle(displayTitle())}</span>

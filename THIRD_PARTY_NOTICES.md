@@ -3419,6 +3419,7 @@ SOFTWARE.
 | lru-cache | 11.5.2 | BlueOak-1.0.0 | Desktop shell, Env App UI | https://www.npmjs.com/package/lru-cache/v/11.5.2 |  |
 | lru-cache | 5.1.1 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/lru-cache/v/5.1.1 |  |
 | lru-cache | 6.0.0 | ISC | Desktop shell | https://www.npmjs.com/package/lru-cache/v/6.0.0 |  |
+| lucide-solid | 1.17.0 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/lucide-solid/v/1.17.0 |  |
 | magic-string | 0.30.21 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/magic-string/v/0.30.21 |  |
 | marked-cjk-friendly | 0.1.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/marked-cjk-friendly/v/0.1.2 |  |
 | marked-footnote | 1.4.0 | MIT | Env App UI | https://www.npmjs.com/package/marked-footnote/v/1.4.0 |  |

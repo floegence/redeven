@@ -234,7 +234,9 @@
       "fetch": "Fetch page",
       "patch": "Apply changes",
       "discoverTargets": "Find pages and applications",
-      "selectTarget": "Switch page or application"
+      "selectTarget": "Switch page or application",
+      "waitingResult": "Running; the result will appear here.",
+      "previewUnavailable": "This tool did not provide a result preview."
     },
     "toolActivityDetailsPending": "Waiting for tool details",
     "toolActivityNoAdditionalDetails": "No additional details",

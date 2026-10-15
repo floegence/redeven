@@ -364,7 +364,9 @@
         "sources": "Quellen anzeigen",
         "fetch": "Seite abrufen",
         "patch": "Änderungen anwenden",
-        "copy": "Kopieren"
+        "copy": "Kopieren",
+        "waitingResult": "Wird ausgeführt. Das Ergebnis erscheint hier.",
+        "previewUnavailable": "Dieses Werkzeug hat keine Ergebnisvorschau bereitgestellt."
       },
       "toolActivityDetailsPending": "Warten auf Tool-Details",
       "toolActivityNoAdditionalDetails": "Keine weiteren Details",

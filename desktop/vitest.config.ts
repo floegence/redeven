@@ -16,6 +16,7 @@ export default defineConfig({
     alias: [
       { find: /^@floegence\/floe-webapp-core\/(chat|chat-media|code-highlight|file-browser|icons|layout|loading|markdown|ui)$/, replacement: `${coreDist}$1.js` },
       { find: /^@floegence\/floe-webapp-core$/, replacement: `${coreDist}index.js` },
+      { find: /^lucide-solid$/, replacement: fileURLToPath(new URL('./node_modules/lucide-solid/dist/source/lucide-solid.jsx', import.meta.url)) },
       { find: /^marked$/, replacement: markedDist },
       { find: /^thinking-orbs\/engine$/, replacement: thinkingOrbsEngine },
     ],
