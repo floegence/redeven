@@ -1452,6 +1452,39 @@ describe('presentFlowerActivityItem', () => {
     expect(JSON.stringify(presentation)).not.toContain('must-not-render');
   });
 
+  it.each(['use_skill', 'okf.open'])('only omits duplicate skill headings when presenting %s results', (tool_name) => {
+    const name = 'redeven-environment';
+    const reason = 'Inspect the selected environment';
+    const content = '# Redeven Environment\n\nObserve the selected environment before acting.';
+    const inputs = [
+      { title: 'name', content: name, format: 'text' },
+      { title: 'reason', content: reason, format: 'text' },
+    ];
+    const presentation = presentFlowerActivityItem(item({
+      tool_name,
+      renderer: 'structured',
+      label: name,
+      payload: {
+        inputs,
+        rows: [{ title: name, meta: reason, content, format: 'markdown', truncated: true }],
+        rows_provided: true,
+      },
+    }));
+
+    expect(presentation.label).toContain(name);
+    expect(presentation.detailBlocks).toEqual([
+      { kind: 'structured_rows', section: 'inputs', rows: [
+        { title: toolActivityEnUS.inputName, meta: '', content: name, format: 'text' },
+        { title: toolActivityEnUS.inputReason, meta: '', content: reason, format: 'text' },
+      ] },
+      { kind: 'structured_rows', section: 'results', rows: [{
+        title: tool_name === 'use_skill' ? '' : name,
+        meta: tool_name === 'use_skill' ? '' : reason,
+        content, format: 'markdown', truncated: true,
+      }] },
+    ]);
+  });
+
   it('explains missing typed Skill details without inventing content', () => {
     const presentation = presentFlowerActivityItem(item({
       tool_name: 'use_skill',

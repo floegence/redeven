@@ -90,6 +90,47 @@ it('keeps wrapped previews expandable even when the supplied text is short', asy
   } finally { dispose(); host.remove(); }
 });
 
+it('shows skill inputs and expandable instructions without a repeated result heading', async () => {
+  await page.viewport(1280, 900);
+  const name = 'redeven-environment';
+  const reason = 'Inspect the selected environment';
+  const content = '# Redeven Environment\n\n' + Array.from({ length: 12 }, (_, index) => `Environment instruction ${index + 1}.`).join('\n\n');
+  const seed = thread({ thread_id: 'skill-presentation', title: 'Skill presentation', messages: [{
+    id: 'skill-message', turn_id: 'skill-turn', role: 'assistant', status: 'complete', content: '', created_at_ms: 2,
+    blocks: [activityTimeline({ thread_id: 'skill-presentation', turn_id: 'skill-turn', run_id: 'skill-run', status: 'success', items: [
+      activityItem({ item_id: 'skill', tool_id: 'skill', tool_name: 'use_skill', renderer: 'structured', label: name, payload: {
+        inputs: [{ title: 'name', content: name, format: 'text' }, { title: 'reason', content: reason, format: 'text' }],
+        rows_provided: true, rows: [{ title: name, meta: reason, content, format: 'markdown' }],
+      } }),
+    ] })],
+  }] });
+  const surface = renderSurfaceWithAdapter({ ...adapter(), listThreads: async () => [seed], loadThread: async () => liveBootstrap(seed, 1) });
+  await waitFor(() => Boolean(surface.querySelector('[data-thread-id="skill-presentation"] button')));
+  surface.querySelector<HTMLButtonElement>('[data-thread-id="skill-presentation"] button')!.click();
+  await waitFor(() => Boolean(surface.querySelector('[data-flower-disclosure-trigger]')));
+  surface.querySelector<HTMLButtonElement>('[data-flower-disclosure-trigger]')!.click();
+  await waitFor(() => Boolean(surface.querySelector('[data-activity-section="results"] h1')));
+  for (const width of [1280, 390]) {
+    await page.viewport(width, 900);
+    const inputs = surface.querySelector<HTMLElement>('[data-activity-section="inputs"]')!;
+    const results = surface.querySelector<HTMLElement>('[data-activity-section="results"]')!;
+    expect(inputs.textContent).toContain(name);
+    expect(inputs.textContent).toContain(reason);
+    expect(results.querySelector('.flower-activity-structured-row-heading')).toBeNull();
+    expect(results.querySelector('h1')?.textContent).toBe('Redeven Environment');
+    expect(results.textContent).toContain('Environment instruction 12.');
+    const more = results.querySelector<HTMLButtonElement>('.flower-activity-detail-expand')!;
+    more.click();
+    expect(more.getAttribute('aria-expanded')).toBe('true');
+    expect(results.querySelector('.flower-activity-detail-content')?.getAttribute('data-expanded')).toBe('true');
+    const details = surface.querySelector<HTMLElement>('.flower-activity-inline-details-content')!;
+    expect(details.scrollWidth).toBeLessThanOrEqual(details.clientWidth + 1);
+    await page.screenshot({ element: surface, path: `__screenshots__/flower-skill-details-${width}.png` });
+    more.click();
+  }
+  await page.viewport(1280, 900);
+});
+
 it('keeps production rows compact and reveals concise facts on desktop and mobile', async () => {
   const seed = thread({thread_id:'tool-presentation', title:'Tool presentation', messages:[{
     id:'tool-message',turn_id:'tool-turn',role:'assistant',status:'complete',content:'',created_at_ms:2,
