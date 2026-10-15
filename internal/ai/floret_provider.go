@@ -435,7 +435,7 @@ func (p *floretProviderAdapter) turnRequest(ctx context.Context, req flprovider.
 	var previousState *ModelGatewayState
 	// The actual provider owns state interpretation, including across Desktop RPC.
 	if previous := req.PreviousState; previous != nil {
-		previousState = &ModelGatewayState{Kind: previous.Kind, ID: previous.ID, Attributes: cloneStringMap(previous.Attributes)}
+		previousState = &ModelGatewayState{Kind: previous.Kind, ID: previous.ID, ReusePolicy: previous.ReusePolicy, Attributes: cloneStringMap(previous.Attributes)}
 	}
 	protocol := p.stateCompatibilityRoute()
 	if webSearch != providerWebSearchModeDisabled {
@@ -678,7 +678,12 @@ func flowerProviderStateToFloret(state *ModelGatewayState) (*flprovider.State, e
 	if kind == "" || id == "" {
 		return nil, errors.New("flower provider state requires kind and id")
 	}
-	return &flprovider.State{Kind: kind, ID: id, Attributes: cloneStringMap(state.Attributes)}, nil
+	switch state.ReusePolicy {
+	case flprovider.StateReuseExactSurface, flprovider.StateReuseCanonicalHistory:
+	default:
+		return nil, errors.New("unsupported provider state reuse policy")
+	}
+	return &flprovider.State{Kind: kind, ID: id, ReusePolicy: state.ReusePolicy, Attributes: cloneStringMap(state.Attributes)}, nil
 }
 
 func floretUsageFromFlower(usage TurnUsage) flprovider.Usage {

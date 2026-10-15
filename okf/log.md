@@ -1,5 +1,12 @@
 # Redeven OKF Update Log
 
+## 2026-10-15: Native provider state reader recovery
+
+- Adopt published Floret v7.34.0 to reopen schema-15 stores carrying optional
+  canonical-history reuse policy. Preserve that policy across epoch-60 Desktop
+  model-source RPC and accept the optional recent ChatGPT response identity.
+  Keep storage opaque and verify [history reader and replay contracts](ai/model-provider-surface-and-history.md).
+
 ## 2026-10-14: Provider aliases and editable endpoints
 
 - Restore Base URL editing for OpenAI, Gemini and Anthropic in the
