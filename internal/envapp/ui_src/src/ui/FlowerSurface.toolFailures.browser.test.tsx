@@ -51,7 +51,7 @@ it.each([['en-US', 1200, 'light'], ['zh-CN', 390, 'dark']] as const)(
       await waitFor(() => row.querySelector('.flower-activity-error-message')?.textContent === message);
       await waitFor(() => row.querySelector('.flower-activity-inline-details')?.getAttribute('data-state') === 'open');
       expect(row.textContent!.split(message)).toHaveLength(2);
-      expect(row.querySelector('.flower-activity-inline-details-content')!.lastElementChild?.classList.contains('flower-activity-error-panel')).toBe(true);
+      expect(row.querySelector('.flower-activity-inline-details-content')!.lastElementChild?.contains(row.querySelector('.flower-activity-error-panel'))).toBe(true);
       expect(row.querySelector('.flower-activity-error-panel')?.getAttribute('aria-label')).toBe(copy.chat.toolStatuses.error);
       expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth + 1);
     }

@@ -5899,6 +5899,7 @@ button.flower-composer-context-source:focus-visible,
 }
 
 .flower-activity-screenshot .chat-media-heading { display: none; }
+.flower-activity-detail-section { display: contents; }
 
 .flower-computer-stage { min-width: 0; min-height: 0; }
 .flower-computer-stage [data-floe-floating-window-content] { display: flex; flex-direction: column; min-width: 0; min-height: 0; padding: 0; overflow: hidden; }

@@ -54,8 +54,11 @@ func TestComputerNavigationFailureContinuesProductionTurn(t *testing.T) {
 			return
 		}
 		var candidate string
-		failed, observed := false, false
+		failed, observed, diagnosis := false, false, false
 		computerProviderObjects(body["input"], func(value map[string]any) {
+			if value["navigation_stage"] == "response" && value["network_error"] == "ERR_SSL_PROTOCOL_ERROR" {
+				diagnosis = true
+			}
 			if ref, _ := value["default_candidate_ref"].(string); ref != "" {
 				candidate = ref
 			}
@@ -82,7 +85,7 @@ func TestComputerNavigationFailureContinuesProductionTurn(t *testing.T) {
 		case 3:
 			name, args = "computer_exec", map[string]any{"code": code, "description": "Check navigation failure"}
 		case 4:
-			if !failed {
+			if !failed || !diagnosis {
 				t.Error("model did not receive a normal navigation failure")
 			}
 			name = "computer_observe"
@@ -94,6 +97,13 @@ func TestComputerNavigationFailureContinuesProductionTurn(t *testing.T) {
 			}
 			writeAskUserIntegrationTextResponse(w, flush, "done", "Recovered and inspected the local page.")
 			return
+		}
+		if args["description"] == nil {
+			args["description"] = map[string]string{
+				"computer_targets":       "Find available task browser pages",
+				"computer_select_target": "Select the discovered task page",
+				"computer_observe":       "Inspect the page after navigation failed",
+			}[name]
 		}
 		raw, _ := json.Marshal(args)
 		id := fmt.Sprintf("navigation-%d", step)
@@ -160,8 +170,8 @@ func TestComputerNavigationFailureContinuesProductionTurn(t *testing.T) {
 			}
 			payload := activity.Presentation.Payload.(fltools.StructuredActivityPayload)
 			details, _ := json.Marshal(payload.Rows)
-			if !strings.Contains(string(details), "ERR_SSL_PROTOCOL_ERROR") || !strings.Contains(string(details), "navigation_stage: response") || !strings.Contains(string(details), `navigate\nobserve`) {
-				t.Fatalf("navigation diagnosis or prefix missing from Activity: %s", details)
+			if payload.Error == nil || !strings.Contains(payload.Error.Message, "ERR_SSL_PROTOCOL_ERROR") || !strings.Contains(string(details), `navigate\nobserve`) {
+				t.Fatalf("navigation diagnosis or prefix missing from Activity: error=%+v rows=%s", payload.Error, details)
 			}
 			if len(payload.Inputs) != 1 || payload.Inputs[0].Content != code {
 				t.Fatal("script intent lost")

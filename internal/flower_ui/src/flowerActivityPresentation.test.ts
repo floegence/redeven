@@ -233,6 +233,15 @@ describe('presentFlowerActivityItem', () => {
     expect(JSON.stringify(history).includes('did not save result details')).toBe(!active);
   });
 
+  it('shows a saved dedicated screenshot without its target-only result row', () => {
+    const resource_ref = `computer://browser-main/${'a'.repeat(64)}`;
+    const presentation = presentFlowerActivityItem(item({ tool_name: 'computer.screenshot', renderer: 'structured',
+      target_refs: [{ kind: 'computer_frame', label: 'Browser page', resource_ref }],
+      payload: { rows_provided: true, rows: [{ title: 'Browser page', content: '', format: 'text' }] },
+    }));
+    expect(presentation.detailBlocks).toEqual([{ kind: 'image', resource_ref, name: '' }]);
+  });
+
   it('presents confirmed screenshot output without empty-output or platform-code noise', () => {
     const presentation = presentFlowerActivityItem(item({
       tool_name: 'computer.click',

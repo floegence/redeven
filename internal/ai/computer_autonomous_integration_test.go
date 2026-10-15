@@ -136,6 +136,14 @@ func testComputerAutonomousProductionToolLoop(t *testing.T, stale bool) {
 			writeAskUserIntegrationTextResponse(w, flusher, "done", "Verified the child page.")
 			return
 		}
+		if args["description"] == nil {
+			args["description"] = map[string]string{
+				"computer_targets":       "Find available task browser pages",
+				"computer_select_target": "Select the discovered task page",
+				"browser_navigate":       "Open the local browser fixture",
+				"computer_observe":       "Inspect the selected task page",
+			}[name]
+		}
 		raw, _ := json.Marshal(args)
 		id := string(rune('a' + step))
 		item := map[string]any{"type": "function_call", "id": id, "call_id": id, "name": name, "arguments": string(raw)}
