@@ -46,12 +46,17 @@ web-search activity, source activity, MCP extension, and unknown extension has
 an explicit type glyph. Command execution and subsequent output reads share
 one terminal glyph and use the existing four-square loader while running.
 Other running tools animate the meaningful parts of their type glyph.
+File edit, write, patch and Tessiven edit share one pencil-and-stroke glyph.
+The pencil lowers, writes left to right with the stroke following its tip,
+then lifts and returns while the stroke fades. The 2.2-second cycle stays
+inside the existing 16px icon slot. Settled and reduced-motion states retain
+the complete pencil and stroke.
 Successful and failed calls retain the full static glyph with the
 existing status color; no badge obscures it. Canonical status remains available
 to assistive technology without repeating it in the expanded content.
 
-The pinned Lucide glyph order and tool motion recipes form one presentation
-catalog. Status changes cancel every animation and remove running base styles;
+The pinned Lucide glyphs, shared writing pencil and tool motion recipes form
+one presentation catalog. Status changes cancel every animation and remove running base styles;
 command settlement replaces the loader with the terminal glyph. Other tools
 retain the same SVG. Unmount cancels all work. The system reduced-motion
 preference stops glyph and four-square motion, including when it changes during

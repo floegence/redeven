@@ -1,7 +1,7 @@
 import type { flowerToolGlyphs } from './flowerToolGlyphs';
 
-// Each recipe animates semantic parts of a fixed Lucide glyph. Part order is
-// tied to the pinned lucide-solid version; coverage tests validate every track.
+// Recipes animate semantic parts of Lucide glyphs or the shared writing pencil.
+// Lucide part order follows the pinned version; tests validate every track.
 export type FlowerToolMotionTrack = Readonly<{
   parts: readonly number[] | 'all';
   origin?: string;
@@ -18,274 +18,55 @@ export type FlowerToolMotionRecipe = Readonly<{
   cycle: number;
   tracks: readonly FlowerToolMotionTrack[];
 }>;
+// Contact phases follow the ink path's vertices; the pencil pivots around its
+// graphite tip so the revealed line stays under the nib. The return is lifted.
+const writingPencilMotion: FlowerToolMotionRecipe = {
+  icon: 'writing-pencil',
+  cycle: 2200,
+  tracks: [
+    {
+      parts: [1, 2],
+      origin: '12.5px 18.25px',
+      keyframes: [
+        { offset: 0, transform: 'translate(-8.5px, -1.2px) rotate(-9deg)', easing: 'cubic-bezier(.4, 0, .2, 1)' },
+        { offset: 0.12, transform: 'translate(-8.5px, 0px) rotate(0deg)' },
+        { offset: 0.22, transform: 'translate(-6.6px, -.6px) rotate(-4deg)' },
+        { offset: 0.30, transform: 'translate(-5.4px, 0px) rotate(1deg)' },
+        { offset: 0.40, transform: 'translate(-3.7px, -.5px) rotate(-3deg)' },
+        { offset: 0.48, transform: 'translate(-2.5px, 0px) rotate(1deg)' },
+        { offset: 0.60, transform: 'translate(0px, 0px) rotate(0deg)', easing: 'cubic-bezier(.4, 0, .2, 1)' },
+        { offset: 0.70, transform: 'translate(0px, -1.2px) rotate(-9deg)', easing: 'cubic-bezier(.4, 0, .2, 1)' },
+        { offset: 0.90, transform: 'translate(-8.5px, -1.2px) rotate(-9deg)' },
+        { offset: 1, transform: 'translate(-8.5px, -1.2px) rotate(-9deg)' },
+      ],
+    },
+    {
+      parts: [0],
+      normalize: true,
+      base: { strokeDasharray: '1' },
+      keyframes: [
+        { offset: 0, strokeDashoffset: '1', opacity: 1 },
+        { offset: 0.12, strokeDashoffset: '1', opacity: 1 },
+        { offset: 0.22, strokeDashoffset: '.776', opacity: 1 },
+        { offset: 0.30, strokeDashoffset: '.626', opacity: 1 },
+        { offset: 0.40, strokeDashoffset: '.427', opacity: 1 },
+        { offset: 0.48, strokeDashoffset: '.281', opacity: 1 },
+        { offset: 0.60, strokeDashoffset: '0', opacity: 1 },
+        { offset: 0.72, strokeDashoffset: '0', opacity: 1 },
+        { offset: 0.86, strokeDashoffset: '0', opacity: 0 },
+        { offset: 0.90, strokeDashoffset: '1', opacity: 0 },
+        { offset: 1, strokeDashoffset: '1', opacity: 1 },
+      ],
+    },
+  ],
+};
+
 const terminalCommandIcon: FlowerToolMotionRecipe = { icon: 'square-terminal', cycle: 1350, tracks: [] };
 
 export const flowerToolMotion: Readonly<Record<string, FlowerToolMotionRecipe>> = {
-  "file.edit": {
-    "icon": "file-pen-line",
-    "cycle": 2600,
-    "tracks": [
-      {
-        "parts": [
-          0
-        ],
-        "origin": "13px 18px",
-        "box": "view-box",
-        "keyframes": [
-          {
-            "offset": 0,
-            "transform": "translate(-3px,-2px) rotate(-8deg)",
-            "easing": "cubic-bezier(.35,0,.2,1)"
-          },
-          {
-            "offset": 0.14,
-            "transform": "translate(-3px,0px) rotate(0deg)",
-            "easing": "cubic-bezier(.35,0,.2,1)"
-          },
-          {
-            "offset": 0.31,
-            "transform": "translate(-1px,-.6px) rotate(0deg)",
-            "easing": "cubic-bezier(.35,0,.2,1)"
-          },
-          {
-            "offset": 0.4,
-            "transform": "translate(-1.2px,0px) rotate(0deg)",
-            "easing": "cubic-bezier(.35,0,.2,1)"
-          },
-          {
-            "offset": 0.59,
-            "transform": "translate(1px,-.6px) rotate(0deg)",
-            "easing": "cubic-bezier(.35,0,.2,1)"
-          },
-          {
-            "offset": 0.7,
-            "transform": "translate(1px,-2px) rotate(-8deg)",
-            "easing": "cubic-bezier(.35,0,.2,1)"
-          },
-          {
-            "offset": 0.89,
-            "transform": "translate(-3px,-2px) rotate(-8deg)",
-            "easing": "cubic-bezier(.35,0,.2,1)"
-          },
-          {
-            "offset": 1,
-            "transform": "translate(-3px,-2px) rotate(-8deg)"
-          }
-        ],
-        "easing": "linear"
-      },
-      {
-        "parts": [
-          3
-        ],
-        "origin": "12px 12px",
-        "box": "view-box",
-        "keyframes": [
-          {
-            "offset": 0,
-            "strokeDashoffset": "1",
-            "easing": "cubic-bezier(.35,0,.2,1)"
-          },
-          {
-            "offset": 0.13,
-            "strokeDashoffset": "1",
-            "easing": "cubic-bezier(.35,0,.2,1)"
-          },
-          {
-            "offset": 0.4,
-            "strokeDashoffset": "0",
-            "easing": "cubic-bezier(.35,0,.2,1)"
-          },
-          {
-            "offset": 0.82,
-            "strokeDashoffset": "0",
-            "easing": "cubic-bezier(.35,0,.2,1)"
-          },
-          {
-            "offset": 0.93,
-            "strokeDashoffset": "1",
-            "easing": "cubic-bezier(.35,0,.2,1)"
-          },
-          {
-            "offset": 1,
-            "strokeDashoffset": "1"
-          }
-        ],
-        "easing": "linear",
-        "base": {
-          "strokeDasharray": "1"
-        },
-        "normalize": true
-      }
-    ]
-  },
-  "file.write": {
-    "icon": "file-plus",
-    "cycle": 2400,
-    "tracks": [
-      {
-        "parts": [
-          2,
-          3
-        ],
-        "origin": "12px 12px",
-        "box": "view-box",
-        "keyframes": [
-          {
-            "offset": 0,
-            "transform": "translateY(-4px)",
-            "opacity": 0.15,
-            "easing": "cubic-bezier(.35,0,.2,1)"
-          },
-          {
-            "offset": 0.12,
-            "transform": "translateY(-4px)",
-            "opacity": 0.15,
-            "easing": "cubic-bezier(.35,0,.2,1)"
-          },
-          {
-            "offset": 0.38,
-            "transform": "translateY(.7px)",
-            "opacity": 1,
-            "easing": "cubic-bezier(.35,0,.2,1)"
-          },
-          {
-            "offset": 0.49,
-            "transform": "translateY(0px)",
-            "opacity": 1,
-            "easing": "cubic-bezier(.35,0,.2,1)"
-          },
-          {
-            "offset": 0.8,
-            "transform": "translateY(0px)",
-            "opacity": 1,
-            "easing": "cubic-bezier(.35,0,.2,1)"
-          },
-          {
-            "offset": 0.94,
-            "transform": "translateY(-4px)",
-            "opacity": 0.15,
-            "easing": "cubic-bezier(.35,0,.2,1)"
-          },
-          {
-            "offset": 1,
-            "transform": "translateY(-4px)",
-            "opacity": 0.15
-          }
-        ],
-        "easing": "linear"
-      }
-    ]
-  },
-  "apply_patch": {
-    "icon": "file-diff",
-    "cycle": 2800,
-    "tracks": [
-      {
-        "parts": [
-          3
-        ],
-        "origin": "12px 12px",
-        "box": "view-box",
-        "keyframes": [
-          {
-            "offset": 0,
-            "transform": "translateX(0px)",
-            "opacity": 1,
-            "easing": "cubic-bezier(.35,0,.2,1)"
-          },
-          {
-            "offset": 0.17,
-            "transform": "translateX(0px)",
-            "opacity": 1,
-            "easing": "cubic-bezier(.35,0,.2,1)"
-          },
-          {
-            "offset": 0.34,
-            "transform": "translateX(-2px)",
-            "opacity": 0,
-            "easing": "cubic-bezier(.35,0,.2,1)"
-          },
-          {
-            "offset": 0.79,
-            "transform": "translateX(-2px)",
-            "opacity": 0,
-            "easing": "cubic-bezier(.35,0,.2,1)"
-          },
-          {
-            "offset": 0.88,
-            "transform": "translateX(0px)",
-            "opacity": 0,
-            "easing": "cubic-bezier(.35,0,.2,1)"
-          },
-          {
-            "offset": 0.97,
-            "transform": "translateX(0px)",
-            "opacity": 1,
-            "easing": "cubic-bezier(.35,0,.2,1)"
-          },
-          {
-            "offset": 1,
-            "transform": "translateX(0px)",
-            "opacity": 1
-          }
-        ],
-        "easing": "linear"
-      },
-      {
-        "parts": [
-          1,
-          2
-        ],
-        "origin": "12px 12px",
-        "box": "view-box",
-        "keyframes": [
-          {
-            "offset": 0,
-            "transform": "translateY(0px)",
-            "opacity": 0.65,
-            "easing": "cubic-bezier(.35,0,.2,1)"
-          },
-          {
-            "offset": 0.27,
-            "transform": "translateY(0px)",
-            "opacity": 0.65,
-            "easing": "cubic-bezier(.35,0,.2,1)"
-          },
-          {
-            "offset": 0.55,
-            "transform": "translateY(6px)",
-            "opacity": 1,
-            "easing": "cubic-bezier(.35,0,.2,1)"
-          },
-          {
-            "offset": 0.75,
-            "transform": "translateY(6px)",
-            "opacity": 1,
-            "easing": "cubic-bezier(.35,0,.2,1)"
-          },
-          {
-            "offset": 0.85,
-            "transform": "translateY(6px)",
-            "opacity": 0,
-            "easing": "cubic-bezier(.35,0,.2,1)"
-          },
-          {
-            "offset": 0.88,
-            "transform": "translateY(0px)",
-            "opacity": 0,
-            "easing": "cubic-bezier(.35,0,.2,1)"
-          },
-          {
-            "offset": 1,
-            "transform": "translateY(0px)",
-            "opacity": 0.65
-          }
-        ],
-        "easing": "linear"
-      }
-    ]
-  },
+  "file.edit": writingPencilMotion,
+  "file.write": writingPencilMotion,
+  "apply_patch": writingPencilMotion,
   "file.read": {
     "icon": "file-text",
     "cycle": 2700,
@@ -4061,66 +3842,7 @@ export const flowerToolMotion: Readonly<Record<string, FlowerToolMotionRecipe>> 
       }
     ]
   },
-  "tessiven.edit": {
-    "icon": "square-pen",
-    "cycle": 1700,
-    "tracks": [
-      {
-        "parts": [
-          1
-        ],
-        "origin": "9px 16px",
-        "box": "view-box",
-        "keyframes": [
-          {
-            "offset": 0,
-            "transform": "translate(-2px,2px) rotate(-6deg)",
-            "easing": "cubic-bezier(.4,0,.2,1)"
-          },
-          {
-            "offset": 0.14,
-            "transform": "translate(-2px,2px) rotate(-6deg)",
-            "easing": "cubic-bezier(.4,0,.2,1)"
-          },
-          {
-            "offset": 0.32,
-            "transform": "translate(.8px,-1px) rotate(2deg)",
-            "easing": "cubic-bezier(.4,0,.2,1)"
-          },
-          {
-            "offset": 0.45,
-            "transform": "translate(.6px,-.3px) rotate(3deg)",
-            "easing": "cubic-bezier(.4,0,.2,1)"
-          },
-          {
-            "offset": 0.53,
-            "transform": "translate(-1.8px,1.8px) rotate(-6deg)",
-            "easing": "cubic-bezier(.4,0,.2,1)"
-          },
-          {
-            "offset": 0.7,
-            "transform": "translate(.8px,-.6px) rotate(2deg)",
-            "easing": "cubic-bezier(.4,0,.2,1)"
-          },
-          {
-            "offset": 0.84,
-            "transform": "translate(0px,0px) rotate(0deg)",
-            "easing": "cubic-bezier(.4,0,.2,1)"
-          },
-          {
-            "offset": 0.95,
-            "transform": "translate(-2px,2px) rotate(-6deg)",
-            "easing": "cubic-bezier(.4,0,.2,1)"
-          },
-          {
-            "offset": 1,
-            "transform": "translate(-2px,2px) rotate(-6deg)"
-          }
-        ],
-        "easing": "linear"
-      }
-    ]
-  },
+  "tessiven.edit": writingPencilMotion,
   "tessiven.versions": {
     "icon": "history",
     "cycle": 2400,
