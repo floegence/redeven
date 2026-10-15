@@ -368,6 +368,10 @@ func flowerContextUsageFromFloret(usage *flruntime.ThreadContextUsage, totals *f
 		}
 		*item.target = &sample
 	}
+	if usage.Confirmed != nil && usage.Confirmed.Usage.Available {
+		native := usage.Confirmed.Usage
+		out.RecentRequestUsage = &FlowerThreadTokenUsage{InputTokens: native.InputTokens, OutputTokens: native.OutputTokens, CacheReadTokens: native.CacheReadTokens, CacheWriteTokens: native.CacheWriteTokens}
+	}
 	return out, nil
 }
 

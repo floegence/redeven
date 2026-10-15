@@ -138,6 +138,10 @@ describe('Flower progress indicator', () => {
     expect(contextIndicator).toContain('aria-valuenow={view().progressValue ?? undefined}');
     expect(contextIndicator).toContain('onFocus={() => setTooltipOpen(true)}');
     expect(contextIndicator).toContain('onBlur={() => setTooltipOpen(false)}');
+    expect(contextIndicator).toContain('<span>{view().recentCacheHitLabel}</span>');
+    expect(contextIndicator).toContain('<strong>{view().recentCacheHitValue}</strong>');
+    expect(contextIndicator).toContain("event.key === 'Escape'");
+    expect(contextIndicator).toContain("event.key === 'Enter' || event.key === ' '");
     expect(contextIndicator).toContain('<span>{view().cacheHitLabel}</span>');
     expect(contextIndicator).toContain('<strong>{view().cacheHitValue}</strong>');
     expect(tooltipRule).toContain('opacity: 0');

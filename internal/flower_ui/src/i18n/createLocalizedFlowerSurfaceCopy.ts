@@ -533,6 +533,7 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
         hardLimit: t(i18n, k('chat.contextIndicatorHardLimit')),
         unknownPercent: t(i18n, k('chat.contextIndicatorUnknownPercent')),
         unavailable: t(i18n, k('chat.contextIndicatorUnavailable')),
+        recentCacheHitLabel: t(i18n, k('chat.contextIndicatorRecentCacheHitLabel')),
         cacheHitLabel: t(i18n, k('chat.contextIndicatorCacheHitLabel')),
         percent: (percent) => t(i18n, k('chat.contextIndicatorPercent'), { percent }),
       },
