@@ -224,6 +224,7 @@ main() {
         src/ui/FlowerSurface.subagentAppearance.browser.test.tsx \
         src/ui/FlowerSurface.reasoningSelection.browser.test.tsx \
         src/ui/FlowerSurface.terminalActivity.browser.test.tsx \
+        src/ui/FlowerSurface.toolFailures.browser.test.tsx \
         src/ui/FlowerSurface.webSearch.browser.test.tsx \
         src/ui/flower/WebSearchActivity.browser.test.tsx \
         src/ui/FlowerSurface.disclosureInteraction.browser.test.tsx \

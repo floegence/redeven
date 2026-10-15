@@ -206,7 +206,7 @@ describe('SSH terminal activity', () => {
     { name: 'failed command', operation: 'exec', status: 'error', payload: { exit_code: 2, output: 'Invalid option' }, result: 'Command exited with code 2.' },
     { name: 'timed out command', operation: 'exec', status: 'error', payload: { timed_out: true, output: 'Starting' }, result: 'Command timed out.' },
     { name: 'input sent', operation: 'write', status: 'success', payload: { stdin: 'secret', output: 'secret', input_bytes: 6 }, result: 'Input sent.' },
-    { name: 'failed input', operation: 'write', status: 'error', payload: { error: { message: 'Session closed' } }, result: 'Input could not be sent.' },
+    { name: 'failed input', operation: 'write', status: 'error', payload: {}, result: 'Input could not be sent.' },
     { name: 'waiting input', operation: 'write', status: 'waiting', payload: {}, result: 'Waiting to send input…' },
     { name: 'stopped command', operation: 'terminate', status: 'success', payload: { terminated: true, output: 'Final diagnostic output' }, result: 'Command stopped.' },
     { name: 'partial read', operation: 'read', status: 'success', payload: { output: 'GPU ready', has_more: true }, result: 'Only part of the output is shown.' },
@@ -265,14 +265,18 @@ describe('SSH terminal activity', () => {
     await page.viewport(1280, 900);
   });
 
-  it('keeps failure summaries visible and all terminal details manually expandable', async () => {
+  it('keeps failures in manually expanded details and returns focus when closing', async () => {
     const failure = activityItem({ ...read(), item_id: 'failed', tool_id: 'failed', label: '检查失败的诊断', status: 'error', payload: { operation: 'read', error: { message: 'Session closed' } } });
     const waiting = activityItem({ ...write(), item_id: 'waiting', tool_id: 'waiting', label: '等待 SSH 输入授权', status: 'waiting', requires_approval: true, approval_state: 'requested' });
     const stopped = activityItem({ ...read(), item_id: 'stopped', tool_id: 'stopped', label: '停止诊断任务', payload: { operation: 'terminate', command: 'ssh udesk26', output: 'Stopped', terminated: true } });
     const { runtime } = await mount([write(), failure, waiting, stopped]);
     expect(toggleFor(runtime, 'failed').getAttribute('aria-expanded')).toBe('false');
     expect(toggleFor(runtime, 'waiting').getAttribute('aria-expanded')).toBe('false');
-    expect(rowFor(runtime, 'failed').textContent).toContain('Session closed');
+    expect(toggleFor(runtime, 'failed').textContent).not.toContain('Session closed');
+    expect(rowFor(runtime, 'failed').getAttribute('data-flower-activity-status')).toBe('error');
+    toggleFor(runtime, 'failed').click();
+    await waitFor(() => rowFor(runtime, 'failed').querySelector('.flower-activity-error-message')?.textContent === 'Session closed');
+    expect(rowFor(runtime, 'failed').querySelectorAll('.flower-activity-terminal-notice')).toHaveLength(0);
     toggleFor(runtime, 'stopped').click();
     await waitFor(() => rowFor(runtime, 'stopped').textContent?.includes('Stopped') === true);
     const commandAction = rowFor(runtime, 'stopped').querySelector<HTMLButtonElement>('.flower-activity-terminal-actions button')!;
@@ -281,5 +285,47 @@ describe('SSH terminal activity', () => {
     toggleFor(runtime, 'stopped').click();
     await waitFor(() => document.activeElement === toggleFor(runtime, 'stopped'));
     expect(toggleFor(runtime, 'stopped').getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it.each(['classic-light', 'classic-dark'])('shows an SSH failure once below the command in %s', async theme => {
+    document.documentElement.classList.toggle('dark', theme === 'classic-dark');
+    document.documentElement.dataset.floeShellTheme = theme;
+    const failed = activityItem({ item_id: 'ssh-failed', tool_id: 'ssh-failed', tool_name: 'terminal.exec', renderer: 'terminal',
+      label: 'Inspect remote runtime', status: 'error', payload: { operation: 'exec', command: 'ssh -o BatchMode=yes udesk26 hostname',
+        output: 'Permission denied (publickey,password).', exit_code: 255,
+        error: { code: 'COMMAND_FAILED', message: 'Terminal process exited with code 255' } } });
+    const { runtime } = await mount([write(), failed]);
+    const row = rowFor(runtime, 'ssh-failed');
+    expect(toggleFor(runtime, 'ssh-failed').textContent).not.toContain('Terminal process exited');
+    toggleFor(runtime, 'ssh-failed').click();
+    await waitFor(() => row.querySelector('.flower-activity-terminal-output') !== null);
+    await waitFor(() => row.querySelector('.flower-activity-inline-details')?.getAttribute('data-state') === 'open');
+    expect(row.querySelector('.flower-activity-error-panel')).toBeNull();
+    expect(row.textContent).not.toContain('Terminal process exited');
+    expect(row.querySelector('.flower-activity-terminal-output')?.textContent).toBe('Permission denied (publickey,password).');
+    expect(row.querySelectorAll('.flower-activity-terminal-notice')).toHaveLength(1);
+    expect(row.querySelector('.flower-activity-terminal-notice')?.textContent).toBe('Command exited with code 255.');
+    const panel = row.querySelector<HTMLElement>('[data-flower-activity-terminal-panel]')!;
+    expect(panel.firstElementChild?.classList.contains('flower-activity-terminal-header')).toBe(true);
+    for (const width of [1280, 390]) {
+      await page.viewport(width, 900);
+      expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth + 1);
+      await page.screenshot({ element: runtime, path: `__screenshots__/flower-terminal-failure-${theme}-${width}.png` });
+    }
+  });
+
+  it('keeps a specific input failure once after the command', async () => {
+    const failed = activityItem({ ...write(), status: 'error', payload: { operation: 'write', command: 'ssh udesk26',
+      stdin: 'secret', output: 'secret', error: { message: 'Session closed' } } });
+    const { runtime } = await mount([failed]);
+    toggleFor(runtime, 'write').click();
+    const row = rowFor(runtime, 'write');
+    await waitFor(() => row.querySelector('.flower-activity-error-message')?.textContent === 'Session closed');
+    expect(row.querySelectorAll('.flower-activity-terminal-notice')).toHaveLength(0);
+    expect(row.textContent).not.toContain('secret');
+    expect(row.textContent).not.toContain('Input could not be sent');
+    const details = row.querySelector('.flower-activity-inline-details-content')!;
+    expect(details.lastElementChild?.classList.contains('flower-activity-error-panel')).toBe(true);
+    expect(details.querySelector('[data-flower-activity-terminal-panel]')).not.toBeNull();
   });
 });

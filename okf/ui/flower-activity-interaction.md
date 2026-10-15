@@ -31,7 +31,7 @@ The existing manual-open map is the only disclosure authority. All tool details
 start closed, including pending, waiting, running, completed, and failed calls.
 Status and attention facts never open a panel. Running tools show the existing
 title sweep while collapsed; settlement stops the sweep without changing the
-user's choice. Failures keep their static type icon and an actionable error in the expanded details. Current replacements
+user's choice. Failures keep their status-colored static type icon and accessible status. Expanded details show inputs and available results before one actionable error, without repeating it beside the title or in generic empty-output notices. Terminal exit codes and generic timeouts use their localized result once; distinct failures and recovery suggestions stay visible. Current replacements
 and navigation within the same Flower surface preserve manual choices. This
 state does not require a backend migration or survive a browser restart.
 
