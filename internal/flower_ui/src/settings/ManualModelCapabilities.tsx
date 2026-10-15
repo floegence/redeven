@@ -1,4 +1,4 @@
-import { Checkbox, Select } from '@floegence/floe-webapp-core/ui';
+import { Select } from '@floegence/floe-webapp-core/ui';
 import type { FlowerProviderModel, FlowerProviderType, FlowerReasoningCapability } from '../contracts/flowerSurfaceContracts';
 import type { ModelCatalogCopy } from './modelCatalogCopy';
 
@@ -30,8 +30,17 @@ export function ManualModelCapabilities(props: Readonly<{
   disabled?: boolean; onChange: (patch: Partial<FlowerProviderModel>) => void;
 }>) {
   return <div class="space-y-3 md:col-span-3">
-    <Checkbox checked={props.model.supports_tools !== false && props.model.supports_tools !== undefined} disabled={props.disabled}
-      label={props.copy.tools} size="sm" onChange={supports_tools => props.onChange({ supports_tools })} />
+    <label class="block space-y-1">
+      <span class="text-xs font-medium">{props.copy.tools}</span>
+      <select class="h-8 w-full cursor-pointer rounded border border-input bg-background px-2.5 text-[length:var(--floe-type-control)] shadow-sm disabled:cursor-not-allowed"
+        value={props.model.supports_tools === undefined ? '' : props.model.supports_tools ? 'supported' : 'unsupported'}
+        required aria-invalid={props.model.supports_tools === undefined} disabled={props.disabled}
+        onChange={event => props.onChange({ supports_tools: event.currentTarget.value === 'supported' })}>
+        <option value="" disabled>{props.copy.toolsUnknown}</option>
+        <option value="supported">{props.copy.reasoningEnabled}</option>
+        <option value="unsupported">{props.copy.toolsUnsupported}</option>
+      </select>
+    </label>
     <div class="space-y-1">
       <label class="text-xs font-medium">{props.copy.reasoning}</label>
       <Select value={props.model.reasoning_capability?.wire_shape ? 'enabled' : 'disabled'}

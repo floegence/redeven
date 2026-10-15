@@ -1,5 +1,11 @@
 # Redeven OKF Update Log
 
+## 2026-10-14: Actionable compatible-model configuration
+
+- Document [provider capability completion](ui/flower-provider-configuration.md)
+  through labeled actions, save-time missing-field navigation and explicit tool
+  support, with browser save/reopen coverage for Desktop and Env layouts.
+
 ## 2026-10-14: Inert HTML preview loading
 
 - Adopt published Floret v7.33.0 complete queue edits and canonical edit lookup.

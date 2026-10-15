@@ -379,7 +379,19 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
     && (chatGPTSelected() && Boolean(store.draft.account_id) && (store.draft.models.length > 0 || (store.draft.catalog_models?.length ?? 0) > 0)
       || !missingFlowerProviderCredential({ ...store.draft, enabled: true }, props.keyConfigured, props.webSearchKeyConfigured))
     && (!flowerProviderTypeRequiresBaseURL(store.draft.type) || store.draft.base_url?.trim() || defaultBaseURLForFlowerProviderType(store.draft.type)));
-  const incompleteModel = () => store.draft?.models.some(flowerModelNeedsConfiguration) ?? false;
+  const incompleteModel = () => store.draft?.models.find(flowerModelNeedsConfiguration);
+  let providerForm: HTMLFieldSetElement | undefined;
+  const configureModel = (name: string) => {
+    setQuery('');
+    setEditingModelName(name);
+    queueMicrotask(() => {
+      if (!props.open || props.disabled || props.saving || editingModelName() !== name) return;
+      const editor = providerForm?.querySelector<HTMLElement>('[data-flower-model-editor]');
+      const input = editor?.querySelector<HTMLElement>('[aria-invalid="true"]') ?? editor?.querySelector<HTMLElement>('input');
+      input?.scrollIntoView({ block: 'center' });
+      input?.focus({ preventScroll: true });
+    });
+  };
   const providerTypeLabel = (type: FlowerProviderType): string => copy().providerTypeLabels[type] ?? type;
 
   createEffect(on(() => [props.open, props.provider?.id] as const, () => {
@@ -533,7 +545,10 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
               {missingCredential() === 'provider' ? copy().needsKey : copy().needsBraveKey}
             </span>
           </Show>
-          <Show when={incompleteModel()}><span role="status" class="mr-auto text-sm text-muted-foreground">{copy().catalog.needsConfiguration}</span></Show>
+          <Show when={incompleteModel()}>{model => <div class="mr-auto flex min-w-0 flex-wrap items-center gap-2">
+            <span role="status" class="max-w-48 truncate text-sm text-muted-foreground" title={model().display_name || model().model_name}>{model().display_name || model().model_name}</span>
+            <Button size="sm" variant="outline" disabled={props.disabled || props.saving} onClick={() => configureModel(model().model_name)}>{copy().catalog.configure}</Button>
+          </div>}</Show>
           <Button size="sm" variant="outline" data-flower-skip-discovery onClick={() => props.onOpenChange(false)}>
             {copy().discard}
           </Button>
@@ -542,8 +557,13 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
             variant="default"
             icon={Save}
             loading={props.saving}
-            disabled={props.disabled || !selectedProviderType() || props.saving || Boolean(missingCredential()) || incompleteModel() || Boolean(store.draft?.model_selection && !store.draft.model_selection.selected_models)}
-            onClick={() => { if (!props.disabled && !props.saving && selectedProviderType() && store.draft && !missingCredential() && !incompleteModel()) void props.onConfirm(store.draft); }}
+            disabled={props.disabled || !selectedProviderType() || props.saving || Boolean(missingCredential()) || Boolean(store.draft?.model_selection && !store.draft.model_selection.selected_models)}
+            onClick={() => {
+              if (props.disabled || props.saving || !selectedProviderType() || !store.draft || missingCredential()) return;
+              const model = incompleteModel();
+              if (model) configureModel(model.model_name);
+              else void props.onConfirm(store.draft);
+            }}
           >
             {copy().saveProvider}
           </Button>
@@ -551,7 +571,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
       )}
     >
       <Show when={store.draft} fallback={<div class="flower-body-copy text-muted-foreground">{copy().providerRemoved}</div>}>
-        <fieldset class="flower-provider-workspace" disabled={props.disabled || props.saving}>
+        <fieldset ref={providerForm} class="flower-provider-workspace" disabled={props.disabled || props.saving}>
           <nav class="flower-provider-picker" aria-label={copy().providerTypeTitle} data-flower-skip-discovery>
             <h3 class="flower-provider-picker-title">{copy().providerTypeTitle}</h3>
             <div class="flower-provider-picker-options">
@@ -831,8 +851,8 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                                   </Show>
                                 </div>
                                 <div class={cn('col-start-2 flex items-center justify-end gap-1 sm:col-start-3 sm:row-start-1', !enabled() && 'invisible')} aria-hidden={!enabled()}>
-                                  <Button disabled={!enabled()} size="sm" variant="ghost" class="h-6 w-6 p-0 text-muted-foreground hover:text-foreground" onClick={() => setEditingModelName(editOpen() ? '' : modelName())} aria-label={copy().catalog.edit}>
-                                    <Pencil class="h-3 w-3" />
+                                  <Button disabled={!enabled()} size="sm" variant="ghost" class={cn('h-6 text-muted-foreground hover:text-foreground', enabled() && flowerModelNeedsConfiguration(model()) ? 'px-2' : 'w-6 p-0')} onClick={() => setEditingModelName(editOpen() ? '' : modelName())} aria-label={flowerModelNeedsConfiguration(model()) ? copy().catalog.configure : copy().catalog.edit}>
+                                    <Show when={enabled() && flowerModelNeedsConfiguration(model())} fallback={<Pencil class="h-3 w-3" />}><span class="text-xs">{copy().catalog.configure}</span></Show>
                                   </Button>
                                   <Button disabled={!enabled()} size="sm" variant="ghost" class="h-6 px-2 text-muted-foreground hover:text-foreground" onClick={() => {
                                     if (modelIndex() >= 0) {
@@ -844,7 +864,8 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                                 </div>
                               </div>
                               <Show when={enabled() && editOpen()}>
-                                <div class="border-t border-border/60 px-3 py-3">
+                                <div data-flower-model-editor class="border-t border-border/60 px-3 py-3">
+                                  <Show when={flowerModelNeedsConfiguration(model())}><p role="status" class="mb-3 flower-body-copy text-muted-foreground">{copy().catalog.configurationHint}</p></Show>
                                   <div class="grid grid-cols-1 gap-3 md:grid-cols-4">
                                     <div class="md:col-span-2">
                                       <FlowerFieldLabel>{copy().modelName}</FlowerFieldLabel>
@@ -855,12 +876,12 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                                       <Input disabled={chatGPTSelected() || store.draft?.type === 'ollama'} value={model().wire_model_name ?? ''} onInput={(event) => { if (modelIndex() >= 0) updateModel(modelIndex(), { wire_model_name: event.currentTarget.value || undefined }); }} placeholder={modelName()} size="sm" class="w-full font-mono" />
                                     </div>
                                     <div>
-                                      <FlowerFieldLabel>{copy().contextWindow}</FlowerFieldLabel>
-                                      <Input type="number" value={model().context_window ?? ''} onInput={(event) => { if (modelIndex() >= 0) updateModel(modelIndex(), { context_window: Number(event.currentTarget.value) || undefined }); }} placeholder="—" size="sm" class="w-full font-mono" />
+                                      <FlowerFieldLabel hint={flowerModelNeedsConfiguration(model()) ? copy().required : undefined}>{copy().contextWindow}</FlowerFieldLabel>
+                                      <Input type="number" aria-label={copy().contextWindow} aria-invalid={flowerModelNeedsConfiguration(model()) && !((model().context_window ?? 0) > 0)} min="1" value={model().context_window ?? ''} onInput={(event) => { if (modelIndex() >= 0) updateModel(modelIndex(), { context_window: Number(event.currentTarget.value) || undefined }); }} placeholder="—" size="sm" class="w-full font-mono" />
                                     </div>
                                     <div>
-                                      <FlowerFieldLabel>{copy().maxOutput}</FlowerFieldLabel>
-                                      <Input type="number" value={model().max_output_tokens ?? ''} onInput={(event) => { if (modelIndex() >= 0) updateModel(modelIndex(), { max_output_tokens: Number(event.currentTarget.value) || undefined }); }} placeholder="—" size="sm" class="w-full font-mono" />
+                                      <FlowerFieldLabel hint={flowerModelNeedsConfiguration(model()) ? copy().required : undefined}>{copy().maxOutput}</FlowerFieldLabel>
+                                      <Input type="number" aria-label={copy().maxOutput} aria-invalid={flowerModelNeedsConfiguration(model()) && !((model().max_output_tokens ?? 0) > 0)} min="1" value={model().max_output_tokens ?? ''} onInput={(event) => { if (modelIndex() >= 0) updateModel(modelIndex(), { max_output_tokens: Number(event.currentTarget.value) || undefined }); }} placeholder="—" size="sm" class="w-full font-mono" />
                                     </div>
                                     <div>
                                       <FlowerFieldLabel>{copy().effectiveContextPercent}</FlowerFieldLabel>

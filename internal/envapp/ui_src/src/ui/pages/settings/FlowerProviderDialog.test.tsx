@@ -331,16 +331,14 @@ describe('shared Flower provider dialog', () => {
       const context = dialog.host.querySelector<HTMLInputElement>('input[type="number"]')!;
       const output = dialog.host.querySelectorAll<HTMLInputElement>('input[type="number"]')[1]!;
       expect(context.value).toBe(''); expect(output.value).toBe('');
-      expect(dialog.button('Save provider').disabled).toBe(true);
+      expect(dialog.button('Save provider').disabled).toBe(false);
       context.value = '32768'; context.dispatchEvent(new Event('input', { bubbles: true }));
       output.value = '4096'; output.dispatchEvent(new Event('input', { bubbles: true }));
-      expect(dialog.button('Save provider').disabled).toBe(true);
-      const toolsLabel = [...dialog.host.querySelectorAll('label')].find(label => label.textContent?.includes('Tool calls'))!;
-      const tools = toolsLabel.querySelector<HTMLInputElement>('input')!;
-      tools.click();
       expect(dialog.button('Save provider').disabled).toBe(false);
-      tools.click();
-      tools.click();
+      const tools = dialog.host.querySelector<HTMLSelectElement>('select[required]')!;
+      expect(tools.value).toBe('');
+      tools.value = 'supported'; tools.dispatchEvent(new Event('change', { bubbles: true }));
+      expect(dialog.button('Save provider').disabled).toBe(false);
       dialog.button('Save provider').click();
       expect(dialog.confirmed().models).toEqual([expect.objectContaining({ model_name: 'unknown-agent', context_window: 32768, max_output_tokens: 4096, supports_tools: true })]);
     } finally { dialog.dispose(); }
@@ -379,7 +377,7 @@ describe('ChatGPT local authentication boundary', () => {
     const host = document.createElement('div'); document.body.append(host);
     const [open, setOpen] = createSignal(true), [local, setLocal] = createSignal(available), [binding, setBinding] = createSignal('local-connection');
     const provider = { id: 'openai', type: 'openai' as const, models: [] };
-    const dispose = render(() => <FlowerProviderDialog providerDefaults={providerDefaultsFixture} open={open()} mode="create" provider={provider} chatGPTAvailable={local()} chatGPTBindingID={binding()} chatGPTAuth={auth} keyConfigured={false} webSearchKeyConfigured={false} onOpenChange={setOpen} onConfirm={vi.fn()} />, host);
+    const dispose = render(() => <FlowerProviderDialog providerDefaults={providerDefaultsFixture} open={open()} mode="create" provider={provider} chatGPTAvailable={local()} chatGPTBindingID={binding()} chatGPTAuth={auth} loadChatGPTAccounts={async () => ({ accounts: {}, saved_accounts: [] })} keyConfigured={false} webSearchKeyConfigured={false} onOpenChange={setOpen} onConfirm={vi.fn()} />, host);
     const button = (text: string) => [...host.querySelectorAll('button')].find(el => {
       const visible = el.cloneNode(true) as HTMLElement;
       visible.querySelectorAll('[aria-hidden=true]').forEach(node => node.remove());
@@ -401,6 +399,7 @@ describe('ChatGPT local authentication boundary', () => {
     let resolveStart!: (result: { id: string; state: string }) => void;
     const auth = vi.fn((action: string) => action === 'start' ? new Promise<{ id: string; state: string }>(resolve => { resolveStart = resolve; }) : Promise.resolve({}));
     const dialog = localDialog(true, auth);
+    await vi.waitFor(() => expect(dialog.button('Continue with ChatGPT').disabled).toBe(false));
     dialog.button('Continue with ChatGPT').click();
     dialog.setBinding('different-connection'); dialog.setLocal(false);
     resolveStart({ id: 'late-attempt', state: 'waiting' });
