@@ -1664,3 +1664,10 @@ localize control labels, and omit redundant confirmation details and empty
 disclosures. Preserve foreground warnings, partial failures, screenshots,
 historical absence and copy/keyboard behavior. See
 [Flower activity interaction](ui/flower-activity-interaction.md).
+
+## 2026-10-15 — Concise single-file edit details
+
+Keep the filename, change counts and file actions in the tool title for
+single-file edits; expanded details start with the diff. Multi-file edits retain
+their individual file toolbars. See
+[Flower activity interaction](ui/flower-activity-interaction.md).

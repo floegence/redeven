@@ -28,6 +28,10 @@ are stated explicitly; older records are neither rewritten nor reconstructed. Un
 private path becomes an inspector fallback. File preview stays a separate
 secondary action.
 
+Single-file edit details start with the diff. The tool title owns the filename,
+change counts and file actions, without a repeated toolbar inside the details.
+Multi-file edits retain each file's toolbar to identify its diff and actions.
+
 The existing manual-open map is the only disclosure authority. All tool details
 start closed, including pending, waiting, running, completed, and failed calls.
 Status and attention facts never open a panel. Running tools show the existing

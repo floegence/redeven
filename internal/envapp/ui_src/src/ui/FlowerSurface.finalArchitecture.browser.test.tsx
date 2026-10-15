@@ -1007,9 +1007,11 @@ describe('Flower final thread cache and workspace transport', () => {
     expect(toolRow.textContent).not.toContain('display name');
     (toolRow.querySelector('button.flower-activity-inline-button') as HTMLButtonElement).click();
     await waitFor(() => toolRow.querySelector('.flower-activity-file-diff-unified') !== null);
+    expect(toolRow.querySelector('.flower-activity-file-toolbar')).toBeNull();
     expect(toolRow.querySelector('.flower-activity-file-diff-unified')?.textContent).toContain('def main():');
     expect(toolRow.textContent).not.toContain('No textual diff');
     expect(toolRow.textContent).not.toContain('create');
+    await page.screenshot({ element: runtime, path: '__screenshots__/flower-single-file-edit.png' });
     expect(runtime.textContent).toContain('Generating...');
     stream.push(assistantCurrent(7, 'Weather data is ready'));
     await waitFor(() => runtime.textContent?.includes('Weather data is ready') === true);
