@@ -1,7 +1,7 @@
 import type { FlowerChromeStatus } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import '../index.css';
 import './flower-feature.css';
-import { expect, it, vi } from 'vitest';
+import { expect, it, onTestFinished, vi } from 'vitest';
 import { page } from 'vitest/browser';
 import type { FlowerBrowserInstallationSnapshot, FlowerComputerUserInput, FlowerLiveStreamEnvelope } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { applyFlowerRuntimeCurrentView } from '../../../../flower_ui/src/runtimeCurrentView';
@@ -78,8 +78,8 @@ it('explains the exact site grant and grants it once before continuing without m
   expect(entry.textContent).toBe('Allow website access');
   expect(entry.hasAttribute('data-floe-progress-shimmer')).toBe(false);
   const activity = s.surface.querySelector('.flower-activity-inline-title')!;
-  expect(activity.textContent).toBe('Open page');
-  expect(s.surface.querySelector('.flower-activity-waiting-clock')).not.toBeNull();
+  expect(activity.textContent).toBe('BrowserUse: Open page');
+  expect(entry.getAttribute('data-session-state')).toBe('awaiting_control');
   expect(card.querySelector('[data-computer-control-action="take"]')).toBeNull();
   const allow = card.querySelector<HTMLButtonElement>('[data-computer-control-action="grant"]')!;
   expect(allow.textContent).toBe('Allow and continue');
@@ -148,6 +148,61 @@ it('does not invent a sign-in requirement when page inspection fails', async () 
   const s = await setup('unknown');
   expect(s.surface.querySelector('.flower-computer-control-heading')?.textContent).toContain('could not safely inspect');
   expect(s.surface.querySelector('.flower-computer-control-heading')?.textContent).not.toContain('Complete sign-in');
+});
+
+it.each(['unknown', 'site'] as const)('fills the %s action icon slot and keeps its geometry through submission and recovery', async (kind) => {
+  const originalTheme = document.documentElement.className;
+  onTestFinished(() => { document.documentElement.className = originalTheme; });
+  document.documentElement.classList.toggle('dark', kind === 'unknown');
+  const s = await setup(kind);
+  const button = s.surface.querySelector<HTMLButtonElement>('[data-computer-control-action="return"], [data-computer-control-action="grant"]')!;
+  const card = button.closest('section')!;
+  const idleIcon = button.querySelector('svg');
+  expect(idleIcon).not.toBeNull();
+  const idleIconBounds = idleIcon!.getBoundingClientRect();
+  expect(idleIconBounds.width).toBeGreaterThan(0);
+  expect(idleIconBounds.height).toBeGreaterThan(0);
+  expect(button.getAttribute('aria-busy')).toBeNull();
+  expect(getComputedStyle(button).cursor).toBe('pointer');
+  const idleBounds = button.getBoundingClientRect();
+  const pending = deferred<never>();
+  s.submitInput.mockImplementationOnce(() => pending.promise);
+  s.gate.resolve();
+  if (import.meta.env.VITE_COMPUTER_ASSISTANCE_SCREENSHOT === '1') await page.screenshot({ element: card, path: `__screenshots__/flower-assistance-${kind}-idle.png` });
+
+  button.click(); button.click();
+  await waitFor(() => s.submitInput.mock.calls.length === 1);
+  expect(button.disabled).toBe(true);
+  expect(button.getAttribute('aria-busy')).toBe('true');
+  const spinner = button.querySelector<SVGElement>('svg.animate-spin');
+  expect(spinner).not.toBeNull();
+  expect(getComputedStyle(spinner!).width).toBe(getComputedStyle(spinner!.parentElement!).width);
+  expect(Math.abs(button.getBoundingClientRect().width - idleBounds.width)).toBeLessThanOrEqual(1);
+  expect(Math.abs(button.getBoundingClientRect().height - idleBounds.height)).toBeLessThanOrEqual(1);
+  if (import.meta.env.VITE_COMPUTER_ASSISTANCE_SCREENSHOT === '1') await page.screenshot({ element: card, path: `__screenshots__/flower-assistance-${kind}-submitting.png` });
+
+  pending.reject(new Error('Check could not be submitted'));
+  await waitFor(() => !button.disabled);
+  expect(button.getAttribute('aria-busy')).toBeNull();
+  expect(button.querySelector('svg')).not.toBeNull();
+  expect(button.querySelector('svg.animate-spin')).toBeNull();
+  expect(Math.abs(button.getBoundingClientRect().width - idleBounds.width)).toBeLessThanOrEqual(1);
+  expect(Math.abs(button.getBoundingClientRect().height - idleBounds.height)).toBeLessThanOrEqual(1);
+  expect(getComputedStyle(button).cursor).toBe('pointer');
+
+  await page.viewport(390, 844);
+  s.surface.style.width = '360px';
+  await new Promise(resolve => requestAnimationFrame(resolve));
+  for (const action of card.querySelectorAll<HTMLButtonElement>('button')) {
+    expect(action.getBoundingClientRect().left).toBeGreaterThanOrEqual(card.getBoundingClientRect().left - 1);
+    expect(action.getBoundingClientRect().right).toBeLessThanOrEqual(card.getBoundingClientRect().right + 1);
+    expect(action.scrollWidth).toBeLessThanOrEqual(action.clientWidth + 1);
+    expect(getComputedStyle(action).whiteSpace).toBe('nowrap');
+  }
+  if (import.meta.env.VITE_COMPUTER_ASSISTANCE_SCREENSHOT === '1') await page.screenshot({ element: card, path: `__screenshots__/flower-assistance-${kind}-narrow.png` });
+  button.click();
+  await waitFor(() => s.submitInput.mock.calls.length === 2);
+  await waitFor(() => !s.surface.querySelector('.flower-computer-control-heading'));
 });
 
 it('submits the canonical check answer without opening or capturing the page first', async () => {
