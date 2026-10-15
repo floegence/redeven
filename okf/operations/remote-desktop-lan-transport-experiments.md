@@ -15,13 +15,13 @@ Neither retransmissions nor a synthetic carrier result proves the whole cause.
 Rejected variants must be restored; diagnostics never qualify a release.
 The [decision index](remote-desktop-lan-experiment-ledger.md) owns C01 and acceptance.
 
-# Conditions
+# Contract
 
 Evidence root `B`, dates and common controls are defined in the decision index.
 Temporary diagnostics have their exact overlays in retained preparation scripts;
 where an exact consumer hash is not established, identity remains unresolved.
-Different-time results cannot isolate a software variable. Native command, wire
-arrival, capture FPS and panel FPS are distinct from observed client presentation.
+Before another trial, declare its changed variable and consult its owning row.
+Preserve the complete workload, source matching and original measurements.
 
 # Decision Ledger
 
@@ -37,6 +37,14 @@ arrival, capture FPS and panel FPS are distinct from observed client presentatio
 | T08 / SSH IPQoS none | Stalls remained | Rejected as established fix. Retry requires matched route/QoS evidence, not Wi-Fi conjecture | [v42 record](remote-desktop-rustdesk-v42-results.md) |
 | T09 / loopback TCP_NODELAY and SSH Nagle hypothesis | 1024-byte/60 Hz local noDelay false/true both P95 about1 ms; OpenSSH10.2 apply_qos always enables TCP_NODELAY | No reproduced Nagle defect. Do not claim missing explicit proxy setNoDelay caused decline. Retry only with packet timing proving batching in the actual socket | `nagle-probe.cjs`, `nagle-probe.json`, `openssh-10.2-packet.c` |
 | T10 / long synthetic SSH/H2 carrier | 7200 x20 KB, 58.88 FPS/P95 26.56 ms/max413.55 ms | Diagnostic capacity only; does not qualify source-to-presentation. Retry only a new carrier ownership question | `h2-long-carrier-probe.json` |
+
+# Boundaries
+
+Different-time results cannot isolate a software variable. Command arrival,
+capture FPS and panel FPS are distinct from observed client presentation.
+Retain confirmed cumulative credit, generation fences, bounded queues and
+authorization when changing scheduling. A carrier-only result cannot qualify
+RustDesk parity; a trace must isolate a previously unresolved interval.
 
 # Stage Evidence And Limits
 

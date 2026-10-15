@@ -622,7 +622,7 @@
               "performance",
               "qualification"
             ],
-            "summary": "The primary qualification task owns this comparison contract. Complete RustDesk\nparity remains unaccepted. The [LAN experiment decision ledger](remote-desktop-lan-experiment-ledger.md)\nowns the current v0.22.47 results, historical advantages and retry conditions.\nIts three valid motion rounds average 38.86 FPS with pooled P95 247.61 ms and\nfive long gaps, versus RustDesk 32.29 FPS, 169.11 ms and one gap. The earlier\nv0.22.40 VP9 rounds below average 50.99 FPS with zero long gaps; hardware AV1\nv0.22.42 also reached 50.53 FPS. Cross-time conditions differ, so the performance\ndecline is observed but its cause remains unresolved. Do not assign it to Wi-Fi,\ncodec or measurement semantics without a controlled comparison. The v0.22.45\nHost-input pair below remains historical evidence.\nEqual application window sizes do not establish equal content viewports. Lower\nquality, omitted SSH costs or failed samples cannot satisfy acceptance; each\nsuccessor needs published-artifact validation and a fresh real-window comparison.",
+            "summary": "The primary qualification task owns acceptance. Complete RustDesk parity remains\nunaccepted. The [experiment ledger](remote-desktop-lan-experiment-ledger.md)\nrecords current v0.22.47, historical advantages and controlled retry conditions.\nCurrent motion rounds average 38.86 FPS/P95 247.61 ms with five long gaps;\nhistorical v0.22.40 averaged 50.99 FPS with zero long gaps, and hardware AV1\nv0.22.42 also reached 50.53 FPS. Cross-time differences establish a deficit,\nnot its cause. Preserve later security and functionality fixes. Acceptance\nrequires published artifacts, complete source matching and equal delivered\ndetail; lower CPU, failed samples or panel peaks cannot substitute. Earlier\nrounds remain historical evidence.",
             "section_count": 2
           },
           {
@@ -693,7 +693,7 @@
               "performance"
             ],
             "summary": "The primary qualification task owns these transport decisions. Existing traces\nshow publication-to-confirmed-receipt tails and some capture-to-submit waits;\nthey do not isolate the cause of historical decline. Preserve bounded queues,\nconfirmed presentation semantics, generation fencing and transport security.\nNeither retransmissions nor a synthetic carrier result proves the whole cause.\nRejected variants must be restored; diagnostics never qualify a release.\nThe [decision index](remote-desktop-lan-experiment-ledger.md) owns C01 and acceptance.",
-            "section_count": 3
+            "section_count": 4
           },
           {
             "concept_id": "operations.remote-desktop-rustdesk-v42-results",
@@ -27650,12 +27650,12 @@
         "title": "LAN codec and capture experiments",
         "type": "Qualification Record"
       },
-      "body_length": 6329,
+      "body_length": 6287,
       "summary": "The primary qualification task owns these media decisions. Historical VP9 and\nhardware AV1 both exceeded the current three-round presented cadence. Codec\nselection alone has not isolated the regression. Preserve screen-text quality,\nordered frames, current input/recovery behavior and explicit hardware evidence.\nTemporary rate or capture variants remain diagnostic until repeated real-window\nlatency, quality and complete resource qualification passes. Restore released\nsettings after rejected experiments. The [decision index](remote-desktop-lan-experiment-ledger.md)\nowns historical identities and the next controlled comparison.",
       "sections": [
         {
-          "id": "conditions-and-interpretation",
-          "title": "Conditions And Interpretation",
+          "id": "contract",
+          "title": "Contract",
           "level": 1,
           "body": "Evidence root `B`, dates, common physical scene and acceptance are defined in the\n[decision index](remote-desktop-lan-experiment-ledger.md). Unless a row supplies\nan exact version/consumer, it is a temporary post-v42 or v45 diagnostic, with\nexact overlay provenance in its preparation script, not a published release.\nUnknown historical consumer identity is an explicit evidence gap. All quoted\nlatencies are input-to-observed-client-pixels, except explicitly isolated probes.\nNo short favorable sample replaces three valid pairs or equal delivered detail.",
           "char_count": 556
@@ -27668,8 +27668,8 @@
           "char_count": 4029
         },
         {
-          "id": "preserved-functional-boundaries",
-          "title": "Preserved Functional Boundaries",
+          "id": "boundaries",
+          "title": "Boundaries",
           "level": 1,
           "body": "v40-to-v47 native changes add positive AV1 negotiation, static-capture scheduling,\nbounded asynchronous media writes, receipt coalescing and shared conversion output.\nConsumer changes also include immediate default Host-key dispatch and transport\nefficiency/security updates. A codec-only switch does not reverse all of them.\nKeep current authorization, lock/unlock recovery, input lifecycle/cancellation,\ngeneration/order checks and dependency security fixes. Any causal comparison of\nold artifacts is isolated from the production upgrade decision.",
           "char_count": 549
@@ -27739,12 +27739,12 @@
         "title": "LAN desktop experiment decision ledger",
         "type": "Qualification Record"
       },
-      "body_length": 8214,
+      "body_length": 8172,
       "summary": "The primary desktop qualification task owns this ledger. RustDesk parity and\nrecovery of the historical three-round performance remain unproven. Published\nv0.22.40 delivered about 51 presented FPS; v0.22.42 also delivered 50.53 FPS with\nhardware AV1. The current v0.22.47 path lowers CPU but has weaker measured tails\nand cadence. Cross-time observations establish a deficit, not its cause.\nPreserve current security, authorization, input, ordering and recovery contracts.\nDiagnostics cannot qualify a release. Restore the verified installed service\nafter a diagnostic; retain invalid attempts and explain their exclusion.",
       "sections": [
         {
-          "id": "experiment-discipline",
-          "title": "Experiment Discipline",
+          "id": "contract",
+          "title": "Contract",
           "level": 1,
           "body": "Before each experiment, read this index and the relevant\n[codec/capture ledger](remote-desktop-lan-codec-experiments.md) or\n[transport ledger](remote-desktop-lan-transport-experiments.md). Record a new ID,\nthe unresolved question, changed variables, candidate identities, controls and\nretry boundary before deployment. Update the same entry after analysis. An old\nfailed hypothesis requires new discriminating evidence before another run.\n\nThe [comparison contract](remote-desktop-rustdesk-comparison-results.md) owns\nacceptance and measurement semantics. This ledger records decisions; it does\nnot replace that contract. Performance, quality, CPU and memory are separate\naxes. Neither lower CPU nor a panel peak can substitute for complete presented\nlatency, unique FPS, gaps, source matches and delivered-detail evidence.\n\nEvidence root `B` is `/private/tmp/redeven-udesk26-rustdesk-baseline`.\nDurable C01/C02 copies and scripts are under the artifact archive\n`redeven-lan-performance-20261014/crossover-20261015`, with checksums.\nAll dates below refer to the 2026-10-11 through 2026-10-14 PDT campaign unless\nspecified. Missing exact consumer hashes or timestamps remain unknown, not\ninferred from a directory name. Original scripts and receipts under B retain\nthe diagnostic build parameters. No credentials belong in this ledger.",
           "char_count": 1334
@@ -27771,8 +27771,8 @@
           "char_count": 702
         },
         {
-          "id": "current-decision-and-remaining-evidence",
-          "title": "Current Decision And Remaining Evidence",
+          "id": "boundaries",
+          "title": "Boundaries",
           "level": 1,
           "body": "Historical performance is not restored in the current product. C01's late v40\n49.53 FPS/P95 161.60 ms/zero gaps approaches the historical range, while its\nother valid round remains weaker. Version, order/time and background effects\nare not isolated. Codec choice, Wi-Fi and outer window size are not established\ncauses. C02 does not demonstrate that removing receipt batching fixes the loss.\nThe [transport ledger](remote-desktop-lan-transport-experiments.md) owns the\npublication/credit evidence and the segment timing needed before another trace.\n\nKeep current security, authorization, input, generation/order and recovery\nfixes. Do not release an old package or select a diagnostic peak. Remaining\nqualification includes repeatable throughput/tails, exact delivered detail,\nclient memory, input completeness and paired RustDesk acceptance. C02 owns the\nnewly verified input association limitation and retry boundaries. The source\ncount audit verifies all six C01 rounds and C02 A1/B1, so that defect is not a\nreason to discard older valid results. M03 requires matched quality evidence before another rate/detail trial.\nThe archive retains cleanup and restoration receipts. The final GitHub snapshot\nfor `floegence/floe-native-apps` has zero open PRs and zero open Dependabot,\nCodeQL and secret-scanning alerts; this is a dated snapshot, not a future guarantee.",
           "char_count": 1364
@@ -27896,7 +27896,7 @@
         "title": "Historical LAN desktop crossover C01",
         "type": "Qualification Record"
       },
-      "body_length": 9222,
+      "body_length": 9209,
       "summary": "The primary qualification task owns C01. Six valid rounds are complete. The\nlatest v40 sample approaches historical throughput; the historical three-round\nadvantage is not recovered. Candidate effects remain confounded by time/order.\nThis diagnostic preserves existing security checks and does not authorize a\nproduction downgrade or establish RustDesk parity. The verified current service\nwas restored after diagnostics; all attempts and raw data are retained.\nThe [decision index](remote-desktop-lan-experiment-ledger.md) owns historical\nanchors and the requirement to consult prior experiments.",
       "sections": [
         {
@@ -27928,15 +27928,15 @@
           "char_count": 2362
         },
         {
-          "id": "repetition-contract",
-          "title": "Repetition Contract",
+          "id": "contract",
+          "title": "Contract",
           "level": 1,
           "body": "Hold physical/source dimensions, display refresh, scene version, exact content\nviewport, compositor budget, Host input mode and workload constant. Record\nnegotiated codec/rate, client decoder observation, all Runtime/bridge/SSH roots,\nroute, background work and network counters for each run. Only one encoding\nsession may run. Do not tune settings between repetitions. Keep clients in small\nordinary windows. Preserve every attempt and validity reason. Use unchanged\nmeasurement/calibration code and complete source matching. A repeat needs either\ncompletion of this planned alternating sequence or a named invalidity, never an\nunfavorable valid result. Subsequent component isolation depends on its outcome.\n\nHistorical packages are comparison fixtures only. Any selected production change\nmust retain later fixes and pass current focused contracts and published-artifact\nqualification; do not downgrade the product as a performance remedy.",
           "char_count": 942
         },
         {
-          "id": "c01-decision",
-          "title": "C01 Decision",
+          "id": "boundaries",
+          "title": "Boundaries",
           "level": 1,
           "body": "All six valid rounds count. FPS means are v40 46.15, v42 44.80 and v47 42.91;\ntwo observations per candidate and the order deviation are insufficient for a\ncausal effect estimate. The late v40 result (49.53 FPS/P95 161.60 ms/zero gaps)\napproaches the old throughput and latency range, but its first round is weaker.\nThe corresponding current second round is 41.22 FPS/P95 150.46 ms/one gap.\nThere is no basis to discard either valid result or call the current path optimal.\n\nC01 does not support a codec-only or Wi-Fi explanation. The follow-on\nquestion was whether the current 50 ms confirmed-receipt batching contributes\nto credit waits. P02 traces support the interval-only C02 A/B/A diagnostic,\nwhich retains confirmation, fences and all later fixes.\nC02 subsequently found no established recovery from removing that wait; see its\n[full decision and input association limits](remote-desktop-lan-receipt-c02.md).\nHistorical capture ROI cell widths 14.2 versus 14.167 imply only 0.23% scale\nchange. Window outer widths differ by 256, while marker origins differ by 127.5:\nmost extra width is letterboxing. Geometry alone has no causal support for the\ncross-time 24% FPS deficit. Raw-pixel detail equivalence remains unqualified.",
           "char_count": 1230
@@ -28006,7 +28006,7 @@
         "title": "Confirmed presentation receipt crossover C02",
         "type": "Qualification Record"
       },
-      "body_length": 8073,
+      "body_length": 8029,
       "summary": "The primary qualification task owns C02. Removing the current 50 ms receipt\nwait did not recover historical throughput or demonstrate a latency benefit.\nKeep the published implementation. The final restored-A trial also exposed a\nmissing source input, which makes its ordinal latency pairing unreliable after\nthe loss. Retain that adverse trial; do not retry it away or silently remap it.\nNo production code changed. Exact A Runtime bytes and the published service\nwere restored through the normal hash-authorizing manager. Historical recovery\nand RustDesk parity remain unproven. The\n[decision index](remote-desktop-lan-experiment-ledger.md) owns acceptance and\nthe requirement to consult prior experiments before another run.",
       "sections": [
         {
@@ -28017,8 +28017,8 @@
           "char_count": 1203
         },
         {
-          "id": "controls-and-validity",
-          "title": "Controls And Validity",
+          "id": "contract",
+          "title": "Contract",
           "level": 1,
           "body": "Use udesk26 physical 1920 x 1280 at 60 Hz, scene v8 allocation 1152 x 768,\n1024 x 720 ordinary Viewer, Smooth, Host input and 2048 MiB compositor budget.\nConfirm moving pixels before the unchanged bounded 180 s observer. The intended\n450 ms wait is additional to native click/tool overhead; actual event timestamps\ndefine measured intervals. Two 50-click batches have an inter-call pause.\nNo build, package transfer or second encoding session runs during sampling.\nRead the experiment entry and T02 before each phase. Idle historical Runtimes\nremain disclosed background work during all phases; no causal claim is made\nabout them. Delivered-detail parity is not newly qualified.\n\nInitial A1 was interrupted by the computer-use app-change check (7 local inputs,\n6 matches); retain it as an incomplete fixture, replaced by its complete retry.\nB preparation initially used `50 -\u003e 00`, an invalid strict-mode JavaScript\nliteral. Its blank Viewer had no observer or measured input. Preserve that\ninvalid provenance, restore A, then use the legal one-byte replacement and\nparse-check it. The valid B run uses only the corrected identity above.\nThe first A2 was interrupted after 50/50; its 44.65 FPS/P95 159.94 ms/zero gaps\nis diagnostic only. A2 retry1 completes all 100 local inputs and counts below,\nincluding the observed input failure. An adverse complete result is not a\nfixture invalidity and does not authorize another favorable-result search.",
           "char_count": 1445
@@ -28031,8 +28031,8 @@
           "char_count": 2402
         },
         {
-          "id": "unresolved-questions-and-retry-conditions",
-          "title": "Unresolved Questions And Retry Conditions",
+          "id": "boundaries",
+          "title": "Boundaries",
           "level": 1,
           "body": "Historical recovery still requires repeatable approximately 51 FPS, historical\ntail/gap behavior, complete input delivery and matched delivered detail while\nretaining current fixes. C01's two observations per candidate and order deviation\ncannot identify a regression commit. Prior stage traces narrow some stalls to\npublication/confirmed-credit return, but do not separate capture cadence,\ncarrier queues, local event scheduling and network recovery.\n\nBefore another receipt trial, obtain new timing evidence separating confirmed\npaint, receipt scheduling, carrier send/arrival and credit release in one clock\ndomain per segment. Repeating this unchanged A/B/A is not justified. Before\nusing ordinal latency on any run with missing source inputs, establish explicit\nevent association or fail its latency qualification while preserving cadence\nand input-loss evidence. An input diagnostic must distinguish local dispatch,\nremote injection and scene receipt; it must not silently shift sequence labels.\nThe separate 3M/QP160 candidate remains unresolved in M03 until matched moving\nquality and repetitions justify its rate/detail tradeoff. Do not sweep presets\nor repeat rejected transport variants without new discriminating evidence.",
           "char_count": 1234
@@ -28114,15 +28114,15 @@
         "title": "LAN transport and tracing experiments",
         "type": "Qualification Record"
       },
-      "body_length": 7116,
+      "body_length": 7493,
       "summary": "The primary qualification task owns these transport decisions. Existing traces\nshow publication-to-confirmed-receipt tails and some capture-to-submit waits;\nthey do not isolate the cause of historical decline. Preserve bounded queues,\nconfirmed presentation semantics, generation fencing and transport security.\nNeither retransmissions nor a synthetic carrier result proves the whole cause.\nRejected variants must be restored; diagnostics never qualify a release.\nThe [decision index](remote-desktop-lan-experiment-ledger.md) owns C01 and acceptance.",
       "sections": [
         {
-          "id": "conditions",
-          "title": "Conditions",
+          "id": "contract",
+          "title": "Contract",
           "level": 1,
-          "body": "Evidence root `B`, dates and common controls are defined in the decision index.\nTemporary diagnostics have their exact overlays in retained preparation scripts;\nwhere an exact consumer hash is not established, identity remains unresolved.\nDifferent-time results cannot isolate a software variable. Native command, wire\narrival, capture FPS and panel FPS are distinct from observed client presentation.",
-          "char_count": 401
+          "body": "Evidence root `B`, dates and common controls are defined in the decision index.\nTemporary diagnostics have their exact overlays in retained preparation scripts;\nwhere an exact consumer hash is not established, identity remains unresolved.\nBefore another trial, declare its changed variable and consult its owning row.\nPreserve the complete workload, source matching and original measurements.",
+          "char_count": 392
         },
         {
           "id": "decision-ledger",
@@ -28130,6 +28130,13 @@
           "level": 1,
           "body": "| ID / variable and identity | Validity / result | Decision, tradeoff and evidence needed to retry | Raw evidence under B |\n| --- | --- | --- | --- |\n| T01 / bounded asynchronous media writer, native `60e12f2`, reuse `4387b0e` | Moves pipe writes off dispatcher; bounded queue, cancellation/restart tests; later formal tails remain | Adopt dispatcher/backpressure repair. Isolate only if new trace shows writer ownership stalls; do not undo cancellation or bounds | `writer-v45-module-provenance.json`, `host_desktop_wire_test.py` upstream |\n| T02 / confirmed cumulative receipts, native `ec3dc73`, v0.22.46 | Coalesce at most 50 ms, immediate first/idle receipt, four credits. Diagnostic r4: 100/100, 45.03 FPS/P95 125.16 ms/max416.71 ms, one gap | Adopt traffic reduction with confirmed paint semantics; stable parity unresolved. Retry interval only with evidence of exhausted credit, distinguishing local batching from return-path delay | `proxy-frame-coalescing/cumulative-receipt-analysis-r4.json`; player tests |\n| T03 / four -\u003e two credits, v45 diagnostic | 100/100; 33.17 FPS/P95 258.04 ms, maximum gap234.38 ms, zero gaps \u003e250 ms | Rejected; lower buffering reduced throughput and did not fix P95. Restored four. Retry only if new evidence isolates excess in-flight latency | `v45-credit2-diagnostic/r1-redeven-motion-analysis.json` |\n| T04 / remove redundant ACK success response | P95 776 ms, one unmatched response | Rejected/restored. Retry only if protocol trace proves this response blocks a necessary path | `lan-ack-oneway-analysis.json`, `prepare/deploy-lan-ack-oneway` scripts; history ordinal55514 |\n| T05 / restrict sending cadence | 100/100, about36 FPS/P95 374 ms | Rejected/restored. Do not repeat pacing without causal enqueue evidence | `lan-ssh-pacing-analysis.json`, history ordinal54247 |\n| T06 / placement HTTP2 frame size 64 KiB, Redeven `5759db07e`; efficiency `279a5b1b0` | Adopted transport efficiency; current complete H47 still fails tails | Keep transport/security contracts. Synthetic throughput is not actual Viewer qualification. Retry only same-candidate isolated frame-size test answering new evidence | `h2-frame-probe.json`, `h2-frame64k-analysis.json`, `h2-revert16k-analysis.json`, `deploy-formal-279a5b1b0.py` |\n| T07 / larger HTTP2 receive window | 11.48 FPS/P95 1626.74 ms | Rejected. Retry only with demonstrated receive-window starvation and a bounded prediction | Existing [comparison record](remote-desktop-rustdesk-comparison-results.md), `h2-flow-diagnostic.cjs` |\n| T08 / SSH IPQoS none | Stalls remained | Rejected as established fix. Retry requires matched route/QoS evidence, not Wi-Fi conjecture | [v42 record](remote-desktop-rustdesk-v42-results.md) |\n| T09 / loopback TCP_NODELAY and SSH Nagle hypothesis | 1024-byte/60 Hz local noDelay false/true both P95 about1 ms; OpenSSH10.2 apply_qos always enables TCP_NODELAY | No reproduced Nagle defect. Do not claim missing explicit proxy setNoDelay caused decline. Retry only with packet timing proving batching in the actual socket | `nagle-probe.cjs`, `nagle-probe.json`, `openssh-10.2-packet.c` |\n| T10 / long synthetic SSH/H2 carrier | 7200 x20 KB, 58.88 FPS/P95 26.56 ms/max413.55 ms | Diagnostic capacity only; does not qualify source-to-presentation. Retry only a new carrier ownership question | `h2-long-carrier-probe.json` |",
           "char_count": 3341
+        },
+        {
+          "id": "boundaries",
+          "title": "Boundaries",
+          "level": 1,
+          "body": "Different-time results cannot isolate a software variable. Command arrival,\ncapture FPS and panel FPS are distinct from observed client presentation.\nRetain confirmed cumulative credit, generation fences, bounded queues and\nauthorization when changing scheduling. A carrier-only result cannot qualify\nRustDesk parity; a trace must isolate a previously unresolved interval.",
+          "char_count": 372
         },
         {
           "id": "stage-evidence-and-limits",
@@ -28779,8 +28786,8 @@
         "title": "Physical desktop RustDesk comparison",
         "type": "Qualification Record"
       },
-      "body_length": 12161,
-      "summary": "The primary qualification task owns this comparison contract. Complete RustDesk\nparity remains unaccepted. The [LAN experiment decision ledger](remote-desktop-lan-experiment-ledger.md)\nowns the current v0.22.47 results, historical advantages and retry conditions.\nIts three valid motion rounds average 38.86 FPS with pooled P95 247.61 ms and\nfive long gaps, versus RustDesk 32.29 FPS, 169.11 ms and one gap. The earlier\nv0.22.40 VP9 rounds below average 50.99 FPS with zero long gaps; hardware AV1\nv0.22.42 also reached 50.53 FPS. Cross-time conditions differ, so the performance\ndecline is observed but its cause remains unresolved. Do not assign it to Wi-Fi,\ncodec or measurement semantics without a controlled comparison. The v0.22.45\nHost-input pair below remains historical evidence.\nEqual application window sizes do not establish equal content viewports. Lower\nquality, omitted SSH costs or failed samples cannot satisfy acceptance; each\nsuccessor needs published-artifact validation and a fresh real-window comparison.",
+      "body_length": 11863,
+      "summary": "The primary qualification task owns acceptance. Complete RustDesk parity remains\nunaccepted. The [experiment ledger](remote-desktop-lan-experiment-ledger.md)\nrecords current v0.22.47, historical advantages and controlled retry conditions.\nCurrent motion rounds average 38.86 FPS/P95 247.61 ms with five long gaps;\nhistorical v0.22.40 averaged 50.99 FPS with zero long gaps, and hardware AV1\nv0.22.42 also reached 50.53 FPS. Cross-time differences establish a deficit,\nnot its cause. Preserve later security and functionality fixes. Acceptance\nrequires published artifacts, complete source matching and equal delivered\ndetail; lower CPU, failed samples or panel peaks cannot substitute. Earlier\nrounds remain historical evidence.",
       "sections": [
         {
           "id": "contract",
@@ -28797,10 +28804,10 @@
           "char_count": 314
         }
       ],
-      "snippet": "The primary qualification task owns this comparison contract. Complete RustDesk parity remains unaccepted. The [LAN experiment decision ledger](remote-desktop-lan-experiment-ledger.md) owns the current v0.22.47 results, historical advantage",
+      "snippet": "The primary qualification task owns acceptance. Complete RustDesk parity remains unaccepted. The [experiment ledger](remote-desktop-lan-experiment-ledger.md) records current v0.22.47, historical advantages and controlled retry conditions.",
       "links": [
         {
-          "label": "LAN experiment decision ledger",
+          "label": "experiment ledger",
           "path": "operations/remote-desktop-lan-experiment-ledger.md",
           "concept_id": "operations.remote-desktop-lan-experiment-ledger",
           "title": "LAN desktop experiment decision ledger"
@@ -41148,5 +41155,5 @@
       ]
     }
   ],
-  "source_sha256": "973bc207965dc3405f275b08d710b9791d1275b1b76813cd5a9dce21f7472857"
+  "source_sha256": "9b6fcddb2ef36299e1894972d64756bd04f1eb4cfd044eca093f3103f4989f64"
 }

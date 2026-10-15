@@ -16,7 +16,7 @@ latency, quality and complete resource qualification passes. Restore released
 settings after rejected experiments. The [decision index](remote-desktop-lan-experiment-ledger.md)
 owns historical identities and the next controlled comparison.
 
-# Conditions And Interpretation
+# Contract
 
 Evidence root `B`, dates, common physical scene and acceptance are defined in the
 [decision index](remote-desktop-lan-experiment-ledger.md). Unless a row supplies
@@ -42,7 +42,7 @@ No short favorable sample replaces three valid pairs or equal delivered detail.
 | M10 / direct converted output into shared completion buffer, `e400c37`, artifact refresh `99fa004`, v0.22.47 | Removes full-frame copy; complete H47 three-round comparison still fails tails and memory | Adopt copy removal, do not equate micro improvement with parity. Retry effect only by isolated buffer variable and identical artifact stack | `v47-paired`, published native diff and worker tests |
 | M11 / compositor GPU budget 2048 -> 256 MiB, v42 diagnostic | 40/40 only; 48.39 FPS, P95 271.62 ms, four gaps; footprint 1090.84 MiB, tile-memory warnings | Rejected, restored 2048 MiB. No memory remedy shown. Retry needs allocation-owner evidence and full workload without warnings | `published-v42-paired/r2-redeven-motion-retry7`; [v42 record](remote-desktop-rustdesk-v42-results.md) |
 
-# Preserved Functional Boundaries
+# Boundaries
 
 v40-to-v47 native changes add positive AV1 negotiation, static-capture scheduling,
 bounded asynchronous media writes, receipt coalescing and shared conversion output.

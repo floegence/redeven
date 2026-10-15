@@ -40,7 +40,7 @@ media bytes, quality, transport, input and security fixes stay unchanged. The
 privileged manager explicitly authorizes each Runtime hash; no integrity check
 is bypassed. A/B/A uses the same unique-ID client wrapper and isolated profile.
 
-# Controls And Validity
+# Contract
 
 Use udesk26 physical 1920 x 1280 at 60 Hz, scene v8 allocation 1152 x 768,
 1024 x 720 ordinary Viewer, Smooth, Host input and 2048 MiB compositor budget.
@@ -103,7 +103,7 @@ Exited-process CPU is a lower bound and RSS includes shared pages. These samples
 do not qualify memory, detail or network parity. Exact process roots and route
 counters remain in the raw resource receipt, without subtraction of idle work.
 
-# Unresolved Questions And Retry Conditions
+# Boundaries
 
 Historical recovery still requires repeatable approximately 51 FPS, historical
 tail/gap behavior, complete input delivery and matched delivered detail while
