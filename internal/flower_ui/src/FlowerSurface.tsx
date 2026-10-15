@@ -7075,27 +7075,32 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
   };
 
-  const messageCopyButton = (message: FlowerChatMessage, text: string, placement: 'assistant' | 'user'): JSX.Element | null => {
-    const value = trimString(text);
-    if (!value) return null;
-    const copied = () => copiedMessageAction() === messageCopyActionKey(message);
+  const MessageCopyButton: Component<{
+    message: FlowerChatMessage;
+    text: string;
+    placement: 'assistant' | 'user';
+  }> = (buttonProps) => {
+    const value = () => trimString(buttonProps.text);
+    const copied = () => copiedMessageAction() === messageCopyActionKey(buttonProps.message);
     const label = () => copied() ? copy().chat.messageCopied : copy().chat.copyMessage;
     return (
-      <button
-        type="button"
-        class={cn('flower-message-copy-button', `flower-message-copy-button-${placement}`)}
-        data-copied={copied() ? 'true' : 'false'}
-        aria-label={label()}
-        title={label()}
-        onClick={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          void copyMessageText(message, value);
-        }}
-      >
-        <Copy class="flower-message-copy-icon flower-message-copy-icon-idle h-3.5 w-3.5" />
-        <Check class="flower-message-copy-icon flower-message-copy-icon-copied h-3.5 w-3.5" />
-      </button>
+      <Show when={Boolean(value())}>
+        <button
+          type="button"
+          class={cn('flower-message-copy-button', `flower-message-copy-button-${buttonProps.placement}`)}
+          data-copied={copied() ? 'true' : 'false'}
+          aria-label={label()}
+          title={label()}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            void copyMessageText(buttonProps.message, value());
+          }}
+        >
+          <Copy class="flower-message-copy-icon flower-message-copy-icon-idle h-3.5 w-3.5" />
+          <Check class="flower-message-copy-icon flower-message-copy-icon-copied h-3.5 w-3.5" />
+        </button>
+      </Show>
     );
   };
 
@@ -10066,7 +10071,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     block: Accessor<Extract<FlowerRenderableMessageBlock, { type: 'content' }>>,
     streaming: Accessor<boolean>,
     failed: Accessor<boolean>,
-    copyAction: Accessor<JSX.Element | null>,
+    showCopyAction: Accessor<boolean>,
+    copyText: Accessor<string>,
     thread: Accessor<FlowerThreadSnapshot | null | undefined>,
   ) => {
     const markdown = createMemo(() => block().block_type === 'markdown');
@@ -10111,8 +10117,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           <div class="flower-message-assistant-copy-body">
             <ContentBody />
           </div>
-          <Show when={copyAction()}>
-            {(action) => action()}
+          <Show when={showCopyAction()}>
+            <MessageCopyButton message={message()} text={copyText()} placement="assistant" />
           </Show>
         </div>
       </Show>
@@ -10328,15 +10334,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             )}
           >
             {(contentBlock) => {
-                const copyAction = () => {
-                  const value = contentBlock();
-                  const currentMessage = message();
-                  return currentMessage.role === 'assistant' && value.key === assistantCopyBlockKey()
-                    ? messageCopyButton(currentMessage, copyText(), 'assistant')
-                    : null;
-                };
+                const showCopyAction = () => message().role === 'assistant'
+                  && contentBlock().key === assistantCopyBlockKey();
                 const streaming = () => streamingBlockKey() === contentBlock().key;
-                return messageContentBubble(message, contentBlock, streaming, failed, copyAction, thread);
+                return messageContentBubble(message, contentBlock, streaming, failed, showCopyAction, copyText, thread);
               }}
           </Show>
         )}
@@ -10504,7 +10505,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     <Show when={messageTime()}>
                       {(value) => <time class="flower-message-time" datetime={new Date(message().created_at_ms).toISOString()}>{value()}</time>}
                     </Show>
-                    {messageCopyButton(message(), copyText(), 'user')}
+                    <MessageCopyButton message={message()} text={copyText()} placement="user" />
                   </div>
                 </Show>
               </div>
@@ -10541,7 +10542,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   <Show when={messageTime()}>
                     {(value) => <time class="flower-message-time" datetime={new Date(message().created_at_ms).toISOString()}>{value()}</time>}
                   </Show>
-                  {messageCopyButton(message(), copyText(), 'user')}
+                  <MessageCopyButton message={message()} text={copyText()} placement="user" />
                 </div>
               </Show>
             </div>
