@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { projectFlowerTurnProcess, flowerDurationParts } from './flowerTurnPresentation';
 import type { FlowerTimelineEntry } from './flowerTimelineProjection';
-import type { FlowerRuntimeTurn } from './contracts/flowerSurfaceContracts';
+import type { FlowerActivityItem, FlowerRuntimeTurn } from './contracts/flowerSurfaceContracts';
 
 type MessageEntry = Extract<FlowerTimelineEntry, { type: 'message' }>;
 const entry = (id: string, role: 'user' | 'assistant' = 'assistant'): MessageEntry => ({
@@ -19,6 +19,20 @@ const thinking: MessageEntry = {
 };
 
 describe('canonical turn process presentation', () => {
+  it.each([
+    ['computer.screenshot', `computer://browser/${'a'.repeat(64)}`, 'manual'],
+    ['computer.screenshot', 'computer://browser/invalid', 'automatic'],
+    ['computer.screenshot', undefined, 'automatic'],
+    ['computer.observe', `computer://browser/${'a'.repeat(64)}`, 'automatic'],
+  ] as const)('keeps saved screenshot turns visible for %s with %s', (tool_name, resource_ref, disclosure) => {
+    const item: FlowerActivityItem = { item_id: 'capture', tool_id: 'capture', tool_name, kind: 'tool', status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false,
+      target_refs: resource_ref ? [{ kind: 'computer_frame', label: 'Saved screenshot', resource_ref }] : [],
+    };
+    const screenshot: MessageEntry = { ...entry('capture'), blocks: [{ type: 'activity', key: 'capture:0', block_index: 0,
+      block: { type: 'activity-timeline', schema_version: 1, items: [item], summary: { status: 'success', severity: 'quiet', needs_attention: false, total_items: 1, counts: { success: 1 } } },
+    }] };
+    expect(projectFlowerTurnProcess([screenshot, ...entries], [turn()]).get('turn')?.disclosure).toBe(disclosure);
+  });
   it('defaults successful legacy process to collapsed without hiding uncertain assistant content', () => {
     const result = projectFlowerTurnProcess([entries[0], thinking, ...entries.slice(1)], [turn({ final_item_ids: [], final_boundary_complete: false })]).get('turn');
     expect(result?.disclosure).toBe('automatic');

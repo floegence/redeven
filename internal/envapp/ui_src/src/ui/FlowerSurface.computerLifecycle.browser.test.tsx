@@ -508,12 +508,14 @@ it('retains keyboard focus when a confirmed empty observation no longer has deta
 
 it('opens saved screenshot results, retries only that image and retains manual collapse across updates', async () => {
   const seed = current('completed');
-  const screenshot = { ...seed, items: seed.items!.map(item => ({ ...item, activity: { ...item.activity!, tool_name: 'computer.screenshot' } })) };
+  const screenshot = { ...seed, turns: [{ turn_id: 'computer-turn', run_id: 'computer-run', started_at: '2026-10-15T12:00:00Z', ended_at: '2026-10-15T12:00:01Z', outcome: 'completed' as const, elapsed_ms: 1000, waiting_ms: 0, work_duration_ms: 1000, final_item_ids: [], final_boundary_complete: false }], items: seed.items!.map(item => ({ ...item, activity: { ...item.activity!, tool_name: 'computer.screenshot' } })) };
   const f = fixture(screenshot);
   f.loadComputerFrame.mockRejectedValueOnce(new Error('Missing saved image'));
   const row = () => f.surface.querySelector<HTMLElement>('[data-flower-activity-item-id="observed"]')!;
   await waitFor(() => Boolean(row()?.querySelector('.chat-media-retry')));
   expect(row().querySelector('[data-flower-disclosure-trigger]')?.getAttribute('aria-expanded')).toBe('true');
+  expect(row().getBoundingClientRect().height).toBeGreaterThan(0);
+  expect(f.surface.querySelector('.flower-turn-summary-button')?.getAttribute('aria-expanded')).toBe('true');
   expect(row().textContent).toContain('Screenshot could not be loaded');
   expect(row().textContent).not.toContain('View last screenshot');
   const first = f.loadComputerFrame.mock.calls[0][0];
@@ -523,6 +525,13 @@ it('opens saved screenshot results, retries only that image and retains manual c
   row().querySelector<HTMLButtonElement>('[data-flower-disclosure-trigger]')!.click();
   await waitFor(() => !row().querySelector('.chat-media-image'));
   f.update({...screenshot,view_version:2});
+  expect(row().querySelector('[data-flower-disclosure-trigger]')?.getAttribute('aria-expanded')).toBe('false');
+  f.surface.querySelector<HTMLButtonElement>('.flower-turn-summary-button')!.click();
+  await waitFor(() => f.surface.querySelector('.flower-turn-summary-button')?.getAttribute('aria-expanded') === 'false');
+  f.update({...screenshot,view_version:3});
+  expect(f.surface.querySelector('.flower-turn-summary-button')?.getAttribute('aria-expanded')).toBe('false');
+  f.surface.querySelector<HTMLButtonElement>('.flower-turn-summary-button')!.click();
+  await waitFor(() => f.surface.querySelector('.flower-turn-summary-button')?.getAttribute('aria-expanded') === 'true');
   expect(row().querySelector('[data-flower-disclosure-trigger]')?.getAttribute('aria-expanded')).toBe('false');
   expect(f.setComputerViewer).not.toHaveBeenCalled();
   expect(f.loadComputerFrame).toHaveBeenCalledTimes(2);

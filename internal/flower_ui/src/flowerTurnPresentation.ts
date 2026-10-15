@@ -1,5 +1,6 @@
 import type { FlowerRuntimeTurn } from './contracts/flowerSurfaceContracts';
 import type { FlowerTimelineEntry } from './flowerTimelineProjection';
+import { isSavedComputerScreenshot } from './flowerActivityPresentation';
 
 export type FlowerTurnDisclosurePolicy = 'none' | 'manual' | 'automatic';
 
@@ -22,9 +23,11 @@ export function projectFlowerTurnProcess(entries: readonly FlowerTimelineEntry[]
     })).map((turn) => turn.turn_id));
   const groups = new Map<string, string[]>();
   const terminalKeys = new Map<string, string>();
+  const screenshotTurns = new Set<string>();
   for (const entry of entries) {
     if (entry.type !== 'message' || !entry.message.turn_id) continue;
     const id = entry.message.turn_id;
+    if (entry.blocks.some((block) => block.type === 'activity' && block.block.items.some(isSavedComputerScreenshot))) screenshotTurns.add(id);
     terminalKeys.set(id, entry.key);
     if (!groups.has(id)) groups.set(id, []);
     const final = facts.get(id)?.final_item_ids.includes(entry.message.id);
@@ -39,7 +42,7 @@ export function projectFlowerTurnProcess(entries: readonly FlowerTimelineEntry[]
     const turn = facts.get(turnID);
     const pending = pendingTurnIDs.includes(turnID);
     const disclosable = Boolean(turn?.outcome && turn.ended_at && !turn.kind && processKeys.length && !pending);
-    const disclosure: FlowerTurnDisclosurePolicy = !disclosable ? 'none' : turn?.outcome === 'completed' ? 'automatic' : 'manual';
+    const disclosure: FlowerTurnDisclosurePolicy = !disclosable ? 'none' : turn?.outcome === 'completed' && !screenshotTurns.has(turnID) ? 'automatic' : 'manual';
     return [turnID, { turnID, turn, processKeys, summaryKey: processKeys[0], terminalKey: terminalKeys.get(turnID), disclosure }];
   }));
 }

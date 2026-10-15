@@ -8,7 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
-import { createComputerBrowserHost } from './computerBrowserHost.mjs';
+import { createComputerBrowserSource } from './computerBrowserSource.mjs';
 
 test('managed browser preserves sandbox isolation and initializes popups at the controlled window size', { timeout: 20000, skip: process.platform === 'win32' }, async () => {
   const installation = process.env.REDEVEN_BROWSER_TEST_INSTALLATION;
@@ -21,7 +21,7 @@ test('managed browser preserves sandbox isolation and initializes popups at the 
   const helper = spawn(process.execPath, [fileURLToPath(new URL('./redevenManagedBrowser.mjs', import.meta.url)), profile, path.join(installation, pkg.executable)], { stdio: ['pipe', 'pipe', 'pipe'] });
   const exited = once(helper, 'exit');
   const lines = createInterface({ input: helper.stdout });
-  let browser, host;
+  let browser, owner;
   const deadline = setTimeout(() => helper.kill('SIGTERM'), 15000);
   try {
     const [line] = await once(lines, 'line'); const ready = JSON.parse(line);
@@ -40,20 +40,9 @@ test('managed browser preserves sandbox isolation and initializes popups at the 
     const context = browser.contexts()[0];
     const page = context.pages().find(page => page.url() === 'about:blank');
     assert(page);
-    const probe = await context.newCDPSession(page);
-    const { targetInfo } = await probe.send('Target.getTargetInfo');
-    await probe.detach();
-    host = await createComputerBrowserHost({ resourceURL: id => `?resource=${id}` });
-    await host.admit({ id: 'owned', endpoint: ready.endpoint, tab: targetInfo.targetId, context: targetInfo.browserContextId || 'default', managed: true });
-    const messages = [];
-    let snapshotReady;
-    const snapshot = new Promise(resolve => { snapshotReady = resolve; });
-    await host.views.open('view', ['owned'], message => { messages.push(message); if (message.type === 'snapshot') snapshotReady(message); }, { initialTab: 'owned', media: false });
-    const { epoch } = await snapshot;
-    assert.equal(await host.views.acquire('view', 'owned', 'user-lease'), true);
-    await host.views.receive('view', 'user-lease', { type: 'command', id: 1, tab: 'owned', epoch, action: { kind: 'viewport', width: 1536, height: 876 } });
+    owner = await createComputerBrowserSource(page, 'owned', { windowViewport: true });
+    await owner.source.setViewportSize({ width: 1536, height: 876 });
     await page.waitForFunction(() => globalThis.innerWidth === 1536 && globalThis.innerHeight === 876);
-    assert.equal(messages.findLast(message => message.type === 'ack' && message.id === 1)?.ok, true);
     await context.route('https://managed-layout.test/**', route => route.fulfill({ contentType: 'text/html', body: '<script>globalThis.initialViewport=[innerWidth,innerHeight]</script><title>Initialized popup</title>' }));
     const opened = context.waitForEvent('page');
     await page.evaluate(() => globalThis.open('https://managed-layout.test/popup'));
@@ -61,7 +50,7 @@ test('managed browser preserves sandbox isolation and initializes popups at the 
     await popup.waitForLoadState();
     assert.deepEqual(await popup.evaluate(() => globalThis.initialViewport), [1536, 876], 'The managed launcher and source host must agree on geometry before popup scripts run');
   } finally {
-    await host?.close(); await browser?.close(); helper.stdin.end(); await exited; clearTimeout(deadline); lines.close();
+    await owner?.dispose(); await browser?.close(); helper.stdin.end(); await exited; clearTimeout(deadline); lines.close();
     await rm(profile, { recursive: true, force: true });
   }
 });

@@ -174,6 +174,7 @@ import {
   safeWebFetchURL,
   type FlowerActivityDetailBlock,
   computerActivityResource,
+  isSavedComputerScreenshot,
   type FlowerActivityDiffFile,
   type FlowerActivityFileAction,
   type FlowerActivityPresentation,
@@ -9934,7 +9935,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     });
     const disclosureControl = createFlowerActivityDisclosureController({
       manualOpen: () => openActivityRuns()[disclosureKey()],
-      defaultOpen: () => item().tool_name === 'computer.screenshot' && Boolean(computerActivityResource(item()).frame),
+      defaultOpen: () => isSavedComputerScreenshot(item()),
       onManualOpenChange: (open) => {
         const key = disclosureKey();
         setOpenActivityRuns((current) => ({ ...current, [key]: open }));
