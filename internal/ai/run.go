@@ -1560,16 +1560,21 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 	if isComputerUseTool(toolName) && activityUpdater != nil {
 		ctx = context.WithValue(ctx, computerProgressKey{}, func(target TargetDescriptor, mode, reason string) {
 			activity := toolStartActivityPresentation(toolName, args)
+			var metadata map[string]any
+			activity.TargetRefs = append(activity.TargetRefs, fltools.ActivityTargetRef{Kind: "computer_target", ResourceRef: target.ID, Label: target.DisplayName})
+			if target.Kind == "browser.connected" || target.Kind == "browser.managed" {
+				activity.Chips = append(activity.Chips, fltools.ActivityChip{Kind: "browser_source", Label: "Browser", Value: target.Kind})
+			}
 			if mode == "foreground" {
 				if reason == "application_may_activate" {
 					activity.Description = "The selected application may become active during this action"
 				} else {
 					activity.Description = "Using the selected application window for native input"
 				}
-				activity.TargetRefs = append(activity.TargetRefs, fltools.ActivityTargetRef{Kind: "computer_target", ResourceRef: target.ID, Label: target.DisplayName})
 				activity.Chips = append(activity.Chips, fltools.ActivityChip{Kind: "execution_mode", Label: "mode", Value: mode})
-				activityUpdater(activity, map[string]any{"execution_mode": mode})
+				metadata = map[string]any{"execution_mode": mode}
 			}
+			activityUpdater(activity, metadata)
 		})
 	}
 
@@ -3103,6 +3108,9 @@ func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string
 	}
 	if !targetAllowedByPolicy(policy, targetID) {
 		return nil, &targetToolPolicyError{code: "target_not_allowed", tool: toolName, target: targetID}
+	}
+	if progress, ok := ctx.Value(computerProgressKey{}).(func(TargetDescriptor, string, string)); ok && isComputerUseTool(toolName) {
+		progress(target, "", "")
 	}
 	if strings.HasPrefix(toolName, "browser.") && target.Kind != "browser.managed" && target.Kind != "browser.connected" {
 		return nil, computerTargetFailure(TargetToolCall{ToolName: toolName, TargetID: target.ID}, "TARGET_CAPABILITY_UNAVAILABLE")

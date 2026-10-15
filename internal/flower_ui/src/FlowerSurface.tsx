@@ -9187,7 +9187,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   );
 
   const computerBlock = (block: Accessor<Extract<FlowerActivityDetailBlock, { kind: 'computer' }>>) => (
-    <div class="flower-activity-computer-block" data-computer-target={block().target}>
+    <div class="flower-activity-computer-block" data-computer-target={block().target} hidden={!block().frame}>
       <Show when={block().frame}>
         <button type="button" class="flower-activity-detail-expand" aria-expanded={computerStageOpen()} onClick={(event) => {
           const frame = block().frame;
@@ -9974,11 +9974,19 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       },
     });
     const subagentsDetail = createMemo(() => subagentsDetailForPresentation(presentation()));
-    const hasDetails = createMemo(() => presentation().detailBlocks.length > 0);
-    const expandable = createMemo(() => item().renderer === 'web_search' && !item().tool_name?.startsWith('okf.') ? hasDetails() : item().kind === 'tool' || hasDetails());
+    const hasDetails = createMemo(() => presentation().detailBlocks.some(block => block.kind !== 'computer' || Boolean(block.frame)));
+    const expandable = createMemo(() => (presentation().suppressEmptyDisclosure
+      || item().renderer === 'web_search' && !item().tool_name?.startsWith('okf.')) ? hasDetails() : item().kind === 'tool' || hasDetails());
     const open = () => expandable() && disclosureControl.open();
     let toggleButtonRef: HTMLButtonElement | undefined;
     let detailPanelRef: HTMLDivElement | undefined;
+    const staticActivityRef = (node: HTMLDivElement) => {
+      const focused = document.activeElement;
+      if (focused !== toggleButtonRef && !detailPanelRef?.contains(focused)) return;
+      queueMicrotask(() => {
+        if (node.isConnected && (document.activeElement === focused || document.activeElement === document.body)) node.focus({ preventScroll: true });
+      });
+    };
     onCleanup(() => { if (toggleButtonRef) viewportScope.releaseDisclosure(toggleButtonRef); });
     const toggleDisclosure = () => {
       if (toggleButtonRef) viewportScope.activateDisclosure(toggleButtonRef);
@@ -10046,7 +10054,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         <div class="flower-activity-inline-line">
           <Show
             when={expandable()}
-            fallback={<div class="flower-activity-inline-button flower-activity-inline-button-static">{activityRowContent()}</div>}
+            fallback={<div ref={staticActivityRef} tabindex={-1} class="flower-activity-inline-button flower-activity-inline-button-static">{activityRowContent()}</div>}
           >
             <button
               ref={toggleButtonRef}

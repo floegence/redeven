@@ -27,7 +27,7 @@ func TestComputerBrowserInstallationUsesCanonicalInputAndValidatesContinuation(t
 			return
 		}
 		if providerCalls.Add(1) == 1 {
-			item := map[string]any{"type": "function_call", "id": "fc_observe", "call_id": "observe-login", "name": "computer_screenshot", "arguments": `{"target":"browser.managed"}`}
+			item := map[string]any{"type": "function_call", "id": "fc_observe", "call_id": "observe-login", "name": "computer_screenshot", "arguments": `{"description":"Inspect the managed browser screenshot","target":"browser.managed"}`}
 			writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.output_item.added", "output_index": 0, "item": item})
 			writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.output_item.done", "output_index": 0, "item": item})
 			writeAskUserIntegrationCompletedResponse(w, flusher, "requires-input")

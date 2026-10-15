@@ -208,6 +208,7 @@ export type FlowerActivityDetailBlock =
     kind: 'structured_rows';
     section?: 'inputs' | 'results';
     preview?: boolean;
+    previewMeta?: boolean;
     notice?: string;
     rows: readonly FlowerActivityStructuredRow[];
   }>
@@ -274,6 +275,7 @@ export type FlowerActivityPresentation = Readonly<{
   primaryAction?: FlowerActivityFileAction;
   detailLines: readonly FlowerActivityDetailLine[];
   detailBlocks: readonly FlowerActivityDetailBlock[];
+  suppressEmptyDisclosure?: boolean;
 }>;
 
 type FlowerActivityPresentationCopy = Readonly<{
@@ -1484,7 +1486,9 @@ function structuredTitle(item: FlowerActivityItem, words: FlowerToolActivityCopy
       && label !== payloadValue(item.payload, 'operation') && !isApprovalLifecycleText(label) ? label : '';
     const input = structuredRowsFromPayload(item.payload, 'inputs');
     const object = input.find(row => row.title === 'url' || row.title === 'key')?.content;
-    return { kind: 'plain', text: intent || payloadValue(item.payload, 'action_summary') || [words[action ?? 'called'], object].filter(Boolean).join(' ') };
+    const browser = tool.startsWith('browser.') || item.renderer === 'browser'
+      || item.chips?.some(chip => chip.kind === 'browser_source' && ['browser.connected', 'browser.managed'].includes(chip.value ?? ''));
+    return { kind: 'plain', text: `${browser ? 'BrowserUse' : 'ComputerUse'}: ${intent || [words[action ?? 'called'], object].filter(Boolean).join(' ')}` };
   }
   if (tool.startsWith('tessiven.') && action) {
     const canvasID = payloadValue(item.payload, 'canvas_id');
@@ -1502,20 +1506,29 @@ function structuredTitle(item: FlowerActivityItem, words: FlowerToolActivityCopy
 function presentationForStructured(item: FlowerActivityItem, copy?: FlowerActivityPresentationCopy): FlowerActivityPresentation {
   const words = copy?.tools ?? toolActivityEnUS;
   const title = structuredTitle(item, words);
+  const computer = trimString(item.tool_name).startsWith('computer.') || trimString(item.tool_name).startsWith('browser.');
+  const outcome = item.chips?.find(chip => chip.kind === 'computer_result')?.value;
+  const rowMeta = (meta: string) => meta.split(' ').map(token => ({
+    default: words.computerDefault, new_tab: words.computerNewTab,
+    button: words.computerButton, link: words.computerLink, textbox: words.computerField, searchbox: words.computerField, combobox: words.computerField,
+    checkbox: words.computerControl, radio: words.computerControl, switch: words.computerControl, tab: words.computerControl, option: words.computerControl,
+    page: '', page_changes: words.computerPageChanges, completed_actions: words.computerCompletedActions,
+    unavailable: words.computerUnavailable,
+  } as Record<string, string>)[token] ?? '').filter(Boolean).join(' · ');
   const errorBlock = errorDetailBlockForItem(item, item.payload);
   const rows = structuredRowsFromPayload(item.payload).filter(row => !errorBlock || row.title || row.meta || !repeatsItemError(item, row.content)).map(row =>
-    item.tool_name === 'use_skill' && row.format === 'markdown' ? { ...row, title: '', meta: '' } : row);
+    item.tool_name === 'use_skill' && row.format === 'markdown' ? { ...row, title: '', meta: '' } : computer ? { ...row, meta: rowMeta(row.meta) } : row);
   const inputs = structuredRowsFromPayload(item.payload, 'inputs').map(row => ({
     ...row, title: TOOL_INPUT_LABELS[row.title] ? words[TOOL_INPUT_LABELS[row.title]] : row.title,
   }));
   const active = item.status === 'running' || item.status === 'pending' || item.status === 'waiting';
-  const detailLines = rows.length > 0 ? [] : meaningfulStructuredSummary(item, title).map(line => ({ ...line, label: words.summary }));
+  const detailLines = computer || rows.length > 0 ? [] : meaningfulStructuredSummary(item, title).map(line => ({ ...line, label: words.summary }));
   const detailBlocks: FlowerActivityDetailBlock[] = [];
-  const computer = trimString(item.tool_name).startsWith('computer.') || trimString(item.tool_name).startsWith('browser.');
   if (inputs.length > 0) detailBlocks.push({ kind: 'structured_rows', section: 'inputs', rows: inputs });
   else if (item.tool_name === 'computer.exec' && !active) detailBlocks.push({ kind: 'structured_rows', section: 'inputs', rows: [], notice: words.inputUnavailable });
   if (rows.length > 0) detailBlocks.push({ kind: 'structured_rows', section: 'results', rows, ...(!errorBlock && (item.status === 'error' || item.status === 'canceled') ? { notice: words.partialOutput } : {}) });
-  else if (!active && (!errorBlock || item.chips?.some(chip => chip.kind === 'partial_execution'))) detailBlocks.push({ kind: 'structured_rows', section: 'results', rows: [], notice: item.chips?.some(chip => chip.kind === 'partial_execution') ? words.partialOutput : item.target_refs?.some(ref => ref.kind === 'computer_frame' || ref.kind === 'tool_image') ? undefined : item.payload?.rows_provided === true ? words.noOutput : words.detailsUnavailable });
+  else if (item.tool_name === 'computer.exec' && active) detailBlocks.push({ kind: 'structured_rows', section: 'results', rows: [], notice: words.waitingResult });
+  else if (!active && (!computer || item.payload?.rows_provided !== true) && (!errorBlock || item.chips?.some(chip => chip.kind === 'partial_execution'))) detailBlocks.push({ kind: 'structured_rows', section: 'results', rows: [], notice: item.chips?.some(chip => chip.kind === 'partial_execution') ? words.partialOutput : item.target_refs?.some(ref => ref.kind === 'computer_frame' || ref.kind === 'tool_image') ? undefined : item.payload?.rows_provided === true ? words.noOutput : words.detailsUnavailable });
   if (detailLines.length > 0) detailBlocks.push({ kind: 'structured', lines: detailLines });
   const image = item.target_refs?.find(ref => ref.kind === 'tool_image' && /^image:\/\/[a-f0-9]{64}\/(png|jpeg|webp)$/u.test(ref.resource_ref ?? ''));
   if (image?.resource_ref) detailBlocks.push({ kind: 'image', resource_ref: image.resource_ref, name: image.label || trimString(item.label) });
@@ -1527,7 +1540,9 @@ function presentationForStructured(item: FlowerActivityItem, copy?: FlowerActivi
     const frame = frameTarget?.resource_ref;
     const targetID = /^computer:\/\/([^/]+)\/[a-f0-9]{64}$/u.exec(frame ?? '')?.[1] || controlTarget?.resource_ref || targetRef?.resource_ref;
     const target = targetRef?.label || controlTarget?.label || frameTarget?.label || '';
-    meta = [target !== titleText(title) ? target : '', meta].filter(Boolean).join(' · ');
+    meta = !active && item.status === 'success'
+      ? outcome === 'empty_page' ? words.computerBlankPage : outcome === 'no_targets' ? words.computerNoTargets : copy?.statuses?.success ?? DEFAULT_FLOWER_SURFACE_COPY.chat.toolStatuses.success
+      : item.chips?.some(chip => chip.kind === 'execution_mode' && chip.value === 'foreground') ? trimString(item.description) : '';
     if (targetID || frame) detailBlocks.push({ kind: 'computer', ...(targetID ? { target_id: targetID } : {}), target, ...(frame ? { frame } : {}) });
     if (item.tool_name === 'computer.screenshot' && !active && !frame && !errorBlock) {
       const index = detailBlocks.findIndex(block => block.kind === 'structured_rows' && block.section === 'results');
@@ -1548,7 +1563,7 @@ function presentationForStructured(item: FlowerActivityItem, copy?: FlowerActivi
         : block.rows.filter(row => row.title !== 'total' || block.rows.length === 1);
       if (block.section === 'inputs' && !visibleRows.length) detailBlocks.splice(index, 1);
       else if (block.section === 'results' && !visibleRows.length && (errorBlock || detailLines.length)) detailBlocks.splice(index, 1);
-      else detailBlocks[index] = { ...block, rows: visibleRows, preview: true,
+      else detailBlocks[index] = { ...block, rows: visibleRows, preview: true, ...(computer ? { previewMeta: true } : {}),
         ...(!visibleRows.length ? { notice: active ? words.waitingResult : words.previewUnavailable } : {}),
       };
     }
@@ -1557,7 +1572,13 @@ function presentationForStructured(item: FlowerActivityItem, copy?: FlowerActivi
     }
   }
   if (errorBlock) detailBlocks.push(errorBlock);
-  return { label: titleText(title), title, meta, detailLines, detailBlocks };
+  if (computer) {
+    // The returned page is the useful detail. Keep the literal script and its
+    // existing copy/expand behavior available after the result.
+    detailBlocks.sort((a, b) => Number(a.kind === 'structured_rows' && a.section === 'inputs') - Number(b.kind === 'structured_rows' && b.section === 'inputs'));
+    if (errorBlock) { const index = detailBlocks.indexOf(errorBlock); detailBlocks.splice(index, 1); detailBlocks.push(errorBlock); }
+  }
+  return { label: titleText(title), title, meta, detailLines, detailBlocks, ...(computer ? { suppressEmptyDisclosure: item.payload?.rows_provided === true } : {}) };
 }
 
 const FLOWER_ACTIVITY_RENDERERS: Readonly<Record<FlowerActivityRenderer, FlowerActivityRendererHandler>> = {

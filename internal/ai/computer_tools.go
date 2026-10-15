@@ -3,6 +3,7 @@ package ai
 import (
 	"encoding/json"
 	"regexp"
+	"slices"
 	"strings"
 
 	aitools "github.com/floegence/redeven/internal/ai/tools"
@@ -18,6 +19,10 @@ func isComputerUseToolName(name string) bool {
 func builtInComputerToolDefinitions() []ToolDef {
 	target := map[string]any{"target": map[string]any{"type": "string", "minLength": 1, "description": "Omit target or use current for the current page or application window. Discover available pages and windows with computer.targets and choose one with computer.select_target. Browser actions require a browser page, not a native browser application window. Never invent target identities."}}
 	schema := func(properties map[string]any, required []string) json.RawMessage {
+		properties["description"] = map[string]any{"type": "string", "minLength": 1, "maxLength": 500, "description": "A concise natural-language description of the action and its real target, shown to the user. Describe the intent, not an expected success. Do not include secrets."}
+		if !slices.Contains(required, "description") {
+			required = append(append([]string{}, required...), "description")
+		}
 		return toolSchemaRaw(map[string]any{"type": "object", "properties": properties, "required": required, "additionalProperties": false})
 	}
 	withTarget := func(properties map[string]any, required ...string) (json.RawMessage, []string) {

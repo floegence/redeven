@@ -1297,6 +1297,21 @@ func floretActivityForToolResult(r *run, result ToolResult) (*fltools.ActivityPr
 		if kind := anyToString(rawPayload["target_kind"]); kind == "browser.connected" || kind == "browser.managed" {
 			activity.Chips = append(activity.Chips, fltools.ActivityChip{Kind: "browser_source", Label: "Browser", Value: kind})
 		}
+		if status == toolResultStatusSuccess {
+			if toolName == "computer.targets" {
+				value := "targets"
+				if len(toAnySlice(rawPayload["candidates"])) == 0 {
+					value = "no_targets"
+				}
+				activity.Chips = append(activity.Chips, fltools.ActivityChip{Kind: "computer_result", Label: "result", Value: value})
+			}
+			if rawPayload["selected"] == true {
+				activity.Chips = append(activity.Chips, fltools.ActivityChip{Kind: "computer_result", Label: "result", Value: "selected"})
+			}
+			if computerActivityBlankPage(rawPayload) {
+				activity.Chips = append(activity.Chips, fltools.ActivityChip{Kind: "computer_result", Label: "result", Value: "empty_page"})
+			}
+		}
 		if mode := anyToString(rawPayload["execution_mode"]); mode == "foreground" || mode == "background" {
 			activity.Chips = append(activity.Chips, fltools.ActivityChip{Kind: "execution_mode", Label: "mode", Value: mode})
 		}

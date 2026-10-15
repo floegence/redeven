@@ -5914,10 +5914,19 @@ button.flower-composer-context-source:focus-visible,
   font-size: 0.75rem;
 }
 
+.flower-activity-structured-row-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .flower-activity-computer-block {
   display: grid;
   gap: 0.35rem;
   margin-top: 0.35rem;
+}
+
+.flower-activity-computer-block[hidden] {
+  display: none;
 }
 
 .flower-computer-stage { min-width: 0; min-height: 0; }
@@ -11980,6 +11989,7 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
 .flower-activity-preview + .flower-activity-preview { margin-top: 0.35rem; }
 .flower-activity-preview-row { min-width: 0; padding: 0.25rem 0; }
 .flower-activity-preview-title { font-size: 0.78rem; font-weight: 500; overflow-wrap: anywhere; }
+.flower-activity-preview-meta { display: block; color: var(--muted-foreground); font-size: 0.75rem; overflow-wrap: anywhere; }
 .flower-activity-preview-text { margin: 0; color: var(--flower-activity-tool-row-foreground); font-size: 0.75rem; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 .flower-activity-preview[data-activity-section='inputs'] .flower-activity-preview-text,
 .flower-activity-preview-text[data-format='code'] { font-family: var(--font-mono); }

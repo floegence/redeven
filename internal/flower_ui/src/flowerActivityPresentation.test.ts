@@ -198,11 +198,30 @@ describe('tool failure presentation', () => {
 });
 
 describe('presentFlowerActivityItem', () => {
+  it('shows the computer family and keeps concrete results ahead of script details', () => {
+    const result = presentFlowerActivityItem(item({ tool_name: 'computer.exec', renderer: 'structured', label: 'Read weather',
+      chips: [{ kind: 'browser_source', label: 'Browser', value: 'browser.connected' }],
+      target_refs: [{ kind: 'computer_target', label: 'Chrome', resource_ref: 'browser-page' }],
+      payload: { inputs: [{ content: 'await ui.observe()', format: 'code' }], rows_provided: true, rows: [{ title: 'Weather', meta: 'page', content: 'Beijing 23°C', format: 'text' }] } }));
+    expect(result.label).toBe('BrowserUse: Read weather');
+    expect(result.meta).toBe('Done');
+    expect(result.detailBlocks[0]).toMatchObject({ kind: 'structured_rows', section: 'results' });
+  });
+
+  it.each(['selected', 'empty_page'])('does not invent expandable detail for a confirmed %s', outcome => {
+    const result = presentFlowerActivityItem(item({ tool_name: outcome === 'selected' ? 'computer.select_target' : 'computer.observe', renderer: 'structured', label: 'Inspect Chrome',
+      chips: [{ kind: 'computer_result', label: 'result', value: outcome }],
+      target_refs: [{ kind: 'computer_target', label: 'Chrome', resource_ref: 'page' }], payload: { rows_provided: true } }));
+    expect(result.detailBlocks.filter(block => block.kind !== 'computer')).toEqual([]);
+    expect(result.meta).not.toContain('Chrome');
+    expect(result.suppressEmptyDisclosure).toBe(true);
+  });
+
   it.each([
     ['computer.targets', 'Find pages and applications'],
     ['computer.select_target', 'Switch page or application'],
   ])('gives %s a readable action title', (tool, label) => {
-    expect(presentFlowerActivityItem(item({ tool_name: tool, label: tool, renderer: 'structured' })).label).toBe(label);
+    expect(presentFlowerActivityItem(item({ tool_name: tool, label: tool, renderer: 'structured' })).label).toBe(`ComputerUse: ${label}`);
   });
 
   it('keeps script intent and literal inputs alongside results and the exact frame', () => {
@@ -213,8 +232,8 @@ describe('presentFlowerActivityItem', () => {
       payload: { operation: 'execute', inputs: [{ content: code, format: 'code', language: 'javascript' }], rows_provided: true,
         rows: [{ content: 'Search field found\nClick stopped', format: 'code', language: 'text', truncated: true }], error: { message: 'Script stopped' } },
     }));
-    expect(presentation.label).toBe('Locate the search field');
-    expect(presentation.meta).toBe('Managed browser');
+    expect(presentation.label).toBe('ComputerUse: Locate the search field');
+    expect(presentation.meta).toBe('');
     expect(presentation.detailBlocks).toEqual(expect.arrayContaining([
       expect.objectContaining({ kind: 'structured_rows', section: 'inputs', rows: [expect.objectContaining({ content: code, language: 'javascript' })] }),
       expect.objectContaining({ kind: 'structured_rows', section: 'results', rows: [expect.objectContaining({ truncated: true })] }),
@@ -227,7 +246,8 @@ describe('presentFlowerActivityItem', () => {
     const saved = presentFlowerActivityItem({ ...base, payload: { inputs: [{ content: 'await ui.observe();', format: 'code' }], rows_provided: true } });
     const history = presentFlowerActivityItem(base);
     const active = status === 'waiting' || status === 'running';
-    expect(JSON.stringify(saved)).toContain(active ? 'await ui.observe();' : 'No output');
+    expect(JSON.stringify(saved)).toContain('await ui.observe();');
+    expect(JSON.stringify(saved)).not.toContain('No output');
     expect(JSON.stringify(saved)).not.toContain('did not save');
     expect(JSON.stringify(history).includes('did not save the script')).toBe(!active);
     expect(JSON.stringify(history).includes('did not save result details')).toBe(!active);
@@ -244,7 +264,7 @@ describe('presentFlowerActivityItem', () => {
         safety: { level: 'routine' },
       },
     }));
-    expect(presentation.label).toBe('clicked the sign in button');
+    expect(presentation.label).toBe('ComputerUse: Click');
     expect(presentation.detailBlocks).toEqual([
       { kind: 'structured_rows', section: 'results', rows: [], notice: undefined },
       expect.objectContaining({ kind: 'computer', target_id: 'browser-main', target: 'Redeven Managed Browser', frame: `computer://browser-main/${'a'.repeat(64)}` }),
