@@ -2,12 +2,16 @@ import '../index.css';
 import './flower-feature.css';
 
 import { page, userEvent } from 'vitest/browser';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FlowerActivityItem, FlowerLiveStreamEnvelope } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { activityItem, activityTimeline, adapter, liveBootstrap, renderSurfaceWithAdapter, runtimeCurrentView, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 
 // Keep the thread rail visible while exercising the conversation contract.
 beforeEach(() => page.viewport(1280, 900));
+afterEach(() => {
+  document.documentElement.classList.remove('dark');
+  document.documentElement.removeAttribute('data-floe-shell-theme');
+});
 
 function fixture(items: readonly FlowerActivityItem[]) {
   return thread({ thread_id: 'terminal-activity', title: 'SSH GPU diagnostics', status: 'running', active_run_id: 'run-terminal', messages: [{
@@ -60,6 +64,49 @@ const rowFor = (runtime: HTMLElement, id: string) => runtime.querySelector(`[dat
 const toggleFor = (runtime: HTMLElement, id: string) => rowFor(runtime, id).querySelector<HTMLButtonElement>('.flower-activity-inline-button')!;
 
 describe('SSH terminal activity', () => {
+  it.each(['classic-light', 'classic-dark'])('blends expanded commands into %s while preserving copy and scroll', async theme => {
+    document.documentElement.classList.toggle('dark', theme === 'classic-dark');
+    document.documentElement.dataset.floeShellTheme = theme;
+    const command = 'date +%s; sleep 10; date +%s; echo "no files changed"';
+    const output = Array.from({ length: 12 }, (_, index) => `Diagnostic line ${index + 1}`).join('\n');
+    const result = activityItem({ ...read(), payload: { operation: 'read', command, output } });
+    const { runtime } = await mount([write(), result]);
+    toggleFor(runtime, 'read').click();
+    await waitFor(() => rowFor(runtime, 'read').querySelector('.flower-activity-terminal-output') !== null);
+    await waitFor(() => rowFor(runtime, 'read').querySelector('.flower-activity-inline-details')?.getAttribute('data-state') === 'open');
+    const panel = rowFor(runtime, 'read').querySelector<HTMLElement>('[data-flower-activity-terminal-panel]')!;
+    const panelStyle = getComputedStyle(panel);
+    expect(panelStyle.borderWidth).toBe('0px');
+    expect(panelStyle.boxShadow).toBe('none');
+    expect(panelStyle.backgroundImage).toContain('radial-gradient');
+    const buttons = panel.querySelectorAll<HTMLButtonElement>('.flower-activity-terminal-actions button');
+    buttons[0].focus();
+    expect(getComputedStyle(buttons[0]).opacity).toBe('1');
+    await userEvent.keyboard('{Enter}');
+    await waitFor(() => buttons[0].getAttribute('aria-expanded') === 'true');
+    expect(panel.querySelector('.flower-activity-terminal-command-full')?.textContent).toBe(command);
+    for (const node of panel.querySelectorAll('.flower-activity-terminal-header, .flower-activity-terminal-command-panel, .flower-activity-terminal-output')) {
+      const style = getComputedStyle(node);
+      expect(style.borderBottomWidth).toBe('0px');
+      expect(style.backgroundColor).toBe('rgba(0, 0, 0, 0)');
+      expect(style.opacity).toBe('1');
+      expect(style.maskImage).toBe('none');
+    }
+    const clipboard = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue();
+    buttons[1].click();
+    await expect.poll(() => clipboard.mock.calls[0]?.[0]).toBe(command);
+    clipboard.mockRestore();
+    const viewport = panel.querySelector<HTMLElement>('.flower-activity-terminal-output')!;
+    expect(viewport.scrollHeight).toBeGreaterThan(viewport.clientHeight);
+    expect(viewport.clientHeight).toBeLessThanOrEqual(107);
+    viewport.scrollTop = viewport.scrollHeight;
+    expect(viewport.scrollTop).toBeGreaterThan(0);
+    await page.screenshot({ element: runtime, path: `__screenshots__/flower-terminal-surface-${theme}.png` });
+    await page.viewport(390, 844);
+    expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth + 1);
+    await page.screenshot({ element: runtime, path: `__screenshots__/flower-terminal-surface-mobile-${theme}.png` });
+  });
+
   it('puts returned output directly below the command without repeating intent or exposing transport metadata', async () => {
     const purpose = 'Check the interactive diagnostic output';
     const output = 'demo\n输入已收到\n';

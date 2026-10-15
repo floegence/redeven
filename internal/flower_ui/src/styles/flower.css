@@ -5223,19 +5223,40 @@ button.flower-composer-context-source:focus-visible,
 }
 
 .flower-chat-md-block :is(th, td) {
-  border: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 76%, transparent);
-  padding: 0.32rem 0.48rem;
+  border: 0;
+  padding: 0.65rem 0.875rem;
   text-align: left;
   vertical-align: top;
 }
 
 .flower-chat-md-block th {
-  background: color-mix(in srgb, var(--flower-chat-surface-elevated) 82%, var(--foreground) 5%);
+  border-bottom: 1px solid color-mix(in srgb, var(--foreground) 20%, transparent);
+  background: transparent;
   font-weight: 600;
 }
 
+.flower-chat-md-block tbody tr + tr td {
+  border-top: 1px solid color-mix(in srgb, var(--foreground) 9%, transparent);
+}
+
+.flower-chat-md-block tr > :first-child {
+  padding-inline-start: 0;
+}
+
+.flower-chat-md-block tr > :last-child {
+  padding-inline-end: 0;
+}
+
+.flower-chat-md-block :is(th, td)[align='center'] {
+  text-align: center;
+}
+
+.flower-chat-md-block :is(th, td)[align='right'] {
+  text-align: right;
+}
+
 .flower-message-bubble-user .flower-chat-md-block th {
-  color: var(--flower-user-inset-foreground);
+  color: inherit;
 }
 
 .flower-message-bubble-user .flower-chat-md-block :is(th, td),
@@ -5277,8 +5298,8 @@ button.flower-composer-context-source:focus-visible,
 }
 
 /* Theme-colored insets need a selection distinct from their own surface. */
-.flower-message-bubble-user :is(.flower-chat-md-inline-code, .flower-chat-md-code-block, th)::selection,
-.flower-message-bubble-user :is(.flower-chat-md-inline-code, .flower-chat-md-code-block, th) ::selection,
+.flower-message-bubble-user :is(.flower-chat-md-inline-code, .flower-chat-md-code-block)::selection,
+.flower-message-bubble-user :is(.flower-chat-md-inline-code, .flower-chat-md-code-block) ::selection,
 .flower-message-bubble-user.flower-message-bubble-error::selection,
 .flower-message-bubble-user.flower-message-bubble-error ::selection,
 .flower-queued-turn-bubble::selection,
@@ -5313,7 +5334,7 @@ button.flower-composer-context-source:focus-visible,
     color: Highlight;
   }
 
-  .flower-message-bubble-user :is(.flower-chat-md-inline-code, .flower-chat-md-code-block, th) {
+  .flower-message-bubble-user :is(.flower-chat-md-inline-code, .flower-chat-md-code-block) {
     forced-color-adjust: auto;
   }
 
@@ -5323,8 +5344,8 @@ button.flower-composer-context-source:focus-visible,
     forced-color-adjust: auto;
   }
 
-  .flower-message-bubble-user :is(.flower-chat-md-inline-code, .flower-chat-md-code-block, th)::selection,
-  .flower-message-bubble-user :is(.flower-chat-md-inline-code, .flower-chat-md-code-block, th) ::selection,
+  .flower-message-bubble-user :is(.flower-chat-md-inline-code, .flower-chat-md-code-block)::selection,
+  .flower-message-bubble-user :is(.flower-chat-md-inline-code, .flower-chat-md-code-block) ::selection,
   .flower-message-bubble-user.flower-message-bubble-error::selection,
   .flower-message-bubble-user.flower-message-bubble-error ::selection,
   .flower-queued-turn-bubble::selection,
@@ -6601,11 +6622,12 @@ button.flower-composer-context-source:focus-visible,
   display: grid;
   min-width: 0;
   overflow: hidden;
-  border: 1px solid var(--redeven-chat-border);
-  border-radius: 0.375rem;
-  background: var(--redeven-chat-output);
+  border: 0;
+  border-radius: 0.5rem;
+  /* Fade the surface, never the selectable command or output. */
+  background: radial-gradient(ellipse at 50% 0%, color-mix(in srgb, var(--foreground) 5%, transparent), transparent 80%);
   color: var(--redeven-chat-text);
-  box-shadow: 0 1px 2px var(--redeven-shadow-color);
+  box-shadow: none;
 }
 
 .flower-activity-terminal-header {
@@ -6613,9 +6635,9 @@ button.flower-composer-context-source:focus-visible,
   min-width: 0;
   align-items: center;
   gap: 0.4375rem;
-  border-bottom: 1px solid var(--redeven-chat-border);
-  background: var(--redeven-code-chrome);
-  padding: 0.5rem 0.625rem;
+  border: 0;
+  background: transparent;
+  padding: 0.5rem 0.75rem;
 }
 
 .flower-activity-terminal-prompt {
@@ -6726,9 +6748,9 @@ button.flower-composer-context-source:focus-visible,
 }
 
 .flower-activity-terminal-command-panel {
-  border-bottom: 1px solid var(--redeven-chat-border);
-  background: var(--redeven-code-surface);
-  padding: 0.625rem;
+  border: 0;
+  background: transparent;
+  padding: 0.375rem 0.75rem 0.625rem;
 }
 
 .flower-activity-terminal-command-full {
@@ -6774,12 +6796,12 @@ button.flower-composer-context-source:focus-visible,
   max-height: 6.640625rem;
   min-width: 0;
   overflow: auto;
-  background: var(--redeven-chat-output);
+  background: transparent;
   color: var(--redeven-code-foreground);
   font-family: var(--flower-activity-terminal-font);
   font-size: 0.71875rem;
   line-height: 1.5;
-  padding: 0.625rem;
+  padding: 0.625rem 0.75rem;
 }
 
 .flower-activity-terminal-output pre {
@@ -6790,7 +6812,7 @@ button.flower-composer-context-source:focus-visible,
 
 .flower-activity-terminal-notice {
   margin: 0;
-  padding: 0.625rem;
+  padding: 0.625rem 0.75rem;
   color: var(--redeven-chat-muted);
   font-size: 0.75rem;
   line-height: 1.5;

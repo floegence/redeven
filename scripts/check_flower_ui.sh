@@ -192,6 +192,7 @@ main() {
         src/ui/FlowerSurface.thinkingDisclosure.browser.test.tsx \
         src/ui/FlowerMarkdown.streamingStability.browser.test.tsx \
         src/ui/FlowerMarkdown.citations.browser.test.tsx \
+        src/ui/FlowerMarkdown.tables.browser.test.tsx \
         src/ui/FlowerMarkdown.emphasis.browser.test.tsx \
         src/ui/FlowerMarkdown.highlight.browser.test.tsx \
         src/ui/FlowerStatusAndThreadMenu.browser.test.tsx \

@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower terminal activity presentation
 description: Terminal output, truthful result messages, safe input confirmation, and read-only controls.
 tags: [ai, flower, terminal, presentation]
-timestamp: 2026-10-08T00:00:00Z
+timestamp: 2026-10-15T00:00:00Z
 ---
 # Summary
 
@@ -32,6 +32,13 @@ The canonical activity status describes the invocation, not the continued lifeti
 Historical output without sequence metadata is an unsequenced static snapshot; live deltas remain sequence-strict. For running exec details, a newer cumulative snapshot replaces the view and a contiguous process-read delta appends. Equal or older snapshots are ignored; empty deltas preserve output; a declared truncated gap replaces the unavailable prefix. Flower requests only `after_seq` for an executing command with a public process id. Read and write panels never start another process poll. Process reads can stop local polling but cannot change canonical status. Transport cursors remain internal to output ordering.
 
 Details are read-only, offer localized icon actions to reveal and copy the command, and cap output at five visual lines with independent scrolling. Execution and settlement belong to [Terminal tool runtime](../ai/terminal-tool-runtime.md) and [Floret thread runtime integration](../ai/floret-thread-runtime.md).
+
+Expanded terminal details use one quiet theme-derived gradient fading into the
+transcript. The command header, full command and output have transparent faces,
+without an outer frame, internal divider lines or a panel shadow. The gradient
+applies only to the background; text, selection, scrollbars and controls remain
+fully visible. Command highlighting, keyboard disclosure, copy feedback and
+the five-line output viewport retain their existing interaction contracts.
 
 ## Interaction boundary
 
