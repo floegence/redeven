@@ -1,5 +1,10 @@
 # Redeven OKF Update Log
 
+## 2026-10-15: Queued messages return to the ordinary composer
+
+- Replace the separate queue editor with [take-back to the input box](ui/flower-turn-launcher.md), overwriting the current draft with complete text, references and staged attachment copies. Adopt published Floret v7.35.0 conditional queue removal; preserve captured snapshots and isolate delayed completion to its original conversation.
+
+
 ## 2026-10-14: Reactive message copy feedback
 
 - Keep [message copy controls](ui/flower-streaming-stability.md) mounted across

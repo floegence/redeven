@@ -1,3 +1,4 @@
+import { flowerQueuedDraftReferences } from './composer/flowerQueuedDraft';
 import { flowerMessageTextForCopy } from './chat/markdown/flowerCitations';
 import { flowerDraftReferenceIdentity, flowerDraftReferenceContextItem, flowerDraftReferenceDescription } from './composer/flowerDraftReferenceModel';
 import type { ThreadReferenceSnapshot } from './contextActionWire';
@@ -117,7 +118,6 @@ import type {
   FlowerThreadSnapshot,
   FlowerChatMessage,
   FlowerQueuedTurn,
-  FlowerQueuedTurnEditInput,
   FlowerQueuedTurnAttachment,
   FlowerContextUsage,
   FlowerActivityStatus,
@@ -1687,79 +1687,53 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 		if (!draftSnapshot) throw new Error('Flower composer draft session snapshot is unavailable.');
 		return draftSnapshot();
 	};
-  type QueueEditor = NonNullable<FlowerComposerDraftValue['queue_edit']> & Readonly<{ scopeKey: string }>;
-  const [queueEditorScopes, setQueueEditorScopes] = createSignal<ReadonlyMap<string, string>>(new Map());
-  const queueEditorForScope = (scopeKey: string): QueueEditor | undefined => {
-    const edit = reactiveDraftSnapshotFor(scopeKey).value.queue_edit;
-    return edit ? { ...edit, scopeKey } : undefined;
-  };
-  const selectedQueueEditor = createMemo(() => {
-    const scopeKey = queueEditorScopes().get(trimString(selectedThreadID()));
-    return scopeKey ? queueEditorForScope(scopeKey) : undefined;
-  });
-  const currentComposerSessionKey = createMemo(() => selectedQueueEditor()?.scopeKey || trimString(selectedThreadID()) || pendingDraftKey());
-  const resumableQueueEditors = createMemo(() => {
-    queueEditorScopes();
+  const currentComposerSessionKey = createMemo(() => trimString(selectedThreadID()) || pendingDraftKey());
+  const [queueTakeBackPending, setQueueTakeBackPending] = createSignal<ReadonlyMap<string, string>>(new Map());
+  const composerTakingBackQueuedTurn = () => queueTakeBackPending().has(trimString(selectedThreadID()));
+  const takeBackQueuedTurn = async (turn: FlowerQueuedTurn) => {
     const threadID = trimString(selectedThreadID());
-    return draftCoordinator.scopes().filter(scope => scope.startsWith(`queue-edit:${threadID}:`))
-      .flatMap(scope => { const editor = queueEditorForScope(scope); return editor && editor.threadID === threadID && !selectedCanonicalQueuedTurns().some(turn => turn.queue_id === editor.original.queue_id) ? [editor] : []; });
-  });
-  const queueEditorConflict = createMemo(() => {
-    const editor = selectedQueueEditor();
-    if (!editor) return false;
-    const canonical = selectedCanonicalQueuedTurns().find(turn => turn.queue_id === editor.original.queue_id);
-    return !canonical || canonical.input_fingerprint !== editor.original.input_fingerprint;
-  });
-  const updateQueueEditor = (editor: QueueEditor, update: (value: NonNullable<FlowerComposerDraftValue['queue_edit']>) => NonNullable<FlowerComposerDraftValue['queue_edit']>) => {
-    draftSessionFor(editor.scopeKey).mutate(value => value.queue_edit ? { ...value, queue_edit: update(value.queue_edit) } : value);
-  };
-  const leaveQueueEditor = (editor: QueueEditor) => {
-    if (launchChatTurnInFlight.has(editor.scopeKey)) return;
-    setQueueEditorScopes(previous => {
-      if (previous.get(editor.threadID) !== editor.scopeKey) return previous;
-      const next = new Map(previous); next.delete(editor.threadID); return next;
-    });
-    focusComposerIfConnected();
-  };
-  const discardQueueEditor = (editor: QueueEditor) => {
-    if (launchChatTurnInFlight.has(editor.scopeKey)) return;
-    attachmentControllerFor(editor.scopeKey).hydrateDraft([]);
-    draftSessionFor(editor.scopeKey).clear();
-    releaseAttachmentStagingScope(editor.scopeKey);
-    leaveQueueEditor(editor);
-  };
-  const deliverQueuedEdit = async (editor: QueueEditor, command: FlowerQueuedTurnEditInput) => {
-    updateQueueEditor(editor, value => ({ ...value, command, error: undefined }));
+    const adapter = props.adapter;
+    if (!threadID || !turn.input_fingerprint || !adapter.prepareQueuedTurnDraft || !adapter.takeBackQueuedTurn
+      || queueTakeBackPending().has(threadID) || queuedTurnSendBlocked(threadID) || composerSendPreparing()
+      || selectedInputRequest() || selectedComposerApprovalDisplayAction()) return;
+    setQueueTakeBackPending(previous => new Map(previous).set(threadID, turn.queue_id));
+    const epoch = liveTransport.connectionEpoch();
+    const draftSession = draftSessionFor(threadID);
+    const attachmentController = attachmentControllerFor(threadID);
+    let prepared: Awaited<ReturnType<NonNullable<FlowerSurfaceAdapter['prepareQueuedTurnDraft']>>> | undefined;
+    const restoreDraft = () => {
+      if (!prepared) return;
+      const attachments = prepared.attachments.map(staged => ({ local_id: `restored:${staged.attachment_id}`, source: staged.source,
+        name: staged.name, mime_type: staged.mime_type, size_bytes: staged.size_bytes, upload_request_id: '', request_id: '', attempt_state: 'staged_ready', staged }));
+      attachmentController.hydrateDraft(attachments);
+      draftSession.mutate(value => ({ ...value, text: prepared!.prompt, references: flowerQueuedDraftReferences(prepared!), attachments,
+        mode: 'ordinary', client_request_id: undefined, prepared_long_text_local_id: undefined, prepared_long_text_attachment_id: undefined,
+        page_context_captured: true, omit_embedded_context: true }));
+      if (!surfaceDisposed && selectedThreadID() === threadID) {
+        composerHistory.reset();
+        returnToChat(); focusComposerIfConnected();
+        queueMicrotask(() => { if (selectedThreadID() === threadID && composerRef instanceof HTMLTextAreaElement) composerRef.setSelectionRange(composerRef.value.length, composerRef.value.length); });
+      }
+    };
     try {
-      const epoch = liveTransport.connectionEpoch();
-      const view = await props.adapter.editQueuedTurn!(editor.threadID, editor.original.queue_id, command);
-      receiveThreadView(view, 'user_action', epoch);
-      const controller = attachmentControllerFor(editor.scopeKey);
-      controller.consumeReady(controller.snapshot().items.map(item => item.local_id));
-      draftSessionFor(editor.scopeKey).clear();
-      releaseAttachmentStagingScope(editor.scopeKey);
-      setQueueEditorScopes(previous => {
-        if (previous.get(editor.threadID) !== editor.scopeKey) return previous;
-        const next = new Map(previous); next.delete(editor.threadID); return next;
-      });
-      if (trimString(selectedThreadID()) === editor.threadID) focusComposerIfConnected();
+      const scope = turn.attachments?.length ? await ensureAttachmentStagingScope(threadID) : undefined;
+      prepared = await adapter.prepareQueuedTurnDraft(threadID, turn.queue_id, { expected_input_fingerprint: turn.input_fingerprint, ...(scope ? { staging_scope: scope } : {}) });
+      // Validate all references before removing the canonical message.
+      flowerQueuedDraftReferences(prepared);
+      if (surfaceDisposed) return;
+      const current = await adapter.takeBackQueuedTurn(threadID, turn.queue_id, turn.input_fingerprint);
+      if (epoch === liveTransport.connectionEpoch()) applyRuntimeCurrent(current);
+      restoreDraft();
     } catch (error) {
-      const rejected = flowerTurnAdmissionFailureKind(error) === 'rejected';
-      updateQueueEditor(editor, value => ({ ...value, command: rejected ? undefined : command, errorUnknown: !rejected, error: getErrorMessage(error) }));
+      if (prepared && flowerTurnAdmissionFailureKind(error) === 'unknown') {
+        restoreDraft();
+        notifyThreadActionError(copy().chat.queueTakeBackUnknown);
+      } else notifyThreadActionError(flowerTurnAdmissionFailureKind(error) === 'rejected' ? copy().chat.queueTakeBackConflict : getErrorMessage(error));
+      try { receiveThreadView(await adapter.loadThread(threadID), 'background_refresh', epoch); }
+      catch (refreshError) { reportThreadDetailDiagnostic(threadID, 'request_or_mapping', 'background_refresh', refreshError); }
+    } finally {
+      setQueueTakeBackPending(previous => { const next = new Map(previous); next.delete(threadID); return next; });
     }
-  };
-  const beginQueueEditor = (turn: FlowerQueuedTurn) => {
-    const threadID = trimString(selectedThreadID());
-    if (!threadID || !turn.input_fingerprint || queuedTurnSendBlocked(threadID) || composerSendPreparing() || selectedInputRequest() || selectedComposerApprovalDisplayAction()) return;
-    const scopeKey = `queue-edit:${threadID}:${turn.queue_id}`;
-    const session = draftSessionFor(scopeKey);
-    if (!session.snapshot().value.queue_edit) {
-      const attachments = (turn.attachments ?? []).map(item => ({ local_id: `admitted:${item.attachment_id}`, source: 'file' as const, name: item.name, mime_type: item.mime_type, size_bytes: item.size_bytes, upload_request_id: '', attempt_state: 'staged_ready', admitted: item }));
-      session.mutate(value => ({ ...value, text: turn.prompt, attachments, queue_edit: { threadID, original: turn },
-        references: (turn.references ?? []).map(reference => ({ local_id: `admitted:${reference.reference_id}`, kind: 'queued_reference' as const, label: reference.label, reference })), page_context_captured: true }));
-    }
-    setQueueEditorScopes(previous => new Map(previous).set(threadID, scopeKey));
-    returnToChat(); focusComposerIfConnected();
   };
 	const [outboxRetryTick, setOutboxRetryTick] = createSignal(0);
 	const visibleTransportOutbox = createMemo(() => {
@@ -1773,9 +1747,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       && (entry.presentation !== 'composer' || entry.delivery === 'failed' || entry.delivery === 'unknown' || entry.terminalError))
       .map(entry => ({ requestKey: entry.requestId, transport: entry }))];
   });
-  const selectedComposerPendingSend = createMemo(() => !selectedQueueEditor() ? visibleTransportOutbox().find(entry =>
+  const selectedComposerPendingSend = createMemo(() => visibleTransportOutbox().find(entry =>
     entry.presentation === 'composer' && !entry.terminalError
-    && entry.delivery !== 'accepted' && entry.delivery !== 'failed' && entry.delivery !== 'unknown') : undefined);
+    && entry.delivery !== 'accepted' && entry.delivery !== 'failed' && entry.delivery !== 'unknown'));
   const consumeSubmittedComposerDraft = (entry: TransportOutboxEntry, scopeKey: string, restoredTextRevision?: number) => {
     const session = draftSessionFor(scopeKey);
     const snapshot = session.snapshot();
@@ -1786,6 +1760,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       && snapshot.value.text === entry.draftText;
     const consumed = session.mutate(value => ({ ...value,
       text: consumesText ? '' : value.text,
+      omit_embedded_context: consumesText ? undefined : value.omit_embedded_context,
       references: value.references.filter(reference => !entry.draftReferences?.some(submitted =>
         submitted.local_id === reference.local_id && retainEqualValue(submitted, reference) === submitted)),
       attachments: flowerComposerDraftAttachments(controller.snapshot().items),
@@ -1925,7 +1900,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       ? session.mutate((value) => value.client_request_id
         ? value
         : { ...value, client_request_id: createFlowerClientRequestID() }).snapshot.value.client_request_id
-      : queueEditorForScope(sessionKey)?.threadID ?? sessionKey;
+      : sessionKey;
     if (!targetID) return Promise.reject(new Error('Attachment staging request identity is unavailable.'));
     return draftCoordinator.ensureAttachmentStagingScope(
       sessionKey,
@@ -3581,7 +3556,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const queuedTurnReorderEnabled = () => Boolean(
     props.adapter.reorderQueuedTurns
     && !selectedThreadReadOnly()
-    && !queuedTurnSendPending(trimString(selectedThreadID()))
+    && !queuedTurnSendPending(trimString(selectedThreadID())) && !queueTakeBackPending().has(trimString(selectedThreadID()))
     && selectedCanonicalQueuedTurns().length > 1
   );
   const beginQueuedTurnDrag = (event: DragEvent & { currentTarget: HTMLDivElement }, queueID: string) => {
@@ -3673,6 +3648,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       || !threadID
       || !queueID
       || queuedTurnSendPending(threadID)
+      || queueTakeBackPending().has(threadID)
     ) return;
     setQueuedTurnReorder(null);
     try {
@@ -3694,6 +3670,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return selectedThreadReadOnly()
       || selectedThreadStopPending()
       || queuedTurnSendPending(threadID)
+      || queueTakeBackPending().has(threadID)
       || transportOutbox().forThread(threadID).some((entry) => !entry.terminalError);
   };
   const sendQueuedTurnNow = async (turn: FlowerQueuedTurn): Promise<void> => {
@@ -5306,7 +5283,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const launchChatTurn = async (promptInput: string) => {
     // Preserve focus ownership while preparing this immutable submission.
     const focusOwner = typeof document === 'undefined' ? null : document.activeElement;
-    const queueEditor = selectedQueueEditor();
     const focusSelectionSequence = threadLoadSequence;
     const inspection = inspectFlowerText(promptInput);
     if (!inspection) {
@@ -5337,8 +5313,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       ? 'preparing_long_text_submission' as const
       : 'ordinary' as const;
     const selectedID = trimString(selectedThreadID());
-    const frozenContextAction = queueEditor ? undefined : props.embeddedConversation?.contextAction
-      ?? (!selectedID ? props.embeddedConversation?.initialContextAction : undefined);
+    const frozenContextAction = operation.session.snapshot().value.omit_embedded_context ? undefined : (props.embeddedConversation?.contextAction
+      ?? (!selectedID ? props.embeddedConversation?.initialContextAction : undefined));
     const notifyEmbeddedAccepted = props.embeddedConversation?.onAccepted;
     const launchAdapter = props.adapter;
     const capturedDecision = currentHandlerDecision();
@@ -5376,7 +5352,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       || operationClaim.snapshot.value.client_request_id !== clientRequestID
       || !composerDraftOperationCurrent(operation)
     ) return;
-    if (!queueEditor) props.embeddedConversation?.onSubmit?.();
+    props.embeddedConversation?.onSubmit?.();
     const launchController = operation.controller;
     const launchSessionKey = operation.sessionKey;
     const scopeBinding = [...pendingAdmissionHandoffs.values()].find(handoff => handoff.sessionKey === launchSessionKey)?.scopeBinding ?? { transferred: false };
@@ -5555,7 +5531,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       if (!submissionCurrent()) return;
       transcriptScroll.startFollowing();
       try {
-        const referenceItems: ContextActionEnvelope['context'] = frozenReferences.filter(reference => reference.kind !== 'queued_reference').map(flowerDraftReferenceContextItem);
+        const referenceItems: ContextActionEnvelope['context'] = frozenReferences.map(flowerDraftReferenceContextItem);
         const contextAction: ContextActionEnvelope | undefined = frozenContextAction
           ? { ...frozenContextAction, context: [...frozenContextAction.context, ...referenceItems] }
           : referenceItems.length > 0 ? {
@@ -5581,20 +5557,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           ...(!admittedThreadID && draftReasoningSelection ? { reasoning_selection: draftReasoningSelection } : {}),
           ...(!admittedThreadID && draftWorkingDir ? { working_dir: draftWorkingDir } : {}),
         };
-        if (queueEditor) {
-          const edit = launchAdapter.editQueuedTurn;
-          if (!edit) throw new Error(copy().chat.queuedEditUnavailable);
-          const command: FlowerQueuedTurnEditInput = queueEditor.command ?? {
-            client_request_id: clientRequestID, expected_input_fingerprint: queueEditor.original.input_fingerprint!, prompt,
-            retained_attachment_ids: readyItems.flatMap(item => item.admitted ? [item.admitted.attachment_id] : []),
-            retained_reference_ids: frozenReferences.flatMap(reference => reference.kind === 'queued_reference' ? [reference.reference.reference_id] : []),
-            ...(attachmentIDs.length ? { attachment_ids: attachmentIDs } : {}),
-            ...(contextAction ? { context_action: contextAction } : {}),
-            ...(launchStagingScope ? { staging_scope: launchStagingScope } : {}),
-          };
-          await deliverQueuedEdit(queueEditor, command);
-          return;
-        }
         const provisionalThreadSettings = !admittedThreadID && frozenPermissionType
           ? {
             model_id: launchModelID,
@@ -5753,16 +5715,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   const submitChat = async () => {
+    if (composerTakingBackQueuedTurn()) return;
     composerHistory.reset();
-    const editor = selectedQueueEditor();
-    if (editor?.command) {
-      if (composerSendPreparing()) return;
-      launchChatTurnInFlight.add(editor.scopeKey); setPreparingSendRevision(revision => revision + 1);
-      try { await deliverQueuedEdit(editor, editor.command); }
-      finally { launchChatTurnInFlight.delete(editor.scopeKey); setPreparingSendRevision(revision => revision + 1); }
-      return;
-    }
-    if (editor && queueEditorConflict()) return;
     const promptInput = composerRef?.value ?? currentComposerSessionDraft().chatDraft;
     const prompt = trimString(promptInput);
     const promptInspection = inspectFlowerText(promptInput);
@@ -5775,7 +5729,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       await submitInputRequest();
       return;
     }
-    if (!editor && selectedThreadCanStop() && !promptOverLimit && !prompt && !composerHasAttachments() && !composerHasReferences()) {
+    if (selectedThreadCanStop() && !promptOverLimit && !prompt && !composerHasAttachments() && !composerHasReferences()) {
       await stopSelectedThreadFromComposer();
       return;
     }
@@ -6425,7 +6379,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const handleComposerKeyDown = (event: KeyboardEvent) => {
     if (event.defaultPrevented) return;
     if (event.isComposing || isComposing() || event.keyCode === 229) return;
-    if (composerReferenceMutationActive()) {
+    if (composerTakingBackQueuedTurn() || composerReferenceMutationActive()) {
       if (event.key === 'Enter') event.preventDefault();
       return;
     }
@@ -6745,10 +6699,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               </div>
               <div class="flower-queued-turn-actions">
                 <Show when={transport()} fallback={<>
-                  <Show when={props.adapter.editQueuedTurn && turn().input_fingerprint}><button type="button" class="flower-queued-turn-action"
+                  <Show when={props.adapter.prepareQueuedTurnDraft && props.adapter.takeBackQueuedTurn && turn().input_fingerprint}><button type="button" class="flower-queued-turn-action"
                     disabled={queuedTurnSendBlocked(trimString(selectedThreadID())) || composerSendPreparing() || Boolean(selectedInputRequest()) || Boolean(selectedComposerApprovalDisplayAction())}
                     data-flower-queued-turn-edit={queueID()} aria-label={copy().chat.queuedEdit} title={copy().chat.queuedEdit}
-                    onClick={() => beginQueueEditor(turn())}><Pencil aria-hidden="true" /></button></Show>
+                    aria-busy={queueTakeBackPending().get(trimString(selectedThreadID())) === queueID() ? 'true' : undefined}
+                    onClick={event => { event.stopPropagation(); void takeBackQueuedTurn(turn()); }}><Show when={queueTakeBackPending().get(trimString(selectedThreadID())) !== queueID()} fallback={<Refresh class="motion-safe:animate-spin" aria-hidden="true" />}><Pencil aria-hidden="true" /></Show></button></Show>
                   <Show when={props.adapter.sendQueuedTurnNow}><button type="button" class="flower-queued-turn-action flower-queued-turn-send"
                     disabled={queuedTurnSendBlocked(trimString(selectedThreadID()))}
                     aria-busy={queuedTurnSendPending(trimString(selectedThreadID()), queueID()) ? 'true' : undefined}
@@ -6757,7 +6712,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     <Show when={!queuedTurnSendPending(trimString(selectedThreadID()), queueID())} fallback={<Refresh class="motion-safe:animate-spin" aria-hidden="true" />}><Send aria-hidden="true" /></Show>
                   </button></Show>
                   <Show when={props.adapter.deleteQueuedTurn}><button type="button" class="flower-queued-turn-action flower-queued-turn-delete"
-                    disabled={queuedTurnSendPending(trimString(selectedThreadID()))} aria-label={copy().chat.queuedDelete} title={copy().chat.queuedDelete}
+                    disabled={queuedTurnSendPending(trimString(selectedThreadID())) || queueTakeBackPending().has(trimString(selectedThreadID()))} aria-label={copy().chat.queuedDelete} title={copy().chat.queuedDelete}
                     data-flower-queued-turn-delete={queueID()} onClick={event => { event.stopPropagation(); void deleteQueuedTurn(turn()); }}><Trash aria-hidden="true" /></button></Show>
                 </>}>
                   {entry => <>
@@ -7166,7 +7121,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       updateInputText(waitingQuestion, value);
       return;
     }
-    if (value && !selectedQueueEditor()) capturePageContext();
+    if (value) capturePageContext();
     updateComposerSessionText(currentComposerSessionKey(), value);
   };
 
@@ -7184,7 +7139,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     && typeof props.adapter.uploadAttachment === 'function'
   ));
   const composerAttachmentEditingAllowed = createMemo(() => (
-    !selectedQueueEditor()?.command
+    !composerTakingBackQueuedTurn()
     && !selectedComposerApprovalDisplayAction()
     && !selectedInputRequest()
     && !selectedThreadDetailPending()
@@ -7414,7 +7369,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
   const handleComposerTextInput = (event: InputEvent & { currentTarget: HTMLTextAreaElement }) => {
     composerHistory.reset();
-    if (composerReferenceMutationActive()) {
+    if (composerTakingBackQueuedTurn() || composerReferenceMutationActive()) {
       event.currentTarget.value = composerTextValue();
       return;
     }
@@ -7573,7 +7528,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const composerHasReferences = createMemo(() => composerReferences().length > 0);
   const composerHasExplicitReferences = createMemo(() => composerReferences().some(reference => reference.kind !== 'page_context'));
   const [composerSnapshotPreviewID, setComposerSnapshotPreviewID] = createSignal('');
-  const composerSnapshotPreview = createMemo(() => composerReferences().find((reference): reference is Extract<FlowerComposerDraftReference, { kind: 'page_context' | 'thread' }> => reference.local_id === composerSnapshotPreviewID() && (reference.kind === 'page_context' || reference.kind === 'thread')));
+  const composerSnapshotPreview = createMemo(() => composerReferences().find((reference): reference is Extract<FlowerComposerDraftReference, { kind: 'page_context' | 'thread' | 'snapshot' }> => reference.local_id === composerSnapshotPreviewID() && (reference.kind === 'page_context' || reference.kind === 'thread' || reference.kind === 'snapshot')));
   createEffect(() => { if (composerSnapshotPreviewID() && !composerSnapshotPreview()) setComposerSnapshotPreviewID(''); });
 
   type CompanionEntry = Readonly<{
@@ -7745,8 +7700,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   });
 
   const composerTextareaReadOnly = createMemo(() => (
-    Boolean(selectedQueueEditor()?.command) ||
-    composerReferenceMutationCount() > 0
+    composerTakingBackQueuedTurn() || composerReferenceMutationCount() > 0
   ));
 
   const handleComposerBlankClick = (event: MouseEvent & { currentTarget: HTMLDivElement }) => {
@@ -8210,7 +8164,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const composerChatDraftText = createMemo(() => trimString(currentComposerSessionDraft().chatDraft));
   const composerChatDraftHasRawText = createMemo(() => currentComposerSessionDraft().chatDraft.length > 0);
-  const composerSlashCommand = createMemo(() => (selectedQueueEditor() || selectedInputRequest() || selectedComposerApprovalDisplayAction() || composerHistoryBrowsing())
+  const composerSlashCommand = createMemo(() => (selectedInputRequest() || selectedComposerApprovalDisplayAction() || composerHistoryBrowsing())
     ? { kind: 'none' as const }
     : parseFlowerSlashCommand(composerChatDraftText()));
   const composerCommandMenuVisible = createMemo(() => (
@@ -8219,13 +8173,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     && composerSlashCommand().kind === 'suggest'
   ));
   const composerPrimaryActionIsCommand = createMemo(() => {
-    if (selectedQueueEditor()) return false;
     const command = composerSlashCommand();
     return command.kind === 'intent' || command.kind === 'suggest';
   });
   const composerPrimaryActionIsStop = createMemo(() => (
     longTextPreparing()
-    || (!selectedQueueEditor() && Boolean(selectedThreadID()) && selectedThreadCanStop() && !composerTextOverLimit() && !composerChatDraftText() && !composerHasAttachments() && !composerHasReferences())
+    || (Boolean(selectedThreadID()) && selectedThreadCanStop() && !composerTextOverLimit() && !composerChatDraftText() && !composerHasAttachments() && !composerHasReferences())
   ));
   type ComposerPrimaryAction = 'send' | 'stop' | 'compact' | 'cancel_long_text';
   const composerPrimaryActionKind = createMemo<ComposerPrimaryAction>(() => (
@@ -8238,12 +8191,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       : 'send'
   ));
   const composerPrimaryActionIcon = createMemo(() => composerPrimaryActionIsStop() ? FlowerStopIcon : composerPrimaryActionIsCommand() ? Clock : ArrowUp);
-  const composerPrimaryActionLabel = createMemo(() => composerPrimaryActionIsStop() ? selectedThreadStopLabel() : composerSendPreparing() ? copy().chat.preparingSend : selectedComposerPendingSend() ? copy().chat.pendingSending : composerPrimaryActionIsCommand() ? copy().chat.compactContext : selectedQueueEditor() ? (selectedQueueEditor()?.command ? copy().chat.queuedEditRetry : copy().chat.queuedEditSave) : copy().chat.send);
+  const composerPrimaryActionLabel = createMemo(() => composerPrimaryActionIsStop() ? selectedThreadStopLabel() : composerSendPreparing() ? copy().chat.preparingSend : selectedComposerPendingSend() ? copy().chat.pendingSending : composerPrimaryActionIsCommand() ? copy().chat.compactContext : copy().chat.send);
   const composerPrimaryActionDisabled = createMemo(() => {
+    if (composerTakingBackQueuedTurn()) return true;
     if (composerReferenceMutationCount() > 0) return true;
     if (longTextPreparing()) return false;
-    if (selectedQueueEditor()?.command && !composerSendPreparing()) return false;
-    if (selectedQueueEditor() && queueEditorConflict()) return true;
     if ((composerSendPreparing() || selectedComposerPendingSend()) && !composerPrimaryActionIsStop()) return true;
     if (selectedThreadStopPending()) return true;
     if (selectedThreadReadOnly()) return true;
@@ -8257,7 +8209,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
     if (composerHasSubmissionBlockingAttachments()) return true;
     if (composerTextOverLimit() && !currentAttachmentSnapshot().capability?.supports_long_text) return true;
-    if (!selectedQueueEditor() && selectedThreadCanStop() && !composerTextOverLimit() && !composerHasAttachments() && !composerHasReferences()) return false;
+    if (selectedThreadCanStop() && !composerTextOverLimit() && !composerHasAttachments() && !composerHasReferences()) return false;
     const hasSendableText = composerTextOverLimit() ? composerChatDraftHasRawText() : Boolean(composerChatDraftText());
     return !readyForChat() || !handlerAllowsSubmitIntent() || (!hasSendableText && !composerHasReadyAttachments() && !composerHasExplicitReferences());
   });
@@ -12199,20 +12151,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     }
                   }}
                 />
-                <Show when={!selectedQueueEditor() && resumableQueueEditors().length}><div class="flower-queue-editor-recovery">
-                  <For each={resumableQueueEditors()}>{editor => <button type="button" class="flower-queue-editor-resume"
-                    disabled={composerSendPreparing() || Boolean(selectedInputRequest()) || Boolean(selectedComposerApprovalDisplayAction())}
-                    data-flower-queue-editor-resume={editor.original.queue_id} title={`${copy().chat.queuedEdit}: ${editor.original.prompt}`}
-                    onClick={() => beginQueueEditor(editor.original)}><Pencil aria-hidden="true" /><span>{copy().chat.queuedEdit}: {editor.original.prompt}</span></button>}</For>
-                </div></Show>
-                <Show when={selectedQueueEditor()}>{editor => <div class="flower-queue-editor-bar" data-flower-queue-editor>
-                  <span>{copy().chat.queuedEdit}</span>
-                  <button type="button" disabled={composerSendPreparing()} onClick={() => leaveQueueEditor(editor())}>{copy().chat.queuedEditCancel}</button>
-                  <Show when={queueEditorConflict() || editor().error}><p role="status">{queueEditorConflict() ? copy().chat.queuedEditConflict : editor().errorUnknown ? copy().chat.queuedEditUnknown : editor().error}</p>
-                    <button type="button" onClick={() => void writeClipboardText(currentComposerSessionDraft().chatDraft, copy().chat.copyMessage).catch(error => notifyThreadActionError(getErrorMessage(error)))}>{copy().chat.copyMessage}</button>
-                    <button type="button" disabled={composerSendPreparing()} title={copy().chat.removeRecoveryCopyDescription} onClick={() => discardQueueEditor(editor())}>{copy().chat.removeRecoveryCopy}</button>
-                  </Show>
-                </div>}</Show>
                 <span class="flower-visually-hidden" aria-live="polite" aria-atomic="true">
                   {composerReferenceAnnouncement()}
                 </span>
@@ -12229,15 +12167,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                           title={flowerDraftReferenceDescription(reference)}
                           data-reference-kind={reference.kind}
                         >
-                          <Show when={reference.kind === 'page_context' || reference.kind === 'thread' || reference.kind === 'queued_reference'} fallback={<>
+                          <Show when={reference.kind === 'page_context' || reference.kind === 'thread' || reference.kind === 'snapshot'} fallback={<>
                             <span class="flower-composer-reference-chip-icon" aria-hidden="true">
                               <FileItemIcon size={18} item={{ name: reference.label, type: reference.kind === 'directory' ? 'folder' : 'file' }} class="size-[18px] shrink-0" />
                             </span>
                             <span class="flower-composer-reference-chip-label">{reference.label}</span>
                           </>}>
                             <button type="button" class="flower-composer-reference-chip-preview" title={reference.label}
-                              onClick={() => { if (reference.kind === 'queued_reference') { const chip = queuedContextDisplay({ queue_id: selectedQueueEditor()!.original.queue_id, prompt: '', created_at_ms: 0, references: [reference.reference] })?.chips[0]; if (chip) void activateQueuedContextChip(selectedQueueEditor()!.original, chip); } else { captureSnapshotPreviewFocus(); setComposerSnapshotPreviewID(reference.local_id); } }}>
-                              <FlowerContextIcon tone={reference.kind === 'queued_reference' ? reference.reference.kind === 'text' ? 'snapshot' : reference.reference.kind : reference.kind === 'thread' ? 'thread' : 'page_context'} name={reference.label} />
+                              onClick={() => { captureSnapshotPreviewFocus(); setComposerSnapshotPreviewID(reference.local_id); }}>
+                              <FlowerContextIcon tone={reference.kind === 'snapshot' ? reference.snapshot.kind === 'text' ? 'snapshot' : reference.snapshot.kind : reference.kind === 'thread' ? 'thread' : 'page_context'} name={reference.label} />
                               <span class="flower-composer-reference-chip-label">{reference.label}</span>
                             </button>
                           </Show>
@@ -12518,7 +12456,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       <Show when={composerSnapshotPreview()} keyed>{reference => (
         <Dynamic component={props.renderContextSnapshotPreview ?? FlowerChatContextPreview}
           title={reference.label} subtitle={reference.kind === 'page_context' ? reference.title : ''}
-          body={reference.kind === 'thread' ? threadSnapshotBody(reference.thread) : reference.content}
+          body={reference.kind === 'thread' ? threadSnapshotBody(reference.thread) : reference.kind === 'snapshot' ? reference.snapshot.text : reference.content}
+          truncated={reference.kind === 'snapshot' && reference.snapshot.truncated}
           actionLabel={reference.kind === 'thread' ? copy().chat.threadReference.open : undefined}
           onAction={reference.kind === 'thread' ? () => void openReferencedThread(reference.thread) : undefined}
           actionDisabled={referenceOpenBusy() || (reference.kind === 'thread' && !!referencedThreadUnavailable(reference.thread))}

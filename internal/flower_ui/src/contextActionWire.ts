@@ -73,7 +73,10 @@ export function parseThreadReferenceSnapshot(value: unknown): ThreadReferenceSna
   return { ...value } as ThreadReferenceSnapshot;
 }
 
+export type ReferenceSnapshot = Readonly<{ kind: 'text' | 'terminal' | 'process'; label: string; text: string; truncated?: boolean }>;
+
 export type ContextActionContextItem =
+  | Readonly<{ kind: 'reference_snapshot'; reference_snapshot: ReferenceSnapshot }>
   | Readonly<{ kind: 'thread_reference'; thread: ThreadReferenceSnapshot }>
   | Readonly<{ kind: 'tessiven_selection'; canvas_id: string; version_id: number; object_refs: string[] }>
   | Readonly<{
@@ -153,6 +156,7 @@ const ASK_FLOWER_SESSION_SOURCES: readonly NonNullable<ContextActionExecutionCon
 
 const KNOWN_CONTEXT_KINDS = new Set([
   'thread_reference',
+  'reference_snapshot',
   'tessiven_selection',
   'file_path',
   'terminal_selection',
@@ -209,6 +213,13 @@ function parseContextItem(value: unknown): ContextActionContextItem | null {
   if (!isRecord(value)) return null;
   const kind = typeof value.kind === 'string' ? value.kind : '';
   switch (kind) {
+    case 'reference_snapshot': {
+      if (!hasOnlyKeys(value, ['kind', 'reference_snapshot']) || !isRecord(value.reference_snapshot)) return null;
+      const snapshot = value.reference_snapshot;
+      if (!hasOnlyKeys(snapshot, ['kind', 'label', 'text', 'truncated']) || !isStringMember(snapshot.kind, ['text', 'terminal', 'process'] as const)
+        || !validNonEmptyString(snapshot.label) || typeof snapshot.text !== 'string' || (snapshot.truncated !== undefined && typeof snapshot.truncated !== 'boolean')) return null;
+      return { kind, reference_snapshot: { kind: snapshot.kind, label: snapshot.label, text: snapshot.text, ...(snapshot.truncated !== undefined ? { truncated: snapshot.truncated } : {}) } };
+    }
     case 'thread_reference': {
       if (!hasOnlyKeys(value, ['kind', 'thread'])) return null;
       const thread = parseThreadReferenceSnapshot(value.thread);
@@ -282,7 +293,7 @@ function surfaceAllowsKind(surface: ContextActionSurface, kind: string): boolean
     case 'monitoring': return kind === 'process_snapshot';
     case 'git_browser':
     case 'desktop_welcome_environment_card': return kind === 'text_snapshot';
-    case 'flower_composer': return kind === 'file_path' || kind === 'text_snapshot' || kind === 'thread_reference';
+    case 'flower_composer': return kind === 'file_path' || kind === 'text_snapshot' || kind === 'thread_reference' || kind === 'reference_snapshot';
     case 'file_browser':
     case 'file_preview':
     case 'editor_preview': return kind === 'file_path';
@@ -325,7 +336,7 @@ export function parseAskFlowerContextActionEnvelope(value: unknown): ContextActi
   for (const rawItem of value.context) {
     if (value.source.surface === 'flower_composer') {
       if (!isRecord(rawItem)) return null;
-      const fields = rawItem.kind === 'thread_reference' ? ['kind', 'thread'] : rawItem.kind === 'text_snapshot' ? ['kind', 'title', 'content'] : ['kind', 'path', 'is_directory'];
+      const fields = rawItem.kind === 'reference_snapshot' ? ['kind', 'reference_snapshot'] : rawItem.kind === 'thread_reference' ? ['kind', 'thread'] : rawItem.kind === 'text_snapshot' ? ['kind', 'title', 'content'] : ['kind', 'path', 'is_directory'];
       if (!hasOnlyKeys(rawItem, fields)) return null;
     }
     if (value.source.surface === 'tessiven' && isRecord(rawItem) && rawItem.kind === 'file_path' && !hasOnlyKeys(rawItem, ['kind', 'path', 'is_directory'])) return null;

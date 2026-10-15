@@ -94,7 +94,7 @@ The browser transport outbox may retain the original ordinary launch input under
 
 ## Queue previews and editing
 
-Canonical queue references remain visible as compact icons and use exact ThreadID, QueueID and ReferenceID for file/directory preview. The resolver requires exactly one queue or turn scope, checks current canonical membership and repeats host filesystem/target authorization; a promoted or deleted item cannot be opened through its old queue scope. Frozen text, terminal, process and conversation context uses the existing snapshot preview. [Turn launcher](flower-turn-launcher.md) owns the single-line queue and shared editor. Existing references carry canonical identity into that editor; additions use the ordinary discovery/admission path, and removal never rebuilds opaque canonical resources from display labels.
+Canonical queue references remain visible as compact icons and use exact ThreadID, QueueID and ReferenceID for file/directory preview. The resolver requires exactly one queue or turn scope, checks current canonical membership and repeats host filesystem/target authorization; a promoted or deleted item cannot be opened through its old queue scope. Frozen text, terminal, process and conversation context uses the existing snapshot preview. [Turn launcher](flower-turn-launcher.md) owns the single-line queue and take-back action. Taking a message back restores authorized file/directory paths and frozen text, terminal, process and conversation snapshots into the ordinary composer, replacing the previous draft. New submission repeats normal authorization and admission; display labels never reconstruct opaque resource authority.
 
 # Boundaries
 

@@ -1,3 +1,4 @@
+import type { ContextActionContextItem } from '../contextActionWire';
 export type FlowerProviderType =
   | 'openai'
   | 'anthropic'
@@ -573,6 +574,13 @@ export type FlowerQueuedTurn = Readonly<{
   attachments?: readonly FlowerQueuedTurnAttachment[];
   context_action?: unknown;
 }>;
+
+export type FlowerQueuedDraft = Readonly<{
+  prompt: string;
+  references: readonly ContextActionContextItem[];
+  attachments: readonly FlowerStagedAttachment[];
+}>;
+export type FlowerQueuedDraftInput = Readonly<{ expected_input_fingerprint: string; staging_scope?: FlowerAttachmentStagingScope }>;
 
 export type FlowerQueuedTurnEditInput = Readonly<{
   client_request_id: string;
@@ -1407,6 +1415,8 @@ export type FlowerSurfaceAdapter = Readonly<{
   setThreadReasoningSelection?: (threadID: string, selection: FlowerReasoningSelection | undefined) => Promise<FlowerThreadView>;
   reorderQueuedTurns?: (threadID: string, orderedQueueIDs: readonly string[]) => Promise<FlowerThreadView>;
   deleteQueuedTurn?: (threadID: string, queueID: string) => Promise<FlowerThreadView>;
+  prepareQueuedTurnDraft?: (threadID: string, queueID: string, input: FlowerQueuedDraftInput) => Promise<FlowerQueuedDraft>;
+  takeBackQueuedTurn?: (threadID: string, queueID: string, fingerprint: string) => Promise<FlowerRuntimeCurrentView>;
   editQueuedTurn?: (threadID: string, queueID: string, input: FlowerQueuedTurnEditInput) => Promise<FlowerThreadView>;
   sendQueuedTurnNow?: (threadID: string, queueID: string) => Promise<FlowerThreadView>;
   forkThread?: (threadID: string, input: Readonly<{ client_request_id: string; title: string }>) => Promise<FlowerThreadSnapshot>;

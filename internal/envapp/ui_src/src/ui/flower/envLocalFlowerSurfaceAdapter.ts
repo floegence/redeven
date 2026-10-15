@@ -612,6 +612,16 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
 		`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/queue/${encodeURIComponent(queueID)}`,
         { method: 'DELETE' },
       ),
+      prepareQueuedTurnDraft: (threadID, queueID, input) => fetchLocalApiJSON(
+        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/queue/${encodeURIComponent(queueID)}/prepare-edit`,
+        { method: 'POST', body: JSON.stringify({ expected_input_fingerprint: input.expected_input_fingerprint,
+            ...(input.staging_scope ? { staging_scope_id: input.staging_scope.staging_scope_id } : {}) }),
+          ...(input.staging_scope ? { headers: flowerAttachmentStagingHeaders(input.staging_scope) } : {}) },
+      ),
+      takeBackQueuedTurn: (threadID, queueID, fingerprint) => fetchLocalApiJSON(
+        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/queue/${encodeURIComponent(queueID)}/take-back`,
+        { method: 'POST', body: JSON.stringify({ expected_input_fingerprint: fingerprint }) },
+      ),
       editQueuedTurn: (threadID, queueID, input) => fetchLocalApiJSON(
         `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/queue/${encodeURIComponent(queueID)}`,
         { method: 'PATCH', body: JSON.stringify(buildFlowerQueuedEditHTTPBody(input)),

@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,6 +10,8 @@ import (
 	"regexp"
 	"strings"
 	"unicode/utf8"
+
+	flruntime "github.com/floegence/floret/v7/runtime"
 )
 
 const ContextActionSchemaVersion = 2
@@ -16,37 +19,38 @@ const ContextActionSchemaVersion = 2
 var ErrInvalidContextAction = errors.New("invalid context action")
 
 const (
-	contextActionAskFlowerID       = "assistant.ask.flower"
-	contextActionFlowerProvider    = "flower"
-	contextActionLocalityAuto      = "auto"
-	contextActionLocalityCurrent   = "current_runtime"
-	contextActionLocalityRemote    = "remote_runtime"
-	contextActionLocalityLocal     = "local_model_remote_target"
-	contextActionRuntimeHintAuto   = "auto"
-	contextActionRuntimeHintLocal  = "local_environment"
-	contextActionRuntimeHintEnv    = "env_local"
-	contextActionSessionLocal      = "local_runtime"
-	contextActionSessionProvider   = "provider_environment"
-	contextActionSessionSSH        = "ssh_environment"
-	contextActionSessionExternal   = "external_local_ui"
-	contextActionSessionGateway    = "runtime_gateway"
-	contextActionSessionSandbox    = "region_sandbox"
-	contextActionSurfaceWelcomeEnv = "desktop_welcome_environment_card"
-	contextActionSurfaceComposer   = "flower_composer"
-	contextActionSurfaceFile       = "file_browser"
-	contextActionSurfaceTerminal   = "terminal"
-	contextActionSurfacePreview    = "file_preview"
-	contextActionSurfaceMonitoring = "monitoring"
-	contextActionSurfaceGit        = "git_browser"
-	contextActionSurfaceEditor     = "editor_preview"
-	contextActionSurfaceTessiven   = "tessiven"
-	contextActionKindTessiven      = "tessiven_selection"
-	contextActionKindFilePath      = "file_path"
-	contextActionKindFileSelection = "file_selection"
-	contextActionKindTerminal      = "terminal_selection"
-	contextActionKindProcess       = "process_snapshot"
-	contextActionKindText          = "text_snapshot"
-	contextActionKindThread        = "thread_reference"
+	contextActionAskFlowerID           = "assistant.ask.flower"
+	contextActionFlowerProvider        = "flower"
+	contextActionLocalityAuto          = "auto"
+	contextActionLocalityCurrent       = "current_runtime"
+	contextActionLocalityRemote        = "remote_runtime"
+	contextActionLocalityLocal         = "local_model_remote_target"
+	contextActionRuntimeHintAuto       = "auto"
+	contextActionRuntimeHintLocal      = "local_environment"
+	contextActionRuntimeHintEnv        = "env_local"
+	contextActionSessionLocal          = "local_runtime"
+	contextActionSessionProvider       = "provider_environment"
+	contextActionSessionSSH            = "ssh_environment"
+	contextActionSessionExternal       = "external_local_ui"
+	contextActionSessionGateway        = "runtime_gateway"
+	contextActionSessionSandbox        = "region_sandbox"
+	contextActionSurfaceWelcomeEnv     = "desktop_welcome_environment_card"
+	contextActionSurfaceComposer       = "flower_composer"
+	contextActionSurfaceFile           = "file_browser"
+	contextActionSurfaceTerminal       = "terminal"
+	contextActionSurfacePreview        = "file_preview"
+	contextActionSurfaceMonitoring     = "monitoring"
+	contextActionSurfaceGit            = "git_browser"
+	contextActionSurfaceEditor         = "editor_preview"
+	contextActionSurfaceTessiven       = "tessiven"
+	contextActionKindTessiven          = "tessiven_selection"
+	contextActionKindFilePath          = "file_path"
+	contextActionKindFileSelection     = "file_selection"
+	contextActionKindTerminal          = "terminal_selection"
+	contextActionKindProcess           = "process_snapshot"
+	contextActionKindText              = "text_snapshot"
+	contextActionKindThread            = "thread_reference"
+	contextActionKindReferenceSnapshot = "reference_snapshot"
 )
 
 type ContextActionEnvelope struct {
@@ -109,29 +113,49 @@ type ContextActionPresentation struct {
 	DisabledReason string `json:"disabled_reason,omitempty"`
 }
 
+type ContextActionReferenceSnapshot struct {
+	Kind      string `json:"kind"`
+	Label     string `json:"label"`
+	Text      string `json:"text"`
+	Truncated bool   `json:"truncated,omitempty"`
+}
+
+func (snapshot *ContextActionReferenceSnapshot) UnmarshalJSON(raw []byte) error {
+	type wire ContextActionReferenceSnapshot
+	var value wire
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&value); err != nil {
+		return err
+	}
+	*snapshot = ContextActionReferenceSnapshot(value)
+	return nil
+}
+
 type ContextActionContextItem struct {
-	Kind           string                   `json:"kind"`
-	Thread         *ThreadReferenceSnapshot `json:"thread,omitempty"`
-	CanvasID       string                   `json:"canvas_id,omitempty"`
-	VersionID      int64                    `json:"version_id,omitempty"`
-	ObjectRefs     []string                 `json:"object_refs,omitempty"`
-	Path           string                   `json:"path,omitempty"`
-	IsDirectory    bool                     `json:"is_directory,omitempty"`
-	RootLabel      string                   `json:"root_label,omitempty"`
-	Selection      string                   `json:"selection,omitempty"`
-	SelectionChars int                      `json:"selection_chars,omitempty"`
-	WorkingDir     string                   `json:"working_dir,omitempty"`
-	PID            int                      `json:"pid,omitempty"`
-	Name           string                   `json:"name,omitempty"`
-	Username       string                   `json:"username,omitempty"`
-	CPUPercent     float64                  `json:"cpu_percent,omitempty"`
-	MemoryBytes    int64                    `json:"memory_bytes,omitempty"`
-	Platform       string                   `json:"platform,omitempty"`
-	CapturedAtMs   int64                    `json:"captured_at_ms,omitempty"`
-	Title          string                   `json:"title,omitempty"`
-	Detail         string                   `json:"detail,omitempty"`
-	Content        string                   `json:"content,omitempty"`
-	wireFields     map[string]json.RawMessage
+	ReferenceSnapshot *ContextActionReferenceSnapshot `json:"reference_snapshot,omitempty"`
+	Kind              string                          `json:"kind"`
+	Thread            *ThreadReferenceSnapshot        `json:"thread,omitempty"`
+	CanvasID          string                          `json:"canvas_id,omitempty"`
+	VersionID         int64                           `json:"version_id,omitempty"`
+	ObjectRefs        []string                        `json:"object_refs,omitempty"`
+	Path              string                          `json:"path,omitempty"`
+	IsDirectory       bool                            `json:"is_directory,omitempty"`
+	RootLabel         string                          `json:"root_label,omitempty"`
+	Selection         string                          `json:"selection,omitempty"`
+	SelectionChars    int                             `json:"selection_chars,omitempty"`
+	WorkingDir        string                          `json:"working_dir,omitempty"`
+	PID               int                             `json:"pid,omitempty"`
+	Name              string                          `json:"name,omitempty"`
+	Username          string                          `json:"username,omitempty"`
+	CPUPercent        float64                         `json:"cpu_percent,omitempty"`
+	MemoryBytes       int64                           `json:"memory_bytes,omitempty"`
+	Platform          string                          `json:"platform,omitempty"`
+	CapturedAtMs      int64                           `json:"captured_at_ms,omitempty"`
+	Title             string                          `json:"title,omitempty"`
+	Detail            string                          `json:"detail,omitempty"`
+	Content           string                          `json:"content,omitempty"`
+	wireFields        map[string]json.RawMessage
 }
 
 func (item *ContextActionContextItem) UnmarshalJSON(data []byte) error {
@@ -148,7 +172,7 @@ func (item *ContextActionContextItem) UnmarshalJSON(data []byte) error {
 		switch field {
 		case "kind", "thread", "path", "is_directory", "root_label", "selection", "selection_chars", "working_dir",
 			"pid", "name", "username", "cpu_percent", "memory_bytes", "platform", "captured_at_ms",
-			"title", "detail", "content", "canvas_id", "version_id", "object_refs":
+			"title", "detail", "content", "canvas_id", "version_id", "object_refs", "reference_snapshot":
 		default:
 			return fmt.Errorf("json: unknown field %q", field)
 		}
@@ -160,6 +184,11 @@ func (item *ContextActionContextItem) UnmarshalJSON(data []byte) error {
 
 func (item ContextActionContextItem) MarshalJSON() ([]byte, error) {
 	switch strings.TrimSpace(item.Kind) {
+	case contextActionKindReferenceSnapshot:
+		return json.Marshal(struct {
+			Kind     string                          `json:"kind"`
+			Snapshot *ContextActionReferenceSnapshot `json:"reference_snapshot"`
+		}{item.Kind, item.ReferenceSnapshot})
 	case contextActionKindThread:
 		return json.Marshal(struct {
 			Kind   string                   `json:"kind"`
@@ -354,6 +383,9 @@ func canonicalReferencePathLabel(value string) string {
 }
 
 func contextActionComposerItemWireShapeAllowed(item ContextActionContextItem) bool {
+	if item.Kind == contextActionKindReferenceSnapshot {
+		return item.wireFields == nil || (len(item.wireFields) == 2 && item.wireFields["kind"] != nil && item.wireFields["reference_snapshot"] != nil)
+	}
 	if item.Kind == contextActionKindThread {
 		return item.wireFields == nil || (len(item.wireFields) == 2 && item.wireFields["kind"] != nil && item.wireFields["thread"] != nil)
 	}
@@ -413,7 +445,7 @@ func contextActionSurfaceAllowsKind(surface string, kind string) bool {
 	case contextActionSurfaceTessiven:
 		return kind == contextActionKindTessiven || kind == contextActionKindFilePath
 	case contextActionSurfaceComposer:
-		return kind == contextActionKindFilePath || kind == contextActionKindText || kind == contextActionKindThread
+		return kind == contextActionKindFilePath || kind == contextActionKindText || kind == contextActionKindThread || kind == contextActionKindReferenceSnapshot
 	case contextActionSurfaceFile:
 		return kind == contextActionKindFilePath
 	case contextActionSurfacePreview, contextActionSurfaceEditor:
@@ -434,6 +466,28 @@ func contextActionSurfaceAllowsKind(surface string, kind string) bool {
 var tessivenContextID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`)
 
 func contextActionItemPayloadAllowed(item ContextActionContextItem) bool {
+	if item.Kind == contextActionKindReferenceSnapshot {
+		snapshot := item.ReferenceSnapshot
+		if snapshot == nil || (snapshot.Kind != "text" && snapshot.Kind != "terminal" && snapshot.Kind != "process") {
+			return false
+		}
+		ref := flruntime.MessageReference{ReferenceID: "snapshot", Kind: flruntime.MessageReferenceKind(snapshot.Kind), Label: snapshot.Label, Text: snapshot.Text, Truncated: snapshot.Truncated}
+		if ref.Validate() != nil {
+			return false
+		}
+		if item.wireFields != nil {
+			return len(item.wireFields) == 2 && item.wireFields["kind"] != nil && item.wireFields["reference_snapshot"] != nil
+		}
+		copy := item
+		copy.Kind = contextActionKindText
+		copy.ReferenceSnapshot = nil
+		copy.Title = "snapshot"
+		copy.Content = "snapshot"
+		return contextActionItemPayloadAllowed(copy)
+	}
+	if item.ReferenceSnapshot != nil {
+		return false
+	}
 	if item.Kind == contextActionKindThread {
 		if item.Thread == nil || !item.Thread.valid() {
 			return false
@@ -572,9 +626,10 @@ func normalizeContextActionItems(items []ContextActionContextItem) []ContextActi
 	out := make([]ContextActionContextItem, 0, len(items))
 	for _, item := range items {
 		normalized := ContextActionContextItem{
-			Kind:     strings.TrimSpace(item.Kind),
-			Thread:   item.Thread,
-			CanvasID: item.CanvasID, VersionID: item.VersionID, ObjectRefs: item.ObjectRefs,
+			Kind:              strings.TrimSpace(item.Kind),
+			ReferenceSnapshot: item.ReferenceSnapshot,
+			Thread:            item.Thread,
+			CanvasID:          item.CanvasID, VersionID: item.VersionID, ObjectRefs: item.ObjectRefs,
 			Path:           strings.TrimSpace(item.Path),
 			IsDirectory:    item.IsDirectory,
 			RootLabel:      strings.TrimSpace(item.RootLabel),

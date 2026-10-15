@@ -5572,13 +5572,9 @@
       "citationSources": "來源",
       "citationCopySources": "複製來源",
       "citationUnavailable": "來源無法使用",
-      "queuedEdit": "編輯排隊訊息",
-      "queuedEditSave": "儲存修改",
-      "queuedEditRetry": "重試儲存",
-      "queuedEditCancel": "返回草稿",
-      "queuedEditUnavailable": "暫時無法編輯排隊訊息。",
-      "queuedEditConflict": "此排隊訊息已變更或開始執行，你的修改已保留。",
-      "queuedEditUnknown": "儲存結果尚未確認，請重試本次儲存以確認結果。"
+      "queuedEdit": "取回到輸入框",
+      "queueTakeBackConflict": "這則佇列訊息已開始執行或有變更，請重新整理後再試。",
+      "queueTakeBackUnknown": "訊息已放回輸入框，但尚未確認移出佇列，請檢查佇列後再傳送。"
     },
     "threadList": {
       "title": "對話",

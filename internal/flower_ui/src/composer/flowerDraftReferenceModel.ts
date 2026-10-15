@@ -5,7 +5,7 @@ import { normalizeFlowerComposerReferencePath } from './flowerComposerReferenceI
 /** One type dispatch for draft identity, submission and visible description. */
 export function flowerDraftReferenceIdentity(reference: FlowerComposerDraftReference): string {
   switch (reference.kind) {
-    case 'queued_reference': return `queued_reference\0${reference.reference.reference_id}`;
+    case 'snapshot': return `snapshot\0${reference.local_id}`;
     case 'thread': return `thread\0${reference.thread.runtime_id}\0${reference.thread.thread_id}`;
     case 'page_context': return 'page_context';
     case 'file':
@@ -15,7 +15,7 @@ export function flowerDraftReferenceIdentity(reference: FlowerComposerDraftRefer
 
 export function flowerDraftReferenceContextItem(reference: FlowerComposerDraftReference): ContextActionContextItem {
   switch (reference.kind) {
-    case 'queued_reference': throw new Error('Retained queue references are not new context submissions.');
+    case 'snapshot': return { kind: 'reference_snapshot', reference_snapshot: reference.snapshot };
     case 'thread': return { kind: 'thread_reference', thread: reference.thread };
     case 'page_context': return { kind: 'text_snapshot', title: reference.title, content: reference.content };
     case 'file':
@@ -25,7 +25,7 @@ export function flowerDraftReferenceContextItem(reference: FlowerComposerDraftRe
 
 export function flowerDraftReferenceDescription(reference: FlowerComposerDraftReference): string {
   switch (reference.kind) {
-    case 'queued_reference': return reference.reference.label;
+    case 'snapshot': return reference.snapshot.label;
     case 'thread': return reference.thread.title || reference.label;
     case 'page_context': return reference.title;
     case 'file':

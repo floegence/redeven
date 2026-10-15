@@ -383,6 +383,20 @@ describe('Env local Flower surface adapter', () => {
 		);
 	});
 
+  it('prepares resources before conditionally taking a queued message back', async () => {
+    const draft = { prompt: 'Original input', references: [], attachments: [] };
+    const current = { thread_id: 'thread/draft', view_version: 3, activity: 'active', queue: [] };
+    fetchMock.mockResolvedValueOnce(jsonResponse(draft)).mockResolvedValueOnce(jsonResponse(current));
+    const adapter = createEnvLocalFlowerSurfaceAdapter({ envPublicID: 'env_a', envLabel: 'Demo Env', rpc: { ai: {} } as any });
+    const fingerprint = 'a'.repeat(64);
+    const scope = { staging_scope_id: 'draft-scope', target_id: 'thread/draft', capability: 'draft-secret', expires_at_unix_ms: Date.now() + 60_000 };
+    await expect(adapter.prepareQueuedTurnDraft!('thread/draft', 'queue/first', { expected_input_fingerprint: fingerprint, staging_scope: scope })).resolves.toEqual(draft);
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/_redeven_proxy/api/ai/threads/thread%2Fdraft/queue/queue%2Ffirst/prepare-edit', expect.objectContaining({ method: 'POST', body: JSON.stringify({ expected_input_fingerprint: fingerprint, staging_scope_id: scope.staging_scope_id }) }));
+    expect(fetchMock.mock.calls[0]![1]!.body).not.toContain('draft-secret');
+    await expect(adapter.takeBackQueuedTurn!('thread/draft', 'queue/first', fingerprint)).resolves.toEqual(current);
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/_redeven_proxy/api/ai/threads/thread%2Fdraft/queue/queue%2Ffirst/take-back', expect.objectContaining({ method: 'POST', body: JSON.stringify({ expected_input_fingerprint: fingerprint }) }));
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
 	it('sends one canonical queued turn now through the send-now route before reloading detail', async () => {
 		fetchMock
 			.mockResolvedValueOnce(jsonResponse({ ok: true }))

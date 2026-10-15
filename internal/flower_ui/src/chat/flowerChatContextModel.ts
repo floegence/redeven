@@ -162,6 +162,7 @@ function buildTextSnapshotChip(item: Extract<ContextActionContextItem, { kind: '
 
 function buildChip(item: ContextActionContextItem, index: number): FlowerChatContextChip {
   switch (item.kind) {
+    case 'reference_snapshot': return buildCanonicalReferenceChip({ reference_id: `ctx-${index}-snapshot`, ...item.reference_snapshot }, index);
     case 'thread_reference': return {
       id: `ctx-${index}-thread`, kind: item.kind, tone: 'thread', label: item.thread.title || item.thread.thread_id, detail: '',
       action: { type: 'open_thread_preview', title: item.thread.title || item.thread.thread_id, subtitle: '',

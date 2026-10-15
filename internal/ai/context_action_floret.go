@@ -58,6 +58,14 @@ func floretContextProjectionForInput(input RunInput, authority *flowerCanonicalR
 		title := nonEmptyString(item.Title, "Submitted context")
 		instruction := "Facts supplied with this reference (routing hints do not establish execution location):"
 		switch strings.TrimSpace(item.Kind) {
+		case contextActionKindReferenceSnapshot:
+			snapshot := item.ReferenceSnapshot
+			reference = flruntime.MessageReference{ReferenceID: floretContextReferenceID(index), Kind: flruntime.MessageReferenceKind(snapshot.Kind), Label: snapshot.Label, Text: snapshot.Text, Truncated: snapshot.Truncated}
+			if err := reference.Validate(); err != nil {
+				return floretContextProjection{}, err
+			}
+			projection.References = append(projection.References, reference)
+			continue
 		case contextActionKindThread:
 			raw, marshalErr := json.Marshal(item.Thread)
 			if marshalErr != nil {

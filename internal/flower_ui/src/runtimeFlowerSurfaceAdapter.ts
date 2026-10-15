@@ -23,6 +23,8 @@ import type {
   FlowerSubmitInputRequest,
   FlowerSurfaceAdapter,
   FlowerQueuedTurnEditInput,
+  FlowerQueuedDraft,
+  FlowerQueuedDraftInput,
   FlowerSubmitInputReceipt,
   FlowerSurfaceRuntimeDescriptor,
   FlowerTerminalProcessSnapshot,
@@ -118,6 +120,8 @@ export type FlowerRuntimeTransport = Readonly<{
   movePinnedThread?(threadID: string, input: FlowerThreadPinPosition): Promise<{ pins: readonly RuntimeThreadPinMetadata[] }>;
   reorderQueuedTurns?(threadID: string, orderedQueueIDs: readonly string[]): Promise<unknown>;
   deleteQueuedTurn?(threadID: string, queueID: string): Promise<unknown>;
+  prepareQueuedTurnDraft?(threadID: string, queueID: string, input: FlowerQueuedDraftInput): Promise<FlowerQueuedDraft>;
+  takeBackQueuedTurn?(threadID: string, queueID: string, fingerprint: string): Promise<FlowerRuntimeCurrentView>;
   editQueuedTurn?(threadID: string, queueID: string, input: FlowerQueuedTurnEditInput): Promise<unknown>;
   sendQueuedTurnNow?(threadID: string, queueID: string): Promise<unknown>;
   forkThread(threadID: string, input: Readonly<{ client_request_id: string; title: string }>): Promise<LoadThreadResponse>;
@@ -436,6 +440,22 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
           if (!qid) throw new Error('Missing Flower queued turn id.');
           await options.transport.deleteQueuedTurn!(tid, qid);
           return loadThread(tid);
+        },
+      } : {}),
+      ...(options.transport.prepareQueuedTurnDraft && options.transport.takeBackQueuedTurn ? {
+        prepareQueuedTurnDraft: (threadID: string, queueID: string, input: FlowerQueuedDraftInput) => options.transport.prepareQueuedTurnDraft!(threadID, queueID, input),
+        takeBackQueuedTurn: async (threadID: string, queueID: string, fingerprint: string) => {
+          const tid = trim(threadID), qid = trim(queueID);
+          for (let attempt = 0; ; attempt++) {
+            try {
+              return await options.transport.takeBackQueuedTurn!(tid, qid, fingerprint);
+            } catch (error) {
+              const status = Number((error as { status?: number })?.status ?? 0);
+              if ((status >= 400 && status < 500) || (error as { failureKind?: string })?.failureKind === 'response') throw flowerTurnAdmissionError('rejected', error);
+              // Reconcile one lost response through the same idempotent removal.
+              if (attempt > 0) throw flowerTurnAdmissionError('unknown', error);
+            }
+          }
         },
       } : {}),
       ...(options.transport.editQueuedTurn ? {

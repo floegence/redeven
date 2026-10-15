@@ -86,6 +86,14 @@ func TestForeignEndpointCannotMutateCanonicalThread(t *testing.T) {
 			return err
 		}},
 		{name: "delete queued", call: func() error { return svc.DeleteQueuedInput(t.Context(), foreign, thread.ThreadID, "foreign-queue") }},
+		{name: "prepare queued draft", call: func() error {
+			_, err := svc.PrepareQueuedDraft(t.Context(), foreign, thread.ThreadID, "foreign-queue", QueuedDraftRequest{ExpectedInputFingerprint: strings.Repeat("a", 64)})
+			return err
+		}},
+		{name: "take back queued", call: func() error {
+			_, err := svc.TakeBackQueuedInput(t.Context(), foreign, thread.ThreadID, "foreign-queue", strings.Repeat("a", 64))
+			return err
+		}},
 		{name: "promote queued", call: func() error {
 			_, err := svc.PromoteQueuedInput(t.Context(), foreign, thread.ThreadID, "foreign-queue")
 			return err

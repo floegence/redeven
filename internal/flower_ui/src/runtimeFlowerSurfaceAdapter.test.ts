@@ -910,3 +910,24 @@ it.each([
   expect(editQueuedTurn).toHaveBeenCalledWith('thread', 'queue', command);
   expect(loadThread).toHaveBeenCalledTimes(confirmed ? 1 : 0);
 });
+
+it('reconciles a lost take-back response with the exact same conditional removal', async () => {
+  const current = { thread_id: 'thread', view_version: 2, activity: 'idle' as const, queue: [] };
+  const takeBackQueuedTurn = vi.fn().mockRejectedValueOnce(new Error('lost response')).mockResolvedValue(current);
+  const loadThread = vi.fn();
+  const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ loadThread, prepareQueuedTurnDraft: vi.fn(), takeBackQueuedTurn }));
+  await expect(adapter.takeBackQueuedTurn!(' thread ', ' queue ', 'a'.repeat(64))).resolves.toBe(current);
+  expect(takeBackQueuedTurn.mock.calls).toEqual(Array(2).fill(['thread', 'queue', 'a'.repeat(64)]));
+  expect(loadThread).not.toHaveBeenCalled();
+});
+
+it.each([
+  [Object.assign(new Error('conflict'), { status: 409 }), 'rejected', 1],
+  [Object.assign(new Error('denied'), { failureKind: 'response' }), 'rejected', 1],
+  [new Error('disconnected'), 'unknown', 2],
+] as const)('classifies a failed take-back without retrying a rejection: %s', async (error, kind, attempts) => {
+  const takeBackQueuedTurn = vi.fn().mockRejectedValue(error);
+  const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ prepareQueuedTurnDraft: vi.fn(), takeBackQueuedTurn }));
+  await expect(adapter.takeBackQueuedTurn!('thread', 'queue', 'a'.repeat(64))).rejects.toMatchObject({ admission_kind: kind });
+  expect(takeBackQueuedTurn).toHaveBeenCalledTimes(attempts);
+});
