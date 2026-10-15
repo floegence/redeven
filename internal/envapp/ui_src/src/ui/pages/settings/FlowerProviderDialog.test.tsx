@@ -15,7 +15,7 @@ vi.mock('@floegence/floe-webapp-core/ui', async (original) => ({
     state: () => (options.open() ? 'entered' : 'exited'),
   }),
   Button: (props: any) => (
-    <button type="button" aria-label={props['aria-label']} disabled={props.disabled} onClick={props.onClick}>
+    <button ref={props.ref} type="button" aria-label={props['aria-label']} disabled={props.disabled} onClick={props.onClick}>
       {props.children}
     </button>
   ),
@@ -47,6 +47,9 @@ vi.mock('@floegence/floe-webapp-core/ui', async (original) => ({
       disabled={props.disabled}
       onInput={props.onInput}
       onBlur={props.onBlur}
+      onKeyDown={props.onKeyDown}
+      ref={props.ref}
+      aria-label={props['aria-label']}
     />
   ),
   Select: (props: any) => (
@@ -92,6 +95,94 @@ describe('shared Flower provider dialog', () => {
     input.value = value; input.dispatchEvent(new Event('input', { bubbles: true }));
   };
   const finishInput = (input: HTMLInputElement) => input.dispatchEvent(new FocusEvent('blur'));
+
+  it.each(['openai', 'anthropic', 'google', 'deepseek', 'openai_compatible'] as const)('renames the %s connection from its title without changing its identity', async type => {
+    const discover = vi.fn(async () => ({ models: [] }));
+    const dialog = mountDialog('edit', discover);
+    try {
+      dialog.setProvider({ id: 'connection', type, base_url: 'https://proxy.example/v1', models: [] });
+      const identity = dialog.host.querySelector('.flower-provider-identity')!;
+      const edit = () => identity.querySelector<HTMLButtonElement>('button')!;
+      edit().click();
+      const input = identity.querySelector<HTMLInputElement>('input')!;
+      expect(input).not.toBeNull();
+      await Promise.resolve();
+      expect(document.activeElement).toBe(input);
+      inputValue(input, '  Work account  ');
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', isComposing: true, bubbles: true }));
+      expect(identity.querySelector('input')).toBe(input);
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      expect(identity.querySelector('h2')?.textContent).toBe('Work account');
+      await Promise.resolve();
+      expect(document.activeElement).toBe(edit());
+      edit().click();
+      const cancelled = identity.querySelector<HTMLInputElement>('input')!;
+      inputValue(cancelled, 'Discarded alias');
+      cancelled.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      expect(identity.querySelector('h2')?.textContent).toBe('Work account');
+      dialog.button('Save provider').click();
+      expect(serializeFlowerProvider(dialog.confirmed())).toMatchObject({ id: 'connection', type, name: 'Work account', base_url: 'https://proxy.example/v1' });
+      expect(discover).not.toHaveBeenCalled();
+    } finally { dialog.dispose(); }
+  });
+
+  it('restores the brand after clearing a connection alias', () => {
+    const dialog = mountDialog('edit');
+    try {
+      dialog.setProvider({ id: 'connection', type: 'openai', name: 'Work account', models: [] });
+      const identity = dialog.host.querySelector('.flower-provider-identity')!;
+      expect(identity.querySelector('h2')?.textContent).toBe('Work account');
+      identity.querySelector<HTMLButtonElement>('button')!.click();
+      const input = identity.querySelector<HTMLInputElement>('input')!;
+      inputValue(input, '   '); finishInput(input);
+      expect(identity.querySelector('h2')?.textContent).toBe('OpenAI');
+      dialog.button('Save provider').click();
+      expect(dialog.confirmed().name).toBe('');
+    } finally { dialog.dispose(); }
+  });
+
+  it('gives two new connections of the same brand independent aliases and identities', () => {
+    const saved = ['Personal', 'Work'].map((name, index) => {
+      const dialog = mountDialog();
+      try {
+        dialog.setProvider({ id: `openai-${index}`, type: 'openai', name: 'OpenAI', base_url: 'https://api.openai.com/v1', models: [] });
+        dialog.type('openai');
+        const identity = dialog.host.querySelector('.flower-provider-identity')!;
+        identity.querySelector<HTMLButtonElement>('button')!.click();
+        const input = identity.querySelector<HTMLInputElement>('input')!;
+        inputValue(input, name); finishInput(input);
+        dialog.button('Save provider').click();
+        return serializeFlowerProvider(dialog.confirmed());
+      } finally { dialog.dispose(); }
+    });
+    expect(saved.map(provider => provider.name)).toEqual(['Personal', 'Work']);
+    expect(saved.map(provider => provider.id)).toEqual(['openai-0', 'openai-1']);
+    expect(saved.every(provider => provider.type === 'openai')).toBe(true);
+  });
+
+  it.each([
+    { type: 'openai', defaultBaseURL: 'https://api.openai.com/v1' },
+    { type: 'google', defaultBaseURL: 'https://generativelanguage.googleapis.com/v1beta/openai' },
+    { type: 'anthropic', defaultBaseURL: 'https://api.anthropic.com' },
+  ] as const)('edits and saves the $type endpoint for new and existing connections', ({ type, defaultBaseURL }) => {
+    for (const mode of ['create', 'edit'] as const) {
+      const dialog = mountDialog(mode);
+      try {
+        const existingBaseURL = 'https://existing.example/v1';
+        if (mode === 'create') {
+          dialog.setProvider({ id: 'new', type: 'openai', base_url: 'https://api.openai.com/v1', models: [] });
+          dialog.type(type);
+        } else dialog.setProvider({ id: 'existing', type, base_url: existingBaseURL, models: [] });
+        const endpoint = dialog.host.querySelector<HTMLInputElement>(`input[placeholder="${defaultBaseURL}"]`);
+        expect(endpoint).not.toBeNull();
+        expect(endpoint!.disabled).toBe(false);
+        expect(endpoint!.value).toBe(mode === 'create' ? defaultBaseURL : existingBaseURL);
+        inputValue(endpoint!, 'https://proxy.example/custom-prefix/v1');
+        dialog.button('Save provider').click();
+        expect(serializeFlowerProvider(dialog.confirmed()).base_url).toBe('https://proxy.example/custom-prefix/v1');
+      } finally { dialog.dispose(); }
+    }
+  });
 
   it('discovers a new Ollama connection once and leaves discovered models unselected', async () => {
     const discover = vi.fn(async () => ({ models: [{ model_name: 'local-agent', context_window: 8192, supports_tools: true }] }));
@@ -386,6 +477,22 @@ describe('ChatGPT local authentication boundary', () => {
     (host.querySelector('[aria-controls=flower-provider-type-openai]') as HTMLButtonElement).click();
     return { host, button, dispose, setOpen, setLocal, setBinding };
   }
+  it('shows the endpoint only for API key authentication and retains its draft across switches', () => {
+    const dialog = localDialog(true);
+    const endpoint = () => dialog.host.querySelector<HTMLInputElement>('input[placeholder="https://api.openai.com/v1"]');
+    try {
+      expect(endpoint()).toBeNull();
+      dialog.button('API key').click();
+      expect(endpoint()).not.toBeNull();
+      endpoint()!.value = 'https://proxy.example/v1';
+      endpoint()!.dispatchEvent(new Event('input', { bubbles: true }));
+      dialog.button('ChatGPT account').click();
+      expect(endpoint()).toBeNull();
+      dialog.button('API key').click();
+      expect(endpoint()!.value).toBe('https://proxy.example/v1');
+    } finally { dialog.dispose(); }
+  });
+
   it('disables the remote tab with persistent guidance and no sign-in controls', () => {
     const auth = vi.fn(); const dialog = localDialog(false, auth);
     expect(dialog.button('ChatGPT account').disabled).toBe(true);

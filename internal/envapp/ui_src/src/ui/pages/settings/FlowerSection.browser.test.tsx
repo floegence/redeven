@@ -146,6 +146,19 @@ it('uses the shared compact model and provider presentation in global Env settin
   if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: host, path: '__screenshots__/flower-env-settings-zh-CN.png' });
 });
 
+it('persists native provider aliases through the Env provider bundle', async () => {
+  const { settings, bundles } = await mount(1000, true, 'en-US');
+  await userEvent.click(page.getByRole('button', { name: 'Edit provider', exact: true }).nth(0));
+  await userEvent.click(page.getByRole('button', { name: 'Connection name', exact: true }));
+  await userEvent.fill(page.getByRole('textbox', { name: 'Connection name', exact: true }), 'Work DeepSeek');
+  await userEvent.keyboard('{Enter}');
+  await userEvent.click(page.getByRole('button', { name: 'Save provider', exact: true }));
+  await expect.poll(() => bundles.length).toBe(1);
+  expect((bundles[0].model_profile as AIModelProfile).providers[0]).toMatchObject({ id: 'deepseek', type: 'deepseek', name: 'Work DeepSeek' });
+  expect(settings().ai?.providers?.[0].name).toBe('Work DeepSeek');
+  await expect.poll(() => host.querySelector('.flower-settings-provider-title > span')?.textContent).toBe('Work DeepSeek');
+});
+
 it('persists enablement, retains the default and account identity, and rolls back failures', async () => {
   const { settings, bundles, failSave } = await mount(1000, true, 'en-US', true);
   const toggle = () => host.querySelector<HTMLButtonElement>('.flower-settings-provider-toggle')!;

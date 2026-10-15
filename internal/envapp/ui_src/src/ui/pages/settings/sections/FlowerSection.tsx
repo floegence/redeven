@@ -83,7 +83,7 @@ function collectAIModelOptions(rows: AIProviderRow[], locale?: string): AIModelO
   const options: AIModelOption[] = [];
   for (const p of Array.isArray(rows) ? rows : []) {
     const providerID = String(p?.id ?? '').trim(); if (!providerID || p.enabled === false) continue;
-    const providerName = localizedProviderDisplayName(p, locale, providerID);
+    const providerName = localizedProviderDisplayName(p, locale);
     for (const m of Array.isArray(p?.models) ? p.models : []) {
       const modelName = String(m?.model_name ?? '').trim(); if (!modelName || m.unavailable) continue;
       options.push({ id: modelID(providerID, modelName), label: `${providerName} / ${modelName}`, supportsImageInput: modelSupportsImageInput(m.input_modalities) });

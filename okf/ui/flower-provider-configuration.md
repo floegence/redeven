@@ -55,6 +55,19 @@ required. Tool support uses an explicit unknown/supported/unsupported choice;
 unknown never appears as an unchecked boolean. Deselecting an incomplete model
 removes its save requirement without inventing capabilities.
 
+Every API key connection exposes an editable Base URL, including OpenAI, Gemini
+and Anthropic. New connections prefill the provider default; existing connections
+retain their configured address. Endpoint visibility is independent of whether
+the backend requires an explicit address. ChatGPT account connections hide the
+endpoint field, and switching authentication methods retains the endpoint draft.
+
+Every provider connection can have an alias, including multiple connections of
+the same brand. The pencil beside the provider title edits the existing `name`
+field in place. Enter or leaving the field accepts the draft; Escape restores the
+prior name, and an empty alias falls back to the brand. Provider galleries and
+model selectors use the same alias. Saving preserves it without changing the
+provider ID, authentication binding, credentials, endpoint or model identities.
+
 Global Env settings use the same provider picker, connection controls and model
 catalog as the other Flower settings entrypoints. Advanced parameters remain
 available through each model's explicit edit control. The catalog includes selected
@@ -150,6 +163,7 @@ catalog synchronization never selects newly discovered models automatically.
 # Evidence
 
 - `redeven:internal/flower_ui/src/settings/FlowerProviderDialog.tsx` - Shared provider selection, credential readiness, authentication actions, and catalog ownership.
+- `redeven:internal/envapp/ui_src/src/ui/pages/settings/FlowerProviderDialog.test.tsx` - Default and custom API endpoints across create/edit flows and authentication switches.
 - `redeven:internal/envapp/ui_src/src/ui/pages/settings/sections/FlowerSection.tsx` - Global Env admission, shared dialog integration and atomic provider/credential saves.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.chatgpt.browser.test.tsx` - Attempt polling without account-list reloads.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSettingsSurface.presentation.browser.test.tsx` - Overview privacy, editor-only recovery, account-read retry and stale-binding rejection.

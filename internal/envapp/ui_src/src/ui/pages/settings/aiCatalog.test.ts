@@ -8,9 +8,9 @@ import {
   defaultBaseURLForProviderType,
   providerBrandForType,
   providerDisplayName,
+  localizedProviderDisplayName,
   providerSupportsCustomModelNames,
   providerTypeLabel,
-  providerUsesCustomConnectionName,
 } from './aiCatalog';
 
 describe('AI provider preset catalog', () => {
@@ -33,17 +33,20 @@ describe('AI provider preset catalog', () => {
       expect(brand.icon.viewBox).not.toEqual('');
     }
     expect(providerBrandForType('deepseek').icon.title).toBe('DeepSeek');
-    expect(providerUsesCustomConnectionName('openai')).toBe(false);
-    expect(providerUsesCustomConnectionName('deepseek')).toBe(false);
-    expect(providerUsesCustomConnectionName('openrouter')).toBe(true);
-    expect(providerUsesCustomConnectionName('ollama')).toBe(true);
-    expect(providerUsesCustomConnectionName('openai_compatible')).toBe(true);
     expect(providerSupportsCustomModelNames('openai')).toBe(true);
     expect(providerSupportsCustomModelNames('deepseek')).toBe(true);
     expect(providerSupportsCustomModelNames('groq')).toBe(true);
     expect(providerSupportsCustomModelNames('ollama')).toBe(false);
     expect(providerSupportsCustomModelNames('openai_compatible')).toBe(true);
-    expect(providerDisplayName({ type: 'deepseek', name: 'Personal DeepSeek' })).toBe('DeepSeek');
+    expect(providerDisplayName({ type: 'deepseek', name: 'Personal DeepSeek' })).toBe('Personal DeepSeek');
     expect(providerDisplayName({ type: 'openai_compatible', name: 'Endpoint A' })).toBe('Endpoint A');
+  });
+
+  it('distinguishes multiple connections of every provider type by alias', () => {
+    for (const { value: type } of AI_PROVIDER_TYPE_OPTIONS) {
+      expect(providerDisplayName({ type, name: '  Personal  ' })).toBe('Personal');
+      expect(localizedProviderDisplayName({ type, name: 'Work' }, 'zh-CN')).toBe('Work');
+      expect(providerDisplayName({ type, name: '' })).toBe(providerTypeLabel(type));
+    }
   });
 });

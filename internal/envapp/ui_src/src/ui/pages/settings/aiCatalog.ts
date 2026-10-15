@@ -12,7 +12,7 @@ import {
   flowerProviderNeedsWebSearchConfig,
   flowerProviderSupportsCustomModels,
   flowerProviderTypeRequiresBaseURL,
-  flowerProviderUsesCustomName,
+  flowerProviderDisplayName,
 } from '../../../../../../flower_ui/src/settings/providerCatalog';
 import {
   normalizeFlowerReasoningCapability,
@@ -26,7 +26,6 @@ export type AIProviderBrand = Readonly<{
   type: AIProviderType;
   label: string;
   description: string;
-  customConnectionName: boolean;
   icon: AIProviderIconDefinition;
 }>;
 
@@ -50,7 +49,6 @@ export const AI_PROVIDER_BRANDS: Record<AIProviderType, AIProviderBrand> = Objec
       type: providerType,
       label: item.label,
       description: item.hint,
-      customConnectionName: providerType === 'openai_compatible',
       icon: AI_PROVIDER_ICON_DEFINITIONS[providerType],
     }];
   }),
@@ -92,26 +90,15 @@ export function localizedProviderTypeLabel(providerType: AIProviderType, locale:
   return localizedFlowerProviderTypeLabels(locale)[providerType] ?? providerTypeLabel(providerType);
 }
 
-export function providerUsesCustomConnectionName(providerType: AIProviderType): boolean {
-  return flowerProviderUsesCustomName(providerType);
-}
-
-export function providerDisplayName(row: Pick<AIProviderRow, 'name' | 'type'>, fallback = 'Provider'): string {
-  if (providerUsesCustomConnectionName(row.type)) {
-    return String(row.name ?? '').trim() || fallback;
-  }
-  return providerTypeLabel(row.type);
+export function providerDisplayName(row: Pick<AIProviderRow, 'name' | 'type'>): string {
+  return flowerProviderDisplayName(row);
 }
 
 export function localizedProviderDisplayName(
   row: Pick<AIProviderRow, 'name' | 'type'>,
   locale: string | undefined,
-  fallback = 'Provider',
 ): string {
-  if (providerUsesCustomConnectionName(row.type)) {
-    return String(row.name ?? '').trim() || fallback;
-  }
-  return localizedProviderTypeLabel(row.type, locale);
+  return flowerProviderDisplayName(row, localizedProviderTypeLabel(row.type, locale));
 }
 
 export function formatTokenCount(tokenCount: number): string {

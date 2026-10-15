@@ -53,10 +53,6 @@ export function flowerProviderTypeRequiresBaseURL(type: FlowerProviderType): boo
   return type === 'moonshot' || type === 'chatglm' || type === 'deepseek' || type === 'qwen' || type === 'openrouter' || type === 'xai' || type === 'groq' || type === 'ollama' || type === 'openai_compatible';
 }
 
-export function flowerProviderUsesCustomName(type: FlowerProviderType): boolean {
-  return type === 'openrouter' || type === 'xai' || type === 'groq' || type === 'ollama' || type === 'openai_compatible';
-}
-
 export function flowerProviderSupportsCustomModels(type: FlowerProviderType): boolean {
   return type !== 'ollama';
 }
@@ -65,10 +61,8 @@ export function flowerProviderNeedsWebSearchConfig(type: FlowerProviderType): bo
   return type === 'openai_compatible';
 }
 
-export function flowerProviderDisplayName(provider: Pick<FlowerProvider, 'id' | 'name' | 'type'>): string {
-  const name = String(provider.name ?? '').trim();
-  if (flowerProviderUsesCustomName(provider.type)) return name || provider.id || flowerProviderTypeLabel(provider.type);
-  return flowerProviderTypeLabel(provider.type);
+export function flowerProviderDisplayName(provider: Pick<FlowerProvider, 'name' | 'type'>, fallback = flowerProviderTypeLabel(provider.type)): string {
+  return String(provider.name ?? '').trim() || fallback;
 }
 
 export function flowerModelID(providerID: string, modelName: string): string {

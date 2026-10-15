@@ -286,6 +286,15 @@ for (const [surface, width, theme] of [['desktop', 1280, 'porcelain-light'], ['d
     const { dialog, copy: localized } = await mount(surface, theme, undefined, width, 'zh-CN');
     const key = page.getByRole('button', { name: localized.apiKey, exact: true });
     await userEvent.click(key);
+    const endpoint = page.getByRole('textbox', { name: localized.baseURL, exact: true });
+    await expect.element(endpoint).toBeVisible();
+    await userEvent.fill(endpoint, 'https://proxy.example/custom-prefix/v1');
+    expect(document.activeElement).toBe(endpoint.element());
+    await userEvent.click(page.getByRole('button', { name: localized.connectionName, exact: true }));
+    const alias = page.getByRole('textbox', { name: localized.connectionName, exact: true });
+    await userEvent.fill(alias, '工作账号 · OpenAI');
+    await userEvent.keyboard('{Enter}');
+    expect(dialog.querySelector('.flower-provider-identity h2')?.textContent).toBe('工作账号 · OpenAI');
     expect(dialog.querySelector('.flower-provider-models')).toBeNull();
     await userEvent.fill(page.getByPlaceholder(localized.pasteAPIKey), 'test-key');
     const checkbox = dialog.querySelector<HTMLInputElement>('input[type=checkbox]')!;
