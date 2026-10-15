@@ -262,6 +262,7 @@ describe('Flower inline media', () => {
     await page.screenshot({ path: `./__screenshots__/redeven-flower-image-window-${mode}.png` });
     // Repeated requests retain the same host surface.
     preview.click();
+    await waitFor(() => openFilePreview.mock.calls.length === 2);
     expect(openFilePreview).toHaveBeenCalledTimes(2);
     expect(document.querySelector('.file-preview-floating-window')).toBe(window);
     window.querySelector<HTMLButtonElement>('[data-floe-floating-window-control="close"]')!.click();

@@ -13,7 +13,8 @@
 - Separate failed computer/browser operations from Agent-owned `ask_user`, with
   one canonical evidence resolver and fresh-observation continuation.
 - Display saved screenshot Activity inline by default through published Floe
-  media, preserving manual collapse, thread isolation and read-only retry.
+  media and keep its completed turn expanded, preserving manual collapse,
+  thread isolation and read-only retry.
 - Preserve completed effects through technical scan/capture failures and retain
   private input, unknown-effect and Run resource-release boundaries.
 

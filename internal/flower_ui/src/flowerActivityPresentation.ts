@@ -1556,6 +1556,10 @@ function presentationForStructured(item: FlowerActivityItem, copy?: FlowerActivi
   return { label: titleText(title), title, meta, detailLines, detailBlocks, primaryAction: actionFromPayload({ target: item.target_refs?.find(target => target.path) }, 'Read', trimString(item.label)), ...(computer ? { suppressEmptyDisclosure: item.payload?.rows_provided === true } : {}) };
 }
 
+export function isSavedComputerScreenshot(item: FlowerActivityItem): boolean {
+  return item.tool_name === 'computer.screenshot' && Boolean(computerActivityResource(item).frame);
+}
+
 export function computerActivityResource(item: FlowerActivityItem) {
   const refs = item.target_refs ?? [];
   const capture = refs.find(ref => ref.kind === 'computer_frame' && /^computer:\/\/([a-zA-Z0-9_-]+)\/[a-f0-9]{64}$/u.test(ref.resource_ref ?? ''));

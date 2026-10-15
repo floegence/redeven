@@ -78,7 +78,9 @@ into a request for human inspection.
 A valid saved screenshot reference makes its Activity default open. Disclosure
 uses `manualOpen ?? defaultOpen`; updates never override a manual collapse.
 Choices stay local to the activity during the mounted UI session; reload restores
-the default. Other tools stay collapsed and may show attached images on expansion.
+the default. Completed turns containing a saved screenshot also default expanded
+through the existing turn disclosure store, preserving manual turn collapse.
+Other tools stay collapsed and may show attached images on expansion.
 The published Floe `MarkdownMedia` owns proportional image display, enlargement,
 cancellation and retry. Retry rereads only the original saved image, never runs
 a screenshot tool. Resolution is bound to the owning Thread and resource, and

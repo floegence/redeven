@@ -45,8 +45,8 @@ black shadow. While the exact task is running, the header entry and visible
 launcher use semantic blue with the published Floe progress shimmer. The header
 has one label: execution mode when known, otherwise task status; assistance names
 the step needing attention. It never prefixes that status with another Computer
-label. Historical entries retain their View last screenshot action and expose
-the matching task outcome in their tooltip and accessible name.
+label. Saved historical screenshots render inline through the existing media
+preview path; their tool details do not create a separate viewer action.
 Waiting, takeover, paused, disconnected and settled states remove the shimmer;
 non-running launchers remain neutral. Hidden launchers do not animate. Reduced
 motion and forced colors use the upstream static presentation. There is no halo,
