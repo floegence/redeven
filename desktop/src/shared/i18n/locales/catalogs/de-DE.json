@@ -890,7 +890,21 @@
         },
         "agentsCount": "{count} delegierte Agenten"
       },
-      "feedbackClose": "Rückmeldung schließen"
+      "feedbackClose": "Rückmeldung schließen",
+      "input": {
+        "queueTitle": "Wartende Anweisungen",
+        "steerNow": "Jetzt anleiten",
+        "remove": "Entfernen",
+        "resend": "Erneut senden",
+        "pending": "Anweisung wird übernommen…",
+        "applied": "Zum Kontext hinzugefügt",
+        "cancelled": "Nicht angewendet",
+        "stopped": "Die Aufgabe wurde gestoppt, bevor diese Anweisung wirksam wurde.",
+        "unknown": "Das Ergebnis eines Werkzeugs ist unbekannt. Diese Anweisung kann hier nicht erneut versucht werden.",
+        "ended": "Die Aufgabe wurde beendet, bevor diese Anweisung wirksam wurde.",
+        "failed": "Der Vorgang konnte nicht bestätigt werden. Aktualisieren Sie die Details und versuchen Sie es erneut.",
+        "changed": "Diese Eingabe wurde geändert oder bereits verarbeitet. Die Details wurden aktualisiert."
+      }
     },
     "settings": {
       "title": "Flower-Einstellungen",

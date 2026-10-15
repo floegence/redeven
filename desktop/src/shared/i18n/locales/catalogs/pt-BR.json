@@ -890,7 +890,21 @@
         },
         "agentsCount": "Agentes delegados: {count}"
       },
-      "feedbackClose": "Fechar detalhes do aviso"
+      "feedbackClose": "Fechar detalhes do aviso",
+      "input": {
+        "queueTitle": "Instruções na fila",
+        "steerNow": "Orientar agora",
+        "remove": "Remover",
+        "resend": "Enviar novamente",
+        "pending": "Aplicando instrução…",
+        "applied": "Adicionada ao contexto",
+        "cancelled": "Não aplicada",
+        "stopped": "A tarefa foi interrompida antes de esta instrução entrar em vigor.",
+        "unknown": "O resultado de uma ferramenta é desconhecido. Esta instrução não pode ser tentada novamente aqui.",
+        "ended": "A tarefa terminou antes de esta instrução entrar em vigor.",
+        "failed": "Não foi possível confirmar a operação. Atualize os detalhes e tente novamente.",
+        "changed": "Esta entrada mudou ou já foi processada. Os detalhes foram atualizados."
+      }
     },
     "settings": {
       "title": "Configurações do Flower",

@@ -890,7 +890,21 @@
         },
         "agentsCount": "{count}개의 위임된 에이전트"
       },
-      "feedbackClose": "알림 세부 정보 닫기"
+      "feedbackClose": "알림 세부 정보 닫기",
+      "input": {
+        "queueTitle": "대기 중인 지시",
+        "steerNow": "지금 지시",
+        "remove": "제거",
+        "resend": "다시 보내기",
+        "pending": "지시 반영 중…",
+        "applied": "컨텍스트에 추가됨",
+        "cancelled": "적용되지 않음",
+        "stopped": "작업이 중지되어 이 지시가 적용되지 않았습니다.",
+        "unknown": "도구 실행 결과를 알 수 없습니다. 여기서 이 지시를 재시도할 수 없습니다.",
+        "ended": "작업이 종료되어 이 지시가 적용되지 않았습니다.",
+        "failed": "작업 결과를 확인할 수 없습니다. 세부 정보를 새로 고친 후 다시 시도하세요.",
+        "changed": "이 입력이 변경되었거나 이미 처리되었습니다. 세부 정보를 새로 고쳤습니다."
+      }
     },
     "settings": {
       "title": "Flower 설정",

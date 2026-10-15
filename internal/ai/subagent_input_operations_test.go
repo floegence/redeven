@@ -136,6 +136,37 @@ func TestSubagentGuidanceInterruptsProviderWithoutReplacingTask(t *testing.T) {
 	if _, err := childRuntime.sendInput(t.Context(), "guide-tool", args); !errors.Is(err, flruntime.ErrRequestConflict) {
 		t.Fatalf("conflict=%v", err)
 	}
+	if _, err := svc.StopThread(t.Context(), meta, parent.ThreadID); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	var stopped flruntime.ThreadView
+	for time.Now().Before(deadline) {
+		stopped, err = svc.threadRuntime.View(t.Context(), childID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if stopped.Activity == flruntime.ThreadActivityIdle {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if stopped.Activity != flruntime.ThreadActivityIdle || stopped.LastOutcome == nil || *stopped.LastOutcome != flruntime.TurnOutcomeCancelled {
+		t.Fatalf("parent stop did not settle child: %+v", stopped)
+	}
+	args["message"] = "Prioritize original release notes"
+	if _, err := childRuntime.sendInput(t.Context(), "guide-tool", args); err != nil {
+		t.Fatalf("replay after parent stop: %v", err)
+	}
+	cancelledContext, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, err := childRuntime.sendInput(cancelledContext, "late-guide", args); err == nil {
+		t.Fatal("cancelled parent operation was admitted")
+	}
+	final, err := svc.threadRuntime.View(t.Context(), childID)
+	if err != nil || final.Activity != flruntime.ThreadActivityIdle || final.TurnID != stopped.TurnID || final.RunID != stopped.RunID || calls.Load() != 3 {
+		t.Fatalf("old guidance revived stopped child: %+v calls=%d err=%v", final, calls.Load(), err)
+	}
 }
 
 func TestSubagentInputOperationsAuthorizeAndConsumeCanonicalQueue(t *testing.T) {

@@ -890,7 +890,21 @@
         },
         "agentsCount": "Agents délégués : {count}"
       },
-      "feedbackClose": "Fermer les détails du message"
+      "feedbackClose": "Fermer les détails du message",
+      "input": {
+        "queueTitle": "Instructions en attente",
+        "steerNow": "Guider maintenant",
+        "remove": "Supprimer",
+        "resend": "Renvoyer",
+        "pending": "Instruction en cours…",
+        "applied": "Ajoutée au contexte",
+        "cancelled": "Non appliquée",
+        "stopped": "La tâche a été arrêtée avant que cette instruction prenne effet.",
+        "unknown": "Le résultat d’un outil est inconnu. Cette instruction ne peut pas être réessayée ici.",
+        "ended": "La tâche s’est terminée avant que cette instruction prenne effet.",
+        "failed": "Impossible de confirmer l’opération. Actualisez les détails et réessayez.",
+        "changed": "Cette saisie a été modifiée ou déjà traitée. Les détails ont été actualisés."
+      }
     },
     "settings": {
       "title": "Paramètres Flower",
