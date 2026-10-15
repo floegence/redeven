@@ -1,5 +1,16 @@
 export const toolActivityEnUS = {
   "previewUnavailable": "This tool did not provide a result preview.",
+  "computerPageChanges": "Page changes",
+  "computerDefault": "Default",
+  "computerNewTab": "New tab",
+  "computerButton": "Button",
+  "computerLink": "Link",
+  "computerField": "Field",
+  "computerControl": "Control",
+  "computerCompletedActions": "Completed actions",
+  "computerUnavailable": "Unavailable",
+  "computerBlankPage": "Blank page",
+  "computerNoTargets": "No available pages or applications",
   "waitingResult": "Running; the result will appear here.",
 
   "copy": "Copy",

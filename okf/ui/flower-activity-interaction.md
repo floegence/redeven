@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower activity disclosure interaction
 description: Keep native tool activation, disclosure state, viewport following, and floating controls consistent during live updates.
 tags: [ai, flower, activity, interaction, accessibility]
-timestamp: 2026-10-14T00:00:00Z
+timestamp: 2026-10-15T00:00:00Z
 ---
 # Summary
 
@@ -19,9 +19,10 @@ activate tools. All transient ownership ends when its view is disposed.
 ## Stable disclosure and safe content
 
 Activity identity uses thread, run, turn, and canonical item ID. Status, payload,
-renderer objects, and list positions cannot own component lifetime. Every tool
-call has a stable native disclosure button from its first visible current,
-including file reads and calls whose detail has not arrived. Structured details distinguish waiting, saved empty output, truncated output,
+renderer objects, and list positions cannot own component lifetime. Tools
+retain a stable native disclosure button while details are available or pending,
+including file reads. A completed Computer Use call with saved empty results
+and no script, frame, or failure is a static row without a disclosure. Structured details distinguish waiting, saved empty output, truncated output,
 and historical records that did not save details. Missing scripts and screenshots
 are stated explicitly; older records are neither rewritten nor reconstructed. Unknown tools remain neutral; no arbitrary payload, stdin, or
 private path becomes an inspector fallback. File preview stays a separate
@@ -67,9 +68,13 @@ is confirmed. Both Desktop and Env App consume the same component.
 
 The collapsed title describes the invocation intent. Dynamic scripts retain the
 required natural-language description through completion and private-input
-pauses. Simple tools use localized action/object titles. Target names remain
-secondary, while opaque identifiers, execution-platform codes and operation
-counters do not become primary reading content.
+pauses. Every Computer Use and Browser Use tool requires that description.
+Titles use `ComputerUse: description` or `BrowserUse: description`; the actual
+resolved target kind identifies browser execution, including Computer scripts.
+Discovery remains Computer Use. Historical calls without descriptions use a
+localized action rather than a fabricated intent. Actual outcomes never replace
+the invocation intent. Opaque identities and execution-platform codes do not
+become primary reading content. Foreground activation warnings remain visible.
 
 Structured `inputs`, result `rows`, `rows_provided`, row `language` and
 `truncated` facts were introduced in published Floret v7.14.0 and remain owned by
@@ -92,8 +97,16 @@ presenters use compact previews. They foreground the query or operation, omit
 parameter and status noise, and start with three entries and two-line text
 previews. One localized disclosure reveals the remaining supplied content.
 Absent preview data is stated explicitly and never mistaken for an empty tool
-result. These are frontend choices over existing Activity; no tool-result
-mapping or storage contract changes. An
+result. Computer details show returned candidates with readable names and safe
+addresses, or actual page text, field values and controls. Localized semantic
+labels replace raw platform roles. Discovery keeps its default candidate in the
+initial three rows. Page changes remain identified as changes, not a complete
+snapshot. Results precede the retained literal script. Confirmation-only and
+verified blank-page results do not create redundant paragraphs or empty panels;
+the collapsed row carries the concise outcome. Partial execution, actionable
+failures, truncation, screenshots and missing historical details stay explicit.
+These mappings use existing structured Activity rows and chips; they introduce
+no storage or Floret API contract. An
 actionable failure suppresses the duplicate partial-output notice. English and
 all shipped locales provide action labels, missing-data notices and copy feedback. Model descriptions, filenames, scripts and actual output remain
 literal. Stable section keys and row slots retain DOM selection and expansion
@@ -162,6 +175,7 @@ file, process, or approval actions. Live transport continues during interaction.
 # Evidence
 
 - `redeven:internal/ai/tool_activity_details.go` - Bounded product input/result mapping over the released Floret contract.
+- `redeven:internal/ai/computer_activity.go` - Candidate and semantic page facts without redundant status or platform details.
 - `redeven:internal/flower_ui/src/FlowerActivityRows.tsx` - Published code display, localized copy feedback and stable row expansion.
 - `redeven:internal/flower_ui/src/flowerLiveMapper.ts` - Strict input/output row validation without dropping presentation fields.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.computerLifecycle.browser.test.tsx` - Live failure, exact screenshot refs, copy, keyboard, selection and historical absence.

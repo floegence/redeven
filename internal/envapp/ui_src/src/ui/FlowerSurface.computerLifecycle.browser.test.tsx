@@ -196,7 +196,7 @@ it('preserves script intent, disclosure, selection and copy through a live failu
   expect(expand.getAttribute('aria-expanded')).toBe('true');
   expect(window.getSelection()!.toString()).toBe(selected);
   expect(codeViewport.scrollTop).toBe(scrollTop);
-  expect(row.querySelector('.flower-activity-inline-title')?.textContent).toBe('Locate the search field and verify the page');
+  expect(row.querySelector('.flower-activity-inline-title')?.textContent).toBe('ComputerUse: Locate the search field and verify the page');
   expect(row.textContent).toContain('Computer script stopped before completion');
   expect(row.textContent).toContain('Search field found');
   window.getSelection()!.removeAllRanges();
@@ -227,7 +227,7 @@ it('explains absent historical script details without reconstructing them', asyn
   } }] });
   await waitFor(() => Boolean(f.surface.querySelector('[data-flower-activity-item-id="old-script"]')));
   const row = f.surface.querySelector<HTMLElement>('[data-flower-activity-item-id="old-script"]')!;
-  expect(row.querySelector('.flower-activity-inline-title')?.textContent).toBe('Run script');
+  expect(row.querySelector('.flower-activity-inline-title')?.textContent).toBe('ComputerUse: Run script');
   row.querySelector<HTMLButtonElement>('[data-flower-disclosure-trigger]')!.click();
   await waitFor(() => row.textContent?.includes('This record did not save the script.') === true);
   expect(row.textContent).toContain('This record did not save result details.');
@@ -411,4 +411,96 @@ it('clears public pixels on a sampled CAPTCHA and waits for canonical assistance
   expect(document.querySelector('.flower-computer-stage textarea')).toBeNull();
   expect(f.submitInput).not.toHaveBeenCalled();
   expect(f.inputComputerControl).not.toHaveBeenCalled();
+});
+
+it('shows concrete candidates and page content without repeated confirmation details', async () => {
+  await page.viewport(1280, 950);
+  const script = 'await ui.navigate("https://weather.example.test");\nawait ui.observe();';
+  const browserChip = { kind: 'browser_source', label: 'Browser', value: 'browser.connected' };
+  const target = { kind: 'computer_target', label: 'Chrome', resource_ref: 'browser-main' };
+  const item = (id: string, tool: string, label: string, payload: Record<string, unknown>, chips = [browserChip]) => ({
+    id, kind: 'tool' as const, ordinal: 1, turn_id: 'computer-turn', run_id: 'computer-run', activity: {
+      item_id: id, tool_id: id, tool_name: tool, status: 'success' as const,
+      presentation: { label, renderer: 'structured' as const, chips, target_refs: [target], payload },
+    },
+  });
+  const f = fixture({ ...current('completed'), items: [
+    item('discover', 'computer.targets', 'Find a browser for the weather preview', { rows_provided: true, rows: [
+      { title: 'Chrome', meta: 'default new_tab', content: '', format: 'text' },
+      ...Array.from({ length: 4 }, (_, i) => ({ title: 'Project ' + (i + 1) + ' — Chrome', content: 'https://example.test/project/' + (i + 1), format: 'text' })),
+    ] }, []),
+    item('select', 'computer.select_target', 'Use a new Chrome tab', { rows_provided: true, rows: [] }, [browserChip, { kind: 'computer_result', label: 'result', value: 'selected' }]),
+    item('blank', 'computer.observe', 'Inspect the new Chrome tab', { rows_provided: true, rows: [] }, [browserChip, { kind: 'computer_result', label: 'result', value: 'empty_page' }]),
+    item('weather', 'computer.exec', 'Open and inspect the weather preview', {
+      rows_provided: true, inputs: [{ content: script, format: 'code', language: 'javascript' }], rows: [
+        { title: 'Weather preview', meta: 'page', content: 'weather.html\n\nBeijing 23°C\nPartly cloudy\nSample data — not live weather', format: 'text' },
+        { title: 'City', meta: 'searchbox', content: 'Beijing', format: 'text' },
+        { title: 'Search', meta: 'button', content: '', format: 'text' },
+      ],
+    }),
+  ] });
+  await waitFor(() => f.surface.querySelectorAll('[data-flower-activity-item-id]').length === 4);
+  const row = (id: string) => f.surface.querySelector<HTMLElement>('[data-flower-activity-item-id="' + id + '"]')!;
+  expect(row('discover').querySelector('.flower-activity-inline-title')?.textContent).toBe('ComputerUse: Find a browser for the weather preview');
+  expect(row('select').querySelector('.flower-activity-inline-title')?.textContent).toBe('BrowserUse: Use a new Chrome tab');
+  for (const id of ['select', 'blank']) {
+    expect(row(id).querySelector('[data-flower-disclosure-trigger]')).toBeNull();
+    expect(row(id).querySelector('.flower-activity-inline-chevron')).toBeNull();
+    expect(row(id).querySelector('.flower-activity-inline-details')).toBeNull();
+  }
+  expect(row('blank').querySelector('.flower-activity-inline-detail')?.textContent).toBe('Blank page');
+  const discover = row('discover').querySelector<HTMLButtonElement>('[data-flower-disclosure-trigger]')!;
+  discover.focus();
+  await userEvent.keyboard('{Enter}');
+  const weather = row('weather').querySelector<HTMLButtonElement>('[data-flower-disclosure-trigger]')!;
+  weather.click();
+  await waitFor(() => Boolean(row('weather').querySelector('[data-activity-section="inputs"] .chat-code-copy-btn')));
+  expect(row('discover').querySelectorAll('.flower-activity-preview-row')).toHaveLength(3);
+  expect(row('discover').querySelector('.flower-activity-preview-meta')?.textContent).toBe('Default · New tab');
+  const more = row('discover').querySelector<HTMLButtonElement>('.flower-activity-detail-expand')!;
+  more.click();
+  expect(row('discover').querySelectorAll('.flower-activity-preview-row')).toHaveLength(5);
+  more.click();
+  const sections = [...row('weather').querySelectorAll('[data-activity-section]')];
+  expect(sections.map(section => section.getAttribute('data-activity-section'))).toEqual(['results', 'inputs']);
+  expect(sections[0].textContent).toContain('Beijing 23°C');
+  expect(sections[0].textContent).toContain('Sample data — not live weather');
+  expect(sections[0].textContent).toContain('Field');
+  expect(sections[0].textContent).toContain('Button');
+  expect(sections[0].textContent).not.toContain('searchbox');
+  expect(getComputedStyle(sections[0].querySelector('.flower-activity-structured-row-text')!).whiteSpace).toBe('pre-wrap');
+  expect(row('weather').querySelector<HTMLElement>('.flower-activity-computer-block')?.hidden).toBe(true);
+  expect(row('weather').querySelector('.flower-activity-computer-block')?.getClientRects().length).toBe(0);
+  expect(row('weather').textContent?.match(/Open and inspect the weather preview/gu)).toHaveLength(1);
+  for (const width of [1280, 390, 320]) {
+    await page.viewport(width, 950);
+    await settle();
+    for (const panel of f.surface.querySelectorAll<HTMLElement>('.flower-activity-inline-details-content')) {
+      expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth + 1);
+    }
+    await page.screenshot({ element: f.surface, path: '__screenshots__/flower-computer-readable-' + width + '.png' });
+  }
+});
+
+it('retains keyboard focus when a confirmed empty observation no longer has details', async () => {
+  const makeCurrent = (done: boolean): FlowerRuntimeCurrentView => ({ ...current(done ? 'completed' : undefined), view_version: done ? 2 : 1, items: [{
+    id: 'empty', kind: 'tool', ordinal: 1, turn_id: 'computer-turn', run_id: 'computer-run', activity: {
+      item_id: 'empty', tool_id: 'empty', tool_name: 'computer.observe', status: done ? 'success' : 'running',
+      presentation: { label: 'Inspect Chrome', renderer: 'structured', payload: done ? { rows_provided: true, rows: [] } : {},
+        chips: [{ kind: 'browser_source', label: 'Browser', value: 'browser.connected' }],
+        target_refs: [{ kind: 'computer_target', label: 'Chrome', resource_ref: 'browser-main' }],
+      },
+    },
+  }] });
+  const f = fixture(makeCurrent(false));
+  await waitFor(() => Boolean(f.surface.querySelector('[data-flower-disclosure-trigger]')));
+  const trigger = f.surface.querySelector<HTMLButtonElement>('[data-flower-disclosure-trigger]')!;
+  trigger.focus();
+  expect(document.activeElement).toBe(trigger);
+  f.update(makeCurrent(true));
+  await waitFor(() => f.surface.querySelector('[data-flower-disclosure-trigger]') === null);
+  const settled = f.surface.querySelector<HTMLElement>('[data-flower-activity-item-id="empty"] .flower-activity-inline-button-static')!;
+  expect(document.activeElement).toBe(settled);
+  expect(settled.tabIndex).toBe(-1);
+  expect(settled.textContent).toContain('BrowserUse: Inspect Chrome');
 });

@@ -46,6 +46,61 @@ func TestComputerActivityPreservesIntentCodeAndOutput(t *testing.T) {
 	}
 }
 
+func TestComputerActivityDescriptionsRequiredForEveryInvocation(t *testing.T) {
+	for _, definition := range builtInComputerToolDefinitions() {
+		var schema struct {
+			Properties map[string]json.RawMessage `json:"properties"`
+			Required   []string                   `json:"required"`
+		}
+		if err := json.Unmarshal(definition.InputSchema, &schema); err != nil {
+			t.Fatal(err)
+		}
+		if schema.Properties["description"] == nil || !strings.Contains(strings.Join(schema.Required, ","), "description") {
+			t.Errorf("%s must require invocation intent", definition.Name)
+		}
+	}
+}
+
+func TestComputerActivityReturnsConcreteCandidates(t *testing.T) {
+	activity, err := floretActivityForToolResult(nil, ToolResult{ToolName: "computer.targets", Status: toolResultStatusSuccess,
+		activityInput: map[string]any{"description": "Find a browser for the preview"}, Data: ComputerTargetInventory{DefaultCandidateRef: "candidate-new", Candidates: []ComputerCandidate{
+			{CandidateRef: "candidate-new", Kind: "browser.connected", DisplayName: "Chrome", NewTab: true, State: "ready"},
+			{CandidateRef: "candidate-page", Kind: "browser.connected", DisplayName: "Chrome", Title: "Project", URL: "https://example.test/project", State: "ready"},
+		}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload := activity.Payload.(fltools.StructuredActivityPayload)
+	if len(payload.Rows) != 2 || !strings.Contains(payload.Rows[1].Content, "example.test/project") {
+		t.Fatalf("actual candidates missing: %+v", payload)
+	}
+	encoded, _ := json.Marshal(payload.Rows)
+	if strings.Contains(string(encoded), "candidate-") {
+		t.Fatal("opaque references entered readable results")
+	}
+}
+
+func TestComputerActivityReadsOuterPageAndSemanticContent(t *testing.T) {
+	rows := structuredToolResults("computer.observe", map[string]any{"title": "Weather", "url": "file:///private/weather.html",
+		"observation": map[string]any{"nodes": []any{
+			map[string]any{"role": "RootWebArea", "canonical_role": "document", "name": ""},
+			map[string]any{"role": "StaticText", "canonical_role": "text", "name": "Beijing 23°C"},
+			map[string]any{"role": "AXTextField", "canonical_role": "searchbox", "name": "City", "value": "Beijing"},
+		}}}, nil)
+	encoded, _ := json.Marshal(rows)
+	text := string(encoded)
+	for _, want := range []string{"Weather", "weather.html", "Beijing 23°C", "City"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("missing %s: %s", want, text)
+		}
+	}
+	for _, noise := range []string{"RootWebArea", "StaticText", "AXTextField", "/private/"} {
+		if strings.Contains(text, noise) {
+			t.Errorf("technical noise %s: %s", noise, text)
+		}
+	}
+}
+
 func TestStructuredToolsPreserveUsefulResults(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -178,5 +233,81 @@ func TestCanvasEditDetailsKeepReplacementFragmentsWithinOneCodeRow(t *testing.T)
 	}
 	if !strings.Contains(diff, "-name: Before 0\n-kind: api\n+name: After 0\n+kind: api") || !strings.Contains(diff, "+name: After 49") {
 		t.Fatalf("replacement fragments not preserved: %s", diff)
+	}
+}
+
+func TestComputerActivityResultFactsAndSafeResources(t *testing.T) {
+	for _, tc := range []struct {
+		name, tool, outcome string
+		data                map[string]any
+	}{
+		{"empty inventory", "computer.targets", "no_targets", map[string]any{"candidates": []any{}}},
+		{"selected browser", "computer.select_target", "selected", map[string]any{"selected": true, "target_kind": "browser.connected"}},
+		{"blank document", "computer.observe", "empty_page", map[string]any{"url": "about:blank", "nodes": []any{map[string]any{"role": "RootWebArea"}}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			activity, err := floretActivityForToolResult(nil, ToolResult{ToolName: tc.tool, Status: toolResultStatusSuccess, activityInput: map[string]any{"description": "Inspect the target"}, Data: tc.data})
+			if err != nil {
+				t.Fatal(err)
+			}
+			found := false
+			for _, chip := range activity.Chips {
+				if chip.Kind == "computer_result" && chip.Value == tc.outcome {
+					found = true
+				}
+			}
+			if !found {
+				t.Fatalf("missing actual result: %+v", activity.Chips)
+			}
+			payload := activity.Payload.(fltools.StructuredActivityPayload)
+			if !payload.RowsProvided || len(payload.Rows) != 0 || len(payload.Inputs) != 0 {
+				t.Fatalf("empty confirmation acquired detail noise: %+v", payload)
+			}
+		})
+	}
+	rows := computerActivityResultRows("computer.targets", map[string]any{"default_candidate_ref": "default", "candidates": []any{
+		map[string]any{"display_name": "Chrome", "candidate_ref": "other", "url": "https://user:secret@example.test/weather?token=private#fragment"},
+		map[string]any{"display_name": "Chrome", "candidate_ref": "default", "new_tab": true, "state": "ready"},
+	}})
+	if rows[0].Meta != "default new_tab" {
+		t.Fatalf("default lost from initial preview: %+v", rows)
+	}
+	body, _ := json.Marshal(fltools.StructuredActivityPayload{Rows: rows, RowsProvided: true})
+	var record map[string]any
+	_ = json.Unmarshal(body, &record)
+	public, ok := sanitizeActivityPayloadValue(record, fltools.ActivityRendererStructured, "computer.targets")
+	encoded, _ := json.Marshal(public)
+	if !ok || !strings.Contains(string(encoded), "https://example.test/weather") || !strings.Contains(string(encoded), "default new_tab") {
+		t.Fatalf("public candidate facts lost: %s", encoded)
+	}
+	for _, private := range []string{"secret", "private", "fragment", "candidate_ref"} {
+		if strings.Contains(string(encoded), private) {
+			t.Fatalf("private resource entered public detail: %s", encoded)
+		}
+	}
+	if got := computerActivityURL("file:///private/user/preview.html"); got != "preview.html" {
+		t.Fatal(got)
+	}
+}
+
+func TestComputerActivityPreservesPartialAndBoundedResults(t *testing.T) {
+	data := map[string]any{"completed": false, "completed_actions": []any{"navigate"}, "observation": map[string]any{"title": "Weather", "format": "diff", "truncated": true, "nodes": []any{map[string]any{"role": "StaticText", "name": "Beijing 23°C"}}}}
+	rows := computerActivityResultRows("computer.exec", data)
+	if len(rows) != 2 || rows[0].Meta != "page_changes" || rows[1].Meta != "completed_actions" || rows[1].Content != "navigate" || !rows[1].Truncated {
+		t.Fatalf("partial result lost: %+v", rows)
+	}
+	if computerActivityBlankPage(map[string]any{"url": "about:blank", "format": "diff", "nodes": []any{}}) {
+		t.Fatal("an empty diff is not a blank page")
+	}
+	if computerActivityBlankPage(map[string]any{"url": "about:blank", "truncated": true, "nodes": []any{}}) {
+		t.Fatal("truncated output cannot prove a blank page")
+	}
+	candidates := make([]any, structuredActivityRowLimit+1)
+	for i := range candidates {
+		candidates[i] = map[string]any{"display_name": fmt.Sprintf("Window %d", i)}
+	}
+	rows = computerActivityResultRows("computer.targets", map[string]any{"candidates": candidates})
+	if len(rows) != structuredActivityRowLimit || !rows[len(rows)-1].Truncated {
+		t.Fatal("candidate output must stay bounded with explicit truncation")
 	}
 }

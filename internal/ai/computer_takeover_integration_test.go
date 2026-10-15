@@ -36,7 +36,7 @@ func TestComputerTakeoverStopsProductionProviderLoop(t *testing.T) {
 			return
 		}
 		if providerCalls.Add(1) == 1 {
-			item := map[string]any{"type": "function_call", "id": "fc_observe", "call_id": "observe-login", "name": "computer_screenshot", "arguments": `{"target":"browser.managed"}`}
+			item := map[string]any{"type": "function_call", "id": "fc_observe", "call_id": "observe-login", "name": "computer_screenshot", "arguments": `{"description":"Inspect the managed browser screenshot","target":"browser.managed"}`}
 			writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.output_item.added", "output_index": 0, "item": item})
 			writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.output_item.done", "output_index": 0, "item": item})
 			writeAskUserIntegrationCompletedResponse(w, flusher, "requires-input")
@@ -147,14 +147,14 @@ func TestComputerTakeoverReturnReobservesWithoutReplayingAction(t *testing.T) {
 				}
 				requestNumber := requests.Add(1)
 				if requestNumber == 1 {
-					item := map[string]any{"type": "function_call", "id": "fc_nav", "call_id": "nav-login", "name": "browser_navigate", "arguments": `{"target":"browser.managed","url":"https://example.test/"}`}
+					item := map[string]any{"type": "function_call", "id": "fc_nav", "call_id": "nav-login", "name": "browser_navigate", "arguments": `{"description":"Open the requested browser page","target":"browser.managed","url":"https://example.test/"}`}
 					writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.output_item.added", "output_index": 0, "item": item})
 					writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.output_item.done", "output_index": 0, "item": item})
 					writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.completed", "response": map[string]any{"id": "pause", "status": "completed", "output": []any{item}}})
 					return
 				}
 				if requestNumber == 2 || requestNumber == 3 {
-					item := map[string]any{"type": "function_call", "id": fmt.Sprintf("fc_resumed_%d", requestNumber), "call_id": fmt.Sprintf("resumed-observation-%d", requestNumber), "name": "computer_screenshot", "arguments": `{"target":"browser.managed"}`}
+					item := map[string]any{"type": "function_call", "id": fmt.Sprintf("fc_resumed_%d", requestNumber), "call_id": fmt.Sprintf("resumed-observation-%d", requestNumber), "name": "computer_screenshot", "arguments": `{"description":"Inspect the managed browser screenshot","target":"browser.managed"}`}
 					writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.output_item.added", "output_index": 0, "item": item})
 					writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.output_item.done", "output_index": 0, "item": item})
 					writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.completed", "response": map[string]any{"id": fmt.Sprintf("resumed-observation-%d", requestNumber), "status": "completed", "output": []any{item}}})
@@ -375,7 +375,7 @@ func TestSampledCaptchaStopsProductionProviderLoop(t *testing.T) {
 			writeAskUserIntegrationTextResponse(w, flush, "unexpected", "Must not continue.")
 			return
 		}
-		item := map[string]any{"type": "function_call", "id": fmt.Sprintf("fc_%d", n), "call_id": fmt.Sprintf("observe-%d", n), "name": "computer_observe", "arguments": `{"target":"browser.managed"}`}
+		item := map[string]any{"type": "function_call", "id": fmt.Sprintf("fc_%d", n), "call_id": fmt.Sprintf("observe-%d", n), "name": "computer_observe", "arguments": `{"description":"Inspect the managed browser page","target":"browser.managed"}`}
 		writeOpenAISSEJSON(w, flush, map[string]any{"type": "response.output_item.added", "output_index": 0, "item": item})
 		writeOpenAISSEJSON(w, flush, map[string]any{"type": "response.output_item.done", "output_index": 0, "item": item})
 		writeAskUserIntegrationCompletedResponse(w, flush, fmt.Sprintf("response-%d", n))
@@ -444,7 +444,7 @@ func TestSystemBrowserConnectionRequiresLiveProfileBeforeCanonicalRespond(t *tes
 			return
 		}
 		if calls.Add(1) == 1 {
-			item := map[string]any{"type": "function_call", "id": "fc_discover", "call_id": "discover-system", "name": "computer_targets", "arguments": `{"browser_source":"system"}`}
+			item := map[string]any{"type": "function_call", "id": "fc_discover", "call_id": "discover-system", "name": "computer_targets", "arguments": `{"description":"Find an available browser","browser_source":"system"}`}
 			writeOpenAISSEJSON(w, flush, map[string]any{"type": "response.output_item.added", "output_index": 0, "item": item})
 			writeOpenAISSEJSON(w, flush, map[string]any{"type": "response.output_item.done", "output_index": 0, "item": item})
 			writeAskUserIntegrationCompletedResponse(w, flush, "connect")

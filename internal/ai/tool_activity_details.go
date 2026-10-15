@@ -23,6 +23,9 @@ func structuredToolInputs(toolName string, args map[string]any, spec aitools.Too
 		}
 		return nil
 	}
+	if isComputerUseTool(toolName) {
+		return nil
+	}
 	rows := []fltools.StructuredActivityRow{}
 	for _, field := range spec.CallPayloadFields {
 		// Typed text may be a secret; identifiers never explain the operation.
@@ -118,56 +121,7 @@ func structuredToolResults(toolName string, data any, existing []fltools.Structu
 		rows = append(rows, toolDetailRow(title, meta, content, format, language, truncated))
 	}
 	if isComputerUseTool(toolName) {
-		if stage, _ := payload["navigation_stage"].(string); stage == "response" || stage == "load" {
-			facts := []string{"navigation_stage: " + stage}
-			if reason, _ := payload["network_error"].(string); computerNavigationReason(reason) {
-				facts = append(facts, "network_error: "+reason)
-			}
-			add("", "", strings.Join(facts, "\n"), fltools.StructuredActivityRowFormatCode, "text", false)
-		}
-		logs := []string{}
-		for _, line := range toAnySlice(payload["logs"]) {
-			if parts, ok := line.([]any); ok {
-				text := []string{}
-				for _, part := range parts {
-					text = append(text, toolDetailValue(part))
-				}
-				logs = append(logs, strings.Join(text, " "))
-			} else {
-				logs = append(logs, toolDetailValue(line))
-			}
-		}
-		if len(logs) > 0 {
-			add("", "", strings.Join(logs, "\n"), fltools.StructuredActivityRowFormatCode, "text", readBoolField(payload, "truncated"))
-		}
-		observation := payload
-		if nested, ok := payload["observation"].(map[string]any); ok {
-			observation = nested
-		}
-		lines := []string{}
-		for _, node := range toAnySlice(observation["nodes"]) {
-			record, _ := node.(map[string]any)
-			parts := []string{}
-			for _, key := range []string{"role", "name", "text", "value"} {
-				if text := strings.TrimSpace(anyToString(record[key])); text != "" && (len(parts) == 0 || parts[len(parts)-1] != text) {
-					parts = append(parts, text)
-				}
-			}
-			if len(parts) > 0 {
-				lines = append(lines, strings.Join(parts, " · "))
-			}
-		}
-		title := anyToString(observation["title"])
-		url := anyToString(observation["url"])
-		if url != "" {
-			lines = append([]string{url}, lines...)
-		}
-		add(title, "", strings.Join(lines, "\n"), fltools.StructuredActivityRowFormatText, "", readBoolField(observation, "truncated"))
-		if payload["completed"] == false {
-			// Confirmed operations remain inspectable after a partial failure.
-			add("", "", strings.Join(extractStringSlice(payload["completed_actions"]), "\n"), fltools.StructuredActivityRowFormatCode, "text", false)
-		}
-		return rows
+		return computerActivityResultRows(toolName, payload)
 	}
 	switch toolName {
 	case "tessiven.read":

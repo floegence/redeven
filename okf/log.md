@@ -1654,3 +1654,13 @@ HTML canvas. Remove the decorative skeleton card and placeholder bars while
 retaining the restrained dot sweep, borderless product surface, circular
 controls, and stable completion. Reduced motion keeps progress readable.
 See [Flower inline media](ui/flower-inline-media.md).
+
+## 2026-10-15 — Readable Computer Use activity
+
+Require invocation descriptions for Computer Use and Browser Use tools, identify
+actual browser execution in titles, and map candidates and semantic page facts
+to the existing bounded Activity rows. Show results before literal scripts,
+localize control labels, and omit redundant confirmation details and empty
+disclosures. Preserve foreground warnings, partial failures, screenshots,
+historical absence and copy/keyboard behavior. See
+[Flower activity interaction](ui/flower-activity-interaction.md).
