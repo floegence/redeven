@@ -622,7 +622,7 @@
               "performance",
               "qualification"
             ],
-            "summary": "The primary qualification task owns acceptance. Full RustDesk parity and\nrepeatable restoration of historical performance remain unaccepted. Published\nnative v0.22.48 with negotiated six-frame delivery averages 46.21 FPS against\nRustDesk 32.54 FPS in three retained motion rounds. Candidate pooled P95 is\n310.60 ms against 207.59 ms, with nine versus three gaps over 250 ms. Candidate\nround three reaches 53.04 FPS/P95 150.20 ms with no long gaps, but the adverse\nfirst round cannot be replaced. Keep current security, authorization, confirmed\npaint, ordering and recovery safeguards. Published artifacts, complete source\nmatching and delivered-detail evidence are mandatory; lower CPU or a peak is\nnot acceptance. The [C05 result](remote-desktop-lan-c05-results.md) owns current\nresults and open cases; the [decision ledger](remote-desktop-lan-experiment-ledger.md)\nrecords adopted, rejected and unresolved experiments.",
+            "summary": "The primary qualification task owns acceptance. Full RustDesk parity and\nrepeatable restoration of historical performance remain unaccepted. Published\nnative v0.22.48 with negotiated six-frame delivery averages 46.21 FPS against\nRustDesk 32.54 FPS in three retained motion rounds. Candidate pooled P95 is\n310.60 ms against 207.59 ms, with nine versus three gaps over 250 ms. Candidate\nround three reaches 53.04 FPS/P95 150.20 ms with no long gaps, but the adverse\nfirst round cannot be replaced. Keep current security, authorization, confirmed\npaint, ordering and recovery safeguards. The [C05 result](remote-desktop-lan-c05-results.md) owns current\nresults and open cases; the [decision ledger](remote-desktop-lan-experiment-ledger.md)\nrecords adopted, rejected and unresolved experiments.",
             "section_count": 4
           },
           {
@@ -707,7 +707,7 @@
               "performance"
             ],
             "summary": "The primary qualification task owns these timestamp diagnostics. P03/P04 narrow\nsome long tails to delivery after accepted outbound writes; they do not isolate\nSSH, kernel, network or client scheduling, or explain every historical result.\nKeep clock domains and calibration uncertainty explicit. Instrumentation must\npreserve confirmed paint, generation fences and bounded queues, and be restored\nafter measurement. A stage trace never substitutes for presented-pixel acceptance.\nThe [decision index](remote-desktop-lan-experiment-ledger.md) owns common controls.",
-            "section_count": 2
+            "section_count": 4
           },
           {
             "concept_id": "operations.remote-desktop-lan-window-c04",
@@ -721,7 +721,7 @@
               "performance"
             ],
             "summary": "The primary qualification task owns C03/T11 and C04/T12. The timer-only C03\ncandidate does not establish improvement. C04's two six-frame rounds exceed\n52 FPS and improve over both four-frame controls; released repeatability and\nRustDesk/detail parity still need qualification. Keep optional compatibility,\nfinite admission, confirmed paint and current-generation input authority.\nIncomplete fixtures and adverse complete rounds remain evidence. Restore a\nrejected diagnostic rather than treating its peak as a release result.\nThe [decision index](remote-desktop-lan-experiment-ledger.md) owns acceptance.",
-            "section_count": 3
+            "section_count": 5
           },
           {
             "concept_id": "operations.remote-desktop-lan-c05-results",
@@ -735,7 +735,7 @@
               "performance"
             ],
             "summary": "The primary qualification task owns C05 outcomes. The released six-frame path\nrestores the ability to exceed 51 FPS while retaining later fixes, but does not\nrestore the historical three-round stability or qualify complete RustDesk parity.\nAll complete adverse trials count. Source-input loss invalidates ordinal latency\nassociation; missing presentation with all source inputs remains a valid failure.\nThe [comparison contract](remote-desktop-rustdesk-comparison-results.md) owns\nacceptance and [C05 preparation](remote-desktop-lan-published-c05.md) owns immutable\nidentities, controls, release checks and compatibility. Retry only a named fixture\nrepair or a new discriminating hypothesis, after consulting the decision ledger.",
-            "section_count": 4
+            "section_count": 6
           },
           {
             "concept_id": "operations.remote-desktop-rustdesk-v40-v45-results",
@@ -749,7 +749,7 @@
               "qualification"
             ],
             "summary": "The primary qualification task owns this historical record. These published\nv0.22.40 and v0.22.45 trials retain original observations, invalid attempts and\nmeasurement limits. They establish historical advantages and deficits, not\ncurrent product acceptance. The [comparison contract](remote-desktop-rustdesk-comparison-results.md)\nowns acceptance; later security, platform and recovery fixes must be preserved.\nA failed or incomplete trial remains retained with its own validity boundary.",
-            "section_count": 1
+            "section_count": 3
           },
           {
             "concept_id": "operations.remote-desktop-lan-published-c05",
@@ -763,7 +763,7 @@
               "qualification"
             ],
             "summary": "The primary qualification task owns C05. The optional six-frame implementation\nmust use a published native module and preserve four-frame legacy/macOS behavior,\nconfirmed paint, generation/order fences and finite admission. C04 establishes a\ndiagnostic throughput benefit, not released recovery or full RustDesk parity.\nThe [comparison contract](remote-desktop-rustdesk-comparison-results.md) owns\nacceptance. A failed release gate or invalid fixture stops qualification; retain\nits evidence and repair the named failure before retrying.",
-            "section_count": 5
+            "section_count": 6
           },
           {
             "concept_id": "operations.remote-desktop-rustdesk-v42-results",
@@ -27949,9 +27949,16 @@
         "title": "Published LAN C05 outcomes and unresolved boundaries",
         "type": "Qualification Record"
       },
-      "body_length": 8859,
+      "body_length": 9478,
       "summary": "The primary qualification task owns C05 outcomes. The released six-frame path\nrestores the ability to exceed 51 FPS while retaining later fixes, but does not\nrestore the historical three-round stability or qualify complete RustDesk parity.\nAll complete adverse trials count. Source-input loss invalidates ordinal latency\nassociation; missing presentation with all source inputs remains a valid failure.\nThe [comparison contract](remote-desktop-rustdesk-comparison-results.md) owns\nacceptance and [C05 preparation](remote-desktop-lan-published-c05.md) owns immutable\nidentities, controls, release checks and compatibility. Retry only a named fixture\nrepair or a new discriminating hypothesis, after consulting the decision ledger.",
       "sections": [
+        {
+          "id": "contract",
+          "title": "Contract",
+          "level": 1,
+          "body": "Retain every complete pair, source count and missing response. Interpret\nperformance, resources and detail as separate acceptance axes. Consult the\ndecision ledger before retrying; change one discriminating variable and retain\nimmutable candidate and fixture identities.",
+          "char_count": 270
+        },
         {
           "id": "retained-presentation-results",
           "title": "Retained Presentation Results",
@@ -27979,6 +27986,13 @@
           "level": 1,
           "body": "Adopt the optional negotiated six-frame Linux path with published v48; keep\nlegacy/macOS four-frame behavior and unsupported Windows physical capture\nunchanged. Do not increase rate, change codec, weaken confirmed-paint/input\nfences or expand queues to conceal residual tails. C01/C02/C03 rejected hypotheses\nremain rejected; M03 requires matched detail evidence before another rate trial.\n\nBefore another performance run, retain the present complete three-round baseline\nand preregister one discriminating variable. For the input loss, instrument local\npointer dispatch, Runtime command acceptance, native injection and source events\nwith an explicit association that survives missing input. For the first-round\ntail, correlate capture/encode, accepted write, encrypted transport, decode and\nconfirmed paint with bounded clock uncertainty; outbound stalls alone cannot\nisolate SSH/kernel/network/client scheduling. For memory, compare one fresh\nViewer lifecycle with equal open surfaces and complete process attribution while\ncontinuing to report whole-tree costs. Require matched static/color detail before\nadopting any quality change. A further unchanged run is not a diagnosis.",
           "char_count": 1181
+        },
+        {
+          "id": "boundaries",
+          "title": "Boundaries",
+          "level": 1,
+          "body": "These outcomes apply only to the recorded hardware, workload and valid intervals.\nMissing source inputs prevent ordinal latency association; missing presentation\nwith all source inputs remains a performance failure. A favorable later round\ndoes not erase earlier adverse evidence or establish the sole regression cause.",
+          "char_count": 319
         }
       ],
       "snippet": "The primary qualification task owns C05 outcomes. The released six-frame path restores the ability to exceed 51 FPS while retaining later fixes, but does not restore the historical three-round stability or qualify complete RustDesk parity.",
@@ -28456,7 +28470,7 @@
         "title": "Published six-frame LAN qualification C05",
         "type": "Qualification Record"
       },
-      "body_length": 8413,
+      "body_length": 8727,
       "summary": "The primary qualification task owns C05. The optional six-frame implementation\nmust use a published native module and preserve four-frame legacy/macOS behavior,\nconfirmed paint, generation/order fences and finite admission. C04 establishes a\ndiagnostic throughput benefit, not released recovery or full RustDesk parity.\nThe [comparison contract](remote-desktop-rustdesk-comparison-results.md) owns\nacceptance. A failed release gate or invalid fixture stops qualification; retain\nits evidence and repair the named failure before retrying.",
       "sections": [
         {
@@ -28493,6 +28507,13 @@
           "level": 1,
           "body": "The Go proxy/checksum database resolves the immutable tag to the native commit\nabove with module sum `h1:wlvpKFaGY5zYhA20QzUTXCfVEQvYpT5rj1bTivcn8VY=`.\nConsumer checks use `GOWORK=off`, with no sibling imports or player overlay.\nRuntime race tests cover the actual control capability, four/six-frame socket\nadmission, overflow teardown and unchanged paint/input authority. Viewer codec\nchecks pass for Linux six-frame, absent legacy offer and macOS four-frame paths,\nincluding reconnect from six to an absent offer. The full Linux service Viewer\nfixture passes input, lock, recovery, audio, clipboard, display, takeover and\ndisconnect checks. Its first attempt exposed a fixture-only capability refresh\nthat omitted the selected window while the assertion retained six; preserve\nthe failure and carry the same offer in unrelated capability refreshes.\nThese checks establish compatibility behavior, not LAN performance acceptance.",
           "char_count": 929
+        },
+        {
+          "id": "boundaries",
+          "title": "Boundaries",
+          "level": 1,
+          "body": "Release and compatibility checks establish only their named published contracts.\nThey do not qualify LAN performance. The post-reboot fixture has a distinct boot\nidentity; never join its intervals to earlier sampling. C05 outcomes retain\nadverse trials, source loss and resource/detail limitations.",
+          "char_count": 298
         }
       ],
       "snippet": "The primary qualification task owns C05. The optional six-frame implementation must use a published native module and preserve four-frame legacy/macOS behavior, confirmed paint, generation/order fences and finite admission. C04 establishes ",
@@ -28685,9 +28706,16 @@
         "title": "LAN desktop stage tracing",
         "type": "Qualification Record"
       },
-      "body_length": 6556,
+      "body_length": 7086,
       "summary": "The primary qualification task owns these timestamp diagnostics. P03/P04 narrow\nsome long tails to delivery after accepted outbound writes; they do not isolate\nSSH, kernel, network or client scheduling, or explain every historical result.\nKeep clock domains and calibration uncertainty explicit. Instrumentation must\npreserve confirmed paint, generation fences and bounded queues, and be restored\nafter measurement. A stage trace never substitutes for presented-pixel acceptance.\nThe [decision index](remote-desktop-lan-experiment-ledger.md) owns common controls.",
       "sections": [
+        {
+          "id": "contract",
+          "title": "Contract",
+          "level": 1,
+          "body": "Trace one preregistered stage variable against the matched source workload.\nPreserve confirmed-paint authority and finite admission. Keep each machine in\nits own clock domain unless offset uncertainty is bounded. Read the decision\nledger before another trace.",
+          "char_count": 259
+        },
         {
           "id": "stage-evidence-and-limits",
           "title": "Stage Evidence And Limits",
@@ -28701,6 +28729,13 @@
           "level": 1,
           "body": "P03 is predeclared after C02 and inspection of the retained\n`receipt-transit-20261014` diagnostic. That older two-frame early-receipt variant\nreported 44.74/48.22 FPS, P95 168.10/336.99 ms and three/nine gaps; its saved\ndisposition rejects publication. Do not repeat it as an untested proposal.\nP03 changes instrumentation only, on consumer `56b7275da` and native v0.22.47.\nIt measures decoded draw, confirmation scheduling, confirmed paint, receipt\nselection/send and carrier delivery by frame ID, plus the duration of product\npaint callbacks. Existing P01/P02 cannot separate those client intervals.\nUse the same small Viewer, physical output, scene and quality controls as C02.\nKeep timestamps in their host clock domains; cross-host comparisons must retain\nmeasured clock-offset bounds. No performance candidate is selected in advance.\nRetain incomplete attempts, restore any diagnostic service and remove temporary\ncredentials. Another trace needs a newly unresolved segment or a named fixture\nfailure. Raw evidence will be under B/`receipt-p03`.\n\nP03 first snapshot matches 747 receipts: publication-to-release P95 137.65 ms,\nclient receive-to-send P95 48.50 ms, and worker ingress-to-release P95 0.412 ms.\nThe product paint callback is at most 0.20 ms. With a Node-hrtime-based clock\nprobe (4.45 ms host-offset interval), publication-to-receive P95 is 101.46 ms;\nthe worst 332.70 ms receipt includes about 264.89 ms outbound, 28.8 ms client\nand 38.64 ms return. Delta frames also exhibit tails. This isolates an outbound\ninterval, not a specific writer or network cause. A Python-monotonic/Node-hrtime\ncalibration is invalid because those Mac clock domains differ; retain it as a\nfixture failure. The prior RustDesk test window was still open during this\nsnapshot; it was closed before the next diagnostic. No acceptance claim.\n\nP04 is predeclared on 2026-10-15 after reading P01-P03 and T01/T06-T10.\nQuestion: does the outbound tail occur before native pipe completion, before\nRuntime WebSocket write completion, before bridge stdio completion, or after\nthose writes? Timestamp-only overlays add those boundaries; they preserve all\nmedia, flow-control, security and input settings. Use the same small v47 Viewer\nand scene. Close the exact prior RustDesk test session first. Retain host clock\ncalibration and complete traces; this remains stage diagnosis, not acceptance.\nRaw scripts and receipts: B/`outbound-p04`. Restore all overlays afterward.\n\nP04 matches 1,740 frame IDs. Median/P95/max ms: publication-to-writer-complete\n0.327/0.600/48.78; writer-to-Runtime-receive 1.695/2.958/51.17;\nRuntime-receive-to-WebSocket-write-complete 0.114/0.204/0.427;\nWebSocket-write-complete-to-client-receive 6.592/24.856/150.40.\nThe combined clock interval is 5.679 ms. The next shared-stream stdio write is\nusually within 0.894 ms (P95); it is not an exact encrypted-frame identity.\nSome native stalls exist, but the largest matched tail is after accepted writes.\nThis does not distinguish SSH, kernel, network and client scheduling. A short\nsteady receive/draw rate of 51.35 FPS is not presented-pixel acceptance.\nA non-task demand-diagnostic workload was observed on udesk26 and left alone;\nit had exited by the later comparison. Original service and Runtime hashes were\nrestored; temporary Go tracing changes are retained only in the artifact patch.",
           "char_count": 3350
+        },
+        {
+          "id": "boundaries",
+          "title": "Boundaries",
+          "level": 1,
+          "body": "Stage timing establishes only the measured segment. Accepted writes do not prove\nremote delivery or paint, and outbound stalls alone cannot isolate SSH, kernel,\nnetwork or client scheduling. Keep clock uncertainty and invalid traces visible.",
+          "char_count": 241
         }
       ],
       "snippet": "The primary qualification task owns these timestamp diagnostics. P03/P04 narrow some long tails to delivery after accepted outbound writes; they do not isolate SSH, kernel, network or client scheduling, or explain every historical result.",
@@ -28893,9 +28928,16 @@
         "title": "LAN desktop receipt and window comparison",
         "type": "Qualification Record"
       },
-      "body_length": 8281,
+      "body_length": 8848,
       "summary": "The primary qualification task owns C03/T11 and C04/T12. The timer-only C03\ncandidate does not establish improvement. C04's two six-frame rounds exceed\n52 FPS and improve over both four-frame controls; released repeatability and\nRustDesk/detail parity still need qualification. Keep optional compatibility,\nfinite admission, confirmed paint and current-generation input authority.\nIncomplete fixtures and adverse complete rounds remain evidence. Restore a\nrejected diagnostic rather than treating its peak as a release result.\nThe [decision index](remote-desktop-lan-experiment-ledger.md) owns acceptance.",
       "sections": [
+        {
+          "id": "contract",
+          "title": "Contract",
+          "level": 1,
+          "body": "Compare receipt timing and offered capacity as separate variables. Preserve\nsecurity, generation/order fences, confirmed presentation and finite admission.\nDiagnostic artifacts cannot qualify a release; published C05 consumer checks\nown adoption compatibility. Read the decision ledger before any retry.",
+          "char_count": 303
+        },
         {
           "id": "exhausted-window-receipt-candidate-c03",
           "title": "Exhausted Window Receipt Candidate C03",
@@ -28916,6 +28958,13 @@
           "level": 1,
           "body": "All four complete rounds independently match local inputs to source sequences\n2 through 101 and to client presentation. B2's incomplete first attempt remains\nexcluded as a whole. The sequence is A1/B1/A2/B2, with the disclosed Runtime\nrebuild between A1 and B1; A2/B2 share the exact Runtime and client process.\n\n| Round | Window | Presented FPS | Input P95 ms | Maximum frame gap ms | Gaps \u003e250 ms |\n| --- | ---: | ---: | ---: | ---: | ---: |\n| A1 | 4 | 45.98 | 147.43 | 199.73 | 0 |\n| B1 | 6 | 52.30 | 143.13 | 283.38 | 1 |\n| A2 | 4 | 44.66 | 168.52 | 276.65 | 1 |\n| B2 retry 1 | 6 | 53.48 | 119.13 | 131.10 | 0 |\n\nMean throughput rises from 45.32 to 52.89 FPS (16.7%). This supports a capacity\nconstraint under these conditions; it does not identify the complete historical\nregression or recover three stable released rounds. The receipt timer and encoder\nsettings are unchanged. Full lineage resources, cropped in each host's own clock,\nshow host CPU 125.1/137.9/133.3/138.2% (one core =100%), client CPU\n26.0/29.7/26.8/30.1%, LAN send 4.39/4.86/4.22/4.97 Mbps. Client RSS P95 is\n993.5/1187.6/1032.3/1013.1 MiB; startup/order and the complete Desktop profile\nlimit memory inference. Six frames increase admission and carried frames; this is\nnot a bitrate reduction. Moving detail and paired RustDesk qualification remain.\n\nDecision: proceed to an explicit optional window contract, not a blanket platform\nlimit change. Native implementation `2b40002537003bd6fc9d976bbf0fa1f817423525`\nretains four when the picture field is absent, advertises six on Linux, validates\nonly four or six, and resets the player's bounded video window per generation.\nmacOS retains four and Windows physical capture remains unsupported. Runtime must\nrequire the native offer and fix the selected capacity for its attachment; legacy\nand mixed components continue to omit the new picture field. Audio, refinements,\nconfirmed paint, receipt timing, input authority and generation/order fences remain.\nNo published-product parity claim follows from this diagnostic. Retry C04 only\nfor a named fixture defect or new capacity evidence; qualify the published pair\nseparately rather than repeating this overlay.",
           "char_count": 2184
+        },
+        {
+          "id": "boundaries",
+          "title": "Boundaries",
+          "level": 1,
+          "body": "The controlled capacity gain applies to the recorded fixture and does not prove\nfull historical recovery or RustDesk parity. Keep adverse complete intervals\nand invalid attempts. Do not expand platform support from a Linux diagnostic.",
+          "char_count": 234
         }
       ],
       "snippet": "The primary qualification task owns C03/T11 and C04/T12. The timer-only C03 candidate does not establish improvement. C04's two six-frame rounds exceed 52 FPS and improve over both four-frame controls; released repeatability and",
@@ -29540,8 +29589,8 @@
         "title": "Physical desktop RustDesk comparison",
         "type": "Qualification Record"
       },
-      "body_length": 4863,
-      "summary": "The primary qualification task owns acceptance. Full RustDesk parity and\nrepeatable restoration of historical performance remain unaccepted. Published\nnative v0.22.48 with negotiated six-frame delivery averages 46.21 FPS against\nRustDesk 32.54 FPS in three retained motion rounds. Candidate pooled P95 is\n310.60 ms against 207.59 ms, with nine versus three gaps over 250 ms. Candidate\nround three reaches 53.04 FPS/P95 150.20 ms with no long gaps, but the adverse\nfirst round cannot be replaced. Keep current security, authorization, confirmed\npaint, ordering and recovery safeguards. Published artifacts, complete source\nmatching and delivered-detail evidence are mandatory; lower CPU or a peak is\nnot acceptance. The [C05 result](remote-desktop-lan-c05-results.md) owns current\nresults and open cases; the [decision ledger](remote-desktop-lan-experiment-ledger.md)\nrecords adopted, rejected and unresolved experiments.",
+      "body_length": 4733,
+      "summary": "The primary qualification task owns acceptance. Full RustDesk parity and\nrepeatable restoration of historical performance remain unaccepted. Published\nnative v0.22.48 with negotiated six-frame delivery averages 46.21 FPS against\nRustDesk 32.54 FPS in three retained motion rounds. Candidate pooled P95 is\n310.60 ms against 207.59 ms, with nine versus three gaps over 250 ms. Candidate\nround three reaches 53.04 FPS/P95 150.20 ms with no long gaps, but the adverse\nfirst round cannot be replaced. Keep current security, authorization, confirmed\npaint, ordering and recovery safeguards. The [C05 result](remote-desktop-lan-c05-results.md) owns current\nresults and open cases; the [decision ledger](remote-desktop-lan-experiment-ledger.md)\nrecords adopted, rejected and unresolved experiments.",
       "sections": [
         {
           "id": "contract",
@@ -29898,15 +29947,29 @@
         "title": "Historical physical desktop v40 and v45 results",
         "type": "Qualification Record"
       },
-      "body_length": 7682,
+      "body_length": 8210,
       "summary": "The primary qualification task owns this historical record. These published\nv0.22.40 and v0.22.45 trials retain original observations, invalid attempts and\nmeasurement limits. They establish historical advantages and deficits, not\ncurrent product acceptance. The [comparison contract](remote-desktop-rustdesk-comparison-results.md)\nowns acceptance; later security, platform and recovery fixes must be preserved.\nA failed or incomplete trial remains retained with its own validity boundary.",
       "sections": [
+        {
+          "id": "contract",
+          "title": "Contract",
+          "level": 1,
+          "body": "Read these results as retained historical evidence. The current comparison\ncontract owns acceptance. Preserve original valid and invalid trials, published\nidentities, source receipts and limitations. Historical speed never authorizes\nreverting later security or functionality fixes.",
+          "char_count": 282
+        },
         {
           "id": "results",
           "title": "Results",
           "level": 1,
           "body": "## Published v0.22.40 Identity And Conditions\n\nudesk26 retains DP-3 at physical 1920 × 1280, 60 Hz, scale 1.6666666269 and GTK\nallocation 1152 × 768. Display settings are unchanged. Native dependency\n`v0.22.40` is the immutable published module; Runtime image SHA-256 is\n`a4289b34c93774969d7317c8e7a99fd7cb0ca4b085c65a788d8e5cab3551bdcc` and\nroot service image SHA-256 is\n`e59e8d23932d4c5f901b2989111aa38afa83a43e796452e24f6ea514ca70cd8d`.\nFormal consumer checks run with `GOWORK=off`.\n\nThe official x86_64 RustDesk 1.5.0 Debian binary SHA-256 is\n`58ef1e984727d827836c8ad84ad50a4971db4a3cb80ad7a646982594af155c52`.\nIts direct LAN port is 24441; the fixture broker stays on loopback 24442.\nRustDesk uses AV1/I420, custom quality 100% and 60 FPS. Redeven uses VP9/I420,\nSmooth and Host input method. Both ordinary application windows are 1280 × 721\nlogical pixels. Marker edges reveal approximately 2073 × 1382 versus\n2043 × 1362 screenshot-pixel content extents, because the headers differ.\nNormalized quality receipts retain that difference; these trials cannot alone\nsatisfy strict equal-viewport acceptance.\n\n## Three Alternating Presentation Rounds\n\nEvery accepted workload observes all 100 source inputs and matches 100 responses.\nPairs alternate RustDesk→Redeven, Redeven→RustDesk and RustDesk→Redeven.\n\n| Round / product | Idle P50 / P95 ms | Motion P50 / P95 ms | Presented FPS | Motion gaps \u003e250 ms |\n| --- | --- | --- | --- | --- |\n| 1 / RustDesk | 105.39 / 123.50 | 140.86 / 160.29 | 30.98 | 0 |\n| 1 / Redeven | 96.98 / 130.82 | 134.56 / 168.11 | 51.14 | 0 |\n| 2 / Redeven | 101.04 / 133.48 | 134.62 / 157.15 | 51.30 | 0 |\n| 2 / RustDesk | 115.39 / 158.05 | 140.93 / 174.42 | 33.76 | 1 |\n| 3 / RustDesk | 128.36 / 193.75 | 139.45 / 173.92 | 31.98 | 0 |\n| 3 / Redeven | 92.74 / 127.32 | 109.49 / 149.47 | 50.53 | 0 |\n\nRound-two RustDesk has an 868.78 ms maximum response and 257.61 ms presentation\ngap. Round-three Redeven has a 279.23 ms maximum response and 167.89 ms gap.\nCandidate first-round idle and motion P95 remain worse than the paired baseline.\nHigher FPS and matched median improvements do not establish every acceptance\nboundary. Earlier expired scenes, incomplete CUA batches and concurrent encoding\nremain invalid trials, including `r3-redeven-idle-retry6`.\n\n## Published v0.22.45 Host-Input Pair\n\nThe current source commit is `79bdd9dc9`, consuming the released native module\n`v0.22.45`. The immutable udesk26 Runtime image is\n`5f8c6e6fe2c02d9debeabb7f6fd2083976424f3cbb6832a065a457c5dea31755`; the\ninstalled root service is bound to that image and the published v0.22.45 media\narchive. Both applications stayed in ordinary 1024 × 720 logical windows, and\nthe RustDesk baseline remained direct LAN on port 24441. The paired window\ncapture used fresh marker calibration and retained every source and observed\ninput.\n\n| Product / workload | Matched inputs | P50 / P95 latency ms | Presented FPS | Gaps \u003e250 ms |\n| --- | ---: | ---: | ---: | ---: |\n| RustDesk / idle | 100 / 100 | 108.52 / 149.71 | n/a | 0 |\n| Redeven / idle | 100 / 100 | 91.02 / 150.22 | n/a | 0 |\n| RustDesk / motion | 100 / 100 | 134.62 / 163.46 | 33.79 | 0 |\n| Redeven / motion | 99 / 100 | 136.81 / 254.98 | 44.58 | 3 |\n\nThe Redeven idle median is 16% lower and moving FPS is 32% higher, while the\nmoving P95 is 56% higher and one source input was unmatched. A second RustDesk\nround under the same changing Wi-Fi conditions measured 108.52/149.71 ms idle\nand 134.62/163.46 ms motion; it confirms the network varied during the run but\ndoes not erase the candidate's long-tail failure. A bounded two-frame credit\ndiagnostic reduced one observed maximum presentation gap to 234 ms but reduced\nmoving FPS to 33.17 and left P95 at 258.04 ms, so it was discarded and the\npublished four-frame configuration was restored. Increasing the SSH HTTP/2\nreceive window was also rejected after a controlled sample reached 11.48 FPS\nand 1626.74 ms P95. These experiments are retained as diagnostics only.\n\n## Resource Boundary\n\nAll six accepted static resource samples last 45 seconds. Workload resource\nintervals derive from corresponding fixture sequences, rather than complete\nsampler lifetimes. CPU is percent of one core. RSS includes shared pages;\nmacOS physical footprint is also retained. Host/client clocks remain independent.\n\n| Motion round / product | Host CPU % | Host RSS P95 MiB | Client CPU % | Client RSS P95 MiB | Client footprint P95 MiB | LAN Mbps |\n| --- | --- | --- | --- | --- | --- | --- |\n| 1 / RustDesk | 251.3 | 560.3 | 45.0 | 277.3 | 554.6 | 4.400 |\n| 1 / Redeven | 297.2* | 672.3 | 37.1 | 1054.8 | 1232.1 | missing* |\n| 2 / Redeven | 308.3 | 754.2 | 37.7 | 1065.5 | 1184.0 | 4.716 |\n| 2 / RustDesk | 250.6 | 537.9 | 46.5 | 288.0 | 547.6 | 4.437 |\n| 3 / RustDesk | 250.7 | 616.1 | 45.5 | 282.3 | 587.8 | 4.385 |\n| 3 / Redeven | 299.8 | 755.5 | 35.0 | 1073.1 | 1195.7 | 4.696 |\n\n*First-round Redeven host roots omit the SSH ancestor: CPU and RSS are lower\nbounds and LAN counters are missing. Subsequent complete roots are\n194093, 194675 and 195615, including the bridge, Runtime and service descendants.\nThose initial resources do not qualify parity. No remote encoding session runs\nconcurrently in accepted replacement trials.\n\nThird-round idle Redeven host CPU is 31.4%, host RSS P95 758.2 MiB and LAN\n0.174 Mbps; RustDesk is 5.7%, 617.6 MiB and 0.009 Mbps. Candidate client CPU is\n5.4%, RSS P95 977.6 MiB and footprint P95 1174.2 MiB; baseline is 4.3%, 245.4 MiB\nand 518.2 MiB. Static candidate host/client CPU is 11.2%/4.9%, versus 3.8%/2.8%.\nThe complete Desktop tree includes its launcher, Env App and task Runtime/bridge.\nThese are whole-tree costs with no subtraction, not equivalent isolated Viewer\nmemory. Resource parity remains open.\n\n## Exact Moving Quality And Calibration\n\nSix accepted quality sets each contain 10 snapshots with an exact moving source\nframe and sequence match. The replacement second-round RustDesk moving sample\nis acquired after the third pair; it completes product coverage but is not a\ncontemporaneous second-round quality pairing. The earlier moving=false sample\nremains invalid. Both products retain source references and all original receipts.\n\nA second analysis fits the same 16-cell magic marker edges per snapshot and uses\nfractional viewport Lanczos resampling to 1920 × 1280 for both products. Mean\ntext PSNR/MAE is 13.23/24.56, 13.22/24.56 and 13.23/24.48 for RustDesk, versus\n13.45/24.55, 13.49/24.30 and 13.45/24.47 for Redeven. Mean color PSNR/MAE is\n20.00/12.30, 20.02/12.26 and 20.01/12.27, versus 19.76/14.00, 20.28/13.14 and\n20.28/13.20. These supersede rounded-viewport metrics for geometric comparison,\nwithout deleting those original results. Fractional compositor rasterization,\nresampling and unequal delivered extents limit pixel metrics; they alone cannot\nestablish perceptual detail parity.",
           "char_count": 6858
+        },
+        {
+          "id": "boundaries",
+          "title": "Boundaries",
+          "level": 1,
+          "body": "The original window extents, source clocks and incomplete resource roots limit\nthe claims stated here. These historical results cannot qualify the current\nproduct or justify silently replacing adverse current trials.",
+          "char_count": 216
         }
       ],
       "snippet": "The primary qualification task owns this historical record. These published v0.22.40 and v0.22.45 trials retain original observations, invalid attempts and measurement limits. They establish historical advantages and deficits, not",
@@ -42159,5 +42222,5 @@
       ]
     }
   ],
-  "source_sha256": "f5c76002d4a65f65bc6127a5a7103147c0987b5a436c5b0c10e1951cf5b37d18"
+  "source_sha256": "0d34920f474ee7c725a909a22ac8c546420b72af3f4a4a666750602f3177c997"
 }

@@ -14,9 +14,7 @@ RustDesk 32.54 FPS in three retained motion rounds. Candidate pooled P95 is
 310.60 ms against 207.59 ms, with nine versus three gaps over 250 ms. Candidate
 round three reaches 53.04 FPS/P95 150.20 ms with no long gaps, but the adverse
 first round cannot be replaced. Keep current security, authorization, confirmed
-paint, ordering and recovery safeguards. Published artifacts, complete source
-matching and delivered-detail evidence are mandatory; lower CPU or a peak is
-not acceptance. The [C05 result](remote-desktop-lan-c05-results.md) owns current
+paint, ordering and recovery safeguards. The [C05 result](remote-desktop-lan-c05-results.md) owns current
 results and open cases; the [decision ledger](remote-desktop-lan-experiment-ledger.md)
 records adopted, rejected and unresolved experiments.
 

@@ -17,6 +17,13 @@ acceptance and [C05 preparation](remote-desktop-lan-published-c05.md) owns immut
 identities, controls, release checks and compatibility. Retry only a named fixture
 repair or a new discriminating hypothesis, after consulting the decision ledger.
 
+# Contract
+
+Retain every complete pair, source count and missing response. Interpret
+performance, resources and detail as separate acceptance axes. Consult the
+decision ledger before retrying; change one discriminating variable and retain
+immutable candidate and fixture identities.
+
 # Retained Presentation Results
 
 All rows use the same post-reboot host, physical 1920 x 1280/60 Hz scene v8,
@@ -127,6 +134,13 @@ isolate SSH/kernel/network/client scheduling. For memory, compare one fresh
 Viewer lifecycle with equal open surfaces and complete process attribution while
 continuing to report whole-tree costs. Require matched static/color detail before
 adopting any quality change. A further unchanged run is not a diagnosis.
+
+# Boundaries
+
+These outcomes apply only to the recorded hardware, workload and valid intervals.
+Missing source inputs prevent ordinal latency association; missing presentation
+with all source inputs remains a performance failure. A favorable later round
+does not erase earlier adverse evidence or establish the sole regression cause.
 
 # Evidence
 

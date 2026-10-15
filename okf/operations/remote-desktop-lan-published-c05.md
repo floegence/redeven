@@ -129,6 +129,13 @@ that omitted the selected window while the assertion retained six; preserve
 the failure and carry the same offer in unrelated capability refreshes.
 These checks establish compatibility behavior, not LAN performance acceptance.
 
+# Boundaries
+
+Release and compatibility checks establish only their named published contracts.
+They do not qualify LAN performance. The post-reboot fixture has a distinct boot
+identity; never join its intervals to earlier sampling. C05 outcomes retain
+adverse trials, source loss and resource/detail limitations.
+
 # Evidence
 
 - B/`published-v48-paired/release-attempt1`: original qualification artifacts.

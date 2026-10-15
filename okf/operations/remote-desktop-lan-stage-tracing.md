@@ -15,6 +15,13 @@ preserve confirmed paint, generation fences and bounded queues, and be restored
 after measurement. A stage trace never substitutes for presented-pixel acceptance.
 The [decision index](remote-desktop-lan-experiment-ledger.md) owns common controls.
 
+# Contract
+
+Trace one preregistered stage variable against the matched source workload.
+Preserve confirmed-paint authority and finite admission. Keep each machine in
+its own clock domain unless offset uncertainty is bounded. Read the decision
+ledger before another trace.
+
 # Stage Evidence And Limits
 
 P01, existing post-v42/v45 tracing: source-to-capture medians45-47 ms,
@@ -100,6 +107,12 @@ steady receive/draw rate of 51.35 FPS is not presented-pixel acceptance.
 A non-task demand-diagnostic workload was observed on udesk26 and left alone;
 it had exited by the later comparison. Original service and Runtime hashes were
 restored; temporary Go tracing changes are retained only in the artifact patch.
+
+# Boundaries
+
+Stage timing establishes only the measured segment. Accepted writes do not prove
+remote delivery or paint, and outbound stalls alone cannot isolate SSH, kernel,
+network or client scheduling. Keep clock uncertainty and invalid traces visible.
 
 # Evidence
 
