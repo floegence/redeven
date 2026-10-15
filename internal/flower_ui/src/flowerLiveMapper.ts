@@ -144,7 +144,8 @@ function mapRunProgress(raw: unknown, activeRunID: string): FlowerRunProgress | 
   if (!runID || !turnID || runID !== activeRunID) {
     throw new Error('Flower contract error: thread.run_progress requires exact active run and turn identity.');
   }
-  return { run_id: runID, turn_id: turnID, phase: runProgressPhase(record.phase) };
+  const retry = record.retry;
+  return { run_id: runID, turn_id: turnID, phase: runProgressPhase(record.phase), ...(retry ? { retry: mapRunRetry(retry) } : {}) };
 }
 
 function nonNegativeInteger(raw: unknown, field: string): number {
@@ -174,6 +175,17 @@ function optionalZeroBasedInteger(raw: unknown): number | undefined {
   if (raw === undefined || raw === null || raw === '') return undefined;
   const value = Number(raw);
   return Number.isFinite(value) && value >= 0 ? Math.floor(value) : undefined;
+}
+
+function mapRunRetry(raw: unknown): FlowerRunProgress['retry'] {
+  const value = recordValue(raw);
+  if (!value || typeof value.retry !== 'number' || typeof value.max_retries !== 'number' || typeof value.next_attempt_at !== 'string' || typeof value.reason !== 'string') {
+    throw new Error('Flower contract error: run_progress.retry is invalid.');
+  }
+  if (!Number.isInteger(value.retry) || value.retry < 1 || !Number.isInteger(value.max_retries) || value.max_retries < value.retry || !Number.isFinite(Date.parse(value.next_attempt_at))) {
+    throw new Error('Flower contract error: run_progress.retry has invalid bounds.');
+  }
+  return { retry: value.retry, max_retries: value.max_retries, next_attempt_at: value.next_attempt_at, reason: value.reason, ...(typeof value.replaced_attempt_id === 'string' ? { replaced_attempt_id: value.replaced_attempt_id } : {}), ...(typeof value.replaced_attempt_epoch === 'number' ? { replaced_attempt_epoch: value.replaced_attempt_epoch } : {}) };
 }
 
 function mapContextUsagePhase(raw: unknown): FlowerContextSample['phase'] {

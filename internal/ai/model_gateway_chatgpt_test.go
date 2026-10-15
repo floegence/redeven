@@ -38,7 +38,6 @@ func TestChatGPTWireFullHistoryNamespaceAndNativeReplay(t *testing.T) {
 	}
 	provider := adapter.(*openAIProvider)
 	provider.chatGPT = true
-	provider.requireTerminal = true
 	provider.chatGPTToken = func(context.Context) (string, error) { return "rotating-access", nil }
 	req := ModelGatewayRequest{Model: "gpt-5.5", Messages: []Message{{Role: "system", Content: []ContentPart{{Type: "text", Text: "system instructions"}}}, {Role: "user", Content: []ContentPart{{Type: "text", Text: "inspect the image"}, {Type: "image", MimeType: "image/png", FileURI: "https://example.com/image.png"}}}}, Tools: []ToolDef{{Name: "inspect", InputSchema: json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)}}}
 	first, err := provider.StreamTurn(context.Background(), req, nil)
@@ -86,7 +85,6 @@ func TestChatGPTStreamTerminalAndLateUsageFailures(t *testing.T) {
 			adapter, _ := newProviderAdapter("openai", server.URL+"/v1", "access", nil)
 			p := adapter.(*openAIProvider)
 			p.chatGPT = true
-			p.requireTerminal = true
 			result, err := p.StreamTurn(context.Background(), ModelGatewayRequest{Model: "gpt-5.5", Messages: []Message{{Role: "user", Content: []ContentPart{{Type: "text", Text: "hello"}}}}}, nil)
 			if err == nil || result.ProviderState != nil {
 				t.Fatal("noncompleted response committed state")
@@ -123,7 +121,7 @@ func TestChatGPTUsesCurrentWebSearchTool(t *testing.T) {
 	defer server.Close()
 	adapter, _ := newProviderAdapter("openai", server.URL+"/v1", "fixture", nil)
 	p := adapter.(*openAIProvider)
-	p.chatGPT, p.requireTerminal = true, true
+	p.chatGPT = true
 	result, err := p.StreamTurn(t.Context(), ModelGatewayRequest{Model: "gpt-6.1-sol", WebSearchMode: providerWebSearchModeOpenAIResponsesBuiltin, Messages: []Message{{Role: "user", Content: []ContentPart{{Type: "text", Text: "hi"}}}}}, nil)
 	if err != nil || result.Text != "Hello." {
 		t.Fatalf("current web search contract: result=%+v error=%v", result, err)
@@ -155,7 +153,7 @@ func TestChatGPTCompletedItemsPreserveNativeOutput(t *testing.T) {
 	defer server.Close()
 	adapter, _ := newProviderAdapter("openai", server.URL+"/v1", "fixture", nil)
 	p := adapter.(*openAIProvider)
-	p.chatGPT, p.requireTerminal = true, true
+	p.chatGPT = true
 	p.strictToolSchema = true
 	req := ModelGatewayRequest{Model: "gpt-6.1-sol", Tools: []ToolDef{strictFixtureTool()}, Messages: []Message{{Role: "user", Content: []ContentPart{{Type: "text", Text: "hi"}}}}}
 	result, err := p.StreamTurn(t.Context(), req, nil)

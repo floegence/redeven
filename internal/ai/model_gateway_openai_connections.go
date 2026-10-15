@@ -14,6 +14,8 @@ import (
 	"sync"
 	"time"
 
+	wire "github.com/coder/websocket"
+	flprovider "github.com/floegence/floret/v7/provider"
 	"github.com/openai/openai-go/v3/option"
 	"github.com/openai/openai-go/v3/packages/param"
 	responses "github.com/openai/openai-go/v3/responses"
@@ -259,6 +261,10 @@ func (s *openAIWebSocketEvents) Next() bool {
 	for {
 		event, err := s.lease.entry.conn.Recv(s.lease.ctx)
 		if err != nil {
+			switch wire.CloseStatus(err) {
+			case wire.StatusNormalClosure, wire.StatusGoingAway, wire.StatusAbnormalClosure, wire.StatusNoStatusRcvd, wire.StatusInternalError, wire.StatusServiceRestart, wire.StatusTryAgainLater:
+				err = flprovider.WithRetryAdvice(err, flprovider.RetryAdvice{Category: flprovider.RetryStreamInterrupted})
+			}
 			s.err = err
 			return false
 		}
@@ -395,6 +401,7 @@ func (p *openAIProvider) responsesStream(ctx context.Context, req ModelGatewayRe
 				var handshake *http.Response
 				connectOpts := []option.RequestOption{option.WithAPIKey(bearer), option.WithMaxRetries(0), option.WithMiddleware(func(r *http.Request, next option.MiddlewareNext) (*http.Response, error) {
 					res, err := next(r)
+					markProviderResponseReceived(res)
 					handshake = res
 					if res != nil && res.StatusCode >= 400 && res.Body != nil {
 						raw, readErr := io.ReadAll(io.LimitReader(res.Body, 64<<10))

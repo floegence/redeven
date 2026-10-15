@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	flprovider "github.com/floegence/floret/v7/provider"
 	flruntime "github.com/floegence/floret/v7/runtime"
@@ -270,5 +271,81 @@ func TestCanonicalProviderHTTPFailurePreservesMessageAndCause(t *testing.T) {
 	diagnostic, ok := parseProviderFailure(failure.Error())
 	if !ok || diagnostic.Provider != "deepseek" || diagnostic.Message != cause.Message || !errors.Is(failure, cause) {
 		t.Fatalf("lost provider failure: %+v", diagnostic)
+	}
+}
+
+func TestCanonicalProviderFailurePreservesFloretRetryAdvice(t *testing.T) {
+	cause := flprovider.WithRetryAdvice(&flprovider.ProviderHTTPError{Provider: "FlowNode", StatusCode: 500, Code: "upstream_gateway_error"}, flprovider.HTTPRetryAdvice(500, "upstream_gateway_error", nil, time.Now()))
+	err := canonicalProviderFailure(cause)
+	var adviser flprovider.RetryAdviser
+	if !errors.As(err, &adviser) || adviser.ProviderRetryAdvice().Category != flprovider.RetryTransient {
+		t.Fatalf("retry advice = %#v, err=%v", adviser, err)
+	}
+	if !strings.HasPrefix(err.Error(), providerFailurePrefix) {
+		t.Fatalf("canonical diagnostic missing: %v", err)
+	}
+}
+
+func TestResponseRetryAdviceRetainsHeadersAndReceiptTime(t *testing.T) {
+	at := time.Now().Add(-30 * time.Second)
+	response := &http.Response{StatusCode: 429, Header: http.Header{"Retry-After": {"45"}, "Retry-After-Ms": {"46000"}, "X-Should-Retry": {"false"}}, Request: (&http.Request{}).WithContext(context.WithValue(t.Context(), providerResponseReceivedKey{}, at))}
+	cause := errors.New("upstream")
+	failure := providerRequestFailure(cause, response, "openai")
+	var adviser flprovider.RetryAdviser
+	if !errors.As(failure, &adviser) {
+		t.Fatal("lost response facts")
+	}
+	advice := adviser.ProviderRetryAdvice()
+	if advice.Category != flprovider.RetryRateLimit || !advice.Forbidden || !advice.NotBefore.Equal(at.Add(46*time.Second)) {
+		t.Fatalf("advice=%+v", advice)
+	}
+	wrapped := canonicalProviderFailure(flprovider.WithRetryAdvice(failure, advice))
+	if !errors.As(wrapped, &adviser) || adviser.ProviderRetryAdvice() != advice || !errors.Is(wrapped, cause) {
+		t.Fatal("canonical wrapper lost advice/cause")
+	}
+	quota := providerStreamFailure(`{"error":{"type":"insufficient_quota","message":"quota"}}`, response, "anthropic")
+	if !errors.As(quota, &adviser) || adviser.ProviderRetryAdvice().Category != flprovider.RetryPermanent {
+		t.Fatal("quota treated as temporary rate limit")
+	}
+}
+
+func TestAnthropicAndCompatibleStreamFailuresCarryStructuredAdvice(t *testing.T) {
+	for _, tc := range []struct {
+		provider, body string
+		status         int
+		category       flprovider.RetryCategory
+	}{
+		{"anthropic", `event: error
+data: {"type":"error","error":{"type":"overloaded_error","message":"busy"}}
+
+`, 200, flprovider.RetryTransient},
+		{"anthropic", `{"error":{"type":"authentication_error","message":"invalid"}}`, 401, flprovider.RetryPermanent},
+		{"anthropic", `{"error":{"type":"rate_limit_error","message":"busy"}}`, 429, flprovider.RetryRateLimit},
+		{"openai_compatible", "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"partial\"}}]}\n\n", 200, flprovider.RetryStreamInterrupted},
+	} {
+		t.Run(tc.provider+fmt.Sprint(tc.status)+string(tc.category), func(t *testing.T) {
+			var calls int
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				calls++
+				if tc.status == 200 {
+					w.Header().Set("Content-Type", "text/event-stream")
+				}
+				w.WriteHeader(tc.status)
+				fmt.Fprint(w, tc.body)
+			}))
+			defer server.Close()
+			gateway, err := newProviderAdapter(tc.provider, server.URL, "test", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = gateway.StreamTurn(t.Context(), ModelGatewayRequest{Model: "test", Messages: []Message{{Role: "user", Content: []ContentPart{{Type: "text", Text: "work"}}}}}, nil)
+			var adviser flprovider.RetryAdviser
+			if !errors.As(err, &adviser) || adviser.ProviderRetryAdvice().Category != tc.category {
+				t.Fatalf("err=%v advice=%+v", err, adviser)
+			}
+			if calls != 1 {
+				t.Fatalf("SDK retried %d physical sends", calls)
+			}
+		})
 	}
 }

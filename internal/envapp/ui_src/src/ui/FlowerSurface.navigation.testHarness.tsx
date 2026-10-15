@@ -610,12 +610,13 @@ export function runtimeCurrentView(
     thread_id: threadValue.thread_id,
     view_version: version,
     cancellation: threadValue.cancellation,
+    ...(threadValue.error ? { error: threadValue.error.message, run_error_code: threadValue.error.code, run_error_detail: threadValue.error.detail } : {}),
     activity: threadValue.status === 'idle' || threadValue.status === 'success' || threadValue.status === 'failed' || threadValue.status === 'canceled'
       ? 'idle'
       : 'active',
     ...(threadValue.active_run_id ? { run_id: threadValue.active_run_id } : {}),
     ...(activeTurnID ? { turn_id: activeTurnID } : {}),
-    ...(threadValue.run_progress ? { run_progress: { phase: threadValue.run_progress.phase } } : {}),
+    ...(threadValue.run_progress ? { run_progress: { phase: threadValue.run_progress.phase, ...(threadValue.run_progress.retry ? { retry: threadValue.run_progress.retry } : {}) } } : {}),
     ...(threadValue.status === 'success' ? { last_outcome: 'completed' as const } : {}),
     ...(threadValue.status === 'failed' ? { last_outcome: 'failed' as const } : {}),
     ...(threadValue.status === 'canceled' ? { last_outcome: 'cancelled' as const } : {}),

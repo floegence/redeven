@@ -2,7 +2,10 @@ package ai
 
 import (
 	"encoding/json"
+	"fmt"
 	"math"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	anthropic "github.com/anthropics/anthropic-sdk-go"
@@ -127,5 +130,70 @@ func TestOpenAIUsageValidatesCacheWritesWithoutOverflow(t *testing.T) {
 func TestProviderUsageRejectsAggregateOverflow(t *testing.T) {
 	if _, err := normalizedPromptUsage(math.MaxInt64, 1, 0, 0, 0); err == nil {
 		t.Fatal("aggregate overflow accepted")
+	}
+}
+
+func TestResponsesFailedAttemptRetainsOnlyExplicitUsage(t *testing.T) {
+	for _, tc := range []struct {
+		name, event, usage string
+		chatGPT            bool
+	}{
+		{"failed", "response.failed", `,"usage":{"input_tokens":100,"output_tokens":20,"input_tokens_details":{"cached_tokens":40}}`, false},
+		{"interrupted", "response.in_progress", `,"usage":{"input_tokens":100,"output_tokens":20,"input_tokens_details":{"cached_tokens":40}}`, false},
+		{"chatgpt_incomplete", "response.incomplete", `,"usage":{"input_tokens":100,"output_tokens":20,"input_tokens_details":{"cached_tokens":40}}`, true},
+		{"unknown_usage", "response.failed", "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "text/event-stream")
+				fmt.Fprintf(w, "data: {\"type\":\"%s\",\"response\":{\"error\":{\"code\":\"server_error\"}%s}}\n\n", tc.event, tc.usage)
+			}))
+			defer server.Close()
+			raw, err := newProviderAdapter("openai", server.URL, "fixture", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			gateway := raw.(*openAIProvider)
+			gateway.chatGPT = tc.chatGPT
+			result, err := gateway.StreamTurn(t.Context(), ModelGatewayRequest{Model: "test", Messages: []Message{{Role: "user", Content: []ContentPart{{Type: "text", Text: "hi"}}}}}, nil)
+			if err == nil {
+				t.Fatal("unfinished response accepted")
+			}
+			want := TurnUsage{}
+			if tc.usage != "" {
+				want = TurnUsage{InputTokens: 60, OutputTokens: 20, CacheReadTokens: 40}
+			}
+			assertTurnUsage(t, result.Usage, want)
+			if result.FinishReason != "" || len(result.ToolCalls) != 0 {
+				t.Fatalf("failed attempt completed: %+v", result)
+			}
+		})
+	}
+}
+
+func TestAnthropicFailedAttemptRetainsReportedUsage(t *testing.T) {
+	for _, mode := range []string{"overloaded", "interrupted"} {
+		t.Run(mode, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "text/event-stream")
+				fmt.Fprint(w, `event: message_start
+data: {"type":"message_start","message":{"id":"msg-usage","type":"message","role":"assistant","model":"test","content":[],"usage":{"input_tokens":60,"output_tokens":2,"cache_read_input_tokens":40}}}
+
+`)
+				if mode == "overloaded" {
+					fmt.Fprint(w, "event: error\ndata: {\"type\":\"error\",\"error\":{\"type\":\"overloaded_error\"}}\n\n")
+				}
+			}))
+			defer server.Close()
+			gateway, err := newProviderAdapter("anthropic", server.URL, "fixture", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			result, err := gateway.StreamTurn(t.Context(), ModelGatewayRequest{Model: "test", Messages: []Message{{Role: "user", Content: []ContentPart{{Type: "text", Text: "hi"}}}}}, nil)
+			if err == nil {
+				t.Fatal("unfinished response accepted")
+			}
+			assertTurnUsage(t, result.Usage, TurnUsage{InputTokens: 60, OutputTokens: 2, CacheReadTokens: 40})
+		})
 	}
 }

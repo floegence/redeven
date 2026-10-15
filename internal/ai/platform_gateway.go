@@ -167,7 +167,7 @@ func (p *platformGatewayProvider) prepareTurn(ctx context.Context, req ModelGate
 	req.Protocol = protocol
 	req.Model = p.modelID
 	client := &http.Client{Transport: platformRequestTransport{provider: p, request: req}}
-	provider := &openAIProvider{providerType: "openai", requireTerminal: true, client: openai.NewClient(ooption.WithAPIKey("platform-lease"), ooption.WithBaseURL(p.baseURL+"/v1"), ooption.WithHTTPClient(client), ooption.WithMaxRetries(0))}
+	provider := &openAIProvider{providerType: "openai", client: openai.NewClient(ooption.WithAPIKey("platform-lease"), ooption.WithBaseURL(p.baseURL+"/v1"), ooption.WithHTTPClient(client), ooption.WithMaxRetries(0))}
 	// Reuse SDK serializers and stream parsers; Floret owns tools and transcript.
 	return provider.prepareTurn(ctx, req)
 }

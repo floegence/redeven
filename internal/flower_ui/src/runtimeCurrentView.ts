@@ -72,7 +72,8 @@ function runtimeRunProgress(current: FlowerRuntimeCurrentView): FlowerRunProgres
   if (!runID || !turnID) {
     throw new Error('Flower contract error: run progress requires exact run_id and turn_id.');
   }
-  return { run_id: runID, turn_id: turnID, phase: runtimeRunProgressPhase(current.run_progress.phase) };
+  const retry = current.run_progress.retry;
+  return { run_id: runID, turn_id: turnID, phase: runtimeRunProgressPhase(current.run_progress.phase), ...(retry ? { retry } : {}) };
 }
 
 function approvalTarget(value: unknown): { kind: string; label: string } | null {
@@ -89,7 +90,7 @@ function approvalTarget(value: unknown): { kind: string; label: string } | null 
 function messageStatus(view: FlowerRuntimeCurrentView, item: FlowerRuntimeCurrentItem): FlowerChatMessage['status'] {
   if (item.live) return 'streaming';
   if (view.last_outcome === 'cancelled' && item.turn_id === view.turn_id) return 'canceled';
-  if (view.last_outcome === 'interrupted' && item.turn_id === view.turn_id) return 'error';
+  if ((view.last_outcome === 'interrupted' || view.last_outcome === 'failed') && item.turn_id === view.turn_id) return 'error';
   return 'complete';
 }
 

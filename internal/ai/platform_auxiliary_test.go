@@ -114,8 +114,8 @@ func TestPlatformAutomaticTitleAndManualCompaction(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 	auxiliary := 0
-	for id := range requests {
-		if strings.HasPrefix(id, "aux_") {
+	for _, payload := range requests {
+		if strings.Contains(payload, "You generate concise thread titles") || strings.Contains(payload, "compaction") {
 			auxiliary++
 		}
 	}

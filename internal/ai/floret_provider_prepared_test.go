@@ -54,6 +54,7 @@ func TestFloretProviderPreparedRequestFreezesCompleteRenderedPayload(t *testing.
 	)
 
 	prepared, err := adapter.Prepare(context.Background(), flprovider.Request{
+		RunID: "run-prepared", PromptScopeID: "scope-prepared",
 		ReusePolicy: &flprovider.RequestReusePolicy{},
 
 		Messages: []flprovider.Message{{
@@ -108,15 +109,31 @@ func TestFloretProviderPreparedRequestFreezesCompleteRenderedPayload(t *testing.
 	if err := prepared.Close(); err != nil {
 		t.Fatalf("idempotent close: %v", err)
 	}
-	if handle.adapter != nil || handle.request.Model != "" {
-		t.Fatalf("close retained rendered request: %#v", handle.request)
+	next := handle.providerRequest
+	next.AttemptID = "replacement"
+	next.AttemptEpoch = 2
+	replay, err := handle.PrepareRetry(t.Context(), next)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replayStream, err := replay.Stream(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range replayStream {
+	}
+	if err := replay.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if resolveCalls != 1 {
+		t.Fatalf("retry resolved attachments %d times", resolveCalls)
 	}
 	gateway.mu.Lock()
 	defer gateway.mu.Unlock()
-	if len(gateway.requests) != 1 {
-		t.Fatalf("rendered model requests = %d, want 1", len(gateway.requests))
+	if len(gateway.requests) != 2 {
+		t.Fatalf("rendered model requests = %d, want 2", len(gateway.requests))
 	}
-	if len(gateway.requests) != 1 || (gateway.requests[0].ReusePolicy == nil || gateway.requests[0].ReusePolicy.ProviderStateAllowed || gateway.requests[0].ReusePolicy.PromptCacheEnabled || gateway.requests[0].ReusePolicy.PreferContinuation) {
+	if len(gateway.requests) != 2 || (gateway.requests[0].ReusePolicy == nil || gateway.requests[0].ReusePolicy.ProviderStateAllowed || gateway.requests[0].ReusePolicy.PromptCacheEnabled || gateway.requests[0].ReusePolicy.PreferContinuation) {
 		t.Fatalf("prepared isolation lost: %+v", gateway.requests[0].ReusePolicy)
 	}
 }
@@ -250,7 +267,7 @@ func TestPreparedEstimateExcludesHostMetadata(t *testing.T) {
 	adapter := newFloretProviderAdapter(&recordingPreparedGateway{}, "openai", "gpt-4o", ProviderControls{}, TurnBudgets{}, "")
 	count := func(runID flidentity.RunID) int64 {
 		t.Helper()
-		p, err := adapter.Prepare(context.Background(), flprovider.Request{RunID: runID,
+		p, err := adapter.Prepare(context.Background(), flprovider.Request{RunID: runID, PromptScopeID: "scope-estimate",
 			Messages: []flprovider.Message{{Role: flprovider.RoleUser, Text: strings.Repeat("Review the source code and explain the changes.\n", 100)}}})
 		if err != nil {
 			t.Fatal(err)

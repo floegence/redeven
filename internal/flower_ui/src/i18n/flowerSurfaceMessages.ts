@@ -300,6 +300,8 @@ export const flowerSurfaceEnUS = {
     modelStatusWaitingResponse: 'Waiting for model response...',
     modelStatusStreaming: 'Thinking...',
     modelStatusRetrying: 'Retrying model request...',
+    providerRetryWaiting: 'Model service unavailable. Retry in {seconds}s · {retry}/{max}',
+    providerRetryRegenerating: 'Connection interrupted. Regenerating in {seconds}s · {retry}/{max}',
     modelStatusFinalizing: 'Finalizing reply...',
     liveProgressTool: 'Using a tool',
     liveProgressOutput: 'Writing the reply',

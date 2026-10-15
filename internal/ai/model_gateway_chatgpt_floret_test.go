@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	flconfig "github.com/floegence/floret/v7/config"
 	flruntime "github.com/floegence/floret/v7/runtime"
@@ -52,7 +53,6 @@ func TestChatGPTFloretToolHistoryRestartAndCompaction(t *testing.T) {
 	provider := raw.(*openAIProvider)
 	provider.chatGPT = true
 	provider.strictToolSchema = true
-	provider.requireTerminal = true
 	provider.chatGPTToken = func(context.Context) (string, error) { return "fixture", nil }
 	gateway := newFloretProviderAdapter(provider, "openai", "gpt-6.1-sol", ProviderControls{}, TurnBudgets{}, "")
 	gateway.identity, err = redevenFloretGatewayIdentity("openai", "openai", server.URL, "gpt-6.1-sol", "responses", "chatgpt", "fixture")
@@ -154,7 +154,9 @@ func TestFloretProviderFailureDiagnosticsSurviveRestart(t *testing.T) {
 		{"openrouter", "openrouter", "google/gemma-4-31b-it:free", "chat_completions", openRouterSharedPoolFailure, runErrorCodeProviderUpstreamRateLimited, "upstream_provider_shared_pool", 429, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			var sends atomic.Int32
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				sends.Add(1)
 				w.Header().Set("Content-Type", "application/json")
 				if tc.status == 200 {
 					w.Header().Set("Content-Type", "text/event-stream")
@@ -174,7 +176,9 @@ func TestFloretProviderFailureDiagnosticsSurviveRestart(t *testing.T) {
 				authIdentity = "chatgpt"
 			}
 			gateway.identity, _ = redevenFloretGatewayIdentity(tc.providerType, tc.providerType, server.URL, tc.model, tc.protocol, authIdentity, "fixture")
-			agent, err := flruntime.NewAgent(flconfig.AgentConfig{Profile: flconfig.AgentProfile{ID: "test", Name: "Test"}, SystemPrompt: "Reply briefly.", Context: flconfig.ContextPolicy{ContextWindowTokens: 128000, CompactedContextTargetTokens: 2000, RecentTailTokens: 100, RecentUserTokens: 100, ReservedSummaryTokens: 1000}}, gateway)
+			policy := flruntime.DefaultProviderRetryPolicy()
+			policy.BaseDelay, policy.MaxDelay, policy.Jitter = time.Microsecond, time.Microsecond, 0
+			agent, err := flruntime.NewAgent(flconfig.AgentConfig{Profile: flconfig.AgentProfile{ID: "test", Name: "Test"}, SystemPrompt: "Reply briefly.", Context: flconfig.ContextPolicy{ContextWindowTokens: 128000, CompactedContextTargetTokens: 2000, RecentTailTokens: 100, RecentUserTokens: 100, ReservedSummaryTokens: 1000}}, gateway, flruntime.WithAgentProviderRetryPolicy(policy))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -202,6 +206,13 @@ func TestFloretProviderFailureDiagnosticsSurviveRestart(t *testing.T) {
 			first := waitDesktopContinuation(t, service, created.ThreadID)
 			if first.Failure == nil {
 				t.Fatal("provider failure missing")
+			}
+			wantSends := int32(5)
+			if tc.status == http.StatusBadRequest {
+				wantSends = 1
+			}
+			if sends.Load() != wantSends {
+				t.Fatalf("physical sends=%d, want %d", sends.Load(), wantSends)
 			}
 			code, message := projectFloretTurnFailure(first.Failure, runErrorCodeFloretEngineFailed)
 			detail := canonicalFailureDetail(first.Failure)

@@ -500,6 +500,8 @@
       "liveProgressTool": "ツールを実行中",
       "liveProgressOutput": "返信を出力中",
       "modelStatusRetrying": "モデルリクエストを再試行中...",
+      "providerRetryWaiting": "モデルサービスを利用できません。{seconds}秒後に再試行 · {retry}/{max}",
+      "providerRetryRegenerating": "接続が切断されました。{seconds}秒後に再生成 · {retry}/{max}",
       "modelStatusFinalizing": "返信を整理中...",
       "contextIndicatorLabel": "コンテキスト",
       "contextIndicatorNearThreshold": "上限に近い",

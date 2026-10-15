@@ -3,6 +3,9 @@ package ai
 import (
 	"context"
 	"encoding/json"
+	"errors"
+
+	flprovider "github.com/floegence/floret/v7/provider"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -75,7 +78,7 @@ func (m *openAIMissingCompletedMock) handle(w http.ResponseWriter, r *http.Reque
 	f.Flush()
 }
 
-func TestOpenAIProvider_StreamTurn_MissingCompleted_SucceedsWithText(t *testing.T) {
+func TestOpenAIProvider_StreamTurn_MissingCompleted_RejectsUnfinishedText(t *testing.T) {
 	t.Parallel()
 
 	mock := &openAIMissingCompletedMock{mode: "text"}
@@ -92,18 +95,16 @@ func TestOpenAIProvider_StreamTurn_MissingCompleted_SucceedsWithText(t *testing.
 		Model:    "gpt-5-mini",
 		Messages: []Message{{Role: "user", Content: []ContentPart{{Type: "text", Text: "hi"}}}},
 	}, nil)
-	if err != nil {
-		t.Fatalf("StreamTurn: %v", err)
+	var adviser flprovider.RetryAdviser
+	if !errors.As(err, &adviser) || adviser.ProviderRetryAdvice().Category != flprovider.RetryStreamInterrupted {
+		t.Fatalf("missing terminal event must be interrupted: %v", err)
 	}
-	if strings.TrimSpace(res.Text) != "HELLO_NO_COMPLETED" {
-		t.Fatalf("text=%q, want %q", res.Text, "HELLO_NO_COMPLETED")
-	}
-	if strings.TrimSpace(res.FinishReason) != "stop" {
-		t.Fatalf("finish_reason=%q, want stop", res.FinishReason)
+	if res.FinishReason != "" || len(res.ToolCalls) != 0 {
+		t.Fatalf("unfinished stream granted completion: %+v", res)
 	}
 }
 
-func TestOpenAIProvider_StreamTurn_MissingCompleted_SucceedsWithToolCall(t *testing.T) {
+func TestOpenAIProvider_StreamTurn_MissingCompleted_RejectsUnconfirmedToolCall(t *testing.T) {
 	t.Parallel()
 
 	mock := &openAIMissingCompletedMock{mode: "tool_call"}
@@ -125,23 +126,11 @@ func TestOpenAIProvider_StreamTurn_MissingCompleted_SucceedsWithToolCall(t *test
 			{Name: "terminal.exec", InputSchema: json.RawMessage(`{"type":"object"}`)},
 		},
 	}, nil)
-	if err != nil {
-		t.Fatalf("StreamTurn: %v", err)
+	var adviser flprovider.RetryAdviser
+	if !errors.As(err, &adviser) || adviser.ProviderRetryAdvice().Category != flprovider.RetryStreamInterrupted {
+		t.Fatalf("missing terminal event must be interrupted: %v", err)
 	}
-	if strings.TrimSpace(res.FinishReason) != "tool_calls" {
-		t.Fatalf("finish_reason=%q, want tool_calls", res.FinishReason)
-	}
-	if len(res.ToolCalls) != 1 {
-		t.Fatalf("tool_calls=%d, want 1", len(res.ToolCalls))
-	}
-	call := res.ToolCalls[0]
-	if strings.TrimSpace(call.ID) != "call_1" {
-		t.Fatalf("call_id=%q, want call_1", call.ID)
-	}
-	if strings.TrimSpace(call.Name) != "terminal.exec" {
-		t.Fatalf("call_name=%q, want terminal.exec", call.Name)
-	}
-	if strings.TrimSpace(anyToString(call.Args["command"])) != "pwd" {
-		t.Fatalf("call.args.command=%v, want pwd", call.Args["command"])
+	if res.FinishReason != "" || len(res.ToolCalls) != 0 {
+		t.Fatalf("unfinished stream granted tool execution: %+v", res)
 	}
 }

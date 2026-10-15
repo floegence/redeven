@@ -67,7 +67,7 @@ func (r *run) buildRunToolSurface(cfg runToolSurfaceConfig, permissionType Flowe
 	var hosted []flprovider.HostedToolDefinition
 	_, searchAllowed := r.toolAllowlist["web_search"]
 	if r.webSearch.HostedTool() && (len(r.toolAllowlist) == 0 || searchAllowed) {
-		hosted = []flprovider.HostedToolDefinition{{Name: "web_search", Type: "web_search", Options: map[string]any{"wire_shape": r.webSearch.Mode}}}
+		hosted = []flprovider.HostedToolDefinition{{Name: "web_search", Type: "web_search", ReplaySafe: true, Options: map[string]any{"wire_shape": r.webSearch.Mode}}}
 	}
 	if cfg.InitialProviderSurface != nil {
 		// Search configuration retains its Turn boundary independently of live

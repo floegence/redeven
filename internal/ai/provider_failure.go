@@ -2,6 +2,7 @@ package ai
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,8 +11,10 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
+	anthropic "github.com/anthropics/anthropic-sdk-go"
 	flprovider "github.com/floegence/floret/v7/provider"
 	"github.com/floegence/redeven/internal/chatgpt"
 	openai "github.com/openai/openai-go/v3"
@@ -37,12 +40,26 @@ type providerFailureDiagnostic struct {
 type providerFailure struct {
 	diagnostic providerFailureDiagnostic
 	cause      error
+	advice     flprovider.RetryAdvice
 }
 
 func (e *providerFailure) Error() string {
 	raw, _ := json.Marshal(e.diagnostic.sanitized())
 	return providerFailurePrefix + string(raw)
 }
+func (e *providerFailure) ProviderRetryAdvice() flprovider.RetryAdvice {
+	if e == nil {
+		return flprovider.RetryAdvice{}
+	}
+	if e.advice.Category != "" || !e.advice.NotBefore.IsZero() || e.advice.Forbidden {
+		return e.advice
+	}
+	code := strings.ToLower(strings.TrimSpace(e.diagnostic.Code))
+	status := e.diagnostic.failureStatus()
+	advice := flprovider.HTTPRetryAdvice(status, code, nil, time.Time{})
+	return advice
+}
+
 func (e *providerFailure) Unwrap() error { return e.cause }
 
 var diagnosticCodePattern = regexp.MustCompile(`^([a-z][a-z0-9_]{0,79}|[45][0-9]{2})$`)
@@ -160,6 +177,9 @@ func diagnosticFromBody(d providerFailureDiagnostic, raw []byte) providerFailure
 				d.Message = message
 			}
 		}
+		if kind, ok := fields["type"].(string); ok {
+			d.Code = kind
+		}
 		if code, ok := fields["code"].(string); ok {
 			d.Code = code
 		} else if code, ok := fields["code"].(float64); ok && code >= 400 && code <= 599 && code == float64(int(code)) {
@@ -191,6 +211,14 @@ func providerRequestFailure(err error, response *http.Response, providerType str
 		return providerStreamFailure(string(streamError.Event.Data), response, providerType)
 	}
 	d := providerFailureDiagnostic{Provider: providerType}
+	var anthropicHTTP *anthropic.Error
+	if errors.As(err, &anthropicHTTP) {
+		d = diagnosticFromBody(d, []byte(anthropicHTTP.RawJSON()))
+		d.Status = anthropicHTTP.StatusCode
+		if response == nil {
+			response = anthropicHTTP.Response
+		}
+	}
 	var upstream *openai.Error
 	if errors.As(err, &upstream) {
 		d.Status, d.Code, d.Message, d.Param = upstream.StatusCode, upstream.Code, upstream.Message, upstream.Param
@@ -210,7 +238,7 @@ func providerRequestFailure(err error, response *http.Response, providerType str
 	if providerType == "chatgpt" {
 		err = &chatgpt.RequestError{Status: d.Status, Code: d.Code, RequestID: d.RequestID, Body: raw}
 	}
-	return &providerFailure{diagnostic: d, cause: err}
+	return &providerFailure{diagnostic: d, cause: err, advice: responseRetryAdvice(d, response)}
 }
 
 func providerStreamFailure(raw string, response *http.Response, providerType string) error {
@@ -233,12 +261,19 @@ func providerStreamFailure(raw string, response *http.Response, providerType str
 	if providerType == "chatgpt" {
 		cause = &chatgpt.RequestError{Status: d.Status, Code: d.Code, RequestID: d.RequestID}
 	}
-	return &providerFailure{diagnostic: d.sanitized(), cause: cause}
+	return &providerFailure{diagnostic: d.sanitized(), cause: cause, advice: responseRetryAdvice(d, response)}
 }
 
 func canonicalProviderFailure(err error) error {
 	var failure *providerFailure
 	if errors.As(err, &failure) {
+		var adviser flprovider.RetryAdviser
+		if errors.As(err, &adviser) {
+			copy := *failure
+			copy.cause = err
+			copy.advice = adviser.ProviderRetryAdvice()
+			return &copy
+		}
 		return failure
 	}
 	var account *chatgpt.RequestError
@@ -256,7 +291,12 @@ func canonicalProviderFailure(err error) error {
 			Provider: strings.ToLower(strings.TrimSpace(floretHTTP.Provider)), Status: floretHTTP.StatusCode,
 			Code: floretHTTP.Code, Message: floretHTTP.Message, Shape: "standard_error",
 		}
-		return &providerFailure{diagnostic: d.sanitized(), cause: err}
+		advice := floretHTTP.ProviderRetryAdvice()
+		var adviser flprovider.RetryAdviser
+		if errors.As(err, &adviser) {
+			advice = adviser.ProviderRetryAdvice()
+		}
+		return &providerFailure{diagnostic: d.sanitized(), cause: err, advice: advice}
 	}
 	return err
 }
@@ -298,4 +338,35 @@ func providerDiagnosticRunCode(d providerFailureDiagnostic) string {
 
 func strictSchemaError(format string, args ...any) error {
 	return &providerFailure{diagnostic: providerFailureDiagnostic{Provider: "openai", Code: "invalid_function_parameters", Param: "tools", Shape: "empty"}, cause: fmt.Errorf(format, args...)}
+}
+
+// Capture response receipt once, before consuming a potentially long stream.
+// The timestamp stays on the response's request context; it is never serialized.
+type providerResponseReceivedKey struct{}
+
+func markProviderResponseReceived(response *http.Response) {
+	if response == nil {
+		return
+	}
+	req := response.Request
+	if req == nil {
+		req = &http.Request{}
+	}
+	if _, ok := req.Context().Value(providerResponseReceivedKey{}).(time.Time); ok {
+		return
+	}
+	response.Request = req.WithContext(context.WithValue(req.Context(), providerResponseReceivedKey{}, time.Now()))
+}
+func responseRetryAdvice(d providerFailureDiagnostic, response *http.Response) flprovider.RetryAdvice {
+	var headers http.Header
+	received := time.Now()
+	if response != nil {
+		headers = response.Header
+		if response.Request != nil {
+			if at, ok := response.Request.Context().Value(providerResponseReceivedKey{}).(time.Time); ok {
+				received = at
+			}
+		}
+	}
+	return flprovider.HTTPRetryAdvice(d.failureStatus(), d.Code, headers, received)
 }

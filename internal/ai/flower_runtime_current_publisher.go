@@ -315,6 +315,14 @@ func flowerRuntimeCurrentBoundaryKey(current flruntime.ThreadView) string {
 	builder.add(current.RunID.String())
 	if current.RunProgress != nil {
 		builder.add(string(current.RunProgress.Phase))
+		if retry := current.RunProgress.Retry; retry != nil {
+			builder.addInt(int64(retry.Retry))
+			builder.addInt(int64(retry.MaxRetries))
+			builder.add(retry.NextAttemptAt.Format(time.RFC3339Nano))
+			builder.add(retry.Reason)
+			builder.add(retry.ReplacedAttemptID)
+			builder.addInt(int64(retry.ReplacedAttemptEpoch))
+		}
 	} else {
 		builder.add("")
 	}

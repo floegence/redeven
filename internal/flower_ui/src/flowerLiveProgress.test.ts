@@ -4,7 +4,7 @@ import type {
   FlowerRunProgressPhase,
   FlowerThreadSnapshot,
 } from './contracts/flowerSurfaceContracts';
-import { flowerRunProgress } from './flowerLiveProgress';
+import { flowerRunProgress, flowerRetrySeconds } from './flowerLiveProgress';
 
 function thread(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThreadSnapshot {
   return {
@@ -52,4 +52,11 @@ describe('flowerRunProgress', () => {
       run_progress: { phase: 'streaming', run_id: 'run-old', turn_id: 'turn-live' },
     }))).toThrow(/active run identity/);
   });
+});
+
+it('derives retry countdown from the absolute server deadline across reopen', () => {
+  const deadline = '2026-10-15T16:00:03Z';
+  expect(flowerRetrySeconds(deadline, Date.parse('2026-10-15T16:00:00.100Z'))).toBe(3);
+  expect(flowerRetrySeconds(deadline, Date.parse('2026-10-15T16:00:02.900Z'))).toBe(1);
+  expect(flowerRetrySeconds(deadline, Date.parse('2026-10-15T16:00:04Z'))).toBe(0);
 });

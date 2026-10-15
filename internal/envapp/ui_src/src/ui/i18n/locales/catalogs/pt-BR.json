@@ -1433,6 +1433,8 @@
     "modelStatusPreparing": "Preparando solicitação ao modelo...",
     "modelStatusWaitingResponse": "Aguardando resposta do modelo...",
     "modelStatusRetrying": "Tentando novamente a solicitação ao modelo...",
+    "providerRetryWaiting": "Serviço do modelo indisponível. Nova tentativa em {seconds} s · {retry}/{max}",
+    "providerRetryRegenerating": "Conexão interrompida. Nova geração em {seconds} s · {retry}/{max}",
     "modelStatusFinalizing": "Finalizando resposta...",
     "waitingForReasoning": "Aguardando reasoning",
     "reasoning": "Raciocínio"
@@ -5399,6 +5401,8 @@
       "liveProgressTool": "Usando uma ferramenta",
       "liveProgressOutput": "Escrevendo a resposta",
       "modelStatusRetrying": "Tentando novamente a solicitação ao modelo...",
+      "providerRetryWaiting": "Serviço do modelo indisponível. Nova tentativa em {seconds} s · {retry}/{max}",
+      "providerRetryRegenerating": "Conexão interrompida. Nova geração em {seconds} s · {retry}/{max}",
       "modelStatusFinalizing": "Finalizando resposta...",
       "contextIndicatorLabel": "Contexto",
       "contextIndicatorNearThreshold": "Perto do limite",

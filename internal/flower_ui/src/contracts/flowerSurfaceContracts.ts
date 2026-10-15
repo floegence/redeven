@@ -288,7 +288,17 @@ export type FlowerRunProgressPhase =
   | 'finalizing'
   | 'tool_execution';
 
+export type FlowerRunRetry = Readonly<{
+  retry: number;
+  max_retries: number;
+  next_attempt_at: string;
+  reason: string;
+  replaced_attempt_id?: string;
+  replaced_attempt_epoch?: number;
+}>;
+
 export type FlowerRunProgress = Readonly<{
+  retry?: FlowerRunRetry;
   phase: FlowerRunProgressPhase;
   run_id: string;
   turn_id: string;
@@ -848,7 +858,7 @@ export type FlowerRuntimeCurrentView = Readonly<{
   activity?: 'idle' | 'active';
   turn_id?: string;
   run_id?: string;
-  run_progress?: Readonly<{ phase: FlowerRunProgressPhase }> | null;
+  run_progress?: Readonly<{ phase: FlowerRunProgressPhase; retry?: FlowerRunRetry }> | null;
   last_outcome?: 'completed' | 'failed' | 'cancelled' | 'interrupted';
   error?: string;
   run_error_code?: string;
