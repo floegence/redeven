@@ -138,6 +138,10 @@ func TestFloretSubagentWaitAndInspectReturnCompleteHandoffs(t *testing.T) {
 func TestFloretSubagentTimedOutWaitReturnsOnlyCompletedHandoffs(t *testing.T) {
 	now := time.Now()
 	completed := completedSubagentTestSummary("thread-complete", "Complete", "complete preview", now)
+	failed := completedSubagentTestSummary("thread-failed", "Failed", "last message before failure", now)
+	failedOutcome := flruntime.TurnOutcomeFailed
+	failed.LastOutcome = &failedOutcome
+	failed.Failure = &flruntime.ThreadTurnFailure{Code: flruntime.ThreadTurnFailureProvider, Message: "provider unavailable"}
 	running := flruntime.ThreadSummary{
 		ID: "thread-running", ParentThreadID: "thread-parent", ParentTurnID: "turn-parent",
 		TaskName: "Running", HostProfileRef: subagentAgentTypeExplore,
@@ -146,12 +150,12 @@ func TestFloretSubagentTimedOutWaitReturnsOnlyCompletedHandoffs(t *testing.T) {
 	}
 	content := "complete:" + strings.Repeat("C", 4_000)
 	adapter, _ := newSubagentHandoffTestAdapter(t,
-		[]flruntime.ThreadSummary{running, completed},
+		[]flruntime.ThreadSummary{running, completed, failed},
 		map[identity.ThreadID]flruntime.ThreadView{completed.ID: completedSubagentTestView(completed, content)},
 	)
 
 	result, err := adapter.wait(t.Context(), map[string]any{
-		"ids": []any{completed.ID.String(), running.ID.String()}, "timeout_ms": 1,
+		"ids": []any{completed.ID.String(), running.ID.String(), failed.ID.String()}, "timeout_ms": 1,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -162,6 +166,12 @@ func TestFloretSubagentTimedOutWaitReturnsOnlyCompletedHandoffs(t *testing.T) {
 	handoffs := subagentHandoffRecords(t, result)
 	if len(handoffs) != 1 || handoffs[0]["thread_id"] != completed.ID.String() || handoffs[0]["content"] != content {
 		t.Fatalf("handoffs = %#v, want only completed report", handoffs)
+	}
+	item := result["items"].([]map[string]any)[2]
+	if item["thread_id"] != failed.ID.String() || !reflect.DeepEqual(item["failure"], map[string]any{
+		"code": string(failed.Failure.Code), "message": failed.Failure.Message,
+	}) {
+		t.Fatalf("timed-out wait lost the failed child's reason: %#v", item)
 	}
 }
 
@@ -257,6 +267,11 @@ func TestSubagentPromptUsesOneHandoffContract(t *testing.T) {
 	prompt := buildPromptSubagentSection(promptProfileSpec{}).render()
 	if !strings.Contains(prompt, "handoffs[].content") || !strings.Contains(prompt, "last_message_preview") {
 		t.Fatalf("prompt does not describe the handoff contract:\n%s", prompt)
+	}
+	for _, required := range []string{"items[].failure.code", "items[].failure.message", "do not infer a cause", "effect_outcome_unknown"} {
+		if !strings.Contains(prompt, required) {
+			t.Fatalf("prompt is missing failure guidance %q:\n%s", required, prompt)
+		}
 	}
 	for _, stale := range []string{"final_handoff_report", "progress_summary"} {
 		if strings.Contains(prompt, stale) {
