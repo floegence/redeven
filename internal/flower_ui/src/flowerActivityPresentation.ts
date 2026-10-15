@@ -503,12 +503,7 @@ function metaForItem(item: FlowerActivityItem, hiddenChipKinds?: ReadonlySet<str
     ...(isApprovalLifecycleText(desc) ? [] : [desc]),
     ...chipText(item, hiddenChipKinds),
   ].filter(Boolean);
-  return Array.from(new Set(parts)).join(' · ');
-}
-
-function metaWithError(item: FlowerActivityItem, base: string): string {
-  const error = item.status === 'error' && item.approval_state !== 'rejected' ? errorMessageFromPayload(item.payload) : '';
-  return Array.from(new Set([base, error].filter(Boolean))).join(' · ');
+  return Array.from(new Set(parts.filter(value => !repeatsItemError(item, value)))).join(' · ');
 }
 
 function diffStats(files: readonly FlowerActivityDiffFile[]): FlowerActivityPresentation['changeStats'] {
@@ -519,11 +514,10 @@ function diffStats(files: readonly FlowerActivityDiffFile[]): FlowerActivityPres
 }
 
 function metaForTerminalItem(item: FlowerActivityItem): string {
-  const error = errorMessageFromPayload(item.payload);
   const executionFacts = (item.chips ?? [])
     .filter((chip) => chip.kind === 'target' || chip.kind === 'execution_location')
     .map((chip) => trimString(chip.value));
-  return [...executionFacts, trimString(typeof item.payload?.execution_location === 'string' ? item.payload.execution_location : ''), item.status === 'error' && item.approval_state !== 'rejected' ? error : '']
+  return [...executionFacts, trimString(typeof item.payload?.execution_location === 'string' ? item.payload.execution_location : '')]
     .filter(Boolean)
     .filter((value, index, values) => value !== 'local_runtime' && values.indexOf(value) === index)
     .join(' · ');
@@ -541,6 +535,10 @@ function errorMessageFromPayload(payload: Readonly<Record<string, unknown>> | un
   const scalarError = scalarText(payload.error);
   if (scalarError) return scalarError;
   return payloadValue(payload, 'message', 'reason');
+}
+
+function repeatsItemError(item: FlowerActivityItem, value: string): boolean {
+  return item.status === 'error' && trimString(value) === errorMessageFromPayload(item.payload);
 }
 
 function errorDetailBlockForItem(item: FlowerActivityItem, payload: Readonly<Record<string, unknown>> | undefined): Extract<FlowerActivityDetailBlock, { kind: 'error' }> | null {
@@ -639,7 +637,7 @@ function structuredRowsFromPayload(payload: Readonly<Record<string, unknown>> | 
 
 function meaningfulStructuredSummary(item: FlowerActivityItem, title: FlowerActivityTitle): readonly FlowerActivityDetailLine[] {
   const summary = payloadValue(item.payload, 'summary');
-  if (!summary || shouldHideDetailLine('summary', summary)) return [];
+  if (!summary || shouldHideDetailLine('summary', summary) || repeatsItemError(item, summary)) return [];
   const normalizedSummary = trimString(summary).toLowerCase();
   const repeatedValues = [titleText(title), item.label, item.description]
     .map((value) => trimString(value).toLowerCase())
@@ -921,10 +919,10 @@ function presentationForSubagents(item: FlowerActivityItem, copy?: FlowerActivit
   const title: FlowerActivityTitle = { kind: 'plain', text: titleText };
   const detailBlocks: FlowerActivityDetailBlock[] = [];
   const errorBlock = errorDetailBlockForItem(item, payload);
-  if (errorBlock) detailBlocks.push(errorBlock);
   if (detail.items.length > 0 || detail.task_preview || detail.status) {
     detailBlocks.push({ kind: 'subagents', subagents: detail });
   }
+  if (errorBlock) detailBlocks.push(errorBlock);
   return {
     label: title.text,
     title,
@@ -1024,8 +1022,7 @@ function presentationForFile(item: FlowerActivityItem, fileActions?: FlowerActiv
   const detailBlocks: FlowerActivityDetailBlock[] = [];
   let files: readonly FlowerActivityDiffFile[] = [];
   const errorBlock = errorDetailBlockForItem(item, payload);
-  if (errorBlock) detailBlocks.push(errorBlock);
-  if (verb === 'Read') {
+  if (verb === 'Read' && (!errorBlock || contentText(payload.content))) {
     detailBlocks.push({
       kind: 'file_read',
       action,
@@ -1035,7 +1032,7 @@ function presentationForFile(item: FlowerActivityItem, fileActions?: FlowerActiv
       total_lines: numericValue(payload.total_lines),
       truncated: boolValue(payload.truncated),
     });
-  } else {
+  } else if (verb !== 'Read') {
     files = diffFilesFromPayload(item, fileActions);
     if (files.length > 0) {
       detailBlocks.push({ kind: 'file_diff', files });
@@ -1046,10 +1043,11 @@ function presentationForFile(item: FlowerActivityItem, fileActions?: FlowerActiv
     detailBlocks.push({ kind: 'structured', lines: statusLines });
   }
   const changeStats = verb === 'Read' ? undefined : diffStats(files);
+  if (errorBlock) detailBlocks.push(errorBlock);
   return {
     label: titleText(title),
     title,
-    meta: metaWithError(item, verb === 'Read' ? '' : metaForItem(item, FILE_TITLE_CHIP_KINDS)),
+    meta: verb === 'Read' ? '' : metaForItem(item, FILE_TITLE_CHIP_KINDS),
     ...(changeStats ? { changeStats } : {}),
     primaryAction: action,
     detailLines: statusLines,
@@ -1063,7 +1061,6 @@ function presentationForPatch(item: FlowerActivityItem, fileActions?: FlowerActi
   const payload = item.payload ?? {};
   const detailBlocks: FlowerActivityDetailBlock[] = [];
   const errorBlock = errorDetailBlockForItem(item, payload);
-  if (errorBlock) detailBlocks.push(errorBlock);
   if (files.length > 0) {
     detailBlocks.push({ kind: 'file_diff', files });
   }
@@ -1072,10 +1069,11 @@ function presentationForPatch(item: FlowerActivityItem, fileActions?: FlowerActi
     detailBlocks.push({ kind: 'structured', lines: statusLines });
   }
   const changeStats = diffStats(files);
+  if (errorBlock) detailBlocks.push(errorBlock);
   return {
     label: titleText(title),
     title,
-    meta: metaWithError(item, metaForItem(item, FILE_TITLE_CHIP_KINDS)),
+    meta: metaForItem(item, FILE_TITLE_CHIP_KINDS),
     ...(changeStats ? { changeStats } : {}),
     ...(files.length === 1 ? { primaryAction: files[0].action } : {}),
     detailLines: statusLines,
@@ -1089,9 +1087,6 @@ function presentationForTodos(item: FlowerActivityItem): FlowerActivityPresentat
   const errorBlock = errorDetailBlockForItem(item, item.payload);
   const statusLines = errorBlock ? [] : resultStatusLines(item.payload);
   const detailBlocks: FlowerActivityDetailBlock[] = [];
-  if (errorBlock) {
-    detailBlocks.push(errorBlock);
-  }
   if (items.length > 0) {
     detailBlocks.push({ kind: 'todos', items });
   }
@@ -1108,10 +1103,11 @@ function presentationForTodos(item: FlowerActivityItem): FlowerActivityPresentat
     counts.pending > 0 ? `pending ${counts.pending}` : '',
     counts.cancelled > 0 ? `cancelled ${counts.cancelled}` : '',
   ]).filter(Boolean).join(' · ');
+  if (errorBlock) detailBlocks.push(errorBlock);
   return {
     label: title.text,
     title,
-    meta: metaWithError(item, meta),
+    meta,
     detailLines: statusLines,
     detailBlocks,
   };
@@ -1136,11 +1132,20 @@ function terminalTitleForItem(item: FlowerActivityItem, copy?: FlowerActivityPre
   const description = trimString(item.description);
   const generic = new Set<string>([...Object.values(DEFAULT_TERMINAL_ACTIVITY_COPY), trimString(item.tool_name), payloadValue(item.payload, 'command')]);
   if (label && !generic.has(label)) return { kind: 'plain', text: label };
-  return { kind: 'plain', text: description || operation };
+  return { kind: 'plain', text: description && !repeatsItemError(item, description) ? description : operation };
 }
 
 function terminalOutputFromPayload(payload: Readonly<Record<string, unknown>>): string {
   return rawPayloadText(payload, 'output');
+}
+
+function terminalErrorRepeatsResult(error: FlowerActivityErrorDetail, terminal: FlowerActivityTerminalDetail): boolean {
+  if (error.repair_action || error.suggested_targets?.length || error.target_state || error.target_kind) return false;
+  const message = error.message;
+  if (terminal.operation !== 'write' && !terminal.timed_out && !terminal.terminated && terminal.exit_code !== undefined && terminal.exit_code !== 0
+    && message === `Terminal process exited with code ${terminal.exit_code}`) return true;
+  return terminal.operation !== 'write' && terminal.timed_out
+    && (message === 'Timed out' || /^Tool execution timed out after \d+ ms$/.test(message));
 }
 
 function presentationForTerminal(item: FlowerActivityItem, copy?: FlowerActivityPresentationCopy): FlowerActivityPresentation {
@@ -1163,9 +1168,9 @@ function presentationForTerminal(item: FlowerActivityItem, copy?: FlowerActivity
   };
   const detailBlocks: FlowerActivityDetailBlock[] = [];
   const errorBlock = item.status === 'canceled' || item.approval_state === 'rejected' ? null : errorDetailBlockForItem(item, payload);
-  if (errorBlock) detailBlocks.push(errorBlock);
   detailBlocks.push({ kind: 'terminal_output', terminal });
   if (detailLines.length > 0) detailBlocks.push({ kind: 'structured', lines: detailLines });
+  if (errorBlock && !terminalErrorRepeatsResult(errorBlock.error, terminal)) detailBlocks.push(errorBlock);
   return {
     label: titleText(title),
     title,
@@ -1224,13 +1229,13 @@ function presentationForKnowledgeSearch(item: FlowerActivityItem): FlowerActivit
     sections: firstAvailableEntries(payload, ['sections']),
   };
   const detailBlocks: FlowerActivityDetailBlock[] = [];
-  if (errorBlock) detailBlocks.push(errorBlock);
   detailBlocks.push({ kind: 'web_search', search });
   if (detailLines.length > 0) detailBlocks.push({ kind: 'structured', lines: detailLines });
+  if (errorBlock) detailBlocks.push(errorBlock);
   return {
     label: titleText(title),
     title,
-    meta: metaWithError(item, metaForItem(item)),
+    meta: metaForItem(item),
     detailLines,
     detailBlocks,
   };
@@ -1266,8 +1271,8 @@ function presentationForWebSearch(item: FlowerActivityItem, copy?: FlowerActivit
   ].filter(Boolean).join(' · ');
   const detailBlocks: FlowerActivityDetailBlock[] = [];
   const error = errorDetailBlockForItem(item, payload);
-  if (error) detailBlocks.push(error);
   if (hasFacts) detailBlocks.push({kind:'web_operation', search:{query, url, pattern, results, notice}});
+  if (error) detailBlocks.push(error);
   return {label, title:{kind:'plain',text:label},meta,detailLines:[],detailBlocks};
 }
 
@@ -1312,15 +1317,15 @@ function presentationForWebFetch(item: FlowerActivityItem): FlowerActivityPresen
     truncated: boolValue(payload.truncated),
   };
   const detailBlocks: FlowerActivityDetailBlock[] = [];
-  if (errorBlock) detailBlocks.push(errorBlock);
   if (fetch.url || fetch.final_url || fetch.status_code !== undefined || fetch.content_type || fetch.format
     || fetch.content_preview || fetch.bytes_read !== undefined || fetch.truncated) {
     detailBlocks.push({ kind: 'web_fetch', fetch });
   }
+  if (errorBlock) detailBlocks.push(errorBlock);
   return {
     label: titleText(title),
     title,
-    meta: metaWithError(item, metaForItem(item)),
+    meta: metaForItem(item),
     detailLines: [],
     detailBlocks,
   };
@@ -1378,20 +1383,20 @@ function presentationForQuestion(item: FlowerActivityItem): FlowerActivityPresen
   const errorBlock = errorDetailBlockForItem(item, payload);
   const detailLines = errorBlock ? resultStatusLines(payload).filter((line) => line.label !== 'summary' && line.label !== 'details') : resultStatusLines(payload);
   const question: FlowerActivityQuestionDetail = {
-    reason: payloadValue(payload, 'reason_code', 'reason'),
+    reason: repeatsItemError(item, payloadValue(payload, 'reason_code', 'reason')) ? '' : payloadValue(payload, 'reason_code', 'reason'),
     required: compactTextArray(payload.required_from_user),
     questions: questionItems(payload),
     answers: questionAnswers(payload),
     contains_secret: boolValue(payload.contains_secret),
   };
   const detailBlocks: FlowerActivityDetailBlock[] = [];
-  if (errorBlock) detailBlocks.push(errorBlock);
   detailBlocks.push({ kind: 'question', question });
   if (detailLines.length > 0) detailBlocks.push({ kind: 'structured', lines: detailLines });
+  if (errorBlock) detailBlocks.push(errorBlock);
   return {
     label: titleText(title),
     title,
-    meta: metaWithError(item, metaForItem(item)),
+    meta: metaForItem(item),
     detailLines,
     detailBlocks,
   };
@@ -1498,7 +1503,7 @@ function presentationForStructured(item: FlowerActivityItem, copy?: FlowerActivi
   const words = copy?.tools ?? toolActivityEnUS;
   const title = structuredTitle(item, words);
   const errorBlock = errorDetailBlockForItem(item, item.payload);
-  const rows = structuredRowsFromPayload(item.payload).map(row =>
+  const rows = structuredRowsFromPayload(item.payload).filter(row => !errorBlock || row.title || row.meta || !repeatsItemError(item, row.content)).map(row =>
     item.tool_name === 'use_skill' && row.format === 'markdown' ? { ...row, title: '', meta: '' } : row);
   const inputs = structuredRowsFromPayload(item.payload, 'inputs').map(row => ({
     ...row, title: TOOL_INPUT_LABELS[row.title] ? words[TOOL_INPUT_LABELS[row.title]] : row.title,
@@ -1509,13 +1514,12 @@ function presentationForStructured(item: FlowerActivityItem, copy?: FlowerActivi
   const computer = trimString(item.tool_name).startsWith('computer.') || trimString(item.tool_name).startsWith('browser.');
   if (inputs.length > 0) detailBlocks.push({ kind: 'structured_rows', section: 'inputs', rows: inputs });
   else if (item.tool_name === 'computer.exec' && !active) detailBlocks.push({ kind: 'structured_rows', section: 'inputs', rows: [], notice: words.inputUnavailable });
-  if (errorBlock) detailBlocks.push(errorBlock);
   if (rows.length > 0) detailBlocks.push({ kind: 'structured_rows', section: 'results', rows, ...(!errorBlock && (item.status === 'error' || item.status === 'canceled') ? { notice: words.partialOutput } : {}) });
-  else if (!active) detailBlocks.push({ kind: 'structured_rows', section: 'results', rows: [], notice: item.chips?.some(chip => chip.kind === 'partial_execution') ? words.partialOutput : item.target_refs?.some(ref => ref.kind === 'computer_frame' || ref.kind === 'tool_image') ? undefined : item.payload?.rows_provided === true ? words.noOutput : words.detailsUnavailable });
+  else if (!active && (!errorBlock || item.chips?.some(chip => chip.kind === 'partial_execution'))) detailBlocks.push({ kind: 'structured_rows', section: 'results', rows: [], notice: item.chips?.some(chip => chip.kind === 'partial_execution') ? words.partialOutput : item.target_refs?.some(ref => ref.kind === 'computer_frame' || ref.kind === 'tool_image') ? undefined : item.payload?.rows_provided === true ? words.noOutput : words.detailsUnavailable });
   if (detailLines.length > 0) detailBlocks.push({ kind: 'structured', lines: detailLines });
   const image = item.target_refs?.find(ref => ref.kind === 'tool_image' && /^image:\/\/[a-f0-9]{64}\/(png|jpeg|webp)$/u.test(ref.resource_ref ?? ''));
   if (image?.resource_ref) detailBlocks.push({ kind: 'image', resource_ref: image.resource_ref, name: image.label || trimString(item.label) });
-  let meta = trimString(item.description) !== titleText(title) ? trimString(item.description) : '';
+  let meta = trimString(item.description) !== titleText(title) && !repeatsItemError(item, trimString(item.description)) ? trimString(item.description) : '';
   if (computer) {
     const frameTarget = item.target_refs?.find(ref => ref.kind === 'computer_frame');
     const controlTarget = item.target_refs?.find(ref => ref.kind === 'computer_control');
@@ -1525,7 +1529,7 @@ function presentationForStructured(item: FlowerActivityItem, copy?: FlowerActivi
     const target = targetRef?.label || controlTarget?.label || frameTarget?.label || '';
     meta = [target !== titleText(title) ? target : '', meta].filter(Boolean).join(' · ');
     if (targetID || frame) detailBlocks.push({ kind: 'computer', ...(targetID ? { target_id: targetID } : {}), target, ...(frame ? { frame } : {}) });
-    if (item.tool_name === 'computer.screenshot' && !active && !frame) {
+    if (item.tool_name === 'computer.screenshot' && !active && !frame && !errorBlock) {
       const index = detailBlocks.findIndex(block => block.kind === 'structured_rows' && block.section === 'results');
       const notice = { kind: 'structured_rows' as const, section: 'results' as const, rows, notice: words.screenshotUnavailable };
       if (index >= 0) detailBlocks[index] = notice;
@@ -1552,6 +1556,7 @@ function presentationForStructured(item: FlowerActivityItem, copy?: FlowerActivi
       detailBlocks.push({ kind: 'structured_rows', section: 'results', rows: [], preview: true, notice: words.waitingResult });
     }
   }
+  if (errorBlock) detailBlocks.push(errorBlock);
   return { label: titleText(title), title, meta, detailLines, detailBlocks };
 }
 

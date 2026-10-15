@@ -9231,6 +9231,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     block: Accessor<Extract<FlowerActivityDetailBlock, { kind: 'terminal_output' }>>;
     canonicalStatus: Accessor<FlowerActivityStatus>;
     approvalState: Accessor<FlowerActivityItem['approval_state']>;
+    failureDetailPresent: Accessor<boolean>;
   }>;
   type FlowerNonTerminalDetailBlock = Exclude<FlowerActivityDetailBlock, { kind: 'terminal_output' }>;
 
@@ -9295,7 +9296,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       if (displayCanceled()) return copy().chat.toolCallCanceled;
       if (terminal().operation === 'write') {
         if (displayStatus() === 'success') return copy().chat.terminalInputSent;
-        if (displayStatus() === 'error') return copy().chat.terminalInputFailed;
+        if (displayStatus() === 'error') return detailProps.failureDetailPresent() ? '' : copy().chat.terminalInputFailed;
         return copy().chat.terminalInputPending;
       }
       if (terminal().timed_out) return copy().chat.terminalTimedOut;
@@ -9305,7 +9306,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return '';
     };
     const emptyOutputNotice = () => {
-      if (resultNotice() || liveError()) return '';
+      if (resultNotice() || liveError() || detailProps.failureDetailPresent()) return '';
       if (terminalListeningPlaceholderVisible(visibleOutput(), displayStatus())) {
         return copy().chat.terminalWaitingOutput;
       }
@@ -9784,7 +9785,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   const errorDetailBlock = (block: Accessor<Extract<FlowerActivityDetailBlock, { kind: 'error' }>>) => (
-    <section class="flower-activity-error-panel" aria-label="Failure reason">
+    <section class="flower-activity-error-panel" aria-label={copy().chat.toolStatuses.error}>
       <div class="flower-activity-error-message">{block().error.message}</div>
       <Show when={block().error.code || block().error.target_state || block().error.repair_action}>
         <div class="flower-activity-error-recovery" role="status">
@@ -10128,6 +10129,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                               block={value}
                               canonicalStatus={() => item().status}
                               approvalState={() => item().approval_state}
+                              failureDetailPresent={() => presentation().detailBlocks.some(block => block.kind === 'error')}
                             />
                           )}
                         </Show>

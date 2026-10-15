@@ -90,6 +90,113 @@ function subagentSummary(overrides: Partial<FlowerSubagentSummary> = {}): Flower
 
 const missingResults = { kind: 'structured_rows', section: 'results', rows: [], notice: 'This record did not save result details.' };
 
+describe('tool failure presentation', () => {
+  it.each([
+    { operation: 'exec', error: { message: 'Terminal process exited with code 255' } },
+    { operation: 'exec', exit_code: 1, error: { message: 'Terminal process exited with code 255' } },
+    { operation: 'write', timed_out: true, error: { message: 'Timed out' } },
+    { operation: 'exec', exit_code: 255, error: { message: 'Terminal process exited with code 255', meta: { repair_action: 'Inspect the SSH target' } } },
+  ])('keeps terminal errors without an equivalent result or with recovery advice: %j', payload => {
+    const presentation = presentFlowerActivityItem(item({ renderer: 'terminal', status: 'error', payload }));
+    expect(presentation.detailBlocks.at(-1)).toMatchObject({ kind: 'error', error: { message: payload.error.message } });
+  });
+
+  it('keeps a recorded partial-execution warning alongside the failure', () => {
+    const presentation = presentFlowerActivityItem(item({ tool_name: 'inspect', renderer: 'structured', status: 'error',
+      chips: [{ kind: 'partial_execution', label: 'Partial execution' }], payload: { error: { message: 'Stopped before all steps completed' } },
+    }));
+    expect(presentation.detailBlocks[0]).toMatchObject({ kind: 'structured_rows', notice: toolActivityEnUS.partialOutput });
+    expect(presentation.detailBlocks.at(-1)).toMatchObject({ kind: 'error', error: { message: 'Stopped before all steps completed' } });
+  });
+
+  it('keeps a terminal failure out of a fallback operation title', () => {
+    const presentation = presentFlowerActivityItem(item({ renderer: 'terminal', status: 'error', label: 'Run command',
+      description: 'Session closed', payload: { operation: 'exec', error: { message: 'Session closed' } },
+    }));
+    expect(presentation.label).toBe('Run command');
+    expect(presentation.meta).toBe('');
+    expect(presentation.detailBlocks.at(-1)).toMatchObject({ kind: 'error', error: { message: 'Session closed' } });
+  });
+
+  it('does not fabricate a zero-line file result after a failed read', () => {
+    const presentation = presentFlowerActivityItem(item({ tool_name: 'file.read', renderer: 'file', status: 'error',
+      payload: { operation: 'read', display_name: 'report.txt', error: { message: 'Permission denied' } },
+    }));
+    expect(presentation.detailBlocks).toEqual([{ kind: 'error', error: { message: 'Permission denied' } }]);
+  });
+
+  it('does not repeat a question failure in its reason', () => {
+    const presentation = presentFlowerActivityItem(item({ tool_name: 'ask_user', renderer: 'question', status: 'error',
+      payload: { reason: 'Question validation failed', error: { message: 'Question validation failed' } },
+    }));
+    expect(presentation.detailBlocks[0]).toMatchObject({ kind: 'question', question: { reason: '' } });
+    expect(presentation.detailBlocks.at(-1)).toMatchObject({ kind: 'error', error: { message: 'Question validation failed' } });
+  });
+
+  it('shows a failed command once through its output and localized exit result', () => {
+    const presentation = presentFlowerActivityItem(item({
+      renderer: 'terminal', status: 'error', label: 'Check remote runtime',
+      description: 'Terminal process exited with code 255',
+      payload: { operation: 'exec', command: 'ssh udesk26 hostname', output: 'Permission denied (publickey).', exit_code: 255,
+        error: { code: 'COMMAND_FAILED', message: 'Terminal process exited with code 255' } },
+    }));
+    expect(presentation.meta).toBe('');
+    expect(presentation.detailBlocks.map(block => block.kind)).toEqual(['terminal_output']);
+    expect(presentation.detailBlocks[0]).toMatchObject({ terminal: { output: 'Permission denied (publickey).', exit_code: 255 } });
+  });
+
+  it('retains a specific terminal failure after the command and output', () => {
+    const presentation = presentFlowerActivityItem(item({
+      renderer: 'terminal', status: 'error', payload: { operation: 'exec', command: 'npm test', exit_code: 1,
+        error: { code: 'TERMINAL_RUNTIME_FAILURE', message: 'Terminal output could not be drained.' } },
+    }));
+    expect(presentation.meta).toBe('');
+    expect(presentation.detailBlocks.map(block => block.kind)).toEqual(['terminal_output', 'error']);
+    expect(presentation.detailBlocks.at(-1)).toMatchObject({ error: { message: 'Terminal output could not be drained.' } });
+  });
+
+  it('keeps a detailed timeout reason even when a timeout result is available', () => {
+    const presentation = presentFlowerActivityItem(item({ renderer: 'terminal', status: 'error',
+      payload: { timed_out: true, error: { code: 'TIMEOUT', message: 'Connection timed out while opening the SSH transport.' } },
+    }));
+    expect(presentation.detailBlocks.at(-1)).toMatchObject({ kind: 'error', error: { message: 'Connection timed out while opening the SSH transport.' } });
+  });
+
+  it.each(['file', 'patch', 'web_search', 'web_fetch', 'question', 'todos', 'subagent', 'subagent_operation', 'structured', 'computer', 'browser'] as const)(
+    'places the %s failure after operation details without repeating the message in the summary', renderer => {
+      const message = 'The requested resource is unavailable.';
+      const presentation = presentFlowerActivityItem(item({ tool_name: renderer === 'web_search' ? 'okf.search' : 'inspect', renderer, status: 'error', description: message,
+        payload: { operation: 'read', display_name: 'report.txt', content: 'partial content',
+          query: 'report', url: 'https://example.test', questions: [{ id: 'choice', question: 'Choose a report' }],
+          inputs: [{ content: 'report.txt', format: 'text' }], rows: [{ content: 'partial result', format: 'text' }],
+          error: { message } },
+      }));
+      expect(presentation.meta).not.toContain(message);
+      expect(presentation.detailBlocks.at(-1)).toMatchObject({ kind: 'error', error: { message } });
+      expect(presentation.detailBlocks.filter(block => block.kind === 'error')).toHaveLength(1);
+    },
+  );
+
+  it('does not repeat a structured failure as a result row, summary, or missing-output notice', () => {
+    const message = 'Skill package could not be loaded.';
+    const presentation = presentFlowerActivityItem(item({ tool_name: 'use_skill', renderer: 'structured', status: 'error',
+      description: message, payload: { summary: message, rows: [{ content: message, format: 'text' }], error: { message } },
+    }));
+    expect(presentation.meta).toBe('');
+    expect(presentation.detailLines).toEqual([]);
+    expect(presentation.detailBlocks).toEqual([{ kind: 'error', error: { message } }]);
+  });
+
+  it('keeps recovery suggestions with a computer failure after partial output', () => {
+    const presentation = presentFlowerActivityItem(item({ tool_name: 'computer.exec', renderer: 'computer', status: 'error',
+      payload: { inputs: [{ content: 'await ui.observe()', format: 'code' }], rows: [{ content: 'Page loaded', format: 'text' }],
+        error: { code: 'TARGET_UNAVAILABLE', message: 'The selected page was closed.', meta: { target_state: 'closed', repair_action: 'Select an available page', suggested_targets: ['Browser'] } } },
+    }));
+    expect(presentation.detailBlocks.map(block => block.kind)).toEqual(['structured_rows', 'structured_rows', 'error']);
+    expect(presentation.detailBlocks.at(-1)).toMatchObject({ error: { code: 'TARGET_UNAVAILABLE', repair_action: 'Select an available page', suggested_targets: ['Browser'] } });
+  });
+});
+
 describe('presentFlowerActivityItem', () => {
   it.each([
     ['computer.targets', 'Find pages and applications'],
@@ -442,7 +549,7 @@ describe('presentFlowerActivityItem', () => {
     });
   });
 
-  it('renders terminal failures as a semantic error block before output', () => {
+  it('uses the terminal timeout result without a duplicate error block', () => {
     const presentation = presentFlowerActivityItem(item({
       renderer: 'terminal',
       status: 'error',
@@ -461,11 +568,8 @@ describe('presentFlowerActivityItem', () => {
     }));
 
     expect(presentation.detailLines).toHaveLength(0);
-    expect(presentation.detailBlocks.map((block) => block.kind)).toEqual(['error', 'terminal_output']);
-    expect(presentation.detailBlocks[0]).toEqual({
-      kind: 'error',
-      error: { message: 'Tool execution timed out after 30000 ms' },
-    });
+    expect(presentation.detailBlocks.map((block) => block.kind)).toEqual(['terminal_output']);
+    expect(presentation.detailBlocks[0]).toMatchObject({ terminal: { timed_out: true } });
     expect(JSON.stringify(presentation.detailBlocks)).not.toContain('TIMEOUT');
     expect(JSON.stringify(presentation.detailBlocks)).not.toContain('retryable');
   });
@@ -486,7 +590,7 @@ describe('presentFlowerActivityItem', () => {
       },
     }));
 
-    expect(presentation.detailBlocks[0]).toEqual({
+    expect(presentation.detailBlocks.at(-1)).toEqual({
       kind: 'error',
       error: { message: 'The final activity item failed.' },
     });
@@ -876,7 +980,7 @@ describe('presentFlowerActivityItem', () => {
       },
     }));
 
-    expect(presentation.detailBlocks[0]).toEqual({
+    expect(presentation.detailBlocks.at(-1)).toEqual({
       kind: 'error',
       error: { message: 'Search provider failed' },
     });
@@ -1003,8 +1107,8 @@ describe('presentFlowerActivityItem', () => {
       },
     }));
 
-    expect(presentation.detailBlocks[0]).toEqual({ kind: 'error', error: { message: 'blocked target' } });
-    expect(presentation.detailBlocks[1]).toEqual(expect.objectContaining({ kind: 'web_fetch' }));
+    expect(presentation.detailBlocks.at(-1)).toEqual({ kind: 'error', error: { message: 'blocked target' } });
+    expect(presentation.detailBlocks[0]).toEqual(expect.objectContaining({ kind: 'web_fetch' }));
     expect(safeWebFetchURL('https://example.test/page')).toBe('https://example.test/page');
     expect(safeWebFetchURL('https://user:secret@example.test/page')).toBe('');
     expect(safeWebFetchURL('javascript:alert(1)')).toBe('');
@@ -1247,8 +1351,8 @@ describe('presentFlowerActivityItem', () => {
       },
     }), fileActions);
 
-    expect(presentation.detailBlocks.map((block) => block.kind)).toEqual(['error', 'file_read']);
-    expect(presentation.detailBlocks[0]).toEqual({
+    expect(presentation.detailBlocks.map((block) => block.kind)).toEqual(['file_read', 'error']);
+    expect(presentation.detailBlocks.at(-1)).toEqual({
       kind: 'error',
       error: { message: 'permission denied' },
     });
@@ -1328,8 +1432,8 @@ describe('presentFlowerActivityItem', () => {
       },
     }), fileActions);
 
-    expect(presentation.detailBlocks.map((block) => block.kind)).toEqual(['error', 'file_diff']);
-    expect(presentation.detailBlocks[0]).toEqual({
+    expect(presentation.detailBlocks.map((block) => block.kind)).toEqual(['file_diff', 'error']);
+    expect(presentation.detailBlocks.at(-1)).toEqual({
       kind: 'error',
       error: { message: 'patch failed' },
     });
@@ -1523,7 +1627,7 @@ describe('presentFlowerActivityItem', () => {
     expect(presentation.detailBlocks).toEqual([{
       kind: 'error',
       error: { message: 'Skill package could not be loaded.' },
-    }, missingResults]);
+    }]);
   });
 
   it('renders only typed structured rows for OKF details', () => {

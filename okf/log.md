@@ -1,5 +1,10 @@
 # Redeven OKF Update Log
 
+## 2026-10-15: Contextual tool failure details
+
+- Show operation content and available results before one [tool failure detail](ui/flower-terminal-activity.md), without repeating the error in row summaries or empty-output notices.
+- Preserve distinct failure reasons and target recovery suggestions; keep [manual disclosure and accessible status](ui/flower-activity-interaction.md) consistent across renderers.
+
 ## 2026-10-15: Search intent and provider recovery
 
 - Adopt published and checksummed Floret v7.40.2; hosted events use the frozen request as authority.
