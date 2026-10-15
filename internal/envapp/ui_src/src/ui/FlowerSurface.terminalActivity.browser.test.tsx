@@ -325,7 +325,8 @@ describe('SSH terminal activity', () => {
     expect(row.textContent).not.toContain('secret');
     expect(row.textContent).not.toContain('Input could not be sent');
     const details = row.querySelector('.flower-activity-inline-details-content')!;
-    expect(details.lastElementChild?.classList.contains('flower-activity-error-panel')).toBe(true);
+    expect(details.querySelectorAll('.flower-activity-error-panel')).toHaveLength(1);
+    expect(details.lastElementChild?.contains(details.querySelector('.flower-activity-error-panel'))).toBe(true);
     expect(details.querySelector('[data-flower-activity-terminal-panel]')).not.toBeNull();
   });
 });
