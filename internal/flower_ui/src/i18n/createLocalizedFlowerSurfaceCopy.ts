@@ -397,6 +397,7 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
         providerUpstreamRateLimited: t(i18n, k('chat.runErrorProviderUpstreamRateLimited')),
         providerServerError: t(i18n, k('chat.runErrorProviderServerError')),
         providerUnreachable: t(i18n, k('chat.runErrorProviderUnreachable')),
+        providerRequestTimeout: t(i18n, k('chat.runErrorProviderRequestTimeout')),
         providerStreamInterrupted: t(i18n, k('chat.runErrorProviderStreamInterrupted')),
         providerModelUnavailable: t(i18n, k('chat.runErrorProviderModelUnavailable')),
         providerRequestInvalid: t(i18n, k('chat.runErrorProviderRequestInvalid')),
@@ -550,6 +551,7 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
       outputProgress: {
         tokens: (count) => t(i18n, k('chat.outputTokens'), { count }),
         elapsed: (seconds) => t(i18n, k('chat.waitSeconds'), { seconds }),
+        waitingForContinuation: t(i18n, k('chat.waitingForModelContinuation')),
         outputTooltip: t(i18n, k('chat.outputTokensTooltip')),
         generating: t(i18n, k('chat.toolGeneratingArguments')),
         previewTooltip: t(i18n, k('chat.toolArgumentPreviewTooltip')),

@@ -15,7 +15,9 @@ Transport uncertainty never proves backend success or authorizes replay.
 # Contract
 
 Provider failures expose Configure current provider, Retry reply and diagnostics.
-Configuration opens the current provider and model directly. Cancel and successful
+Typed model-request timeouts use localized recovery copy and the same actions;
+[request deadlines and automatic recovery](../ai/model-provider-surface-and-history.md)
+remain upstream-owned. Configuration opens the current provider and model directly. Cancel and successful
 save return to the originating chat; saving does not retry automatically. Save
 errors retain the dialog and draft, pending actions prevent duplicate dispatch,
 and retry failures leave another deliberate attempt available. Navigating to a
@@ -62,5 +64,6 @@ operations remain separate from conversation recovery.
 - `redeven:internal/flower_ui/src/flowerTimelineProjection.ts` - One timeline failure owner.
 - `redeven:internal/flower_ui/src/requestDeadline.ts` - Bounded mutation deadline.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.liveRecovery.test.tsx` - Stop and detail recovery.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.streamingStability.browser.test.tsx` - Pause tokens, available Stop/navigation, terminal cleanup and safe retry at narrow and desktop widths.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.providerRecovery.browser.test.tsx` - Provider and historical recovery.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.navigation.test.tsx` - Navigation and accepted message rendering.

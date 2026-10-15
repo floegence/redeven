@@ -29,6 +29,7 @@ const (
 	runErrorCodeProviderUpstreamRateLimited = "provider_upstream_rate_limited"
 	runErrorCodeProviderServerError         = "provider_server_error"
 	runErrorCodeProviderUnreachable         = "provider_unreachable"
+	runErrorCodeProviderRequestTimeout      = "provider_request_timeout"
 	runErrorCodeProviderStreamInterrupted   = "provider_stream_interrupted"
 	runErrorCodeProviderModelUnavailable    = "provider_model_unavailable"
 	runErrorCodeProviderRequestInvalid      = "provider_request_invalid"
@@ -72,6 +73,8 @@ func userFacingRunError(code string, fallback string) string {
 		return "The model provider returned a server error. Try again shortly."
 	case runErrorCodeProviderUnreachable:
 		return "The selected AI provider could not be reached. Check the provider endpoint and network connection."
+	case runErrorCodeProviderRequestTimeout:
+		return "The model request timed out. Retry or choose another model. Check provider settings if it keeps happening."
 	case runErrorCodeProviderStreamInterrupted:
 		return "The selected AI provider ended the response stream unexpectedly. Try again, or check the provider endpoint if this keeps happening."
 	case runErrorCodeProviderModelUnavailable:
@@ -238,6 +241,9 @@ func projectFloretTurnFailure(failure *flruntime.ThreadTurnFailure, fallbackCode
 	case flruntime.ThreadTurnFailureModelContextUnavailable:
 		return runErrorCodeModelContextUnavailable, userFacingRunError(runErrorCodeModelContextUnavailable, message)
 	case flruntime.ThreadTurnFailureProvider:
+		if failure.ProviderTimeout != nil {
+			return runErrorCodeProviderRequestTimeout, userFacingRunError(runErrorCodeProviderRequestTimeout, "")
+		}
 		if message == "provider output was content filtered" {
 			return runErrorCodeProviderRequestRejected, message
 		}
@@ -337,6 +343,13 @@ func canonicalFailureDetail(failure *flruntime.ThreadTurnFailure) string {
 	}
 	switch failure.Code {
 	case flruntime.ThreadTurnFailureProvider:
+		if failure.ProviderTimeout != nil && failure.ProviderTimeout.Validate() == nil {
+			raw, _ := json.MarshalIndent(struct {
+				Code    string                            `json:"code"`
+				Timeout *flprovider.RequestTimeoutDetails `json:"timeout"`
+			}{runErrorCodeProviderRequestTimeout, failure.ProviderTimeout}, "", "  ")
+			return string(raw)
+		}
 		if detail := providerFailureDetail(failure.Message); detail != "" {
 			return detail
 		}

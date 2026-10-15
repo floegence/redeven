@@ -111,7 +111,7 @@ func TestAutomaticTitleSettlementPublishesCanonicalWorkspaceSummary(t *testing.T
 			}
 			svc, err := NewService(Options{
 				Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: t.TempDir(), AgentHomeDir: t.TempDir(), Shell: "/bin/bash", Config: cfg,
-				PersistOpTimeout: 2 * time.Second, RunMaxWallTime: 5 * time.Second, RunIdleTimeout: 2 * time.Second,
+				PersistOpTimeout: 2 * time.Second, ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration: 5 * time.Second, FirstOutputTimeout: 2 * time.Second, IdleTimeout: 2 * time.Second},
 				ResolveProviderAPIKey: func(string) (string, bool, error) { return "sk-test", true, nil },
 			})
 			if err != nil {

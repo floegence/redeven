@@ -116,9 +116,9 @@ func TestThreadPermissionAppliesToNextToolAndQueuedWork(t *testing.T) {
 			stateDir := t.TempDir()
 			svc, err := NewService(Options{
 				Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: stateDir, AgentHomeDir: stateDir, Shell: "/bin/sh",
-				Config:                &config.AIConfig{CurrentModelID: "openai/gpt-5-mini", Providers: []config.AIProvider{{ID: "openai", Name: "OpenAI", Type: "openai", BaseURL: provider.URL + "/v1", Models: []config.AIProviderModel{{ModelName: "gpt-5-mini"}}}}},
-				ResolveProviderAPIKey: func(string) (string, bool, error) { return "test-key", true, nil },
-				RunMaxWallTime:        10 * time.Second, RunIdleTimeout: 10 * time.Second, PersistOpTimeout: 2 * time.Second,
+				Config:                       &config.AIConfig{CurrentModelID: "openai/gpt-5-mini", Providers: []config.AIProvider{{ID: "openai", Name: "OpenAI", Type: "openai", BaseURL: provider.URL + "/v1", Models: []config.AIProviderModel{{ModelName: "gpt-5-mini"}}}}},
+				ResolveProviderAPIKey:        func(string) (string, bool, error) { return "test-key", true, nil },
+				ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration: 10 * time.Second, FirstOutputTimeout: 10 * time.Second, IdleTimeout: 10 * time.Second}, PersistOpTimeout: 2 * time.Second,
 			})
 			if err != nil {
 				t.Fatal(err)
@@ -249,9 +249,9 @@ func TestQueuedPermissionSwitchBackUsesCurrentSurface(t *testing.T) {
 	stateDir := t.TempDir()
 	svc, err := NewService(Options{
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: stateDir, AgentHomeDir: stateDir, Shell: "/bin/sh",
-		Config:                &config.AIConfig{CurrentModelID: "openai/gpt-5-mini", Providers: []config.AIProvider{{ID: "openai", Name: "OpenAI", Type: "openai", BaseURL: provider.URL + "/v1", Models: []config.AIProviderModel{{ModelName: "gpt-5-mini"}}}}},
-		ResolveProviderAPIKey: func(string) (string, bool, error) { return "test-key", true, nil },
-		RunMaxWallTime:        10 * time.Second, RunIdleTimeout: 10 * time.Second, PersistOpTimeout: 2 * time.Second,
+		Config:                       &config.AIConfig{CurrentModelID: "openai/gpt-5-mini", Providers: []config.AIProvider{{ID: "openai", Name: "OpenAI", Type: "openai", BaseURL: provider.URL + "/v1", Models: []config.AIProviderModel{{ModelName: "gpt-5-mini"}}}}},
+		ResolveProviderAPIKey:        func(string) (string, bool, error) { return "test-key", true, nil },
+		ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration: 10 * time.Second, FirstOutputTimeout: 10 * time.Second, IdleTimeout: 10 * time.Second}, PersistOpTimeout: 2 * time.Second,
 	})
 	if err != nil {
 		t.Fatal(err)

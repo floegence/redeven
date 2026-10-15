@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	flruntime "github.com/floegence/floret/v7/runtime"
 	"image"
 	"image/png"
 	"io"
@@ -83,8 +84,8 @@ func TestWebSearchTurnSurfaceReachesProvider(t *testing.T) {
 			stateDir := t.TempDir()
 			svc, err := NewService(Options{
 				Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: stateDir, AgentHomeDir: stateDir, Shell: "/bin/sh",
-				Config:         &config.AIConfig{CurrentModelID: "provider/" + tc.model, Providers: []config.AIProvider{provider}},
-				RunMaxWallTime: 5 * time.Second, RunIdleTimeout: 5 * time.Second, PersistOpTimeout: 2 * time.Second,
+				Config:                       &config.AIConfig{CurrentModelID: "provider/" + tc.model, Providers: []config.AIProvider{provider}},
+				ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration: 5 * time.Second, FirstOutputTimeout: 5 * time.Second, IdleTimeout: 5 * time.Second}, PersistOpTimeout: 2 * time.Second,
 				ResolveProviderAPIKey: func(string) (string, bool, error) { return "test-key", true, nil },
 				ResolveWebSearchProviderAPIKey: func(string) (string, bool, error) {
 					if tc.braveKey {
@@ -257,8 +258,8 @@ func testNativeSearchLifecycle(t *testing.T, failure string) {
 		Config: &config.AIConfig{CurrentModelID: "search/model-a", Providers: []config.AIProvider{{ID: "search", Type: "openai_compatible", BaseURL: server.URL,
 			// This fixture tests search continuation and model switching, not compaction.
 			Models: []config.AIProviderModel{{ModelName: "model-a", ContextWindow: 128000}, {ModelName: "model-b", ContextWindow: 128000}}, WebSearch: &config.AIProviderWebSearch{Enabled: true, Source: config.AIWebSearchSourceNative}}}},
-		RunMaxWallTime: 5 * time.Second, RunIdleTimeout: 5 * time.Second,
-		ResolveProviderAPIKey: func(string) (string, bool, error) { return "test-key", true, nil }}
+		ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration: 5 * time.Second, FirstOutputTimeout: 5 * time.Second, IdleTimeout: 5 * time.Second},
+		ResolveProviderAPIKey:        func(string) (string, bool, error) { return "test-key", true, nil }}
 	svc, err := NewService(opts)
 	if err != nil {
 		t.Fatal(err)

@@ -62,10 +62,9 @@ type runOptions struct {
 	UserPublicID string
 	MessageID    string
 
-	MaxWallTime         time.Duration
-	IdleTimeout         time.Duration
-	ToolApprovalTimeout time.Duration
-	StreamWriteTimeout  time.Duration
+	ProviderRequestTimeoutPolicy flruntime.ProviderRequestTimeoutPolicy
+	ToolApprovalTimeout          time.Duration
+	StreamWriteTimeout           time.Duration
 
 	UploadsDir           string
 	ProductCapabilities  runProductCapabilities
@@ -129,8 +128,7 @@ type run struct {
 	settlementRunID    string
 	settlementTurnID   string
 
-	idleTimeout time.Duration
-	activityCh  chan struct{}
+	providerRequestTimeoutPolicy flruntime.ProviderRequestTimeoutPolicy
 
 	muCancel                 sync.Mutex
 	cancelFn                 context.CancelFunc
@@ -141,13 +139,13 @@ type run struct {
 	nextExecutionAdmissionID uint64
 	executionAdmissions      map[uint64]context.CancelCauseFunc
 	detached                 atomic.Bool // hard-canceled: stop emitting realtime events and skip thread state updates
-	busyCount                atomic.Int32
-	runtimeToolCalls         atomic.Int64
-	uploadsDir               string
-	product                  runProductCapabilities
-	threadRuntime            flruntime.ThreadService
-	toolRuntimeState         *floretToolRuntimeState
-	effectAuthorizations     *floretEffectAuthorizationRegistry
+
+	runtimeToolCalls     atomic.Int64
+	uploadsDir           string
+	product              runProductCapabilities
+	threadRuntime        flruntime.ThreadService
+	toolRuntimeState     *floretToolRuntimeState
+	effectAuthorizations *floretEffectAuthorizationRegistry
 
 	onStreamEvent func(any)
 	w             http.ResponseWriter
@@ -309,63 +307,60 @@ func newRun(opts runOptions) *run {
 		effectAuthorizations = newFloretEffectAuthorizationRegistry()
 	}
 	r := &run{
-		platformHTTPTransport:       opts.PlatformHTTPTransport,
-		log:                         opts.Log,
-		stateDir:                    strings.TrimSpace(opts.StateDir),
-		agentHomeDir:                agentHomeDir,
-		workingDir:                  workingDir,
-		scope:                       opts.FilesystemScope,
-		shell:                       strings.TrimSpace(opts.Shell),
-		host:                        opts.HostCapabilities,
-		cfg:                         opts.AIConfig,
-		permissionType:              FlowerPermissionApprovalRequired,
-		sessionMeta:                 runMeta,
-		resolveProviderKey:          opts.ResolveProviderKey,
-		chatGPT:                     opts.ChatGPT,
-		resolveWebSearchKey:         opts.ResolveWebSearchKey,
-		desktopModelSource:          opts.DesktopModelSource,
-		liveMetrics:                 opts.LiveMetrics,
-		id:                          runID,
-		executionKey:                executionKey,
-		channelID:                   strings.TrimSpace(opts.ChannelID),
-		endpointID:                  strings.TrimSpace(opts.EndpointID),
-		threadID:                    strings.TrimSpace(opts.ThreadID),
-		turnID:                      strings.TrimSpace(opts.TurnID),
-		userPublicID:                strings.TrimSpace(opts.UserPublicID),
-		messageID:                   strings.TrimSpace(opts.MessageID),
-		settlementThreadID:          strings.TrimSpace(opts.ThreadID),
-		settlementRunID:             runID,
-		settlementTurnID:            strings.TrimSpace(opts.TurnID),
-		uploadsDir:                  strings.TrimSpace(opts.UploadsDir),
-		product:                     opts.ProductCapabilities,
-		threadRuntime:               opts.FloretThreadRuntime,
-		effectAuthorizations:        effectAuthorizations,
-		onStreamEvent:               opts.OnStreamEvent,
-		w:                           opts.Writer,
-		idleTimeout:                 opts.IdleTimeout,
-		executionAdmissions:         make(map[uint64]context.CancelCauseFunc),
-		lifecycleMinEmitGap:         600 * time.Millisecond,
-		webSearch:                   opts.WebSearch,
-		subagentRuntime:             opts.SubagentRuntime,
-		currentThinkingBlockIndex:   -1,
-		subagentDepth:               opts.SubagentDepth,
-		toolTargetPolicy:            normalizeToolTargetPolicy(opts.ToolTargetPolicy),
-		canonicalReferenceAuthority: cloneFlowerCanonicalReferenceTargetAuthority(opts.CanonicalReferenceAuthority),
-		targetToolExecutor:          opts.TargetToolExecutor,
-		targetResolver:              opts.TargetResolver,
-		interactionSafetyGate:       opts.InteractionSafetyGate,
-		skillManager:                opts.SkillManager,
-		mcpManager:                  opts.MCPManager,
-		noUserInteraction:           opts.NoUserInteraction,
+		platformHTTPTransport:        opts.PlatformHTTPTransport,
+		log:                          opts.Log,
+		stateDir:                     strings.TrimSpace(opts.StateDir),
+		agentHomeDir:                 agentHomeDir,
+		workingDir:                   workingDir,
+		scope:                        opts.FilesystemScope,
+		shell:                        strings.TrimSpace(opts.Shell),
+		host:                         opts.HostCapabilities,
+		cfg:                          opts.AIConfig,
+		permissionType:               FlowerPermissionApprovalRequired,
+		sessionMeta:                  runMeta,
+		resolveProviderKey:           opts.ResolveProviderKey,
+		chatGPT:                      opts.ChatGPT,
+		resolveWebSearchKey:          opts.ResolveWebSearchKey,
+		desktopModelSource:           opts.DesktopModelSource,
+		liveMetrics:                  opts.LiveMetrics,
+		id:                           runID,
+		executionKey:                 executionKey,
+		channelID:                    strings.TrimSpace(opts.ChannelID),
+		endpointID:                   strings.TrimSpace(opts.EndpointID),
+		threadID:                     strings.TrimSpace(opts.ThreadID),
+		turnID:                       strings.TrimSpace(opts.TurnID),
+		userPublicID:                 strings.TrimSpace(opts.UserPublicID),
+		messageID:                    strings.TrimSpace(opts.MessageID),
+		settlementThreadID:           strings.TrimSpace(opts.ThreadID),
+		settlementRunID:              runID,
+		settlementTurnID:             strings.TrimSpace(opts.TurnID),
+		uploadsDir:                   strings.TrimSpace(opts.UploadsDir),
+		product:                      opts.ProductCapabilities,
+		threadRuntime:                opts.FloretThreadRuntime,
+		effectAuthorizations:         effectAuthorizations,
+		onStreamEvent:                opts.OnStreamEvent,
+		w:                            opts.Writer,
+		providerRequestTimeoutPolicy: opts.ProviderRequestTimeoutPolicy,
+		executionAdmissions:          make(map[uint64]context.CancelCauseFunc),
+		lifecycleMinEmitGap:          600 * time.Millisecond,
+		webSearch:                    opts.WebSearch,
+		subagentRuntime:              opts.SubagentRuntime,
+		currentThinkingBlockIndex:    -1,
+		subagentDepth:                opts.SubagentDepth,
+		toolTargetPolicy:             normalizeToolTargetPolicy(opts.ToolTargetPolicy),
+		canonicalReferenceAuthority:  cloneFlowerCanonicalReferenceTargetAuthority(opts.CanonicalReferenceAuthority),
+		targetToolExecutor:           opts.TargetToolExecutor,
+		targetResolver:               opts.TargetResolver,
+		interactionSafetyGate:        opts.InteractionSafetyGate,
+		skillManager:                 opts.SkillManager,
+		mcpManager:                   opts.MCPManager,
+		noUserInteraction:            opts.NoUserInteraction,
 		allowSubagentDelegate: func() bool {
 			if opts.AllowSubagentDelegate {
 				return true
 			}
 			return opts.SubagentDepth <= 0
 		}(),
-	}
-	if r.idleTimeout > 0 {
-		r.activityCh = make(chan struct{}, 1)
 	}
 	if len(opts.ToolAllowlist) > 0 {
 		r.toolAllowlist = make(map[string]struct{}, len(opts.ToolAllowlist))
@@ -416,26 +411,6 @@ func (r *run) resolveRunModelCapability(modelID string) contextmodel.ModelCapabi
 		}
 	}
 	return contextmodel.NormalizeCapability(capability)
-}
-
-func (r *run) touchActivity() {
-	if r == nil || r.activityCh == nil {
-		return
-	}
-	select {
-	case r.activityCh <- struct{}{}:
-	default:
-	}
-}
-
-func (r *run) beginBusy() func() {
-	if r == nil {
-		return func() {}
-	}
-	r.busyCount.Add(1)
-	return func() {
-		r.busyCount.Add(-1)
-	}
 }
 
 func (r *run) requireExecutionOpen() error {
@@ -558,7 +533,6 @@ func (r *run) sendStreamEvent(ev any) {
 		return
 	}
 
-	r.touchActivity()
 	if !r.acceptsPresentationUpdates() {
 		return
 	}
@@ -1588,8 +1562,6 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 	}
 
 	r.debug("ai.run.tool.exec.start", "tool_id", toolID, "tool_name", toolName)
-	endBusy := r.beginBusy()
-	defer endBusy()
 	result, toolErrRaw := r.execTool(ctx, meta, toolID, toolName, args)
 	if toolErrRaw != nil {
 		var partial any
@@ -3652,8 +3624,6 @@ func (r *run) handleTerminalExecProcessTool(ctx context.Context, meta *session.M
 	}
 
 	r.debug("ai.run.tool.exec.start", "tool_id", toolID, "tool_name", "terminal.exec")
-	endBusy := r.beginBusy()
-	defer endBusy()
 
 	canonicalRunID, canonicalThreadID, canonicalTurnID := r.floretCanonicalIdentity()
 	if canonicalRunID == "" || canonicalThreadID == "" || canonicalTurnID == "" {

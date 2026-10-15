@@ -2,6 +2,7 @@ package ai
 
 import (
 	"encoding/json"
+	flruntime "github.com/floegence/floret/v7/runtime"
 	"io"
 	"log/slog"
 	"net/http"
@@ -81,7 +82,7 @@ func TestPlatformAutomaticTitleAndManualCompaction(t *testing.T) {
 	}))
 	defer edge.Close()
 	dir := t.TempDir()
-	svc, err := NewService(Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: dir, AgentHomeDir: dir, Shell: "/bin/sh", RunMaxWallTime: 15 * time.Second, RunIdleTimeout: 5 * time.Second})
+	svc, err := NewService(Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: dir, AgentHomeDir: dir, Shell: "/bin/sh", ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration: 15 * time.Second, FirstOutputTimeout: 5 * time.Second, IdleTimeout: 5 * time.Second}})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"encoding/json"
+	flruntime "github.com/floegence/floret/v7/runtime"
 	"io"
 	"log/slog"
 	"net/http"
@@ -58,7 +59,7 @@ func TestPlatformGatewayRunSurvivesCallerDisconnectAndHistoryRestart(t *testing.
 		t.Helper()
 		svc, err := NewService(Options{
 			Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: stateDir, AgentHomeDir: stateDir, Shell: "/bin/sh",
-			RunMaxWallTime: 10 * time.Second, RunIdleTimeout: 5 * time.Second, PersistOpTimeout: 2 * time.Second,
+			ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration: 10 * time.Second, FirstOutputTimeout: 5 * time.Second, IdleTimeout: 5 * time.Second}, PersistOpTimeout: 2 * time.Second,
 			ResolveProviderAPIKey: func(string) (string, bool, error) {
 				t.Error("platform provider tried to read a Provider key")
 				return "", false, nil

@@ -68,8 +68,8 @@ func TestFlowerForkContinuesToolHistoryAfterRestart(t *testing.T) {
 	open := func() *Service {
 		svc, err := NewService(Options{
 			Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: stateDir, AgentHomeDir: stateDir, Shell: "/bin/sh",
-			Config:         &config.AIConfig{CurrentModelID: "deepseek/deepseek-v4-flash", Providers: []config.AIProvider{{ID: "deepseek", Type: "deepseek", BaseURL: server.URL + "/v1", Models: []config.AIProviderModel{{ModelName: "deepseek-v4-flash"}}}}},
-			RunMaxWallTime: 10 * time.Second, RunIdleTimeout: 5 * time.Second, PersistOpTimeout: 2 * time.Second,
+			Config:                       &config.AIConfig{CurrentModelID: "deepseek/deepseek-v4-flash", Providers: []config.AIProvider{{ID: "deepseek", Type: "deepseek", BaseURL: server.URL + "/v1", Models: []config.AIProviderModel{{ModelName: "deepseek-v4-flash"}}}}},
+			ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration: 10 * time.Second, FirstOutputTimeout: 5 * time.Second, IdleTimeout: 5 * time.Second}, PersistOpTimeout: 2 * time.Second,
 			ResolveProviderAPIKey: func(string) (string, bool, error) { return "sk-test", true, nil },
 		})
 		if err != nil {

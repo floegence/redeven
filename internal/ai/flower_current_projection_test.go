@@ -280,7 +280,7 @@ func TestFlowerCurrentAndSummaryPreserveExactRunIdentityAndProgress(t *testing.T
 		RunID:    identity.RunID("run-progress"),
 		Activity: flruntime.ThreadActivityActive,
 		RunProgress: &flruntime.ThreadRunProgress{Phase: flruntime.ThreadRunPhaseStreaming, Request: &flruntime.ProviderRequestProgress{
-			LogicalRequestID: "request", AttemptID: "attempt", AttemptEpoch: 1, StartedAt: started, FirstOutputAt: &first, EstimatedOutputTokens: 128,
+			LogicalRequestID: "request", AttemptID: "attempt", AttemptEpoch: 1, StartedAt: started, FirstOutputAt: &first, LastProgressAt: &first, EstimatedOutputTokens: 128,
 		}},
 		ToolCallPreviews: []flruntime.ThreadToolCallPreview{{ThreadID: "thread-progress", TurnID: "turn-progress", RunID: "run-progress", LogicalRequestID: "request", AttemptID: "attempt", AttemptEpoch: 1,
 			CallID: "call", Name: "file.write", Preview: &fltools.ArgumentPreview{DisplayName: "safe.txt", Additions: &zero}}},
@@ -302,7 +302,7 @@ func TestFlowerCurrentAndSummaryPreserveExactRunIdentityAndProgress(t *testing.T
 		t.Fatalf("current run progress=%#v", progress)
 	}
 	request := progress["request"].(map[string]any)
-	if request["estimated_output_tokens"] != float64(128) || payload["sampled_at_ms"].(float64) < float64(first.UnixMilli()) {
+	if request["last_progress_at"] != first.Format(time.RFC3339Nano) || request["estimated_output_tokens"] != float64(128) || payload["sampled_at_ms"].(float64) < float64(first.UnixMilli()) {
 		t.Fatalf("request progress or sample lost: %#v", payload)
 	}
 	preview := payload["tool_call_previews"].([]any)[0].(map[string]any)["preview"].(map[string]any)

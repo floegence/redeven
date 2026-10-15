@@ -91,7 +91,7 @@ func TestRedevenDeepSeekUnknownToolReturnsErrorAndContinues(t *testing.T) {
 				Models: []config.AIProviderModel{{ModelName: "deepseek-v4-flash"}},
 			}},
 		},
-		RunMaxWallTime: 5 * time.Second, RunIdleTimeout: 5 * time.Second, PersistOpTimeout: 2 * time.Second,
+		ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration: 5 * time.Second, FirstOutputTimeout: 5 * time.Second, IdleTimeout: 5 * time.Second}, PersistOpTimeout: 2 * time.Second,
 		ResolveProviderAPIKey: func(string) (string, bool, error) { return "sk-test", true, nil },
 	})
 	if err != nil {

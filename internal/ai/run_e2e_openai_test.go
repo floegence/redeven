@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	flruntime "github.com/floegence/floret/v7/runtime"
 	"io"
 	"log/slog"
 	"os"
@@ -64,14 +65,13 @@ func TestE2E_OpenAICompatibleBaseURL_StreamText(t *testing.T) {
 	}
 
 	svc, err := NewService(Options{
-		Logger:              logger,
-		StateDir:            stateDir,
-		AgentHomeDir:        agentHomeDir,
-		Shell:               "bash",
-		Config:              cfg,
-		RunMaxWallTime:      2 * time.Minute,
-		RunIdleTimeout:      90 * time.Second,
-		ToolApprovalTimeout: 30 * time.Second,
+		Logger:                       logger,
+		StateDir:                     stateDir,
+		AgentHomeDir:                 agentHomeDir,
+		Shell:                        "bash",
+		Config:                       cfg,
+		ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration: 2 * time.Minute, FirstOutputTimeout: 90 * time.Second, IdleTimeout: 90 * time.Second},
+		ToolApprovalTimeout:          30 * time.Second,
 		ResolveProviderAPIKey: func(providerID string) (string, bool, error) {
 			if strings.TrimSpace(providerID) != "openai" {
 				return "", false, nil

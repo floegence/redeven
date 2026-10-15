@@ -97,7 +97,7 @@ func TestRedevenHostedRunAskUserWaitsAndResumesWithoutAuthorityCorruption(t *tes
 				Models: []config.AIProviderModel{{ModelName: "gpt-5-mini"}, {ModelName: "gpt-5-nano"}},
 			}},
 		},
-		RunMaxWallTime: 5 * time.Second, RunIdleTimeout: 5 * time.Second, PersistOpTimeout: 2 * time.Second,
+		ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration: 5 * time.Second, FirstOutputTimeout: 5 * time.Second, IdleTimeout: 5 * time.Second}, PersistOpTimeout: 2 * time.Second,
 		ResolveProviderAPIKey: func(string) (string, bool, error) { return "sk-test", true, nil },
 	})
 	if err != nil {
@@ -334,7 +334,7 @@ func TestRedevenHostedRunNaturalStopCompletesTurn(t *testing.T) {
 				Models: []config.AIProviderModel{{ModelName: "gpt-5-mini"}},
 			}},
 		},
-		RunMaxWallTime: 5 * time.Second, RunIdleTimeout: 5 * time.Second, PersistOpTimeout: 2 * time.Second,
+		ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration: 5 * time.Second, FirstOutputTimeout: 5 * time.Second, IdleTimeout: 5 * time.Second}, PersistOpTimeout: 2 * time.Second,
 		ResolveProviderAPIKey: func(string) (string, bool, error) { return "sk-test", true, nil },
 	})
 	if err != nil {
@@ -449,7 +449,7 @@ func TestSubmitRequestUserInputResponseRPCReturnsAdmissionReceiptBeforeProviderC
 				Models: []config.AIProviderModel{{ModelName: "deepseek-v4-pro"}},
 			}},
 		},
-		RunMaxWallTime: 30 * time.Second, RunIdleTimeout: 30 * time.Second, PersistOpTimeout: 2 * time.Second,
+		ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration: 30 * time.Second, FirstOutputTimeout: 30 * time.Second, IdleTimeout: 30 * time.Second}, PersistOpTimeout: 2 * time.Second,
 		ResolveProviderAPIKey: func(string) (string, bool, error) { return "sk-test", true, nil },
 	})
 	if err != nil {

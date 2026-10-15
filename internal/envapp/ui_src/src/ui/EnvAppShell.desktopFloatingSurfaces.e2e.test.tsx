@@ -22,6 +22,11 @@ let directoryNavigationContext: any;
 
 const filePreviewOpenPreviewMock = vi.fn(async () => undefined);
 const filePreviewClosePreviewMock = vi.fn();
+const readFileBytesOnceMock = vi.fn(async () => new Uint8Array([0]));
+vi.mock('./utils/fileStreamReader', async (importOriginal) => ({
+  ...await importOriginal<typeof import('./utils/fileStreamReader')>(),
+  readFileBytesOnce: readFileBytesOnceMock,
+}));
 const filePreviewSaveCurrentMock = vi.fn(async () => undefined);
 const debugConsoleShowMock = vi.fn(() => {
   debugConsoleEnabled = true;
@@ -770,6 +775,7 @@ beforeEach(() => {
     return testDOMRect(0, 0, 0, 0);
   });
   vi.clearAllMocks();
+  readFileBytesOnceMock.mockReset().mockResolvedValue(new Uint8Array([0]));
   debugConsoleEnabled = false;
   protocolSnapshot = Object.freeze({ state: 'idle', attempt: 0 });
   protocolConnectionConfig = null;
@@ -920,6 +926,9 @@ describe('EnvAppShell desktop floating surfaces', () => {
       await flushAsync();
       await flushAsync();
 
+      expect(readFileBytesOnceMock).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
+        client: protocolSnapshot.currentSession, path: '/workspace/demo.txt', maxBytes: 1,
+      }));
       expect(filePreviewOpenPreviewMock).toHaveBeenCalledTimes(1);
       expect(host.querySelector('[data-testid="file-preview-host"]')).not.toBeNull();
       expect(filePreviewOpenPreviewMock).toHaveBeenCalledWith(expect.objectContaining({
@@ -1365,6 +1374,9 @@ describe('EnvAppShell desktop floating surfaces', () => {
       await flushAsync();
 
       expect(filePreviewOpenPreviewMock).not.toHaveBeenCalled();
+      expect(readFileBytesOnceMock).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
+        client: protocolSnapshot.currentSession, path: '/workspace/demo.txt', maxBytes: 1,
+      }));
       expect(host.querySelector('[data-testid="workbench-preview-activation"]')?.textContent).toBe('/workspace/demo.txt');
       expect(windowOpenMock).not.toHaveBeenCalled();
     } finally {

@@ -3,6 +3,7 @@ package ai
 import (
 	"encoding/json"
 	"fmt"
+	flruntime "github.com/floegence/floret/v7/runtime"
 	"io"
 	"log/slog"
 	"net/http"
@@ -121,7 +122,7 @@ func TestComputerNavigationFailureContinuesProductionTurn(t *testing.T) {
 	t.Logf("owned runtime pid=%d provider=%s site=%s state=%s", os.Getpid(), provider.URL, site.URL, state)
 	options := Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: state, AgentHomeDir: state, Shell: "/bin/sh", TargetResolver: host, TargetToolExecutor: host,
 		Config:                &config.AIConfig{CurrentModelID: "openai/gpt-5-mini", Providers: []config.AIProvider{{ID: "openai", Name: "OpenAI", Type: "openai", BaseURL: provider.URL + "/v1", Models: []config.AIProviderModel{{ModelName: "gpt-5-mini", InputModalities: []string{"text", "image"}}}}}},
-		ResolveProviderAPIKey: func(string) (string, bool, error) { return "fixture", true, nil }, RunMaxWallTime: 30 * time.Second, RunIdleTimeout: 30 * time.Second}
+		ResolveProviderAPIKey: func(string) (string, bool, error) { return "fixture", true, nil }, ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration: 30 * time.Second, FirstOutputTimeout: 30 * time.Second, IdleTimeout: 30 * time.Second}}
 	svc, err := NewService(options)
 	if err != nil {
 		t.Fatal(err)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	flruntime "github.com/floegence/floret/v7/runtime"
 	"io"
 	"log/slog"
 	"net/http"
@@ -75,8 +76,8 @@ func TestThreadReasoningOffSurvivesRestartAndWaitingContinuation(t *testing.T) {
 				ID: "deepseek", Name: "DeepSeek", Type: "deepseek", BaseURL: provider.URL,
 				Models: []config.AIProviderModel{{ModelName: "deepseek-v4-flash"}},
 			}}},
-			ResolveProviderAPIKey: func(string) (string, bool, error) { return "test-key", true, nil },
-			RunMaxWallTime:        5 * time.Second, RunIdleTimeout: 5 * time.Second, PersistOpTimeout: 2 * time.Second,
+			ResolveProviderAPIKey:        func(string) (string, bool, error) { return "test-key", true, nil },
+			ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration: 5 * time.Second, FirstOutputTimeout: 5 * time.Second, IdleTimeout: 5 * time.Second}, PersistOpTimeout: 2 * time.Second,
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -179,7 +180,7 @@ func TestOllamaReasoningOnSurvivesRestartAndProviderDispatch(t *testing.T) {
 	state := t.TempDir()
 	meta := &session.Meta{EndpointID: "ollama-reasoning", ChannelID: "channel", NamespacePublicID: "namespace", UserPublicID: "user", CanRead: true, CanWrite: true, CanExecute: true, CanAdmin: true}
 	open := func() *Service {
-		svc, err := NewService(Options{StateDir: state, AgentHomeDir: state, Shell: "/bin/sh", Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), Config: &config.AIConfig{CurrentModelID: "local/renamed-model", Providers: []config.AIProvider{{ID: "local", Type: "ollama", BaseURL: provider.URL + "/v1", ModelSelection: &config.AIModelSelection{SelectedModels: []string{"renamed-model"}}}}}, RunMaxWallTime: 5 * time.Second, RunIdleTimeout: 5 * time.Second})
+		svc, err := NewService(Options{StateDir: state, AgentHomeDir: state, Shell: "/bin/sh", Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), Config: &config.AIConfig{CurrentModelID: "local/renamed-model", Providers: []config.AIProvider{{ID: "local", Type: "ollama", BaseURL: provider.URL + "/v1", ModelSelection: &config.AIModelSelection{SelectedModels: []string{"renamed-model"}}}}}, ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration: 5 * time.Second, FirstOutputTimeout: 5 * time.Second, IdleTimeout: 5 * time.Second}})
 		if err != nil {
 			t.Fatal(err)
 		}

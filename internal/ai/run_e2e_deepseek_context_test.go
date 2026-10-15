@@ -259,7 +259,7 @@ func TestE2E_FlowerDeepSeekV4ContextPrefixAndModelSwitch(t *testing.T) {
 	stateDir := t.TempDir()
 	svc, err := NewService(Options{
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: stateDir, AgentHomeDir: stateDir, Shell: "bash", Config: cfg,
-		RunMaxWallTime: 8 * time.Minute, RunIdleTimeout: 3 * time.Minute, ToolApprovalTimeout: time.Minute,
+		ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration: 8 * time.Minute, FirstOutputTimeout: 3 * time.Minute, IdleTimeout: 3 * time.Minute}, ToolApprovalTimeout: time.Minute,
 		ResolveProviderAPIKey: func(candidate string) (string, bool, error) {
 			if strings.TrimSpace(candidate) != providerID {
 				return "", false, nil
@@ -337,7 +337,7 @@ func TestE2E_FlowerDeepSeekV4AskUserStructuredContinuation(t *testing.T) {
 	stateDir := t.TempDir()
 	svc, err := NewService(Options{
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: stateDir, AgentHomeDir: stateDir, Shell: "bash", Config: cfg,
-		RunMaxWallTime: 8 * time.Minute, RunIdleTimeout: 3 * time.Minute, ToolApprovalTimeout: time.Minute,
+		ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration: 8 * time.Minute, FirstOutputTimeout: 3 * time.Minute, IdleTimeout: 3 * time.Minute}, ToolApprovalTimeout: time.Minute,
 		ResolveProviderAPIKey: func(candidate string) (string, bool, error) {
 			if strings.TrimSpace(candidate) != providerID {
 				return "", false, nil

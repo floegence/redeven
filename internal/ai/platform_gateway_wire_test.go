@@ -2,6 +2,7 @@ package ai
 
 import (
 	"encoding/json"
+	flruntime "github.com/floegence/floret/v7/runtime"
 	"io"
 	"log/slog"
 	"os"
@@ -34,7 +35,7 @@ func TestPlatformGatewayExternalEdgeWireContract(t *testing.T) {
 	state := t.TempDir()
 	svc, err := NewService(Options{
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: state, AgentHomeDir: state, Shell: "/bin/sh",
-		RunMaxWallTime: 20 * time.Second, RunIdleTimeout: 10 * time.Second,
+		ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration: 20 * time.Second, FirstOutputTimeout: 10 * time.Second, IdleTimeout: 10 * time.Second},
 		ResolveProviderAPIKey: func(string) (string, bool, error) {
 			t.Error("platform requested a Provider key")
 			return "", false, nil

@@ -414,7 +414,7 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 		return pc
 	}
 
-	for stream.Next() {
+	for !gotCompleted && stream.Next() {
 		event := stream.Current()
 		if event.Response.JSON.Usage.Valid() {
 			usage, err := turnUsageFromOpenAIResponse(event.Response.Usage)
@@ -524,13 +524,10 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 			}
 			emitEnd(pc, pc.ArgsRaw.String())
 
-		case "response.incomplete":
-			if p.chatGPT {
+		case "response.incomplete", "response.completed":
+			if p.chatGPT && event.Type == "response.incomplete" {
 				return ModelGatewayResult{}, providerStreamFailure(event.RawJSON(), httpResponse, p.failureProviderType())
 			}
-			completed = event.Response
-			gotCompleted = true
-		case "response.completed":
 			completed = event.Response
 			if p.chatGPT {
 				var err error
@@ -539,13 +536,13 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 					return ModelGatewayResult{}, err
 				}
 			}
-			gotCompleted = true
 			for _, item := range completed.Output {
 				if p.chatGPT && item.Type == "function_call" && item.Namespace != chatGPTToolNamespace {
 					return ModelGatewayResult{}, errors.New("unexpected ChatGPT tool namespace")
 				}
 				hosted.item(item)
 			}
+			gotCompleted = true
 		case "response.failed", "error":
 			return ModelGatewayResult{}, providerStreamFailure(event.RawJSON(), httpResponse, p.failureProviderType())
 		}
@@ -562,35 +559,31 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 		Reasoning:       reasoningBuf.String(),
 		RawProviderDiag: map[string]any{},
 	}
-	if gotCompleted {
-		result.FinishReason = mapOpenAIStatus(completed.Status)
-		if completed.Status == "incomplete" && completed.IncompleteDetails.Reason == "content_filter" {
-			result.FinishReason = "content_filter"
-		}
-		if result.Reasoning == "" {
-			for _, item := range completed.Output {
-				if item.Type == "reasoning" {
-					for _, summary := range item.Summary {
-						result.Reasoning += summary.Text
-					}
+	result.FinishReason = mapOpenAIStatus(completed.Status)
+	if completed.Status == "incomplete" && completed.IncompleteDetails.Reason == "content_filter" {
+		result.FinishReason = "content_filter"
+	}
+	if result.Reasoning == "" {
+		for _, item := range completed.Output {
+			if item.Type == "reasoning" {
+				for _, summary := range item.Summary {
+					result.Reasoning += summary.Text
 				}
 			}
 		}
-		result.Sources = extractOpenAIURLSources(completed)
-		usage, usageErr := turnUsageFromOpenAIResponse(completed.Usage)
-		if usageErr != nil {
-			return ModelGatewayResult{}, fmt.Errorf("normalize OpenAI response usage: %w", usageErr)
+	}
+	result.Sources = extractOpenAIURLSources(completed)
+	usage, usageErr := turnUsageFromOpenAIResponse(completed.Usage)
+	if usageErr != nil {
+		return ModelGatewayResult{}, fmt.Errorf("normalize OpenAI response usage: %w", usageErr)
+	}
+	result.Usage = usage
+	if rid := strings.TrimSpace(completed.ID); rid != "" {
+		result.RawProviderDiag["response_id"] = rid
+		result.ProviderState = &ModelGatewayState{
+			Kind: providerContinuationKindOpenAIResponses,
+			ID:   rid,
 		}
-		result.Usage = usage
-		if rid := strings.TrimSpace(completed.ID); rid != "" {
-			result.RawProviderDiag["response_id"] = rid
-			result.ProviderState = &ModelGatewayState{
-				Kind: providerContinuationKindOpenAIResponses,
-				ID:   rid,
-			}
-		}
-	} else {
-		result.RawProviderDiag["missing_response_completed"] = true
 	}
 
 	type orderedToolCall struct {
@@ -633,52 +626,50 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 	}
 
 	// Fallback: if stream events miss tool calls, recover them from completed.output.
-	if gotCompleted {
-		for _, item := range completed.Output {
-			if strings.TrimSpace(item.Type) != "function_call" {
-				continue
-			}
-			callID := strings.TrimSpace(item.CallID)
-			if callID == "" {
-				callID = strings.TrimSpace(item.ID)
-			}
-			if callID == "" {
-				callID = fmt.Sprintf("openai_call_%d", len(result.ToolCalls)+1)
-			}
-			if _, ok := seen[callID]; ok {
-				continue
-			}
-			toolName := canonicalProviderToolName(item.Name, aliases)
-			rawArgs := strings.TrimSpace(item.Arguments.OfString)
-			args := parseProviderToolArguments(rawArgs)
-			args = aliases.restoreArguments(toolName, args)
-			call := ToolCall{ID: callID, Name: toolName, Args: args}
-			result.ToolCalls = append(result.ToolCalls, call)
-			emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallStart, ToolCall: &PartialToolCall{ID: call.ID, Name: call.Name}})
-			emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallDelta, Text: rawArgs, ToolCall: &PartialToolCall{ID: call.ID, Name: call.Name}})
-			emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallEnd, ToolCall: &PartialToolCall{ID: call.ID, Name: call.Name, Arguments: cloneProviderToolArguments(call.Args)}})
+	for _, item := range completed.Output {
+		if strings.TrimSpace(item.Type) != "function_call" {
+			continue
 		}
+		callID := strings.TrimSpace(item.CallID)
+		if callID == "" {
+			callID = strings.TrimSpace(item.ID)
+		}
+		if callID == "" {
+			callID = fmt.Sprintf("openai_call_%d", len(result.ToolCalls)+1)
+		}
+		if _, ok := seen[callID]; ok {
+			continue
+		}
+		toolName := canonicalProviderToolName(item.Name, aliases)
+		rawArgs := strings.TrimSpace(item.Arguments.OfString)
+		args := parseProviderToolArguments(rawArgs)
+		args = aliases.restoreArguments(toolName, args)
+		call := ToolCall{ID: callID, Name: toolName, Args: args}
+		result.ToolCalls = append(result.ToolCalls, call)
+		emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallStart, ToolCall: &PartialToolCall{ID: call.ID, Name: call.Name}})
+		emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallDelta, Text: rawArgs, ToolCall: &PartialToolCall{ID: call.ID, Name: call.Name}})
+		emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallEnd, ToolCall: &PartialToolCall{ID: call.ID, Name: call.Name, Arguments: cloneProviderToolArguments(call.Args)}})
 	}
+
 	if len(result.ToolCalls) > 0 {
 		result.FinishReason = "tool_calls"
 	}
-	if gotCompleted {
-		finalText := extractOpenAIResponseText(completed)
-		if strings.HasPrefix(finalText, result.Text) {
-			// Complete only an exact streamed prefix; annotations address finalText.
-			if suffix := finalText[len(result.Text):]; suffix != "" {
-				textBuf.WriteString(suffix)
-				emitProviderEvent(onEvent, StreamEvent{Type: StreamEventTextDelta, Text: suffix})
-			}
-			result.Text = finalText
-		} else {
-			// Already emitted text cannot be rewritten. Keep the sources, but do
-			// not claim final-response offsets apply to a different transcript.
-			for i := range result.Sources {
-				result.Sources[i].StartIndex, result.Sources[i].EndIndex = nil, nil
-			}
+	finalText := extractOpenAIResponseText(completed)
+	if strings.HasPrefix(finalText, result.Text) {
+		// Complete only an exact streamed prefix; annotations address finalText.
+		if suffix := finalText[len(result.Text):]; suffix != "" {
+			textBuf.WriteString(suffix)
+			emitProviderEvent(onEvent, StreamEvent{Type: StreamEventTextDelta, Text: suffix})
+		}
+		result.Text = finalText
+	} else {
+		// Already emitted text cannot be rewritten. Keep the sources, but do
+		// not claim final-response offsets apply to a different transcript.
+		for i := range result.Sources {
+			result.Sources[i].StartIndex, result.Sources[i].EndIndex = nil, nil
 		}
 	}
+
 	if result.FinishReason == "unknown" && result.Text != "" {
 		result.FinishReason = "stop"
 	}

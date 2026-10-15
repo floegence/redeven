@@ -309,9 +309,11 @@ export type FlowerProviderRequestProgress = Readonly<{
   attempt_epoch: number;
   started_at: string;
   first_output_at?: string;
+  last_progress_at?: string;
   estimated_output_tokens: number;
   // Browser-only monotonic anchor, retained with the cached detail.
   wait_anchor_monotonic_ms?: number;
+  progress_anchor_monotonic_ms?: number;
 }>;
 
 export type FlowerArgumentPreview = Readonly<{

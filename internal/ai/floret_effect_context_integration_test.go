@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"encoding/json"
+	flruntime "github.com/floegence/floret/v7/runtime"
 	"io"
 	"log/slog"
 	"net/http"
@@ -98,7 +99,7 @@ func TestHostedAgentRunLabelsAuthorizeParallelEffects(t *testing.T) {
 				Models: []config.AIProviderModel{{ModelName: "gpt-5-mini"}},
 			}},
 		},
-		RunMaxWallTime: 5 * time.Second, RunIdleTimeout: 5 * time.Second, PersistOpTimeout: 2 * time.Second,
+		ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration: 5 * time.Second, FirstOutputTimeout: 5 * time.Second, IdleTimeout: 5 * time.Second}, PersistOpTimeout: 2 * time.Second,
 		ResolveProviderAPIKey: func(string) (string, bool, error) { return "sk-test", true, nil },
 	})
 	if err != nil {

@@ -2,6 +2,7 @@ package ai
 
 import (
 	"encoding/json"
+	flruntime "github.com/floegence/floret/v7/runtime"
 	"io"
 	"log/slog"
 	"net/http"
@@ -46,8 +47,8 @@ func TestEnvironmentCardSendPreservesDeviceThroughDeepSeekWireFollowup(t *testin
 	stateDir := t.TempDir()
 	meta := &session.Meta{EndpointID: "env_tool_runtime", ChannelID: "channel", NamespacePublicID: "namespace", UserPublicID: "user", UserEmail: "context@example.invalid", CanRead: true, CanWrite: true, CanExecute: true, CanAdmin: true}
 	svc, err := NewService(Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: stateDir, AgentHomeDir: stateDir, Shell: "/bin/sh",
-		Config:         &config.AIConfig{CurrentModelID: "deepseek/deepseek-v4-flash", Providers: []config.AIProvider{{ID: "deepseek", Name: "DeepSeek", Type: "deepseek", BaseURL: server.URL + "/v1", Models: []config.AIProviderModel{{ModelName: "deepseek-v4-flash"}}}}},
-		RunMaxWallTime: 5 * time.Second, RunIdleTimeout: 5 * time.Second, PersistOpTimeout: 2 * time.Second, ResolveProviderAPIKey: func(string) (string, bool, error) { return "sk-test", true, nil },
+		Config:                       &config.AIConfig{CurrentModelID: "deepseek/deepseek-v4-flash", Providers: []config.AIProvider{{ID: "deepseek", Name: "DeepSeek", Type: "deepseek", BaseURL: server.URL + "/v1", Models: []config.AIProviderModel{{ModelName: "deepseek-v4-flash"}}}}},
+		ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration: 5 * time.Second, FirstOutputTimeout: 5 * time.Second, IdleTimeout: 5 * time.Second}, PersistOpTimeout: 2 * time.Second, ResolveProviderAPIKey: func(string) (string, bool, error) { return "sk-test", true, nil },
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -77,14 +77,9 @@ type Options struct {
 	// When zero, it defaults to 10 seconds.
 	PersistOpTimeout time.Duration
 
-	// RunMaxWallTime is the hard cap for a single run's lifetime.
-	//
-	// When zero, it defaults to 15 minutes.
-	RunMaxWallTime time.Duration
-	// RunIdleTimeout cancels a run if no runtime stream activity is observed for the duration.
-	//
-	// When zero, it defaults to 2 minutes.
-	RunIdleTimeout time.Duration
+	// ProviderRequestTimeoutPolicy is enforced by Floret for physical model
+	// requests only. Zero fields use the upstream defaults.
+	ProviderRequestTimeoutPolicy flruntime.ProviderRequestTimeoutPolicy
 	// ToolApprovalTimeout is the max time a run waits for user approval for high-risk tools.
 	//
 	// When zero, it defaults to 10 minutes.
@@ -146,10 +141,9 @@ type Service struct {
 
 	persistOpTO time.Duration
 
-	runMaxWallTime  time.Duration
-	runIdleTimeout  time.Duration
-	approvalTimeout time.Duration
-	streamWriteTO   time.Duration
+	providerRequestTimeoutPolicy flruntime.ProviderRequestTimeoutPolicy
+	approvalTimeout              time.Duration
+	streamWriteTO                time.Duration
 
 	resolveProviderKey  func(providerID string) (string, bool, error)
 	resolveWebSearchKey func(providerID string) (string, bool, error)
@@ -298,10 +292,9 @@ type resolvedRunModel struct {
 
 const (
 	defaultPersistOpTimeout = 10 * time.Second
-	defaultRunMaxWallTime   = 15 * time.Minute
-	defaultRunIdleTimeout   = 2 * time.Minute
-	defaultToolApprovalTO   = 10 * time.Minute
-	defaultStreamWriteTO    = 5 * time.Second
+
+	defaultToolApprovalTO = 10 * time.Minute
+	defaultStreamWriteTO  = 5 * time.Second
 )
 
 func runThreadKey(endpointID string, threadID string) string {
@@ -319,6 +312,9 @@ func NewService(opts Options) (*Service, error) {
 }
 
 func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
+	if err := opts.ProviderRequestTimeoutPolicy.Validate(); err != nil {
+		return nil, fmt.Errorf("provider request timeout policy: %w", err)
+	}
 	if ctx == nil {
 		return nil, errors.New("AI service startup context is required")
 	}
@@ -406,14 +402,6 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 	if toolTargetPolicy.requiresExplicitTarget() && opts.TargetToolExecutor == nil {
 		return nil, errors.Join(errors.New("explicit target tool policy requires TargetToolExecutor"), flowerGenerationCloseError(errors.Join(reads.Close(), ts.Close(), floretBootstrap.close())))
 	}
-	maxWall := opts.RunMaxWallTime
-	if maxWall <= 0 {
-		maxWall = defaultRunMaxWallTime
-	}
-	idleTO := opts.RunIdleTimeout
-	if idleTO <= 0 {
-		idleTO = defaultRunIdleTimeout
-	}
 	approvalTO := opts.ToolApprovalTimeout
 	if approvalTO <= 0 {
 		approvalTO = defaultToolApprovalTO
@@ -443,8 +431,7 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 		cfg:                             opts.Config,
 		desktopModelSource:              newDesktopModelSourceClient(logger),
 		persistOpTO:                     persistTO,
-		runMaxWallTime:                  maxWall,
-		runIdleTimeout:                  idleTO,
+		providerRequestTimeoutPolicy:    opts.ProviderRequestTimeoutPolicy,
 		approvalTimeout:                 approvalTO,
 		streamWriteTO:                   streamWTO,
 		resolveProviderKey:              resolveProviderKey,
@@ -1592,8 +1579,8 @@ func (s *Service) prepareThreadEffect(meta *session.Meta, executionKey string, r
 		ChannelID: channelID, EndpointID: endpointID, ThreadID: threadID,
 		UserPublicID: strings.TrimSpace(metaRef.UserPublicID), UploadsDir: uploadsDir,
 		ProductCapabilities: productCapabilities,
-		FloretThreadRuntime: s.threadRuntime,
-		PersistOpTimeout:    persistTO, SkillManager: s.skillManager, MCPManager: s.mcpManager,
+		FloretThreadRuntime: s.threadRuntime, ProviderRequestTimeoutPolicy: s.providerRequestTimeoutPolicy,
+		PersistOpTimeout: persistTO, SkillManager: s.skillManager, MCPManager: s.mcpManager,
 		ToolAllowlist: append([]string(nil), req.Options.ToolAllowlist...), NoUserInteraction: req.Options.NoUserInteraction,
 		ToolTargetPolicy: toolTargetPolicy, CanonicalReferenceAuthority: referenceAuthority,
 		TargetToolExecutor: targetToolExecutor,

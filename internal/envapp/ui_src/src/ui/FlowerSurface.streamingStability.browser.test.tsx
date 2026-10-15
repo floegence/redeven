@@ -5,7 +5,7 @@ import { commands, page, userEvent } from 'vitest/browser';
 import type { FlowerLiveStreamEnvelope, FlowerRuntimeCurrentView, FlowerSurfaceAdapter } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { applyFlowerRuntimeCurrentView } from '../../../../flower_ui/src/runtimeCurrentView';
 import { streamingFixture } from '../../../../flower_ui/testing/streamingFixture';
-import { adapter, deferred, inputRequest, liveBootstrap, renderSurfaceWithAdapter, runtimeCurrentView, subagentSummary, thread, waitFor } from './FlowerSurface.navigation.testHarness';
+import { adapter, deferred, inputRequest, liveBootstrap, renderSurfaceWithAdapter, renderSurfaceWithAdapterProps, runtimeCurrentView, subagentSummary, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 
 function liveStream() {
   const values: FlowerLiveStreamEnvelope[] = [];
@@ -343,4 +343,48 @@ describe('Flower complete interaction subtree stability', () => {
       await waitFor(() => document.activeElement?.tagName === 'TEXTAREA');
     }
   });
+});
+
+it.each([390, 1280])('keeps recovery controls usable during a model pause at %s px', async (width) => {
+  await page.viewport(width, 900);
+  onTestFinished(() => page.viewport(1280, 900));
+  const fixture = streamingFixture(8, 0);
+  const base = fixture.current();
+  const sampledAt = Date.now();
+  const request = { logical_request_id: 'stalled-request', attempt_id: 'stalled-attempt', attempt_epoch: 1,
+    started_at: new Date(sampledAt - 20000).toISOString(), first_output_at: new Date(sampledAt - 19000).toISOString(),
+    last_progress_at: new Date(sampledAt - 16000).toISOString(), estimated_output_tokens: 42 };
+  fixture.replace({ ...base, view_version: 2, queue: [], sampled_at_ms: sampledAt, run_progress: { phase: 'streaming', request } });
+  const retry = vi.fn(async () => ({ thread: applyFlowerRuntimeCurrentView(fixture.thread, fixture.current()), current: fixture.current() }));
+  const runtime = renderSurfaceWithAdapterProps({ ...adapter(true), ...fixture.adapter, retryThread: retry },
+    { focusThreadRequest: { request_id: 'focus-paused', thread_id: fixture.thread.thread_id } });
+  runtime.style.height = '780px';
+  await waitFor(() => runtime.querySelector('.flower-model-status-text')?.textContent?.includes('Waiting for model to continue') === true);
+  expect(runtime.querySelector('.flower-model-status-metric')?.textContent).toContain('42 tokens');
+  expect(runtime.querySelector<HTMLButtonElement>('[data-flower-primary-action="stop"]')?.disabled).toBe(false);
+  if (width < 600) {
+    const navigation = runtime.querySelector<HTMLButtonElement>('.flower-mobile-navigation-button')!;
+    await userEvent.click(navigation);
+    await waitFor(() => navigation.getAttribute('aria-expanded') === 'true');
+    const selection = document.querySelector<HTMLButtonElement>(`.flower-mobile-thread-drawer [data-thread-id="${fixture.thread.thread_id}"] button`)!;
+    expect(selection.disabled).toBe(false);
+    await userEvent.click(selection);
+    await waitFor(() => navigation.getAttribute('aria-expanded') === 'false');
+  } else {
+    expect(runtime.querySelector<HTMLButtonElement>(`[data-thread-id="${fixture.thread.thread_id}"] button`)?.disabled).toBe(false);
+  }
+  const indicator = runtime.querySelector('.flower-model-status-indicator')!;
+  expect(indicator.scrollWidth).toBeLessThanOrEqual(indicator.clientWidth + 1);
+  fixture.replace({ ...fixture.current(), view_version: 3, activity: 'idle', last_outcome: 'failed', run_progress: null, tool_call_previews: [],
+    error: 'The model request timed out.', run_error_code: 'provider_request_timeout' });
+  await waitFor(() => runtime.querySelector('.flower-run-error')?.textContent?.includes('The model request timed out.') === true);
+  expect(runtime.querySelector('.flower-model-status-indicator')).toBeNull();
+  const notice = runtime.querySelector('.flower-run-error')!;
+  const buttons = [...notice.querySelectorAll<HTMLButtonElement>('button')];
+  expect(buttons.some(button => button.textContent?.includes('Configure') && !button.disabled)).toBe(true);
+  const retryButton = buttons.find(button => button.textContent?.includes('Retry reply'));
+  expect(retryButton?.disabled).toBe(false);
+  retryButton!.click();
+  await waitFor(() => retry.mock.calls.length === 1);
+  expect(runtime.querySelector<HTMLTextAreaElement>('textarea')?.disabled).toBe(false);
 });

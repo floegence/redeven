@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	flruntime "github.com/floegence/floret/v7/runtime"
 	"image"
 	"image/color"
 	"image/png"
@@ -132,7 +133,7 @@ func TestImageReadReachesNativeProviderAndSurvivesRestartForkAndFileDeletion(t *
 			nativeImage := base64.StdEncoding.EncodeToString(encoded.Bytes())
 			vision, _ := config.AIModelCatalogEntry(tc.provider, tc.model)
 			textModel := config.AIProviderModel{ModelName: "text-only", ContextWindow: 128000, MaxOutputTokens: 4096, InputModalities: []string{"text"}}
-			options := Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: state, AgentHomeDir: state, Shell: "/bin/sh", Config: &config.AIConfig{CurrentModelID: tc.provider + "/" + vision.ModelName, Providers: []config.AIProvider{{ID: tc.provider, Type: tc.provider, BaseURL: provider.URL, Models: []config.AIProviderModel{vision, textModel}}}}, ResolveProviderAPIKey: func(string) (string, bool, error) { return "test", true, nil }, RunMaxWallTime: 60 * time.Second, RunIdleTimeout: 60 * time.Second}
+			options := Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: state, AgentHomeDir: state, Shell: "/bin/sh", Config: &config.AIConfig{CurrentModelID: tc.provider + "/" + vision.ModelName, Providers: []config.AIProvider{{ID: tc.provider, Type: tc.provider, BaseURL: provider.URL, Models: []config.AIProviderModel{vision, textModel}}}}, ResolveProviderAPIKey: func(string) (string, bool, error) { return "test", true, nil }, ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration: 60 * time.Second, FirstOutputTimeout: 60 * time.Second, IdleTimeout: 60 * time.Second}}
 			svc, err := NewService(options)
 			if err != nil {
 				t.Fatal(err)

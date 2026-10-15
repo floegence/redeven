@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	flprovider "github.com/floegence/floret/v7/provider"
 	flruntime "github.com/floegence/floret/v7/runtime"
@@ -252,6 +253,25 @@ func TestUnknownCanonicalProviderFailureRetainsProviderRecoveryClassification(t 
 		detail := canonicalFailureDetail(failure)
 		if !strings.Contains(detail, code) || strings.Contains(detail, message) {
 			t.Fatalf("unsafe or missing provider diagnostic: %s", detail)
+		}
+	}
+}
+
+func TestCanonicalTimeoutDetailsDoNotOverrideIndependentFailures(t *testing.T) {
+	now := time.Now()
+	details := &flprovider.RequestTimeoutDetails{Stage: "output_idle", StartedAt: now, LastProgressAt: &now, TimedOutAt: now.Add(2 * time.Minute), LogicalRequestID: "logical", AttemptID: "attempt", AttemptEpoch: 1}
+	for _, code := range []flruntime.ThreadTurnFailureCode{flruntime.ThreadTurnFailureProvider, flruntime.ThreadTurnFailureStorage, flruntime.ThreadTurnFailureEffectOutcomeUnknown} {
+		failure := &flruntime.ThreadTurnFailure{Code: code, Message: "private diagnostic", ProviderTimeout: details}
+		got, message := projectFloretTurnFailure(failure, runErrorCodeFloretEngineFailed)
+		if code == flruntime.ThreadTurnFailureProvider {
+			if got != runErrorCodeProviderRequestTimeout || !strings.Contains(canonicalFailureDetail(failure), "output_idle") {
+				t.Fatalf("timeout code=%s detail=%s", got, canonicalFailureDetail(failure))
+			}
+		} else if got == runErrorCodeProviderRequestTimeout || canonicalFailureDetail(failure) != "" {
+			t.Fatalf("independent failure overridden: %s", got)
+		}
+		if strings.Contains(message, "private diagnostic") {
+			t.Fatal("private failure leaked")
 		}
 	}
 }
