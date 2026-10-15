@@ -579,7 +579,7 @@ func flowerRunProgress(runID identity.RunID, turnID identity.TurnID, progress *f
 	if progress == nil || strings.TrimSpace(runID.String()) == "" || strings.TrimSpace(turnID.String()) == "" {
 		return nil
 	}
-	return &FlowerRunProgress{RunID: runID.String(), TurnID: turnID.String(), Phase: progress.Phase, Retry: progress.Retry}
+	return &FlowerRunProgress{RunID: runID.String(), TurnID: turnID.String(), Phase: progress.Phase, Retry: progress.Retry, Request: progress.Request, SampledAtMS: time.Now().UnixMilli()}
 }
 
 func (s *Service) CreateThread(ctx context.Context, meta *session.Meta, title string, modelID string, permissionType string, workingDir string) (*ThreadView, error) {

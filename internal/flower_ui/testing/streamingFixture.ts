@@ -84,7 +84,10 @@ export function streamingFixture(messageCount = 72, toolCount = 20) {
       wake?.();
     },
     replace(next: FlowerRuntimeCurrentView, extras: Partial<FlowerLiveStreamEnvelope> = {}) { current = next; emit({ schema_version: 1, kind: 'thread.batch', thread_id: threadID, current, ...extras }); },
-    append(text: string) { current = { ...current, view_version: current.view_version + 1, items: current.items?.map((item) => item.id === 'streaming-tail' ? { ...item, text: `${item.text}${text}` } : item) }; emit({ schema_version: 1, kind: 'thread.batch', thread_id: threadID, current: structuredClone(current) }); },
+    append(text: string) { current = { ...current, view_version: current.view_version + 1,
+      ...(current.run_progress?.request ? { sampled_at_ms: Date.now(), run_progress: { ...current.run_progress, request: { ...current.run_progress.request, estimated_output_tokens: current.run_progress.request.estimated_output_tokens + Math.ceil(text.length / 4) } },
+        tool_call_previews: current.tool_call_previews?.map(call => ({ ...call, preview: { ...call.preview, additions: (call.preview?.additions ?? 0) + 1 } })) } : {}),
+      items: current.items?.map((item) => item.id === 'streaming-tail' ? { ...item, text: `${item.text}${text}` } : item) }; emit({ schema_version: 1, kind: 'thread.batch', thread_id: threadID, current: structuredClone(current) }); },
   };
 }
 

@@ -75,6 +75,7 @@ try {
           await page.waitForSelector('[data-flower-queued-turn-dock-id="queued-first"]', { timeout: 30_000 });
           await page.waitForFunction(() => document.querySelector('.flower-chat-transcript')?.getAttribute('data-flower-tail-preparing') !== 'true');
           await page.waitForTimeout(300);
+          const outputProgress = reference ? null : await page.evaluate(() => window.flowerPerformance.checkOutputProgress());
           const row = page.locator('[data-flower-activity-item-id]').last();
           const toggle = row.locator('[data-flower-disclosure-trigger]');
           await toggle.scrollIntoViewIfNeeded();
@@ -102,7 +103,7 @@ try {
           const after = await cdp.send('Performance.getMetrics');
           const continuity = await page.evaluate(() => window.flowerPerformance.checkContinuity());
           const metric = (data, key) => data.metrics.find((value) => value.name === key)?.value ?? 0;
-          const run = { runtime, messages, tools, hz, seconds, processID: application?.process().pid, url, stateDirectory: runtime === 'desktop' ? path.join(temporary, name) : undefined, ...result, continuity, layoutMs: 1000 * (metric(after, 'LayoutDuration') - metric(before, 'LayoutDuration')), styleMs: 1000 * (metric(after, 'RecalcStyleDuration') - metric(before, 'RecalcStyleDuration')), layoutCount: metric(after, 'LayoutCount') - metric(before, 'LayoutCount') };
+          const run = { runtime, messages, tools, hz, seconds, processID: application?.process().pid, url, stateDirectory: runtime === 'desktop' ? path.join(temporary, name) : undefined, ...result, continuity, outputProgress, layoutMs: 1000 * (metric(after, 'LayoutDuration') - metric(before, 'LayoutDuration')), styleMs: 1000 * (metric(after, 'RecalcStyleDuration') - metric(before, 'RecalcStyleDuration')), layoutCount: metric(after, 'LayoutCount') - metric(before, 'LayoutCount') };
           evidence.runs.push(run);
           await page.screenshot({ path: path.join(artifacts, `${name}.png`) });
           console.log(JSON.stringify({ runtime, messages, tools, hz, frameP95: run.frameP95, clickP95: run.clickP95, maxLongTask: run.maxLongTask, protectedChanges: run.protectedChanges, parses: run.parsers.parses, layoutMs: run.layoutMs, continuity }));
@@ -115,7 +116,7 @@ try {
       }
     }
   }
-  evidence.acceptance = evidence.runs.every((run) => run.continuity.flashes === 0 && run.continuity.stableMessage && run.continuity.stableSelection && run.continuity.draftPreserved && run.continuity.loads === 3 && run.continuity.baselines === 72 && run.protectedChanges === 0 && run.clicks.length > 0 && run.clickP95 <= 100 && (run.messages === 72 ? run.frameP95 <= 20 : run.maxLongTask < 100));
+  evidence.acceptance = evidence.runs.every((run) => (reference || run.outputProgress?.valid) && run.continuity.flashes === 0 && run.continuity.stableMessage && run.continuity.stableSelection && run.continuity.draftPreserved && run.continuity.loads === 3 && run.continuity.baselines === 72 && run.protectedChanges === 0 && run.clicks.length > 0 && run.clickP95 <= 100 && (run.messages === 72 ? run.frameP95 <= 20 : run.maxLongTask < 100));
   await writeFile(path.join(artifacts, 'metrics.json'), JSON.stringify(evidence, null, 2));
   console.log(`Evidence: ${artifacts}`);
   if (!reference && !evidence.acceptance) throw new Error('Flower streaming performance acceptance failed; inspect metrics.json');

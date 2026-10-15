@@ -146,6 +146,46 @@ func TestFlowerRuntimeCurrentPublisherStreamsThinkingAtVisualCadence(t *testing.
 	}
 }
 
+func TestFlowerRuntimeCurrentPublisherCoalescesOutputNumbersAndFlushesRequestBoundaries(t *testing.T) {
+	clock := newFakeFlowerRuntimePublishClock()
+	var published []recordedFlowerRuntimeCurrent
+	publisher := newFlowerRuntimeCurrentPublisher(50*time.Millisecond, clock, func(endpointID string, current flruntime.ThreadView) {
+		published = append(published, recordedFlowerRuntimeCurrent{endpointID: endpointID, current: current})
+	})
+	t.Cleanup(publisher.Close)
+	first := clock.Now()
+	view := func(version uint64, attempt string, output bool, tokens int64, additions int) flruntime.ThreadView {
+		request := &flruntime.ProviderRequestProgress{LogicalRequestID: "request", AttemptID: attempt, AttemptEpoch: 1, StartedAt: first, EstimatedOutputTokens: tokens}
+		if output {
+			request.FirstOutputAt = &first
+		}
+		current := flruntime.ThreadView{ThreadID: "thread", TurnID: "turn", RunID: "run", Activity: flruntime.ThreadActivityActive, ViewVersion: version,
+			RunProgress: &flruntime.ThreadRunProgress{Phase: flruntime.ThreadRunPhaseWaitingResponse, Request: request}}
+		if output {
+			current.ToolCallPreviews = []flruntime.ThreadToolCallPreview{{ThreadID: "thread", TurnID: "turn", RunID: "run", LogicalRequestID: "request", AttemptID: attempt, AttemptEpoch: 1, CallID: "call", Preview: &tools.ArgumentPreview{Additions: &additions}}}
+		}
+		return current
+	}
+	publisher.Publish("env", view(1, "attempt-1", false, 0, 0))
+	publisher.Publish("env", view(2, "attempt-1", true, 1, 1))
+	publisher.Publish("env", view(3, "attempt-1", true, 2, 2))
+	publisher.Publish("env", view(4, "attempt-1", true, 3, 3))
+	if got := publishedVersions(published); !equalUint64s(got, []uint64{1, 2}) {
+		t.Fatalf("numeric deltas bypassed cadence: %v", got)
+	}
+	clock.Advance(50 * time.Millisecond)
+	if got := publishedVersions(published); !equalUint64s(got, []uint64{1, 2, 4}) {
+		t.Fatalf("coalesced views: %v", got)
+	}
+	if *published[2].current.ToolCallPreviews[0].Preview.Additions != 3 || published[2].current.RunProgress.Request.EstimatedOutputTokens != 3 {
+		t.Fatal("latest counts were lost")
+	}
+	publisher.Publish("env", view(5, "attempt-2", false, 0, 0))
+	if got := publishedVersions(published); !equalUint64s(got, []uint64{1, 2, 4, 5}) {
+		t.Fatalf("new attempt delayed: %v", got)
+	}
+}
+
 func TestFlowerRuntimeCurrentPublisherPublishesEveryRunPhaseBoundaryImmediately(t *testing.T) {
 	clock := newFakeFlowerRuntimePublishClock()
 	var published []recordedFlowerRuntimeCurrent

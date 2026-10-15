@@ -1,3 +1,4 @@
+import { mapFlowerProviderRequestProgress } from './providerRequestProgress';
 import { mapFlowerCitationSources } from './chat/markdown/flowerCitations';
 import { threadTitleSnapshot } from './threadTitleSnapshot';
 import type {
@@ -145,7 +146,9 @@ function mapRunProgress(raw: unknown, activeRunID: string): FlowerRunProgress | 
     throw new Error('Flower contract error: thread.run_progress requires exact active run and turn identity.');
   }
   const retry = record.retry;
-  return { run_id: runID, turn_id: turnID, phase: runProgressPhase(record.phase), ...(retry ? { retry: mapRunRetry(retry) } : {}) };
+  return { run_id: runID, turn_id: turnID, phase: runProgressPhase(record.phase), ...(retry ? { retry: mapRunRetry(retry) } : {}),
+    ...(record.request ? { request: mapFlowerProviderRequestProgress(record.request, record.sampled_at_ms), sampled_at_ms: Number(record.sampled_at_ms) } : {}),
+  };
 }
 
 function nonNegativeInteger(raw: unknown, field: string): number {

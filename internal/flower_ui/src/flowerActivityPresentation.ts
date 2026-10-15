@@ -961,7 +961,7 @@ function diffFileFromMutation(
   fileActions?: FlowerActivityFileActions,
   actionID = '',
 ): FlowerActivityDiffFile | null {
-  const hasMutationDetail = ['additions', 'deletions', 'unified_diff', 'diff_unavailable_reason']
+  const hasMutationDetail = mutation.change_type === 'noop' || ['additions', 'deletions', 'unified_diff', 'diff_unavailable_reason']
     .some((key) => mutation[key] !== undefined);
   if (!hasMutationDetail) return null;
   const changeType = payloadValue(mutation, 'change_type') || operationFromPayload(item.payload) || 'update';

@@ -325,6 +325,10 @@ func publicFloretMessageReferences(references []flruntime.MessageReference) ([]p
 
 func publicFloretThreadView(current flruntime.ThreadView) flruntime.ThreadView {
 	out := current
+	out.ToolCallPreviews = append([]flruntime.ThreadToolCallPreview(nil), current.ToolCallPreviews...)
+	for index := range out.ToolCallPreviews {
+		out.ToolCallPreviews[index].Preview = out.ToolCallPreviews[index].Preview.Clone()
+	}
 	out.Cancellation = cloneFlowerCancellation(current.Cancellation)
 	out.Items = append([]flruntime.ThreadItem(nil), current.Items...)
 	for index := range out.Items {

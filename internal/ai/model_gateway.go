@@ -350,10 +350,11 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 		Name        string
 		OutputIndex int64
 
-		Started bool
-		Ended   bool
-		ArgsRaw strings.Builder
-		Args    map[string]any
+		Started  bool
+		Ended    bool
+		ArgsRaw  strings.Builder
+		ArgsSent int
+		Args     map[string]any
 	}
 	partials := map[string]*partialCall{} // item_id -> partial
 
@@ -376,16 +377,17 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 			return
 		}
 		emitStart(pc)
-		raw := strings.TrimSpace(pc.ArgsRaw.String())
-		var args map[string]any
-		if raw != "" {
-			_ = json.Unmarshal([]byte(raw), &args) // Streaming deltas may be incomplete; ignore parse failures.
+		raw := pc.ArgsRaw.String()
+		if len(raw) <= pc.ArgsSent {
+			return
 		}
+		delta := raw[pc.ArgsSent:]
+		pc.ArgsSent = len(raw)
 		name := canonicalProviderToolName(pc.Name, aliases)
 		if name == "" {
 			return
 		}
-		emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallDelta, ToolCall: &PartialToolCall{ID: strings.TrimSpace(pc.CallID), Name: name, ArgumentsJSON: raw, Arguments: cloneProviderToolArguments(args)}})
+		emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallDelta, Text: delta, ToolCall: &PartialToolCall{ID: strings.TrimSpace(pc.CallID), Name: name}})
 	}
 	emitEnd := func(pc *partialCall, rawArgs string) {
 		if pc == nil || pc.Ended {
@@ -401,6 +403,7 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 		args = aliases.restoreArguments(name, args)
 		pc.Args = args
 		emitStart(pc)
+		emitDelta(pc)
 		emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallEnd, ToolCall: &PartialToolCall{ID: strings.TrimSpace(pc.CallID), Name: name, Arguments: cloneProviderToolArguments(args)}})
 	}
 
@@ -463,10 +466,10 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 				pc.Name = name
 			}
 			emitStart(pc)
-			if raw := strings.TrimSpace(item.Arguments.OfString); raw != "" {
+			if raw := item.Arguments.OfString; raw != "" {
 				pc.ArgsRaw.WriteString(raw)
-				emitDelta(pc)
 			}
+			emitDelta(pc)
 
 		case "response.function_call_arguments.delta":
 			pc := getPartial(event.ItemID)
@@ -485,8 +488,11 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 			if pc == nil {
 				continue
 			}
-			raw := strings.TrimSpace(event.Arguments)
+			raw := event.Arguments
 			if raw != "" {
+				if !strings.HasPrefix(raw, pc.ArgsRaw.String()) {
+					return ModelGatewayResult{}, errors.New("provider tool arguments changed streamed prefix")
+				}
 				pc.ArgsRaw.Reset()
 				pc.ArgsRaw.WriteString(raw)
 			}
@@ -519,7 +525,7 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 			if name := canonicalProviderToolName(item.Name, aliases); name != "" {
 				pc.Name = name
 			}
-			if raw := strings.TrimSpace(item.Arguments.OfString); raw != "" && strings.TrimSpace(pc.ArgsRaw.String()) == "" {
+			if raw := item.Arguments.OfString; raw != "" && pc.ArgsRaw.Len() == 0 {
 				pc.ArgsRaw.WriteString(raw)
 			}
 			emitEnd(pc, pc.ArgsRaw.String())
@@ -655,7 +661,7 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 			call := ToolCall{ID: callID, Name: toolName, Args: args}
 			result.ToolCalls = append(result.ToolCalls, call)
 			emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallStart, ToolCall: &PartialToolCall{ID: call.ID, Name: call.Name}})
-			emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallDelta, ToolCall: &PartialToolCall{ID: call.ID, Name: call.Name, ArgumentsJSON: rawArgs, Arguments: cloneProviderToolArguments(call.Args)}})
+			emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallDelta, Text: rawArgs, ToolCall: &PartialToolCall{ID: call.ID, Name: call.Name}})
 			emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallEnd, ToolCall: &PartialToolCall{ID: call.ID, Name: call.Name, Arguments: cloneProviderToolArguments(call.Args)}})
 		}
 	}
@@ -812,6 +818,7 @@ func (p *openAIProvider) streamPreparedChatTurn(ctx context.Context, model strin
 		Ended     bool
 		Signature string
 		ArgsRaw   strings.Builder
+		ArgsSent  int
 		Args      map[string]any
 	}
 	partials := map[int64]*partialCall{}
@@ -855,10 +862,14 @@ func (p *openAIProvider) streamPreparedChatTurn(ctx context.Context, model strin
 		if callID == "" || name == "" {
 			return
 		}
-		raw := strings.TrimSpace(pc.ArgsRaw.String())
-		args := parseProviderToolArguments(raw)
+		raw := pc.ArgsRaw.String()
+		if len(raw) <= pc.ArgsSent {
+			return
+		}
+		delta := raw[pc.ArgsSent:]
+		pc.ArgsSent = len(raw)
 		emitStart(pc)
-		emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallDelta, ToolCall: &PartialToolCall{ID: callID, Name: name, ArgumentsJSON: raw, Arguments: cloneProviderToolArguments(args)}})
+		emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallDelta, Text: delta, ToolCall: &PartialToolCall{ID: callID, Name: name}})
 	}
 	emitEnd := func(pc *partialCall) {
 		if pc == nil || pc.Ended {
@@ -875,6 +886,7 @@ func (p *openAIProvider) streamPreparedChatTurn(ctx context.Context, model strin
 		pc.Args = args
 		pc.Ended = true
 		emitStart(pc)
+		emitDelta(pc)
 		emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallEnd, ToolCall: &PartialToolCall{ID: callID, Name: name, Arguments: cloneProviderToolArguments(args)}})
 	}
 
@@ -929,6 +941,7 @@ func (p *openAIProvider) streamPreparedChatTurn(ctx context.Context, model strin
 					continue
 				}
 				emitStart(pc)
+				emitDelta(pc)
 			}
 		}
 	}
@@ -1075,13 +1088,14 @@ func (p *moonshotProvider) streamPreparedTurn(ctx context.Context, aliases provi
 	}
 
 	type partialCall struct {
-		Index   int64
-		CallID  string
-		Name    string
-		Started bool
-		Ended   bool
-		ArgsRaw strings.Builder
-		Args    map[string]any
+		Index    int64
+		CallID   string
+		Name     string
+		Started  bool
+		Ended    bool
+		ArgsRaw  strings.Builder
+		ArgsSent int
+		Args     map[string]any
 	}
 
 	partials := map[int64]*partialCall{}
@@ -1131,16 +1145,19 @@ func (p *moonshotProvider) streamPreparedTurn(ctx context.Context, aliases provi
 		if callID == "" || name == "" {
 			return
 		}
-		raw := strings.TrimSpace(pc.ArgsRaw.String())
-		args := parseProviderToolArguments(raw)
+		raw := pc.ArgsRaw.String()
+		if len(raw) <= pc.ArgsSent {
+			return
+		}
+		delta := raw[pc.ArgsSent:]
+		pc.ArgsSent = len(raw)
 		emitStart(pc)
 		emitProviderEvent(onEvent, StreamEvent{
 			Type: StreamEventToolCallDelta,
+			Text: delta,
 			ToolCall: &PartialToolCall{
-				ID:            callID,
-				Name:          name,
-				ArgumentsJSON: raw,
-				Arguments:     cloneProviderToolArguments(args),
+				ID:   callID,
+				Name: name,
 			},
 		})
 	}
@@ -1159,6 +1176,7 @@ func (p *moonshotProvider) streamPreparedTurn(ctx context.Context, aliases provi
 		pc.Args = args
 		pc.Ended = true
 		emitStart(pc)
+		emitDelta(pc)
 		emitProviderEvent(onEvent, StreamEvent{
 			Type: StreamEventToolCallEnd,
 			ToolCall: &PartialToolCall{
@@ -1211,6 +1229,7 @@ func (p *moonshotProvider) streamPreparedTurn(ctx context.Context, aliases provi
 					continue
 				}
 				emitStart(pc)
+				emitDelta(pc)
 			}
 		}
 	}
@@ -2191,10 +2210,11 @@ func (p *anthropicProvider) streamPreparedTurn(ctx context.Context, payload []by
 		ID    string
 		Name  string
 
-		Started bool
-		Ended   bool
-		ArgsRaw strings.Builder
-		Args    map[string]any
+		Started  bool
+		Ended    bool
+		ArgsRaw  strings.Builder
+		ArgsSent int
+		Args     map[string]any
 	}
 	partials := map[int64]*partialCall{} // content_block index -> partial
 
@@ -2213,12 +2233,13 @@ func (p *anthropicProvider) streamPreparedTurn(ctx context.Context, payload []by
 			return
 		}
 		emitStart(pc)
-		raw := strings.TrimSpace(pc.ArgsRaw.String())
-		var args map[string]any
-		if raw != "" {
-			_ = json.Unmarshal([]byte(raw), &args) // Streaming deltas may be incomplete; ignore parse failures.
+		raw := pc.ArgsRaw.String()
+		if len(raw) <= pc.ArgsSent {
+			return
 		}
-		emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallDelta, ToolCall: &PartialToolCall{ID: strings.TrimSpace(pc.ID), Name: strings.TrimSpace(pc.Name), ArgumentsJSON: raw, Arguments: cloneAnyMap(args)}})
+		delta := raw[pc.ArgsSent:]
+		pc.ArgsSent = len(raw)
+		emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallDelta, Text: delta, ToolCall: &PartialToolCall{ID: strings.TrimSpace(pc.ID), Name: strings.TrimSpace(pc.Name)}})
 	}
 	emitEnd := func(pc *partialCall, rawArgs string) {
 		if pc == nil || pc.Ended {
@@ -2232,6 +2253,7 @@ func (p *anthropicProvider) streamPreparedTurn(ctx context.Context, payload []by
 		}
 		pc.Args = args
 		emitStart(pc)
+		emitDelta(pc)
 		emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallEnd, ToolCall: &PartialToolCall{ID: strings.TrimSpace(pc.ID), Name: strings.TrimSpace(pc.Name), Arguments: cloneAnyMap(args)}})
 	}
 
@@ -2382,7 +2404,7 @@ func (p *anthropicProvider) streamPreparedTurn(ctx context.Context, payload []by
 				raw = string(variant.Input)
 			}
 			emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallStart, ToolCall: &PartialToolCall{ID: call.ID, Name: call.Name}})
-			emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallDelta, ToolCall: &PartialToolCall{ID: call.ID, Name: call.Name, ArgumentsJSON: raw, Arguments: cloneProviderToolArguments(call.Args)}})
+			emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallDelta, Text: raw, ToolCall: &PartialToolCall{ID: call.ID, Name: call.Name}})
 			emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallEnd, ToolCall: &PartialToolCall{ID: call.ID, Name: call.Name, Arguments: cloneProviderToolArguments(call.Args)}})
 		}
 	}

@@ -10,6 +10,7 @@ import (
 
 	"github.com/floegence/floret/v7/identity"
 	flruntime "github.com/floegence/floret/v7/runtime"
+	fltools "github.com/floegence/floret/v7/tools"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 )
 
@@ -270,12 +271,19 @@ func TestTypedFailureProjectionIsConsistentAcrossCurrentAndSummaryPaths(t *testi
 }
 
 func TestFlowerCurrentAndSummaryPreserveExactRunIdentityAndProgress(t *testing.T) {
+	started := time.Now().Add(-5 * time.Second)
+	first := started.Add(time.Second)
+	zero := 0
 	current := flruntime.ThreadView{
-		ThreadID:    identity.ThreadID("thread-progress"),
-		TurnID:      identity.TurnID("turn-progress"),
-		RunID:       identity.RunID("run-progress"),
-		Activity:    flruntime.ThreadActivityActive,
-		RunProgress: &flruntime.ThreadRunProgress{Phase: flruntime.ThreadRunPhaseStreaming},
+		ThreadID: identity.ThreadID("thread-progress"),
+		TurnID:   identity.TurnID("turn-progress"),
+		RunID:    identity.RunID("run-progress"),
+		Activity: flruntime.ThreadActivityActive,
+		RunProgress: &flruntime.ThreadRunProgress{Phase: flruntime.ThreadRunPhaseStreaming, Request: &flruntime.ProviderRequestProgress{
+			LogicalRequestID: "request", AttemptID: "attempt", AttemptEpoch: 1, StartedAt: started, FirstOutputAt: &first, EstimatedOutputTokens: 128,
+		}},
+		ToolCallPreviews: []flruntime.ThreadToolCallPreview{{ThreadID: "thread-progress", TurnID: "turn-progress", RunID: "run-progress", LogicalRequestID: "request", AttemptID: "attempt", AttemptEpoch: 1,
+			CallID: "call", Name: "file.write", Preview: &fltools.ArgumentPreview{DisplayName: "safe.txt", Additions: &zero}}},
 	}
 
 	encoded, err := flowerCurrentJSON(current)
@@ -293,6 +301,20 @@ func TestFlowerCurrentAndSummaryPreserveExactRunIdentityAndProgress(t *testing.T
 	if progress["phase"] != "streaming" {
 		t.Fatalf("current run progress=%#v", progress)
 	}
+	request := progress["request"].(map[string]any)
+	if request["estimated_output_tokens"] != float64(128) || payload["sampled_at_ms"].(float64) < float64(first.UnixMilli()) {
+		t.Fatalf("request progress or sample lost: %#v", payload)
+	}
+	preview := payload["tool_call_previews"].([]any)[0].(map[string]any)["preview"].(map[string]any)
+	if preview["additions"] != float64(0) || preview["deletions"] != nil {
+		t.Fatalf("unknown and zero counts conflated: %#v", preview)
+	}
+	bad := current
+	bad.ToolCallPreviews = append([]flruntime.ThreadToolCallPreview(nil), current.ToolCallPreviews...)
+	bad.ToolCallPreviews[0].AttemptID = "old-attempt"
+	if _, err := flowerCurrentJSON(bad); err == nil {
+		t.Fatal("accepted a stale preview attempt")
+	}
 
 	view := ThreadView{ThreadID: "thread-progress"}
 	applyFlowerThreadRuntimeProjection(&view, flowerThreadRuntimeProjectionFromCurrent(current))
@@ -301,6 +323,9 @@ func TestFlowerCurrentAndSummaryPreserveExactRunIdentityAndProgress(t *testing.T
 	}
 	if view.RunProgress == nil || view.RunProgress.RunID != "run-progress" || view.RunProgress.TurnID != "turn-progress" || view.RunProgress.Phase != flruntime.ThreadRunPhaseStreaming {
 		t.Fatalf("summary run progress=%#v", view.RunProgress)
+	}
+	if view.RunProgress.Request == nil || view.RunProgress.Request.EstimatedOutputTokens != 128 || view.RunProgress.SampledAtMS < first.UnixMilli() {
+		t.Fatalf("summary lost request progress: %#v", view.RunProgress)
 	}
 
 	projected := mustProjectRuntimeThread(t, threadstore.ThreadSettings{ThreadID: "thread-progress"}, current, flruntime.ThreadSummary{})

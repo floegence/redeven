@@ -255,7 +255,7 @@ func (p *floretProviderAdapter) streamPreparedTurn(ctx context.Context, provider
 				}
 			case StreamEventToolCallDelta:
 				if stream := floretToolCallStreamFromFlower(ev.ToolCall); stream != nil {
-					sendFloretProviderEvent(ctx, out, flprovider.Event{Type: flprovider.EventToolCallDelta, ToolCallStream: stream})
+					sendFloretProviderEvent(ctx, out, flprovider.Event{Type: flprovider.EventToolCallDelta, Text: ev.Text, ToolCallStream: stream})
 				}
 			case StreamEventToolCallEnd:
 				if stream := floretToolCallStreamFromFlower(ev.ToolCall); stream != nil {

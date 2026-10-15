@@ -235,7 +235,7 @@ type flowerLiveEncodedBatch struct {
 }
 
 // Comparison data is frozen once, outside subscriber fanout and its lock. The
-// fingerprint includes every public field except version and growing text.
+// fingerprint excludes version, sample time, growing text and replaceable progress numbers.
 type flowerLiveCurrentComparison struct {
 	threadID    string
 	routeID     string
@@ -243,6 +243,7 @@ type flowerLiveCurrentComparison struct {
 	version     uint64
 	fingerprint [sha256.Size]byte
 	texts       []string
+	metrics     []int64
 	independent bool
 }
 
@@ -651,6 +652,30 @@ func compareFlowerLiveCurrent(envelope FlowerLiveStreamEnvelope) *flowerLiveCurr
 	}
 	normalized := *current
 	normalized.ViewVersion = 0
+	if current.RunProgress != nil && current.RunProgress.Request != nil {
+		progress := *current.RunProgress
+		request := *progress.Request
+		comparison.metrics = append(comparison.metrics, request.EstimatedOutputTokens)
+		request.EstimatedOutputTokens = 0
+		progress.Request = &request
+		normalized.RunProgress = &progress
+	}
+	normalized.ToolCallPreviews = append([]flruntime.ThreadToolCallPreview(nil), current.ToolCallPreviews...)
+	for index, call := range current.ToolCallPreviews {
+		if call.Preview == nil {
+			continue
+		}
+		preview := *call.Preview
+		if preview.Additions != nil {
+			comparison.metrics = append(comparison.metrics, int64(*preview.Additions))
+			preview.Additions = new(int)
+		}
+		if preview.Deletions != nil {
+			comparison.metrics = append(comparison.metrics, int64(*preview.Deletions))
+			preview.Deletions = new(int)
+		}
+		normalized.ToolCallPreviews[index].Preview = &preview
+	}
 	normalized.Items = append([]flruntime.ThreadItem(nil), current.Items...)
 	for index, item := range current.Items {
 		if !item.Live || item.TurnID != current.TurnID || item.RunID != current.RunID ||
@@ -666,7 +691,7 @@ func compareFlowerLiveCurrent(envelope FlowerLiveStreamEnvelope) *flowerLiveCurr
 	} else {
 		envelope.Current = &normalized
 	}
-	data, err := json.Marshal(envelope)
+	data, err := marshalFlowerLiveEnvelopeAt(envelope, time.Time{})
 	if err != nil {
 		comparison.texts = nil
 		return comparison
@@ -810,11 +835,11 @@ func enqueueFlowerLiveSubscriberLocked(service *Service, subscriber *flowerLiveS
 	return true
 }
 
-// Text growth may be coalesced only when every other public envelope field is
-// unchanged. Tool, interaction, lifecycle and first-item boundaries stay ordered.
+// Text growth and progress numbers may replace unsent snapshots only when all
+// structural fields match. Tool, interaction and lifecycle boundaries stay ordered.
 func flowerLiveTextAppend(previous, next *flowerLiveEncodedBatch) bool {
 	before, after := previous.current, next.current
-	if before == nil || after == nil || len(before.texts) == 0 || len(before.texts) != len(after.texts) ||
+	if before == nil || after == nil || (len(before.texts) == 0 && len(before.metrics) == 0) || len(before.texts) != len(after.texts) || len(before.metrics) != len(after.metrics) ||
 		before.threadID != after.threadID || before.routeID != after.routeID || before.subagent != after.subagent ||
 		after.version <= before.version || before.fingerprint != after.fingerprint {
 		return false
@@ -825,6 +850,9 @@ func flowerLiveTextAppend(previous, next *flowerLiveEncodedBatch) bool {
 			return false
 		}
 		changed = changed || text != before.texts[index]
+	}
+	for index, value := range after.metrics {
+		changed = changed || value != before.metrics[index]
 	}
 	return changed
 }

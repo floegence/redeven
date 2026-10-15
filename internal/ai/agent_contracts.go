@@ -26,10 +26,9 @@ const (
 )
 
 type PartialToolCall struct {
-	ID            string         `json:"id,omitempty"`
-	Name          string         `json:"name,omitempty"`
-	ArgumentsJSON string         `json:"arguments_json,omitempty"`
-	Arguments     map[string]any `json:"arguments,omitempty"`
+	ID        string         `json:"id,omitempty"`
+	Name      string         `json:"name,omitempty"`
+	Arguments map[string]any `json:"arguments,omitempty"`
 }
 
 type PartialUsage struct {

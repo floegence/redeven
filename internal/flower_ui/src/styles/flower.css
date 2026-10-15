@@ -4346,6 +4346,16 @@
   min-width: 0;
   align-items: center;
   gap: 0.38rem;
+  max-width: 100%;
+}
+
+.flower-model-status-metric {
+  flex: 0 0 auto;
+  min-width: 4ch;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .flower-model-status-flower {
@@ -4376,6 +4386,9 @@
   font-weight: 500;
   letter-spacing: 0;
   white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 

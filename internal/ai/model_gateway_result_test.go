@@ -118,3 +118,30 @@ func TestFloretProviderRejectsIncompleteModelGatewayToolCallBeforeDispatch(t *te
 }
 
 var _ ModelGateway = fixedModelGatewayResult{}
+
+func TestFloretProviderForwardsArgumentFragmentsWithoutParsing(t *testing.T) {
+	adapter := &floretProviderAdapter{}
+	var arguments strings.Builder
+	ends := 0
+	stream := adapter.streamPreparedTurn(t.Context(), flprovider.Request{}, func(_ context.Context, emit func(StreamEvent)) (ModelGatewayResult, error) {
+		emit(StreamEvent{Type: StreamEventToolCallStart, ToolCall: &PartialToolCall{ID: "call", Name: "inspect"}})
+		for _, delta := range []string{`{"content":"`, `中文\n`, `done"}`} {
+			emit(StreamEvent{Type: StreamEventToolCallDelta, Text: delta, ToolCall: &PartialToolCall{ID: "call", Name: "inspect"}})
+		}
+		emit(StreamEvent{Type: StreamEventToolCallEnd, ToolCall: &PartialToolCall{ID: "call", Name: "inspect", Arguments: map[string]any{"content": "中文\ndone"}}})
+		return ModelGatewayResult{FinishReason: "tool_calls", ToolCalls: []ToolCall{{ID: "call", Name: "inspect", Args: map[string]any{"content": "中文\ndone"}}}}, nil
+	})
+	for event := range stream {
+		switch event.Type {
+		case flprovider.EventError:
+			t.Fatal(event.Err)
+		case flprovider.EventToolCallDelta:
+			arguments.WriteString(event.Text)
+		case flprovider.EventToolCallEnd:
+			ends++
+		}
+	}
+	if arguments.String() != `{"content":"中文\ndone"}` || ends != 1 {
+		t.Fatalf("arguments=%q ends=%d", arguments.String(), ends)
+	}
+}

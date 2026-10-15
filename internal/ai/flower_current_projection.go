@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/url"
 	"strings"
+	"time"
 
 	flruntime "github.com/floegence/floret/v7/runtime"
 )
@@ -32,6 +33,10 @@ func flowerAttachmentURL(uploadID, threadID, turnID, queueID string) string {
 }
 
 func flowerCurrentJSON(current flruntime.ThreadView) (json.RawMessage, error) {
+	return flowerCurrentJSONAt(current, time.Now())
+}
+
+func flowerCurrentJSONAt(current flruntime.ThreadView, sampledAt time.Time) (json.RawMessage, error) {
 	if err := validateFlowerCurrentIdentity(current); err != nil {
 		return nil, err
 	}
@@ -50,6 +55,9 @@ func flowerCurrentJSON(current flruntime.ThreadView) (json.RawMessage, error) {
 	decoder.UseNumber()
 	if err := decoder.Decode(&root); err != nil {
 		return nil, err
+	}
+	if current.RunProgress != nil && current.RunProgress.Request != nil && !sampledAt.IsZero() {
+		root["sampled_at_ms"] = sampledAt.UnixMilli()
 	}
 	threadID := strings.TrimSpace(current.ThreadID.String())
 	if items, ok := root["items"].([]any); ok {
@@ -123,6 +131,17 @@ func validateFlowerCurrentIdentity(current flruntime.ThreadView) error {
 	for _, interaction := range current.Interactions {
 		if strings.TrimSpace(interaction.ID) == "" || strings.TrimSpace(interaction.TurnID.String()) == "" || strings.TrimSpace(interaction.RunID.String()) == "" {
 			return errors.New("flower current interaction requires exact id, turn_id, and run_id")
+		}
+	}
+	for _, call := range current.ToolCallPreviews {
+		if call.ThreadID != current.ThreadID || call.TurnID == "" || call.TurnID != current.TurnID || call.RunID == "" || call.RunID != current.RunID || call.CallID == "" || call.LogicalRequestID == "" || call.AttemptID == "" || call.AttemptEpoch < 0 {
+			return errors.New("flower tool preview requires exact thread, turn, run, request, and call identity")
+		}
+		if current.RunProgress != nil && current.RunProgress.Request != nil {
+			request := current.RunProgress.Request
+			if call.LogicalRequestID != request.LogicalRequestID || call.AttemptID != request.AttemptID || call.AttemptEpoch != request.AttemptEpoch {
+				return errors.New("flower tool preview and provider request identities differ")
+			}
 		}
 	}
 	return nil
@@ -220,10 +239,28 @@ func (r aiSubmitRequestUserInputResponseResp) MarshalJSON() ([]byte, error) {
 }
 
 func (e FlowerLiveStreamEnvelope) MarshalJSON() ([]byte, error) {
+	return marshalFlowerLiveEnvelopeAt(e, time.Now())
+}
+
+func marshalFlowerLiveEnvelopeAt(e FlowerLiveStreamEnvelope, sampledAt time.Time) ([]byte, error) {
+	var current, subagentCurrent json.RawMessage
+	var err error
+	if e.Current != nil {
+		current, err = flowerCurrentJSONAt(*e.Current, sampledAt)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if e.SubagentCurrent != nil {
+		subagentCurrent, err = flowerCurrentJSONAt(*e.SubagentCurrent, sampledAt)
+		if err != nil {
+			return nil, err
+		}
+	}
 	type wire FlowerLiveStreamEnvelope
 	return json.Marshal(struct {
 		wire
-		Current         *flowerCurrentJSONView `json:"current,omitempty"`
-		SubagentCurrent *flowerCurrentJSONView `json:"subagent_current,omitempty"`
-	}{wire(e), (*flowerCurrentJSONView)(e.Current), (*flowerCurrentJSONView)(e.SubagentCurrent)})
+		Current         json.RawMessage `json:"current,omitempty"`
+		SubagentCurrent json.RawMessage `json:"subagent_current,omitempty"`
+	}{wire(e), current, subagentCurrent})
 }

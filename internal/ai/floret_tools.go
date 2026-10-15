@@ -101,6 +101,7 @@ func buildFloretTools(r *run, activeTools []ToolDef, state *floretToolRuntimeSta
 		if err != nil {
 			return nil, err
 		}
+		toolDef.NewArgumentPreview = flowerArgumentPreviewFactory(name)
 		tool := fltools.Define[map[string]any](
 			toolDef,
 			nil,

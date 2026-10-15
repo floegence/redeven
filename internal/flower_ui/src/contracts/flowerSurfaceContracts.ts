@@ -297,11 +297,48 @@ export type FlowerRunRetry = Readonly<{
   replaced_attempt_epoch?: number;
 }>;
 
+export type FlowerProviderRequestProgress = Readonly<{
+  logical_request_id: string;
+  attempt_id: string;
+  attempt_epoch: number;
+  started_at: string;
+  first_output_at?: string;
+  estimated_output_tokens: number;
+  // Browser-only monotonic anchor, retained with the cached detail.
+  wait_anchor_monotonic_ms?: number;
+}>;
+
+export type FlowerArgumentPreview = Readonly<{
+  display_name?: string;
+  additions?: number;
+  deletions?: number;
+}>;
+
+export type FlowerToolCallPreview = Readonly<{
+  thread_id: string;
+  turn_id: string;
+  run_id: string;
+  logical_request_id: string;
+  attempt_id: string;
+  attempt_epoch: number;
+  call_id: string;
+  name: string;
+  arguments_complete: boolean;
+  preview: FlowerArgumentPreview | null;
+}>;
+
+export type FlowerToolCallPreviewBlock = Readonly<{
+  type: 'tool-call-preview';
+  call: FlowerToolCallPreview;
+}>;
+
 export type FlowerRunProgress = Readonly<{
   retry?: FlowerRunRetry;
   phase: FlowerRunProgressPhase;
   run_id: string;
   turn_id: string;
+  request?: FlowerProviderRequestProgress;
+  sampled_at_ms?: number;
 }>;
 
 export type FlowerContextPressureStatus =
@@ -417,6 +454,7 @@ export type FlowerActivityItem = Readonly<{
   item_id: string;
   tool_id?: string;
   tool_name?: string;
+  argument_preview?: FlowerArgumentPreview;
   kind: FlowerActivityKind;
   status: FlowerActivityStatus;
   severity: FlowerActivitySeverity;
@@ -500,7 +538,8 @@ export type FlowerChatMessageBlock =
     url?: string;
   }>
   | FlowerInputResponseBlock
-  | FlowerActivityTimelineBlock;
+  | FlowerActivityTimelineBlock
+  | FlowerToolCallPreviewBlock;
 
 export type FlowerInputRequestAction = Readonly<{
   type: string;
@@ -858,7 +897,9 @@ export type FlowerRuntimeCurrentView = Readonly<{
   activity?: 'idle' | 'active';
   turn_id?: string;
   run_id?: string;
-  run_progress?: Readonly<{ phase: FlowerRunProgressPhase; retry?: FlowerRunRetry }> | null;
+  sampled_at_ms?: number;
+  tool_call_previews?: readonly FlowerToolCallPreview[];
+  run_progress?: Readonly<{ phase: FlowerRunProgressPhase; retry?: FlowerRunRetry; request?: FlowerProviderRequestProgress }> | null;
   last_outcome?: 'completed' | 'failed' | 'cancelled' | 'interrupted';
   error?: string;
   run_error_code?: string;

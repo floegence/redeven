@@ -166,7 +166,7 @@ func (p *deepSeekPreparedTurn) StreamTurn(ctx context.Context, onEvent func(Stre
 				if event.Type == flprovider.EventToolCallEnd {
 					kind = StreamEventToolCallEnd
 				}
-				emitProviderEvent(onEvent, StreamEvent{Type: kind, ToolCall: &PartialToolCall{ID: call.ID, Name: canonicalProviderToolName(call.Name, aliases)}})
+				emitProviderEvent(onEvent, StreamEvent{Type: kind, Text: event.Text, ToolCall: &PartialToolCall{ID: call.ID, Name: canonicalProviderToolName(call.Name, aliases)}})
 			}
 		case flprovider.EventHostedToolCall, flprovider.EventHostedToolResult:
 			emitProviderEvent(onEvent, StreamEvent{Type: StreamEventHostedTool, HostedToolEvent: &event})

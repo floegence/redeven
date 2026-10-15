@@ -245,6 +245,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Flower conversation sidebar](ui/flower-thread-sidebar.md) - Distinguish selection and persist pin order while preserving menus, focus and running animations.
 - [Flower inline media](ui/flower-inline-media.md) - Display screenshots, video, audio, and isolated HTML previews inside assistant messages.
 - [Flower streaming stability](ui/flower-streaming-stability.md) - Preserve complete interaction subtrees, bound rendering work, and reproduce streaming performance acceptance.
+- [Flower received output progress](ui/flower-output-progress.md) - Show request waiting time, received output estimates and safe streamed edit counts with canonical result replacement.
 - [Flower code highlighting](ui/flower-code-highlighting.md): Verify syntax colors, stable code selection/copy, and bounded background work in both hosts.
 - [Flower message appearance](ui/flower-message-appearance.md) - Recognize sent user messages and preserve readable content and native text selection across themes.
 - [Flower terminal activity presentation](ui/flower-terminal-activity.md) - Render safe terminal operation facts and bounded output.

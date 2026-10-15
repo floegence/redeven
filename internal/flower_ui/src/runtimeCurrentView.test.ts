@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { FlowerRuntimeCurrentView, FlowerThreadSnapshot } from './contracts/flowerSurfaceContracts';
+import type { FlowerRuntimeCurrentView, FlowerThreadSnapshot, FlowerToolCallPreview } from './contracts/flowerSurfaceContracts';
 import { buildFlowerTimelineEntries, flowerMessageSignature } from './flowerTimelineProjection';
 import { applyFlowerRuntimeCurrentView } from './runtimeCurrentView';
 
@@ -9,6 +9,60 @@ const summary = (): FlowerThreadSnapshot => ({
   created_at_ms: 1, updated_at_ms: 2, status: 'idle', source_label: 'Desktop', target_labels: ['local'],
   messages: [{ id: 'old', role: 'assistant', content: 'old', status: 'complete', created_at_ms: 1 }],
   read_status: { is_unread: false, snapshot: { activity_revision: 0 }, read_state: { last_seen_activity_revision: 0 } },
+});
+
+describe('streamed tool argument presentation', () => {
+  const call: FlowerToolCallPreview = {
+    thread_id: 'thread-a', turn_id: 'turn-a', run_id: 'run-a', logical_request_id: 'request-a', attempt_id: 'attempt-a', attempt_epoch: 1,
+    call_id: 'call-a', name: 'file.write', arguments_complete: false, preview: { display_name: 'a.txt', additions: 8 },
+  };
+  const current: FlowerRuntimeCurrentView = {
+    thread_id: 'thread-a', turn_id: 'turn-a', run_id: 'run-a', view_version: 1, activity: 'active',
+    run_progress: { phase: 'streaming' }, tool_call_previews: [call], items: [],
+  };
+  const tool = (status: string) => ({
+    id: 'tool:turn-a:call-a', turn_id: 'turn-a', run_id: 'run-a', ordinal: 1, kind: 'tool' as const,
+    activity: { item_id: 'canonical-entry-a', tool_id: 'call-a', tool_name: 'file.write', kind: 'tool', status, severity: 'normal',
+      presentation: { renderer: 'file', payload: { display_name: 'a.txt', operation: 'write', change_type: 'noop' } } },
+  });
+
+  it('keeps unvalidated previews outside runtime items and joins the exact validated call without duplicates', () => {
+    const generating = applyFlowerRuntimeCurrentView(summary(), current);
+    expect(current.items).toEqual([]);
+    expect(generating.messages).toHaveLength(1);
+    expect(generating.messages[0].blocks?.[0]).toEqual({ type: 'tool-call-preview', call });
+    const waiting = applyFlowerRuntimeCurrentView(generating, { ...current, view_version: 2, items: [tool('waiting')] });
+    expect(waiting.messages).toHaveLength(1);
+    const block = waiting.messages[0].blocks![0];
+    expect(block.type).toBe('activity-timeline');
+    if (block.type === 'activity-timeline') expect(block.items[0].argument_preview).toEqual(call.preview);
+    const before = buildFlowerTimelineEntries(generating)[0];
+    const after = buildFlowerTimelineEntries(waiting)[0];
+    expect(before.key).toBe(after.key);
+    if (before.type === 'message' && after.type === 'message') expect(before.blocks[0].key).toBe(after.blocks[0].key);
+  });
+
+  it.each(['success', 'error', 'declined', 'canceled'])('clears preview counts on %s, including a successful zero-change result', (status) => {
+    const next = applyFlowerRuntimeCurrentView(summary(), { ...current, items: [tool(status)] });
+    expect(next.messages).toHaveLength(1);
+    const block = next.messages[0].blocks![0];
+    if (block.type !== 'activity-timeline') throw new Error('Expected the canonical tool activity.');
+    expect(block.items[0].argument_preview).toBeUndefined();
+    expect(block.items[0].payload?.change_type).toBe('noop');
+  });
+
+  it('ignores previews from another attempt, run, turn or thread and clears them on refresh', () => {
+    for (const changed of [{ thread_id: 'other' }, { turn_id: 'other' }, { run_id: 'other' }, { attempt_id: 'other' }, { attempt_epoch: 2 }, { logical_request_id: 'other' }]) {
+      const next = applyFlowerRuntimeCurrentView(summary(), { ...current,
+        sampled_at_ms: Date.parse('2026-01-01T00:00:02Z'),
+        run_progress: { phase: 'streaming', request: { logical_request_id: 'request-a', attempt_id: 'attempt-a', attempt_epoch: 1, started_at: '2026-01-01T00:00:00Z', estimated_output_tokens: 12 } },
+        tool_call_previews: [{ ...call, ...changed }],
+      });
+      expect(next.messages).toEqual([]);
+    }
+    const generated = applyFlowerRuntimeCurrentView(summary(), current);
+    expect(applyFlowerRuntimeCurrentView(generated, { ...current, view_version: 2, tool_call_previews: [] }).messages).toEqual([]);
+  });
 });
 
 describe('applyFlowerRuntimeCurrentView', () => {

@@ -10,9 +10,11 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/floegence/floret/v7/identity"
 	flruntime "github.com/floegence/floret/v7/runtime"
+	fltools "github.com/floegence/floret/v7/tools"
 	"github.com/floegence/redeven/internal/config"
 )
 
@@ -209,6 +211,56 @@ func TestFlowerLiveFragmentsCoalesceOnlyUnsentPureTextGrowth(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestFlowerLiveProgressCoalescingRetainsAttemptAndPreviewBoundaries(t *testing.T) {
+	started := time.Date(2026, 10, 15, 0, 0, 0, 0, time.UTC)
+	for _, boundary := range []string{"numbers", "first_output", "attempt", "complete", "removed", "unknown_count"} {
+		t.Run(boundary, func(t *testing.T) {
+			before := flruntime.ThreadView{ThreadID: "thread", TurnID: "turn", RunID: "run", Activity: flruntime.ThreadActivityActive, ViewVersion: 1,
+				RunProgress: &flruntime.ThreadRunProgress{Phase: flruntime.ThreadRunPhaseStreaming, Request: &flruntime.ProviderRequestProgress{
+					LogicalRequestID: "request", AttemptID: "attempt", AttemptEpoch: 1, StartedAt: started, EstimatedOutputTokens: 10}},
+				ToolCallPreviews: []flruntime.ThreadToolCallPreview{{ThreadID: "thread", TurnID: "turn", RunID: "run", LogicalRequestID: "request", AttemptID: "attempt", AttemptEpoch: 1,
+					CallID: "call", Name: "file.write", Preview: &fltools.ArgumentPreview{DisplayName: "example.ts", Additions: new(int)}}}}
+			// Round trip detaches every nested value so normalization cannot mutate
+			// either caller-owned snapshot.
+			raw, _ := json.Marshal(before)
+			var after flruntime.ThreadView
+			if err := json.Unmarshal(raw, &after); err != nil {
+				t.Fatal(err)
+			}
+			after.ViewVersion++
+			after.RunProgress.Request.EstimatedOutputTokens = 20
+			*after.ToolCallPreviews[0].Preview.Additions = 8
+			switch boundary {
+			case "first_output":
+				after.RunProgress.Request.FirstOutputAt = &started
+			case "attempt":
+				after.RunProgress.Request.AttemptID = "attempt-2"
+				after.ToolCallPreviews[0].AttemptID = "attempt-2"
+			case "complete":
+				after.ToolCallPreviews[0].ArgumentsComplete = true
+			case "removed":
+				after.ToolCallPreviews = nil
+			case "unknown_count":
+				after.ToolCallPreviews[0].Preview.Deletions = new(int)
+			}
+			left := newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{SchemaVersion: 1, Kind: FlowerLiveStreamThreadBatch, Current: &before})
+			right := newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{SchemaVersion: 1, Kind: FlowerLiveStreamThreadBatch, Current: &after})
+			if left.err != nil || right.err != nil {
+				t.Fatalf("encode: %v, %v", left.err, right.err)
+			}
+			if got := flowerLiveTextAppend(left, right); got != (boundary == "numbers") {
+				t.Fatalf("coalesce=%t for %s", got, boundary)
+			}
+			if before.RunProgress.Request.EstimatedOutputTokens != 10 || after.RunProgress.Request.EstimatedOutputTokens != 20 || (boundary != "removed" && *after.ToolCallPreviews[0].Preview.Additions != 8) {
+				t.Fatal("comparison mutated source")
+			}
+			if !bytes.Contains(right.data, []byte(`"sampled_at_ms":`)) {
+				t.Fatal("wire snapshot lost server sample")
+			}
+		})
 	}
 }
 

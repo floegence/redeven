@@ -53,7 +53,7 @@ type flowerRuntimeCurrentPublishState struct {
 
 // flowerRuntimeCurrentPublisher is the only cadence boundary between Floret's
 // replaceable current views and Flower's workspace stream. It coalesces only
-// cumulative text growth; structural and terminal transitions publish at once.
+// cumulative text, output estimate and argument-preview growth; structural and terminal transitions publish at once.
 type flowerRuntimeCurrentPublisher struct {
 	mu       sync.Mutex
 	interval time.Duration
@@ -323,6 +323,12 @@ func flowerRuntimeCurrentBoundaryKey(current flruntime.ThreadView) string {
 			builder.add(retry.ReplacedAttemptID)
 			builder.addInt(int64(retry.ReplacedAttemptEpoch))
 		}
+		if request := current.RunProgress.Request; request != nil {
+			builder.add(request.LogicalRequestID.String())
+			builder.add(request.AttemptID)
+			builder.addInt(int64(request.AttemptEpoch))
+			builder.addBool(request.FirstOutputAt != nil)
+		}
 	} else {
 		builder.add("")
 	}
@@ -339,6 +345,12 @@ func flowerRuntimeCurrentBoundaryKey(current flruntime.ThreadView) string {
 	} else {
 		builder.add("")
 		builder.add("")
+	}
+	builder.addInt(int64(len(current.ToolCallPreviews)))
+	for _, preview := range current.ToolCallPreviews {
+		builder.add(preview.CallID)
+		builder.addBool(preview.ArgumentsComplete)
+		builder.addBool(preview.Preview != nil)
 	}
 	builder.addInt(int64(len(current.Items)))
 	for _, item := range current.Items {

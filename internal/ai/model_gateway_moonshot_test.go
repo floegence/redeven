@@ -621,6 +621,9 @@ func TestMoonshotProvider_StreamTurn_ToolCallAliasRoundTrip(t *testing.T) {
 	if !containsStreamEvent(events, StreamEventToolCallStart) || !containsStreamEvent(events, StreamEventToolCallEnd) {
 		t.Fatalf("missing tool call stream events")
 	}
+	if got := strings.Join(streamEventTexts(events, StreamEventToolCallDelta), ""); got != `{"cmd":"pwd"}` {
+		t.Fatalf("argument fragments=%q, want each received byte exactly once", got)
+	}
 	if countStreamEvent(events, StreamEventToolCallDelta) != 2 {
 		t.Fatalf("tool call delta count=%d, want 2", countStreamEvent(events, StreamEventToolCallDelta))
 	}

@@ -1,3 +1,4 @@
+import { flowerToolCallPreviewIdentity } from './toolCallPreview';
 import type {
   FlowerActivityTimelineBlock,
   FlowerChatMessage,
@@ -14,6 +15,12 @@ import { flowerAttachmentDisplayKind, safeFlowerAttachmentURL } from './attachme
 import { inputResponseSignature } from './inputResponse';
 
 export type FlowerRenderableMessageBlock =
+  | Readonly<{
+    type: 'tool_preview';
+    key: string;
+    block_index: number;
+    block: Extract<NonNullable<FlowerChatMessage['blocks']>[number], { type: 'tool-call-preview' }>;
+  }>
   | Readonly<{
     type: 'content';
     key: string;
@@ -111,6 +118,7 @@ export function activityTimelineSignature(timeline: FlowerActivityTimelineBlock)
       item.item_id,
       item.tool_id ?? '',
       item.tool_name ?? '',
+      JSON.stringify(item.argument_preview ?? null),
       item.kind,
       item.status,
       item.severity,
@@ -132,6 +140,7 @@ export function activityTimelineSignature(timeline: FlowerActivityTimelineBlock)
 }
 
 export function messageBlockSignature(block: NonNullable<FlowerChatMessage['blocks']>[number]): string {
+  if (block.type === 'tool-call-preview') return `tool-preview:${JSON.stringify(block.call)}`;
   if (block.type === 'activity-timeline') return `activity:${activityTimelineSignature(block)}`;
   if (block.type === 'input-response') return `input-response:${inputResponseSignature(block)}`;
   if (block.type === 'image') return `image:${block.src}:${block.alt ?? ''}`;
@@ -171,12 +180,18 @@ function activityRenderableKey(threadID: string, messageID: string, block: Flowe
     threadID: block.thread_id,
     runID: block.run_id,
     turnID: block.turn_id,
-    itemID: firstItem.item_id,
+    itemID: firstItem.kind === 'tool' && firstItem.tool_id ? firstItem.tool_id : firstItem.item_id,
   })}`;
 }
 
 function contentBlocksFromMessage(threadID: string, message: FlowerChatMessage): readonly FlowerRenderableMessageBlock[] {
   const projectedBlocks = (message.blocks ?? []).flatMap((block, index): readonly FlowerRenderableMessageBlock[] => {
+    if (block.type === 'tool-call-preview') {
+      if (block.call.thread_id !== threadID || block.call.run_id !== message.run_id || block.call.turn_id !== message.turn_id) {
+        throw new Error('Flower contract error: tool argument preview and message identities differ.');
+      }
+      return [{ type: 'tool_preview', key: `activity:${flowerToolCallPreviewIdentity(block.call)}`, block_index: index, block }];
+    }
     if (block.type === 'activity-timeline') {
       if (block.items.length === 0) return [];
       return [{ type: 'activity', key: activityRenderableKey(threadID, message.id, block), block_index: index, block }];
@@ -358,7 +373,7 @@ function messageSegmentEntry(
   totalSegments: number,
 ): Extract<FlowerTimelineEntry, { type: 'message' }> | null {
   if (blocks.length === 0 && !message.references?.length && message.status !== 'error' && message.active_cursor !== true) return null;
-  const activity = blocks.find((block): block is Extract<FlowerRenderableMessageBlock, { type: 'activity' }> => block.type === 'activity');
+  const activity = blocks.find((block) => block.type === 'activity' || block.type === 'tool_preview');
   return {
     type: 'message',
     key: activity?.key ?? (totalSegments <= 1 ? `message:${message.id}` : `message:${message.id}:segment:${segmentIndex}`),
