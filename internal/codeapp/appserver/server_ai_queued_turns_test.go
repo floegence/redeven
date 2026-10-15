@@ -76,13 +76,13 @@ func TestServer_AIQueueEndpoints(t *testing.T) {
 	threadIDForCleanup := ""
 
 	aiSvc, err := ai.NewService(ai.Options{
-		Logger:           logger,
-		StateDir:         stateDir,
-		AgentHomeDir:     stateDir,
-		Shell:            "bash",
-		Config:           cfg,
-		ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration:30 * time.Second, FirstOutputTimeout:30 * time.Second, IdleTimeout:30 * time.Second},
-		PersistOpTimeout: 2 * time.Second,
+		Logger:                       logger,
+		StateDir:                     stateDir,
+		AgentHomeDir:                 stateDir,
+		Shell:                        "bash",
+		Config:                       cfg,
+		ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration: 30 * time.Second, FirstOutputTimeout: 30 * time.Second, IdleTimeout: 30 * time.Second},
+		PersistOpTimeout:             2 * time.Second,
 		ResolveProviderAPIKey: func(string) (string, bool, error) {
 			return "sk-test", true, nil
 		},
