@@ -374,7 +374,9 @@ describe('Canonical managed facts on the existing workspace transport', () => {
 
 
 it('bounds a stalled Stop, preserves navigation and drafts, and confirms before another attempt', async () => {
-  onTestFinished(() => vi.restoreAllMocks());
+  onTestFinished(() => {
+    vi.restoreAllMocks();
+  });
   const running = thread({ thread_id: 'thread-stalled-stop', status: 'running' });
   const other = thread({ thread_id: 'thread-other', title: 'Other chat' });
   const pending = deferred<void>();
@@ -417,7 +419,9 @@ it('bounds a stalled Stop, preserves navigation and drafts, and confirms before 
 
 
 it('bounds Stop confirmation reads and ignores their late terminal detail', async () => {
-  onTestFinished(() => vi.restoreAllMocks());
+  onTestFinished(() => {
+    vi.restoreAllMocks();
+  });
   const running = thread({ thread_id: 'thread-stop-detail-timeout', status: 'running' });
   const confirmation = deferred<ReturnType<typeof liveBootstrap>>();
   let stopped = false;
