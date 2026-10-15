@@ -76,6 +76,7 @@ describe('Flower markdown readability', () => {
     const css = flowerStyles();
     const resetSelectors = [
       '.flower-chat-md-block > .flower-chat-md-committed-segment:first-child > :first-child',
+      '.flower-chat-md-block > .flower-chat-md-committed-segment:first-child .flower-chat-md-segment-html > :first-child',
       '.flower-chat-md-block > .flower-chat-md-tail-frame:first-child .flower-chat-md-tail > :first-child',
       '.flower-chat-md-blockquote > :first-child',
       '.flower-chat-md-block li > :first-child',
