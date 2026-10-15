@@ -201,7 +201,16 @@
         "expand": "Agrandir l’aperçu",
         "collapse": "Réduire l’aperçu",
         "open": "Ouvrir l’original",
-        "close": "Fermer l’aperçu"
+        "close": "Fermer l’aperçu",
+        "generating": "Création de l’aperçu…",
+        "incomplete": "Création interrompue. Le code source est disponible.",
+        "showSource": "Afficher le code HTML",
+        "showPreview": "Afficher l’aperçu",
+        "more": "Autres actions",
+        "copyHTML": "Copier le HTML",
+        "copied": "Copié",
+        "copyFailed": "Sélectionnez et copiez le code source.",
+        "replay": "Recharger l’aperçu"
       },
       "webSearch": {
         "search": "Rechercher",

@@ -5110,7 +5110,16 @@
         "anchorUnavailable": "Der verlinkte Abschnitt wurde nicht gefunden.",
         "relativePathUnavailable": "Der relative Pfad kann ohne Quellverzeichnis der Vorschau nicht aufgelöst werden.",
         "invalidLink": "Dieser Link ist ungültig.",
-        "unsupportedLink": "Dieses Linkprotokoll wird nicht unterstützt."
+        "unsupportedLink": "Dieses Linkprotokoll wird nicht unterstützt.",
+        "generating": "Vorschau wird erstellt…",
+        "incomplete": "Erstellung unterbrochen. Der Quelltext ist verfügbar.",
+        "showSource": "HTML-Quelltext anzeigen",
+        "showPreview": "Vorschau anzeigen",
+        "more": "Weitere Aktionen",
+        "copyHTML": "HTML kopieren",
+        "copied": "Kopiert",
+        "copyFailed": "Quelltext auswählen und kopieren.",
+        "replay": "Vorschau neu laden"
       },
       "webSearch": {
         "search": "Suchen",

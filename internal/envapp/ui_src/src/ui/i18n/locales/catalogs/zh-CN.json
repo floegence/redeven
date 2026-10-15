@@ -5110,7 +5110,16 @@
         "anchorUnavailable": "未找到链接指向的栏目。",
         "relativePathUnavailable": "无法确定相对路径：预览未绑定来源目录。",
         "invalidLink": "此链接无效。",
-        "unsupportedLink": "不支持此链接协议。"
+        "unsupportedLink": "不支持此链接协议。",
+        "generating": "正在生成预览…",
+        "incomplete": "生成已中断，可查看已生成的源码。",
+        "showSource": "查看 HTML 源码",
+        "showPreview": "查看预览",
+        "more": "更多操作",
+        "copyHTML": "复制 HTML",
+        "copied": "已复制",
+        "copyFailed": "请选中并复制源码。",
+        "replay": "重新加载预览"
       },
       "webSearch": {
         "search": "搜索",

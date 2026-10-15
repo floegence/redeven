@@ -5110,7 +5110,16 @@
         "anchorUnavailable": "A seção vinculada não foi encontrada.",
         "relativePathUnavailable": "Não é possível resolver o caminho relativo porque a prévia não tem um diretório de origem.",
         "invalidLink": "Este link é inválido.",
-        "unsupportedLink": "O protocolo deste link não é compatível."
+        "unsupportedLink": "O protocolo deste link não é compatível.",
+        "generating": "Criando prévia…",
+        "incomplete": "Geração interrompida. O código-fonte está disponível.",
+        "showSource": "Mostrar código HTML",
+        "showPreview": "Mostrar prévia",
+        "more": "Mais ações",
+        "copyHTML": "Copiar HTML",
+        "copied": "Copiado",
+        "copyFailed": "Selecione e copie o código-fonte.",
+        "replay": "Recarregar prévia"
       },
       "webSearch": {
         "search": "Pesquisar",

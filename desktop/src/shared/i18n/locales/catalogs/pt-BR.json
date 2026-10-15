@@ -201,7 +201,16 @@
         "expand": "Ampliar prévia",
         "collapse": "Reduzir prévia",
         "open": "Abrir original",
-        "close": "Fechar prévia"
+        "close": "Fechar prévia",
+        "generating": "Criando prévia…",
+        "incomplete": "Geração interrompida. O código-fonte está disponível.",
+        "showSource": "Mostrar código HTML",
+        "showPreview": "Mostrar prévia",
+        "more": "Mais ações",
+        "copyHTML": "Copiar HTML",
+        "copied": "Copiado",
+        "copyFailed": "Selecione e copie o código-fonte.",
+        "replay": "Recarregar prévia"
       },
       "webSearch": {
         "search": "Pesquisar",

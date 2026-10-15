@@ -201,7 +201,16 @@
         "expand": "Vorschau vergrößern",
         "collapse": "Vorschau verkleinern",
         "open": "Original öffnen",
-        "close": "Vorschau schließen"
+        "close": "Vorschau schließen",
+        "generating": "Vorschau wird erstellt…",
+        "incomplete": "Erstellung unterbrochen. Der Quelltext ist verfügbar.",
+        "showSource": "HTML-Quelltext anzeigen",
+        "showPreview": "Vorschau anzeigen",
+        "more": "Weitere Aktionen",
+        "copyHTML": "HTML kopieren",
+        "copied": "Kopiert",
+        "copyFailed": "Quelltext auswählen und kopieren.",
+        "replay": "Vorschau neu laden"
       },
       "webSearch": {
         "search": "Suchen",

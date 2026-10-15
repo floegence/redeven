@@ -5110,7 +5110,16 @@
         "anchorUnavailable": "リンク先のセクションが見つかりません。",
         "relativePathUnavailable": "プレビューの参照元ディレクトリがないため、相対パスを解決できません。",
         "invalidLink": "このリンクは無効です。",
-        "unsupportedLink": "このリンクのプロトコルはサポートされていません。"
+        "unsupportedLink": "このリンクのプロトコルはサポートされていません。",
+        "generating": "プレビューを生成中…",
+        "incomplete": "生成が中断されました。ソースを確認できます。",
+        "showSource": "HTML ソースを表示",
+        "showPreview": "プレビューを表示",
+        "more": "その他の操作",
+        "copyHTML": "HTML をコピー",
+        "copied": "コピーしました",
+        "copyFailed": "ソースを選択してコピーしてください。",
+        "replay": "プレビューを再読み込み"
       },
       "webSearch": {
         "search": "検索",

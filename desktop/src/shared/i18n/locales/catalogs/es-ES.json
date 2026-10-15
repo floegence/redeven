@@ -201,7 +201,16 @@
         "expand": "Ampliar vista previa",
         "collapse": "Reducir vista previa",
         "open": "Abrir original",
-        "close": "Cerrar vista previa"
+        "close": "Cerrar vista previa",
+        "generating": "Creando vista previa…",
+        "incomplete": "Generación interrumpida. El código fuente está disponible.",
+        "showSource": "Mostrar código HTML",
+        "showPreview": "Mostrar vista previa",
+        "more": "Más acciones",
+        "copyHTML": "Copiar HTML",
+        "copied": "Copiado",
+        "copyFailed": "Selecciona y copia el código fuente.",
+        "replay": "Recargar vista previa"
       },
       "webSearch": {
         "search": "Buscar",

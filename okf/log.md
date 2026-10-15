@@ -1604,3 +1604,13 @@ actions. Fragment navigation retains live document state; invalid or failed
 opens retain their source and show explicit localized feedback. See
 [Flower inline media](ui/flower-inline-media.md) and
 [HTML file preview](ui/file-preview-html.md).
+
+
+## 2026-10-15 — Generated HTML preview canvas
+
+Adopt published Floe Webapp v0.86.33 for bounded dotted HTML canvases, generating
+sheen, source inspection, and circular floating controls. Keep the same Flower
+segment from an opening preview fence through completion. Interrupted source
+remains inspectable without executing partial HTML. Preserve file authorization,
+isolated link routing, independent preview windows, and the ready iframe while
+later Markdown grows. See [Flower inline media](ui/flower-inline-media.md).

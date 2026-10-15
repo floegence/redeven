@@ -1,6 +1,15 @@
 import type { MarkdownMediaLabels } from '@floegence/floe-webapp-core/chat';
 
 export type FlowerMarkdownMediaCopy = MarkdownMediaLabels & {
+  generating: string;
+  incomplete: string;
+  showSource: string;
+  showPreview: string;
+  more: string;
+  copyHTML: string;
+  copied: string;
+  copyFailed: string;
+  replay: string;
   previewImage: string;
   previewHTML: string;
   previewHTMLWindow: string;
@@ -13,6 +22,16 @@ export type FlowerMarkdownMediaCopy = MarkdownMediaLabels & {
 };
 
 export const markdownMediaEnUS = {
+  "generating": "Creating preview\u2026",
+  "incomplete": "Generation interrupted. Source is available.",
+  "showSource": "Show HTML source",
+  "showPreview": "Show preview",
+  "more": "More actions",
+  "copyHTML": "Copy HTML",
+  "copied": "Copied",
+  "copyFailed": "Select and copy the source.",
+  "replay": "Reload preview",
+
   "image": "Image",
   "previewImage": "Preview image",
   "previewHTML": "Open file preview",
