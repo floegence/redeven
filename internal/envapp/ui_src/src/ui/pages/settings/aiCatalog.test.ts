@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import {
   AI_PROVIDER_PRESET_CATALOG,
   AI_PROVIDER_TYPE_OPTIONS,
+  cloneAIProviderRow,
   defaultBaseURLForProviderType,
   providerBrandForType,
   providerDisplayName,
@@ -14,6 +15,11 @@ import {
 } from './aiCatalog';
 
 describe('AI provider preset catalog', () => {
+  it('preserves an enabled Responses continuation setting in editable rows', () => {
+    expect(cloneAIProviderRow({ id: 'openai', type: 'openai', responses_continuation: true, models: [] }).responses_continuation).toBe(true);
+    expect(cloneAIProviderRow({ id: 'openai', type: 'openai', models: [] }).responses_continuation).toBeUndefined();
+  });
+
   it('keeps provider model defaults out of the frontend preset catalog', () => {
     for (const preset of Object.values(AI_PROVIDER_PRESET_CATALOG)) expect(preset.models).toEqual([]);
   });

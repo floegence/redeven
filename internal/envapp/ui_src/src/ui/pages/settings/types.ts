@@ -36,6 +36,7 @@ export type AIProvider = Readonly<{
   name?: string;
   type: AIProviderType;
   base_url?: string;
+  responses_continuation?: boolean;
   web_search?: AIProviderWebSearch;
   models?: AIProviderModel[];
   model_selection?: FlowerModelSelection;
@@ -174,6 +175,7 @@ export type AIProviderRow = {
   name: string;
   type: AIProviderType;
   base_url: string;
+  responses_continuation?: boolean;
   web_search?: AIProviderWebSearch;
   models: AIProviderModelRow[];
   model_selection?: FlowerModelSelection;

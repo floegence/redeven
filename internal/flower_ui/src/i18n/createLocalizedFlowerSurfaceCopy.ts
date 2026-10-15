@@ -1000,6 +1000,8 @@ function createLocalizedFlowerProviderDialogCopy(i18n: FlowerSurfaceTranslator):
     pasteAPIKey: t(i18n, k('dialogPasteAPIKey')),
     required: t(i18n, k('dialogRequired')),
     baseURL: t(i18n, k('dialogBaseURL')),
+    responsesContinuation: t(i18n, k('dialogResponsesContinuation')),
+    responsesContinuationDescription: t(i18n, k('dialogResponsesContinuationDescription')),
     webSearch: t(i18n, k('dialogWebSearch')),
     disabled: t(i18n, k('dialogDisabled')),
     openAIBuiltIn: t(i18n, k('dialogOpenAIBuiltIn')),

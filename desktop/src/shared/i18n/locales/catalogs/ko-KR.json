@@ -1005,6 +1005,8 @@
       "dialogPasteAPIKey": "API 키 붙여넣기",
       "dialogRequired": "필수",
       "dialogBaseURL": "기본 URL",
+      "dialogResponsesContinuation": "Responses 연속 사용",
+      "dialogResponsesContinuationDescription": "대화를 이어갈 때 previous_response_id를 보냅니다. 이 값을 지원하지 않는 게이트웨이에서는 끄세요.",
       "dialogWebSearch": "웹 검색",
       "dialogDisabled": "비활성화됨",
       "dialogOpenAIBuiltIn": "OpenAI 내장",

@@ -61,6 +61,7 @@ func (r *run) prepareFloretHostedAgent(ctx context.Context, req RunRequest, prov
 	}
 
 	configureChatGPTAdapter(adapter, providerCfg, r.chatGPT)
+	configureResponsesContinuation(adapter, providerCfg)
 	configureOpenAIConnections(adapter, providerCfg.ID, providerCfg.BaseURL, string(providerCfg.EffectiveAuthMethod())+":"+providerCfg.AccountID, r.host.openAIConnections)
 
 	webSearchCapability := config.ResolveAIWebSearch(providerCfg, capability.WireModelName, true)

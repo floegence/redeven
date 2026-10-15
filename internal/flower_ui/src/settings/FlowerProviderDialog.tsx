@@ -368,7 +368,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
     if (method === 'chatgpt' && !chatGPTEnabled()) return;
     cancelAuthorization(); setAuthError('');
     invalidateDiscovery();
-    updateProvider({ auth_method: method, account_id: undefined, chatgpt_account: undefined, catalog_models: undefined });
+    updateProvider({ auth_method: method, account_id: undefined, chatgpt_account: undefined, catalog_models: undefined, responses_continuation: undefined });
   };
   let currentAuth: FlowerChatGPTAuth | undefined;
   let currentBinding: string | undefined;
@@ -486,6 +486,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
     updateProvider({
       type,
       auth_method: type === 'openai' ? chatGPTEnabled() ? 'chatgpt' : 'api_key' : undefined,
+      responses_continuation: undefined,
       account_id: undefined, chatgpt_account: undefined,
       name: providerTypeLabel(type),
       base_url: defaultBaseURLForFlowerProviderType(type),
@@ -769,6 +770,18 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                           class="w-full"
                         />
                       </div>
+                      <Show when={store.draft!.type === 'openai'}>
+                        <div class="space-y-1.5">
+                          <Checkbox
+                            checked={store.draft!.responses_continuation === true}
+                            onChange={(enabled) => updateProvider({ responses_continuation: enabled ? true : undefined })}
+                            label={copy().responsesContinuation}
+                            aria-description={copy().responsesContinuationDescription}
+                            size="sm"
+                          />
+                          <p class="flower-body-copy text-xs text-muted-foreground">{copy().responsesContinuationDescription}</p>
+                        </div>
+                      </Show>
                     </Show>
                     <Show when={flowerProviderNeedsWebSearchConfig(store.draft!.type)}>
                       <div>

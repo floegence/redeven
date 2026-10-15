@@ -1005,6 +1005,8 @@
       "dialogPasteAPIKey": "粘贴 API 密钥",
       "dialogRequired": "必填",
       "dialogBaseURL": "基础 URL",
+      "dialogResponsesContinuation": "使用 Responses 续接",
+      "dialogResponsesContinuationDescription": "继续对话时发送 previous_response_id。不支持此字段的网关请关闭此选项。",
       "dialogWebSearch": "网页搜索",
       "dialogDisabled": "已禁用",
       "dialogOpenAIBuiltIn": "OpenAI 内置",

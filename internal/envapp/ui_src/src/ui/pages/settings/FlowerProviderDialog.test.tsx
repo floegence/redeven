@@ -82,7 +82,7 @@ function mountDialog(mode: 'create' | 'edit' = 'create', discover?: FlowerModelC
     return el;
   };
   const type = (value: string) => (host.querySelector(`[aria-controls="flower-provider-type-${value}"]`) as HTMLButtonElement).click();
-  const selected = () => host.querySelectorAll('input[type="checkbox"]:checked').length;
+  const selected = () => host.querySelectorAll('.flower-provider-models input[type="checkbox"]:checked').length;
   const search = (value: string) => {
     const el = host.querySelector('input[placeholder="Search models"]') as HTMLInputElement;
     el.value = value; el.dispatchEvent(new Event('input', { bubbles: true }));
@@ -441,7 +441,7 @@ describe('shared Flower provider dialog', () => {
       dialog.type('openai');
       const total = backendModelsForProviderType('openai').map(cloneFlowerModel).length;
       dialog.button('Select all').click();
-      const checkbox = dialog.host.querySelector('input[type="checkbox"]') as HTMLInputElement;
+      const checkbox = dialog.host.querySelector('.flower-provider-models input[type="checkbox"]') as HTMLInputElement;
       checkbox.click();
       expect(dialog.selected()).toBe(total - 1);
       dialog.search('no-matching-model');

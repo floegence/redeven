@@ -87,19 +87,20 @@ func resolveProviderWebSearchCapability(provider config.AIProvider, modelName st
 }
 
 type openAIProvider struct {
-	responsesPool     *openAIResponsesPool
-	transportIdentity openAIConnectionIdentity
-	officialOpenAI    bool
-	providerType      string
-	client            openai.Client
-	strictToolSchema  bool
-	forceChat         bool
-	gemini            bool
-	parallelTools     parallelToolCallsWireMode
-	chatGPT           bool
-	chatGPTToken      func(context.Context) (string, error)
-	chatGPTFailure    func(context.Context, string, error)
-	chatGPTWatch      func(context.Context, func(error)) (func(), error)
+	responsesPool         *openAIResponsesPool
+	transportIdentity     openAIConnectionIdentity
+	officialOpenAI        bool
+	providerType          string
+	client                openai.Client
+	strictToolSchema      bool
+	responsesContinuation bool
+	forceChat             bool
+	gemini                bool
+	parallelTools         parallelToolCallsWireMode
+	chatGPT               bool
+	chatGPTToken          func(context.Context) (string, error)
+	chatGPTFailure        func(context.Context, string, error)
+	chatGPTWatch          func(context.Context, func(error)) (func(), error)
 }
 
 func (p *openAIProvider) failureProviderType() string {
@@ -193,7 +194,7 @@ func (p *openAIProvider) prepareTurn(ctx context.Context, req ModelGatewayReques
 	if req.ProviderControls.TopP != nil {
 		params.TopP = openai.Float(*req.ProviderControls.TopP)
 	}
-	if state := req.PreviousState; state != nil && !p.chatGPT && (req.ReusePolicy == nil || req.ReusePolicy.PreferContinuation) {
+	if state := req.PreviousState; state != nil && !p.chatGPT && p.responsesContinuation && (req.ReusePolicy == nil || req.ReusePolicy.PreferContinuation) {
 		if state.Kind != providerContinuationKindOpenAIResponses || strings.TrimSpace(state.ID) == "" || len(state.Attributes) != 0 {
 			return nil, errors.New("invalid OpenAI Responses continuation state")
 		}

@@ -1,5 +1,11 @@
 # Redeven OKF Update Log
 
+## 2026-10-15: Configurable Responses continuation
+
+- Make OpenAI API key continuation an explicit opt-in while preserving official ChatGPT native replay and complete canonical history.
+- Document the shared provider control, authentication transitions, save recovery and one effective runtime policy in [model request reuse](ai/model-request-reuse.md).
+- Keep Desktop and Env App catalogs aligned, including the existing received-output and argument-preview messages.
+
 ## 2026-10-15: Received output and edit progress
 
 - Consume checksummed Floret v7.39.2 with the v7.39.0 progress contracts and document [request output, waiting seconds and argument previews](ui/flower-output-progress.md).

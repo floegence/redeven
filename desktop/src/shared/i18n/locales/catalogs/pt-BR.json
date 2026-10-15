@@ -1005,6 +1005,8 @@
       "dialogPasteAPIKey": "Colar a chave API",
       "dialogRequired": "Obrigatório",
       "dialogBaseURL": "URL base",
+      "dialogResponsesContinuation": "Usar continuação do Responses",
+      "dialogResponsesContinuationDescription": "Envia previous_response_id ao continuar uma conversa. Desative para gateways que não oferecem suporte.",
       "dialogWebSearch": "Busca web",
       "dialogDisabled": "Desativado",
       "dialogOpenAIBuiltIn": "OpenAI integrado",

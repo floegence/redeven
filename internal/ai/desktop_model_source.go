@@ -1245,6 +1245,7 @@ func (e *desktopModelSourceExecutor) streamTurn(ctx context.Context, frame Deskt
 		return ModelGatewayResult{}, err
 	}
 	configureChatGPTAdapter(adapter, entry.ProviderCfg, chatgpt.New(secretStore))
+	configureResponsesContinuation(adapter, entry.ProviderCfg)
 	configureOpenAIConnections(adapter, entry.ProviderCfg.ID, entry.ProviderCfg.BaseURL, string(entry.ProviderCfg.EffectiveAuthMethod())+":"+entry.ProviderCfg.AccountID, e.openAIConnectionPool())
 	req := body.Request
 	req.Model = strings.TrimSpace(entry.WireModelName)

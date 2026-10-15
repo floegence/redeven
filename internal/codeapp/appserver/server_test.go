@@ -2403,6 +2403,7 @@ func TestServer_AIProviderBundle_SavesConfigAndSecretTogether(t *testing.T) {
 	        "name": "OpenAI",
 	        "type": "openai",
 	        "base_url": "https://api.openai.com/v1",
+	        "responses_continuation": true,
 	        "models": [
 	          { "model_name": "gpt-5-mini", "input_modalities": ["text", "image"] }
 	        ]
@@ -2437,6 +2438,18 @@ func TestServer_AIProviderBundle_SavesConfigAndSecretTogether(t *testing.T) {
 	}
 	if cfg.AI.ToolRecoveryEnabled == nil || *cfg.AI.ToolRecoveryEnabled {
 		t.Fatalf("tool recovery setting changed: %#v", cfg.AI.ToolRecoveryEnabled)
+	}
+	if cfg.AI.Providers[0].ResponsesContinuation == nil || !*cfg.AI.Providers[0].ResponsesContinuation {
+		t.Fatalf("responses continuation setting was not saved: %#v", cfg.AI.Providers[0].ResponsesContinuation)
+	}
+
+	unknownFieldBody := strings.Replace(body, `"responses_continuation": true`, `"responses_continuation_typo": true`, 1)
+	req = httptest.NewRequest(http.MethodPut, "/_redeven_proxy/api/ai/provider_bundle", bytes.NewBufferString(unknownFieldBody))
+	req.Header.Set("Origin", envOrigin)
+	rr = httptest.NewRecorder()
+	srv.serveHTTP(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("unknown provider field code = %d, want %d body=%s", rr.Code, http.StatusBadRequest, rr.Body.String())
 	}
 
 	req = httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/ai/provider_keys/status", bytes.NewBufferString(`{"provider_ids":["openai"]}`))

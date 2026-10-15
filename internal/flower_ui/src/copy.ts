@@ -281,6 +281,8 @@ export type FlowerProviderDialogCopy = Readonly<{
   pasteAPIKey: string;
   required: string;
   baseURL: string;
+  responsesContinuation: string;
+  responsesContinuationDescription: string;
   webSearch: string;
   disabled: string;
   openAIBuiltIn: string;
@@ -1583,6 +1585,8 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       pasteAPIKey: 'Paste API key',
       required: 'Required',
       baseURL: 'Base URL',
+      responsesContinuation: 'Use Responses continuation',
+      responsesContinuationDescription: 'Send previous_response_id when continuing a conversation. Turn this off for gateways that do not support it.',
       webSearch: 'Web search',
       disabled: 'Disabled',
       openAIBuiltIn: 'OpenAI built-in',

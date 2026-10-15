@@ -11522,15 +11522,15 @@
         "title": "Model request reuse",
         "type": "AI Runtime Contract"
       },
-      "body_length": 3843,
+      "body_length": 5399,
       "summary": "Floret owns effective reuse decisions and canonical state. Redeven executes them through one prepared request and one Responses consumer. In-memory connections can optimize transmission only after the next canonical state and complete input agree. Failures return to normal turn recovery; supplemental context cannot enable reuse.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Runtime/Desktop epoch 61 and model-source RPC v2 preserve Floret's effective request reuse policy. Missing or incompatible frame versions close the connection and release pending requests immediately. The Engine decides prompt-cache enablement/namespace, native-state permission and continuation preference. Adapters cannot broaden it. Queue acceptance, replay and reads use one validated canonical base, preserving native history across queue-only mutations and restart without ancestor fallback or a new schema migration.\n\nOfficial OpenAI requests derive a bounded, non-secret cache key from that namespace and provider/account routing identity. ChatGPT authentication on the official Responses route defaults to WebSocket; other authentication and custom endpoints retain HTTP. Runtime Service and Desktop executor each own a bounded process-local pool (16 connections, five-minute idle expiry, 55-minute rotation between requests). Connections isolate provider, endpoint, account, model and prompt scope. A socket processes one request at a time; its last successful response is usable only when the next canonical PreviousState, complete rendered input prefix, native output order and fixed settings match. Otherwise it sends full input from the same prepared request. Full input always owns estimates and fingerprints.\n\n## Cache usage presentation\n\nThe existing context tooltip shows the latest completed request and cumulative session cache hit rates. Both use disjoint ordinary-input, cache-read and cache-write buckets with one formatter; absent valid input displays “—”, while measured zero hits display “0%”. Recent counters project Floret's canonical confirmed usage directly and clear with its existing model/compaction boundaries. They are not inferred from context-window occupancy or persisted in a host statistics store. OpenAI ordinary input subtracts both SDK cache-read and cache-write tokens from total input; invalid, negative or excessive cached counts fail explicitly using overflow-safe bounds. Historical cumulative usage is neither rewritten nor backfilled.",
-          "char_count": 2084
+          "body": "Runtime/Desktop epoch 61 and model-source RPC v2 preserve Floret's effective request reuse policy. Missing or incompatible frame versions close the connection and release pending requests immediately. The Engine decides prompt-cache enablement/namespace, native-state permission and continuation preference. Adapters cannot broaden it. Queue acceptance, replay and reads use one validated canonical base, preserving native history across queue-only mutations and restart without ancestor fallback or a new schema migration.\n\nOfficial OpenAI requests derive a bounded, non-secret cache key from that namespace and provider/account routing identity. ChatGPT authentication on the official Responses route defaults to WebSocket; other authentication and custom endpoints retain HTTP. Runtime Service and Desktop executor each own a bounded process-local pool (16 connections, five-minute idle expiry, 55-minute rotation between requests). Connections isolate provider, endpoint, account, model and prompt scope. A socket processes one request at a time; its last successful response is usable only when the next canonical PreviousState, complete rendered input prefix, native output order and fixed settings match. Otherwise it sends full input from the same prepared request. Full input always owns estimates and fingerprints.\n\n## Responses continuation configuration\n\n`config.AIProvider.EffectiveResponsesContinuation` is the sole provider-level decision. OpenAI API key connections send `previous_response_id` only when `responses_continuation` is explicitly `true`; absent and false values disable it, including existing configurations. This decision can only restrict the Engine's continuation preference. Complete canonical input remains available when the ID is omitted. Official ChatGPT account connections retain native replay and their existing WebSocket behavior; other provider types cannot enable this OpenAI option.\n\nThe shared provider dialog exposes “Use Responses continuation” only for OpenAI API key connections. Authentication changes and leaving OpenAI clear the draft value; returning to API key starts disabled. Saving writes only an enabled OpenAI API key value. Cancel discards edits, while failed saves retain the editable draft and normal close action. Changing the setting affects subsequent turns; prepared work retains its snapshot. Gateways such as FlowNode/Sub2API can use complete history without requiring server response-ID storage. No gateway-specific retry or alternative history owner is introduced.\n\n## Cache usage presentation\n\nThe existing context tooltip shows the latest completed request and cumulative session cache hit rates. Both use disjoint ordinary-input, cache-read and cache-write buckets with one formatter; absent valid input displays “—”, while measured zero hits display “0%”. Recent counters project Floret's canonical confirmed usage directly and clear with its existing model/compaction boundaries. They are not inferred from context-window occupancy or persisted in a host statistics store. OpenAI ordinary input subtracts both SDK cache-read and cache-write tokens from total input; invalid, negative or excessive cached counts fail explicitly using overflow-safe bounds. Historical cumulative usage is neither rewritten nor backfilled.",
+          "char_count": 3294
         },
         {
           "id": "boundaries",
@@ -11541,6 +11541,21 @@
         }
       ],
       "evidence": [
+        {
+          "id": "redeven:internal/config/ai.go:0:one effective continuation policy for every adapter initialization path.",
+          "source": "redeven:internal/config/ai.go",
+          "description": "One effective continuation policy for every adapter initialization path."
+        },
+        {
+          "id": "redeven:internal/ai/openai_continuation_test.go:0:wire requests preserve full history with continuation disabled.",
+          "source": "redeven:internal/ai/openai_continuation_test.go",
+          "description": "Wire requests preserve full history with continuation disabled."
+        },
+        {
+          "id": "redeven:internal/flower_ui/src/settings/FlowerProviderDialog.tsx:0:conditional opt-in control and draft lifecycle.",
+          "source": "redeven:internal/flower_ui/src/settings/FlowerProviderDialog.tsx",
+          "description": "Conditional opt-in control and draft lifecycle."
+        },
         {
           "id": "redeven:internal/ai/model_gateway_openai_connections.go:0:executor-owned pool, exact continuation checks and bounded transport fallback.",
           "source": "redeven:internal/ai/model_gateway_openai_connections.go",
@@ -41446,5 +41461,5 @@
       ]
     }
   ],
-  "source_sha256": "0a0c00308a239f498dd468c6614faf06674f5e423040d6c1f345af05aaefa01f"
+  "source_sha256": "a2aff31f0da5a1631608eea5a8048193919987d0634f6a49d8085be50e58c465"
 }

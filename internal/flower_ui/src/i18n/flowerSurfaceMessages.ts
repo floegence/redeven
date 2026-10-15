@@ -798,6 +798,8 @@ export const flowerSurfaceEnUS = {
     dialogPasteAPIKey: 'Paste API key',
     dialogRequired: 'Required',
     dialogBaseURL: 'Base URL',
+    dialogResponsesContinuation: 'Use Responses continuation',
+    dialogResponsesContinuationDescription: 'Send previous_response_id when continuing a conversation. Turn this off for gateways that do not support it.',
     dialogWebSearch: 'Web search',
     dialogDisabled: 'Disabled',
     dialogOpenAIBuiltIn: 'OpenAI built-in',

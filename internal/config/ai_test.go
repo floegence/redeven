@@ -46,6 +46,64 @@ func TestAIConfigIsComputerUseEnabledDefaultsOn(t *testing.T) {
 	}
 }
 
+func TestAIProviderEffectiveResponsesContinuation(t *testing.T) {
+	t.Parallel()
+
+	trueValue := true
+	falseValue := false
+	tests := []struct {
+		name     string
+		provider AIProvider
+		want     bool
+	}{
+		{name: "api key omitted", provider: AIProvider{Type: "openai", AuthMethod: AIAuthAPIKey}, want: false},
+		{name: "api key explicit false", provider: AIProvider{Type: "openai", AuthMethod: AIAuthAPIKey, ResponsesContinuation: &falseValue}, want: false},
+		{name: "api key explicit true", provider: AIProvider{Type: "openai", AuthMethod: AIAuthAPIKey, ResponsesContinuation: &trueValue}, want: true},
+		{name: "legacy api key auth omitted", provider: AIProvider{Type: "openai"}, want: false},
+		{name: "legacy api key opt in", provider: AIProvider{Type: "openai", ResponsesContinuation: &trueValue}, want: true},
+		{name: "chatgpt omitted", provider: AIProvider{Type: "openai", AuthMethod: AIAuthChatGPT}, want: true},
+		{name: "chatgpt ignores field", provider: AIProvider{Type: "openai", AuthMethod: AIAuthChatGPT, ResponsesContinuation: &falseValue}, want: true},
+		{name: "other provider ignores field", provider: AIProvider{Type: "deepseek", ResponsesContinuation: &trueValue}, want: false},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := tt.provider.EffectiveResponsesContinuation(); got != tt.want {
+				t.Fatalf("EffectiveResponsesContinuation()=%v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestAIProviderResponsesContinuationJSONRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	var provider AIProvider
+	if err := json.Unmarshal([]byte(`{"id":"openai","type":"openai","auth_method":"api_key","models":[]}`), &provider); err != nil {
+		t.Fatalf("Unmarshal legacy provider: %v", err)
+	}
+	if provider.ResponsesContinuation != nil {
+		t.Fatalf("legacy provider unexpectedly has continuation setting: %#v", provider.ResponsesContinuation)
+	}
+	raw, err := json.Marshal(provider)
+	if err != nil {
+		t.Fatalf("Marshal legacy provider: %v", err)
+	}
+	if strings.Contains(string(raw), "responses_continuation") {
+		t.Fatalf("legacy provider gained continuation field: %s", raw)
+	}
+
+	provider.ResponsesContinuation = func() *bool { value := true; return &value }()
+	raw, err = json.Marshal(provider)
+	if err != nil {
+		t.Fatalf("Marshal enabled provider: %v", err)
+	}
+	if !strings.Contains(string(raw), `"responses_continuation":true`) {
+		t.Fatalf("enabled provider lost continuation field: %s", raw)
+	}
+}
+
 func TestAIConfigValidate_RejectsPartialModelProfiles(t *testing.T) {
 	t.Parallel()
 

@@ -64,12 +64,13 @@ func TestDesktopModelContinuationPreservesOpaqueState(t *testing.T) {
 func TestDesktopModelContinuationEndToEnd(t *testing.T) {
 	for _, tc := range []struct {
 		name, provider, model string
-		retry                 bool
+		retry, continuation   bool
 	}{
-		{"deepseek_image", "deepseek", "deepseek-v4-flash-vision-exp", false},
-		{"openai", "openai", "gpt-5-mini", false},
-		{"gemini", "google", "gemini-3.8-flash", false},
-		{"deepseek_retry_restart", "deepseek", "deepseek-v4-flash-vision-exp", true},
+		{"deepseek_image", "deepseek", "deepseek-v4-flash-vision-exp", false, false},
+		{"openai_enabled", "openai", "gpt-5-mini", false, true},
+		{"openai_default_off", "openai", "gpt-5-mini", false, false},
+		{"gemini", "google", "gemini-3.8-flash", false, false},
+		{"deepseek_retry_restart", "deepseek", "deepseek-v4-flash-vision-exp", true, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var requests, effects atomic.Int32
@@ -141,8 +142,18 @@ func TestDesktopModelContinuationEndToEnd(t *testing.T) {
 							t.Errorf("lost or duplicated tool/image history: calls=%d results=%d", calls, results)
 						}
 					}
-				} else if n > 1 && !strings.HasPrefix(string(body["previous_response_id"]), `"response-`) {
-					t.Errorf("OpenAI missing continuation: %s", body["previous_response_id"])
+				} else {
+					if tc.continuation && n > 1 && !strings.HasPrefix(string(body["previous_response_id"]), `"response-`) {
+						t.Errorf("OpenAI missing continuation: %s", body["previous_response_id"])
+					}
+					if !tc.continuation {
+						if _, ok := body["previous_response_id"]; ok {
+							t.Error("disabled OpenAI continuation sent previous_response_id")
+						}
+						if n > 1 && (!strings.Contains(string(body["input"]), "Inspect the available target.") || !strings.Contains(string(body["input"]), "Observed once.")) {
+							t.Error("disabled OpenAI continuation lost canonical tool history")
+						}
+					}
 				}
 				output := `[ {"type":"message","role":"assistant","content":[{"type":"output_text","text":"Continued."}]} ]`
 				if n == 1 {
@@ -154,7 +165,7 @@ func TestDesktopModelContinuationEndToEnd(t *testing.T) {
 				fmt.Fprintf(w, "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"response-%d\",\"status\":\"completed\",\"output\":%s}}\n\n", n, output)
 			}))
 			defer server.Close()
-			gateway := desktopContinuationGateway(t, tc.provider, tc.model, server.URL)
+			gateway := desktopContinuationGateway(t, tc.provider, tc.model, server.URL, tc.continuation)
 			tool := fltools.Define[struct{}](fltools.Definition{Name: "inspect", InputSchema: fltools.StrictObject(map[string]any{}, []string{}), ReadOnly: true, Permission: fltools.PermissionSpec{Mode: fltools.PermissionAllow}}, nil, nil, func(context.Context, fltools.Invocation[struct{}]) (fltools.Result, error) {
 				effects.Add(1)
 				result := fltools.Result{Text: "Observed once."}
@@ -247,11 +258,15 @@ func waitDesktopContinuation(t *testing.T, service flruntime.ThreadService, id f
 	}
 }
 
-func desktopContinuationGateway(t *testing.T, providerType, model, baseURL string) *floretProviderAdapter {
+func desktopContinuationGateway(t *testing.T, providerType, model, baseURL string, continuation bool) *floretProviderAdapter {
 	t.Helper()
 	root := t.TempDir()
 	configPath, secretsPath := filepath.Join(root, "config.json"), filepath.Join(root, "secrets.json")
-	if err := config.Save(configPath, &config.Config{AI: &config.AIConfig{CurrentModelID: "fixture/" + model, Providers: []config.AIProvider{{ID: "fixture", Type: providerType, BaseURL: baseURL, Models: []config.AIProviderModel{{ModelName: model, ContextWindow: 128000}}}}}}); err != nil {
+	var responsesContinuation *bool
+	if continuation {
+		responsesContinuation = &continuation
+	}
+	if err := config.Save(configPath, &config.Config{AI: &config.AIConfig{CurrentModelID: "fixture/" + model, Providers: []config.AIProvider{{ID: "fixture", Type: providerType, BaseURL: baseURL, ResponsesContinuation: responsesContinuation, Models: []config.AIProviderModel{{ModelName: model, ContextWindow: 128000}}}}}}); err != nil {
 		t.Fatal(err)
 	}
 	if err := settings.NewSecretsStore(secretsPath).SetAIProviderAPIKey("fixture", "fixture-key"); err != nil {
@@ -333,6 +348,8 @@ func TestModelContinuationRejectsInvalidStateBeforeHTTP(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			enabled := true
+			configureResponsesContinuation(gateway, config.AIProvider{Type: tc.provider, ResponsesContinuation: &enabled})
 			_, err = gateway.StreamTurn(t.Context(), ModelGatewayRequest{Model: tc.model, Protocol: tc.protocol, PreviousState: tc.state, Messages: []Message{{Role: "user", Content: []ContentPart{{Type: "text", Text: "hello"}}}}}, nil)
 			if err == nil || requests.Load() != 0 {
 				t.Fatalf("invalid state must fail before HTTP: err=%v requests=%d", err, requests.Load())
