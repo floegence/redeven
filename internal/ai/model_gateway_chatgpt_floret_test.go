@@ -147,12 +147,18 @@ func TestFloretProviderFailureDiagnosticsSurviveRestart(t *testing.T) {
 		status                                                  int
 		chatGPT                                                 bool
 	}{
-		{"chatgpt", "openai", "gpt-6.1-sol", "responses", `{"error":{"message":"private prompt Bearer sk-secret","code":null,"param":"tools[0].parameters"}}`, runErrorCodeProviderRequestInvalid, "tools[0].parameters", 400, true},
+		{"server_stream", "openai", "gpt-6.1-sol", "responses", "data: {\"type\":\"response.failed\",\"response\":{\"error\":{\"code\":\"500\",\"message\":\"The model is overloaded. Please retry shortly.\"}}}\n\n", runErrorCodeProviderServerError, "The model is overloaded. Please retry shortly.", 200, false},
+		{"server_responses", "openai", "gpt-6.1-sol", "responses", `{"error":{"message":"The model is overloaded. Please retry shortly.","code":"server_error"}}`, runErrorCodeProviderServerError, "The model is overloaded. Please retry shortly.", 500, false},
+		{"server_chat", "openai", "gpt-6.1-sol", "chat_completions", `{"error":{"message":"The model is overloaded. Please retry shortly.","code":"server_error"}}`, runErrorCodeProviderServerError, "The model is overloaded. Please retry shortly.", 500, false},
+		{"chatgpt", "openai", "gpt-6.1-sol", "responses", `{"error":{"message":"Invalid credentials: Bearer sk-secret","code":null,"param":"tools[0].parameters"}}`, runErrorCodeProviderRequestInvalid, "tools[0].parameters", 400, true},
 		{"openrouter", "openrouter", "google/gemma-4-31b-it:free", "chat_completions", openRouterSharedPoolFailure, runErrorCodeProviderUpstreamRateLimited, "upstream_provider_shared_pool", 429, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
+				if tc.status == 200 {
+					w.Header().Set("Content-Type", "text/event-stream")
+				}
 				w.Header().Set("x-request-id", "req-restart-fixture")
 				w.WriteHeader(tc.status)
 				fmt.Fprint(w, tc.body)
@@ -203,7 +209,7 @@ func TestFloretProviderFailureDiagnosticsSurviveRestart(t *testing.T) {
 				t.Fatalf("failure=%+v code=%s detail=%s", first.Failure, code, detail)
 			}
 			if strings.Contains(first.Failure.Message+message+detail, "sk-secret") || strings.Contains(first.Failure.Message, "private prompt") {
-				t.Fatal("canonical failure leaked upstream text")
+				t.Fatal("canonical failure leaked credentials")
 			}
 			if err := host.Shutdown(t.Context()); err != nil {
 				t.Fatal(err)

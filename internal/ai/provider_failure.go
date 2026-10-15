@@ -10,7 +10,9 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
+	flprovider "github.com/floegence/floret/v7/provider"
 	"github.com/floegence/redeven/internal/chatgpt"
 	openai "github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/packages/ssestream"
@@ -19,11 +21,13 @@ import (
 const providerFailurePrefix = "redeven_provider_failure_v1:"
 
 // This bounded product-owned envelope survives Floret's canonical failure
-// message. Upstream prose, bodies, endpoints and credentials never enter it.
+// message. Only structured error messages and reviewed diagnostic fields enter
+// it; raw bodies, metadata, endpoints and credentials stay private.
 type providerFailureDiagnostic struct {
 	Provider    string `json:"provider"`
 	Status      int    `json:"http_status,omitempty"`
 	Code        string `json:"code,omitempty"`
+	Message     string `json:"message,omitempty"`
 	Param       string `json:"param,omitempty"`
 	RequestID   string `json:"request_id,omitempty"`
 	Shape       string `json:"response_shape"`
@@ -47,7 +51,7 @@ var diagnosticRequestIDPattern = regexp.MustCompile(`^req[_-][A-Za-z0-9_-]{1,120
 
 func (d providerFailureDiagnostic) sanitized() providerFailureDiagnostic {
 	switch d.Provider {
-	case "openai", "chatgpt", "openai_compatible", "openrouter", "xai", "groq", "ollama", "google", "chatglm", "qwen", "moonshot":
+	case "openai", "chatgpt", "openai_compatible", "openrouter", "xai", "groq", "ollama", "google", "chatglm", "qwen", "moonshot", "deepseek", "anthropic":
 	default:
 		d.Provider = "unknown"
 	}
@@ -63,6 +67,7 @@ func (d providerFailureDiagnostic) sanitized() providerFailureDiagnostic {
 	if !diagnosticRequestIDPattern.MatchString(d.RequestID) || strings.Contains(strings.ToLower(d.RequestID), "bearer") || strings.Contains(d.RequestID, "sk-") {
 		d.RequestID = ""
 	}
+	d.Message = sanitizeProviderDiagnosticMessage(d.Message)
 	if d.Provider != "openrouter" || d.failureStatus() != http.StatusTooManyRequests || d.LimitSource != "upstream_provider_shared_pool" {
 		d.LimitSource = ""
 	}
@@ -72,6 +77,26 @@ func (d providerFailureDiagnostic) sanitized() providerFailureDiagnostic {
 		d.Shape = "empty"
 	}
 	return d
+}
+
+var diagnosticSecretPattern = regexp.MustCompile(`(?i)\b(?:bearer\s+[^\s,;]+|sk-[a-z0-9_-]+|(?:api[_ -]?key|authorization)\s*[:=]\s*[^\s,;]+)`)
+var diagnosticURLPattern = regexp.MustCompile(`(?i)https?://[^\s<>"']+`)
+
+// Only explicit error-message fields cross the product presentation boundary.
+// Bound their size, normalize whitespace and redact credential-shaped values
+// and URLs. Raw response bodies and metadata are never presentation sources.
+func sanitizeProviderDiagnosticMessage(value string) string {
+	value = strings.Join(strings.Fields(strings.TrimSpace(value)), " ")
+	value = diagnosticSecretPattern.ReplaceAllString(value, "[redacted]")
+	value = diagnosticURLPattern.ReplaceAllString(value, "[redacted]")
+	if len(value) > 1024 {
+		for len(value) > 1021 {
+			_, size := utf8.DecodeLastRuneInString(value)
+			value = value[:len(value)-size]
+		}
+		value += "…"
+	}
+	return value
 }
 
 // Stream errors may carry an HTTP-style numeric code inside an HTTP 200
@@ -88,7 +113,7 @@ func (d providerFailureDiagnostic) failureStatus() int {
 
 func parseProviderFailure(message string) (providerFailureDiagnostic, bool) {
 	var d providerFailureDiagnostic
-	if !strings.HasPrefix(message, providerFailurePrefix) || len(message) > 2048 {
+	if !strings.HasPrefix(message, providerFailurePrefix) || len(message) > 8192 {
 		return d, false
 	}
 	decoder := json.NewDecoder(strings.NewReader(strings.TrimPrefix(message, providerFailurePrefix)))
@@ -131,12 +156,17 @@ func diagnosticFromBody(d providerFailureDiagnostic, raw []byte) providerFailure
 			d.Shape = "detail"
 			if nested, ok := detail.(map[string]any); ok {
 				fields = nested
+			} else if message, ok := detail.(string); ok {
+				d.Message = message
 			}
 		}
 		if code, ok := fields["code"].(string); ok {
 			d.Code = code
 		} else if code, ok := fields["code"].(float64); ok && code >= 400 && code <= 599 && code == float64(int(code)) {
 			d.Code = strconv.Itoa(int(code))
+		}
+		if message, ok := fields["message"].(string); ok {
+			d.Message = message
 		}
 		if param, ok := fields["param"].(string); ok {
 			d.Param = param
@@ -163,7 +193,7 @@ func providerRequestFailure(err error, response *http.Response, providerType str
 	d := providerFailureDiagnostic{Provider: providerType}
 	var upstream *openai.Error
 	if errors.As(err, &upstream) {
-		d.Status, d.Code, d.Param = upstream.StatusCode, upstream.Code, upstream.Param
+		d.Status, d.Code, d.Message, d.Param = upstream.StatusCode, upstream.Code, upstream.Message, upstream.Param
 		if response == nil {
 			response = upstream.Response
 		}
@@ -210,6 +240,14 @@ func canonicalProviderFailure(err error) error {
 	var accountFailure *chatgpt.Error
 	if errors.As(err, &accountFailure) {
 		return &providerFailure{diagnostic: providerFailureDiagnostic{Provider: "chatgpt", Code: accountFailure.Code, Shape: "empty"}.sanitized(), cause: err}
+	}
+	var floretHTTP *flprovider.ProviderHTTPError
+	if errors.As(err, &floretHTTP) && floretHTTP != nil {
+		d := providerFailureDiagnostic{
+			Provider: strings.ToLower(strings.TrimSpace(floretHTTP.Provider)), Status: floretHTTP.StatusCode,
+			Code: floretHTTP.Code, Message: floretHTTP.Message, Shape: "standard_error",
+		}
+		return &providerFailure{diagnostic: d.sanitized(), cause: err}
 	}
 	return err
 }

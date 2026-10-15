@@ -538,6 +538,7 @@ func TestFailureDiagnosticMatchesCurrentAndSummary(t *testing.T) {
 	for _, failure := range []*flruntime.ThreadTurnFailure{
 		{Code: flruntime.ThreadTurnFailureContextBudgetInvalid, Message: "context_window_tokens=3891 reserved_output_tokens=4096 request_safe_limit=-205"},
 		{Code: flruntime.ThreadTurnFailureProvider, Message: (&providerFailure{diagnostic: diagnosticFromBody(providerFailureDiagnostic{Provider: "openrouter", Status: 429}, []byte(openRouterSharedPoolFailure))}).Error()},
+		{Code: flruntime.ThreadTurnFailureProvider, Message: (&providerFailure{diagnostic: providerFailureDiagnostic{Provider: "openai", Status: 500, Message: "The model is overloaded.", Shape: "standard_error"}}).Error()},
 	} {
 		t.Run(string(failure.Code), func(t *testing.T) {
 			outcome := flruntime.TurnOutcomeFailed

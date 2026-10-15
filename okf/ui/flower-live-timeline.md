@@ -199,7 +199,11 @@ v7.25.2 supplies the canonical terminal `Failure.Code`; Redeven maps that code
 once for summary, detail, and live current, then removes the upstream failure
 payload before serializing Flower data. Known provider, gateway, control,
 canonical-authority, and unknown-effect failures use stable codes and localized
-presentation; raw engine wording stays in internal diagnostics. There is no
+presentation; raw engine wording stays in internal diagnostics. Explicit provider
+error messages cross the bounded [provider diagnostic boundary](../ai/chatgpt-local-authentication.md)
+and appear as literal text. A failed reply uses one quiet inline explanation with
+small text actions and collapsed, copyable technical details. It has no repeated
+visible generic heading, filled warning panel or duplicate turn-ended label. There is no
 error-text fallback. Classification never changes canonical messages, replays
 an Effect, or creates a client recovery lifecycle.
 

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	flprovider "github.com/floegence/floret/v7/provider"
 	flruntime "github.com/floegence/floret/v7/runtime"
 	"github.com/floegence/redeven/internal/chatgpt"
 	openai "github.com/openai/openai-go/v3"
@@ -62,10 +63,34 @@ func TestOpenRouterFailurePresentation(t *testing.T) {
 			if json.Unmarshal([]byte(detail), &fields) != nil || fields["limit_source"] != "upstream_provider_shared_pool" {
 				t.Fatalf("lost structured limit reason: %s", detail)
 			}
+			if fields["message"] != "Provider returned error" {
+				t.Fatalf("lost safe upstream message: %s", detail)
+			}
 			for _, private := range []string{"private", "Bearer", "sk-secret", "Google AI Studio", "https://", "quota", "limit resets"} {
 				if strings.Contains(failure.Message+message+detail, private) {
 					t.Errorf("untrusted or unsupported claim exposed: %s", private)
 				}
+			}
+		})
+	}
+}
+
+func TestProviderDiagnosticMessageRedactsCredentialsAndBoundsProse(t *testing.T) {
+	for _, tc := range []struct {
+		name, message string
+		want          string
+	}{
+		{name: "safe", message: "The selected model is temporarily unavailable", want: "The selected model is temporarily unavailable"},
+		{name: "credential", message: "Incorrect API key: sk-secret", want: "Incorrect [redacted]"},
+		{name: "url", message: "See https://private.example/remedy", want: "See [redacted]"},
+		{name: "whitespace", message: "  Model is\n  unavailable. ", want: "Model is unavailable."},
+		{name: "too_long", message: strings.Repeat("x", 1025), want: strings.Repeat("x", 1021) + "…"},
+		{name: "unicode", message: strings.Repeat("界", 342), want: strings.Repeat("界", 340) + "…"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			d := (providerFailureDiagnostic{Provider: "openai", Status: 500, Message: tc.message, Shape: "standard_error"}).sanitized()
+			if d.Message != tc.want {
+				t.Fatalf("message=%q want=%q", d.Message, tc.want)
 			}
 		})
 	}
@@ -128,8 +153,8 @@ func TestProviderDiagnosticsCaptureHTTPAndStreamFailures(t *testing.T) {
 		status                  int
 		body, shape, code, want string
 	}{
-		{"uncoded", 400, `{"error":{"message":"private prompt Bearer sk-secret","code":null,"param":"tools[0].parameters"}}`, "standard_error", "", runErrorCodeProviderRequestInvalid},
-		{"detail", 400, `{"detail":{"message":"private prompt","code":"invalid_function_parameters","param":"tools"}}`, "detail", "invalid_function_parameters", runErrorCodeProviderRequestInvalid},
+		{"uncoded", 400, `{"error":{"message":"Invalid credentials: Bearer sk-secret","code":null,"param":"tools[0].parameters"}}`, "standard_error", "", runErrorCodeProviderRequestInvalid},
+		{"detail", 400, `{"detail":{"message":"Invalid credentials: Bearer sk-secret","code":"invalid_function_parameters","param":"tools"}}`, "detail", "invalid_function_parameters", runErrorCodeProviderRequestInvalid},
 		{"empty", 400, "", "empty", "", runErrorCodeProviderRequestInvalid},
 		{"html", 400, `<html>Bearer sk-secret</html>`, "non_json", "", runErrorCodeProviderRequestInvalid},
 		{"auth", 401, `{"detail":"private credentials"}`, "detail", "", runErrorCodeChatGPTReview},
@@ -137,7 +162,7 @@ func TestProviderDiagnosticsCaptureHTTPAndStreamFailures(t *testing.T) {
 		{"quota", 429, `{"error":{"code":"subscription_sharing_usage_limit_exceeded"}}`, "standard_error", "subscription_sharing_usage_limit_exceeded", runErrorCodeChatGPTUsage},
 		{"temporary", 503, `{"error":{"code":"subscription_sharing_usage_unavailable"}}`, "standard_error", "subscription_sharing_usage_unavailable", runErrorCodeChatGPTTemporary},
 		{"stream", 200, "data: {\"type\":\"response.failed\",\"response\":{\"error\":{\"code\":\"subscription_sharing_usage_limit_exceeded\",\"message\":\"Bearer sk-secret\",\"param\":\"tools\"}}}\n\n", "stream_error", "subscription_sharing_usage_limit_exceeded", runErrorCodeChatGPTUsage},
-		{"sdk_stream", 200, "data: {\"error\":{\"code\":\"invalid_request_error\",\"message\":\"private prompt\",\"param\":\"tools\"}}\n\n", "stream_error", "invalid_request_error", runErrorCodeProviderRequestInvalid},
+		{"sdk_stream", 200, "data: {\"error\":{\"code\":\"invalid_request_error\",\"message\":\"Bearer sk-secret\",\"param\":\"tools\"}}\n\n", "stream_error", "invalid_request_error", runErrorCodeProviderRequestInvalid},
 	}
 	for _, tc := range cases {
 		for _, protocol := range []string{"openai-responses", "openai-chat-completions"} {
@@ -225,5 +250,25 @@ func TestProviderDiagnosticPreservesSafeTokenRelatedCodes(t *testing.T) {
 		if d.Code != "" {
 			t.Errorf("credential-shaped code %q was retained", code)
 		}
+	}
+}
+
+func TestHistoricalProviderServerFailureUsesServerGuidance(t *testing.T) {
+	failure := &flruntime.ThreadTurnFailure{Code: flruntime.ThreadTurnFailureProvider, Message: providerFailurePrefix + `{"provider":"openai","http_status":500,"response_shape":"standard_error"}`}
+	code, message := projectFloretTurnFailure(failure, runErrorCodeFloretEngineFailed)
+	if code != runErrorCodeProviderServerError || strings.Contains(message, "network") || !strings.Contains(message, "server error") {
+		t.Fatalf("misleading historical failure: %s %s", code, message)
+	}
+	if strings.Contains(canonicalFailureDetail(failure), `"message"`) {
+		t.Fatal("fabricated a lost upstream message")
+	}
+}
+
+func TestCanonicalProviderHTTPFailurePreservesMessageAndCause(t *testing.T) {
+	cause := &flprovider.ProviderHTTPError{Provider: "DeepSeek", StatusCode: 503, Code: "server_error", Message: "The model is overloaded."}
+	failure := canonicalProviderFailure(cause)
+	diagnostic, ok := parseProviderFailure(failure.Error())
+	if !ok || diagnostic.Provider != "deepseek" || diagnostic.Message != cause.Message || !errors.Is(failure, cause) {
+		t.Fatalf("lost provider failure: %+v", diagnostic)
 	}
 }

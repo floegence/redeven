@@ -5352,6 +5352,7 @@
       "runErrorProviderMissingKey": "Il manque une clé API au fournisseur de modèles sélectionné. Ouvrez les paramètres et complétez le profil d’IA local.",
       "runErrorProviderRateLimited": "Le fournisseur de modèles sélectionné limite cette requête. Réessayez plus tard ou choisissez un autre modèle.",
       "runErrorProviderUpstreamRateLimited": "Le fournisseur en amont du modèle limite temporairement la capacité partagée d’OpenRouter. Réessayez dans un moment, choisissez un autre modèle ou connectez votre propre clé API de fournisseur dans OpenRouter.",
+      "runErrorProviderServerError": "Le fournisseur de modèles a renvoyé une erreur serveur. Réessayez dans un instant.",
       "runErrorProviderUnreachable": "Le fournisseur de modèles sélectionné est injoignable. Vérifiez son point de terminaison et la connexion réseau.",
       "runErrorProviderStreamInterrupted": "Le fournisseur de modèles sélectionné a interrompu le flux de réponse de manière inattendue. Réessayez ; si le problème persiste, vérifiez son point de terminaison.",
       "runErrorProviderModelUnavailable": "Le modèle sélectionné n’est pas disponible auprès de ce fournisseur de modèles. Choisissez un autre modèle dans le profil d’IA local.",

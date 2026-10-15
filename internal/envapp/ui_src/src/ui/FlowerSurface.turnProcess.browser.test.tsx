@@ -108,6 +108,29 @@ describe('completed turn process disclosure', () => {
     expect(document.activeElement).toBe(button);
     expect(message(root, 'final-a')).toBe(final);
   });
+  it('shows one failure explanation while preserving older failed-turn status', async () => {
+    const done = current(true);
+    const oldItems = done.items!.filter((item) => item.id === 'user').map((item) => ({ ...item, id: 'old-user', turn_id: 'old-turn', run_id: 'old-run' }));
+    const { root } = await mount(current(true, {
+      last_outcome: 'failed', run_error_code: 'provider_server_error', error: 'The model provider returned a server error.',
+      run_error_detail: JSON.stringify({ provider: 'openai', http_status: 500, message: 'The model is overloaded.' }),
+      items: [...oldItems, ...done.items!],
+      turns: [turn({ turn_id: 'old-turn', run_id: 'old-run', outcome: 'failed', final_item_ids: [], final_boundary_complete: false }), turn({ outcome: 'failed', final_item_ids: [], final_boundary_complete: false })],
+    }));
+    await waitFor(() => Boolean(root.querySelector('.flower-error-card')));
+    expect(root.querySelectorAll('.flower-error-card')).toHaveLength(1);
+    expect(root.querySelector('[data-flower-turn-id="turn"] .flower-turn-ended')).toBeNull();
+    expect(root.querySelector('[data-flower-turn-id="old-turn"] .flower-turn-ended')).not.toBeNull();
+    expect(root.querySelector('.flower-error-message')?.textContent).toBe('The model is overloaded.');
+  });
+  it('retains the interruption label when the generic failure notice is hidden', async () => {
+    const { root } = await mount(current(true, {
+      last_outcome: 'interrupted', run_error_code: 'floret_turn_interrupted', error: 'Runtime interrupted.',
+      turns: [turn({ outcome: 'interrupted', final_item_ids: [], final_boundary_complete: false })],
+    }));
+    expect(root.querySelector('.flower-error-card')).toBeNull();
+    expect(root.querySelector('[data-flower-turn-id="turn"] .flower-turn-ended')).not.toBeNull();
+  });
   it.each(['failed', 'cancelled', 'interrupted'] as const)('keeps %s work and an active thinking preview visible', async (outcome) => {
     const { root, live } = await mount();
     expect(root.querySelector('[data-flower-thinking-view="preview"]')).not.toBeNull();
