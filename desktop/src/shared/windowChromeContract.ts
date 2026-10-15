@@ -110,7 +110,7 @@ ${topBarDragSelector} > div:first-child {
 
 :root[data-redeven-desktop-window-chrome-mode='hidden-inset'][data-redeven-desktop-window-controls-side='left'] ${topBarDragSelector} > div:first-child {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 4.5rem minmax(0, 24rem) 4.5rem minmax(0, 1fr);
+  grid-template-columns: minmax(max-content, 1fr) minmax(0, 24rem) minmax(max-content, 1fr);
   align-items: center;
   column-gap: 0.5rem;
   padding-inline-start: calc(0.75rem + var(--redeven-desktop-titlebar-balance-inset));
@@ -118,20 +118,20 @@ ${topBarDragSelector} > div:first-child {
 }
 
 :root[data-redeven-desktop-window-chrome-mode='hidden-inset'][data-redeven-desktop-window-controls-side='left'] ${topBarDragSelector} > div:first-child > :first-child {
-  grid-column: 2;
+  grid-column: 1;
   min-width: 0;
   justify-self: end;
 }
 
 :root[data-redeven-desktop-window-chrome-mode='hidden-inset'][data-redeven-desktop-window-controls-side='left'] ${topBarDragSelector} > div:first-child > button:nth-child(2) {
-  grid-column: 3;
+  grid-column: 2;
   width: 100%;
   max-width: 100%;
   justify-self: center;
 }
 
 :root[data-redeven-desktop-window-chrome-mode='hidden-inset'][data-redeven-desktop-window-controls-side='left'] ${topBarDragSelector} > div:first-child > :last-child {
-  grid-column: 4;
+  grid-column: 3;
   min-width: 0;
   justify-self: start;
 }

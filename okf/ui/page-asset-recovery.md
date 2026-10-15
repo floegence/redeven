@@ -13,6 +13,8 @@ presentation, and explicit reload action. A connected Runtime does not prove
 that an already loaded browser document can still fetch its page modules.
 Changed builds and failed module loads must expose recovery rather than an
 endless loading placeholder. Detection never reloads over unsaved work.
+Recovery notices stay inside the active mode's content area, below the unchanged
+shell header and native window controls.
 
 # Contract
 
@@ -43,6 +45,16 @@ disabled until protocol and secure-session readiness return. This preserves
 current work until that explicit action; it does not promise that arbitrary
 unsaved editor or plugin state survives a document reload.
 
+Activity places the notice above its page viewport inside Shell's main area.
+Workbench places it above its content boundary inside DisplayModePageShell.
+Neither notice may precede or displace the top bar. Retained inactive modes do
+not render a notice or announce a duplicate live status. Showing, changing, or
+clearing a notice preserves the header position, native drag regions, navigation,
+and mounted editors. Desktop's shared window-chrome snapshot remains the sole
+authority for native control insets, including fullscreen transitions. Its
+titlebar layout sizes both side groups from their content, allowing search to
+shrink before controls can overflow a narrow window.
+
 Activity pages use Floe's `renderError` boundary outside their loading boundary.
 A rejected module replaces its page placeholder with a localized reload action;
 other visited pages retain their DOM and input. Workbench content has a matching
@@ -63,6 +75,8 @@ Transport readiness does not prove document assets are current or loadable. Buil
 - `redeven:internal/envapp/ui_src/src/ui/reconnect/createEnvAppAssetRecovery.ts` - Secure-readiness trigger and authenticated document route.
 - `redeven:internal/envapp/ui_src/src/ui/reconnect/PageAssetRecovery.tsx` - Localized, non-destructive notice and explicit recovery action.
 - `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx` - Activity isolation and Workbench content boundary.
+- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.flowerCompanion.browser.test.tsx` - Active-mode notice placement, native control insets, narrow and fullscreen chrome, and retained drafts across mode changes.
+- `redeven:desktop/src/shared/windowChromeContract.ts` - Shared native control insets and content-sized titlebar columns.
 - `redeven:internal/envapp/ui_src/src/ui/reconnect/PageAssetRecovery.browser.test.tsx` - Failed module, retained input, connection readiness, localization, and narrow viewport acceptance.
 - `redeven:internal/envapp/ui_src/src/ui/reconnect/createEnvAppAssetRecovery.test.ts` - Reconnection checks and authorization adapter forwarding.
 - `redeven:internal/envapp/ui_src/src/ui/utils/windowNavigation.test.ts` - Embedding-aware reload ownership.
