@@ -772,7 +772,8 @@
       "unknown": "A tool’s outcome is unknown. This instruction cannot be retried here.",
       "ended": "The task ended before this instruction took effect.",
       "failed": "Could not confirm the operation. Refresh the details and try again.",
-      "changed": "This input changed or was already consumed. The details have been refreshed."
+      "changed": "This input changed or was already consumed. The details have been refreshed.",
+      "busy": "The subagent is stopping or compacting context. Try again when it finishes."
     }
   },
   "settings": {

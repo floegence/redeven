@@ -58,7 +58,7 @@ describe('Subagent immediate guidance controls', () => {
   });
   it('refreshes a conflict and keeps removal and a stable retry available', async () => {
     let attempts = 0;
-    const { detail, call, loadDetail } = await mount(async () => { if (++attempts === 1) throw Object.assign(new Error('changed'), { status: 409 }); return fixture().detail; });
+    const { detail, call, loadDetail } = await mount(async () => { if (++attempts === 1) throw Object.assign(new Error('changed'), { status: 409, code: 'subagent_input_conflict' }); return fixture().detail; });
     buttons()[0].click();
     await waitFor(() => Boolean(row().querySelector('[role="alert"]')));
     await waitFor(() => loadDetail.mock.calls.length === 2);
@@ -68,6 +68,14 @@ describe('Subagent immediate guidance controls', () => {
     await waitFor(() => !buttons()[0].disabled);
     buttons()[1].click(); await waitFor(() => call.mock.calls.length === 3);
     expect(call.mock.calls[2]).toEqual([detail.summary.parent_thread_id, detail.summary.thread_id, expect.objectContaining({ action: 'remove_queue', item_id: 'first' })]);
+  });
+  it('explains a busy execution and leaves queue actions recoverable', async () => {
+    const { loadDetail } = await mount(async () => { throw Object.assign(new Error('busy'), { status: 409, code: 'subagent_input_busy' }); });
+    buttons()[0].click();
+    await waitFor(() => row().querySelector('[role="alert"]')?.textContent?.includes('stopping or compacting context') === true);
+    await waitFor(() => loadDetail.mock.calls.length === 2);
+    expect(buttons().every(button => !button.disabled)).toBe(true);
+    expect(document.querySelector<HTMLButtonElement>('.flower-subagent-detail-window button[aria-label="Close"]')?.disabled).toBe(false);
   });
   it('allows closing during a request and ignores the late response', async () => {
     const pending = deferred<FlowerSubagentDetail>();
@@ -96,7 +104,7 @@ describe('Subagent immediate guidance controls', () => {
     const { call } = await mount(async () => {
       if (++attempts === 1) {
         value = { ...value, current: { ...value.current, view_version: 9, queue: value.current.queue!.map(item => item.id === 'first' ? { ...item, input_fingerprint: 'revised-fingerprint', input: { text: 'Revised instruction' } } : item) } };
-        throw Object.assign(new Error('changed'), { status: 409 });
+        throw Object.assign(new Error('changed'), { status: 409, code: 'subagent_input_conflict' });
       }
       return value;
     }, async () => value);

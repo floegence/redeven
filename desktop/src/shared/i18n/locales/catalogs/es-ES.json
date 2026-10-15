@@ -903,7 +903,8 @@
         "unknown": "Se desconoce el resultado de una herramienta. Esta instrucción no se puede reintentar aquí.",
         "ended": "La tarea terminó antes de que esta instrucción surtiera efecto.",
         "failed": "No se pudo confirmar la operación. Actualiza los detalles y vuelve a intentarlo.",
-        "changed": "Esta entrada cambió o ya se procesó. Se actualizaron los detalles."
+        "changed": "Esta entrada cambió o ya se procesó. Se actualizaron los detalles.",
+        "busy": "El subagente se está deteniendo o compactando el contexto. Vuelve a intentarlo cuando termine."
       }
     },
     "settings": {

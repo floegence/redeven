@@ -540,6 +540,7 @@ export const flowerSurfaceEnUS = {
       ended: 'The task ended before this instruction took effect.',
       failed: 'Could not confirm the operation. Refresh the details and try again.',
       changed: 'This input changed or was already consumed. The details have been refreshed.',
+      busy: 'The subagent is stopping or compacting context. Try again when it finishes.',
     },
     feedbackClose: 'Close feedback',
     unavailableThread: 'Thread not available',

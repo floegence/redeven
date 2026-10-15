@@ -705,6 +705,7 @@ function createLocalizedFlowerSubagentsCopy(i18n: FlowerSurfaceTranslator): Flow
       ended: t(i18n, k('input.ended')),
       failed: t(i18n, k('input.failed')),
       changed: t(i18n, k('input.changed')),
+      busy: t(i18n, k('input.busy')),
     },
     feedbackClose: t(i18n, k('feedbackClose')),
     unavailableThread: t(i18n, k('unavailableThread')),
