@@ -1,10 +1,20 @@
 # Redeven OKF Update Log
 
+## 2026-10-15: Clear provider failures and quieter error presentation
+
+- Preserve bounded structured [provider error messages](ai/chatgpt-local-authentication.md)
+  through canonical Floret persistence and restart; distinguish server errors
+  from failed network connections without fabricating lost historical messages.
+- Use one compact [failure explanation](ui/flower-live-timeline.md), deliberate
+  recovery actions and collapsed diagnostics; keep older abnormal-turn labels
+  while removing the duplicate latest-turn label.
+
 ## 2026-10-15: Continuous Flower presentation during live recovery
 
 - Protect selected details in the bounded [thread cache](ui/flower-live-timeline.md), retain valid empty conversations during refresh, and separate baseline bytes from the live queue count.
 - Unify root and child unsent text coalescing across independent currents while retaining semantic barriers, started fragments, and bounded overload recovery. Add repeated reconnect checks to the browser and isolated Electron [renderer evidence](ui/flower-streaming-stability.md).
 - Align Desktop queued-message take-back catalogs with the shared source and Env App, as required by the cross-renderer localization contract.
+
 
 ## 2026-10-15: Queued messages return to the ordinary composer
 
@@ -29,6 +39,7 @@
   as one aligned row with a framed brand mark and inline name editing.
 - Remove the duplicate brand subtitle, keep editing height stable, and align
   credential and endpoint fields across light, dark and narrow layouts.
+
 
 ## 2026-10-15: Native provider state reader recovery
 

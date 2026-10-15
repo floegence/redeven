@@ -373,6 +373,7 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
         providerMissingKey: t(i18n, k('chat.runErrorProviderMissingKey')),
         providerRateLimited: t(i18n, k('chat.runErrorProviderRateLimited')),
         providerUpstreamRateLimited: t(i18n, k('chat.runErrorProviderUpstreamRateLimited')),
+        providerServerError: t(i18n, k('chat.runErrorProviderServerError')),
         providerUnreachable: t(i18n, k('chat.runErrorProviderUnreachable')),
         providerStreamInterrupted: t(i18n, k('chat.runErrorProviderStreamInterrupted')),
         providerModelUnavailable: t(i18n, k('chat.runErrorProviderModelUnavailable')),

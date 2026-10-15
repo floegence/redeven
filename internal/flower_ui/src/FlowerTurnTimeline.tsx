@@ -11,6 +11,7 @@ import { flowerDurationParts, projectFlowerTurnProcess } from './flowerTurnPrese
 export function FlowerTurnTimeline(props: Readonly<{
   thread: FlowerThreadSnapshot | null | undefined;
   entries: readonly FlowerTimelineEntry[];
+  failureNoticeVisible: boolean;
   runtimeID: string;
   scope: string;
   choices: FlowerTurnDisclosureStore;
@@ -24,6 +25,8 @@ export function FlowerTurnTimeline(props: Readonly<{
   const processes = createMemo(() => projectFlowerTurnProcess(props.entries, props.thread?.turns,
     props.thread?.current_execution && ['running', 'waiting_user', 'waiting_approval'].includes(props.thread.status)
       ? [props.thread.current_execution.turn_id] : []));
+  const failureTurnID = createMemo(() => props.failureNoticeVisible
+    ? props.thread?.turns?.at(-1)?.turn_id : undefined);
   const nodes = new Map<string, HTMLElement>();
   const motions = new Set<string>();
   let layoutAnchor: HTMLElement | undefined;
@@ -130,6 +133,7 @@ export function FlowerTurnTimeline(props: Readonly<{
     const ended = createMemo(() => {
       const current = group();
       const outcome = current?.turn?.outcome;
+      if (current?.turnID === failureTurnID() && (outcome === 'failed' || outcome === 'interrupted')) return '';
       return current?.terminalKey === key && outcome && outcome !== 'completed' ? props.copy[outcome] : '';
     });
     // Decide protection and capture the anchor before inserting summary height.

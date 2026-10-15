@@ -321,6 +321,12 @@ function latestThreadFailureIsUserRejectedTool(thread: FlowerThreadSnapshot | nu
   return latestFailedMessage ? messageHasUserRejectedTool(latestFailedMessage) : false;
 }
 
+function runErrorNoticeVisible(thread: FlowerThreadSnapshot | null | undefined, error = thread?.error): boolean {
+  const code = trimString(error?.code);
+  return Boolean(trimString(error?.message)) && code !== 'runtime_restarted' && code !== 'floret_turn_interrupted'
+    && !(code === 'floret_engine_failed' && latestThreadFailureIsUserRejectedTool(thread));
+}
+
 type FlowerComposerControlID = 'permission' | 'model_reasoning' | 'read_only';
 type FlowerComposerControlLocation = 'inline' | 'overflow';
 type FlowerComposerControlLayout = Readonly<{
@@ -2497,6 +2503,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     includeUnmappedMessage = true,
   ): string => {
     const code = trimString(error?.code);
+    // The backend owns message selection and redaction. Provider prose is
+    // literal text; it is never rendered as Markdown or executable markup.
+    if (code.startsWith('provider_') || code.startsWith('chatgpt_')) {
+      try {
+        const diagnostic = JSON.parse(trimString(error?.detail)) as { message?: unknown };
+        if (typeof diagnostic.message === 'string' && diagnostic.message.trim()
+          && diagnostic.message !== '[redacted]'
+          && !/^(provider returned error|provider error|request failed|internal server error)$/i.test(diagnostic.message.trim())) {
+          return diagnostic.message.trim();
+        }
+      } catch { /* Historical failures may have no structured details. */ }
+    }
     switch (code) {
       case 'chatgpt_review_required': return copy().settings.dialog.chatGPT.reviewRequired;
       case 'chatgpt_temporarily_unavailable': return copy().settings.dialog.chatGPT.temporarilyUnavailable;
@@ -2512,6 +2530,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         return copy().chat.runErrors.providerRateLimited;
       case 'provider_upstream_rate_limited':
         return copy().chat.runErrors.providerUpstreamRateLimited;
+      case 'provider_server_error':
+        return copy().chat.runErrors.providerServerError;
       case 'provider_unreachable':
         return copy().chat.runErrors.providerUnreachable;
       case 'provider_stream_interrupted':
@@ -6510,14 +6530,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const errorNotice = (title: string, message: string, action?: JSX.Element, className = '', detail?: JSX.Element) => (
     <div role="alert" class={cn('flower-error-card', className)}>
-      <div class="flower-error-icon"><AlertTriangle class="h-4 w-4" /></div>
+      <div class="flower-error-icon" aria-hidden="true"><AlertTriangle class="h-4 w-4" /></div>
       <div class="flower-error-copy">
         <div class="flower-error-title">{title}</div>
         <div class="flower-error-message">{message}</div>
-        {detail}
         <Show when={action}>
           {(item) => <div class="flower-error-actions">{item()}</div>}
         </Show>
+        {detail}
       </div>
     </div>
   );
@@ -6900,19 +6920,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     ) : undefined;
     const action = () => code === 'chatgpt_usage_unavailable' ? (
       <a href="https://chatgpt.com/settings/usage" target="_blank" rel="noopener noreferrer" class="cursor-pointer whitespace-nowrap text-sm font-medium text-primary hover:underline">{copy().settings.dialog.chatGPT.manageUsage}</a>
-    ) : code === 'chatgpt_temporarily_unavailable' || code === 'provider_rate_limited' || code === 'provider_upstream_rate_limited' || code === 'provider_request_invalid' || code === 'provider_request_rejected' ? (
-      <Button size="sm" variant="outline" icon={Refresh} disabled={retryPending()} onClick={() => void retryContinuation()}>{copy().chat.retryReply}</Button>
+    ) : code === 'chatgpt_temporarily_unavailable' || code === 'provider_server_error' || code === 'provider_rate_limited' || code === 'provider_upstream_rate_limited' || code === 'provider_request_invalid' || code === 'provider_request_rejected' ? (
+      <Button size="sm" variant="ghost" disabled={retryPending()} onClick={() => void retryContinuation()}>{copy().chat.retryReply}</Button>
     ) : contextFailure ? (
       <>
-        <Button size="sm" variant="outline" icon={Settings} onClick={openSettings}>{copy().chat.runErrorActions.openSettings}</Button>
-        <Button size="sm" variant="ghost" icon={Refresh} disabled={retryPending()} onClick={() => void retryContinuation()}>{copy().chat.retryReply}</Button>
+        <Button size="sm" variant="ghost" onClick={openSettings}>{copy().chat.runErrorActions.openSettings}</Button>
+        <Button size="sm" variant="ghost" disabled={retryPending()} onClick={() => void retryContinuation()}>{copy().chat.retryReply}</Button>
       </>
     ) : continuationFailure()
       ? (
         <Button
           size="sm"
-          variant="outline"
-          icon={Refresh}
+          variant="ghost"
           onClick={() => void retryContinuation()}
         >
           {copy().chat.retryReply}
@@ -6920,7 +6939,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       )
       : actionable
       ? (
-        <Button size="sm" variant="outline" icon={Settings} onClick={openSettings}>
+        <Button size="sm" variant="ghost" onClick={openSettings}>
           {runErrorActionLabel(code)}
         </Button>
       )
@@ -6928,13 +6947,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return (
       <Show
         when={continuationFailure()}
-        fallback={errorNotice(stoppedUnknown() ? copy().chat.stopOutcomeUnknownTitle : contextFailure ? copy().chat.runContextErrorTitle : copy().chat.runErrorTitle, stoppedUnknown() ? copy().chat.stopOutcomeUnknownDescription : presentRunError(error), action(), '', diagnostics())}
+        fallback={errorNotice(stoppedUnknown() ? copy().chat.stopOutcomeUnknownTitle : contextFailure ? copy().chat.runContextErrorTitle : copy().chat.runErrorTitle, stoppedUnknown() ? copy().chat.stopOutcomeUnknownDescription : presentRunError(error), action(), 'flower-run-error', diagnostics())}
       >
         {errorNotice(
           copy().chat.runContinuationErrorTitle,
           presentRunError(error),
           action(),
-          'flower-continuation-error',
+          'flower-run-error flower-continuation-error',
           diagnostics(),
         )}
       </Show>
@@ -10674,7 +10693,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     );
   };
 
-  const errorEntry = (entry: Accessor<FlowerTimelineEntry>) => {
+  const errorEntry = (entry: Accessor<FlowerTimelineEntry>, thread: Accessor<FlowerThreadSnapshot | null | undefined>) => {
     const error = createMemo(() => {
       const value = entry();
       return value.type === 'error' ? value.error : null;
@@ -10684,8 +10703,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         {(value) => {
           const code = trimString(value().code);
           if (code === 'runtime_restarted') return runtimeRestartedDivider();
-          if (code === 'floret_turn_interrupted') return null;
-          if (code === 'floret_engine_failed' && latestThreadFailureIsUserRejectedTool(selectedThread())) return null;
+          if (!runErrorNoticeVisible(thread(), value())) return null;
           return runErrorNotice(value());
         }}
       </Show>
@@ -10711,7 +10729,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       case 'input_request':
         return inputRequestEntry(entry);
       case 'error':
-        return errorEntry(entry);
+        return errorEntry(entry, thread);
     }
   };
 
@@ -10941,6 +10959,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       entries={subagentDetailTimelineEntries()}
       renderEntry={(entry) => timelineEntry(entry, subagentDetailScroll, subagentDetailThread)}
       renderTimeline={() => <FlowerTurnTimeline thread={subagentDetailThread()} entries={subagentDetailTimelineEntries()}
+        failureNoticeVisible={runErrorNoticeVisible(subagentDetailThread())}
         runtimeID={props.adapter.runtime.runtime_id} scope="subagent" choices={turnDisclosureChoices}
         scroll={subagentDetailScroll} reducedMotion={reducedMotionPreferred} copy={copy().chat.turnProcess}
         renderEntry={(entry) => timelineEntry(entry, subagentDetailScroll, subagentDetailThread)} />}
@@ -12539,6 +12558,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               fallback={selectedThreadFallbackState()}
             >
               <FlowerTurnTimeline thread={selectedThread()} entries={visibleTimelineEntries()}
+                failureNoticeVisible={runErrorNoticeVisible(selectedThread())}
                 runtimeID={props.adapter.runtime.runtime_id} scope="main" choices={turnDisclosureChoices}
                 scroll={transcriptScroll} reducedMotion={reducedMotionPreferred} copy={copy().chat.turnProcess}
                 renderEntry={(entry) => timelineEntry(entry, transcriptScroll, selectedThread)} />

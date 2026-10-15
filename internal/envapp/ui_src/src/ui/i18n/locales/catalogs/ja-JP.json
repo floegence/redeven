@@ -5352,6 +5352,7 @@
       "runErrorProviderMissingKey": "選択した AI プロバイダーに API キーが設定されていません。［設定］を開き、Local AI Profile の設定を完了してください。",
       "runErrorProviderRateLimited": "選択中のモデルプロバイダーがこのリクエストを制限しています。しばらくしてから再試行するか、別のモデルを選択してください。",
       "runErrorProviderUpstreamRateLimited": "モデルの上流プロバイダーが OpenRouter の共有容量を一時的に制限しています。しばらくしてから再試行するか、別のモデルを選択するか、OpenRouter でご自身のプロバイダー API キーを接続してください。",
+      "runErrorProviderServerError": "モデルプロバイダーのサーバーでエラーが発生しました。しばらくしてから再試行してください。",
       "runErrorProviderUnreachable": "選択中の AI プロバイダーに接続できません。プロバイダーのエンドポイントとネットワーク接続を確認してください。",
       "runErrorProviderStreamInterrupted": "選択中の AI プロバイダーが応答ストリームを予期せず終了しました。再試行し、問題が続く場合はプロバイダーのエンドポイントを確認してください。",
       "runErrorProviderModelUnavailable": "選択したモデルはこのプロバイダーでは利用できません。Local AI Profile で別のモデルを選択してください。",

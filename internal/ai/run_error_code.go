@@ -26,6 +26,7 @@ const (
 	runErrorCodeProviderMissingKey          = "provider_missing_key"
 	runErrorCodeProviderRateLimited         = "provider_rate_limited"
 	runErrorCodeProviderUpstreamRateLimited = "provider_upstream_rate_limited"
+	runErrorCodeProviderServerError         = "provider_server_error"
 	runErrorCodeProviderUnreachable         = "provider_unreachable"
 	runErrorCodeProviderStreamInterrupted   = "provider_stream_interrupted"
 	runErrorCodeProviderModelUnavailable    = "provider_model_unavailable"
@@ -65,6 +66,8 @@ func userFacingRunError(code string, fallback string) string {
 		return "The selected AI provider is rate limiting this request. Try again later or choose another model."
 	case runErrorCodeProviderUpstreamRateLimited:
 		return "The model's upstream provider is temporarily rate limiting OpenRouter's shared capacity. Try again shortly, choose another model, or connect your own provider API key in OpenRouter."
+	case runErrorCodeProviderServerError:
+		return "The model provider returned a server error. Try again shortly."
 	case runErrorCodeProviderUnreachable:
 		return "The selected AI provider could not be reached. Check the provider endpoint and network connection."
 	case runErrorCodeProviderStreamInterrupted:
@@ -266,7 +269,7 @@ func providerHTTPStatusRunErrorCode(status int) string {
 		return runErrorCodeProviderModelUnavailable
 	default:
 		if status >= 500 && status <= 599 {
-			return runErrorCodeProviderUnreachable
+			return runErrorCodeProviderServerError
 		}
 		if status >= 400 && status <= 499 {
 			return runErrorCodeProviderRequestRejected
@@ -315,7 +318,7 @@ func providerHTTPStatusFromSDKError(text string) (int, bool) {
 }
 
 // Only validated provider envelopes and typed numeric budget failures cross
-// the diagnostic presentation boundary. Arbitrary upstream prose stays private.
+// the diagnostic presentation boundary. Raw upstream bodies stay private.
 func canonicalFailureDetail(failure *flruntime.ThreadTurnFailure) string {
 	if failure == nil {
 		return ""

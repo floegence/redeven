@@ -569,6 +569,7 @@ export type FlowerSurfaceCopy = Readonly<{
       providerMissingKey: string;
       providerRateLimited: string;
       providerUpstreamRateLimited: string;
+      providerServerError: string;
       providerUnreachable: string;
       providerStreamInterrupted: string;
       providerModelUnavailable: string;
@@ -963,6 +964,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       providerMissingKey: 'The selected AI provider is missing an API key. Open Settings and complete the Local AI Profile.',
       providerRateLimited: 'The selected AI provider is rate limiting this request. Try again later or choose another model.',
       providerUpstreamRateLimited: "The model's upstream provider is temporarily rate limiting OpenRouter's shared capacity. Try again shortly, choose another model, or connect your own provider API key in OpenRouter.",
+      providerServerError: 'The model provider returned a server error. Try again shortly.',
       providerUnreachable: 'The selected AI provider could not be reached. Check the provider endpoint and network connection.',
       providerStreamInterrupted: 'The selected AI provider ended the response stream unexpectedly. Try again, or check the provider endpoint if this keeps happening.',
       providerModelUnavailable: 'The selected model is not available from this provider. Choose another model in the Local AI Profile.',

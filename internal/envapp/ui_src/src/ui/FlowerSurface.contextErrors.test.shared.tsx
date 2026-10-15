@@ -63,6 +63,7 @@ describe('Flower provider failure recovery', () => {
   it.each([
     ['provider_request_invalid', 'request format', 'Retry reply'],
     ['provider_request_rejected', 'diagnostic details', 'Retry reply'],
+    ['provider_server_error', 'server error', 'Retry reply'],
     ['provider_rate_limited', 'try again later', 'Retry reply'],
     ['provider_upstream_rate_limited', 'shared capacity', 'Retry reply'],
     ['chatgpt_review_required', 'connection', 'Open settings'],
@@ -122,5 +123,25 @@ describe('Flower provider failure recovery', () => {
     pending.resolve(liveBootstrap(thread({ status: 'idle', error: undefined }), 2));
     await waitFor(() => !surface.querySelector('.flower-error-card'));
     expect(retryThread).toHaveBeenCalledTimes(1);
+  });
+});
+
+
+describe('Flower upstream error messages', () => {
+  it.each(['zh-CN', 'en-US'] as const)('shows the upstream reason directly in %s', async (locale) => {
+    const i18n = createTestI18nHelpers(locale);
+    const copy = createLocalizedFlowerSurfaceCopy({ locale, t: (key, params) => i18n.t(key as EnvAppTranslationKey, params), tn: (key, count, params) => i18n.tn(key as EnvAppTranslationKey, count, params) });
+    const reason = 'The model is overloaded. Please retry shortly.';
+    const diagnostic = JSON.stringify({ provider: 'openai', http_status: 500, message: reason, response_shape: 'standard_error' });
+    const failed = thread({ status: 'failed', error: { code: 'provider_server_error', message: 'controlled fallback', detail: diagnostic } });
+    const retryThread = vi.fn(async () => liveBootstrap(thread({ status: 'idle', error: undefined }), 2));
+    const surface = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: vi.fn(async () => [failed]), loadThread: vi.fn(async () => liveBootstrap(failed)), retryThread }, { copy, focusThreadRequest: { request_id: 'server-error', thread_id: failed.thread_id } });
+    await waitFor(() => Boolean(surface.querySelector('.flower-error-card')));
+    const card = surface.querySelector<HTMLElement>('.flower-error-card')!;
+    expect(card.querySelector('.flower-error-message')?.textContent).toBe(reason);
+    expect(card.querySelector<HTMLDetailsElement>('details')?.open).toBe(false);
+    expect(card.textContent).not.toContain(copy.chat.runErrors.providerUnreachable);
+    expect(card.querySelector('.flower-error-actions')?.textContent).toContain(copy.chat.retryReply);
+    expect(retryThread).not.toHaveBeenCalled();
   });
 });
