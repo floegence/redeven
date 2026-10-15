@@ -1,5 +1,10 @@
 # Redeven OKF Update Log
 
+## 2026-10-15: Quieter Flower reading surfaces
+
+- Use transparent [Markdown tables](ui/flower-message-appearance.md) with horizontal separators and preserved column alignment and local scrolling.
+- Blend expanded [terminal details](ui/flower-terminal-activity.md) into the transcript with a subtle gradient while retaining readable commands, copy, keyboard disclosure and bounded output scrolling.
+
 ## 2026-10-15: Configurable Responses continuation
 
 - Make OpenAI API key continuation an explicit opt-in while preserving official ChatGPT native replay and complete canonical history.

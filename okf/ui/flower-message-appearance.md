@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower message appearance
 description: Recognize sent user messages and keep their text, references and native selections readable in every shell theme.
 tags: [flower, themes, accessibility, selection]
-timestamp: 2026-10-14T00:00:00Z
+timestamp: 2026-10-15T00:00:00Z
 ---
 
 # Summary
@@ -58,15 +58,19 @@ Links retain underlines and use the bubble foreground in idle, hover and focus
 states. Keyboard focus has a visible outline. Quotes, receipt labels and
 reference labels inherit the bubble foreground. Reference chips retain their
 source text and actions with a transparent face, readable detail text and a
-foreground-derived boundary. Tables and code retain separate theme-colored
-insets; their text derives from the theme foreground with bounded lightness.
+foreground-derived boundary. Tables sit directly on the message surface with
+one header rule and quieter separators between body rows. They have no outer
+frame, vertical rules, or header fill. Column alignment and local horizontal
+scrolling remain intact. Code retains theme-colored insets; its text derives
+from the theme foreground with bounded lightness.
 
 ## Native text selection
 
-Filled bubble text uses Floe's contrasting `selection-on-primary` pair. Code,
-table-header insets and queued input use the theme's dark/light reading roles
-in reverse, keeping selection distinct from their own faces. Selecting text
-never changes parsing, content, copy behavior or transport state.
+Filled bubble text, including transparent table headers, uses Floe's
+contrasting `selection-on-primary` pair. Code insets and queued input use the
+theme's dark/light reading roles in reverse, keeping selection distinct from
+their own faces. Selecting text never changes parsing, content, copy behavior
+or transport state.
 
 # Boundaries
 
@@ -92,4 +96,5 @@ layout, failed messages and forced colors. Code highlighting retains its indepen
 - [Shared transcript rendering](../../internal/flower_ui/src/FlowerSurface.tsx)
 - [Theme, contrast and selection acceptance](../../internal/envapp/ui_src/src/styles/flowerMessageContrast.browser.test.tsx)
 - [Rendered text scale and compact composer controls](../../internal/envapp/ui_src/src/ui/FlowerMarkdown.citations.browser.test.tsx)
+- [Horizontal table rules, alignment and narrow scrolling](../../internal/envapp/ui_src/src/ui/FlowerMarkdown.tables.browser.test.tsx)
 - [Answered-question receipt and composer acceptance](../../internal/envapp/ui_src/src/ui/FlowerSurface.inputResponse.browser.test.tsx)
