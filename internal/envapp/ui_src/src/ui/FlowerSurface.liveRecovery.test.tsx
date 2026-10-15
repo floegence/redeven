@@ -354,11 +354,13 @@ describe('Canonical managed facts on the existing workspace transport', () => {
    yield { schema_version: 1, kind: 'thread.batch', thread_id: parent.thread_id, subagent_current: detail.current, model_context: facts };
    await waitForAbort(input);
   });
-  const surface = renderSurfaceWithAdapter({ ...adapter(true), listThreads: vi.fn(async () => [parent]), loadThread: vi.fn(async () => liveBootstrap(parent)),
+  const loadThread = vi.fn(async () => liveBootstrap(parent));
+  const surface = renderSurfaceWithAdapter({ ...adapter(true), listThreads: vi.fn(async () => [parent]), loadThread,
    loadSubagentDetail: vi.fn(async () => detail), connectLiveStream });
   await waitFor(() => Boolean(surface.querySelector('[data-thread-id="facts-parent"] button')));
   selectThread(surface, parent.thread_id);
-  await waitFor(() => Boolean(surface.querySelector('button[aria-controls="flower-subagents-dropdown"]')));
+  await waitFor(() => loadThread.mock.calls.length > 0 && !surface.querySelector('.flower-thread-loading'));
+  await waitFor(() => surface.querySelector('button[aria-controls="flower-subagents-dropdown"] .flower-header-icon-badge')?.textContent === '1');
   (surface.querySelector('button[aria-controls="flower-subagents-dropdown"]') as HTMLButtonElement).click();
   await waitFor(() => Boolean(document.querySelector('[data-flower-subagent-row="0"]')));
   (document.querySelector('[data-flower-subagent-row="0"]') as HTMLButtonElement).click();
