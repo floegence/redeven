@@ -202,7 +202,6 @@ func attachSearchTestImage(t *testing.T, svc *Service, meta *session.Meta, reque
 	request.Input.Attachments = []RunAttachmentIn{{AttachmentID: upload.AttachmentID}}
 }
 
-
 func TestNativeSearchSurvivesWaitingRetryAndRestart(t *testing.T) {
 	for _, failure := range []string{"rejected", "misrouted", "settings_changed"} {
 		t.Run(failure, func(t *testing.T) { testNativeSearchLifecycle(t, failure) })
