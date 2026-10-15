@@ -33,6 +33,12 @@ hydration cannot execute models or tools during preparation. Floret remains
 the source of actual migration and verification progress. A standalone service
 activates by default only after the same preparation succeeds.
 
+Published Floret v7.39.2 retains canonical and projection validation during
+inspection without building disposable text-search postings. The retained Host
+builds the full search index once during formal startup, with deduplicated Unicode
+fragments. Redeven keeps the existing complete-set snapshot policy and readiness
+phases; it does not cache, decode, or persist a second search index.
+
 Welcome renders each observed phase in its existing readiness boundary,
 including checking, backup, optimization, upgrade, verification, recovery,
 and restore. Flower mounts only for `ready` or `degraded`, while navigation and
