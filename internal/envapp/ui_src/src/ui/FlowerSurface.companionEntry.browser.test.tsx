@@ -351,7 +351,8 @@ describe('Flower companion entry with the published shell', () => {
       state: 'requested', status: 'pending', requested_at_ms: 1, can_approve: true, surface_role: 'primary_action',
       summary: { label: 'Review command', command: 'pwd' },
     }] }) : thread({ status: 'waiting_user', input_request: inputRequest({
-      tool_name: kind === 'computer' ? 'computer.request_control' : 'ask_user',
+      ...(kind === 'computer' ? { prompt_id: 'tool-input:historical-computer', computer_assistance: { kind: 'inspection', target_id: 'browser-main', tool_call_id: 'historical-capture' } } : {}),
+      tool_name: kind === 'computer' ? 'computer.screenshot' : 'ask_user',
       public_summary: 'This detail should stay inside the drawer',
       questions: [{ id: kind === 'computer' ? 'computer_control' : 'password', header: 'Action', question: 'Private question',
         response_mode: kind === 'computer' ? 'select' : 'write', is_secret: kind === 'secret', choices: [] }],
