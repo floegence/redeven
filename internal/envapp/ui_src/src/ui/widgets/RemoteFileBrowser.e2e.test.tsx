@@ -1344,8 +1344,6 @@ function createEnvContextWithIdAccessor(envId: () => string, options?: { canWrit
     openTerminalInDirectory: envActionSpies.openTerminalInDirectory,
     openFileBrowserAtPath: envActionSpies.openFileBrowserAtPath,
     openFilePreview: async () => {},
-    openFlowerFileBrowser: async () => {},
-    openFlowerFilePreview: async () => {},
     openFlowerLinkedFilePreview: async () => {},
     openFlowerLinkedDirectoryBrowser: async () => {},
     consumeOpenTerminalInDirectoryRequest: () => {},

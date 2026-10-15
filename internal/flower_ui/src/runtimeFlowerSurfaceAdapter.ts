@@ -4,7 +4,6 @@ import type { FlowerModelCatalogDiscovery } from './contracts/flowerSurfaceContr
 import type {
   FlowerApprovalCommandResult,
   FlowerCanonicalReferenceOpenRequest,
-  FlowerFileOpenRequest,
   FlowerLinkedContextPathOpenRequest,
   FlowerModelSourceRecovery,
   FlowerPermissionType,
@@ -177,8 +176,6 @@ export type RuntimeFlowerSurfaceAdapterOptions = Readonly<{
   submitInput: (input: FlowerSubmitInputRequest) => Promise<FlowerSubmitInputReceipt>;
   getWorkingDirectoryPathContext?: () => Promise<FlowerWorkingDirectoryPathContext>;
   listWorkingDirectoryEntries?: (input: FlowerWorkingDirectoryListInput) => Promise<readonly FlowerWorkingDirectoryEntry[]>;
-  openFileBrowser?: (request: FlowerFileOpenRequest) => Promise<void>;
-  openFilePreview?: (request: FlowerFileOpenRequest) => Promise<void>;
   openCanonicalReference?: (request: FlowerCanonicalReferenceOpenRequest) => Promise<void>;
   resolveCanonicalReference?: FlowerSurfaceAdapter['resolveCanonicalReference'];
   openLinkedFilePreview?: (request: FlowerLinkedContextPathOpenRequest) => Promise<void>;
@@ -594,8 +591,6 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
     } : {}),
     ...(options.getWorkingDirectoryPathContext ? { getWorkingDirectoryPathContext: options.getWorkingDirectoryPathContext } : {}),
     ...(options.listWorkingDirectoryEntries ? { listWorkingDirectoryEntries: options.listWorkingDirectoryEntries } : {}),
-    ...(options.openFileBrowser ? { openFileBrowser: options.openFileBrowser } : {}),
-    ...(options.openFilePreview ? { openFilePreview: options.openFilePreview } : {}),
     ...(options.openCanonicalReference ? { openCanonicalReference: options.openCanonicalReference } : {}),
     ...(options.resolveCanonicalReference ? { resolveCanonicalReference: options.resolveCanonicalReference } : {}),
     ...(options.openLinkedFilePreview ? { openLinkedFilePreview: options.openLinkedFilePreview } : {}),

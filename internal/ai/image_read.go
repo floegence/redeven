@@ -91,6 +91,7 @@ func decodeBoundedImage(body []byte) (image.Image, string, image.Config, error) 
 }
 
 type imageReadResult struct {
+	FilePath    string `json:"file_path,omitempty"`
 	DisplayName string `json:"display_name"`
 	MIMEType    string `json:"mime_type"`
 	Width       int    `json:"width"`
@@ -139,6 +140,7 @@ func (r *run) toolImageRead(ctx context.Context, meta *session.Meta, toolID stri
 	}
 	var body []byte
 	var name string
+	var sourcePath string
 	if r.shouldRouteTargetTool("image.read") {
 		result, err := r.execTargetTool(ctx, toolID, "image.read", args)
 		if err != nil {
@@ -194,6 +196,7 @@ func (r *run) toolImageRead(ctx context.Context, meta *session.Meta, toolID stri
 			return nil, err
 		}
 		name = info.Name()
+		sourcePath = path
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -202,6 +205,7 @@ func (r *run) toolImageRead(ctx context.Context, meta *session.Meta, toolID stri
 	if err != nil {
 		return nil, err
 	}
+	result.FilePath = sourcePath
 	if err := r.host.saveToolMedia(ctx, attachment, body); err != nil {
 		return nil, err
 	}

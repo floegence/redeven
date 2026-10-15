@@ -5,6 +5,8 @@ import { createFilePreviewController } from './createFilePreviewController';
 
 const openReadFileStreamChannelMock = vi.fn();
 
+vi.mock('../services/localApi', () => ({prepareLocalApiRequestInit: vi.fn(async (init: RequestInit) => init)}));
+
 vi.mock('../utils/fileStreamReader', () => ({
   openReadFileStreamChannel: (...args: unknown[]) => openReadFileStreamChannelMock(...args),
 }));
@@ -365,8 +367,8 @@ describe('createFilePreviewController', () => {
 
       expect(controller.open()).toBe(true);
       expect(controller.item()?.path).toBe('/workspace/demo.ts');
-      expect(controller.loading()).toBe(true);
-      expect(controller.error()).toBe(null);
+      expect(controller.loading()).toBe(false);
+      expect(controller.errorType()).toBe('connection_error');
       expect(controller.message()).toBe('Waiting for connection...');
       expect(openReadFileStreamChannelMock).not.toHaveBeenCalled();
 
@@ -577,5 +579,64 @@ describe('createFilePreviewController', () => {
     } finally {
       dispose();
     }
+  });
+});
+
+describe('file preview recovery', () => {
+  it('retains the missing state while retrying once and replaces it only after success', async () => {
+    const file = {id:'/missing.txt',name:'missing.txt',path:'/missing.txt',type:'file'} satisfies FileItem;
+    const retry = deferred<ReturnType<typeof createTextChannel>>();
+    openReadFileStreamChannelMock.mockRejectedValueOnce(Object.assign(new Error('Access denied text must not override status'),{code:404})).mockReturnValueOnce(retry.promise);
+    let controller!: ReturnType<typeof createFilePreviewController>;
+    const dispose=createRoot(dispose=>{controller=createFilePreviewController({client:()=>({} as any),rpc:()=>undefined,canWrite:()=>false});return dispose;});
+    try {
+      await controller.openPreview(file);
+      expect(controller.errorType()).toBe('not_found');
+      const retained=controller.error();
+      const pending=controller.retry();
+      await controller.retry();
+      expect(controller.loading()).toBe(true);
+      expect(controller.error()).toBe(retained);
+      expect(openReadFileStreamChannelMock).toHaveBeenCalledTimes(2);
+      retry.resolve(createTextChannel('restored'));
+      await pending;
+      expect(controller.error()).toBeNull();
+      expect(controller.text()).toBe('restored');
+    } finally {dispose();}
+  });
+
+  it('ignores a delayed retry after switching to another target', async () => {
+    const old={id:'/old.txt',name:'old.txt',path:'/old.txt',type:'file'} satisfies FileItem;
+    const next={...old,id:'/next.txt',name:'next.txt',path:'/next.txt'};
+    const retry=deferred<ReturnType<typeof createTextChannel>>();
+    openReadFileStreamChannelMock.mockRejectedValueOnce(Object.assign(new Error('gone'),{code:404})).mockReturnValueOnce(retry.promise).mockResolvedValueOnce(createTextChannel('new target'));
+    let controller!: ReturnType<typeof createFilePreviewController>;
+    const dispose=createRoot(dispose=>{controller=createFilePreviewController({client:()=>({} as any),rpc:()=>undefined,canWrite:()=>false});return dispose;});
+    try {
+      await controller.openPreview(old);
+      const pending=controller.retry();
+      await controller.openPreview(next);
+      const stale=createTextChannel('old target');retry.resolve(stale);await pending;
+      expect(controller.item()?.path).toBe('/next.txt');
+      expect(controller.text()).toBe('new target');
+      expect(stale.channel.close).toHaveBeenCalledOnce();
+    } finally {dispose();}
+  });
+
+  it.each([[404,'not_found'],[403,'permission_denied'],[409,'type_changed'],[200,'render_error']] as const)('classifies media failure using authorized HEAD %s',async(status,kind)=>{
+    const fetchMock=vi.fn(async()=>new Response(null,{status,statusText:status===409?'path is a directory':'Unavailable'}));vi.stubGlobal('fetch',fetchMock);
+    let controller!:ReturnType<typeof createFilePreviewController>;
+    const dispose=createRoot(dispose=>{controller=createFilePreviewController({client:()=>undefined,rpc:()=>undefined,canWrite:()=>false});return dispose;});
+    try {
+      await controller.openPreview({id:'/movie.mp4',name:'movie.mp4',path:'/movie.mp4',type:'file'});
+      await controller.reportResourceError('/movie.mp4',controller.resourceUrl());
+      expect(controller.errorType()).toBe(kind);
+      expect(fetchMock).toHaveBeenCalledWith(controller.resourceUrl(),expect.objectContaining({method:'HEAD',cache:'no-store'}));
+      fetchMock.mockResolvedValueOnce(new Response(null,{status:200}));
+      await controller.retry();
+      expect(controller.error()).toBeNull();
+      expect(controller.resourceUrl()).toContain('movie.mp4');
+      expect(openReadFileStreamChannelMock).not.toHaveBeenCalled();
+    } finally {dispose();vi.unstubAllGlobals();}
   });
 });

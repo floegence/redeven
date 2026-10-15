@@ -1095,74 +1095,13 @@ describe('buildFlowerTimelineEntries', () => {
     expect(first.blocks.map((block) => (block.type === 'content' ? block.content : 'activity'))).toEqual(['Structured answer.']);
   });
 
-  it('keeps host-only file action paths out of activity signatures', () => {
-    const timeline = activityTimeline({
-      file_actions: {
-        file_action_1: {
-          action_id: 'file_action_1',
-          display_name: 'app.ts',
-          can_preview: true,
-          can_browse_directory: true,
-        },
-      },
-      items: [activityItem({
-        item_id: 'file_action_1',
-        tool_name: 'file.read',
-        renderer: 'file',
-        label: 'app.ts',
-        payload: { operation: 'read', display_name: 'app.ts', file_action_id: 'file_action_1' },
-      })],
-    });
-
-    const signature = activityTimelineSignature(timeline);
-    expect(signature).toContain('file_action_1');
-    expect(signature).toContain('app.ts');
-    expect(signature).not.toContain('/workspace/private');
-  });
-
-  it('includes file action capabilities in activity signatures', () => {
-    const base = activityTimeline({
-      file_actions: {
-        file_action_1: {
-          action_id: 'file_action_1',
-          display_name: 'app.ts',
-          can_preview: false,
-          can_browse_directory: false,
-        },
-      },
-      items: [activityItem({
-        item_id: 'file_action_1',
-        tool_name: 'file.read',
-        renderer: 'file',
-        label: 'app.ts',
-        payload: { operation: 'read', display_name: 'app.ts', file_action_id: 'file_action_1' },
-      })],
-    });
-    const withPreview = activityTimeline({
-      ...base,
-      file_actions: {
-        file_action_1: {
-          action_id: 'file_action_1',
-          display_name: 'app.ts',
-          can_preview: true,
-          can_browse_directory: false,
-        },
-      },
-    });
-    const withBrowse = activityTimeline({
-      ...base,
-      file_actions: {
-        file_action_1: {
-          action_id: 'file_action_1',
-          display_name: 'app.ts',
-          can_preview: true,
-          can_browse_directory: true,
-        },
-      },
-    });
-
-    expect(activityTimelineSignature(withPreview)).not.toBe(activityTimelineSignature(base));
-    expect(activityTimelineSignature(withBrowse)).not.toBe(activityTimelineSignature(withPreview));
+  it('includes exact resource targets in activity signatures', () => {
+    const make = (path: string) => activityTimeline({ items: [activityItem({
+      tool_name: 'read_file', renderer: 'file', target_refs: [{kind:'file',label:'app.ts',path}],
+      payload: {operation:'read',display_name:'app.ts'},
+    })] });
+    expect(activityTimelineSignature(make('/one/app.ts'))).not.toBe(activityTimelineSignature(make('/two/app.ts')));
+    expect(activityTimelineSignature(make('/one/app.ts'))).toContain('/one/app.ts');
   });
 
   it('keeps nested payloads available without accepting host-only path fields', () => {

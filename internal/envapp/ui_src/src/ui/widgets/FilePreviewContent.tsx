@@ -1,3 +1,4 @@
+import type { FilePreviewErrorType } from './filePreviewErrorUtils';
 import type { BindPdfPreviewEditor } from './pdfPreviewEditor';
 import { Show, createMemo } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
@@ -36,6 +37,10 @@ export interface FilePreviewContentProps {
   truncated?: boolean;
   loading?: boolean;
   error?: string | null;
+  errorType?: FilePreviewErrorType;
+  onOpenParent?: () => void | Promise<void>;
+  onRenderError?: (path: string, message?: string) => void;
+  onResourceError?: (path:string,source:string) => void;
   xlsxSheetName?: string;
   xlsxRows?: string[][];
   onCopyPath?: () => boolean | Promise<boolean>;
@@ -89,14 +94,18 @@ export function FilePreviewContent(props: FilePreviewContentProps) {
 
         <Show when={resolvedError()}>
           <FilePreviewErrorState
-            errorType={classifyFilePreviewError(resolvedError())}
+            errorType={props.errorType ?? classifyFilePreviewError(resolvedError())}
             message={resolvedError()}
             onRetry={props.onRetry}
+            path={resolvedPath()}
+            busy={props.loading}
+            onOpenParent={resolvedPath() && resolvedPath() !== '/' ? props.onOpenParent : undefined}
+            onCopyPath={props.onCopyPath}
           />
         </Show>
 
         <RedevenLoadingCurtain
-          visible={!!props.loading}
+          visible={!!props.loading && !resolvedError()}
           eyebrow={i18n.t('filePreview.previewEyebrow')}
           message={props.message || i18n.t('filePreview.loadingFile')}
         />

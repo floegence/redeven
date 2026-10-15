@@ -1,3 +1,4 @@
+import type { FilePreviewErrorType } from './filePreviewErrorUtils';
 import type { BindPdfPreviewEditor } from './pdfPreviewEditor';
 import { Show, createMemo } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
@@ -43,8 +44,13 @@ export interface FilePreviewPanelProps {
   truncated?: boolean;
   loading?: boolean;
   error?: string | null;
+  errorType?: FilePreviewErrorType;
+  onOpenParent?: () => void | Promise<void>;
+  onRenderError?: (path: string, message?: string) => void;
+  onResourceError?: (path:string,source:string) => void;
   xlsxSheetName?: string;
   xlsxRows?: string[][];
+  onRetry?: () => void;
   onCopyPath?: () => boolean | Promise<boolean>;
   onDownload?: () => void;
   onAskFlower?: (selectionText: string) => void | Promise<void>;
@@ -96,6 +102,11 @@ export function FilePreviewPanel(props: FilePreviewPanelProps) {
             truncated={props.truncated}
             loading={props.loading}
             error={props.error}
+            errorType={props.errorType}
+            onOpenParent={props.onOpenParent}
+            onResourceError={props.onResourceError}
+            onRenderError={props.onRenderError}
+            onRetry={props.onRetry}
             xlsxSheetName={props.xlsxSheetName}
             xlsxRows={props.xlsxRows}
             onCopyPath={props.onCopyPath}

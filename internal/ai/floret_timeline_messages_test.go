@@ -332,7 +332,7 @@ func TestTypedTimelineDoesNotConsumeDeprecatedGlobalDrafts(t *testing.T) {
 	}
 }
 
-func TestPublicFloretActivityProjectionRemovesPrivatePathsEverywhere(t *testing.T) {
+func TestPublicFloretActivityProjectionOnlyExposesExplicitTargetPaths(t *testing.T) {
 	t.Parallel()
 	pathPayload := fltools.FileActivityPayload{
 		Path: "/workspace/private.md", Operation: "write", Status: "success", Summary: "updated",
@@ -358,8 +358,8 @@ func TestPublicFloretActivityProjectionRemovesPrivatePathsEverywhere(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, forbidden := range []string{"\"path\"", "\"file_path\"", "\"pending_token\"", "private.md"} {
-		if strings.Contains(string(raw), forbidden) && forbidden != "private.md" {
+	for _, forbidden := range []string{`"file_path"`, `"pending_token"`, "file:///workspace/private.md"} {
+		if strings.Contains(string(raw), forbidden) {
 			t.Fatalf("public activity contains forbidden field %s: %s", forbidden, raw)
 		}
 	}
@@ -370,7 +370,7 @@ func TestPublicFloretActivityProjectionRemovesPrivatePathsEverywhere(t *testing.
 	if payload.Path != "" || payload.Operation != "write" || payload.Status != "success" || payload.DisplayName != "private.md" || payload.ChangeType != "update" || payload.Additions != 2 || payload.Deletions != 1 || payload.UnifiedDiff == "" {
 		t.Fatalf("public file payload=%+v", payload)
 	}
-	if len(view.Items[0].Activity.Presentation.TargetRefs) != 1 || view.Items[0].Activity.Presentation.TargetRefs[0].Path != "" {
+	if len(view.Items[0].Activity.Presentation.TargetRefs) != 1 || view.Items[0].Activity.Presentation.TargetRefs[0].Path != "/workspace/private.md" {
 		t.Fatalf("public target refs=%+v", view.Items[0].Activity.Presentation.TargetRefs)
 	}
 	if view.Items[0].Activity.Metadata["display_name"] != "private.md" || len(view.Items[0].Activity.Metadata) != 1 {
@@ -380,8 +380,8 @@ func TestPublicFloretActivityProjectionRemovesPrivatePathsEverywhere(t *testing.
 	if err != nil || !ok {
 		t.Fatalf("typed timeline projection: ok=%v err=%v", ok, err)
 	}
-	if strings.Contains(string(rawMessage), `"path"`) {
-		t.Fatalf("typed timeline contains private path: %s", rawMessage)
+	if strings.Count(string(rawMessage), `"path":"/workspace/private.md"`) != 1 {
+		t.Fatalf("typed timeline must expose the path only in its target: %s", rawMessage)
 	}
 }
 
@@ -506,9 +506,10 @@ func TestQueuedAttachmentWithoutSafeResourceKeepsStableDisplayIdentity(t *testin
 
 func TestTimelinePaginationBoundsUntrustedRowIDs(t *testing.T) {
 	t.Parallel()
-	const endpointID, threadID = "endpoint_pagination", "thread_pagination"
+	meta := testSendTurnMeta()
+	endpointID, threadID := meta.EndpointID, "thread_pagination"
 	store := newAuthorityContinuityStore(t)
-	if err := store.CreateThreadSettings(t.Context(), threadstore.ThreadSettings{ThreadID: threadID, EndpointID: endpointID, PermissionType: "readonly"}); err != nil {
+	if err := store.CreateThreadSettings(t.Context(), threadstore.ThreadSettings{ThreadID: threadID, EndpointID: endpointID, NamespacePublicID: meta.NamespacePublicID, PermissionType: "readonly"}); err != nil {
 		t.Fatal(err)
 	}
 	service := &Service{threadsDB: store, threadRuntime: &authorityContinuityRuntime{
@@ -521,17 +522,17 @@ func TestTimelinePaginationBoundsUntrustedRowIDs(t *testing.T) {
 		},
 	}}
 	for _, rowID := range []int64{math.MaxInt32 + 1, math.MaxInt64} {
-		before, _, _, err := service.listThreadTimelineMessages(t.Context(), endpointID, threadID, 2, rowID)
+		before, _, _, err := service.listThreadTimelineMessages(t.Context(), meta, threadID, 2, rowID)
 		if err != nil || len(before) != 2 || before[0].MessageID != "second" || before[1].MessageID != "third" {
 			t.Fatalf("before %d = %#v, error %v; want final two items", rowID, before, err)
 		}
-		after, next, more, err := service.listThreadTimelineMessagesAfter(t.Context(), endpointID, threadID, 2, rowID, false)
+		after, next, more, err := service.listThreadTimelineMessagesAfter(t.Context(), meta, threadID, 2, rowID, false)
 		if err != nil || len(after) != 0 || next != 3 || more {
 			t.Fatalf("after %d = %#v, next %d, more %v, error %v; want exhausted page", rowID, after, next, more, err)
 		}
 	}
 	for _, rowID := range []int64{-1, math.MinInt64} {
-		page, next, more, err := service.listThreadTimelineMessagesAfter(t.Context(), endpointID, threadID, 2, rowID, false)
+		page, next, more, err := service.listThreadTimelineMessagesAfter(t.Context(), meta, threadID, 2, rowID, false)
 		if err != nil || len(page) != 2 || page[0].MessageID != "first" || next != 2 || !more {
 			t.Fatalf("after %d = %#v, next %d, more %v, error %v; want first page", rowID, page, next, more, err)
 		}

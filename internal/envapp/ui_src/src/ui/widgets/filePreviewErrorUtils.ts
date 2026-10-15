@@ -1,6 +1,7 @@
 import type { EnvAppTranslationKey } from '../i18n/locales';
 
 export type FilePreviewErrorType =
+  | 'type_changed'
   | 'not_found'
   | 'permission_denied'
   | 'file_too_large'
@@ -21,10 +22,24 @@ function lower(value: string | null | undefined): string {
   return (value ?? '').toLowerCase();
 }
 
-export function classifyFilePreviewError(message: string | null | undefined): FilePreviewErrorType {
-  const msg = lower(message);
+export function classifyFilePreviewError(error: unknown): FilePreviewErrorType {
+  const record = error && typeof error === 'object' ? error as { code?: unknown; status?: unknown; message?: unknown } : null;
+  const code = typeof record?.code === 'string' ? record.code.toUpperCase() : '';
+  if (['EACCES', 'EPERM', 'PERMISSION_DENIED', 'READ_DENIED', 'PATH_OUTSIDE_SCOPE'].includes(code)) return 'permission_denied';
+  if (['ENOENT', 'NOT_FOUND'].includes(code)) return 'not_found';
+  if (['EISDIR', 'ENOTDIR', 'PATH_NOT_FILE', 'PATH_NOT_DIRECTORY'].includes(code)) return 'type_changed';
+  const status = Number(record?.status ?? record?.code);
+  if (status === 403 || status === 401) return 'permission_denied';
+  if (status === 404 || status === 410) return 'not_found';
+  if (status === 413) return 'file_too_large';
+  if (status === 415) return 'unsupported';
+  if (status === 409) return 'type_changed';
+  if (status >= 500) return 'connection_error';
+  const msg = lower(typeof error === 'string' ? error : typeof record?.message === 'string' ? record.message : '');
 
+  if (status === 400 && !['path is a directory', 'path is not a directory'].includes(msg)) return 'generic_error';
   if (!msg) return 'generic_error';
+  if (msg.includes('not a file') || msg.includes('must reference a file') || msg.includes('is a directory')) return 'type_changed';
 
   if (msg.includes('not found') || msg.includes('404') || msg.includes('no such file')) {
     return 'not_found';
@@ -65,7 +80,9 @@ export function classifyFilePreviewError(message: string | null | undefined): Fi
   }
 
   if (
-    msg.includes('connection')
+    msg.includes('failed to fetch')
+    || msg.includes('load failed')
+    || msg.includes('connection')
     || msg.includes('waiting for connection')
     || msg.includes('network')
     || msg.includes('econnrefused')
@@ -79,9 +96,15 @@ export function classifyFilePreviewError(message: string | null | undefined): Fi
 }
 
 const ERROR_META: Record<FilePreviewErrorType, { title: string; description: string; titleKey: EnvAppTranslationKey; descriptionKey: EnvAppTranslationKey }> = {
+  type_changed: {
+    title: 'File type changed',
+    description: 'The current object cannot be opened as a file. Browse its parent folder to inspect it.',
+    titleKey: 'filePreview.errorTypeChangedTitle',
+    descriptionKey: 'filePreview.errorTypeChangedDescription',
+  },
   not_found: {
     title: 'File not found',
-    description: 'The file may have been moved, deleted, or renamed.',
+    description: 'It may have been moved, deleted, or disconnected.',
     titleKey: 'filePreview.errorFileNotFoundTitle',
     descriptionKey: 'filePreview.errorFileNotFoundDescription',
   },

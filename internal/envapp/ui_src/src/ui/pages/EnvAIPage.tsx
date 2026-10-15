@@ -126,8 +126,6 @@ export function EnvAIPage(props: EnvAIPageProps) {
     ...env.flowerWorkingDirectoryActions,
     openMessageFile: env.openFlowerMessageFile,
     openMessageURL: env.openFlowerMessageURL,
-    openFileBrowser: env.openFlowerFileBrowser,
-    openFilePreview: env.openFlowerFilePreview,
     openCanonicalReferenceTarget: env.openFlowerCanonicalReferenceTarget,
     openLinkedFilePreview: env.openFlowerLinkedFilePreview,
     openLinkedDirectoryBrowser: env.openFlowerLinkedDirectoryBrowser,

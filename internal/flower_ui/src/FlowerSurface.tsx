@@ -256,6 +256,7 @@ import {
 } from './flowerCompanionPresence';
 import { formatFilesystemPickerError, mapFilesystemPickerContext, mapFilesystemPickerEntries } from './filePicker/filesystemPicker';
 import { applyFlowerRuntimeCurrentView } from './runtimeCurrentView';
+import { threadNeedsFileActivityTargets } from './fileActivityTargets';
 import { mergeFlowerContextUsage } from './flowerLiveMapper';
 import { createFlowerScrollTailController, type FlowerScrollTailController } from './flowerScrollTail';
 import { basenameFromAbsolutePath, normalizeAbsolutePath } from './filePicker/path';
@@ -4287,10 +4288,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     returnToChat();
     if (detailAvailable) {
       if (!mobileNavigation()) requestComposerFocus(focusOwner);
-      if (revalidateWarmDetail) {
+      if (revalidateWarmDetail || threadNeedsFileActivityTargets(threadCache().views.get(tid)!.thread)) {
         void requestThreadDetail(
           tid,
           'background_refresh',
+          true,
         );
       }
       return;
@@ -6218,7 +6220,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           const item = block.block.items[itemIndex];
           const toolName = item?.tool_name || '';
           if (toolName[0] !== 'c' && toolName[0] !== 'b') continue;
-          const presentation = presentFlowerActivityItem(item, undefined, { tools: copy().chat.toolActivity });
+          const presentation = presentFlowerActivityItem(item, { tools: copy().chat.toolActivity });
           const detail = presentation.detailBlocks.find((candidate) => candidate.kind === 'computer');
           if (!detail || detail.kind !== 'computer') continue;
           candidates.push({
@@ -9015,7 +9017,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
   const activityItemAriaLabel = (item: FlowerActivityItem, timeline: FlowerActivityTimelineBlock): string => (
     [
-      presentFlowerActivityItem(item, timeline.file_actions, {
+      presentFlowerActivityItem(item, {
         tools: copy().chat.toolActivity,
       webSearch: copy().chat.webSearch,
         statuses: copy().chat.toolStatuses,
@@ -9085,50 +9087,33 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       ?? (candidates.length === 1 ? candidates[0] : null);
   };
 
-  const openActivityFileBrowser = (messageID: string, blockIndex: number, itemID: string, action: FlowerActivityFileAction) => {
-    if (selectedThreadDetailPending()) return;
-    if (!action.can_browse_directory || !trimString(action.action_id) || !props.adapter.openFileBrowser) return;
-    void props.adapter.openFileBrowser({
-		thread_id: trimString(selectedThreadID()) || undefined,
-      message_id: messageID,
-      block_index: blockIndex,
-      item_id: itemID,
-      action_id: action.action_id,
-    }).catch((error) => {
-      notifyThreadActionError(getErrorMessage(error));
-    });
-  };
-
-  const openActivityFilePreview = (messageID: string, blockIndex: number, itemID: string, action: FlowerActivityFileAction) => {
-    if (selectedThreadDetailPending()) return;
-    if (!action.can_preview || !trimString(action.action_id) || !props.adapter.openFilePreview) return;
-    void props.adapter.openFilePreview({
-		thread_id: trimString(selectedThreadID()) || undefined,
-      message_id: messageID,
-      block_index: blockIndex,
-      item_id: itemID,
-      action_id: action.action_id,
-    }).catch((error) => {
-      notifyThreadActionError(getErrorMessage(error));
-    });
+  const pendingActivityFileOpens = new Set<string>();
+  const openActivityFile = (action: FlowerActivityFileAction, preview: boolean) => {
+    if (selectedThreadDetailPending() || !action.path || !props.adapter.openMessageFile) return;
+    const key = JSON.stringify([action.path, preview, action.target_kind]);
+    if (pendingActivityFileOpens.has(key)) return;
+    pendingActivityFileOpens.add(key);
+    void props.adapter.openMessageFile({
+      path: action.path,
+      action: preview ? 'preview' : 'reveal',
+      kind: action.target_kind === 'directory' ? 'directory' : 'file',
+    }).catch(error => notifyThreadActionError(getErrorMessage(error)))
+      .finally(() => pendingActivityFileOpens.delete(key));
   };
 
   const fileActionButtons = (
-    messageID: Accessor<string>,
-    blockIndex: Accessor<number>,
-    itemID: Accessor<string>,
     action: Accessor<FlowerActivityFileAction | null>,
     attachmentTarget: Accessor<FlowerMessageAttachmentPreviewTarget | null> = () => null,
   ) => {
-    const canonicalActionID = () => trimString(action()?.action_id);
+    const targetPath = () => trimString(action()?.path);
     const canPreview = () => Boolean(
       attachmentTarget()
-      || (action()?.can_preview && canonicalActionID() && props.adapter.openFilePreview),
+      || (action()?.can_preview && targetPath() && props.adapter.openMessageFile),
     );
     const canBrowseDirectory = () => Boolean(
       action()?.can_browse_directory
-      && canonicalActionID()
-      && props.adapter.openFileBrowser,
+      && targetPath()
+      && props.adapter.openMessageFile,
     );
     const displayName = () => trimString(attachmentTarget()?.name) || trimString(action()?.display_name) || copy().chat.toolActivity.file;
     return (
@@ -9147,7 +9132,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   openMessageAttachmentPreview(attachmentTarget()!);
                   return;
                 }
-                if (action()) openActivityFilePreview(messageID(), blockIndex(), itemID(), action()!);
+                if (action()) openActivityFile(action()!, true);
               }}
             >
               <FileItemIcon size={14} item={{ name: displayName(), type: 'file' }} class="size-3.5" />
@@ -9162,7 +9147,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               disabled={selectedThreadDetailPending()}
               onClick={(event) => {
                 event.stopPropagation();
-                openActivityFileBrowser(messageID(), blockIndex(), itemID(), action()!);
+                openActivityFile(action()!, false);
               }}
             >
               <FileItemIcon size={14} item={{ name: displayName(), type: 'folder' }} open class="size-3.5" />
@@ -9686,7 +9671,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     </section>
   );
 
-  const fileReadBlock = (messageID: Accessor<string>, blockIndex: Accessor<number>, itemID: Accessor<string>, block: Accessor<Extract<FlowerActivityDetailBlock, { kind: 'file_read' }>>) => {
+  const fileReadBlock = (block: Accessor<Extract<FlowerActivityDetailBlock, { kind: 'file_read' }>>) => {
     const lineSummary = () => {
       const start = Math.max(1, Math.floor(Number(block().line_offset || 1)));
       const count = Math.max(0, Math.floor(Number(block().line_count || 0)));
@@ -9704,22 +9689,22 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               <span class="flower-activity-file-truncated"> · truncated</span>
             </Show>
           </span>
-          {fileActionButtons(messageID, blockIndex, itemID, () => block().action)}
+          {fileActionButtons(() => block().action)}
         </div>
         <pre class="flower-activity-file-read-content"><code>{block().content}</code></pre>
       </div>
     );
   };
 
-  const fileDiffBlock = (messageID: Accessor<string>, blockIndex: Accessor<number>, itemID: Accessor<string>, block: Accessor<Extract<FlowerActivityDetailBlock, { kind: 'file_diff' }>>) => (
+  const fileDiffBlock = (block: Accessor<Extract<FlowerActivityDetailBlock, { kind: 'file_diff' }>>) => (
     <div class="flower-activity-file-diff-list">
-      <FlowerKeyedList scope={selectedThreadID()} focusFallback={focusComposerIfConnected} each={block().files} identity={(file) => file.action.action_id || file}>
-        {(file) => fileDiffFile(messageID, blockIndex, itemID, file, () => block().files.length > 1)}
+      <FlowerKeyedList scope={selectedThreadID()} focusFallback={focusComposerIfConnected} each={block().files} identity={(file) => file.action.path || file}>
+        {(file) => fileDiffFile(file, () => block().files.length > 1)}
       </FlowerKeyedList>
     </div>
   );
 
-  const fileDiffFile = (messageID: Accessor<string>, blockIndex: Accessor<number>, itemID: Accessor<string>, file: Accessor<FlowerActivityDiffFile>, showFileHeader: Accessor<boolean>) => (
+  const fileDiffFile = (file: Accessor<FlowerActivityDiffFile>, showFileHeader: Accessor<boolean>) => (
     <section class="flower-activity-file-diff-file">
       <Show when={showFileHeader()}>
         <div class="flower-activity-file-toolbar">
@@ -9734,7 +9719,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           <Show when={file().truncated}>
             <span class="flower-activity-file-truncated">{copy().chat.toolActivityDiffTruncated}</span>
           </Show>
-          {fileActionButtons(messageID, blockIndex, itemID, () => file().action)}
+          {fileActionButtons(() => file().action)}
         </div>
       </Show>
       <div class="flower-activity-file-diff-grid">
@@ -9856,9 +9841,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   const ActivityDetailBlock: Component<{
-    messageID: string;
-    blockIndex: number;
-    itemID: string;
     block: FlowerNonTerminalDetailBlock;
   }> = (detailProps) => {
     const blockOfKind = <K extends FlowerNonTerminalDetailBlock['kind']>(_kind: K) =>
@@ -9866,7 +9848,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return <Switch>
       <Match when={detailProps.block.kind === 'error'}>{errorDetailBlock(blockOfKind('error'))}</Match>
       <Match when={detailProps.block.kind === 'structured_rows'}>
-        <Show when={blockOfKind('structured_rows')().preview} fallback={<FlowerActivityRows block={blockOfKind('structured_rows')()} copy={copy().chat} />}>
+        <Show when={blockOfKind('structured_rows')().preview} fallback={<FlowerActivityRows block={blockOfKind('structured_rows')()} copy={copy().chat} renderTargetActions={target => fileActionButtons(() => ({ path: target.path ?? '', target_kind: target.kind, display_name: target.label, can_preview: target.kind === 'file', can_browse_directory: true }))} />}>
           <FlowerActivityPreview block={blockOfKind('structured_rows')()} copy={copy().chat} />
         </Show>
       </Match>
@@ -9877,8 +9859,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       <Match when={detailProps.block.kind === 'web_fetch'}>{webFetchBlock(blockOfKind('web_fetch'))}</Match>
       <Match when={detailProps.block.kind === 'question'}>{questionBlock(blockOfKind('question'))}</Match>
       <Match when={detailProps.block.kind === 'structured'}>{detailLinesBlock(blockOfKind('structured'))}</Match>
-      <Match when={detailProps.block.kind === 'file_read'}>{fileReadBlock(() => detailProps.messageID, () => detailProps.blockIndex, () => detailProps.itemID, blockOfKind('file_read'))}</Match>
-      <Match when={detailProps.block.kind === 'file_diff'}>{fileDiffBlock(() => detailProps.messageID, () => detailProps.blockIndex, () => detailProps.itemID, blockOfKind('file_diff'))}</Match>
+      <Match when={detailProps.block.kind === 'file_read'}>{fileReadBlock(blockOfKind('file_read'))}</Match>
+      <Match when={detailProps.block.kind === 'file_diff'}>{fileDiffBlock(blockOfKind('file_diff'))}</Match>
       <Match when={detailProps.block.kind === 'web_operation'}><WebSearchActivity search={(detailProps.block as Extract<FlowerActivityDetailBlock, { kind: 'web_operation' }>).search} copy={copy().chat.webSearch} openLabel={copy().chat.toolActivityOpenWebPage} /></Match>
       <Match when={detailProps.block.kind === 'todos'}>
         <div class="flower-activity-todo-list" role="list" aria-label={copy().chat.toolActivity.todos}>
@@ -9942,7 +9924,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     viewportScope: FlowerScrollTailController,
   ) => {
     const disclosureKey = createMemo(() => activityItemKey(messageID(), timeline(), item()));
-    const presentation = createMemo<FlowerActivityPresentation>((previous) => retainEqualValue(previous, presentFlowerActivityItem(item(), timeline().file_actions, {
+    const presentation = createMemo<FlowerActivityPresentation>((previous) => retainEqualValue(previous, presentFlowerActivityItem(item(), {
       tools: copy().chat.toolActivity,
       webSearch: copy().chat.webSearch,
       statuses: copy().chat.toolStatuses,
@@ -10070,13 +10052,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               {activityRowContent()}
             </button>
           </Show>
-          {fileActionButtons(
-            messageID,
-            blockIndex,
-            () => item().item_id,
-            rowFileAction,
-            rowAttachmentPreviewTarget,
-          )}
+          {fileActionButtons(rowFileAction, rowAttachmentPreviewTarget)}
         </div>
         <Show when={disclosure.mounted()}>
           <div
@@ -10144,7 +10120,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                           )}
                         </Show>
                         <Show when={!terminalBlock()}>
-                          <ActivityDetailBlock messageID={messageID()} blockIndex={blockIndex()} itemID={item().item_id} block={block() as FlowerNonTerminalDetailBlock} />
+                          <ActivityDetailBlock block={block() as FlowerNonTerminalDetailBlock} />
                         </Show>
                       </>
                     );

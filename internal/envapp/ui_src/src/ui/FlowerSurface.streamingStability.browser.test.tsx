@@ -229,10 +229,11 @@ describe('Flower complete interaction subtree stability', () => {
   });
 
   it('retains open tool details, selection, readers and observers through 300 unrelated snapshots', async () => {
+    await page.viewport(1280, 900);
     const fixture = streamingFixture(16, 5);
     const source = fixture.current();
     const extraDetails = [
-      { renderer: 'patch', tool_name: 'apply_patch', target_refs: [{ kind: 'file_action:patch-file', label: 'app.ts' }], payload: { mutations: [{ display_name: 'app.ts', change_type: 'update', additions: 1, deletions: 1, unified_diff: '@@ -1 +1 @@\n-old\n+new\n' }] } },
+      { renderer: 'patch', tool_name: 'apply_patch', payload: { mutations: [{ target: {kind:'file',label:'app.ts',path:'/workspace/app.ts'}, display_name: 'app.ts', change_type: 'update', additions: 1, deletions: 1, unified_diff: '@@ -1 +1 @@\n-old\n+new\n' }] } },
       { renderer: 'structured', tool_name: 'inspect', payload: { summary: 'Verified file permissions' } },
       { renderer: 'structured', tool_name: 'inspect', status: 'error', payload: { error: { message: 'Visible tool failure' } } },
       { renderer: 'question', tool_name: 'ask_user', payload: { questions: [{ id: 'historical-question', question: 'Choose a route', options: ['Fast', 'Scenic'] }] } },

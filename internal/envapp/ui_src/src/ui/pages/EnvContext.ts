@@ -2,7 +2,6 @@ import type { FlowerTurnLauncherSubmitInput } from '../../../../../flower_ui/src
 import { createContext, useContext, type Resource } from 'solid-js';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import type {
-  FlowerFileOpenRequest,
   FlowerSurfaceAdapter,
   FlowerComposerDraftCoordinator,
   FlowerLinkedContextPathOpenRequest,
@@ -170,8 +169,6 @@ export type EnvContextValue = {
   flowerWorkingDirectoryActions?: FlowerWorkingDirectoryNavigation;
   openFlowerMessageFile?: FlowerSurfaceAdapter['openMessageFile'];
   openFlowerMessageURL?: FlowerSurfaceAdapter['openMessageURL'];
-  openFlowerFileBrowser: (request: FlowerFileOpenRequest) => Promise<void>;
-  openFlowerFilePreview: (request: FlowerFileOpenRequest) => Promise<void>;
   openFlowerCanonicalReferenceTarget?: (target: FlowerCanonicalReferenceNavigationTarget) => Promise<void>;
   openFlowerLinkedFilePreview: (request: FlowerLinkedContextPathOpenRequest) => Promise<void>;
   openFlowerLinkedDirectoryBrowser: (request: FlowerLinkedContextPathOpenRequest) => Promise<void>;

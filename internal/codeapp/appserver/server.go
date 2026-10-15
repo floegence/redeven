@@ -2473,7 +2473,8 @@ func (g *Server) handleFSServeFile(w http.ResponseWriter, r *http.Request) {
 
 	resolved, err := g.scope.Resolve(userPath, filesystemscope.ResolveOptions{RequireExisting: true})
 	if err != nil {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		status, message := fsListHTTPError(err)
+		http.Error(w, message, status)
 		return
 	}
 	resolvedPath := resolved.RealAbs
@@ -2491,18 +2492,20 @@ func (g *Server) handleFSServeFile(w http.ResponseWriter, r *http.Request) {
 
 	f, err := os.Open(resolvedPath)
 	if err != nil {
-		http.Error(w, "not found", http.StatusNotFound)
+		status, message := fsListHTTPError(err)
+		http.Error(w, message, status)
 		return
 	}
 	defer f.Close()
 
 	st, err := f.Stat()
 	if err != nil {
-		http.Error(w, "not found", http.StatusNotFound)
+		status, message := fsListHTTPError(err)
+		http.Error(w, message, status)
 		return
 	}
 	if st.IsDir() {
-		http.Error(w, "not a file", http.StatusBadRequest)
+		http.Error(w, "not a file", http.StatusConflict)
 		return
 	}
 	if preview && (st.Size() > 64<<20 || (htmlPreview && st.Size() > 1_000_000)) {
@@ -2558,7 +2561,7 @@ func fsListHTTPError(err error) (int, string) {
 	switch {
 	case errors.Is(err, filesystemscope.ErrPathOutsideScope):
 		return http.StatusForbidden, "path outside filesystem scope"
-	case errors.Is(err, filesystemscope.ErrReadDenied):
+	case errors.Is(err, filesystemscope.ErrReadDenied), os.IsPermission(err):
 		return http.StatusForbidden, "read permission denied"
 	case os.IsNotExist(err):
 		return http.StatusNotFound, "not found"
@@ -5597,38 +5600,6 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				Label string `json:"label"`
 				Path  string `json:"path"`
 			}{Kind: target.Kind, Label: target.Label, Path: target.Path}})
-			return
-
-		case action == "file-action-open-target" && r.Method == http.MethodPost && len(parts) == 2:
-			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
-			if !ok {
-				return
-			}
-			if !g.requireAIService(w, aiSvc) {
-				return
-			}
-			dec := json.NewDecoder(r.Body)
-			dec.DisallowUnknownFields()
-			var body ai.FlowerFileActionOpenRequest
-			if err := dec.Decode(&body); err != nil {
-				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
-				return
-			}
-			if err := dec.Decode(&struct{}{}); err != io.EOF {
-				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
-				return
-			}
-			body.ThreadID = threadID
-			target, err := aiSvc.ResolveFlowerFileActionOpenTarget(r.Context(), meta, body)
-			if err != nil {
-				status := http.StatusBadRequest
-				if errors.Is(err, ai.ErrFlowerFileActionNotFound) {
-					status = http.StatusNotFound
-				}
-				writeJSON(w, status, apiResp{OK: false, Error: err.Error()})
-				return
-			}
-			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: target})
 			return
 
 		case action == "input_response" && r.Method == http.MethodPost && len(parts) == 2:

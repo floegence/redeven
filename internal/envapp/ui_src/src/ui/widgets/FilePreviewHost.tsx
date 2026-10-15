@@ -1,3 +1,4 @@
+import { dirnameAbsolute } from '../utils/askFlowerPath';
 import { useNotification } from '@floegence/floe-webapp-core';
 import { useEnvContext } from '../pages/EnvContext';
 import { useDownloadManager } from '../downloads/DownloadContext';
@@ -107,6 +108,11 @@ export function FilePreviewHost() {
       truncated={filePreview.controller.truncated()}
       loading={filePreview.controller.loading()}
       error={filePreview.controller.error()}
+      errorType={filePreview.controller.errorType()}
+      onRetry={() => void filePreview.controller.retry()}
+      onRenderError={filePreview.controller.reportRenderError}
+      onResourceError={(path,source) => void filePreview.controller.reportResourceError(path,source)}
+      onOpenParent={() => env.openFileBrowserAtPath(dirnameAbsolute(filePreview.controller.item()?.path ?? ''),{openStrategy:'focus_latest_or_create'})}
       xlsxSheetName={filePreview.controller.xlsxSheetName()}
       xlsxRows={filePreview.controller.xlsxRows()}
       onCopyPath={handleCopyPath}

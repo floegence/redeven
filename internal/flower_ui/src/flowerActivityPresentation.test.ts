@@ -32,26 +32,6 @@ it('renders a typed tool image as authorized media without a unavailable-result 
   expect(result.detailBlocks.some(block => block.kind === 'structured_rows' && block.notice)).toBe(false);
 });
 
-const fileActions = {
-  read_app: {
-    action_id: 'read_app',
-    display_name: 'app.ts',
-    can_preview: true,
-    can_browse_directory: true,
-  },
-  edit_app: {
-    action_id: 'edit_app',
-    display_name: 'app.ts',
-    can_preview: true,
-    can_browse_directory: true,
-  },
-  delete_old: {
-    action_id: 'delete_old',
-    display_name: 'old.ts',
-    can_preview: false,
-    can_browse_directory: true,
-  },
-} as const;
 
 function approvalAction(overrides: Partial<FlowerApprovalAction> = {}): FlowerApprovalAction {
   return {
@@ -274,7 +254,7 @@ describe('presentFlowerActivityItem', () => {
   it('localizes input labels while preserving the original query', () => {
     const result = presentFlowerActivityItem(item({ tool_name: 'rgrep', renderer: 'structured', label: 'useMemo',
       payload: { inputs: [{ title: 'query', content: 'useMemo', format: 'text' }], rows_provided: true },
-    }), undefined, { tools: { ...toolActivityEnUS, searchFiles: '搜索文件内容', inputQuery: '搜索条件', noOutput: '没有输出' } });
+    }), { tools: { ...toolActivityEnUS, searchFiles: '搜索文件内容', inputQuery: '搜索条件', noOutput: '没有输出' } });
     expect(result.label).toBe('搜索文件内容 useMemo');
     expect(JSON.stringify(result.detailBlocks)).toContain('搜索条件');
     expect(JSON.stringify(result.detailBlocks)).toContain('useMemo');
@@ -303,7 +283,7 @@ describe('presentFlowerActivityItem', () => {
       status: 'running',
       label: 'Review API boundary',
       payload: { action: 'wait', targets: [{ thread_id: 'child-thread-1' }], requested_count: 1 },
-    }), undefined, {
+    }), {
       subagentSummaries: [subagentSummary()],
     });
 
@@ -328,7 +308,7 @@ describe('presentFlowerActivityItem', () => {
       renderer: 'subagent_operation',
       label: 'Unrelated task',
       payload: { action: 'list', targets: [] },
-    }), undefined, {
+    }), {
       subagentSummaries: [subagentSummary()],
     });
 
@@ -339,10 +319,10 @@ describe('presentFlowerActivityItem', () => {
     const operation = item({ tool_name: 'subagents', renderer: 'subagent_operation',
       payload: { action: 'wait', targets: [{ thread_id: 'child-thread-1' }], requested_count: 1, completed_count: 0, timed_out: true },
     });
-    const completed = presentFlowerActivityItem(operation, undefined, {
+    const completed = presentFlowerActivityItem(operation, {
       subagentSummaries: [subagentSummary({ status: 'completed', created_at_ms: 1000, updated_at_ms: 5000 })],
     });
-    const rerunning = presentFlowerActivityItem(operation, undefined, {
+    const rerunning = presentFlowerActivityItem(operation, {
       subagentSummaries: [subagentSummary({ status: 'running', created_at_ms: 1000, updated_at_ms: 65_000 })],
     });
     expect(completed.label).toBe('Wait timed out · 0/1 completed');
@@ -354,7 +334,7 @@ describe('presentFlowerActivityItem', () => {
     const operation = item({ tool_name: 'subagents', renderer: 'subagent_operation',
       payload: { action: 'spawn', targets: [{ thread_id: 'child-thread-1', status: 'running' }] },
     });
-    const presentation = presentFlowerActivityItem(operation, undefined, {
+    const presentation = presentFlowerActivityItem(operation, {
       subagentSummaries: [subagentSummary({ status: 'completed', created_at_ms: 1000, updated_at_ms: 5000 })],
     });
     expect(presentation.label).toBe('Created subagent · Review API boundary');
@@ -662,7 +642,7 @@ describe('presentFlowerActivityItem', () => {
       renderer: 'terminal',
       description: '停止挂起的维基百科搜索请求',
       payload: {},
-    }), undefined, {
+    }), {
       terminal: {
         runCommand: '运行命令',
         readCommandOutput: '查看命令输出',
@@ -909,7 +889,7 @@ describe('presentFlowerActivityItem', () => {
         ],
         requested_count: 3,
       },
-    }), undefined, {
+    }), {
       subagentSummaries: [
         subagentSummary({ thread_id: 'thread-big-tech', task_name: 'Big Tech AI News' }),
         subagentSummary({ thread_id: 'thread-models', task_name: 'AI Models and Products' }),
@@ -1228,7 +1208,7 @@ describe('presentFlowerActivityItem', () => {
       tool_name: 'file.read',
       renderer: 'file',
       label: 'app.ts#dcbdf9b8c27f#e1703606242a',
-      target_refs: [{ kind: 'file_action:read_app', label: 'app.ts#dcbdf9b8c27f' }],
+      target_refs: [{ kind: 'file', path: '/workspace/src/app.ts', label: 'app.ts#dcbdf9b8c27f' }],
       payload: {
         operation: 'read',
         display_name: 'app.ts',
@@ -1238,13 +1218,13 @@ describe('presentFlowerActivityItem', () => {
         total_lines: 42,
         truncated: false,
       },
-    }), fileActions);
+    }));
 
     expect(presentation.label).toBe('Read app.ts');
     expect(presentation.title).toEqual({ kind: 'file', verb: 'Read', display_name: 'app.ts' });
     expect(presentation.meta).not.toContain('#dcbdf9b8c27f');
     expect(presentation.primaryAction).toEqual({
-      action_id: 'read_app',
+      path: '/workspace/src/app.ts', target_kind: 'file',
       display_name: 'app.ts',
       can_preview: true,
       can_browse_directory: true,
@@ -1253,7 +1233,7 @@ describe('presentFlowerActivityItem', () => {
     expect(presentation.detailBlocks).toEqual([{
       kind: 'file_read',
       action: {
-        action_id: 'read_app',
+        path: '/workspace/src/app.ts', target_kind: 'file',
         display_name: 'app.ts',
         can_preview: true,
         can_browse_directory: true,
@@ -1288,7 +1268,7 @@ describe('presentFlowerActivityItem', () => {
     const presentation = presentFlowerActivityItem(item({
       tool_name: 'file.write',
       renderer: 'file',
-      target_refs: [{ kind: 'file_action:edit_app', label: 'app.ts' }],
+      target_refs: [{ kind: 'file', path: '/workspace/src/app.ts', label: 'app.ts' }],
       payload: {
         operation: 'write',
         display_name: 'app.ts',
@@ -1297,7 +1277,7 @@ describe('presentFlowerActivityItem', () => {
         deletions: 1,
         unified_diff: '--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1,1 +1,1 @@\n-const value = 1;\n+const value = 2;',
       },
-    }), fileActions);
+    }));
 
     expect(presentation.label).toBe('Edit app.ts');
     expect(presentation.title).toEqual({ kind: 'file', verb: 'Edit', display_name: 'app.ts' });
@@ -1311,7 +1291,7 @@ describe('presentFlowerActivityItem', () => {
         new_path: '',
         change_type: 'update',
         action: {
-          action_id: 'edit_app',
+          path: '/workspace/src/app.ts', target_kind: 'file',
           display_name: 'app.ts',
           can_preview: true,
           can_browse_directory: true,
@@ -1354,7 +1334,7 @@ describe('presentFlowerActivityItem', () => {
       renderer: 'file',
       status: 'error',
       label: 'app.ts',
-      target_refs: [{ kind: 'file_action:read_app', label: 'app.ts' }],
+      target_refs: [{ kind: 'file', path: '/workspace/src/app.ts', label: 'app.ts' }],
       payload: {
         operation: 'read',
         display_name: 'app.ts',
@@ -1369,7 +1349,7 @@ describe('presentFlowerActivityItem', () => {
           retryable: false,
         },
       },
-    }), fileActions);
+    }));
 
     expect(presentation.detailBlocks.map((block) => block.kind)).toEqual(['file_read', 'error']);
     expect(presentation.detailBlocks.at(-1)).toEqual({
@@ -1385,14 +1365,15 @@ describe('presentFlowerActivityItem', () => {
       tool_name: 'apply_patch',
       renderer: 'patch',
       target_refs: [
-        { kind: 'file_action:edit_app', label: 'app.ts' },
-        { kind: 'file_action:delete_old', label: 'old.ts' },
+        { kind: 'file', path: '/workspace/src/app.ts', label: 'app.ts' },
+        { kind: 'directory', path: '/workspace/src', label: 'old.ts' },
       ],
       payload: {
         operation: 'apply_patch',
         mutations: [
           {
             display_name: 'app.ts',
+            target: {kind:'file',label:'app.ts',path:'/workspace/src/app.ts'},
             change_type: 'update',
             additions: 1,
             deletions: 1,
@@ -1400,13 +1381,14 @@ describe('presentFlowerActivityItem', () => {
           },
           {
             display_name: 'old.ts',
+            target: {kind:'directory',label:'src',path:'/workspace/src'},
             change_type: 'delete',
             deletions: 1,
             unified_diff: '--- a/src/old.ts\n+++ /dev/null\n@@ -1,1 +0,0 @@\n-remove',
           },
         ],
       },
-    }), fileActions);
+    }));
 
     expect(presentation.label).toBe('Edit 2 files');
     expect(presentation.title).toEqual({ kind: 'file', verb: 'Edit', display_name: '2 files' });
@@ -1419,12 +1401,12 @@ describe('presentFlowerActivityItem', () => {
         {
           display_name: 'app.ts',
           change_type: 'update',
-          action: { action_id: 'edit_app', display_name: 'app.ts', can_preview: true, can_browse_directory: true },
+          action: { path: '/workspace/src/app.ts', target_kind: 'file', display_name: 'app.ts', can_preview: true, can_browse_directory: true },
         },
         {
           display_name: 'old.ts',
           change_type: 'delete',
-          action: { action_id: 'delete_old', display_name: 'old.ts', can_preview: false, can_browse_directory: true },
+          action: { path: '/workspace/src', target_kind: 'directory', display_name: 'old.ts', can_preview: false, can_browse_directory: true },
         },
       ],
     });
@@ -1435,7 +1417,7 @@ describe('presentFlowerActivityItem', () => {
       tool_name: 'apply_patch',
       renderer: 'patch',
       status: 'error',
-      target_refs: [{ kind: 'file_action:edit_app', label: 'app.ts' }],
+      target_refs: [{ kind: 'file', path: '/workspace/src/app.ts', label: 'app.ts' }],
       payload: {
         operation: 'apply_patch',
         status: 'error',
@@ -1450,7 +1432,7 @@ describe('presentFlowerActivityItem', () => {
           retryable: false,
         },
       },
-    }), fileActions);
+    }));
 
     expect(presentation.detailBlocks.map((block) => block.kind)).toEqual(['file_diff', 'error']);
     expect(presentation.detailBlocks.at(-1)).toEqual({
@@ -1465,21 +1447,22 @@ describe('presentFlowerActivityItem', () => {
     const presentation = presentFlowerActivityItem(item({
       tool_name: 'apply_patch',
       renderer: 'patch',
-      target_refs: [{ kind: 'file_action:delete_old', label: 'old.ts' }],
+      target_refs: [{ kind: 'directory', path: '/workspace/src', label: 'old.ts' }],
       payload: {
         operation: 'apply_patch',
         mutations: [{
           display_name: 'old.ts',
+          target: {kind:'directory',label:'src',path:'/workspace/src'},
           change_type: 'delete',
           unified_diff: '--- a/src/old.ts\n+++ /dev/null\n@@ -1,1 +0,0 @@\n-remove',
         }],
       },
-    }), fileActions);
+    }));
 
     expect(presentation.label).toBe('Delete old.ts');
     expect(presentation.title).toEqual({ kind: 'file', verb: 'Delete', display_name: 'old.ts' });
     expect(presentation.primaryAction).toEqual({
-      action_id: 'delete_old',
+      path: '/workspace/src', target_kind: 'directory',
       display_name: 'old.ts',
       can_preview: false,
       can_browse_directory: true,

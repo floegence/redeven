@@ -556,3 +556,31 @@ func TestFSFileChatHTMLPreviewIsInertAndBounded(t *testing.T) {
 		t.Fatalf("out of scope preview = %d", got.Code)
 	}
 }
+
+func TestServerFSFileResourceRecoveryClassification(t *testing.T) {
+	home := t.TempDir()
+	srv, origin := newFSFileTestServer(t, home, session.Meta{CanRead: true}, nil)
+	target := filepath.Join(home, "gone.mp4")
+	if got := performFSFileRequest(srv, http.MethodHead, target, origin, ""); got.Code != http.StatusNotFound {
+		t.Fatalf("missing status=%d", got.Code)
+	}
+	if err := os.Mkdir(target, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if got := performFSFileRequest(srv, http.MethodHead, target, origin, ""); got.Code != http.StatusConflict {
+		t.Fatalf("changed type status=%d", got.Code)
+	}
+	if err := os.Remove(target); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(target, []byte("restored"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := performFSFileRequest(srv, http.MethodHead, target, origin, ""); got.Code != http.StatusOK {
+		t.Fatalf("restored status=%d", got.Code)
+	}
+	denied, _ := newFSFileTestServer(t, home, session.Meta{CanRead: false}, nil)
+	if got := performFSFileRequest(denied, http.MethodHead, target, origin, ""); got.Code != http.StatusForbidden {
+		t.Fatalf("denied status=%d", got.Code)
+	}
+}

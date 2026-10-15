@@ -172,7 +172,6 @@ type run struct {
 	assistantCreatedAtUnixMs int64
 	assistantBlocks          []any
 	assistantAnswer          assistantAnswerState
-	activityFileActionSeq    int64
 
 	muFloretIdentity     sync.Mutex
 	floretEventIdentity  floretRuntimeEventIdentity

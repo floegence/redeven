@@ -102,7 +102,7 @@ func toolDetailRow(title, meta, content string, format fltools.StructuredActivit
 	return fltools.StructuredActivityRow{Title: title, Meta: meta, Content: content, Format: format, Language: language, Truncated: truncated}
 }
 
-func structuredToolResults(toolName string, data any, existing []fltools.StructuredActivityRow) []fltools.StructuredActivityRow {
+func structuredToolResults(toolName string, data any, existing []fltools.StructuredActivityRow, withTargets ...bool) []fltools.StructuredActivityRow {
 	if isThreadQueryTool(toolName) {
 		return nil
 	}
@@ -178,7 +178,11 @@ func structuredToolResults(toolName string, data any, existing []fltools.Structu
 			if failure := anyToString(file["error"]); failure != "" {
 				content = failure
 			}
+			previousRows := len(rows)
 			add(name, "", content, fltools.StructuredActivityRowFormatCode, "text", readBoolField(result, "truncated"))
+			if len(withTargets) > 0 && withTargets[0] && anyToString(file["error"]) == "" && len(rows) > previousRows && payload["target_id"] == nil && payload["execution_location"] == nil {
+				rows[len(rows)-1].Target = fileActivityTarget(anyToString(result["file_path"]), "file")
+			}
 		}
 	case "use_skill":
 		add(anyToString(payload["name"]), anyToString(payload["reason"]), anyToString(payload["content"]), fltools.StructuredActivityRowFormatMarkdown, "", readBoolField(payload, "truncated"))

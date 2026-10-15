@@ -132,7 +132,7 @@ export async function openReadFileStreamChannel(params: {
     if (!meta.ok) {
       const code = meta.error?.code ?? 0;
       const msg = meta.error?.message ?? 'Failed to read file';
-      throw new Error(code ? `${msg} (${code})` : msg);
+      throw Object.assign(new Error(msg), { code });
     }
 
     return { channel, meta };

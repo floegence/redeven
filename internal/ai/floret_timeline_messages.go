@@ -11,6 +11,7 @@ import (
 	"github.com/floegence/floret/v7/identity"
 	"github.com/floegence/floret/v7/observation"
 	flruntime "github.com/floegence/floret/v7/runtime"
+	"github.com/floegence/redeven/internal/session"
 )
 
 // threadTimelineMessage is an HTTP pagination envelope over the typed current
@@ -20,6 +21,7 @@ type threadTimelineMessage struct {
 	MessageID   string
 	MessageJSON json.RawMessage
 	Decoration  *FlowerTimelineDecoration
+	item        *flruntime.ThreadItem
 }
 
 func normalizeTimelineLimit(limit int) int {
@@ -29,15 +31,15 @@ func normalizeTimelineLimit(limit int) int {
 	return min(limit, 500)
 }
 
-func (service *Service) typedTimelineMessages(ctx context.Context, endpointID, threadID string) ([]threadTimelineMessage, error) {
+func (service *Service) typedTimelineMessages(ctx context.Context, meta *session.Meta, threadID string) ([]threadTimelineMessage, error) {
 	if service == nil || service.threadRuntime == nil || service.threadsDB == nil {
 		return nil, errors.New("flower thread runtime is unavailable")
 	}
-	endpointID, threadID = strings.TrimSpace(endpointID), strings.TrimSpace(threadID)
-	if endpointID == "" || threadID == "" {
+	threadID = strings.TrimSpace(threadID)
+	if threadID == "" {
 		return nil, errors.New("invalid request")
 	}
-	settings, err := service.threadsDB.GetThreadSettings(ctxOrBackground(ctx), endpointID, threadID)
+	settings, err := service.threadSettingsForRead(ctxOrBackground(ctx), meta, threadID)
 	if err != nil || settings == nil {
 		if err == nil {
 			err = flruntime.ErrThreadNotFound
@@ -65,9 +67,34 @@ func (service *Service) typedTimelineMessages(ctx context.Context, endpointID, t
 		if !ok {
 			continue
 		}
-		out = append(out, threadTimelineMessage{RowID: int64(len(out) + 1), MessageID: item.ID, MessageJSON: raw})
+		out = append(out, threadTimelineMessage{RowID: int64(len(out) + 1), MessageID: item.ID, MessageJSON: raw, item: &item})
 	}
 	return out, nil
+}
+
+// Hydration follows HTTP pagination so a page performs one canonical batch and
+// never resolves tools outside the response. Source items are response-local.
+func (service *Service) hydrateTimelineMessageTargets(ctx context.Context, meta *session.Meta, threadID string, page []threadTimelineMessage) error {
+	items := make([]flruntime.ThreadItem, 0, len(page))
+	indices := make([]int, 0, len(page))
+	for index, message := range page {
+		if message.item != nil && message.item.Activity != nil {
+			items = append(items, *message.item)
+			indices = append(indices, index)
+		}
+	}
+	hydrated, err := service.hydrateFileActivityTargets(ctx, meta, threadID, items)
+	if err != nil {
+		return err
+	}
+	for index, item := range hydrated {
+		raw, _, err := typedThreadItemMessage(threadID, item)
+		if err != nil {
+			return err
+		}
+		page[indices[index]].MessageJSON = raw
+	}
+	return nil
 }
 
 func typedThreadItemMessage(threadID string, item flruntime.ThreadItem) (json.RawMessage, bool, error) {
@@ -99,7 +126,7 @@ func typedThreadItemMessage(threadID string, item flruntime.ThreadItem) (json.Ra
 			Items:         []observation.ActivityItem{*item.Activity},
 		}
 		timeline.Summary = observation.RebuildActivitySummary(timeline)
-		block := newActivityTimelineBlockWithPublicIdentity(timeline, nil, activityTimelinePublicIdentity{
+		block := newActivityTimelineBlockWithPublicIdentity(timeline, activityTimelinePublicIdentity{
 			RunID:    runID,
 			ThreadID: threadID,
 			TurnID:   turnID,
@@ -219,8 +246,8 @@ func inputResponseVisibleText(block persistedInputResponseBlock) string {
 	return strings.Join(rows, "\n\n")
 }
 
-func (service *Service) listThreadTimelineMessages(ctx context.Context, endpointID, threadID string, limit int, beforeRowID int64) ([]threadTimelineMessage, int64, bool, error) {
-	items, err := service.typedTimelineMessages(ctx, endpointID, threadID)
+func (service *Service) listThreadTimelineMessages(ctx context.Context, meta *session.Meta, threadID string, limit int, beforeRowID int64) ([]threadTimelineMessage, int64, bool, error) {
+	items, err := service.typedTimelineMessages(ctx, meta, threadID)
 	if err != nil {
 		return nil, 0, false, err
 	}
@@ -231,14 +258,17 @@ func (service *Service) listThreadTimelineMessages(ctx context.Context, endpoint
 	}
 	start := max(0, end-limit)
 	page := append([]threadTimelineMessage(nil), items[start:end]...)
+	if err := service.hydrateTimelineMessageTargets(ctx, meta, threadID, page); err != nil {
+		return nil, 0, false, err
+	}
 	if start == 0 || len(page) == 0 {
 		return page, 0, false, nil
 	}
 	return page, int64(start + 1), true, nil
 }
 
-func (service *Service) listThreadTimelineMessagesAfter(ctx context.Context, endpointID, threadID string, limit int, afterRowID int64, tail bool) ([]threadTimelineMessage, int64, bool, error) {
-	items, err := service.typedTimelineMessages(ctx, endpointID, threadID)
+func (service *Service) listThreadTimelineMessagesAfter(ctx context.Context, meta *session.Meta, threadID string, limit int, afterRowID int64, tail bool) ([]threadTimelineMessage, int64, bool, error) {
+	items, err := service.typedTimelineMessages(ctx, meta, threadID)
 	if err != nil {
 		return nil, 0, false, err
 	}
@@ -249,25 +279,10 @@ func (service *Service) listThreadTimelineMessagesAfter(ctx context.Context, end
 	}
 	end := min(len(items), start+limit)
 	page := append([]threadTimelineMessage(nil), items[start:end]...)
+	if err := service.hydrateTimelineMessageTargets(ctx, meta, threadID, page); err != nil {
+		return nil, 0, false, err
+	}
 	return page, int64(end), end < len(items), nil
-}
-
-func (service *Service) buildCanonicalFlowerTimelineMessages(ctx context.Context, endpointID, threadID string) ([]FlowerTimelineMessage, error) {
-	items, err := service.typedTimelineMessages(ctx, endpointID, threadID)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]FlowerTimelineMessage, 0, len(items))
-	for _, item := range items {
-		message, ok, decodeErr := flowerTimelineMessageFromRaw(threadID, "", "", item.MessageID, item.MessageJSON)
-		if decodeErr != nil {
-			return nil, decodeErr
-		}
-		if ok {
-			out = append(out, message)
-		}
-	}
-	return out, nil
 }
 
 func canonicalUserTimelineMessageForThread(threadID, turnID, runID, entryID, input string, attachments []flruntime.MessageAttachment, references []flruntime.MessageReference, createdAt int64) (json.RawMessage, error) {

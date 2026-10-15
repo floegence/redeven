@@ -105,6 +105,13 @@ func listDirectoryRPCError(err error) *sessionrpc.Error {
 	}
 }
 
+func readFileRPCError(err error) *sessionrpc.Error {
+	if errors.Is(err, errFSPathIsDirectory) {
+		return &sessionrpc.Error{Code: 400, Message: "path is a directory"}
+	}
+	return listDirectoryRPCError(err)
+}
+
 func (s *Service) Register(r *sessionrpc.Router, meta *session.Meta) {
 	s.RegisterWithAccessGate(r, meta, nil)
 }

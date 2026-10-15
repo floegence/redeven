@@ -72,7 +72,7 @@ export function projectFlowerCompanionLiveTail(
       const itemIndex = activeTool(block);
       if (itemIndex < 0) continue;
       const item = block.items[itemIndex];
-      const text = singleLineHead(presentFlowerActivityItem(item, block.file_actions).label);
+      const text = singleLineHead(presentFlowerActivityItem(item).label);
       if (text) return { kind: 'tool', text, identity: [progress.identity, 'tool', item.item_id].join('\x1f') };
     }
     const output = liveOutput(message);

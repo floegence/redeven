@@ -5,7 +5,6 @@ import type {
   FlowerActivityAttentionReason,
   FlowerActivityApprovalState,
   FlowerActivityChip,
-  FlowerActivityFileAction,
   FlowerActivityItem,
   FlowerActivityKind,
   FlowerActivityRenderer,
@@ -579,7 +578,7 @@ function sanitizeActivityPublicValue(value: unknown, path: string): unknown {
   return value;
 }
 
-const structuredActivityRowKeys = new Set(['title', 'meta', 'content', 'format', 'language', 'truncated']);
+const structuredActivityRowKeys = new Set(['title', 'meta', 'content', 'format', 'language', 'truncated', 'target']);
 const structuredActivityRowFormats = new Set(['text', 'markdown', 'code']);
 const structuredActivityRowLimit = 200;
 const webFetchActivityPayloadKeys = new Set([
@@ -656,7 +655,7 @@ function mapSubagentOperationActivityPayload(payload: JsonRecord): Readonly<Reco
   return out;
 }
 
-function mapStructuredActivityRows(raw: unknown, field: string): readonly Readonly<Record<string, string | boolean>>[] {
+function mapStructuredActivityRows(raw: unknown, field: string): readonly Readonly<Record<string, unknown>>[] {
   if (!Array.isArray(raw)) {
     throw new Error(`Flower contract error: activity_item.presentation.payload.${field} must be an array.`);
   }
@@ -690,6 +689,7 @@ function mapStructuredActivityRows(raw: unknown, field: string): readonly Readon
       throw new Error(`Flower contract error: ${field}[${index}].content exceeds the structured activity limit.`);
     }
     return {
+      ...(row.target !== undefined ? {target:mapActivityTargetRef(row.target,index)} : {}),
       ...(language ? { language } : {}),
       ...(row.truncated !== undefined ? { truncated: row.truncated as boolean } : {}),
       ...(title ? { title } : {}),
@@ -730,6 +730,13 @@ function mapActivityPayload(raw: unknown, renderer?: FlowerActivityRenderer): Re
       }
     }
     if (safeKey === 'rows_provided' && typeof value !== 'boolean') throw new Error('Flower contract error: rows_provided must be a boolean.');
+    if (safeKey === 'mutations' && Array.isArray(value)) {
+      out[safeKey]=value.map((entry,index) => {
+        const mutation=plainRecordValue(entry) ?? {};const {target,...rest}=mutation;
+        return {...sanitizeActivityPublicValue(rest,'activity_item.presentation.payload.mutations') as Record<string,unknown>, ...(target !== undefined ? {target:mapActivityTargetRef(target,index)} : {})};
+      });
+      continue;
+    }
     out[safeKey] = safeKey === 'rows' || safeKey === 'inputs'
       ? mapStructuredActivityRows(value, safeKey)
       : sanitizeActivityPublicValue(value, `activity_item.presentation.payload.${safeKey}`);
@@ -754,7 +761,7 @@ function mapActivityChip(raw: unknown): FlowerActivityChip | null {
 function mapActivityTargetRef(raw: unknown, index: number): FlowerActivityTargetRef | null {
   const record = plainRecordValue(raw);
   if (!record) return null;
-  const allowed = new Set(['kind', 'label', 'uri', 'resource_ref', 'line']);
+  const allowed = new Set(['kind', 'label', 'uri', 'resource_ref', 'path', 'line']);
   for (const key of Object.keys(record)) {
     if (!allowed.has(key)) {
       throw new Error(`Flower contract error: activity_item.presentation.target_refs[${index}].${key} is not part of the activity target ref contract.`);
@@ -766,6 +773,7 @@ function mapActivityTargetRef(raw: unknown, index: number): FlowerActivityTarget
   return {
     kind,
     label,
+    ...(record.path !== undefined ? {path: navigationPath(record.path,kind)} : {}),
     ...(trim(record.uri) ? { uri: trim(record.uri) } : {}),
     ...(trim(record.resource_ref) ? { resource_ref: trim(record.resource_ref) } : {}),
     ...(record.line !== undefined ? { line: nonNegativeInteger(record.line, `activity_item.presentation.target_refs[${index}].line`) } : {}),
@@ -847,38 +855,6 @@ function mapActivityCounts(raw: unknown): FlowerActivityTimelineBlock['summary']
   return out;
 }
 
-function mapActivityFileAction(raw: unknown, actionKey: string): FlowerActivityFileAction | null {
-  const record = plainRecordValue(raw);
-  if (!record) return null;
-  const allowed = new Set(['action_id', 'display_name', 'can_preview', 'can_browse_directory']);
-  for (const key of Object.keys(record)) {
-    if (!allowed.has(key)) {
-      throw new Error(`Flower contract error: activity_timeline.file_actions.${actionKey}.${key} is not part of the file action contract.`);
-    }
-  }
-  const actionID = trim(record.action_id);
-  const displayName = trim(record.display_name);
-  if (!actionID || !displayName) return null;
-  return {
-    action_id: actionID,
-    display_name: displayName,
-    can_preview: Boolean(record.can_preview),
-    can_browse_directory: Boolean(record.can_browse_directory),
-  };
-}
-
-function mapActivityFileActions(raw: unknown): Readonly<Record<string, FlowerActivityFileAction>> | undefined {
-  const record = plainRecordValue(raw);
-  if (!record) return undefined;
-  const out: Record<string, FlowerActivityFileAction> = {};
-  for (const [key, value] of Object.entries(record)) {
-    const actionKey = trim(key);
-    if (!actionKey) continue;
-    const action = mapActivityFileAction(value, actionKey);
-    if (action) out[actionKey] = action;
-  }
-  return Object.keys(out).length > 0 ? out : undefined;
-}
 
 function mapActivityTimelineBlock(raw: unknown): FlowerActivityTimelineBlock | null {
   const record = plainRecordValue(raw);
@@ -890,7 +866,6 @@ function mapActivityTimelineBlock(raw: unknown): FlowerActivityTimelineBlock | n
   const items = Array.isArray(record.items) ? record.items.map(mapFlowerActivityItem).filter(isPresent) : [];
   const summary = plainRecordValue(record.summary) ?? {};
   const attention = activityAttentionReasonArray(summary.attention_reasons);
-  const fileActions = mapActivityFileActions(record.file_actions);
   return {
     type: 'activity-timeline',
     schema_version: positiveInteger(record.schema_version) ?? 1,
@@ -908,7 +883,6 @@ function mapActivityTimelineBlock(raw: unknown): FlowerActivityTimelineBlock | n
       ...(positiveInteger(summary.duration_ms) ? { duration_ms: positiveInteger(summary.duration_ms) } : {}),
     },
     items,
-    ...(fileActions ? { file_actions: fileActions } : {}),
   };
 }
 
@@ -1276,4 +1250,13 @@ export function mapFlowerThread(raw: unknown, messages: readonly FlowerChatMessa
     read_status: mapFlowerReadStatus(readStatusRaw ?? record.read_status),
   };
   return thread;
+}
+
+function navigationPath(value: unknown, kind: string): string {
+  if (typeof value !== 'string' || !value.startsWith('/') || value !== value.trim()
+    || value.includes('\0') || /[\r\n]/u.test(value) || Array.from(value).length > 500
+    || !['file', 'directory'].includes(kind)) {
+    throw new Error('Flower contract error: invalid navigation target path.');
+  }
+  return value;
 }

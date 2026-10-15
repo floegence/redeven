@@ -13,6 +13,7 @@ export interface ImagePreviewPaneProps {
   item?: FileItem | null;
   descriptor: FilePreviewDescriptor;
   objectUrl?: string;
+  onRenderError?: () => void;
   allowLocalWheel?: boolean;
 }
 
@@ -54,7 +55,7 @@ export function ImagePreviewPane(props: ImagePreviewPaneProps) {
                 onLoad={event => {
                   if (source !== props.objectUrl) return;
                   setNaturalSize({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight });
-                }} onError={() => { if (source === props.objectUrl) setFailed(true); }} />
+                }} onError={() => { if (source === props.objectUrl) {setFailed(true);props.onRenderError?.();} }} />
             )}</Show>
           </div>
         </Show>

@@ -20,6 +20,8 @@ import { openReadFileStreamChannel, type ReadFileStreamChannel } from '../utils/
 import { getFilePreviewBlockReason } from './FileBrowserShared';
 import { createWorkspaceEffectRpc } from '../services/workspaceEffects';
 import { bytesToBase64 } from '../protocol/redeven_v1/codec/base64';
+import { prepareLocalApiRequestInit } from '../services/localApi';
+import { classifyFilePreviewError, type FilePreviewErrorType } from './filePreviewErrorUtils';
 import type { BindPdfPreviewEditor, PdfPreviewEditor } from './pdfPreviewEditor';
 
 type PendingPreviewAction =
@@ -43,7 +45,7 @@ function encodeUtf8Bytes(text: string): Uint8Array<ArrayBuffer> {
 }
 
 function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) return String(error.message || '').trim();
+  if (error && typeof error === 'object' && 'message' in error) return String(error.message || '').trim();
   return String(error ?? '').trim();
 }
 
@@ -68,6 +70,10 @@ export interface FilePreviewController {
   truncated: Accessor<boolean>;
   loading: Accessor<boolean>;
   error: Accessor<string | null>;
+  errorType: Accessor<FilePreviewErrorType | undefined>;
+  retry: () => Promise<void>;
+  reportResourceError: (path: string, source: string) => Promise<void>;
+  reportRenderError: (path: string, message?: string) => void;
   xlsxSheetName: Accessor<string>;
   xlsxRows: Accessor<string[][]>;
   openPreview: (item: FileItem) => Promise<void>;
@@ -109,6 +115,8 @@ export function createFilePreviewController(params: {
   const [previewTruncated, setPreviewTruncated] = createSignal(false);
   const [previewLoading, setPreviewLoading] = createSignal(false);
   const [previewError, setPreviewError] = createSignal<string | null>(null);
+  const [previewErrorType, setPreviewErrorType] = createSignal<FilePreviewErrorType>();
+  let mediaErrorController: AbortController | undefined;
   const [xlsxSheetName, setXlsxSheetName] = createSignal('');
   const [xlsxRows, setXlsxRows] = createSignal<string[][]>([]);
   const [pendingConnectionLoad, setPendingConnectionLoad] = createSignal<PendingConnectionPreviewLoad | null>(null);
@@ -135,6 +143,9 @@ export function createFilePreviewController(params: {
   };
 
   const cleanupPreviewContent = () => {
+    mediaErrorController?.abort();
+    mediaErrorController=undefined;
+    setPreviewErrorType(undefined);
     if (activePreviewChannel) {
       try {
 		void Promise.resolve(activePreviewChannel.stream.reset()).catch(() => undefined);
@@ -209,7 +220,9 @@ export function createFilePreviewController(params: {
     setCloseConfirmOpen(true);
   };
 
-  const loadPreview = async (item: FileItem) => {
+  const loadPreview = async (item: FileItem, retrying = false) => {
+    const retainedError = retrying ? previewError() : null;
+    const retainedType = retrying ? previewErrorType() : undefined;
     if (item.type !== 'file') return;
 
     const seq = (previewReqSeq += 1);
@@ -228,10 +241,14 @@ export function createFilePreviewController(params: {
       return;
     }
 
-    cleanupPreviewContent();
-    setPreviewItem(item);
-    setPreviewOpen(true);
-    setPreviewLoading(true);
+    batch(() => {
+      cleanupPreviewContent();
+      setPreviewItem(item);
+      setPreviewOpen(true);
+      setPreviewLoading(true);
+      setPreviewError(retainedError);
+      setPreviewErrorType(retainedType);
+    });
 
     const baseDescriptor = describeFilePreview(item.name);
     setPreviewDescriptor(baseDescriptor);
@@ -241,6 +258,8 @@ export function createFilePreviewController(params: {
     if (fileSize != null && readPlan.rejectOversizedBeforeRead && fileSize > readPlan.maxBytes) {
       setPreviewDescriptor({ mode: 'unsupported' });
       setPreviewMessage(readPlan.oversizedMessage);
+      setPreviewError(null);
+      setPreviewErrorType(undefined);
       setPreviewLoading(false);
       return;
     }
@@ -253,19 +272,43 @@ export function createFilePreviewController(params: {
         setPreviewLoading(false);
         return;
       }
-      setPreviewResourceUrl(resourceUrl);
-      setPreviewLoading(false);
+      if (retrying) {
+        const controller = new AbortController();
+        mediaErrorController = controller;
+        try {
+          const response = await fetch(resourceUrl, await prepareLocalApiRequestInit({ method: 'HEAD', cache: 'no-store', signal: controller.signal }));
+          if (!response.ok) throw Object.assign(new Error(response.statusText), { status: response.status });
+          if (controller.signal.aborted || seq !== previewReqSeq) return;
+        } catch (error) {
+          if (controller.signal.aborted || seq !== previewReqSeq) return;
+          setPreviewError(getErrorMessage(error) || 'Failed to fetch media.');
+          setPreviewErrorType(classifyFilePreviewError(error));
+          setPreviewLoading(false);
+          return;
+        } finally {
+          if (mediaErrorController === controller) mediaErrorController = undefined;
+        }
+      }
+      batch(() => {
+        setPreviewResourceUrl(resourceUrl);
+        setPreviewError(null);
+        setPreviewErrorType(undefined);
+        setPreviewLoading(false);
+      });
       return;
     }
 
     const client = params.client();
     if (!client) {
       setPendingConnectionLoad({ item, seq });
-      setPreviewError(null);
+      setPreviewError(CONNECTION_WAITING_MESSAGE);
+      setPreviewErrorType('connection_error');
       setPreviewMessage(CONNECTION_WAITING_MESSAGE);
+      setPreviewLoading(false);
       return;
     }
 
+    let failed = false;
     try {
       const wantBytes = readPlan.readBytes;
       let bytes = emptyBytes();
@@ -278,7 +321,7 @@ export function createFilePreviewController(params: {
         offset: 0,
         maxBytes: wantBytes,
       });
-      activePreviewChannel = channel;
+      if (seq === previewReqSeq) activePreviewChannel = channel;
 
       try {
         if (seq !== previewReqSeq) return;
@@ -441,14 +484,53 @@ export function createFilePreviewController(params: {
       }
     } catch (error) {
       if (seq !== previewReqSeq) return;
+      failed = true;
       setPreviewError(getErrorMessage(error) || 'Failed to load file.');
+      setPreviewErrorType(classifyFilePreviewError(error));
       setPreviewDescriptor({ mode: 'unsupported' });
       setPreviewMessage('Failed to load file.');
     } finally {
       if (seq === previewReqSeq) {
+        if (!failed) { setPreviewError(null); setPreviewErrorType(undefined); }
         setPreviewLoading(false);
       }
     }
+  };
+
+  const retry = async () => {
+    const item = previewItem();
+    if (!item || previewLoading() || previewDirty()) return;
+    await loadPreview(item, true);
+  };
+
+  const reportRenderError = (path: string, message = 'Failed to render preview') => {
+    if (previewItem()?.path !== path || !previewOpen() || previewDirty()) return;
+    batch(() => {
+      setPreviewError(message);
+      setPreviewErrorType('render_error');
+      setPreviewLoading(false);
+    });
+  };
+
+  const reportResourceError = async (path: string, source: string) => {
+    if (previewItem()?.path !== path || previewResourceUrl() !== source || mediaErrorController) return;
+    const seq = previewReqSeq;
+    const controller = new AbortController();
+    mediaErrorController = controller;
+    let error: unknown = new Error('Failed to render media preview');
+    try {
+      const response = await fetch(source, await prepareLocalApiRequestInit({ method: 'HEAD', cache: 'no-store', signal: controller.signal }));
+      if (!response.ok) error = Object.assign(new Error(response.statusText), { status: response.status });
+    } catch (failure) {
+      error = failure;
+    }
+    if (controller.signal.aborted || seq !== previewReqSeq || previewItem()?.path !== path) return;
+    mediaErrorController = undefined;
+    batch(() => {
+      setPreviewError(getErrorMessage(error) || 'Failed to load file.');
+      setPreviewErrorType(classifyFilePreviewError(error));
+      setPreviewLoading(false);
+    });
   };
 
   const openPreview = async (item: FileItem) => {
@@ -471,7 +553,7 @@ export function createFilePreviewController(params: {
         return;
       }
       setPendingConnectionLoad(null);
-      void loadPreview(pending.item);
+      void loadPreview(pending.item, true);
     });
   });
 
@@ -648,6 +730,10 @@ export function createFilePreviewController(params: {
     truncated: previewTruncated,
     loading: previewLoading,
     error: previewError,
+    errorType: previewErrorType,
+    retry,
+    reportResourceError,
+    reportRenderError,
     xlsxSheetName,
     xlsxRows,
     openPreview,

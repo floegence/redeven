@@ -75,6 +75,7 @@ function PdfPreviewPage(props: { document: PDFDocumentProxy; session: PdfDocumen
 }
 
 export interface PdfPreviewPaneProps {
+  onRenderError?: (message: string) => void;
   surface?: FilePreviewSurface;
   bytes?: Uint8Array<ArrayBuffer> | null;
   editing?: boolean;
@@ -149,7 +150,7 @@ export function PdfPreviewPane(props: PdfPreviewPaneProps) {
         }
         if (!disposed) setLoaded({ document, pages });
       } catch (reason) {
-        if (!disposed) setError(reason instanceof Error ? reason.message : String(reason));
+        if (!disposed) { const message = reason instanceof Error ? reason.message : String(reason); setError(message); props.onRenderError?.(message); }
       } finally { if (!disposed) setLoading(false); }
     })();
     onCleanup(() => {

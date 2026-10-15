@@ -146,13 +146,6 @@ type PendingToolResult struct {
 	Metadata    map[string]string `json:"metadata,omitempty"`
 }
 
-type FlowerActivityFileAction struct {
-	ActionID      string `json:"action_id"`
-	DisplayName   string `json:"display_name"`
-	PreviewPath   string `json:"preview_path,omitempty"`
-	DirectoryPath string `json:"directory_path,omitempty"`
-}
-
 type SourceRef struct {
 	StartIndex *int   `json:"start_index,omitempty"`
 	EndIndex   *int   `json:"end_index,omitempty"`
