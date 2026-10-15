@@ -29,7 +29,7 @@ func TestDesktopModelContinuationPreservesOpaqueState(t *testing.T) {
 		t.Run(kind, func(t *testing.T) {
 			gateway := &recordingPreparedGateway{}
 			adapter := newFloretProviderAdapter(gateway, DesktopModelSourceProviderType, "desktop:model_test", ProviderControls{}, TurnBudgets{}, "")
-			state := &flprovider.State{Kind: kind, ID: "response-1", Attributes: map[string]string{"opaque": "original"}}
+			state := &flprovider.State{Kind: kind, ID: "response-1", ReusePolicy: flprovider.StateReuseCanonicalHistory, Attributes: map[string]string{"opaque": "original"}}
 			prepared, err := adapter.Prepare(t.Context(), flprovider.Request{PreviousState: state})
 			if err != nil {
 				t.Fatal(err)
@@ -51,7 +51,7 @@ func TestDesktopModelContinuationPreservesOpaqueState(t *testing.T) {
 				t.Fatalf("requests = %d", len(gateway.requests))
 			}
 			request := gateway.requests[0]
-			want := &ModelGatewayState{Kind: kind, ID: "response-1", Attributes: map[string]string{"opaque": "original"}}
+			want := &ModelGatewayState{Kind: kind, ID: "response-1", ReusePolicy: flprovider.StateReuseCanonicalHistory, Attributes: map[string]string{"opaque": "original"}}
 			if request.Protocol != "" || !reflect.DeepEqual(request.PreviousState, want) {
 				t.Fatalf("Desktop must forward frozen opaque state to its executor: %+v", request)
 			}

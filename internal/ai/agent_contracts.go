@@ -169,9 +169,10 @@ type TurnUsage struct {
 }
 
 type ModelGatewayState struct {
-	Kind       string            `json:"kind,omitempty"`
-	ID         string            `json:"id,omitempty"`
-	Attributes map[string]string `json:"attributes,omitempty"`
+	ReusePolicy flprovider.StateReusePolicy `json:"reuse_policy,omitempty"`
+	Kind        string                      `json:"kind,omitempty"`
+	ID          string                      `json:"id,omitempty"`
+	Attributes  map[string]string           `json:"attributes,omitempty"`
 }
 
 type ModelGatewayResult struct {

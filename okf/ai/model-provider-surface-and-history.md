@@ -3,7 +3,7 @@ type: AI Runtime Contract
 title: Model provider surface and history
 description: Keep provider-visible model history, tool surface refresh, and render lineage under Floret ownership.
 tags: [ai, models, providers, history]
-timestamp: 2026-10-08T00:00:00Z
+timestamp: 2026-10-15T00:00:00Z
 ---
 # Summary
 
@@ -13,7 +13,9 @@ Floret owns the provider-visible history and render lineage for each Turn. Redev
 
 ## Provider surface and history
 
-Flower's provider prefix has one owner. Published Floret v7.26.0 keeps one append-only canonical history and keys each render lineage by the complete provider request surface: provider, model, reasoning, System Prompt, local and hosted tools, adapter, context policy, and provider-state compatibility. Accepted user input, reasoning, assistant text, historical tool calls, and results enter later requests exactly once. `ask_user` remains an Assistant tool call and its durable public answer is the matching Tool result, never a synthetic Assistant explanation plus User JSON. Secret answers leave one redacted Tool result while the real value exists only in the current resume overlay. A provider-surface change sends the full canonical history on its own lineage and clears incompatible continuation state. It does not compact unless the selected model's context window is actually insufficient. Completed compaction starts one new global generation; other prefix shrinkage or mutation fails as `context_prefix_drift`.
+Flower's provider prefix has one owner. Published Floret v7.34.0 keeps one append-only canonical history and keys each render lineage by the complete provider request surface: provider, model, reasoning, System Prompt, local and hosted tools, adapter, context policy, and provider-state compatibility. Accepted user input, reasoning, assistant text, historical tool calls, and results enter later requests exactly once. `ask_user` remains an Assistant tool call and its durable public answer is the matching Tool result, never a synthetic Assistant explanation plus User JSON. Secret answers leave one redacted Tool result while the real value exists only in the current resume overlay. A provider-surface change sends the full canonical history on its own lineage and clears incompatible exact-surface continuation. Native state marked `canonical_history` remains eligible only when the adapter validates its canonical prefix. It does not compact unless the selected model's context window is actually insufficient. Completed compaction starts one new global generation; other prefix shrinkage or mutation fails as `context_prefix_drift`.
+
+Runtime/Desktop epoch 60 preserves optional `reuse_policy` across model-source RPC. The published Floret v7.34.0 reader accepts that optional field in existing schema-15 stores; older readers reject it and must be upgraded without host-side database repair. ChatGPT accepts both existing native state and an optional recent `response_id`, validates canonical history before replay, and stores its native output with the canonical-history reuse policy. The response identity is metadata, never a service-side continuation request.
 
 Redeven builds each new hosted Agent from the current product version, persisted thread settings, current System Prompt, and current tool registry. Floret fixes model and reasoning configuration for the Turn. Redeven resolves current permission before provider requests and tool authorization batches. `RefreshProviderSurface` enables the corresponding current prompt and local tools on every request. Hosted search definitions come from Floret's detached `InitialProviderSurface` once a checkpoint exists, preserving unrelated search settings across continuation and restart. No refresh rewrites an earlier request or canonical message. The user's objective stays in Floret's canonical user message and restart recovery reads the original `AgentRequest.CanonicalTurnInput`; an Ask User answer is never promoted into a new objective. Current date, working directory, repository facts, rules, available skills, and Subagent inventory are one durable `UserInput.Context` snapshot accepted with each new user message. Canonical references and these snapshots use the same model-history projection for execution, continuation, retry, fork, restart, and compaction. Later snapshots apply from their admission point and never rewrite earlier facts.
 
@@ -36,6 +38,7 @@ Redeven maps product model and permission state into Floret's typed surface. It 
 - `redeven:internal/ai/floret_runtime.go` - Hosted Agents receive the current prompt, tools, model, reasoning, and context policy.
 - `redeven:internal/ai/prompt_builder.go` - Stable System Prompt construction.
 - `redeven:internal/ai/floret_bootstrap.go` - Restart uses canonical Turn input and provider-safe state.
+- `redeven:internal/ai/provider_state_reader_test.go` - Old and current native state validation and Desktop RPC round trips.
 - `redeven:internal/ai/floret_approval_command_integration_test.go:118` - Invalid tool presentation remains canonical history without handler execution.
 - `redeven:internal/ai/floret_tools.go:135` - Child tool calls validate parent execution identity.
 - `redeven:internal/ai/subagents_floret.go:363` - Child hosts reuse the shared model gateway and Floret runtime.

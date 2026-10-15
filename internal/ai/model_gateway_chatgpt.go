@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strings"
 
+	flprovider "github.com/floegence/floret/v7/provider"
 	"github.com/floegence/redeven/internal/chatgpt"
 	"github.com/openai/openai-go/v3/packages/param"
 	oresponses "github.com/openai/openai-go/v3/responses"
@@ -141,8 +142,19 @@ func chatGPTReplay(req ModelGatewayRequest, items oresponses.ResponseInputParam)
 	}
 	records := []chatGPTNativeRecord{}
 	if state := req.PreviousState; state != nil {
-		if state.Kind != chatGPTStateKind || state.ID != req.Model || len(state.Attributes) != 1 || len(state.Attributes["native_output"]) > 8<<20 {
+		if state.Kind != chatGPTStateKind || state.ID != req.Model || len(state.Attributes["native_output"]) > 8<<20 {
 			return nil, nil, nil, errors.New("incompatible ChatGPT provider state")
+		}
+		for key := range state.Attributes {
+			if key != "native_output" && key != "response_id" {
+				return nil, nil, nil, errors.New("unsupported ChatGPT provider state attribute")
+			}
+		}
+		if state.ReusePolicy != flprovider.StateReuseExactSurface && state.ReusePolicy != flprovider.StateReuseCanonicalHistory {
+			return nil, nil, nil, errors.New("unsupported ChatGPT provider state reuse policy")
+		}
+		if id, ok := state.Attributes["response_id"]; ok && (id == "" || len(id) > 512 || strings.ContainsAny(id, "\r\n")) {
+			return nil, nil, nil, errors.New("invalid ChatGPT comparison response identity")
 		}
 		if err := json.Unmarshal([]byte(state.Attributes["native_output"]), &records); err != nil || records == nil {
 			return nil, nil, nil, errors.New("invalid ChatGPT native provider state")
@@ -238,7 +250,11 @@ func chatGPTState(req ModelGatewayRequest, result ModelGatewayResult, completed 
 	if len(raw) > 8<<20 {
 		return nil, errors.New("ChatGPT native output exceeds the context state limit")
 	}
-	return &ModelGatewayState{Kind: chatGPTStateKind, ID: req.Model, Attributes: map[string]string{"native_output": string(raw)}}, nil
+	attrs := map[string]string{"native_output": string(raw)}
+	if completed.ID != "" {
+		attrs["response_id"] = completed.ID
+	}
+	return &ModelGatewayState{Kind: chatGPTStateKind, ID: req.Model, ReusePolicy: flprovider.StateReuseCanonicalHistory, Attributes: attrs}, nil
 }
 
 type chatGPTStreamContext struct {
