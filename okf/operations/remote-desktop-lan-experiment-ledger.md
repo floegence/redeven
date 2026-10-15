@@ -10,8 +10,8 @@ timestamp: 2026-10-15T02:00:00Z
 The primary desktop qualification task owns this ledger. RustDesk parity and
 recovery of the historical three-round performance remain unproven. Published
 v0.22.40 delivered about 51 presented FPS; v0.22.42 also delivered 50.53 FPS with
-hardware AV1. The current v0.22.47 path lowers CPU but has weaker measured tails
-and cadence. Cross-time observations establish a deficit, not its cause.
+hardware AV1. The v0.22.47 baseline lowers CPU but has weaker measured tails and cadence.
+Published v0.22.48 recovers a 53.04 FPS round, but not three-round stability. Cross-time observations establish a deficit, not its cause.
 Preserve current security, authorization, input, ordering and recovery contracts.
 Diagnostics cannot qualify a release. Restore the verified installed service
 after a diagnostic; retain invalid attempts and explain their exclusion.
@@ -93,14 +93,20 @@ produce 45.98/44.66 FPS; six-frame rounds produce 52.30/53.48 FPS with
 100/100 inputs and P95 143.13/119.13 ms. Six-frame B1 still has one long gap;
 B2 has none. This supports an optional capacity contract, not complete recovery
 or RustDesk parity. The [stage record](remote-desktop-lan-stage-tracing.md)
-separates outbound timing from confirmed-paint and receipt delays. Candidate
-native v0.22.48 is tagged at `2b40002`; publication and consumer qualification
-remain pending. Current security and platform boundaries remain mandatory.
+separates outbound timing from confirmed-paint and receipt delays. Native v0.22.48 is published at `2b40002`; release qualification and
+published consumer compatibility pass. Performance acceptance remains open. Current security and platform boundaries remain mandatory.
 
 [C05: published qualification](remote-desktop-lan-published-c05.md) predeclares
 three alternating pairs, equal content viewports, source-associated inputs,
 moving detail and complete resource lineage. It retains release qualification
 failures and the udesk26 reboot as preparation boundaries, not performance data.
+[C05 outcomes](remote-desktop-lan-c05-results.md) retains three complete motion
+pairs: candidate 35.98/49.60/53.04 FPS, pooled observed P95 310.60 ms and nine
+long gaps; RustDesk 31.26/32.24/34.12 FPS, P95 207.59 ms and three gaps. The
+candidate has one unpresented response and one separate idle source-input loss.
+Six-frame throughput is adopted; historical repeatability, source completeness,
+static cost, whole-tree client memory and delivered-detail parity remain open.
+Do not repeat C05 unchanged; follow the named instrumentation/fixture conditions.
 
 # Boundaries
 

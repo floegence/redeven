@@ -58,6 +58,9 @@ preparation (`APPLICATION_HOST_SERVICE_UNAVAILABLE`); its private permission-sto
 process exited 1 and the browser never loaded. ARM64 private desktop and both
 host-media lanes pass. Keep the failing artifacts and retry only after examining
 these boundaries. No GitHub release is valid before the complete Release gate.
+Attempt 2 passed every lane and the Release gate at 11:22 UTC against the
+same immutable tag; v0.22.48 was published at 11:24 UTC. Failed attempt 1
+evidence remains retained. No source or tag was changed to retry qualification.
 
 At approximately 10:43 UTC, the authenticated udesk26 SSH master could open a
 channel but `/bin/bash` returned `Input/output error`, including for
@@ -68,6 +71,48 @@ the host. New boot ID `f4c6eedd-8995-4e3b-934f-46c4b2d19c2f` is reachable at 10:
 survives and must be replaced through the authoritative manager before formal
 sampling. Rebuild fixtures and record new process identities; do not join
 pre-reboot and post-reboot intervals or reuse stale credentials/geometry.
+
+# Post-Reboot Fixture
+
+The Runtime is built from consumer commit `20bc99cb46938f3349555e9a91b5e66b1497bb0d`
+with published v0.22.48 and no overlay. Linux Runtime SHA-256 is
+`ec08327ea1ab20773b13ebd24ca213c00615d183efc3f203d90b1779f04fb565`.
+The authoritative manager installed the published service and fresh verified
+media closure; the pre-reboot diagnostic was not reused. Native physical login
+through the locked Viewer succeeds after reboot. Smooth/Host input and AV1 remain
+selected. The ordinary Viewer is 1024 x 720 and RustDesk is 1026 x 710; their
+actual source content is approximately 1020 x 680, with chrome excluded. Marker
+calibration is validated before workload input. RustDesk uses its official
+SHA-verified Debian binary with an isolated transient service; Auto (AV1),
+custom 100% and 60 FPS were observed. Its credential is temporary and unsaved.
+The Cairo fixture is extracted into task temp state from the apt-index-pinned
+Ubuntu archive; no package is installed globally.
+
+The host also runs a separate Flowersec capacity diagnostic. Do not stop another
+task or attribute its load to this product. Record complete background/process
+lineage and interpret nonconcurrent pairs with that limitation. Alternate
+RustDesk then Redeven for each of three pairs; only one encoder is active while
+measuring. No pre-reboot intervals are joined.
+
+The first complete Redeven motion trial receives all 100 source inputs but
+matches 99 presented responses, at 35.98 FPS with nine intervals over 250 ms.
+It is an adverse complete trial and must not be replaced. An earlier attempt
+was interrupted when the Viewer moved: the passive tap recorded 45 local
+inputs and classified 58 events outside its original boundary. Preserve that
+whole attempt, exclude it from acceptance, and reacquire window bounds before
+the named retry. The subsequent ordinary window is 1025 x 721; retain this
+one-pixel geometry deviation. No performance acceptance follows from C04's peak.
+
+# Outcome And Cleanup
+
+[Complete C05 outcomes](remote-desktop-lan-c05-results.md) owns all three pairs,
+invalid fixtures, source loss, resources, detail and next experiment conditions.
+The released path reaches 53.04 FPS in round three, while full historical
+recovery and RustDesk parity remain unaccepted. Temporary stored SSH credentials
+are removed through Desktop settings; isolated credential files/root service
+state and test-only RustDesk options are removed. Verified task Runtimes and
+transient RustDesk service are stopped, and ports 24441/24448 are closed. Keep
+the SHA-verified published v48 native service, not a diagnostic replacement.
 
 # Published Module And Compatibility
 
