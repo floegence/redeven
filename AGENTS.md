@@ -1090,12 +1090,28 @@ Flower uses one workspace live transport, a summary/detail-separated bounded thr
 
 Each new Turn resolves the persisted model and reasoning configuration. Model and reasoning changes require an idle thread with no queued input or unresolved interaction. Permission changes remain available during work and apply at the next tool authorization boundary, including queued work and resumed execution. Redeven uses the published dynamic tool surface to refresh model-visible tools and permission instructions before each provider request; Floret keeps earlier checkpoints and canonical history immutable. Already prepared invocations and pending approvals keep their invocation snapshot. Admission permission in execution authority is historical attribution, never live authorization. Historical tool Activity comes from canonical persisted presentation; removed tools use neutral presentation and are never restored to the registry.
 
-Submitted references and ordinary runtime context belong to Floret's canonical
-model history. Admission maps references and `UserInput.Context` snapshots once;
-working directory, runtime facts, and selected-device hints must not depend on
-`SupplementalContext`. Only explicitly ephemeral material such as secret answers
-uses that separate contract. Context changes append new snapshots effective from
-the new user message. Hosts never rebuild provider history from display state.
+Submitted references and ordinary user-supplied facts retain the published
+MessageReference and UserInput.Context contracts. Automatic runtime facts use
+one complete ModelContextSnapshot collector at admission and the existing
+ToolSurface provider-request/compaction boundary. Its stable partitions cover
+execution environment, date/timezone, repository state, rule sources, skills,
+and delegation. The same resolved permission governs tool definitions and facts.
+Floret v7.40.0 owns validation, semantic comparison, typed durable admission,
+ordered user-role context projection, exact compaction baselines, and retry,
+fork and restart recovery. Never reconstruct provider history, parse historical
+runtime_context text, or maintain a product-owned snapshot store. Queue edits
+preserve their admitted snapshot; actual execution collects current facts.
+Network retries reuse the prepared request. Ordinary changes do not interrupt
+streaming; task direction changes still use steering. Required collection failure
+ends the Turn with model_context_unavailable and an explicit safe retry;
+nonessential probes replace older facts with an unavailable result. Cancellation
+propagates through collection. SupplementalContext remains exclusively ephemeral.
+
+Authorized context reads and the existing workspace live transport carry the
+canonical snapshot location and latest request-use identity. The shared context
+panel distinguishes collection from request use and remains dismissible by mouse,
+touch and keyboard. Context updates never create user bubbles or disable thread
+navigation, Stop, history, or safe recovery. Unknown effects remain non-retryable.
 
 Environment cards identify the user-selected device, while runtime snapshots
 identify the actual tool host. Card admission includes the existing environment

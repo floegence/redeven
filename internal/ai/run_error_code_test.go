@@ -52,6 +52,7 @@ func TestClassifyRunFailureCodeProviderErrors(t *testing.T) {
 		{name: "floret wrapped effect authorization rejection", err: errors.New("floret effect is unauthorized: effect is unauthorized"), want: runErrorCodeFloretEngineFailed},
 		{name: "floret active turn admission", err: errors.New("thread already has an active turn"), want: runErrorCodeFloretAdmissionBlocked},
 		{name: "floret authority consistency", err: errors.New("floret authority state is corrupt: session tree authority state is corrupt"), want: runErrorCodeFloretAuthorityConsistency},
+		{name: "current runtime facts unavailable", err: flruntime.ErrModelContextUnavailable, want: runErrorCodeModelContextUnavailable},
 		{name: "unknown preserves fallback", err: errors.New("other failure"), want: runErrorCodeFloretEngineFailed},
 	}
 

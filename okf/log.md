@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-15: Canonical runtime context snapshots
+
+- Adopt published Floret v7.40.0 for [managed runtime facts](ai/flower-managed-model-context.md), exact compaction baselines, request-boundary refresh, and shared context details.
+
 ## 2026-10-15: Pencil writing feedback
 
 - Give file edit, write, patch and Tessiven edit one [pencil-and-stroke icon](ui/flower-activity-interaction.md) with synchronized writing, lift and return motion in the existing 16px slot.

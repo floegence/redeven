@@ -2,6 +2,7 @@ package ai
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -117,9 +118,7 @@ type skillManager struct {
 	active           map[string]SkillActivation
 
 	disabledPaths map[string]struct{}
-	stateLoaded   bool
 	sources       map[string]SkillSourceRecord
-	sourcesLoaded bool
 	embedded      map[string]string
 
 	catalogVersion  int64
@@ -204,7 +203,7 @@ func (m *skillManager) Discover() {
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.discoverLocked()
+	_ = m.discoverLocked(context.Background())
 }
 
 func (m *skillManager) Reload() SkillCatalog {
@@ -213,7 +212,7 @@ func (m *skillManager) Reload() SkillCatalog {
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.discoverLocked()
+	_ = m.discoverLocked(context.Background())
 	return m.catalogLocked()
 }
 
@@ -235,7 +234,7 @@ func (m *skillManager) PatchToggles(patches []SkillTogglePatch) (SkillCatalog, e
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.discoverLocked()
+	_ = m.discoverLocked(context.Background())
 
 	for i := range patches {
 		path := filepath.Clean(strings.TrimSpace(patches[i].Path))
@@ -254,7 +253,7 @@ func (m *skillManager) PatchToggles(patches []SkillTogglePatch) (SkillCatalog, e
 	if err := m.saveStateLocked(); err != nil {
 		return SkillCatalog{}, err
 	}
-	m.discoverLocked()
+	_ = m.discoverLocked(context.Background())
 	return m.catalogLocked(), nil
 }
 
@@ -310,7 +309,7 @@ func (m *skillManager) Create(scope string, name string, description string, bod
 		return SkillCatalog{}, err
 	}
 
-	m.discoverLocked()
+	_ = m.discoverLocked(context.Background())
 	return m.catalogLocked(), nil
 }
 
@@ -348,7 +347,7 @@ func (m *skillManager) Delete(scope string, name string) (SkillCatalog, error) {
 	if err := m.saveSourcesLocked(); err != nil {
 		return SkillCatalog{}, err
 	}
-	m.discoverLocked()
+	_ = m.discoverLocked(context.Background())
 	return m.catalogLocked(), nil
 }
 
@@ -369,9 +368,12 @@ func (m *skillManager) scopeRootLocked(scope string) (string, error) {
 	}
 }
 
-func (m *skillManager) discoverLocked() {
+func (m *skillManager) discoverLocked(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if m == nil {
-		return
+		return fmt.Errorf("skill manager unavailable")
 	}
 	allErrors := make([]SkillCatalogNotice, 0, 8)
 	if err := m.loadStateLocked(); err != nil {
@@ -383,7 +385,10 @@ func (m *skillManager) discoverLocked() {
 
 	grouped := make(map[string][]SkillMeta)
 	for _, root := range m.roots() {
-		skills, errors := scanSkillRoot(root)
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		skills, errors := scanSkillRoot(ctx, root)
 		allErrors = append(allErrors, errors...)
 		for i := range skills {
 			meta := skills[i]
@@ -396,6 +401,9 @@ func (m *skillManager) discoverLocked() {
 	}
 	sort.Strings(embeddedPaths)
 	for _, p := range embeddedPaths {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		meta, _, err := parseSkillContent(p, string(SkillSourceTypeSystem), m.embedded[p])
 		if err != nil {
 			allErrors = append(allErrors, SkillCatalogNotice{Path: p, Message: err.Error()})
@@ -408,6 +416,9 @@ func (m *skillManager) discoverLocked() {
 	entries := make([]SkillCatalogEntry, 0, len(grouped))
 	conflicts := make([]SkillCatalogNotice, 0)
 	for _, name := range sortedSkillNames(grouped) {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		items := grouped[name]
 		if len(items) == 0 {
 			continue
@@ -493,22 +504,27 @@ func (m *skillManager) discoverLocked() {
 		return allErrors[i].Path < allErrors[j].Path
 	})
 
-	for name := range m.active {
-		if _, ok := m.resolveCandidateLocked(name, "", false); !ok {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	m.discovered = effectiveByName
+	m.candidatesByName = grouped
+	for name, activation := range m.active {
+		meta, ok := m.resolveCandidateLocked(name, "", false)
+		if !ok || meta.Path != activation.ContentRef {
 			delete(m.active, name)
 		}
 	}
 
-	m.discovered = effectiveByName
-	m.candidatesByName = grouped
 	m.catalogEntries = entries
 	m.catalogConflict = conflicts
 	m.catalogErrors = allErrors
 	m.pruneSourcesLocked()
 	m.catalogVersion++
+	return nil
 }
 
-func scanSkillRoot(root skillDiscoveryRoot) ([]SkillMeta, []SkillCatalogNotice) {
+func scanSkillRoot(ctx context.Context, root skillDiscoveryRoot) ([]SkillMeta, []SkillCatalogNotice) {
 	rootPath := filepath.Clean(strings.TrimSpace(root.Path))
 	if rootPath == "" {
 		return nil, nil
@@ -523,6 +539,9 @@ func scanSkillRoot(root skillDiscoveryRoot) ([]SkillMeta, []SkillCatalogNotice) 
 	out := make([]SkillMeta, 0, len(entries))
 	notices := make([]SkillCatalogNotice, 0)
 	for _, entry := range entries {
+		if err := ctx.Err(); err != nil {
+			return nil, []SkillCatalogNotice{{Path: rootPath, Message: err.Error()}}
+		}
 		if entry == nil || !entry.IsDir() {
 			continue
 		}
@@ -649,6 +668,25 @@ func (m *skillManager) List(mode string) []SkillMeta {
 	}
 	m.mu.RLock()
 	defer m.mu.RUnlock()
+	return m.listLocked(mode)
+}
+
+func (m *skillManager) modelContextCatalog(ctx context.Context, mode string) ([]SkillMeta, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if err := m.discoverLocked(ctx); err != nil {
+		return nil, err
+	}
+	if len(m.catalogErrors) != 0 {
+		return nil, fmt.Errorf("skill catalog source %q: %s", m.catalogErrors[0].Path, m.catalogErrors[0].Message)
+	}
+	return m.listLocked(mode), nil
+}
+
+func (m *skillManager) listLocked(mode string) []SkillMeta {
 	out := make([]SkillMeta, 0, len(m.candidatesByName))
 	for _, name := range sortedSkillNames(m.candidatesByName) {
 		meta, ok := m.resolveCandidateLocked(name, mode, false)
@@ -677,12 +715,12 @@ func (m *skillManager) Activate(name string, mode string, implicit bool) (SkillA
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if activation, ok := m.active[name]; ok {
-		return activation, true, nil
-	}
 	meta, ok := m.resolveCandidateLocked(name, mode, implicit)
 	if !ok {
 		return SkillActivation{}, false, fmt.Errorf("unknown skill: %s", name)
+	}
+	if activation, ok := m.active[name]; ok && activation.ContentRef == meta.Path {
+		return activation, true, nil
 	}
 	body, err := m.skillBodyLocked(meta)
 	if err != nil {
@@ -759,17 +797,17 @@ func (m *skillManager) DeactivateAll() {
 }
 
 func (m *skillManager) loadStateLocked() error {
-	if m == nil || m.stateLoaded {
+	if m == nil {
 		return nil
 	}
-	m.stateLoaded = true
-	m.disabledPaths = map[string]struct{}{}
+	disabled := map[string]struct{}{}
 	if strings.TrimSpace(m.statePath) == "" {
 		return nil
 	}
 	raw, err := os.ReadFile(m.statePath)
 	if err != nil {
 		if os.IsNotExist(err) {
+			m.disabledPaths = disabled
 			return nil
 		}
 		return err
@@ -790,8 +828,9 @@ func (m *skillManager) loadStateLocked() error {
 		if path == "" {
 			continue
 		}
-		m.disabledPaths[path] = struct{}{}
+		disabled[path] = struct{}{}
 	}
+	m.disabledPaths = disabled
 	return nil
 }
 

@@ -5420,6 +5420,12 @@
       "providerRetryWaiting": "모델 서비스를 사용할 수 없습니다. {seconds}초 후 재시도 · {retry}/{max}",
       "providerRetryRegenerating": "연결이 끊겼습니다. {seconds}초 후 다시 생성 · {retry}/{max}",
       "modelStatusFinalizing": "답변을 정리 중...",
+      "contextIndicatorRuntimeFacts": "런타임 정보",
+      "contextIndicatorCollected": "수집됨",
+      "contextIndicatorUsed": "최근 요청에 사용됨",
+      "contextIndicatorUpdated": "업데이트됨",
+      "contextIndicatorRemoved": "제거됨",
+      "runErrorModelContextUnavailable": "현재 런타임 정보를 수집할 수 없습니다. 원본을 복구한 후 다시 시도하세요.",
       "contextIndicatorLabel": "컨텍스트",
       "contextIndicatorNearThreshold": "한도에 가까움",
       "contextIndicatorWillCompact": "곧 압축",
@@ -5596,7 +5602,12 @@
       "citationUnavailable": "출처를 사용할 수 없음",
       "queuedEdit": "입력창으로 가져오기",
       "queueTakeBackConflict": "이 대기 중인 메시지가 이미 실행을 시작했거나 변경되었습니다. 새로고침한 후 다시 시도하세요.",
-      "queueTakeBackUnknown": "메시지를 입력창으로 가져왔지만 대기열에서 제거되었는지 확인하지 못했습니다. 보내기 전에 대기열을 확인하세요."
+      "queueTakeBackUnknown": "메시지를 입력창으로 가져왔지만 대기열에서 제거되었는지 확인하지 못했습니다. 보내기 전에 대기열을 확인하세요.",
+      "outputTokens": "{count} 토큰",
+      "outputTokensTooltip": "현재 모델 요청에서 수신한 출력의 추정치이며, 추론과 도구 인수를 포함합니다. 과금 사용량은 별도로 표시됩니다.",
+      "waitSeconds": "{seconds} s",
+      "toolArgumentPreviewTooltip": "인수가 수신됨에 따라 줄 수가 갱신됩니다. 도구가 완료되면 실제 변경 사항이 표시됩니다.",
+      "toolGeneratingArguments": "인수 생성 중"
     },
     "threadList": {
       "title": "대화",

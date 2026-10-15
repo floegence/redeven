@@ -2,15 +2,21 @@ package ai
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
+	"time"
+
+	flruntime "github.com/floegence/floret/v7/runtime"
 )
 
 type fakePromptSubagentRuntime struct {
 	items []subagentSnapshot
+	err   error
 }
 
 func (f fakePromptSubagentRuntime) manage(context.Context, string, map[string]any) (map[string]any, error) {
@@ -21,7 +27,7 @@ func (f fakePromptSubagentRuntime) release() {}
 
 func (f fakePromptSubagentRuntime) snapshots(context.Context) ([]subagentSnapshot, error) {
 	out := append([]subagentSnapshot(nil), f.items...)
-	return out, nil
+	return out, f.err
 }
 
 func runPromptWorkspaceGit(t *testing.T, dir string, args ...string) string {
@@ -70,7 +76,7 @@ func TestCollectPromptRepositoryState_ReportsDirtyCounts(t *testing.T) {
 		t.Fatalf("write untracked file: %v", err)
 	}
 
-	state := collectPromptRepositoryState(repo)
+	state := collectPromptRepositoryState(t.Context(), repo)
 	if !state.Available {
 		t.Fatalf("expected repository state to be available")
 	}
@@ -94,7 +100,7 @@ func TestCollectPromptRepositoryState_ReportsLinkedWorktree(t *testing.T) {
 		t.Fatalf("write worktree file: %v", err)
 	}
 
-	state := collectPromptRepositoryState(worktree)
+	state := collectPromptRepositoryState(t.Context(), worktree)
 	if !state.Available {
 		t.Fatalf("expected worktree repository state to be available")
 	}
@@ -130,7 +136,7 @@ func TestCollectPromptRepoRuleFiles_DiscoversScopedSources(t *testing.T) {
 		t.Fatalf("write CLAUDE.md: %v", err)
 	}
 
-	files, err := newRun(runOptions{AgentHomeDir: root, WorkingDir: nested}).collectPromptRepoRuleFiles(nested, root)
+	files, err := newRun(runOptions{AgentHomeDir: root, WorkingDir: nested}).collectPromptRepoRuleFiles(t.Context(), nested, root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -186,7 +192,7 @@ func TestCollectPromptDelegationState_SummarizesActiveSubagents(t *testing.T) {
 		},
 	}
 
-	state := collectPromptDelegationState(r)
+	state := collectPromptDelegationState(t.Context(), r)
 	if !state.Enabled {
 		t.Fatalf("expected delegation to be enabled")
 	}
@@ -204,7 +210,7 @@ func TestCollectPromptDelegationState_SummarizesActiveSubagents(t *testing.T) {
 func TestBuildPromptWorkspaceContextSection_RendersStructuredFacts(t *testing.T) {
 	t.Parallel()
 
-	section := buildPromptWorkspaceContextSection(promptWorkspaceContext{
+	workspace := promptWorkspaceContext{
 		Environment: promptEnvironmentFacts{
 			Shell:        "/bin/zsh",
 			AgentHomeDir: "/workspace/home",
@@ -248,19 +254,16 @@ func TestBuildPromptWorkspaceContextSection_RendersStructuredFacts(t *testing.T)
 				},
 			},
 		},
-	}).render()
+	}
+	section := strings.Join(append(append(append(renderPromptEnvironmentFactsLines(workspace.Environment), renderPromptRepositoryStateLines(workspace.Repository)...), renderPromptRepoRuleLines(workspace.RepoRules, nil)...), renderPromptDelegationLines(workspace.Delegation)...), "\n")
 
 	for _, want := range []string{
-		"### Environment Facts",
 		"- Shell: /bin/zsh",
 		"- Filesystem roots: Home=/workspace/home (read-write); Computer=/ (read-only)",
 		"- Permission type: approval_required",
-		"### Repository State",
 		"- Repository root: /workspace/repo",
-		"### Repository Rules",
 		"/workspace/repo/AGENTS.md",
 		"readable; contents not loaded",
-		"### Delegation State",
 		"Rule sync -- objective: Sync repo rules",
 	} {
 		if !strings.Contains(section, want) {
@@ -269,21 +272,82 @@ func TestBuildPromptWorkspaceContextSection_RendersStructuredFacts(t *testing.T)
 	}
 }
 
-func TestFloretTurnRuntimeContextCarriesMutableFactsOutsideSystemPrompt(t *testing.T) {
-	t.Parallel()
-
-	workingDir := t.TempDir()
-	r := newRun(runOptions{WorkingDir: workingDir, AgentHomeDir: workingDir, Shell: "/bin/zsh"})
-	item, err := r.floretTurnRuntimeContext()
+func TestModelContextSnapshotCarriesCompleteStablePartitions(t *testing.T) {
+	root := t.TempDir()
+	r := newRun(runOptions{WorkingDir: root, AgentHomeDir: root, Shell: "/bin/zsh"})
+	now := func() time.Time { return time.Date(2026, 10, 15, 12, 0, 0, 0, time.UTC) }
+	first, err := r.collectModelContextSnapshot(t.Context(), FlowerPermissionApprovalRequired, now)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if item.Kind != "runtime_context" || item.Title != "Tool execution environment" {
-		t.Fatalf("runtime context item=%#v", item)
+	if len(first.Sections) != 6 {
+		t.Fatalf("sections=%+v", first.Sections)
 	}
-	for _, want := range []string{"## Current Context", workingDir, "- Current date:", "- Timezone:", "## Workspace Context", "- Shell: /bin/zsh"} {
-		if !strings.Contains(item.Text, want) {
-			t.Fatalf("runtime context missing %q: %q", want, item.Text)
+	text := modelContextSnapshotText(first)
+	for _, want := range []string{root, "- Current date: 2026-10-15", "- Timezone: UTC", "- Shell: /bin/zsh", "approval_required"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("missing %q: %s", want, text)
 		}
+	}
+	second, err := r.collectModelContextSnapshot(t.Context(), FlowerPermissionApprovalRequired, now)
+	if err != nil || !reflect.DeepEqual(first, second) {
+		t.Fatalf("unchanged discovery changed facts: %v", err)
+	}
+}
+
+func TestModelContextCollectorRefreshesDateRepositoryAndSkillsWithoutUnrelatedChanges(t *testing.T) {
+	root := initPromptWorkspaceRepo(t)
+	writeContextTestSkill(t, root, "First catalog")
+	mgr := newSkillManager(root, root)
+	mgr.userHome = root
+	r := newRun(runOptions{WorkingDir: root, AgentHomeDir: root, SkillManager: mgr})
+	clock := time.Date(2026, 10, 15, 12, 0, 0, 0, time.UTC)
+	now := func() time.Time { return clock }
+	first, err := r.collectModelContextSnapshot(t.Context(), FlowerPermissionFullAccess, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sections := func(snapshot *flruntime.ModelContextSnapshot) map[string]string {
+		out := map[string]string{}
+		for _, section := range snapshot.Sections {
+			out[section.Key] = section.Text
+		}
+		return out
+	}
+	previous := sections(first)
+	clock = clock.Add(time.Second)
+	same, err := r.collectModelContextSnapshot(t.Context(), FlowerPermissionFullAccess, now)
+	if err != nil || !reflect.DeepEqual(first, same) {
+		t.Fatalf("subsecond collection changed facts: %v", err)
+	}
+	clock = clock.Add(24 * time.Hour)
+	writeContextTestSkill(t, root, "Second catalog")
+	if err := os.WriteFile(filepath.Join(root, "new-file.txt"), []byte("new"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	next, err := r.collectModelContextSnapshot(t.Context(), FlowerPermissionFullAccess, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	current := sections(next)
+	for _, key := range []string{"local_time", "repository", "skills"} {
+		if current[key] == previous[key] {
+			t.Fatalf("changed section %s was stale", key)
+		}
+	}
+	for _, key := range []string{"execution_environment", "repository_rules", "delegation"} {
+		if current[key] != previous[key] {
+			t.Fatalf("unrelated section %s changed", key)
+		}
+	}
+	r.subagentRuntime = fakePromptSubagentRuntime{err: errors.New("delegation read failed")}
+	unavailable, err := r.collectModelContextSnapshot(t.Context(), FlowerPermissionFullAccess, now)
+	if err != nil || !strings.Contains(sections(unavailable)["delegation"], "earlier delegation facts are no longer current") {
+		t.Fatalf("optional probe retained false facts: %v", err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if snapshot, err := r.collectModelContextSnapshot(ctx, FlowerPermissionFullAccess, now); snapshot != nil || !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled collection=%+v %v", snapshot, err)
 	}
 }

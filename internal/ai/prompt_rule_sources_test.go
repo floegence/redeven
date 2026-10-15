@@ -1,10 +1,14 @@
 package ai
 
 import (
+	"context"
+	"errors"
+	flruntime "github.com/floegence/floret/v7/runtime"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 	"unicode/utf8"
 
 	"github.com/floegence/redeven/internal/config"
@@ -27,8 +31,8 @@ func TestFlowerRuntimeContextListsAllRuleSourcesWithoutBodies(t *testing.T) {
 		}
 	}
 	r := newRun(runOptions{AgentHomeDir: root, WorkingDir: nested})
-	workspace := collectPromptWorkspaceContext(r)
-	text := buildPromptWorkspaceContextSection(workspace).render()
+	workspace := collectPromptWorkspaceContext(t.Context(), r, FlowerPermissionApprovalRequired)
+	text := strings.Join(renderPromptRepoRuleLines(workspace.RepoRules, workspace.RepoRulesError), "\n")
 	if len(workspace.RepoRules) != 12 {
 		t.Fatalf("discovered %d rule sources, want all 12", len(workspace.RepoRules))
 	}
@@ -57,7 +61,8 @@ func TestFlowerRuleSourceRejectsSymlinkOutsideAuthorizedRoots(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := newRun(runOptions{AgentHomeDir: root, WorkingDir: root, FilesystemScope: flowerTestFilesystemScope(t, root)})
-	text := buildPromptWorkspaceContextSection(collectPromptWorkspaceContext(r)).render()
+	workspace := collectPromptWorkspaceContext(t.Context(), r, FlowerPermissionApprovalRequired)
+	text := strings.Join(renderPromptRepoRuleLines(workspace.RepoRules, workspace.RepoRulesError), "\n")
 	assertPromptContains(t, text, path)
 	assertPromptContains(t, text, "unreadable")
 	assertPromptNotContains(t, text, "OUTSIDE_RULE_SECRET")
@@ -91,7 +96,7 @@ func TestFlowerRuleSourcesReportUnreadableAndIncompleteDiscovery(t *testing.T) {
 		}
 	}
 	r := newRun(runOptions{AgentHomeDir: root, WorkingDir: root, FilesystemScope: flowerTestFilesystemScope(t, root)})
-	files, err := r.collectPromptRepoRuleFiles(root, root)
+	files, err := r.collectPromptRepoRuleFiles(t.Context(), root, root)
 	if err != nil || len(files) != 2 || files[0].ReadError == "" || files[1].ReadError == "" {
 		t.Fatalf("unreadable sources lost: %+v, %v", files, err)
 	}
@@ -101,20 +106,20 @@ func TestFlowerRuleSourcesReportUnreadableAndIncompleteDiscovery(t *testing.T) {
 			t.Fatal(err)
 		}
 		t.Cleanup(func() { _ = os.Chmod(path, 0o600) })
-		files, err = r.collectPromptRepoRuleFiles(root, root)
+		files, err = r.collectPromptRepoRuleFiles(t.Context(), root, root)
 		if err != nil || len(files) != 3 || files[2].ReadError == "" {
 			t.Fatalf("unreadable file was omitted or marked readable: %+v, %v", files, err)
 		}
 	}
-	_, err = r.collectPromptRepoRuleFiles(filepath.Join(root, "missing"), root)
+	_, err = r.collectPromptRepoRuleFiles(t.Context(), filepath.Join(root, "missing"), root)
 	if err == nil {
 		t.Fatal("incomplete discovery must be explicit")
 	}
 	text := strings.Join(renderPromptRepoRuleLines(files, err), "\n")
 	assertPromptContains(t, text, "Rule discovery incomplete")
 	assertPromptContains(t, text, "Pause affected operations")
-	if _, err := (*run)(nil).floretTurnRuntimeContext(); err != nil {
-		t.Fatalf("empty runtime snapshot: %v", err)
+	if _, err := (*run)(nil).collectModelContextSnapshot(context.Background(), FlowerPermissionApprovalRequired, time.Now); !errors.Is(err, flruntime.ErrModelContextUnavailable) {
+		t.Fatalf("missing runtime must fail explicitly: %v", err)
 	}
 }
 

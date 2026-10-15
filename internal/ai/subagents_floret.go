@@ -805,8 +805,13 @@ func (service *Service) GetFlowerSubagentDetail(ctx context.Context, meta *sessi
 	if err != nil {
 		return nil, err
 	}
+	projection, err := service.readCanonicalThreadContextProjection(ctx, view)
+	if err != nil {
+		return nil, err
+	}
 	snapshot := subagentSnapshotFromThread(*summary, view)
 	return &FlowerSubagentDetailResponse{
+		ModelContext: projection.ModelContext, ContextUsage: projection.Usage,
 		Summary: flowerSubagentSummaryFromSnapshot(snapshot),
 		Current: view,
 	}, nil

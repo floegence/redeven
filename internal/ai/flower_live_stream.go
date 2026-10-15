@@ -74,20 +74,21 @@ func (s *Service) publishModelDirectoryChanged() {
 type FlowerLiveStreamRequest struct{}
 
 type FlowerLiveStreamEnvelope struct {
-	ObserverID          string                     `json:"observer_id,omitempty"`
-	SchemaVersion       int64                      `json:"schema_version"`
-	Kind                FlowerLiveStreamKind       `json:"kind"`
-	ThreadID            string                     `json:"thread_id,omitempty"`
-	Summaries           []ThreadView               `json:"summaries,omitempty"`
-	Current             *flruntime.ThreadView      `json:"current,omitempty"`
-	SubagentCurrent     *flruntime.ThreadView      `json:"subagent_current,omitempty"`
-	Subagents           *[]FlowerSubagentSummary   `json:"subagents,omitempty"`
-	ContextUsage        *FlowerContextUsage        `json:"context_usage,omitempty"`
-	ContextCompactions  []FlowerContextCompaction  `json:"context_compactions,omitempty"`
-	TimelineDecorations []FlowerTimelineDecoration `json:"timeline_decorations,omitempty"`
-	ReadStatus          *FlowerThreadReadView      `json:"read_status,omitempty"`
-	ComputerFrame       *FlowerComputerFrame       `json:"computer_frame,omitempty"`
-	ComputerStatus      *FlowerComputerStatus      `json:"computer_status,omitempty"`
+	ObserverID          string                        `json:"observer_id,omitempty"`
+	SchemaVersion       int64                         `json:"schema_version"`
+	Kind                FlowerLiveStreamKind          `json:"kind"`
+	ThreadID            string                        `json:"thread_id,omitempty"`
+	Summaries           []ThreadView                  `json:"summaries,omitempty"`
+	Current             *flruntime.ThreadView         `json:"current,omitempty"`
+	SubagentCurrent     *flruntime.ThreadView         `json:"subagent_current,omitempty"`
+	Subagents           *[]FlowerSubagentSummary      `json:"subagents,omitempty"`
+	ModelContext        *flruntime.ThreadModelContext `json:"model_context,omitempty"`
+	ContextUsage        *FlowerContextUsage           `json:"context_usage,omitempty"`
+	ContextCompactions  []FlowerContextCompaction     `json:"context_compactions,omitempty"`
+	TimelineDecorations []FlowerTimelineDecoration    `json:"timeline_decorations,omitempty"`
+	ReadStatus          *FlowerThreadReadView         `json:"read_status,omitempty"`
+	ComputerFrame       *FlowerComputerFrame          `json:"computer_frame,omitempty"`
+	ComputerStatus      *FlowerComputerStatus         `json:"computer_status,omitempty"`
 }
 
 type FlowerComputerFrame struct {
@@ -470,6 +471,7 @@ func (s *Service) broadcastFlowerRuntimeCurrent(endpointID string, current flrun
 				s.log.Warn("ai: project canonical Flower thread context", "thread_id", current.ThreadID.String(), "error", err)
 			}
 		} else {
+			envelope.ModelContext = contextProjection.ModelContext
 			envelope.ContextUsage = contextProjection.Usage
 			envelope.ContextCompactions = contextProjection.Compactions
 			envelope.TimelineDecorations = contextProjection.Decorations
@@ -496,11 +498,21 @@ func (s *Service) broadcastFlowerSubagentRuntimeCurrent(endpointID, parentThread
 		return
 	}
 	copy := current
+	var modelContext *flruntime.ThreadModelContext
+	var usage *FlowerContextUsage
+	if current.Activity != flruntime.ThreadActivityActive {
+		ctx, cancel := context.WithTimeout(context.Background(), s.persistTimeout())
+		projection, err := s.readCanonicalThreadContextProjection(ctx, current)
+		cancel()
+		if err == nil {
+			modelContext, usage = projection.ModelContext, projection.Usage
+		}
+	}
 	batch := newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{
 		SchemaVersion:   FlowerLiveSchemaVersion,
 		Kind:            FlowerLiveStreamThreadBatch,
 		ThreadID:        parentThreadID,
-		SubagentCurrent: &copy,
+		SubagentCurrent: &copy, ModelContext: modelContext, ContextUsage: usage,
 	})
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -543,10 +555,20 @@ func (s *Service) publishFlowerRuntimeContextUsage(endpointID string, threadID s
 		return
 	}
 	copy := usage
+	var modelContext *flruntime.ThreadModelContext
+	if reader, ok := s.threadRuntime.(flruntime.ThreadContextReader); ok {
+		ctx, cancel := context.WithTimeout(context.Background(), s.persistTimeout())
+		snapshot, err := reader.Context(ctx, identity.ThreadID(threadID))
+		cancel()
+		if err == nil {
+			modelContext = snapshot.ModelContext
+		}
+	}
 	batch := newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{
 		SchemaVersion: FlowerLiveSchemaVersion,
 		Kind:          FlowerLiveStreamThreadBatch,
 		ThreadID:      threadID,
+		ModelContext:  modelContext,
 		ContextUsage:  &copy,
 	})
 	s.mu.Lock()
@@ -643,7 +665,7 @@ func compareFlowerLiveCurrent(envelope FlowerLiveStreamEnvelope) *flowerLiveCurr
 		threadID: current.ThreadID.String(), routeID: envelope.ThreadID, subagent: envelope.SubagentCurrent != nil,
 		version: current.ViewVersion,
 		independent: envelope.ObserverID == "" && envelope.Summaries == nil && envelope.Subagents == nil &&
-			envelope.ContextUsage == nil && envelope.ContextCompactions == nil && envelope.TimelineDecorations == nil &&
+			envelope.ModelContext == nil && envelope.ContextUsage == nil && envelope.ContextCompactions == nil && envelope.TimelineDecorations == nil &&
 			envelope.ReadStatus == nil && envelope.ComputerFrame == nil && envelope.ComputerStatus == nil,
 	}
 	if current.ThreadID == "" || current.Activity != flruntime.ThreadActivityActive || current.TurnID == "" || current.RunID == "" ||

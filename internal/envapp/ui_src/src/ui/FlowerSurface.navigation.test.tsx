@@ -1586,6 +1586,26 @@ describe('FlowerSurface navigation', () => {
     expect(runtime.querySelector('.flower-error-card')?.textContent).toContain('Run failed: provider rejected request.');
   });
 
+  it('keeps history and navigation available while current facts fail and offers safe retry', async () => {
+    const failed = thread({ thread_id: 'thread-context-source', status: 'failed',
+      error: { code: 'model_context_unavailable', message: 'collection failed', detail: 'Skill catalog source cannot be read.' } });
+    const another = thread({ thread_id: 'thread-context-other', title: 'Another conversation' });
+    const retryThread = vi.fn(async () => liveBootstrap(thread({ ...failed, status: 'success', error: undefined })));
+    const runtime = renderSurfaceWithAdapter({ ...adapter(true), listThreads: vi.fn(async () => [failed, another]),
+      loadThread: vi.fn(async (id: string) => liveBootstrap(id === failed.thread_id ? failed : another)), retryThread });
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-context-source"] button')));
+    (runtime.querySelector('[data-thread-id="thread-context-source"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('.flower-error-card')));
+    expect(runtime.querySelector('.flower-error-card')?.textContent).toContain('Repair the source and retry.');
+    expect(runtime.querySelector('.flower-error-details')?.textContent).toContain('Skill catalog source cannot be read.');
+    const retry = [...runtime.querySelectorAll<HTMLButtonElement>('.flower-error-actions button')].find(button => button.textContent?.includes('Retry'));
+    expect(retry).toBeDefined(); retry!.click();
+    await waitFor(() => retryThread.mock.calls.length === 1);
+    (runtime.querySelector('[data-thread-id="thread-context-other"] button') as HTMLButtonElement).click();
+    await waitFor(() => runtime.textContent?.includes('Another conversation') ?? false);
+    expect((runtime.querySelector('.flower-composer textarea') as HTMLTextAreaElement).disabled).toBe(false);
+  });
+
   it('shows unknown effect failure without any retry action', async () => {
     const failedThread = thread({
       thread_id: 'thread-unknown-effect',

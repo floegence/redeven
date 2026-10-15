@@ -5420,6 +5420,12 @@
       "providerRetryWaiting": "Servicio del modelo no disponible. Reintento en {seconds} s · {retry}/{max}",
       "providerRetryRegenerating": "Conexión interrumpida. Regeneración en {seconds} s · {retry}/{max}",
       "modelStatusFinalizing": "Finalizando respuesta...",
+      "contextIndicatorRuntimeFacts": "Datos de ejecución",
+      "contextIndicatorCollected": "Recopilados",
+      "contextIndicatorUsed": "Usados en la última solicitud",
+      "contextIndicatorUpdated": "Actualizados",
+      "contextIndicatorRemoved": "Eliminados",
+      "runErrorModelContextUnavailable": "No se pudieron recopilar los datos de ejecución actuales. Corrige la fuente e inténtalo de nuevo.",
       "contextIndicatorLabel": "Contexto",
       "contextIndicatorNearThreshold": "Cerca del límite",
       "contextIndicatorWillCompact": "Compresión próxima",
@@ -5596,7 +5602,12 @@
       "citationUnavailable": "Fuente no disponible",
       "queuedEdit": "Volver al cuadro de texto",
       "queueTakeBackConflict": "Este mensaje ya ha empezado a ejecutarse o ha cambiado. Actualiza e inténtalo de nuevo.",
-      "queueTakeBackUnknown": "El mensaje está en el cuadro de texto, pero no se pudo confirmar su retirada de la cola. Revisa la cola antes de enviarlo."
+      "queueTakeBackUnknown": "El mensaje está en el cuadro de texto, pero no se pudo confirmar su retirada de la cola. Revisa la cola antes de enviarlo.",
+      "outputTokens": "{count} tokens",
+      "outputTokensTooltip": "Estimación de la salida recibida para esta solicitud al modelo, incluidos el razonamiento y los argumentos de herramientas. El uso facturado se informa por separado.",
+      "waitSeconds": "{seconds} s",
+      "toolArgumentPreviewTooltip": "El número de líneas se actualiza a medida que llegan los argumentos. Los cambios reales se muestran cuando termina la herramienta.",
+      "toolGeneratingArguments": "Generando argumentos"
     },
     "threadList": {
       "title": "Conversaciones",

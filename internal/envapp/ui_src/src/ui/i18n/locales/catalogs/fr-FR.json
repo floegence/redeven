@@ -5420,6 +5420,12 @@
       "providerRetryWaiting": "Service du modèle indisponible. Nouvel essai dans {seconds} s · {retry}/{max}",
       "providerRetryRegenerating": "Connexion interrompue. Régénération dans {seconds} s · {retry}/{max}",
       "modelStatusFinalizing": "Finalisation de la réponse...",
+      "contextIndicatorRuntimeFacts": "Informations d’exécution",
+      "contextIndicatorCollected": "Recueillies",
+      "contextIndicatorUsed": "Utilisées dans la dernière requête",
+      "contextIndicatorUpdated": "Mises à jour",
+      "contextIndicatorRemoved": "Supprimées",
+      "runErrorModelContextUnavailable": "Impossible de recueillir les informations d’exécution actuelles. Corrigez la source et réessayez.",
       "contextIndicatorLabel": "Contexte",
       "contextIndicatorNearThreshold": "Proche de la limite",
       "contextIndicatorWillCompact": "Compression imminente",
@@ -5596,7 +5602,12 @@
       "citationUnavailable": "Source indisponible",
       "queuedEdit": "Reprendre dans le champ de saisie",
       "queueTakeBackConflict": "Ce message a déjà démarré ou a été modifié. Actualisez la vue et réessayez.",
-      "queueTakeBackUnknown": "Le message a été remis dans le champ de saisie, mais son retrait de la file n’a pas pu être confirmé. Vérifiez la file avant de l’envoyer."
+      "queueTakeBackUnknown": "Le message a été remis dans le champ de saisie, mais son retrait de la file n’a pas pu être confirmé. Vérifiez la file avant de l’envoyer.",
+      "outputTokens": "{count} tokens",
+      "outputTokensTooltip": "Estimation de la sortie reçue pour cette requête au modèle, y compris le raisonnement et les arguments des outils. La consommation facturée est indiquée séparément.",
+      "waitSeconds": "{seconds} s",
+      "toolArgumentPreviewTooltip": "Le nombre de lignes évolue à mesure que les arguments arrivent. Les modifications réelles sont affichées une fois l’outil terminé.",
+      "toolGeneratingArguments": "Génération des arguments"
     },
     "threadList": {
       "title": "Discussions",

@@ -395,6 +395,7 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
         floretEngineFailed: t(i18n, k('chat.runErrorFloretEngineFailed')),
         floretControlContractFailed: t(i18n, k('chat.runErrorFloretControlContractFailed')),
         floretAuthorityConsistencyFailed: t(i18n, k('chat.runErrorFloretAuthorityConsistencyFailed')),
+        modelContextUnavailable: t(i18n, k('chat.runErrorModelContextUnavailable')),
         floretEffectOutcomeUnknown: t(i18n, k('chat.runErrorFloretEffectOutcomeUnknown')),
         runtimeRestarted: t(i18n, k('chat.runErrorRuntimeRestarted')),
       },
@@ -548,6 +549,7 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
       liveProgressTool: t(i18n, k('chat.liveProgressTool')),
       liveProgressOutput: t(i18n, k('chat.liveProgressOutput')),
       contextIndicator: {
+        runtimeFacts: t(i18n, k('chat.contextIndicatorRuntimeFacts')), collected: t(i18n, k('chat.contextIndicatorCollected')), used: t(i18n, k('chat.contextIndicatorUsed')), updated: t(i18n, k('chat.contextIndicatorUpdated')), removed: t(i18n, k('chat.contextIndicatorRemoved')),
         label: t(i18n, k('chat.contextIndicatorLabel')),
         nearThreshold: t(i18n, k('chat.contextIndicatorNearThreshold')),
         willCompact: t(i18n, k('chat.contextIndicatorWillCompact')),

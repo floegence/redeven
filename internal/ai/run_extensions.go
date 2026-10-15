@@ -16,7 +16,6 @@ func (r *run) ensureSkillManager() *skillManager {
 	defer r.mu.Unlock()
 	if r.skillManager == nil {
 		r.skillManager = newSkillManager(r.agentHomeDir, r.stateDir)
-		r.skillManager.Discover()
 	}
 	return r.skillManager
 }

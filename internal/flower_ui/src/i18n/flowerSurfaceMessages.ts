@@ -312,6 +312,8 @@ export const flowerSurfaceEnUS = {
     toolArgumentPreviewTooltip: "Line counts update as arguments arrive. Actual changes are shown after the tool finishes.",
     liveProgressTool: 'Using a tool',
     liveProgressOutput: 'Writing the reply',
+    contextIndicatorRuntimeFacts: 'Runtime facts', contextIndicatorCollected: 'Collected', contextIndicatorUsed: 'Used by latest request', contextIndicatorUpdated: 'Updated', contextIndicatorRemoved: 'Removed',
+    runErrorModelContextUnavailable: 'Could not collect current runtime facts. Repair the source and retry.',
     contextIndicatorLabel: 'Context',
     contextIndicatorNearThreshold: 'Near limit',
     contextIndicatorWillCompact: 'Compacting soon',

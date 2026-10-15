@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -56,6 +57,7 @@ func TestFlowerEveryHistoricalWriterUpgradesAndContinues(t *testing.T) {
 			state, fixture := loadFlowerUpgradeFixture(t, entry.Name())
 			opts := fixtureMaintenanceOptions(t, state)
 			calls := fixtureModelServer(t, &opts)
+			repairFixtureExecutionDirectory(t, state, opts.AgentHomeDir)
 			svc, err := NewServiceContext(t.Context(), opts)
 			if err != nil {
 				t.Fatal(err)
@@ -140,6 +142,7 @@ func TestFlowerRestoreLifecycleFixtureCannotResumeOldWork(t *testing.T) {
 	if err := RestoreFlowerSnapshot(t.Context(), opts, op.OriginalSnapshot); err != nil {
 		t.Fatal(err)
 	}
+	repairFixtureExecutionDirectory(t, state, opts.AgentHomeDir)
 	svc, err = NewServiceContext(t.Context(), opts)
 	if err != nil {
 		t.Fatal(err)
@@ -167,4 +170,19 @@ func TestFlowerRestoreLifecycleFixtureCannotResumeOldWork(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitForAskUserIntegrationThread(t, svc, fixtureProductMeta(), fixture.WaitingThreadID, func(view *ThreadView) bool { return view.RunStatus == "success" })
+}
+
+// Historical writers captured an absolute directory on their producing host.
+// Repair only product-owned execution settings in the extracted test copy;
+// the historical archives and all opaque Floret-owned facts stay untouched.
+func repairFixtureExecutionDirectory(t *testing.T, state, workingDir string) {
+	t.Helper()
+	db, err := sql.Open("sqlite", filepath.Join(state, "ai", "threads.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.ExecContext(t.Context(), "UPDATE ai_thread_settings SET working_dir = ?", workingDir); err != nil {
+		t.Fatal(err)
+	}
 }

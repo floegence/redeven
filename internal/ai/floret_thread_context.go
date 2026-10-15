@@ -11,9 +11,10 @@ import (
 )
 
 type flowerCanonicalContextProjection struct {
-	Usage       *FlowerContextUsage
-	Compactions []FlowerContextCompaction
-	Decorations []FlowerTimelineDecoration
+	ModelContext *flruntime.ThreadModelContext
+	Usage        *FlowerContextUsage
+	Compactions  []FlowerContextCompaction
+	Decorations  []FlowerTimelineDecoration
 }
 
 func (s *Service) readCanonicalThreadContextProjection(ctx context.Context, current flruntime.ThreadView) (flowerCanonicalContextProjection, error) {
@@ -32,7 +33,7 @@ func (s *Service) readCanonicalThreadContextProjection(ctx context.Context, curr
 }
 
 func flowerThreadContextProjection(snapshot flruntime.ThreadContextSnapshot, current flruntime.ThreadView) (flowerCanonicalContextProjection, error) {
-	projection := flowerCanonicalContextProjection{}
+	projection := flowerCanonicalContextProjection{ModelContext: snapshot.ModelContext}
 	if snapshot.ContextUsage != nil {
 		usage, err := flowerContextUsageFromFloret(snapshot.ContextUsage, snapshot.UsageTotals)
 		if err != nil {

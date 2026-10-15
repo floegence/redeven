@@ -322,6 +322,7 @@ describe('runtime Flower surface adapter read state', () => {
 					can_send_input: false, can_interrupt: true, can_close: true,
 				},
 				current: { thread_id: 'child-detail', view_version: 4, activity: 'active' as const },
+                model_context: { snapshot: { sections: [{ key: 'skills', title: 'Skills', text: 'Child catalog' }] }, entry_id: 'entry-child', path_depth: 1, turn_id: 'turn-child', run_id: 'run-child', updated_at: '2026-10-15T12:00:00Z', changed_keys: ['skills'], removed_keys: [] },
 			},
 		}));
 		const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ loadSubagentDetail }));
@@ -330,6 +331,7 @@ describe('runtime Flower surface adapter read state', () => {
 
 		expect(loadSubagentDetail).toHaveBeenCalledWith('parent-detail', 'child-detail');
 		expect(detail.current.view_version).toBe(4);
+        expect(detail.model_context?.snapshot.sections[0].text).toBe('Child catalog');
 		expect(detail).toEqual(expect.not.objectContaining({ timeline: expect.anything(), generated_at_ms: expect.anything() }));
 	});
 

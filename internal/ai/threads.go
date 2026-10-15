@@ -517,6 +517,7 @@ func (s *Service) GetFlowerThreadDetail(ctx context.Context, meta *session.Meta,
 	if err != nil {
 		return nil, err
 	}
+	thread.ModelContext = contextProjection.ModelContext
 	thread.ContextUsage = contextProjection.Usage
 	thread.ContextCompactions = contextProjection.Compactions
 	thread.TimelineDecorations = contextProjection.Decorations

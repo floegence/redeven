@@ -16,6 +16,7 @@ import type {
   FlowerChatMessage,
   FlowerContextCompaction,
   FlowerContextUsage,
+  FlowerModelContext,
   FlowerContextSample,
   FlowerTimelineAnchor,
   FlowerTimelineDecoration,
@@ -251,6 +252,47 @@ function mapContextCompactionStatus(raw: unknown): FlowerContextCompaction['stat
     default:
       return 'checkpoint';
   }
+}
+
+export function mapModelContext(raw: unknown): FlowerModelContext | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  if (typeof raw !== 'object' || Array.isArray(raw)) throw new Error('Invalid canonical model context.');
+  const record = raw as Record<string, unknown>;
+  const snapshot = record.snapshot as Record<string, unknown> | undefined;
+  if (!snapshot || !Array.isArray(snapshot.sections) || snapshot.sections.length > 128
+    || typeof record.entry_id !== 'string' || !record.entry_id
+    || !Number.isSafeInteger(record.path_depth) || Number(record.path_depth) < 1
+    || typeof record.updated_at !== 'string' || !Number.isFinite(Date.parse(record.updated_at))
+    || typeof record.turn_id !== 'string' || typeof record.run_id !== 'string') throw new Error('Invalid canonical model context.');
+  const keys = new Set<string>();
+  const sections = snapshot.sections.map((value: unknown) => {
+    const section = value as Record<string, unknown>;
+    if (!section || typeof section.key !== 'string' || !section.key || keys.has(section.key)
+      || typeof section.title !== 'string' || typeof section.text !== 'string'
+      || Array.from(section.text).length > 64000) throw new Error('Invalid model context section.');
+    keys.add(section.key);
+    return { key: section.key, title: section.title, text: section.text };
+  });
+  if (new TextEncoder().encode(JSON.stringify({ sections }).replace(/[<>&]/g, char => '\\u00' + char.charCodeAt(0).toString(16))).length > 256 * 1024) throw new Error('Model context exceeds capacity.');
+  const changes = (field: 'changed_keys' | 'removed_keys'): string[] => {
+    const value = record[field];
+    if (!Array.isArray(value) || value.length > 128 || !value.every(key => typeof key === 'string' && key.length > 0)
+      || new Set(value).size !== value.length) throw new Error('Invalid model context changes.');
+    return value;
+  };
+  const requestIdentity = (field: 'used_by_request_id' | 'used_by_turn_id' | 'used_by_run_id'): string | undefined => {
+    const value = record[field];
+    if (value !== undefined && (typeof value !== 'string' || !value)) throw new Error('Invalid model context request identity.');
+    return value as string | undefined;
+  };
+  if (record.used_at !== undefined && (typeof record.used_at !== 'string' || !Number.isFinite(Date.parse(record.used_at)))) throw new Error('Invalid model context request time.');
+  return {
+    snapshot: { sections }, entry_id: record.entry_id, path_depth: Number(record.path_depth),
+    turn_id: record.turn_id, run_id: record.run_id, updated_at: record.updated_at,
+    changed_keys: changes('changed_keys'), removed_keys: changes('removed_keys'),
+    used_by_request_id: requestIdentity('used_by_request_id'), used_by_turn_id: requestIdentity('used_by_turn_id'),
+    used_by_run_id: requestIdentity('used_by_run_id'), used_at: record.used_at as string | undefined,
+  };
 }
 
 export function mapContextUsage(raw: unknown): FlowerContextUsage | null {
@@ -1181,6 +1223,7 @@ export function mapFlowerThread(raw: unknown, messages: readonly FlowerChatMessa
   }
   const errorMessage = trim(record.run_error);
   const errorCode = trim(record.run_error_code);
+  const modelContext = mapModelContext(record.model_context);
   const contextUsage = mapContextUsage(record.context_usage);
   const contextCompactions = mapFlowerContextCompactions(record.context_compactions);
   const timelineDecorations = mapFlowerTimelineDecorations(record.timeline_decorations);
@@ -1224,6 +1267,7 @@ export function mapFlowerThread(raw: unknown, messages: readonly FlowerChatMessa
     messages,
     ...(normalizeFlowerReasoningSelection(record.reasoning_selection) ? { reasoning_selection: normalizeFlowerReasoningSelection(record.reasoning_selection) } : {}),
     ...(normalizeFlowerReasoningCapability(record.reasoning_capability) ? { reasoning_capability: normalizeFlowerReasoningCapability(record.reasoning_capability) } : {}),
+    ...(modelContext ? { model_context: modelContext } : {}),
     ...(contextUsage ? { context_usage: contextUsage } : {}),
     ...(contextCompactions ? { context_compactions: contextCompactions } : {}),
     ...(timelineDecorations ? { timeline_decorations: timelineDecorations } : {}),

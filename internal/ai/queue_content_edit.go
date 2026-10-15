@@ -256,6 +256,11 @@ func (s *Service) editQueuedContent(ctx context.Context, meta *session.Meta, thr
 	}
 	replacement.Attachments = append(retained, replacement.Attachments...)
 	replacement.Context = contexts
+	if original.ModelContextSnapshot != nil {
+		snapshot := *original.ModelContextSnapshot
+		snapshot.Sections = append([]flruntime.ModelContextSection(nil), snapshot.Sections...)
+		replacement.ModelContextSnapshot = &snapshot
+	}
 	return editor.EditQueued(ctx, flruntime.EditQueuedInput{ThreadID: identity.ThreadID(threadID), QueueItemID: queueID, ExpectedInput: original, Input: &replacement, RequestKey: key})
 }
 

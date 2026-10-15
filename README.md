@@ -128,6 +128,8 @@ On Linux, import the exported public certificate into the trust store used by th
 
 Flower keeps the references and device selection you submit with the conversation, so follow-up questions retain their context. The selected device and the machine running tools are identified separately. Temporary secret inputs stay out of saved history.
 
+Flower refreshes current execution, repository, date, skill, and delegation facts before each model request. The context panel shows what changed and whether the latest request used it. Collection failures stop safely with a retry after repair; saved history remains intact.
+
 Flower can combine semantic browser and desktop operations in bounded scripts. Select a managed browser profile, an authorized Chrome tab, or an application window, with explicit site and app permissions for each task. Screenshots are requested when needed, and the viewer opens on demand. Background operation depends on the target and action; Windows and Safari automation are not included.
 
 Flower supports API keys and official ChatGPT plan sign-in. Account sign-in is available only through a verified local Desktop or local runtime; remote settings keep it disabled. Remote chats can still use the existing Desktop model source. ChatGPT usage never switches automatically to API billing. While Runtime is running, saved accounts renew automatically without model usage, including paused connections. Temporary failures preserve login; confirmed authorization loss requires sign-in. Signing out or removing the last connection stops account tasks and clears local tokens, with a separate result for remote revocation. Runtime shutdown preserves login and schedules no system background work.

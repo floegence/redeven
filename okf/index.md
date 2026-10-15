@@ -336,3 +336,5 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Plugin integration gate](release/plugin-integration-gates.md) - Qualify released plugin Host, market, renderer, and Desktop integration.
 - [OKF release assets](release/okf-release-assets.md) - Public release verification files for the embedded OKF bundle.
 - [Automated service-template catalog updates](release/service-template-updates.md) - Adopt checksum-verified catalog tags through the final main gate without publishing product packages or upgrading instances.
+
+- [Managed runtime facts](ai/flower-managed-model-context.md): canonical request-boundary snapshots and safe recovery.

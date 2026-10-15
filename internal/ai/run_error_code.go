@@ -33,6 +33,7 @@ const (
 	runErrorCodeProviderRequestInvalid      = "provider_request_invalid"
 	runErrorCodeProviderRequestRejected     = "provider_request_rejected"
 	runErrorCodeModelGatewayContract        = "model_gateway_contract_failed"
+	runErrorCodeModelContextUnavailable     = "model_context_unavailable"
 	runErrorCodeContextBudgetInvalid        = "context_budget_invalid"
 	runErrorCodeContextFixedOverhead        = "context_fixed_overhead"
 	runErrorCodeContextCompactionLimit      = "context_compaction_limit"
@@ -80,6 +81,8 @@ func userFacingRunError(code string, fallback string) string {
 		return "The selected AI provider rejected Flower's request. Check the diagnostic details and try again later."
 	case runErrorCodeModelGatewayContract:
 		return "The model source returned an incomplete tool call. No tool was run. Try again or choose another model."
+	case runErrorCodeModelContextUnavailable:
+		return "Flower could not collect current runtime facts. Repair the reported source and retry. " + fallback
 	case runErrorCodeContextBudgetInvalid:
 		return "The output allowance leaves no room for input. Increase the model's configured context window or lower its output limit, then retry. For Ollama, set num_ctx in the Modelfile and reload the model."
 	case runErrorCodeContextFixedOverhead:
@@ -107,6 +110,9 @@ func userFacingRunError(code string, fallback string) string {
 func classifyRunFailureCode(err error, fallback string) string {
 	if err == nil {
 		return strings.TrimSpace(fallback)
+	}
+	if errors.Is(err, flruntime.ErrModelContextUnavailable) {
+		return runErrorCodeModelContextUnavailable
 	}
 	if diagnostic, ok := parseProviderFailure(err.Error()); ok {
 		return providerDiagnosticRunCode(diagnostic)
@@ -228,6 +234,8 @@ func projectFloretTurnFailure(failure *flruntime.ThreadTurnFailure, fallbackCode
 	}
 	message := strings.TrimSpace(failure.Message)
 	switch failure.Code {
+	case flruntime.ThreadTurnFailureModelContextUnavailable:
+		return runErrorCodeModelContextUnavailable, userFacingRunError(runErrorCodeModelContextUnavailable, message)
 	case flruntime.ThreadTurnFailureProvider:
 		return projectRunFailure(message, fallbackCode)
 	case flruntime.ThreadTurnFailureContextBudgetInvalid:
