@@ -627,6 +627,13 @@ export type FlowerSurfaceCopy = Readonly<{
     }>;
     providerRetryWaiting: (seconds: number, retry: number, max: number) => string;
     providerRetryRegenerating: (seconds: number, retry: number, max: number) => string;
+    outputProgress: Readonly<{
+      tokens: (count: number) => string;
+      elapsed: (seconds: number) => string;
+      outputTooltip: string;
+      generating: string;
+      previewTooltip: string;
+    }>;
     liveProgressTool: string;
     liveProgressOutput: string;
     contextIndicator: Readonly<{
@@ -1023,12 +1030,19 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     modelStatus: {
       preparing: 'Preparing model request...',
       waitingResponse: 'Waiting for model response...',
-      streaming: 'Thinking...',
+      streaming: 'Generating...',
       retrying: 'Retrying model request...',
       finalizing: 'Finalizing reply...',
     },
     providerRetryWaiting: (seconds, retry, max) => `Model service unavailable. Retry in ${seconds}s · ${retry}/${max}`,
     providerRetryRegenerating: (seconds, retry, max) => `Connection interrupted. Regenerating in ${seconds}s · ${retry}/${max}`,
+    outputProgress: {
+      tokens: (count) => `${count} tokens`,
+      elapsed: (seconds) => `${seconds} s`,
+      outputTooltip: 'Estimated output received for this model request, including reasoning and tool arguments. Billing usage is reported separately.',
+      generating: 'Generating arguments',
+      previewTooltip: 'Line counts update as arguments arrive. Actual changes are shown after the tool finishes.',
+    },
     liveProgressTool: 'Using a tool',
     liveProgressOutput: 'Writing the reply',
     contextIndicator: {

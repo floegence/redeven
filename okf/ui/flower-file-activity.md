@@ -7,8 +7,9 @@ timestamp: 2026-10-08T00:00:00Z
 ---
 # Summary
 
-Flower presents file reads and mutations only from canonical typed Floret
-Activity. A mutation row shows the user-facing file name and aggregate added and
+Flower presents confirmed file reads and mutations from canonical typed Floret
+Activity. [Received output progress](flower-output-progress.md) owns temporary
+argument-generation counts before those outcomes exist. A mutation row shows the user-facing file name and aggregate added and
 deleted line counts; its detail contains the matching unified diff. Protocol
 fields, private paths, and internal action IDs never become display metadata.
 An activity without typed mutation detail exposes safe purpose and status through

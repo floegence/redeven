@@ -15,6 +15,13 @@ window.__flowerPerfCounts = { parses: 0, lexes: 0 };
 function setup() {
   const query = new URLSearchParams(location.search);
   const fixture = streamingFixture(Number(query.get('messages') || 72), Number(query.get('tools') || 20));
+  const initial = fixture.current();
+  const request = { logical_request_id: 'performance-request', attempt_id: 'performance-attempt', attempt_epoch: 1,
+    started_at: new Date().toISOString(), first_output_at: new Date().toISOString(), estimated_output_tokens: 128 };
+  const call = { thread_id: initial.thread_id, turn_id: initial.turn_id!, run_id: initial.run_id!, logical_request_id: request.logical_request_id,
+    attempt_id: request.attempt_id, attempt_epoch: 1, call_id: 'performance-edit', name: 'file.edit', arguments_complete: false,
+    preview: { display_name: 'example.ts', additions: 8, deletions: 3 } };
+  fixture.replace({ ...initial, view_version: initial.view_version + 1, sampled_at_ms: Date.now(), run_progress: { phase: 'streaming', request }, tool_call_previews: [call] });
   const root = document.getElementById('root')!;
   root.style.height = '100vh';
   const drafts = createFlowerComposerDraftCoordinator();
@@ -45,6 +52,38 @@ function setup() {
   root.addEventListener('click', clicked, true);
   let callsBefore = { ...fixture.calls };
   return {
+    async checkOutputProgress() {
+      const original = fixture.current();
+      const replace = (next: Partial<typeof original>) => fixture.replace({ ...original, ...next, view_version: fixture.current().view_version + 1 });
+      const until = async (condition: () => boolean) => {
+        const deadline = performance.now() + 5000;
+        while (!condition()) {
+          if (performance.now() >= deadline) throw new Error('Output progress did not reach its expected UI state.');
+          await new Promise(resolve => setTimeout(resolve, 20));
+        }
+      };
+      replace({ sampled_at_ms: Date.now(), run_progress: { phase: 'waiting_response', request: { ...request, first_output_at: undefined, started_at: new Date(Date.now() - 4000).toISOString(), estimated_output_tokens: 0 } }, tool_call_previews: [] });
+      await until(() => root.querySelector('.flower-model-status-metric')?.textContent?.includes('4 s') === true);
+      const indicator = root.querySelector('.flower-model-status-indicator');
+      replace({ sampled_at_ms: Date.now() });
+      await until(() => root.querySelector('[data-flower-argument-generation]') != null);
+      const row = root.querySelector('[data-flower-argument-generation]')!.closest('[data-flower-tool-row-identity]')!;
+      const generated = row.textContent?.includes('+8') && !row.querySelector('button') && fixture.calls.preview === 0;
+      const tokens = root.querySelector('.flower-model-status-metric');
+      const announcedOnlyPhase = tokens?.closest('[aria-live="polite"]') === null;
+      const stableIndicator = indicator === root.querySelector('.flower-model-status-indicator');
+      const tool = { id: `tool:${initial.turn_id}:${call.call_id}`, turn_id: initial.turn_id!, run_id: initial.run_id!, ordinal: initial.items!.length + 1, kind: 'tool' as const,
+        activity: { item_id: 'performance-journal-entry', tool_id: call.call_id, tool_name: call.name, kind: 'tool', status: 'success', severity: 'quiet',
+          presentation: { renderer: 'file', payload: { operation: 'edit', display_name: 'example.ts', change_type: 'noop' } } } };
+      replace({ run_progress: { phase: 'tool_execution' }, tool_call_previews: [], items: [...initial.items!, tool] });
+      await until(() => row.textContent?.includes('+0') === true);
+      const actualZero = row.textContent?.includes('−0') && row.isConnected && root.querySelectorAll('[data-flower-tool-row-identity]').length === (initial.items?.filter(item => item.kind === 'tool').length ?? 0) + 1;
+      replace({ sampled_at_ms: Date.now() });
+      await until(() => root.querySelector('[data-flower-argument-generation]') != null);
+      const valid = Boolean(generated && actualZero && announcedOnlyPhase && stableIndicator);
+      if (!valid) throw new Error('Output progress UI acceptance failed.');
+      return { valid, generated: Boolean(generated), actualZero: Boolean(actualZero), announcedOnlyPhase, stableIndicator };
+    },
     async checkContinuity() {
       const message = root.querySelector('[data-flower-message-id="message-0"]');
       if (!message) throw new Error('The selected production transcript is missing.');

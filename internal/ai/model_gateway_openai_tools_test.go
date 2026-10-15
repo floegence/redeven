@@ -320,6 +320,9 @@ func TestOpenAICompatibleResponses_TerminalReadToolAliasRoundTrip(t *testing.T) 
 	if len(events) == 0 {
 		t.Fatal("missing streamed tool call events")
 	}
+	if got := strings.Join(streamEventTexts(events, StreamEventToolCallDelta), ""); got != `{"process_id":"proc-1","description":"Read curl output","after_seq":0}` {
+		t.Fatalf("argument fragments=%q, want each received byte exactly once", got)
+	}
 	seenTypes := map[StreamEventType]bool{}
 	for _, event := range events {
 		seenTypes[event.Type] = true

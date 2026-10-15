@@ -1,3 +1,5 @@
+import { flowerCurrentToolCallPreviews } from './toolCallPreview';
+import { mapFlowerProviderRequestProgress } from './providerRequestProgress';
 import { mapFlowerCitationSources } from './chat/markdown/flowerCitations';
 import { mapFlowerCancellation } from './flowerLiveMapper';
 import type {
@@ -65,7 +67,7 @@ function runtimeRunProgressPhase(value: unknown): FlowerRunProgressPhase {
   }
 }
 
-function runtimeRunProgress(current: FlowerRuntimeCurrentView): FlowerRunProgress | null {
+function runtimeRunProgress(current: FlowerRuntimeCurrentView, previous?: FlowerRunProgress | null): FlowerRunProgress | null {
   if (!current.run_progress) return null;
   const runID = trim(current.run_id);
   const turnID = trim(current.turn_id);
@@ -73,7 +75,9 @@ function runtimeRunProgress(current: FlowerRuntimeCurrentView): FlowerRunProgres
     throw new Error('Flower contract error: run progress requires exact run_id and turn_id.');
   }
   const retry = current.run_progress.retry;
-  return { run_id: runID, turn_id: turnID, phase: runtimeRunProgressPhase(current.run_progress.phase), ...(retry ? { retry } : {}) };
+  return { run_id: runID, turn_id: turnID, phase: runtimeRunProgressPhase(current.run_progress.phase), ...(retry ? { retry } : {}),
+    ...(current.run_progress.request ? { request: mapFlowerProviderRequestProgress(current.run_progress.request, current.sampled_at_ms, previous?.request), sampled_at_ms: current.sampled_at_ms } : {}),
+  };
 }
 
 function approvalTarget(value: unknown): { kind: string; label: string } | null {
@@ -194,6 +198,11 @@ function activityBlock(base: FlowerThreadSnapshot, view: FlowerRuntimeCurrentVie
     && (trim(interaction.tool_call_id) || trim(interaction.approval?.tool_call_id)) === toolCallID
   )) : undefined;
   if (resolvedApproval) activity = mergeResolvedApproval(activity, resolvedApproval);
+  const preview = (view.tool_call_previews ?? []).find(call => call.thread_id === base.thread_id
+    && call.turn_id === identity.turnID && call.run_id === identity.runID && call.call_id === toolCallID);
+  if (preview?.preview && ['pending', 'running', 'waiting'].includes(activity.status)) {
+    activity = { ...activity, argument_preview: preview.preview };
+  }
   const fileActions = Object.fromEntries((activity.target_refs ?? []).flatMap((target) => {
     const actionID = trim(target.kind).startsWith('file_action:')
       ? trim(target.kind).slice('file_action:'.length)
@@ -225,6 +234,9 @@ function activityBlock(base: FlowerThreadSnapshot, view: FlowerRuntimeCurrentVie
 }
 
 function runtimeMessages(base: FlowerThreadSnapshot, view: FlowerRuntimeCurrentView): readonly FlowerChatMessage[] {
+  const previews = flowerCurrentToolCallPreviews(view);
+  view = { ...view, tool_call_previews: previews };
+  const matchedCalls = new Set<string>();
   const messages: FlowerChatMessage[] = [];
   const seenItemIDs = new Set<string>();
   for (const item of view.items ?? []) {
@@ -252,6 +264,7 @@ function runtimeMessages(base: FlowerThreadSnapshot, view: FlowerRuntimeCurrentV
       continue;
     }
     if (item.kind === 'tool') {
+      matchedCalls.add(JSON.stringify([identity.turnID, identity.runID, trim(item.activity?.tool_id)]));
       messages.push({
         id: itemID, thread_id: base.thread_id, turn_id: identity.turnID, run_id: identity.runID, role: 'assistant',
         content: '', status: 'complete', created_at_ms: createdAtMs,
@@ -279,6 +292,14 @@ function runtimeMessages(base: FlowerThreadSnapshot, view: FlowerRuntimeCurrentV
       ...(attachmentBlocks.length > 0 ? { blocks: attachmentBlocks } : {}),
       ...(item.live ? { live: true, active_cursor: item.kind === 'assistant' } : {}),
       ...(references ? { references } : {}),
+    });
+  }
+  for (const call of previews) {
+    if (matchedCalls.has(JSON.stringify([call.turn_id, call.run_id, call.call_id]))) continue;
+    messages.push({
+      id: `tool:${call.turn_id}:${call.call_id}`, thread_id: call.thread_id, turn_id: call.turn_id, run_id: call.run_id,
+      role: 'assistant', content: '', status: 'streaming', created_at_ms: base.updated_at_ms,
+      blocks: [{ type: 'tool-call-preview', call }],
     });
   }
   return messages;
@@ -459,7 +480,7 @@ export function applyFlowerRuntimeCurrentView(
     current_execution: trim(current.turn_id) && trim(current.run_id)
       ? { turn_id: trim(current.turn_id), run_id: trim(current.run_id), status, ...(current.turn_kind ? { turn_kind: current.turn_kind } : {}) }
       : undefined,
-    run_progress: runtimeRunProgress(current),
+    run_progress: runtimeRunProgress(current, base.run_progress),
     cancellation: mapFlowerCancellation(current.cancellation, threadID, trim(current.run_id), trim(current.turn_id)),
     approval_pending: approvalCount > 0,
     approval_pending_count: approvalCount,

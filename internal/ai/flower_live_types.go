@@ -26,10 +26,12 @@ type FlowerThreadReadView struct {
 }
 
 type FlowerRunProgress struct {
-	Retry  *flruntime.ProviderRetryProgress `json:"retry,omitempty"`
-	RunID  string                           `json:"run_id"`
-	TurnID string                           `json:"turn_id"`
-	Phase  flruntime.ThreadRunPhase         `json:"phase"`
+	Retry       *flruntime.ProviderRetryProgress   `json:"retry,omitempty"`
+	Request     *flruntime.ProviderRequestProgress `json:"request,omitempty"`
+	SampledAtMS int64                              `json:"sampled_at_ms,omitempty"`
+	RunID       string                             `json:"run_id"`
+	TurnID      string                             `json:"turn_id"`
+	Phase       flruntime.ThreadRunPhase           `json:"phase"`
 }
 
 type FlowerApprovalState string

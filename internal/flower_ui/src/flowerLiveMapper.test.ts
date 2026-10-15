@@ -377,10 +377,16 @@ describe('mapFlowerActivityItem Subagent operation contract', () => {
 
 describe('Provider retry progress', () => {
   const mapperOptions = { runtimeID: 'runtime', runtimeKind: 'local_environment' as const, sourceLabel: 'Local', targetLabels: [] };
-  it('preserves absolute retry deadlines and attempt replacement facts', () => {
+  it('preserves request observations, absolute retry deadlines and attempt replacement facts', () => {
     const retry = { retry: 1, max_retries: 4, next_attempt_at: '2026-10-15T16:00:03Z', reason: 'transient', replaced_attempt_id: 'attempt-1', replaced_attempt_epoch: 1 };
-    const mapped = mapFlowerThread({ read_status: { is_unread: false, snapshot: { activity_revision: 1 }, read_state: { last_seen_activity_revision: 1 } }, created_at_unix_ms: 1, updated_at_unix_ms: 1, title: '', title_status: '', title_generation: 0, thread_id: 'thread-retry', active_run_id: 'run-retry', run_id: 'run-retry', turn_id: 'turn-retry', run_status: 'running', run_progress: { run_id: 'run-retry', turn_id: 'turn-retry', phase: 'retrying', retry } }, [], mapperOptions);
+    const request = { logical_request_id: 'request', attempt_id: 'attempt-1', attempt_epoch: 1,
+      started_at: '2026-10-15T16:00:00Z', first_output_at: '2026-10-15T16:00:01Z', estimated_output_tokens: 128 };
+    const sampledAt = Date.parse('2026-10-15T16:00:02Z');
+    const mapped = mapFlowerThread({ read_status: { is_unread: false, snapshot: { activity_revision: 1 }, read_state: { last_seen_activity_revision: 1 } }, created_at_unix_ms: 1, updated_at_unix_ms: 1, title: '', title_status: '', title_generation: 0, thread_id: 'thread-retry', active_run_id: 'run-retry', run_id: 'run-retry', turn_id: 'turn-retry', run_status: 'running', run_progress: { run_id: 'run-retry', turn_id: 'turn-retry', phase: 'retrying', retry, request, sampled_at_ms: sampledAt } }, [], mapperOptions);
     expect(mapped.run_progress?.retry).toEqual(retry);
+    expect(mapped.run_progress?.request).toMatchObject(request);
+    expect(mapped.run_progress?.sampled_at_ms).toBe(sampledAt);
+    expect(Number.isFinite(mapped.run_progress?.request?.wait_anchor_monotonic_ms)).toBe(true);
     expect(() => mapFlowerThread({ thread_id: 'thread-retry', active_run_id: 'run-retry', run_id: 'run-retry', turn_id: 'turn-retry', run_status: 'running', run_progress: { run_id: 'run-retry', turn_id: 'turn-retry', phase: 'retrying', retry: { ...retry, retry: 0 } } }, [], mapperOptions)).toThrow('run_progress.retry');
   });
 });

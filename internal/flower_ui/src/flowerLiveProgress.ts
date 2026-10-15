@@ -1,6 +1,7 @@
 import type {
   FlowerRunProgress,
   FlowerRunProgressPhase,
+  FlowerProviderRequestProgress,
   FlowerThreadSnapshot,
 } from './contracts/flowerSurfaceContracts';
 import { trimString } from './flowerSurfaceModel';
@@ -13,6 +14,7 @@ export type FlowerLiveProgress = Readonly<{
   turnID: string;
   identity: string;
   retry?: FlowerRunProgress['retry'];
+  request?: FlowerProviderRequestProgress;
 }>;
 
 export function flowerRunProgress(
@@ -26,6 +28,7 @@ export function flowerRunProgress(
   }
   return {
     kind: thread.run_progress.phase,
+    request: thread.run_progress.request,
     runID,
     turnID,
     identity: [thread.thread_id, runID].join('\x1f'),

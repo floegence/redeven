@@ -104,6 +104,48 @@ async function unrelatedUpdates(fixture: ReturnType<typeof streamingFixture>, co
 }
 
 describe('Flower complete interaction subtree stability', () => {
+  it('keeps one edit row through argument generation, approval and actual zero changes', async () => {
+    onTestFinished(() => page.viewport(1280, 900));
+    await page.viewport(1280, 900);
+    const fixture = streamingFixture(8, 0);
+    const base = fixture.current();
+    const call = { thread_id: base.thread_id, turn_id: base.turn_id!, run_id: base.run_id!, logical_request_id: 'output-request', attempt_id: 'output-attempt', attempt_epoch: 1,
+      call_id: 'edit-preview', name: 'file.write', arguments_complete: false, preview: { display_name: 'example.ts', additions: 8 } };
+    const startedAt = Date.now() - 4000;
+    const request = { logical_request_id: call.logical_request_id, attempt_id: call.attempt_id, attempt_epoch: 1,
+      started_at: new Date(startedAt).toISOString(), estimated_output_tokens: 0 };
+    fixture.replace({ ...base, view_version: 2, sampled_at_ms: Date.now(), run_progress: { phase: 'waiting_response', request } });
+    const runtime = await mountFixture(fixture);
+    await waitFor(() => Boolean(runtime.querySelector('.flower-model-status-metric')?.textContent?.includes('4 s')));
+    const indicator = runtime.querySelector('.flower-model-status-indicator');
+    fixture.replace({ ...base, view_version: 3, sampled_at_ms: Date.now(), run_progress: { phase: 'streaming', request: { ...request, first_output_at: new Date().toISOString(), estimated_output_tokens: 128 } }, tool_call_previews: [call] });
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-argument-generation]')));
+    const row = runtime.querySelector('[data-flower-tool-row-identity]')!;
+    expect(row.textContent).toContain('+8');
+    expect(row.querySelector('button')).toBeNull();
+    expect(fixture.calls.preview).toBe(0);
+    expect(runtime.querySelector('.flower-model-status-indicator')).toBe(indicator);
+    expect(runtime.querySelector('.flower-model-status-metric')?.textContent).toContain('128 tokens');
+    expect(runtime.querySelector('.flower-model-status-metric')?.closest('[aria-live="polite"]')).toBeNull();
+    await page.screenshot({ element: runtime, path: '__screenshots__/flower-output-progress-wide.png' });
+    await page.viewport(390, 844);
+    await page.screenshot({ element: runtime, path: '__screenshots__/flower-output-progress-narrow.png' });
+    const tool = { id: `tool:${base.turn_id}:${call.call_id}`, turn_id: base.turn_id!, run_id: base.run_id!, ordinal: base.items!.length + 1, kind: 'tool' as const,
+      activity: { item_id: 'journal-tool-entry', tool_id: call.call_id, tool_name: call.name, kind: 'tool', status: 'waiting', severity: 'normal',
+        presentation: { renderer: 'file', payload: { operation: 'write', display_name: 'example.ts' } } } };
+    fixture.replace({ ...base, view_version: 4, run_progress: null, attention: { approval_count: 1 }, interactions: [{ id: 'approval-preview', turn_id: base.turn_id!, run_id: base.run_id!, kind: 'approval', tool_call_id: call.call_id, approval: { tool_call_id: call.call_id, tool_name: call.name, label: 'Write example.ts' } }], tool_call_previews: [{ ...call, arguments_complete: true }], items: [...base.items!, tool] });
+    await waitFor(() => Boolean(row.querySelector('[data-flower-activity-status="waiting"]')));
+    expect(runtime.querySelector('[data-flower-tool-row-identity]')).toBe(row);
+    expect(row.textContent).toContain('+8');
+    expect(runtime.querySelectorAll('[data-flower-tool-row-identity]')).toHaveLength(1);
+    fixture.replace({ ...base, view_version: 5, run_progress: { phase: 'tool_execution' }, tool_call_previews: [], items: [...base.items!, { ...tool, activity: { ...tool.activity, status: 'success', presentation: { renderer: 'file', payload: { operation: 'write', display_name: 'example.ts', change_type: 'noop' } } } }] });
+    await waitFor(() => row.textContent?.includes('+0') === true);
+    expect(row.textContent).toContain('−0');
+    expect(row.textContent).not.toContain('+8');
+    expect(runtime.querySelector('[data-flower-tool-row-identity]')).toBe(row);
+    expect(runtime.querySelectorAll('[data-flower-tool-row-identity]')).toHaveLength(1);
+  });
+
   it('keeps queue drag ownership and row nodes through 300 updates and a real reorder', async () => {
     const fixture = streamingFixture(8, 0);
     const reorder = vi.fn(async (_threadID: string, ids: readonly string[]) => {

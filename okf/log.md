@@ -1,5 +1,11 @@
 # Redeven OKF Update Log
 
+## 2026-10-15: Received output and edit progress
+
+- Consume checksummed Floret v7.39.2 with the v7.39.0 progress contracts and document [request output, waiting seconds and argument previews](ui/flower-output-progress.md).
+- Keep previews ephemeral, separate from canonical Activity and effects; replace generated line counts with confirmed results including zero.
+- Review the changed source copy and all ten explicit locale catalogs for tooltip meaning, developer terminology, placeholders and neutral token/second units. README product claims remain unchanged.
+
 ## 2026-10-15: Faster Flower storage loading
 
 - Adopt published Floret v7.39.2 to omit disposable inspection text postings and reduce formal search-index construction allocations. Preserve complete validation, snapshot policy, and the [readiness lifecycle](architecture/ai-readiness-lifecycle.md).

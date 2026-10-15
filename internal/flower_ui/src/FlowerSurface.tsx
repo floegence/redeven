@@ -1,3 +1,4 @@
+import { flowerToolCallPreviewIdentity } from './toolCallPreview';
 import { flowerQueuedDraftReferences } from './composer/flowerQueuedDraft';
 import { flowerMessageTextForCopy } from './chat/markdown/flowerCitations';
 import { flowerDraftReferenceIdentity, flowerDraftReferenceContextItem, flowerDraftReferenceDescription } from './composer/flowerDraftReferenceModel';
@@ -97,6 +98,8 @@ import type {
   FlowerApprovalAction,
   FlowerActivityItem,
   FlowerActivityTimelineBlock,
+  FlowerToolCallPreviewBlock,
+  FlowerArgumentPreview,
   FlowerInputAnswer,
   FlowerInputRequest,
   FlowerInputRequestChoice,
@@ -8939,7 +8942,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     threadID: timeline.thread_id,
     runID: timeline.run_id,
     turnID: timeline.turn_id,
-    itemID: item.item_id,
+    itemID: item.kind === 'tool' && item.tool_id ? item.tool_id : item.item_id,
   });
 
   const activityItemHasVisiblePayload = (item: FlowerActivityItem): boolean => {
@@ -9856,6 +9859,34 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     </Switch>;
   };
 
+  const changeStats = (stats: Accessor<FlowerArgumentPreview | undefined>, preview: Accessor<boolean>) => (
+    <Show when={stats()}>
+      {(value) => <span class="flower-activity-inline-change-stats" title={preview() ? copy().chat.outputProgress.previewTooltip : undefined}>
+        <Show when={value().additions !== undefined}><span class="flower-activity-file-stat-add">+{value().additions}</span></Show>
+        <Show when={value().additions !== undefined && value().deletions !== undefined}><span aria-hidden="true"> / </span></Show>
+        <Show when={value().deletions !== undefined}><span class="flower-activity-file-stat-del">−{value().deletions}</span></Show>
+      </span>}
+    </Show>
+  );
+
+  const argumentPreviewRow = (block: Accessor<FlowerToolCallPreviewBlock>) => (
+    <div class="flower-activity-inline-row flower-activity-inline-row-generating" data-flower-tool-call-id={block().call.call_id} data-flower-argument-generation="true">
+      <div class="flower-activity-inline-line">
+        <div class="flower-activity-inline-button flower-activity-inline-button-static">
+          <span class="flower-activity-inline-icon"><FlowerToolIcon toolName={block().call.name} running={false} /></span>
+          <span class="flower-activity-inline-copy">
+            <span class="flower-activity-inline-title" data-floe-progress-shimmer={livePresentationConfirmed() ? 'text' : undefined}>
+              {block().call.name === 'apply_patch' ? copy().chat.toolActivity.patch : copy().chat.toolActivity.edit}
+              <Show when={block().call.preview?.display_name}>{(name) => <> <span class="flower-activity-file-name">{name()}</span></>}</Show>
+            </span>
+            <span class="flower-activity-inline-detail">{copy().chat.outputProgress.generating}</span>
+            {changeStats(() => block().call.preview ?? undefined, () => true)}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+
   const activityRow = (
     messageID: Accessor<string>,
     blockIndex: Accessor<number>,
@@ -9947,15 +9978,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           <Show when={presentation().meta}>
             {(meta) => <span class="flower-activity-inline-detail">{meta()}</span>}
           </Show>
-          <Show when={presentation().changeStats}>
-            {(stats) => (
-              <span class="flower-activity-inline-change-stats" aria-label={`+${stats().additions} / -${stats().deletions}`}>
-                <span class="flower-activity-file-stat-add">+{stats().additions}</span>
-                <span aria-hidden="true"> / </span>
-                <span class="flower-activity-file-stat-del">-{stats().deletions}</span>
-              </span>
-            )}
-          </Show>
+          {changeStats(() => item().argument_preview ?? presentation().changeStats, () => item().argument_preview !== undefined)}
         </span>
         <Show when={duration()}>
           {(value) => <span class="flower-activity-inline-duration">{value()}</span>}
@@ -10082,33 +10105,25 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const activityBlock = (
     messageID: Accessor<string>,
     blockIndex: Accessor<number>,
-    block: Accessor<FlowerActivityTimelineBlock>,
+    block: Accessor<FlowerActivityTimelineBlock | null>,
+    preview: Accessor<FlowerToolCallPreviewBlock | null>,
     viewportScope: FlowerScrollTailController,
   ) => {
-    const visibleItems = createMemo(() => block().items.filter(activityItemVisible));
-    const visibleItemKeys = createMemo(() => visibleItems().map((item) => activityItemKey(messageID(), block(), item)));
-    const visibleItemsByKey = createMemo(() => {
-      const items = visibleItems();
-      return new Map(visibleItemKeys().map((key, index) => [key, items[index]] as const));
-    });
-
+    const visibleItems = createMemo(() => block()?.items.filter(activityItemVisible) ?? []);
+    const visibleItemsByKey = createMemo(() => new Map(visibleItems().map(item => [activityItemKey(messageID(), block()!, item), item])));
+    const visibleItemKeys = createMemo(() => preview()
+      ? [flowerToolCallPreviewIdentity(preview()!.call)] : [...visibleItemsByKey().keys()]);
     return (
       <Show when={visibleItemKeys().length > 0}>
-        <div class="flower-activity-inline" data-flower-activity-run-id={block().run_id}>
+        <div class="flower-activity-inline" data-flower-activity-run-id={block()?.run_id ?? preview()?.call.run_id}>
           <For each={visibleItemKeys()}>
             {(itemKey) => {
               const visibleItem = createMemo(() => visibleItemsByKey().get(itemKey) ?? null);
-              return (
-                <Show when={visibleItem()}>
-                  {(item) => activityRow(
-                    messageID,
-                    blockIndex,
-                    block,
-                    item,
-                    viewportScope,
-                  )}
+              return <div data-flower-tool-row-identity={itemKey}>
+                <Show when={visibleItem()} fallback={<Show when={preview()}>{argumentPreviewRow}</Show>}>
+                  {(item) => activityRow(messageID, blockIndex, () => block()!, item, viewportScope)}
                 </Show>
-              );
+              </div>;
             }}
           </For>
         </div>
@@ -10364,7 +10379,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     viewportScope: FlowerScrollTailController,
     thread: Accessor<FlowerThreadSnapshot | null | undefined>,
   ) => {
-    const activity = createMemo(() => block().type === 'activity' ? block() as Extract<FlowerRenderableMessageBlock, { type: 'activity' }> : null);
+    const activity = createMemo(() => block().type === 'activity' || block().type === 'tool_preview' ? block() as Extract<FlowerRenderableMessageBlock, { type: 'activity' | 'tool_preview' }> : null);
     const content = createMemo(() => block().type === 'content' ? block() as Extract<FlowerRenderableMessageBlock, { type: 'content' }> : null);
     const inputResponse = createMemo(() => block().type === 'input_response' ? block() as Extract<FlowerRenderableMessageBlock, { type: 'input_response' }> : null);
     const attachment = createMemo(() => (
@@ -10396,7 +10411,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         {(activityBlockValue) => activityBlock(
           () => message().id,
           () => activityBlockValue().block_index,
-          () => activityBlockValue().block,
+          () => { const value = activityBlockValue(); return value.type === 'activity' ? value.block : null; },
+          () => { const value = activityBlockValue(); return value.type === 'tool_preview' ? value.block : null; },
           viewportScope,
         )}
       </Show>
@@ -11024,8 +11040,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     <SubagentDetailWindow
       syncNotice={workspaceSyncNotice()}
       runProgress={<Show when={subagentDetailRunProgress()}>{(progress) => (
-        <div class="flower-subagent-detail-progress" role="status" aria-live="polite" aria-atomic="true">
-          <FlowerProgressIndicator progress={progress()} label={liveProgressLabel(progress().kind, progress().retry)} />
+        <div class="flower-subagent-detail-progress">
+          <FlowerProgressIndicator progress={progress()} label={liveProgressLabel(progress().kind, progress().retry)} outputCopy={copy().chat.outputProgress} />
         </div>
       )}</Show>}
       open={subagentDetailOpen()}
@@ -11938,13 +11954,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   );
 
   const progressLane = (conversation = false) => (
-    <div class={cn('flower-model-status-lane', conversation && 'flower-model-status-lane--conversation')}
-      role="status" aria-live="polite" aria-atomic="true">
+    <div class={cn('flower-model-status-lane', conversation && 'flower-model-status-lane--conversation')}>
       <Show when={selectedThreadStopPending()} fallback={<FlowerProgressIndicator
         progress={selectedRunProgress()}
+        outputCopy={copy().chat.outputProgress}
         label={selectedRunProgress() ? liveProgressLabel(selectedRunProgress()!.kind, selectedRunProgress()!.retry)
           : ''}
-      />}><span class="flower-turn-stopping text-xs text-muted-foreground">{copy().chat.stopping}</span></Show>
+      />}><span class="flower-turn-stopping text-xs text-muted-foreground" role="status" aria-live="polite">{copy().chat.stopping}</span></Show>
     </div>
   );
 

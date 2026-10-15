@@ -44,9 +44,17 @@ func TestGeminiStreamPreservesToolSignaturesAndImageInput(t *testing.T) {
 		t.Fatal(err)
 	}
 	req := ModelGatewayRequest{Model: "gemini-3.8-flash", Messages: []Message{{Role: "user", Content: []ContentPart{{Type: "text", Text: "Describe the weather"}, {Type: "image", FileURI: image, MimeType: "image/png"}}}}, Tools: []ToolDef{{Name: "lookup", InputSchema: json.RawMessage(`{"type":"object","properties":{"city":{"type":"string"}},"required":["city"]}`)}}, ProviderControls: ProviderControls{ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelHigh}, ReasoningCapability: config.AIReasoningCapabilityForModel("google", "gemini-3.8-flash")}}
-	first, err := gateway.StreamTurn(context.Background(), req, nil)
+	var arguments strings.Builder
+	first, err := gateway.StreamTurn(context.Background(), req, func(event StreamEvent) {
+		if event.Type == StreamEventToolCallDelta {
+			arguments.WriteString(event.Text)
+		}
+	})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if arguments.String() != `{"city":"Paris"}` {
+		t.Fatalf("argument fragments=%q", arguments.String())
 	}
 	if len(first.ToolCalls) != 1 || first.ProviderState == nil {
 		t.Fatalf("missing tool or signature state: %+v", first)

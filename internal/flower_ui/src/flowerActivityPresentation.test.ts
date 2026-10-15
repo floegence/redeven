@@ -18,6 +18,13 @@ function item(overrides: Partial<FlowerActivityItem>): FlowerActivityItem {
   };
 }
 
+it('shows explicit zero for a successful no-op instead of retaining argument preview counts', () => {
+  const presentation = presentFlowerActivityItem(item({ tool_name: 'file.write', renderer: 'file',
+    argument_preview: { additions: 99 }, payload: { display_name: 'same.txt', operation: 'write', change_type: 'noop' },
+  }));
+  expect(presentation.changeStats).toEqual({ additions: 0, deletions: 0 });
+});
+
 it('renders a typed tool image as authorized media without a unavailable-result notice', () => {
   const resource_ref = `image://${'c'.repeat(64)}/png`;
   const result = presentFlowerActivityItem(item({ tool_name: 'image.read', label: 'photo.png', renderer: 'structured', target_refs: [{ kind: 'tool_image', label: 'photo.png', resource_ref }] }));

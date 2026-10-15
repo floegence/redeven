@@ -526,6 +526,13 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
       },
       providerRetryWaiting: (seconds, retry, max) => t(i18n, k('chat.providerRetryWaiting'), { seconds, retry, max }),
       providerRetryRegenerating: (seconds, retry, max) => t(i18n, k('chat.providerRetryRegenerating'), { seconds, retry, max }),
+      outputProgress: {
+        tokens: (count) => t(i18n, k('chat.outputTokens'), { count }),
+        elapsed: (seconds) => t(i18n, k('chat.waitSeconds'), { seconds }),
+        outputTooltip: t(i18n, k('chat.outputTokensTooltip')),
+        generating: t(i18n, k('chat.toolGeneratingArguments')),
+        previewTooltip: t(i18n, k('chat.toolArgumentPreviewTooltip')),
+      },
       liveProgressTool: t(i18n, k('chat.liveProgressTool')),
       liveProgressOutput: t(i18n, k('chat.liveProgressOutput')),
       contextIndicator: {
