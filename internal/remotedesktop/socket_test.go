@@ -23,6 +23,76 @@ type socketTransport struct {
 func (t *socketTransport) Control() <-chan nativeapps.HostDesktopMessage { return t.control }
 func (t *socketTransport) Media() <-chan nativeapps.HostDesktopMessage   { return t.media }
 
+func TestRemoteDesktopSocketsEnforceNegotiatedFrameWindow(t *testing.T) {
+	for _, tc := range []struct {
+		name              string
+		offered, selected int
+	}{
+		{"legacy", 0, 0},
+		{"extended", 6, 6},
+		{"legacy-client", 6, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			native := &socketTransport{fakeTransport: fakeTransport{done: make(chan struct{})}, control: make(chan nativeapps.HostDesktopMessage, 2), media: make(chan nativeapps.HostDesktopMessage, 7)}
+			m := &Manager{sessions: map[string]*ownedSession{}, factory: func(context.Context) (Transport, error) { return native, nil }}
+			s := &ownedSession{owner: "alice", view: Session{ID: "window", Mode: "control"}}
+			m.sessions[s.view.ID], m.controller = s, s.view.ID
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { m.serveSocket(w, r, s) }))
+			defer server.Close()
+			ticket, err := m.Ticket("alice", s.view.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			dial := func(channel string) *websocket.Conn {
+				t.Helper()
+				d := websocket.Dialer{Subprotocols: []string{"redeven-desktop-v1", ticket.Token}}
+				c, _, err := d.Dial("ws"+strings.TrimPrefix(server.URL, "http")+ViewerPath+channel, nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				t.Cleanup(func() { _ = c.Close() })
+				_ = c.SetReadDeadline(time.Now().Add(2 * time.Second))
+				return c
+			}
+			control, media := dial("control"), dial("media")
+			native.control <- nativeapps.HostDesktopMessage{Version: 1, Type: "capabilities", Capabilities: &nativeapps.HostDesktopCapabilities{Backend: "x11", FrameWindow: tc.offered}}
+			var message nativeapps.HostDesktopMessage
+			if err := control.ReadJSON(&message); err != nil || message.Capabilities == nil || message.Capabilities.FrameWindow != tc.offered {
+				t.Fatal("native window offer lost", message, err)
+			}
+			picture := &nativeapps.HostDesktopPicture{Mode: "smooth", MaxDimension: 2560, FrameRate: 60, FrameWindow: tc.selected}
+			if err := m.send(s, s.pair, nativeapps.HostDesktopCommand{Version: 1, Method: "connect", Mode: "control", Picture: picture}, false); err != nil {
+				t.Fatal(err)
+			}
+			native.control <- nativeapps.HostDesktopMessage{Version: 1, Type: "state", State: "active", Mode: "control", Generation: 1}
+			if err := control.ReadJSON(&message); err != nil {
+				t.Fatal(err)
+			}
+			for id := 1; id <= picture.FrameCapacity(); id++ {
+				native.media <- nativeapps.HostDesktopMessage{Version: 1, Type: "frame", Codec: "png", Generation: 1, FrameID: uint64(id), Width: 2, Height: 2, Data: []byte{1}}
+				if _, _, err := media.ReadMessage(); err != nil {
+					t.Fatalf("allowed frame %d rejected: %v", id, err)
+				}
+			}
+			s.pair.mu.Lock()
+			painted, outstanding := s.pair.painted, len(s.pair.sent)
+			s.pair.mu.Unlock()
+			if painted || outstanding != picture.FrameCapacity() {
+				t.Fatalf("delivery granted paint or lost capacity: painted=%v outstanding=%d", painted, outstanding)
+			}
+			native.media <- nativeapps.HostDesktopMessage{Version: 1, Type: "frame", Codec: "png", Generation: 1, FrameID: uint64(picture.FrameCapacity() + 1), Width: 2, Height: 2, Data: []byte{1}}
+			if _, _, err := media.ReadMessage(); err == nil {
+				t.Fatal("frame beyond negotiated capacity reached the client")
+			}
+			select {
+			case <-native.Done():
+			case <-time.After(time.Second):
+				t.Fatal("overflow retained native input/media")
+			}
+		})
+	}
+}
+
 func TestRemoteDesktopSocketsBindBothChannelsAndRetireTogether(t *testing.T) {
 	native := &socketTransport{fakeTransport: fakeTransport{done: make(chan struct{})}, control: make(chan nativeapps.HostDesktopMessage, 4), media: make(chan nativeapps.HostDesktopMessage, 4)}
 	m := &Manager{sessions: map[string]*ownedSession{}, factory: func(context.Context) (Transport, error) { return native, nil }}

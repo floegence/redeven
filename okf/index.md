@@ -56,6 +56,9 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Confirmed receipt crossover C02](operations/remote-desktop-lan-receipt-c02.md) - Inspect the interval-only diagnostic, unproven recovery change and verified input association failure.
 - [LAN codec and capture experiments](operations/remote-desktop-lan-codec-experiments.md) - Check adopted and rejected codec, rate, quantization and capture tradeoffs against their raw evidence.
 - [LAN transport and tracing experiments](operations/remote-desktop-lan-transport-experiments.md) - Check credit, receipts, HTTP2, SSH and stage diagnostics before repeating a latency hypothesis.
+- [LAN stage tracing](operations/remote-desktop-lan-stage-tracing.md) - Inspect clock-qualified publication, write, receive and receipt boundaries before assigning transport stalls.
+- [LAN receipt and window comparison](operations/remote-desktop-lan-window-c04.md) - Evaluate C03's rejected timer change and C04's four-versus-six-frame evidence and compatibility boundary.
+- [Published six-frame qualification C05](operations/remote-desktop-lan-published-c05.md) - Check released adoption, paired acceptance and retained preparation failures before claiming restored LAN performance.
 - [udesk26 hardware AV1 comparison](operations/remote-desktop-rustdesk-v42-results.md) - Inspect published AV1 diagnostic latency, complete resources and unresolved parity failures.
 - [udesk26 DRM cadence comparison](operations/remote-desktop-rustdesk-v43-results.md) - Inspect released cadence improvements, corrected motion validity and remaining latency, quality and memory deficits.
 - [Orange RustDesk comparison attempts](operations/remote-desktop-rustdesk-orange-results.md) - Inspect failed responses and unstable LAN conditions before applying another host's results to Orange.

@@ -65,6 +65,8 @@ github.com/envoyproxy/go-control-plane v0.9.1-0.20191026205805-5f8ba28d4473/go.m
 github.com/envoyproxy/protoc-gen-validate v0.1.0/go.mod h1:iSmxcyjqTsJpI2R4NaDN7+kN2VEUnK/pcBlmesArF7c=
 github.com/floegence/floe-native-apps v0.22.47 h1:6Ch9IyYwqNxUQk75mmuWPOGneSc7V94NRQOfAXWWCMc=
 github.com/floegence/floe-native-apps v0.22.47/go.mod h1:bhum1digz3s8aaQcF7pO6iqsxLAsYATeDu3E3AWsmN0=
+github.com/floegence/floe-native-apps v0.22.48 h1:wlvpKFaGY5zYhA20QzUTXCfVEQvYpT5rj1bTivcn8VY=
+github.com/floegence/floe-native-apps v0.22.48/go.mod h1:bhum1digz3s8aaQcF7pO6iqsxLAsYATeDu3E3AWsmN0=
 github.com/floegence/floeterm/terminal-go v0.19.2 h1:BCqhXYaxEMcjpXl4jNY6aldyqj0DHqqUtwS9X6KaJkI=
 github.com/floegence/floeterm/terminal-go v0.19.2/go.mod h1:ZEmwGasoupP8dXTbQk/Xi/aHMdOo4TCEbeQZvhtYNyI=
 github.com/floegence/floret/v7 v7.39.2 h1:+VzKRSFFPB2WV+J62dh5FPrDbIXLGFyeTIGAOwV9u7s=

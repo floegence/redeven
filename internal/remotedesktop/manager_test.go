@@ -332,3 +332,41 @@ func TestConnectionUsesHostApprovalPreferenceNotViewerInput(t *testing.T) {
 		}
 	}
 }
+
+func TestFrameWindowRequiresAdapterOfferAndCannotGrantPaint(t *testing.T) {
+	m := &Manager{sessions: map[string]*ownedSession{}}
+	s, native := testSession(m, "window", "control")
+	command := nativeapps.HostDesktopCommand{Version: 1, ID: 1, Method: "connect", Mode: "control", Picture: &nativeapps.HostDesktopPicture{Mode: "smooth", MaxDimension: 2560, FrameRate: 60, FrameWindow: 6}}
+	if err := m.send(s, s.pair, command, false); err != ErrInvalid {
+		t.Fatalf("unoffered window: %v", err)
+	}
+	if len(native.commands) != 0 {
+		t.Fatal("unoffered window reached adapter")
+	}
+	s.pair.maxFrameWindow = 6
+	if err := m.send(s, s.pair, command, false); err != nil {
+		t.Fatal(err)
+	}
+	if s.pair.frameWindow != 6 || s.pair.painted {
+		t.Fatal("window selection lost bounds or granted paint")
+	}
+	command.Method = "configure"
+	command.Generation = s.pair.generation
+	command.Picture.FrameWindow = 0
+	if err := m.send(s, s.pair, command, false); err != ErrInvalid {
+		t.Fatalf("in-place shrink: %v", err)
+	}
+	command.Picture.FrameWindow = 6
+	if err := m.send(s, s.pair, command, false); err != nil {
+		t.Fatal(err)
+	}
+	command.Method = "connect"
+	command.Generation = 0
+	command.Picture.FrameWindow = 0
+	if err := m.send(s, s.pair, command, false); err != nil {
+		t.Fatal(err)
+	}
+	if s.pair.frameWindow != 4 {
+		t.Fatal("legacy connect did not restore four")
+	}
+}

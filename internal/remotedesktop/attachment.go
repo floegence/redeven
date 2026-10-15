@@ -29,6 +29,9 @@ type attachment struct {
 	paintedFrame   uint64
 	state          string
 	sent           map[uint64]bool
+
+	frameWindow    int
+	maxFrameWindow int
 }
 
 // Replacement must not overlap a retired native input or portal grant lease.
@@ -168,7 +171,11 @@ func (m *Manager) runAttachment(s *ownedSession, a *attachment) {
 				if message.Type == "frame" {
 					a.sent[message.FrameID] = true
 				}
-				overflow := len(a.sent) > 4
+				limit := a.frameWindow
+				if limit == 0 {
+					limit = nativeapps.HostDesktopDefaultFrameWindow
+				}
+				overflow := len(a.sent) > limit
 				a.mu.Unlock()
 				if overflow {
 					return
@@ -199,6 +206,14 @@ func (m *Manager) runAttachment(s *ownedSession, a *attachment) {
 				}
 			}
 		case message := <-native.Control():
+			if message.Type == "capabilities" && message.Capabilities != nil {
+				a.mu.Lock()
+				a.maxFrameWindow = nativeapps.HostDesktopDefaultFrameWindow
+				if message.Capabilities.FrameWindow == nativeapps.HostDesktopMaxFrameWindow {
+					a.maxFrameWindow = nativeapps.HostDesktopMaxFrameWindow
+				}
+				a.mu.Unlock()
+			}
 			var selected string
 			var saveDisplay func(string)
 			if message.Type == "error" {
@@ -261,6 +276,24 @@ func (m *Manager) send(s *ownedSession, a *attachment, command nativeapps.HostDe
 	defer a.mu.Unlock()
 	if a.closed || a.native == nil {
 		return ErrUnavailable
+	}
+	if command.Picture != nil {
+		limit := a.maxFrameWindow
+		if limit == 0 {
+			limit = nativeapps.HostDesktopDefaultFrameWindow
+		}
+		// The window is fixed for this attachment. A configuration change
+		// cannot shrink its bound while old-generation media is still draining.
+		current := a.frameWindow
+		if current == 0 {
+			current = nativeapps.HostDesktopDefaultFrameWindow
+		}
+		if command.Method == "configure" && command.Picture.FrameCapacity() != current {
+			return ErrInvalid
+		}
+		if command.Picture.FrameCapacity() > limit {
+			return ErrInvalid
+		}
 	}
 	switch command.Method {
 	case "probe":
@@ -332,7 +365,13 @@ func (m *Manager) send(s *ownedSession, a *attachment, command nativeapps.HostDe
 	}
 	a.sequence++
 	command.ID = a.sequence
-	return a.native.Send(command, takeover)
+	if err := a.native.Send(command, takeover); err != nil {
+		return err
+	}
+	if command.Picture != nil {
+		a.frameWindow = command.Picture.FrameCapacity()
+	}
+	return nil
 }
 
 // Change is used by owner-authorized product routes; generation is taken only
