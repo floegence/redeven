@@ -38,6 +38,7 @@ export type SubagentDetailWindowProps = Readonly<{
   error: string;
   detailAvailable: boolean;
   entries: readonly FlowerTimelineEntry[];
+  inputControls?: JSX.Element;
   renderTimeline?: () => JSX.Element;
   renderEntry: (entry: Accessor<FlowerTimelineEntry>) => JSX.Element;
   bindScroll: (node: HTMLDivElement) => void;
@@ -369,6 +370,7 @@ export function SubagentDetailWindow(props: SubagentDetailWindowProps): JSX.Elem
                   }}
                 </For>}>{props.renderTimeline?.()}</Show>
               </Show>
+              {props.inputControls}
             </div>
             <Show when={props.showScrollToLatest}>
               <div class="flower-subagent-detail-scroll-to-latest">

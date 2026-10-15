@@ -259,6 +259,7 @@ export type FlowerChatMessage = Readonly<{
   live?: boolean;
   active_cursor?: boolean;
   attempt_epoch?: number;
+  steering?: Readonly<{ status: 'pending' | 'applied' | 'cancelled'; reason?: string }>;
 }>;
 
 export type FlowerThreadStatus =
@@ -669,6 +670,13 @@ export type FlowerSubagentSummary = Readonly<{
   updated_at_ms?: number;
 }>;
 
+export type FlowerSubagentInputOperation = Readonly<{
+  action: 'steer_queue' | 'remove_queue' | 'resend_steering';
+  item_id: string;
+  expected_input_fingerprint?: string;
+  client_request_id: string;
+}>;
+
 export type FlowerSubagentDetail = Readonly<{
   summary: FlowerSubagentSummary;
   current: FlowerRuntimeCurrentView;
@@ -733,7 +741,8 @@ export type FlowerRuntimeCurrentItem = Readonly<{
   turn_id: string;
   run_id: string;
   ordinal: number;
-  kind: 'user' | 'thinking' | 'assistant' | 'tool' | 'interaction';
+  kind: 'user' | 'steering' | 'thinking' | 'assistant' | 'tool' | 'interaction';
+  steering?: FlowerChatMessage['steering'];
   sources?: readonly FlowerCitationSource[];
   text?: string;
   live?: boolean;
@@ -1405,6 +1414,7 @@ export type FlowerSurfaceAdapter = Readonly<{
   loadThread: (threadID: string) => Promise<FlowerThreadView>;
   connectLiveStream?: (input: FlowerLiveStreamConnectInput) => AsyncIterable<FlowerLiveStreamEnvelope>;
   loadSubagentDetail: (parentThreadID: string, childThreadID: string) => Promise<FlowerSubagentDetail>;
+  operateSubagentInput?: (parentThreadID: string, childThreadID: string, input: FlowerSubagentInputOperation) => Promise<FlowerSubagentDetail>;
   markThreadRead: (threadID: string, snapshot: FlowerThreadActivitySnapshot) => Promise<FlowerThreadReadStatus>;
   renameThread?: (threadID: string, title: string) => Promise<FlowerThreadView>;
   setThreadPinned?: (threadID: string, pinned: boolean) => Promise<FlowerThreadPinMetadata>;

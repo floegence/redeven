@@ -3,7 +3,7 @@ type: AI Tool Contract
 title: Flower subagent runtime
 description: Floret v7 child threads, parent membership, bounded status, and complete handoffs.
 tags: [ai, floret, subagents, permissions]
-timestamp: 2026-10-08T00:00:00Z
+timestamp: 2026-10-15T00:00:00Z
 ---
 # Summary
 
@@ -19,9 +19,13 @@ List and each result `items` entry expose `last_message_preview` only for bounde
 
 Model-visible handoff content bypasses Redeven's Activity-size sanitizer and remains subject only to Floret's standard tool-output projection. The Activity projection reads its own bounded status allowlist and never copies or scans handoff content, so a long report cannot create a false Activity truncation state.
 
-Redeven calls published Floret v7 typed Create/Fork, Send, View, List, and Delete operations. Floret allocates the canonical child `ThreadID`; that id is used in model results, Flower summaries, detail routes, interactions, and activity. There is no public or persisted `subagent_id`, publication receipt, provisional child identity, or recovery handle.
+Redeven calls published Floret v7 typed Create/Fork, Send, Steer, View, List, and Delete operations. Floret allocates the canonical child `ThreadID`; that id is used in model results, Flower summaries, detail routes, interactions, and activity. There is no public or persisted `subagent_id`, publication receipt, provisional child identity, or recovery handle.
 
 Spawn and child input use deterministic request keys scoped to the parent thread, parent turn, tool call, and canonical child where applicable. Repeating the same logical tool action therefore converges in the canonical journal without duplicate child input. Redeven may persist product settings for display and current policy, but those rows do not own membership, messages, queue, activity, or lifecycle.
+
+`send_input` uses the optional published `ThreadSteeringController.Steer` capability in Floret v7.36.1. Admission immediately persists the full instruction; the current child task resumes after the engine's safe provider/tool boundary. It does not enqueue ordinary input or cancel and replace the Turn. Floret owns pending/applied/cancelled steering facts and rejects late interaction responses. `accepted` confirms admission only. Confirmed tool results remain canonical; an uncertain irreversible effect terminates with `effect_outcome_unknown` and must never be replayed automatically. Active guidance retains the child's existing execution authority; a new Turn receives normal product authorization. Steering does not create an unconsumed effect-request inbox entry.
+
+The parent-scoped child input operation validates current RWX permission, endpoint ownership, and canonical membership on every call. Queue steering atomically consumes the exact full canonical input through `SteerQueued`; conditional removal checks the same complete-input fingerprint. Changed, removed, or consumed input returns a conflict. Explicit resubmission reads an original steering item only when its cancellation reason is `stopped`; unknown effects cannot be resubmitted through this route. No browser transcript is accepted as execution content.
 
 Each child execution proves parent-child membership through the typed runtime and derives its current tool policy from Redeven settings. Child tools cannot address the root or a sibling, and the child surface excludes recursive subagent creation. Approval and Ask User interactions remain canonical child interactions; resolving them updates only that child current view.
 
@@ -37,6 +41,7 @@ Task labels and previews are presentation, not identity or results. Redeven must
 - `redeven:internal/ai/subagents_floret.go` - Adapts subagent operations to typed Floret v7 child Thread methods.
 - `redeven:internal/ai/floret_tools.go` - Maps SubAgent calls and results into the typed operation Activity without losing action or target order.
 - `redeven:internal/ai/subagents_handoff_test.go` - Proves complete handoffs, timeout behavior, identity failures, and Activity separation.
+- `redeven:internal/ai/subagent_input_operations_test.go` - Proves immediate provider interruption, task identity, queue consumption, and authorization failures.
 - `redeven:internal/ai/types.go` - Exposes canonical child `thread_id` in product views.
 - `redeven:internal/flower_ui/src/flowerSubagentProjection.ts` - Projects canonical child activity for Flower.
 - `redeven:internal/flower_ui/src/flowerSubagentDetailThread.ts` - Builds detail from the typed canonical child view.

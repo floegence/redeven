@@ -764,6 +764,10 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
 	        'GET',
 	        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(parentThreadID)}/subagents/${encodeURIComponent(childThreadID)}/detail`,
 	      ),
+      operateSubagentInput: (parentThreadID, childThreadID, input) => runtimeJSON<Readonly<{ detail?: FlowerSubagentDetail }>>(
+        bridge, 'POST',
+        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(parentThreadID)}/subagents/${encodeURIComponent(childThreadID)}/input`, input,
+      ),
       readTerminalProcess: (runID, processID, input) => {
         const params = new URLSearchParams();
         params.set('after_seq', String(input.after_seq));

@@ -154,3 +154,11 @@ it('allows exact queue edit and canonical reference commands only through declar
     expect(() => runtimeFlowerPath(path + '?path=arbitrary')).toThrow();
   }
 });
+
+
+it('allows parent-scoped child input only through the exact POST route', () => {
+  const path = '/_redeven_proxy/api/ai/threads/parent/subagents/child/input';
+  expect(runtimeFlowerMethodAllowed(path, 'POST')).toBe(true);
+  for (const method of ['GET', 'PUT', 'PATCH', 'DELETE'] as const) expect(runtimeFlowerMethodAllowed(path, method)).toBe(false);
+  for (const suffix of ['?force=true', '/extra', '/']) expect(() => runtimeFlowerPath(path + suffix)).toThrow();
+});

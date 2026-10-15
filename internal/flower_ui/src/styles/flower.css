@@ -11936,3 +11936,11 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
 .flower-activity-preview-text[data-format='code'] { font-family: var(--font-mono); }
 .flower-activity-preview[data-expanded='false'] .flower-activity-preview-text { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .flower-activity-preview-count { margin-inline-start: 0.4rem; color: var(--muted-foreground); }
+
+.flower-subagent-inputs { margin-top: 1rem; padding: 0.75rem; border: 1px solid var(--border); border-radius: 0.75rem; }
+.flower-subagent-inputs h3 { font-size: 0.75rem; font-weight: 600; color: var(--muted-foreground); }
+.flower-subagent-input-row { padding-top: 0.75rem; min-width: 0; }
+.flower-subagent-input-row p { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.8125rem; }
+.flower-subagent-input-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem; }
+.flower-steering-status { display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin: 0.25rem 0 0.75rem; font-size: 0.75rem; color: var(--muted-foreground); }
+.flower-subagent-input-row [role='alert'], .flower-steering-status [role='alert'] { color: var(--destructive); }

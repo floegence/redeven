@@ -249,6 +249,15 @@ func (service *Service) sendFloretSubagentInput(ctx context.Context, threads flr
 	return result, nil
 }
 
+func hasSubagentAdmission(view flruntime.ThreadView, requestKey string) bool {
+	for _, item := range view.Items {
+		if item.ID == "user:"+requestKey && item.TurnID == view.TurnID {
+			return true
+		}
+	}
+	return false
+}
+
 func (service *Service) ensureChildThreadSettings(ctx context.Context, parent *run, childID, parentID, agentType string) error {
 	if service == nil || service.threadsDB == nil || parent == nil {
 		return errors.New("child thread catalog is unavailable")
@@ -314,17 +323,26 @@ func (runtime *floretSubagentRuntime) sendInput(ctx context.Context, toolCallID 
 	if err != nil {
 		return nil, err
 	}
-	if parseBoolArg(args, "interrupt", false) {
-		if _, err := threads.Cancel(ctxOrBackground(ctx), flruntime.CancelInput{
-			ThreadID: summary.ID, RequestKey: flruntime.RequestKey(requestKey + ":cancel"),
-		}); err != nil {
-			return nil, err
-		}
-	}
 	request := runtime.childEffectRequest(parent, target, requestKey, message, summary.HostProfileRef)
-	result, err := service.sendFloretSubagentInput(ctx, threads, summary.ID, message, requestKey, request)
+	controller, ok := threads.(flruntime.ThreadSteeringController)
+	if !ok {
+		return nil, errors.New("subagent steering is unavailable")
+	}
+	if err := service.persistExecutionAuthority(ctx, &request.meta, target, requestKey, "", request.req.Options.PermissionType); err != nil {
+		return nil, err
+	}
+	result, err := controller.Steer(ctxOrBackground(ctx), flruntime.SteerInput{
+		ThreadID: summary.ID, Input: flruntime.UserInput{Text: message}, RequestKey: flruntime.RequestKey(requestKey),
+	})
 	if err != nil {
 		return nil, err
+	}
+	if result.TurnID != "" && hasSubagentAdmission(result, requestKey) {
+		persistCtx, cancelPersist := context.WithTimeout(context.Background(), service.persistTimeout())
+		defer cancelPersist()
+		if err := service.persistExecutionAuthority(persistCtx, &request.meta, target, requestKey, result.TurnID.String(), request.req.Options.PermissionType); err != nil {
+			return nil, err
+		}
 	}
 	snapshot := subagentSnapshotFromThread(summary, result)
 	return map[string]any{

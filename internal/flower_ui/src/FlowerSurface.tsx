@@ -134,6 +134,7 @@ import type {
   FlowerReasoningCapability,
   FlowerReasoningSelection,
   FlowerSubagentDetail,
+  FlowerSubagentInputOperation,
   FlowerSubagentSummary,
 } from './contracts/flowerSurfaceContracts';
 import { flowerThreadIsStopping, flowerThreadHasActiveTurnEvidence, projectFlowerThreadListItem, trimString } from './flowerSurfaceModel';
@@ -1070,6 +1071,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
   const subagentDetailError = () => activeSubagentDetail()?.error ?? '';
   let subagentDetailGeneration = 0;
+  type SubagentInputAction = FlowerSubagentInputOperation['action'];
+  type SubagentInputCommand = Readonly<{ busy: boolean; error: string; action: SubagentInputAction; requestID: string; fingerprint?: string }>;
+  const [subagentInputCommands, setSubagentInputCommands] = createSignal<Readonly<Record<string, SubagentInputCommand>>>({});
+  const subagentInputKey = (itemID: string) => JSON.stringify([activeSubagentDetail()?.parentThreadID, activeSubagentID(), itemID]);
+  const subagentInputCommand = (itemID: string) => subagentInputCommands()[subagentInputKey(itemID)];
+
   let threadLoadSequence = 0;
   let engagementBootstrapSequence = 0;
   let threadsRefreshSequence = 0;
@@ -1403,6 +1410,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     subagentDetailGeneration += 1;
     subagentDetailReadController?.abort();
     setActiveSubagentDetail(null);
+    setSubagentInputCommands({});
     resetSubagentDetailScroll();
   };
   const selectedThreadTailPreparing = createMemo(() => {
@@ -5294,11 +5302,50 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
   };
 
+  const operateSubagentInput = async (action: SubagentInputAction, itemID: string, fingerprint?: string): Promise<void> => {
+    const selected = untrack(activeSubagentDetail);
+    const operate = props.adapter.operateSubagentInput;
+    if (!selected || !operate || props.adapter.canMutate === false) return;
+    const key = subagentInputKey(itemID);
+    const previous = subagentInputCommands()[key];
+    if (previous?.busy) return;
+    const requestID = previous?.action === action && previous.fingerprint === fingerprint ? previous.requestID : createFlowerClientRequestID();
+    const command: SubagentInputCommand = { busy: true, error: '', action, requestID, fingerprint };
+    const epoch = liveTransport.connectionEpoch();
+    const stillSelected = () => {
+      const active = untrack(activeSubagentDetail);
+      return active?.parentThreadID === selected.parentThreadID && active.childThreadID === selected.childThreadID
+        && active.generation === selected.generation && epoch === liveTransport.connectionEpoch();
+    };
+    setSubagentInputCommands((commands) => ({ ...commands, [key]: command }));
+    try {
+      const detail = await readDetail(() => operate(selected.parentThreadID, selected.childThreadID, {
+        action, item_id: itemID, client_request_id: requestID,
+        ...(fingerprint ? { expected_input_fingerprint: fingerprint } : {}),
+      }));
+      if (!stillSelected()) return;
+      if (detail.summary.parent_thread_id !== selected.parentThreadID || detail.summary.thread_id !== selected.childThreadID
+        || detail.current.thread_id !== selected.childThreadID) throw new Error('Subagent input response identity mismatch.');
+      acceptActiveSubagentCurrent(selected.parentThreadID, detail.current, detail.summary);
+      setSubagentInputCommands((commands) => { const next = { ...commands }; delete next[key]; return next; });
+    } catch (error) {
+      if (!stillSelected()) return;
+      const status = (error as { status?: number })?.status;
+      const text = status === 409 ? subagentsCopy().input.changed : subagentsCopy().input.failed;
+      setSubagentInputCommands((commands) => ({ ...commands, [key]: { ...command, busy: false, error: text } }));
+      void refreshActiveSubagentDetail();
+    } finally {
+      setSubagentInputCommands((commands) => commands[key] === command
+        ? { ...commands, [key]: { ...command, busy: false } } : commands);
+    }
+  };
+
   const openSubagentDetail = (item: FlowerSubagentPanelItem) => {
     const parentID = trimString(selectedThread()?.thread_id);
     const childID = trimString(item.threadID);
     if (!parentID || !childID) return;
     subagentDetailGeneration += 1;
+    setSubagentInputCommands({});
     resetSubagentDetailScroll();
     setActiveSubagentDetail({
       parentThreadID: parentID,
@@ -10717,12 +10764,27 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     thread: Accessor<FlowerThreadSnapshot | null | undefined>,
   ) => {
     switch (entry().type) {
-      case 'message':
-        return messageEntry(
-          () => entry() as Extract<FlowerTimelineEntry, { type: 'message' }>,
-          viewportScope,
-          thread,
-        );
+      case 'message': {
+        const message = () => (entry() as Extract<FlowerTimelineEntry, { type: 'message' }>).message;
+        return <>
+          {messageEntry(() => entry() as Extract<FlowerTimelineEntry, { type: 'message' }>, viewportScope, thread)}
+          <Show when={message().steering}>{(steering) => <div class="flower-steering-status" data-flower-steering-status={steering().status}>
+            <span role="status">{subagentsCopy().input[steering().status]}</span>
+            <Show when={steering().status === 'cancelled'}>
+              <span>{steering().reason === 'effect_outcome_unknown' ? subagentsCopy().input.unknown
+                : steering().reason === 'stopped' ? subagentsCopy().input.stopped : subagentsCopy().input.ended}</span>
+              <Show when={steering().reason === 'stopped' && activeSubagentID() === thread()?.thread_id && props.adapter.canMutate !== false && props.adapter.operateSubagentInput}>
+                <Button size="sm" variant="outline" disabled={subagentInputCommand(message().id)?.busy}
+                  aria-busy={subagentInputCommand(message().id)?.busy}
+                  onClick={() => void operateSubagentInput('resend_steering', message().id)}>{subagentsCopy().input.resend}</Button>
+              </Show>
+            </Show>
+            <Show when={activeSubagentID() === thread()?.thread_id && subagentInputCommand(message().id)?.error}>
+              <span role="alert">{subagentInputCommand(message().id)?.error}</span>
+            </Show>
+          </div>}</Show>
+        </>;
+      }
       case 'queued_turn':
         return queuedTurnEntry(() => entry() as Extract<FlowerTimelineEntry, { type: 'queued_turn' }>);
       case 'context_compaction':
@@ -10924,7 +10986,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     </Show>
   );
 
-  const subagentDetailTimelineEntries = createMemo(() => buildFlowerTimelineEntries(subagentDetailThread()));
+  const subagentDetailTimelineEntries = createMemo(() => buildFlowerTimelineEntries(subagentDetailThread()).filter(entry => entry.type !== 'queued_turn'));
   const subagentDetailWindowTitle = createMemo(() => activeSubagentTitle());
   const showSubagentDetailScrollToLatestButton = createMemo(() => (
     Boolean(subagentDetailThread())
@@ -10958,6 +11020,27 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       error={subagentDetailError()}
       detailAvailable={Boolean(subagentDetailThread())}
       entries={subagentDetailTimelineEntries()}
+      inputControls={<Show when={subagentDetail()?.current.queue?.length}>
+        <section class="flower-subagent-inputs" aria-label={subagentsCopy().input.queueTitle}>
+          <h3>{subagentsCopy().input.queueTitle}</h3>
+          <For each={subagentDetail()?.current.queue}>{(item) => <div class="flower-subagent-input-row" data-flower-subagent-input-id={item.id}>
+            <p>{item.input.text}</p>
+            <Show when={item.input.attachments?.length}><p>{item.input.attachments?.map(file => file.name).join(', ')}</p></Show>
+            <Show when={item.input.references?.length}><p>{item.input.references?.map(ref => ref.label).join(', ')}</p></Show>
+            <Show when={props.adapter.canMutate !== false && props.adapter.operateSubagentInput}>
+              <div class="flower-subagent-input-actions">
+                <Button size="sm" variant="outline" disabled={subagentInputCommand(item.id)?.busy || !item.input_fingerprint}
+                  aria-busy={subagentInputCommand(item.id)?.busy}
+                  onClick={() => void operateSubagentInput('steer_queue', item.id, item.input_fingerprint)}>{subagentsCopy().input.steerNow}</Button>
+                <Button size="sm" variant="ghost" disabled={subagentInputCommand(item.id)?.busy || !item.input_fingerprint}
+                  onClick={() => void operateSubagentInput('remove_queue', item.id, item.input_fingerprint)}>{subagentsCopy().input.remove}</Button>
+              </div>
+            </Show>
+            <Show when={subagentInputCommand(item.id)?.error}><p role="alert">{subagentInputCommand(item.id)?.error}</p></Show>
+          </div>}</For>
+        </section>
+      </Show>}
+
       renderEntry={(entry) => timelineEntry(entry, subagentDetailScroll, subagentDetailThread)}
       renderTimeline={() => <FlowerTurnTimeline thread={subagentDetailThread()} entries={subagentDetailTimelineEntries()}
         failureNoticeVisible={runErrorNoticeVisible(subagentDetailThread())}

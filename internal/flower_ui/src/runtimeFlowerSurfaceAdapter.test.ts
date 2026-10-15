@@ -931,3 +931,14 @@ it.each([
   await expect(adapter.takeBackQueuedTurn!('thread', 'queue', 'a'.repeat(64))).rejects.toMatchObject({ admission_kind: kind });
   expect(takeBackQueuedTurn).toHaveBeenCalledTimes(attempts);
 });
+
+it('forwards canonical child input operations and hides them from read-only surfaces', async () => {
+  const detail = { summary: { parent_thread_id: 'parent', thread_id: 'child', task_name: 'Review', title: 'Review', title_status: 'ready' as const, title_generation: 1, status: 'running', agent_type: 'reviewer', can_send_input: true, can_interrupt: true, can_close: true }, current: { thread_id: 'child', activity: 'idle' as const, view_version: 1, items: [] } };
+  const operation = { action: 'steer_queue' as const, item_id: 'queue:first', expected_input_fingerprint: 'full-input', client_request_id: 'command' };
+  const operate = vi.fn(async () => ({ detail }));
+  const options = adapterOptions({ operateSubagentInput: operate });
+  const adapter = createRuntimeFlowerSurfaceAdapter(options);
+  expect(await adapter.operateSubagentInput!('parent', 'child', operation)).toMatchObject({ summary: { parent_thread_id: 'parent', thread_id: 'child' }, current: detail.current });
+  expect(operate).toHaveBeenCalledWith('parent', 'child', operation);
+  expect(createRuntimeFlowerSurfaceAdapter({ ...options, canMutate: false }).operateSubagentInput).toBeUndefined();
+});

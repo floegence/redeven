@@ -18,6 +18,7 @@ type authorityContinuityRuntime struct {
 	setTitle            func(context.Context, flruntime.SetTitleInput) (flruntime.ThreadView, error)
 	list                func(context.Context, flruntime.ThreadScope) ([]flruntime.ThreadSummary, error)
 	view                func(context.Context, identity.ThreadID) (flruntime.ThreadView, error)
+	steer               func(context.Context, flruntime.SteerInput) (flruntime.ThreadView, error)
 	send                func(context.Context, flruntime.SendInput) (flruntime.ThreadView, error)
 	retry               func(context.Context, flruntime.RetryInput) (flruntime.ThreadView, error)
 	importPendingInputs func(context.Context, flruntime.ImportPendingInputsInput) (flruntime.ImportResult, error)
@@ -41,6 +42,16 @@ func (runtime *authorityContinuityRuntime) View(ctx context.Context, threadID id
 
 func (runtime *authorityContinuityRuntime) Send(ctx context.Context, input flruntime.SendInput) (flruntime.ThreadView, error) {
 	return runtime.send(ctx, input)
+}
+
+func (runtime *authorityContinuityRuntime) Steer(ctx context.Context, input flruntime.SteerInput) (flruntime.ThreadView, error) {
+	if runtime.steer != nil {
+		return runtime.steer(ctx, input)
+	}
+	return runtime.ThreadService.(flruntime.ThreadSteeringController).Steer(ctx, input)
+}
+func (runtime *authorityContinuityRuntime) SteerQueued(ctx context.Context, input flruntime.SteerQueuedInput) (flruntime.ThreadView, error) {
+	return runtime.ThreadService.(flruntime.ThreadSteeringController).SteerQueued(ctx, input)
 }
 
 func (runtime *authorityContinuityRuntime) Retry(ctx context.Context, input flruntime.RetryInput) (flruntime.ThreadView, error) {
@@ -198,10 +209,14 @@ func TestSubagentInputsPersistAuthorityBeforeSendAndRestoreAutonomousOptions(t *
 		sendCount++
 		sendKeys = append(sendKeys, string(input.RequestKey))
 		childView.TurnID = identity.TurnID("turn-child-" + string(rune('0'+sendCount)))
+		childView.Items = append(childView.Items, flruntime.ThreadItem{ID: "user:" + string(input.RequestKey), TurnID: childView.TurnID, Kind: flruntime.ThreadItemUser})
 		if cancelAcceptedSend != nil {
 			cancelAcceptedSend()
 		}
 		return childView, nil
+	}
+	runtime.steer = func(ctx context.Context, input flruntime.SteerInput) (flruntime.ThreadView, error) {
+		return runtime.send(ctx, flruntime.SendInput{ThreadID: input.ThreadID, Input: input.Input, RequestKey: input.RequestKey})
 	}
 	effects := newFloretEffectAdapter()
 	svc := &Service{threadsDB: store, threadRuntime: runtime, floretEffects: effects}

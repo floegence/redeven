@@ -1,14 +1,14 @@
 ---
 type: UI Contract
 title: Flower subagent detail presentation
-description: Parent header membership, canonical thread routing, and read-only child execution detail.
+description: Parent header membership, canonical thread routing, and child execution detail and canonical input controls.
 tags: [ai, flower, subagents, ui]
-timestamp: 2026-10-14T00:00:00Z
+timestamp: 2026-10-15T00:00:00Z
 ---
 # Summary
 
 - Authority: Floret v7 parent-scoped `ThreadRuntime.List` owns child membership; the child's complete `ThreadView` is the only detail-content authority.
-- Outcome: Flower opens a stable, parent-scoped read-only window immediately and updates it live without polling or layout-changing sync chrome.
+- Outcome: Flower opens a stable, parent-scoped detail window immediately and updates it live without polling or layout-changing sync chrome.
 - Invariants: every public child route uses canonical `thread_id`; `task_name` is required and never guessed from title, role, description, or message.
 - Failure boundary: malformed summaries, missing canonical identity, parent-child mismatch, or invalid detail contracts are rejected rather than mapped through legacy aliases.
 
@@ -32,7 +32,7 @@ Current child status and runtime appear in the child dropdown and detail overvie
 later child turns, live replacements, history reloads, and terminal refresh cannot
 restart an old management row's timer.
 
-The dropdown is a compact accessible floating surface over the parent thread. Active and ended groups stay visible, rows sort by canonical status and update time, and keyboard navigation supports arrows, Home, End, Enter, and Escape. Selecting a row synchronously creates one stable detail selection and opens its read-only floating window with a loading skeleton. A boolean-equality projection of selection presence is the only window-visibility input; current-view, summary, request, and error updates cannot restart the floating-window presence animation. There is no second writable open state. The window does not wait for HTTP, select a sidebar child thread, or create a child composer. Temporary inventory omission cannot close it; only explicit close, parent-thread selection change, or leaving Flower can do so. Initial failure stays visible with an in-place retry.
+The dropdown is a compact accessible floating surface over the parent thread. Active and ended groups stay visible, rows sort by canonical status and update time, and keyboard navigation supports arrows, Home, End, Enter, and Escape. Selecting a row synchronously creates one stable detail selection and opens its floating detail window with a loading skeleton. A boolean-equality projection of selection presence is the only window-visibility input; current-view, summary, request, and error updates cannot restart the floating-window presence animation. There is no second writable open state. The window does not wait for HTTP, select a sidebar child thread, or create a child composer. Temporary inventory omission cannot close it; only explicit close, parent-thread selection change, or leaving Flower can do so. Initial failure stays visible with an in-place retry.
 
 Child identity uses one original vector avatar catalog: 99 animal-and-accessory portraits with 36 color combinations. Canonical child `thread_id` deterministically selects the same portrait and palette in the dropdown and detail overview, independently of task text, status, row order, or live updates. Avatars are decorative; localized status text and a separate static indicator convey lifecycle. These surfaces never use a thinking orb for child identity or running status. The overview leads with the delegated task description above compact status, role, and duration metadata; the transcript has no full-height decorative guide line.
 
@@ -43,6 +43,10 @@ HTTP and SSE pass through the same safe current projection and the same selectio
 The detail window maps canonical child messages, interactions, and Activity into the shared renderers with one keyed reconciliation path. Ledger groups and their nested entries render from stable semantic keys and read changing content through accessors; object identity, status, payload, position, and `view_version` never own component lifetime. An activity phase keeps one root and body owner while it grows from one operation to many: the single-operation form hides only the group summary, so an already-open tool row, disclosure controller, and terminal viewport remain mounted. Every ledger disclosure stores its first default and later user choice in that keyed owner; there is no batch-only state map or parallel open authority.
 
 [Activity disclosure interaction](flower-activity-interaction.md) owns the shared native activation, floating controls, and scroll policy. The parent transcript and child detail each pass their own viewport controller to the shared renderer; opening a child tool cannot change parent following or anchoring. Native ledger summaries use the same press protection while retaining keyed grouping and initial-open rules. Later child currents request layout measurement without claiming follow intent. The selection and its current view are bounded human UI state; neither is injected into the parent model context or persisted as another transcript.
+
+The detail has no independent chat composer. Historical queued inputs offer Steer now and Remove through one parent-scoped operation boundary shared by Env App and Desktop. Each row freezes its full-input fingerprint; a conflict refreshes canonical detail and preserves usable controls. Busy and failure state belongs only to that row. Navigation, closing the window, and parent Stop remain available. Selection identity and connection epoch prevent late operation responses from reopening a window or replacing another child's content. Reconnection uses the existing live/current refresh, without polling.
+
+Canonical steering renders as one stable user message with pending, applied, or cancelled status. Cancelled guidance explains why it was not applied. Only a `stopped` cancellation offers explicit Send again; unknown-effect failures explain the boundary without a retry control. Floret remains the lifecycle owner described in [Subagent runtime](../ai/subagent-runtime.md).
 
 # Boundaries
 
@@ -64,3 +68,5 @@ Flower must not recover a missing child identity from activity sidecars, a title
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.finalArchitecture.browser.test.tsx` - Proves streamed current replacement preserves the window, activity row, terminal viewport, disclosure motion, and parent scroll isolation.
 - `redeven:internal/flower_ui/src/flowerActivityPresentation.ts` - Formats localized operation titles and exact ordered target summaries.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.activityTiming.browser.test.tsx` - Verifies invocation duration across clock ticks, child reruns, terminal replacement and reload.
+
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.subagentSteering.browser.test.tsx` - Verifies row-scoped operations, stable windows, recoverable conflicts, Stop availability, and late-response isolation.

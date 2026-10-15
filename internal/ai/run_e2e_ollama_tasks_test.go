@@ -733,7 +733,7 @@ func ollamaTaskSubagentHistory(f *ollamaTaskFixture) {
 }
 
 func ollamaTaskSubagentInterrupt(f *ollamaTaskFixture) {
-	f.finish("child-steer", fmt.Sprintf("Use subagents to spawn exactly one worker named Slow Audit with mission_only context. Its mission is to execute terminal.exec with yield_ms 30000 and command 'printf STARTED > %s/child-started.txt; sleep 30; printf OLD > %s/child-old.txt', then report OLD. After spawning, use terminal.exec yourself to wait until %s/child-started.txt exists (a bounded shell loop). Then immediately call subagents send_input on that child's returned thread_id with interrupt true and message: 'The old task is cancelled. Use terminal.exec to write exactly STEERED into %s/child-new.txt and report STEERED. Do not run the old command again.' Wait for the child and report STEERED. Do not create a second child.", f.root, f.root, f.root, f.root), "STEERED")
+	f.finish("child-steer", fmt.Sprintf("Use subagents to spawn exactly one worker named Slow Audit with mission_only context. Its mission is to execute terminal.exec with yield_ms 30000 and command 'printf STARTED > %s/child-started.txt; sleep 30; printf OLD > %s/child-old.txt', then report OLD. After spawning, use terminal.exec yourself to wait until %s/child-started.txt exists (a bounded shell loop). Then immediately call subagents send_input on that child's returned thread_id with message: 'The old task is cancelled. Use terminal.exec to write exactly STEERED into %s/child-new.txt and report STEERED. Do not run the old command again.' Wait for the child and report STEERED. Do not create a second child.", f.root, f.root, f.root, f.root), "STEERED")
 	f.file("child-started.txt", "STARTED")
 	f.file("child-new.txt", "STEERED")
 	f.missing("child-old.txt")
