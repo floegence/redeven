@@ -78,10 +78,33 @@ function inspectPaintedPixels(image: ReturnType<typeof PNG.sync.read>): Readonly
 
 export default mergeConfig(viteConfig, defineConfig({
   optimizeDeps: {
+    // Prepare the shared browser graph before tests start. Discovering a new
+    // dependency during a test reloads its page and duplicates Solid owners.
+    noDiscovery: true,
     include: [
       '@chenglou/pretext',
+      '@floegence/floe-webapp-boot',
+      '@floegence/floe-webapp-boot/artifact-source',
+      '@floegence/floe-webapp-protocol',
+      '@floegence/floeterm-terminal-web/semantic',
+      '@floegence/floeterm-terminal-web/sessions',
+      '@floegence/flowersec-core/proxy',
+      '@floegence/redevplugin-contracts',
+      '@floegence/redevplugin-ui',
+      '@floegence/redevplugin-ui/local-import',
+      '@noble/hashes/sha2.js',
+      '@noble/hashes/utils.js',
+      'axe-core',
       'docx-preview',
+      'dompurify',
       'exceljs',
+      'katex',
+      'marked',
+      'marked-footnote',
+      'mermaid',
+      'semver/functions/compare.js',
+      'semver/functions/valid.js',
+      'shiki',
     ],
     exclude: ['@floegence/floe-webapp-core'],
   },
