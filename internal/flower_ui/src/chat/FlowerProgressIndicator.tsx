@@ -65,7 +65,9 @@ export const FlowerProgressIndicator: Component<FlowerProgressIndicatorProps> = 
           </span>
           <span class="flower-model-status-text" data-floe-progress-shimmer="text" role="status" aria-live="polite" aria-atomic="true">
             {label()}
-            <span class="flower-model-status-dots" aria-hidden="true">...</span>
+            <Show when={!metric()}>
+              <span class="flower-model-status-dots" aria-hidden="true">...</span>
+            </Show>
           </span>
           <Show when={metric()}>
             {(value) => <span class="flower-model-status-metric" title={value().title} aria-live="off">
