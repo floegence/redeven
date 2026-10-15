@@ -14,7 +14,7 @@ Floret v7 `ThreadService` is the sole owner of active and canonical thread lifec
 
 ## Typed runtime
 
-Published `ThreadQueueController` supports complete paired expected/replacement inputs in addition to text edits. `ThreadQueueEditReader` resolves committed edit identities from existing canonical facts after promotion or deletion. Redeven uses these contracts for the [shared queue editor](../ui/flower-turn-launcher.md); it does not persist an admitted edit ledger, inspect upstream records or alter the Floret schema.
+Published `ThreadQueueController` supports complete paired expected/replacement inputs in addition to text edits. `ThreadQueueEditReader` resolves committed edit identities from existing canonical facts after promotion or deletion. Floret v7.35.0 also provides `DeleteQueuedInput.ExpectedInputSHA256`, binding removal to the complete captured canonical input. Redeven uses conditional removal for [taking queued input back to the composer](../ui/flower-turn-launcher.md). It prepares authorized draft resources first and leaves queue ownership with Floret; it does not persist an admitted edit ledger, inspect upstream records or alter the Floret schema.
 
 The optional published `ThreadQueryReader` owns indexed canonical queries, exact
 counts and bounded reads without widening `ThreadService`. [Canonical thread

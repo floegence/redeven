@@ -27,6 +27,13 @@ const baseAction = {
 };
 
 describe('Flower chat linked context parser', () => {
+  it('preserves restored reference kinds and truncation before canonical send confirmation', () => {
+    const display = parseChatContextAction({ ...baseAction, source: { surface: 'flower_composer' }, context: [
+      { kind: 'reference_snapshot', reference_snapshot: { kind: 'terminal', label: 'Build output', text: 'captured output', truncated: true } },
+    ] });
+    expect(display?.chips[0]).toMatchObject({ kind: 'terminal', tone: 'terminal', label: 'Build output', truncated: true,
+      action: { type: 'open_text_preview', body: 'captured output', truncated: true } });
+  });
   it('previews a frozen thread snapshot only when the canonical target agrees', () => {
     const snapshot = { runtime_id: 'env:local-environment', thread_id: 'thread-source', title: 'Frozen title', status: 'idle', working_dir: '/workspace', created_at_ms: 1, updated_at_ms: 2, captured_at_ms: 3 };
     const reference = { reference_id: 'thread-ref', kind: 'thread' as const, referenced_thread_id: snapshot.thread_id, label: snapshot.title, text: JSON.stringify(snapshot) };

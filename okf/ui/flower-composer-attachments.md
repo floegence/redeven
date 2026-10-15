@@ -24,7 +24,7 @@ The inline threshold is exactly 50,000 Unicode code points. Exactly 50,000 stays
 
 Long-text source keeps original whitespace and newline bytes. Until Send is accepted, the item offers Restore to editor. Restore reads the exact owner-and-staging-scope-bound text with the connection-held capability, verifies its digest, inserts it at the current selection, and removes the staging membership. Ordinary remove updates the local scope and releases that membership; abandoned late upload completion uses the same idempotent staged cleanup path. A subsequent Send may stage the current complete editor value again. Names are presentation only and include a timestamp plus collision ordinal.
 
-For a Desktop-initiated Runtime Restart, the Env App's existing draft coordinator temporarily suspends uploads and exports only unsent user-authored text, references, explicit choices, and locally available attachment bytes. Desktop holds the bounded transfer in memory for the retained window. The fresh session restores each draft before Flower surfaces mount, assigns new upload request ids, and stages local files against the new capability; it never reuses old staging secrets or automatically replays commands. Queue edit drafts retain admitted descriptors and any uncertain edit request identity so explicit replay can query canonical edit facts; new staged resources must be recovered under the fresh scope before a changed submission. An attachment without locally available bytes makes preparation fail before the old Runtime is stopped. A canceled preparation resumes the original upload controller. No automatic Send occurs during restoration.
+For a Desktop-initiated Runtime Restart, the Env App's existing draft coordinator temporarily suspends uploads and exports only unsent user-authored text, references, explicit choices, and locally available attachment bytes. Desktop holds the bounded transfer in memory for the retained window. The fresh session restores each draft before Flower surfaces mount, assigns new upload request ids, and stages local files against the new capability; it never reuses old staging secrets or automatically replays commands. An attachment without locally available bytes makes preparation fail before the old Runtime is stopped. A canceled preparation resumes the original upload controller. No automatic Send occurs during restoration.
 
 ## Connection-local editing
 
@@ -34,7 +34,7 @@ The shared in-memory value contains text, staged attachment projection, referenc
 
 ## Queued content
 
-Active execution keeps file selection, paste, drag-and-drop and reference controls available. Ready resources freeze into the ordinary Send path and appear immediately in the local queue row. [Turn launcher](flower-turn-launcher.md) owns the single-line layout, preview overflow and complete queue editor. Editing starts from canonical descriptors; admitted images can be previewed and removed locally without uploading again or deleting canonical bytes. Added files use a staging scope bound to the same ThreadID. New queue-edit uploads retain their exact staging claim until settlement, allowing an explicit retry after canonical mutation fails; releasing that scope removes temporary membership and preserves thread-owned bytes.
+Active execution keeps file selection, paste, drag-and-drop and reference controls available. Ready resources freeze into the ordinary Send path and appear immediately in the local queue row. [Turn launcher](flower-turn-launcher.md) owns the single-line layout, preview overflow and take-back action. Before queue removal, authorized admitted attachments are copied into the ordinary composer staging scope bound to the same ThreadID. The restored message replaces existing draft text, references and attachments. Users can remove or add resources and send normally; staged copies remain usable after the queue item is removed, while canonical attachment bytes stay immutable.
 
 ## Canonical Presentation
 
@@ -78,4 +78,4 @@ A surface never persists file bytes or editable state, creates its own global co
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.composerAttachments.browser.test.tsx` - Chromium verifies narrow and 400-percent-equivalent attachment layout containment.
 
 - `redeven:internal/ai/threadstore/uploads_test.go` - Queue-edit claims remain retryable and reject unrelated staging scopes.
-- `redeven:internal/flower_ui/src/composer/createFlowerComposerDraftCoordinator.test.ts` - Restart preserves admitted media and uncertain edit identity without staging credentials.
+- `redeven:internal/flower_ui/src/composer/createFlowerComposerDraftCoordinator.test.ts` - Restart preserves ordinary draft content and resource intent without staging credentials.

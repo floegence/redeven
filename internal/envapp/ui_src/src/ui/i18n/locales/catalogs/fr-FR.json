@@ -5572,13 +5572,9 @@
       "citationSources": "Sources",
       "citationCopySources": "Copier les sources",
       "citationUnavailable": "Source indisponible",
-      "queuedEdit": "Modifier le message en attente",
-      "queuedEditSave": "Enregistrer les modifications",
-      "queuedEditRetry": "Réessayer l’enregistrement",
-      "queuedEditCancel": "Revenir au brouillon",
-      "queuedEditUnavailable": "La modification des messages en attente est indisponible.",
-      "queuedEditConflict": "Ce message a changé ou son exécution a commencé. Vos modifications sont conservées.",
-      "queuedEditUnknown": "Le résultat de l’enregistrement est inconnu. Réessayez le même enregistrement pour le vérifier."
+      "queuedEdit": "Reprendre dans le champ de saisie",
+      "queueTakeBackConflict": "Ce message a déjà démarré ou a été modifié. Actualisez la vue et réessayez.",
+      "queueTakeBackUnknown": "Le message a été remis dans le champ de saisie, mais son retrait de la file n’a pas pu être confirmé. Vérifiez la file avant de l’envoyer."
     },
     "threadList": {
       "title": "Discussions",

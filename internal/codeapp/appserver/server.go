@@ -5743,6 +5743,46 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusOK, apiResp{OK: true})
 			return
 
+		case action == "queue" && r.Method == http.MethodPost && len(parts) == 4 && (parts[3] == "prepare-edit" || parts[3] == "take-back"):
+			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
+			if !ok || !g.requireAIService(w, aiSvc) {
+				return
+			}
+			dec := json.NewDecoder(r.Body)
+			dec.DisallowUnknownFields()
+			var body ai.QueuedDraftRequest
+			if err := dec.Decode(&body); err != nil {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			if err := dec.Decode(&struct{}{}); err != io.EOF {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			var data any
+			var err error
+			if parts[3] == "prepare-edit" {
+				scopeID, capability, headerErr := optionalUploadStagingHeaders(r)
+				if headerErr != nil || body.StagingScopeID != scopeID {
+					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "upload staging scope mismatch"})
+					return
+				}
+				body.StagingCapability = capability
+				data, err = aiSvc.PrepareQueuedDraft(r.Context(), meta, threadID, parts[2], body)
+			} else {
+				var view flruntime.ThreadView
+				view, err = aiSvc.TakeBackQueuedInput(r.Context(), meta, threadID, parts[2], body.ExpectedInputFingerprint)
+				if err == nil {
+					data, err = ai.MarshalFlowerCurrentView(view)
+				}
+			}
+			if err != nil {
+				writeJSON(w, aiThreadActionHTTPStatus(err), apiResp{OK: false, Error: err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: data})
+			return
+
 		case action == "queue" && r.Method == http.MethodPatch && len(parts) == 3:
 			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
 			if !ok {

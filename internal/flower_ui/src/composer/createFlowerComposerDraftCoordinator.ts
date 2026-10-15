@@ -1,4 +1,4 @@
-import type { ThreadReferenceSnapshot } from '../contextActionWire';
+import type { ReferenceSnapshot, ThreadReferenceSnapshot } from '../contextActionWire';
 import type {
   FlowerAttachmentSource,
   FlowerAttachmentStagingScope,
@@ -6,9 +6,6 @@ import type {
   FlowerReasoningSelection,
   FlowerStagedAttachment,
   FlowerQueuedTurnAttachment,
-  FlowerMessageReference,
-  FlowerQueuedTurn,
-  FlowerQueuedTurnEditInput,
 } from '../contracts/flowerSurfaceContracts';
 import type { FlowerAttachmentController } from '../attachments/createFlowerAttachmentController';
 
@@ -42,11 +39,11 @@ export type FlowerComposerDraftReference = Readonly<{
   kind: FlowerComposerDraftReferenceKind;
   path: string;
   label: string;
-}> | (FlowerPageContextSnapshot & Readonly<{ local_id: string; kind: 'page_context' }>) | Readonly<{ local_id: string; kind: 'thread'; label: string; thread: ThreadReferenceSnapshot }> | Readonly<{ local_id: string; kind: 'queued_reference'; label: string; reference: FlowerMessageReference }>;
+}> | (FlowerPageContextSnapshot & Readonly<{ local_id: string; kind: 'page_context' }>) | Readonly<{ local_id: string; kind: 'thread'; label: string; thread: ThreadReferenceSnapshot }> | Readonly<{ local_id: string; kind: 'snapshot'; label: string; snapshot: ReferenceSnapshot }>;
 
 export type FlowerComposerDraftValue = Readonly<{
   text: string;
-  queue_edit?: Readonly<{ threadID: string; original: FlowerQueuedTurn; command?: FlowerQueuedTurnEditInput; error?: string; errorUnknown?: boolean }>;
+  omit_embedded_context?: boolean;
   attachments: readonly FlowerComposerDraftAttachment[];
   references: readonly FlowerComposerDraftReference[];
   /** Prevent edit-time recapture until an explicit companion opening or New action. */
@@ -266,7 +263,7 @@ export function createFlowerComposerDraftCoordinator(
         // revisions and previously prepared submissions belong to the old session.
         drafts.push({ scope_id: scopeID, files, value: {
           text: value.text, mode: 'ordinary',
-          ...(value.queue_edit ? { queue_edit: { ...value.queue_edit, command: value.queue_edit.command ? { ...value.queue_edit.command, staging_scope: undefined } : undefined } } : {}),
+          omit_embedded_context: value.omit_embedded_context,
           references: value.references.map(reference => ({ ...reference })),
           page_context_captured: value.page_context_captured,
           attachments: value.attachments.map(attachment => ({

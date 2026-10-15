@@ -799,6 +799,14 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
         'DELETE',
         `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/queue/${encodeURIComponent(queueID)}`,
       ),
+      prepareQueuedTurnDraft: (threadID, queueID, input) => runtimeJSON(
+        bridge, 'POST', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/queue/${encodeURIComponent(queueID)}/prepare-edit`,
+        { expected_input_fingerprint: input.expected_input_fingerprint, ...(input.staging_scope ? { staging_scope_id: input.staging_scope.staging_scope_id } : {}) }, input.staging_scope,
+      ),
+      takeBackQueuedTurn: (threadID, queueID, fingerprint) => runtimeJSON(
+        bridge, 'POST', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/queue/${encodeURIComponent(queueID)}/take-back`,
+        { expected_input_fingerprint: fingerprint },
+      ),
       editQueuedTurn: (threadID, queueID, input) => runtimeJSON(
         bridge, 'PATCH', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/queue/${encodeURIComponent(queueID)}`,
         buildFlowerQueuedEditHTTPBody(input), input.staging_scope,

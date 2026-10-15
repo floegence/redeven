@@ -1575,3 +1575,20 @@ it('edits full queued content and resolves preview targets through scoped Deskto
   expect(calls.at(-1)).toMatchObject({ method: 'POST', path: '/_redeven_proxy/api/ai/threads/thread-1/reference-open-target', body: { queue_id: 'queue:first', reference_id: 'directory' } });
   await expect(adapter.resolveCanonicalReference!({ thread_id: 'thread-1', turn_id: 'turn', queue_id: 'queue:first', reference_id: 'directory' })).rejects.toThrow('exact Flower reference scope');
 });
+
+it('prepares queued draft resources and conditionally takes back through Desktop IPC', async () => {
+  const calls: RuntimeFlowerRequest[] = [];
+  const draft = { prompt: 'Original input', references: [], attachments: [] };
+  const current = { thread_id: 'thread-1', view_version: 3, activity: 'active', queue: [] };
+  const bridge = bridgeFor(request => {
+    calls.push(request);
+    return request.path.endsWith('/prepare-edit') ? draft : current;
+  });
+  const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge);
+  const fingerprint = 'a'.repeat(64);
+  await expect(adapter.prepareQueuedTurnDraft!('thread-1', 'queue:first', { expected_input_fingerprint: fingerprint, staging_scope: stagingScope('thread-1') })).resolves.toEqual(draft);
+  expect(calls[0]).toMatchObject({ method: 'POST', path: '/_redeven_proxy/api/ai/threads/thread-1/queue/queue%3Afirst/prepare-edit', body: { expected_input_fingerprint: fingerprint, staging_scope_id: 'staging_thread-1' }, staging_scope_id: 'staging_thread-1', staging_capability: 'secret_thread-1' });
+  expect(JSON.stringify(calls[0].body)).not.toContain('secret');
+  await expect(adapter.takeBackQueuedTurn!('thread-1', 'queue:first', fingerprint)).resolves.toEqual(current);
+  expect(calls[1]).toMatchObject({ method: 'POST', path: '/_redeven_proxy/api/ai/threads/thread-1/queue/queue%3Afirst/take-back', body: { expected_input_fingerprint: fingerprint } });
+});
