@@ -53,7 +53,7 @@ function settingsResponse(): AgentSettingsResponse {
         id: 'default',
         type: 'openai_compatible' as const,
       base_url: 'https://api.example.test/v1',
-      web_search: { mode: 'brave' as const },
+      web_search: { enabled: true, source: 'brave' as const },
       models: [{
           model_name: 'gpt-4.1',
           context_window: 128000,

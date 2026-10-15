@@ -66,7 +66,7 @@ describe('Flower provider failure recovery', () => {
     ['provider_server_error', 'server error', 'Retry reply'],
     ['provider_rate_limited', 'try again later', 'Retry reply'],
     ['provider_upstream_rate_limited', 'shared capacity', 'Retry reply'],
-    ['chatgpt_review_required', 'connection', 'Open settings'],
+    ['chatgpt_review_required', 'connection', 'Configure current provider'],
     ['chatgpt_usage_unavailable', 'usage', 'Manage usage'],
     ['chatgpt_temporarily_unavailable', 'temporarily', 'Retry reply'],
   ])('shows concise %s guidance and copyable diagnostics', async (code, guidance, action) => {

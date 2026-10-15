@@ -141,10 +141,7 @@ type AIProvider struct {
 	// - moonshot/chatglm/deepseek/qwen: non-strict
 	StrictToolSchema *bool `json:"strict_tool_schema,omitempty"`
 
-	// WebSearch configures optional web search behavior for generic OpenAI-compatible providers.
-	//
-	// Native providers (OpenAI, Moonshot, ChatGLM/GLM, DeepSeek, and Qwen) derive their web-search
-	// behavior from the provider type and explicit model allow-list, so this field is ignored for them.
+	// WebSearch holds provider-wide search intent. Model preferences form a second gate.
 	WebSearch *AIProviderWebSearch `json:"web_search,omitempty"`
 
 	// Models is the explicit selection for OpenRouter/custom endpoints, or a legacy brand list.
@@ -155,16 +152,13 @@ type AIProvider struct {
 }
 
 type AIProviderWebSearch struct {
-	// Mode is only honored for openai_compatible providers.
-	//
-	// Supported values:
-	// - "disabled": do not expose any web-search capability
-	// - "openai_builtin": attach OpenAI Responses-style hosted web search
-	// - "brave": expose Flower's external Brave-backed web.search tool
-	Mode string `json:"mode,omitempty"`
+	Enabled bool   `json:"enabled"`
+	Source  string `json:"source"`
+	legacy  bool
 }
 
 type AIProviderModel struct {
+	WebSearchEnabled *bool  `json:"web_search_enabled,omitempty"`
 	PlatformProtocol string `json:"-"`
 	SupportsTools    *bool  `json:"supports_tools,omitempty"`
 	// Discovery metadata is presentation-only and is never selection authority.
@@ -196,12 +190,6 @@ const (
 	defaultAIToolRecoveryFailOnRepeatedSignature = true
 
 	defaultAIEffectiveContextWindowPercent int = 95
-)
-
-const (
-	AIProviderWebSearchModeDisabled      = "disabled"
-	AIProviderWebSearchModeOpenAIBuiltin = "openai_builtin"
-	AIProviderWebSearchModeBrave         = "brave"
 )
 
 const (
@@ -433,19 +421,8 @@ func (p *AIModelProfile) Validate() error {
 			}
 		}
 
-		if provider.WebSearch != nil {
-			mode := strings.ToLower(strings.TrimSpace(provider.WebSearch.Mode))
-			if mode == "" {
-				mode = AIProviderWebSearchModeDisabled
-			}
-			switch mode {
-			case AIProviderWebSearchModeDisabled, AIProviderWebSearchModeOpenAIBuiltin, AIProviderWebSearchModeBrave:
-			default:
-				return fmt.Errorf("providers[%d]: invalid web_search.mode %q", i, provider.WebSearch.Mode)
-			}
-			if t != "openai_compatible" && mode != AIProviderWebSearchModeDisabled {
-				return fmt.Errorf("providers[%d]: web_search.mode is only supported for openai_compatible providers", i)
-			}
+		if err := provider.validateWebSearch(); err != nil {
+			return fmt.Errorf("providers[%d]: %w", i, err)
 		}
 
 		if err := provider.ValidateAuthentication(); err != nil {

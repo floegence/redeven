@@ -24,7 +24,7 @@ function fixtureAdapter(adapter: TestFlowerSurfaceAdapter): FlowerSurfaceAdapter
   return {
     ...adapter,
     connectLiveStream: adapter.connectLiveStream ?? ((input) => testLiveStreamFromLegacyFixture(adapter, input)),
-    loadSettings: async () => withModelDirectoryFixture(await adapter.loadSettings()),
+    loadSettings: async refresh => withModelDirectoryFixture(await adapter.loadSettings(refresh)),
     loadModelDirectory: adapter.loadModelDirectory ?? (async () => withModelDirectoryFixture(await adapter.loadSettings()).model_directory!),
     saveDefaultPermission: async (permission) => withModelDirectoryFixture(await adapter.saveDefaultPermission(permission)),
     saveModelProfile: async (profile) => withModelDirectoryFixture(await adapter.saveModelProfile(profile)),

@@ -115,7 +115,7 @@ describe('Flower setup browser presentation', () => {
         schema_version: 1, current_model_id: modelID, providers: [
           { id: 'search', type: 'openai', models: [{ model_name: 'vision', wire_model_name: 'gpt-5.5', web_search: { status: 'available', reason: 'catalog_supported' } }] },
           { id: 'deepseek', type: 'deepseek', models: [{ model_name: 'deepseek-v4-flash-vision-exp', web_search: { status: 'unavailable', reason: 'unsupported' } }] },
-          { id: 'brave', type: 'openai_compatible', web_search: { mode: 'brave' }, models: [{ model_name: 'custom', web_search: { status: 'unavailable', reason: 'needs_credentials' } }] },
+          { id: 'brave', type: 'openai_compatible', web_search: { enabled: true, source: 'brave' }, models: [{ model_name: 'custom', web_search: { status: 'unavailable', reason: 'needs_credentials' } }] },
         ],
       }, provider_secrets: [
         { provider_id: 'search', provider_api_key_configured: true, web_search_api_key_configured: false },

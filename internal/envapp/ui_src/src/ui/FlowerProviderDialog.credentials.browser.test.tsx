@@ -31,7 +31,7 @@ async function mount(surface: 'desktop' | 'env', stored: boolean, dark = false) 
   }
   dispose = render(() => <FloeProvider config={{ theme: { shellPresets: builtInShellThemePresets } }}><Theme /><FlowerProviderDialog
     open={open()} mode="edit" provider={{ id: 'endpoint', type: 'openai_compatible', name: 'Custom endpoint', base_url: 'https://api.example.com/v1',
-      web_search: { mode: 'brave' }, models: [{ model_name: 'agent', context_window: 32768, max_output_tokens: 4096 }] }}
+      web_search: { enabled: true, source: 'brave' }, models: [{ model_name: 'agent', context_window: 32768, max_output_tokens: 4096 }] }}
     keyConfigured={stored} webSearchKeyConfigured={stored} onOpenChange={setOpen} onConfirm={confirm} /></FloeProvider>, host);
   await expect.element(page.getByRole('dialog')).toBeVisible();
   const dialog = document.querySelector<HTMLElement>('.flower-provider-dialog')!;

@@ -53,6 +53,14 @@ describe('connection-owned local model reads', () => {
     expect(modelRead).toHaveBeenCalledTimes(1);
     expect(modelRead.mock.calls[0]?.[0]).toBe(true);
   });
+  it('refreshes saved configuration explicitly after an uncertain save', async () => {
+    const configRead = vi.fn().mockResolvedValueOnce(configuration).mockResolvedValue({ ...configuration, defaults: { permission_type: 'readonly' } });
+    const resource = createFlowerModelReadResource({ scope: () => 'connection', loadConfiguration: configRead, loadDirectory: async () => directory });
+    await resource.loadSettings();
+    expect((await resource.loadSettings()).defaults.permission_type).toBe('approval_required');
+    expect((await resource.loadSettings(true)).defaults.permission_type).toBe('readonly');
+    expect(configRead).toHaveBeenCalledTimes(2);
+  });
   it('reacquires an invalidated settings read and ignores the old late result', async () => {
     let finish!: (value: typeof configuration) => void;
     const configRead = vi.fn().mockImplementationOnce(() => new Promise(resolve => { finish = resolve; })).mockResolvedValue(configuration);
@@ -135,4 +143,15 @@ describe('connection-owned local model reads', () => {
     expect(() => readFlowerModelDirectory({ current_model: '', models: [] })).toThrow('invalid');
     expect(() => readFlowerModelDirectory({ current_model: '', directory: { models: [{ id: 'desktop:private', source: 'runtime_config', state: 'ready' }], sources: [] } })).toThrow('invalid');
   });
+});
+
+it('validates and retains backend search policy without frontend capability inference', () => {
+  const policy = { editable: true, default_enabled: true, default_model_enabled: true, enabled: false, source: 'native', supported_sources: ['native'] };
+  const payload = { current_model: '', directory: { models: [], sources: [], search_policies: { openai: policy }, provider_search_policies: { proxy: policy } } };
+  const result = readFlowerModelDirectory(payload);
+  expect(result.search_policies?.openai).toEqual(policy);
+  expect(result.provider_search_policies?.proxy).toEqual(policy);
+  for (const patch of [{ enabled: 'true' }, { supported_sources: ['unknown'] }, { source: 'auto' }, { editable: undefined }]) {
+    expect(() => readFlowerModelDirectory({ ...payload, directory: { ...payload.directory, search_policies: { openai: { ...policy, ...patch } } } })).toThrow('invalid');
+  }
 });

@@ -360,7 +360,8 @@ function normalizePermissionType(raw: unknown): FlowerPermissionType {
 
 function mapProviderModel(model: NonNullable<NonNullable<AIConfig['providers']>[number]['models']>[number]): FlowerProviderModel {
   return {
-    model_name: trim(model.model_name), supports_tools: model.supports_tools,
+    model_name: trim(model.model_name),
+    web_search_enabled: model.web_search_enabled, supports_tools: model.supports_tools,
     display_name: model.display_name, status: model.status,
     model_digest: model.model_digest, quantization: model.quantization, unavailable: model.unavailable,
     ...(trim(model.wire_model_name) ? { wire_model_name: trim(model.wire_model_name) } : {}),
@@ -381,7 +382,7 @@ function mapProvider(provider: NonNullable<AIConfig['providers']>[number]): Flow
     type: provider.type,
     ...(trim(provider.base_url) ? { base_url: trim(provider.base_url) } : {}),
     ...(provider.responses_continuation === true ? { responses_continuation: true } : {}),
-    ...(provider.web_search ? { web_search: { mode: provider.web_search.mode ?? 'disabled' } } : {}),
+    ...(provider.web_search ? { web_search: { ...provider.web_search } } : {}),
     model_selection: provider.model_selection,
     auth_method: provider.auth_method, account_id: provider.account_id,
     models: (provider.models ?? []).map(mapProviderModel).filter((model) => model.model_name),
@@ -550,8 +551,8 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
 
   const resource = options.modelReadResource ?? createEnvFlowerModelReadResource(() => String(options.settingsRevision?.() ?? 0));
   const directoryForSurface = (directory: FlowerModelDirectory) => visibleDirectory(directory, options.desktopSessionTargetRoute === 'remote_desktop');
-  const loadSettings = async () => {
-    const snapshot = await resource.loadSettings();
+  const loadSettings = async (refresh = false) => {
+    const snapshot = await resource.loadSettings(refresh);
     if (options.isAvailable?.() === false) throw new DOMException('Flower settings load cancelled.', 'AbortError');
     const guarded = restrictChatGPTForRemoteDesktop(snapshot, options.desktopSessionTargetRoute === 'remote_desktop');
     return guarded.model_directory ? withFlowerModelDirectory(guarded, directoryForSurface(guarded.model_directory)) : guarded;
@@ -695,6 +696,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       return snapshot;
     },
     saveModelProfile: async (draft) => {
+      resource.invalidate();
       const providerAPIKeyPatches: FlowerSecretPatch[] = draft.model_profile.providers.flatMap((provider): FlowerSecretPatch[] => {
         if (provider.provider_api_key === undefined) return [];
         const providerID = trim(provider.id);

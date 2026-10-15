@@ -368,6 +368,7 @@ func buildPromptWebResearchCapabilitySection(snapshot promptRuntimeSnapshot) pro
 	}
 	hasSearch := promptToolAvailable(snapshot.AvailableToolNames, searchName)
 	hasFetch := promptToolAvailable(snapshot.AvailableToolNames, "web_fetch")
+	hasBrowser := promptToolAvailable(snapshot.AvailableToolNames, "computer.targets") && promptToolAvailable(snapshot.AvailableToolNames, "computer.select_target") && promptToolAvailable(snapshot.AvailableToolNames, "computer.exec")
 	hasTerminal := promptToolAvailable(snapshot.AvailableToolNames, "terminal.exec")
 	lines := []string{
 		"# Online Research Capability",
@@ -384,15 +385,25 @@ func buildPromptWebResearchCapabilitySection(snapshot promptRuntimeSnapshot) pro
 			"- Treat search results as pointers, not evidence; cite the exact authoritative URLs you verified.",
 			"- If web_fetch blocks a URL, use web.search to find an authoritative alternate URL; do not bypass the blocked target.",
 		)
+	case hasSearch:
+		lines = append(lines,
+			"- Available web tool: use web.search to discover authoritative sources.",
+		)
+		if hasBrowser {
+			lines = append(lines, "- Treat search results as pointers and verify primary sources through an available authorized browser.")
+		} else {
+			lines = append(lines, "- Direct page fetching is unavailable in this run. Treat search results as pointers and state the resulting verification limitation.")
+		}
+	case hasBrowser:
+		lines = append(lines,
+			"- Discover available browser targets with computer.targets, select an authorized target with computer.select_target, and use computer.exec for browser search and primary-source verification when dedicated search is unavailable.",
+			"- Follow the current computer target and browser interaction contracts. If no authorized browser target exists, state that limitation or request the missing access through the normal interaction policy.",
+			"- Use web_fetch for verified public text URLs when it is available. Never bypass a blocked URL, permission refusal, or an explicitly required browser/account through another tool.",
+		)
 	case hasFetch:
 		lines = append(lines,
 			"- Available web tool: use web_fetch with known authoritative public text URLs or APIs.",
 			"- URL discovery is unavailable in this run. Do not invent another web tool; state the limitation when no reliable URL is known.",
-		)
-	case hasSearch:
-		lines = append(lines,
-			"- Available web tool: use web.search to discover authoritative sources.",
-			"- Direct page fetching is unavailable in this run. Treat search results as pointers and state the resulting verification limitation.",
 		)
 	default:
 		lines = append(lines,
@@ -400,6 +411,12 @@ func buildPromptWebResearchCapabilitySection(snapshot promptRuntimeSnapshot) pro
 			"- Do not invent web tools or use OKF or terminal commands as an internet fallback.",
 		)
 	}
+	if hasBrowser && hasSearch {
+		lines = append(lines,
+			"- If a search tool is missing or fails before execution, use the current tool surface to choose another available path. Discover browser targets with computer.targets, select an authorized target with computer.select_target, and use computer.exec for browser search and source verification.",
+		)
+	}
+	lines = append(lines, "- A missing tool or a failure confirmed to have occurred before execution is feedback to choose another available tool, not a reason to abandon the task. Never bypass permission denial or URL blocking, and never automatically replay an operation with an unknown side-effect outcome.")
 	if hasFetch && hasTerminal {
 		lines = append(lines,
 			"- Use curl only when web_fetch cannot express required authentication, custom headers, a non-GET request, or a binary download. Never use curl for URL discovery or to bypass a target blocked by web_fetch.",

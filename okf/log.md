@@ -1,5 +1,11 @@
 # Redeven OKF Update Log
 
+## 2026-10-15: Search intent and provider recovery
+
+- Adopt published and checksummed Floret v7.40.2; hosted events use the frozen request as authority.
+- Document one [search resolver](ai/model-web-search.md), provider/model switches, atomic configuration migration and retained Brave keys.
+- Add shared [provider recovery](ui/flower-provider-configuration.md) with targeted settings, cancel/save return and deliberate canonical retry.
+
 ## 2026-10-15: Canonical runtime context snapshots
 
 - Adopt published Floret v7.40.0 for [managed runtime facts](ai/flower-managed-model-context.md), exact compaction baselines, request-boundary refresh, and shared context details.

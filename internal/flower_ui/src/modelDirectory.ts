@@ -2,7 +2,7 @@ import { projectFlowerProviderModels } from './providerModelProjection';
 import type { FlowerModelDirectory, FlowerModelSourceStatus, FlowerSettingsSnapshot } from './contracts/flowerSurfaceContracts';
 
 export type FlowerModelReadResource = Readonly<{
-  loadSettings: () => Promise<FlowerSettingsSnapshot>;
+  loadSettings: (refresh?: boolean) => Promise<FlowerSettingsSnapshot>;
   loadDirectory: (refresh?: boolean, prepare?: () => Promise<unknown>) => Promise<FlowerModelDirectory>;
   subscribe: (listener: (directory: FlowerModelDirectory) => void) => () => void;
   invalidate: () => void;
@@ -19,9 +19,16 @@ export function readFlowerModelDirectory(value: unknown): FlowerModelDirectory {
       || models.some(model => !model || typeof model.model_name !== 'string' || !model.model_name.trim() || model.model_name.includes(String.fromCharCode(0)) || /[\r\n/]/u.test(model.model_name)
         || (model.wire_model_name !== undefined && (typeof model.wire_model_name !== 'string' || model.wire_model_name.includes(String.fromCharCode(0)) || /[\r\n]/u.test(model.wire_model_name)))
         || (model.supports_tools !== undefined && typeof model.supports_tools !== 'boolean')
+        || (model.web_search_enabled !== undefined && typeof model.web_search_enabled !== 'boolean')
         || [model.context_window, model.max_output_tokens].some(limit => limit !== undefined && (!Number.isSafeInteger(limit) || limit < 0))))));
+  const invalidSearchPolicies = [directory?.search_policies, directory?.provider_search_policies].some(policies => policies !== undefined && (!policies || typeof policies !== 'object' || Array.isArray(policies)
+    || Object.entries(policies).some(([key, policy]) => !key.trim() || !policy
+      || [policy.editable, policy.default_enabled, policy.default_model_enabled, policy.enabled].some(flag => typeof flag !== 'boolean')
+      || !['native', 'brave'].includes(policy.source) || !Array.isArray(policy.supported_sources)
+      || new Set(policy.supported_sources).size !== policy.supported_sources.length
+      || policy.supported_sources.some(source => !['native', 'brave'].includes(source)))));
   if (!directory || !Array.isArray(directory.models) || !Array.isArray(directory.sources)
-    || invalidCatalogs
+    || invalidCatalogs || invalidSearchPolicies
     || typeof response?.current_model !== 'string'
     || new Set(directory.models.map(model => model?.id)).size !== directory.models.length
     || new Set(directory.sources.map(source => source?.id)).size !== directory.sources.length
@@ -36,7 +43,7 @@ export function readFlowerModelDirectory(value: unknown): FlowerModelDirectory {
       || (model.source === 'runtime_config' && model.id !== `${model.provider_id}/${model.model_name}`))) {
     throw new Error('Flower model directory response is invalid.');
   }
-  return { current_model_id: response.current_model, models: directory.models, sources: directory.sources, provider_catalogs: directory.provider_catalogs, provider_defaults: directory.provider_defaults };
+  return { current_model_id: response.current_model, models: directory.models, sources: directory.sources, provider_catalogs: directory.provider_catalogs, provider_defaults: directory.provider_defaults, search_policies: directory.search_policies, provider_search_policies: directory.provider_search_policies };
 }
 
 const MODEL_READ_DEADLINE_MS = 10_000;
@@ -121,7 +128,8 @@ export function createFlowerModelReadResource(options: Readonly<{
     directoryRequest = request;
     return request;
   };
-  const loadSettings = (): Promise<FlowerSettingsSnapshot> => {
+  const loadSettings = (refresh = false): Promise<FlowerSettingsSnapshot> => {
+    if (refresh) invalidate();
     checkScope();
     if (configuration) return Promise.resolve(directory ? withFlowerModelDirectory(configuration, directory) : configuration);
     if (settingsRequest) return settingsRequest;
@@ -171,7 +179,7 @@ export function withFlowerModelDirectory(snapshot: FlowerSettingsSnapshot, direc
   const runtimeModels = new Map(directory.models.filter(model => model.source === 'runtime_config').map(model => [model.id, model]));
   return { ...snapshot, model_directory: directory,
     model_profile: snapshot.model_profile ? { ...snapshot.model_profile, providers: snapshot.model_profile.providers.map(provider => {
-      provider = { ...provider, model_defaults: directory.provider_defaults?.[provider.type] };
+      provider = { ...provider, model_defaults: directory.provider_defaults?.[provider.type], search_policy: directory.provider_search_policies?.[provider.id] ?? directory.search_policies?.[provider.type] };
       const catalog = directory.provider_catalogs?.[provider.id];
       const resolved = catalog ? { ...provider, catalog_models: catalog, models: projectFlowerProviderModels(provider, catalog) } : provider;
       return { ...resolved, models: resolved.models.map(model => ({ ...model, web_search: runtimeModels.get(`${provider.id}/${model.model_name}`)?.web_search ?? model.web_search })) };

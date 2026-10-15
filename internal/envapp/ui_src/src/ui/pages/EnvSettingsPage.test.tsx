@@ -1043,7 +1043,7 @@ describe('EnvSettingsPage', () => {
             name: 'Custom endpoint',
             type: 'openai_compatible',
             base_url: 'https://llm.example.invalid/v1',
-            web_search: { mode: 'brave' },
+            web_search: { enabled: true, source: 'brave' },
             models: [
               {
                 model_name: 'custom-model',

@@ -76,14 +76,7 @@ func providerReasoningSelection(controls ProviderControls) (config.AIReasoningSe
 }
 
 func resolveProviderWebSearchCapability(provider config.AIProvider, modelName string) config.AIWebSearchResolution {
-	wire := strings.TrimSpace(modelName)
-	for _, model := range provider.EffectiveModels() {
-		if model.ModelName == wire {
-			wire = model.EffectiveWireModelName()
-			break
-		}
-	}
-	return config.ResolveAIWebSearch(provider, wire, true)
+	return config.ResolveAIWebSearch(provider, modelName, true)
 }
 
 type openAIProvider struct {

@@ -64,7 +64,7 @@ func (r *run) prepareFloretHostedAgent(ctx context.Context, req RunRequest, prov
 	configureResponsesContinuation(adapter, providerCfg)
 	configureOpenAIConnections(adapter, providerCfg.ID, providerCfg.BaseURL, string(providerCfg.EffectiveAuthMethod())+":"+providerCfg.AccountID, r.host.openAIConnections)
 
-	webSearchCapability := config.ResolveAIWebSearch(providerCfg, capability.WireModelName, true)
+	webSearchCapability := config.ResolveAIWebSearch(providerCfg, modelName, true)
 	if webSearchCapability.Mode == config.AIWebSearchBrave {
 		configured := false
 		if r.resolveWebSearchKey != nil {
@@ -74,7 +74,7 @@ func (r *run) prepareFloretHostedAgent(ctx context.Context, req RunRequest, prov
 			}
 			configured = found && strings.TrimSpace(key) != ""
 		}
-		webSearchCapability = config.ResolveAIWebSearch(providerCfg, capability.WireModelName, configured)
+		webSearchCapability = config.ResolveAIWebSearch(providerCfg, modelName, configured)
 	}
 	if webSearchCapability.Reason == "invalid_configuration" {
 		return nil, errors.New("invalid web search configuration")

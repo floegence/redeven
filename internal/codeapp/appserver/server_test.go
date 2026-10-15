@@ -2585,7 +2585,7 @@ func TestServer_AIProviderBundle_CleansSecretsOutsideCurrentProfile(t *testing.T
 	        "name": "OpenAI",
 	        "type": "openai",
 	        "base_url": "https://api.openai.com/v1",
-	        "web_search": { "mode": "disabled" },
+	        "web_search": { "enabled": false, "source": "native" },
 	        "models": [
 	          { "model_name": "gpt-5-mini" }
 	        ]
@@ -2625,8 +2625,8 @@ func TestServer_AIProviderBundle_CleansSecretsOutsideCurrentProfile(t *testing.T
 	}
 	data, _ = resp["data"].(map[string]any)
 	webSet, _ := data["web_search_provider_api_key_set"].(map[string]any)
-	if webSet["openai"] != false {
-		t.Fatalf("openai web search key set=%v, want=false", webSet["openai"])
+	if webSet["openai"] != true {
+		t.Fatalf("openai web search key set=%v, want=true", webSet["openai"])
 	}
 	if webSet["unused"] != false {
 		t.Fatalf("unused web search key set=%v, want=false", webSet["unused"])

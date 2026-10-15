@@ -9,7 +9,6 @@ import { AI_PROVIDER_ICON_DEFINITIONS, type AIProviderIconDefinition } from './p
 import {
   FLOWER_PROVIDER_PRESETS,
   FLOWER_PROVIDER_TYPES,
-  flowerProviderNeedsWebSearchConfig,
   flowerProviderSupportsCustomModels,
   flowerProviderTypeRequiresBaseURL,
   flowerProviderDisplayName,
@@ -37,7 +36,6 @@ function toAIProviderPreset(providerType: AIProviderType): AIProviderPreset {
     type: providerType,
     name: preset.name,
     default_base_url: preset.default_base_url,
-    web_search: preset.web_search,
     models: [],
   };
 }
@@ -149,10 +147,6 @@ export function defaultBaseURLForProviderType(providerType: AIProviderType): str
   return providerPresetForType(providerType).default_base_url;
 }
 
-export function providerNeedsWebSearchConfig(providerType: AIProviderType): boolean {
-  return flowerProviderNeedsWebSearchConfig(providerType);
-}
-
 export function providerSupportsCustomModelNames(providerType: AIProviderType): boolean {
   return flowerProviderSupportsCustomModels(providerType);
 }
@@ -172,11 +166,10 @@ export function cloneAIProviderRow(row: AIProvider & Partial<Omit<AIProviderRow,
     type: (row?.type as AIProviderType) || 'openai',
     base_url: String(row?.base_url ?? ''),
     responses_continuation: row?.responses_continuation === true ? true : undefined,
-    web_search: providerNeedsWebSearchConfig((row?.type as AIProviderType) || 'openai')
-      ? { mode: row?.web_search?.mode === 'openai_builtin' || row?.web_search?.mode === 'brave' ? row.web_search.mode : 'disabled' }
-      : undefined,
+    web_search: row.web_search,
+    search_policy: row.search_policy,
     models: (Array.isArray(row?.models) ? row.models : []).map((m) => ({
-      display_name: m.display_name, status: m.status, web_search: m.web_search,
+      display_name: m.display_name, status: m.status, web_search: m.web_search, web_search_enabled: m.web_search_enabled,
       model_digest: m.model_digest, quantization: m.quantization, unavailable: m.unavailable,
       model_name: String(m?.model_name ?? ''),
       wire_model_name: String(m?.wire_model_name ?? ''),
@@ -195,7 +188,7 @@ export function normalizeAIProviderRowDraft(row: AIProvider & Partial<Omit<AIPro
   const out = cloneAIProviderRow(row);
   const models = Array.isArray(out.models) ? out.models : [];
   out.models = models.map((m) => ({
-    display_name: m.display_name, status: m.status, web_search: m.web_search,
+    display_name: m.display_name, status: m.status, web_search: m.web_search, web_search_enabled: m.web_search_enabled,
     model_digest: m.model_digest, quantization: m.quantization, unavailable: m.unavailable,
     model_name: String(m?.model_name ?? ''),
     wire_model_name: String(m?.wire_model_name ?? '').trim() || undefined,

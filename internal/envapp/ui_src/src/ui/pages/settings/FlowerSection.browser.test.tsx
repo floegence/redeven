@@ -33,7 +33,7 @@ async function mount(width = 1000, canAdmin = true, locale: RedevenLocale = 'en-
     logging: { log_format: 'plain', log_level: 'info' }, codespaces: { code_server_port_min: 0, code_server_port_max: 0 }, permission_policy: null,
     runtime: { agent_home_dir: '/workspace', shell: '/bin/sh' },
     ai: { current_model_id: 'deepseek/deepseek-v4-flash-vision-exp', providers: [
-      { id: 'deepseek', type: brave ? 'openai_compatible' : 'deepseek', base_url: 'https://api.deepseek.com', ...(brave ? { name: 'DeepSeek', web_search: { mode: 'brave' as const } } : {}), models: [{ model_name: 'deepseek-v4-flash-vision-exp', display_name: 'DeepSeek V4 Flash Vision Exp', context_window: 1_000_000, max_output_tokens: 384_000, input_modalities: ['text', 'image'], reasoning_capability: { kind: 'effort', supported_levels: ['high', 'max'], default_level: 'high' } }] },
+      { id: 'deepseek', type: brave ? 'openai_compatible' : 'deepseek', base_url: 'https://api.deepseek.com', ...(brave ? { name: 'DeepSeek', web_search: { enabled: true, source: 'brave' as const } } : {}), models: [{ model_name: 'deepseek-v4-flash-vision-exp', display_name: 'DeepSeek V4 Flash Vision Exp', context_window: 1_000_000, max_output_tokens: 384_000, input_modalities: ['text', 'image'], reasoning_capability: { kind: 'effort', supported_levels: ['high', 'max'], default_level: 'high' } }] },
       { id: 'local', type: 'openai_compatible', name: 'Local model', base_url: 'http://localhost:1234/v1', models: [{ model_name: 'agent', context_window: 32768 }] },
       ...(account ? [{ id: 'account', type: 'openai' as const, auth_method: 'chatgpt' as const, account_id: 'saved-account', models: [{ model_name: 'gpt-5.5', context_window: 400000 }] }] : []),
     ] },

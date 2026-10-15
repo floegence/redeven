@@ -141,7 +141,7 @@ export type RuntimeFlowerSurfaceAdapterOptions = Readonly<{
   chatGPTAuth?: FlowerSurfaceAdapter['chatGPTAuth'];
   loadChatGPTAccounts?: FlowerSurfaceAdapter['loadChatGPTAccounts'];
   discoverProviderModels?: FlowerModelCatalogDiscovery;
-  loadSettings: () => Promise<FlowerSettingsSnapshot>;
+  loadSettings: FlowerSurfaceAdapter['loadSettings'];
   loadModelDirectory?: FlowerSurfaceAdapter['loadModelDirectory'];
   recoverModelSource?: FlowerSurfaceAdapter['recoverModelSource'];
   subscribeModelDirectory?: FlowerSurfaceAdapter['subscribeModelDirectory'];

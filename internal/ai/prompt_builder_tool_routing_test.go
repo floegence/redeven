@@ -265,3 +265,26 @@ func TestBuildLayeredSystemPromptRoutesImagesToSharedAuthorizedTool(t *testing.T
 		assertPromptContains(t, prompt, "do not bypass missing vision through another tool")
 	}
 }
+
+func TestWebResearchBrowserFallbackMatchesFinalToolSurface(t *testing.T) {
+	for _, search := range []bool{false, true} {
+		tools := []ToolDef{{Name: "web_fetch"}, {Name: "computer.targets"}, {Name: "computer.select_target"}, {Name: "computer.exec"}}
+		if search {
+			tools = append(tools, ToolDef{Name: "web.search"})
+		}
+		prompt := buildPromptForToolSetTest(t, FlowerPermissionApprovalRequired, tools)
+		assertPromptNotContains(t, prompt, "URL discovery is unavailable")
+		assertPromptContains(t, prompt, "computer.targets")
+		assertPromptContains(t, prompt, "computer.select_target")
+		assertPromptContains(t, prompt, "computer.exec")
+		assertPromptContains(t, prompt, "Never bypass permission denial or URL blocking")
+		assertPromptContains(t, prompt, "never automatically replay an operation with an unknown side-effect outcome")
+	}
+}
+
+func TestWebResearchSearchAndBrowserWithoutFetch(t *testing.T) {
+	prompt := buildPromptForToolSetTest(t, FlowerPermissionApprovalRequired, []ToolDef{{Name: "web.search"}, {Name: "computer.targets"}, {Name: "computer.select_target"}, {Name: "computer.exec"}})
+	assertPromptContains(t, prompt, "use web.search to discover authoritative sources")
+	assertPromptNotContains(t, prompt, "Direct page fetching is unavailable")
+	assertPromptContains(t, prompt, "computer.exec for browser search and source verification")
+}

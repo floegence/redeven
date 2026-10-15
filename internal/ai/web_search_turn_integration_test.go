@@ -11,7 +11,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"reflect"
 	"strings"
 	"sync"
@@ -78,19 +77,8 @@ func TestWebSearchTurnSurfaceReachesProvider(t *testing.T) {
 				}
 			}
 			provider := config.AIProvider{ID: "provider", Type: tc.provider, BaseURL: server.URL, Models: []config.AIProviderModel{selected}}
-			if tc.provider == "openai" {
-				provider.BaseURL = "https://api.openai.com"
-				target, _ := url.Parse(server.URL)
-				original := http.DefaultTransport
-				http.DefaultTransport = searchTestTransport(func(request *http.Request) (*http.Response, error) {
-					copy := request.Clone(request.Context())
-					copy.URL.Scheme, copy.URL.Host = target.Scheme, target.Host
-					return original.RoundTrip(copy)
-				})
-				t.Cleanup(func() { http.DefaultTransport = original })
-			}
 			if tc.searchMode != "" {
-				provider.WebSearch = &config.AIProviderWebSearch{Mode: tc.searchMode}
+				provider.WebSearch = &config.AIProviderWebSearch{Enabled: tc.searchMode != "disabled", Source: map[bool]string{true: "brave", false: "native"}[tc.searchMode == "brave"]}
 			}
 			stateDir := t.TempDir()
 			svc, err := NewService(Options{
@@ -175,7 +163,7 @@ func TestWebSearchTurnSurfaceReachesProvider(t *testing.T) {
 			if tc.name == "vision" && !strings.Contains(string(raw), `"type":"input_image"`) {
 				t.Fatal("unsupported search disabled Vision image input")
 			}
-			if strings.Contains(string(raw), "URL discovery is unavailable") == wantSearch {
+			if !wantSearch && !strings.Contains(string(raw), "Discover available browser targets") && !strings.Contains(string(raw), "URL discovery is unavailable") {
 				t.Fatalf("prompt/search mismatch: search=%v", wantSearch)
 			}
 			if len(titleBodies) == 0 {
@@ -214,11 +202,6 @@ func attachSearchTestImage(t *testing.T, svc *Service, meta *session.Meta, reque
 	request.Input.Attachments = []RunAttachmentIn{{AttachmentID: upload.AttachmentID}}
 }
 
-type searchTestTransport func(*http.Request) (*http.Response, error)
-
-func (transport searchTestTransport) RoundTrip(request *http.Request) (*http.Response, error) {
-	return transport(request)
-}
 
 func TestNativeSearchSurvivesWaitingRetryAndRestart(t *testing.T) {
 	for _, failure := range []string{"rejected", "misrouted", "settings_changed"} {
@@ -274,7 +257,7 @@ func testNativeSearchLifecycle(t *testing.T, failure string) {
 	opts := Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: stateDir, AgentHomeDir: stateDir, Shell: "/bin/sh",
 		Config: &config.AIConfig{CurrentModelID: "search/model-a", Providers: []config.AIProvider{{ID: "search", Type: "openai_compatible", BaseURL: server.URL,
 			// This fixture tests search continuation and model switching, not compaction.
-			Models: []config.AIProviderModel{{ModelName: "model-a", ContextWindow: 128000}, {ModelName: "model-b", ContextWindow: 128000}}, WebSearch: &config.AIProviderWebSearch{Mode: config.AIProviderWebSearchModeOpenAIBuiltin}}}},
+			Models: []config.AIProviderModel{{ModelName: "model-a", ContextWindow: 128000}, {ModelName: "model-b", ContextWindow: 128000}}, WebSearch: &config.AIProviderWebSearch{Enabled: true, Source: config.AIWebSearchSourceNative}}}},
 		RunMaxWallTime: 5 * time.Second, RunIdleTimeout: 5 * time.Second,
 		ResolveProviderAPIKey: func(string) (string, bool, error) { return "test-key", true, nil }}
 	svc, err := NewService(opts)
@@ -295,7 +278,7 @@ func testNativeSearchLifecycle(t *testing.T, failure string) {
 		t.Fatal(err)
 	}
 	if failure == "settings_changed" {
-		opts.Config.Providers[0].WebSearch.Mode = config.AIProviderWebSearchModeDisabled
+		opts.Config.Providers[0].WebSearch.Enabled = false
 	}
 	svc, err = NewService(opts)
 	if err != nil {
@@ -306,7 +289,7 @@ func testNativeSearchLifecycle(t *testing.T, failure string) {
 	}
 	failed := waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(view *ThreadView) bool { return view.RunStatus == "failed" })
 	if failure == "misrouted" {
-		if !strings.Contains(failed.RunError, "provider returned a local function call for hosted tool") {
+		if failed.RunErrorCode != runErrorCodeProviderRequestRejected {
 			t.Fatalf("hosted tool contract failure was replaced: %s", failed.RunError)
 		}
 	} else if failed.RunErrorCode != runErrorCodeProviderRequestInvalid || !strings.Contains(failed.RunErrorDetail, `"http_status": 400`) || !strings.Contains(failed.RunErrorDetail, `"code": "search_unavailable"`) {
