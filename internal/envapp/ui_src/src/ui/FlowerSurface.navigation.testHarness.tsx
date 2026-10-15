@@ -540,6 +540,7 @@ export function runtimeCurrentView(
       kind: 'input' as const,
       resolved: false,
       tool_call_id: threadValue.input_request.tool_id,
+      computer_assistance: threadValue.input_request.computer_assistance,
       input: {
         summary: threadValue.input_request.public_summary ?? '',
         questions: threadValue.input_request.questions.map((question) => ({
