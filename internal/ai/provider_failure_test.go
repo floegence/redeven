@@ -349,3 +349,28 @@ data: {"type":"error","error":{"type":"overloaded_error","message":"busy"}}
 		})
 	}
 }
+
+func TestChatGPTRetryFactsRespectAccountAndQuotaBoundaries(t *testing.T) {
+	for _, tc := range []struct {
+		code     string
+		status   int
+		category flprovider.RetryCategory
+	}{
+		{"subscription_sharing_usage_limit_exceeded", 429, flprovider.RetryPermanent},
+		{"subscription_sharing_usage_limit_exceeded", 200, flprovider.RetryPermanent},
+		{"chatpass_v2_scope_not_authorized", 429, flprovider.RetryPermanent},
+		{"subscription_sharing_invalid_user", 500, flprovider.RetryPermanent},
+		{"subscription_sharing_usage_unavailable", 200, flprovider.RetryTransient},
+		{"temporarily_unavailable", 401, flprovider.RetryPermanent},
+		{"rate_limited", 429, flprovider.RetryRateLimit},
+	} {
+		t.Run(fmt.Sprintf("%s/%d", tc.code, tc.status), func(t *testing.T) {
+			response := &http.Response{StatusCode: tc.status, Header: http.Header{"X-Should-Retry": {"true"}}}
+			err := providerStreamFailure(fmt.Sprintf(`{"error":{"code":%q}}`, tc.code), response, "chatgpt")
+			var adviser flprovider.RetryAdviser
+			if !errors.As(err, &adviser) || adviser.ProviderRetryAdvice().Category != tc.category {
+				t.Fatalf("advice for %s: %v", tc.code, err)
+			}
+		})
+	}
+}

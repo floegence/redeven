@@ -54,10 +54,7 @@ func (e *providerFailure) ProviderRetryAdvice() flprovider.RetryAdvice {
 	if e.advice.Category != "" || !e.advice.NotBefore.IsZero() || e.advice.Forbidden {
 		return e.advice
 	}
-	code := strings.ToLower(strings.TrimSpace(e.diagnostic.Code))
-	status := e.diagnostic.failureStatus()
-	advice := flprovider.HTTPRetryAdvice(status, code, nil, time.Time{})
-	return advice
+	return responseRetryAdvice(e.diagnostic, nil)
 }
 
 func (e *providerFailure) Unwrap() error { return e.cause }
@@ -208,7 +205,9 @@ func providerRequestFailure(err error, response *http.Response, providerType str
 	}
 	var streamError *ssestream.StreamError
 	if errors.As(err, &streamError) {
-		return providerStreamFailure(string(streamError.Event.Data), response, providerType)
+		failure := providerStreamFailure(string(streamError.Event.Data), response, providerType)
+		failure.cause = errors.Join(err, failure.cause)
+		return failure
 	}
 	d := providerFailureDiagnostic{Provider: providerType}
 	var anthropicHTTP *anthropic.Error
@@ -236,12 +235,12 @@ func providerRequestFailure(err error, response *http.Response, providerType str
 	}
 	d = diagnosticFromBody(d, raw)
 	if providerType == "chatgpt" {
-		err = &chatgpt.RequestError{Status: d.Status, Code: d.Code, RequestID: d.RequestID, Body: raw}
+		err = errors.Join(err, &chatgpt.RequestError{Status: d.Status, Code: d.Code, RequestID: d.RequestID, Body: raw})
 	}
 	return &providerFailure{diagnostic: d, cause: err, advice: responseRetryAdvice(d, response)}
 }
 
-func providerStreamFailure(raw string, response *http.Response, providerType string) error {
+func providerStreamFailure(raw string, response *http.Response, providerType string) *providerFailure {
 	d := diagnosticFromBody(providerFailureDiagnostic{Provider: providerType, Shape: "stream_error"}, []byte(raw))
 	d.Shape = "stream_error"
 	if response != nil {
@@ -283,7 +282,10 @@ func canonicalProviderFailure(err error) error {
 	}
 	var accountFailure *chatgpt.Error
 	if errors.As(err, &accountFailure) {
-		return &providerFailure{diagnostic: providerFailureDiagnostic{Provider: "chatgpt", Code: accountFailure.Code, Shape: "empty"}.sanitized(), cause: err}
+		d := providerFailureDiagnostic{Provider: "chatgpt", Code: accountFailure.Code, Shape: "empty"}.sanitized()
+		advice := responseRetryAdvice(d, nil)
+		advice.NotBefore = accountFailure.RetryAt
+		return &providerFailure{diagnostic: d, cause: err, advice: advice}
 	}
 	var floretHTTP *flprovider.ProviderHTTPError
 	if errors.As(err, &floretHTTP) && floretHTTP != nil {
@@ -368,5 +370,19 @@ func responseRetryAdvice(d providerFailureDiagnostic, response *http.Response) f
 			}
 		}
 	}
-	return flprovider.HTTPRetryAdvice(d.failureStatus(), d.Code, headers, received)
+	advice := flprovider.HTTPRetryAdvice(d.failureStatus(), d.Code, headers, received)
+	if d.Provider == "chatgpt" {
+		code := strings.ToLower(strings.TrimSpace(d.Code))
+		switch {
+		case chatgpt.Failure(code).Action != "retry", code == "storage_unavailable", code == "logout_cleanup_failed":
+			advice.Category = flprovider.RetryPermanent
+		case advice.Category == flprovider.RetryPermanent:
+			// Authentication and contract failures outrank temporary protocol codes.
+		case code == "subscription_sharing_usage_unavailable", code == "temporarily_unavailable":
+			advice.Category = flprovider.RetryTransient
+		case code == "rate_limited":
+			advice.Category = flprovider.RetryRateLimit
+		}
+	}
+	return advice
 }
