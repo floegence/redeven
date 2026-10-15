@@ -57,7 +57,7 @@ describe('windowChromeContract', () => {
     expect(styleText).toContain("[data-redeven-desktop-window-titlebar='true']");
     expect(styleText).toContain(DESKTOP_WINDOW_CHROME_NO_DRAG_SELECTOR);
     expect(DESKTOP_WINDOW_CHROME_NO_DRAG_ATTR).toBe('data-redeven-desktop-titlebar-no-drag');
-    expect(styleText).toContain("grid-template-columns: minmax(0, 1fr) 4.5rem minmax(0, 24rem) 4.5rem minmax(0, 1fr);");
+    expect(styleText).toContain("grid-template-columns: minmax(max-content, 1fr) minmax(0, 24rem) minmax(max-content, 1fr);");
     expect(styleText).toContain("grid-column: 3;");
   });
 });

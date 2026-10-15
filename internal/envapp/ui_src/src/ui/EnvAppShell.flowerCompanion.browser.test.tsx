@@ -11,6 +11,9 @@ import { Dialog } from '@floegence/floe-webapp-core/ui';
 import { REDEVEN_BROWSER_MOBILE_QUERY } from './mobileViewportPolicy';
 import { FileBrowserWorkspace } from './widgets/FileBrowserWorkspace';
 import { FlowerTurnLauncherWindow as SharedFlowerTurnLauncherWindow } from '../../../../flower_ui/src/FlowerTurnLauncherWindow';
+import type { DocumentAssetRecoveryReason } from '@floegence/floe-webapp-core/app';
+import { buildDesktopWindowChromeStyleText, DESKTOP_WINDOW_CHROME_STYLE_ID } from '../../../../../desktop/src/shared/windowChromeContract';
+import { resolveDesktopWindowChromeSnapshot } from '../../../../../desktop/src/shared/windowChromePlatform';
 
 const EnvContextMock = createContext({} as any);
 const FilePreviewContextMock = createContext({} as any);
@@ -18,6 +21,11 @@ const FileBrowserSurfaceContextMock = createContext({} as any);
 let floeRegistryComponents = (): any[] => [];
 let testFilesMenu = false;
 let testRealFlowerLauncher = false;
+const [assetRecoveryReason, setAssetRecoveryReason] = createSignal<DocumentAssetRecoveryReason>(null);
+
+vi.mock('./reconnect/createEnvAppAssetRecovery', () => ({
+  createEnvAppAssetRecovery: () => ({ reason: assetRecoveryReason }),
+}));
 
 const filePreviewOpenPreviewMock = vi.fn(async () => undefined);
 const filePreviewClosePreviewMock = vi.fn();
@@ -912,6 +920,8 @@ vi.mock('./services/desktopShellCommandPalette', () => ({ buildDesktopShellComma
 vi.mock('./services/desktopShellBridge', () => ({
   desktopShellBridgeAvailable: () => false,
   desktopShellServiceCanvasWindowOpenAvailable: () => false,
+  desktopShellExternalURLOpenAvailable: () => false,
+  openExternalURLInDesktopShell: vi.fn(async () => null),
   openServiceCanvasWindowInDesktopShell: vi.fn(async () => null),
   prepareDesktopBrowserWindow: vi.fn(async () => false),
   getRuntimeMaintenanceContextFromDesktopShell: vi.fn(async () => null),
@@ -1125,6 +1135,9 @@ afterEach(async () => {
   while (disposers.length > 0) disposers.pop()?.();
   document.body.replaceChildren();
   document.documentElement.removeAttribute('style');
+  document.getElementById(DESKTOP_WINDOW_CHROME_STYLE_ID)?.remove();
+  delete document.documentElement.dataset.redevenDesktopWindowChromeMode;
+  delete document.documentElement.dataset.redevenDesktopWindowControlsSide;
   await mediaCommands.emulateMediaPreferences({ reducedMotion: 'no-preference' });
   await mediaCommands.emulateTouchInput(false);
   await page.viewport(1280, 800);
@@ -1135,6 +1148,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   testFilesMenu = false;
   testRealFlowerLauncher = false;
+  setAssetRecoveryReason(null);
   debugConsoleEnabled = false;
   protocolSnapshot = Object.freeze({ state: 'idle', attempt: 0 });
   protocolConnectionConfig = null;
@@ -1190,6 +1204,78 @@ beforeEach(() => {
 });
 
 describe('EnvAppShell Activity Flower browser integration', () => {
+  it.each([
+    ['darwin', false, 1280],
+    ['darwin', false, 1024],
+    ['darwin', true, 960],
+    ['win32', false, 960],
+    ['linux', false, 960],
+  ] as const)('keeps recovery notices below native controls on %s (fullscreen %s, width %i)', async (platform, fullScreen, width) => {
+    await page.viewport(width, 800);
+    testRealFlowerLauncher = true;
+    const chrome = resolveDesktopWindowChromeSnapshot(platform, { fullScreen });
+    const style = document.createElement('style');
+    style.id = DESKTOP_WINDOW_CHROME_STYLE_ID;
+    style.textContent = buildDesktopWindowChromeStyleText(chrome);
+    document.head.append(style);
+    document.documentElement.dataset.redevenDesktopWindowChromeMode = chrome.mode;
+    document.documentElement.dataset.redevenDesktopWindowControlsSide = chrome.controlsSide;
+    const fixture = await mountShell();
+    await userEvent.click(document.querySelector<HTMLButtonElement>('[data-testid="activity-open-flower-launcher"]')!);
+    await vi.waitFor(() => expect(document.querySelector('.flower-turn-launcher-window textarea')).toBeTruthy());
+    const editor = document.querySelector<HTMLTextAreaElement>('.flower-turn-launcher-window textarea')!;
+    await userEvent.fill(editor, 'Preserve this draft when a recovery notice appears');
+    const visible = (selector: string) => Array.from(fixture.host.querySelectorAll<HTMLElement>(selector))
+      .filter(element => element.getBoundingClientRect().width > 0);
+
+    for (const reason of ['load-failed', 'updated', null] as const) {
+      setAssetRecoveryReason(reason);
+      await flushAsync();
+      for (const mode of ['Workbench', 'Activity']) {
+        const tab = Array.from(fixture.host.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
+          .find(element => element.textContent?.trim() === mode && element.getBoundingClientRect().width > 0)!;
+        await userEvent.click(tab);
+        await flushAsync();
+        const headers = visible('[data-floe-shell-slot="top-bar"]');
+        expect(headers).toHaveLength(1);
+        const bounds = headers[0]!.getBoundingClientRect();
+        expect(bounds.top).toBe(0);
+        expect(bounds.height).toBeGreaterThanOrEqual(chrome.titleBarHeight);
+        for (const button of headers[0]!.querySelectorAll<HTMLButtonElement>('button')) {
+          const control = button.getBoundingClientRect();
+          if (!control.width) continue;
+          expect(control.left).toBeGreaterThanOrEqual(chrome.contentInsetStart);
+          expect(control.right).toBeLessThanOrEqual(width - chrome.contentInsetEnd);
+        }
+        const notices = visible('[role="status"]');
+        expect(notices).toHaveLength(reason ? 1 : 0);
+        expect(fixture.host.querySelectorAll('[role="status"]')).toHaveLength(reason ? 1 : 0);
+        if (reason) {
+          const notice = notices[0]!;
+          expect(notice.getBoundingClientRect().top).toBeGreaterThanOrEqual(bounds.bottom);
+          expect(notice.scrollWidth).toBeLessThanOrEqual(notice.clientWidth);
+          expect(notice.querySelector('button')!.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+        }
+        expect(document.querySelector('.flower-turn-launcher-window textarea')).toBe(editor);
+        expect(editor.value).toBe('Preserve this draft when a recovery notice appears');
+      }
+    }
+  });
+
+  it('keeps mobile recovery notices inside the page without displacing navigation', async () => {
+    await page.viewport(360, 700);
+    const fixture = await mountProductionMobileShell();
+    const navigation = fixture.mobileTabBar.getBoundingClientRect();
+    setAssetRecoveryReason('load-failed');
+    await flushAsync();
+    const notice = fixture.body.querySelector<HTMLElement>('[role="status"]')!;
+    expect(notice.getBoundingClientRect().top).toBe(fixture.body.getBoundingClientRect().top);
+    expect(notice.scrollWidth).toBeLessThanOrEqual(notice.clientWidth);
+    expect(notice.getBoundingClientRect().bottom).toBeLessThan(navigation.top);
+    expect(fixture.mobileTabBar.getBoundingClientRect().toJSON()).toEqual(navigation.toJSON());
+    expect(notice.querySelector('button')!.getBoundingClientRect().right).toBeLessThanOrEqual(360);
+  });
+
   it('reclaims the entire desktop bottom edge without runtime grants', async () => {
     await page.viewport(1280, 800);
     getEnvironmentMock.mockResolvedValue({

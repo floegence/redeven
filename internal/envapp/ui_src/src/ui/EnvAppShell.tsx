@@ -5067,6 +5067,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       topBarActions={<HeaderActions />}
     >
       <div class="h-full min-h-0 overflow-hidden flex flex-col">
+        <PageAssetRecoveryNotice reason={viewMode() === 'activity' ? assetRecovery.reason() : null} ready={assetRecoveryReady()} />
         <div
           ref={setActivityNotesViewportAnchor}
           class="flex-1 min-h-0 overflow-hidden relative outline-none"
@@ -5218,7 +5219,6 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
           data-redeven-interaction-mode={layout.isMobile() ? 'mobile' : 'desktop'}
           data-env-shell-background
         >
-          <PageAssetRecoveryNotice reason={assetRecovery.reason()} ready={assetRecoveryReady()} />
           <KeepAliveStack
             class="redeven-env-shell-stage min-h-0 flex-1"
             activeId={viewMode()}
@@ -5239,11 +5239,16 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
                 id: 'workbench',
                 render: () => (
                   <DisplayModePageShell logo={<ShellLogo />} actions={<HeaderActions />}>
-                    <ErrorBoundary fallback={() => <PageLoadError ready={assetRecoveryReady()} />}>
-                      <Suspense fallback={<ActivityPageLoading />}>
-                        {renderWorkbenchContent()}
-                      </Suspense>
-                    </ErrorBoundary>
+                    <div class="flex h-full min-h-0 flex-col overflow-hidden">
+                      <PageAssetRecoveryNotice reason={viewMode() === 'workbench' ? assetRecovery.reason() : null} ready={assetRecoveryReady()} />
+                      <div class="min-h-0 flex-1 overflow-hidden">
+                        <ErrorBoundary fallback={() => <PageLoadError ready={assetRecoveryReady()} />}>
+                          <Suspense fallback={<ActivityPageLoading />}>
+                            {renderWorkbenchContent()}
+                          </Suspense>
+                        </ErrorBoundary>
+                      </div>
+                    </div>
                   </DisplayModePageShell>
                 ),
               },
