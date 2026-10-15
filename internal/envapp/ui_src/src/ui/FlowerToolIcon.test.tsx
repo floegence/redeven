@@ -11,6 +11,28 @@ const disposers: (() => void)[] = [];
 afterEach(() => { disposers.splice(0).forEach(dispose => dispose()); vi.restoreAllMocks(); document.body.replaceChildren(); });
 
 describe('semantic tool icons', () => {
+ it('uses the same terminal glyph for starting a command and reading its output', () => {
+  const host = document.createElement('div');
+  disposers.push(render(() => <><FlowerToolIcon toolName="terminal.exec" running={false} /><FlowerToolIcon toolName="terminal.read" running={false} /></>, host));
+  const [exec, read] = host.querySelectorAll('svg');
+  expect(exec.outerHTML).toBe(read.outerHTML);
+ });
+ it.each(['terminal.exec', 'terminal.read'])('restores the four-square loader only while %s is running', name => {
+  const animate = vi.spyOn(SVGElement.prototype, 'animate');
+  const [running, setRunning] = createSignal(false);
+  const host = document.createElement('div');
+  disposers.push(render(() => <FlowerToolIcon toolName={name} running={running()} />, host));
+  expect(host.querySelector('svg')).not.toBeNull();
+  expect(host.querySelector('.flower-activity-inline-loader')).toBeNull();
+  setRunning(true);
+  expect(host.querySelectorAll('.flower-activity-inline-loader-square')).toHaveLength(4);
+  expect(host.querySelector('.flower-activity-inline-loader')?.getAttribute('aria-hidden')).toBe('true');
+  expect(host.querySelector('svg')).toBeNull();
+  expect(animate).not.toHaveBeenCalled();
+  setRunning(false);
+  expect(host.querySelector('.flower-activity-inline-loader')).toBeNull();
+  expect(host.querySelector('svg')).not.toBeNull();
+ });
  it('validates every animation against the actual icon parts', () => {
   for (const name of Object.keys(flowerToolMotion)) {
    const host=document.createElement('div');
@@ -38,7 +60,7 @@ describe('semantic tool icons', () => {
   let reduce = false; let change = () => {};
   vi.spyOn(window, 'matchMedia').mockImplementation(() => ({get matches(){return reduce;},addEventListener: (_: string, listener: () => void) => { change=listener; }, removeEventListener: vi.fn()}) as unknown as MediaQueryList);
   const host=document.createElement('div'); document.body.append(host);
-  const dispose=render(() => <FlowerToolIcon toolName="terminal.exec" running />,host);
+  const dispose=render(() => <FlowerToolIcon toolName="file.edit" running />,host);
   expect(animate).toHaveBeenCalled(); reduce=true; change(); expect(cancel).toHaveBeenCalled();
   const count=animate.mock.calls.length; change(); expect(animate).toHaveBeenCalledTimes(count);
   dispose();

@@ -3,14 +3,14 @@ import './flower-feature.css';
 import { For, createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { expect, it } from 'vitest';
-import { page } from 'vitest/browser';
+import { commands, page } from 'vitest/browser';
 import { FlowerToolIcon } from '../../../../flower_ui/src/FlowerToolIcon';
 import { flowerToolMotion } from '../../../../flower_ui/src/flowerToolMotion';
 import { FlowerActivityPreview } from '../../../../flower_ui/src/FlowerActivityPreview';
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../../../../flower_ui/src/copy';
 import { activityItem, activityTimeline, adapter, liveBootstrap, renderSurfaceWithAdapter, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 
-it('animates all 58 semantic glyphs and restores static shapes without replacing nodes', async () => {
+it('animates every tool type and restores static glyphs at settlement', async () => {
   await page.viewport(1100, 1000);
   const [running, setRunning] = createSignal(true);
   const host = document.createElement('div');
@@ -25,7 +25,9 @@ it('animates all 58 semantic glyphs and restores static shapes without replacing
   try {
     await waitFor(() => host.getAnimations({ subtree: true }).length > 58);
     const svgs = [...host.querySelectorAll('svg')];
-    expect(svgs).toHaveLength(174);
+    expect(svgs).toHaveLength(172);
+    expect(host.querySelectorAll('.flower-activity-inline-loader')).toHaveLength(2);
+    expect(host.querySelectorAll('.flower-activity-inline-loader-square')).toHaveLength(8);
     const animations = host.getAnimations({ subtree: true });
     const start = animations.map(animation => animation.effect?.getComputedTiming().duration as number);
     for (const phase of [0, 0.35, 0.7, 0.999]) {
@@ -35,9 +37,41 @@ it('animates all 58 semantic glyphs and restores static shapes without replacing
     }
     setRunning(false);
     expect(host.getAnimations({ subtree: true })).toHaveLength(0);
-    expect([...host.querySelectorAll('svg')].every((svg, index) => svg === svgs[index])).toBe(true);
+    expect(host.querySelectorAll('svg')).toHaveLength(174);
+    expect(host.querySelector('.flower-activity-inline-loader')).toBeNull();
+    expect(svgs.every(svg => svg.isConnected)).toBe(true);
     expect([...host.querySelectorAll('g')].every(group => !group.style.strokeDasharray && !group.style.opacity)).toBe(true);
   } finally { dispose(); host.remove(); }
+});
+
+it('uses the original staggered four-square command motion and honors reduced motion changes', async () => {
+  const media = commands as unknown as { emulateMediaPreferences: (preferences: { reducedMotion: 'reduce' | 'no-preference' }) => Promise<void> };
+  await media.emulateMediaPreferences({ reducedMotion: 'no-preference' });
+  const host = document.createElement('div');
+  document.body.append(host);
+  const [running, setRunning] = createSignal(true);
+  const dispose = render(() => <><FlowerToolIcon toolName="terminal.exec" running={running()} /><FlowerToolIcon toolName="terminal.read" running={running()} /></>, host);
+  try {
+    await waitFor(() => host.getAnimations({ subtree: true }).length === 8);
+    const squares = [...host.querySelectorAll<HTMLElement>('.flower-activity-inline-loader-square')];
+    expect(squares.slice(0, 4).map(square => getComputedStyle(square).animationDelay)).toEqual(['0s', '0.135s', '0.405s', '0.27s']);
+    expect(squares.every(square => getComputedStyle(square).animationName === 'flower-activity-loader-square')).toBe(true);
+    const animation = squares[0].getAnimations()[0];
+    animation.pause();
+    animation.currentTime = 0;
+    const initial = getComputedStyle(squares[0]).transform;
+    animation.currentTime = 675;
+    expect(getComputedStyle(squares[0]).transform).not.toBe(initial);
+    await media.emulateMediaPreferences({ reducedMotion: 'reduce' });
+    await waitFor(() => host.getAnimations({ subtree: true }).length === 0);
+    expect(squares.every(square => getComputedStyle(square).transform === 'none')).toBe(true);
+    await media.emulateMediaPreferences({ reducedMotion: 'no-preference' });
+    await waitFor(() => host.getAnimations({ subtree: true }).length === 8);
+    setRunning(false);
+    expect(host.getAnimations({ subtree: true })).toHaveLength(0);
+    const [exec, read] = host.querySelectorAll('svg');
+    expect(exec.outerHTML).toBe(read.outerHTML);
+  } finally { dispose(); host.remove(); await media.emulateMediaPreferences({ reducedMotion: 'no-preference' }); }
 });
 
 it('keeps wrapped previews expandable even when the supplied text is short', async () => {

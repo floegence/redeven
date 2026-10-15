@@ -43,16 +43,19 @@ panel containing focus, the trigger receives focus with `preventScroll`.
 
 Collapsed rows retain their compact geometry. Each registered tool, the hosted
 web-search activity, source activity, MCP extension, and unknown extension has
-an explicit type glyph. Running motion animates the meaningful parts of that
-same glyph. Successful and failed calls retain the full static glyph with the
+an explicit type glyph. Command execution and subsequent output reads share
+one terminal glyph and use the existing four-square loader while running.
+Other running tools animate the meaningful parts of their type glyph.
+Successful and failed calls retain the full static glyph with the
 existing status color; no badge obscures it. Canonical status remains available
 to assistive technology without repeating it in the expanded content.
 
-The pinned Lucide glyph order and 58 independent motion recipes form one
-presentation catalog. Status changes cancel every animation and remove running
-base styles without replacing the SVG. Unmount cancels all work. The system
-reduced-motion preference keeps complete static glyphs, including when it changes
-during execution. Historical running rows animate only after live presentation
+The pinned Lucide glyph order and tool motion recipes form one presentation
+catalog. Status changes cancel every animation and remove running base styles;
+command settlement replaces the loader with the terminal glyph. Other tools
+retain the same SVG. Unmount cancels all work. The system reduced-motion
+preference stops glyph and four-square motion, including when it changes during
+execution. Historical running rows animate only after live presentation
 is confirmed. Both Desktop and Env App consume the same component.
 
 ## Intent, inputs and results
