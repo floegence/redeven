@@ -2,6 +2,7 @@ package ai
 
 import (
 	"encoding/json"
+	flruntime "github.com/floegence/floret/v7/runtime"
 	"io"
 	"log/slog"
 	"net/http"
@@ -161,7 +162,7 @@ func testComputerAutonomousProductionToolLoop(t *testing.T, stale bool) {
 	state := t.TempDir()
 	svc, err := NewService(Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: state, AgentHomeDir: state, Shell: "/bin/sh", TargetResolver: host, TargetToolExecutor: host,
 		Config:                &config.AIConfig{CurrentModelID: "openai/gpt-5-mini", Providers: []config.AIProvider{{ID: "openai", Name: "OpenAI", Type: "openai", BaseURL: provider.URL + "/v1", Models: []config.AIProviderModel{{ModelName: "gpt-5-mini", InputModalities: []string{"text", "image"}}}}}},
-		ResolveProviderAPIKey: func(string) (string, bool, error) { return "test", true, nil }, RunMaxWallTime: 30 * time.Second, RunIdleTimeout: 30 * time.Second})
+		ResolveProviderAPIKey: func(string) (string, bool, error) { return "test", true, nil }, ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration: 30 * time.Second, FirstOutputTimeout: 30 * time.Second, IdleTimeout: 30 * time.Second}})
 	if err != nil {
 		t.Fatal(err)
 	}

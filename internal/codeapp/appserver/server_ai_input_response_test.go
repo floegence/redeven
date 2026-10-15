@@ -67,8 +67,7 @@ func TestServer_AIThreadInputResponseUsesURLThreadID(t *testing.T) {
 				}},
 			}},
 		},
-		RunMaxWallTime:   3 * time.Second,
-		RunIdleTimeout:   3 * time.Second,
+		ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration:3 * time.Second, FirstOutputTimeout:3 * time.Second, IdleTimeout:3 * time.Second},
 		PersistOpTimeout: 2 * time.Second,
 		ResolveProviderAPIKey: func(string) (string, bool, error) {
 			return "sk-test", true, nil

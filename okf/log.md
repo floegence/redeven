@@ -1,5 +1,11 @@
 # Redeven OKF Update Log
 
+## 2026-10-15: Bounded FlowNode stream recovery
+
+- Adopt published Floret v7.42.0 for one [physical-request timeout and recovery owner](ai/model-provider-surface-and-history.md), semantic progress, and canonical timeout details.
+- Finish Responses on their terminal event and release transport resources; remove unused host run timers and activity accounting.
+- Show [output pauses](ui/flower-output-progress.md) after fifteen seconds with honest token estimates, localized recovery, and usable Stop, navigation and safe retry.
+
 ## 2026-10-15: Compact context statistics
 
 - Summarize [runtime fact categories](ai/flower-managed-model-context.md) with localized horizontal bars and Unicode text shares; disclose complete text on demand.

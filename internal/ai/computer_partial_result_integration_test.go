@@ -69,7 +69,7 @@ func TestComputerPartialErrorAndUnknownOutcomeSurviveRestart(t *testing.T) {
 			t.Logf("owned runtime pid=%d provider=%s state=%s", os.Getpid(), provider.URL, state)
 			options := Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: state, AgentHomeDir: state, Shell: "/bin/sh", TargetResolver: registry, TargetToolExecutor: executor,
 				Config:                &config.AIConfig{CurrentModelID: "openai/gpt-5-mini", Providers: []config.AIProvider{{ID: "openai", Name: "OpenAI", Type: "openai", BaseURL: provider.URL + "/v1", Models: []config.AIProviderModel{{ModelName: "gpt-5-mini"}}}}},
-				ResolveProviderAPIKey: func(string) (string, bool, error) { return "fixture", true, nil }, RunMaxWallTime: 5 * time.Second, RunIdleTimeout: 5 * time.Second}
+				ResolveProviderAPIKey: func(string) (string, bool, error) { return "fixture", true, nil }, ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration: 5 * time.Second, FirstOutputTimeout: 5 * time.Second, IdleTimeout: 5 * time.Second}}
 			svc, err := NewService(options)
 			if err != nil {
 				t.Fatal(err)

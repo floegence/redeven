@@ -70,8 +70,8 @@ func TestE2E_FlowerOllamaContextCompaction(t *testing.T) {
 			cfg := &config.AIConfig{CurrentModelID: modelID, PermissionType: config.AIPermissionReadonly, Providers: []config.AIProvider{profile}}
 			stateRoot, homeRoot := t.TempDir(), t.TempDir()
 			opts := Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: stateRoot, AgentHomeDir: homeRoot, Shell: "bash", Config: cfg,
-				RunMaxWallTime: 8 * time.Minute, RunIdleTimeout: 3 * time.Minute,
-				ResolveProviderAPIKey: func(id string) (string, bool, error) { return apiKey, id == providerID && apiKey != "", nil },
+				ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration: 8 * time.Minute, FirstOutputTimeout: 3 * time.Minute, IdleTimeout: 3 * time.Minute},
+				ResolveProviderAPIKey:        func(id string) (string, bool, error) { return apiKey, id == providerID && apiKey != "", nil },
 			}
 			svc, err := NewService(opts)
 			if err != nil {

@@ -2535,6 +2535,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         return copy().chat.runErrors.providerServerError;
       case 'provider_unreachable':
         return copy().chat.runErrors.providerUnreachable;
+      case 'provider_request_timeout':
+        return copy().chat.runErrors.providerRequestTimeout;
       case 'provider_stream_interrupted':
         return copy().chat.runErrors.providerStreamInterrupted;
       case 'provider_request_invalid': return copy().chat.runErrors.providerRequestInvalid;

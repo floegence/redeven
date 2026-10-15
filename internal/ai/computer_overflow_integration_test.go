@@ -3,6 +3,7 @@ package ai
 import (
 	"encoding/json"
 	"fmt"
+	flruntime "github.com/floegence/floret/v7/runtime"
 	"io"
 	"log/slog"
 	"net/http"
@@ -92,7 +93,7 @@ func testComputerDeepSeekImageOverflow(t *testing.T, longHistory bool) {
 	}
 	svc, err := NewService(Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: state, AgentHomeDir: state, Shell: "/bin/sh", TargetResolver: host, TargetToolExecutor: host,
 		Config:                &config.AIConfig{CurrentModelID: "deepseek/deepseek-v4-flash-vision-exp", Providers: []config.AIProvider{{ID: "deepseek", Name: "DeepSeek", Type: "deepseek", BaseURL: server.URL, Models: []config.AIProviderModel{model}}}},
-		ResolveProviderAPIKey: func(string) (string, bool, error) { return "test", true, nil }, RunMaxWallTime: 15 * time.Second, RunIdleTimeout: 10 * time.Second})
+		ResolveProviderAPIKey: func(string) (string, bool, error) { return "test", true, nil }, ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration: 15 * time.Second, FirstOutputTimeout: 10 * time.Second, IdleTimeout: 10 * time.Second}})
 	if err != nil {
 		t.Fatal(err)
 	}

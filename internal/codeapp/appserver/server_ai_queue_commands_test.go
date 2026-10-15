@@ -36,7 +36,7 @@ func TestServerQueueCommandsPreserveCanonicalInputAndPublicProjection(t *testing
 				Config: &config.AIConfig{CurrentModelID: "openai/gpt-5-mini", Providers: []config.AIProvider{{ID: "openai", Type: "openai", BaseURL: provider.URL,
 					Models: []config.AIProviderModel{{ModelName: "gpt-5-mini"}}}}},
 				ResolveProviderAPIKey: func(string) (string, bool, error) { return "fixture", true, nil },
-				RunMaxWallTime:        time.Minute, RunIdleTimeout: time.Minute,
+				ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration:time.Minute, FirstOutputTimeout:time.Minute, IdleTimeout:time.Minute},
 			})
 			if err != nil {
 				t.Fatal(err)

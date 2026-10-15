@@ -11,7 +11,6 @@ import (
 )
 
 const (
-	floretEventStepStart             = observation.EventTypeStepStart
 	floretEventProviderRequest       = observation.EventTypeProviderRequest
 	floretEventProviderFinish        = observation.EventTypeProviderFinish
 	floretEventProviderRetry         = observation.EventTypeProviderRetry
@@ -103,8 +102,6 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 			"step_index": ev.Step,
 			"message":    strings.TrimSpace(ev.Message),
 		})
-	case floretEventStepStart:
-		r.touchActivity()
 	case floretEventToolApprovalRequested, floretEventToolApprovalApproved, floretEventToolApprovalRejected, floretEventToolApprovalTimedOut, floretEventToolApprovalCanceled:
 		r.recordRunDiagnostic("floret."+string(ev.Type), RealtimeStreamKindLifecycle, map[string]any{
 			"tool_id":   strings.TrimSpace(ev.ToolID),
@@ -578,7 +575,6 @@ func (r *run) applyFloretStreamObservation(stream *flruntime.StreamObservation) 
 		}
 	case flruntime.StreamObservationReasoningDelta:
 		if stream.Text != "" {
-			r.touchActivity()
 			_ = r.appendThinkingDelta(stream.Text)
 		}
 	case flruntime.StreamObservationToolCallStart, flruntime.StreamObservationToolCallDelta, flruntime.StreamObservationToolCallEnd:

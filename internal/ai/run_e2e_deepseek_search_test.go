@@ -58,9 +58,9 @@ func TestE2E_FlowerDeepSeekV4WebResearchBoundary(t *testing.T) {
 			stateDir := t.TempDir()
 			opts := Options{
 				Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: stateDir, AgentHomeDir: stateDir, Shell: "/bin/sh",
-				Config:         &config.AIConfig{CurrentModelID: "deepseek/" + model, Providers: []config.AIProvider{{ID: "deepseek", Type: "deepseek", BaseURL: proxyURL, Models: config.AIProviderCatalog("deepseek")}}},
-				RunMaxWallTime: 2 * time.Minute, RunIdleTimeout: time.Minute,
-				ResolveProviderAPIKey: func(string) (string, bool, error) { return apiKey, true, nil },
+				Config:                       &config.AIConfig{CurrentModelID: "deepseek/" + model, Providers: []config.AIProvider{{ID: "deepseek", Type: "deepseek", BaseURL: proxyURL, Models: config.AIProviderCatalog("deepseek")}}},
+				ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration: 2 * time.Minute, FirstOutputTimeout: time.Minute, IdleTimeout: time.Minute},
+				ResolveProviderAPIKey:        func(string) (string, bool, error) { return apiKey, true, nil },
 			}
 			svc, err := NewService(opts)
 			if err != nil {

@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	flruntime "github.com/floegence/floret/v7/runtime"
 	"io"
 	"log/slog"
 	"net/http"
@@ -376,7 +377,7 @@ func TestComputerPairedModelBenchmark(t *testing.T) {
 					hostClient.Transport = &computerBenchmarkHostTransport{RoundTripper: hostClient.Transport, metrics: metrics}
 					state := t.TempDir()
 					svc, err := NewService(Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: state, AgentHomeDir: state, Shell: "/bin/sh", TargetResolver: runtime, TargetToolExecutor: runtime,
-						Config: &config.AIConfig{CurrentModelID: selected.ID + "/" + model, Providers: []config.AIProvider{selected}}, ResolveProviderAPIKey: func(string) (string, bool, error) { return "benchmark", true, nil }, RunMaxWallTime: 3 * time.Minute, RunIdleTimeout: 90 * time.Second})
+						Config: &config.AIConfig{CurrentModelID: selected.ID + "/" + model, Providers: []config.AIProvider{selected}}, ResolveProviderAPIKey: func(string) (string, bool, error) { return "benchmark", true, nil }, ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration: 3 * time.Minute, FirstOutputTimeout: 90 * time.Second, IdleTimeout: 90 * time.Second}})
 					if err != nil {
 						t.Fatal(err)
 					}

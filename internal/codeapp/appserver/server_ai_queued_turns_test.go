@@ -81,8 +81,7 @@ func TestServer_AIQueueEndpoints(t *testing.T) {
 		AgentHomeDir:     stateDir,
 		Shell:            "bash",
 		Config:           cfg,
-		RunMaxWallTime:   30 * time.Second,
-		RunIdleTimeout:   30 * time.Second,
+		ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration:30 * time.Second, FirstOutputTimeout:30 * time.Second, IdleTimeout:30 * time.Second},
 		PersistOpTimeout: 2 * time.Second,
 		ResolveProviderAPIKey: func(string) (string, bool, error) {
 			return "sk-test", true, nil

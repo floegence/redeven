@@ -100,7 +100,7 @@ func newOllamaTaskFixture(t *testing.T, profile config.AIProvider, model config.
 	profile.BaseURL = f.fault.server.URL + "/v1"
 	// Runtime journals must not appear among task files: otherwise a child
 	// could recover a fact from SQLite instead of its inherited conversation.
-	f.opts = Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: t.TempDir(), AgentHomeDir: f.root, Shell: "/bin/bash", Config: &config.AIConfig{CurrentModelID: modelID, PermissionType: config.AIPermissionFullAccess, Providers: []config.AIProvider{profile}}, RunMaxWallTime: 6 * time.Minute, RunIdleTimeout: 2 * time.Minute, ToolApprovalTimeout: 3 * time.Minute, ResolveProviderAPIKey: func(string) (string, bool, error) { return key, key != "", nil }}
+	f.opts = Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: t.TempDir(), AgentHomeDir: f.root, Shell: "/bin/bash", Config: &config.AIConfig{CurrentModelID: modelID, PermissionType: config.AIPermissionFullAccess, Providers: []config.AIProvider{profile}}, ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration: 6 * time.Minute, FirstOutputTimeout: 2 * time.Minute, IdleTimeout: 2 * time.Minute}, ToolApprovalTimeout: 3 * time.Minute, ResolveProviderAPIKey: func(string) (string, bool, error) { return key, key != "", nil }}
 	var err error
 	f.svc, err = NewService(f.opts)
 	if err != nil {

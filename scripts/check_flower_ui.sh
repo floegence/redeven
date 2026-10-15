@@ -75,6 +75,7 @@ main() {
       src/ui/FlowerSurface.visibility.shared.test.tsx \
       src/ui/FlowerThreadCard.performance.test.tsx \
       src/ui/FlowerModelStatusIndicator.test.tsx \
+      src/ui/FlowerProgressIndicator.test.tsx \
       src/ui/FlowerThreadList.delete.test.tsx \
       src/ui/FlowerSurface.navigation.structuredInput.test.tsx \
       src/ui/FlowerSurface.canonicalReferences.test.tsx \
@@ -113,6 +114,7 @@ main() {
     ui_pkg_log ""
     ui_pkg_log "Flower UI: shared timeline projection contracts..."
     ui_pkg_run_pnpm exec vitest run --root "$ROOT_DIR" --config "$dir/vite.config.ts" --environment=node --maxWorkers=2 --testTimeout=10000 \
+      internal/flower_ui/src/providerRequestProgress.test.ts \
       internal/flower_ui/src/flowerToolMotion.test.ts \
       internal/flower_ui/src/webSearchCapability.test.ts \
       internal/flower_ui/src/threadCache.test.ts \
@@ -214,6 +216,8 @@ main() {
         src/ui/FlowerSurface.queuedSendNow.browser.test.tsx \
         src/ui/FlowerSurface.setupGuide.browser.test.tsx \
         src/ui/FlowerSurface.providerReadiness.browser.test.tsx \
+        src/ui/FlowerSurface.providerRetry.browser.test.tsx \
+        src/ui/FlowerSurface.providerRecovery.browser.test.tsx \
         src/ui/FlowerSurface.modelMenu.browser.test.tsx \
         src/ui/FlowerProviderDialog.selection.browser.test.tsx \
         src/ui/FlowerProviderDialog.continuation.browser.test.tsx \

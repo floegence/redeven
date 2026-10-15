@@ -214,6 +214,7 @@ func buildFloretThreadAgent(
 		return nil, errors.New("floret effect adapter requires a run and provider")
 	}
 	agentOptions := []flruntime.AgentOption{
+		flruntime.WithAgentProviderRequestTimeoutPolicy(r.providerRequestTimeoutPolicy),
 		flruntime.WithAgentDynamicToolSurface(r.liveFloretToolSurface(surfaceConfig)),
 		flruntime.WithAgentRunLabels(labels),
 		flruntime.WithAgentEffectAuthorization(floretEffectAuthorizationGateForRun(r)),

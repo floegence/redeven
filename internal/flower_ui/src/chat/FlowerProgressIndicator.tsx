@@ -5,7 +5,7 @@ import { FlowerIcon } from '../icons/FlowerIcon';
 import { trimString } from '../flowerSurfaceModel';
 import type { FlowerProviderRequestProgress } from '../contracts/flowerSurfaceContracts';
 import type { FlowerSurfaceCopy } from '../copy';
-import { flowerRequestWaitSeconds } from '../providerRequestProgress';
+import { flowerRequestStallSeconds, flowerRequestWaitSeconds } from '../providerRequestProgress';
 
 export type FlowerProgressIndicatorState = Readonly<{
   kind: string;
@@ -21,14 +21,19 @@ export type FlowerProgressIndicatorProps = Readonly<{
 
 export const FlowerProgressIndicator: Component<FlowerProgressIndicatorProps> = (props) => {
   const runID = () => trimString(props.progress?.runID) || null;
-  const label = () => props.label.replace(/\.\.\.$/, '');
+
   const [now, setNow] = createSignal(performance.now());
   const waiting = createMemo(() => props.progress?.kind === 'waiting_response'
     && props.progress.request != null && !props.progress.request.first_output_at);
+  const streaming = createMemo(() => !!props.progress?.request?.first_output_at
+    && (props.progress.kind === 'streaming' || props.progress.kind === 'waiting_response'));
+  const stalledSeconds = createMemo(() => streaming() ? flowerRequestStallSeconds(props.progress?.request, now()) : null);
+  const label = () => stalledSeconds() !== null && props.outputCopy
+    ? props.outputCopy.waitingForContinuation : props.label.replace(/\.\.\.$/, '');
   createEffect(() => {
-    if (!waiting()) return;
+    if (!waiting() && !streaming()) return;
     // Align the first tick to a whole second of the sampled request age.
-    const anchor = props.progress?.request?.wait_anchor_monotonic_ms;
+    const anchor = waiting() ? props.progress?.request?.wait_anchor_monotonic_ms : props.progress?.request?.progress_anchor_monotonic_ms;
     if (anchor === undefined) return;
     let timer: ReturnType<typeof setTimeout>;
     const tick = () => {
@@ -47,9 +52,10 @@ export const FlowerProgressIndicator: Component<FlowerProgressIndicatorProps> = 
       const seconds = flowerRequestWaitSeconds(request, now());
       return seconds === null ? null : { label: props.outputCopy.elapsed(seconds) };
     }
-    return request.first_output_at && (progress?.kind === 'streaming' || progress?.kind === 'finalizing')
-      ? { label: props.outputCopy.tokens(request.estimated_output_tokens), title: props.outputCopy.outputTooltip }
-      : null;
+    if (!request.first_output_at || (!streaming() && progress?.kind !== 'finalizing')) return null;
+    const seconds = stalledSeconds();
+    const tokens = props.outputCopy.tokens(request.estimated_output_tokens);
+    return { label: seconds === null ? tokens : `${tokens} · ${props.outputCopy.elapsed(seconds)}`, title: props.outputCopy.outputTooltip };
   });
 
   return (

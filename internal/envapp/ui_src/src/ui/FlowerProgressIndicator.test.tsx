@@ -151,3 +151,29 @@ describe('FlowerProgressIndicator', () => {
     expect(nextIndicator?.getAttribute('data-flower-progress-run-id')).toBe('run-2');
   });
 });
+
+it('shows a pause after fifteen seconds, retains tokens, and resumes on semantic progress', async () => {
+  vi.useFakeTimers({ toFake: ['performance', 'setTimeout', 'clearTimeout'] });
+  const { host, setProgress } = renderIndicator();
+  const raw = { logical_request_id: 'request', attempt_id: 'attempt', attempt_epoch: 1,
+    started_at: '2026-01-01T00:00:00Z', first_output_at: '2026-01-01T00:00:01Z', last_progress_at: '2026-01-01T00:00:02Z', estimated_output_tokens: 42 };
+  const request = mapFlowerProviderRequestProgress(raw, Date.parse(raw.last_progress_at));
+  setProgress({ kind: 'streaming', runID: 'run-1', request });
+  await vi.advanceTimersByTimeAsync(14999);
+  expect(host.textContent).not.toContain('Waiting for model to continue');
+  await vi.advanceTimersByTimeAsync(1);
+  expect(host.textContent).toContain('Waiting for model to continue');
+  expect(host.textContent).toContain('42 tokens');
+  expect(host.textContent).toContain('15 s');
+  const resumed = mapFlowerProviderRequestProgress({ ...raw, last_progress_at: '2026-01-01T00:00:17Z', estimated_output_tokens: 43 }, Date.parse('2026-01-01T00:00:17Z'), request);
+  setProgress({ kind: 'streaming', runID: 'run-1', request: resumed });
+  await flushEffects();
+  expect(host.textContent).not.toContain('Waiting for model to continue');
+  expect(host.textContent).toContain('43 tokens');
+  setProgress({ kind: 'tool_execution', runID: 'run-1', request: resumed });
+  await vi.advanceTimersByTimeAsync(30000);
+  expect(host.textContent).not.toContain('Waiting for model to continue');
+  expect(host.querySelector('.flower-model-status-metric')).toBeNull();
+  setProgress(null);
+  expect(host.querySelector('.flower-model-status-indicator')).toBeNull();
+});

@@ -152,7 +152,7 @@ func openRealtimeTestService(t *testing.T, stateDir string, baseURL string) *Ser
 	cfg := &config.AIConfig{CurrentModelID: "openai/gpt-5-mini", Providers: []config.AIProvider{{ID: "openai", Type: "openai", BaseURL: strings.TrimSuffix(baseURL, "/") + "/v1", Models: []config.AIProviderModel{{ModelName: "gpt-5-mini"}}}}}
 	svc, err := NewService(Options{
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: stateDir, AgentHomeDir: t.TempDir(), Shell: "bash", Config: cfg,
-		RunMaxWallTime: 30 * time.Second, RunIdleTimeout: 10 * time.Second, ToolApprovalTimeout: 5 * time.Second,
+		ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration: 30 * time.Second, FirstOutputTimeout: 10 * time.Second, IdleTimeout: 10 * time.Second}, ToolApprovalTimeout: 5 * time.Second,
 		ResolveProviderAPIKey: func(providerID string) (string, bool, error) {
 			return "sk-test", strings.TrimSpace(providerID) == "openai", nil
 		},
@@ -174,7 +174,7 @@ func newSendTurnTestService(t *testing.T) *Service {
 	}
 	svc, err := NewService(Options{
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: t.TempDir(), AgentHomeDir: t.TempDir(), Shell: "/bin/bash", Config: cfg,
-		PersistOpTimeout: 2 * time.Second, RunMaxWallTime: 2 * time.Second, RunIdleTimeout: time.Second,
+		PersistOpTimeout: 2 * time.Second, ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration: 2 * time.Second, FirstOutputTimeout: time.Second, IdleTimeout: time.Second},
 		ResolveProviderAPIKey: func(string) (string, bool, error) { return "", false, nil },
 	})
 	if err != nil {
@@ -191,7 +191,7 @@ func newTestService(t *testing.T, cfg *config.AIConfig) *Service {
 	}
 	svc, err := NewService(Options{
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: t.TempDir(), AgentHomeDir: t.TempDir(), Shell: "/bin/bash", Config: cfg,
-		PersistOpTimeout: 2 * time.Second, RunMaxWallTime: 2 * time.Second, RunIdleTimeout: time.Second,
+		PersistOpTimeout: 2 * time.Second, ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration: 2 * time.Second, FirstOutputTimeout: time.Second, IdleTimeout: time.Second},
 		ResolveProviderAPIKey: func(string) (string, bool, error) { return "", false, nil },
 	})
 	if err != nil {

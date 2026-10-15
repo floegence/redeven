@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"encoding/json"
+	flruntime "github.com/floegence/floret/v7/runtime"
 	"io"
 	"log/slog"
 	"net/http"
@@ -71,8 +72,8 @@ func TestModelContextRefreshAfterConfirmedToolAndSafeRetry(t *testing.T) {
 			t.Cleanup(server.Close)
 			svc, err := NewService(Options{
 				Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: root, AgentHomeDir: root, Shell: "/bin/sh",
-				Config:         &config.AIConfig{CurrentModelID: "openai/gpt-5-mini", Providers: []config.AIProvider{{ID: "openai", Name: "OpenAI", Type: "openai", BaseURL: server.URL + "/v1", Models: []config.AIProviderModel{{ModelName: "gpt-5-mini"}}}}},
-				RunMaxWallTime: 10 * time.Second, RunIdleTimeout: 10 * time.Second, PersistOpTimeout: 2 * time.Second,
+				Config:                       &config.AIConfig{CurrentModelID: "openai/gpt-5-mini", Providers: []config.AIProvider{{ID: "openai", Name: "OpenAI", Type: "openai", BaseURL: server.URL + "/v1", Models: []config.AIProviderModel{{ModelName: "gpt-5-mini"}}}}},
+				ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration: 10 * time.Second, FirstOutputTimeout: 10 * time.Second, IdleTimeout: 10 * time.Second}, PersistOpTimeout: 2 * time.Second,
 				ResolveProviderAPIKey: func(string) (string, bool, error) { return "sk-test", true, nil },
 			})
 			if err != nil {

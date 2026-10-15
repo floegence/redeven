@@ -3,7 +3,7 @@ type: AI Runtime Contract
 title: Floret thread runtime integration
 description: Typed Floret v7 thread runtime ownership and Redeven product boundaries.
 tags: [ai, floret, threads, runtime]
-timestamp: 2026-10-14T00:00:00Z
+timestamp: 2026-10-15T00:00:00Z
 quality_exception: Typed Floret ThreadService lifecycle and restart contract covering canonical journal ownership, idempotent effects, and migration safety.
 ---
 # Summary
@@ -14,7 +14,7 @@ Floret v7 `ThreadService` is the sole owner of active and canonical thread lifec
 
 ## Typed runtime
 
-Published Floret v7.39.2 supplies request-scoped received-output progress and
+Published Floret v7.42.0 supplies request-scoped received-output progress and
 separate in-memory tool argument previews. The Engine calculates them from
 validated stream fragments and the thread actor owns their current snapshot.
 Redeven contributes tool-specific parsers through frozen tool definitions and
@@ -43,7 +43,7 @@ visible until a manual resync. Resync cancels the previous attempt, timers and
 unapplied frames, advances the epoch and starts one connection. A valid applied
 ready refreshes summaries and the selected root and open SubAgent through their
 existing detail loaders. Handshake and detail reads release after 15 seconds;
-provider execution has no such timeout.
+model calls use the separate [upstream request policy](model-provider-surface-and-history.md).
 
 Connection errors are separate from detail errors. The workspace notice remains
 visible without a selected thread, in approvals and in Companion; history and
@@ -57,12 +57,18 @@ Conflicted decisions refresh canonical detail and remain user-controlled; effect
 
 Independent context compaction uses the optional public capability without widening ThreadService. Floret owns typed control-turn admission, atomic installation, terminal results, replay, and recovery. See [Model context usage and compaction](model-context-usage-and-compaction.md) for command and presentation contracts.
 
-Redeven consumes published Floret v7.40.3, preserving typed Provider failures
+Redeven consumes published Floret v7.42.0, preserving typed Provider failures
 when a request times out while execution remains active, and graceful-stop ownership
 when a projection write is canceled. The stop owner settles pending approvals,
 tool results, and the terminal together; a canceled write must not enter competing
 failure finalization. Genuine storage and unknown-effect failures retain their
-existing classification. The dependency gate requires the released dynamic tool surface
+existing classification. Optional typed `ProviderTimeout` details retain stage,
+timing and request identity in canonical terminal metadata and remain readable
+after restart. Redeven maps those details without parsing error prose or
+introducing another schema or retry ledger. Active previews and busy status
+end with the canonical failure; [manual recovery](../ui/flower-failure-recovery.md)
+uses existing safe checkpoints. Runtime restart keeps the existing interruption
+boundary and never automatically replays incomplete operations. The dependency gate requires the released dynamic tool surface
 and preservation of its initial provider surface; live permission ownership is
 defined in [Tool permission runtime](tool-permission-runtime.md).
 

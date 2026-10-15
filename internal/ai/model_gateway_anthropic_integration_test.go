@@ -235,14 +235,13 @@ func newAnthropicTestService(t *testing.T, mock *anthropicMock) (*Service, sessi
 	}
 
 	svc, err := NewService(Options{
-		Logger:              logger,
-		StateDir:            stateDir,
-		AgentHomeDir:        agentHomeDir,
-		Shell:               "bash",
-		Config:              cfg,
-		RunMaxWallTime:      30 * time.Second,
-		RunIdleTimeout:      10 * time.Second,
-		ToolApprovalTimeout: 5 * time.Second,
+		Logger:                       logger,
+		StateDir:                     stateDir,
+		AgentHomeDir:                 agentHomeDir,
+		Shell:                        "bash",
+		Config:                       cfg,
+		ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration: 30 * time.Second, FirstOutputTimeout: 10 * time.Second, IdleTimeout: 10 * time.Second},
+		ToolApprovalTimeout:          5 * time.Second,
 		ResolveProviderAPIKey: func(providerID string) (string, bool, error) {
 			if strings.TrimSpace(providerID) != "anthropic" {
 				return "", false, nil

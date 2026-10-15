@@ -10,7 +10,7 @@ timestamp: 2026-10-15T00:00:00Z
 
 Flower shows how long a dispatched model request has waited and how much output
 has arrived. Edit rows show line counts while their arguments are generated,
-then use the confirmed tool result. Published Floret v7.39.2 owns the generic
+then use the confirmed tool result. Published Floret v7.42.0 owns the generic
 in-memory progress and preview lifecycle; Redeven interprets its own tool JSON
 and presents the safe observations. No new journal records or schema changes
 are required.
@@ -19,13 +19,19 @@ are required.
 
 ## Model request
 
-Each logical request and attempt has its own start, first-output time and
-estimated received output tokens. Text, reasoning and append-only tool argument
+Each logical request and attempt has its own start, first-output time, last
+semantic-progress time and estimated received output tokens. Text, reasoning and append-only tool argument
 fragments count; final complete arguments count once only when no fragments
 were streamed. ASCII characters contribute 0.25 tokens and other Unicode scalars
 1.5 tokens, rounded up after accumulation. This estimate is separate from billed
 usage and context pressure. Empty events do not end the initial wait. Midstream
-pauses retain the last count. A replacement request or attempt resets it.
+pauses retain the last count. A replacement request or attempt resets it. After
+15 seconds without semantic progress, the status says Waiting for model to
+continue and shows the pause duration beside the unchanged token estimate.
+Heartbeats, usage and empty fragments do not advance semantic progress. Hosted
+tool execution keeps its own status; returning from it restores the ordinary
+output wait. Local tools, approvals and user input never use this model-pause
+presentation.
 
 The existing status row shows total waiting seconds from three seconds onward,
 and tokens during generation. Preparation, retry backoff, approvals and tool
@@ -33,7 +39,10 @@ execution keep their own status. The transport attaches a server sample time;
 Flower anchors sampled elapsed time to `performance.now()` in the existing
 detail cache. One local timer updates whole seconds and catches up after hidden
 presentation or selection changes. New samples for the same attempt cannot move
-the displayed age backward. No timer events, ViewVersion changes, polling or
+the displayed age backward. New semantic progress resets only the pause age.
+Cached reopen and reconnect use the canonical current sample. This browser clock
+controls display only; [Floret request deadlines](../ai/model-provider-surface-and-history.md)
+own timeout, failure and recovery. No timer events, ViewVersion changes, polling or
 additional network requests are introduced. Only phase text is a live region;
 numerical updates are readable without repeated automatic announcements.
 

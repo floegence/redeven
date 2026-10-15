@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	flruntime "github.com/floegence/floret/v7/runtime"
 	"io"
 	"log/slog"
 	"net/http"
@@ -321,14 +322,13 @@ func TestIntegration_ModelGateway_OpenAI_IdentityQuestionCompletesWithNaturalSto
 	}
 
 	svc, err := NewService(Options{
-		Logger:              logger,
-		StateDir:            stateDir,
-		AgentHomeDir:        agentHomeDir,
-		Shell:               "bash",
-		Config:              cfg,
-		RunMaxWallTime:      30 * time.Second,
-		RunIdleTimeout:      10 * time.Second,
-		ToolApprovalTimeout: 5 * time.Second,
+		Logger:                       logger,
+		StateDir:                     stateDir,
+		AgentHomeDir:                 agentHomeDir,
+		Shell:                        "bash",
+		Config:                       cfg,
+		ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration: 30 * time.Second, FirstOutputTimeout: 10 * time.Second, IdleTimeout: 10 * time.Second},
+		ToolApprovalTimeout:          5 * time.Second,
 		ResolveProviderAPIKey: func(providerID string) (string, bool, error) {
 			if strings.TrimSpace(providerID) != "openai" {
 				return "", false, nil
@@ -429,14 +429,13 @@ func TestIntegration_ModelGateway_OpenAI_ResponsesStream_GPT4o_Succeeds(t *testi
 	}
 
 	svc, err := NewService(Options{
-		Logger:              logger,
-		StateDir:            stateDir,
-		AgentHomeDir:        agentHomeDir,
-		Shell:               "bash",
-		Config:              cfg,
-		RunMaxWallTime:      30 * time.Second,
-		RunIdleTimeout:      10 * time.Second,
-		ToolApprovalTimeout: 5 * time.Second,
+		Logger:                       logger,
+		StateDir:                     stateDir,
+		AgentHomeDir:                 agentHomeDir,
+		Shell:                        "bash",
+		Config:                       cfg,
+		ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration: 30 * time.Second, FirstOutputTimeout: 10 * time.Second, IdleTimeout: 10 * time.Second},
+		ToolApprovalTimeout:          5 * time.Second,
 		ResolveProviderAPIKey: func(providerID string) (string, bool, error) {
 			if strings.TrimSpace(providerID) != "openai" {
 				return "", false, nil

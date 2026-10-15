@@ -82,8 +82,8 @@ func TestE2E_FlowerDeepSeekContextCompaction(t *testing.T) {
 				t.Fatal(err)
 			}
 			opts := Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: filepath.Join(directory, "state"), AgentHomeDir: filepath.Join(directory, "home"), Shell: "/bin/sh", Config: cfg,
-				RunMaxWallTime: 10 * time.Minute, RunIdleTimeout: 5 * time.Minute,
-				ResolveProviderAPIKey: func(id string) (string, bool, error) { return key, id == selected.ID, nil },
+				ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration: 10 * time.Minute, FirstOutputTimeout: 5 * time.Minute, IdleTimeout: 5 * time.Minute},
+				ResolveProviderAPIKey:        func(id string) (string, bool, error) { return key, id == selected.ID, nil },
 			}
 			svc, err := NewService(opts)
 			if err != nil {

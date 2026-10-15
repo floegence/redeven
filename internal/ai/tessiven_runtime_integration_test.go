@@ -137,7 +137,7 @@ func TestTessivenCanonicalRuntimeSaveAndUnknownEffect(t *testing.T) {
 				writeAskUserIntegrationTextResponse(w, flush, "done", "The canvas has been saved.")
 			}))
 			defer provider.Close()
-			options := Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: state, AgentHomeDir: state, Shell: "/bin/sh", Tessiven: library, TessivenResources: resources, Config: &config.AIConfig{CurrentModelID: "openai/gpt-5-mini", Providers: []config.AIProvider{{ID: "openai", Name: "OpenAI", Type: "openai", BaseURL: provider.URL + "/v1", Models: []config.AIProviderModel{{ModelName: "gpt-5-mini"}}}}}, ResolveProviderAPIKey: func(string) (string, bool, error) { return "fixture", true, nil }, RunMaxWallTime: 8 * time.Second, RunIdleTimeout: 8 * time.Second}
+			options := Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: state, AgentHomeDir: state, Shell: "/bin/sh", Tessiven: library, TessivenResources: resources, Config: &config.AIConfig{CurrentModelID: "openai/gpt-5-mini", Providers: []config.AIProvider{{ID: "openai", Name: "OpenAI", Type: "openai", BaseURL: provider.URL + "/v1", Models: []config.AIProviderModel{{ModelName: "gpt-5-mini"}}}}}, ResolveProviderAPIKey: func(string) (string, bool, error) { return "fixture", true, nil }, ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration: 8 * time.Second, FirstOutputTimeout: 8 * time.Second, IdleTimeout: 8 * time.Second}}
 			svc, err := NewService(options)
 			if err != nil {
 				t.Fatal(err)

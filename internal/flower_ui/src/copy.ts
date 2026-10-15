@@ -576,6 +576,7 @@ export type FlowerSurfaceCopy = Readonly<{
       providerServerError: string;
       providerUnreachable: string;
       providerStreamInterrupted: string;
+      providerRequestTimeout: string;
       providerModelUnavailable: string;
       providerRequestInvalid: string;
       providerRequestRejected: string;
@@ -633,6 +634,7 @@ export type FlowerSurfaceCopy = Readonly<{
       tokens: (count: number) => string;
       elapsed: (seconds: number) => string;
       outputTooltip: string;
+      waitingForContinuation: string;
       generating: string;
       previewTooltip: string;
     }>;
@@ -983,6 +985,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       providerUpstreamRateLimited: "The model's upstream provider is temporarily rate limiting OpenRouter's shared capacity. Try again shortly, choose another model, or connect your own provider API key in OpenRouter.",
       providerServerError: 'The model provider returned a server error. Try again shortly.',
       providerUnreachable: 'The selected AI provider could not be reached. Check the provider endpoint and network connection.',
+      providerRequestTimeout: 'The model request timed out. Retry or choose another model. Check provider settings if it keeps happening.',
       providerStreamInterrupted: 'The selected AI provider ended the response stream unexpectedly. Try again, or check the provider endpoint if this keeps happening.',
       providerModelUnavailable: 'The selected model is not available from this provider. Choose another model in the Local AI Profile.',
       providerRequestInvalid: "The selected AI provider rejected Flower's request format. Update Redeven and retry.",
@@ -1044,6 +1047,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     outputProgress: {
       tokens: (count) => `${count} tokens`,
       elapsed: (seconds) => `${seconds} s`,
+      waitingForContinuation: 'Waiting for model to continue',
       outputTooltip: 'Estimated output received for this model request, including reasoning and tool arguments. Billing usage is reported separately.',
       generating: 'Generating arguments',
       previewTooltip: 'Line counts update as arguments arrive. Actual changes are shown after the tool finishes.',

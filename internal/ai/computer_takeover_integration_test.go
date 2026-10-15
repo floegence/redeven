@@ -51,8 +51,8 @@ func TestComputerTakeoverStopsProductionProviderLoop(t *testing.T) {
 	}
 	state := t.TempDir()
 	svc, err := NewService(Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: state, AgentHomeDir: state, Shell: "/bin/sh", TargetResolver: registry, TargetToolExecutor: failingComputerExecutor{code: "TAKEOVER_REQUIRED"},
-		Config:         &config.AIConfig{CurrentModelID: "openai/gpt-5-mini", Providers: []config.AIProvider{{ID: "openai", Name: "OpenAI", Type: "openai", BaseURL: providerServer.URL + "/v1", Models: []config.AIProviderModel{{ModelName: "gpt-5-mini"}}}}},
-		RunMaxWallTime: 5 * time.Second, RunIdleTimeout: 5 * time.Second, PersistOpTimeout: 2 * time.Second, ResolveProviderAPIKey: func(string) (string, bool, error) { return "sk-test", true, nil }})
+		Config:                       &config.AIConfig{CurrentModelID: "openai/gpt-5-mini", Providers: []config.AIProvider{{ID: "openai", Name: "OpenAI", Type: "openai", BaseURL: providerServer.URL + "/v1", Models: []config.AIProviderModel{{ModelName: "gpt-5-mini"}}}}},
+		ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration: 5 * time.Second, FirstOutputTimeout: 5 * time.Second, IdleTimeout: 5 * time.Second}, PersistOpTimeout: 2 * time.Second, ResolveProviderAPIKey: func(string) (string, bool, error) { return "sk-test", true, nil }})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -182,7 +182,7 @@ func TestComputerTakeoverReturnReobservesWithoutReplayingAction(t *testing.T) {
 				var err error
 				svc, err = NewService(Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: state, AgentHomeDir: state, Shell: "/bin/sh", TargetResolver: host, TargetToolExecutor: host,
 					Config:                &config.AIConfig{CurrentModelID: "deepseek/deepseek-v4-flash-vision-exp", Providers: []config.AIProvider{{ID: "deepseek", Name: "DeepSeek", Type: "deepseek", BaseURL: provider.URL, Models: []config.AIProviderModel{model}}}},
-					ResolveProviderAPIKey: func(string) (string, bool, error) { return "sk-test", true, nil }, RunMaxWallTime: 5 * time.Second, RunIdleTimeout: 5 * time.Second})
+					ResolveProviderAPIKey: func(string) (string, bool, error) { return "sk-test", true, nil }, ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration: 5 * time.Second, FirstOutputTimeout: 5 * time.Second, IdleTimeout: 5 * time.Second}})
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -399,8 +399,8 @@ func TestSampledCaptchaStopsProductionProviderLoop(t *testing.T) {
 	installBrowserStub(t, host)
 	defer host.Close()
 	svc, err := NewService(Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: state, AgentHomeDir: state, Shell: "/bin/sh", TargetResolver: host, TargetToolExecutor: host,
-		Config:         &config.AIConfig{CurrentModelID: "openai/gpt-5-mini", Providers: []config.AIProvider{{ID: "openai", Name: "OpenAI", Type: "openai", BaseURL: provider.URL + "/v1", Models: []config.AIProviderModel{{ModelName: "gpt-5-mini"}}}}},
-		RunMaxWallTime: 5 * time.Second, RunIdleTimeout: 5 * time.Second, ResolveProviderAPIKey: func(string) (string, bool, error) { return "fixture", true, nil }})
+		Config:                       &config.AIConfig{CurrentModelID: "openai/gpt-5-mini", Providers: []config.AIProvider{{ID: "openai", Name: "OpenAI", Type: "openai", BaseURL: provider.URL + "/v1", Models: []config.AIProviderModel{{ModelName: "gpt-5-mini"}}}}},
+		ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration: 5 * time.Second, FirstOutputTimeout: 5 * time.Second, IdleTimeout: 5 * time.Second}, ResolveProviderAPIKey: func(string) (string, bool, error) { return "fixture", true, nil }})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -457,8 +457,8 @@ func TestSystemBrowserConnectionRequiresLiveProfileBeforeCanonicalRespond(t *tes
 	host := NewComputerUseRuntime(NewTargetRegistry(), nil, filepath.Join(state, "media"))
 	defer host.Close()
 	svc, err := NewService(Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: state, AgentHomeDir: state, Shell: "/bin/sh", TargetResolver: host, TargetToolExecutor: host,
-		Config:         &config.AIConfig{CurrentModelID: "openai/gpt-5-mini", Providers: []config.AIProvider{{ID: "openai", Name: "OpenAI", Type: "openai", BaseURL: provider.URL + "/v1", Models: []config.AIProviderModel{{ModelName: "gpt-5-mini"}}}}},
-		RunMaxWallTime: 5 * time.Second, RunIdleTimeout: 5 * time.Second, ResolveProviderAPIKey: func(string) (string, bool, error) { return "fixture", true, nil }})
+		Config:                       &config.AIConfig{CurrentModelID: "openai/gpt-5-mini", Providers: []config.AIProvider{{ID: "openai", Name: "OpenAI", Type: "openai", BaseURL: provider.URL + "/v1", Models: []config.AIProviderModel{{ModelName: "gpt-5-mini"}}}}},
+		ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration: 5 * time.Second, FirstOutputTimeout: 5 * time.Second, IdleTimeout: 5 * time.Second}, ResolveProviderAPIKey: func(string) (string, bool, error) { return "fixture", true, nil }})
 	if err != nil {
 		t.Fatal(err)
 	}

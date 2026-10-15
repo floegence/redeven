@@ -388,15 +388,14 @@ func runTask(
 	}
 
 	svc, err := ai.NewService(ai.Options{
-		StateDir:              sandbox.StateDir,
-		AgentHomeDir:          sandbox.WorkspacePath,
-		Shell:                 "bash",
-		Config:                aiCfg,
-		RunMaxWallTime:        3 * time.Minute,
-		RunIdleTimeout:        75 * time.Second,
-		ToolApprovalTimeout:   20 * time.Second,
-		PersistOpTimeout:      10 * time.Second,
-		ResolveProviderAPIKey: resolveProviderAPIKey,
+		StateDir:                     sandbox.StateDir,
+		AgentHomeDir:                 sandbox.WorkspacePath,
+		Shell:                        "bash",
+		Config:                       aiCfg,
+		ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration: 3 * time.Minute, FirstOutputTimeout: 75 * time.Second, IdleTimeout: 75 * time.Second},
+		ToolApprovalTimeout:          20 * time.Second,
+		PersistOpTimeout:             10 * time.Second,
+		ResolveProviderAPIKey:        resolveProviderAPIKey,
 	})
 	if err != nil {
 		return failedTaskResult(task, sourceWorkspace, sandbox, inputs, "init_task_service_failed", err)
