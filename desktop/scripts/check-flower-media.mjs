@@ -29,6 +29,45 @@ let page;
 let envServer;
 const html = '<h1>Daily brief</h1><input aria-label="Reading note"><button onclick="this.textContent=\'Updated\'">Update report</button><a href="#economy">Economy</a><a href="https://example.com/news">News source</a><a href="javascript:alert(1)">Unsupported link</a><section id="economy" style="margin-top:1200px">Economy section</section>';
 
+async function qualifyHtmlGeneration(surface, publish) {
+  const canvas = page.locator('.chat-html-canvas');
+  const original = await canvas.elementHandle();
+  const height = (await canvas.boundingBox()).height;
+  const prefix = 'Here is the workspace preview.\n\n![Workspace](computer://browser-main/' + 'a'.repeat(64) + ')\n\n';
+  const fence = '```html preview\n';
+  await publish(prefix + fence + '<main>Partial', true);
+  await page.waitForFunction(() => document.querySelector('.chat-html-canvas')?.dataset.state === 'generating');
+  assert.equal(await canvas.locator('.chat-html-skeleton').count(), 0);
+  assert.equal(await canvas.locator('iframe').count(), 0);
+  assert.equal(await canvas.locator('.chat-html-sheet').isVisible(), false);
+  const status = canvas.locator('.chat-html-loading [data-floe-progress-shimmer=text]');
+  await status.waitFor();
+  assert.equal(await status.textContent(), 'Creating preview…');
+  assert.equal(await status.evaluate(element => getComputedStyle(element).animationName), 'floe-progress-shimmer');
+  assert.equal(await canvas.locator('.chat-html-sheen').evaluate(element => getComputedStyle(element).animationName), 'chat-html-sweep');
+  for (const width of [1240, 390]) {
+    await page.setViewportSize({width, height:900});
+    await canvas.scrollIntoViewIfNeeded();
+    const bounds = await canvas.boundingBox();
+    const text = await status.boundingBox();
+    assert.ok(Math.abs(text.x + text.width / 2 - bounds.x - bounds.width / 2) < 1);
+    assert.ok(Math.abs(text.y + text.height / 2 - bounds.y - bounds.height / 2) < 1);
+    assert.equal(await canvas.evaluate(element => getComputedStyle(element).borderWidth), '0px');
+    await page.screenshot({path:path.join(output, surface+'-html-generating-'+width+'.png')});
+  }
+  await page.emulateMedia({reducedMotion:'reduce'});
+  assert.equal(await status.evaluate(element => getComputedStyle(element).animationName), 'none');
+  assert.equal(await canvas.locator('.chat-html-sheen').evaluate(element => getComputedStyle(element).animationName), 'none');
+  await page.emulateMedia({reducedMotion:'no-preference'});
+  await page.setViewportSize({width:1240,height:900});
+  await publish(prefix + fence + html + '\n```', false);
+  await canvas.locator('iframe').waitFor();
+  assert.equal(await canvas.evaluate((element, original) => element === original, original), true);
+  assert.equal((await canvas.boundingBox()).height, height);
+  assert.equal(await canvas.locator('.chat-html-loading').count(), 0);
+  return {noSkeleton:true, centered:true, textShimmer:true, dottedSheen:true, borderless:true, reducedMotion:true, stableCompletion:true};
+}
+
 async function qualifyHtmlPreview(surface) {
   const sourceURL = page.url();
   const canvas = page.locator('.chat-html-canvas');
@@ -160,6 +199,7 @@ try {
   await page.locator('[data-thread-id="navigation-thread"] button').first().click();
   await page.waitForFunction(() => document.querySelector('.chat-media-image')?.naturalWidth > 0);
   await page.locator('.chat-media-image').scrollIntoViewIfNeeded();
+  report.generation = await qualifyHtmlGeneration('welcome', (text, generating) => page.evaluate(({text,generating}) => window.navigationFixture.publishHTML(text, generating), {text,generating}));
   await page.screenshot({ path: path.join(output, 'before.png') });
   report.stability = await page.evaluate(async () => {
     const image = document.querySelector('.chat-media-image');
@@ -205,7 +245,7 @@ try {
     created_at_unix_ms: 1, updated_at_unix_ms: 2, last_message_at_unix_ms: 2,
     read_status: { is_unread: false, snapshot: { activity_revision: 1 }, read_state: { last_seen_activity_revision: 1 } } };
   const resourceRef = `computer://browser-main/${'a'.repeat(64)}`;
-  const current = { thread_id: thread.thread_id, view_version: 1, activity: 'idle', queue: [], interactions: [],
+  let current = { thread_id: thread.thread_id, view_version: 1, activity: 'idle', queue: [], interactions: [],
     items: [{ id: 'env-reply', kind: 'assistant', turn_id: 'env-turn', run_id: 'env-run', ordinal: 1,
       text: `Here is the workspace preview.\n\n![Workspace](${resourceRef})\n\n\`\`\`html preview\n${html}\n\`\`\`` }] };
   const requests = [];
@@ -223,7 +263,9 @@ try {
         response.writeHead(200, { 'content-type': 'image/png' }); response.end(screenshotBytes); return true;
       } else if (route.endsWith('/ai/flower/stream')) {
         response.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store' });
-        response.write(`data: ${JSON.stringify({ schema_version: 1, kind: 'ready', summaries: [thread] })}\n\n`);
+        const payload = Buffer.from(JSON.stringify({schema_version:1, kind:'ready', summaries:[thread]}));
+        const frame = {envelope_id:'env-ready',fragment_index:0,fragment_count:1,total_bytes:payload.length,data_base64:payload.toString('base64')};
+        response.write('data: '+JSON.stringify(frame)+'\n\n');
         streams.add(response); request.on('close', () => streams.delete(response)); return true;
       } else return false;
       response.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
@@ -267,6 +309,13 @@ try {
   assert.equal(report.envStability.reloads, 0);
   assert.deepEqual(report.envStability.extraRequests, []);
   await page.screenshot({ path: path.join(output, 'env-after.png') });
+  report.envGeneration = await qualifyHtmlGeneration('env', async (text, generating) => {
+    current = {...current, view_version:current.view_version + 1, activity:generating ? 'active' : 'idle',
+      turn_id:'env-turn', run_id:'env-run', run_progress:generating ? {phase:'streaming'} : null, items:current.items.map(item => ({...item,text,live:generating}))};
+    const payload = Buffer.from(JSON.stringify({schema_version:1,kind:'thread.batch',thread_id:thread.thread_id,current}));
+    const frame = {envelope_id:'html-'+current.view_version, fragment_index:0, fragment_count:1, total_bytes:payload.length, data_base64:payload.toString('base64')};
+    for (const stream of streams) stream.write('data: '+JSON.stringify(frame)+'\n\n');
+  });
   report.envHTML = await qualifyHtmlPreview('env');
   assert.deepEqual(report.errors, []);
   assert.equal(child.exitCode, null);

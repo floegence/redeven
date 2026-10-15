@@ -45,6 +45,9 @@ preview error without interrupting the conversation.
   offer a retry that cannot load them.
 - HTML uses the published Floe dotted canvas with a restrained generating sheen.
   Flower removes the canvas perimeter stroke for a borderless reading surface.
+  Generation shows only centered localized status text with the shared progress
+  shimmer over the dots; no skeleton card or placeholder bars frame the text.
+  Reduced motion stops both animations without hiding progress.
   Circular expansion sits at the top right; source inspection and an actions menu
   sit at the bottom left, outside the document. Source copying, reload, independent
   preview, and authorized containing-folder navigation live in that menu. Loading,
