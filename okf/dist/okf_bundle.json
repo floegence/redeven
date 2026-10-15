@@ -4589,7 +4589,7 @@
               "recovery"
             ],
             "summary": "Flower consumes published Floret v7.40.0. One complete collector supplies six\nstable partitions: execution environment, date/timezone, repository state, rule\nsources, available skills, and delegation. Floret owns chronological admission,\nsemantic changes, user-role model-context messages, compaction and recovery.\nThe product owns collection and authorized presentation only.",
-            "section_count": 2
+            "section_count": 3
           }
         ]
       }
@@ -9955,7 +9955,7 @@
         "title": "Flower managed runtime facts",
         "type": "AI Context Contract"
       },
-      "body_length": 2862,
+      "body_length": 3279,
       "summary": "Flower consumes published Floret v7.40.0. One complete collector supplies six\nstable partitions: execution environment, date/timezone, repository state, rule\nsources, available skills, and delegation. Floret owns chronological admission,\nsemantic changes, user-role model-context messages, compaction and recovery.\nThe product owns collection and authorized presentation only.",
       "sections": [
         {
@@ -9964,6 +9964,13 @@
           "level": 1,
           "body": "Admission and the existing dynamic tool surface invoke the same collector. Each\nlogical provider request uses the current execution configuration and the same\nresolved permission for tools and facts. Dates change only on date/timezone\nchanges. Skill rediscovery uses one authoritative catalog and deterministic\ntext; disabled or newly restricted skills cannot reuse an activation cache.\nLoaded skill instructions remain historical model facts.\n\nUserInput.Context retains ordinary submitted facts and references. Automatic\nfacts use ModelContextSnapshot, never historical free-text parsing. Queue edits\nretain their admitted snapshot; queued execution collects current facts.\nPrepared network attempts remain immutable. Steering, authorization and unknown\neffect termination retain their existing boundaries.\n\nRequired rule or catalog failures terminate with model_context_unavailable.\nOptional Git/delegation probe failures explicitly invalidate previous facts.\nCollection honors cancellation and the existing three-second Git limit.\nSafe retry collects again and preserves confirmed tool results. Unknown effects\nnever replay. Floret keeps exact compaction-cut baselines, chronological tails,\nfork-point facts, and permanent schema migrations; hosts do not inspect storage.",
           "char_count": 1274
+        },
+        {
+          "id": "boundaries",
+          "title": "Boundaries",
+          "level": 1,
+          "body": "Floret is the sole owner of admitted snapshots, model history, compaction and\nrecovery. Flower collects facts and presents authorized canonical reads through\nthe existing transport. It does not retain a second snapshot store, parse old\nruntime-context text, or reconstruct provider history. Dynamic permissions remain\nenforced at actual tool authorization, independently of displayed historical facts.",
+          "char_count": 401
         },
         {
           "id": "presentation",
@@ -42307,5 +42314,5 @@
       ]
     }
   ],
-  "source_sha256": "dd80bccbf119401dfe4ea3cceeca72d4fab61e66bd32bae70064d0cd989653e5"
+  "source_sha256": "d2f9d3168340a322611952f34009aaeee9b55cfbce096da5ede0d9d221b466d0"
 }
