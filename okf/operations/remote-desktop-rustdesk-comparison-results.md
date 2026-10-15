@@ -8,12 +8,15 @@ timestamp: 2026-10-13T09:04:00Z
 # Summary
 
 The primary qualification task owns this comparison contract. Complete RustDesk
-parity remains unaccepted. Published native `v0.22.45` now dispatches default
-Host keys immediately and has been deployed to udesk26; the fresh paired
-measurements below show lower idle median latency and higher moving frame rate,
-but the dynamic P95 and long-tail stalls remain worse under the observed SSH
-Wi-Fi impairment. The current release therefore does not satisfy the target.
-The earlier VP9 and DRM cadence rounds remain historical comparison evidence.
+parity remains unaccepted. The [LAN experiment decision ledger](remote-desktop-lan-experiment-ledger.md)
+owns the current v0.22.47 results, historical advantages and retry conditions.
+Its three valid motion rounds average 38.86 FPS with pooled P95 247.61 ms and
+five long gaps, versus RustDesk 32.29 FPS, 169.11 ms and one gap. The earlier
+v0.22.40 VP9 rounds below average 50.99 FPS with zero long gaps; hardware AV1
+v0.22.42 also reached 50.53 FPS. Cross-time conditions differ, so the performance
+decline is observed but its cause remains unresolved. Do not assign it to Wi-Fi,
+codec or measurement semantics without a controlled comparison. The v0.22.45
+Host-input pair below remains historical evidence.
 Equal application window sizes do not establish equal content viewports. Lower
 quality, omitted SSH costs or failed samples cannot satisfy acceptance; each
 successor needs published-artifact validation and a fresh real-window comparison.
@@ -161,6 +164,21 @@ text PSNR/MAE is 13.23/24.56, 13.22/24.56 and 13.23/24.48 for RustDesk, versus
 without deleting those original results. Fractional compositor rasterization,
 resampling and unequal delivered extents limit pixel metrics; they alone cannot
 establish perceptual detail parity.
+
+## Matched Historical C01
+
+The controlled crossover uses the same udesk26 1920 × 1280/60 Hz source, scene
+v8, 1152 × 768 source allocation, 1024 × 720 Viewer, Smooth, Host input,
+2048 MiB compositor budget and 100-click workload. It confirms VP9 for v40 and
+hardware AV1 for v42 in the Viewer. The first complete pass measured v47 at
+44.60 FPS/P95 135.88 ms/zero long gaps, v40 at 42.77 FPS/P95 212.21 ms/one
+long gap, and v42 at 41.73 FPS/P95 300.15 ms/one long gap. Reverse v42 and v40
+attempts were invalid for named window/input/frame-capture reasons and remain
+excluded. These matched results rule out a simple “AV1 is inherently slow” or
+“current VP9 selection alone explains v47” conclusion, but do not yet isolate
+which later capture, queue, acknowledgement, compositor or client-path change
+caused the historical decline. See [C01 ledger](remote-desktop-lan-historical-c01.md).
+
 
 # Boundaries
 

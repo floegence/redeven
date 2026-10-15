@@ -51,6 +51,10 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Physical-device remote desktop Viewer qualification](operations/remote-desktop-device-viewer-results.md) - Assess actual udesk26 toolkit input, unlock and paint recovery while identifying incomplete orange, IME, cursor and competitor acceptance.
 - [Orange Viewer follow-up](operations/remote-desktop-orange-viewer-results.md) - Verify published Orange deployment, functional recovery, and the limits of the current RustDesk comparison.
 - [Physical desktop RustDesk comparison](operations/remote-desktop-rustdesk-comparison-results.md) - Check paired presentation, quality and resource evidence before accepting latency and performance parity.
+- [LAN experiment decision ledger](operations/remote-desktop-lan-experiment-ledger.md) - Consult complete historical candidates, current deficits and controlled retry conditions before another performance experiment.
+- [Historical LAN desktop crossover C01](operations/remote-desktop-lan-historical-c01.md): Inspect matched historical/current candidates, fixture validity and all crossover results.
+- [LAN codec and capture experiments](operations/remote-desktop-lan-codec-experiments.md) - Check adopted and rejected codec, rate, quantization and capture tradeoffs against their raw evidence.
+- [LAN transport and tracing experiments](operations/remote-desktop-lan-transport-experiments.md) - Check credit, receipts, HTTP2, SSH and stage diagnostics before repeating a latency hypothesis.
 - [udesk26 hardware AV1 comparison](operations/remote-desktop-rustdesk-v42-results.md) - Inspect published AV1 diagnostic latency, complete resources and unresolved parity failures.
 - [udesk26 DRM cadence comparison](operations/remote-desktop-rustdesk-v43-results.md) - Inspect released cadence improvements, corrected motion validity and remaining latency, quality and memory deficits.
 - [Orange RustDesk comparison attempts](operations/remote-desktop-rustdesk-orange-results.md) - Inspect failed responses and unstable LAN conditions before applying another host's results to Orange.
