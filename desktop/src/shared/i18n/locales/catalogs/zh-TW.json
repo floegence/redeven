@@ -1005,6 +1005,8 @@
       "dialogPasteAPIKey": "貼上 API 金鑰",
       "dialogRequired": "必填",
       "dialogBaseURL": "Base URL",
+      "dialogResponsesContinuation": "使用 Responses 續接",
+      "dialogResponsesContinuationDescription": "繼續對話時傳送 previous_response_id。不支援此欄位的閘道請關閉此選項。",
       "dialogWebSearch": "網頁搜尋",
       "dialogDisabled": "已停用",
       "dialogOpenAIBuiltIn": "OpenAI 內建",

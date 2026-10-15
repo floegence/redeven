@@ -171,6 +171,7 @@ export function cloneAIProviderRow(row: AIProvider & Partial<Omit<AIProviderRow,
     name: String(row?.name ?? ''),
     type: (row?.type as AIProviderType) || 'openai',
     base_url: String(row?.base_url ?? ''),
+    responses_continuation: row?.responses_continuation === true ? true : undefined,
     web_search: providerNeedsWebSearchConfig((row?.type as AIProviderType) || 'openai')
       ? { mode: row?.web_search?.mode === 'openai_builtin' || row?.web_search?.mode === 'brave' ? row.web_search.mode : 'disabled' }
       : undefined,

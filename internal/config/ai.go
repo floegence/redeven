@@ -111,6 +111,12 @@ type AIProvider struct {
 	AuthMethod string `json:"auth_method,omitempty"`
 	AccountID  string `json:"account_id,omitempty"`
 
+	// ResponsesContinuation controls whether OpenAI Responses requests may
+	// reference the previous provider response alongside canonical history.
+	// It is opt-in for API key connections because compatible gateways may
+	// not retain or accept OpenAI response IDs.
+	ResponsesContinuation *bool `json:"responses_continuation,omitempty"`
+
 	// BaseURL overrides the provider endpoint (example: "https://api.openai.com/v1").
 	// When empty, provider defaults apply.
 	//
@@ -642,6 +648,22 @@ func (p AIProvider) EffectiveAuthMethod() string {
 		return AIAuthAPIKey
 	}
 	return p.AuthMethod
+}
+
+// EffectiveResponsesContinuation resolves the one provider policy used by all
+// runtime adapter initialization paths.
+//
+// Official ChatGPT accounts always use their native Responses continuation.
+// API key connections require an explicit opt-in. Other provider types never
+// use this OpenAI-specific state.
+func (p AIProvider) EffectiveResponsesContinuation() bool {
+	if strings.ToLower(strings.TrimSpace(p.Type)) != "openai" {
+		return false
+	}
+	if p.EffectiveAuthMethod() == AIAuthChatGPT {
+		return true
+	}
+	return p.EffectiveAuthMethod() == AIAuthAPIKey && p.ResponsesContinuation != nil && *p.ResponsesContinuation
 }
 
 func (p AIProvider) ValidateAuthentication() error {

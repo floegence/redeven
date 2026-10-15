@@ -1020,6 +1020,8 @@
       "dialogPasteAPIKey": "Вставьте ключ API",
       "dialogRequired": "Обязательно",
       "dialogBaseURL": "Базовый URL",
+      "dialogResponsesContinuation": "Использовать продолжение Responses",
+      "dialogResponsesContinuationDescription": "Отправляет previous_response_id при продолжении разговора. Отключите для шлюзов, которые его не поддерживают.",
       "dialogWebSearch": "Веб-поиск",
       "dialogDisabled": "Отключено",
       "dialogOpenAIBuiltIn": "Встроено в OpenAI",

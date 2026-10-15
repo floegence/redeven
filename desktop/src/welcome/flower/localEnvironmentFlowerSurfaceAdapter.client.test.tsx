@@ -139,6 +139,17 @@ function attachmentBridgeStubs() {
 }
 
 describe('Local Environment Flower surface adapter', () => {
+  it('round-trips Responses continuation through settings and provider bundles', () => {
+    const base = settingsResponse();
+    const settings: AgentSettingsResponse = { ...base, ai: { ...base.ai, providers: [
+      { id: 'openai', type: 'openai', responses_continuation: true, models: [{ model_name: 'gpt-5-mini' }] },
+    ] } };
+    const snapshot = mapRuntimeFlowerSettings(settings);
+    expect(snapshot.model_profile!.providers[0].responses_continuation).toBe(true);
+    const bundle = mapFlowerSettingsDraftToRuntimeBundle({ model_profile: snapshot.model_profile! });
+    expect(bundle.model_profile.providers[0].responses_continuation).toBe(true);
+  });
+
   it('uses backend model defaults from settings while model IPC is unavailable', async () => {
     const directory = { provider_defaults: { openai_compatible: [{ model_name: 'gpt-4.1', context_window: 128000 }] },
       provider_catalogs: { default: [{ model_name: 'gpt-4.1', context_window: 128000 }] },

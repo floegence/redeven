@@ -59,6 +59,28 @@ function errorResponse(code: string, data: unknown): Response {
 
 const DESKTOP_MODEL_ID = `desktop:model_${'a'.repeat(64)}`;
 
+it('round-trips Responses continuation through Env App settings and provider bundles', async () => {
+  let settings = { ai: { current_model_id: 'openai/gpt-5-mini', providers: [
+    { id: 'openai', type: 'openai', responses_continuation: true, models: [{ model_name: 'gpt-5-mini' }] },
+  ] } } as AgentSettingsResponse;
+  let bundle: { model_profile: NonNullable<AgentSettingsResponse['ai']> } | undefined;
+  fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+    if (url === '/_redeven_proxy/api/settings') return jsonResponse(settings);
+    if (url === '/_redeven_proxy/api/ai/provider_bundle' && init?.method === 'PUT') {
+      bundle = JSON.parse(String(init.body));
+      settings = { ...settings, ai: bundle!.model_profile };
+      return jsonResponse({});
+    }
+    throw new Error(`Unexpected request: ${url}`);
+  });
+  const adapter = createEnvLocalFlowerSurfaceAdapter({ envPublicID: 'env', envLabel: 'Environment', rpc: { ai: {} } as never });
+  const snapshot = await adapter.loadSettings();
+  expect(snapshot.model_profile!.providers[0].responses_continuation).toBe(true);
+  const saved = await adapter.saveModelProfile({ model_profile: snapshot.model_profile! });
+  expect(bundle!.model_profile.providers![0].responses_continuation).toBe(true);
+  expect(saved.model_profile!.providers[0].responses_continuation).toBe(true);
+});
+
 it.each([
   ['env_local', 'env:local-environment'],
   ['env_remote', 'env:env_remote'],

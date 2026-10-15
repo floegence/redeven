@@ -43,6 +43,8 @@ export function serializeFlowerProvider(provider: FlowerProviderDraft): FlowerPr
   const out: FlowerProvider = {
     enabled: provider.enabled,
     id: provider.id, name: provider.name, type: provider.type, base_url: provider.base_url,
+    ...(provider.type === 'openai' && provider.auth_method !== 'chatgpt' && provider.responses_continuation === true
+      ? { responses_continuation: true } : {}),
     auth_method: provider.auth_method, account_id: provider.account_id,
     web_search: provider.web_search, models: provider.models.map(serializeFlowerModel),
   };

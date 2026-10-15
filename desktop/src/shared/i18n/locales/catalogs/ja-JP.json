@@ -1005,6 +1005,8 @@
       "dialogPasteAPIKey": "API キーを貼り付けます",
       "dialogRequired": "必須",
       "dialogBaseURL": "ベース URL",
+      "dialogResponsesContinuation": "Responses 継続を使用",
+      "dialogResponsesContinuationDescription": "会話を続けるときに previous_response_id を送信します。対応していないゲートウェイではオフにしてください。",
       "dialogWebSearch": "Web 検索",
       "dialogDisabled": "無効",
       "dialogOpenAIBuiltIn": "OpenAI 組み込み",

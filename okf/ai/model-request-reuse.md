@@ -15,6 +15,12 @@ Runtime/Desktop epoch 61 and model-source RPC v2 preserve Floret's effective req
 
 Official OpenAI requests derive a bounded, non-secret cache key from that namespace and provider/account routing identity. ChatGPT authentication on the official Responses route defaults to WebSocket; other authentication and custom endpoints retain HTTP. Runtime Service and Desktop executor each own a bounded process-local pool (16 connections, five-minute idle expiry, 55-minute rotation between requests). Connections isolate provider, endpoint, account, model and prompt scope. A socket processes one request at a time; its last successful response is usable only when the next canonical PreviousState, complete rendered input prefix, native output order and fixed settings match. Otherwise it sends full input from the same prepared request. Full input always owns estimates and fingerprints.
 
+## Responses continuation configuration
+
+`config.AIProvider.EffectiveResponsesContinuation` is the sole provider-level decision. OpenAI API key connections send `previous_response_id` only when `responses_continuation` is explicitly `true`; absent and false values disable it, including existing configurations. This decision can only restrict the Engine's continuation preference. Complete canonical input remains available when the ID is omitted. Official ChatGPT account connections retain native replay and their existing WebSocket behavior; other provider types cannot enable this OpenAI option.
+
+The shared provider dialog exposes “Use Responses continuation” only for OpenAI API key connections. Authentication changes and leaving OpenAI clear the draft value; returning to API key starts disabled. Saving writes only an enabled OpenAI API key value. Cancel discards edits, while failed saves retain the editable draft and normal close action. Changing the setting affects subsequent turns; prepared work retains its snapshot. Gateways such as FlowNode/Sub2API can use complete history without requiring server response-ID storage. No gateway-specific retry or alternative history owner is introduced.
+
 ## Cache usage presentation
 
 The existing context tooltip shows the latest completed request and cumulative session cache hit rates. Both use disjoint ordinary-input, cache-read and cache-write buckets with one formatter; absent valid input displays “—”, while measured zero hits display “0%”. Recent counters project Floret's canonical confirmed usage directly and clear with its existing model/compaction boundaries. They are not inferred from context-window occupancy or persisted in a host statistics store. OpenAI ordinary input subtracts both SDK cache-read and cache-write tokens from total input; invalid, negative or excessive cached counts fail explicitly using overflow-safe bounds. Historical cumulative usage is neither rewritten nor backfilled.
@@ -25,6 +31,9 @@ HTTP and WebSocket use one Responses event consumer. An unsupported upgrade befo
 
 # Evidence
 
+- `redeven:internal/config/ai.go` - One effective continuation policy for every adapter initialization path.
+- `redeven:internal/ai/openai_continuation_test.go` - Wire requests preserve full history with continuation disabled.
+- `redeven:internal/flower_ui/src/settings/FlowerProviderDialog.tsx` - Conditional opt-in control and draft lifecycle.
 - `redeven:internal/ai/model_gateway_openai_connections.go` - Executor-owned pool, exact continuation checks and bounded transport fallback.
 - `redeven:internal/ai/model_gateway_openai_connections_test.go` - Local WebSocket/SSE continuation, tool order, cancellation, isolation and executor shutdown tests.
 - `redeven:internal/ai/model_gateway_usage.go` - Disjoint input buckets and explicit invalid-usage failures.

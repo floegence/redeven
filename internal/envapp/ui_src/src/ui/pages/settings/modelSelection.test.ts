@@ -54,6 +54,20 @@ describe('reviewed defaults across every provider', () => {
 });
 
 describe('model catalog preferences', () => {
+  it('persists Responses continuation only for an enabled OpenAI API key connection', () => {
+    const enabled = serializeFlowerProvider({ id: 'openai', type: 'openai', auth_method: 'api_key', responses_continuation: true, models: [] });
+    expect(enabled.responses_continuation).toBe(true);
+
+    for (const provider of [
+      { id: 'openai', type: 'openai' as const, auth_method: 'api_key' as const, models: [] },
+      { id: 'openai', type: 'openai' as const, auth_method: 'api_key' as const, responses_continuation: false, models: [] },
+      { id: 'openai', type: 'openai' as const, auth_method: 'chatgpt' as const, responses_continuation: true, models: [] },
+      { id: 'deepseek', type: 'deepseek' as const, responses_continuation: true, models: [] },
+    ]) {
+      expect(serializeFlowerProvider(provider).responses_continuation).toBeUndefined();
+    }
+  });
+
   it('starts new providers with no selected models', () => {
     for (const type of ['openai', 'anthropic', 'google', 'moonshot', 'chatglm', 'deepseek', 'qwen', 'xai', 'groq'] as const) {
       const selected = defaultFlowerProviderModels(type);

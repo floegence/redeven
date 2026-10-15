@@ -377,6 +377,7 @@ function mapProvider(provider: NonNullable<AIConfig['providers']>[number]): Flow
     ...(trim(provider.name) ? { name: trim(provider.name) } : {}),
     type: provider.type,
     ...(trim(provider.base_url) ? { base_url: trim(provider.base_url) } : {}),
+    ...(provider.responses_continuation === true ? { responses_continuation: true } : {}),
     ...(provider.web_search ? { web_search: { mode: provider.web_search.mode ?? 'disabled' } } : {}),
     model_selection: provider.model_selection,
     auth_method: provider.auth_method, account_id: provider.account_id,

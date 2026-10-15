@@ -506,7 +506,7 @@ describe('Desktop shared i18n dictionaries', () => {
     }).toEqual({
       preparing: 'Preparing model request...',
       waitingResponse: 'Waiting for model response...',
-      streaming: 'Thinking...',
+      streaming: 'Generating...',
       retrying: 'Retrying model request...',
       finalizing: 'Finalizing reply...',
     });
@@ -519,7 +519,7 @@ describe('Desktop shared i18n dictionaries', () => {
     }).toEqual({
       preparing: '正在准备模型请求...',
       waitingResponse: '正在等待模型响应...',
-      streaming: '正在思考...',
+      streaming: '正在生成...',
       retrying: '正在重试模型请求...',
       finalizing: '正在整理回复...',
     });
@@ -532,7 +532,7 @@ describe('Desktop shared i18n dictionaries', () => {
     }).toEqual({
       preparing: '正在準備模型請求...',
       waitingResponse: '正在等待模型回應...',
-      streaming: '正在思考...',
+      streaming: '正在產生...',
       retrying: '正在重試模型請求...',
       finalizing: '正在整理回覆...',
     });
@@ -545,7 +545,7 @@ describe('Desktop shared i18n dictionaries', () => {
     }).toEqual({
       preparing: 'Preparando solicitud al modelo...',
       waitingResponse: 'Esperando respuesta del modelo...',
-      streaming: 'Pensando...',
+      streaming: 'Generando...',
       retrying: 'Reintentando solicitud al modelo...',
       finalizing: 'Finalizando respuesta...',
     });
@@ -558,7 +558,7 @@ describe('Desktop shared i18n dictionaries', () => {
     }).toEqual({
       preparing: 'Preparando solicitação ao modelo...',
       waitingResponse: 'Aguardando resposta do modelo...',
-      streaming: 'Pensando...',
+      streaming: 'Gerando...',
       retrying: 'Tentando novamente a solicitação ao modelo...',
       finalizing: 'Finalizando resposta...',
     });

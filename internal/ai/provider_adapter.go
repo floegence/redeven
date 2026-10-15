@@ -62,6 +62,7 @@ func (s *Service) initResolvedProviderAdapter(resolved resolvedRunModel) (resolv
 		return resolvedProviderAdapter{}, fmt.Errorf("init provider adapter failed: %w", err)
 	}
 	configureChatGPTAdapter(adapter, resolved.Provider, s.chatGPT)
+	configureResponsesContinuation(adapter, resolved.Provider)
 	configureOpenAIConnections(adapter, resolved.Provider.ID, resolved.Provider.BaseURL, string(resolved.Provider.EffectiveAuthMethod())+":"+resolved.Provider.AccountID, s.openAIConnectionPool())
 	return resolvedProviderAdapter{Adapter: adapter, ProviderType: providerType, ModelName: modelName}, nil
 }
@@ -121,5 +122,11 @@ func configureChatGPTAdapter(adapter ModelGateway, p config.AIProvider, client *
 		gateway.chatGPTWatch = func(ctx context.Context, stop func(error)) (func(), error) {
 			return client.WatchSession(ctx, p.AccountID, stop)
 		}
+	}
+}
+
+func configureResponsesContinuation(adapter ModelGateway, p config.AIProvider) {
+	if gateway, ok := adapter.(*openAIProvider); ok {
+		gateway.responsesContinuation = p.EffectiveResponsesContinuation()
 	}
 }
