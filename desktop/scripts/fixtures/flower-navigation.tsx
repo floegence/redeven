@@ -2,6 +2,8 @@ import { render } from 'solid-js/web';
 import { DesktopWelcomeShell, type DesktopWelcomeRuntime } from '../../src/welcome/App';
 import type { DesktopWelcomeSnapshot } from '../../src/shared/desktopLauncherIPC';
 import type { RuntimeFlowerStreamEvent } from '../../src/shared/runtimeFlowerIPC';
+import type { FlowerRuntimeCurrentView } from '../../../internal/flower_ui/src/contracts/flowerSurfaceContracts';
+import { flowerLiveWireFixture } from '../../../internal/flower_ui/src/test/flowerLiveWireFixture';
 import '../../src/welcome/index.css';
 import { INTERFACE_DENSITY_MARKDOWN } from '../../../internal/envapp/ui_src/src/ui/FlowerSurface.interfaceDensity.fixture';
 
@@ -15,6 +17,7 @@ declare global {
       prematureRequests: number;
       releaseRuntime: () => void;
       refreshHealth: () => void;
+      publishHTML: (text: string, generating: boolean) => void;
       publish: (patch: Partial<DesktopWelcomeSnapshot>) => void;
       dispose: () => void;
     };
@@ -24,6 +27,7 @@ declare global {
 let snapshot = window.navigationSnapshot;
 let receive: ((value: DesktopWelcomeSnapshot) => void) | undefined;
 let receiveStream: ((event: RuntimeFlowerStreamEvent) => void) | undefined;
+let receiveStreamID = '';
 let aiReady = false;
 const unavailable = () => ({ ok: false as const, error: { code: 'AI_SERVICE_UNAVAILABLE', status: 503,
   message: 'AI service is unavailable', data: { readiness: { state: 'inspecting', retryable: false, safe_to_retry: false } } } });
@@ -34,6 +38,14 @@ const fixture = window.navigationFixture = {
     fixture.publish({ environments: snapshot.environments.map(entry => ({ ...entry,
       ...(entry.runtime_service ? { runtime_service: { ...entry.runtime_service, ai_readiness: { state: 'ready' as const } } } : {}),
     })) });
+  },
+  publishHTML(text: string, generating: boolean) {
+    current = { ...current, view_version: current.view_version + 1, activity: generating ? 'active' : 'idle',
+      turn_id: 'navigation-turn', run_id: 'navigation-run', run_progress: generating ? { phase: 'streaming' } : null,
+      items: current.items?.map(item => item.id === 'density-reading' ? { ...item, text, live: generating } : item) };
+    for (const frame of flowerLiveWireFixture({ schema_version: 1, kind: 'thread.batch', thread_id: thread.thread_id, current }, 'html-'+current.view_version)) {
+      receiveStream?.({ stream_id: receiveStreamID, kind: 'chunk', chunk: new TextEncoder().encode('data: '+frame.data+'\n\n') });
+    }
   },
   publish(patch: Partial<DesktopWelcomeSnapshot>) {
     snapshot = { ...snapshot, ...patch, snapshot_revision: (snapshot.snapshot_revision ?? 0) + 1 };
@@ -55,7 +67,7 @@ const mediaMode = new URLSearchParams(location.search).has('media');
 const mediaRef = `computer://browser-main/${'a'.repeat(64)}`;
 const mediaHTML = '<h1>Daily brief</h1><input aria-label="Reading note"><button onclick="this.textContent=\'Updated\'">Update report</button><a href="#economy">Economy</a><a href="https://example.com/news">News source</a><a href="javascript:alert(1)">Unsupported link</a><section id="economy" style="margin-top:1200px">Economy section</section>';
 
-const current = { thread_id: thread.thread_id, view_version: 1, activity: 'idle', items: [{ id: 'navigation-input', kind: 'user', turn_id: 'navigation-turn', run_id: 'navigation-run', ordinal: 1, text: 'Inspect this workspace' }, { id: 'density-reading', kind: 'assistant', turn_id: 'navigation-turn', run_id: 'navigation-run', ordinal: 2, text: mediaMode ? `Here is the workspace preview.\n\n![Workspace](${mediaRef})\n\n\`\`\`html preview\n${mediaHTML}\n\`\`\`\n\nReady for your next step.` : INTERFACE_DENSITY_MARKDOWN }], queue: [], interactions: [] };
+let current: FlowerRuntimeCurrentView = { thread_id: thread.thread_id, view_version: 1, activity: 'idle', items: [{ id: 'navigation-input', kind: 'user', turn_id: 'navigation-turn', run_id: 'navigation-run', ordinal: 1, text: 'Inspect this workspace' }, { id: 'density-reading', kind: 'assistant', turn_id: 'navigation-turn', run_id: 'navigation-run', ordinal: 2, text: mediaMode ? `Here is the workspace preview.\n\n![Workspace](${mediaRef})\n\n\`\`\`html preview\n${mediaHTML}\n\`\`\`\n\nReady for your next step.` : INTERFACE_DENSITY_MARKDOWN }], queue: [], interactions: [] };
 const settings: DesktopWelcomeRuntime['settings'] = {
   async load() { return { ok: false, error: 'No environment settings in this fixture.' }; },
   async save() { return { ok: false, error: 'No settings mutations in this fixture.' }; },
@@ -89,9 +101,13 @@ const settings: DesktopWelcomeRuntime['settings'] = {
   },
   async startRuntimeFlowerStream(request) {
     fixture.streams++;
+    receiveStreamID = request.stream_id;
     if (!aiReady) { fixture.prematureRequests++; return unavailable(); }
-    queueMicrotask(() => receiveStream?.({ stream_id: request.stream_id, kind: 'chunk',
-      chunk: new TextEncoder().encode(`data: ${JSON.stringify({ schema_version: 1, kind: 'ready', summaries: [thread] })}\n\n`) }));
+    queueMicrotask(() => {
+      for (const frame of flowerLiveWireFixture({ schema_version: 1, kind: 'ready', summaries: [thread] }, 'navigation-ready')) {
+        receiveStream?.({ stream_id: request.stream_id, kind: 'chunk', chunk: new TextEncoder().encode('data: '+frame.data+'\n\n') });
+      }
+    });
     return { ok: true, status: 200, content_type: 'text/event-stream' };
   },
   cancelRuntimeFlowerStream() { fixture.cancellations++; },

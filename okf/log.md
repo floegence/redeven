@@ -1619,3 +1619,12 @@ segment from an opening preview fence through completion. Interrupted source
 remains inspectable without executing partial HTML. Preserve file authorization,
 isolated link routing, independent preview windows, and the ready iframe while
 later Markdown grows. See [Flower inline media](ui/flower-inline-media.md).
+
+
+## 2026-10-15 — Minimal HTML generation feedback
+
+Adopt published Floe Webapp v0.86.34 for centered progress text over the dotted
+HTML canvas. Remove the decorative skeleton card and placeholder bars while
+retaining the restrained dot sweep, borderless product surface, circular
+controls, and stable completion. Reduced motion keeps progress readable.
+See [Flower inline media](ui/flower-inline-media.md).

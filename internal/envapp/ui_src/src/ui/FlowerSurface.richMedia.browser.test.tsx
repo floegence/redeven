@@ -51,6 +51,16 @@ describe('Flower inline media', () => {
     expect(getComputedStyle(canvas).borderWidth).toBe('0px');
     expect(canvas.dataset.state).toBe('generating');
     expect(root.querySelector('iframe')).toBeNull();
+    expect(canvas.querySelector('.chat-html-skeleton')).toBeNull();
+    expect(getComputedStyle(canvas.querySelector('.chat-html-sheet')!).visibility).toBe('hidden');
+    const status = canvas.querySelector<HTMLElement>('.chat-html-loading [data-floe-progress-shimmer=text]')!;
+    expect(status.textContent).toBe(markdownMediaEnUS.generating);
+    expect(getComputedStyle(status).animationName).toBe('floe-progress-shimmer');
+    expect(getComputedStyle(canvas.querySelector('.chat-html-sheen')!).animationName).toBe('chat-html-sweep');
+    const textBounds = status.getBoundingClientRect();
+    const canvasBounds = canvas.getBoundingClientRect();
+    expect(Math.abs(textBounds.x + textBounds.width / 2 - canvasBounds.x - canvasBounds.width / 2)).toBeLessThan(1);
+    expect(Math.abs(textBounds.y + textBounds.height / 2 - canvasBounds.y - canvasBounds.height / 2)).toBeLessThan(1);
     expect(root.querySelector('.flower-chat-md-tail')).toBeNull();
     await userEvent.click(canvas.querySelector<HTMLButtonElement>('[data-chat-media-action=source]')!);
     setContent(fence + html);
@@ -58,6 +68,10 @@ describe('Flower inline media', () => {
     setStreaming(false);
     expect(canvas.dataset.state).toBe('incomplete');
     expect(root.querySelector('iframe')).toBeNull();
+    await userEvent.click(canvas.querySelector<HTMLButtonElement>('[data-chat-media-action=source]')!);
+    expect(canvas.querySelector('[data-floe-progress-shimmer]')).toBeNull();
+    expect(getComputedStyle(canvas.querySelector('.chat-html-sheen')!).animationName).toBe('none');
+    await userEvent.click(canvas.querySelector<HTMLButtonElement>('[data-chat-media-action=source]')!);
     setStreaming(true);
     setContent(fence + html + '\n```');
     await waitFor(() => Boolean(canvas.querySelector('iframe')));
