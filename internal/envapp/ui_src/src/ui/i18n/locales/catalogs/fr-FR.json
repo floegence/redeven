@@ -5315,6 +5315,7 @@
       "handlerStartFailedTitle": "Flower n’a pas pu démarrer",
       "handlerStillStarting": "Flower est encore en cours de démarrage.",
       "computerViewLastScreenshot": "Voir la dernière capture",
+      "computerScreenshotLoadFailed": "Impossible de charger la capture d’écran",
       "computerResumeControl": "Reprendre le contrôle",
       "computerStageTitle": "Ordinateur",
       "computerStageMaximize": "Agrandir la vue",

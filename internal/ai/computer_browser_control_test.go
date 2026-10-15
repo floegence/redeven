@@ -2,7 +2,6 @@ package ai
 
 import (
 	"context"
-	"strings"
 	"testing"
 	"time"
 )
@@ -21,11 +20,11 @@ func TestSystemBrowserDiscoveryRequestsConnectionWithoutManagedFallback(t *testi
 	r := &run{threadID: "thread-first", targetResolver: host, targetToolExecutor: host}
 	bindTargetTestRun(t, r)
 	value, err := r.execTargetTool(computerAuthorizedTestContext(t, r, "discover", "computer.targets"), "discover", "computer.targets", map[string]any{"browser_source": "system"})
-	if err != nil {
-		t.Fatal(err)
+	if err == nil {
+		t.Fatal("missing connection reported success")
 	}
 	execution, ok := value.(toolExecutionOutput)
-	if !ok || execution.inputRequired == nil || !strings.Contains(execution.inputRequired.Summary, "Connect") {
+	if !ok || execution.Payload.(map[string]any)["connection_required"] != true {
 		t.Fatalf("system browser request did not produce connection assistance: %#v", value)
 	}
 	selected, _ := store.GetComputerTarget(t.Context(), "thread-first")
@@ -34,7 +33,7 @@ func TestSystemBrowserDiscoveryRequestsConnectionWithoutManagedFallback(t *testi
 	}
 }
 
-func TestSampledSafetyPauseBecomesCanonicalInputWithOriginalTarget(t *testing.T) {
+func TestSampledSafetyPauseReturnsFailureWithOriginalTarget(t *testing.T) {
 	for _, nextTool := range []string{"computer.observe", "computer.exec", "computer.select_target", "computer.targets"} {
 		t.Run(nextTool, func(t *testing.T) {
 			host, _, store, _ := computerBindingFixture(t)
@@ -64,11 +63,11 @@ func TestSampledSafetyPauseBecomesCanonicalInputWithOriginalTarget(t *testing.T)
 				t.Fatal(err)
 			}
 			value, err := r.execTargetTool(computerAuthorizedTestContext(t, r, "next", nextTool), "next", nextTool, map[string]any{"candidate_ref": candidate.CandidateRef, "code": "await ui.observe();", "description": "Inspect the result"})
-			if err != nil {
-				t.Fatalf("sampled safety escaped as an ordinary tool error: %v", err)
+			if !takeoverResult(TargetToolResult{}, err) {
+				t.Fatalf("missing safety failure: %v", err)
 			}
 			execution, ok := value.(toolExecutionOutput)
-			if !ok || execution.inputRequired == nil || execution.TargetID != target.ID || !strings.Contains(execution.inputRequired.Summary, "CAPTCHA") {
+			if !ok || execution.TargetID != target.ID || execution.Payload.(map[string]any)["safety"] == nil {
 				t.Fatalf("original safety cause/target lost: %#v", value)
 			}
 			selected, _ := store.GetComputerTarget(t.Context(), threadID)
@@ -170,7 +169,7 @@ func TestComputerSamplingReadFailureDoesNotAcquireUserControl(t *testing.T) {
 		t.Fatal(err)
 	}
 	execution, ok := value.(toolExecutionOutput)
-	if !ok || execution.inputRequired != nil {
+	if !ok || execution.Payload == nil {
 		t.Fatalf("invented human step: %#v", value)
 	}
 	control.mu.Lock()

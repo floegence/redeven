@@ -162,6 +162,7 @@ func buildPromptComputerUseCapabilitySection(snapshot promptRuntimeSnapshot) pro
 	}
 	common := []string{
 		"# Computer Use Capability",
+		"- Operation tools return execution facts and errors; they never ask questions or wait for your user. For confirmed login, CAPTCHA, private input, permission, browser setup/connection or explicit takeover, independently call ask_user after reading the result. Set evidence_refs to the actual blocking tool call ID. Explain the required user action in task language. An answer does not grant permission or prove setup completed. After a response, observe the current target before any effect; never replay completed actions or unknown effects. For technical read failures, use only bounded read-only checks within the existing execution budget, then explain the specific limitation.",
 		"- Use the typed Redeven computer and browser functions supplied with this request for application interaction. When the user asks to verify a GUI, verify the actual interface; command output alone is insufficient.",
 		"- Use only currently available operations. If a required inspection, target selection, or action is unavailable, report that specific blocker through the interaction policy rather than inventing the missing operation.",
 		"- Do not retry the same computer action indefinitely. Preserve explicit Stop, private-input takeover, selected-browser/account requirements, and completed actions. A failed inspection alone is not evidence that login or manual takeover is required.",

@@ -5315,6 +5315,7 @@
       "handlerStartFailedTitle": "O Flower não pôde iniciar",
       "handlerStillStarting": "O Flower ainda está iniciando.",
       "computerViewLastScreenshot": "Ver última captura",
+      "computerScreenshotLoadFailed": "Não foi possível carregar a captura de tela",
       "computerResumeControl": "Retomar controle",
       "computerStageTitle": "Computador",
       "computerStageMaximize": "Maximizar visualização",

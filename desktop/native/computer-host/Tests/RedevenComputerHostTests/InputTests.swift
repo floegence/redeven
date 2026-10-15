@@ -3,6 +3,16 @@ import CoreGraphics
 @testable import RedevenComputerHost
 
 final class InputTests: XCTestCase {
+    func testObservationFailurePreservesConfirmedInputAndUnknownDispatchBoundary() {
+        for code in ["FRAME_UNAVAILABLE", "TARGET_NOT_READY", "TARGET_OBSERVATION_UNAVAILABLE"] {
+            XCTAssertEqual(nativeFailureCode(code, observing: true, effectStarted: true), "TARGET_OBSERVATION_UNAVAILABLE")
+            XCTAssertEqual(nativeFailureCode(code, observing: true, effectStarted: false), "TARGET_OBSERVATION_UNAVAILABLE")
+        }
+        XCTAssertEqual(nativeFailureCode("TARGET_NOT_READY", observing: false, effectStarted: true), "EFFECT_OUTCOME_UNKNOWN")
+        XCTAssertEqual(nativeFailureCode("EFFECT_OUTCOME_UNKNOWN", observing: true, effectStarted: true), "EFFECT_OUTCOME_UNKNOWN")
+        XCTAssertEqual(nativeFailureCode("INVALID_REQUEST", observing: false, effectStarted: false), "INVALID_REQUEST")
+    }
+
     func testCommittedLineBreakUsesNativeReturnWithoutLosingUnicode() throws {
         let events = try NativeInput.text("中\n文")
         XCTAssertEqual(events[2].getIntegerValueField(.keyboardEventKeycode), 36)

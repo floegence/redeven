@@ -212,23 +212,21 @@ func TestComputerControlContinuationKeepsTurnAndUserBoundaries(t *testing.T) {
 	resumed.RunID, resumed.ToolName = "resumed", "computer.screenshot"
 	runtime.continueComputerControl(owner.ThreadID, owner.TurnID, resumed.RunID)
 	if _, err := runtime.ExecuteTargetTool(t.Context(), resumed); err == nil {
-		t.Fatal("continuation returned user control without handback")
+		t.Fatal("continuation cleared safety without resolved evidence")
+	}
+	for _, identity := range [][2]string{{"other", "turn"}, {"owner", "other-turn"}} {
+		invalid := owner
+		invalid.ThreadID, invalid.TurnID = identity[0], identity[1]
+		invalid.interactionID = "resolved-input"
+		runtime.resumeComputerControl(invalid, resumed.RunID)
+		if _, err := runtime.ExecuteTargetTool(t.Context(), resumed); err == nil {
+			t.Fatal("unrelated evidence cleared safety")
+		}
 	}
 	executor.safe.Store(true)
 	owner.interactionID = "resolved-input"
-	runtime.resumeComputerControl(owner, owner.RunID)
-	observation := owner
-	observation.ToolName = "computer.screenshot"
-	if _, err := runtime.ExecuteTargetTool(t.Context(), observation); err != nil {
-		t.Fatal(err)
-	}
-	for _, identity := range [][3]string{{"other", "turn", "resumed"}, {"owner", "other-turn", "resumed"}, {"owner", "", "resumed"}} {
-		runtime.continueComputerControl(identity[0], identity[1], identity[2])
-		if _, err := runtime.ExecuteTargetTool(t.Context(), resumed); err == nil {
-			t.Fatal("unrelated canonical identity advanced the target lease")
-		}
-	}
-	runtime.continueComputerControl(owner.ThreadID, owner.TurnID, resumed.RunID)
+	runtime.resumeComputerControl(owner, resumed.RunID)
+	resumed.interactionID = owner.interactionID
 	if _, err := runtime.ExecuteTargetTool(t.Context(), resumed); err != nil {
 		t.Fatal(err)
 	}
@@ -236,11 +234,16 @@ func TestComputerControlContinuationKeepsTurnAndUserBoundaries(t *testing.T) {
 	other := resumed
 	other.ThreadID = "other"
 	if _, err := runtime.ExecuteTargetTool(t.Context(), other); err == nil {
-		t.Fatal("old terminal notification released the resumed target")
+		t.Fatal("old terminal released current ownership")
 	}
-	// A further text-only continuation must also retire its resource on terminal.
+	// Even a paused text-only continuation with unusable evidence must release on Stop.
+	control := runtime.controlForTarget("target")
+	control.mu.Lock()
+	control.pauseForUser()
+	control.mu.Unlock()
 	runtime.continueComputerControl(owner.ThreadID, owner.TurnID, "text-only")
 	runtime.releaseComputerControl(owner.ThreadID, "text-only")
+	other.interactionID = ""
 	if _, err := runtime.ExecuteTargetTool(t.Context(), other); err != nil {
 		t.Fatal(err)
 	}

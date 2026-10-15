@@ -112,16 +112,17 @@ final class NativeWindow {
             // Inspect roles before reading any values. Secure fields never
             // contribute their labels, values or pixels to model observations.
             var queue = [element], visited = 0
-            while let node = queue.popLast(), visited < 5000 {
+            while !queue.isEmpty && visited < 5000 {
+                let node = queue.removeLast()
                 visited += 1
                 if axString(node, kAXSubroleAttribute) == kAXSecureTextFieldSubrole { reasons.insert("secret_input") }
                 let label = name(node).lowercased()
                 if ["one-time", "verification code", "security code", "authenticator"].contains(where: label.contains) { reasons.insert("otp"); reasons.insert("secret_input") }
                 if ["captcha", "verify you are human", "not a robot"].contains(where: label.contains) { reasons.insert("captcha") }
                 if let children = axValue(node, kAXChildrenAttribute) as? [AXUIElement] { queue.append(contentsOf: children.prefix(5001)) }
-                if queue.count > 10000 { reasons.insert("unknown"); break }
+                if queue.count > 10000 { break }
             }
-            if !queue.isEmpty { reasons.insert("unknown") }
+            try validateNativeSafetyScan(remainingNodes: queue.count, confirmedReasons: reasons)
         }
         var result: [String: Any] = ["level": reasons.isEmpty ? "routine" : "takeover", "reason_codes": reasons.sorted(),
                                      "safe_to_capture": reasons.isEmpty, "safe_to_send_to_model": reasons.isEmpty]
@@ -231,7 +232,8 @@ final class NativeWindow {
         let exact = selector["exact"] as? Bool ?? false
         let root = try (selector["root_ref"] as? String).map { try resolve(["ref": $0]) } ?? element
         var queue = [root], matches: [AXUIElement] = [], visited = 0
-        while let node = queue.popLast(), visited < 5000 {
+        while !queue.isEmpty && visited < 5000 {
+                let node = queue.removeLast()
             visited += 1
             let candidateName = self.name(node)
             let nameMatches = wantedName == nil || (exact ? candidateName == wantedName! : candidateName.localizedCaseInsensitiveContains(wantedName!))
@@ -327,5 +329,13 @@ final class NativeAccessibility {
             }
         }
         return result
+    }
+}
+
+// Incomplete scans cannot prove safety or a human requirement. Confirmed private
+// content still blocks capture even when the rest of the tree is unavailable.
+func validateNativeSafetyScan(remainingNodes: Int, confirmedReasons: Set<String>) throws {
+    if remainingNodes > 0 && confirmedReasons.isEmpty {
+        throw HostFailure(code: "TARGET_OBSERVATION_UNAVAILABLE", message: "The accessibility safety scan exceeded its limit.")
     }
 }

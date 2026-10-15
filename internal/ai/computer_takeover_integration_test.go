@@ -17,11 +17,18 @@ import (
 
 	"github.com/floegence/floret/v7/identity"
 	flruntime "github.com/floegence/floret/v7/runtime"
-	"github.com/floegence/redeven/internal/browserbridge"
 	"github.com/floegence/redeven/internal/config"
 )
 
-func TestComputerTakeoverStopsProductionProviderLoop(t *testing.T) {
+func writeComputerEvidenceQuestion(w http.ResponseWriter, flush http.Flusher, evidence, questionID, prompt, choice string) {
+	args, _ := json.Marshal(map[string]any{"reason_code": "missing_external_input", "required_from_user": []string{questionID}, "evidence_refs": []string{evidence}, "questions": []any{map[string]any{"id": questionID, "header": "Continue the task", "question": prompt, "response_mode": "select", "is_secret": false, "choices_exhaustive": true, "choices": []any{map[string]any{"choice_id": "continue", "label": choice, "kind": "select"}}}}})
+	item := map[string]any{"type": "function_call", "id": "fc_ask_" + evidence, "call_id": "ask_" + evidence, "name": "ask_user", "arguments": string(args)}
+	writeOpenAISSEJSON(w, flush, map[string]any{"type": "response.output_item.added", "output_index": 0, "item": item})
+	writeOpenAISSEJSON(w, flush, map[string]any{"type": "response.output_item.done", "output_index": 0, "item": item})
+	writeOpenAISSEJSON(w, flush, map[string]any{"type": "response.completed", "response": map[string]any{"id": "question_" + evidence, "status": "completed", "output": []any{item}}})
+}
+
+func TestComputerTakeoverUsesIndependentAskUser(t *testing.T) {
 	var providerCalls atomic.Int32
 	providerServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		var body map[string]any
@@ -35,11 +42,16 @@ func TestComputerTakeoverStopsProductionProviderLoop(t *testing.T) {
 			writeAskUserIntegrationTextResponse(w, flusher, "title", "External sign-in")
 			return
 		}
-		if providerCalls.Add(1) == 1 {
+		n := providerCalls.Add(1)
+		if n == 1 {
 			item := map[string]any{"type": "function_call", "id": "fc_observe", "call_id": "observe-login", "name": "computer_screenshot", "arguments": `{"description":"Inspect the managed browser screenshot","target":"browser.managed"}`}
 			writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.output_item.added", "output_index": 0, "item": item})
 			writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.output_item.done", "output_index": 0, "item": item})
 			writeAskUserIntegrationCompletedResponse(w, flusher, "requires-input")
+			return
+		}
+		if n == 2 {
+			writeComputerEvidenceQuestion(w, flusher, "observe-login", "computer_control", "Complete sign-in on the page, then continue.", "Return control to Flower")
 			return
 		}
 		writeAskUserIntegrationTextResponse(w, flusher, "unexpected-continuation", "Continued without user control.")
@@ -65,8 +77,8 @@ func TestComputerTakeoverStopsProductionProviderLoop(t *testing.T) {
 	if _, err := svc.SendUserTurn(t.Context(), meta, SendUserTurnRequest{ClientRequestID: "start", ThreadID: thread.ThreadID, Model: "openai/gpt-5-mini", Input: RunInput{Text: "Observe the browser and continue after I complete sign-in."}, Options: RunOptions{PermissionType: config.AIPermissionFullAccess}}); err != nil {
 		t.Fatal(err)
 	}
-	view := waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(view *ThreadView) bool { return view.WaitingPrompt != nil || providerCalls.Load() > 1 })
-	if view.WaitingPrompt == nil || view.RunStatus != "waiting_user" || providerCalls.Load() != 1 {
+	view := waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(view *ThreadView) bool { return view.WaitingPrompt != nil || providerCalls.Load() > 2 })
+	if view.WaitingPrompt == nil || view.RunStatus != "waiting_user" || providerCalls.Load() != 2 {
 		t.Fatalf("takeover was not a canonical input wait: status=%s prompt=%+v requests=%d", view.RunStatus, view.WaitingPrompt, providerCalls.Load())
 	}
 	for _, question := range view.WaitingPrompt.Questions {
@@ -80,8 +92,8 @@ func TestComputerTakeoverStopsProductionProviderLoop(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(view *ThreadView) bool { return view.RunStatus == "success" || providerCalls.Load() > 1 })
-	if providerCalls.Load() != 2 {
+	waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(view *ThreadView) bool { return view.RunStatus == "success" })
+	if providerCalls.Load() != 3 {
 		t.Fatalf("canonical answer did not reach the provider: requests=%d", providerCalls.Load())
 	}
 	if _, err := svc.threadRuntime.Cancel(t.Context(), flruntime.CancelInput{ThreadID: identity.ThreadID(thread.ThreadID), RequestKey: "cancel"}); err != nil {
@@ -153,7 +165,15 @@ func TestComputerTakeoverReturnReobservesWithoutReplayingAction(t *testing.T) {
 					writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.completed", "response": map[string]any{"id": "pause", "status": "completed", "output": []any{item}}})
 					return
 				}
-				if requestNumber == 2 || requestNumber == 3 {
+				if requestNumber == 2 || requestNumber == 4 {
+					evidence := "nav-login"
+					if requestNumber == 4 {
+						evidence = "resumed-observation-3"
+					}
+					writeComputerEvidenceQuestion(w, flusher, evidence, "computer_control", "Sign in on the selected page and continue. Flower will observe again.", "Return control to Flower")
+					return
+				}
+				if requestNumber == 3 || requestNumber == 5 {
 					item := map[string]any{"type": "function_call", "id": fmt.Sprintf("fc_resumed_%d", requestNumber), "call_id": fmt.Sprintf("resumed-observation-%d", requestNumber), "name": "computer_screenshot", "arguments": `{"description":"Inspect the managed browser screenshot","target":"browser.managed"}`}
 					writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.output_item.added", "output_index": 0, "item": item})
 					writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.output_item.done", "output_index": 0, "item": item})
@@ -298,7 +318,7 @@ func TestComputerTakeoverReturnReobservesWithoutReplayingAction(t *testing.T) {
 					continue
 				}
 				call, computer, err := computerControlCall(resolvedView, interaction)
-				if err != nil || !computer || call.TargetID != "target" || call.TurnID != string(interaction.TurnID) || call.RunID != string(interaction.RunID) {
+				if err != nil || computer && (call.TargetID != "target" || call.TurnID != string(interaction.TurnID) || call.RunID != string(interaction.RunID)) {
 					t.Fatalf("resolved interaction lost canonical target provenance: call=%+v computer=%t error=%v", call, computer, err)
 				}
 				resolved = true
@@ -310,7 +330,7 @@ func TestComputerTakeoverReturnReobservesWithoutReplayingAction(t *testing.T) {
 			waitingAgain := waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(v *ThreadView) bool {
 				return v.WaitingPrompt != nil && v.WaitingPrompt.PromptID != waiting.WaitingPrompt.PromptID
 			})
-			if requests.Load() != 2 || executor.effects.Load() != 1 || executor.observations.Load() != 1 || waitingAgain.WaitingPrompt == nil {
+			if requests.Load() != 4 || executor.effects.Load() != 1 || executor.observations.Load() != 1 || waitingAgain.WaitingPrompt == nil {
 				t.Fatalf("fresh observation did not create a new canonical wait: requests=%d effects=%d observations=%d", requests.Load(), executor.effects.Load(), executor.observations.Load())
 			}
 			// The actual user finishes outside model history, then explicitly returns.
@@ -323,7 +343,7 @@ func TestComputerTakeoverReturnReobservesWithoutReplayingAction(t *testing.T) {
 			if err := svc.InputComputerControl(t.Context(), meta, userInput); err == nil {
 				t.Fatal("resolved interaction retained user control")
 			}
-			if requests.Load() != 4 || executor.effects.Load() != 1 || executor.observations.Load() != 2 {
+			if requests.Load() != 6 || executor.effects.Load() != 1 || executor.observations.Load() != 2 {
 				t.Fatalf("requests=%d effects=%d observations=%d", requests.Load(), executor.effects.Load(), executor.observations.Load())
 			}
 		})
@@ -371,7 +391,11 @@ func TestSampledCaptchaStopsProductionProviderLoop(t *testing.T) {
 			}
 			stop()
 		}
-		if n > 2 {
+		if n == 3 {
+			writeComputerEvidenceQuestion(w, flush, "observe-2", "computer_control", "Complete human verification on the page, then continue.", "Return control to Flower")
+			return
+		}
+		if n > 3 {
 			writeAskUserIntegrationTextResponse(w, flush, "unexpected", "Must not continue.")
 			return
 		}
@@ -420,8 +444,8 @@ func TestSampledCaptchaStopsProductionProviderLoop(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	view := waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(v *ThreadView) bool { return v.WaitingPrompt != nil || calls.Load() > 2 })
-	if view.WaitingPrompt == nil || calls.Load() != 2 || effects.Load() != 2 {
+	view := waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(v *ThreadView) bool { return v.WaitingPrompt != nil || calls.Load() > 3 })
+	if view.WaitingPrompt == nil || calls.Load() != 3 || effects.Load() != 2 {
 		t.Fatalf("loop escaped canonical pause: requests=%d executions=%d", calls.Load(), effects.Load())
 	}
 	if len(view.WaitingPrompt.Questions) != 1 || view.WaitingPrompt.Questions[0].ID != "computer_control" || !strings.Contains(view.WaitingPrompt.Questions[0].Question, "verification") {
@@ -429,7 +453,7 @@ func TestSampledCaptchaStopsProductionProviderLoop(t *testing.T) {
 	}
 }
 
-func TestSystemBrowserConnectionRequiresLiveProfileBeforeCanonicalRespond(t *testing.T) {
+func TestSystemBrowserConnectionAnswerDoesNotGrantOrRequireConnection(t *testing.T) {
 	var calls atomic.Int32
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		var body map[string]any
@@ -443,11 +467,16 @@ func TestSystemBrowserConnectionRequiresLiveProfileBeforeCanonicalRespond(t *tes
 			writeAskUserIntegrationTextResponse(w, flush, "title", "Connect browser")
 			return
 		}
-		if calls.Add(1) == 1 {
+		n := calls.Add(1)
+		if n == 1 {
 			item := map[string]any{"type": "function_call", "id": "fc_discover", "call_id": "discover-system", "name": "computer_targets", "arguments": `{"description":"Find an available browser","browser_source":"system"}`}
 			writeOpenAISSEJSON(w, flush, map[string]any{"type": "response.output_item.added", "output_index": 0, "item": item})
 			writeOpenAISSEJSON(w, flush, map[string]any{"type": "response.output_item.done", "output_index": 0, "item": item})
 			writeAskUserIntegrationCompletedResponse(w, flush, "connect")
+			return
+		}
+		if n == 2 {
+			writeComputerEvidenceQuestion(w, flush, "discover-system", "browser_connection", "Connect Chrome or reply to choose another permitted route.", "Continue with connected browser")
 			return
 		}
 		writeAskUserIntegrationTextResponse(w, flush, "continued", "Browser connected.")
@@ -475,48 +504,16 @@ func TestSystemBrowserConnectionRequiresLiveProfileBeforeCanonicalRespond(t *tes
 	if err != nil {
 		t.Fatal(err)
 	}
-	view := waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(v *ThreadView) bool { return v.WaitingPrompt != nil || calls.Load() > 1 })
-	if view.WaitingPrompt == nil || calls.Load() != 1 {
+	view := waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(v *ThreadView) bool { return v.WaitingPrompt != nil || calls.Load() > 2 })
+	if view.WaitingPrompt == nil || calls.Load() != 2 {
 		t.Fatal("connection did not stop the provider")
 	}
 	request := SubmitRequestUserInputResponseRequest{ThreadID: thread.ThreadID, Response: RequestUserInputResponse{PromptID: view.WaitingPrompt.PromptID, Answers: map[string]RequestUserInputAnswer{"browser_connection": {ChoiceID: "Continue with connected browser"}}}}
-	if _, err := svc.SubmitRequestUserInputResponse(t.Context(), meta, request); err == nil {
-		t.Fatal("unconnected browser resumed")
-	}
-	if calls.Load() != 1 || len(host.managedProfiles) != 0 {
-		t.Fatal("missing connection launched a substitute")
-	}
-	hub, _, peer := extensionFixture(t, host)
-	host.mu.Lock()
-	host.extension = hub
-	host.mu.Unlock()
-	go func() {
-		for {
-			raw, err := browserbridge.ReadMessage(peer, 1<<20)
-			if err != nil {
-				return
-			}
-			var message struct {
-				ID      string `json:"id"`
-				Command string `json:"command"`
-			}
-			if json.Unmarshal(raw, &message) != nil {
-				return
-			}
-			if message.Command != "inventory" {
-				t.Errorf("connection guide created or selected a tab: %s", message.Command)
-				return
-			}
-			if browserbridge.WriteMessage(peer, map[string]any{"id": message.ID, "result": []any{}}, 1<<20) != nil {
-				return
-			}
-		}
-	}()
 	if _, err := svc.SubmitRequestUserInputResponse(t.Context(), meta, request); err != nil {
 		t.Fatal(err)
 	}
 	waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(v *ThreadView) bool { return v.RunStatus == "success" })
-	if calls.Load() != 2 {
+	if calls.Load() != 3 {
 		t.Fatalf("continuation requests=%d", calls.Load())
 	}
 	selected, _ := svc.snapshotThreadStore().GetComputerTarget(t.Context(), thread.ThreadID)

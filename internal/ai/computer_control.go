@@ -189,7 +189,7 @@ func (r *ComputerUseRuntime) continueComputerControl(threadID, turnID, runID str
 	defer r.mu.RUnlock()
 	for _, control := range r.controls {
 		control.mu.Lock()
-		if control.threadID == threadID && control.turnID == turnID && control.pause == nil {
+		if control.threadID == threadID && control.turnID == turnID {
 			control.runID = runID
 		}
 		control.mu.Unlock()
@@ -205,7 +205,7 @@ func (r *ComputerUseRuntime) resumeComputerControl(call TargetToolCall, runID st
 	control := r.controlForTarget(call.TargetID)
 	control.mu.Lock()
 	defer control.mu.Unlock()
-	if control.threadID != "" && (control.threadID != call.ThreadID || control.turnID != call.TurnID || control.runID != call.RunID) {
+	if control.threadID != "" && (control.threadID != call.ThreadID || control.turnID != call.TurnID || (control.runID != call.RunID && control.runID != runID)) {
 		return
 	}
 	control.threadID, control.turnID, control.runID = call.ThreadID, call.TurnID, runID

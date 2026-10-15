@@ -8,7 +8,7 @@ timestamp: 2026-09-27T00:00:00Z
 # Summary
 
 Desktop and Env App share one personal browser connection guide. ComputerUseRuntime owns
-connections; Floret InputRequired and Respond remain the conversation owners.
+connections; Floret ask_user and Respond remain the conversation owners.
 The guide is bounded UI observation, not a second execution lifecycle. Users confirm installation and the first connection in Chrome; that profile then restores the same environment connection after restarts. Routine tasks reuse the verified connection without manually selecting a target.
 
 # Contract
@@ -66,15 +66,16 @@ flow. When this Runtime lacks a graphical launch session, the guide exposes a
 copyable connection-page link for Chrome on the environment desktop; the
 [diagnostics contract](computer-use-chrome-diagnostics.md) owns that recovery. A
 bounded two-minute inventory observation exists only while the guide is open;
-only the completed Native Messaging handshake can resume the original Floret
-interaction. Closing or switching conversations discards delayed results. A
+the completed Native Messaging handshake establishes connection readiness.
+Independent questions still require the user's ordinary answer. Existing
+tool-origin connection interactions retain scoped guide acknowledgement. Closing or switching conversations discards delayed results. A
 failed check retains installation guidance and exposes a stage-specific recovery
 action, without binding a tab or creating another lifecycle.
 Connected profiles are reused. Conversation assistance starts at the connection
 step when the Runtime has a prepared registration; installation remains available
 through Back. First setup and adding another profile start with installation.
 Preparation is not proof of Chrome installation or a live connection, and never
-resumes a task. Only live, handshaken profiles do so.
+resumes a task. Live, handshaken profiles establish connection readiness only.
 
 After a successful user-confirmed connection, extension-local settings retain
 the profile identity, exact native host and automatic-reconnection consent.
@@ -97,7 +98,9 @@ The shared [environment settings dialog](computer-use-environment-settings.md)
 can add another profile while existing profiles remain
 connected. Only new verified profile identities complete that guide, returning
 to Chrome management without selecting a page or changing conversation grants. Conversation
-assistance may reuse already connected profiles and resume immediately. Genuine
+assistance may reuse already connected profiles. Independent questions still
+require their own answer; existing tool-origin acknowledgements remain scoped
+to the initiating interaction. Genuine
 profile ambiguity remains the Agent's responsibility through existing discovery.
 The extension's optional profile label is user content, not routing authority.
 
@@ -136,7 +139,7 @@ with the same extension key; it does not require clearing browser profiles.
 
 Installation and connection never grant website access or authorize a tab. The
 Agent discovers and selects a target through the existing authorization path
-after Respond. A failed or cancelled guide leaves the task paused. Uncertain
+after Respond. A failed or cancelled guide leaves the question answerable and stoppable. Uncertain
 tool effects, private pixels and explicit Stop keep their existing boundaries.
 
 # Evidence

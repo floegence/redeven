@@ -162,8 +162,8 @@ func TestComputerAutonomousManagedPagesAndPopupSelection(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if result.(toolExecutionOutput).inputRequired != nil {
-			t.Fatal("full access required manual browser setup")
+		if result.(toolExecutionOutput).Payload == nil {
+			t.Fatal("navigation facts missing")
 		}
 	}
 	first, _ := store.GetComputerTarget(t.Context(), "thread-first")

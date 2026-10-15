@@ -246,12 +246,6 @@ export type FlowerActivityDetailBlock =
     items: readonly FlowerActivityTodoItem[];
   }>
   | Readonly<{
-    kind: 'computer';
-    target_id?: string;
-    target: string;
-    frame?: string;
-  }>
-  | Readonly<{
     kind: 'file_read';
     action: FlowerActivityFileAction;
     content: string;
@@ -1522,16 +1516,9 @@ function presentationForStructured(item: FlowerActivityItem, copy?: FlowerActivi
   if (image?.resource_ref) detailBlocks.push({ kind: 'image', resource_ref: image.resource_ref, name: image.label || trimString(item.label) });
   let meta = trimString(item.description) !== titleText(title) && !repeatsItemError(item, trimString(item.description)) ? trimString(item.description) : '';
   if (computer) {
-    const frameTarget = item.target_refs?.find(ref => ref.kind === 'computer_frame');
-    const controlTarget = item.target_refs?.find(ref => ref.kind === 'computer_control');
-    const targetRef = item.target_refs?.find(ref => ref.kind === 'computer_target');
-    const frame = frameTarget?.resource_ref;
-    const targetID = /^computer:\/\/([^/]+)\/[a-f0-9]{64}$/u.exec(frame ?? '')?.[1] || controlTarget?.resource_ref || targetRef?.resource_ref;
-    const target = targetRef?.label || controlTarget?.label || frameTarget?.label || '';
-    meta = !active && item.status === 'success'
-      ? outcome === 'empty_page' ? words.computerBlankPage : outcome === 'no_targets' ? words.computerNoTargets : copy?.statuses?.success ?? DEFAULT_FLOWER_SURFACE_COPY.chat.toolStatuses.success
-      : item.chips?.some(chip => chip.kind === 'execution_mode' && chip.value === 'foreground') ? trimString(item.description) : '';
-    if (targetID || frame) detailBlocks.push({ kind: 'computer', ...(targetID ? { target_id: targetID } : {}), target, ...(frame ? { frame } : {}) });
+    const { frame } = computerActivityResource(item);
+    meta = !active && item.status === 'success' ? outcome === 'empty_page' ? words.computerBlankPage : outcome === 'no_targets' ? words.computerNoTargets : '' : '';
+    if (frame) detailBlocks.push({ kind: 'image', resource_ref: frame, name: '' });
     if (item.tool_name === 'computer.screenshot' && !active && !frame && !errorBlock) {
       const index = detailBlocks.findIndex(block => block.kind === 'structured_rows' && block.section === 'results');
       const notice = { kind: 'structured_rows' as const, section: 'results' as const, rows, notice: words.screenshotUnavailable };
@@ -1567,6 +1554,16 @@ function presentationForStructured(item: FlowerActivityItem, copy?: FlowerActivi
     if (errorBlock) { const index = detailBlocks.indexOf(errorBlock); detailBlocks.splice(index, 1); detailBlocks.push(errorBlock); }
   }
   return { label: titleText(title), title, meta, detailLines, detailBlocks, primaryAction: actionFromPayload({ target: item.target_refs?.find(target => target.path) }, 'Read', trimString(item.label)), ...(computer ? { suppressEmptyDisclosure: item.payload?.rows_provided === true } : {}) };
+}
+
+export function computerActivityResource(item: FlowerActivityItem) {
+  const refs = item.target_refs ?? [];
+  const capture = refs.find(ref => ref.kind === 'computer_frame' && /^computer:\/\/([a-zA-Z0-9_-]+)\/[a-f0-9]{64}$/u.test(ref.resource_ref ?? ''));
+  const frame = capture?.resource_ref;
+  const control = refs.find(ref => ref.kind === 'computer_control');
+  const target = refs.find(ref => ref.kind === 'computer_target');
+  const target_id = /^computer:\/\/([^/]+)\/[a-f0-9]{64}$/u.exec(frame ?? '')?.[1] || control?.resource_ref || target?.resource_ref;
+  return { frame, target_id, target: target?.label || control?.label || capture?.label || '' };
 }
 
 const FLOWER_ACTIVITY_RENDERERS: Readonly<Record<FlowerActivityRenderer, FlowerActivityRendererHandler>> = {

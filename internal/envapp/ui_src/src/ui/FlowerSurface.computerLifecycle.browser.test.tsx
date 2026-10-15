@@ -207,7 +207,8 @@ it('preserves script intent, disclosure, selection and copy through a live failu
   await waitFor(() => outputCopy.getAttribute('aria-label') === 'Could not copy. Try again.');
   expect(document.activeElement).toBe(outputCopy);
   expand.click();
-  const screenshotButton = row.querySelector<HTMLButtonElement>('.flower-activity-computer-block button')!;
+  await waitFor(() => Boolean(row.querySelector('.chat-media-image-button')));
+  const screenshotButton = row.querySelector<HTMLButtonElement>('.chat-media-image-button')!;
   expect(screenshotButton.getBoundingClientRect().width).toBeGreaterThan(90);
   row.querySelector<HTMLElement>('.flower-activity-inline-details-content')!.scrollTop = 0;
   await settle();
@@ -270,14 +271,14 @@ it('collapses a terminal run once and does not infer history success from a late
 });
 
 it('requires explicit recovery and a newly decoded private frame after the workspace disconnects', async () => {
-  const waiting = { ...current(), interactions: [{ id: 'takeover', kind: 'input' as const, turn_id: 'computer-turn', run_id: 'computer-run', tool_call_id: 'observe', input: { summary: 'Verification', questions: [{ id: 'computer_control', prompt: 'Return control', kind: 'select', options: ['Return control to Flower'] }] } }] };
+  const waiting = { ...current(), interactions: [{ computer_assistance: { kind: 'verification', target_id: 'browser-main', tool_call_id: 'observe' }, id: 'tool-input:takeover', kind: 'input' as const, turn_id: 'computer-turn', run_id: 'computer-run', tool_call_id: 'observe', input: { summary: 'Verification', questions: [{ id: 'computer_control', prompt: 'Return control', kind: 'select', options: ['Return control to Flower'] }] } }] };
   const f = fixture(waiting);
   await waitFor(() => Array.from(f.surface.querySelectorAll('button')).some(b => b.textContent === 'Open page'));
   f.surface.querySelector<HTMLButtonElement>('[data-computer-control-action="take"]')!.click();
   await waitFor(() => Boolean(f.setComputerViewer.mock.calls.at(-1)?.[0].interaction_id));
   const offerFrame = () => {
     const viewer = f.setComputerViewer.mock.calls.at(-1)![0];
-    f.emit({ schema_version: 1, kind: 'computer.frame', thread_id: threadID, computer_frame: { session_id: viewer.observer_id, viewer_revision: viewer.revision, target_id: 'browser-main', interaction_id: 'takeover', frame_id: '1', sequence: 1, mime_type: 'image/png' } });
+    f.emit({ schema_version: 1, kind: 'computer.frame', thread_id: threadID, computer_frame: { session_id: viewer.observer_id, viewer_revision: viewer.revision, target_id: 'browser-main', interaction_id: 'tool-input:takeover', frame_id: '1', sequence: 1, mime_type: 'image/png' } });
   };
   offerFrame();
   await waitFor(() => Boolean(document.querySelector('.flower-computer-stage textarea')));
@@ -285,7 +286,7 @@ it('requires explicit recovery and a newly decoded private frame after the works
   const oldViewer = f.setComputerViewer.mock.calls.at(-1)![0];
   let finishOldFrame: (value: Blob) => void = () => undefined;
   f.loadComputerFrame.mockImplementationOnce(() => new Promise(resolve => { finishOldFrame = resolve; }));
-  f.emit({ schema_version: 1, kind: 'computer.frame', thread_id: threadID, computer_frame: { session_id: oldViewer.observer_id, viewer_revision: oldViewer.revision, target_id: 'browser-main', interaction_id: 'takeover', frame_id: 'late', sequence: 2, mime_type: 'image/png' } });
+  f.emit({ schema_version: 1, kind: 'computer.frame', thread_id: threadID, computer_frame: { session_id: oldViewer.observer_id, viewer_revision: oldViewer.revision, target_id: 'browser-main', interaction_id: 'tool-input:takeover', frame_id: 'late', sequence: 2, mime_type: 'image/png' } });
   await waitFor(() => f.loadComputerFrame.mock.calls.some(([frame]) => frame.private_frame?.frame_id === 'late'));
   let finishInput: () => void = () => undefined;
   f.inputComputerControl.mockImplementationOnce(() => new Promise(resolve => { finishInput = () => resolve(undefined); }));
@@ -306,7 +307,7 @@ it('requires explicit recovery and a newly decoded private frame after the works
   expect(document.querySelector('.flower-computer-stage textarea')).toBeNull();
   expect(document.querySelector<HTMLImageElement>('.flower-computer-stage img')?.src).toBe(before);
   const loads = f.loadComputerFrame.mock.calls.length;
-  f.emit({ schema_version: 1, kind: 'computer.frame', thread_id: threadID, computer_frame: { session_id: oldViewer.observer_id, viewer_revision: oldViewer.revision, target_id: 'browser-main', interaction_id: 'takeover', frame_id: 'stale', sequence: 3, mime_type: 'image/png' } });
+  f.emit({ schema_version: 1, kind: 'computer.frame', thread_id: threadID, computer_frame: { session_id: oldViewer.observer_id, viewer_revision: oldViewer.revision, target_id: 'browser-main', interaction_id: 'tool-input:takeover', frame_id: 'stale', sequence: 3, mime_type: 'image/png' } });
   await settle();
   expect(f.loadComputerFrame.mock.calls.length).toBe(loads);
   const take = f.surface.querySelector<HTMLButtonElement>('[data-computer-control-action="take"]')!;
@@ -343,7 +344,7 @@ it('opens the next task only on request after automatic terminal collapse', asyn
 });
 
 it.each(['close', 'switch', 'expire'] as const)('discards private decoding when recovery is interrupted by %s', async action => {
-  const waiting = { ...current(), interactions: [{ id: 'takeover', kind: 'input' as const, turn_id: 'computer-turn', run_id: 'computer-run', tool_call_id: 'observe', input: { summary: 'Verification', questions: [{ id: 'computer_control', prompt: 'Return control', kind: 'select', options: ['Return control to Flower'] }] } }] };
+  const waiting = { ...current(), interactions: [{ computer_assistance: { kind: 'verification', target_id: 'browser-main', tool_call_id: 'observe' }, id: 'tool-input:takeover', kind: 'input' as const, turn_id: 'computer-turn', run_id: 'computer-run', tool_call_id: 'observe', input: { summary: 'Verification', questions: [{ id: 'computer_control', prompt: 'Return control', kind: 'select', options: ['Return control to Flower'] }] } }] };
   const f = fixture(waiting);
   await waitFor(() => Boolean(f.surface.querySelector('[data-computer-control-action="take"]')));
   f.surface.querySelector<HTMLButtonElement>('[data-computer-control-action="take"]')!.click();
@@ -355,7 +356,7 @@ it.each(['close', 'switch', 'expire'] as const)('discards private decoding when 
   let finish: (value: Blob) => void = () => undefined;
   f.loadComputerFrame.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
   const loads = f.loadComputerFrame.mock.calls.length;
-  f.emit({ schema_version: 1, kind: 'computer.frame', thread_id: threadID, computer_frame: { session_id: viewer.observer_id, viewer_revision: viewer.revision, target_id: 'browser-main', interaction_id: 'takeover', frame_id: 'recovering', sequence: 1, mime_type: 'image/png' } });
+  f.emit({ schema_version: 1, kind: 'computer.frame', thread_id: threadID, computer_frame: { session_id: viewer.observer_id, viewer_revision: viewer.revision, target_id: 'browser-main', interaction_id: 'tool-input:takeover', frame_id: 'recovering', sequence: 1, mime_type: 'image/png' } });
   await waitFor(() => f.loadComputerFrame.mock.calls.length > loads);
   if (action === 'close') document.querySelector<HTMLButtonElement>('[data-floe-floating-window-control="close"]')!.click();
   else if (action === 'expire') f.update({ ...current('cancelled'), view_version: 2 });
@@ -469,8 +470,7 @@ it('shows concrete candidates and page content without repeated confirmation det
   expect(sections[0].textContent).toContain('Button');
   expect(sections[0].textContent).not.toContain('searchbox');
   expect(getComputedStyle(sections[0].querySelector('.flower-activity-structured-row-text')!).whiteSpace).toBe('pre-wrap');
-  expect(row('weather').querySelector<HTMLElement>('.flower-activity-computer-block')?.hidden).toBe(true);
-  expect(row('weather').querySelector('.flower-activity-computer-block')?.getClientRects().length).toBe(0);
+  expect(row('weather').querySelector('.flower-activity-computer-block')).toBeNull();
   expect(row('weather').textContent?.match(/Open and inspect the weather preview/gu)).toHaveLength(1);
   for (const width of [1280, 390, 320]) {
     await page.viewport(width, 950);
@@ -503,4 +503,63 @@ it('retains keyboard focus when a confirmed empty observation no longer has deta
   expect(document.activeElement).toBe(settled);
   expect(settled.tabIndex).toBe(-1);
   expect(settled.textContent).toContain('BrowserUse: Inspect Chrome');
+});
+
+
+it('opens saved screenshot results, retries only that image and retains manual collapse across updates', async () => {
+  const seed = current('completed');
+  const screenshot = { ...seed, items: seed.items!.map(item => ({ ...item, activity: { ...item.activity!, tool_name: 'computer.screenshot' } })) };
+  const f = fixture(screenshot);
+  f.loadComputerFrame.mockRejectedValueOnce(new Error('Missing saved image'));
+  const row = () => f.surface.querySelector<HTMLElement>('[data-flower-activity-item-id="observed"]')!;
+  await waitFor(() => Boolean(row()?.querySelector('.chat-media-retry')));
+  expect(row().querySelector('[data-flower-disclosure-trigger]')?.getAttribute('aria-expanded')).toBe('true');
+  expect(row().textContent).toContain('Screenshot could not be loaded');
+  expect(row().textContent).not.toContain('View last screenshot');
+  const first = f.loadComputerFrame.mock.calls[0][0];
+  row().querySelector<HTMLButtonElement>('.chat-media-retry')!.click();
+  await waitFor(() => row().querySelector<HTMLImageElement>('.chat-media-image')?.naturalWidth === 1);
+  expect(f.loadComputerFrame.mock.calls[1][0]).toMatchObject({thread_id: first.thread_id, target_id: first.target_id, sha256: first.sha256, resource_ref: first.resource_ref});
+  row().querySelector<HTMLButtonElement>('[data-flower-disclosure-trigger]')!.click();
+  await waitFor(() => !row().querySelector('.chat-media-image'));
+  f.update({...screenshot,view_version:2});
+  expect(row().querySelector('[data-flower-disclosure-trigger]')?.getAttribute('aria-expanded')).toBe('false');
+  expect(f.setComputerViewer).not.toHaveBeenCalled();
+  expect(f.loadComputerFrame).toHaveBeenCalledTimes(2);
+});
+
+it.each([true, false])('keeps independent questions answerable with computer evidence=%s', async assisted => {
+  await page.viewport(1280, 900);
+  const initial = current();
+  const f = fixture({ ...initial, interactions: [{ id: 'ask-independent', kind: 'input', turn_id: 'computer-turn', run_id: 'computer-run',
+    ...(assisted ? { computer_assistance: { kind: 'captcha', target_id: 'browser-main', tool_call_id: 'observe' } } : {}),
+    input: { reason_code: 'missing_external_input', required_from_user: ['verification-done'], evidence_refs: assisted ? ['observe'] : ['missing'],
+      summary: 'Verification is required', questions: [{ id: 'verification-done', prompt: 'Finish the verification in the page, then tell Flower.', kind: 'select', options: ['I finished verification', 'Choose another approach'] }] },
+  }] });
+  await waitFor(() => Boolean(f.surface.querySelector('.flower-input-request-choice')));
+  expect(f.surface.querySelector('.flower-composer-stop')).not.toBeNull();
+  expect(f.surface.querySelector('[data-computer-control-action="return"]')).toBeNull();
+  expect(Boolean(f.surface.querySelector('[data-computer-control-action="take"]'))).toBe(assisted);
+  const choice = [...f.surface.querySelectorAll<HTMLButtonElement>('.flower-input-request-choice')].find(button => button.textContent?.includes('I finished verification'))!;
+  choice.click();
+  f.surface.querySelector<HTMLButtonElement>('.flower-composer-continue')!.click();
+  await waitFor(() => f.submitInput.mock.calls.length === 1);
+  expect(f.submitInput).toHaveBeenCalledWith(expect.objectContaining({ thread_id: threadID, prompt_id: 'ask-independent', answers: { 'verification-done': { choice_id: 'I finished verification' } } }));
+  expect(f.inputComputerControl).not.toHaveBeenCalled();
+  expect(f.setComputerViewer).not.toHaveBeenCalled();
+});
+
+it('aborts an inline screenshot read when switching conversations without reading another thread', async () => {
+  await page.viewport(1280, 900);
+  const seed = current('completed');
+  const f = fixture({ ...seed, items: seed.items!.map(item => ({ ...item, activity: { ...item.activity!, tool_name: 'computer.screenshot' } })) });
+  f.loadComputerFrame.mockImplementationOnce(async ({ signal }) => new Promise<Blob>((_, reject) => signal?.addEventListener('abort', () => reject(new DOMException('Cancelled', 'AbortError')), {once:true})));
+  await waitFor(() => f.loadComputerFrame.mock.calls.length === 1);
+  const request = f.loadComputerFrame.mock.calls[0][0];
+  expect(request.thread_id).toBe(threadID);
+  await waitFor(() => Boolean(f.surface.querySelector('[data-thread-id="other-thread"] button')));
+  f.surface.querySelector<HTMLButtonElement>('[data-thread-id="other-thread"] button')!.click();
+  await waitFor(() => Boolean(request.signal?.aborted));
+  expect(f.loadComputerFrame).toHaveBeenCalledTimes(1);
+  expect(f.surface.querySelector('.chat-media-image')).toBeNull();
 });

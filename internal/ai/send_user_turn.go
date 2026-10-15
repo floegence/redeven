@@ -541,12 +541,7 @@ func (s *Service) SubmitRequestUserInputResponse(ctx context.Context, meta *sess
 			RequestKey: flruntime.RequestKey("respond:" + promptID),
 		})
 	}
-	var result flruntime.ThreadView
-	if inputInteraction.Resolved {
-		result, err = respond()
-	} else {
-		result, err = s.respondComputerControl(ctx, meta, view, inputInteraction, answers, respond)
-	}
+	result, err := respond()
 	if err != nil {
 		return SubmitRequestUserInputResponseResponse{}, err
 	}

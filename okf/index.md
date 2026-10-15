@@ -289,12 +289,12 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Optional built-in browser installation](ai/computer-use-browser-installation.md) - Confirm browser download or Desktop upload, persist the capability switch, and validate task continuation.
 - [Built-in browser Linux system preparation](ai/computer-use-browser-system.md) - Authorize exact versioned AppArmor preparation while preserving the browser sandbox and user data.
 - [Browser and desktop settings](ai/computer-use-environment-settings.md) - Inspect environment capabilities and manage pairing without changing conversation targets or permissions.
-- [Guided Chrome connection](ai/computer-use-browser-connection.md) - Install and confirm a browser connection, then resume the original task automatically.
+- [Guided Chrome connection](ai/computer-use-browser-connection.md) - Prepare and confirm a browser connection while retaining independent task answers and Stop.
 - [Chrome connection diagnostics and recovery](ai/computer-use-chrome-diagnostics.md) - Diagnose missing components and graphical sessions, then recover on the correct environment host.
 - [Managed browsers and authorized Chrome tabs](ai/computer-use-browser.md) - Select profiles and exact tabs, preserve user settings, and qualify background control.
 - [Semantic desktop operations](ai/computer-use-desktop.md) - Use window AX and isolated AT-SPI with explicit foreground authority and user input priority.
 - [Computer target selection across threads](ai/computer-use-target-selection.md) - Preserve authorized target choices across turns and restart without inheriting control on fork.
-- [Computer use safety pauses and user control](ai/computer-use-takeover.md) - Pause canonical tool execution, keep private browser input out of history, and require fresh observation on handback.
+- [Computer use safety pauses and user control](ai/computer-use-takeover.md) - Return operation facts, resolve independent question evidence, and require fresh observation after user input.
 - [Private browser observation and input](ai/computer-use-private-browser-control.md) - Fence secret-surface observation, user-only frames, ordered input and explicit handback recovery.
 - [Computer use media and visual requests](ai/computer-use-media.md) - Separate durable keyframes from live samples and verify decoded Stage pixels and visual request budgets.
 - [Flower computer viewer presentation](ui/flower-computer-viewer.md) - Present decoded Stage pixels, restore viewer geometry and apply canonical status without changing media authority.

@@ -52,6 +52,8 @@ func handle(_ line: String) {
     var envelope: [String: Any] = ["type": "error", "request_id": "", "target_id": ""]
     var window: NativeWindow?
     var effectStarted = false
+    var observationStage = "safety_scan"
+    var observing = false
     do {
         try execution.check()
         guard line.utf8.count <= 262144,
@@ -85,6 +87,7 @@ func handle(_ line: String) {
             emit(["type": "result", "request_id": id, "target_id": target, "safety": safety,
                   "payload": ["code": "TAKEOVER_REQUIRED", "action_executed": effectStarted]])
         }
+        observing = true
         let before = try selected.safety(allowedApps: allowedApps, fullAccess: fullAccess, privateInput: privateInput)
         if before["level"] as? String == "takeover" { pause(before); return }
         func number(_ key: String, default fallback: Double? = nil) throws -> Double {
@@ -112,12 +115,19 @@ func handle(_ line: String) {
         let beforeInput = foreground.inputCount
         let beforeApplication = NSWorkspace.shared.frontmostApplication?.processIdentifier
         let beforePointer = CGEvent(source: nil)?.location
+        observing = false
         switch tool {
         case "computer.screenshot": break
-        case "computer.observe": payload["observation"] = try selected.observe(args)
+        case "computer.observe":
+            observing = true
+            observationStage = "semantic_read"
+            payload["observation"] = try selected.observe(args)
         case "computer.action":
             let action = args["action"] as? String ?? ""
-            if ["read", "wait"].contains(action) { payload = try selected.action(args) }
+            if ["read", "wait"].contains(action) {
+                observing = true; observationStage = "semantic_read"
+                payload = try selected.action(args)
+            }
             else if ["fill", "click"].contains(action) {
                 // AX permission does not promise that an application will stay
                 // in the background. Announce and authorize that possibility
@@ -165,6 +175,8 @@ func handle(_ line: String) {
                 }
             }, didPost: { effectStarted = true })
         }
+        observing = true
+        observationStage = "safety_scan"
         effectStarted = effectStarted || payload["action_executed"] as? Bool == true
         try execution.check()
         if privateInput {
@@ -180,11 +192,14 @@ func handle(_ line: String) {
         payload["user_input_events"] = userEvents
         payload["background_interference"] = interference
         if interference { mode = "foreground" }
+        observationStage = "safety_scan"
         let after = try selected.safety(allowedApps: allowedApps, fullAccess: fullAccess)
         if after["level"] as? String == "takeover" { pause(after); return }
         if tool == "computer.screenshot" || (tool == "computer.observe" ? args["screenshot"] as? Bool == true : request["script_operation"] as? Bool != true) {
+            observationStage = "capture"
             payload.merge(try screenshot(selected)) { _, new in new }
             CFRunLoopRunInMode(.defaultMode, 0, true)
+            observationStage = "safety_scan"
             let captured = try selected.safety(allowedApps: allowedApps, fullAccess: fullAccess)
             if captured["level"] as? String == "takeover" { pause(captured); return }
         }
@@ -198,8 +213,11 @@ func handle(_ line: String) {
             envelope["type"] = "result"
             envelope["safety"] = ["level": "takeover", "reason_codes": [failure.code == "FOREGROUND_PERMISSION_REQUIRED" ? "foreground_permission" : "user_control"], "safe_to_capture": false, "safe_to_send_to_model": false]
             envelope["payload"] = ["code": "TAKEOVER_REQUIRED", "action_executed": effectStarted]
+        } else if nativeFailureCode(failure.code, observing: observing, effectStarted: effectStarted) == "TARGET_OBSERVATION_UNAVAILABLE" {
+            envelope["error_code"] = "TARGET_OBSERVATION_UNAVAILABLE"
+            envelope["payload"] = ["action_executed": effectStarted, "observation_stage": observationStage]
         } else {
-            envelope["error_code"] = effectStarted ? "EFFECT_OUTCOME_UNKNOWN" : failure.code
+            envelope["error_code"] = nativeFailureCode(failure.code, observing: observing, effectStarted: effectStarted)
             envelope["error"] = failure.message
         }
         emit(envelope)

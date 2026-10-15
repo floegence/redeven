@@ -61,9 +61,9 @@ func newLiveFrameExecutor(t *testing.T) *liveFrameExecutor {
 	return &liveFrameExecutor{body: body, attachment: attachment}
 }
 
-func (e *liveFrameExecutor) ExecuteTargetTool(context.Context, TargetToolCall) (TargetToolResult, error) {
+func (e *liveFrameExecutor) ExecuteTargetTool(_ context.Context, call TargetToolCall) (TargetToolResult, error) {
 	n := e.calls.Add(1)
-	return TargetToolResult{frameBytes: e.body, Attachments: []TargetToolAttachment{e.attachment}, Result: n}, nil
+	return TargetToolResult{TargetID: call.TargetID, frameBytes: e.body, Attachments: []TargetToolAttachment{e.attachment}, Result: n}, nil
 }
 
 func TestComputerLiveFramesPublishesAndStops(t *testing.T) {

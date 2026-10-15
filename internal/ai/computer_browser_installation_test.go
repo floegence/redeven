@@ -60,22 +60,20 @@ func TestManagedBrowserConfigurationLeavesRetiredProductDatabaseUntouched(t *tes
 	}
 }
 
-func TestComputerMissingBrowserRequestsConsentAndDisabledBrowserCannotRun(t *testing.T) {
+func TestComputerMissingBrowserReportsSetupAndDisabledBrowserCannotRun(t *testing.T) {
 	host, executor, store, _ := computerBindingFixture(t)
 	host.ConfigureManagedBrowser(t.TempDir())
 	r := &run{threadID: "thread-first", targetResolver: host, targetToolExecutor: host}
 	bindTargetTestRun(t, r)
 	value, err := r.execTargetTool(computerAuthorizedTestContext(t, r, "observe", "computer.screenshot"), "observe", "computer.screenshot", map[string]any{"target": "browser-main"})
-	if err != nil {
-		t.Fatal(err)
+	if err == nil {
+		t.Fatal("missing installation reported success")
 	}
 	execution, ok := value.(toolExecutionOutput)
-	if !ok || execution.inputRequired == nil || execution.inputRequired.Questions[0].ID != "browser_install" {
+	if !ok || execution.Payload.(map[string]any)["browser_installation_required"] != true {
 		t.Fatalf("missing canonical consent: %#v", value)
 	}
-	if err := execution.inputRequired.Validate(); err != nil {
-		t.Fatalf("browser consent violates the published Floret input contract: %v", err)
-	}
+
 	if state := host.browserInstallation.Snapshot(); state.State != "not_installed" || state.OperationID != "" {
 		t.Fatalf("discovery started installation: %+v", state)
 	}

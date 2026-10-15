@@ -184,7 +184,7 @@ describe('presentFlowerActivityItem', () => {
       target_refs: [{ kind: 'computer_target', label: 'Chrome', resource_ref: 'browser-page' }],
       payload: { inputs: [{ content: 'await ui.observe()', format: 'code' }], rows_provided: true, rows: [{ title: 'Weather', meta: 'page', content: 'Beijing 23°C', format: 'text' }] } }));
     expect(result.label).toBe('BrowserUse: Read weather');
-    expect(result.meta).toBe('Done');
+    expect(result.meta).toBe('');
     expect(result.detailBlocks[0]).toMatchObject({ kind: 'structured_rows', section: 'results' });
   });
 
@@ -192,7 +192,7 @@ describe('presentFlowerActivityItem', () => {
     const result = presentFlowerActivityItem(item({ tool_name: outcome === 'selected' ? 'computer.select_target' : 'computer.observe', renderer: 'structured', label: 'Inspect Chrome',
       chips: [{ kind: 'computer_result', label: 'result', value: outcome }],
       target_refs: [{ kind: 'computer_target', label: 'Chrome', resource_ref: 'page' }], payload: { rows_provided: true } }));
-    expect(result.detailBlocks.filter(block => block.kind !== 'computer')).toEqual([]);
+    expect(result.detailBlocks).toEqual([]);
     expect(result.meta).not.toContain('Chrome');
     expect(result.suppressEmptyDisclosure).toBe(true);
   });
@@ -247,7 +247,7 @@ describe('presentFlowerActivityItem', () => {
     expect(presentation.label).toBe('ComputerUse: Click');
     expect(presentation.detailBlocks).toEqual([
       { kind: 'structured_rows', section: 'results', rows: [], notice: undefined },
-      expect.objectContaining({ kind: 'computer', target_id: 'browser-main', target: 'Redeven Managed Browser', frame: `computer://browser-main/${'a'.repeat(64)}` }),
+      expect.objectContaining({ kind: 'image', resource_ref: `computer://browser-main/${'a'.repeat(64)}` }),
     ]);
   });
 

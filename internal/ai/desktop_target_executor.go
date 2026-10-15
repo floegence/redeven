@@ -233,6 +233,9 @@ func (e *NativeDesktopTargetExecutor) executeTargetTool(ctx context.Context, cal
 	}
 	if event.Type == "error" || strings.TrimSpace(event.Error) != "" {
 		healthy = true
+		if event.ErrorCode == "TARGET_OBSERVATION_UNAVAILABLE" {
+			return computerObservationFailure(call, event.Payload, "macos_desktop")
+		}
 		return TargetToolResult{}, computerTargetFailure(call, event.ErrorCode)
 	}
 	if event.Type != "result" {

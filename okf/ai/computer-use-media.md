@@ -8,7 +8,7 @@ timestamp: 2026-10-08T00:00:00Z
 # Summary
 
 Redeven owns screenshot bytes and authorized media resolution; Floret owns opaque
-attachment history and provider rendering. Flower displays decoded pixels in a
+attachment history and provider rendering. Flower displays saved screenshots inline and offers decoded pixels in a
 media-only Stage. Durable keyframes and ephemeral viewing samples have distinct
 lifetimes. A missing, changed or unauthorized reference fails explicitly and
 cannot fall back to an unrestricted image URL. Successful tool metadata alone
@@ -69,14 +69,29 @@ sampler, authenticated workspace channel and decoding path.
 
 Screenshot identity uses Floret v7.26.0's `ActivityPresentation.target_refs`: `kind: computer_frame`, opaque `resource_ref: computer://<target>/<sha256>`, and target display label. Navigable `uri` is not a media reference. The renderer stays `structured` without custom frame fields. Public projection preserves hash-addressed frame references, bounded Computer target identities, and validated requested-access facts. Other opaque references remain private. A target reference enables semantic-only viewing; it does not grant site, application or media authority. Env App and Desktop Welcome resolve frames through the authenticated thread media endpoint into short-lived Blob URLs. Desktop's authorized Runtime IPC carries PNG `Uint8Array` bytes; credentials stay in main. Image sources cannot use opaque references directly or bypass authorization through an HTTP fallback.
 
-Opening a screenshot from Activity selects that canonical frame, including when
-newer semantic observations have no image. Historical viewing starts no live
-sampler and retains the chosen frame across minimize/restore. The selection is
-local presentation state scoped to the thread and current run; a new run, thread
-change, explicit live-view request or private takeover releases it.
-Without an explicit selection, completed viewing resolves the last saved capture
-of the latest observed run and target. An image-free observation must not hide
-that capture's viewer entry.
+Dedicated `computer.screenshot` success requires one fully validated PNG for
+the exact executed target, saved before returning its attachment. Missing,
+corrupt, mismatched or unsaved pixels fail explicitly. Adapter buffers are always
+released. Post-action save failures retain confirmed execution and never turn
+into a request for human inspection.
+
+A valid saved screenshot reference makes its Activity default open. Disclosure
+uses `manualOpen ?? defaultOpen`; updates never override a manual collapse.
+Choices stay local to the activity during the mounted UI session; reload restores
+the default. Other tools stay collapsed and may show attached images on expansion.
+The published Floe `MarkdownMedia` owns proportional image display, enlargement,
+cancellation and retry. Retry rereads only the original saved image, never runs
+a screenshot tool. Resolution is bound to the owning Thread and resource, and
+switching conversations cancels pending work. A missing image shows a localized
+load failure. No title, target summary or generic result is repeated as detail.
+
+Historical saved frames use the same inline path, including older Chrome captures.
+A record without an image explains that no screenshot was saved; it does not
+borrow a newer frame, capture again or expose private viewer pixels. The tool's
+own outcome remains independent of any subsequent pending question. The header
+viewer continues to offer the latest saved capture for an observed target even
+when a newer semantic observation has no image. Historical viewing starts no
+live sampler or input carrier.
 
 When a turn completes or fails, an already open public viewer retains its last
 decoded live pixels while sampling stops, even when an older model screenshot

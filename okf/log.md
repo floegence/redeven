@@ -6,6 +6,17 @@
 - Finish Responses on their terminal event and release transport resources; remove unused host run timers and activity accounting.
 - Show [output pauses](ui/flower-output-progress.md) after fifteen seconds with honest token estimates, localized recovery, and usable Stop, navigation and safe retry.
 
+## 2026-10-15 — Screenshot results and independent computer questions
+
+- Adopt published Floret v7.43.0 canonical input reason and evidence metadata;
+  no schema or historical record changes. README product claims remain valid.
+- Separate failed computer/browser operations from Agent-owned `ask_user`, with
+  one canonical evidence resolver and fresh-observation continuation.
+- Display saved screenshot Activity inline by default through published Floe
+  media, preserving manual collapse, thread isolation and read-only retry.
+- Preserve completed effects through technical scan/capture failures and retain
+  private input, unknown-effect and Run resource-release boundaries.
+
 ## 2026-10-15: Compact context statistics
 
 - Summarize [runtime fact categories](ai/flower-managed-model-context.md) with localized horizontal bars and Unicode text shares; disclose complete text on demand.

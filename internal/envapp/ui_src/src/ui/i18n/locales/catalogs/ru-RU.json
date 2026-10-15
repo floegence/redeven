@@ -5418,6 +5418,7 @@
       "handlerStartFailedTitle": "Flower не удалось запустить",
       "handlerStillStarting": "Flower все еще запускается.",
       "computerViewLastScreenshot": "Показать последний снимок",
+      "computerScreenshotLoadFailed": "Не удалось загрузить снимок экрана",
       "computerResumeControl": "Возобновить управление",
       "computerStageTitle": "Компьютер",
       "computerStageMaximize": "Развернуть окно просмотра",

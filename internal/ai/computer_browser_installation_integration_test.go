@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-func TestComputerBrowserInstallationUsesCanonicalInputAndValidatesContinuation(t *testing.T) {
+func TestComputerBrowserInstallationUsesIndependentQuestionWithoutCertifyingSetup(t *testing.T) {
 	var providerCalls atomic.Int32
 	providerServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		var body map[string]any
@@ -27,11 +27,16 @@ func TestComputerBrowserInstallationUsesCanonicalInputAndValidatesContinuation(t
 			writeAskUserIntegrationTextResponse(w, flusher, "title", "External sign-in")
 			return
 		}
-		if providerCalls.Add(1) == 1 {
+		n := providerCalls.Add(1)
+		if n == 1 {
 			item := map[string]any{"type": "function_call", "id": "fc_observe", "call_id": "observe-login", "name": "computer_screenshot", "arguments": `{"description":"Inspect the managed browser screenshot","target":"browser.managed"}`}
 			writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.output_item.added", "output_index": 0, "item": item})
 			writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.output_item.done", "output_index": 0, "item": item})
 			writeAskUserIntegrationCompletedResponse(w, flusher, "requires-input")
+			return
+		}
+		if n == 2 {
+			writeComputerEvidenceQuestion(w, flusher, "observe-login", "browser_install", "Open browser setup or reply to choose another route.", "Continue")
 			return
 		}
 		writeAskUserIntegrationTextResponse(w, flusher, "unexpected-continuation", "Continued without user control.")
@@ -60,8 +65,8 @@ func TestComputerBrowserInstallationUsesCanonicalInputAndValidatesContinuation(t
 	if _, err := svc.SendUserTurn(t.Context(), meta, SendUserTurnRequest{ClientRequestID: "start", ThreadID: thread.ThreadID, Model: "openai/gpt-5-mini", Input: RunInput{Text: "Observe the browser and continue after I complete sign-in."}, Options: RunOptions{PermissionType: config.AIPermissionFullAccess}}); err != nil {
 		t.Fatal(err)
 	}
-	view := waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(view *ThreadView) bool { return view.WaitingPrompt != nil || providerCalls.Load() > 1 })
-	if view.WaitingPrompt == nil || view.RunStatus != "waiting_user" || providerCalls.Load() != 1 {
+	view := waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(view *ThreadView) bool { return view.WaitingPrompt != nil || providerCalls.Load() > 2 })
+	if view.WaitingPrompt == nil || view.RunStatus != "waiting_user" || providerCalls.Load() != 2 {
 		t.Fatalf("installation was not a canonical input wait: status=%s prompt=%+v requests=%d", view.RunStatus, view.WaitingPrompt, providerCalls.Load())
 	}
 	for _, question := range view.WaitingPrompt.Questions {
@@ -69,32 +74,17 @@ func TestComputerBrowserInstallationUsesCanonicalInputAndValidatesContinuation(t
 			t.Fatal("takeover asks for a secret")
 		}
 	}
-	if _, err := svc.SubmitRequestUserInputResponse(t.Context(), meta, SubmitRequestUserInputResponseRequest{
-		ThreadID: thread.ThreadID, Response: RequestUserInputResponse{PromptID: view.WaitingPrompt.PromptID,
-			Answers: map[string]RequestUserInputAnswer{"browser_install": {ChoiceID: "Continue with installed browser"}}},
-	}); err == nil {
-		t.Fatal("uninstalled browser acknowledged as installed")
+	if view.WaitingPrompt.ComputerAssistance == nil || view.WaitingPrompt.ComputerAssistance.Kind != "installation" {
+		t.Fatalf("setup facts lost: %+v", view.WaitingPrompt)
 	}
-	if providerCalls.Load() != 1 {
-		t.Fatal("invalid return continued provider")
-	}
-	if _, err := svc.SubmitRequestUserInputResponse(t.Context(), meta, SubmitRequestUserInputResponseRequest{
-		ThreadID: thread.ThreadID, Response: RequestUserInputResponse{PromptID: view.WaitingPrompt.PromptID,
-			Answers: map[string]RequestUserInputAnswer{"browser_install": {ChoiceID: "Continue without built-in browser"}}},
-	}); err == nil {
-		t.Fatal("enabled browser accepted disabled acknowledgement")
-	}
-	if _, err := svc.SetComputerBrowserEnabled(t.Context(), meta, false); err != nil {
+	if _, err := svc.SubmitRequestUserInputResponse(t.Context(), meta, SubmitRequestUserInputResponseRequest{ThreadID: thread.ThreadID, Response: RequestUserInputResponse{PromptID: view.WaitingPrompt.PromptID, Answers: map[string]RequestUserInputAnswer{"browser_install": {ChoiceID: "Continue"}}}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.SubmitRequestUserInputResponse(t.Context(), meta, SubmitRequestUserInputResponseRequest{
-		ThreadID: thread.ThreadID, Response: RequestUserInputResponse{PromptID: view.WaitingPrompt.PromptID,
-			Answers: map[string]RequestUserInputAnswer{"browser_install": {ChoiceID: "Continue without built-in browser"}}},
-	}); err != nil {
-		t.Fatal(err)
+	waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(view *ThreadView) bool { return view.RunStatus == "success" })
+	if providerCalls.Load() != 3 {
+		t.Fatal("answer did not continue provider")
 	}
-	waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(view *ThreadView) bool { return view.WaitingPrompt == nil && providerCalls.Load() == 2 })
-	if state := host.browserInstallation.Snapshot(); state.Enabled || state.OperationID != "" {
-		t.Fatalf("disable/consent boundary: %+v", state)
+	if state := host.browserInstallation.Snapshot(); !state.Enabled || state.OperationID != "" || state.State != "not_installed" {
+		t.Fatalf("answer mutated setup: %+v", state)
 	}
 }

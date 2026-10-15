@@ -29,7 +29,7 @@ The shared controller retries only a read, at most once. Frame attachment,
 detachment and navigation invalidate observations. Stable read failure returns
 `TARGET_OBSERVATION_UNAVAILABLE` with confirmed `action_executed` and a closed
 `observation_stage`; no page data or pixels survive. Runtime does not latch a
-pause or create InputRequired for this error. The next authorized observation
+pause or create a question for this error. The next authorized observation
 may proceed. Viewer failure uses the existing unavailable/reconnect display.
 It inspects before input, after an action, and
 after capture. Secret DOM transitions are latched during observation so removing
@@ -59,7 +59,7 @@ bytes through its existing private IPC boundary.
 
 Submitting the canonical answer does not capture a screenshot or wait for the
 target gate. The answer reaches Floret's provider continuation unchanged; the
-button text **Continue check** authorizes inspection only. Floret admits the
+answer only permits the Agent to check again. Floret admits the
 exact interaction before Runtime updates the matching target lease for the new
 Run. Queued private input rechecks canonical interaction authority after taking
 the gate, so late commands cannot reclaim control. If the resource is absent,
@@ -68,8 +68,9 @@ target. It does not infer success or replay the original action.
 
 The localized input card has a compact status heading, muted explanation and
 inline validation notice. Its wrapping footer groups Stop on the left and
-content-sized takeover/check buttons on the right. The check button submits the
-canonical response and Stop retains ordinary canonical cancellation.
+content-sized control actions on the right. Independent questions keep generated
+choices and ordinary submission. Existing tool-origin questions retain their
+canonical acknowledgement button. Stop retains canonical cancellation.
 Explicit takeover opens the media-only Stage. Keyboard and pointer actions go to the
 private endpoint; only the acknowledgement goes through `submitInput`. Images
 are decoded before replacement and Blob URLs are retired on disposal. Failed
@@ -99,19 +100,17 @@ Runtime restart. No navigation, page restoration, or private input is replayed.
 Ordinary preview reconnection never grants private input. Historical display and
 terminal collapse follow the [media contract](computer-use-media.md).
 
-Every admitted computer tool converts a typed safety pause through one result
-boundary, including pre-dispatch selection checks. Confirmed script steps and
-action outcomes survive this conversion. Sampling itself creates no interaction;
-it stops public frames with a closed assistance classification. The next admitted
-tool supplies Floret's canonical `InputRequired`. Diagnostics record only target
-identity, source, reason and requested assistance, never page text or private input.
+Every admitted computer tool returns factual safety failures, including
+pre-dispatch selection checks. Confirmed script steps and action outcomes survive.
+Sampling stops public frames with a closed assistance classification and creates
+no interaction. Flower may independently call `ask_user` with the actual tool ID.
+Diagnostics retain only target identity, source, reason and requested assistance.
 
-An explicit system-browser request with no live connection uses a separate
-`browser_connection` question with canonical tool provenance. Its guide establishes
-an extension connection without selecting a tab or enabling private control.
-`Respond` rechecks current connected inventory; the resumed Agent discovers and
-selects its own task page. Connection and verification share Floret lifecycle
-ownership but grant different capabilities.
+A system-browser request without a live connection returns connection facts.
+The independently requested guide establishes an extension connection without
+selecting a tab or enabling private control. An answer does not assert connection
+readiness; the resumed Agent discovers and selects its own task page through the
+existing authorization boundary. See [guided connection](computer-use-browser-connection.md).
 
 # Boundaries
 

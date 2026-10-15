@@ -5315,6 +5315,7 @@
       "handlerStartFailedTitle": "Flower を起動できませんでした",
       "handlerStillStarting": "Flower はまだ起動中です。",
       "computerViewLastScreenshot": "最後のスクリーンショットを見る",
+      "computerScreenshotLoadFailed": "スクリーンショットを読み込めません",
       "computerResumeControl": "操作を再開",
       "computerStageTitle": "コンピューター",
       "computerStageMaximize": "ビューアーを最大化",

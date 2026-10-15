@@ -25,7 +25,7 @@ async function setup(kind: 'site' | 'captcha' | 'unknown' | 'connection' | 'inst
     if (!entry.activity) return entry;
     const { label, description, renderer, payload, chips, target_refs, ...facts } = entry.activity;
     return { ...entry, activity: { ...facts, presentation: { label, description, renderer, payload, chips, target_refs } } };
-  }), interactions: [{ id: 'tool-input:step', kind: 'input' as const, turn_id: 'turn-control', run_id: 'run-control', tool_call_id: 'navigate',
+  }), interactions: [{ computer_assistance: { kind, tool_call_id: 'navigate', ...(kind === 'connection' || kind === 'installation' ? {} : {target_id: 'browser-main'}) }, id: 'tool-input:step', kind: 'input' as const, turn_id: 'turn-control', run_id: 'run-control', tool_call_id: 'navigate',
     input: { summary: 'Specific external step', questions: [{ id: kind === 'installation' ? 'browser_install' : kind === 'connection' ? 'browser_connection' : 'computer_control', prompt: 'Inspect the selected page.', kind: 'select', options: kind === 'installation' ? ['Continue with installed browser', 'Continue without built-in browser'] : [kind === 'connection' ? 'Continue with connected browser' : 'Return control to Flower'] }] },
   }] };
   const gate = deferred<void>();

@@ -362,7 +362,10 @@ function runtimeInputRequest(
     tool_id: trim(interaction.id),
     ...(trim(interaction.tool_call_id) ? { tool_call_id: trim(interaction.tool_call_id) } : {}),
     tool_name: trim(view.items?.find((item) => item.turn_id === interaction.turn_id && item.run_id === interaction.run_id && item.activity?.tool_id === interaction.tool_call_id)?.activity?.tool_name) || 'ask_user',
-    required_from_user: questions.map((question) => trim(question.id)).filter(Boolean),
+    ...(input.reason_code ? { reason_code: input.reason_code } : {}),
+    ...(input.required_from_user ? { required_from_user: [...input.required_from_user] } : {}),
+    ...(input.evidence_refs ? { evidence_refs: [...input.evidence_refs] } : {}),
+    ...(interaction.computer_assistance ? { computer_assistance: interaction.computer_assistance } : {}),
     questions: questions.map((question) => {
       const choices = question.choices?.length ? question.choices.map((choice) => ({
         choice_id: trim(choice.choice_id) || trim(choice.value),

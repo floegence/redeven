@@ -403,6 +403,12 @@ func (r *ComputerUseRuntime) executeComputerToolLocked(ctx context.Context, call
 		defer cancel()
 	}
 	result, err := executor.ExecuteTargetTool(captureCtx, call)
+	// Release every transient executor frame once, including validation failures.
+	for _, attachment := range result.Attachments {
+		if release, ok := executor.(interface{ releaseTargetFrame(string) }); ok {
+			defer release.releaseTargetFrame(attachment.ResourceRef)
+		}
+	}
 	if approvedURL != "" {
 		if payload, ok := result.Result.(map[string]any); ok && payload["action_executed"] == true {
 			control.mu.Lock()
@@ -446,32 +452,23 @@ func (r *ComputerUseRuntime) executeComputerToolLocked(ctx context.Context, call
 		}
 	}
 	if result.Safety != nil && (!result.Safety.SafeToCapture || !result.Safety.SafeToSendToModel) {
-		for _, attachment := range result.Attachments {
-			if release, ok := executor.(interface{ releaseTargetFrame(string) }); ok {
-				release.releaseTargetFrame(attachment.ResourceRef)
-			}
-		}
 		result.Attachments, result.frameBytes = nil, nil
 	}
 	if err == nil && (result.Safety == nil || result.Safety.SafeToSendToModel) {
 		if semanticErr := normalizeComputerSemanticResult(&result); semanticErr != nil {
-			for _, attachment := range result.Attachments {
-				if release, ok := executor.(interface{ releaseTargetFrame(string) }); ok {
-					release.releaseTargetFrame(attachment.ResourceRef)
-				}
-			}
 			payload, _ := result.Result.(map[string]any)
 			return computerObservationFailure(call, map[string]any{"action_executed": payload["action_executed"] == true, "observation_stage": "semantic_read"}, result.ExecutionLocation)
 		}
 	}
+	if err == nil && !takeoverResult(result, err) && call.ToolName == "computer.screenshot" && (result.TargetID != call.TargetID || len(result.Attachments) != 1 || !strings.HasPrefix(result.Attachments[0].ResourceRef, "computer://"+call.TargetID+"/") || validateComputerFrame(result.Attachments[0], result.frameBytes) != nil) {
+		return TargetToolResult{}, computerTargetFailure(call, "FRAME_UNAVAILABLE")
+	}
 	if err == nil && len(result.Attachments) > 0 {
 		for _, attachment := range result.Attachments {
-			if release, ok := executor.(interface{ releaseTargetFrame(string) }); ok {
-				defer release.releaseTargetFrame(attachment.ResourceRef)
-			}
 			if !call.liveFrame {
 				if storeErr := r.media.put(ctx, attachment, result.frameBytes); storeErr != nil {
-					return TargetToolResult{}, computerTargetFailure(call, "FRAME_UNAVAILABLE")
+					payload, _ := result.Result.(map[string]any)
+					return computerObservationFailure(call, map[string]any{"action_executed": payload["action_executed"] == true, "observation_stage": "capture"}, result.ExecutionLocation)
 				}
 			}
 		}
@@ -482,9 +479,6 @@ func (r *ComputerUseRuntime) executeComputerToolLocked(ctx context.Context, call
 		}
 		if result.Safety.Level != "routine" || !result.Safety.SafeToCapture || !result.Safety.SafeToSendToModel {
 			return TargetToolResult{}, &targetToolPolicyError{code: "interaction_takeover_required", tool: call.ToolName, target: call.TargetID, safety: result.Safety}
-		}
-		if call.ToolName == "computer.screenshot" && (len(result.Attachments) != 1 || validateComputerFrame(result.Attachments[0], result.frameBytes) != nil) {
-			return TargetToolResult{}, computerTargetFailure(call, "FRAME_UNAVAILABLE")
 		}
 		control.mu.Lock()
 		if control.threadID != call.ThreadID || control.runID != call.RunID {

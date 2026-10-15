@@ -42,6 +42,22 @@ afterEach(() => {
 });
 
 describe('createFlowerActivityDisclosureController', () => {
+  it('opens a completed screenshot when its image arrives and retains a manual collapse', () => {
+    createRoot(dispose => {
+      const [available, setAvailable] = createSignal(false);
+      const [manualOpen, setManualOpen] = createSignal<boolean>();
+      const control = createFlowerActivityDisclosureController({ manualOpen, defaultOpen: available, onManualOpenChange: setManualOpen });
+      expect(control.open()).toBe(false);
+      setAvailable(true);
+      expect(control.open()).toBe(true);
+      control.toggle();
+      setAvailable(false); setAvailable(true);
+      expect(control.open()).toBe(false);
+      setManualOpen(undefined);
+      expect(control.open()).toBe(true);
+      dispose();
+    });
+  });
   it('keeps details closed until the user opens them', () => {
     const harness = createControllerHarness();
     expect(harness.control.open()).toBe(false);
