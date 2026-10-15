@@ -77,7 +77,8 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(src).toContain("`flower-activity-inline-row-${displayStatus()}`");
     expect(src).toContain('data-flower-activity-status={displayStatus()}');
     expect(src).not.toContain('flower-activity-inline-status-${displayStatus()}');
-    expect(src).toContain("copy().chat.toolStatuses[activityWaitingForComputer(item, timeline) ? 'waiting' : item.status]");
+    expect(src).toContain("copy().chat.toolStatuses[item.status]");
+    expect(src).not.toContain("activityWaitingForComputer");
     expect(src).not.toContain('payload.status');
     expect(src).not.toContain("payload['status']");
   });

@@ -45,7 +45,7 @@ test('native popup workflows preserve effects and require separate target author
         const children = [];
         context.on('page', child => children.push(child));
         const name = { link: 'Link', form: 'Submit', 'other-site': 'Other site', proxy: 'Proxy', cached: 'Cached open' }[scenario] || 'Open';
-        const request = { tool_name: 'computer.action', args: { action: 'click', selector: { role: scenario === 'link' ? 'link' : 'button', name } }, allowed_origins: scenario === 'revoke' ? [] : [origin], script_operation: true };
+        const request = { tool_name: 'computer.action', args: { action: 'click', selector: { role: scenario === 'link' ? 'link' : 'button', name, exact: true } }, allowed_origins: scenario === 'revoke' ? [] : [origin], script_operation: true };
         const result = await controller.execute(request);
         if (scenario === 'click-unknown') {
           assert.equal(result.error, 'EFFECT_OUTCOME_UNKNOWN', JSON.stringify(result));

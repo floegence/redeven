@@ -107,6 +107,10 @@
         "run_id": "run-fixture",
         "kind": "input",
         "input": {
+          "reason_code": "user_decision_required",
+          "required_from_user": [
+            "channel"
+          ],
           "summary": "The current deployment has completed its checks. Before I prepare the next step, which release channel should Flower use for this workspace, considering whether you need the version tested for production or want to evaluate the upcoming features?",
           "questions": [
             {
@@ -155,6 +159,10 @@
         "run_id": "run-fixture",
         "kind": "input",
         "input": {
+          "reason_code": "user_decision_required",
+          "required_from_user": [
+            "channel"
+          ],
           "summary": "Which release channel should Flower use?",
           "questions": [
             {
@@ -206,6 +214,10 @@
         "run_id": "run-fixture",
         "kind": "input",
         "input": {
+          "reason_code": "user_decision_required",
+          "required_from_user": [
+            "channel"
+          ],
           "summary": "Which release channel should Flower use?",
           "questions": [
             {
@@ -254,6 +266,10 @@
         "run_id": "run-fixture",
         "kind": "input",
         "input": {
+          "reason_code": "user_decision_required",
+          "required_from_user": [
+            "channel"
+          ],
           "summary": "Flower 应使用哪个发布渠道？",
           "questions": [
             {

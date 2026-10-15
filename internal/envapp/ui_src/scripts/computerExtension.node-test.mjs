@@ -278,7 +278,7 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
     const nestedClick = await execute('computer.action', { action: 'click', selector: { role: 'button', name: 'Nested apply' } });
     assert.equal(nestedClick.error, undefined, JSON.stringify(nestedClick));
     assert.equal(await task.frameLocator('iframe').frameLocator('iframe').locator('button').textContent(), 'Nested done');
-    await execute('computer.action', { action: 'fill', selector: { role: 'textbox', name: 'Query' }, text: 'Completed' });
+    await execute('computer.action', { action: 'fill', selector: { role: 'textbox', name: 'Query', exact: true }, text: 'Completed' });
     assert.equal(await task.locator('input').inputValue(), 'Completed');
     assert.equal(await user.locator('input').inputValue(), '');
     assert.deepEqual(await worker.evaluate(async () => (await chrome.tabs.query({ active: true })).map(tab => tab.id)), activeBeforeInput);
@@ -301,7 +301,7 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
     assert.equal((await call('execute', { tab_id: created.tab_id, request: { tool_name: 'computer.observe', args: {} } })).safety.level, 'routine');
     await call('execute', { tab_id: selected.id, request: { tool_name: 'computer.screenshot', recovery_observation: true, allowed_origins: origins } });
     await task.keyboard.press('Escape');
-    assert.equal((await execute('computer.action', { action: 'fill', selector: { role: 'textbox', name: 'Query' }, text: 'Continued' })).safety.level, 'routine');
+    assert.equal((await execute('computer.action', { action: 'fill', selector: { role: 'textbox', name: 'Query', exact: true }, text: 'Continued' })).safety.level, 'routine');
     assert.equal(await task.locator('input').inputValue(), 'Continued');
     await call('execute', { tab_id: selected.id, request: { tool_name: 'computer.screenshot', recovery_observation: true, allowed_origins: origins } });
     await user.bringToFront();
@@ -338,7 +338,7 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
       withheldCredits = '';
     });
     await call('unbind', { tab_id: selected.id });
-    assert.equal((await execute('computer.action', { action: 'fill', selector: { role: 'textbox', name: 'Query' }, text: 'Forbidden' })).error, 'TARGET_CONNECTION_REQUIRED');
+    assert.equal((await execute('computer.action', { action: 'fill', selector: { role: 'textbox', name: 'Query', exact: true }, text: 'Forbidden' })).error, 'TARGET_CONNECTION_REQUIRED');
     assert.equal(await task.locator('input').inputValue(), 'Continued');
     await task.close();
     assert.equal((await execute('computer.observe')).error, 'TARGET_CONNECTION_REQUIRED');
