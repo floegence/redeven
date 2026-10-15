@@ -9976,7 +9976,7 @@
         "title": "Flower managed runtime facts",
         "type": "AI Context Contract"
       },
-      "body_length": 3279,
+      "body_length": 3659,
       "summary": "Flower consumes published Floret v7.40.0. One complete collector supplies six\nstable partitions: execution environment, date/timezone, repository state, rule\nsources, available skills, and delegation. Floret owns chronological admission,\nsemantic changes, user-role model-context messages, compaction and recovery.\nThe product owns collection and authorized presentation only.",
       "sections": [
         {
@@ -9997,8 +9997,8 @@
           "id": "presentation",
           "title": "Presentation",
           "level": 1,
-          "body": "Authorized canonical reads and the existing workspace subscription carry the\nsame snapshot, record location, changed/removed keys and latest request use.\nThe shared context panel exposes complete selectable facts and distinguishes\ncollected from used. Updates do not create chat bubbles, take focus or block\nnavigation. Keyboard, touch and mouse can open and dismiss the panel; failure\nshows source diagnostics and a safe retry action. Subtask details use the same\ncomponent and bounded detail cache.",
-          "char_count": 500
+          "body": "Authorized canonical reads and the existing workspace subscription carry the\nsame snapshot, record location, changed/removed keys and latest request use.\nThe shared context panel summarizes partitions as compact horizontal bars with\nlocalized labels. Bar percentages represent each partition's share of runtime\nfact text by Unicode character count; they are separate from provider token\nusage. Complete selectable text appears only when a partition is expanded.\nCollection and request-use times remain in the status indicator's accessible\nlabel and hover text. Stable partition keys preserve focus and expanded text\nduring refresh. Updates do not create chat bubbles, take focus or block\nnavigation. Keyboard, touch and mouse can open and dismiss the panel; failure\nshows source diagnostics and a safe retry action. Subtask details use the same\ncomponent and bounded detail cache.",
+          "char_count": 880
         }
       ],
       "snippet": "Flower consumes published Floret v7.40.0. One complete collector supplies six stable partitions: execution environment, date/timezone, repository state, rule sources, available skills, and delegation. Floret owns chronological admission,",
@@ -42480,5 +42480,5 @@
       ]
     }
   ],
-  "source_sha256": "f4f595f0f3c21dc2ca3281368d2d2c03e0f4f3a1108cf7e55347491120cac753"
+  "source_sha256": "f191bdce8e5ccd1f2af06444f5bb37007292a612b3469bfdbaea71fb66eccb15"
 }

@@ -1,5 +1,10 @@
 # Redeven OKF Update Log
 
+## 2026-10-15: Compact context statistics
+
+- Summarize [runtime fact categories](ai/flower-managed-model-context.md) with localized horizontal bars and Unicode text shares; disclose complete text on demand.
+- Keep collection and request-use metadata in the status hint and preserve focus and expanded categories during refresh.
+
 ## 2026-10-15: Confirmed file targets and recovery
 
 - Restore [file Activity navigation](ui/flower-file-activity.md) with direct per-resource targets and canonical history enrichment.

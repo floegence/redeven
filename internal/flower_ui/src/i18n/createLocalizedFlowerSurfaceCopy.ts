@@ -558,6 +558,15 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
       liveProgressOutput: t(i18n, k('chat.liveProgressOutput')),
       contextIndicator: {
         runtimeFacts: t(i18n, k('chat.contextIndicatorRuntimeFacts')), collected: t(i18n, k('chat.contextIndicatorCollected')), used: t(i18n, k('chat.contextIndicatorUsed')), updated: t(i18n, k('chat.contextIndicatorUpdated')), removed: t(i18n, k('chat.contextIndicatorRemoved')),
+        textShare: t(i18n, k('chat.contextIndicatorTextShare')),
+        sectionLabels: {
+          delegation: t(i18n, k('chat.contextIndicatorDelegation')),
+          execution_environment: t(i18n, k('chat.contextIndicatorEnvironment')),
+          local_time: t(i18n, k('chat.contextIndicatorDateTime')),
+          repository: t(i18n, k('chat.contextIndicatorRepository')),
+          repository_rules: t(i18n, k('chat.contextIndicatorRules')),
+          skills: t(i18n, k('chat.contextIndicatorSkills')),
+        },
         label: t(i18n, k('chat.contextIndicatorLabel')),
         nearThreshold: t(i18n, k('chat.contextIndicatorNearThreshold')),
         willCompact: t(i18n, k('chat.contextIndicatorWillCompact')),

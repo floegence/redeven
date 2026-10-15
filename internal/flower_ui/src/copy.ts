@@ -646,6 +646,8 @@ export type FlowerSurfaceCopy = Readonly<{
       unknownPercent: string;
       unavailable: string;
       runtimeFacts: string; collected: string; used: string; updated: string; removed: string;
+      textShare: string;
+      sectionLabels: Readonly<Record<string, string>>;
       recentCacheHitLabel: string;
       cacheHitLabel: string;
       percent: (percent: number) => string;
@@ -1056,6 +1058,11 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       unknownPercent: '—',
       unavailable: 'Not available',
       runtimeFacts: 'Runtime facts', collected: 'Collected', used: 'Used by latest request', updated: 'Updated', removed: 'Removed',
+      textShare: 'Share of runtime fact text (characters)',
+      sectionLabels: {
+        delegation: 'Delegation', execution_environment: 'Environment', local_time: 'Date & time',
+        repository: 'Repository', repository_rules: 'Rules', skills: 'Skills',
+      },
       recentCacheHitLabel: 'Latest request cache hit rate',
       cacheHitLabel: 'Session cache hit rate',
       percent: (percent) => `${percent}%`,

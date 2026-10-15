@@ -172,7 +172,10 @@ describe('Subagent detail window boundary', () => {
     expect(bounds.bottom).toBeLessThanOrEqual(windowBounds.bottom);
     const target = document.elementFromPoint(bounds.left + 20, bounds.top + 20);
     expect(target !== null && panel.contains(target), target?.outerHTML).toBe(true);
-    expect(panel.textContent).toContain('Complete current catalog');
+    expect(panel.querySelectorAll('.flower-model-context-bar')).toHaveLength(1);
+    expect(panel.querySelector('pre')).toBeNull();
+    panel.querySelector<HTMLElement>('summary')!.click();
+    await expect.poll(() => panel.textContent).toContain('Complete current catalog');
     trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     await nextFrame();
     expect(panel.getAttribute('data-open')).toBeNull();
