@@ -15,6 +15,7 @@ import (
 
 	flidentity "github.com/floegence/floret/v7/identity"
 	flprovider "github.com/floegence/floret/v7/provider"
+	"github.com/floegence/redeven/internal/chatgpt"
 	"github.com/gorilla/websocket"
 	"github.com/openai/openai-go/v3/option"
 )
@@ -167,6 +168,60 @@ func TestOpenAIWebSocketUpgradeFallbackPreservesFailures(t *testing.T) {
 				if !errors.As(err, &failure) || failure.diagnostic.Status != status {
 					t.Fatalf("classification=%v", err)
 				}
+			}
+		})
+	}
+}
+
+func TestOpenAIWebSocketStreamErrorsPreserveStatus(t *testing.T) {
+	for _, sample := range []struct {
+		status     int
+		code, want string
+	}{
+		{401, "invalid_api_key", runErrorCodeChatGPTReview},
+		{429, "rate_limit_exceeded", runErrorCodeProviderRateLimited},
+		{400, "invalid_request_error", runErrorCodeProviderRequestInvalid},
+		{503, "server_error", runErrorCodeChatGPTTemporary},
+	} {
+		t.Run(fmt.Sprint(sample.status), func(t *testing.T) {
+			pool := newOpenAIResponsesPool()
+			defer pool.Close()
+			var commands atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != "GET" {
+					t.Error("stream failure fell back to HTTP")
+					return
+				}
+				conn, err := (&websocket.Upgrader{}).Upgrade(w, r, nil)
+				if err != nil {
+					return
+				}
+				defer conn.Close()
+				var body map[string]json.RawMessage
+				if conn.ReadJSON(&body) != nil {
+					return
+				}
+				commands.Add(1)
+				_ = conn.WriteJSON(map[string]any{"type": "error", "status": sample.status, "error": map[string]any{"code": sample.code, "message": "request rejected"}})
+			}))
+			defer server.Close()
+			p := testOpenAISocketProvider(t, server, pool)
+			var observed error
+			p.chatGPTFailure = func(_ context.Context, _ string, err error) { observed = err }
+			_, err := p.StreamTurn(t.Context(), testOpenAISocketRequest("scope"), nil)
+			var failure *providerFailure
+			if !errors.As(err, &failure) || failure.diagnostic.Status != sample.status || providerDiagnosticRunCode(failure.diagnostic) != sample.want {
+				t.Fatalf("stream failure lost classification: %v", err)
+			}
+			var account *chatgpt.RequestError
+			if !errors.As(observed, &account) || account.Status != sample.status {
+				t.Fatalf("account observation lost status: %v", observed)
+			}
+			pool.mu.Lock()
+			retained := len(pool.entries)
+			pool.mu.Unlock()
+			if commands.Load() != 1 || retained != 0 {
+				t.Fatalf("failed generation replayed or retained: commands=%d retained=%d", commands.Load(), retained)
 			}
 		})
 	}
