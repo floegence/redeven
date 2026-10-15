@@ -26,9 +26,11 @@ it('never replaces the selected transcript with loading across repeated 24-threa
   await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="message-0"]')));
   drafts.open(fixture.thread.thread_id).mutate(value => ({ ...value, text: 'Keep this unfinished draft' }));
   const message = runtime.querySelector('[data-flower-message-id="message-0"]')!;
-  const range = document.createRange(); range.selectNodeContents(message.querySelector('p') ?? message);
+  await waitFor(() => Boolean(message.querySelector('p')?.textContent));
+  const range = document.createRange(); range.selectNodeContents(message.querySelector('p')!);
   const selection = window.getSelection()!; selection.removeAllRanges(); selection.addRange(range);
   const selectedText = selection.toString();
+  expect(selectedText).not.toBe('');
   let flashes = 0;
   const observer = new MutationObserver(records => {
     for (const record of records) for (const node of record.addedNodes) {

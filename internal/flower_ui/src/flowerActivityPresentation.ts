@@ -1498,7 +1498,8 @@ function presentationForStructured(item: FlowerActivityItem, copy?: FlowerActivi
     unavailable: words.computerUnavailable,
   } as Record<string, string>)[token] ?? '').filter(Boolean).join(' · ');
   const errorBlock = errorDetailBlockForItem(item, item.payload);
-  const rows = structuredRowsFromPayload(item.payload).filter(row => !errorBlock || row.title || row.meta || !repeatsItemError(item, row.content)).map(row =>
+  const savedScreenshot = isSavedComputerScreenshot(item);
+  const rows = structuredRowsFromPayload(item.payload).filter(row => (!savedScreenshot || row.content.trim()) && (!errorBlock || row.title || row.meta || !repeatsItemError(item, row.content))).map(row =>
     item.tool_name === 'use_skill' && row.format === 'markdown' ? { ...row, title: '', meta: '' } : computer ? { ...row, meta: rowMeta(row.meta) } : row);
   const inputs = structuredRowsFromPayload(item.payload, 'inputs').map(row => ({
     ...row, title: TOOL_INPUT_LABELS[row.title] ? words[TOOL_INPUT_LABELS[row.title]] : row.title,

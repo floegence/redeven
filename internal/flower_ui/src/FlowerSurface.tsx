@@ -10074,9 +10074,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   </div>
                 </Show>
                 {/* Keep the script input in a stable section when new results arrive. */}
-                <For each={[false, true]}>{inputs => <For each={detailKeys().filter(key => {
+                <For each={['results', 'inputs', 'error'] as const}>{section => <div class="flower-activity-detail-section"><For each={detailKeys().filter(key => {
                   const block = detailsByKey().get(key);
-                  return (block?.kind === 'structured_rows' && block.section === 'inputs') === inputs;
+                  return (block?.kind === 'error' ? 'error' : block?.kind === 'structured_rows' && block.section === 'inputs' ? 'inputs' : 'results') === section;
                 })}>
                   {(detailKey) => {
                     const block = createMemo(() => detailsByKey().get(detailKey)!);
@@ -10113,7 +10113,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                       </>
                     );
                   }}
-                </For>}</For>
+                </For></div>}</For>
               </div>
             </div>
           </div>

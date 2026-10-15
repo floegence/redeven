@@ -161,7 +161,8 @@ it('retains a newly arrived approval during a pending batch and keeps navigation
 });
 
 it('uses the same pending guard for returning computer control', async () => {
-  const s = await setup({ request: inputRequest({ tool_name: 'computer.screenshot', questions: [{ id: 'computer_control',
+  const s = await setup({ request: inputRequest({ prompt_id: 'tool-input:legacy-capture', tool_name: 'computer.screenshot',
+    computer_assistance: { kind: 'inspection', target_id: 'browser-main', tool_call_id: 'legacy-capture' }, questions: [{ id: 'computer_control',
     header: '', question: 'Return control when ready.', response_mode: 'select',
     choices: [{ choice_id: 'return', value: 'Return control to Flower', label: 'Return control', kind: 'select' }] }] }) });
   const button = s.runtime.querySelector<HTMLButtonElement>('.flower-computer-control-actions button:last-child')!;
