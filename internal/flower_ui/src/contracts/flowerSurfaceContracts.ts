@@ -311,6 +311,7 @@ export type FlowerThreadTokenUsage = Readonly<{
 }>;
 
 export type FlowerContextUsage = Readonly<{
+  recent_request_usage?: FlowerThreadTokenUsage;
   confirmed?: FlowerContextSample;
   estimate?: FlowerContextSample;
   thread_usage?: FlowerThreadTokenUsage;

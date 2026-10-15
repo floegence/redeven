@@ -56,7 +56,7 @@ func (p *deepSeekProvider) prepareTurn(ctx context.Context, req ModelGatewayRequ
 	if err != nil {
 		return nil, err
 	}
-	request := flprovider.Request{RunID: req.RunID, PromptScopeID: req.PromptScopeID, Reasoning: req.ProviderControls.ReasoningSelection, MaxOutputTokens: int64(req.Budgets.MaxOutputToken)}
+	request := flprovider.Request{ReusePolicy: req.ReusePolicy, RunID: req.RunID, PromptScopeID: req.PromptScopeID, Reasoning: req.ProviderControls.ReasoningSelection, MaxOutputTokens: int64(req.Budgets.MaxOutputToken)}
 	if request.RunID == "" {
 		request.RunID = flidentity.RunID("provider-" + rand.Text())
 	}

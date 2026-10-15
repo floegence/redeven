@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 
 	anthropic "github.com/anthropics/anthropic-sdk-go"
 	openai "github.com/openai/openai-go/v3"
@@ -16,7 +17,7 @@ func turnUsageFromOpenAIResponse(usage oresponses.ResponseUsage) (TurnUsage, err
 		usage.OutputTokens,
 		usage.OutputTokensDetails.ReasoningTokens,
 		usage.InputTokensDetails.CachedTokens,
-		0,
+		usage.InputTokensDetails.CacheWriteTokens,
 	)
 }
 
@@ -63,11 +64,11 @@ func normalizedPromptUsage(totalInput, output, reasoning, cacheRead, cacheWrite 
 	if totalInput < 0 || output < 0 || reasoning < 0 || cacheRead < 0 || cacheWrite < 0 {
 		return TurnUsage{}, errors.New("provider usage token counts must not be negative")
 	}
-	if cacheRead > totalInput {
-		return TurnUsage{}, errors.New("provider cache-read tokens exceed total input tokens")
+	if cacheRead > totalInput || cacheWrite > totalInput-cacheRead {
+		return TurnUsage{}, errors.New("provider cached tokens exceed total input tokens")
 	}
 	out := TurnUsage{
-		InputTokens: totalInput - cacheRead, OutputTokens: output, ReasoningTokens: reasoning,
+		InputTokens: totalInput - cacheRead - cacheWrite, OutputTokens: output, ReasoningTokens: reasoning,
 		CacheReadTokens: cacheRead, CacheWriteTokens: cacheWrite,
 	}
 	if err := validateTurnUsage(out); err != nil {
@@ -79,6 +80,13 @@ func normalizedPromptUsage(totalInput, output, reasoning, cacheRead, cacheWrite 
 func validateTurnUsage(usage TurnUsage) error {
 	if usage.InputTokens < 0 || usage.OutputTokens < 0 || usage.ReasoningTokens < 0 || usage.CacheReadTokens < 0 || usage.CacheWriteTokens < 0 {
 		return errors.New("model gateway usage token counts must not be negative")
+	}
+	remaining := int64(math.MaxInt64)
+	for _, tokens := range []int64{usage.InputTokens, usage.OutputTokens, usage.ReasoningTokens, usage.CacheReadTokens, usage.CacheWriteTokens} {
+		if tokens > remaining {
+			return errors.New("model gateway usage total overflows int64")
+		}
+		remaining -= tokens
 	}
 	return nil
 }

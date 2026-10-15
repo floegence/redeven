@@ -401,6 +401,11 @@ func flowerSourcesToFloret(in []SourceRef) []flprovider.Source {
 }
 
 func (p *floretProviderAdapter) turnRequest(ctx context.Context, req flprovider.Request) (ModelGatewayRequest, error) {
+	var reusePolicy *flprovider.RequestReusePolicy
+	if req.ReusePolicy != nil {
+		copy := *req.ReusePolicy
+		reusePolicy = &copy
+	}
 	controls := p.controls
 	// Floret request-level reasoning is authoritative, including an explicit
 	// zero selection used by short requests such as automatic titles.
@@ -451,7 +456,7 @@ func (p *floretProviderAdapter) turnRequest(ctx context.Context, req flprovider.
 	turn := ModelGatewayRequest{
 		ThreadID: req.ThreadID, TurnID: req.TurnID, TraceID: req.TraceID, LogicalRequestID: req.LogicalRequestID, AttemptID: req.AttemptID, AttemptEpoch: req.AttemptEpoch,
 		Step:  req.Step,
-		RunID: req.RunID, PromptScopeID: req.PromptScopeID, PreviousState: previousState,
+		RunID: req.RunID, PromptScopeID: req.PromptScopeID, PreviousState: previousState, ReusePolicy: reusePolicy,
 		Model:            p.modelName,
 		Messages:         messages,
 		Tools:            tools,

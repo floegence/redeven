@@ -42,7 +42,7 @@ describe('Flower context usage contract', () => {
   const thread_usage = { input_tokens: 50, output_tokens: 20, cache_read_tokens: 45, cache_write_tokens: 5 };
 
   it('maps the same confirmed and estimated samples for live and reconnect', () => {
-    const wire = { confirmed, estimate, thread_usage };
+    const wire = { confirmed, estimate, thread_usage, recent_request_usage: {input_tokens: 30, output_tokens: 5, cache_read_tokens: 60, cache_write_tokens: 10} };
     expect(mapContextUsage(wire)).toEqual(wire);
     expect(mapContextUsage(JSON.parse(JSON.stringify(wire)))).toEqual(mapContextUsage(wire));
   });
@@ -52,7 +52,7 @@ describe('Flower context usage contract', () => {
     expect(mergeFlowerContextUsage(previous, incoming)).toEqual({ ...incoming, thread_usage });
   });
   it('clears obsolete samples on model changes and successful compaction', () => {
-    const previous = mapContextUsage({ confirmed, estimate, thread_usage })!;
+    const previous = mapContextUsage({ confirmed, estimate, thread_usage, recent_request_usage: thread_usage })!;
     expect(mergeFlowerContextUsage(previous, mapContextUsage({})!)).toEqual({ thread_usage });
     const next = mapContextUsage({ estimate })!;
     expect(mergeFlowerContextUsage(previous, next).confirmed).toBeUndefined();

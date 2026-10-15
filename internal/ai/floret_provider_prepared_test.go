@@ -54,6 +54,7 @@ func TestFloretProviderPreparedRequestFreezesCompleteRenderedPayload(t *testing.
 	)
 
 	prepared, err := adapter.Prepare(context.Background(), flprovider.Request{
+		ReusePolicy: &flprovider.RequestReusePolicy{},
 
 		Messages: []flprovider.Message{{
 			Role: flprovider.RoleUser,
@@ -70,6 +71,7 @@ func TestFloretProviderPreparedRequestFreezesCompleteRenderedPayload(t *testing.
 	if !ok {
 		t.Fatalf("prepared request type = %T", prepared)
 	}
+
 	if resolveCalls != 1 {
 		t.Fatalf("attachment resolve calls = %d, want 1", resolveCalls)
 	}
@@ -113,6 +115,9 @@ func TestFloretProviderPreparedRequestFreezesCompleteRenderedPayload(t *testing.
 	defer gateway.mu.Unlock()
 	if len(gateway.requests) != 1 {
 		t.Fatalf("rendered model requests = %d, want 1", len(gateway.requests))
+	}
+	if len(gateway.requests) != 1 || (gateway.requests[0].ReusePolicy == nil || gateway.requests[0].ReusePolicy.ProviderStateAllowed || gateway.requests[0].ReusePolicy.PromptCacheEnabled || gateway.requests[0].ReusePolicy.PreferContinuation) {
+		t.Fatalf("prepared isolation lost: %+v", gateway.requests[0].ReusePolicy)
 	}
 }
 

@@ -86,17 +86,20 @@ func resolveProviderWebSearchCapability(provider config.AIProvider, modelName st
 }
 
 type openAIProvider struct {
-	providerType     string
-	client           openai.Client
-	strictToolSchema bool
-	forceChat        bool
-	gemini           bool
-	parallelTools    parallelToolCallsWireMode
-	requireTerminal  bool
-	chatGPT          bool
-	chatGPTToken     func(context.Context) (string, error)
-	chatGPTFailure   func(context.Context, string, error)
-	chatGPTWatch     func(context.Context, func(error)) (func(), error)
+	responsesPool     *openAIResponsesPool
+	transportIdentity openAIConnectionIdentity
+	officialOpenAI    bool
+	providerType      string
+	client            openai.Client
+	strictToolSchema  bool
+	forceChat         bool
+	gemini            bool
+	parallelTools     parallelToolCallsWireMode
+	requireTerminal   bool
+	chatGPT           bool
+	chatGPTToken      func(context.Context) (string, error)
+	chatGPTFailure    func(context.Context, string, error)
+	chatGPTWatch      func(context.Context, func(error)) (func(), error)
 }
 
 func (p *openAIProvider) failureProviderType() string {
@@ -141,6 +144,14 @@ func (p *openAIProvider) prepareTurn(ctx context.Context, req ModelGatewayReques
 	if strings.TrimSpace(req.Model) == "" {
 		return nil, errors.New("missing model")
 	}
+	if req.ReusePolicy != nil {
+		if err := req.ReusePolicy.Validate(); err != nil {
+			return nil, err
+		}
+		if !req.ReusePolicy.ProviderStateAllowed && req.PreviousState != nil {
+			return nil, errors.New("provider state forbidden by request reuse policy")
+		}
+	}
 	useChat := p.forceChat
 	switch req.Protocol {
 	case "":
@@ -169,6 +180,9 @@ func (p *openAIProvider) prepareTurn(ctx context.Context, req ModelGatewayReques
 		Model:           oshared.ResponsesModel(strings.TrimSpace(req.Model)),
 		MaxOutputTokens: openai.Int(modelGatewayDefaultMaxOutputTokens),
 	}
+	if policy := req.ReusePolicy; policy != nil && policy.PromptCacheEnabled && p.officialOpenAI {
+		params.PromptCacheKey = openai.String(openAIPromptCacheKey(policy.PromptCacheNamespace, p.transportIdentity))
+	}
 	applyResponsesParallelToolCalls(&params, p.parallelTools)
 	if req.Budgets.MaxOutputToken > 0 {
 		params.MaxOutputTokens = openai.Int(int64(req.Budgets.MaxOutputToken))
@@ -179,7 +193,7 @@ func (p *openAIProvider) prepareTurn(ctx context.Context, req ModelGatewayReques
 	if req.ProviderControls.TopP != nil {
 		params.TopP = openai.Float(*req.ProviderControls.TopP)
 	}
-	if state := req.PreviousState; state != nil && !p.chatGPT {
+	if state := req.PreviousState; state != nil && !p.chatGPT && (req.ReusePolicy == nil || req.ReusePolicy.PreferContinuation) {
 		if state.Kind != providerContinuationKindOpenAIResponses || strings.TrimSpace(state.ID) == "" || len(state.Attributes) != 0 {
 			return nil, errors.New("invalid OpenAI Responses continuation state")
 		}
@@ -280,8 +294,20 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 		bearer = token
 		options = append(options, ooption.WithAPIKey(token), ooption.WithMaxRetries(0))
 	}
-	stream := p.client.Responses.NewStreaming(ctx, oresponses.ResponseNewParams{}, options...)
-	defer func() { _ = stream.Close() }()
+	var native chatGPTStreamContext
+	if len(chatGPTContext) == 1 {
+		native = chatGPTContext[0]
+	}
+	stream, lease, fallback, err := p.responsesStream(ctx, native.Request, bearer, payload, &httpResponse, options)
+	if err != nil {
+		return ModelGatewayResult{}, providerRequestFailure(err, httpResponse, p.failureProviderType())
+	}
+	defer func() {
+		_ = stream.Close()
+		if lease != nil {
+			lease.finish(resultErr == nil)
+		}
+	}()
 	var textBuf strings.Builder
 	var completed oresponses.Response
 	gotCompleted := false
@@ -668,7 +694,25 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 			return ModelGatewayResult{}, stateErr
 		}
 	}
-	return result, validateModelGatewayResult(result)
+	if policy := native.Request.ReusePolicy; policy != nil && !policy.ProviderStateAllowed {
+		result.ProviderState = nil
+	}
+	if err := validateModelGatewayResult(result); err != nil {
+		return ModelGatewayResult{}, err
+	}
+	if lease != nil {
+		if err := lease.confirm(payload, completed, result.ProviderState); err != nil {
+			return ModelGatewayResult{}, err
+		}
+	}
+	result.RawProviderDiag["transport"] = "http"
+	if lease != nil {
+		result.RawProviderDiag["transport"] = "websocket"
+	}
+	if fallback != "" {
+		result.RawProviderDiag["transport_fallback"] = fallback
+	}
+	return result, nil
 }
 
 func (p *openAIProvider) prepareChatTurn(ctx context.Context, req ModelGatewayRequest) (preparedModelGatewayTurn, error) {
@@ -706,6 +750,9 @@ func (p *openAIProvider) prepareChatTurn(ctx context.Context, req ModelGatewayRe
 		Model:         oshared.ChatModel(strings.TrimSpace(req.Model)),
 		Messages:      messages,
 		StreamOptions: openai.ChatCompletionStreamOptionsParam{IncludeUsage: openai.Bool(true)},
+	}
+	if policy := req.ReusePolicy; policy != nil && policy.PromptCacheEnabled && p.officialOpenAI {
+		params.PromptCacheKey = openai.String(openAIPromptCacheKey(policy.PromptCacheNamespace, p.transportIdentity))
 	}
 	applyChatParallelToolCalls(&params, p.parallelTools)
 	if req.Budgets.MaxOutputToken > 0 {
@@ -2541,21 +2588,23 @@ func newProviderAdapter(providerType string, baseURL string, apiKey string, stri
 	}
 	switch providerType {
 	case "openai":
-		opts := []ooption.RequestOption{ooption.WithAPIKey(strings.TrimSpace(apiKey))}
+		opts := []ooption.RequestOption{ooption.WithAPIKey(strings.TrimSpace(apiKey)), ooption.WithMaxRetries(0)}
 		if strings.TrimSpace(baseURL) != "" {
 			opts = append(opts, ooption.WithBaseURL(strings.TrimSpace(baseURL)))
 		}
 		return &openAIProvider{
-			providerType:     providerType,
-			client:           openai.NewClient(opts...),
-			strictToolSchema: strictToolSchema,
-			parallelTools:    parallelTools,
+			providerType:      providerType,
+			officialOpenAI:    isOfficialOpenAIEndpoint(providerType, baseURL),
+			transportIdentity: openAIConnectionIdentity{Provider: providerType, Endpoint: normalizedOpenAIEndpoint(baseURL)},
+			client:            openai.NewClient(opts...),
+			strictToolSchema:  strictToolSchema,
+			parallelTools:     parallelTools,
 		}, nil
 	case "openai_compatible", "openrouter", "xai", "groq", "ollama", "google":
 		if providerType == "google" && strings.TrimSpace(baseURL) == "" {
 			baseURL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 		}
-		opts := []ooption.RequestOption{ooption.WithAPIKey(strings.TrimSpace(apiKey))}
+		opts := []ooption.RequestOption{ooption.WithAPIKey(strings.TrimSpace(apiKey)), ooption.WithMaxRetries(0)}
 		if strings.TrimSpace(apiKey) == "" {
 			// Override ambient SDK credentials and omit authentication for keyless endpoints.
 			opts = append(opts, ooption.WithHeaderDel("Authorization"))
@@ -2564,41 +2613,47 @@ func newProviderAdapter(providerType string, baseURL string, apiKey string, stri
 			opts = append(opts, ooption.WithBaseURL(strings.TrimSpace(baseURL)))
 		}
 		return &openAIProvider{
-			providerType:     providerType,
-			client:           openai.NewClient(opts...),
-			strictToolSchema: strictToolSchema,
-			forceChat:        true,
-			gemini:           providerType == "google",
-			parallelTools:    parallelTools,
+			providerType:      providerType,
+			officialOpenAI:    isOfficialOpenAIEndpoint(providerType, baseURL),
+			transportIdentity: openAIConnectionIdentity{Provider: providerType, Endpoint: normalizedOpenAIEndpoint(baseURL)},
+			client:            openai.NewClient(opts...),
+			strictToolSchema:  strictToolSchema,
+			forceChat:         true,
+			gemini:            providerType == "google",
+			parallelTools:     parallelTools,
 		}, nil
 	case "deepseek":
 		return &deepSeekProvider{baseURL: strings.TrimRight(strings.TrimSpace(baseURL), "/"), apiKey: strings.TrimSpace(apiKey), strictTools: strictToolSchema}, nil
 	case "chatglm":
-		opts := []ooption.RequestOption{ooption.WithAPIKey(strings.TrimSpace(apiKey))}
+		opts := []ooption.RequestOption{ooption.WithAPIKey(strings.TrimSpace(apiKey)), ooption.WithMaxRetries(0)}
 		if strings.TrimSpace(baseURL) != "" {
 			opts = append(opts, ooption.WithBaseURL(strings.TrimSpace(baseURL)))
 		}
 		return &openAIProvider{
-			providerType:     providerType,
-			client:           openai.NewClient(opts...),
-			strictToolSchema: strictToolSchema,
-			forceChat:        true,
-			parallelTools:    parallelTools,
+			providerType:      providerType,
+			officialOpenAI:    isOfficialOpenAIEndpoint(providerType, baseURL),
+			transportIdentity: openAIConnectionIdentity{Provider: providerType, Endpoint: normalizedOpenAIEndpoint(baseURL)},
+			client:            openai.NewClient(opts...),
+			strictToolSchema:  strictToolSchema,
+			forceChat:         true,
+			parallelTools:     parallelTools,
 		}, nil
 	case "qwen":
-		opts := []ooption.RequestOption{ooption.WithAPIKey(strings.TrimSpace(apiKey))}
+		opts := []ooption.RequestOption{ooption.WithAPIKey(strings.TrimSpace(apiKey)), ooption.WithMaxRetries(0)}
 		if strings.TrimSpace(baseURL) != "" {
 			opts = append(opts, ooption.WithBaseURL(strings.TrimSpace(baseURL)))
 		}
 		return &openAIProvider{
-			providerType:     providerType,
-			client:           openai.NewClient(opts...),
-			strictToolSchema: strictToolSchema,
-			forceChat:        true,
-			parallelTools:    parallelTools,
+			providerType:      providerType,
+			officialOpenAI:    isOfficialOpenAIEndpoint(providerType, baseURL),
+			transportIdentity: openAIConnectionIdentity{Provider: providerType, Endpoint: normalizedOpenAIEndpoint(baseURL)},
+			client:            openai.NewClient(opts...),
+			strictToolSchema:  strictToolSchema,
+			forceChat:         true,
+			parallelTools:     parallelTools,
 		}, nil
 	case "moonshot":
-		opts := []ooption.RequestOption{ooption.WithAPIKey(strings.TrimSpace(apiKey))}
+		opts := []ooption.RequestOption{ooption.WithAPIKey(strings.TrimSpace(apiKey)), ooption.WithMaxRetries(0)}
 		if strings.TrimSpace(baseURL) != "" {
 			opts = append(opts, ooption.WithBaseURL(strings.TrimSpace(baseURL)))
 		}

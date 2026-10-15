@@ -2,6 +2,7 @@ package ai
 
 import (
 	"encoding/json"
+	"math"
 	"testing"
 
 	anthropic "github.com/anthropics/anthropic-sdk-go"
@@ -97,5 +98,34 @@ func assertTurnUsage(t *testing.T, got, want TurnUsage) {
 	t.Helper()
 	if got != want {
 		t.Fatalf("usage=%#v, want %#v", got, want)
+	}
+}
+
+func TestOpenAIUsageValidatesCacheWritesWithoutOverflow(t *testing.T) {
+	for _, sample := range []struct {
+		total, read, write int64
+		valid              bool
+	}{{100, 40, 10, true}, {100, 0, 0, true}, {0, 0, 0, true}, {100, 70, 31, false}, {100, 0, 101, false}, {math.MaxInt64, math.MaxInt64, 1, false}, {math.MaxInt64, math.MaxInt64 - 1, 1, true}, {100, -1, 0, false}, {100, 0, -1, false}} {
+		usage, err := normalizedPromptUsage(sample.total, 0, 0, sample.read, sample.write)
+		if (err == nil) != sample.valid {
+			t.Fatalf("sample=%+v usage=%+v err=%v", sample, usage, err)
+		}
+		if err == nil && usage.InputTokens != sample.total-sample.read-sample.write {
+			t.Fatal(usage)
+		}
+	}
+	var usage oresponses.ResponseUsage
+	if err := json.Unmarshal([]byte(`{"input_tokens":100,"input_tokens_details":{"cached_tokens":40,"cache_write_tokens":10}}`), &usage); err != nil {
+		t.Fatal(err)
+	}
+	got, err := turnUsageFromOpenAIResponse(usage)
+	if err != nil || got.InputTokens != 50 || got.CacheWriteTokens != 10 {
+		t.Fatalf("usage=%+v %v", got, err)
+	}
+}
+
+func TestProviderUsageRejectsAggregateOverflow(t *testing.T) {
+	if _, err := normalizedPromptUsage(math.MaxInt64, 1, 0, 0, 0); err == nil {
+		t.Fatal("aggregate overflow accepted")
 	}
 }

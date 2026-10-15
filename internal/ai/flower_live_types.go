@@ -106,9 +106,10 @@ type FlowerSafeTarget struct {
 }
 
 type FlowerContextUsage struct {
-	Confirmed   *FlowerContextSample    `json:"confirmed,omitempty"`
-	Estimate    *FlowerContextSample    `json:"estimate,omitempty"`
-	ThreadUsage *FlowerThreadTokenUsage `json:"thread_usage,omitempty"`
+	RecentRequestUsage *FlowerThreadTokenUsage `json:"recent_request_usage,omitempty"`
+	Confirmed          *FlowerContextSample    `json:"confirmed,omitempty"`
+	Estimate           *FlowerContextSample    `json:"estimate,omitempty"`
+	ThreadUsage        *FlowerThreadTokenUsage `json:"thread_usage,omitempty"`
 }
 
 type FlowerContextSample struct {

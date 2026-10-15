@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	flprovider "github.com/floegence/floret/v7/provider"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -611,6 +612,9 @@ func TestDesktopModelSourceProviderStreamsAndMapsErrors(t *testing.T) {
 			if len(body.Request.Tools) != 1 || !body.Request.Tools[0].Strict || string(body.Request.Tools[0].InputSchema) != string(strictFixtureTool().InputSchema) {
 				t.Fatal("Desktop model source lost strict tool intent or canonical schema")
 			}
+			if body.Request.ReusePolicy == nil || *body.Request.ReusePolicy != (flprovider.RequestReusePolicy{}) {
+				t.Error("Desktop RPC lost supplemental reuse isolation")
+			}
 			if body.Request.Model != modelID {
 				return testDesktopModelSourceError(frame.ID, "MODEL_MISMATCH", "unexpected model")
 			}
@@ -624,8 +628,9 @@ func TestDesktopModelSourceProviderStreamsAndMapsErrors(t *testing.T) {
 	gateway := modelSource.ModelGateway(modelID)
 	var events []StreamEvent
 	result, err := gateway.StreamTurn(context.Background(), ModelGatewayRequest{
-		Model: modelID,
-		Tools: []ToolDef{strictFixtureTool()},
+		ReusePolicy: &flprovider.RequestReusePolicy{},
+		Model:       modelID,
+		Tools:       []ToolDef{strictFixtureTool()},
 	}, func(ev StreamEvent) {
 		events = append(events, ev)
 	})

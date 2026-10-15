@@ -9,8 +9,8 @@ import {
   contextPressureTone,
   contextUsagePercent,
   formatContextTokenCount,
-  formatThreadCacheHitPercent,
-  threadCacheHitRatio,
+  formatCacheHitPercent,
+  cacheHitRatio,
 } from './flowerContextPresentation';
 
 function usage(overrides: Partial<FlowerContextSample> & Pick<FlowerContextUsage, 'thread_usage'> = {}): FlowerContextUsage {
@@ -36,9 +36,9 @@ describe('flower context presentation', () => {
     }), DEFAULT_FLOWER_SURFACE_COPY);
     expect(view).toMatchObject({
       ariaLabel: 'Context', ratioValue: '91%',
-      cacheHitLabel: 'Cache hit rate', cacheHitValue: '—', tone: 'warning',
+      cacheHitLabel: 'Session cache hit rate', cacheHitValue: '—', tone: 'warning',
       ratio: 0.91, progressValue: 91, warning: 'Near limit',
-      ariaValueText: 'Context: 91%, Cache hit rate: Not available, Near limit',
+      ariaValueText: 'Context: 91%, Latest request cache hit rate: Not available, Session cache hit rate: Not available, Near limit',
     });
   });
 
@@ -49,7 +49,7 @@ describe('flower context presentation', () => {
     expect(unknown.progressValue).toBeNull();
     expect(unknown.ratioValue).toBe('—');
     expect(unknown.warning).toBe('');
-    expect(unknown.ariaValueText).toBe('Context: Not available, Cache hit rate: Not available');
+    expect(unknown.ariaValueText).toBe('Context: Not available, Latest request cache hit rate: Not available, Session cache hit rate: Not available');
   });
 
   it('localizes tooltip percentages and accessible usage', () => {
@@ -58,7 +58,7 @@ describe('flower context presentation', () => {
     } };
     const view = buildFlowerComposerContextIndicatorView(usage({ input_tokens: 72000, context_window_tokens: 100000 }), copy);
     expect(view.ratioValue).toBe('72% 已用');
-    expect(view.ariaValueText).toBe('Context: 72% 已用, Cache hit rate: Not available');
+    expect(view.ariaValueText).toBe('Context: 72% 已用, Latest request cache hit rate: Not available, Session cache hit rate: Not available');
   });
 
   it('calculates the whole-conversation cache hit rate from disjoint input buckets', () => {
@@ -72,9 +72,9 @@ describe('flower context presentation', () => {
     });
     const view = buildFlowerComposerContextIndicatorView(current, DEFAULT_FLOWER_SURFACE_COPY);
 
-    expect(threadCacheHitRatio(current)).toBe(0.45);
+    expect(cacheHitRatio(current.thread_usage)).toBe(0.45);
     expect(view.cacheHitValue).toBe('45%');
-    expect(view.ariaValueText).toContain('Cache hit rate: 45%');
+    expect(view.ariaValueText).toContain('Session cache hit rate: 45%');
   });
 
   it('shows the first live cache hit rate without waiting for a refresh', () => {
@@ -87,23 +87,23 @@ describe('flower context presentation', () => {
       },
     });
 
-    expect(threadCacheHitRatio(current)).toBeCloseTo(0.2642789722);
-    expect(formatThreadCacheHitPercent(current, 'Not available')).toBe('26%');
+    expect(cacheHitRatio(current.thread_usage)).toBeCloseTo(0.2642789722);
+    expect(formatCacheHitPercent(current.thread_usage, 'Not available')).toBe('26%');
   });
 
   it('formats zero, exact, near-perfect, and unavailable cache hit rates honestly', () => {
-    expect(formatThreadCacheHitPercent(usage({
+    expect(formatCacheHitPercent(usage({
       thread_usage: { input_tokens: 100, output_tokens: 0, cache_read_tokens: 0, cache_write_tokens: 0 },
-    }), 'Not available')).toBe('0%');
-    expect(formatThreadCacheHitPercent(usage({
+    }).thread_usage, 'Not available')).toBe('0%');
+    expect(formatCacheHitPercent(usage({
       thread_usage: { input_tokens: 0, output_tokens: 0, cache_read_tokens: 100, cache_write_tokens: 0 },
-    }), 'Not available')).toBe('100%');
-    expect(formatThreadCacheHitPercent(usage({
+    }).thread_usage, 'Not available')).toBe('100%');
+    expect(formatCacheHitPercent(usage({
       thread_usage: { input_tokens: 1, output_tokens: 0, cache_read_tokens: 1999, cache_write_tokens: 0 },
-    }), 'Not available')).toBe('99.95%');
-    expect(formatThreadCacheHitPercent(usage({
+    }).thread_usage, 'Not available')).toBe('99.95%');
+    expect(formatCacheHitPercent(usage({
       thread_usage: { input_tokens: 0, output_tokens: 10, cache_read_tokens: 0, cache_write_tokens: 0 },
-    }), 'Not available')).toBe('Not available');
+    }).thread_usage, 'Not available')).toBe('Not available');
   });
 
   it('prefers confirmed usage and shows the installed estimate after invalidation', () => {
@@ -175,3 +175,10 @@ describe('flower context presentation', () => {
     }), DEFAULT_FLOWER_SURFACE_COPY)).toBe(DEFAULT_FLOWER_SURFACE_COPY.chat.compactionContextTooSmall);
   });
 });
+
+ it('shows distinct latest and cumulative rates through the same formatter', () => {
+  const view=buildFlowerComposerContextIndicatorView({recent_request_usage:{input_tokens:30,output_tokens:5,cache_read_tokens:60,cache_write_tokens:10},thread_usage:{input_tokens:80,output_tokens:20,cache_read_tokens:60,cache_write_tokens:10}},DEFAULT_FLOWER_SURFACE_COPY);
+  expect(view.recentCacheHitValue).toBe('60%');expect(view.cacheHitValue).toBe('40%');
+  expect(view.ariaValueText).toContain('Latest request cache hit rate: 60%');
+  expect(buildFlowerComposerContextIndicatorView({recent_request_usage:{input_tokens:100,output_tokens:1,cache_read_tokens:0,cache_write_tokens:0}},DEFAULT_FLOWER_SURFACE_COPY).recentCacheHitValue).toBe('0%');
+ });

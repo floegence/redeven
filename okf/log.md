@@ -1,5 +1,11 @@
 # Redeven OKF Update Log
 
+## 2026-10-15 — OpenAI request reuse
+
+- Adopt checksummed Floret v7.37.0 for canonical queue-state continuity and Engine-owned request reuse decisions.
+- Document [official Responses connection reuse and cache metrics](ai/model-request-reuse.md). Epoch 61 and model-source RPC v2 preserve supplemental isolation across Desktop.
+
+
 ## 2026-10-15: Clear provider failures and quieter error presentation
 
 - Preserve bounded structured [provider error messages](ai/chatgpt-local-authentication.md)

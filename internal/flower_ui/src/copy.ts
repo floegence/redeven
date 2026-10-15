@@ -634,6 +634,7 @@ export type FlowerSurfaceCopy = Readonly<{
       hardLimit: string;
       unknownPercent: string;
       unavailable: string;
+      recentCacheHitLabel: string;
       cacheHitLabel: string;
       percent: (percent: number) => string;
     }>;
@@ -1033,7 +1034,8 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       hardLimit: 'At limit',
       unknownPercent: '—',
       unavailable: 'Not available',
-      cacheHitLabel: 'Cache hit rate',
+      recentCacheHitLabel: 'Latest request cache hit rate',
+      cacheHitLabel: 'Session cache hit rate',
       percent: (percent) => `${percent}%`,
     },
     compactionDivider: {

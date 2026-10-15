@@ -33,7 +33,7 @@ import (
 
 const (
 	DesktopModelSourceProviderType      = "desktop_model_source"
-	DesktopModelSourceProtocolVersion   = "redeven-desktop-model-source-rpc-v1"
+	DesktopModelSourceProtocolVersion   = "redeven-desktop-model-source-rpc-v2"
 	DesktopModelSourceDefaultSource     = "desktop_local_environment"
 	desktopModelSourceModelIDPrefix     = "desktop:model_"
 	defaultDesktopModelSourceRPCTimeout = 30 * time.Second
@@ -1021,10 +1021,12 @@ func desktopModelSourceConnectionErrorRetryable(err error) bool {
 }
 
 type desktopModelSourceExecutor struct {
-	log         *slog.Logger
-	configPath  string
-	secretsPath string
-	session     DesktopModelSourceSession
+	poolMu        sync.Mutex
+	responsesPool *openAIResponsesPool
+	log           *slog.Logger
+	configPath    string
+	secretsPath   string
+	session       DesktopModelSourceSession
 }
 
 func (e *desktopModelSourceExecutor) serve(ctx context.Context, ws *websocket.Conn) error {
@@ -1060,7 +1062,18 @@ func (e *desktopModelSourceExecutor) serve(ctx context.Context, ws *websocket.Co
 			delete(active, id)
 		}
 	}
-	defer cancelAll()
+	var workers sync.WaitGroup
+	pool := e.openAIConnectionPool()
+	defer func() {
+		cancelAll()
+		pool.Close()
+		workers.Wait()
+		e.poolMu.Lock()
+		if e.responsesPool == pool {
+			e.responsesPool = nil
+		}
+		e.poolMu.Unlock()
+	}()
 
 	write := func(frame DesktopModelSourceRPCFrame) error {
 		frame.ProtocolVersion = DesktopModelSourceProtocolVersion
@@ -1094,7 +1107,9 @@ func (e *desktopModelSourceExecutor) serve(ctx context.Context, ws *websocket.Co
 			activeMu.Lock()
 			active[frame.ID] = cancel
 			activeMu.Unlock()
+			workers.Add(1)
 			go func(frame DesktopModelSourceRPCFrame) {
+				defer workers.Done()
 				defer func() {
 					activeMu.Lock()
 					delete(active, frame.ID)
@@ -1228,6 +1243,7 @@ func (e *desktopModelSourceExecutor) streamTurn(ctx context.Context, frame Deskt
 		return ModelGatewayResult{}, err
 	}
 	configureChatGPTAdapter(adapter, entry.ProviderCfg, chatgpt.New(secretStore))
+	configureOpenAIConnections(adapter, entry.ProviderCfg.ID, entry.ProviderCfg.BaseURL, string(entry.ProviderCfg.EffectiveAuthMethod())+":"+entry.ProviderCfg.AccountID, e.openAIConnectionPool())
 	req := body.Request
 	req.Model = strings.TrimSpace(entry.WireModelName)
 	result, err := adapter.StreamTurn(ctx, req, func(ev StreamEvent) {
@@ -1674,4 +1690,13 @@ func chatGPTBillingSource(p config.AIProvider) string {
 		return "chatgpt_plan"
 	}
 	return ""
+}
+
+func (e *desktopModelSourceExecutor) openAIConnectionPool() *openAIResponsesPool {
+	e.poolMu.Lock()
+	defer e.poolMu.Unlock()
+	if e.responsesPool == nil {
+		e.responsesPool = newOpenAIResponsesPool()
+	}
+	return e.responsesPool
 }

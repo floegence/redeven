@@ -109,6 +109,7 @@ type Options struct {
 }
 
 type Service struct {
+	openAIConnections      *openAIResponsesPool
 	chatGPT                *chatgpt.Client
 	accountMu              sync.Mutex
 	accountTasks           map[string]accountTaskWatch
@@ -637,6 +638,7 @@ func (s *Service) closeService() error {
 	}
 	s.mu.Lock()
 	s.serviceClosing = true
+	responsesPool := s.openAIConnections
 	terminalProcesses := s.terminalProcesses
 	targetExecutor := s.targetToolExecutor
 	s.terminalProcesses = nil
@@ -654,6 +656,7 @@ func (s *Service) closeService() error {
 	s.maintenanceStopCh = nil
 	s.maintenanceDoneCh = nil
 	s.mu.Unlock()
+	responsesPool.Close()
 	if lifecycleCancel != nil {
 		lifecycleCancel()
 	}

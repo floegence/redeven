@@ -49,6 +49,8 @@ Four mandatory lanes cover small-history noop, manual installation/replay/restar
 
 Floret owns one shared summary, validation, convergence, and installation path. Redeven owns authorization, frozen product configuration, transport, localization, and presentation. Domain schema 12→13 migration is exclusively upstream-owned. Historical `/compact` conversation output is never retroactively classified as successful compaction.
 
+Cache counters and the latest/cumulative tooltip rates follow the [request reuse and usage contract](model-request-reuse.md#cache-usage-presentation), using canonical confirmed usage rather than another host store.
+
 # Evidence
 
 - `redeven:internal/ai/compact_thread_context.go` - Authorized asynchronous admission through published Floret.

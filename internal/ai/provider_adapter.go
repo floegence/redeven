@@ -62,6 +62,7 @@ func (s *Service) initResolvedProviderAdapter(resolved resolvedRunModel) (resolv
 		return resolvedProviderAdapter{}, fmt.Errorf("init provider adapter failed: %w", err)
 	}
 	configureChatGPTAdapter(adapter, resolved.Provider, s.chatGPT)
+	configureOpenAIConnections(adapter, resolved.Provider.ID, resolved.Provider.BaseURL, string(resolved.Provider.EffectiveAuthMethod())+":"+resolved.Provider.AccountID, s.openAIConnectionPool())
 	return resolvedProviderAdapter{Adapter: adapter, ProviderType: providerType, ModelName: modelName}, nil
 }
 

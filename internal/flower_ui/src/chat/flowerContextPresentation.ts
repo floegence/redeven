@@ -1,4 +1,4 @@
-import type { FlowerContextCompaction, FlowerContextUsage, FlowerContextSample } from '../contracts/flowerSurfaceContracts';
+import type { FlowerContextCompaction, FlowerContextUsage, FlowerContextSample, FlowerThreadTokenUsage } from '../contracts/flowerSurfaceContracts';
 import type { FlowerSurfaceCopy } from '../copy';
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../copy';
 import { trimString } from '../flowerSurfaceModel';
@@ -11,6 +11,8 @@ export type FlowerComposerContextIndicatorView = Readonly<{
   tone: FlowerContextTone;
   ratio: number | null;
   progressValue: number | null;
+  recentCacheHitLabel: string;
+  recentCacheHitValue: string;
   cacheHitLabel: string;
   cacheHitValue: string;
   warning: string;
@@ -52,20 +54,19 @@ export function contextPressureTone(pressure: string): FlowerContextTone {
   }
 }
 
-export function threadCacheHitRatio(usage: FlowerContextUsage): number | null {
-  const totals = usage.thread_usage;
+export function cacheHitRatio(totals: FlowerThreadTokenUsage | undefined): number | null {
   if (!totals) return null;
   const input = Number(totals.input_tokens);
   const cacheRead = Number(totals.cache_read_tokens);
   const cacheWrite = Number(totals.cache_write_tokens);
   if (![input, cacheRead, cacheWrite].every((value) => Number.isFinite(value) && value >= 0)) return null;
   const totalInput = input + cacheRead + cacheWrite;
-  if (totalInput <= 0) return null;
+  if (!Number.isFinite(totalInput) || totalInput <= 0) return null;
   return Math.max(0, Math.min(1, cacheRead / totalInput));
 }
 
-export function formatThreadCacheHitPercent(usage: FlowerContextUsage, unavailable: string): string {
-  const ratio = threadCacheHitRatio(usage);
+export function formatCacheHitPercent(totals: FlowerThreadTokenUsage | undefined, unavailable: string): string {
+  const ratio = cacheHitRatio(totals);
   if (ratio === null) return unavailable;
   const percent = ratio * 100;
   if (percent === 100) return '100%';
@@ -96,16 +97,20 @@ export function buildFlowerComposerContextIndicatorView(
       default: return '';
     }
   })();
-  const cacheHitValue = formatThreadCacheHitPercent(usage, labels.unknownPercent);
+  const cacheHitValue = formatCacheHitPercent(usage.thread_usage, labels.unknownPercent);
+  const recentCacheHitValue = formatCacheHitPercent(usage.recent_request_usage, labels.unknownPercent);
+  const accessibleRecentCache = formatCacheHitPercent(usage.recent_request_usage, labels.unavailable);
   const accessibleUsage = progressValue === null ? labels.unavailable : ratioValue;
-  const accessibleCache = formatThreadCacheHitPercent(usage, labels.unavailable);
+  const accessibleCache = formatCacheHitPercent(usage.thread_usage, labels.unavailable);
   return {
     ariaLabel: labels.label,
-    ariaValueText: `${labels.label}: ${accessibleUsage}, ${labels.cacheHitLabel}: ${accessibleCache}${warning ? `, ${warning}` : ''}`,
+    ariaValueText: `${labels.label}: ${accessibleUsage}, ${labels.recentCacheHitLabel}: ${accessibleRecentCache}, ${labels.cacheHitLabel}: ${accessibleCache}${warning ? `, ${warning}` : ''}`,
     ratioValue,
     tone: usage.confirmed ? contextPressureTone(pressure?.pressure_status ?? 'estimated') : 'estimated',
     ratio,
     progressValue,
+    recentCacheHitLabel: labels.recentCacheHitLabel,
+    recentCacheHitValue,
     cacheHitLabel: labels.cacheHitLabel,
     cacheHitValue,
     warning,

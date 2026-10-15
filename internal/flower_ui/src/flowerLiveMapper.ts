@@ -242,13 +242,18 @@ export function mapContextUsage(raw: unknown): FlowerContextUsage | null {
   const record = recordValue(raw);
   if (!record) return null;
   if ('phase' in record) throw new Error('context_usage requires a measurement/estimate snapshot');
-  const threadUsageRecord = plainRecordValue(record.thread_usage);
-  const threadUsage = threadUsageRecord ? {
-    input_tokens: nonNegativeInteger(threadUsageRecord.input_tokens, 'context_usage.thread_usage.input_tokens'),
-    output_tokens: nonNegativeInteger(threadUsageRecord.output_tokens, 'context_usage.thread_usage.output_tokens'),
-    cache_read_tokens: nonNegativeInteger(threadUsageRecord.cache_read_tokens, 'context_usage.thread_usage.cache_read_tokens'),
-    cache_write_tokens: nonNegativeInteger(threadUsageRecord.cache_write_tokens, 'context_usage.thread_usage.cache_write_tokens'),
-  } : undefined;
+  const mapTokens = (raw: unknown, label: string) => {
+    const tokens = plainRecordValue(raw);
+    if (!tokens) return undefined;
+    return {
+      input_tokens: nonNegativeInteger(tokens.input_tokens, `${label}.input_tokens`),
+      output_tokens: nonNegativeInteger(tokens.output_tokens, `${label}.output_tokens`),
+      cache_read_tokens: nonNegativeInteger(tokens.cache_read_tokens, `${label}.cache_read_tokens`),
+      cache_write_tokens: nonNegativeInteger(tokens.cache_write_tokens, `${label}.cache_write_tokens`),
+    };
+  };
+  const threadUsage = mapTokens(record.thread_usage, 'context_usage.thread_usage');
+  const recentRequestUsage = mapTokens(record.recent_request_usage, 'context_usage.recent_request_usage');
   const confirmed = mapContextSample(record.confirmed);
   const estimate = mapContextSample(record.estimate);
   if (confirmed && confirmed.phase !== 'provider_usage') throw new Error('confirmed context requires model usage');
@@ -256,6 +261,7 @@ export function mapContextUsage(raw: unknown): FlowerContextUsage | null {
     ...(confirmed ? { confirmed } : {}),
     ...(estimate ? { estimate } : {}),
     ...(threadUsage ? { thread_usage: threadUsage } : {}),
+    ...(recentRequestUsage ? { recent_request_usage: recentRequestUsage } : {}),
   };
 }
 

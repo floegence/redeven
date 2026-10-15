@@ -14,6 +14,7 @@ import (
 // exact root-thread runtime. It intentionally contains no Service, Floret
 // bootstrap, lifecycle coordinator, or capability binder.
 type runHostCapabilities struct {
+	openAIConnections         *openAIResponsesPool
 	queryThreads              func(context.Context, *session.Meta, string, map[string]any) (any, error)
 	tessiven                  *tessiven.Service
 	tessivenResources         *tessiven.ResourceBackend
@@ -87,6 +88,7 @@ func (s *Service) bindExactRunExecutionCapabilities(endpointID string, execution
 		return runHostCapabilities{}, err
 	}
 	return runHostCapabilities{
+		openAIConnections: s.openAIConnectionPool(),
 		authorityThreadID: effectAuthorityThreadID,
 		queryThreads: func(ctx context.Context, meta *session.Meta, name string, args map[string]any) (any, error) {
 			if meta == nil || strings.TrimSpace(meta.EndpointID) != endpointID {

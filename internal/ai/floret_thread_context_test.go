@@ -316,7 +316,7 @@ func TestFlowerThreadContextProjectionIncludesCanonicalUsage(t *testing.T) {
 		ContextUsage: &flruntime.ThreadContextUsage{Confirmed: &observation.ContextStatus{
 			RunID: "run-context", ThreadID: "thread-context", TurnID: "turn-context", Step: 2,
 			Phase: observation.ContextPhaseProviderUsage, ObservedAt: observedAt,
-			Usage:           observation.ProviderUsage{WindowInputTokens: 500},
+			Usage:           observation.ProviderUsage{Available: true, WindowInputTokens: 500, InputTokens: 30, CacheReadTokens: 60, CacheWriteTokens: 10},
 			ContextPressure: config.ContextPressure{ContextWindowTokens: 1000},
 			UsedRatio:       0.5, Status: observation.ContextStatusStable,
 		}},
@@ -335,6 +335,10 @@ func TestFlowerThreadContextProjectionIncludesCanonicalUsage(t *testing.T) {
 	}) {
 		t.Fatalf("thread usage=%#v", projection.Usage.ThreadUsage)
 	}
+	if projection.Usage.RecentRequestUsage == nil || *projection.Usage.RecentRequestUsage != (FlowerThreadTokenUsage{InputTokens: 30, CacheReadTokens: 60, CacheWriteTokens: 10}) {
+		t.Fatalf("recent usage=%+v", projection.Usage.RecentRequestUsage)
+	}
+
 }
 
 func TestFlowerThreadContextProjectionRejectsNegativeCanonicalUsageTotals(t *testing.T) {

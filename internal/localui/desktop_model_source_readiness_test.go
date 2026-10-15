@@ -24,7 +24,7 @@ func TestDesktopModelSourceUnavailableUsesRetryableHTTPStatus(t *testing.T) {
 			if endpoint == "rpc" {
 				method = http.MethodGet
 			}
-			req := httptest.NewRequest(method, "http://localhost/v2/desktop-model-source/"+endpoint+"?session_id=test", strings.NewReader(`{"session_id":"test","protocol_version":"redeven-desktop-model-source-rpc-v1"}`))
+			req := httptest.NewRequest(method, "http://localhost/v2/desktop-model-source/"+endpoint+"?session_id=test", strings.NewReader(`{"session_id":"test","protocol_version":"redeven-desktop-model-source-rpc-v2"}`))
 			req.Header.Set("X-Redeven-Desktop-Model-Source-Protocol", ai.DesktopModelSourceProtocolVersion)
 			req.RemoteAddr = "127.0.0.1:2345"
 			req.Header.Set("Authorization", "Bearer test-owner")
