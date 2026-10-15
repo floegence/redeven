@@ -47,8 +47,13 @@ enforced at actual tool authorization, independently of displayed historical fac
 
 Authorized canonical reads and the existing workspace subscription carry the
 same snapshot, record location, changed/removed keys and latest request use.
-The shared context panel exposes complete selectable facts and distinguishes
-collected from used. Updates do not create chat bubbles, take focus or block
+The shared context panel summarizes partitions as compact horizontal bars with
+localized labels. Bar percentages represent each partition's share of runtime
+fact text by Unicode character count; they are separate from provider token
+usage. Complete selectable text appears only when a partition is expanded.
+Collection and request-use times remain in the status indicator's accessible
+label and hover text. Stable partition keys preserve focus and expanded text
+during refresh. Updates do not create chat bubbles, take focus or block
 navigation. Keyboard, touch and mouse can open and dismiss the panel; failure
 shows source diagnostics and a safe retry action. Subtask details use the same
 component and bounded detail cache.
