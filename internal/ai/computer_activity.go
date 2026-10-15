@@ -84,7 +84,7 @@ func computerActivityResultRows(tool string, payload map[string]any) []fltools.S
 				continue
 			}
 			if slices.Contains([]string{"button", "link", "textbox", "searchbox", "combobox", "checkbox", "radio", "switch", "tab", "option"}, role) {
-				controls = append(controls, toolDetailRow(name, role, value, fltools.StructuredActivityRowFormatText, "", false))
+				controls = append(controls, fltools.StructuredActivityRow{Title: name, Meta: role, Content: value, Format: fltools.StructuredActivityRowFormatText})
 			} else {
 				line := strings.Join(nonemptyComputerText(name, value), " · ")
 				if line != "" && (len(text) == 0 || text[len(text)-1] != line) {
