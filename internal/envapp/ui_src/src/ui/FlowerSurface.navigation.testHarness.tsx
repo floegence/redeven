@@ -163,7 +163,7 @@ vi.mock('@floegence/floe-webapp-core/icons', async (importOriginal) => {
     Pencil: Icon,
     Pin: Icon,
     Plus: Icon,
-    Refresh: Icon,
+    Refresh: actual.Refresh,
     Search: Icon,
     Send: Icon,
     Settings: Icon,
