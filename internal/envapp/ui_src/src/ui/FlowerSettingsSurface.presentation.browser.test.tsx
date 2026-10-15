@@ -47,6 +47,21 @@ function settings(): FlowerSettingsSnapshot {
   };
 }
 
+it('persists native provider aliases and uses them in the provider gallery and model picker', async () => {
+  const { copy, saveModel } = await mount();
+  await userEvent.click(page.getByRole('button', { name: copy.settings.editProvider, exact: true }).nth(0));
+  await userEvent.click(page.getByRole('button', { name: copy.settings.dialog.connectionName, exact: true }));
+  await userEvent.fill(page.getByRole('textbox', { name: copy.settings.dialog.connectionName, exact: true }), 'Work DeepSeek');
+  await userEvent.keyboard('{Enter}');
+  await userEvent.click(page.getByRole('button', { name: copy.settings.dialog.saveProvider, exact: true }));
+  await expect.poll(() => saveModel.mock.calls.length).toBe(1);
+  expect(saveModel.mock.calls[0][0].model_profile?.providers[0]).toMatchObject({ id: 'deepseek', type: 'deepseek', name: 'Work DeepSeek' });
+  await expect.poll(() => host.querySelector('.flower-settings-provider-title > span')?.textContent).toBe('Work DeepSeek');
+  expect(host.querySelector('.flower-settings-model-provider')?.textContent).toBe('Work DeepSeek');
+  await userEvent.click(page.getByRole('button', { name: copy.settings.changeModel, exact: true }));
+  await expect.element(page.getByRole('option', { name: 'Work DeepSeek / deepseek-v4-pro', exact: true })).toBeVisible();
+});
+
 async function mount(locale: RedevenLocale = 'en-US', width = 1000, dark = false, initial = settings(), auth?: FlowerChatGPTAuth, loadAccounts?: FlowerSurfaceAdapter['loadChatGPTAccounts']) {
   await page.viewport(1280, 960);
   const i18n = createI18nHelpers(locale, await loadEnvAppDictionary(locale));

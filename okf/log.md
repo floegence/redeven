@@ -1,5 +1,13 @@
 # Redeven OKF Update Log
 
+## 2026-10-14: Provider aliases and editable endpoints
+
+- Restore Base URL editing for OpenAI, Gemini and Anthropic in the
+  [shared provider dialog](ui/flower-provider-configuration.md), independently
+  of required-field validation. Preserve custom addresses and authentication drafts.
+- Add inline connection aliases for every brand and preserve them in settings
+  saves, provider galleries and model selectors without changing connection identity.
+
 ## 2026-10-14: Actionable compatible-model configuration
 
 - Document [provider capability completion](ui/flower-provider-configuration.md)

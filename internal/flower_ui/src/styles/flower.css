@@ -152,7 +152,14 @@
   font-size: 1.125rem;
   font-weight: 600;
   letter-spacing: -0.02em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
+
+.flower-provider-identity-name { min-width: 0; }
+.flower-provider-identity-name--editing { flex: 1; max-width: 24rem; }
+.flower-provider-identity-type { display: block; color: var(--muted-foreground); font-size: 0.75rem; }
 
 .flower-provider-connection {
   display: grid;

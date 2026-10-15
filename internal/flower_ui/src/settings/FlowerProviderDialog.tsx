@@ -24,7 +24,7 @@ import {
   flowerProviderNeedsWebSearchConfig,
   flowerProviderSupportsCustomModels,
   flowerProviderTypeRequiresBaseURL,
-  flowerProviderUsesCustomName,
+  flowerProviderDisplayName,
 } from './providerCatalog';
 import {
   FLOWER_STORED_SECRET_PLACEHOLDER,
@@ -114,6 +114,24 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
   };
   const [customModelName, setCustomModelName] = createSignal('');
   const [editingModelName, setEditingModelName] = createSignal('');
+  const [editingProviderName, setEditingProviderName] = createSignal(false);
+  let originalProviderName: string | undefined;
+  let providerNameInput: HTMLInputElement | undefined;
+  let providerNameButton: HTMLButtonElement | undefined;
+  const beginProviderNameEdit = () => {
+    if (!store.draft || props.disabled || props.saving) return;
+    originalProviderName = store.draft.name;
+    setEditingProviderName(true);
+    queueMicrotask(() => {
+      if (props.open && editingProviderName()) { providerNameInput?.focus(); providerNameInput?.select(); }
+    });
+  };
+  const finishProviderNameEdit = (commit: boolean, restoreFocus = false) => {
+    if (!editingProviderName()) return;
+    updateProvider({ name: commit ? store.draft?.name?.trim() ?? '' : originalProviderName });
+    setEditingProviderName(false);
+    if (restoreFocus) queueMicrotask(() => { if (props.open) providerNameButton?.focus({ preventScroll: true }); });
+  };
   const [selectedProviderType, setSelectedProviderType] = createSignal<FlowerProviderType | null>(null);
   const [store, setStore] = createStore<{ draft: FlowerProviderDraft | null }>({ draft: null });
   const keyHint = () => {
@@ -405,6 +423,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
       setAuthError('');
       setCustomModelName(''); setQuery(''); setDiscoveryError('');
       setEditingModelName('');
+      setEditingProviderName(false);
       setSelectedProviderType(initial && (props.mode === 'edit' || initial.auth_method === 'chatgpt' && initial.account_id) ? initial.type : null);
       if (props.mode === 'create' && initial?.auth_method === 'chatgpt' && initial.chatgpt_account?.state === 'ready') {
         queueMicrotask(() => { if (props.open && store.draft?.id === initial.id) void discover(); });
@@ -462,6 +481,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
     cancelAuthorization();
     invalidateDiscovery(); setAuthError('');
     setQuery(''); setCustomModelName(''); setEditingModelName('');
+    setEditingProviderName(false);
     const nextModels = defaultFlowerProviderModels(type);
     updateProvider({
       type,
@@ -599,7 +619,30 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
               <div id={`flower-provider-type-${store.draft!.type}`} class="flower-provider-editor">
                 <div class="flower-provider-identity">
                   <FlowerProviderBrandIcon type={store.draft!.type} class="h-6 w-6 shrink-0" />
-                  <h2>{providerTypeLabel(store.draft!.type)}</h2>
+                  <div class="flower-provider-identity-name" classList={{ 'flower-provider-identity-name--editing': editingProviderName() }}>
+                    <Show when={editingProviderName()} fallback={<h2 title={flowerProviderDisplayName(store.draft!, providerTypeLabel(store.draft!.type))}>{flowerProviderDisplayName(store.draft!, providerTypeLabel(store.draft!.type))}</h2>}>
+                      <Input ref={providerNameInput} value={store.draft!.name ?? ''}
+                        onInput={event => updateProvider({ name: event.currentTarget.value })}
+                        onBlur={() => finishProviderNameEdit(true)}
+                        onKeyDown={event => {
+                          if (event.isComposing) return;
+                          if (event.key === 'Enter' || event.key === 'Escape') {
+                            event.preventDefault(); event.stopPropagation();
+                            finishProviderNameEdit(event.key === 'Enter', true);
+                          }
+                        }}
+                        aria-label={copy().connectionName} placeholder={providerTypeLabel(store.draft!.type)} maxLength={80} size="sm" class="w-full" />
+                    </Show>
+                    <Show when={store.draft!.name?.trim() && store.draft!.name?.trim() !== providerTypeLabel(store.draft!.type)}>
+                      <span class="flower-provider-identity-type">{providerTypeLabel(store.draft!.type)}</span>
+                    </Show>
+                  </div>
+                  <Show when={!editingProviderName()}>
+                    <Button ref={providerNameButton} size="icon" variant="ghost" class="flower-provider-name-edit h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
+                      aria-label={copy().connectionName} title={copy().connectionName} onClick={beginProviderNameEdit} disabled={props.disabled || props.saving}>
+                      <Pencil class="h-3.5 w-3.5" />
+                    </Button>
+                  </Show>
                 </div>
                 <section class="flower-provider-connection">
                   <div class="flower-provider-section-heading"><h3>{copy().connectionTitle}</h3></div>
@@ -692,49 +735,36 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                     </div>
                   </Show>
                   <div class="flower-provider-connection-fields">
-                    <Show when={flowerProviderUsesCustomName(store.draft!.type)}>
+                    <Show when={!chatGPTSelected()}>
                       <div>
-                        <FlowerFieldLabel>{copy().connectionName}</FlowerFieldLabel>
+                        <FlowerFieldLabel hint={keyHint()}>
+                          {copy().apiKey}
+                        </FlowerFieldLabel>
                         <Input
-                          value={store.draft!.name ?? ''}
-                          onInput={(event) => updateProvider({ name: event.currentTarget.value })}
-                          placeholder={providerTypeLabel(store.draft!.type)}
+                          type="password"
+                          value={store.draft!.provider_api_key ?? ''}
+                          onInput={(event) => updateProvider({
+                            provider_api_key: event.currentTarget.value,
+                          })}
+                          onBlur={finishConnectionInput}
+                          placeholder={props.keyConfigured ? FLOWER_STORED_SECRET_PLACEHOLDER : copy().pasteAPIKey}
+                          aria-label={copy().apiKey}
+                          aria-description={keyHint()}
+                          autocomplete="new-password"
+                          data-stored-secret={props.keyConfigured ? 'true' : undefined}
                           size="sm"
-                          class="w-full"
+                          class="flower-provider-secret-input w-full"
+                          disabled={!providerID()}
                         />
                       </div>
-                    </Show>
-                    <Show when={!chatGPTSelected()}>
-                    <div>
-                      <FlowerFieldLabel hint={keyHint()}>
-                        {copy().apiKey}
-                      </FlowerFieldLabel>
-                      <Input
-                        type="password"
-                        value={store.draft!.provider_api_key ?? ''}
-                        onInput={(event) => updateProvider({
-                          provider_api_key: event.currentTarget.value,
-                        })}
-                        onBlur={finishConnectionInput}
-                        placeholder={props.keyConfigured ? FLOWER_STORED_SECRET_PLACEHOLDER : copy().pasteAPIKey}
-                        aria-label={copy().apiKey}
-                        aria-description={keyHint()}
-                        autocomplete="new-password"
-                        data-stored-secret={props.keyConfigured ? 'true' : undefined}
-                        size="sm"
-                        class="flower-provider-secret-input w-full"
-                        disabled={!providerID()}
-                      />
-                    </div>
-                    </Show>
-                    <Show when={flowerProviderTypeRequiresBaseURL(store.draft!.type)}>
                       <div>
-                        <FlowerFieldLabel hint={copy().required}>{copy().baseURL}</FlowerFieldLabel>
+                        <FlowerFieldLabel hint={flowerProviderTypeRequiresBaseURL(store.draft!.type) ? copy().required : undefined}>{copy().baseURL}</FlowerFieldLabel>
                         <Input
                           value={store.draft!.base_url ?? ''}
                           onInput={(event) => updateProvider({ base_url: event.currentTarget.value })}
                           onBlur={finishConnectionInput}
                           placeholder={defaultBaseURLForFlowerProviderType(store.draft!.type)}
+                          aria-label={copy().baseURL}
                           size="sm"
                           class="w-full"
                         />

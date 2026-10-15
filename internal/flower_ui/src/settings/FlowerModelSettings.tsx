@@ -8,7 +8,7 @@ import { flowerModelSupportsImage, formatFlowerTokenCount } from '../flowerModel
 import { flowerWebSearchLabel } from '../webSearchCapability';
 import { FlowerReasoningControl } from '../ReasoningControl';
 import { reasoningCapabilitySupportsControl } from '../reasoning';
-import { flowerProviderUsesCustomName } from './providerCatalog';
+import { flowerProviderDisplayName } from './providerCatalog';
 import { FlowerProviderBrandIcon } from './FlowerProviderBrandIcon';
 import { FlowerSubSectionHeader } from './FlowerSettingsPrimitives';
 import { FlowerModelSelectionDialog } from './FlowerModelSelectionDialog';
@@ -31,9 +31,7 @@ export type FlowerModelSettingsProps = Readonly<{
 // Hosts own configuration and persistence; this component owns only editor visibility.
 export const FlowerModelSettings: Component<FlowerModelSettingsProps> = (props) => {
   const copy = () => props.copy;
-  const displayName = (provider: FlowerProvider) => flowerProviderUsesCustomName(provider.type)
-    ? provider.name?.trim() || copy().providerTypeLabels[provider.type]
-    : copy().providerTypeLabels[provider.type];
+  const displayName = (provider: FlowerProvider) => flowerProviderDisplayName(provider, copy().providerTypeLabels[provider.type]);
   const modelGroups = createMemo(() => props.providers.filter(provider => provider.enabled !== false)
     .map(provider => ({ id: provider.id, type: provider.type, label: displayName(provider), models: provider.models.filter(model => !model.unavailable) }))
     .filter(group => group.models.length > 0));

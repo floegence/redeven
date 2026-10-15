@@ -26,7 +26,7 @@ import {
   flowerProviderPresetForType,
   flowerProviderTypeLabel,
   flowerProviderTypeRequiresBaseURL,
-  flowerProviderUsesCustomName,
+  flowerProviderDisplayName,
   normalizeFlowerEffectiveContextPercent,
   normalizeFlowerInputModalities,
   normalizeFlowerPositiveInteger,
@@ -69,7 +69,7 @@ function newProviderDraft(): FlowerProviderDraft {
 
   return {
     id: newProviderID(),
-    name: flowerProviderUsesCustomName(type) ? preset.name : flowerProviderTypeLabel(type),
+    name: preset.name,
     type,
     base_url: defaultBaseURLForFlowerProviderType(type),
     models: defaultFlowerProviderModels(type),
@@ -80,9 +80,7 @@ function providerDisplayName(
   provider: Pick<FlowerProviderDraft, 'id' | 'name' | 'type'>,
   labels?: FlowerProviderTypeLabels,
 ): string {
-  const name = trim(provider.name);
-  if (flowerProviderUsesCustomName(provider.type)) return name || provider.id || labels?.[provider.type] || flowerProviderTypeLabel(provider.type);
-  return labels?.[provider.type] || flowerProviderTypeLabel(provider.type);
+  return flowerProviderDisplayName(provider, labels?.[provider.type] || flowerProviderTypeLabel(provider.type));
 }
 
 function providerSecretConfigured(snapshot: FlowerSettingsSnapshot | null, providerID: string): boolean {
@@ -112,7 +110,7 @@ function normalizeProviderForSave(provider: FlowerProviderDraft): FlowerProvider
     catalog_models: provider.catalog_models,
     model_defaults: provider.model_defaults,
     id: trim(provider.id),
-    name: flowerProviderUsesCustomName(provider.type) ? trim(provider.name) : flowerProviderTypeLabel(provider.type),
+    name: trim(provider.name),
     type: provider.type,
     base_url: trim(provider.base_url),
     web_search: flowerProviderNeedsWebSearchConfig(provider.type) ? { mode: webSearchMode } : undefined,
