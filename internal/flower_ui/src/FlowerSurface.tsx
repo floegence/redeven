@@ -9714,27 +9714,29 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const fileDiffBlock = (messageID: Accessor<string>, blockIndex: Accessor<number>, itemID: Accessor<string>, block: Accessor<Extract<FlowerActivityDetailBlock, { kind: 'file_diff' }>>) => (
     <div class="flower-activity-file-diff-list">
       <FlowerKeyedList scope={selectedThreadID()} focusFallback={focusComposerIfConnected} each={block().files} identity={(file) => file.action.action_id || file}>
-        {(file) => fileDiffFile(messageID, blockIndex, itemID, file)}
+        {(file) => fileDiffFile(messageID, blockIndex, itemID, file, () => block().files.length > 1)}
       </FlowerKeyedList>
     </div>
   );
 
-  const fileDiffFile = (messageID: Accessor<string>, blockIndex: Accessor<number>, itemID: Accessor<string>, file: Accessor<FlowerActivityDiffFile>) => (
+  const fileDiffFile = (messageID: Accessor<string>, blockIndex: Accessor<number>, itemID: Accessor<string>, file: Accessor<FlowerActivityDiffFile>, showFileHeader: Accessor<boolean>) => (
     <section class="flower-activity-file-diff-file">
-      <div class="flower-activity-file-toolbar">
-        <span class="flower-activity-file-path">{file().display_name}</span>
-        <Show when={file().additions || file().deletions}>
-          <span class="flower-activity-file-change">
-            <span class="flower-activity-file-stat-add">+{file().additions}</span>
-            {' / '}
-            <span class="flower-activity-file-stat-del">-{file().deletions}</span>
-          </span>
-        </Show>
-        <Show when={file().truncated}>
-          <span class="flower-activity-file-truncated">{copy().chat.toolActivityDiffTruncated}</span>
-        </Show>
-        {fileActionButtons(messageID, blockIndex, itemID, () => file().action)}
-      </div>
+      <Show when={showFileHeader()}>
+        <div class="flower-activity-file-toolbar">
+          <span class="flower-activity-file-path">{file().display_name}</span>
+          <Show when={file().additions || file().deletions}>
+            <span class="flower-activity-file-change">
+              <span class="flower-activity-file-stat-add">+{file().additions}</span>
+              {' / '}
+              <span class="flower-activity-file-stat-del">-{file().deletions}</span>
+            </span>
+          </Show>
+          <Show when={file().truncated}>
+            <span class="flower-activity-file-truncated">{copy().chat.toolActivityDiffTruncated}</span>
+          </Show>
+          {fileActionButtons(messageID, blockIndex, itemID, () => file().action)}
+        </div>
+      </Show>
       <div class="flower-activity-file-diff-grid">
         <Show
           when={getGitPatchRenderSnapshot(file().patch_text).renderedLines.length > 0}
