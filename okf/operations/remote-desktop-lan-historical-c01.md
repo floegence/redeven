@@ -100,7 +100,7 @@ are disclosed background limitations, not a demonstrated cause. Task clients
 and C01 remote Runtimes were stopped after C02, and temporary credentials
 removed. The exact current service/Runtime restoration is recorded in C02.
 
-# Repetition Contract
+# Contract
 
 Hold physical/source dimensions, display refresh, scene version, exact content
 viewport, compositor budget, Host input mode and workload constant. Record
@@ -116,7 +116,7 @@ Historical packages are comparison fixtures only. Any selected production change
 must retain later fixes and pass current focused contracts and published-artifact
 qualification; do not downgrade the product as a performance remedy.
 
-# C01 Decision
+# Boundaries
 
 All six valid rounds count. FPS means are v40 46.15, v42 44.80 and v47 42.91;
 two observations per candidate and the order deviation are insufficient for a

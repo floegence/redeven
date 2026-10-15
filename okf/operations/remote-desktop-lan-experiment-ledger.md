@@ -16,7 +16,7 @@ Preserve current security, authorization, input, ordering and recovery contracts
 Diagnostics cannot qualify a release. Restore the verified installed service
 after a diagnostic; retain invalid attempts and explain their exclusion.
 
-# Experiment Discipline
+# Contract
 
 Before each experiment, read this index and the relevant
 [codec/capture ledger](remote-desktop-lan-codec-experiments.md) or
@@ -85,7 +85,7 @@ trial is retained, with no favorable replacement. Zero-wait B is not adopted;
 it does not recover the historical cadence. Exact A and the released service
 are restored. No production implementation or dependency was downgraded.
 
-# Current Decision And Remaining Evidence
+# Boundaries
 
 Historical performance is not restored in the current product. C01's late v40
 49.53 FPS/P95 161.60 ms/zero gaps approaches the historical range, while its

@@ -7,19 +7,16 @@ timestamp: 2026-10-15T06:00:00Z
 ---
 # Summary
 
-The primary qualification task owns this comparison contract. Complete RustDesk
-parity remains unaccepted. The [LAN experiment decision ledger](remote-desktop-lan-experiment-ledger.md)
-owns the current v0.22.47 results, historical advantages and retry conditions.
-Its three valid motion rounds average 38.86 FPS with pooled P95 247.61 ms and
-five long gaps, versus RustDesk 32.29 FPS, 169.11 ms and one gap. The earlier
-v0.22.40 VP9 rounds below average 50.99 FPS with zero long gaps; hardware AV1
-v0.22.42 also reached 50.53 FPS. Cross-time conditions differ, so the performance
-decline is observed but its cause remains unresolved. Do not assign it to Wi-Fi,
-codec or measurement semantics without a controlled comparison. The v0.22.45
-Host-input pair below remains historical evidence.
-Equal application window sizes do not establish equal content viewports. Lower
-quality, omitted SSH costs or failed samples cannot satisfy acceptance; each
-successor needs published-artifact validation and a fresh real-window comparison.
+The primary qualification task owns acceptance. Complete RustDesk parity remains
+unaccepted. The [experiment ledger](remote-desktop-lan-experiment-ledger.md)
+records current v0.22.47, historical advantages and controlled retry conditions.
+Current motion rounds average 38.86 FPS/P95 247.61 ms with five long gaps;
+historical v0.22.40 averaged 50.99 FPS with zero long gaps, and hardware AV1
+v0.22.42 also reached 50.53 FPS. Cross-time differences establish a deficit,
+not its cause. Preserve later security and functionality fixes. Acceptance
+requires published artifacts, complete source matching and equal delivered
+detail; lower CPU, failed samples or panel peaks cannot substitute. Earlier
+rounds remain historical evidence.
 
 # Contract
 
