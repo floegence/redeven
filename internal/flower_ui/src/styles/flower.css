@@ -1147,7 +1147,7 @@
   --flower-layer-subagent-dropdown: 120;
   --flower-layer-subagent-window: 160;
   --flower-chat-dock-track-max-width: 112rem;
-  --flower-chat-text-column-width: 58rem;
+  --flower-chat-text-column-width: 48rem;
   --flower-chat-user-bubble-width: 44rem;
   display: flex;
   min-width: 0;
