@@ -44,14 +44,15 @@ async function mount(surface: 'desktop' | 'env', theme = 'porcelain-light', auth
     { model_name: 'gpt-6-luna', display_name: 'GPT-6 Luna', context_window: 1050000, max_output_tokens: 128000, input_modalities: ['text', 'image'] },
   ];
   const discover = vi.fn(async () => ({ models }));
+  const onOpenChange = vi.fn();
   dispose = render(() => <FloeProvider config={{ theme: { shellPresets: builtInShellThemePresets, defaultSurfaceStyle: 'soft-neumorphic' } }}><Theme /><FlowerProviderDialog
-    open mode="create" copy={localizedCopy} providerDefaults={providerDefaultsFixture} provider={{ id: 'openai', type: 'openai', models: account ? [models[0]] : [], ...(account ? { auth_method: 'chatgpt' as const, account_id: account.account_id, catalog_models: models } : {}) }} chatGPTAvailable chatGPTBindingID="local" chatGPTAccount={account}
-    chatGPTAuth={auth ?? vi.fn(async () => ({ id: 'attempt', state: 'waiting' }))} onDiscoverModels={discover}
-    keyConfigured={false} webSearchKeyConfigured={false} onOpenChange={vi.fn()} onConfirm={vi.fn()} /></FloeProvider>, host);
+    open mode="create" copy={localizedCopy} providerDefaults={providerDefaultsFixture} provider={{ id: 'openai', type: 'openai', base_url: 'https://api.openai.com/v1', models: account ? [models[0]] : [], ...(account ? { auth_method: 'chatgpt' as const, account_id: account.account_id, catalog_models: models } : {}) }} chatGPTAvailable chatGPTBindingID="local" chatGPTAccount={account}
+    chatGPTAuth={auth ?? vi.fn(async () => ({ id: 'attempt', state: 'waiting' }))} loadChatGPTAccounts={async () => ({ accounts: {}, saved_accounts: account ? [account] : [] })} onDiscoverModels={discover}
+    keyConfigured={false} webSearchKeyConfigured={false} onOpenChange={onOpenChange} onConfirm={vi.fn()} /></FloeProvider>, host);
   await expect.element(page.getByRole('dialog')).toBeVisible();
   await userEvent.click(document.querySelector<HTMLButtonElement>('[aria-controls=flower-provider-type-openai]')!);
   await expect.poll(() => document.querySelector('[role=dialog]')!.getAnimations({ subtree: true }).every(animation => animation.playState !== 'running')).toBe(true);
-  return { discover, copy: localizedCopy, dialog: document.querySelector<HTMLElement>('.flower-provider-dialog')! };
+  return { discover, onOpenChange, copy: localizedCopy, dialog: document.querySelector<HTMLElement>('.flower-provider-dialog')! };
 }
 
 function color(value: string) {
@@ -278,6 +279,58 @@ for (const surface of ['desktop', 'env'] as const) {
     expect(auth.mock.calls.some(([action]) => action === 'cancel')).toBe(false);
     await expect.poll(() => dialog.getAnimations({ subtree: true }).every(animation => animation.playState !== 'running')).toBe(true);
     if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: dialog, path: `__screenshots__/flower-controls-${surface}-ready.png` });
+  });
+}
+
+for (const [surface, width, theme] of [['desktop', 1280, 'porcelain-dark'], ['desktop', 1280, 'porcelain-light'], ['desktop', 390, 'porcelain-dark'], ['env', 390, 'porcelain-dark'], ['env', 390, 'porcelain-light']] as const) {
+  it(`keeps the connection identity on one aligned row while renaming in ${surface} ${theme} at ${width}px`, async () => {
+    const { dialog, onOpenChange, copy: localized } = await mount(surface, theme, undefined, width, 'zh-CN');
+    await userEvent.click(page.getByRole('button', { name: localized.apiKey, exact: true }));
+    const identity = dialog.querySelector<HTMLElement>('.flower-provider-identity')!;
+    const edit = () => page.getByRole('button', { name: localized.connectionName, exact: true });
+    const name = () => page.getByRole('textbox', { name: localized.connectionName, exact: true });
+    const screenshot = async (state: string) => {
+      if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: dialog, path: `__screenshots__/flower-identity-${surface}-${width}-${theme}-${state}.png` });
+    };
+    const originalBounds = identity.getBoundingClientRect();
+    const titleFont = getComputedStyle(identity.querySelector('h2')!).fontSize;
+    await userEvent.click(edit());
+    await userEvent.fill(name(), 'FlowNode');
+    expect(document.activeElement).toBe(name().element());
+    expect(getComputedStyle(name().element()).fontSize).toBe(titleFont);
+    await screenshot('editing');
+    expect(identity.getBoundingClientRect().height).toBe(originalBounds.height);
+    await userEvent.keyboard('{Enter}');
+    expect(identity.innerText.trim()).toBe('FlowNode');
+    expect(identity.getBoundingClientRect().height).toBe(originalBounds.height);
+    const heading = identity.querySelector('h2')!;
+    const center = (element: Element) => { const rect = element.getBoundingClientRect(); return rect.top + rect.height / 2; };
+    expect(Math.abs(center(heading) - center(edit().element()))).toBeLessThanOrEqual(1);
+    expect(Math.abs(center(heading) - center(identity.querySelector('[data-flower-provider-brand]')!))).toBeLessThanOrEqual(1);
+    const key = dialog.querySelector<HTMLInputElement>('input[type=password]')!;
+    const endpoint = page.getByRole('textbox', { name: localized.baseURL, exact: true }).element();
+    if (width > 759) expect(Math.abs(key.getBoundingClientRect().top - endpoint.getBoundingClientRect().top)).toBeLessThanOrEqual(1);
+    await userEvent.click(key);
+    await screenshot('named');
+    await userEvent.click(edit());
+    const longAlias = 'FlowNode · Production · Research · Europe · Shared account';
+    await userEvent.fill(name(), longAlias);
+    await userEvent.keyboard('{Enter}');
+    expect(identity.querySelector('h2')!.title).toBe(longAlias);
+    expect(identity.scrollWidth).toBeLessThanOrEqual(identity.clientWidth);
+    expect(edit().element().getBoundingClientRect().right).toBeLessThanOrEqual(identity.getBoundingClientRect().right);
+    expect(getComputedStyle(edit().element()).cursor).toBe('pointer');
+    await userEvent.click(key);
+    await screenshot('long');
+    await userEvent.click(edit());
+    await userEvent.fill(name(), 'Discard this name');
+    await userEvent.keyboard('{Escape}');
+    expect(identity.querySelector('h2')!.textContent).toBe(longAlias);
+    expect(document.activeElement).toBe(edit().element());
+    await expect.element(page.getByRole('dialog')).toBeVisible();
+    expect(onOpenChange).not.toHaveBeenCalled();
+    await userEvent.keyboard('{Escape}');
+    expect(onOpenChange).toHaveBeenCalledExactlyOnceWith(false);
   });
 }
 
