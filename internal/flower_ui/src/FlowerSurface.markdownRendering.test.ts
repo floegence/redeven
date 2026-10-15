@@ -102,8 +102,9 @@ describe('FlowerSurface markdown rendering boundary', () => {
     const composerAnchorIndex = src.indexOf('flower-composer-anchor', statusLaneIndex);
     const composerIndex = src.indexOf('flower-composer p-3');
     const composerActionsIndex = src.indexOf('flower-composer-actions');
-    const compactContextIndicatorIndex = src.indexOf('<FlowerComposerContextIndicator');
+    const compactContextIndicatorIndex = src.indexOf('<FlowerComposerContextIndicator', composerActionsIndex);
     const contextIndicatorIndex = src.indexOf('<FlowerComposerContextIndicator', compactContextIndicatorIndex + 1);
+    const childContextIndex = src.indexOf('contextIndicator={<Show when={subagentDetailThread()?.model_context}>');
     const submitIndex = src.indexOf('flower-composer-submit');
 
     expect(headerIndex).toBeGreaterThanOrEqual(0);
@@ -119,6 +120,8 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(composerActionsIndex).toBeGreaterThan(composerIndex);
     expect(compactContextIndicatorIndex).toBeGreaterThanOrEqual(0);
     expect(contextIndicatorIndex).toBe(-1);
+    expect(childContextIndex).toBeGreaterThanOrEqual(0);
+    expect(childContextIndex).toBeLessThan(src.indexOf('renderTimeline={() => <FlowerTurnTimeline', childContextIndex));
     expect(submitIndex).toBeGreaterThan(compactContextIndicatorIndex);
     expect(src).toContain('!livePresentationConfirmed() || selectedThreadTerminalSyncing() ? null : flowerRunProgress(selectedThread())');
     expect(src).not.toContain('projectFlowerLiveProgress');
@@ -128,7 +131,7 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(src).not.toContain('const liveProgressIndicator');
     expect(src).not.toContain('flower-live-progress-placeholder');
     expect(src).not.toContain('data-flower-composer-more-item="context"');
-    expect(src).toContain('<Show when={selectedContextUsage()}>');
+    expect(src).toContain('<Show when={selectedContextUsage() ?? (selectedThread()?.model_context ? {} : undefined)}>');
     expect(src).toContain('usage={contextUsage()}');
     expect(src).toContain('copy().chat.modelStatus');
     expect(src).toContain('DEFAULT_FLOWER_SURFACE_COPY.chat.modelStatus');

@@ -40,6 +40,7 @@ export type SubagentDetailWindowProps = Readonly<{
   detailAvailable: boolean;
   entries: readonly FlowerTimelineEntry[];
   inputControls?: JSX.Element;
+  contextIndicator?: JSX.Element;
   renderTimeline?: () => JSX.Element;
   renderEntry: (entry: Accessor<FlowerTimelineEntry>) => JSX.Element;
   bindScroll: (node: HTMLDivElement) => void;
@@ -290,6 +291,7 @@ export function SubagentDetailWindow(props: SubagentDetailWindowProps): JSX.Elem
         <header ref={overview} tabIndex={-1} class="flower-subagent-detail-overview">
           <SubagentAvatar threadID={props.threadID} class="flower-subagent-detail-avatar" />
           <div class="flower-subagent-detail-overview-copy">
+            {props.contextIndicator}
             <Show when={props.description}>
               <p class="flower-subagent-detail-description" title={props.description}>{props.description}</p>
             </Show>

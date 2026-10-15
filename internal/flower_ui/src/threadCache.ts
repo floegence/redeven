@@ -191,6 +191,7 @@ function summaryOnly(thread: FlowerThreadSnapshot): FlowerThreadSnapshot {
   delete summary.turns;
   delete summary.queued_turns;
   delete summary.restored_inputs;
+  delete summary.model_context;
   delete summary.context_usage;
   delete summary.context_compactions;
   delete summary.timeline_decorations;

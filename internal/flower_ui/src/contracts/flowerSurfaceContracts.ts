@@ -349,6 +349,21 @@ export type FlowerContextPressureStatus =
   | 'hard_limit'
   | 'estimated';
 
+export type FlowerModelContext = Readonly<{
+  snapshot: Readonly<{ sections: readonly Readonly<{ key: string; title: string; text: string }>[] }>;
+  entry_id: string;
+  path_depth: number;
+  turn_id: string;
+  run_id: string;
+  updated_at: string;
+  changed_keys: readonly string[];
+  removed_keys: readonly string[];
+  used_by_request_id?: string;
+  used_by_turn_id?: string;
+  used_by_run_id?: string;
+  used_at?: string;
+}>;
+
 export type FlowerContextUsagePhase = 'projected_request' | 'provider_usage';
 
 export type FlowerThreadTokenUsage = Readonly<{
@@ -690,6 +705,7 @@ export type FlowerThreadSnapshot = Readonly<{
   messages: readonly FlowerChatMessage[];
   reasoning_selection?: FlowerReasoningSelection;
   reasoning_capability?: FlowerReasoningCapability;
+  model_context?: FlowerModelContext | null;
   context_usage?: FlowerContextUsage | null;
   context_compactions?: readonly FlowerContextCompaction[];
   timeline_decorations?: readonly FlowerTimelineDecoration[];
@@ -729,6 +745,8 @@ export type FlowerSubagentInputOperation = Readonly<{
 }>;
 
 export type FlowerSubagentDetail = Readonly<{
+  model_context?: FlowerModelContext;
+  context_usage?: FlowerContextUsage;
   summary: FlowerSubagentSummary;
   current: FlowerRuntimeCurrentView;
 }>;
@@ -947,6 +965,7 @@ export type FlowerLiveStreamEnvelope = Readonly<{
   subagent_current?: FlowerRuntimeCurrentView;
   /** Full replacement of the parent thread's canonical Subagent inventory. */
   subagents?: readonly FlowerSubagentSummary[];
+  model_context?: FlowerModelContext | null;
   context_usage?: FlowerContextUsage | null;
   context_compactions?: readonly FlowerContextCompaction[];
   timeline_decorations?: readonly FlowerTimelineDecoration[];

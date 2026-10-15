@@ -587,6 +587,7 @@ export type FlowerSurfaceCopy = Readonly<{
       floretEngineFailed: string;
       floretControlContractFailed: string;
       floretAuthorityConsistencyFailed: string;
+      modelContextUnavailable: string;
       floretEffectOutcomeUnknown: string;
       runtimeRestarted: string;
     }>;
@@ -647,6 +648,7 @@ export type FlowerSurfaceCopy = Readonly<{
       hardLimit: string;
       unknownPercent: string;
       unavailable: string;
+      runtimeFacts: string; collected: string; used: string; updated: string; removed: string;
       recentCacheHitLabel: string;
       cacheHitLabel: string;
       percent: (percent: number) => string;
@@ -991,6 +993,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       floretEngineFailed: 'Flower could not finish this turn because the orchestration engine failed.',
       floretControlContractFailed: 'Flower could not generate a valid question. The reply so far has been preserved. Retry to continue.',
       floretAuthorityConsistencyFailed: 'Flower could not finish this turn because the committed tool result could not be verified. The tool was not run again; start a new reply to continue.',
+      modelContextUnavailable: 'Could not collect current runtime facts. Repair the source and retry.',
       floretEffectOutcomeUnknown: 'Some operations may have completed, but their results could not be confirmed. The task was stopped to avoid duplicate execution.',
       runtimeRestarted: 'The local runtime restarted before this reply finished. Start a new reply when the runtime is ready.',
     },
@@ -1058,6 +1061,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       hardLimit: 'At limit',
       unknownPercent: '—',
       unavailable: 'Not available',
+      runtimeFacts: 'Runtime facts', collected: 'Collected', used: 'Used by latest request', updated: 'Updated', removed: 'Removed',
       recentCacheHitLabel: 'Latest request cache hit rate',
       cacheHitLabel: 'Session cache hit rate',
       percent: (percent) => `${percent}%`,

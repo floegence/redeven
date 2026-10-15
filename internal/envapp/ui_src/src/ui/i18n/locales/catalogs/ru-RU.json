@@ -5523,6 +5523,12 @@
       "providerRetryWaiting": "Сервис модели недоступен. Повтор через {seconds} с · {retry}/{max}",
       "providerRetryRegenerating": "Соединение прервано. Повторная генерация через {seconds} с · {retry}/{max}",
       "modelStatusFinalizing": "Завершение ответа...",
+      "contextIndicatorRuntimeFacts": "Данные выполнения",
+      "contextIndicatorCollected": "Собраны",
+      "contextIndicatorUsed": "Использованы в последнем запросе",
+      "contextIndicatorUpdated": "Обновлены",
+      "contextIndicatorRemoved": "Удалены",
+      "runErrorModelContextUnavailable": "Не удалось собрать текущие данные выполнения. Исправьте источник и повторите попытку.",
       "contextIndicatorLabel": "Контекст",
       "contextIndicatorNearThreshold": "Близко к лимиту",
       "contextIndicatorWillCompact": "Скоро сжатие",
@@ -5705,7 +5711,12 @@
       "citationUnavailable": "Источник недоступен",
       "queuedEdit": "Вернуть в поле ввода",
       "queueTakeBackConflict": "Это сообщение уже начало выполняться или было изменено. Обновите список и попробуйте снова.",
-      "queueTakeBackUnknown": "Сообщение возвращено в поле ввода, но удаление из очереди не подтверждено. Проверьте очередь перед отправкой."
+      "queueTakeBackUnknown": "Сообщение возвращено в поле ввода, но удаление из очереди не подтверждено. Проверьте очередь перед отправкой.",
+      "outputTokens": "{count} ток.",
+      "outputTokensTooltip": "Приблизительный объём полученного вывода для этого запроса к модели, включая рассуждения и аргументы инструментов. Данные для оплаты учитываются отдельно.",
+      "waitSeconds": "{seconds} s",
+      "toolArgumentPreviewTooltip": "Количество строк обновляется по мере получения аргументов. Фактические изменения отображаются после завершения работы инструмента.",
+      "toolGeneratingArguments": "Генерация аргументов"
     },
     "threadList": {
       "title": "Беседы",

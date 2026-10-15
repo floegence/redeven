@@ -5,6 +5,7 @@ import (
 	"errors"
 	"slices"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/floegence/floret/v7/identity"
@@ -228,11 +229,11 @@ func (s *Service) sendTypedExistingThread(ctx context.Context, meta *session.Met
 	}
 	var effect *threadEffect
 	if simple {
-		runtimeContext, contextErr := s.floretTurnRuntimeContextForAdmission(ctx, meta, req)
+		runtimeContext, contextErr := s.modelContextSnapshotForAdmission(ctx, meta, req)
 		if contextErr != nil {
 			return finish(SendUserTurnResponse{}, contextErr)
 		}
-		turnInput.Context = []flruntime.MessageContextItem{runtimeContext}
+		turnInput.ModelContextSnapshot = runtimeContext
 	} else {
 		effect, err = s.prepareThreadEffect(meta, executionKey, RunStartRequest{
 			ThreadID:          strings.TrimSpace(req.ThreadID),
@@ -252,16 +253,17 @@ func (s *Service) sendTypedExistingThread(ctx context.Context, meta *session.Met
 		if projectionErr != nil {
 			return finish(SendUserTurnResponse{}, projectionErr)
 		}
-		runtimeContext, contextErr := effect.builder.floretTurnRuntimeContext()
+		runtimeContext, contextErr := effect.builder.collectModelContextSnapshot(ctx, effect.builder.currentPermissionType(), time.Now)
 		if contextErr != nil {
 			return finish(SendUserTurnResponse{}, contextErr)
 		}
-		projection.Context = append(projection.Context, runtimeContext)
+
 		turnInput, err = effect.builder.floretTurnInput(ctx, effect.req.Input, projection.References)
 		if err != nil {
 			return finish(SendUserTurnResponse{}, err)
 		}
 		turnInput.Context = projection.Context
+		turnInput.ModelContextSnapshot = runtimeContext
 	}
 	if err := turnInput.Validate(); err != nil {
 		return finish(SendUserTurnResponse{}, err)
@@ -353,21 +355,21 @@ func simpleTypedTurnInput(input RunInput) (flruntime.TurnInput, bool, error) {
 	return turnInput, true, nil
 }
 
-func (s *Service) floretTurnRuntimeContextForAdmission(ctx context.Context, meta *session.Meta, req SendUserTurnRequest) (flruntime.MessageContextItem, error) {
+func (s *Service) modelContextSnapshotForAdmission(ctx context.Context, meta *session.Meta, req SendUserTurnRequest) (*flruntime.ModelContextSnapshot, error) {
 	settings, err := s.threadSettingsForRead(ctx, meta, req.ThreadID)
 	if err != nil {
-		return flruntime.MessageContextItem{}, err
+		return nil, err
 	}
 	if settings == nil {
-		return flruntime.MessageContextItem{}, errors.New("thread not found")
+		return nil, errors.New("thread not found")
 	}
 	permission, err := parsePermissionType(req.Options.PermissionType)
 	if err != nil {
-		return flruntime.MessageContextItem{}, err
+		return nil, err
 	}
 	workingDir, err := threadWorkingDir(settings)
 	if err != nil {
-		return flruntime.MessageContextItem{}, err
+		return nil, err
 	}
 	metaCopy := *meta
 	r := newRun(runOptions{
@@ -378,7 +380,7 @@ func (s *Service) floretTurnRuntimeContextForAdmission(ctx context.Context, meta
 	})
 	r.setPermissionState(permission, PermissionSnapshot{})
 	r.subagentRuntime = newServiceFloretSubagentRuntime(s, r)
-	return r.floretTurnRuntimeContext()
+	return r.collectModelContextSnapshot(ctx, permission, time.Now)
 }
 
 func (s *Service) typedSendLookup(ctx context.Context, meta *session.Meta, req SendUserTurnRequest) (SendUserTurnResponse, bool, error) {

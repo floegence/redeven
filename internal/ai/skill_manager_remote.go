@@ -3,6 +3,7 @@ package ai
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -281,17 +282,17 @@ type resolvedGitHubImportInput struct {
 }
 
 func (m *skillManager) loadSourcesLocked() error {
-	if m == nil || m.sourcesLoaded {
+	if m == nil {
 		return nil
 	}
-	m.sourcesLoaded = true
-	m.sources = map[string]SkillSourceRecord{}
+	sources := map[string]SkillSourceRecord{}
 	if strings.TrimSpace(m.sourcePath) == "" {
 		return nil
 	}
 	raw, err := os.ReadFile(m.sourcePath)
 	if err != nil {
 		if os.IsNotExist(err) {
+			m.sources = sources
 			return nil
 		}
 		return err
@@ -321,8 +322,9 @@ func (m *skillManager) loadSourcesLocked() error {
 		item.RepoPath = strings.TrimSpace(item.RepoPath)
 		item.InstallMode = strings.TrimSpace(item.InstallMode)
 		item.InstalledCommit = strings.TrimSpace(item.InstalledCommit)
-		m.sources[p] = item
+		sources[p] = item
 	}
+	m.sources = sources
 	return nil
 }
 
@@ -402,7 +404,7 @@ func (m *skillManager) ListSources() (SkillSourcesView, error) {
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.discoverLocked()
+	_ = m.discoverLocked(context.Background())
 
 	items := make([]SkillSourceRecord, 0, len(m.catalogEntries))
 	for i := range m.catalogEntries {
@@ -446,7 +448,7 @@ func (m *skillManager) ValidateGitHubImport(req SkillGitHubImportRequest) (Skill
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.discoverLocked()
+	_ = m.discoverLocked(context.Background())
 
 	input, err := m.resolveGitHubImportInputLocked(req)
 	if err != nil {
@@ -465,7 +467,7 @@ func (m *skillManager) ImportFromGitHub(req SkillGitHubImportRequest) (SkillGitH
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.discoverLocked()
+	_ = m.discoverLocked(context.Background())
 
 	input, err := m.resolveGitHubImportInputLocked(req)
 	if err != nil {
@@ -534,7 +536,7 @@ func (m *skillManager) ImportFromGitHub(req SkillGitHubImportRequest) (SkillGitH
 	if err := m.saveSourcesLocked(); err != nil {
 		return SkillGitHubImportResult{}, newSkillError(ErrCodeAISkillsInternal, http.StatusInternalServerError, "failed to persist skill source metadata", err)
 	}
-	m.discoverLocked()
+	_ = m.discoverLocked(context.Background())
 	return SkillGitHubImportResult{Catalog: m.catalogLocked(), Imports: imports}, nil
 }
 
@@ -544,7 +546,7 @@ func (m *skillManager) Reinstall(paths []string, overwrite bool) (SkillReinstall
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.discoverLocked()
+	_ = m.discoverLocked(context.Background())
 
 	if len(paths) == 0 {
 		return SkillReinstallResult{}, newSkillError(ErrCodeAISkillsInvalidPath, http.StatusBadRequest, "missing paths", nil)
@@ -624,7 +626,7 @@ func (m *skillManager) Reinstall(paths []string, overwrite bool) (SkillReinstall
 	if err := m.saveSourcesLocked(); err != nil {
 		return SkillReinstallResult{}, newSkillError(ErrCodeAISkillsInternal, http.StatusInternalServerError, "failed to persist skill source metadata", err)
 	}
-	m.discoverLocked()
+	_ = m.discoverLocked(context.Background())
 	return SkillReinstallResult{Catalog: m.catalogLocked(), Reinstalled: reinstalled}, nil
 }
 
@@ -634,7 +636,7 @@ func (m *skillManager) BrowseTree(skillPath string, dir string) (SkillBrowseTree
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.discoverLocked()
+	_ = m.discoverLocked(context.Background())
 
 	skill, err := m.resolveBrowseSkillLocked(skillPath)
 	if err != nil {
@@ -724,7 +726,7 @@ func (m *skillManager) BrowseFile(skillPath string, file string, encoding string
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.discoverLocked()
+	_ = m.discoverLocked(context.Background())
 
 	skill, err := m.resolveBrowseSkillLocked(skillPath)
 	if err != nil {
@@ -851,7 +853,7 @@ func (m *skillManager) ListGitHubCatalog(req SkillGitHubCatalogRequest) (SkillGi
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.discoverLocked()
+	_ = m.discoverLocked(context.Background())
 
 	repo, err := normalizeGitHubRepo(firstNonEmpty(req.Repo, "openai/skills"))
 	if err != nil {

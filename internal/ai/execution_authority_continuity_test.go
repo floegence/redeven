@@ -286,3 +286,7 @@ func TestSubagentInputsPersistAuthorityBeforeSendAndRestoreAutonomousOptions(t *
 		t.Fatalf("send_input authority=%#v, send_key=%q", sendAuthority, sendKeys[1])
 	}
 }
+
+func (runtime *authorityContinuityRuntime) Context(ctx context.Context, threadID identity.ThreadID) (flruntime.ThreadContextSnapshot, error) {
+	return runtime.ThreadService.(flruntime.ThreadContextReader).Context(ctx, threadID)
+}

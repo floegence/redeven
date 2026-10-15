@@ -480,3 +480,28 @@ func TestFlowerLiveFragmentsInitializationCoalescesOnlyPureTextGrowth(t *testing
 		t.Fatal("initialization text coalescing leaked retained bytes")
 	}
 }
+
+func TestFlowerLiveFragmentsCarryCompleteManagedModelContext(t *testing.T) {
+	svc, sub := subscribeFlowerFragmentTest(t)
+	snapshot := flruntime.ModelContextSnapshot{}
+	for i := range 4 {
+		snapshot.Sections = append(snapshot.Sections, flruntime.ModelContextSection{Key: fmt.Sprintf("section_%d", i), Title: "Runtime facts", Text: strings.Repeat("x", 64000)})
+	}
+	if err := snapshot.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	facts := &flruntime.ThreadModelContext{Snapshot: snapshot, EntryID: "entry-facts", PathDepth: 1, TurnID: "turn-facts", RunID: "run-facts", UpdatedAt: time.Now(), ChangedKeys: []string{"section_0", "section_1", "section_2", "section_3"}, RemovedKeys: []string{}}
+	batch := newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamThreadBatch, ThreadID: "thread-facts", ModelContext: facts})
+	enqueueFlowerFragmentTest(t, svc, sub, batch)
+	frame := nextFlowerLiveStreamFrame(t, sub)
+	if !bytes.Equal(frame.Data, batch.data) || sub.subscriber.closed {
+		t.Fatal("valid complete runtime facts disconnected or changed")
+	}
+	var received FlowerLiveStreamEnvelope
+	if err := json.Unmarshal(frame.Data, &received); err != nil {
+		t.Fatal(err)
+	}
+	if received.ModelContext == nil || len(received.ModelContext.Snapshot.Sections) != 4 || len(received.ModelContext.Snapshot.Sections[3].Text) != 64000 {
+		t.Fatal("runtime facts were truncated")
+	}
+}

@@ -25,7 +25,7 @@ func TestQueuedContentEditClaimsResourcesAndReplaysAfterDeletion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	original := flruntime.UserInput{Text: "original", References: []flruntime.MessageReference{{ReferenceID: "old", Kind: flruntime.MessageReferenceText, Label: "Old context", Text: "OLD_CONTEXT"}}, Context: []flruntime.MessageContextItem{{Kind: "runtime_context", Title: "Runtime", Text: "captured runtime"}}}
+	original := flruntime.UserInput{ModelContextSnapshot: &flruntime.ModelContextSnapshot{Sections: []flruntime.ModelContextSection{{Key: "skills", Title: "Skills", Text: "captured catalog"}}}, Text: "original", References: []flruntime.MessageReference{{ReferenceID: "old", Kind: flruntime.MessageReferenceText, Label: "Old context", Text: "OLD_CONTEXT"}}, Context: []flruntime.MessageContextItem{{Kind: "runtime_context", Title: "Runtime", Text: "captured runtime"}}}
 	if _, err := svc.threadRuntime.ImportPendingInputs(t.Context(), flruntime.ImportPendingInputsInput{ThreadID: identity.ThreadID(thread.ThreadID), Items: []flruntime.ImportedPendingInput{{RequestKey: "queued-content", Input: original}}}); err != nil {
 		t.Fatal(err)
 	}
@@ -52,6 +52,9 @@ func TestQueuedContentEditClaimsResourcesAndReplaysAfterDeletion(t *testing.T) {
 		t.Fatal(err)
 	}
 	input := updated.Queue[0].Input
+	if input.ModelContextSnapshot == nil || len(input.ModelContextSnapshot.Sections) != 1 || input.ModelContextSnapshot.Sections[0].Text != "captured catalog" {
+		t.Fatalf("managed snapshot lost: %#v", input)
+	}
 	if input.Text != "updated" || len(input.Attachments) != 1 || len(input.References) != 1 || input.References[0].Text != "NEW_CONTEXT" {
 		t.Fatalf("input=%#v", input)
 	}

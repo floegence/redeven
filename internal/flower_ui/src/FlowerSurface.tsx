@@ -2554,6 +2554,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         return copy().chat.runErrors.providerModelUnavailable;
       case 'model_gateway_contract_failed':
         return copy().chat.runErrors.modelGatewayContractFailed;
+      case 'model_context_unavailable': return copy().chat.runErrors.modelContextUnavailable;
       case 'context_budget_invalid':
         return copy().chat.runErrors.contextBudgetInvalid;
       case 'context_fixed_overhead':
@@ -4594,6 +4595,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     timelineDecorations?: FlowerLiveStreamEnvelope['timeline_decorations'],
     source: ThreadDetailSource = 'user_action',
     admissionSettings?: TransportOutboxProvisionalThreadSettings,
+    modelContext?: FlowerLiveStreamEnvelope['model_context'],
   ): boolean => {
     const threadID = trimString(current.thread_id);
     if (!threadID || retiredThreadIDs.has(threadID)) return false;
@@ -4639,6 +4641,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           ? { reasoning_selection: provisionalSettings.reasoning_selection }
           : {}),
       } : {}),
+      ...(modelContext ? { model_context: modelContext } : {}),
       ...(mergedContextUsage ? { context_usage: mergedContextUsage } : {}),
       ...(contextCompactions ? { context_compactions: contextCompactions } : {}),
       ...(timelineDecorations ? { timeline_decorations: timelineDecorations } : {}),
@@ -4943,7 +4946,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
     if (envelope.kind === 'thread.batch' && envelope.subagent_current) {
       const parentThreadID = trimString(envelope.thread_id);
-      acceptActiveSubagentCurrent(parentThreadID, envelope.subagent_current);
+      acceptActiveSubagentCurrent(parentThreadID, envelope.subagent_current, undefined, envelope.model_context ?? undefined, envelope.context_usage ?? undefined);
       return;
     }
     if (envelope.current) {
@@ -4953,6 +4956,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         envelope.context_compactions,
         envelope.timeline_decorations,
         'live_current',
+        undefined,
+        envelope.model_context,
       );
       if (accepted && envelope.kind === 'thread.batch') {
         const observation = companionRunTracker.observe(envelope.current);
@@ -4963,14 +4968,26 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       }
       return;
     }
-    if (envelope.kind === 'thread.batch' && envelope.context_usage) {
+    if (envelope.kind === 'thread.batch' && (envelope.context_usage || envelope.model_context)) {
       const threadID = trimString(envelope.thread_id);
       const incomingContextUsage = envelope.context_usage;
+      const incomingModelContext = envelope.model_context;
+      const activeChild = untrack(activeSubagentDetail);
+      if (activeChild?.childThreadID === threadID && activeChild.detail) {
+        setActiveSubagentDetail((child) => child?.childThreadID === threadID && child.detail ? {
+          ...child, detail: { ...child.detail,
+            ...(incomingContextUsage ? { context_usage: mergeFlowerContextUsage(child.detail.context_usage, incomingContextUsage) } : {}),
+            ...(incomingModelContext ? { model_context: incomingModelContext } : {}),
+          },
+        } : child);
+        return;
+      }
       const currentView = threadCache().views.get(threadID);
       if (threadID && currentView && !retiredThreadIDs.has(threadID)) {
         setThreadCache((cache) => cache.updateDetailAdjuncts(threadID, (thread) => ({
           ...thread,
-          context_usage: mergeFlowerContextUsage(thread.context_usage, incomingContextUsage),
+          ...(incomingContextUsage ? { context_usage: mergeFlowerContextUsage(thread.context_usage, incomingContextUsage) } : {}),
+          ...(incomingModelContext ? { model_context: incomingModelContext } : {}),
         })));
       }
       return;
@@ -5227,6 +5244,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     parentThreadID: string,
     current: FlowerSubagentDetail['current'],
     summary?: FlowerSubagentSummary,
+    modelContext?: FlowerLiveStreamEnvelope['model_context'],
+    contextUsage?: FlowerLiveStreamEnvelope['context_usage'],
   ): boolean => {
     const childThreadID = trimString(current.thread_id);
     const viewVersion = Math.max(0, Math.floor(Number(current.view_version) || 0));
@@ -5246,13 +5265,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       if (!active || active.parentThreadID !== parentThreadID || active.childThreadID !== childThreadID) return active;
       const currentVersion = Math.max(0, Math.floor(Number(active.detail?.current.view_version) || 0));
       if (active.connectionEpoch === liveTransport.connectionEpoch() && viewVersion <= currentVersion) {
-        if (!active.detail || active.detail.summary === nextSummary) return active;
-        return { ...active, detail: { ...active.detail, summary: nextSummary } };
+        if (!active.detail || viewVersion < currentVersion) return active;
+        return { ...active, detail: { ...active.detail, summary: nextSummary, model_context: modelContext ?? active.detail.model_context, context_usage: contextUsage ?? active.detail.context_usage } };
       }
       accepted = true;
       return {
         ...active,
-        detail: { summary: nextSummary, current },
+        detail: { summary: nextSummary, current, model_context: modelContext ?? active.detail?.model_context, context_usage: contextUsage ?? active.detail?.context_usage },
         connectionEpoch: liveTransport.connectionEpoch(),
         error: '',
       };
@@ -5291,7 +5310,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       }
       const current = untrack(activeSubagentDetail);
       if (!current || current.generation !== generation || requestEpoch !== liveTransport.connectionEpoch()) return;
-      acceptActiveSubagentCurrent(request.parentThreadID, detail.current, detail.summary);
+      acceptActiveSubagentCurrent(request.parentThreadID, detail.current, detail.summary, detail.model_context, detail.context_usage);
       setActiveSubagentDetail((latest) => (
         latest?.generation === generation ? { ...latest, requestStatus: 'idle', error: '' } : latest
       ));
@@ -5331,7 +5350,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       if (!stillSelected()) return;
       if (detail.summary.parent_thread_id !== selected.parentThreadID || detail.summary.thread_id !== selected.childThreadID
         || detail.current.thread_id !== selected.childThreadID) throw new Error('Subagent input response identity mismatch.');
-      acceptActiveSubagentCurrent(selected.parentThreadID, detail.current, detail.summary);
+      acceptActiveSubagentCurrent(selected.parentThreadID, detail.current, detail.summary, detail.model_context, detail.context_usage);
       setSubagentInputCommands((commands) => { const next = { ...commands }; delete next[key]; return next; });
     } catch (error) {
       if (!stillSelected()) return;
@@ -6963,7 +6982,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       }
     };
     const providerFailure = code.startsWith('provider_') || code.startsWith('chatgpt_');
-    const diagnostics = () => (contextFailure || providerFailure) && trimString(error?.detail) ? (
+    const diagnostics = () => (contextFailure || providerFailure || code === 'model_context_unavailable') && trimString(error?.detail) ? (
       <details class="flower-error-details">
         <summary>{copy().chat.runErrorDetails}</summary>
         <pre>{trimString(error?.detail)}</pre>
@@ -6974,7 +6993,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     ) : undefined;
     const action = () => code === 'chatgpt_usage_unavailable' ? (
       <a href="https://chatgpt.com/settings/usage" target="_blank" rel="noopener noreferrer" class="cursor-pointer whitespace-nowrap text-sm font-medium text-primary hover:underline">{copy().settings.dialog.chatGPT.manageUsage}</a>
-    ) : code === 'chatgpt_temporarily_unavailable' || code === 'provider_server_error' || code === 'provider_rate_limited' || code === 'provider_upstream_rate_limited' || code === 'provider_request_invalid' || code === 'provider_request_rejected' ? (
+    ) : code === 'chatgpt_temporarily_unavailable' || code === 'provider_server_error' || code === 'provider_rate_limited' || code === 'provider_upstream_rate_limited' || code === 'provider_request_invalid' || code === 'provider_request_rejected' || code === 'model_context_unavailable' ? (
       <Button size="sm" variant="ghost" disabled={retryPending()} onClick={() => void retryContinuation()}>{copy().chat.retryReply}</Button>
     ) : contextFailure ? (
       <>
@@ -11083,6 +11102,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       </Show>}
 
       renderEntry={(entry) => timelineEntry(entry, subagentDetailScroll, subagentDetailThread)}
+      contextIndicator={<Show when={subagentDetailThread()?.model_context}><FlowerComposerContextIndicator placement="below-start" usage={subagentDetailThread()?.context_usage ?? {}} modelContext={subagentDetailThread()?.model_context} copy={copy()} /></Show>}
       renderTimeline={() => <FlowerTurnTimeline thread={subagentDetailThread()} entries={subagentDetailTimelineEntries()}
         failureNoticeVisible={runErrorNoticeVisible(subagentDetailThread())}
         runtimeID={props.adapter.runtime.runtime_id} scope="subagent" choices={turnDisclosureChoices}
@@ -12412,10 +12432,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   {composerMoreButton()}
                 </div>
                 {composerMorePanel()}
-                      <Show when={selectedContextUsage()}>
+                      <Show when={selectedContextUsage() ?? (selectedThread()?.model_context ? {} : undefined)}>
                         {(contextUsage) => (
                           <FlowerComposerContextIndicator
                             usage={contextUsage()}
+                            modelContext={selectedThread()?.model_context}
                             copy={copy()}
                           />
                         )}

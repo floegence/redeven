@@ -54,6 +54,7 @@ type promptFilesystemRootFact struct {
 }
 
 type promptRepositoryState struct {
+	Unavailable     string
 	Available       bool
 	RepoRoot        string
 	RelativeWorkdir string
@@ -75,6 +76,7 @@ type promptRepoRuleFile struct {
 }
 
 type promptDelegationState struct {
+	Unavailable    string
 	Enabled        bool
 	ActiveCount    int
 	QueuedCount    int
@@ -95,17 +97,17 @@ type promptDelegationItem struct {
 	Objective string
 }
 
-func collectPromptWorkspaceContext(r *run) promptWorkspaceContext {
-	ctx := promptWorkspaceContext{
-		Environment: collectPromptEnvironmentFacts(r),
+func collectPromptWorkspaceContext(ctx context.Context, r *run, permission FlowerPermissionType) promptWorkspaceContext {
+	workspace := promptWorkspaceContext{
+		Environment: collectPromptEnvironmentFacts(r, permission),
 	}
-	ctx.Repository = collectPromptRepositoryState(ctx.Environment.WorkingDir)
-	ctx.RepoRules, ctx.RepoRulesError = r.collectPromptRepoRuleFiles(ctx.Environment.WorkingDir, ctx.Repository.RepoRoot)
-	ctx.Delegation = collectPromptDelegationState(r)
-	return ctx
+	workspace.Repository = collectPromptRepositoryState(ctx, workspace.Environment.WorkingDir)
+	workspace.RepoRules, workspace.RepoRulesError = r.collectPromptRepoRuleFiles(ctx, workspace.Environment.WorkingDir, workspace.Repository.RepoRoot)
+	workspace.Delegation = collectPromptDelegationState(ctx, r)
+	return workspace
 }
 
-func collectPromptEnvironmentFacts(r *run) promptEnvironmentFacts {
+func collectPromptEnvironmentFacts(r *run, permission FlowerPermissionType) promptEnvironmentFacts {
 	out := promptEnvironmentFacts{}
 	if r == nil {
 		return out
@@ -126,23 +128,26 @@ func collectPromptEnvironmentFacts(r *run) promptEnvironmentFacts {
 		}
 	}
 	out.Shell = strings.TrimSpace(r.shell)
-	out.PermissionType = r.currentPermissionType()
+	out.PermissionType = permission
 	out.SubagentDelegation = r.allowSubagentDelegate
 	return out
 }
 
-func collectPromptRepositoryState(workingDir string) promptRepositoryState {
+func collectPromptRepositoryState(parent context.Context, workingDir string) promptRepositoryState {
 	workingDir = strings.TrimSpace(workingDir)
 	if workingDir == "" {
 		return promptRepositoryState{}
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), promptGitProbeTimeout)
+	ctx, cancel := context.WithTimeout(parent, promptGitProbeTimeout)
 	defer cancel()
 
-	repoRoot, ok := gitutil.ShowTopLevel(ctx, workingDir)
-	if !ok {
-		return promptRepositoryState{}
+	repoRoot, err := gitutil.ResolveTopLevel(ctx, workingDir)
+	if err != nil {
+		if strings.Contains(err.Error(), "not a git repository") {
+			return promptRepositoryState{}
+		}
+		return promptRepositoryState{Unavailable: "Git repository probe unavailable"}
 	}
 	state := promptRepositoryState{
 		Available: true,
@@ -174,8 +179,11 @@ func collectPromptRepositoryState(workingDir string) promptRepositoryState {
 		state.LinkedWorktree = true
 	}
 
-	statusRaw := readPromptGitOptional(ctx, state.RepoRoot, "status", "--porcelain=1", "--untracked-files=normal")
-	state.StagedCount, state.UnstagedCount, state.UntrackedCount = parsePromptGitStatusCounts(statusRaw)
+	statusRaw, err := gitutil.RunCombinedOutput(ctx, state.RepoRoot, nil, "status", "--porcelain=1", "--untracked-files=normal")
+	if err != nil || ctx.Err() != nil {
+		return promptRepositoryState{Unavailable: "Git repository status unavailable"}
+	}
+	state.StagedCount, state.UnstagedCount, state.UntrackedCount = parsePromptGitStatusCounts(string(statusRaw))
 	return state
 }
 
@@ -243,7 +251,7 @@ func parsePromptGitStatusCounts(raw string) (staged int, unstaged int, untracked
 	return staged, unstaged, untracked
 }
 
-func (r *run) collectPromptRepoRuleFiles(workingDir, repoRoot string) ([]promptRepoRuleFile, error) {
+func (r *run) collectPromptRepoRuleFiles(ctx context.Context, workingDir, repoRoot string) ([]promptRepoRuleFile, error) {
 	if r == nil || strings.TrimSpace(workingDir) == "" {
 		return nil, nil
 	}
@@ -253,6 +261,9 @@ func (r *run) collectPromptRepoRuleFiles(workingDir, repoRoot string) ([]promptR
 	}
 	files := []promptRepoRuleFile{}
 	for _, dir := range promptRuleSearchDirs(workingDir, repoRoot) {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		resolvedDir, err := scope.Registry.Resolve(dir, filesystemscope.ResolveOptions{RequireExisting: true, RequireDir: true})
 		if err != nil {
 			return files, fmt.Errorf("cannot inspect repository rule directory %q within authorized filesystem roots", dir)
@@ -266,6 +277,9 @@ func (r *run) collectPromptRepoRuleFiles(workingDir, repoRoot string) ([]promptR
 			names[entry.Name()] = true
 		}
 		for _, name := range promptRepoRuleCandidateNames {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
 			if !names[name] {
 				continue
 			}
@@ -320,7 +334,7 @@ func promptRuleSearchDirs(workingDir string, repoRoot string) []string {
 	return dirs
 }
 
-func collectPromptDelegationState(r *run) promptDelegationState {
+func collectPromptDelegationState(ctx context.Context, r *run) promptDelegationState {
 	out := promptDelegationState{}
 	if r == nil {
 		return out
@@ -330,12 +344,19 @@ func collectPromptDelegationState(r *run) promptDelegationState {
 		return out
 	}
 
-	snapshots, err := r.subagentRuntime.snapshots(context.Background())
-	if err != nil || len(snapshots) == 0 {
+	snapshots, err := r.subagentRuntime.snapshots(ctx)
+	if err != nil {
+		out.Unavailable = "Delegation state is unavailable: " + err.Error()
+		return out
+	}
+	if len(snapshots) == 0 {
 		return out
 	}
 	sort.Slice(snapshots, func(i, j int) bool {
 		if snapshots[i].UpdatedAtMS == snapshots[j].UpdatedAtMS {
+			if snapshots[i].CreatedAtMS == snapshots[j].CreatedAtMS {
+				return snapshots[i].ThreadID < snapshots[j].ThreadID
+			}
 			return snapshots[i].CreatedAtMS > snapshots[j].CreatedAtMS
 		}
 		return snapshots[i].UpdatedAtMS > snapshots[j].UpdatedAtMS
@@ -378,49 +399,62 @@ func collectPromptDelegationState(r *run) promptDelegationState {
 	return out
 }
 
-func buildPromptWorkspaceContextSection(workspace promptWorkspaceContext) promptSection {
-	lines := []string{"## Workspace Context"}
-	if envLines := renderPromptEnvironmentFactsLines(workspace.Environment); len(envLines) > 0 {
-		lines = append(lines, "### Environment Facts")
-		lines = append(lines, envLines...)
+// collectModelContextSnapshot is the sole Flower runtime fact collector. Floret
+// owns comparison, chronological admission, rendering and durable history.
+func (r *run) collectModelContextSnapshot(ctx context.Context, permission FlowerPermissionType, now func() time.Time) (*flruntime.ModelContextSnapshot, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
-	if repoLines := renderPromptRepositoryStateLines(workspace.Repository); len(repoLines) > 0 {
-		lines = append(lines, "### Repository State")
-		lines = append(lines, repoLines...)
+	if r == nil {
+		return nil, fmt.Errorf("%w: runtime execution configuration is unavailable", flruntime.ErrModelContextUnavailable)
 	}
-	if ruleLines := renderPromptRepoRuleLines(workspace.RepoRules, workspace.RepoRulesError); len(ruleLines) > 0 {
-		lines = append(lines, "### Repository Rules")
-		lines = append(lines, ruleLines...)
+	workspace := collectPromptWorkspaceContext(ctx, r, permission)
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
-	if delegationLines := renderPromptDelegationLines(workspace.Delegation); len(delegationLines) > 0 {
-		lines = append(lines, "### Delegation State")
-		lines = append(lines, delegationLines...)
+	if workspace.RepoRulesError != nil {
+		return nil, fmt.Errorf("%w: %v", flruntime.ErrModelContextUnavailable, workspace.RepoRulesError)
 	}
-	return newPromptSection("workspace_context", lines...)
-}
-
-func (r *run) floretTurnRuntimeContext() (flruntime.MessageContextItem, error) {
-	runtimeLines := []string{"Tool execution environment: terminal.exec runs on the AI runtime host. A user-selected device may be different; selection does not route a command."}
-	if r != nil && strings.TrimSpace(r.endpointID) != "" {
-		runtimeLines = append(runtimeLines, "Runtime endpoint ID: "+strings.TrimSpace(r.endpointID))
-	}
-	sections := []promptSection{
-		newPromptSection("tool_execution_environment", runtimeLines...),
-		newPromptSection("current_context", buildBasicPromptCurrentContextLines(promptWorkingDirForRun(r), currentPromptLocalTimeContext(time.Now))...),
-		buildPromptWorkspaceContextSection(collectPromptWorkspaceContext(r)),
-	}
-	if r != nil {
-		if catalog := newPromptSectionFromText("available_skills", buildSkillCatalogPrompt(r.listSkills())); !catalog.isEmpty() {
-			sections = append(sections, catalog)
+	for _, file := range workspace.RepoRules {
+		if file.ReadError != "" {
+			return nil, fmt.Errorf("%w: repository rule source %q: %s", flruntime.ErrModelContextUnavailable, file.Path, file.ReadError)
 		}
 	}
-	item := flruntime.MessageContextItem{
-		Kind: "runtime_context", Title: "Tool execution environment", Text: renderPromptSections(sections),
+	runtimeLines := []string{"Tool execution environment: terminal.exec runs on the AI runtime host. A user-selected device may be different; selection does not route a command.", "- Working directory: " + workspace.Environment.WorkingDir}
+	if endpoint := strings.TrimSpace(r.endpointID); endpoint != "" {
+		runtimeLines = append(runtimeLines, "Runtime endpoint ID: "+endpoint)
 	}
-	if err := item.Validate(); err != nil {
-		return flruntime.MessageContextItem{}, fmt.Errorf("tool execution context cannot be admitted: %w", err)
+	runtimeLines = append(runtimeLines, renderPromptEnvironmentFactsLines(workspace.Environment)...)
+	manager := r.ensureSkillManager()
+	if manager == nil {
+		return nil, fmt.Errorf("%w: skill catalog unavailable", flruntime.ErrModelContextUnavailable)
 	}
-	return item, nil
+	catalog, err := manager.modelContextCatalog(ctx, permissionTypeString(permission))
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		return nil, fmt.Errorf("%w: %v", flruntime.ErrModelContextUnavailable, err)
+	}
+	skills := buildSkillCatalogPrompt(catalog)
+	if skills == "" {
+		skills = "No skills are available for the current permission policy."
+	}
+	snapshot := &flruntime.ModelContextSnapshot{Sections: []flruntime.ModelContextSection{
+		{Key: "execution_environment", Title: "Execution environment", Text: strings.Join(runtimeLines, "\n")},
+		{Key: "local_time", Title: "Date and timezone", Text: strings.Join(renderPromptLocalTimeContextLines(currentPromptLocalTimeContext(now)), "\n")},
+		{Key: "repository", Title: "Repository state", Text: strings.Join(renderPromptRepositoryStateLines(workspace.Repository), "\n")},
+		{Key: "repository_rules", Title: "Repository rule sources", Text: strings.Join(renderPromptRepoRuleLines(workspace.RepoRules, nil), "\n")},
+		{Key: "skills", Title: "Available skills", Text: skills},
+		{Key: "delegation", Title: "Delegation state", Text: strings.Join(renderPromptDelegationLines(workspace.Delegation), "\n")},
+	}}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if err := snapshot.Validate(); err != nil {
+		return nil, fmt.Errorf("%w: runtime snapshot cannot be admitted: %v", flruntime.ErrModelContextUnavailable, err)
+	}
+	return snapshot, nil
 }
 
 func renderPromptEnvironmentFactsLines(env promptEnvironmentFacts) []string {
@@ -454,11 +488,14 @@ func renderPromptEnvironmentFactsLines(env promptEnvironmentFacts) []string {
 	}
 	permissionType := env.PermissionType
 	lines = append(lines, fmt.Sprintf("- Permission type: %s", permissionTypeString(permissionType)))
-	lines = append(lines, fmt.Sprintf("- Subagent delegation configured at admission: %t", env.SubagentDelegation))
+	lines = append(lines, fmt.Sprintf("- Subagent delegation available: %t", env.SubagentDelegation))
 	return lines
 }
 
 func renderPromptRepositoryStateLines(repo promptRepositoryState) []string {
+	if repo.Unavailable != "" {
+		return []string{"- " + repo.Unavailable + "; earlier repository facts are no longer current."}
+	}
 	if !repo.Available {
 		return []string{"- Git repository detected from the current working directory: false"}
 	}
@@ -507,11 +544,14 @@ func renderPromptRepoRuleLines(files []promptRepoRuleFile, discoveryErr error) [
 }
 
 func renderPromptDelegationLines(state promptDelegationState) []string {
+	if state.Unavailable != "" {
+		return []string{fmt.Sprintf("- Subagent delegation available: %t", state.Enabled), "- " + state.Unavailable + "; earlier delegation facts are no longer current."}
+	}
 	if !state.Enabled {
-		return []string{"- Subagent delegation configured at admission: false"}
+		return []string{"- Subagent delegation available: false"}
 	}
 	lines := []string{
-		"- Subagent delegation configured at admission: true",
+		"- Subagent delegation available: true",
 		fmt.Sprintf("- Subagent counts: active=%d, queued=%d, running=%d, waiting_input=%d, completed=%d, failed=%d, canceled=%d, timed_out=%d", state.ActiveCount, state.QueuedCount, state.RunningCount, state.WaitingCount, state.CompletedCount, state.FailedCount, state.CanceledCount, state.TimedOutCount),
 	}
 	if len(state.Items) == 0 {

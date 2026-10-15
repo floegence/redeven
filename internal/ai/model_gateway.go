@@ -3309,7 +3309,7 @@ func buildSkillCatalogPrompt(skills []SkillMeta) string {
 	}
 	var sb strings.Builder
 	sb.WriteString("## Skills\n")
-	sb.WriteString("Skill catalog at admission. Follow the current request's capability policy for activation.\n")
+	sb.WriteString("Current skill catalog. Follow the current request's capability policy for activation.\n")
 	for _, skill := range skills {
 		name := strings.TrimSpace(skill.Name)
 		desc := strings.TrimSpace(skill.Description)

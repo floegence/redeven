@@ -313,3 +313,58 @@ describe('Flower workspace synchronization recovery', () => {
     expect(loadSubagentDetail).toHaveBeenCalledTimes(2);
   });
 });
+
+
+describe('Canonical managed facts on the existing workspace transport', () => {
+ it('updates background detail without creating user messages or changing selection', async () => {
+  const first = thread({ thread_id: 'facts-background-first', title: 'First conversation' });
+  const second = thread({ thread_id: 'facts-background-second', title: 'Second conversation' });
+  const publish = deferred<void>();
+  const facts = { snapshot: { sections: [{ key: 'skills', title: 'Skills', text: 'Background catalog changed' }] }, entry_id: 'facts-background', path_depth: 1,
+   turn_id: 'turn-facts', run_id: 'run-facts', updated_at: '2026-10-15T12:00:00Z', changed_keys: ['skills'], removed_keys: [] };
+  const connectLiveStream = vi.fn(async function* (input: FlowerLiveStreamConnectInput): AsyncIterable<FlowerLiveStreamEnvelope> {
+   yield { schema_version: 1, kind: 'ready', summaries: [first, second] };
+   await publish.promise;
+   yield { schema_version: 1, kind: 'thread.batch', thread_id: second.thread_id, model_context: facts };
+   await waitForAbort(input);
+  });
+  const surface = renderSurfaceWithAdapter({ ...adapter(true), listThreads: vi.fn(async () => [first, second]),
+   loadThread: vi.fn(async (id: string) => liveBootstrap(id === first.thread_id ? first : second)), connectLiveStream });
+  await waitFor(() => Boolean(surface.querySelector('[data-thread-id="facts-background-first"] button')));
+  selectThread(surface, second.thread_id);
+  await waitFor(() => surface.querySelector('.flower-chat-title')?.textContent?.includes(second.title) ?? Boolean(surface.querySelector('.flower-composer textarea')));
+  selectThread(surface, first.thread_id);
+  await flush(); publish.resolve(); await flush();
+  expect(surface.querySelector('.flower-model-context-details')?.textContent ?? '').not.toContain('Background catalog changed');
+  selectThread(surface, second.thread_id);
+  await waitFor(() => surface.querySelector('.flower-model-context-details')?.textContent?.includes('Background catalog changed') ?? false);
+  expect(surface.querySelectorAll('.flower-user-message')).toHaveLength(0);
+  expect(connectLiveStream).toHaveBeenCalledTimes(1);
+ });
+ it('accepts child facts at an unchanged canonical view version', async () => {
+  const child = subagentSummary({ parent_thread_id: 'facts-parent', thread_id: 'facts-child', status: 'completed' });
+  const parent = thread({ thread_id: child.parent_thread_id, subagents: [child] });
+  const detail = subagentDetail({ summary: child, current: { thread_id: child.thread_id, view_version: 4, activity: 'idle', items: [] } });
+  const publish = deferred<void>();
+  const facts = { snapshot: { sections: [{ key: 'skills', title: 'Skills', text: 'Current child catalog' }] }, entry_id: 'child-facts', path_depth: 1,
+   turn_id: 'turn-child', run_id: 'run-child', updated_at: '2026-10-15T12:00:00Z', changed_keys: ['skills'], removed_keys: [] };
+  const connectLiveStream = vi.fn(async function* (input: FlowerLiveStreamConnectInput): AsyncIterable<FlowerLiveStreamEnvelope> {
+   yield { schema_version: 1, kind: 'ready', summaries: [parent] };
+   await publish.promise;
+   yield { schema_version: 1, kind: 'thread.batch', thread_id: parent.thread_id, subagent_current: detail.current, model_context: facts };
+   await waitForAbort(input);
+  });
+  const surface = renderSurfaceWithAdapter({ ...adapter(true), listThreads: vi.fn(async () => [parent]), loadThread: vi.fn(async () => liveBootstrap(parent)),
+   loadSubagentDetail: vi.fn(async () => detail), connectLiveStream });
+  await waitFor(() => Boolean(surface.querySelector('[data-thread-id="facts-parent"] button')));
+  selectThread(surface, parent.thread_id);
+  await waitFor(() => Boolean(surface.querySelector('button[aria-controls="flower-subagents-dropdown"]')));
+  (surface.querySelector('button[aria-controls="flower-subagents-dropdown"]') as HTMLButtonElement).click();
+  await waitFor(() => Boolean(document.querySelector('[data-flower-subagent-row="0"]')));
+  (document.querySelector('[data-flower-subagent-row="0"]') as HTMLButtonElement).click();
+  await waitFor(() => Boolean(document.querySelector('[data-flower-subagent-detail="open"]')));
+  await flush();publish.resolve();
+  await waitFor(() => document.querySelector('[data-flower-subagent-detail="open"] .flower-model-context-details')?.textContent?.includes('Current child catalog') ?? false);
+  expect(surface.querySelector('.flower-composer .flower-model-context-details')).toBeNull();
+ });
+});

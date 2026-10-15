@@ -5420,6 +5420,12 @@
       "providerRetryWaiting": "Modelldienst nicht verfügbar. Neuer Versuch in {seconds} s · {retry}/{max}",
       "providerRetryRegenerating": "Verbindung unterbrochen. Neue Generierung in {seconds} s · {retry}/{max}",
       "modelStatusFinalizing": "Antwort wird vorbereitet...",
+      "contextIndicatorRuntimeFacts": "Laufzeitinformationen",
+      "contextIndicatorCollected": "Erfasst",
+      "contextIndicatorUsed": "In letzter Anfrage verwendet",
+      "contextIndicatorUpdated": "Aktualisiert",
+      "contextIndicatorRemoved": "Entfernt",
+      "runErrorModelContextUnavailable": "Aktuelle Laufzeitinformationen konnten nicht erfasst werden. Beheben Sie das Problem mit der Quelle und versuchen Sie es erneut.",
       "contextIndicatorLabel": "Kontext",
       "contextIndicatorNearThreshold": "Nahe am Limit",
       "contextIndicatorWillCompact": "Komprimierung bald",
@@ -5596,7 +5602,12 @@
       "citationUnavailable": "Quelle nicht verfügbar",
       "queuedEdit": "Ins Eingabefeld zurückholen",
       "queueTakeBackConflict": "Diese Nachricht wurde bereits gestartet oder geändert. Aktualisiere die Ansicht und versuche es erneut.",
-      "queueTakeBackUnknown": "Die Nachricht ist wieder im Eingabefeld. Das Entfernen aus der Warteschlange konnte nicht bestätigt werden. Prüfe die Warteschlange vor dem Senden."
+      "queueTakeBackUnknown": "Die Nachricht ist wieder im Eingabefeld. Das Entfernen aus der Warteschlange konnte nicht bestätigt werden. Prüfe die Warteschlange vor dem Senden.",
+      "outputTokens": "{count} Tokens",
+      "outputTokensTooltip": "Geschätzte empfangene Ausgabe für diese Modellanfrage, einschließlich Denkprozess und Werkzeugargumenten. Der abgerechnete Verbrauch wird separat angegeben.",
+      "waitSeconds": "{seconds} s",
+      "toolArgumentPreviewTooltip": "Die Zeilenzahlen werden beim Empfang der Argumente aktualisiert. Die tatsächlichen Änderungen werden nach Abschluss des Werkzeugs angezeigt.",
+      "toolGeneratingArguments": "Argumente werden generiert"
     },
     "threadList": {
       "title": "Unterhaltungen",

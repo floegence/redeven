@@ -137,7 +137,7 @@ describe('Flower progress indicator', () => {
     expect(contextIndicator).toContain('aria-valuemax="100"');
     expect(contextIndicator).toContain('aria-valuenow={view().progressValue ?? undefined}');
     expect(contextIndicator).toContain('onFocus={() => setTooltipOpen(true)}');
-    expect(contextIndicator).toContain('onBlur={() => setTooltipOpen(false)}');
+    expect(contextIndicator).toContain('onFocusOut=');
     expect(contextIndicator).toContain('<span>{view().recentCacheHitLabel}</span>');
     expect(contextIndicator).toContain('<strong>{view().recentCacheHitValue}</strong>');
     expect(contextIndicator).toContain("event.key === 'Escape'");
@@ -212,8 +212,8 @@ describe('Flower progress indicator', () => {
     const tailViewportRule = cssRule(css, '.flower-companion-collapsed-tail-viewport');
     const tailValueRule = cssRule(css, '.flower-companion-collapsed-tail-value');
 
-    expect(contentRule).toContain('grid-template-columns: minmax(0, 1fr) auto');
-    expect(contentRule).toContain('align-items: end');
+    expect(contentRule).toContain('display: flex');
+    expect(contentRule).toContain('flex-direction: column');
     expect(textareaRule).toContain('line-height: 1.5rem');
     expect(textareaRule).not.toContain('height: 2.25rem');
     expect(textareaRule).not.toContain('white-space: nowrap');

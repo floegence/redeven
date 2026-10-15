@@ -8,6 +8,7 @@ import { page } from 'vitest/browser';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../../../../../flower_ui/src/copy';
+import { FlowerComposerContextIndicator } from '../../../../../flower_ui/src/chat/FlowerComposerContextIndicator';
 import { SubagentDetailWindow, type SubagentDetailWindowProps } from '../../../../../flower_ui/src/SubagentDetailWindow';
 
 type Theme = 'light' | 'dark';
@@ -104,7 +105,7 @@ async function nextFrame(count = 2): Promise<void> {
   }
 }
 
-async function mountWindow(theme: Theme) {
+async function mountWindow(theme: Theme, withContext = false) {
   document.documentElement.classList.remove('light', 'dark');
   document.documentElement.classList.add(theme);
   document.documentElement.dataset.floeSurfaceStyle = 'soft-neumorphic';
@@ -122,7 +123,12 @@ async function mountWindow(theme: Theme) {
   disposers.push(render(
     () => (
       <LayoutProvider>
-        <SubagentDetailWindow {...windowProps(open(), setOpen)} />
+        <SubagentDetailWindow {...windowProps(open(), setOpen)} contextIndicator={withContext ? <FlowerComposerContextIndicator
+          placement="below-start" copy={DEFAULT_FLOWER_SURFACE_COPY} modelContext={{
+            snapshot: { sections: [{ key: 'skills', title: 'Available skills', text: 'Complete current catalog' }] },
+            entry_id: 'context-entry', path_depth: 1, turn_id: 'turn-child', run_id: 'run-child',
+            updated_at: '2026-10-15T12:00:00Z', changed_keys: ['skills'], removed_keys: [],
+          }} /> : undefined} />
       </LayoutProvider>
     ),
     fixture,
@@ -151,6 +157,28 @@ function assertQuietBorder(surface: HTMLElement, adjacentBackground: string): vo
 }
 
 describe('Subagent detail window boundary', () => {
+  it('keeps current facts accessible without transcript entries and dismisses the detail window with Escape', async () => {
+    await page.viewport(900, 720);
+    const { surface, open } = await mountWindow('dark', true);
+    const trigger = surface.querySelector<HTMLElement>('.flower-composer-context-progress')!;
+    const panel = surface.querySelector<HTMLElement>('.flower-composer-context-tooltip')!;
+    trigger.focus(); trigger.click();
+    await nextFrame(12);
+    const bounds = panel.getBoundingClientRect();
+    const windowBounds = surface.getBoundingClientRect();
+    expect(bounds.top).toBeGreaterThan(trigger.getBoundingClientRect().bottom);
+    expect(bounds.left).toBeGreaterThanOrEqual(windowBounds.left);
+    expect(bounds.right).toBeLessThanOrEqual(windowBounds.right);
+    expect(bounds.bottom).toBeLessThanOrEqual(windowBounds.bottom);
+    const target = document.elementFromPoint(bounds.left + 20, bounds.top + 20);
+    expect(target !== null && panel.contains(target), target?.outerHTML).toBe(true);
+    expect(panel.textContent).toContain('Complete current catalog');
+    trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await nextFrame();
+    expect(panel.getAttribute('data-open')).toBeNull();
+    expect(open()).toBe(false);
+  });
+
   it('keeps an opaque, elevated boundary in light and dark themes', async () => {
     await page.viewport(1440, 900);
 

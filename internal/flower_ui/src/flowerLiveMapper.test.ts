@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   mapContextUsage,
+  mapModelContext,
   mapFlowerActivityItem,
   mapFlowerMessage,
   mapFlowerThread,
@@ -389,4 +390,25 @@ describe('Provider retry progress', () => {
     expect(Number.isFinite(mapped.run_progress?.request?.wait_anchor_monotonic_ms)).toBe(true);
     expect(() => mapFlowerThread({ thread_id: 'thread-retry', active_run_id: 'run-retry', run_id: 'run-retry', turn_id: 'turn-retry', run_status: 'running', run_progress: { run_id: 'run-retry', turn_id: 'turn-retry', phase: 'retrying', retry: { ...retry, retry: 0 } } }, [], mapperOptions)).toThrow('run_progress.retry');
   });
+});
+
+
+describe('Canonical managed model context', () => {
+ const facts = { snapshot: { sections: [{ key: 'skills', title: 'Available skills', text: 'Complete catalog' }] },
+  entry_id: 'entry-facts', path_depth: 2, turn_id: 'turn-a', run_id: 'run-a', updated_at: '2026-10-15T12:00:00Z',
+  changed_keys: ['skills'], removed_keys: [] };
+ it('maps admitted and used snapshots identically on live and reconnect', () => {
+  const used = { ...facts, used_by_request_id: 'request-a', used_by_turn_id: 'turn-a', used_by_run_id: 'run-a', used_at: '2026-10-15T12:00:01Z' };
+  expect(mapModelContext(facts)?.used_at).toBeUndefined();
+  expect(mapModelContext(used)).toEqual(mapModelContext(JSON.parse(JSON.stringify(used))));
+  expect(mapModelContext({ ...facts, snapshot: { sections: [] }, changed_keys: [], removed_keys: ['skills'] })?.snapshot.sections).toEqual([]);
+ });
+ it.each([
+  { snapshot: { sections: [facts.snapshot.sections[0], facts.snapshot.sections[0]] } },
+  { snapshot: { sections: [{ ...facts.snapshot.sections[0], text: 'x'.repeat(64001) }] } },
+  { path_depth: -1 }, { changed_keys: ['skills', 'skills'] }, { removed_keys: [7] },
+  { used_at: 'invalid' }, { used_by_request_id: 7 }, { run_id: null },
+ ])('rejects corrupt canonical facts %j', override => {
+  expect(() => mapModelContext({ ...facts, ...override })).toThrow();
+ });
 });

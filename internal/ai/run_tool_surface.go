@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	flprovider "github.com/floegence/floret/v7/provider"
 	flruntime "github.com/floegence/floret/v7/runtime"
@@ -130,6 +131,12 @@ func (r *run) liveFloretToolSurface(cfg runToolSurfaceConfig) flruntime.ToolSurf
 	return func(ctx context.Context, request flruntime.ToolSurfaceRequest) (flruntime.ToolSurface, error) {
 		permission, err := r.liveThreadPermissionType(ctx)
 		if err != nil {
+			if ctx.Err() != nil {
+				return flruntime.ToolSurface{}, ctx.Err()
+			}
+			if request.Phase == "provider_request" || request.Phase == "compact" {
+				return flruntime.ToolSurface{}, fmt.Errorf("%w: permission facts: %v", flruntime.ErrModelContextUnavailable, err)
+			}
 			return flruntime.ToolSurface{}, err
 		}
 		current := cfg
@@ -144,7 +151,15 @@ func (r *run) liveFloretToolSurface(cfg runToolSurfaceConfig) flruntime.ToolSurf
 				return flruntime.ToolSurface{}, err
 			}
 		}
+		var snapshot *flruntime.ModelContextSnapshot
+		if request.Phase == "provider_request" || request.Phase == "compact" {
+			snapshot, err = r.collectModelContextSnapshot(ctx, surface.PermissionType, time.Now)
+			if err != nil {
+				return flruntime.ToolSurface{}, err
+			}
+		}
 		return flruntime.ToolSurface{
+			ModelContextSnapshot:   snapshot,
 			RefreshProviderSurface: true,
 			Tools:                  registry, HostedToolDefinitions: surface.HostedTools,
 			SystemPrompt: surface.SystemPrompt, HostContext: surface.HostContext,

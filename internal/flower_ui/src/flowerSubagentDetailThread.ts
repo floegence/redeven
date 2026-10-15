@@ -43,6 +43,6 @@ export function projectSubagentDetailThread(detail: FlowerSubagentDetail | null,
       read_state: { last_seen_activity_revision: 1 },
     },
   };
-  const thread = applyFlowerRuntimeCurrentView(base, detail.current);
+  const thread = applyFlowerRuntimeCurrentView({ ...base, model_context: detail.model_context, context_usage: detail.context_usage }, detail.current);
   return retainThreadPresentation(previous ?? undefined, { ...thread, read_status: readStatus(thread) });
 }

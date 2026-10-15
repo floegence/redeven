@@ -5420,6 +5420,12 @@
       "providerRetryWaiting": "モデルサービスを利用できません。{seconds}秒後に再試行 · {retry}/{max}",
       "providerRetryRegenerating": "接続が切断されました。{seconds}秒後に再生成 · {retry}/{max}",
       "modelStatusFinalizing": "返信を整理中...",
+      "contextIndicatorRuntimeFacts": "実行時の情報",
+      "contextIndicatorCollected": "取得済み",
+      "contextIndicatorUsed": "最新のリクエストで使用済み",
+      "contextIndicatorUpdated": "更新済み",
+      "contextIndicatorRemoved": "削除済み",
+      "runErrorModelContextUnavailable": "現在の実行時情報を取得できません。情報源を修復して再試行してください。",
       "contextIndicatorLabel": "コンテキスト",
       "contextIndicatorNearThreshold": "上限に近い",
       "contextIndicatorWillCompact": "まもなく圧縮",
@@ -5596,7 +5602,12 @@
       "citationUnavailable": "出典を利用できません",
       "queuedEdit": "入力欄に戻す",
       "queueTakeBackConflict": "このメッセージは実行を開始したか、変更されています。更新して再試行してください。",
-      "queueTakeBackUnknown": "メッセージを入力欄に戻しました。キューから削除されたことを確認できませんでした。送信前にキューを確認してください。"
+      "queueTakeBackUnknown": "メッセージを入力欄に戻しました。キューから削除されたことを確認できませんでした。送信前にキューを確認してください。",
+      "outputTokens": "{count} トークン",
+      "outputTokensTooltip": "このモデルへのリクエストで受信した出力の推定値です。推論とツールの引数を含みます。課金対象の使用量は別途表示されます。",
+      "waitSeconds": "{seconds} s",
+      "toolArgumentPreviewTooltip": "引数の受信に合わせて行数が更新されます。ツールの完了後に実際の変更が表示されます。",
+      "toolGeneratingArguments": "引数を生成中"
     },
     "threadList": {
       "title": "会話",

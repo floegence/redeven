@@ -46,6 +46,7 @@ import {
   mapFlowerThread,
   mapFlowerTimelineDecorations,
   mapContextUsage,
+  mapModelContext,
   type FlowerLiveThreadMapperOptions,
 } from './flowerLiveMapper';
 import { applyFlowerRuntimeCurrentView } from './runtimeCurrentView';
@@ -256,6 +257,7 @@ function mapRuntimeLiveStreamEnvelope(raw: unknown, options: RuntimeFlowerSurfac
     : undefined;
   const contextCompactions = mapFlowerContextCompactions(value.context_compactions);
   const timelineDecorations = mapFlowerTimelineDecorations(value.timeline_decorations);
+  const modelContext = mapModelContext(value.model_context);
   const contextUsage = mapContextUsage(value.context_usage);
   const rawFrame = value.computer_frame && typeof value.computer_frame === 'object' ? value.computer_frame as Record<string, unknown> : undefined;
   const computerFrame = rawFrame && typeof rawFrame.session_id === 'string' && typeof rawFrame.target_id === 'string'
@@ -302,6 +304,7 @@ function mapRuntimeLiveStreamEnvelope(raw: unknown, options: RuntimeFlowerSurfac
     ...(current ? { current } : {}),
     ...(subagentCurrent ? { subagent_current: subagentCurrent } : {}),
     ...(subagents !== undefined ? { subagents } : {}),
+    ...(modelContext ? { model_context: modelContext } : {}),
     ...(contextUsage ? { context_usage: contextUsage } : {}),
     ...(contextCompactions ? { context_compactions: contextCompactions } : {}),
     ...(timelineDecorations ? { timeline_decorations: timelineDecorations } : {}),
@@ -315,7 +318,7 @@ function mapSubagentDetail(raw: LoadSubagentDetailResponse): FlowerSubagentDetai
   if (!raw.detail?.current || !raw.detail.summary) throw new Error('Missing subagent detail.');
   const summary = mapFlowerSubagents([raw.detail.summary], 'subagent.detail.summary')?.[0];
   if (!summary) throw new Error('Flower contract error: missing subagent summary.');
-  return { ...raw.detail, summary };
+  return { ...raw.detail, summary, model_context: mapModelContext(raw.detail.model_context), context_usage: mapContextUsage(raw.detail.context_usage) ?? undefined };
 }
 
 export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceAdapterOptions): FlowerSurfaceAdapter {

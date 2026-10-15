@@ -5420,6 +5420,12 @@
       "providerRetryWaiting": "模型服務暫時無法使用，{seconds} 秒後重試 · {retry}/{max}",
       "providerRetryRegenerating": "連線中斷，{seconds} 秒後重新產生 · {retry}/{max}",
       "modelStatusFinalizing": "正在整理回覆...",
+      "contextIndicatorRuntimeFacts": "執行階段事實",
+      "contextIndicatorCollected": "已收集",
+      "contextIndicatorUsed": "最近請求已使用",
+      "contextIndicatorUpdated": "已更新",
+      "contextIndicatorRemoved": "已移除",
+      "runErrorModelContextUnavailable": "無法收集目前的執行階段事實。請修復來源後重試。",
       "contextIndicatorLabel": "上下文",
       "contextIndicatorNearThreshold": "接近上限",
       "contextIndicatorWillCompact": "即將壓縮",
@@ -5596,7 +5602,12 @@
       "citationUnavailable": "來源無法使用",
       "queuedEdit": "取回到輸入框",
       "queueTakeBackConflict": "這則佇列訊息已開始執行或有變更，請重新整理後再試。",
-      "queueTakeBackUnknown": "訊息已放回輸入框，但尚未確認移出佇列，請檢查佇列後再傳送。"
+      "queueTakeBackUnknown": "訊息已放回輸入框，但尚未確認移出佇列，請檢查佇列後再傳送。",
+      "outputTokens": "{count} tokens",
+      "outputTokensTooltip": "目前模型請求已接收輸出的估算值，包含思考內容和工具參數。計費用量另行統計。",
+      "waitSeconds": "{seconds} s",
+      "toolArgumentPreviewTooltip": "行數隨參數產生即時更新；工具完成後顯示實際變更。",
+      "toolGeneratingArguments": "正在產生參數"
     },
     "threadList": {
       "title": "對話",
