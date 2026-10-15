@@ -36,7 +36,11 @@ export function safeFlowerMarkdownHref(rawHref: string): string | null {
   const href = String(rawHref ?? '').trim();
   if (!href) return null;
   if (/^(https?:|mailto:)/i.test(href)) return href;
-  if (href.startsWith('#') || href.startsWith('/')) return href;
+  if (href.startsWith('#') || href.startsWith('/') || (
+    !href.startsWith('//')
+    && !href.startsWith('\\')
+    && !/^[a-z][a-z0-9+.-]*:/i.test(href)
+  )) return href;
   return null;
 }
 

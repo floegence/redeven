@@ -33,6 +33,7 @@ export interface FlowerMarkdownBlockProps {
   mediaLabels?: MarkdownMediaLabels;
   resolveMedia?: MarkdownMediaProps['resolve'];
   onOpenMediaLink?: MarkdownMediaProps['onOpenLink'];
+  onOpenMediaLinkError?: (error: unknown) => void;
   class?: string;
 }
 
@@ -80,6 +81,7 @@ export const FlowerMarkdownBlock: Component<FlowerMarkdownBlockProps> = (props) 
   ) : '');
   let rootRef: HTMLDivElement | undefined;
   let copiedResetTimer: number | undefined;
+  let activeLinkController: AbortController | undefined;
   const iconCleanups = new WeakMap<HTMLButtonElement, () => void>();
   const mountedButtons = new Set<HTMLButtonElement>();
   const resolvedMediaLabels = () => props.mediaLabels ?? markdownMediaEnUS;
@@ -88,6 +90,7 @@ export const FlowerMarkdownBlock: Component<FlowerMarkdownBlockProps> = (props) 
     if (copiedResetTimer !== undefined) {
       window.clearTimeout(copiedResetTimer);
     }
+    activeLinkController?.abort();
     for (const button of Array.from(mountedButtons)) {
       iconCleanups.get(button)?.();
     }
@@ -130,26 +133,51 @@ export const FlowerMarkdownBlock: Component<FlowerMarkdownBlockProps> = (props) 
     const target = event.target;
     if (!(target instanceof Element)) return;
     const button = target.closest('button.flower-chat-md-code-copy');
-    if (!(button instanceof HTMLButtonElement)) return;
-    if (!rootRef?.contains(button)) return;
-    const code = button.dataset.flowerSourceCopy ?? flowerMarkdownCodeTextForCopyButton(button);
-    if (!code) return;
+    if (button instanceof HTMLButtonElement && rootRef?.contains(button)) {
+      const code = button.dataset.flowerSourceCopy ?? flowerMarkdownCodeTextForCopyButton(button);
+      if (code) {
+        event.preventDefault();
+        event.stopPropagation();
+
+        void writeTextToClipboard(code).then(() => {
+          if (copiedResetTimer !== undefined) {
+            window.clearTimeout(copiedResetTimer);
+          }
+          if (copiedButton() && copiedButton() !== button) {
+            resetCopiedButton();
+          }
+          button.dataset.copied = 'true';
+          button.setAttribute('aria-label', props.codeCopiedLabel);
+          button.setAttribute('title', props.codeCopiedLabel);
+          setCopiedButton(button);
+          copiedResetTimer = window.setTimeout(resetCopiedButton, 1600);
+        });
+        return;
+      }
+    }
+
+    const link = target.closest<HTMLAnchorElement>('a.flower-chat-md-link');
+    const openMediaLink = props.onOpenMediaLink;
+    if (!link || !rootRef?.contains(link) || props.mediaEnabled !== true || !openMediaLink) return;
+    const href = link.getAttribute('href')?.trim() ?? '';
+    // External URLs and fragment links retain native browser behavior. Local
+    // paths are host-authorized so reports and other files open in the
+    // existing file-preview floating window instead of navigating the shell.
+    if (!href || href.startsWith('#') || href.startsWith('//') || href.startsWith('\\') || /^[a-z][a-z0-9+.-]*:/i.test(href)) return;
     event.preventDefault();
     event.stopPropagation();
-
-    void writeTextToClipboard(code).then(() => {
-      if (copiedResetTimer !== undefined) {
-        window.clearTimeout(copiedResetTimer);
-      }
-      if (copiedButton() && copiedButton() !== button) {
-        resetCopiedButton();
-      }
-      button.dataset.copied = 'true';
-      button.setAttribute('aria-label', props.codeCopiedLabel);
-      button.setAttribute('title', props.codeCopiedLabel);
-      setCopiedButton(button);
-      copiedResetTimer = window.setTimeout(resetCopiedButton, 1600);
-    });
+    activeLinkController?.abort();
+    const controller = new AbortController();
+    activeLinkController = controller;
+    const source = { kind: 'html' as const, src: href, title: link.textContent?.trim() ?? '' };
+    void Promise.resolve()
+      .then(() => openMediaLink(source, href, controller.signal))
+      .catch(error => {
+        if (!controller.signal.aborted) props.onOpenMediaLinkError?.(error);
+      })
+      .finally(() => {
+        if (activeLinkController === controller) activeLinkController = undefined;
+      });
   };
 
   const decorateRegion = (element: Accessor<HTMLDivElement>, content: Accessor<unknown>, committed = true) => {
