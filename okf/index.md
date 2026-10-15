@@ -58,6 +58,8 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [LAN transport and tracing experiments](operations/remote-desktop-lan-transport-experiments.md) - Check credit, receipts, HTTP2, SSH and stage diagnostics before repeating a latency hypothesis.
 - [LAN stage tracing](operations/remote-desktop-lan-stage-tracing.md) - Inspect clock-qualified publication, write, receive and receipt boundaries before assigning transport stalls.
 - [LAN receipt and window comparison](operations/remote-desktop-lan-window-c04.md) - Evaluate C03's rejected timer change and C04's four-versus-six-frame evidence and compatibility boundary.
+- [Published LAN C05 outcomes](operations/remote-desktop-lan-c05-results.md) - Inspect all retained paired results, source-loss validity and unresolved resource/detail boundaries before another experiment.
+- [Historical v40 and v45 results](operations/remote-desktop-rustdesk-v40-v45-results.md) - Retrieve original published cadence, host-input regression and calibration limits without mistaking history for current acceptance.
 - [Published six-frame qualification C05](operations/remote-desktop-lan-published-c05.md) - Check released adoption, paired acceptance and retained preparation failures before claiming restored LAN performance.
 - [udesk26 hardware AV1 comparison](operations/remote-desktop-rustdesk-v42-results.md) - Inspect published AV1 diagnostic latency, complete resources and unresolved parity failures.
 - [udesk26 DRM cadence comparison](operations/remote-desktop-rustdesk-v43-results.md) - Inspect released cadence improvements, corrected motion validity and remaining latency, quality and memory deficits.

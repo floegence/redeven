@@ -1,22 +1,24 @@
 ---
 type: Qualification Record
 title: Physical desktop RustDesk comparison
-description: Check current paired presentation, resource and quality evidence before accepting RustDesk parity.
+description: Apply paired presentation, detail, compatibility and resource criteria before accepting RustDesk parity.
 tags: [desktop, performance, qualification]
-timestamp: 2026-10-15T06:00:00Z
+timestamp: 2026-10-15T13:00:00Z
 ---
 # Summary
 
-The primary qualification task owns acceptance. Complete RustDesk parity remains
-unaccepted. The [experiment ledger](remote-desktop-lan-experiment-ledger.md)
-records current v0.22.47, historical advantages and controlled retry conditions.
-Current motion rounds average 38.86 FPS/P95 247.61 ms with five long gaps;
-historical v0.22.40 averaged 50.99 FPS with zero long gaps, and hardware AV1
-v0.22.42 also reached 50.53 FPS. Cross-time differences establish a deficit,
-not its cause. Preserve later security and functionality fixes. Acceptance
-requires published artifacts, complete source matching and equal delivered
-detail; lower CPU, failed samples or panel peaks cannot substitute. Earlier
-rounds remain historical evidence.
+The primary qualification task owns acceptance. Full RustDesk parity and
+repeatable restoration of historical performance remain unaccepted. Published
+native v0.22.48 with negotiated six-frame delivery averages 46.21 FPS against
+RustDesk 32.54 FPS in three retained motion rounds. Candidate pooled P95 is
+310.60 ms against 207.59 ms, with nine versus three gaps over 250 ms. Candidate
+round three reaches 53.04 FPS/P95 150.20 ms with no long gaps, but the adverse
+first round cannot be replaced. Keep current security, authorization, confirmed
+paint, ordering and recovery safeguards. Published artifacts, complete source
+matching and delivered-detail evidence are mandatory; lower CPU or a peak is
+not acceptance. The [C05 result](remote-desktop-lan-c05-results.md) owns current
+results and open cases; the [decision ledger](remote-desktop-lan-experiment-ledger.md)
+records adopted, rejected and unresolved experiments.
 
 # Contract
 
@@ -44,157 +46,38 @@ use the same calibration and resampling algorithm for both products. Whole-tree
 resources and incremental Viewer costs are distinct observations; baseline
 subtraction cannot silently replace whole-tree reporting.
 
-## Published v0.22.40 Identity And Conditions
+# Current Qualification
 
-udesk26 retains DP-3 at physical 1920 × 1280, 60 Hz, scale 1.6666666269 and GTK
-allocation 1152 × 768. Display settings are unchanged. Native dependency
-`v0.22.40` is the immutable published module; Runtime image SHA-256 is
-`a4289b34c93774969d7317c8e7a99fd7cb0ca4b085c65a788d8e5cab3551bdcc` and
-root service image SHA-256 is
-`e59e8d23932d4c5f901b2989111aa38afa83a43e796452e24f6ea514ca70cd8d`.
-Formal consumer checks run with `GOWORK=off`.
+[C05 preparation and compatibility](remote-desktop-lan-published-c05.md) records
+published v0.22.48, consumer identity, source-only tests, platform contracts,
+release qualification and the reboot boundary. [C05 outcomes](remote-desktop-lan-c05-results.md)
+retains all three pairs, source-input loss, missing presentation, fixture repairs,
+whole-tree resources, exact-source detail and controlled retry conditions.
+No complete parity claim follows from the six-frame diagnostic's 52-53 FPS.
 
-The official x86_64 RustDesk 1.5.0 Debian binary SHA-256 is
-`58ef1e984727d827836c8ad84ad50a4971db4a3cb80ad7a646982594af155c52`.
-Its direct LAN port is 24441; the fixture broker stays on loopback 24442.
-RustDesk uses AV1/I420, custom quality 100% and 60 FPS. Redeven uses VP9/I420,
-Smooth and Host input method. Both ordinary application windows are 1280 × 721
-logical pixels. Marker edges reveal approximately 2073 × 1382 versus
-2043 × 1362 screenshot-pixel content extents, because the headers differ.
-Normalized quality receipts retain that difference; these trials cannot alone
-satisfy strict equal-viewport acceptance.
+# Historical Evidence
 
-## Three Alternating Presentation Rounds
-
-Every accepted workload observes all 100 source inputs and matches 100 responses.
-Pairs alternate RustDesk→Redeven, Redeven→RustDesk and RustDesk→Redeven.
-
-| Round / product | Idle P50 / P95 ms | Motion P50 / P95 ms | Presented FPS | Motion gaps >250 ms |
-| --- | --- | --- | --- | --- |
-| 1 / RustDesk | 105.39 / 123.50 | 140.86 / 160.29 | 30.98 | 0 |
-| 1 / Redeven | 96.98 / 130.82 | 134.56 / 168.11 | 51.14 | 0 |
-| 2 / Redeven | 101.04 / 133.48 | 134.62 / 157.15 | 51.30 | 0 |
-| 2 / RustDesk | 115.39 / 158.05 | 140.93 / 174.42 | 33.76 | 1 |
-| 3 / RustDesk | 128.36 / 193.75 | 139.45 / 173.92 | 31.98 | 0 |
-| 3 / Redeven | 92.74 / 127.32 | 109.49 / 149.47 | 50.53 | 0 |
-
-Round-two RustDesk has an 868.78 ms maximum response and 257.61 ms presentation
-gap. Round-three Redeven has a 279.23 ms maximum response and 167.89 ms gap.
-Candidate first-round idle and motion P95 remain worse than the paired baseline.
-Higher FPS and matched median improvements do not establish every acceptance
-boundary. Earlier expired scenes, incomplete CUA batches and concurrent encoding
-remain invalid trials, including `r3-redeven-idle-retry6`.
-
-## Published v0.22.45 Host-Input Pair
-
-The current source commit is `79bdd9dc9`, consuming the released native module
-`v0.22.45`. The immutable udesk26 Runtime image is
-`5f8c6e6fe2c02d9debeabb7f6fd2083976424f3cbb6832a065a457c5dea31755`; the
-installed root service is bound to that image and the published v0.22.45 media
-archive. Both applications stayed in ordinary 1024 × 720 logical windows, and
-the RustDesk baseline remained direct LAN on port 24441. The paired window
-capture used fresh marker calibration and retained every source and observed
-input.
-
-| Product / workload | Matched inputs | P50 / P95 latency ms | Presented FPS | Gaps >250 ms |
-| --- | ---: | ---: | ---: | ---: |
-| RustDesk / idle | 100 / 100 | 108.52 / 149.71 | n/a | 0 |
-| Redeven / idle | 100 / 100 | 91.02 / 150.22 | n/a | 0 |
-| RustDesk / motion | 100 / 100 | 134.62 / 163.46 | 33.79 | 0 |
-| Redeven / motion | 99 / 100 | 136.81 / 254.98 | 44.58 | 3 |
-
-The Redeven idle median is 16% lower and moving FPS is 32% higher, while the
-moving P95 is 56% higher and one source input was unmatched. A second RustDesk
-round under the same changing Wi-Fi conditions measured 108.52/149.71 ms idle
-and 134.62/163.46 ms motion; it confirms the network varied during the run but
-does not erase the candidate's long-tail failure. A bounded two-frame credit
-diagnostic reduced one observed maximum presentation gap to 234 ms but reduced
-moving FPS to 33.17 and left P95 at 258.04 ms, so it was discarded and the
-published four-frame configuration was restored. Increasing the SSH HTTP/2
-receive window was also rejected after a controlled sample reached 11.48 FPS
-and 1626.74 ms P95. These experiments are retained as diagnostics only.
-
-## Resource Boundary
-
-All six accepted static resource samples last 45 seconds. Workload resource
-intervals derive from corresponding fixture sequences, rather than complete
-sampler lifetimes. CPU is percent of one core. RSS includes shared pages;
-macOS physical footprint is also retained. Host/client clocks remain independent.
-
-| Motion round / product | Host CPU % | Host RSS P95 MiB | Client CPU % | Client RSS P95 MiB | Client footprint P95 MiB | LAN Mbps |
-| --- | --- | --- | --- | --- | --- | --- |
-| 1 / RustDesk | 251.3 | 560.3 | 45.0 | 277.3 | 554.6 | 4.400 |
-| 1 / Redeven | 297.2* | 672.3 | 37.1 | 1054.8 | 1232.1 | missing* |
-| 2 / Redeven | 308.3 | 754.2 | 37.7 | 1065.5 | 1184.0 | 4.716 |
-| 2 / RustDesk | 250.6 | 537.9 | 46.5 | 288.0 | 547.6 | 4.437 |
-| 3 / RustDesk | 250.7 | 616.1 | 45.5 | 282.3 | 587.8 | 4.385 |
-| 3 / Redeven | 299.8 | 755.5 | 35.0 | 1073.1 | 1195.7 | 4.696 |
-
-*First-round Redeven host roots omit the SSH ancestor: CPU and RSS are lower
-bounds and LAN counters are missing. Subsequent complete roots are
-194093, 194675 and 195615, including the bridge, Runtime and service descendants.
-Those initial resources do not qualify parity. No remote encoding session runs
-concurrently in accepted replacement trials.
-
-Third-round idle Redeven host CPU is 31.4%, host RSS P95 758.2 MiB and LAN
-0.174 Mbps; RustDesk is 5.7%, 617.6 MiB and 0.009 Mbps. Candidate client CPU is
-5.4%, RSS P95 977.6 MiB and footprint P95 1174.2 MiB; baseline is 4.3%, 245.4 MiB
-and 518.2 MiB. Static candidate host/client CPU is 11.2%/4.9%, versus 3.8%/2.8%.
-The complete Desktop tree includes its launcher, Env App and task Runtime/bridge.
-These are whole-tree costs with no subtraction, not equivalent isolated Viewer
-memory. Resource parity remains open.
-
-## Exact Moving Quality And Calibration
-
-Six accepted quality sets each contain 10 snapshots with an exact moving source
-frame and sequence match. The replacement second-round RustDesk moving sample
-is acquired after the third pair; it completes product coverage but is not a
-contemporaneous second-round quality pairing. The earlier moving=false sample
-remains invalid. Both products retain source references and all original receipts.
-
-A second analysis fits the same 16-cell magic marker edges per snapshot and uses
-fractional viewport Lanczos resampling to 1920 × 1280 for both products. Mean
-text PSNR/MAE is 13.23/24.56, 13.22/24.56 and 13.23/24.48 for RustDesk, versus
-13.45/24.55, 13.49/24.30 and 13.45/24.47 for Redeven. Mean color PSNR/MAE is
-20.00/12.30, 20.02/12.26 and 20.01/12.27, versus 19.76/14.00, 20.28/13.14 and
-20.28/13.20. These supersede rounded-viewport metrics for geometric comparison,
-without deleting those original results. Fractional compositor rasterization,
-resampling and unequal delivered extents limit pixel metrics; they alone cannot
-establish perceptual detail parity.
-
-## Matched Historical C01
-
-C01 holds the udesk26 1920 x 1280/60 Hz source, scene v8 allocation 1152 x 768,
-1024 x 720 Viewer, Smooth, Host input, 2048 MiB compositor budget and 100-click
-workload fixed. Two complete rounds per candidate measure v47 at 44.60/41.22
-FPS, v40 at 42.77/49.53 and v42 at 41.73/47.86. All six have 100 measured
-source inputs. Actual valid order 47/40/42/47/42/40 deviates from the planned
-counterbalancing; every invalid attempt and its reason remain retained. The late
-v40 round reaches P95 161.60 ms with zero long gaps, approaching its historical
-range, but repeatability and causality remain unresolved. See the
-[C01 ledger](remote-desktop-lan-historical-c01.md) for all tails and limitations.
-The subsequent [C02 receipt diagnostic](remote-desktop-lan-receipt-c02.md)
-does not establish recovery by removing local receipt waiting; its restored-A
-trial also identifies an input-loss/ordinal-association limitation. Neither
-experiment qualifies current RustDesk parity or supports a product downgrade.
+- [Published v40 and v45 results](remote-desktop-rustdesk-v40-v45-results.md): original three-round v40 advantage, host-input regression, complete resources and calibration limits.
+- [Matched historical C01](remote-desktop-lan-historical-c01.md): same-condition v47/v40/v42 crossover; order deviation and all invalid trials retained.
+- [Receipt C02](remote-desktop-lan-receipt-c02.md): rejected immediate-receipt candidate and source-loss association boundary.
+- [Window C03/C04](remote-desktop-lan-window-c04.md): rejected exhausted-only timer and controlled four/six-frame crossover.
+- [Orange comparison attempts](remote-desktop-rustdesk-orange-results.md): physical-host preparation and network limitations.
+- [v37 results](remote-desktop-rustdesk-v37-results.md), [v42 results](remote-desktop-rustdesk-v42-results.md) and [v43 results](remote-desktop-rustdesk-v43-results.md): retained release-specific evidence.
 
 # Boundaries
 
-These observations apply only to the recorded hardware, published candidate
-and measured paths. Diagnostic runs, incomplete pairs and missing samples
-do not establish RustDesk parity or support unmeasured quality, recovery
-or resource claims. The acceptance results and unresolved cases above remain
-authoritative.
+Results apply only to the recorded hardware, path and fixture. Cross-time
+historical differences establish a deficit without isolating its cause. Do not
+attribute it to Wi-Fi, codec or statistics without a discriminating measurement.
+Do not discard adverse complete trials or silently remap inputs after loss.
+Do not downgrade later security/functionality fixes. Unsupported physical
+platforms cannot inherit Linux qualification; macOS and legacy four-frame
+contracts remain distinct. Unmeasured hardware decoding and photon latency
+remain unclaimed.
 
 # Evidence
 
-- Task-owned `redeven-udesk26-rustdesk-baseline/published-v40-paired`: immutable raw inputs, window captures, exact source matches, calibrated receipts and `resources-three-rounds.json`; invalid attempts retain separate validity records.
-- [Orange comparison attempts](remote-desktop-rustdesk-orange-results.md): incomplete physical-host and network evidence.
-- [udesk26 v0.22.37 baseline](remote-desktop-rustdesk-v37-results.md): failing H.264 baseline and source-clock limits.
-- [Orange functional deployment and recovery](remote-desktop-orange-viewer-results.md): functional boundaries, distinct from performance acceptance.
-- [Native v0.22.40 release](https://github.com/floegence/floe-native-apps/releases/tag/v0.22.40): commit `eeddccc4a3b42e126e82406628705e2a0715541b`, module `h1:rKsKYiAnc4aMIp+0za1hsQ4pOZGwozSj+tij+lSblPo=`; all 545 module entries match source.
-- [v0.22.40 qualification](https://github.com/floegence/floe-native-apps/actions/runs/38335810377): all lanes pass on rerun; initial AMD64 host-service initialization failure remains unexplained and retained.
-- [v0.22.40 CodeQL](https://github.com/floegence/floe-native-apps/actions/runs/38335574962): extended security analysis.
-- [Official RustDesk release](https://github.com/rustdesk/rustdesk/releases/tag/1.5.0): baseline provenance.
-- `internal/codeapp/appserver/remote_desktop_viewer/viewer.js`: rendered image and input authority.
+- B is `/private/tmp/redeven-udesk26-rustdesk-baseline`; durable C05 evidence is `/Volumes/JianDisk/.codex-cc/artifacts/redeven-lan-performance-20261014/published-c05-20261015`, with a SHA-256 manifest.
+- `internal/codeapp/appserver/remote_desktop_viewer/viewer.js`: rendered-image and input authority.
+- `internal/remotedesktop/socket_test.go`: offered capacity, actual socket overflow and unchanged paint authority.
 - `desktop/src/main/windowTransport.ts`: Desktop transport lifecycle.
