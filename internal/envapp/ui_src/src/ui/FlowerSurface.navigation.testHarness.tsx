@@ -1,4 +1,5 @@
 import { withModelDirectoryFixture } from '../../../../flower_ui/testing/modelDirectoryFixture';
+import { restoreTransportOutbox } from '../../../../flower_ui/src/transportOutbox';
 import { Show, createEffect, createSignal, onCleanup, type Component, type JSX } from 'solid-js';
 import { Dynamic, render } from 'solid-js/web';
 import { afterEach, vi } from 'vitest';
@@ -1212,10 +1213,16 @@ export function renderSurfaceWithFocusController(
   };
 }
 
-afterEach(() => {
+afterEach(async () => {
   while (disposers.length > 0) {
     disposers.pop()?.();
   }
+  // Browser files share one origin. Keep restart coverage within each test
+  // without letting its durable transport entries alter later fixtures.
+  let outbox = await restoreTransportOutbox();
+  for (const requestID of outbox.entries.keys()) outbox = outbox.drop(requestID);
+  await outbox.flushPersistence();
+  outbox.dispose();
   clearFlowerSurfaceNotifications();
   document.body.innerHTML = '';
 });
