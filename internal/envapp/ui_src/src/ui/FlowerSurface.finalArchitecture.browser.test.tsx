@@ -930,7 +930,7 @@ describe('Flower final thread cache and workspace transport', () => {
     expect(runtime.querySelector('.flower-model-status-indicator')).toBe(progressIndicator);
     expect(progressIndicator?.querySelector('.flower-model-status-flower')).toBe(progressFlower);
     expect(progressIndicator?.querySelector('.flower-model-status-dots')).toBe(progressDots);
-    expect(runtime.textContent).toContain('Thinking');
+    expect(runtime.textContent).toContain('Generating...');
 
     const toolActivity = {
       item_id: 'tool:continued', tool_id: 'tool:continued', tool_name: 'file.write', kind: 'tool',
@@ -1003,14 +1003,14 @@ describe('Flower final thread cache and workspace transport', () => {
     stream.push(assistantCurrent(6, 'Weather data'));
     await waitFor(() => runtime.textContent?.includes('Weather data') === true);
     await waitFor(() => toolRow.querySelector('.flower-activity-inline-change-stats')?.textContent?.includes('+49') === true);
-    expect(toolRow.querySelector('.flower-activity-inline-change-stats')?.textContent).toContain('-0');
+    expect(toolRow.querySelector('.flower-activity-inline-change-stats')?.textContent).toContain('−0');
     expect(toolRow.textContent).not.toContain('display name');
     (toolRow.querySelector('button.flower-activity-inline-button') as HTMLButtonElement).click();
     await waitFor(() => toolRow.querySelector('.flower-activity-file-diff-unified') !== null);
     expect(toolRow.querySelector('.flower-activity-file-diff-unified')?.textContent).toContain('def main():');
     expect(toolRow.textContent).not.toContain('No textual diff');
     expect(toolRow.textContent).not.toContain('create');
-    expect(runtime.textContent).toContain('Thinking');
+    expect(runtime.textContent).toContain('Generating...');
     stream.push(assistantCurrent(7, 'Weather data is ready'));
     await waitFor(() => runtime.textContent?.includes('Weather data is ready') === true);
     expect(runtime.querySelector('.flower-model-status-indicator')).toBe(progressIndicator);
@@ -1077,7 +1077,7 @@ describe('Flower final thread cache and workspace transport', () => {
     expect(runtime.querySelector('.flower-thread-warmup-list')).toBeNull();
   });
 
-  it('atomically replaces a new-thread outbox row when live current wins the launch race', async () => {
+  it('retains the new-thread draft until canonical admission wins the launch race', async () => {
     const stream = controlledWorkspaceStream([{ schema_version: 1, kind: 'ready', summaries: [] }]);
     const launchResponse = deferred<FlowerTurnLaunchReceipt>();
     const launchTurn = vi.fn((_input: FlowerTurnLaunchInput) => launchResponse.promise);
@@ -1112,7 +1112,8 @@ describe('Flower final thread cache and workspace transport', () => {
 
     await waitFor(() => launchTurn.mock.calls.length === 1);
     const requestID = launchTurn.mock.calls[0]![0].client_request_id;
-    await waitFor(() => runtime.querySelector(`[data-flower-transport-outbox-id="${requestID}"]`) !== null);
+    expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('hi');
+    expect(runtime.querySelector('.flower-composer-submit')?.getAttribute('aria-label')).toBe('Sending');
     const receipt = launchReceipt('thread-new-race', 'turn-new-race', 'start', requestID);
     const current = {
       ...receipt.current,
@@ -1125,16 +1126,12 @@ describe('Flower final thread cache and workspace transport', () => {
         text: 'hi',
       }],
     };
-    let minVisibleUserRows = Number.POSITIVE_INFINITY;
     let maxVisibleUserRows = 0;
-    let emptyStateObservedAfterSend = false;
     const observeVisibleRows = () => {
       const visibleUserRows = runtime.querySelectorAll(
-        '[data-flower-message-role="user"], [data-flower-transport-outbox-id]',
+        '[data-flower-message-role="user"]',
       ).length;
-      minVisibleUserRows = Math.min(minVisibleUserRows, visibleUserRows);
       maxVisibleUserRows = Math.max(maxVisibleUserRows, visibleUserRows);
-      emptyStateObservedAfterSend ||= runtime.querySelector('.flower-empty-state') !== null;
     };
     const observer = new MutationObserver(observeVisibleRows);
     observer.observe(runtime, { childList: true, subtree: true });
@@ -1146,7 +1143,7 @@ describe('Flower final thread cache and workspace transport', () => {
       thread_id: receipt.thread_id,
       current,
     });
-    await waitFor(() => runtime.querySelector(`[data-flower-transport-outbox-id="${requestID}"]`) === null);
+    await waitFor(() => runtime.querySelector(`[data-flower-message-id="user:${requestID}"]`) !== null);
     observeVisibleRows();
     expect(runtime.querySelector(`[data-flower-message-id="user:${requestID}"]`)).not.toBeNull();
     expect(runtime.querySelector('.flower-permission-trigger')?.getAttribute('data-permission-type'))
@@ -1161,9 +1158,7 @@ describe('Flower final thread cache and workspace transport', () => {
     expect(launchTurn).toHaveBeenCalledTimes(1);
     expect(runtime.querySelectorAll(`[data-flower-message-id="user:${requestID}"]`)).toHaveLength(1);
     expect(runtime.querySelector(`[data-flower-transport-outbox-id="${requestID}"]`)).toBeNull();
-    expect(minVisibleUserRows).toBe(1);
     expect(maxVisibleUserRows).toBe(1);
-    expect(emptyStateObservedAfterSend).toBe(false);
   });
 
   it('keeps a newer New Chat draft selected when an earlier admission arrives late', async () => {
@@ -1189,7 +1184,7 @@ describe('Flower final thread cache and workspace transport', () => {
 
     await waitFor(() => launchTurn.mock.calls.length === 1);
     const requestID = launchTurn.mock.calls[0]![0].client_request_id;
-    await waitFor(() => runtime.querySelector(`[data-flower-transport-outbox-id="${requestID}"]`) !== null);
+    expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('first request');
     (runtime.querySelector('.flower-new-chat-button') as HTMLButtonElement).click();
     textarea.value = 'second draft';
     textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
@@ -1371,7 +1366,7 @@ describe('Flower final thread cache and workspace transport', () => {
     expect(todoRow.querySelector('[data-status="in_progress"]')?.textContent).toContain('Verify current work');
   });
 
-  it('uses one Web Fetch indicator and animates only the running title', async () => {
+  it('uses one semantic Web Fetch icon and animates only the running glyph', async () => {
     const threadID = 'thread-web-fetch-searching-orb';
     const turnID = 'turn-web-fetch-searching-orb';
     const webFetchThread = thread({
@@ -1431,13 +1426,14 @@ describe('Flower final thread cache and workspace transport', () => {
 
     await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${threadID}"] button`)));
     (runtime.querySelector(`[data-thread-id="${threadID}"] button`) as HTMLButtonElement).click();
-    await waitFor(() => runtime.querySelectorAll('.flower-activity-web-fetch-searching-orb').length === 2);
+    await waitFor(() => runtime.querySelectorAll('.flower-tool-icon').length === 3);
 
     const runningRow = runtime.querySelector('[data-flower-activity-item-id="web-fetch-running"]') as HTMLElement;
     const completeRow = runtime.querySelector('[data-flower-activity-item-id="web-fetch-complete"]') as HTMLElement;
     const errorRow = runtime.querySelector('[data-flower-activity-item-id="web-fetch-error"]') as HTMLElement;
-    const runningOrb = runningRow.querySelector('.flower-activity-web-fetch-searching-orb') as HTMLCanvasElement;
-    const completeOrb = completeRow.querySelector('.flower-activity-web-fetch-searching-orb') as HTMLCanvasElement;
+    const runningIcon = runningRow.querySelector('.flower-tool-icon') as HTMLElement;
+    const completeIcon = completeRow.querySelector('.flower-tool-icon') as HTMLElement;
+    const errorIcon = errorRow.querySelector('.flower-tool-icon') as HTMLElement;
     const runningTitle = runningRow.querySelector('.flower-activity-inline-title') as HTMLElement;
     const runningTarget = runningTitle.querySelector('.flower-activity-inline-title-target') as HTMLElement;
     const completeTitle = completeRow.querySelector('.flower-activity-inline-title') as HTMLElement;
@@ -1450,10 +1446,12 @@ describe('Flower final thread cache and workspace transport', () => {
     expect(completeRow.querySelector('.flower-activity-inline-title svg')).toBeNull();
     expect(errorRow.querySelector('.flower-activity-web-fetch-searching-orb')).toBeNull();
     expect(errorRow.dataset.flowerActivityStatus).toBe('error');
-    expect(runningOrb.dataset.running).toBe('true');
-    expect(completeOrb.dataset.running).toBe('false');
-    expect(runningOrb.width).toBeGreaterThanOrEqual(20);
-    expect(completeOrb.width).toBeGreaterThanOrEqual(20);
+    expect(runningIcon.querySelectorAll('svg')).toHaveLength(1);
+    expect(completeIcon.querySelectorAll('svg')).toHaveLength(1);
+    expect(errorIcon.querySelectorAll('svg')).toHaveLength(1);
+    await expect.poll(() => runningIcon.getAnimations({ subtree: true }).length).toBeGreaterThan(0);
+    expect(completeIcon.getAnimations({ subtree: true })).toHaveLength(0);
+    expect(errorIcon.getAnimations({ subtree: true })).toHaveLength(0);
     expect(window.getComputedStyle(runningTitle, '::after').animationName).toBe('none');
     expect(window.getComputedStyle(runningTitle, '::after').content).toBe('none');
     expect(window.getComputedStyle(completeTitle, '::after').animationName).toBe('none');

@@ -92,7 +92,7 @@ describe('Flower thread references', () => {
     await userEvent.click(await reference(surface, 'thread-2'));
     const editor = surface.querySelector<HTMLTextAreaElement>('textarea')!;
     await userEvent.keyboard('{Enter}');
-    await waitFor(() => vi.mocked(source.launchTurn).mock.calls.length === 1);
+    await expect.poll(() => vi.mocked(source.launchTurn).mock.calls.length).toBe(1);
     const input = vi.mocked(source.launchTurn).mock.calls[0]![0];
     expect(input.prompt).toBe('');
     const item = parseAskFlowerContextActionEnvelope(input.context_action)?.context[0];

@@ -35,6 +35,14 @@ Safe retry collects again and preserves confirmed tool results. Unknown effects
 never replay. Floret keeps exact compaction-cut baselines, chronological tails,
 fork-point facts, and permanent schema migrations; hosts do not inspect storage.
 
+# Boundaries
+
+Floret is the sole owner of admitted snapshots, model history, compaction and
+recovery. Flower collects facts and presents authorized canonical reads through
+the existing transport. It does not retain a second snapshot store, parse old
+runtime-context text, or reconstruct provider history. Dynamic permissions remain
+enforced at actual tool authorization, independently of displayed historical facts.
+
 # Presentation
 
 Authorized canonical reads and the existing workspace subscription carry the
