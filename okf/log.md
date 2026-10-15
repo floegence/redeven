@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-15: Faster Flower storage loading
+
+- Adopt published Floret v7.39.2 to omit disposable inspection text postings and reduce formal search-index construction allocations. Preserve complete validation, snapshot policy, and the [readiness lifecycle](architecture/ai-readiness-lifecycle.md).
+
 ## 2026-10-15: Unified provider recovery
 
 - Document published Floret provider recovery ownership, frozen adapter replay and shared Flower retry progress.
