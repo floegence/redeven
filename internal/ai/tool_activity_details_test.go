@@ -291,6 +291,10 @@ func TestComputerActivityResultFactsAndSafeResources(t *testing.T) {
 }
 
 func TestComputerActivityPreservesPartialAndBoundedResults(t *testing.T) {
+	controls := computerActivityResultRows("computer.observe", map[string]any{"nodes": []any{map[string]any{"canonical_role": "textbox", "name": "Notes", "value": strings.Repeat("文", activityPayloadStringLimit+1)}}})
+	if len(controls) != 1 || !controls[0].Truncated || !utf8.ValidString(controls[0].Content) {
+		t.Fatalf("bounded control value lost its truncation marker: %+v", controls)
+	}
 	data := map[string]any{"completed": false, "completed_actions": []any{"navigate"}, "observation": map[string]any{"title": "Weather", "format": "diff", "truncated": true, "nodes": []any{map[string]any{"role": "StaticText", "name": "Beijing 23°C"}}}}
 	rows := computerActivityResultRows("computer.exec", data)
 	if len(rows) != 2 || rows[0].Meta != "page_changes" || rows[1].Meta != "completed_actions" || rows[1].Content != "navigate" || !rows[1].Truncated {
