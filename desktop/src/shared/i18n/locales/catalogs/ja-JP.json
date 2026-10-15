@@ -201,7 +201,16 @@
         "expand": "プレビューを拡大",
         "collapse": "プレビューを縮小",
         "open": "元のファイルを開く",
-        "close": "プレビューを閉じる"
+        "close": "プレビューを閉じる",
+        "generating": "プレビューを生成中…",
+        "incomplete": "生成が中断されました。ソースを確認できます。",
+        "showSource": "HTML ソースを表示",
+        "showPreview": "プレビューを表示",
+        "more": "その他の操作",
+        "copyHTML": "HTML をコピー",
+        "copied": "コピーしました",
+        "copyFailed": "ソースを選択してコピーしてください。",
+        "replay": "プレビューを再読み込み"
       },
       "webSearch": {
         "search": "検索",

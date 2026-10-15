@@ -201,7 +201,16 @@
         "expand": "미리보기 확대",
         "collapse": "미리보기 축소",
         "open": "원본 열기",
-        "close": "미리보기 닫기"
+        "close": "미리보기 닫기",
+        "generating": "미리보기 생성 중…",
+        "incomplete": "생성이 중단되었습니다. 소스를 확인할 수 있습니다.",
+        "showSource": "HTML 소스 보기",
+        "showPreview": "미리보기 보기",
+        "more": "추가 작업",
+        "copyHTML": "HTML 복사",
+        "copied": "복사됨",
+        "copyFailed": "소스를 선택하여 복사하세요.",
+        "replay": "미리보기 새로고침"
       },
       "webSearch": {
         "search": "검색",

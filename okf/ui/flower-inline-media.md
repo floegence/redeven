@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower inline media
 description: Display assistant media through released Floe previews and authorized Runtime resources.
 tags: [flower, media, preview, security]
-timestamp: 2026-10-14T00:00:00Z
+timestamp: 2026-10-15T00:00:00Z
 ---
 
 # Summary
@@ -28,8 +28,9 @@ preview error without interrupting the conversation.
 - Assistant media capability is fixed at Markdown mount independently of label
   readiness. Preview references always produce inert placeholders. Missing labels
   use the English catalog until localized copy arrives without remounting or
-  reloading the preview. Loading reserves the bounded media viewport and exposes
-  no link or preview action; failure offers only an in-place Retry.
+  reloading the preview. Loading reserves the bounded media viewport. HTML retains source inspection
+  and expansion while loading; executable and file actions appear only when
+  ready. Failure offers an in-place Retry.
 - Local sources use absolute Runtime paths; relative paths resolve against the
   selected thread's working directory. Local files always cross the authenticated
   filesystem scope. They are never interpreted as application routes.
@@ -42,7 +43,14 @@ preview error without interrupting the conversation.
   preview. Ordinary `html` fences remain copyable source code. Raw HTML remains
   escaped. External HTML pages open through links and do not mount a preview or
   offer a retry that cannot load them.
-- Media displays without outer cards or title bars, with a single rounded edge,
+- HTML uses the published Floe dotted canvas with a restrained generating sheen.
+  Flower removes the canvas perimeter stroke for a borderless reading surface.
+  Circular expansion sits at the top right; source inspection and an actions menu
+  sit at the bottom left, outside the document. Source copying, reload, independent
+  preview, and authorized containing-folder navigation live in that menu. Loading,
+  failure, and completion keep the same bounded geometry. Source inspection makes
+  the retained iframe inert without destroying its form or script state.
+- Other media displays without outer cards or title bars, with a single rounded edge,
   quiet captions, and named actions on hover or keyboard focus (always
   visible on touch). Loading and retry states use the active locale.
   Clicking a local image or its eye button opens the existing host file preview
@@ -66,8 +74,13 @@ preview error without interrupting the conversation.
   preview. Missing directories, unsupported protocols, permission failures,
   missing files, and opening failures retain the source with explicit feedback.
   A host without the relevant opening capability reports it as unavailable.
-- Only stable Markdown segments mount media. An unfinished streaming tail stays
-  inert, and later reply text does not reload committed previews. Media near the
+- Top-level HTML preview fences own stable segments keyed by their source start,
+  from the opening fence through closure, completion, and later reply text. Open
+  fences pass partial source with a generating state; interrupted open fences pass
+  an incomplete state. Neither state mounts executable HTML. Ordinary code keeps
+  its streaming behavior. Canvas source inspection and expansion survive closure;
+  later reply text does not reload the ready iframe. Other unfinished media tails
+  stay inert. Media near the
   viewport loads lazily. Disposal aborts pending observation and revokes blob URLs.
 - The resolver identity changes only with the adapter, filesystem scope, selected
   thread, or working directory. Published Floe owns request cancellation and ignores reactive reads

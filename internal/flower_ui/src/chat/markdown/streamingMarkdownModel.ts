@@ -4,6 +4,7 @@ import { retainEqualValue } from '../../presentationIdentity';
 export type MarkdownCommittedSegment = Readonly<{
   key: string;
   html: string;
+  media?: Readonly<{ html: string; state?: 'generating' | 'incomplete' }>;
 }>;
 
 export type MarkdownTail =
@@ -27,7 +28,7 @@ export function createMarkdownRenderModel(markdown: MarkdownParser) {
   let previousLinks: Links | undefined;
   let previousRenderingKey: string | undefined;
   let cache = new Map<string, { token: Token; html: string }>();
-  return (content: string, streaming: boolean, renderingKey = ''): MarkdownRenderSnapshot => {
+  return (content: string, streaming: boolean, renderingKey = '', mediaEnabled = false): MarkdownRenderSnapshot => {
     if (previousRenderingKey !== renderingKey) cache.clear();
     previousRenderingKey = renderingKey;
     const nextCache = new Map<string, { token: Token; html: string }>();
@@ -50,7 +51,7 @@ export function createMarkdownRenderModel(markdown: MarkdownParser) {
         return result.html;
       },
     };
-    const snapshot = buildMarkdownRenderSnapshot(cachedParser, content, streaming);
+    const snapshot = buildMarkdownRenderSnapshot(cachedParser, content, streaming, mediaEnabled);
     cache = nextCache;
     previous = retainEqualValue(previous, snapshot);
     return previous;
@@ -98,10 +99,20 @@ function renderCommittedSegments(
   markdown: MarkdownParser,
   entries: TokenEntry[],
   links: Links,
+  mediaEnabled = false,
+  streaming = false,
 ): MarkdownCommittedSegment[] {
   const segments: MarkdownCommittedSegment[] = [];
 
   for (const entry of entries) {
+    if (mediaEnabled && entry.token.type === 'code' && entry.token.lang?.trim().toLowerCase() === 'html preview') {
+      const closed = isClosedFence(String(entry.token.raw ?? ''));
+      segments.push({ key: entry.start + ':html-preview', html: '', media: {
+        html: entry.token.text,
+        state: closed ? undefined : streaming ? 'generating' : 'incomplete',
+      } });
+      continue;
+    }
     const html = renderTokenHtml(markdown, entry.token, links);
     if (!html.trim()) continue;
     segments.push({
@@ -120,21 +131,19 @@ function emptyTail(): MarkdownTail {
   };
 }
 
+function isClosedFence(raw: string): boolean {
+  const lines = raw.trimEnd().split('\n');
+  const opening = lines[0]?.match(/^[ \t]{0,3}(`{3,}|~{3,})/);
+  const mark = opening?.[1];
+  if (!mark || lines.length < 2) return false;
+  const closing = lines.at(-1)?.match(/^[ \t]{0,3}(`+|~+)[ \t]*$/)?.[1];
+  return !!closing && closing[0] === mark[0] && closing.length >= mark.length;
+}
+
 function findUnclosedCodeBlock(entries: TokenEntry[], fromIndex: number): number {
   for (let index = fromIndex; index >= 0; index -= 1) {
     const token = entries[index]?.token;
-    if (token?.type !== 'code') continue;
-    const raw = String((token as { raw?: string }).raw ?? '');
-    const fence = raw.match(/^[ \t]{0,3}(`{3,}|~{3,})/);
-    if (!fence) continue;
-    const mark = fence[1];
-    if (!mark) continue;
-    const char = mark[0];
-    const size = mark.length;
-    const last = raw.trimEnd().split('\n').at(-1)?.trim() ?? '';
-    if (!new RegExp(`^[\\t ]{0,3}${char}{${size},}[\\t ]*$`).test(last)) {
-      return index;
-    }
+    if (token?.type === 'code' && /^[ \t]{0,3}(`{3,}|~{3,})/.test(String(token.raw ?? '')) && !isClosedFence(String(token.raw ?? ''))) return index;
   }
   return -1;
 }
@@ -143,6 +152,7 @@ export function buildMarkdownRenderSnapshot(
   markdown: MarkdownParser,
   content: string,
   streaming: boolean,
+  mediaEnabled = false,
 ): MarkdownRenderSnapshot {
   const source = String(content ?? '');
   if (!source) {
@@ -181,7 +191,7 @@ export function buildMarkdownRenderSnapshot(
       committedSegments: renderCommittedSegments(
         markdown,
         entries.slice(0, lastMeaningfulIndex + 1),
-        links,
+        links, mediaEnabled, streaming,
       ),
       tail: emptyTail(),
     };
@@ -190,12 +200,20 @@ export function buildMarkdownRenderSnapshot(
   const unclosedCodeIndex = findUnclosedCodeBlock(entries, lastMeaningfulIndex);
   if (unclosedCodeIndex >= 0) {
     const unclosedEntry = entries[unclosedCodeIndex];
+    if (mediaEnabled && unclosedEntry?.token.type === 'code' && unclosedEntry.token.lang?.trim().toLowerCase() === 'html preview') {
+      return {
+        sourceLength: source.length,
+        committedSourceLength: unclosedEntry.start,
+        committedSegments: renderCommittedSegments(markdown, entries, links, true, streaming),
+        tail: emptyTail(),
+      };
+    }
     const rawText = source.slice(unclosedEntry?.start ?? 0);
     return {
       sourceLength: source.length,
       committedSourceLength: unclosedEntry?.start ?? 0,
       committedSegments: unclosedCodeIndex > 0
-        ? renderCommittedSegments(markdown, entries.slice(0, unclosedCodeIndex), links)
+        ? renderCommittedSegments(markdown, entries.slice(0, unclosedCodeIndex), links, mediaEnabled, streaming)
         : [],
       tail: rawText
         ? {
@@ -215,7 +233,7 @@ export function buildMarkdownRenderSnapshot(
       committedSegments: renderCommittedSegments(
         markdown,
         entries.slice(0, lastMeaningfulIndex + 1),
-        links,
+        links, mediaEnabled, streaming,
       ),
       tail: emptyTail(),
     };
@@ -226,11 +244,15 @@ export function buildMarkdownRenderSnapshot(
     return {
       sourceLength: source.length,
       committedSourceLength: source.length,
-      committedSegments: renderCommittedSegments(markdown, entries.slice(0, lastMeaningfulIndex), links),
+      committedSegments: renderCommittedSegments(markdown, entries.slice(0, lastMeaningfulIndex), links, mediaEnabled, streaming),
       tail: emptyTail(),
     };
   }
 
+  if (mediaEnabled && tailEntry.token.type === 'code' && tailEntry.token.lang?.trim().toLowerCase() === 'html preview') {
+    return { sourceLength: source.length, committedSourceLength: source.length,
+      committedSegments: renderCommittedSegments(markdown, entries, links, true, streaming), tail: emptyTail() };
+  }
   const tailHtml = renderTokenHtml(markdown, tailEntry.token, links);
   return {
     sourceLength: source.length,
@@ -238,7 +260,7 @@ export function buildMarkdownRenderSnapshot(
     committedSegments: renderCommittedSegments(
       markdown,
       entries.slice(0, lastMeaningfulIndex),
-      links,
+      links, mediaEnabled, streaming,
     ),
     tail: tailHtml.trim()
       ? {

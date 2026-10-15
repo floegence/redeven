@@ -70,7 +70,16 @@
       "expand": "Expand preview",
       "collapse": "Collapse preview",
       "open": "Open source",
-      "close": "Close preview"
+      "close": "Close preview",
+      "generating": "Creating preview…",
+      "incomplete": "Generation interrupted. Source is available.",
+      "showSource": "Show HTML source",
+      "showPreview": "Show preview",
+      "more": "More actions",
+      "copyHTML": "Copy HTML",
+      "copied": "Copied",
+      "copyFailed": "Select and copy the source.",
+      "replay": "Reload preview"
     },
     "webSearch": {
       "search": "Search",

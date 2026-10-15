@@ -124,8 +124,8 @@
     "vitest": "^4.1.11"
   },
   "dependencies": {
-    "@floegence/floe-webapp-boot": "0.86.32",
-    "@floegence/floe-webapp-core": "0.86.32",
+    "@floegence/floe-webapp-boot": "0.86.33",
+    "@floegence/floe-webapp-core": "0.86.33",
     "@floegence/flowersec-core": "5.11.1",
     "@floegence/redeven-service-templates": "https://github.com/floegence/redeven-service-templates/releases/download/v0.7.0/floegence-redeven-service-templates-0.7.0.tgz",
     "builder-util-runtime": "^9.7.0",

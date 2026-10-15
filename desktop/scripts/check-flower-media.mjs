@@ -31,10 +31,20 @@ const html = '<h1>Daily brief</h1><input aria-label="Reading note"><button oncli
 
 async function qualifyHtmlPreview(surface) {
   const sourceURL = page.url();
-  const inline = page.frameLocator('.chat-media-viewport iframe');
-  const original = await page.locator('.chat-media-viewport iframe').elementHandle();
+  const canvas = page.locator('.chat-html-canvas');
+  assert.equal(await canvas.evaluate(element => getComputedStyle(element).borderWidth), '0px');
+  await canvas.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: path.join(output, `${surface}-html-canvas.png`) });
+  const inline = page.frameLocator('.chat-html-sheet iframe');
+  const original = await page.locator('.chat-html-sheet iframe').elementHandle();
   await inline.getByRole('textbox', { name: 'Reading note' }).fill('Keep this reading state');
   await inline.getByRole('button', { name: 'Update report' }).click();
+  await page.locator('.chat-html-controls [data-chat-media-action="source"]').click();
+  assert.equal(await canvas.getAttribute('data-view'), 'source');
+  assert.equal(await page.locator('.chat-html-source').textContent(), html);
+  await page.locator('.chat-html-controls [data-chat-media-action="source"]').click();
+  assert.equal(await inline.getByRole('textbox', { name: 'Reading note' }).inputValue(), 'Keep this reading state');
+  assert.equal(await inline.getByRole('button').textContent(), 'Updated');
   await inline.getByRole('link', { name: 'Economy', exact: true }).click();
   const frame = await original.contentFrame();
   assert.equal(await frame.evaluate(() => location.href), 'about:srcdoc');
@@ -42,10 +52,10 @@ async function qualifyHtmlPreview(surface) {
   await inline.getByRole('link', { name: 'News source' }).click();
   await page.waitForFunction(() => window.htmlPreviewURLs?.includes('https://example.com/news'));
   await inline.getByRole('link', { name: 'Unsupported link' }).click();
-  await page.locator('.chat-media-viewport [role="alert"]').waitFor();
+  await page.locator('.chat-html-sheet [role="alert"]').waitFor();
   assert.equal(page.url(), sourceURL);
 
-  const trigger = page.locator('[data-media-kind="html"] [data-chat-media-action="preview"]');
+  const trigger = page.locator('[data-media-kind="html"] [aria-label="More actions"]');
   await trigger.focus();
   const scrollBefore = await trigger.evaluate(element => {
     const positions = [];
@@ -53,6 +63,7 @@ async function qualifyHtmlPreview(surface) {
     return positions;
   });
   await page.keyboard.press('Enter');
+  await page.getByRole('menuitem', { name: 'Open preview window' }).click();
   const popup = page.locator('.chat-media-preview-window');
   await popup.waitFor();
   await page.waitForFunction(() => document.querySelector('.chat-media-preview-window')?.getAttribute('data-floating-presence') === 'open');
@@ -61,7 +72,7 @@ async function qualifyHtmlPreview(surface) {
   assert.equal(await copy.getByRole('textbox', { name: 'Reading note' }).inputValue(), '');
   assert.equal(await inline.getByRole('textbox', { name: 'Reading note' }).inputValue(), 'Keep this reading state');
   assert.equal(await inline.getByRole('button').textContent(), 'Updated');
-  assert.equal(await page.locator('.chat-media-viewport iframe').evaluate((element, original) => element === original, original), true);
+  assert.equal(await page.locator('.chat-html-sheet iframe').evaluate((element, original) => element === original, original), true);
   assert.deepEqual(await trigger.evaluate(element => {
     const positions = [];
     for (let node = element; node; node = node.parentElement) positions.push(node.scrollTop);
@@ -85,6 +96,7 @@ async function qualifyHtmlPreview(surface) {
   const bounds = await trigger.boundingBox();
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 }] });
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await page.getByRole('menuitem', { name: 'Open preview window' }).click();
   await popup.waitFor();
   await page.waitForFunction(() => document.querySelector('.chat-media-preview-window')?.getAttribute('data-floating-presence') === 'open');
   await popup.evaluate(async element => { await Promise.all(element.getAnimations({ subtree: true }).map(animation => animation.finished)); });

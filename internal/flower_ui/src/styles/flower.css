@@ -3652,6 +3652,10 @@
   max-width: 100%;
 }
 
+.flower-message-assistant-copy-body:has(.chat-html-canvas) {
+  flex: 1 1 0%;
+}
+
 .flower-message-bubble-framed.flower-message-bubble-streaming {
   border-color: color-mix(in srgb, var(--primary) 28%, var(--flower-chat-surface-border));
   box-shadow: none;
@@ -5096,6 +5100,10 @@ button.flower-composer-context-source:focus-visible,
   max-width: min(100%, 58rem);
 }
 
+.flower-chat-md-block .chat-html-canvas {
+  border: 0;
+}
+
 .flower-chat-md-committed-segment,
 .flower-chat-md-tail,
 .flower-chat-md-tail-frame {
@@ -5103,7 +5111,7 @@ button.flower-composer-context-source:focus-visible,
   max-width: 100%;
 }
 
-.flower-chat-md-block :is(p, ul, ol, blockquote, pre, table) {
+.flower-chat-md-block :is(p, ul, ol, blockquote, pre, table):not(.chat-html-source) {
   margin: 0.8em 0 0;
 }
 
@@ -5114,6 +5122,7 @@ button.flower-composer-context-source:focus-visible,
 }
 
 .flower-chat-md-block > .flower-chat-md-committed-segment:first-child > :first-child,
+.flower-chat-md-block > .flower-chat-md-committed-segment:first-child .flower-chat-md-segment-html > :first-child,
 .flower-chat-md-block > .flower-chat-md-tail-frame:first-child .flower-chat-md-tail > :first-child,
 .flower-chat-md-blockquote > :first-child,
 .flower-chat-md-block li > :first-child {
@@ -10439,7 +10448,7 @@ button.flower-attachment-preview-trigger:disabled {
   line-height: 1.66;
 }
 
-.flower-subagent-ledger-entry-body .flower-chat-md-block :is(p, ul, ol, blockquote, pre, table) {
+.flower-subagent-ledger-entry-body .flower-chat-md-block :is(p, ul, ol, blockquote, pre, table):not(.chat-html-source) {
   margin-top: 0.58rem;
 }
 

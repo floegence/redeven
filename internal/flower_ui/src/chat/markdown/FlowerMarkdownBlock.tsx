@@ -71,6 +71,7 @@ export const FlowerMarkdownBlock: Component<FlowerMarkdownBlockProps> = (props) 
     displayContent(),
     props.streaming === true,
     JSON.stringify([citations().html, props.citationLabels]),
+    props.mediaEnabled === true,
   ));
   const segments = createMemo(() => new Map(snapshot().committedSegments.map((segment) => [segment.key, segment])));
   const segmentKeys = createMemo(() => [...segments().keys()]);
@@ -241,9 +242,15 @@ export const FlowerMarkdownBlock: Component<FlowerMarkdownBlockProps> = (props) 
 
   const HtmlSegment: Component<{ segmentKey: string }> = (segmentProps) => {
     let element!: HTMLDivElement;
-    const html = createMemo(() => segments().get(segmentProps.segmentKey)?.html ?? '');
+    const segment = () => segments().get(segmentProps.segmentKey);
+    const html = createMemo(() => segment()?.html ?? '');
+    const source = createMemo(() => ({ kind: 'html' as const, html: segment()?.media?.html ?? '', title: '' }), undefined, { equals: (previous, next) => previous.html === next.html });
     decorateRegion(() => element, html);
-    return <div ref={element} class="flower-chat-md-committed-segment" data-segment-key={segmentProps.segmentKey} innerHTML={html()} />;
+    return <div ref={element} class="flower-chat-md-committed-segment" data-segment-key={segmentProps.segmentKey}>
+      <Show when={segment()?.media} fallback={<div class="flower-chat-md-segment-html" innerHTML={html()} />}>
+        <MarkdownMedia source={source()} htmlState={segment()?.media?.state} labels={resolvedMediaLabels()} resolve={props.resolveMedia} onOpenLink={props.onOpenMediaLink} />
+      </Show>
+    </div>;
   };
 
   const TailFrame: Component = () => {

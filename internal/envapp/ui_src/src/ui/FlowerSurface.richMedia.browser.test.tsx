@@ -34,6 +34,47 @@ async function imageBlob(): Promise<Blob> {
 }
 
 describe('Flower inline media', () => {
+  it('retains one bounded canvas while HTML streams, stops, closes, and moves before later text', async () => {
+    await page.viewport(1000, 800);
+    const root = document.createElement('div'); document.body.appendChild(root);
+    root.style.maxWidth = '680px';
+    const fence = '```html preview\n';
+    const html = '<button onclick="this.textContent=String(Number(this.textContent)+1)">0</button>';
+    const [content, setContent] = createSignal(fence + '<main>Partial');
+    const [streaming, setStreaming] = createSignal(true);
+    const dispose = render(() => <FlowerMarkdownBlock content={content()} streaming={streaming()} mediaEnabled
+      copyCodeLabel="Copy code" codeCopiedLabel="Copied" mediaLabels={markdownMediaEnUS} />, root);
+    onTestFinished(() => { dispose(); root.remove(); });
+    await waitFor(() => Boolean(root.querySelector('.chat-html-canvas')));
+    const canvas = root.querySelector<HTMLElement>('.chat-html-canvas')!;
+    const height = canvas.getBoundingClientRect().height;
+    expect(getComputedStyle(canvas).borderWidth).toBe('0px');
+    expect(canvas.dataset.state).toBe('generating');
+    expect(root.querySelector('iframe')).toBeNull();
+    expect(root.querySelector('.flower-chat-md-tail')).toBeNull();
+    await userEvent.click(canvas.querySelector<HTMLButtonElement>('[data-chat-media-action=source]')!);
+    setContent(fence + html);
+    expect(canvas.querySelector('pre')?.textContent).toBe(html);
+    setStreaming(false);
+    expect(canvas.dataset.state).toBe('incomplete');
+    expect(root.querySelector('iframe')).toBeNull();
+    setStreaming(true);
+    setContent(fence + html + '\n```');
+    await waitFor(() => Boolean(canvas.querySelector('iframe')));
+    expect(root.querySelector('.chat-html-canvas')).toBe(canvas);
+    expect(canvas.dataset.view).toBe('source');
+    expect(canvas.getBoundingClientRect().height).toBe(height);
+    const frame = canvas.querySelector('iframe');
+    setContent(fence + html + '\n```\n\nA new paragraph');
+    setStreaming(false);
+    expect(root.querySelector('.chat-html-canvas')).toBe(canvas);
+    expect(canvas.querySelector('iframe')).toBe(frame);
+    await userEvent.click(canvas.querySelector<HTMLButtonElement>('[data-chat-media-action=source]')!);
+    await userEvent.click(canvas.querySelector<HTMLButtonElement>('[data-chat-media-action=expand]')!);
+    expect(canvas.querySelector('iframe')).toBe(frame);
+    await page.viewport(320, 800);
+    expect(root.scrollWidth).toBeLessThanOrEqual(320);
+  });
   it('opens a fenced HTML copy and routes links with the bound thread directory', async () => {
     await page.viewport(1200, 900);
     const html = '<h1>Daily brief</h1><a href="#economy">Economy</a><a href="https://example.com/news">News source</a><a href="./details.html">Related file</a><a href="javascript:alert(1)">Unsupported link</a><section id="economy" style="margin-top:1200px">Economy</section>';
@@ -51,20 +92,21 @@ describe('Flower inline media', () => {
     runtime.querySelector<HTMLButtonElement>('[data-thread-id="html-links"] button')!.click();
     await waitFor(() => Boolean(runtime.querySelector('[data-media-kind="html"] iframe')));
     const frame = runtime.querySelector('iframe');
-    const trigger = runtime.querySelector<HTMLButtonElement>('[data-chat-media-action="preview"]');
+    const trigger = runtime.querySelector<HTMLElement>('[aria-label="More actions"]');
     expect(trigger, 'Fenced HTML needs an independent preview action').toBeTruthy();
     const clickLink = (commands as unknown as { clickHtmlPreviewLink: (selector: string, name: string) => Promise<{ url: string; scrollY: number }> }).clickHtmlPreviewLink;
-    const anchor = await clickLink('.chat-media-viewport iframe', 'Economy');
+    const anchor = await clickLink('.chat-html-sheet iframe', 'Economy');
     expect(anchor.url).toBe('about:srcdoc');
     expect(anchor.scrollY).toBeGreaterThan(500);
-    await clickLink('.chat-media-viewport iframe', 'News source');
+    await clickLink('.chat-html-sheet iframe', 'News source');
     await vi.waitFor(() => expect(openMessageURL).toHaveBeenCalledWith(expect.objectContaining({ url: 'https://example.com/news' })));
-    await clickLink('.chat-media-viewport iframe', 'Related file');
+    await clickLink('.chat-html-sheet iframe', 'Related file');
     await vi.waitFor(() => expect(openMessageFile).toHaveBeenCalledWith(expect.objectContaining({ path: '/workspace/news/details.html', action: 'preview' })));
-    await clickLink('.chat-media-viewport iframe', 'Unsupported link');
+    await clickLink('.chat-html-sheet iframe', 'Unsupported link');
     await vi.waitFor(() => expect(runtime.querySelector('[role="alert"]')?.textContent).toContain('protocol'));
     expect(runtime.querySelector('iframe')).toBe(frame);
     await userEvent.click(trigger!);
+    await userEvent.click(page.getByRole('menuitem', { name: 'Open preview window' }));
     await waitFor(() => Boolean(document.querySelector('.chat-media-preview-window iframe')));
     expect(runtime.querySelector('iframe')).toBe(frame);
     await clickLink('.chat-media-preview-window iframe', 'Related file');
@@ -256,6 +298,8 @@ describe('Flower inline media', () => {
     const frame = media.querySelector('iframe');
     const expansion = media.querySelector<HTMLButtonElement>('button[aria-label="Expand preview"]')!;
     const expandIcon = expansion.querySelector('svg')!.innerHTML;
+    expect(media.getBoundingClientRect().width).toBeGreaterThan(350);
+    expect(getComputedStyle(media.querySelector('.chat-html-canvas')!).borderWidth).toBe('0px');
     await userEvent.click(expansion);
     expect(expansion.getAttribute('aria-expanded')).toBe('true');
     expect(expansion.getAttribute('aria-label')).toBe('Collapse preview');
@@ -263,8 +307,9 @@ describe('Flower inline media', () => {
     expect(media.querySelector('iframe')).toBe(frame);
     await userEvent.click(expansion);
     expect(expansion.getAttribute('aria-expanded')).toBe('false');
-    const preview = media.querySelector<HTMLButtonElement>('button[aria-label="Open file preview"]')!;
-    await userEvent.click(preview);
+    const more = media.querySelector<HTMLElement>('[aria-label="More actions"]')!;
+    await userEvent.click(more);
+    await userEvent.click(page.getByRole('menuitem', { name: 'Open file preview' }));
     await waitFor(() => Boolean(document.querySelector('.file-preview-floating-window iframe.html-preview-frame')));
     const window = document.querySelector<HTMLElement>('.file-preview-floating-window')!;
     expect(openFilePreview).toHaveBeenLastCalledWith(expect.objectContaining({ path: '/workspace/reports/report.html' }), { focus: true, reusePolicy: 'same_file_or_create' });
@@ -273,8 +318,13 @@ describe('Flower inline media', () => {
     await page.screenshot({ path: './__screenshots__/redeven-flower-html-preview-window.png' });
     window.querySelector<HTMLButtonElement>('[data-floe-floating-window-control="close"]')!.click();
     await waitFor(() => !document.querySelector('.file-preview-floating-window'));
-    await userEvent.click(media.querySelector<HTMLButtonElement>('button[aria-label="Open containing folder"]')!);
+    await userEvent.click(more);
+    await userEvent.click(page.getByRole('menuitem', { name: 'Open containing folder' }));
     expect(openFileBrowserAtPath).toHaveBeenCalledWith('/workspace/reports', { title: 'reports', openStrategy: 'focus_latest_or_create' });
+    await page.viewport(390, 844);
+    await waitFor(() => media.getBoundingClientRect().width <= 390);
+    expect(media.getBoundingClientRect().width).toBeGreaterThan(200);
+    expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
   });
 
   it('renders an assistant screenshot, file preview, and web link through the real conversation surface', async () => {
@@ -378,7 +428,8 @@ describe('Flower inline media', () => {
     await waitFor(() => resolve.mock.calls.length === 1);
     const media = root.querySelector<HTMLElement>('.chat-media')!;
     expect(media.textContent).toContain(markdownMediaEnUS.loading);
-    expect(media.querySelector('a, button, iframe')).toBeNull();
+    expect(media.querySelector('a, iframe')).toBeNull();
+    expect(media.querySelector('[data-chat-media-action=source]')).toBeTruthy();
     setLabels({ ...markdownMediaEnUS, loading: 'Preparing preview…', html: 'HTML preview' });
     await waitFor(() => media.textContent?.includes('Preparing preview…') === true);
     expect(root.querySelector('.chat-media')).toBe(media);
@@ -387,7 +438,7 @@ describe('Flower inline media', () => {
     completeHTML('<h1>Ready</h1>');
     await waitFor(() => Boolean(media.querySelector('iframe')));
     expect(root.querySelector('.chat-media')).toBe(media);
-    expect(media.textContent).toContain('HTML preview');
+    expect(media.querySelector('iframe')?.title).toBe('Report');
     expect(resolve).toHaveBeenCalledTimes(1);
   });
 
@@ -413,7 +464,7 @@ describe('Flower inline media', () => {
     await waitFor(() => loadMessageFile.mock.calls.length === 1);
     expect(media.querySelector('a')).toBeNull();
     expect(media.textContent).toContain('Loading preview');
-    expect(media.querySelector('button, iframe')).toBeNull();
+    expect(media.querySelector('iframe')).toBeNull();
     const transcript = runtime.querySelector<HTMLElement>('.flower-chat-transcript')!;
     transcript.dispatchEvent(new WheelEvent('wheel', { deltaY: -1, bubbles: true }));
     await new Promise<void>(done => requestAnimationFrame(() => requestAnimationFrame(() => done())));
@@ -421,8 +472,8 @@ describe('Flower inline media', () => {
     const initialRoot = document.documentElement;
     const initialScroll = transcript.scrollTop;
     expect(initialScroll).toBeGreaterThan(0);
-    const loadingHeight = media.querySelector('.chat-media-viewport')!.getBoundingClientRect().height;
-    await userEvent.click(media.querySelector<HTMLElement>('.chat-media-title')!);
+    const loadingHeight = media.querySelector('.chat-html-canvas')!.getBoundingClientRect().height;
+    await userEvent.click(media.querySelector<HTMLElement>('.chat-html-loading')!);
     expect(window.location.href).toBe(initialURL);
     expect(document.documentElement).toBe(initialRoot);
     expect(runtime.isConnected).toBe(true);
@@ -434,9 +485,11 @@ describe('Flower inline media', () => {
     resolveFile(new Blob(['<h1>Ready</h1>'], { type: 'text/plain' }));
     await waitFor(() => Boolean(media.querySelector('iframe')));
     expect(media.querySelector('a')).toBeNull();
-    expect(media.querySelector('.chat-media-viewport')!.getBoundingClientRect().height).toBe(loadingHeight);
+    expect(media.querySelector('.chat-html-canvas')!.getBoundingClientRect().height).toBe(loadingHeight);
     expect(media.querySelector<HTMLButtonElement>('button[aria-label="Expand preview"]')).toBeTruthy();
-    await userEvent.click(media.querySelector<HTMLButtonElement>('button[aria-label="Open file preview"]')!);
+    await userEvent.click(media.querySelector<HTMLElement>('[aria-label="More actions"]')!);
+    await userEvent.click(page.getByRole('menuitem', { name: 'Open file preview' }));
+    await vi.waitFor(() => expect(openMessageFile).toHaveBeenCalled());
     expect(openMessageFile).toHaveBeenCalledWith({ path: '/Users/tangjianyin/Downloads/code/test/pelican-ride.html', action: 'preview' });
   });
 
@@ -453,7 +506,9 @@ describe('Flower inline media', () => {
     await waitFor(() => Boolean(runtime.querySelector('.chat-media-retry')));
     const media = runtime.querySelector<HTMLElement>('[data-media-kind="html"]')!;
     expect(media.querySelector('a, iframe')).toBeNull();
-    expect(media.querySelectorAll('button')).toHaveLength(1);
+    expect(media.querySelectorAll('.chat-media-retry')).toHaveLength(1);
+    expect(media.querySelector('[data-chat-media-action=source]')).toBeTruthy();
+    expect(media.querySelector('[data-chat-media-action=expand]')).toBeTruthy();
     const initialURL = window.location.href;
     await userEvent.click(media.querySelector<HTMLButtonElement>('.chat-media-retry')!);
     await waitFor(() => Boolean(media.querySelector('iframe')));

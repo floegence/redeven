@@ -5110,7 +5110,16 @@
         "anchorUnavailable": "找不到連結指向的章節。",
         "relativePathUnavailable": "無法解析相對路徑：預覽未綁定來源目錄。",
         "invalidLink": "此連結無效。",
-        "unsupportedLink": "不支援此連結協定。"
+        "unsupportedLink": "不支援此連結協定。",
+        "generating": "正在產生預覽…",
+        "incomplete": "產生已中斷，可查看已產生的原始碼。",
+        "showSource": "查看 HTML 原始碼",
+        "showPreview": "查看預覽",
+        "more": "更多操作",
+        "copyHTML": "複製 HTML",
+        "copied": "已複製",
+        "copyFailed": "請選取並複製原始碼。",
+        "replay": "重新載入預覽"
       },
       "webSearch": {
         "search": "搜尋",

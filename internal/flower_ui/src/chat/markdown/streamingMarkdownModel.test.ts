@@ -16,6 +16,37 @@ function createMarked(): Marked<string, string> {
 }
 
 describe('buildMarkdownRenderSnapshot', () => {
+  it('keeps HTML preview identity from generation through closure and completion', () => {
+    const markdown = createMarked();
+    const partial = 'Intro\n\n```html preview\n<main>Partial';
+    const generating = buildMarkdownRenderSnapshot(markdown, partial, true, true);
+    const complete = buildMarkdownRenderSnapshot(markdown, partial + '</main>\n```', false, true);
+    const preview = generating.committedSegments.at(-1)!;
+    expect(generating.tail.kind).toBe('empty');
+    expect(preview.media).toEqual({ html: '<main>Partial', state: 'generating' });
+    expect(complete.committedSegments.at(-1)?.key).toBe(preview.key);
+    expect(complete.committedSegments.at(-1)?.media).toEqual({ html: '<main>Partial</main>', state: undefined });
+    expect(buildMarkdownRenderSnapshot(markdown, partial, false, true).committedSegments.at(-1)?.media?.state).toBe('incomplete');
+    expect(buildMarkdownRenderSnapshot(markdown, partial, true, false).tail.kind).toBe('raw');
+  });
+  it('requires the matching full fence before executing HTML and distinguishes multiple previews', () => {
+    const markdown = createMarked();
+    for (const fence of ['````', '~~~~']) {
+      const short = fence.slice(1);
+      const content = fence + 'HTML PREVIEW\n<main>Partial</main>\n' + short;
+      const incomplete = buildMarkdownRenderSnapshot(markdown, content, false, true);
+      expect(incomplete.committedSegments[0]?.media?.state).toBe('incomplete');
+      const complete = buildMarkdownRenderSnapshot(markdown, content + '\n' + fence, true, true);
+      expect(complete.committedSegments[0]?.media?.state).toBeUndefined();
+    }
+    const first = '```html preview\n<p>One</p>\n```\n\n';
+    const render = createMarkdownRenderModel(markdown);
+    const before = render(first + '```html preview\n<p>Two', true, '', true);
+    const after = render(first + '```html preview\n<p>Two</p>\n```\n\nLater text', true, '', true);
+    expect(before.committedSegments.map(segment => segment.key)).toEqual(after.committedSegments.map(segment => segment.key));
+    expect(before.committedSegments[0]).toBe(after.committedSegments[0]);
+    expect(new Set(after.committedSegments.map(segment => segment.key)).size).toBe(2);
+  });
   it('commits all rendered segments for complete markdown', () => {
     const snapshot = buildMarkdownRenderSnapshot(createMarked(), '# Title\n\n- one\n- two', false);
 
