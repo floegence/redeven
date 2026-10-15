@@ -6395,6 +6395,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return selectedSubagentItems().find((item) => trimString(item.threadID) === active.childThreadID) ?? active.item;
   });
   const subagentDetailThread = createMemo<FlowerThreadSnapshot | null>((previous) => projectSubagentDetailThread(subagentDetail(), previous));
+  const subagentDetailRunProgress = createMemo(() => flowerRunProgress(subagentDetailThread()));
 
   const subagentDetailActiveStatus = createMemo<FlowerSubagentPanelStatus>(() => {
     const itemStatus = activeSubagentItem()?.status ?? 'unknown';
@@ -7039,6 +7040,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const selectedThreadHasLiveProgress = createMemo(() => selectedRunProgress() != null);
   createEffect(() => {
     const retrying = selectedRunProgress()?.retry != null
+      || (subagentDetailOpen() && subagentDetailThread()?.run_progress?.retry != null)
       || [...threadCache().views.values()].some(view => view.thread.status === 'running' && view.thread.run_progress?.retry != null);
     if (!retrying) return;
     setRetryNow(Date.now());
@@ -11021,6 +11023,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const subagentDetailDialog = () => (
     <SubagentDetailWindow
       syncNotice={workspaceSyncNotice()}
+      runProgress={<Show when={subagentDetailRunProgress()}>{(progress) => (
+        <div class="flower-subagent-detail-progress" role="status" aria-live="polite" aria-atomic="true">
+          <FlowerProgressIndicator progress={progress()} label={liveProgressLabel(progress().kind, progress().retry)} />
+        </div>
+      )}</Show>}
       open={subagentDetailOpen()}
       onOpenChange={(open) => {
         if (!open) closeSubagentOverlays();

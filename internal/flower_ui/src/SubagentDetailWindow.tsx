@@ -31,6 +31,7 @@ export type SubagentDetailWindowProps = Readonly<{
   statusLabel: string;
   statusIndicator: JSX.Element;
   syncNotice?: JSX.Element;
+  runProgress?: JSX.Element;
   agentTypeLabel: string;
   elapsedLabel: string;
   description: string;
@@ -313,6 +314,7 @@ export function SubagentDetailWindow(props: SubagentDetailWindowProps): JSX.Elem
           </div>
         </header>
         {props.syncNotice}
+        {props.runProgress}
 
         <Show when={props.loading && !props.detailAvailable}>
           <div class="flower-subagent-detail-loading" role="status" aria-label={props.threadLoadingLabel}>

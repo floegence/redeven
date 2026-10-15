@@ -10001,6 +10001,22 @@ button.flower-attachment-preview-trigger:disabled {
   display: inline-block;
 }
 
+.flower-subagent-detail-progress {
+  flex: 0 0 auto;
+  min-width: 0;
+  padding: 0.5rem 1rem;
+  color: var(--flower-subagent-window-muted);
+  font-size: var(--floe-type-caption);
+}
+
+.flower-subagent-detail-progress .flower-model-status-indicator {
+  display: flex;
+}
+
+.flower-subagent-detail-progress .flower-model-status-text {
+  white-space: normal;
+}
+
 
 .flower-subagent-dropdown-row-running .flower-subagent-dropdown-name,
 .flower-subagent-status-label-running .flower-subagent-status-text {

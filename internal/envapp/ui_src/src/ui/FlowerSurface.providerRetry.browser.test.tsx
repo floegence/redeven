@@ -4,7 +4,7 @@ import './flower-feature.css';
 import { expect, it, vi } from 'vitest';
 import { page } from 'vitest/browser';
 import type { FlowerLiveStreamEnvelope, FlowerThreadSnapshot } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
-import { adapter, liveBootstrap, renderSurfaceWithAdapterProps, runtimeCurrentView, thread, waitFor } from './FlowerSurface.navigation.testHarness';
+import { adapter, liveBootstrap, renderSurfaceWithAdapterProps, runtimeCurrentView, subagentDetail, subagentSummary, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 
 it.each([[1100, 'stop'], [420, 'stop'], [1100, 'success'], [420, 'failure']] as const)('keeps provider recovery in one turn at width %s through %s', async (width, outcome) => {
   await page.viewport(width, 850);
@@ -84,4 +84,36 @@ it.each([[1100, 'stop'], [420, 'stop'], [1100, 'success'], [420, 'failure']] as 
     retryButton!.click();
     await waitFor(() => retryThread.mock.calls.length === 1);
   }
+});
+
+it('shows the same retry deadline in a narrow SubAgent window', async () => {
+  await page.viewport(1100, 900);
+  const child = subagentSummary();
+  const parent = thread({ thread_id: child.parent_thread_id, status: 'running', active_run_id: 'parent-run',
+    run_progress: { run_id: 'parent-run', turn_id: 'parent-turn', phase: 'streaming' }, subagents: [child], messages: [],
+  });
+  const base = subagentDetail({ summary: child });
+  const detail = { ...base, current: { ...base.current, items: [], run_progress: { phase: 'retrying' as const,
+    retry: { retry: 2, max_retries: 4, next_attempt_at: new Date(Date.now() + 3500).toISOString(), reason: 'stream_interrupted' },
+  } } };
+  const runtime = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: vi.fn(async () => [parent]),
+    loadThread: vi.fn(async () => liveBootstrap(parent)), loadSubagentDetail: vi.fn(async () => detail),
+  }, { focusThreadRequest: { request_id: 'child-retry', thread_id: parent.thread_id } });
+  runtime.style.height = '850px';
+  await waitFor(() => runtime.querySelector('button[aria-controls="flower-subagents-dropdown"]') != null);
+  runtime.querySelector<HTMLButtonElement>('button[aria-controls="flower-subagents-dropdown"]')!.click();
+  await waitFor(() => document.querySelector('[data-flower-subagent-row]') != null);
+  document.querySelector<HTMLButtonElement>('[data-flower-subagent-row]')!.click();
+  const progress = () => document.querySelector<HTMLElement>('.flower-subagent-detail-progress [data-flower-progress-kind="retrying"]');
+  await waitFor(() => progress()?.textContent?.includes('2/4') ?? false);
+  const label = progress()!.textContent;
+  await vi.waitFor(() => expect(progress()!.textContent).not.toBe(label), { timeout: 2500 });
+  await page.viewport(540, 850);
+  const window = document.querySelector<HTMLElement>('.flower-subagent-detail-window')!;
+  await waitFor(() => window.getBoundingClientRect().width < 540);
+  expect(window.scrollWidth).toBeLessThanOrEqual(window.clientWidth + 1);
+  expect(progress()!.getBoundingClientRect().right).toBeLessThanOrEqual(window.getBoundingClientRect().right + 1);
+  expect(window.querySelectorAll('.flower-error-card')).toHaveLength(0);
+  expect(runtime.querySelector<HTMLButtonElement>('.flower-composer-submit')?.disabled).toBe(false);
+  await page.screenshot({ element: window, path: '__screenshots__/provider-retry-subagent.png' });
 });
