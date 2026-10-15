@@ -471,11 +471,11 @@ func TestInvocationPolicies_StructuredFileTools(t *testing.T) {
 	t.Parallel()
 
 	readArgs := map[string]any{"file_path": "/tmp/workspace/readme.md"}
-	if RequiresApprovalForInvocation("file.read", readArgs) {
-		t.Fatalf("file.read should not require approval")
+	if RequiresApprovalForInvocation("read_file", readArgs) {
+		t.Fatalf("read_file should not require approval")
 	}
-	if IsMutatingForInvocation("file.read", readArgs) {
-		t.Fatalf("file.read should not be classified as mutating")
+	if IsMutatingForInvocation("read_file", readArgs) {
+		t.Fatalf("read_file should not be classified as mutating")
 	}
 
 	writeArgs := map[string]any{"file_path": "/tmp/workspace/note.txt", "content": "hello"}

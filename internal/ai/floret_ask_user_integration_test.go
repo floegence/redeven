@@ -308,9 +308,13 @@ func TestRedevenHostedRunNaturalStopCompletesTurn(t *testing.T) {
 			writeAskUserIntegrationTextResponse(w, flusher, "resp_title_natural", "Natural completion")
 			return
 		}
-		if mainCalls.Add(1) != 1 {
+		if mainCalls.Add(1) > 2 {
 			t.Fatalf("unexpected main provider request %d", mainCalls.Load())
 		}
+		prompt, _ := request["instructions"].(string)
+		assertPromptContains(t, prompt, "Answer directly when the supplied context is sufficient")
+		assertPromptNotContains(t, prompt, "Follow this workflow for every task")
+		assertPromptNotContains(t, prompt, "file.read")
 		writeAskUserIntegrationTextResponse(w, flusher, "resp_natural_stop", "Finished naturally.")
 	}))
 	t.Cleanup(providerServer.Close)
@@ -342,7 +346,7 @@ func TestRedevenHostedRunNaturalStopCompletesTurn(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := svc.SendUserTurn(context.Background(), meta, SendUserTurnRequest{
-		ClientRequestID: "request-natural-stop", ThreadID: thread.ThreadID, Model: "openai/gpt-5-mini", Input: RunInput{Text: "Finish with a normal response."},
+		ClientRequestID: "request-natural-stop", ThreadID: thread.ThreadID, Model: "openai/gpt-5-mini", Input: RunInput{Text: "Analyze this supplied prompt for conflicting instructions: always call a tool; answer ordinary questions directly. Give a coherent replacement policy without changing files."},
 		Options: RunOptions{PermissionType: config.AIPermissionFullAccess},
 	}); err != nil {
 		t.Fatal(err)
@@ -357,6 +361,25 @@ func TestRedevenHostedRunNaturalStopCompletesTurn(t *testing.T) {
 		t.Fatalf("last message=%q, want natural completion output", completed.LastMessagePreview)
 	}
 	requireAssistantTimelineTextContains(t, context.Background(), svc, meta, thread.ThreadID, "Finished naturally.")
+	followup, err := svc.SendUserTurn(t.Context(), meta, SendUserTurnRequest{
+		ClientRequestID: "request-analysis-followup", ThreadID: thread.ThreadID,
+		Input: RunInput{Text: "Explain how the replacement handles a missing user-input capability."},
+	})
+	if err != nil || followup.Kind != "start" {
+		t.Fatalf("natural analysis completion blocked follow-up: %+v, %v", followup, err)
+	}
+	waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(view *ThreadView) bool {
+		return view.RunStatus == "success" && mainCalls.Load() == 2
+	})
+	current, err := svc.threadRuntime.View(t.Context(), identity.ThreadID(thread.ThreadID))
+	if err != nil || len(current.Interactions) != 0 || len(current.Queue) != 0 {
+		t.Fatalf("analysis left pending work: %+v, %v", current, err)
+	}
+	for _, item := range current.Items {
+		if item.Activity != nil {
+			t.Fatal("direct analysis should not require tool activity")
+		}
+	}
 }
 
 func TestSubmitRequestUserInputResponseRPCReturnsAdmissionReceiptBeforeProviderCompletes(t *testing.T) {

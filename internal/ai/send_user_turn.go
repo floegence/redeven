@@ -252,12 +252,19 @@ func (s *Service) sendTypedExistingThread(ctx context.Context, meta *session.Met
 		if projectionErr != nil {
 			return finish(SendUserTurnResponse{}, projectionErr)
 		}
-		projection.Context = append(projection.Context, effect.builder.floretTurnRuntimeContext())
+		runtimeContext, contextErr := effect.builder.floretTurnRuntimeContext()
+		if contextErr != nil {
+			return finish(SendUserTurnResponse{}, contextErr)
+		}
+		projection.Context = append(projection.Context, runtimeContext)
 		turnInput, err = effect.builder.floretTurnInput(ctx, effect.req.Input, projection.References)
 		if err != nil {
 			return finish(SendUserTurnResponse{}, err)
 		}
 		turnInput.Context = projection.Context
+	}
+	if err := turnInput.Validate(); err != nil {
+		return finish(SendUserTurnResponse{}, err)
 	}
 	if err := s.persistExecutionAuthority(ctx, meta, req.ThreadID, executionKey, "", req.Options.PermissionType); err != nil {
 		return finish(SendUserTurnResponse{}, err)
@@ -371,7 +378,7 @@ func (s *Service) floretTurnRuntimeContextForAdmission(ctx context.Context, meta
 	})
 	r.setPermissionState(permission, PermissionSnapshot{})
 	r.subagentRuntime = newServiceFloretSubagentRuntime(s, r)
-	return r.floretTurnRuntimeContext(), nil
+	return r.floretTurnRuntimeContext()
 }
 
 func (s *Service) typedSendLookup(ctx context.Context, meta *session.Meta, req SendUserTurnRequest) (SendUserTurnResponse, bool, error) {

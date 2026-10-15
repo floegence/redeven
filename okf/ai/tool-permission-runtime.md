@@ -3,7 +3,7 @@ type: AI Tool Contract
 title: AI tool permissions and dispatch
 description: Tool registration, scheduling, permission, readonly, and target-routing contracts.
 tags: [ai, tools, permissions, dispatch]
-timestamp: 2026-10-08T00:00:00Z
+timestamp: 2026-10-15T00:00:00Z
 ---
 # Summary
 
@@ -40,6 +40,10 @@ requests approval by submitting the intended call. The runtime asks before any
 effect executes; missing prior approval is not a denial. An actual rejection
 still binds the denied action and must not be bypassed with another tool.
 
+[Flower prompt and rule sources](flower-prompt-and-rule-sources.md) owns
+capability-gated instructions, interaction fallback, research, timeout recovery,
+and the distinction between working-directory defaults and filesystem authority.
+
 Immediately before an effect, Redeven validates the Floret request against its invocation snapshot. Floret has settled any canonical approval; Redeven never creates or waits for a second decision. Each concurrent invocation receives one process-local proof. Cancellation, resource checks, target routing, effect fencing and output limits remain enforced. A setting change cannot settle a pending approval, cancel an executing tool or rewrite a provider request already sent. The next authorization batch reads the new setting.
 
 In `approval_required`, mutating actions use Floret's canonical interaction; in `full_access`, per-tool approval is skipped while the remaining execution checks still apply. Terminal process operations require effective write and execute permission. Model and reasoning settings retain their separate busy guard.
@@ -63,7 +67,7 @@ Target provenance is part of the tool contract, not a UI hint. Flower must not i
 - `redeven:internal/ai/tools/registry.go:299` - OKF tools carry read-only structured presentation policy.
 - `redeven:internal/ai/floret_tools.go:91` - Redeven projects host builtins and selects the direct Floret-native path.
 - `redeven:internal/ai/floret_native_tools.go` - The unique native factory derives `web_fetch` from Floret and binds invocation product permission.
-- `redeven:internal/ai/prompt_builder.go:322` - Prompt construction routes information sources between workspace tools, OKF, and external web discovery.
+- `redeven:internal/ai/prompt_builder.go` - One behavior policy with capability-gated workspace, research and interaction guidance.
 - `redeven:internal/ai/target_tool_policy.go` - Target tool calls and results preserve explicit target and execution-location provenance.
 - `redeven:internal/ai/subagents_floret.go` - Child runs receive the parent-derived product permission surface under Floret lifecycle ownership.
 - `redeven:internal/ai/run_tool_surface.go` - Hosted Agents resolve current permission at provider and dispatch boundaries.

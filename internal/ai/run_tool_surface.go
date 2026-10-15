@@ -81,7 +81,6 @@ func (r *run) buildRunToolSurface(cfg runToolSurfaceConfig, permissionType Flowe
 	}
 	systemPrompt := r.buildLayeredSystemPrompt(
 		permissionTypeString(permissionType),
-		activeTools,
 		capabilityContract,
 	)
 	hostContext := cloneStringMap(cfg.HostLabels)

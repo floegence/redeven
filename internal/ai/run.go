@@ -2007,20 +2007,6 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 		}
 		return r.toolReadonlyGrep(ctx, p.Query, p.Paths, p.Glob, p.CaseSensitive, p.FixedStrings, p.MaxMatches, p.ContextLines)
 
-	case "file.read":
-		if !r.canExecuteReadonlyExclusiveTool(ctx) {
-			return nil, errors.New("readonly tool unavailable for current permission type")
-		}
-		if meta == nil || !meta.CanRead {
-			return nil, errors.New("read permission denied")
-		}
-		var p FileReadArgs
-		b, _ := json.Marshal(args)
-		if err := json.Unmarshal(b, &p); err != nil {
-			return nil, errors.New("invalid args")
-		}
-		return r.toolFileRead(ctx, p)
-
 	case "file.edit":
 		if meta == nil || !meta.CanWrite {
 			return nil, errors.New("write permission denied")

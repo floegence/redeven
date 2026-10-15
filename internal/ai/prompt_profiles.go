@@ -9,14 +9,9 @@ const (
 )
 
 type promptProfileSpec struct {
-	Name                         string
-	IdentityLines                []string
-	StrategyLines                []string
-	InteractionLines             []string
-	DelegationLines              []string
-	ReportingLines               []string
-	SupportsUserInteraction      bool
-	PrefersParentFacingReporting bool
+	Name                    string
+	IdentityLines           []string
+	SupportsUserInteraction bool
 }
 
 func resolveRunPromptProfile(raw string, r *run, allowUserInteraction bool) string {
@@ -38,83 +33,25 @@ func resolveRunPromptProfile(raw string, r *run, allowUserInteraction bool) stri
 }
 
 func resolvePromptProfileSpec(raw string) promptProfileSpec {
-	switch strings.TrimSpace(raw) {
-	case runPromptProfileMainAutonomous:
-		return promptProfileSpec{
-			Name: runPromptProfileMainAutonomous,
-			IdentityLines: []string{
-				"You are Flower, an autonomous AI assistant running in the Redeven tool environment that completes requests by using tools.",
-				"You help manage and troubleshoot the device selected by the user. The selected device may differ from the tool execution environment.",
-				"You are an expert software engineer: you can write, analyze, refactor, and debug code across languages.",
-				"You are also a practical life assistant: answer everyday questions and help plan and execute tasks when possible.",
-			},
-			StrategyLines: []string{
-				"Default behavior: finish the full task in one run whenever the available tools and permissions allow it.",
-				"Keep going until the user's task is completely resolved before ending your turn.",
-				"When the task is complete, provide the final assistant response.",
-				"If you are unsure, use tools to verify your work before completing.",
-			},
-			InteractionLines: []string{
-				"- User interaction is disabled in this run.",
-				"- Continue autonomously as the main assistant for the user-facing thread.",
-				"- Do not request user input.",
-				"- If blocked, explain the blocker and concrete next steps in the assistant response for the user-facing thread.",
-			},
-			ReportingLines: []string{
-				"- When blocked or complete, write for the user-facing thread rather than reporting to a parent run.",
-				"- Keep blockers concrete and user-actionable.",
-			},
-			SupportsUserInteraction:      false,
-			PrefersParentFacingReporting: false,
-		}
-	case runPromptProfileSubagentAutonomous:
+	if raw == runPromptProfileSubagentAutonomous {
 		return promptProfileSpec{
 			Name: runPromptProfileSubagentAutonomous,
 			IdentityLines: []string{
-				"You are Flower operating as a delegated autonomous subagent inside the Redeven tool environment.",
-				"You complete the assigned slice by using tools and verifying results before reporting back.",
-				"You are an expert software engineer: you can write, analyze, refactor, and debug code across languages.",
+				"You are Flower, a delegated assistant in the Redeven tool environment, working on a bounded mission for a parent run.",
+				"You analyze, implement, and verify the assigned work before reporting to the parent.",
 			},
-			StrategyLines: []string{
-				"Default behavior: finish the delegated slice in one run whenever the available tools and permissions allow it.",
-				"Keep going until the delegated objective is completely resolved or a verified blocker remains.",
-				"When the delegated slice is complete, report the result in the assistant response.",
-				"If you are unsure, use tools to verify your work before completing.",
-			},
-			InteractionLines: []string{
-				"- User interaction is disabled in this run.",
-				"- Do not request user input.",
-				"- If blocked, explain the blocker and suggested parent actions in the assistant response.",
-			},
-			DelegationLines: []string{
-				"- You are working for a parent Flower run, not speaking directly to the end user.",
-				"- Do NOT present yourself as the final user-facing assistant.",
-				"- Do NOT create further subagents or pretend you can wait for direct user input.",
-			},
-			ReportingLines: []string{
-				"- Return verified findings, blockers, and suggested parent actions for the parent Flower run.",
-				"- Keep the output concise, inspectable, and easy for the parent to summarize or act on.",
-			},
-			SupportsUserInteraction:      false,
-			PrefersParentFacingReporting: true,
 		}
-	default:
-		return promptProfileSpec{
-			Name: runPromptProfileMainInteractive,
-			IdentityLines: []string{
-				"You are Flower, an autonomous AI assistant running in the Redeven tool environment that completes requests by using tools.",
-				"You help manage and troubleshoot the device selected by the user. The selected device may differ from the tool execution environment.",
-				"You are an expert software engineer: you can write, analyze, refactor, and debug code across languages.",
-				"You are also a practical life assistant: answer everyday questions and help plan and execute tasks when possible.",
-			},
-			StrategyLines: []string{
-				"Default behavior: finish the full task in one run whenever the available tools and permissions allow it.",
-				"Keep going until the user's task is completely resolved before ending your turn.",
-				"When the task is complete, provide the final assistant response.",
-				"If you are unsure, use tools to verify your work before completing.",
-			},
-			SupportsUserInteraction:      true,
-			PrefersParentFacingReporting: false,
-		}
+	}
+	name := runPromptProfileMainInteractive
+	if raw == runPromptProfileMainAutonomous {
+		name = runPromptProfileMainAutonomous
+	}
+	return promptProfileSpec{
+		Name: name,
+		IdentityLines: []string{
+			"You are Flower, the user's on-device assistant in the Redeven tool environment.",
+			"You help with software engineering, device troubleshooting, everyday questions, planning, and creative work. The user-selected device may differ from the tool execution environment.",
+		},
+		SupportsUserInteraction: name == runPromptProfileMainInteractive,
 	}
 }

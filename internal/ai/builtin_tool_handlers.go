@@ -28,8 +28,6 @@ func toolSuccessSummary(toolName string) string {
 		return "terminal.write"
 	case "terminal.terminate":
 		return "terminal.terminate"
-	case "file.read":
-		return "file.read"
 	case "attachment.read", "image.read":
 		return toolName
 	case "file.edit", "file.write":
@@ -200,8 +198,6 @@ func normalizeTruncatedToolPayload(toolName string, payload any) (any, bool) {
 			m["truncated"] = true
 		}
 		return m, truncated
-	case "file.read":
-		return normalizeFileReadPayload(payload)
 	case "attachment.read", "image.read":
 		return normalizeJSONCompatibleToolPayload(payload)
 	case "file.edit", "file.write":
@@ -212,7 +208,7 @@ func normalizeTruncatedToolPayload(toolName string, payload any) (any, bool) {
 		return normalizeTodosPayload(payload)
 	case "subagents":
 		return normalizeSubagentsPayload(payload)
-	case "threads.query", "threads.read", "threads.aggregate", "okf.index", "okf.search", "okf.open", "rgrep", "find", "read_files", "use_skill", "sources", "tessiven.runtimes", "tessiven.runtime.inspect", "tessiven.runtime.action", "tessiven.schema", "tessiven.list", "tessiven.read", "tessiven.search", "tessiven.versions", "tessiven.validate", "tessiven.save", "tessiven.edit":
+	case "threads.query", "threads.read", "threads.aggregate", "okf.index", "okf.search", "okf.open", "rgrep", "find", "read_file", "read_files", "use_skill", "sources", "tessiven.runtimes", "tessiven.runtime.inspect", "tessiven.runtime.action", "tessiven.schema", "tessiven.list", "tessiven.read", "tessiven.search", "tessiven.versions", "tessiven.validate", "tessiven.save", "tessiven.edit":
 		// These executors already bound their content. Keep the typed shape;
 		// truncating an entire JSON object destroys every usable result field.
 		return normalizeJSONCompatibleToolPayload(payload)
@@ -249,24 +245,6 @@ func normalizeJSONCompatibleToolPayload(payload any) (any, bool) {
 		return payload, false
 	}
 	return normalized, false
-}
-
-func normalizeFileReadPayload(payload any) (any, bool) {
-	normalized, _ := normalizeJSONCompatibleToolPayload(payload)
-	record, ok := normalized.(map[string]any)
-	if !ok || record == nil {
-		return normalized, false
-	}
-	truncated := readBoolField(record, "truncated")
-	if content, ok := record["content"].(string); ok {
-		trimmed, hit := truncateByRunes(content, 4000)
-		record["content"] = trimmed
-		truncated = truncated || hit
-	}
-	if truncated {
-		record["truncated"] = true
-	}
-	return record, truncated
 }
 
 func normalizeTodosPayload(payload any) (any, bool) {
@@ -572,27 +550,15 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:         "image.read",
-			Description:  "Read a project-scoped PNG, JPEG, WebP or GIF image directly for visual inspection. Requires an image-capable model. Detects the actual format, preserves resolution within limits, and reads the first GIF frame. The immutable image snapshot remains in this thread history. Do not start a browser or HTTP server to inspect a local image.",
+			Description:  "Read an authorized PNG, JPEG, WebP or GIF image directly for visual inspection. Requires an image-capable model. Detects the actual format, preserves resolution within limits, and reads the first GIF frame. The immutable image snapshot remains in this thread history. Do not start a browser or HTTP server to inspect a local image.",
 			InputSchema:  toSchema(map[string]any{"type": "object", "properties": withTargetID(map[string]any{"file_path": map[string]any{"type": "string", "minLength": 1, "description": "Image path relative to the working directory, or an authorized absolute path."}}), "required": []string{"file_path"}, "additionalProperties": false}),
 			Visibility:   ToolVisibilitySharedReadonly,
 			Capabilities: []ToolCapabilityClass{ToolCapabilityReadonlyLocal},
 			Source:       "builtin", Namespace: "builtin.image", Priority: 100,
 		},
 		{
-			Name:             "file.read",
-			Description:      "Read a project-scoped file from disk. Use this as the primary file inspection tool before editing.",
-			InputSchema:      toSchema(map[string]any{"type": "object", "properties": withTargetID(map[string]any{"file_path": map[string]any{"type": "string", "description": "Path to the file to read. Relative paths resolve from the current working directory; absolute paths must still stay inside the active project root."}, "offset": map[string]any{"type": "integer", "minimum": 0, "description": "Optional 1-based starting line for partial reads."}, "limit": map[string]any{"type": "integer", "minimum": 1, "maximum": maxFileReadLimit, "description": "Optional maximum number of lines to return for partial reads."}}), "required": []string{"file_path"}, "additionalProperties": false}),
-			Mutating:         false,
-			RequiresApproval: false,
-			Visibility:       ToolVisibilityReadonlyExclusive,
-			Capabilities:     []ToolCapabilityClass{ToolCapabilityReadonlyLocal},
-			Source:           "builtin",
-			Namespace:        "builtin.file",
-			Priority:         100,
-		},
-		{
 			Name:             "read_file",
-			Description:      "Safely read a project-scoped regular text file. Available only in readonly permission.",
+			Description:      "Safely read an authorized regular text file. Available only in readonly permission.",
 			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"path": map[string]any{"type": "string"}, "offset": map[string]any{"type": "integer", "minimum": 0}, "limit": map[string]any{"type": "integer", "minimum": 1, "maximum": maxFileReadLimit}}, "required": []string{"path"}, "additionalProperties": false}),
 			Mutating:         false,
 			RequiresApproval: false,
@@ -604,7 +570,7 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:             "read_files",
-			Description:      "Safely read multiple project-scoped regular text files with per-file status. Available only in readonly permission.",
+			Description:      "Safely read multiple authorized regular text files with per-file status. Available only in readonly permission.",
 			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"paths": map[string]any{"type": "array", "minItems": 1, "maxItems": 50, "items": map[string]any{"type": "string"}}, "limit": map[string]any{"type": "integer", "minimum": 1, "maximum": maxFileReadLimit}}, "required": []string{"paths"}, "additionalProperties": false}),
 			Mutating:         false,
 			RequiresApproval: false,
@@ -616,7 +582,7 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:             "rgrep",
-			Description:      "Search project-scoped regular text files without shell execution. Available only in readonly permission.",
+			Description:      "Search authorized regular text files without shell execution. Available only in readonly permission.",
 			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"query": map[string]any{"type": "string"}, "paths": map[string]any{"type": "array", "items": map[string]any{"type": "string"}}, "glob": map[string]any{"type": "array", "items": map[string]any{"type": "string"}}, "case_sensitive": map[string]any{"type": "boolean"}, "fixed_strings": map[string]any{"type": "boolean"}, "max_matches": map[string]any{"type": "integer", "minimum": 1, "maximum": 1000}, "context_lines": map[string]any{"type": "integer", "minimum": 0, "maximum": 10}}, "required": []string{"query"}, "additionalProperties": false}),
 			Mutating:         false,
 			RequiresApproval: false,
@@ -628,7 +594,7 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:             "find",
-			Description:      "Find project-scoped files and directories without shell execution. Available only in readonly permission.",
+			Description:      "Find authorized files and directories without shell execution. Available only in readonly permission.",
 			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"root": map[string]any{"type": "string"}, "name": map[string]any{"type": "string"}, "type": map[string]any{"type": "string", "enum": []string{"file", "dir", "directory", "symlink", "any"}}, "max_results": map[string]any{"type": "integer", "minimum": 1, "maximum": 1000}, "max_depth": map[string]any{"type": "integer", "minimum": 0, "maximum": 32}, "include_hidden": map[string]any{"type": "boolean"}}, "additionalProperties": false}),
 			Mutating:         false,
 			RequiresApproval: false,
@@ -640,8 +606,8 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:             "file.edit",
-			Description:      "Edit a project-scoped text file by replacing an exact old_string with new_string. Use this as the primary deterministic in-place editing tool.",
-			InputSchema:      toSchema(map[string]any{"type": "object", "properties": withTargetID(map[string]any{"file_path": map[string]any{"type": "string", "description": "Path to the file to edit. Relative paths resolve from the current working directory; absolute paths must still stay inside the active project root."}, "old_string": map[string]any{"type": "string", "minLength": 1, "description": "Exact text to replace."}, "new_string": map[string]any{"type": "string", "description": "Replacement text. It must differ from old_string."}, "replace_all": map[string]any{"type": "boolean", "description": "Replace every occurrence instead of requiring a single exact match."}}), "required": []string{"file_path", "old_string", "new_string"}, "additionalProperties": false}),
+			Description:      "Edit an authorized text file by replacing an exact old_string with new_string. Use this as the primary deterministic in-place editing tool.",
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": withTargetID(map[string]any{"file_path": map[string]any{"type": "string", "description": "Path to the file to edit. Relative paths resolve from the current working directory; absolute paths must be within the configured filesystem roots with the required permissions."}, "old_string": map[string]any{"type": "string", "minLength": 1, "description": "Exact text to replace."}, "new_string": map[string]any{"type": "string", "description": "Replacement text. It must differ from old_string."}, "replace_all": map[string]any{"type": "boolean", "description": "Replace every occurrence instead of requiring a single exact match."}}), "required": []string{"file_path", "old_string", "new_string"}, "additionalProperties": false}),
 			Mutating:         true,
 			RequiresApproval: true,
 			Visibility:       ToolVisibilityStandard,
@@ -652,8 +618,8 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:             "file.write",
-			Description:      "Write the full content of a project-scoped text file. Use this to create files or replace an entire file deterministically.",
-			InputSchema:      toSchema(map[string]any{"type": "object", "properties": withTargetID(map[string]any{"file_path": map[string]any{"type": "string", "description": "Path to the file to write. Relative paths resolve from the current working directory; absolute paths must still stay inside the active project root."}, "content": map[string]any{"type": "string", "description": "Full file content to write."}}), "required": []string{"file_path", "content"}, "additionalProperties": false}),
+			Description:      "Write the full content of an authorized text file. Use this to create files or replace an entire file deterministically.",
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": withTargetID(map[string]any{"file_path": map[string]any{"type": "string", "description": "Path to the file to write. Relative paths resolve from the current working directory; absolute paths must be within the configured filesystem roots with the required permissions."}, "content": map[string]any{"type": "string", "description": "Full file content to write."}}), "required": []string{"file_path", "content"}, "additionalProperties": false}),
 			Mutating:         true,
 			RequiresApproval: true,
 			Visibility:       ToolVisibilityStandard,
@@ -664,7 +630,7 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:             "apply_patch",
-			Description:      "Apply a canonical patch to project-scoped files. Use ONLY the canonical Begin/End Patch format with relative paths. The patch must be one document from `*** Begin Patch` to `*** End Patch` using `*** Add File:`, `*** Delete File:`, `*** Update File:`, optional `*** Move to:`, and `@@` hunks. In `*** Add File:` bodies, every content line must start with `+`.",
+			Description:      "Apply a canonical patch within the run working directory; patch paths cannot escape that directory. Use authorized absolute-path file tools for a sibling worktree. Use ONLY the canonical Begin/End Patch format with relative paths. The patch must be one document from `*** Begin Patch` to `*** End Patch` using `*** Add File:`, `*** Delete File:`, `*** Update File:`, optional `*** Move to:`, and `@@` hunks. In `*** Add File:` bodies, every content line must start with `+`.",
 			InputSchema:      toSchema(map[string]any{"type": "object", "properties": withTargetID(map[string]any{"patch": map[string]any{"type": "string", "description": "Entire patch text in canonical Begin/End Patch format. Start with `*** Begin Patch`, end with `*** End Patch`, use relative paths, and include file operations such as `*** Update File:` plus `@@` hunks. For `*** Add File: path`, every new content line must begin with `+`, for example `+hello`."}}), "required": []string{"patch"}, "additionalProperties": false}),
 			Mutating:         true,
 			RequiresApproval: true,

@@ -317,6 +317,30 @@ func assertPermissionProviderSurface(t *testing.T, request map[string]any, mode 
 	if names["terminal_exec"] != (mode != "readonly") || names["read_file"] != (mode == "readonly") {
 		t.Errorf("provider tool surface does not match %s: %v", mode, names)
 	}
+	prompt, _ := request["instructions"].(string)
+	if prompt == "" {
+		messages, _ := request["input"].([]any)
+		for _, raw := range messages {
+			message, _ := raw.(map[string]any)
+			if anyToString(message["role"]) == "system" {
+				prompt += anyToString(message["content"])
+			}
+		}
+	}
+	if !strings.Contains(prompt, "Current permission mode for this request: "+mode) {
+		t.Errorf("provider prompt omitted current permission %s", mode)
+	}
+	for _, name := range []string{"terminal.exec", "terminal.read", "terminal.write", "terminal.terminate", "file.edit", "file.write", "apply_patch", "read_file", "read_files", "rgrep"} {
+		if strings.Contains(prompt, "- Use "+name+" ") && !names[strings.ReplaceAll(name, ".", "_")] {
+			t.Errorf("provider prompt recommends unavailable %s", name)
+		}
+	}
+	for _, stale := range []string{"file.read", "# Mandatory Rules", "# Anti-Patterns", "# Common Workflows"} {
+		if strings.Contains(prompt, stale) {
+			t.Errorf("provider prompt retained obsolete instruction %q", stale)
+		}
+	}
+
 }
 
 func TestQueuedRecoveryPreservesAdmissionAttribution(t *testing.T) {

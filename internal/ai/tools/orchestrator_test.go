@@ -1,9 +1,11 @@
 package tools
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -185,5 +187,18 @@ func TestClassifyError_InvalidArguments(t *testing.T) {
 	}
 	if got := toolErr.Meta["validation_error_code"]; got != "invalid_arguments.subagents.inspect_requires_target_or_ids" {
 		t.Fatalf("validation_error_code=%v, want inspect contract code", got)
+	}
+}
+
+func TestClassifyErrorDoesNotAuthorizeUnknownEffectReplay(t *testing.T) {
+	for _, err := range []error{context.DeadlineExceeded, errors.New("command timed out"), errors.New("permission denied")} {
+		classified := ClassifyError(Invocation{ToolName: "terminal.exec"}, err)
+		if classified.Retryable {
+			t.Fatalf("%v must not imply that dispatch is safe to replay", err)
+		}
+		advice := strings.Join(classified.SuggestedFixes, " ")
+		if strings.Contains(advice, "switch to") || strings.Contains(advice, "Increase timeout") {
+			t.Fatalf("unsafe recovery advice for %v: %s", err, advice)
+		}
 	}
 }

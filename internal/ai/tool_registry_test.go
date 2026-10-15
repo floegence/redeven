@@ -45,8 +45,8 @@ func TestInMemoryToolRegistry_ReplacesByPriority(t *testing.T) {
 	t.Parallel()
 
 	reg := NewInMemoryToolRegistry()
-	low := registryTestTool("file.read", "skill", 10)
-	high := registryTestTool("file.read", "skill", 20)
+	low := registryTestTool("read_file", "skill", 10)
+	high := registryTestTool("read_file", "skill", 20)
 	if err := reg.Register(low); err != nil {
 		t.Fatalf("Register low priority: %v", err)
 	}
@@ -66,8 +66,8 @@ func TestInMemoryToolRegistry_ReplacesBySourceRank(t *testing.T) {
 	t.Parallel()
 
 	reg := NewInMemoryToolRegistry()
-	skill := registryTestTool("file.read", "skill", 10)
-	builtin := registryTestTool("file.read", "builtin", 10)
+	skill := registryTestTool("read_file", "skill", 10)
+	builtin := registryTestTool("read_file", "builtin", 10)
 	if err := reg.Register(skill); err != nil {
 		t.Fatalf("Register skill tool: %v", err)
 	}
@@ -87,8 +87,8 @@ func TestInMemoryToolRegistry_RejectsDuplicateWithSamePriorityAndSource(t *testi
 	t.Parallel()
 
 	reg := NewInMemoryToolRegistry()
-	first := registryTestTool("file.read", "builtin", 10)
-	second := registryTestTool("file.read", "builtin", 10)
+	first := registryTestTool("read_file", "builtin", 10)
+	second := registryTestTool("read_file", "builtin", 10)
 	if err := reg.Register(first); err != nil {
 		t.Fatalf("Register first tool: %v", err)
 	}
@@ -105,10 +105,10 @@ func TestInMemoryToolRegistry_UnregisterRemovesTool(t *testing.T) {
 	t.Parallel()
 
 	reg := NewInMemoryToolRegistry()
-	if err := reg.Register(registryTestTool("file.read", "builtin", 10)); err != nil {
+	if err := reg.Register(registryTestTool("read_file", "builtin", 10)); err != nil {
 		t.Fatalf("Register tool: %v", err)
 	}
-	if err := reg.Unregister(" file.read "); err != nil {
+	if err := reg.Unregister(" read_file "); err != nil {
 		t.Fatalf("Unregister: %v", err)
 	}
 	if snapshot := reg.Snapshot(); len(snapshot) != 0 {
@@ -123,7 +123,7 @@ func TestInMemoryToolRegistry_SnapshotSortsByPriorityThenName(t *testing.T) {
 	for _, def := range []ToolDef{
 		registryTestTool("web.search", "builtin", 10),
 		registryTestTool("write_todos", "builtin", 30),
-		registryTestTool("file.read", "builtin", 10),
+		registryTestTool("read_file", "builtin", 10),
 	} {
 		if err := reg.Register(def); err != nil {
 			t.Fatalf("Register %s: %v", def.Name, err)
@@ -134,7 +134,7 @@ func TestInMemoryToolRegistry_SnapshotSortsByPriorityThenName(t *testing.T) {
 	for _, def := range snapshot {
 		got = append(got, def.Name)
 	}
-	want := []string{"write_todos", "file.read", "web.search"}
+	want := []string{"write_todos", "read_file", "web.search"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("snapshot order=%v, want %v", got, want)
 	}

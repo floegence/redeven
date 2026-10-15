@@ -37,8 +37,7 @@ func ClassifyError(inv Invocation, err error) *ToolError {
 		out := &ToolError{
 			Code:           ErrorCodeTimeout,
 			Message:        "Timed out",
-			Retryable:      true,
-			SuggestedFixes: []string{"Retry with a smaller scope.", "Increase timeout when safe."},
+			SuggestedFixes: []string{"Inspect the current state or existing process before continuing. A timeout does not establish that an effect did not execute; never replay an unknown effect."},
 		}
 		out.Normalize()
 		return out
@@ -123,24 +122,23 @@ func ClassifyError(inv Invocation, err error) *ToolError {
 		out.Retryable = false
 		out.SuggestedFixes = []string{
 			"Configure a web search API key for the selected provider (for Brave: set REDEVEN_BRAVE_API_KEY or BRAVE_API_KEY, or update it in the AI settings UI).",
-			"If web.search is unavailable, switch tools: use terminal.exec with curl to query a public API or fetch an authoritative URL directly.",
+			"Use another currently supplied research capability only when it can verify the needed source within the existing authorization; never bypass a blocked target.",
 		}
 	case strings.Contains(lower, "permission denied"):
 		out.Code = ErrorCodePermissionDenied
 		out.Retryable = false
-		out.SuggestedFixes = []string{"Request the required permission or switch to an authorized tool."}
+		out.SuggestedFixes = []string{"Do not repeat the denied operation through another tool. Continue independent authorized work or explain the authorization change required before this operation can proceed."}
 	case strings.Contains(lower, "must be absolute") || strings.Contains(lower, "invalid path") || strings.Contains(lower, "invalid cwd"):
 		out.Code = ErrorCodeInvalidPath
 		out.Retryable = true
-		out.SuggestedFixes = []string{"Use a valid filesystem path.", "Relative paths are resolved against working_dir_abs; '~/' resolves to the configured runtime home directory and still must stay inside the active project boundary."}
+		out.SuggestedFixes = []string{"Use a valid filesystem path.", "Relative paths resolve against the working directory; home-relative paths resolve against the runtime home. The resolved path must satisfy the configured filesystem roots and their permissions, including when using a sibling worktree."}
 	case strings.Contains(lower, "not found"):
 		out.Code = ErrorCodeNotFound
 		out.Retryable = false
 		out.SuggestedFixes = []string{"Verify the absolute path exists.", "List the parent directory before retrying."}
 	case strings.Contains(lower, "timed out"):
 		out.Code = ErrorCodeTimeout
-		out.Retryable = true
-		out.SuggestedFixes = []string{"Retry with a smaller scope.", "Increase timeout when safe."}
+		out.SuggestedFixes = []string{"Inspect current state before continuing. Retry only an inspection or an operation confirmed not to have executed; never replay an unknown effect."}
 	}
 
 	normalized := normalizeArgs(inv)
