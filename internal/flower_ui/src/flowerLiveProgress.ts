@@ -1,4 +1,5 @@
 import type {
+  FlowerRunProgress,
   FlowerRunProgressPhase,
   FlowerThreadSnapshot,
 } from './contracts/flowerSurfaceContracts';
@@ -11,6 +12,7 @@ export type FlowerLiveProgress = Readonly<{
   runID: string;
   turnID: string;
   identity: string;
+  retry?: FlowerRunProgress['retry'];
 }>;
 
 export function flowerRunProgress(
@@ -27,5 +29,12 @@ export function flowerRunProgress(
     runID,
     turnID,
     identity: [thread.thread_id, runID].join('\x1f'),
+    ...(thread.run_progress.retry ? { retry: thread.run_progress.retry } : {}),
   };
+}
+
+// Derive countdowns from the authoritative absolute deadline, including after
+// reopening a view. The host never schedules or dispatches retries.
+export function flowerRetrySeconds(nextAttemptAt: string, now: number): number {
+  return Math.max(0, Math.ceil((Date.parse(nextAttemptAt) - now) / 1000));
 }

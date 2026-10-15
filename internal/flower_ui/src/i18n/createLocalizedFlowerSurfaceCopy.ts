@@ -524,6 +524,8 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
         retrying: t(i18n, k('chat.modelStatusRetrying')),
         finalizing: t(i18n, k('chat.modelStatusFinalizing')),
       },
+      providerRetryWaiting: (seconds, retry, max) => t(i18n, k('chat.providerRetryWaiting'), { seconds, retry, max }),
+      providerRetryRegenerating: (seconds, retry, max) => t(i18n, k('chat.providerRetryRegenerating'), { seconds, retry, max }),
       liveProgressTool: t(i18n, k('chat.liveProgressTool')),
       liveProgressOutput: t(i18n, k('chat.liveProgressOutput')),
       contextIndicator: {

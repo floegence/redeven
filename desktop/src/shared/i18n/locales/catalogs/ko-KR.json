@@ -500,6 +500,8 @@
       "liveProgressTool": "도구 실행 중",
       "liveProgressOutput": "답변 작성 중",
       "modelStatusRetrying": "모델 요청을 다시 시도 중...",
+      "providerRetryWaiting": "모델 서비스를 사용할 수 없습니다. {seconds}초 후 재시도 · {retry}/{max}",
+      "providerRetryRegenerating": "연결이 끊겼습니다. {seconds}초 후 다시 생성 · {retry}/{max}",
       "modelStatusFinalizing": "답변을 정리 중...",
       "contextIndicatorLabel": "컨텍스트",
       "contextIndicatorNearThreshold": "한도에 가까움",

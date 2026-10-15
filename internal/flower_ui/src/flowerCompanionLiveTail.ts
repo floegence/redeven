@@ -5,7 +5,7 @@ import type {
 } from './contracts/flowerSurfaceContracts';
 import { presentFlowerActivityItem } from './flowerActivityPresentation';
 import { flowerRunProgress } from './flowerLiveProgress';
-import type { FlowerLiveProgressKind } from './flowerLiveProgress';
+import type { FlowerLiveProgress, FlowerLiveProgressKind } from './flowerLiveProgress';
 import { trimString } from './flowerSurfaceModel';
 
 export type FlowerCompanionProgressKind = 'status' | 'tool' | 'output' | 'error';
@@ -16,7 +16,7 @@ export type FlowerCompanionLiveTail = Readonly<{
   identity: string;
 }>;
 
-type LiveProgressLabel = (kind: FlowerLiveProgressKind) => string;
+type LiveProgressLabel = (kind: FlowerLiveProgressKind, retry?: FlowerLiveProgress['retry']) => string;
 const FLOWER_COMPANION_LIVE_TAIL_MAX_CHARACTERS = 320;
 const ACTIVE_TOOL_STATUSES = new Set(['pending', 'running', 'waiting']);
 
@@ -61,6 +61,7 @@ export function projectFlowerCompanionLiveTail(
 ): FlowerCompanionLiveTail | null {
   const progress = flowerRunProgress(thread);
   if (!progress) return null;
+  if (progress.kind === 'retrying') return { kind: 'status', text: liveProgressLabel(progress.kind, progress.retry), identity: progress.identity };
   const messages = thread.messages.filter((message) => trimString(message.turn_id) === progress.turnID);
   for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
     const message = messages[messageIndex];
@@ -83,7 +84,7 @@ export function projectFlowerCompanionLiveTail(
   }
   return {
     kind: 'status',
-    text: liveProgressLabel(progress.kind),
+    text: liveProgressLabel(progress.kind, progress.retry),
     identity: progress.identity,
   };
 }

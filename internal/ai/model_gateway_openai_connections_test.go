@@ -28,7 +28,6 @@ func testOpenAISocketProvider(t *testing.T, server *httptest.Server, pool *openA
 	}
 	p := adapter.(*openAIProvider)
 	p.chatGPT = true
-	p.requireTerminal = true
 	p.officialOpenAI = true
 	p.responsesPool = pool
 	p.transportIdentity = openAIConnectionIdentity{"profile", server.URL, "account"}

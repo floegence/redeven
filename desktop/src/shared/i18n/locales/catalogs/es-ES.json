@@ -500,6 +500,8 @@
       "liveProgressTool": "Usando una herramienta",
       "liveProgressOutput": "Escribiendo la respuesta",
       "modelStatusRetrying": "Reintentando solicitud al modelo...",
+      "providerRetryWaiting": "Servicio del modelo no disponible. Reintento en {seconds} s · {retry}/{max}",
+      "providerRetryRegenerating": "Conexión interrumpida. Regeneración en {seconds} s · {retry}/{max}",
       "modelStatusFinalizing": "Finalizando respuesta...",
       "contextIndicatorLabel": "Contexto",
       "contextIndicatorNearThreshold": "Cerca del límite",

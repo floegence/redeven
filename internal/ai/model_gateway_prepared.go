@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
@@ -13,6 +14,7 @@ import (
 
 type preparedModelWire struct {
 	mu          sync.Mutex
+	consumed    bool
 	payload     []byte
 	estimate    flprovider.TokenEstimate
 	fingerprint string
@@ -46,10 +48,10 @@ func (p *preparedModelWire) RenderedPayloadFingerprint() string      { return p.
 func (p *preparedModelWire) StreamTurn(ctx context.Context, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
 	p.mu.Lock()
 	execute, payload := p.execute, p.payload
-	p.execute = nil
-	p.payload = nil
+	consumed := p.consumed
+	p.consumed = true
 	p.mu.Unlock()
-	if execute == nil {
+	if consumed || execute == nil {
 		return ModelGatewayResult{}, errors.New("prepared provider request already used or closed")
 	}
 	return execute(ctx, payload, onEvent)
@@ -57,7 +59,14 @@ func (p *preparedModelWire) StreamTurn(ctx context.Context, onEvent func(StreamE
 func (p *preparedModelWire) Close() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.execute = nil
-	p.payload = nil
+	p.consumed = true
 	return nil
+}
+
+// Replay retains the exact rendered body and immutable dispatch closure. Closing
+// a single-use handle releases its execution right, not its frozen model input.
+func (p *preparedModelWire) replay(_ context.Context, _ flprovider.Request) (preparedModelGatewayTurn, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return &preparedModelWire{payload: bytes.Clone(p.payload), estimate: p.estimate, fingerprint: p.fingerprint, execute: p.execute}, nil
 }

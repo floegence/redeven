@@ -509,6 +509,8 @@
       "liveProgressTool": "Выполняется инструмент",
       "liveProgressOutput": "Формируется ответ",
       "modelStatusRetrying": "Повтор запроса к модели...",
+      "providerRetryWaiting": "Сервис модели недоступен. Повтор через {seconds} с · {retry}/{max}",
+      "providerRetryRegenerating": "Соединение прервано. Повторная генерация через {seconds} с · {retry}/{max}",
       "modelStatusFinalizing": "Завершение ответа...",
       "contextIndicatorLabel": "Контекст",
       "contextIndicatorNearThreshold": "Близко к лимиту",

@@ -29,11 +29,23 @@ Historical tool calls and results remain canonical facts even when their definit
 
 Published Floret v7.26.0 owns `EstimateRenderedRequest` for local Responses, Chat Completions, Gemini signatures, Moonshot, and Anthropic. Each adapter freezes its final SDK-rendered input once, and estimation plus dispatch use those same bytes. Verified model mappings select official vocabularies; unknown models use an explicit multilingual BPE proxy. Image parts use model and dimension budgets, opaque files retain conservative budgets, and Desktop/platform transports omit runtime IDs, routing, and product tool metadata. DeepSeek uses the official V4 tokenizer with 10% text headroom and documented image budgets; calibration invalidates when history, execution surface, model, compaction lineage, or estimator changes. These remain estimates because server rendering can differ; Redeven adds no network preflight or calibration ledger.
 
+## Temporary provider failures
+
+Published Floret v7.39.1 owns one cancellable recovery budget for each frozen model request, including parent turns, SubAgent turns, compaction batches and titles. Defaults allow four extra sends (three for timeouts), jittered exponential delays and a five-minute recovery window. Server retry deadlines are captured at response receipt; long waits terminate without early redispatch. Authentication, exhausted quota, invalid contracts, unknown errors and tool effects remain terminal boundaries.
+
+Redeven disables SDK retries, maps structured HTTP/SSE/WebSocket facts into `provider.RetryAdvice`, and preserves the original cause and sanitized diagnostics. A consumed prepared request can replay only its immutable rendered bytes; attachments and mutable tool lists are never resolved again. Each real send receives Floret's new AttemptID/Epoch and passes admission again. The failed attempt's known usage remains billable; missing usage stays unknown. Only explicitly read-only hosted search is marked replay safe.
+
+Flower reads `ThreadRunProgress.Retry` from the authoritative current view. Main and companion surfaces display the absolute-deadline countdown and draft-replacement hint without admitting another turn. Stop stays available; manual retry appears only after terminal failure. No product retry loop, timer queue, or durable retry ledger exists.
+
 # Boundaries
 
 Redeven maps product model and permission state into Floret's typed surface. It does not persist provider envelopes, reconstruct canonical history, or infer execution authority from rendered Flower state. Usage accounting, compaction, and capacity errors belong to [Model context usage and compaction](model-context-usage-and-compaction.md).
 
 # Evidence
+
+- `redeven:internal/ai/provider_failure.go` - Structured response-time retry advice and safe diagnostics.
+- `redeven:internal/ai/floret_provider_prepared_test.go` - Single-use transports and frozen attachment replay.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.providerRetry.browser.test.tsx` - Countdown, draft replacement, reopen and Stop at desktop and narrow widths.
 
 - `redeven:internal/ai/floret_runtime.go` - Hosted Agents receive the current prompt, tools, model, reasoning, and context policy.
 - `redeven:internal/ai/prompt_builder.go` - Stable System Prompt construction.

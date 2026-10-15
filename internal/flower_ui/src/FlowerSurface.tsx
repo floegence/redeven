@@ -143,6 +143,7 @@ import { canonicalFlowerThreadSnapshotTitle, flowerForkTitle, flowerThreadDispla
 import { projectFlowerCompanionLiveTail, type FlowerCompanionProgressKind } from './flowerCompanionLiveTail';
 import {
   flowerRunProgress,
+  flowerRetrySeconds,
   type FlowerLiveProgress,
   type FlowerLiveProgressKind,
 } from './flowerLiveProgress';
@@ -2680,6 +2681,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     lastSidebarListSignature = signature;
     setSidebarListItems(items);
   });
+  const [retryNow, setRetryNow] = createSignal(Date.now());
   const companionThreadItems = createMemo<readonly FlowerCompanionThreadListItem[]>(() => {
     companionRunRevision();
     const cache = threadCache();
@@ -6939,7 +6941,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       || code === 'model_gateway_contract_failed';
     const retryContinuation = async () => {
       const threadID = trimString(selectedThreadID());
-      if (!threadID || retryPending()) return;
+      if (!threadID || retryPending() || selectedThread()?.status === 'running') return;
       setRetryPending(true);
       try {
         const requestEpoch = liveTransport.connectionEpoch();
@@ -7035,6 +7037,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return retainEqualValue(previous, usage);
   });
   const selectedThreadHasLiveProgress = createMemo(() => selectedRunProgress() != null);
+  createEffect(() => {
+    const retrying = selectedRunProgress()?.retry != null
+      || [...threadCache().views.values()].some(view => view.thread.status === 'running' && view.thread.run_progress?.retry != null);
+    if (!retrying) return;
+    setRetryNow(Date.now());
+    const timer = window.setInterval(() => setRetryNow(Date.now()), 250);
+    onCleanup(() => window.clearInterval(timer));
+  });
+
   const showScrollToLatestButton = createMemo(() => (
     (selectedThreadHasContent() || selectedThreadHasLiveProgress())
     && !selectedThreadTailPreparing()
@@ -7060,7 +7071,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     };
     return labels[phase];
   }
-  function liveProgressLabel(kind: FlowerLiveProgressKind): string {
+  function liveProgressLabel(kind: FlowerLiveProgressKind, retry?: FlowerLiveProgress['retry']): string {
+    if (kind === 'retrying' && retry) {
+      const seconds = flowerRetrySeconds(retry.next_attempt_at, retryNow());
+      const label = retry.reason === 'stream_interrupted' ? copy().chat.providerRetryRegenerating : copy().chat.providerRetryWaiting;
+      return label(seconds, retry.retry, retry.max_retries);
+    }
     return modelStatusLabel(kind);
   }
   const formatMessageTime = (createdAtMs: number): string => {
@@ -11919,7 +11935,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       role="status" aria-live="polite" aria-atomic="true">
       <Show when={selectedThreadStopPending()} fallback={<FlowerProgressIndicator
         progress={selectedRunProgress()}
-        label={selectedRunProgress() ? liveProgressLabel(selectedRunProgress()!.kind)
+        label={selectedRunProgress() ? liveProgressLabel(selectedRunProgress()!.kind, selectedRunProgress()!.retry)
           : ''}
       />}><span class="flower-turn-stopping text-xs text-muted-foreground">{copy().chat.stopping}</span></Show>
     </div>

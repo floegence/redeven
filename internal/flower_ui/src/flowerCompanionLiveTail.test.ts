@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import type {
   FlowerActivityItem,
@@ -216,4 +216,12 @@ describe('projectFlowerCompanionLiveTail', () => {
     expect(nextBlock?.identity).not.toBe(first?.identity);
     expect(nextBlock?.identity).toContain('message-live');
   });
+});
+
+it('shows authoritative retry progress before previously committed output', () => {
+  const retry = { retry: 2, max_retries: 4, next_attempt_at: '2026-10-15T16:00:03Z', reason: 'stream_interrupted' };
+  const label = vi.fn((_kind: string, info?: { retry: number; max_retries: number }) => `Regenerating · ${info?.retry}/${info?.max_retries}`);
+  const projected = projectFlowerCompanionLiveTail(thread({ run_progress: { phase: 'retrying', run_id: 'run-live', turn_id: 'turn-live', retry }, messages: [message({live:true,content:'old fragment'})] }), label);
+  expect(projected).toMatchObject({kind:'status',text:'Regenerating · 2/4'});
+  expect(label).toHaveBeenCalledWith('retrying',retry);
 });

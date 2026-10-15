@@ -102,7 +102,7 @@ func TestOpenAIStrictWireAcceptsFlowerToolset(t *testing.T) {
 			protocol := route
 			if route == "chatgpt" {
 				provider := gateway.(*openAIProvider)
-				provider.chatGPT, provider.requireTerminal = true, true
+				provider.chatGPT = true
 				provider.chatGPTToken = func(context.Context) (string, error) { return "fixture", nil }
 				protocol = "openai-responses"
 			}

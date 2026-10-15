@@ -333,9 +333,9 @@ describe('applyFlowerRuntimeCurrentView', () => {
     ]);
   });
 
-  it('projects an interrupted runtime outcome as a visible failed turn', () => {
+  it.each(['interrupted', 'failed'] as const)('projects %s output as a visible failed turn', (outcome) => {
     const result = applyFlowerRuntimeCurrentView(summary(), {
-      thread_id: 'thread-a', view_version: 8, activity: 'idle', turn_id: 'turn-a', last_outcome: 'interrupted',
+      thread_id: 'thread-a', view_version: 8, activity: 'idle', turn_id: 'turn-a', last_outcome: outcome,
     items: [{ id: 'assistant:turn-a:1', turn_id: 'turn-a', run_id: 'run-a', ordinal: 1, kind: 'assistant', text: 'partial output' }],
     });
 

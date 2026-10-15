@@ -500,6 +500,8 @@
       "liveProgressTool": "Werkzeug wird ausgeführt",
       "liveProgressOutput": "Antwort wird geschrieben",
       "modelStatusRetrying": "Modellanfrage wird erneut versucht...",
+      "providerRetryWaiting": "Modelldienst nicht verfügbar. Neuer Versuch in {seconds} s · {retry}/{max}",
+      "providerRetryRegenerating": "Verbindung unterbrochen. Neue Generierung in {seconds} s · {retry}/{max}",
       "modelStatusFinalizing": "Antwort wird vorbereitet...",
       "contextIndicatorLabel": "Kontext",
       "contextIndicatorNearThreshold": "Nahe am Limit",

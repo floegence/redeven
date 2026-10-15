@@ -15,6 +15,7 @@ import (
 
 	anthropic "github.com/anthropics/anthropic-sdk-go"
 	aoption "github.com/anthropics/anthropic-sdk-go/option"
+	assestream "github.com/anthropics/anthropic-sdk-go/packages/ssestream"
 	flprovider "github.com/floegence/floret/v7/provider"
 	"github.com/floegence/redeven/internal/config"
 	openai "github.com/openai/openai-go/v3"
@@ -95,7 +96,6 @@ type openAIProvider struct {
 	forceChat         bool
 	gemini            bool
 	parallelTools     parallelToolCallsWireMode
-	requireTerminal   bool
 	chatGPT           bool
 	chatGPTToken      func(context.Context) (string, error)
 	chatGPTFailure    func(context.Context, string, error)
@@ -285,7 +285,11 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 		}
 	}()
 	var httpResponse *http.Response
-	options := []ooption.RequestOption{ooption.WithRequestBody("application/json", payload), ooption.WithResponseInto(&httpResponse)}
+	options := []ooption.RequestOption{ooption.WithRequestBody("application/json", payload), ooption.WithResponseInto(&httpResponse), ooption.WithMiddleware(func(r *http.Request, next ooption.MiddlewareNext) (*http.Response, error) {
+		res, err := next(r)
+		markProviderResponseReceived(res)
+		return res, err
+	})}
 	if p.chatGPTToken != nil {
 		token, err := p.chatGPTToken(ctx)
 		if err != nil {
@@ -306,6 +310,14 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 		_ = stream.Close()
 		if lease != nil {
 			lease.finish(resultErr == nil)
+		}
+	}()
+	// Failed attempts may still report billable usage. Keep only explicit protocol
+	// facts, without granting their unfinished text or tool drafts completion.
+	var observedUsage TurnUsage
+	defer func() {
+		if resultErr != nil {
+			result.Usage = observedUsage
 		}
 	}()
 	var textBuf strings.Builder
@@ -407,6 +419,13 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 
 	for stream.Next() {
 		event := stream.Current()
+		if event.Response.JSON.Usage.Valid() {
+			usage, err := turnUsageFromOpenAIResponse(event.Response.Usage)
+			if err != nil {
+				return ModelGatewayResult{}, fmt.Errorf("normalize OpenAI response usage: %w", err)
+			}
+			observedUsage = usage
+		}
 		switch strings.TrimSpace(event.Type) {
 		case "response.output_text.delta":
 			delta := event.Delta
@@ -534,27 +553,9 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 	if err := stream.Err(); err != nil {
 		return ModelGatewayResult{}, providerRequestFailure(err, httpResponse, p.failureProviderType())
 	}
-	if p.requireTerminal && !gotCompleted {
-		return ModelGatewayResult{}, errors.New("provider stream closed without terminal response")
+	if !gotCompleted {
+		return ModelGatewayResult{}, flprovider.WithRetryAdvice(errors.New("provider stream closed without terminal response"), flprovider.RetryAdvice{Category: flprovider.RetryStreamInterrupted})
 	}
-	// Some OpenAI-compatible endpoints omit `response.completed` even when they have already
-	// streamed usable text or tool call deltas. Treat missing completion as a soft-failure
-	// and continue best-effort when we have enough information to proceed.
-	hasToolCall := false
-	for _, pc := range partials {
-		if pc == nil || !pc.Ended {
-			continue
-		}
-		if strings.TrimSpace(pc.CallID) == "" || strings.TrimSpace(pc.Name) == "" {
-			continue
-		}
-		hasToolCall = true
-		break
-	}
-	if !gotCompleted && strings.TrimSpace(textBuf.String()) == "" && !hasToolCall {
-		return ModelGatewayResult{}, errors.New("missing response.completed event")
-	}
-
 	result = ModelGatewayResult{
 		FinishReason:    "unknown",
 		Text:            textBuf.String(),
@@ -791,7 +792,11 @@ func (p *openAIProvider) prepareChatTurn(ctx context.Context, req ModelGatewayRe
 
 func (p *openAIProvider) streamPreparedChatTurn(ctx context.Context, model string, capability config.AIReasoningCapability, aliases providerToolAliases, signatures map[string]geminiToolSignature, payload []byte, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
 	var httpResponse *http.Response
-	stream := p.client.Chat.Completions.NewStreaming(ctx, openai.ChatCompletionNewParams{}, ooption.WithRequestBody("application/json", payload), ooption.WithResponseInto(&httpResponse))
+	stream := p.client.Chat.Completions.NewStreaming(ctx, openai.ChatCompletionNewParams{}, ooption.WithRequestBody("application/json", payload), ooption.WithResponseInto(&httpResponse), ooption.WithMiddleware(func(r *http.Request, next ooption.MiddlewareNext) (*http.Response, error) {
+		res, err := next(r)
+		markProviderResponseReceived(res)
+		return res, err
+	}))
 	defer func() { _ = stream.Close() }()
 	var textBuf strings.Builder
 	var reasoningBuf strings.Builder
@@ -928,12 +933,12 @@ func (p *openAIProvider) streamPreparedChatTurn(ctx context.Context, model strin
 		}
 	}
 	if err := stream.Err(); err != nil {
-		return ModelGatewayResult{}, providerRequestFailure(err, httpResponse, p.failureProviderType())
+		return result, providerRequestFailure(err, httpResponse, p.failureProviderType())
 	}
 
 	sort.SliceStable(order, func(i, j int) bool { return order[i] < order[j] })
-	if p.requireTerminal && result.FinishReason == "unknown" {
-		return ModelGatewayResult{}, errors.New("provider stream closed without finish reason")
+	if result.FinishReason == "unknown" {
+		return result, flprovider.WithRetryAdvice(errors.New("provider stream closed without finish reason"), flprovider.RetryAdvice{Category: flprovider.RetryStreamInterrupted})
 	}
 	for _, idx := range order {
 		pc := partials[idx]
@@ -1056,7 +1061,11 @@ func (p *moonshotProvider) prepareTurn(ctx context.Context, req ModelGatewayRequ
 
 func (p *moonshotProvider) streamPreparedTurn(ctx context.Context, aliases providerToolAliases, payload []byte, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
 	var httpResponse *http.Response
-	stream := p.client.Chat.Completions.NewStreaming(ctx, openai.ChatCompletionNewParams{}, ooption.WithRequestBody("application/json", payload), ooption.WithResponseInto(&httpResponse))
+	stream := p.client.Chat.Completions.NewStreaming(ctx, openai.ChatCompletionNewParams{}, ooption.WithRequestBody("application/json", payload), ooption.WithResponseInto(&httpResponse), ooption.WithMiddleware(func(r *http.Request, next ooption.MiddlewareNext) (*http.Response, error) {
+		res, err := next(r)
+		markProviderResponseReceived(res)
+		return res, err
+	}))
 	defer func() { _ = stream.Close() }()
 	var textBuf strings.Builder
 	var reasoningBuf strings.Builder
@@ -1206,7 +1215,10 @@ func (p *moonshotProvider) streamPreparedTurn(ctx context.Context, aliases provi
 		}
 	}
 	if err := stream.Err(); err != nil {
-		return ModelGatewayResult{}, providerRequestFailure(err, httpResponse, "moonshot")
+		return result, providerRequestFailure(err, httpResponse, "moonshot")
+	}
+	if result.FinishReason == "unknown" {
+		return result, flprovider.WithRetryAdvice(errors.New("provider stream closed without finish reason"), flprovider.RetryAdvice{Category: flprovider.RetryStreamInterrupted})
 	}
 
 	sort.SliceStable(order, func(i, j int) bool { return order[i] < order[j] })
@@ -1299,7 +1311,11 @@ func (p *moonshotProvider) Turn(ctx context.Context, req ModelGatewayRequest) (M
 	}
 
 	var httpResponse *http.Response
-	completion, err := p.client.Chat.Completions.New(ctx, params, ooption.WithResponseInto(&httpResponse))
+	completion, err := p.client.Chat.Completions.New(ctx, params, ooption.WithResponseInto(&httpResponse), ooption.WithMiddleware(func(r *http.Request, next ooption.MiddlewareNext) (*http.Response, error) {
+		res, err := next(r)
+		markProviderResponseReceived(res)
+		return res, err
+	}))
 	if err != nil {
 		return ModelGatewayResult{}, providerRequestFailure(err, httpResponse, "moonshot")
 	}
@@ -2147,9 +2163,27 @@ func (p *anthropicProvider) prepareTurn(ctx context.Context, req ModelGatewayReq
 }
 
 func (p *anthropicProvider) streamPreparedTurn(ctx context.Context, payload []byte, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
-	stream := p.client.Messages.NewStreaming(ctx, anthropic.MessageNewParams{}, aoption.WithRequestBody("application/json", payload))
+	var httpResponse *http.Response
+	err := p.client.Post(ctx, "v1/messages", nil, &httpResponse, aoption.WithRequestBody("application/json", payload), aoption.WithMiddleware(func(r *http.Request, next aoption.MiddlewareNext) (*http.Response, error) {
+		res, err := next(r)
+		markProviderResponseReceived(res)
+		return res, err
+	}))
+	if err != nil {
+		return ModelGatewayResult{}, providerRequestFailure(err, httpResponse, "anthropic")
+	}
+	stream := assestream.NewDecoder(httpResponse)
+
 	defer func() { _ = stream.Close() }()
 	msg := anthropic.Message{}
+	failed := func(cause error) (ModelGatewayResult, error) {
+		usage, err := turnUsageFromAnthropic(msg.Usage)
+		if err != nil {
+			return ModelGatewayResult{}, fmt.Errorf("normalize Anthropic response usage: %w", err)
+		}
+		return ModelGatewayResult{Usage: usage}, cause
+	}
+	gotStop := false
 	var textBuf strings.Builder
 
 	type partialCall struct {
@@ -2202,9 +2236,22 @@ func (p *anthropicProvider) streamPreparedTurn(ctx context.Context, payload []by
 	}
 
 	for stream.Next() {
-		event := stream.Current()
+		wire := stream.Event()
+		if wire.Type == "error" {
+			return failed(providerStreamFailure(string(wire.Data), httpResponse, "anthropic"))
+		}
+		if wire.Type == "ping" {
+			continue
+		}
+		var event anthropic.MessageStreamEventUnion
+		if err := json.Unmarshal(wire.Data, &event); err != nil {
+			return failed(err)
+		}
+		if event.Type == "message_stop" {
+			gotStop = true
+		}
 		if err := msg.Accumulate(event); err != nil {
-			return ModelGatewayResult{}, err
+			return failed(err)
 		}
 		switch variant := event.AsAny().(type) {
 		case anthropic.ContentBlockStartEvent:
@@ -2270,7 +2317,10 @@ func (p *anthropicProvider) streamPreparedTurn(ctx context.Context, payload []by
 		}
 	}
 	if err := stream.Err(); err != nil {
-		return ModelGatewayResult{}, err
+		return failed(providerRequestFailure(err, httpResponse, "anthropic"))
+	}
+	if !gotStop {
+		return failed(flprovider.WithRetryAdvice(errors.New("provider stream closed without message_stop"), flprovider.RetryAdvice{Category: flprovider.RetryStreamInterrupted}))
 	}
 
 	usage, err := turnUsageFromAnthropic(msg.Usage)
@@ -2662,7 +2712,7 @@ func newProviderAdapter(providerType string, baseURL string, apiKey string, stri
 			strictToolSchema: strictToolSchema,
 		}, nil
 	case "anthropic":
-		opts := []aoption.RequestOption{aoption.WithAPIKey(strings.TrimSpace(apiKey))}
+		opts := []aoption.RequestOption{aoption.WithAPIKey(strings.TrimSpace(apiKey)), aoption.WithMaxRetries(0)}
 		if strings.TrimSpace(baseURL) != "" {
 			// The Messages SDK appends v1/messages. Accept the versioned base
 			// previously saved by Flower without duplicating the API version.

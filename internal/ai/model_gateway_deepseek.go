@@ -200,9 +200,21 @@ func (p *deepSeekPreparedTurn) StreamTurn(ctx context.Context, onEvent func(Stre
 		if ctx.Err() != nil {
 			return result, ctx.Err()
 		}
-		return result, errors.New("DeepSeek gateway closed without terminal event")
+		return result, flprovider.WithRetryAdvice(errors.New("DeepSeek gateway closed without terminal event"), flprovider.RetryAdvice{Category: flprovider.RetryStreamInterrupted})
 	}
 	result.Text = text.String()
 	result.Reasoning = reasoning.String()
 	return result, validateModelGatewayResult(result)
+}
+
+func (p *deepSeekPreparedTurn) replay(ctx context.Context, next flprovider.Request) (preparedModelGatewayTurn, error) {
+	replayer, ok := p.PreparedRequest.(flprovider.PreparedRequestReplay)
+	if !ok {
+		return nil, errors.New("DeepSeek request does not support frozen replay")
+	}
+	prepared, err := replayer.PrepareRetry(ctx, next)
+	if err != nil {
+		return nil, err
+	}
+	return &deepSeekPreparedTurn{PreparedRequest: prepared, aliases: p.aliases}, nil
 }

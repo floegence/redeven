@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
@@ -50,15 +51,16 @@ type preparedModelGatewayTurn interface {
 }
 
 type preparedFloretModelRequest struct {
-	mu              sync.Mutex
-	adapter         *floretProviderAdapter
-	providerRequest flprovider.Request
-	request         ModelGatewayRequest
-	transport       preparedModelGatewayTurn
-	estimate        flprovider.TokenEstimate
-	fingerprint     string
-	streamed        bool
-	closed          bool
+	mu                  sync.Mutex
+	adapter             *floretProviderAdapter
+	providerRequest     flprovider.Request
+	frozenProviderInput []byte
+	request             ModelGatewayRequest
+	transport           preparedModelGatewayTurn
+	estimate            flprovider.TokenEstimate
+	fingerprint         string
+	streamed            bool
+	closed              bool
 }
 
 func newFloretProviderAdapter(base ModelGateway, providerType string, modelName string, controls ProviderControls, budgets TurnBudgets, webSearch string, options ...floretProviderAdapterOption) *floretProviderAdapter {
@@ -143,6 +145,21 @@ func (p *floretProviderAdapter) Prepare(ctx context.Context, req flprovider.Requ
 	if p == nil || p.base == nil {
 		return nil, errors.New("nil floret provider adapter")
 	}
+	// Detach caller-owned slices and retain the exact provider input for replay validation.
+	raw, err := json.Marshal(req)
+	if err != nil {
+		return nil, err
+	}
+	if err = json.Unmarshal(raw, &req); err != nil {
+		return nil, err
+	}
+	frozenInput := req
+	frozenInput.AttemptID = ""
+	frozenInput.AttemptEpoch = 0
+	frozenProviderInput, err := json.Marshal(frozenInput)
+	if err != nil {
+		return nil, err
+	}
 	turnReq, err := p.turnRequest(ctx, req)
 	if err != nil {
 		return nil, err
@@ -153,7 +170,7 @@ func (p *floretProviderAdapter) Prepare(ctx context.Context, req flprovider.Requ
 			return nil, err
 		}
 		return &preparedFloretModelRequest{
-			adapter: p, providerRequest: req, transport: transport,
+			adapter: p, providerRequest: req, frozenProviderInput: frozenProviderInput, transport: transport,
 			estimate: transport.TokenEstimate(), fingerprint: transport.RenderedPayloadFingerprint(),
 		}, nil
 	}
@@ -171,7 +188,7 @@ func (p *floretProviderAdapter) Prepare(ctx context.Context, req flprovider.Requ
 	}
 	digest := sha256.Sum256(payload)
 	return &preparedFloretModelRequest{
-		adapter: p, providerRequest: req, request: frozen, estimate: estimate, fingerprint: fmt.Sprintf("sha256:%x", digest[:]),
+		adapter: p, providerRequest: req, frozenProviderInput: frozenProviderInput, request: frozen, estimate: estimate, fingerprint: fmt.Sprintf("sha256:%x", digest[:]),
 	}, nil
 }
 
@@ -248,6 +265,9 @@ func (p *floretProviderAdapter) streamPreparedTurn(ctx context.Context, provider
 		}
 		result, err := execute(requestContext, onEvent)
 		if err != nil {
+			if usage := floretUsageFromFlower(result.Usage); usage.Available {
+				sendFloretProviderEvent(ctx, out, flprovider.Event{Type: flprovider.EventUsage, Usage: usage})
+			}
 			err = canonicalProviderFailure(err)
 			sendFloretProviderEvent(ctx, out, flprovider.Event{Type: flprovider.EventError, Err: err, Reason: err.Error()})
 			return
@@ -354,15 +374,64 @@ func (p *preparedFloretModelRequest) Close() error {
 		return nil
 	}
 	p.closed = true
-	p.adapter = nil
-	p.providerRequest = flprovider.Request{}
-	p.request = ModelGatewayRequest{}
+	// Keep the frozen adapter and provider request so PrepareRetry can create a
+	// fresh single-use transport after this handle has been consumed.
 	if p.transport != nil {
 		err := p.transport.Close()
-		p.transport = nil
 		return err
 	}
 	return nil
+}
+
+// PrepareRetry creates a fresh prepared transport from the immutable request
+// snapshot retained by this handle. It never re-reads host files or capabilities.
+func (p *preparedFloretModelRequest) PrepareRetry(ctx context.Context, next flprovider.Request) (flprovider.PreparedRequest, error) {
+	if p == nil || p.adapter == nil {
+		return nil, errors.New("prepared model request adapter is unavailable")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if next.RunID != p.providerRequest.RunID || next.PromptScopeID != p.providerRequest.PromptScopeID {
+		return nil, errors.New("provider retry changed execution scope")
+	}
+	input := next
+	input.AttemptID = ""
+	input.AttemptEpoch = 0
+	raw, err := json.Marshal(input)
+	if err != nil {
+		return nil, err
+	}
+	if !bytes.Equal(raw, p.frozenProviderInput) {
+		return nil, errors.New("provider retry changed frozen input")
+	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	result := &preparedFloretModelRequest{adapter: p.adapter, providerRequest: next, frozenProviderInput: p.frozenProviderInput, estimate: p.estimate, fingerprint: p.fingerprint}
+	if p.transport != nil {
+		replay, ok := p.transport.(interface {
+			replay(context.Context, flprovider.Request) (preparedModelGatewayTurn, error)
+		})
+		if !ok {
+			return nil, errors.New("prepared transport does not support frozen replay")
+		}
+		var err error
+		result.transport, err = replay.replay(ctx, next)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		raw, err := json.Marshal(p.request)
+		if err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal(raw, &result.request); err != nil {
+			return nil, err
+		}
+		result.request.AttemptID, result.request.AttemptEpoch = next.AttemptID, next.AttemptEpoch
+	}
+	return result, nil
 }
 
 var _ flprovider.Gateway = (*floretProviderAdapter)(nil)

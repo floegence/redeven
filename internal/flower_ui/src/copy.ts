@@ -625,6 +625,8 @@ export type FlowerSurfaceCopy = Readonly<{
       retrying: string;
       finalizing: string;
     }>;
+    providerRetryWaiting: (seconds: number, retry: number, max: number) => string;
+    providerRetryRegenerating: (seconds: number, retry: number, max: number) => string;
     liveProgressTool: string;
     liveProgressOutput: string;
     contextIndicator: Readonly<{
@@ -1025,6 +1027,8 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       retrying: 'Retrying model request...',
       finalizing: 'Finalizing reply...',
     },
+    providerRetryWaiting: (seconds, retry, max) => `Model service unavailable. Retry in ${seconds}s · ${retry}/${max}`,
+    providerRetryRegenerating: (seconds, retry, max) => `Connection interrupted. Regenerating in ${seconds}s · ${retry}/${max}`,
     liveProgressTool: 'Using a tool',
     liveProgressOutput: 'Writing the reply',
     contextIndicator: {

@@ -502,6 +502,8 @@
       "liveProgressTool": "正在执行工具",
       "liveProgressOutput": "正在输出回复",
       "modelStatusRetrying": "正在重试模型请求...",
+      "providerRetryWaiting": "模型服务暂时不可用，{seconds} 秒后重试 · {retry}/{max}",
+      "providerRetryRegenerating": "连接中断，{seconds} 秒后重新生成 · {retry}/{max}",
       "modelStatusFinalizing": "正在整理回复...",
       "contextIndicatorLabel": "上下文",
       "contextIndicatorNearThreshold": "接近上限",

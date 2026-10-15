@@ -30,7 +30,7 @@ func TestDesktopModelContinuationPreservesOpaqueState(t *testing.T) {
 			gateway := &recordingPreparedGateway{}
 			adapter := newFloretProviderAdapter(gateway, DesktopModelSourceProviderType, "desktop:model_test", ProviderControls{}, TurnBudgets{}, "")
 			state := &flprovider.State{Kind: kind, ID: "response-1", ReusePolicy: flprovider.StateReuseCanonicalHistory, Attributes: map[string]string{"opaque": "original"}}
-			prepared, err := adapter.Prepare(t.Context(), flprovider.Request{PreviousState: state})
+			prepared, err := adapter.Prepare(t.Context(), flprovider.Request{RunID: "run-continuation", PromptScopeID: "scope-continuation", PreviousState: state})
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -6,11 +6,12 @@ require (
 	github.com/acobaugh/osrelease v0.1.0
 	github.com/anthropics/anthropic-sdk-go v1.22.1
 	github.com/bodgit/sevenzip v1.6.1
+	github.com/coder/websocket v1.8.15
 	github.com/coreos/go-oidc/v3 v3.21.0
 	github.com/creack/pty v1.1.24
 	github.com/floegence/floe-native-apps v0.22.47
 	github.com/floegence/floeterm/terminal-go v0.19.2
-	github.com/floegence/floret/v7 v7.37.2
+	github.com/floegence/floret/v7 v7.39.1
 	github.com/floegence/flowersec/flowersec-go/v5 v5.11.1
 	github.com/floegence/redeven-service-templates v0.7.0
 	github.com/floegence/redevplugin/v3 v3.0.35
@@ -46,7 +47,6 @@ require (
 	github.com/bodgit/plumbing v1.3.0 // indirect
 	github.com/bodgit/windows v1.0.1 // indirect
 	github.com/boombuler/barcode v1.0.1-0.20190219062509-6c824513bacc // indirect
-	github.com/coder/websocket v1.8.15 // indirect
 	github.com/dlclark/regexp2 v1.12.0 // indirect
 	github.com/dsnet/compress v0.0.2-0.20230904184137-39efe44ab707 // indirect
 	github.com/dunglas/httpsfv v1.1.1 // indirect

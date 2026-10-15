@@ -406,3 +406,20 @@ func equalUint64s(left []uint64, right []uint64) bool {
 	}
 	return true
 }
+
+func TestFlowerRetryAttemptsPublishWithoutWaitingForTextCadence(t *testing.T) {
+	clock := newFakeFlowerRuntimePublishClock()
+	var published []recordedFlowerRuntimeCurrent
+	publisher := newFlowerRuntimeCurrentPublisher(time.Second, clock, func(endpointID string, current flruntime.ThreadView) {
+		published = append(published, recordedFlowerRuntimeCurrent{endpointID: endpointID, current: current})
+	})
+	defer publisher.Close()
+	current := flruntime.ThreadView{ThreadID: "thread-retry", TurnID: "turn-retry", RunID: "run-retry", ViewVersion: 1, Activity: flruntime.ThreadActivityActive, RunProgress: &flruntime.ThreadRunProgress{Phase: flruntime.ThreadRunPhaseRetrying, Retry: &flruntime.ProviderRetryProgress{Retry: 1, MaxRetries: 4, NextAttemptAt: clock.Now().Add(time.Second), Reason: "transient"}}}
+	publisher.Publish("env", current)
+	current.ViewVersion++
+	current.RunProgress = &flruntime.ThreadRunProgress{Phase: flruntime.ThreadRunPhaseRetrying, Retry: &flruntime.ProviderRetryProgress{Retry: 2, MaxRetries: 4, NextAttemptAt: clock.Now().Add(2 * time.Second), Reason: "transient"}}
+	publisher.Publish("env", current)
+	if len(published) != 2 {
+		t.Fatalf("retry boundary was coalesced: %d", len(published))
+	}
+}
