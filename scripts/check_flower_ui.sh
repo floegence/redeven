@@ -81,6 +81,7 @@ main() {
       src/ui/FlowerSurface.canonicalReferences.test.tsx \
       src/ui/flower/FlowerChatContextChips.test.tsx \
       src/ui/flower/FlowerAttachmentLane.test.tsx \
+      src/ui/FlowerSurface.attachmentCapability.test.tsx \
       src/ui/FlowerToolIcon.test.tsx \
       src/ui/FlowerActivityPreview.test.tsx \
       src/ui/flower/AIReadinessBoundary.test.tsx \

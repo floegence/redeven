@@ -48,6 +48,78 @@ function staged(input: Readonly<{ id: string; file: File; source?: 'file' | 'lon
 }
 
 describe('createFlowerAttachmentController', () => {
+  it('queues pasted Flash images until model capabilities finish loading', async () => {
+    const file = new File(['image'], 'diagram.png', { type: 'image/png' });
+    const flash = capability({
+      model_id: 'deepseek/deepseek-flash',
+      routes: { 'image/png': 'native_full_content' },
+    });
+    const upload = vi.fn(async (input) => staged({ id: 'upl_flash_image___________', file: input.file }));
+    const controller = createFlowerAttachmentController({ stagingScope, upload });
+
+    controller.addFiles([file], 'paste');
+    expect(controller.snapshot().items[0]?.status).toBe('queued');
+    expect(controller.snapshot().items[0]?.error_code).toBeUndefined();
+    expect(upload).not.toHaveBeenCalled();
+
+    controller.setCapability(flash);
+    await controller.waitForIdle();
+    expect(upload).toHaveBeenCalledOnce();
+    expect(upload).toHaveBeenCalledWith(expect.objectContaining({ model_id: flash.model_id, file }));
+    expect(controller.snapshot().items[0]?.status).toBe('staged_ready');
+    controller.dispose();
+  });
+
+  it.each(['file', 'paste', 'drop'] as const)('validates queued %s files against the resolved capability before upload', async (source) => {
+    const upload = vi.fn();
+    const controller = createFlowerAttachmentController({ stagingScope, upload });
+    controller.addFiles([new File(['oversized'], 'diagram.png', { type: 'image/png' })], source);
+    controller.setCapability(capability({ max_file_size_bytes: 1 }));
+    await controller.waitForIdle();
+    expect(controller.snapshot().items[0]).toMatchObject({ status: 'validation_error', error_code: 'attachment_too_large' });
+    expect(upload).not.toHaveBeenCalled();
+    controller.dispose();
+  });
+
+  it('rejects queued attachments when the resolved model disables them', async () => {
+    const upload = vi.fn();
+    const controller = createFlowerAttachmentController({ stagingScope, upload });
+    controller.addFiles([new File(['image'], 'diagram.png', { type: 'image/png' })], 'paste');
+    controller.setCapability(capability({ enabled: false }));
+    await controller.waitForIdle();
+    expect(controller.snapshot().items[0]).toMatchObject({ status: 'validation_error', error_code: 'attachment_unavailable' });
+    expect(upload).not.toHaveBeenCalled();
+    controller.dispose();
+  });
+
+  it.each(['upload_invalid_request', 'upload_idempotency_conflict', 'attachment_integrity_mismatch'])('does not blame the model for %s', async (code) => {
+    const controller = createFlowerAttachmentController({ capability: capability(), stagingScope,
+      upload: async () => { throw Object.assign(new Error('rejected'), { code }); },
+    });
+    controller.addFiles([new File(['bytes'], 'notes.txt', { type: 'text/plain' })], 'file');
+    await controller.waitForIdle();
+    expect(controller.snapshot().items[0]).toMatchObject({ status: 'validation_error', error_code: 'attachment_upload_failed' });
+    controller.dispose();
+  });
+
+  it.each([false, true])('keeps local images retryable when capability loading fails (file first=%s)', async (fileFirst) => {
+    const file = new File(['image'], 'diagram.png', { type: 'image/png' });
+    const upload = vi.fn(async (input) => staged({ id: 'upl_retry_image___________', file: input.file }));
+    const controller = createFlowerAttachmentController({ stagingScope, upload });
+    if (fileFirst) controller.addFiles([file], 'file');
+    controller.markCapabilityUnavailable();
+    if (!fileFirst) controller.addFiles([file], 'file');
+    await controller.waitForIdle();
+    expect(controller.snapshot().items[0]).toMatchObject({ status: 'upload_error', error_code: 'attachment_upload_failed' });
+    expect(upload).not.toHaveBeenCalled();
+    controller.setCapability(capability({ routes: { 'image/png': 'native_full_content' } }));
+    controller.retry(controller.snapshot().items[0].local_id);
+    await controller.waitForIdle();
+    expect(controller.snapshot().items[0]?.status).toBe('staged_ready');
+    expect(upload).toHaveBeenCalledOnce();
+    controller.dispose();
+  });
+
   it('creates and releases connection-local image previews without persisting them', () => {
     const createObjectURL = vi.fn(() => 'blob:flower-preview');
     const revokeObjectURL = vi.fn();

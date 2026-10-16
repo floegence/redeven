@@ -99,6 +99,7 @@ export type FlowerAttachmentController = Readonly<{
   subscribe: (listener: (snapshot: FlowerAttachmentControllerSnapshot) => void) => () => void;
   batch: <Result>(operation: () => Result) => Result;
   setCapability: (capability: FlowerAttachmentCapability | null) => void;
+  markCapabilityUnavailable: () => void;
   setStagingScope: (scope: FlowerAttachmentStagingScope | null) => void;
   markStagingUnavailable: () => void;
   hydrateDraft: (items: readonly FlowerAttachmentDraftHydrationItem[]) => void;
@@ -184,7 +185,7 @@ function uploadFailure(error: unknown): Readonly<{ code: FlowerAttachmentErrorCo
     case 'upload_invalid_request':
     case 'upload_idempotency_conflict':
     case 'attachment_integrity_mismatch':
-      return { code: 'attachment_unavailable', retryable: false };
+      return { code: 'attachment_upload_failed', retryable: false };
     case 'upload_in_progress':
     case 'attachment_store_unavailable':
       return { code: 'attachment_upload_failed', retryable: true };
@@ -200,6 +201,7 @@ export function createFlowerAttachmentController(
   options: FlowerAttachmentControllerOptions,
 ): FlowerAttachmentController {
   let capability = options.capability ?? null;
+  let capabilityUnavailable = false;
   let stagingScope = options.stagingScope ?? null;
   let disposed = false;
   let suspended = false;
@@ -242,7 +244,11 @@ export function createFlowerAttachmentController(
   };
 
   const validationError = (file: File, excludedLocalID?: string): FlowerAttachmentErrorCode | null => {
-    if (!capability?.enabled || !options.upload) return 'attachment_unavailable';
+    if (!options.upload || (capability && !capability.enabled)) return 'attachment_unavailable';
+    if (capabilityUnavailable) return 'attachment_upload_failed';
+    // A model change clears capability while its authoritative snapshot loads.
+    // Retain local files in the queue; pump validates them before any upload.
+    if (!capability) return null;
     const retainedItems = excludedLocalID
       ? items.filter((item) => item.local_id !== excludedLocalID)
       : items;
@@ -367,7 +373,7 @@ export function createFlowerAttachmentController(
       mime_type: safeFileType(file),
       size_bytes: file.size,
       text_stats: textStats ? { ...textStats } : undefined,
-      status: error ? 'validation_error' : 'queued',
+      status: error === 'attachment_upload_failed' ? 'upload_error' : error ? 'validation_error' : 'queued',
       loaded_bytes: 0,
       progress_indeterminate: false,
       error_code: error ?? undefined,
@@ -425,6 +431,7 @@ export function createFlowerAttachmentController(
     },
     setCapability: (next) => {
       capability = next;
+      capabilityUnavailable = false;
       for (const item of items) {
         if (!item.staged) continue;
         item.status = next && flowerStagedAttachmentCompatible(next, item.staged)
@@ -433,6 +440,16 @@ export function createFlowerAttachmentController(
       }
       emit();
       pump();
+    },
+    markCapabilityUnavailable: () => {
+      capability = null;
+      capabilityUnavailable = true;
+      for (const item of items) {
+        if (item.status !== 'queued') continue;
+        item.status = 'upload_error';
+        item.error_code = 'attachment_upload_failed';
+      }
+      emit();
     },
     setStagingScope: (next) => {
       const previous = stagingScope;
@@ -460,7 +477,7 @@ export function createFlowerAttachmentController(
       for (const item of items) {
         if (item.status !== 'queued') continue;
         item.status = 'upload_error';
-        item.error_code = 'attachment_unavailable';
+        item.error_code = 'attachment_upload_failed';
         changed = true;
       }
       if (changed) emit();
@@ -545,7 +562,7 @@ export function createFlowerAttachmentController(
         return;
       }
       const error = validationError(item.file, item.local_id);
-      item.status = error ? 'validation_error' : 'queued';
+      item.status = error === 'attachment_upload_failed' ? 'upload_error' : error ? 'validation_error' : 'queued';
       item.error_code = error ?? undefined;
       emit();
       pump();
@@ -565,7 +582,7 @@ export function createFlowerAttachmentController(
       item.file = file;
       item.longText = undefined;
       const error = validationError(file, item.local_id);
-      item.status = error ? 'validation_error' : 'queued';
+      item.status = error === 'attachment_upload_failed' ? 'upload_error' : error ? 'validation_error' : 'queued';
       item.error_code = error ?? undefined;
       item.preview_url = createLocalPreviewURL(file, item.mime_type);
       item.loaded_bytes = 0;
