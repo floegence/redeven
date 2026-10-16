@@ -254,6 +254,8 @@ type Server struct {
 
 	configPath            string
 	stateDir              string
+	sourceIconsOnce       sync.Once
+	sourceIcons           *flowerIconCache
 	localPermissionPolicy *config.PermissionPolicy
 	localPermissionCap    *config.PermissionSet
 	configUpdateMu        sync.Mutex // Orders settings commits and live AI option publication.
@@ -2613,6 +2615,10 @@ func isRenderableMime(ct string) bool {
 }
 
 func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/_redeven_proxy/api/flower/source-icon" {
+		g.handleFlowerSourceIcon(w, r)
+		return
+	}
 	if r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/ui-cache-scope" {
 		g.handleUICacheScope(w, r)
 		return

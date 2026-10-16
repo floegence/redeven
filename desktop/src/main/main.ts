@@ -11586,8 +11586,8 @@ async function withRuntimeFlowerTimeout<T>(promise: Promise<T>, timeoutMs: numbe
   }
 }
 
-// Browser installation belongs to the currently running environment session.
-// Background status/cancel calls must never start a stopped Runtime.
+// Background resource and browser status requests use the current environment.
+// They must never start a stopped Runtime or prepare model providers.
 async function runningBrowserFlowerTarget(): Promise<RuntimeFlowerTarget | null> {
   const preferences = await loadDesktopPreferencesCached();
   if (desktopPlatformCapabilities.wsl_environment) {
@@ -11653,7 +11653,8 @@ async function requestRuntimeFlower(request: RuntimeFlowerRequest): Promise<Runt
     throw new Error('Flower runtime request method is not allowed for this path.');
   }
   const browserInstallation = path === '/_redeven_proxy/api/ai/computer/managed/browser';
-  const flowerTarget = browserInstallation ? await runningBrowserFlowerTarget() : await withRuntimeFlowerTimeout(
+  const sourceIcon = new URL(path, 'http://runtime-flower.local').pathname === '/_redeven_proxy/api/flower/source-icon';
+  const flowerTarget = browserInstallation || sourceIcon ? await runningBrowserFlowerTarget() : await withRuntimeFlowerTimeout(
     ensureRuntimeFlowerRecord(!isTessivenRuntimePath(path)),
     RUNTIME_FLOWER_READINESS_TIMEOUT_MS,
     'runtime_flower_readiness_timeout',
@@ -11662,7 +11663,7 @@ async function requestRuntimeFlower(request: RuntimeFlowerRequest): Promise<Runt
   if (!flowerTarget || (request.environment_id && request.environment_id !== flowerTarget.record.environment_id)) {
     throw new Error('The browser installation environment session has ended.');
   }
-  const lease = await retainRuntimeFlowerTarget(flowerTarget, 'flower-request', !isTessivenRuntimePath(path));
+  const lease = await retainRuntimeFlowerTarget(flowerTarget, 'flower-request', !sourceIcon && !isTessivenRuntimePath(path));
   try {
   const record = flowerTarget.record;
   const url = new URL(path, runtimeFlowerBaseURL(record));

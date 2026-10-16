@@ -10211,6 +10211,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           streaming={streaming()}
           mediaLabels={message().role === 'assistant' ? copy().chat.media : undefined}
           mediaEnabled={message().role === 'assistant'}
+          resolveSourceIcon={props.adapter.resolveSourceIcon}
           resolveMedia={resolveMessageMedia()}
           onOpenMediaLink={openMessageMediaLink()}
           onOpenMediaLinkError={error => notifyThreadActionError(getErrorMessage(error))}

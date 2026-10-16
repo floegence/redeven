@@ -1,0 +1,424 @@
+{
+  "schema_version": 1,
+  "source": {
+    "repository": "https://github.com/glincker/thesvg",
+    "revision": "bdfcb7cf0209c140f38afeb73ebccd432eff5c92",
+    "license_metadata_path": "src/data/icons.json"
+  },
+  "assets": [
+    {
+      "identity": "anthropic",
+      "label": "Anthropic",
+      "domains": [
+        "anthropic.com",
+        "claude.ai"
+      ],
+      "file": "anthropic.svg",
+      "source_path": "public/icons/anthropic/mono.svg",
+      "license": "CC0-1.0",
+      "license_file": "assets/licenses/CC0-1.0.txt",
+      "sha256": "1cc599f6ebce2016dc388cf84e54a52c6b13487655c7e243554d654c7bce1882",
+      "upstream_sha256": "1cc599f6ebce2016dc388cf84e54a52c6b13487655c7e243554d654c7bce1882",
+      "modified": false,
+      "monochrome": true
+    },
+    {
+      "identity": "apple",
+      "label": "Apple",
+      "domains": [
+        "apple.com"
+      ],
+      "file": "apple.svg",
+      "source_path": "public/icons/apple/mono.svg",
+      "license": "CC0-1.0",
+      "license_file": "assets/licenses/CC0-1.0.txt",
+      "sha256": "2a1509dccd25e6d2bc7a11a8e52941077e1a48555e192ce638699b9f083c2a7c",
+      "upstream_sha256": "2a1509dccd25e6d2bc7a11a8e52941077e1a48555e192ce638699b9f083c2a7c",
+      "modified": false,
+      "monochrome": true
+    },
+    {
+      "identity": "arxiv",
+      "label": "arXiv",
+      "domains": [
+        "arxiv.org"
+      ],
+      "file": "arxiv.svg",
+      "source_path": "public/icons/arxiv/default.svg",
+      "license": "CC0-1.0",
+      "license_file": "assets/licenses/CC0-1.0.txt",
+      "sha256": "e4f92c97c88a20fec0ef9996c0b5b5e29cb7ba02e619886e694ba371e9b6aac4",
+      "upstream_sha256": "e4f92c97c88a20fec0ef9996c0b5b5e29cb7ba02e619886e694ba371e9b6aac4",
+      "modified": false,
+      "monochrome": false
+    },
+    {
+      "identity": "aws",
+      "label": "AWS",
+      "domains": [
+        "aws.amazon.com"
+      ],
+      "file": "aws.svg",
+      "source_path": "public/icons/aws/icon.svg",
+      "license": "MIT",
+      "license_file": "assets/licenses/thesvg-MIT.txt",
+      "sha256": "5ec53eb851db224de2a861ae9f46e0d0355acacf57a45c996803688a912c713e",
+      "upstream_sha256": "5ec53eb851db224de2a861ae9f46e0d0355acacf57a45c996803688a912c713e",
+      "modified": false,
+      "monochrome": false
+    },
+    {
+      "identity": "bing",
+      "label": "Bing",
+      "domains": [
+        "bing.com"
+      ],
+      "file": "bing.svg",
+      "source_path": "public/icons/bing/default.svg",
+      "license": "MIT",
+      "license_file": "assets/licenses/thesvg-MIT.txt",
+      "sha256": "192d4671a23e40c7deb8fb16c48970e27f116a6ca5cc648eb6e3b366f5c8dd6d",
+      "upstream_sha256": "192d4671a23e40c7deb8fb16c48970e27f116a6ca5cc648eb6e3b366f5c8dd6d",
+      "modified": false,
+      "monochrome": false
+    },
+    {
+      "identity": "cloudflare",
+      "label": "Cloudflare",
+      "domains": [
+        "cloudflare.com"
+      ],
+      "file": "cloudflare.svg",
+      "source_path": "public/icons/cloudflare/default.svg",
+      "license": "CC0-1.0",
+      "license_file": "assets/licenses/CC0-1.0.txt",
+      "sha256": "b8dff311e8041942b6006c907fd44c5f3ae941bd88ec650e552fe3f727f5139c",
+      "upstream_sha256": "b8dff311e8041942b6006c907fd44c5f3ae941bd88ec650e552fe3f727f5139c",
+      "modified": false,
+      "monochrome": false
+    },
+    {
+      "identity": "discord",
+      "label": "Discord",
+      "domains": [
+        "discord.com",
+        "discord.gg"
+      ],
+      "file": "discord.svg",
+      "source_path": "public/icons/discord/default.svg",
+      "license": "CC0-1.0",
+      "license_file": "assets/licenses/CC0-1.0.txt",
+      "sha256": "6634cc2f915db66df7a5237cac0c1b98016289e86a2bb4b7bf6408ec2b95265c",
+      "upstream_sha256": "6634cc2f915db66df7a5237cac0c1b98016289e86a2bb4b7bf6408ec2b95265c",
+      "modified": false,
+      "monochrome": false
+    },
+    {
+      "identity": "figma",
+      "label": "Figma",
+      "domains": [
+        "figma.com"
+      ],
+      "file": "figma.svg",
+      "source_path": "public/icons/figma/default.svg",
+      "license": "CC0-1.0",
+      "license_file": "assets/licenses/CC0-1.0.txt",
+      "sha256": "5bcdea3417293412845b8298fe357fce3b192e8ff112d9b3fef315bc5cd127f6",
+      "upstream_sha256": "5bcdea3417293412845b8298fe357fce3b192e8ff112d9b3fef315bc5cd127f6",
+      "modified": false,
+      "monochrome": false
+    },
+    {
+      "identity": "github",
+      "label": "GitHub",
+      "domains": [
+        "github.com",
+        "github.blog",
+        "github.io"
+      ],
+      "file": "github.svg",
+      "source_path": "public/icons/github/mono.svg",
+      "license": "CC0-1.0",
+      "license_file": "assets/licenses/CC0-1.0.txt",
+      "sha256": "3bf8cceead820aec50d4ee825a3fd02c5a1cd6665cc9cf4cbf3d9c8861a204bb",
+      "upstream_sha256": "3bf8cceead820aec50d4ee825a3fd02c5a1cd6665cc9cf4cbf3d9c8861a204bb",
+      "modified": false,
+      "monochrome": true
+    },
+    {
+      "identity": "google",
+      "label": "Google",
+      "domains": [
+        "google.com",
+        "blog.google"
+      ],
+      "file": "google.svg",
+      "source_path": "public/icons/google/default.svg",
+      "license": "CC0-1.0",
+      "license_file": "assets/licenses/CC0-1.0.txt",
+      "sha256": "a60266dab17c1c00981c7077fa025aa84c92782e0657ca2f78b7f70cbb8d5a56",
+      "upstream_sha256": "a60266dab17c1c00981c7077fa025aa84c92782e0657ca2f78b7f70cbb8d5a56",
+      "modified": false,
+      "monochrome": false
+    },
+    {
+      "identity": "medium",
+      "label": "Medium",
+      "domains": [
+        "medium.com"
+      ],
+      "file": "medium.svg",
+      "source_path": "public/icons/medium/mono.svg",
+      "license": "CC0-1.0",
+      "license_file": "assets/licenses/CC0-1.0.txt",
+      "sha256": "411fbe8f2b7d631db8ac0a18b0e248639413fb8c263a71ed8bc9934049b6a7d1",
+      "upstream_sha256": "411fbe8f2b7d631db8ac0a18b0e248639413fb8c263a71ed8bc9934049b6a7d1",
+      "modified": false,
+      "monochrome": true
+    },
+    {
+      "identity": "microsoft",
+      "label": "Microsoft",
+      "domains": [
+        "microsoft.com"
+      ],
+      "file": "microsoft.svg",
+      "source_path": "public/icons/microsoft/default.svg",
+      "license": "MIT",
+      "license_file": "assets/licenses/thesvg-MIT.txt",
+      "sha256": "726aa11548b3771591ccbd747f744fbc8acc6879594c14edc740f2c0a00f016b",
+      "upstream_sha256": "726aa11548b3771591ccbd747f744fbc8acc6879594c14edc740f2c0a00f016b",
+      "modified": false,
+      "monochrome": false
+    },
+    {
+      "identity": "notion",
+      "label": "Notion",
+      "domains": [
+        "notion.so",
+        "notion.com"
+      ],
+      "file": "notion.svg",
+      "source_path": "public/icons/notion/default.svg",
+      "license": "CC0-1.0",
+      "license_file": "assets/licenses/CC0-1.0.txt",
+      "sha256": "0d94471649fb9badd434394846079c279876fdd224cf49ed46b6c09fbd3a041f",
+      "upstream_sha256": "0d94471649fb9badd434394846079c279876fdd224cf49ed46b6c09fbd3a041f",
+      "modified": false,
+      "monochrome": false
+    },
+    {
+      "identity": "nvidia",
+      "label": "NVIDIA",
+      "domains": [
+        "nvidia.com"
+      ],
+      "file": "nvidia.svg",
+      "source_path": "public/icons/nvidia/default.svg",
+      "license": "CC0-1.0",
+      "license_file": "assets/licenses/CC0-1.0.txt",
+      "sha256": "c0ba24515aa21f07119e15914abbde64dd17b42fd95518a15df208a615c3810e",
+      "upstream_sha256": "c0ba24515aa21f07119e15914abbde64dd17b42fd95518a15df208a615c3810e",
+      "modified": false,
+      "monochrome": false
+    },
+    {
+      "identity": "openai",
+      "label": "OpenAI",
+      "domains": [
+        "openai.com",
+        "chatgpt.com"
+      ],
+      "file": "openai.svg",
+      "source_path": "public/icons/openai/light.svg",
+      "license": "MIT",
+      "license_file": "assets/licenses/thesvg-MIT.txt",
+      "sha256": "a4b4dae5e28790a0fb3dc7b5d8bb199b0dd6938a002e52a8b6355394c321718e",
+      "upstream_sha256": "a4b4dae5e28790a0fb3dc7b5d8bb199b0dd6938a002e52a8b6355394c321718e",
+      "modified": false,
+      "monochrome": true
+    },
+    {
+      "identity": "reddit",
+      "label": "Reddit",
+      "domains": [
+        "reddit.com"
+      ],
+      "file": "reddit.svg",
+      "source_path": "public/icons/reddit/default.svg",
+      "license": "CC0-1.0",
+      "license_file": "assets/licenses/CC0-1.0.txt",
+      "sha256": "7703616008edfdb085a01da78e0ad96cbafedd3d2f1a2907394b74ca00d82b14",
+      "upstream_sha256": "7703616008edfdb085a01da78e0ad96cbafedd3d2f1a2907394b74ca00d82b14",
+      "modified": false,
+      "monochrome": false
+    },
+    {
+      "identity": "vercel",
+      "label": "Vercel",
+      "domains": [
+        "vercel.com"
+      ],
+      "file": "vercel.svg",
+      "source_path": "public/icons/vercel/mono.svg",
+      "license": "CC0-1.0",
+      "license_file": "assets/licenses/CC0-1.0.txt",
+      "sha256": "57f1e4135486c566e9878fddd259f7f6bf8ec43f31e7e6e38a36d9e814a1c0e0",
+      "upstream_sha256": "57f1e4135486c566e9878fddd259f7f6bf8ec43f31e7e6e38a36d9e814a1c0e0",
+      "modified": false,
+      "monochrome": true
+    },
+    {
+      "identity": "wikipedia",
+      "label": "Wikipedia",
+      "domains": [
+        "wikipedia.org"
+      ],
+      "file": "wikipedia.svg",
+      "source_path": "public/icons/wikipedia/mono.svg",
+      "license": "CC0-1.0",
+      "license_file": "assets/licenses/CC0-1.0.txt",
+      "sha256": "2b2acdcf513d7e4d4d6a137bc047d64162ab55955602a01984edf81019efa9f4",
+      "upstream_sha256": "2b2acdcf513d7e4d4d6a137bc047d64162ab55955602a01984edf81019efa9f4",
+      "modified": false,
+      "monochrome": true
+    },
+    {
+      "identity": "x",
+      "label": "X",
+      "domains": [
+        "x.com",
+        "twitter.com"
+      ],
+      "file": "x.svg",
+      "source_path": "public/icons/x/mono.svg",
+      "license": "CC0-1.0",
+      "license_file": "assets/licenses/CC0-1.0.txt",
+      "sha256": "693e68863eceb8dc9f72e2acd386ab9c20a10858dab2c076212f7084cb7a32fe",
+      "upstream_sha256": "693e68863eceb8dc9f72e2acd386ab9c20a10858dab2c076212f7084cb7a32fe",
+      "modified": false,
+      "monochrome": true
+    },
+    {
+      "identity": "youtube",
+      "label": "YouTube",
+      "domains": [
+        "youtube.com",
+        "youtu.be"
+      ],
+      "file": "youtube.svg",
+      "source_path": "public/icons/youtube/default.svg",
+      "license": "CC0-1.0",
+      "license_file": "assets/licenses/CC0-1.0.txt",
+      "sha256": "419a6bc647bab83c249709bed0ae67c8f44ce42d8dda1be202ab5a3cdb187372",
+      "upstream_sha256": "419a6bc647bab83c249709bed0ae67c8f44ce42d8dda1be202ab5a3cdb187372",
+      "modified": false,
+      "monochrome": false
+    },
+    {
+      "identity": "stack-overflow",
+      "label": "Stack Overflow",
+      "domains": [
+        "stackoverflow.com"
+      ],
+      "file": "stack-overflow.svg",
+      "source_path": "public/icons/stack-overflow/default.svg",
+      "license": "CC0-1.0",
+      "license_file": "assets/licenses/CC0-1.0.txt",
+      "sha256": "368ad01b46f737d6f3b1f0fe9bf69b0eb38c8cad48c63103dd1985167e88c959",
+      "upstream_sha256": "368ad01b46f737d6f3b1f0fe9bf69b0eb38c8cad48c63103dd1985167e88c959",
+      "modified": false,
+      "monochrome": false
+    },
+    {
+      "identity": "mozilla",
+      "label": "Mozilla",
+      "domains": [
+        "mozilla.org"
+      ],
+      "file": "mozilla.svg",
+      "source_path": "public/icons/mozilla/mono.svg",
+      "license": "CC0-1.0",
+      "license_file": "assets/licenses/CC0-1.0.txt",
+      "sha256": "46810871b03036f74eda75215bfd1d1880524bbe65054495c5a55210236d7011",
+      "upstream_sha256": "46810871b03036f74eda75215bfd1d1880524bbe65054495c5a55210236d7011",
+      "modified": false,
+      "monochrome": true
+    },
+    {
+      "identity": "npm",
+      "label": "npm",
+      "domains": [
+        "npmjs.com"
+      ],
+      "file": "npm.svg",
+      "source_path": "public/icons/npm/default.svg",
+      "license": "CC0-1.0",
+      "license_file": "assets/licenses/CC0-1.0.txt",
+      "sha256": "8fe7a9b3c30d7c44a4b7a431d6f943e30e374d8bde032d83377f2ab4e6a34544",
+      "upstream_sha256": "8fe7a9b3c30d7c44a4b7a431d6f943e30e374d8bde032d83377f2ab4e6a34544",
+      "modified": false,
+      "monochrome": false
+    },
+    {
+      "identity": "gitlab",
+      "label": "GitLab",
+      "domains": [
+        "gitlab.com"
+      ],
+      "file": "gitlab.svg",
+      "source_path": "public/icons/gitlab/default.svg",
+      "license": "CC0-1.0",
+      "license_file": "assets/licenses/CC0-1.0.txt",
+      "sha256": "f113a0879aae4d458ac1de8f6ff3c8c6f9793299069fa1e422350ca24128a1fa",
+      "upstream_sha256": "f113a0879aae4d458ac1de8f6ff3c8c6f9793299069fa1e422350ca24128a1fa",
+      "modified": false,
+      "monochrome": false
+    },
+    {
+      "identity": "baidu",
+      "label": "Baidu",
+      "domains": [
+        "baidu.com"
+      ],
+      "file": "baidu.svg",
+      "source_path": "public/icons/baidu/default.svg",
+      "license": "CC0-1.0",
+      "license_file": "assets/licenses/CC0-1.0.txt",
+      "sha256": "c06b13de3ac002d1913b2ca7c74508e9333bddbb0f487672f50d3f204795dd55",
+      "upstream_sha256": "c06b13de3ac002d1913b2ca7c74508e9333bddbb0f487672f50d3f204795dd55",
+      "modified": false,
+      "monochrome": false
+    },
+    {
+      "identity": "zhihu",
+      "label": "Zhihu",
+      "domains": [
+        "zhihu.com"
+      ],
+      "file": "zhihu.svg",
+      "source_path": "public/icons/zhihu/default.svg",
+      "license": "CC0-1.0",
+      "license_file": "assets/licenses/CC0-1.0.txt",
+      "sha256": "99322d6c81830bb28a5cc83abbf960182feb57d01aed33e5ec1831318ecdb3df",
+      "upstream_sha256": "99322d6c81830bb28a5cc83abbf960182feb57d01aed33e5ec1831318ecdb3df",
+      "modified": false,
+      "monochrome": false
+    },
+    {
+      "identity": "bilibili",
+      "label": "Bilibili",
+      "domains": [
+        "bilibili.com"
+      ],
+      "file": "bilibili.svg",
+      "source_path": "public/icons/bilibili/default.svg",
+      "license": "CC0-1.0",
+      "license_file": "assets/licenses/CC0-1.0.txt",
+      "sha256": "b765d3899f1d4ffa4b9be5fb6f4ef41b3d9c5e6905f174c29e92b43409483d24",
+      "upstream_sha256": "b765d3899f1d4ffa4b9be5fb6f4ef41b3d9c5e6905f174c29e92b43409483d24",
+      "modified": false,
+      "monochrome": false
+    }
+  ]
+}

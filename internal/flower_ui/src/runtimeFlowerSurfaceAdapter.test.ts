@@ -150,6 +150,12 @@ function adapterOptions(
 }
 
 describe('runtime Flower surface adapter read state', () => {
+  it('passes the independent source icon resolver through read-only adapters', async () => {
+    const resolveSourceIcon = vi.fn(async () => ({ expires_at: '2027-01-13T00:00:00Z' }));
+    const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({}, { canMutate: false, resolveSourceIcon }));
+    await adapter.resolveSourceIcon?.('https://example.com');
+    expect(resolveSourceIcon).toHaveBeenCalledExactlyOnceWith('https://example.com');
+  });
   it('rejects the removed unfragmented wire shape at the production adapter boundary', async () => {
     const base = adapterOptions();
     const adapter = createRuntimeFlowerSurfaceAdapter({ ...base, transport: {

@@ -13,6 +13,7 @@ import { normalizeMarkdownForDisplay } from './normalizeMarkdownForDisplay';
 import { createMarkdownRenderModel, type MarkdownRenderSnapshot } from './streamingMarkdownModel';
 import { StreamingMarkdownTail } from './StreamingMarkdownTail';
 import { prepareFlowerCitations } from './flowerCitations';
+import { enhanceFlowerSourceIcons, type FlowerSourceIconResolver } from './flowerSourceIcons';
 import { parseFlowerSourceFence, renderFlowerSourceCards } from './flowerSourceCards';
 import type { FlowerCitationSource } from '../../contracts/flowerSurfaceContracts';
 import {
@@ -31,6 +32,7 @@ export interface FlowerMarkdownBlockProps {
   copyCodeLabel: string;
   codeCopiedLabel: string;
   mediaLabels?: MarkdownMediaLabels;
+  resolveSourceIcon?: FlowerSourceIconResolver;
   resolveMedia?: MarkdownMediaProps['resolve'];
   onOpenMediaLink?: MarkdownMediaProps['onOpenLink'];
   onOpenMediaLinkError?: (error: unknown) => void;
@@ -133,6 +135,12 @@ export const FlowerMarkdownBlock: Component<FlowerMarkdownBlockProps> = (props) 
   const handleClick = (event: MouseEvent) => {
     const target = event.target;
     if (!(target instanceof Element)) return;
+    const toggle = target.closest<HTMLButtonElement>('button.flower-chat-source-toggle');
+    if (toggle && rootRef?.contains(toggle)) {
+      const list = toggle.closest('.flower-chat-source-list')?.querySelector<HTMLOListElement>('.flower-chat-source-grid');
+      if (list) { list.hidden = !list.hidden; toggle.setAttribute('aria-expanded', String(!list.hidden)); }
+      return;
+    }
     const button = target.closest('button.flower-chat-md-code-copy');
     if (button instanceof HTMLButtonElement && rootRef?.contains(button)) {
       const code = button.dataset.flowerSourceCopy ?? flowerMarkdownCodeTextForCopyButton(button);
@@ -183,6 +191,7 @@ export const FlowerMarkdownBlock: Component<FlowerMarkdownBlockProps> = (props) 
 
   const decorateRegion = (element: Accessor<HTMLDivElement>, content: Accessor<unknown>, committed = true) => {
     let buttons: readonly HTMLButtonElement[] = [];
+    const sourceIcons = new Map<HTMLElement, () => void>();
     const media = new Map<HTMLElement, () => void>();
     const highlighted = new Map<HTMLElement, () => void>();
     const release = (button: HTMLButtonElement) => {
@@ -198,6 +207,12 @@ export const FlowerMarkdownBlock: Component<FlowerMarkdownBlockProps> = (props) 
       queueMicrotask(() => {
         if (cancelled) return;
         const root = element();
+        for (const [node, dispose] of sourceIcons) {
+          if (!root.contains(node)) { dispose(); sourceIcons.delete(node); }
+        }
+        for (const node of root.querySelectorAll<HTMLElement>('.flower-chat-source-list')) {
+          if (!sourceIcons.has(node)) sourceIcons.set(node, enhanceFlowerSourceIcons(node, props.resolveSourceIcon));
+        }
         for (const button of buttons) {
           if (!root.contains(button)) release(button);
         }
@@ -232,6 +247,8 @@ export const FlowerMarkdownBlock: Component<FlowerMarkdownBlockProps> = (props) 
       });
     });
     onCleanup(() => {
+      for (const dispose of sourceIcons.values()) dispose();
+      sourceIcons.clear();
       for (const button of buttons) release(button);
       for (const dispose of media.values()) dispose();
       media.clear();

@@ -1,3 +1,4 @@
+import { createFlowerSourceIconResolver } from '../../../../../flower_ui/src/chat/markdown/flowerSourceIcons';
 import { flowerExtensionsAdapter } from '../../../../../flower_ui/host/extensionsAdapter';
 import { computerManagementAdapter } from '../../../../../flower_ui/host/computerUseAdapter';
 import { computerFramePath } from '../../../../../flower_ui/host/computerFramePath';
@@ -672,6 +673,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       if (options.onSettingsChanged) void Promise.resolve(options.onSettingsChanged()).catch(() => undefined);
       return snapshot;
     },
+    resolveSourceIcon: createFlowerSourceIconResolver(origin => fetchLocalApiJSON('/_redeven_proxy/api/flower/source-icon?' + new URLSearchParams({ origin }), { method: 'GET' })),
     computerManagement: { ...computerManagementAdapter((method, path, body, signal) => fetchLocalApiJSON(path, { method, signal, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }), `environment:${options.envPublicID}`, options.revealHostApplication) },
     saveComputerUseEnabled: async (enabled) => {
       await fetchLocalApiJSON<unknown>('/_redeven_proxy/api/ai/computer_use', {

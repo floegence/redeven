@@ -46,6 +46,7 @@ const runtimeFlowerSkillBrowseQuery = (kind: 'dir' | 'file') => (parsed: URL): b
 };
 const RUNTIME_FLOWER_ROUTES: readonly RuntimeFlowerRoute[] = [
   ...TESSIVEN_RUNTIME_ROUTES,
+  { path: '/_redeven_proxy/api/flower/source-icon', methods: ['GET'], allowsQuery: runtimeFlowerIdentifierQuery('origin') },
   { path: '/_redeven_proxy/api/ai/mcp', methods: ['GET', 'PUT', 'DELETE'] },
   { path: '/_redeven_proxy/api/ai/mcp/check', methods: ['POST'] },
   { path: '/_redeven_proxy/api/ai/skills', methods: ['GET', 'POST', 'DELETE'] },

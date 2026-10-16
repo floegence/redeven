@@ -1,4 +1,5 @@
 import { safeFlowerCitationURL } from './flowerCitations';
+import { flowerSourceIconPlaceholder } from './flowerSourceIcons';
 import { escapeFlowerMarkdownHtml as escape } from './markedConfig';
 
 export type FlowerSourceCard = Readonly<{ number?: string; title?: string; url: string }>;
@@ -28,11 +29,17 @@ export function parseFlowerSourceFence(token: { text: string; lang?: string; raw
 }
 
 export function renderFlowerSourceCards(sources: readonly FlowerSourceCard[], labels: FlowerSourceCardLabels, copyText?: string): string {
+  if (!sources.length) return '';
   const copy = labels.copy && copyText
     ? `<button type="button" class="flower-chat-source-copy flower-chat-md-code-copy" aria-label="${escape(labels.copy)}" title="${escape(labels.copy)}" data-flower-source-copy="${escape(copyText)}"></button>` : '';
+  const sites = new Map<string, URL>();
   const rows = sources.map((source, index) => {
-    const host = new URL(source.url).hostname;
-    return `<li class="flower-chat-source-item"><a class="flower-chat-source-card" href="${escape(source.url)}" title="${escape(source.url)}" target="_blank" rel="noopener noreferrer"><span class="flower-chat-source-number">${escape(source.number ?? String(index + 1))}</span><span class="flower-chat-source-detail"><span class="flower-chat-source-title">${escape(source.title || host)}</span><span class="flower-chat-source-domain">${escape(host)}</span><span class="flower-chat-source-url">${escape(source.url)}</span></span></a></li>`;
+    const url = new URL(source.url);
+    const host = url.hostname.replace(/^www\./, '');
+    if (!sites.has(host)) sites.set(host, url);
+    return `<li class="flower-chat-source-item"><a class="flower-chat-source-card" href="${escape(source.url)}" title="${escape((source.title || host) + '\n' + source.url)}" target="_blank" rel="noopener noreferrer"><span class="flower-chat-source-number">${escape(source.number ?? String(index + 1))}</span>${flowerSourceIconPlaceholder(url)}<span class="flower-chat-source-detail"><span class="flower-chat-source-title">${escape(source.title || host)}</span><span class="flower-chat-source-domain">${escape(host)}</span></span><span class="flower-chat-source-external" aria-hidden="true">↗</span></a></li>`;
   }).join('');
-  return `<aside class="flower-chat-source-list" aria-label="${escape(labels.sources)}"><div class="flower-chat-source-toolbar"><span class="flower-chat-source-heading">${escape(labels.sources)}</span><span class="flower-chat-source-count">${sources.length}</span>${copy}</div><ol class="flower-chat-source-grid">${rows}</ol></aside>`;
+  const summary = [...sites.values()].slice(0, 4).map(flowerSourceIconPlaceholder).join('');
+  const overflow = sites.size > 4 ? `<span class="flower-chat-source-overflow">+${sites.size - 4}</span>` : '';
+  return `<aside class="flower-chat-source-list" aria-label="${escape(labels.sources)}"><div class="flower-chat-source-toolbar"><button type="button" class="flower-chat-source-toggle" aria-expanded="false"><span class="flower-chat-source-chevron" aria-hidden="true">›</span><span class="flower-chat-source-heading">${escape(labels.sources)}</span><span class="flower-chat-source-count">${sources.length}</span><span class="flower-chat-source-sites" aria-hidden="true">${summary}${overflow}</span></button>${copy}</div><ol class="flower-chat-source-grid" hidden>${rows}</ol></aside>`;
 }

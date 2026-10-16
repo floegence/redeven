@@ -20,6 +20,15 @@ function readSharedGatewaySource(): string {
 }
 
 describe('main routing', () => {
+  it('resolves source icons without starting a Runtime or preparing models', () => {
+    const source = readMainSource();
+    const start = source.indexOf('async function requestRuntimeFlower(');
+    const request = source.slice(start, source.indexOf('const record = flowerTarget.record;', start));
+    expect(request).toContain("const sourceIcon = new URL(path, 'http://runtime-flower.local').pathname === '/_redeven_proxy/api/flower/source-icon';");
+    expect(request).toContain('browserInstallation || sourceIcon ? await runningBrowserFlowerTarget()');
+    expect(request).toContain("retainRuntimeFlowerTarget(flowerTarget, 'flower-request', !sourceIcon && !isTessivenRuntimePath(path))");
+  });
+
   it('keeps member administration separate from Gateway service lifecycle', () => {
     const source = readMainSource();
     const profileActions = source.slice(source.indexOf('async function manageGatewayMemberFromLauncher('), source.indexOf('function gatewayActionFailure('));

@@ -19,9 +19,12 @@ const noticeInputs = new Set([
   'assets/terminal_agent_icons.json',
   'assets/container_service_icons.json',
   'assets/environment_platform_icons.json',
+  'assets/flower_source_icons.json',
+  'scripts/flower_source_icon_integrity.mjs',
   'scripts/environment_platform_icon_integrity.mjs',
 ]);
 const assetRoots = [
+  'internal/flower_ui/src/assets/source-icons/',
   'desktop/src/welcome/assets/environment-platform-icons/',
   'assets/licenses/',
   'internal/envapp/ui_src/public/agent-cli-icons/',

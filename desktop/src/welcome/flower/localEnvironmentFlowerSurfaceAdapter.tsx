@@ -1,3 +1,4 @@
+import { createFlowerSourceIconResolver } from '../../../../internal/flower_ui/src/chat/markdown/flowerSourceIcons';
 import { flowerExtensionsAdapter } from '../../../../internal/flower_ui/host/extensionsAdapter';
 import { LOCAL_ENVIRONMENT_FLOWER_RUNTIME_ID as LOCAL_ENVIRONMENT_RUNTIME_ID } from '../../../../internal/flower_ui/src/flowerRuntimeIdentity';
 import type { DesktopSecurityRequest, SecurityResult } from '../../shared/runtimeSecurity';
@@ -921,6 +922,7 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
       await runtimeJSON(bridge, 'POST', '/_redeven_proxy/api/ai/computer/input', input);
     },
     setComputerViewer: async (input) => { await runtimeJSON(bridge, 'PUT', '/_redeven_proxy/api/ai/computer/view', input); },
+    resolveSourceIcon: createFlowerSourceIconResolver(origin => runtimeJSON(bridge, 'GET', '/_redeven_proxy/api/flower/source-icon?' + new URLSearchParams({ origin }), undefined, undefined, options.runtimeEnvironmentID)),
     computerManagement: { ...computerManagementAdapter((method, path, body) => runtimeJSON(bridge, method, path, body, undefined, options.runtimeEnvironmentID), `desktop:${options.runtimeEnvironmentID ?? 'default'}`) },
     saveModelProfile: async (draft) => {
       resource.invalidate();
