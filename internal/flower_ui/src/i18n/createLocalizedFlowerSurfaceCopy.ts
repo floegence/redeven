@@ -560,7 +560,7 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
       liveProgressTool: t(i18n, k('chat.liveProgressTool')),
       liveProgressOutput: t(i18n, k('chat.liveProgressOutput')),
       contextIndicator: {
-        runtimeFacts: t(i18n, k('chat.contextIndicatorRuntimeFacts')), collected: t(i18n, k('chat.contextIndicatorCollected')), used: t(i18n, k('chat.contextIndicatorUsed')), updated: t(i18n, k('chat.contextIndicatorUpdated')), removed: t(i18n, k('chat.contextIndicatorRemoved')),
+        currentContents: t(i18n, k('chat.contextIndicatorCurrentContents')), currentContentsHint: t(i18n, k('chat.contextIndicatorCurrentContentsHint')), collected: t(i18n, k('chat.contextIndicatorCollected')), used: t(i18n, k('chat.contextIndicatorUsed')), updated: t(i18n, k('chat.contextIndicatorUpdated')), removed: t(i18n, k('chat.contextIndicatorRemoved')),
         textShare: t(i18n, k('chat.contextIndicatorTextShare')),
         composition: t(i18n, k('chat.contextIndicatorComposition')),
         compositionHint: t(i18n, k('chat.contextIndicatorCompositionHint')),

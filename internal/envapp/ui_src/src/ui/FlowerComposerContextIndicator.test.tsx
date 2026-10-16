@@ -23,6 +23,9 @@ describe('Flower managed context panel', () => {
   expect(panel.getAttribute('data-open')).toBe('true');
   const disclosure = host.querySelector('.flower-model-context-disclosure') as HTMLElement;
   expect(host.querySelector('.flower-model-context-row')).toBeNull();
+  expect(disclosure.textContent).toContain('Auto-loaded context');
+  expect(disclosure.querySelector('.flower-model-context-amount')?.textContent).toBe('—');
+  expect(disclosure.querySelector('.flower-model-context-share')?.textContent).toBe('—');
   disclosure.click();
   await expect.poll(() => host.querySelector('.flower-model-context-row')).not.toBeNull();
   disclosure.focus();
@@ -79,6 +82,44 @@ describe('Flower managed context panel', () => {
   expect(status().getAttribute('aria-label')).toContain(DEFAULT_FLOWER_SURFACE_COPY.chat.contextIndicator.used);
   expect(host.textContent).not.toContain(DEFAULT_FLOWER_SURFACE_COPY.chat.contextIndicator.used);
  });
+ it('keeps current contents inside their single used-context category across request updates', async () => {
+  const base = { phase: 'provider_usage', pressure_status: 'stable', updated_at_ms: 1, input_tokens: 900, context_window_tokens: 1000 } as const;
+  const [usage, update] = createSignal({ confirmed: { ...base, breakdown: { source: 'semantic_input_bpe_v1', model_context_tokens: 100, tool_result_tokens: 300 } } });
+  const host = document.createElement('div'); document.body.append(host);
+  disposers.push(render(() => <FlowerComposerContextIndicator usage={usage()} modelContext={facts} copy={DEFAULT_FLOWER_SURFACE_COPY} />, host));
+  (host.querySelector('[role="progressbar"]') as HTMLElement).focus();
+  const category = host.querySelector('[data-category="model_context_tokens"].flower-model-context-details');
+  expect(category).not.toBeNull();
+  expect(host.querySelectorAll('.flower-model-context-details')).toHaveLength(1);
+  expect(category?.closest('.flower-context-composition')).not.toBeNull();
+  const disclosure = category!.querySelector('summary')!;
+  expect(disclosure.textContent).toContain('Auto-loaded context');
+  expect(disclosure.textContent).toContain('≈100');
+  expect(disclosure.textContent).toContain('25%');
+  expect(host.querySelector('.flower-model-context-row')).toBeNull();
+  disclosure.click(); disclosure.focus();
+  await expect.poll(() => host.querySelector('.flower-model-context-row')).not.toBeNull();
+  expect(category?.textContent).toContain('Current contents');
+  expect(category?.textContent).toContain('27 chars');
+  expect(category?.textContent).toContain('token totals include retained updates');
+  expect(category?.querySelectorAll('summary')).toHaveLength(1);
+  update({ confirmed: { ...base, breakdown: { source: 'semantic_input_bpe_v1', model_context_tokens: 400, tool_result_tokens: 100 } } });
+  expect(host.querySelector('.flower-model-context-disclosure')).toBe(disclosure);
+  expect(document.activeElement).toBe(disclosure);
+  expect(category?.getAttribute('open')).not.toBeNull();
+  expect(disclosure.textContent).toContain('≈400');
+  expect(disclosure.textContent).toContain('80%');
+ });
+ it('shows a request category without offering unavailable current contents', () => {
+  const host = document.createElement('div'); document.body.append(host);
+  disposers.push(render(() => <FlowerComposerContextIndicator copy={DEFAULT_FLOWER_SURFACE_COPY}
+   usage={{ confirmed: { phase: 'provider_usage', pressure_status: 'stable', updated_at_ms: 1, input_tokens: 100,
+    breakdown: { source: 'semantic_input_bpe_v1', model_context_tokens: 100 } } }} />, host));
+  expect(host.querySelectorAll('.flower-context-composition-row')).toHaveLength(1);
+  expect(host.querySelector('.flower-context-composition-row')?.textContent).toContain('Auto-loaded context');
+  expect(host.querySelector('details')).toBeNull();
+  expect(host.querySelector('.flower-model-context-row')).toBeNull();
+ });
  it('shows retained tool output in the primary estimated input distribution', () => {
   const base = { phase: 'provider_usage', pressure_status: 'stable', updated_at_ms: 1, input_tokens: 900, context_window_tokens: 1000 } as const;
   const [usage, update] = createSignal({ confirmed: { ...base, breakdown: { source: 'semantic_input_bpe_v1', tool_result_tokens: 300, user_tokens: 100 } } });
@@ -87,13 +128,13 @@ describe('Flower managed context panel', () => {
   const trigger = host.querySelector('[role="progressbar"]') as HTMLElement;
   trigger.focus();
   expect(host.querySelector('.flower-context-composition')?.textContent).toContain('Tool outputs');
-  expect([...host.querySelectorAll('.flower-context-composition-row .flower-model-context-share')].map(row => row.textContent)).toEqual(['75%', '25%']);
-  expect([...host.querySelectorAll('.flower-context-composition-row .flower-model-context-amount')].map(row => row.textContent)).toEqual(['≈300', '≈100']);
+  expect([...host.querySelectorAll('.flower-context-composition-row .flower-model-context-share')].map(row => row.textContent)).toEqual(['75%', '25%', '0%']);
+  expect([...host.querySelectorAll('.flower-context-composition-row .flower-model-context-amount')].map(row => row.textContent)).toEqual(['≈300', '≈100', '≈0']);
   expect(host.querySelector('.flower-context-heading')?.textContent).toContain('900 / 1k');
   expect(host.querySelector('pre')).toBeNull();
   expect(host.querySelector('.flower-model-context-row')).toBeNull();
   update({ confirmed: { ...base, breakdown: { source: 'semantic_input_bpe_v1', tool_result_tokens: 100, user_tokens: 100 } } });
-  expect([...host.querySelectorAll('.flower-context-composition-row .flower-model-context-share')].map(row => row.textContent)).toEqual(['50%', '50%']);
+  expect([...host.querySelectorAll('.flower-context-composition-row .flower-model-context-share')].map(row => row.textContent)).toEqual(['50%', '50%', '0%']);
   expect(document.activeElement).toBe(trigger);
   expect(host.querySelector('[role="region"]')?.getAttribute('data-open')).toBe('true');
  });
