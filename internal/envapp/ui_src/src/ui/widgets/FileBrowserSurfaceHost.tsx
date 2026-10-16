@@ -1,7 +1,8 @@
-import { Show, createEffect, createSignal } from 'solid-js';
+import { Show, createEffect, createMemo, createSignal } from 'solid-js';
 import {
   DEFAULT_FILE_BROWSER_SURFACE_PERSISTENCE_KEY,
   DEFAULT_FILE_BROWSER_SURFACE_TITLE,
+  type FileBrowserSurfaceState,
 } from './createFileBrowserSurfaceController';
 import { useFileBrowserSurfaceContext } from './FileBrowserSurfaceContext';
 import { PersistentFloatingWindow } from './PersistentFloatingWindow';
@@ -12,6 +13,11 @@ export function FileBrowserSurfaceHost() {
   const fileBrowserSurface = useFileBrowserSurfaceContext();
   const stack = useEnvAppFloatingWindowStack();
   const [windowSurface, setWindowSurface] = createSignal<HTMLElement | null>(null);
+  // Keep the current presentation intact while Floe owns exit motion and unmounting.
+  const presentation = createMemo<FileBrowserSurfaceState | null>(
+    previous => fileBrowserSurface.controller.surface() ?? previous,
+    null,
+  );
   createEffect(() => {
     const request = fileBrowserSurface.controller.surface();
     const surface = windowSurface();
@@ -24,15 +30,15 @@ export function FileBrowserSurfaceHost() {
     <PersistentFloatingWindow
       open={fileBrowserSurface.controller.open()}
       onOpenChange={fileBrowserSurface.controller.handleOpenChange}
-      title={fileBrowserSurface.controller.surface()?.title ?? DEFAULT_FILE_BROWSER_SURFACE_TITLE}
-      persistenceKey={fileBrowserSurface.controller.surface()?.persistenceKey ?? DEFAULT_FILE_BROWSER_SURFACE_PERSISTENCE_KEY}
+      title={presentation()?.title ?? DEFAULT_FILE_BROWSER_SURFACE_TITLE}
+      persistenceKey={presentation()?.persistenceKey ?? DEFAULT_FILE_BROWSER_SURFACE_PERSISTENCE_KEY}
       stackId="file-browser"
       surfaceRef={setWindowSurface}
       defaultSize={{ width: 760, height: 580 }}
       minSize={{ width: 420, height: 320 }}
     >
       <div class="redeven-file-preview-surface-window h-full min-h-0 overflow-hidden">
-        <Show when={fileBrowserSurface.controller.surface()} keyed>
+        <Show when={presentation()} keyed>
           {(browser) => (
             <RemoteFileBrowser
               stateScope={browser.stateScope}
