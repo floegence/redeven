@@ -47,12 +47,21 @@ enforced at actual tool authorization, independently of displayed historical fac
 
 Authorized canonical reads and the existing workspace subscription carry the
 same snapshot, record location, changed/removed keys and latest request use.
-The shared context panel summarizes partitions in one stacked color bar and
-aligned, localized category rows with matching swatches, character counts and
-percentages. These shares use Unicode character counts, separate from the
-provider-token capacity bar above them. Category colors use the host theme's
-categorical tokens and remain stable across snapshot refreshes. Complete
-selectable text appears only when a partition is expanded.
+The primary shared context panel shows a request-scoped breakdown of used
+model input: system instructions, tool definitions, user/assistant messages,
+tool calls, retained tool outputs, managed context updates, conversation
+summaries, retained reasoning and expanded images/files. Floret owns the
+semantic offline BPE estimates; Flower maps the published contract without
+rebuilding provider history. Categories use one horizontal stacked bar and
+aligned localized rows, sorted by size. Estimated token counts and shares are
+visibly identified; they are not scaled to the native capacity total. Confirmed
+usage and composition come from the same request. Older samples show unavailable
+composition until a new request supplies it. Discarded original tool artifacts
+never count as model input. Expanded-media budgets come from prepared input.
+
+Complete selectable auto-loaded text remains in a secondary collapsed inspector.
+Category colors use the host theme's categorical tokens. The native capacity
+bar, output headroom and free space stay separate from estimated composition.
 Collection and request-use times remain in the status indicator's accessible
 label and hover text. Stable partition keys preserve focus and expanded text
 during refresh. Updates do not create chat bubbles, take focus or block

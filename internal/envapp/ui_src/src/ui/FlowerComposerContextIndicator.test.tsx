@@ -21,11 +21,13 @@ describe('Flower managed context panel', () => {
   expect(panel.getAttribute('aria-hidden')).toBe('true');
   trigger.focus(); trigger.click();
   expect(panel.getAttribute('data-open')).toBe('true');
-  const summary = host.querySelector('summary') as HTMLElement;
+  const disclosure = host.querySelector('.flower-model-context-disclosure') as HTMLElement;
+  disclosure.click();
+  await expect.poll(() => host.querySelector('.flower-model-context-row')).not.toBeNull();
+  const summary = host.querySelector('.flower-model-context-row') as HTMLElement;
   summary.tabIndex = 0; summary.focus();
   expect(panel.getAttribute('data-open')).toBe('true');
-  expect(host.querySelectorAll('.flower-model-context-bar')).toHaveLength(1);
-  expect(host.querySelector('.flower-model-context-share')?.textContent).toBe('100%');
+  expect(host.querySelector('.flower-context-composition')).toBeNull();
   expect(host.textContent).not.toContain('Complete selectable catalog');
   summary.click();
   await expect.poll(() => host.textContent).toContain('Complete selectable catalog');
@@ -51,28 +53,23 @@ describe('Flower managed context panel', () => {
   expect(status().getAttribute('aria-label')).toContain(DEFAULT_FLOWER_SURFACE_COPY.chat.contextIndicator.used);
   expect(host.textContent).not.toContain(DEFAULT_FLOWER_SURFACE_COPY.chat.contextIndicator.used);
  });
- it('sizes stacked segments and aligned category amounts by Unicode text share and refreshes the existing panel', () => {
-  const [context, update] = createSignal({ ...facts, snapshot: { sections: [
-   { key: 'skills', title: 'Available skills', text: '😀😀😀' },
-   { key: 'repository', title: 'Repository state', text: 'A' },
-  ] } });
+ it('shows retained tool output in the primary estimated input distribution', () => {
+  const base = { phase: 'provider_usage', pressure_status: 'stable', updated_at_ms: 1, input_tokens: 900, context_window_tokens: 1000 } as const;
+  const [usage, update] = createSignal({ confirmed: { ...base, breakdown: { source: 'semantic_input_bpe_v1', tool_result_tokens: 300, user_tokens: 100 } } });
   const host = document.createElement('div'); document.body.append(host);
-  disposers.push(render(() => <FlowerComposerContextIndicator modelContext={context()} copy={DEFAULT_FLOWER_SURFACE_COPY} />, host));
+  disposers.push(render(() => <FlowerComposerContextIndicator usage={usage()} modelContext={facts} copy={DEFAULT_FLOWER_SURFACE_COPY} />, host));
   const trigger = host.querySelector('[role="progressbar"]') as HTMLElement;
   trigger.focus();
-  const shares = () => [...host.querySelectorAll('.flower-model-context-share')].map(row => row.textContent);
-  expect(shares()).toEqual(['75%', '25%']);
-  expect([...host.querySelectorAll('.flower-model-context-amount')].map(row => row.textContent)).toEqual(['3', '1']);
-  expect(host.querySelector('.flower-model-context-heading')?.textContent).toContain('4 chars');
-  expect([...host.querySelectorAll('.flower-model-context-bar > span')].map(row => row.getAttribute('data-category'))).toEqual(['skills', 'repository']);
-  expect(host.querySelector('.flower-model-context-bar > span')?.getAttribute('style')).toContain('75%');
-  update({ ...facts, snapshot: { sections: [{ key: 'repository', title: 'Repository state', text: '' }] } });
-  expect(shares()).toEqual(['0%']);
-  expect(host.querySelector('.flower-model-context-bar > span')?.getAttribute('style')).toContain('0%');
+  expect(host.querySelector('.flower-context-composition')?.textContent).toContain('Tool outputs');
+  expect([...host.querySelectorAll('.flower-context-composition-row .flower-model-context-share')].map(row => row.textContent)).toEqual(['75%', '25%']);
+  expect([...host.querySelectorAll('.flower-context-composition-row .flower-model-context-amount')].map(row => row.textContent)).toEqual(['≈300', '≈100']);
+  expect(host.querySelector('.flower-context-heading')?.textContent).toContain('900 / 1k');
+  expect(host.querySelector('pre')).toBeNull();
+  expect(host.querySelector('.flower-model-context-row')).toBeNull();
+  update({ confirmed: { ...base, breakdown: { source: 'semantic_input_bpe_v1', tool_result_tokens: 100, user_tokens: 100 } } });
+  expect([...host.querySelectorAll('.flower-context-composition-row .flower-model-context-share')].map(row => row.textContent)).toEqual(['50%', '50%']);
   expect(document.activeElement).toBe(trigger);
   expect(host.querySelector('[role="region"]')?.getAttribute('data-open')).toBe('true');
-  update({ ...facts, snapshot: { sections: [] } });
-  expect(host.querySelector('.flower-model-context-details')).toBeNull();
  });
 });
 

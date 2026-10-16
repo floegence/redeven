@@ -88,7 +88,7 @@ func TestProductionProvidersPreservePairedToolImagesAndNativeBudget(t *testing.T
 			}
 			defer prepared.Close()
 			estimate := prepared.TokenEstimate()
-			if estimate.EstimatedInputTokens < 100 || estimate.EstimatedInputTokens > 8_000 || estimate.Coverage != "complete_request" {
+			if estimate.AttachmentTokens <= 0 || estimate.AttachmentTokens > estimate.MessageTokens || estimate.EstimatedInputTokens < 100 || estimate.EstimatedInputTokens > 8_000 || estimate.Coverage != "complete_request" {
 				t.Fatalf("native tool images escaped the complete visual budget: %+v", estimate)
 			}
 			uri = strings.Replace(uri, "data:image/png", "data:image/jpeg", 1)

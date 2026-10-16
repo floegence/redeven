@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-15 — Used context composition
+
+- Document request-scoped used-input estimates, retained tool output, native-total authority and compact localized presentation in [managed context](ai/flower-managed-model-context.md).
+
 ## 2026-10-15: Distinct subagent identities and compact dropdown
 
 - Replace the animal/accessory generator with 36 original fixed-palette [subagent avatars](ui/flower-subagent-detail.md).
@@ -1727,3 +1731,11 @@ Keep the filename, change counts and file actions in the tool title for
 single-file edits; expanded details start with the diff. Multi-file edits retain
 their individual file toolbars. See
 [Flower activity interaction](ui/flower-activity-interaction.md).
+
+
+## 2026-10-15 — Plain-language context labels
+
+Label automatically loaded project rules, skills and environment information as
+auto-loaded context across Flower surfaces. Keep status times and failure
+guidance readable without exposing engine terminology. See
+[Flower managed model context](ai/flower-managed-model-context.md).

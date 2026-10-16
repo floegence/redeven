@@ -3,7 +3,7 @@ import { ChevronRight } from 'lucide-solid';
 
 import type { FlowerContextUsage, FlowerModelContext } from '../contracts/flowerSurfaceContracts';
 import type { FlowerSurfaceCopy } from '../copy';
-import { buildFlowerComposerContextIndicatorView, buildFlowerContextWindow, formatContextAmount } from './flowerContextPresentation';
+import { buildFlowerComposerContextIndicatorView, buildFlowerContextWindow, buildFlowerContextComposition, formatContextAmount } from './flowerContextPresentation';
 
 export function FlowerComposerContextIndicator(props: {
   usage?: FlowerContextUsage;
@@ -14,18 +14,11 @@ export function FlowerComposerContextIndicator(props: {
   const labels = () => props.copy.chat.contextIndicator;
   const view = createMemo(() => buildFlowerComposerContextIndicatorView(props.usage ?? {}, props.copy));
   const contextWindow = createMemo(() => buildFlowerContextWindow(props.usage ?? {}));
-  const sections = createMemo(() => {
-    const source = props.modelContext?.snapshot.sections ?? [];
-    const sizes = source.map((section) => Array.from(section.text).length);
-    const total = sizes.reduce((sum, size) => sum + size, 0);
-    return new Map(source.map((section, index) => [section.key, {
-      ...section,
-      label: labels().sectionLabels[section.key] ?? section.title,
-      size: sizes[index]!,
-      share: total > 0 ? (sizes[index]! / total) * 100 : 0,
-    }]));
-  });
-  const textTotal = createMemo(() => [...sections().values()].reduce((sum, section) => sum + section.size, 0));
+  const composition = createMemo(() => buildFlowerContextComposition(props.usage ?? {}));
+  const [factsExpanded, setFactsExpanded] = createSignal(false);
+  const sections = createMemo(() => new Map((props.modelContext?.snapshot.sections ?? []).map(section => [section.key, {
+    ...section, label: labels().sectionLabels[section.key] ?? section.title,
+  }])));
   const percent = (share: number) => labels().percent(Math.round(share * 10) / 10);
   const factStatus = createMemo(() => {
     const context = props.modelContext;
@@ -37,6 +30,9 @@ export function FlowerComposerContextIndicator(props: {
     ].filter(Boolean).join('\n');
   });
   const [tooltipOpen, setTooltipOpen] = createSignal(false);
+  let dismissTimer: ReturnType<typeof setTimeout> | undefined;
+  const cancelDismiss = () => { clearTimeout(dismissTimer); };
+  onCleanup(cancelDismiss);
   let container: HTMLDivElement | undefined;
   let trigger: HTMLDivElement | undefined;
   onMount(() => {
@@ -59,9 +55,9 @@ export function FlowerComposerContextIndicator(props: {
       data-context-pressure={view().tone}
       data-context-ratio={dataRatio()}
       data-context-placement={props.placement ?? 'above-end'}
-      onPointerEnter={() => setTooltipOpen(true)}
+      onPointerEnter={() => { cancelDismiss(); setTooltipOpen(true); }}
       onPointerLeave={(event) => {
-        if (!props.modelContext && !event.currentTarget.contains(document.activeElement)) setTooltipOpen(false);
+        if (!event.currentTarget.contains(document.activeElement)) dismissTimer = setTimeout(() => setTooltipOpen(false), 150);
       }}
       onFocusOut={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setTooltipOpen(false); }}
       onKeyDown={(event) => {
@@ -129,37 +125,52 @@ export function FlowerComposerContextIndicator(props: {
             }</For>
           </div>
         }</Show>
+        <Show when={composition()}>{(breakdown) =>
+          <div class="flower-context-composition" role="group" aria-label={labels().composition}>
+            <div class="flower-context-heading">
+              <span>{labels().composition}</span>
+              <span class="flower-context-estimate" title={labels().compositionHint}>{labels().estimated}</span>
+            </div>
+            <div class="flower-context-stacked-bar flower-context-composition-bar" aria-hidden="true">
+              <For each={breakdown().rows}>{(row) => <span data-category={row.key} style={{ width: row.share + '%' }} />}</For>
+            </div>
+            <For each={breakdown().rows}>{(row) =>
+              <div class="flower-context-composition-row" data-category={row.key}
+                aria-label={[labels().categoryLabels[row.key], labels().estimated, labels().tokens(String(row.tokens)), percent(row.share)].join(' · ')}
+                title={labels().categoryLabels[row.key] + ' · ' + labels().estimated + ' ' + labels().tokens(String(row.tokens))}>
+                <i class="flower-context-swatch" aria-hidden="true" />
+                <span class="flower-model-context-label">{labels().categoryLabels[row.key]}</span>
+                <span class="flower-model-context-amount">≈{formatContextAmount(row.tokens)}</span>
+                <span class="flower-model-context-share">{percent(row.share)}</span>
+              </div>
+            }</For>
+          </div>
+        }</Show>
+        <Show when={!composition() && contextWindow()}>
+          <div class="flower-context-composition-unavailable">{labels().composition}<span>{labels().unavailable}</span></div>
+        </Show>
         <Show when={sections().size > 0}>
-          <div class="flower-model-context-details" role="group" aria-label={labels().textShare}>
-            <div class="flower-context-heading flower-model-context-heading">
-              <span class="flower-model-context-title">{labels().runtimeFacts}
-                <span class="flower-model-context-status" role="img" aria-label={factStatus()} title={factStatus()} data-used={props.modelContext?.used_at ? 'true' : undefined} />
-              </span>
-              <span class="flower-context-total" title={labels().characters(String(textTotal()))}>{labels().characters(formatContextAmount(textTotal()))}</span>
-            </div>
-            <div class="flower-context-stacked-bar flower-model-context-bar" aria-hidden="true">
-              <For each={[...sections().keys()]}>{(key) => <span data-category={key} style={{ width: `${sections().get(key)!.share}%` }} />}</For>
-            </div>
-            <For each={[...sections().keys()]}>{(key) => {
+          <details class="flower-model-context-details" onToggle={(event) => setFactsExpanded(event.currentTarget.open)}>
+            <summary class="flower-model-context-disclosure">
+              <ChevronRight class="flower-context-chevron" aria-hidden="true" />
+              <span>{labels().runtimeFacts}</span>
+              <span class="flower-model-context-status" role="img" aria-label={factStatus()} title={factStatus()} data-used={props.modelContext?.used_at ? 'true' : undefined} />
+            </summary>
+            <Show when={factsExpanded()}><For each={[...sections().keys()]}>{(key) => {
               const section = () => sections().get(key)!;
               const [expanded, setExpanded] = createSignal(false);
               return (
-                <details data-category={key} onToggle={(event) => setExpanded(event.currentTarget.open)}>
-                  <summary
-                    class="flower-model-context-row"
-                    aria-label={`${section().label}: ${labels().characters(String(section().size))}, ${percent(section().share)}, ${labels().textShare}`}
-                    title={`${section().title}${props.modelContext?.changed_keys.includes(key) ? ` · ${labels().updated}` : ''}`}>
+                <details data-category={key} onToggle={(event) => { event.stopPropagation(); setExpanded(event.currentTarget.open); }}>
+                  <summary class="flower-model-context-row" title={section().title}>
                     <i class="flower-context-swatch" aria-hidden="true" />
                     <span class="flower-model-context-label">{section().label}</span>
-                    <span class="flower-model-context-amount">{formatContextAmount(section().size)}</span>
-                    <span class="flower-model-context-share">{percent(section().share)}</span>
                     <ChevronRight class="flower-context-chevron" aria-hidden="true" />
                   </summary>
                   <Show when={expanded()}><pre>{section().text}</pre></Show>
                 </details>
               );
-            }}</For>
-          </div>
+            }}</For></Show>
+          </details>
         </Show>
         <div class="flower-context-cache-stats">
           <div title={view().recentCacheHitLabel}>

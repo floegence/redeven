@@ -1,3 +1,4 @@
+import { FLOWER_CONTEXT_CATEGORIES } from '../contracts/flowerSurfaceContracts';
 import type { FlowerContextCompaction, FlowerContextUsage, FlowerContextSample, FlowerThreadTokenUsage } from '../contracts/flowerSurfaceContracts';
 import type { FlowerSurfaceCopy } from '../copy';
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../copy';
@@ -30,6 +31,19 @@ export function buildFlowerContextWindow(usage: FlowerContextUsage) {
       { key: 'freeSpace' as const, tokens: capacity - used - reserved },
     ].map((segment) => ({ ...segment, share: Math.min(1, segment.tokens / capacity) * 100 })),
   };
+}
+
+// Composition belongs to the same request as the displayed total. Never
+// substitute a newer request's categories or auto-loaded character counts.
+export function buildFlowerContextComposition(usage: FlowerContextUsage) {
+  const breakdown = (usage.confirmed ?? usage.estimate)?.breakdown;
+  if (!breakdown?.source) return null;
+  const rows = FLOWER_CONTEXT_CATEGORIES.map(key => ({ key, tokens: breakdown[key] ?? 0 }))
+    .filter(row => Number.isSafeInteger(row.tokens) && row.tokens > 0)
+    .sort((a, b) => b.tokens - a.tokens);
+  const total = rows.reduce((sum, row) => sum + row.tokens, 0);
+  if (!Number.isSafeInteger(total) || total <= 0) return null;
+  return { total, rows: rows.map(row => ({ ...row, share: row.tokens / total * 100 })) };
 }
 
 export type FlowerComposerContextIndicatorView = Readonly<{

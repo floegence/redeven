@@ -1,3 +1,4 @@
+import { FLOWER_CONTEXT_CATEGORIES, type FlowerContextBreakdown } from './contracts/flowerSurfaceContracts';
 import { mapFlowerProviderRequestProgress } from './providerRequestProgress';
 import { mapFlowerCitationSources } from './chat/markdown/flowerCitations';
 import { threadTitleSnapshot } from './threadTitleSnapshot';
@@ -321,14 +322,29 @@ export function mapContextUsage(raw: unknown): FlowerContextUsage | null {
   };
 }
 
+function mapContextBreakdown(raw: unknown): FlowerContextBreakdown | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  const record = recordValue(raw);
+  if (!record || !trim(record.source)) throw new Error('context breakdown requires an estimate source');
+  const result: { source: string } & Partial<Record<typeof FLOWER_CONTEXT_CATEGORIES[number], number>> = { source: trim(record.source) };
+  for (const key of FLOWER_CONTEXT_CATEGORIES) {
+    if (record[key] === undefined) continue;
+    const value = record[key];
+    if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) throw new Error('invalid context breakdown tokens');
+    result[key] = value;
+  }
+  return result;
+}
+
 function mapContextSample(raw: unknown): FlowerContextSample | null {
   const record = recordValue(raw);
   if (!record) return null;
+  const breakdown = mapContextBreakdown(record.breakdown);
   const phase = mapContextUsagePhase(record.phase);
   const pressureStatus = mapContextPressureStatus(record.pressure_status);
   const updatedAt = integerOrZero(record.updated_at_ms ?? record.updated_at_unix_ms);
   const stepIndex = optionalInteger(record.step_index);
-  const inputTokens = optionalInteger(record.input_tokens);
+  const inputTokens = optionalZeroBasedInteger(record.input_tokens);
   const contextWindowTokens = optionalInteger(record.context_window_tokens);
   const thresholdTokens = optionalInteger(record.threshold_tokens);
   const requestSafeLimitTokens = optionalInteger(record.request_safe_limit_tokens);
@@ -339,7 +355,8 @@ function mapContextSample(raw: unknown): FlowerContextSample | null {
     ...(trim(record.run_id) ? { run_id: trim(record.run_id) } : {}),
     ...(stepIndex ? { step_index: stepIndex } : {}),
     phase,
-    ...(inputTokens ? { input_tokens: inputTokens } : {}),
+    ...(inputTokens !== undefined ? { input_tokens: inputTokens } : {}),
+    ...(breakdown ? { breakdown } : {}),
     ...(contextWindowTokens ? { context_window_tokens: contextWindowTokens } : {}),
     ...(thresholdTokens ? { threshold_tokens: thresholdTokens } : {}),
     ...(requestSafeLimitTokens ? { request_safe_limit_tokens: requestSafeLimitTokens } : {}),
