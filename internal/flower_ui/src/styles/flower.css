@@ -5166,8 +5166,8 @@ button.flower-composer-context-source:focus-visible,
   padding: 0.12em 0.36em;
   color: var(--inline-code-foreground);
   font-family: var(--flower-chat-md-code-font);
-  font-size: 0.91em;
-  font-weight: 400;
+  font-size: 0.96em;
+  font-weight: 500;
   line-height: inherit;
   white-space: break-spaces;
   overflow-wrap: anywhere;

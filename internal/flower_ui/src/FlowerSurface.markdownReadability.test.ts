@@ -69,7 +69,8 @@ describe('Flower markdown readability', () => {
     expect(inlineCodeRule).toContain('overflow-wrap: anywhere');
     expect(inlineCodeRule).toContain('box-decoration-break: clone');
     expect(inlineCodeRule).toContain('font-family: var(--flower-chat-md-code-font)');
-    expect(inlineCodeRule).toContain('font-weight: 400');
+    expect(inlineCodeRule).toContain('font-size: 0.96em');
+    expect(inlineCodeRule).toContain('font-weight: 500');
     expect(codeBlockRule).toContain('font-family: var(--flower-chat-md-code-font)');
     expect(codeBlockRule).toContain('font-size: 0.875em');
     expect(codeBlockRule).toContain('line-height: 1.65');
