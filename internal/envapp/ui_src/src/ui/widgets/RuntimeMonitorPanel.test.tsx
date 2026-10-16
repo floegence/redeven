@@ -207,6 +207,57 @@ describe('RuntimeMonitorPanel', () => {
     } finally { dispose(); }
   });
 
+  it.each(['page', 'workbench'] as const)('keeps a zero-traffic %s chart mounted across polling', async (variant) => {
+    rpcMocks.monitor.getSysMonitor.mockResolvedValue({
+      ...makeSnapshot(1),
+      networkBytesReceived: 0,
+      networkBytesSent: 0,
+      networkSpeedReceived: 0,
+      networkSpeedSent: 0,
+    });
+    const dispose = render(() => <RuntimeMonitorPanel variant={variant} />, host);
+    try {
+      await flushPanel();
+      const chart = host.querySelector('[data-testid="network-chart"]');
+      expect(chart?.textContent).toContain('In: 0 B/s | Out: 0 B/s');
+      rpcMocks.monitor.getSysMonitor.mockResolvedValue({
+        ...makeSnapshot(2001),
+        networkSpeedReceived: 1024,
+        networkSpeedSent: 2048,
+      });
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(host.querySelector('[data-testid="network-chart"]')).toBe(chart);
+      expect(chart?.textContent).toContain('In: 1 kB/s | Out: 2 kB/s');
+    } finally { dispose(); }
+  });
+
+  it.each(['page', 'workbench'] as const)('recovers the %s network chart after an initial request failure and retry', async (variant) => {
+    const retry = createDeferred<ReturnType<typeof makeSnapshot>>();
+    rpcMocks.monitor.getSysMonitor.mockRejectedValueOnce(new Error('Monitoring unavailable')).mockReturnValueOnce(retry.promise);
+    const dispose = render(() => <RuntimeMonitorPanel variant={variant} />, host);
+    try {
+      await flushPanel();
+      expect(host.querySelector('[role="alert"]')?.textContent).toBe('Monitoring unavailable');
+      const retryButton = Array.from(host.querySelectorAll('button')).find(button => button.textContent?.includes('Retry'));
+      expect(retryButton).toBeDefined();
+      retryButton!.click();
+      await flushPanel();
+      expect(rpcMocks.monitor.getSysMonitor).toHaveBeenCalledTimes(2);
+      retry.resolve({ ...makeSnapshot(2001), networkSpeedReceived: 0, networkSpeedSent: 0 });
+      await flushPanel();
+      expect(host.textContent).not.toContain('Monitoring unavailable');
+      const chart = host.querySelector('[data-testid="network-chart"]');
+      expect(chart?.textContent).toContain('In: 0 B/s | Out: 0 B/s');
+      rpcMocks.monitor.getSysMonitor.mockResolvedValue(makeSnapshot(4001));
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(host.querySelector('[data-testid="network-chart"]')).toBe(chart);
+      expect(chart?.textContent).toContain('In: 10 B/s | Out: 20 B/s');
+    } finally { dispose(); }
+    const calls = rpcMocks.monitor.getSysMonitor.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(rpcMocks.monitor.getSysMonitor).toHaveBeenCalledTimes(calls);
+  });
+
   it('scopes runtime monitor styles on the panel root', async () => {
     rpcMocks.monitor.getSysMonitor.mockResolvedValue(makeSnapshot(1));
 

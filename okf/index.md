@@ -108,6 +108,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Managed Service instance configuration](architecture/managed-service-instance-configuration.md) - Combine current template definitions with typed instance overrides and apply stopped Runtime changes through one risk-checked journal.
 - [Runtime Service snapshot](architecture/runtime-service-snapshot.md) - Desktop/runtime compatibility, open readiness, capabilities, and bindings.
 - [Runtime session permission gates](architecture/runtime-session-permission-gates.md) - Runtime validation and local permission clamping before sessions open.
+- [Runtime system monitoring](architecture/runtime-system-monitoring.md) - Read cached resource snapshots, exclude loopback traffic, and recover network sampling without a second metrics owner.
 - [Runtime transport dependencies](architecture/runtime-transport-dependencies.md) - Flowersec and Floeterm dependency boundaries.
 - [Runtime artifact spend and control pool](architecture/runtime-artifact-spend-and-control-pool.md) - Burn opaque control artifacts once and recover bounded pool delivery.
 - [Runtime terminal lifecycle](architecture/runtime-terminal-lifecycle.md) - Delegate PTY, semantic history, and live terminal ownership to Floeterm.

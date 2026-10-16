@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Runtime session permission gates
 description: Redeven validates session metadata and clamps granted permissions before opening runtime sessions.
 tags: [architecture, security, session-security]
-timestamp: 2026-10-12T00:00:00Z
+timestamp: 2026-10-16T00:00:00Z
 ---
 # Summary
 
@@ -15,7 +15,7 @@ Before any runtime session is accepted, Redeven validates `session_meta`, reject
 
 When `grant_server` arrives on the control channel, the runtime checks the channel id, endpoint id, and `floe_app`, resolves the local cap via `PermissionPolicy.ResolveCap`, intersects that cap with the declared read/write/execute grant, writes the clamped flags back into the session snapshot, and refuses Code App or Port Forward sessions that do not satisfy stricter runtime-side requirements. The raw read bit authorizes system-monitor snapshots and other modeled read operations. The raw execute bit remains required for process termination and port forwarding, while a general terminal or arbitrary command process derives a separate effective process-launch capability from `write && execute`.
 
-The Monitor service is the single owner of environment CPU, used and total memory, network, and process sampling. Its existing read-protected system snapshot RPC reads the two-second cache and does not recollect on request. The Monitor page consumes that snapshot without creating another endpoint, sampler, or canonical metrics owner. Runtime version and process start time remain owned by `sys.ping`; runtime Settings consume the existing version model.
+The existing system-monitor snapshot RPC requires read permission; process termination independently requires execute permission. Resource sampling, cached presentation, network accounting, and recovery are owned by the [runtime system monitoring contract](runtime-system-monitoring.md).
 
 # Boundaries
 
