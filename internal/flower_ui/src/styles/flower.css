@@ -3674,11 +3674,9 @@
 }
 
 .flower-message-assistant-copy-line {
-  display: flex;
-  max-width: min(100%, 58rem);
+  display: block;
+  width: min(100%, 58rem);
   min-width: 0;
-  align-items: flex-end;
-  gap: 0.32rem;
 }
 
 .flower-message-assistant-copy-body {
@@ -11979,11 +11977,10 @@ button.flower-attachment-preview-trigger:disabled {
 .flower-chat-source-sites .flower-chat-source-icon + .flower-chat-source-icon { margin-inline-start: -0.3rem; }
 .flower-chat-source-overflow { margin-inline-start: 0.4rem; }
 .flower-chat-source-toggle[aria-expanded="true"] .flower-chat-source-sites { display: none; }
-.flower-chat-source-toolbar .flower-chat-source-copy { position: relative; inset: auto; margin-inline-start: auto; flex-shrink: 0; }
 .flower-chat-source-list .flower-chat-source-grid { display: block; margin: 0; padding: 0.25rem 0 0; list-style: none; border-top: 1px solid var(--flower-chat-surface-border); }
 .flower-chat-source-list .flower-chat-source-grid[hidden] { display: none; }
 .flower-chat-source-list .flower-chat-source-item { min-width: 0; margin: 0; padding: 0; }
-.flower-chat-source-list .flower-chat-source-card { display: grid; grid-template-columns: 1.125rem 1.125rem minmax(0, 1fr) 0.875rem; align-items: center; gap: 0.5rem; min-height: 2.25rem; min-width: 0; padding: 0.375rem 0.4rem; margin-inline: -0.4rem; border-radius: 0.35rem; color: var(--foreground); cursor: pointer; text-decoration: none; }
+.flower-chat-source-list .flower-chat-source-card { display: grid; grid-template-columns: 1.125rem 1.125rem minmax(0, 1fr) 0.875rem; align-items: center; gap: 0.5rem; min-height: 2.25rem; min-width: 0; padding: 0.375rem 0.4rem; margin-inline: 0; border-radius: 0.35rem; color: var(--foreground); cursor: pointer; text-decoration: none; }
 .flower-chat-source-card:hover { background: var(--flower-chat-surface-soft); }
 .flower-chat-source-card:focus-visible, .flower-chat-source-toggle:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .flower-chat-source-number { color: var(--muted-foreground); font-size: 0.8em; font-variant-numeric: tabular-nums; }
@@ -12221,3 +12218,15 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
 .flower-context-categories > .flower-context-composition-row + .flower-model-context-details { margin-top: 0.125rem; }
 .flower-model-context-distribution { display: grid; gap: 0.5rem; max-height: 13rem; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
 .flower-context-composition-row .flower-model-context-track { height: 0.1875rem; }
+
+.flower-answer-actions { display: flex; align-items: center; justify-content: space-between; gap: 1rem; min-width: 0; margin-top: 0.75rem; font-family: var(--font-sans); line-height: 1; }
+.flower-answer-action-buttons { display: flex; align-items: center; gap: 0.125rem; }
+.flower-answer-action, .flower-answer-actions .flower-message-copy-button { display: inline-flex; position: relative; align-items: center; justify-content: center; flex: 0 0 auto; width: 2rem; height: 2rem; margin: 0; padding: 0; border: 0; border-radius: 0.375rem; background: transparent; color: var(--muted-foreground); opacity: 1; cursor: pointer; transition: color 120ms ease, background-color 120ms ease; }
+.flower-answer-actions svg { width: 1.125rem; height: 1.125rem; stroke-width: 2; }
+.flower-answer-action:hover, .flower-answer-actions .flower-message-copy-button:hover { background: var(--muted); color: var(--foreground); }
+.flower-answer-action:focus-visible, .flower-answer-actions .flower-message-copy-button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.flower-answer-action:disabled { opacity: 0.35; cursor: default; background: transparent; }
+.flower-answer-time { flex: 0 0 auto; color: var(--muted-foreground); font-size: 0.6875rem; font-variant-numeric: tabular-nums; white-space: nowrap; user-select: text; }
+.flower-chat-md-block:has(.flower-answer-actions) .flower-chat-source-list { margin-top: 0.5rem; }
+@media (pointer: coarse) { .flower-answer-action, .flower-answer-actions .flower-message-copy-button { width: 2.75rem; height: 2.75rem; } }
+@media (prefers-reduced-motion: reduce) { .flower-answer-action, .flower-answer-actions .flower-message-copy-button { transition: none; } }

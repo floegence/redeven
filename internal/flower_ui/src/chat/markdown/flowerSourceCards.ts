@@ -3,7 +3,7 @@ import { flowerSourceIconPlaceholder } from './flowerSourceIcons';
 import { escapeFlowerMarkdownHtml as escape } from './markedConfig';
 
 export type FlowerSourceCard = Readonly<{ number?: string; title?: string; url: string }>;
-export type FlowerSourceCardLabels = Readonly<{ sources: string; copy?: string }>;
+export type FlowerSourceCardLabels = Readonly<{ sources: string }>;
 
 // This is an authored bibliography, not provider provenance. Only complete,
 // plain-text fences made entirely of numbered title/URL pairs qualify.
@@ -28,10 +28,8 @@ export function parseFlowerSourceFence(token: { text: string; lang?: string; raw
   return sources;
 }
 
-export function renderFlowerSourceCards(sources: readonly FlowerSourceCard[], labels: FlowerSourceCardLabels, copyText?: string): string {
+export function renderFlowerSourceCards(sources: readonly FlowerSourceCard[], labels: FlowerSourceCardLabels): string {
   if (!sources.length) return '';
-  const copy = labels.copy && copyText
-    ? `<button type="button" class="flower-chat-source-copy flower-chat-md-code-copy" aria-label="${escape(labels.copy)}" title="${escape(labels.copy)}" data-flower-source-copy="${escape(copyText)}"></button>` : '';
   const sites = new Map<string, URL>();
   const rows = sources.map((source, index) => {
     const url = new URL(source.url);
@@ -41,5 +39,5 @@ export function renderFlowerSourceCards(sources: readonly FlowerSourceCard[], la
   }).join('');
   const summary = [...sites.values()].slice(0, 4).map(flowerSourceIconPlaceholder).join('');
   const overflow = sites.size > 4 ? `<span class="flower-chat-source-overflow">+${sites.size - 4}</span>` : '';
-  return `<aside class="flower-chat-source-list" aria-label="${escape(labels.sources)}"><div class="flower-chat-source-toolbar"><button type="button" class="flower-chat-source-toggle" aria-expanded="false"><span class="flower-chat-source-chevron" aria-hidden="true">›</span><span class="flower-chat-source-heading">${escape(labels.sources)}</span><span class="flower-chat-source-count">${sources.length}</span><span class="flower-chat-source-sites" aria-hidden="true">${summary}${overflow}</span></button>${copy}</div><ol class="flower-chat-source-grid" hidden>${rows}</ol></aside>`;
+  return `<aside class="flower-chat-source-list" aria-label="${escape(labels.sources)}"><div class="flower-chat-source-toolbar"><button type="button" class="flower-chat-source-toggle" aria-expanded="false"><span class="flower-chat-source-chevron" aria-hidden="true">›</span><span class="flower-chat-source-heading">${escape(labels.sources)}</span><span class="flower-chat-source-count">${sources.length}</span><span class="flower-chat-source-sites" aria-hidden="true">${summary}${overflow}</span></button></div><ol class="flower-chat-source-grid" hidden>${rows}</ol></aside>`;
 }

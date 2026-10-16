@@ -66,7 +66,7 @@ describe('Flower canonical citations in Chromium', () => {
     const resolve = createFlowerSourceIconResolver(request);
     root = document.createElement('div'); document.body.appendChild(root);
     dispose = render(() => <div class="flower-chat-shell" style={{ width: '640px' }}>
-      <FlowerMarkdownBlock content={'```text\n' + bibliography + '\n```'} citationLabels={{ sources: 'Sources', unavailable: 'Unavailable', copy: 'Copy sources' }} resolveSourceIcon={resolve} copyCodeLabel="Copy" codeCopiedLabel="Copied" />
+      <FlowerMarkdownBlock content={'```text\n' + bibliography + '\n```'} citationLabels={{ sources: 'Sources', unavailable: 'Unavailable' }} resolveSourceIcon={resolve} copyCodeLabel="Copy" codeCopiedLabel="Copied" />
       <textarea aria-label="Message" />
     </div>, root);
     await expect.poll(() => request.mock.calls.length).toBe(1);
@@ -83,9 +83,7 @@ describe('Flower canonical citations in Chromium', () => {
     const input = root.querySelector('textarea')!;
     input.focus(); input.value = 'Continue working'; input.dispatchEvent(new InputEvent('input', { bubbles: true }));
     expect(document.activeElement).toBe(input);
-    const copy = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue();
-    root.querySelector<HTMLButtonElement>('.flower-chat-source-copy')!.click();
-    await expect.poll(() => copy.mock.calls[0]?.[0]).toBe(bibliography);
+    expect(root.querySelector('.flower-chat-source-copy')).toBeNull();
     toggle.click(); await frame();
     expect(list.hidden).toBe(true);
     expect(root.querySelector('.flower-chat-source-sites')!.getBoundingClientRect().height).toBeGreaterThan(0);
@@ -118,9 +116,8 @@ describe('Flower canonical citations in Chromium', () => {
     const bibliography = `[1] Hermes v0.22.0\nhttps://github.com/NousResearch/hermes-agent/releases/tag/v0.22.0\n\n[14] 原始来源 — a long title that wraps without hiding its destination\nhttps://example.com/${'long-source-path-'.repeat(24)}`;
     const [content, setContent] = createSignal(`# Report\n\nFirst paragraph.\n\nSecond paragraph.\n\n## Findings\n\n- First finding\n- Second finding\n\n### References\n\n\`\`\`text\n${bibliography}`);
     root = document.createElement('div'); root.style.width = '960px'; document.body.appendChild(root);
-    const [copyLabel, setCopyLabel] = createSignal('Copy sources');
     dispose = render(() => <div class="flower-chat-shell" style={{ padding: '24px', transform: 'translate(0px, 0px)' }}>
-      <div class="flower-message-bubble flower-message-bubble-assistant"><FlowerMarkdownBlock content={content()} streaming={true} citationLabels={{ sources: 'Sources', unavailable: 'Unavailable', copy: copyLabel() }} copyCodeLabel="Copy code" codeCopiedLabel="Copied" /></div>
+      <div class="flower-message-bubble flower-message-bubble-assistant"><FlowerMarkdownBlock content={content()} streaming={true} citationLabels={{ sources: 'Sources', unavailable: 'Unavailable' }} copyCodeLabel="Copy code" codeCopiedLabel="Copied" /></div>
       <div class="flower-composer">
         <textarea aria-label="Message" />
         <div style={{ display: 'flex' }}>
@@ -144,17 +141,7 @@ describe('Flower canonical citations in Chromium', () => {
     expect(parseFloat(getComputedStyle(paragraphs[1]).marginTop)).toBeGreaterThanOrEqual(11);
     expect(root.querySelectorAll('.flower-chat-source-number')[1].textContent).toBe('14');
     expect(root.querySelectorAll('.flower-chat-source-card')[1].getAttribute('href')).toBe(bibliography.split('\n').at(-1));
-    const write = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue();
-    const button = root.querySelector<HTMLButtonElement>('.flower-chat-source-copy')!;
-    const bounds = button.getBoundingClientRect();
-    const glyph = button.querySelector('svg')!.getBoundingClientRect();
-    expect(glyph.left).toBeGreaterThanOrEqual(bounds.left);
-    expect(glyph.right).toBeLessThanOrEqual(bounds.right);
-    expect(glyph.top).toBeGreaterThanOrEqual(bounds.top);
-    expect(glyph.bottom).toBeLessThanOrEqual(bounds.bottom);
-    button.click();
-    await expect.poll(() => write.mock.calls[0]?.[0]).toBe(bibliography);
-    expect(button.getAttribute('aria-label')).toBe('Copied');
+    expect(root.querySelector('.flower-chat-source-copy')).toBeNull();
     expect(root.querySelector('.flower-chat-md-code-block')).toBeNull();
     await page.screenshot({ element: root, path: `__screenshots__/flower-source-cards-${theme}.png` });
     const toggle = root.querySelector<HTMLButtonElement>('.flower-chat-source-toggle')!;
@@ -172,7 +159,5 @@ describe('Flower canonical citations in Chromium', () => {
     first.focus();
     expect(getComputedStyle(first).outlineStyle).toBe('solid');
     await page.screenshot({ element: root, path: `__screenshots__/flower-source-cards-narrow-${theme}.png` });
-    setCopyLabel('複製來源'); await frame();
-    expect(root.querySelector('.flower-chat-source-copy')?.getAttribute('aria-label')).toBe('複製來源');
   });
 });

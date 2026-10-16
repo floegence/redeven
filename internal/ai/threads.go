@@ -975,7 +975,7 @@ func (s *Service) ForkThreadWithOptions(ctx context.Context, meta *session.Meta,
 		return nil, err
 	}
 	current, err := runtime.Fork(ctxOrBackground(ctx), flruntime.ForkThreadInput{
-		SourceThreadID: identity.ThreadID(sourceThreadID), RequestKey: flruntime.RequestKey(clientRequestID),
+		SourceThreadID: identity.ThreadID(sourceThreadID), SourceItemID: strings.TrimSpace(req.SourceItemID), RequestKey: flruntime.RequestKey(clientRequestID),
 	})
 	if err != nil {
 		return nil, err

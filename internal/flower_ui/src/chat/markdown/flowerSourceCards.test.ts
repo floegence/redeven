@@ -22,10 +22,10 @@ describe('Flower source cards', () => {
     const sources = parseFlowerSourceFence(fence());
     expect(sources?.map(source => source.number)).toEqual(['1', '14']);
     expect(sources?.[0].title).toBe('Hermes v0.22.0');
-    const html = renderFlowerSourceCards(sources!, { sources: 'Sources', copy: 'Copy sources' }, bibliography);
+    const html = renderFlowerSourceCards(sources!, { sources: 'Sources' });
     expect(html).toContain('github.com');
     expect(html).toContain('href="https://arxiv.org/abs/2610.18052"');
-    expect(html).toContain('data-flower-source-copy=');
+    expect(html).not.toContain('data-flower-source-copy=');
     expect(html).not.toContain('<pre');
   });
 
@@ -44,9 +44,9 @@ describe('Flower source cards', () => {
     expect(parseFlowerSourceFence({ text: bibliography, raw: bibliography })).toBeNull();
   });
 
-  it('escapes source titles, labels and original copy content', () => {
+  it('escapes source titles and labels', () => {
     const text = '[1] <img src=x onerror=alert(1)> & "Title"\nhttps://example.com/?q=%22';
-    const html = renderFlowerSourceCards(parseFlowerSourceFence(fence(text))!, { sources: '<Sources>', copy: 'Copy "sources"' }, text);
+    const html = renderFlowerSourceCards(parseFlowerSourceFence(fence(text))!, { sources: '<Sources>' });
     expect(html).not.toContain('<img');
     expect(html).toContain('&lt;img');
     expect(html).toContain('&lt;Sources&gt;');

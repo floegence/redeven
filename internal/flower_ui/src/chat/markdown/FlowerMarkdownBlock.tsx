@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from 'solid-js';
-import type { Accessor, Component } from 'solid-js';
+import type { Accessor, Component, JSX } from 'solid-js';
 import { render } from 'solid-js/web';
 import { createMarkdownParser } from '@floegence/floe-webapp-core/markdown';
 import { cn } from '@floegence/floe-webapp-core';
@@ -24,8 +24,9 @@ import { markdownMediaEnUS } from './mediaCopy';
 
 export interface FlowerMarkdownBlockProps {
   content: string;
+  footer?: JSX.Element;
   sources?: readonly FlowerCitationSource[];
-  citationLabels?: Readonly<{ sources: string; unavailable: string; copy?: string }>;
+  citationLabels?: Readonly<{ sources: string; unavailable: string }>;
   streaming?: boolean;
   /** Keep media references inert even while localized media labels are loading. */
   mediaEnabled?: boolean;
@@ -50,7 +51,7 @@ export const FlowerMarkdownBlock: Component<FlowerMarkdownBlockProps> = (props) 
     sourceFence: token => {
       if (!props.citationLabels) return null;
       const sources = parseFlowerSourceFence(token);
-      return sources ? renderFlowerSourceCards(sources, props.citationLabels, token.text) : null;
+      return sources ? renderFlowerSourceCards(sources, props.citationLabels) : null;
     },
   }) });
 
@@ -76,11 +77,14 @@ export const FlowerMarkdownBlock: Component<FlowerMarkdownBlockProps> = (props) 
     props.mediaEnabled === true,
   ));
   const segments = createMemo(() => new Map(snapshot().committedSegments.map((segment) => [segment.key, segment])));
-  const segmentKeys = createMemo(() => [...segments().keys()]);
+  const sourceHTML = (html: string) => html.startsWith('<aside class="flower-chat-source-list"');
+  const sourceTail = () => { const tail = snapshot().tail; return tail.kind === 'html' && sourceHTML(tail.html); };
+  const sourceSegment = (key: string) => sourceHTML(segments().get(key)?.html ?? '');
+  const segmentKeys = createMemo(() => [...segments().keys()].filter(key => !sourceSegment(key)));
+  const sourceSegmentKeys = createMemo(() => [...segments().keys()].filter(sourceSegment));
   const remainingSourcesHTML = createMemo(() => props.citationLabels ? renderFlowerSourceCards(
     citations().remaining,
     props.citationLabels,
-    citations().remaining.map((source, index) => `[${index + 1}] ${source.title || new URL(source.url).hostname}\n${source.url}`).join('\n\n'),
   ) : '');
   let rootRef: HTMLDivElement | undefined;
   let copiedResetTimer: number | undefined;
@@ -104,7 +108,7 @@ export const FlowerMarkdownBlock: Component<FlowerMarkdownBlockProps> = (props) 
     const button = copiedButton();
     if (!button) return;
     button.dataset.copied = 'false';
-    const label = copyLabel(button);
+    const label = props.copyCodeLabel;
     button.setAttribute('aria-label', label);
     button.setAttribute('title', label);
     setCopiedButton(null);
@@ -129,9 +133,6 @@ export const FlowerMarkdownBlock: Component<FlowerMarkdownBlockProps> = (props) 
     };
   };
 
-  const copyLabel = (button: HTMLButtonElement) => button.hasAttribute('data-flower-source-copy')
-    ? props.citationLabels?.copy ?? props.copyCodeLabel : props.copyCodeLabel;
-
   const handleClick = (event: MouseEvent) => {
     const target = event.target;
     if (!(target instanceof Element)) return;
@@ -143,7 +144,7 @@ export const FlowerMarkdownBlock: Component<FlowerMarkdownBlockProps> = (props) 
     }
     const button = target.closest('button.flower-chat-md-code-copy');
     if (button instanceof HTMLButtonElement && rootRef?.contains(button)) {
-      const code = button.dataset.flowerSourceCopy ?? flowerMarkdownCodeTextForCopyButton(button);
+      const code = flowerMarkdownCodeTextForCopyButton(button);
       if (code) {
         event.preventDefault();
         event.stopPropagation();
@@ -216,14 +217,7 @@ export const FlowerMarkdownBlock: Component<FlowerMarkdownBlockProps> = (props) 
         for (const button of buttons) {
           if (!root.contains(button)) release(button);
         }
-        const sourceButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('button[data-flower-source-copy]'));
-        for (const button of sourceButtons) {
-          mountCopyIcons(button);
-          const label = button.dataset.copied === 'true' ? props.codeCopiedLabel : copyLabel(button);
-          button.setAttribute('aria-label', label);
-          button.setAttribute('title', label);
-        }
-        buttons = [...decorateFlowerMarkdownCodeBlocks(root, labels, mountCopyIcons), ...sourceButtons];
+        buttons = decorateFlowerMarkdownCodeBlocks(root, labels, mountCopyIcons);
         for (const [node, dispose] of highlighted) {
           if (!root.contains(node)) { dispose(); highlighted.delete(node); }
         }
@@ -286,7 +280,10 @@ export const FlowerMarkdownBlock: Component<FlowerMarkdownBlockProps> = (props) 
   return (
     <div ref={(node) => { rootRef = node; }} class={cn('flower-chat-md-block', props.class)} onClick={handleClick}>
       <For each={segmentKeys()}>{(key) => <HtmlSegment segmentKey={key} />}</For>
-      <Show when={snapshot().tail.kind !== 'empty'}><TailFrame /></Show>
+      <Show when={snapshot().tail.kind !== 'empty' && !sourceTail()}><TailFrame /></Show>
+      {props.footer}
+      <For each={sourceSegmentKeys()}>{(key) => <HtmlSegment segmentKey={key} />}</For>
+      <Show when={sourceTail()}><TailFrame /></Show>
       <Show when={citations().remaining.length > 0 && props.streaming !== true}>
         <RemainingSources />
       </Show>

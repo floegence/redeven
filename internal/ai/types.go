@@ -250,6 +250,7 @@ type CreateThreadResponse struct {
 }
 
 type ForkThreadRequest struct {
+	SourceItemID    string `json:"source_item_id,omitempty"`
 	ClientRequestID string `json:"client_request_id"`
 	Title           string `json:"title,omitempty"`
 }
