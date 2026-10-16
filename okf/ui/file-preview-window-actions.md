@@ -3,7 +3,7 @@ type: UI Contract
 title: File preview window actions
 description: Read files in Activity and Workbench with one set of product actions in the existing title bar.
 tags: [ui, files, preview, floating-windows, selection]
-timestamp: 2026-09-22T00:00:00Z
+timestamp: 2026-10-16T00:00:00Z
 ---
 # Summary
 
@@ -12,7 +12,9 @@ the floating window and Workbench widget title-bar action slots. Activity previe
 on desktop and Workbench previews show the file name on the left and compact file
 actions on the right, before the trailing window controls. The separate path row is absent. Moving actions must preserve file
 permissions, the current draft, preview-local text selection, download behavior,
-and the existing unsaved-change confirmation boundary.
+and the existing unsaved-change confirmation boundary. Closing immediately
+invalidates pending work while keeping the current document and title intact
+until the published window or mobile dialog retires its content.
 
 # Contract
 
@@ -121,6 +123,8 @@ opening belong to the target surface without a duplicate notification. Files kee
 failed navigation preserves a valid directory, missing initial/current directories
 show recovery instead of an empty list, transient refresh failure preserves
 usable content, and parent/Home jumps remain explicit and authorized.
+
+Preview dismissal and resource lifetime follow the [file preview dismissal contract](file-preview-dismissal.md).
 
 # Boundaries
 

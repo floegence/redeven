@@ -79,7 +79,7 @@ describe('File preview titlebar', () => {
       expect(root.querySelector('.redeven-file-preview-toolbar')).toBeNull();
       expect(root.textContent).not.toContain('/workspace/review.md');
       expect(root.querySelectorAll('button[aria-label="Download file"]')).toHaveLength(1);
-      const title = titlebar.querySelector('h2')!;
+      const title = titlebar.querySelector<HTMLElement>('h2 > span')!;
       const controls = titlebar.querySelector<HTMLElement>('[data-floe-floating-window-control="maximize"]')!;
       const assertLayout = () => {
         expect(title.getBoundingClientRect().right).toBeLessThanOrEqual(actions.getBoundingClientRect().left);

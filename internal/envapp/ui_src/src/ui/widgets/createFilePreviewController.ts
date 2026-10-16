@@ -78,6 +78,7 @@ export interface FilePreviewController {
   xlsxRows: Accessor<string[][]>;
   openPreview: (item: FileItem) => Promise<void>;
   closePreview: () => void;
+  retainContent: () => () => void;
   handleOpenChange: (open: boolean) => void;
   cancelPendingAction: () => void;
   confirmDiscardAndContinue: () => Promise<void>;
@@ -121,6 +122,7 @@ export function createFilePreviewController(params: {
   const [xlsxRows, setXlsxRows] = createSignal<string[][]>([]);
   const [pendingConnectionLoad, setPendingConnectionLoad] = createSignal<PendingConnectionPreviewLoad | null>(null);
 
+  const presentations = new Set<symbol>();
   let activePreviewChannel: ReadFileStreamChannel | null = null;
   let activeObjectUrl: string | null = null;
   let previewReqSeq = 0;
@@ -142,10 +144,9 @@ export function createFilePreviewController(params: {
     pdfEditRevision++;
   };
 
-  const cleanupPreviewContent = () => {
+  const cancelPreviewLoad = () => {
     mediaErrorController?.abort();
     mediaErrorController=undefined;
-    setPreviewErrorType(undefined);
     if (activePreviewChannel) {
       try {
 		void Promise.resolve(activePreviewChannel.stream.reset()).catch(() => undefined);
@@ -157,7 +158,11 @@ export function createFilePreviewController(params: {
       }
       activePreviewChannel = null;
     }
+  };
 
+  const cleanupPreviewContent = () => {
+    cancelPreviewLoad();
+    setPreviewErrorType(undefined);
     if (activeObjectUrl) {
       try {
         URL.revokeObjectURL(activeObjectUrl);
@@ -184,14 +189,34 @@ export function createFilePreviewController(params: {
     setCloseConfirmOpen(false);
   };
 
+  const releaseClosedContent = () => {
+    if (previewOpen() || presentations.size > 0) return;
+    batch(() => {
+      cleanupPreviewContent();
+      setPreviewItem(null);
+    });
+  };
+
+  // The mounted preview owns its content through Floe's existing exit presence.
+  const retainContent = () => {
+    const presentation = Symbol();
+    presentations.add(presentation);
+    return () => {
+      if (!presentations.delete(presentation)) return;
+      releaseClosedContent();
+    };
+  };
+
   const forceClosePreview = () => {
     previewReqSeq += 1;
     saveReqSeq += 1;
-    setPendingConnectionLoad(null);
-    clearPendingAction();
-    cleanupPreviewContent();
-    setPreviewItem(null);
-    setPreviewOpen(false);
+    batch(() => {
+      setPendingConnectionLoad(null);
+      clearPendingAction();
+      setPreviewOpen(false);
+      cancelPreviewLoad();
+      releaseClosedContent();
+    });
   };
 
   const hasUnsavedChanges = () => previewOpen() && previewDirty();
@@ -370,6 +395,8 @@ export function createFilePreviewController(params: {
         }
       }
 
+      if (seq !== previewReqSeq) return;
+
       if (baseDescriptor.mode === 'image') {
         if (truncated) {
           setPreviewDescriptor({ mode: 'unsupported' });
@@ -499,7 +526,7 @@ export function createFilePreviewController(params: {
 
   const retry = async () => {
     const item = previewItem();
-    if (!item || previewLoading() || previewDirty()) return;
+    if (!previewOpen() || !item || previewLoading() || previewDirty()) return;
     await loadPreview(item, true);
   };
 
@@ -513,7 +540,7 @@ export function createFilePreviewController(params: {
   };
 
   const reportResourceError = async (path: string, source: string) => {
-    if (previewItem()?.path !== path || previewResourceUrl() !== source || mediaErrorController) return;
+    if (!previewOpen() || previewItem()?.path !== path || previewResourceUrl() !== source || mediaErrorController) return;
     const seq = previewReqSeq;
     const controller = new AbortController();
     mediaErrorController = controller;
@@ -597,13 +624,13 @@ export function createFilePreviewController(params: {
   };
 
   const beginEditing = () => {
-    if (!canEdit()) return;
+    if (!previewOpen() || !canEdit()) return;
     setPreviewEditing(true);
     setPreviewSaveError(null);
   };
 
   const updateDraft = (value: string) => {
-    if (!isTextFilePreview(previewDescriptor())) return;
+    if (!previewOpen() || !isTextFilePreview(previewDescriptor())) return;
     setPreviewDraftText(value);
     setPreviewDirty(value !== previewText());
     if (previewSaveError()) {
@@ -637,7 +664,7 @@ export function createFilePreviewController(params: {
   };
 
   const saveCurrent = async (): Promise<boolean> => {
-    if (!canEdit() || !previewDirty() || previewSaving()) return false;
+    if (!previewOpen() || !canEdit() || !previewDirty() || previewSaving()) return false;
 
     const rpc = params.rpc();
     const item = previewItem();
@@ -706,6 +733,7 @@ export function createFilePreviewController(params: {
   };
 
   onCleanup(() => {
+    presentations.clear();
     forceClosePreview();
   });
 
@@ -738,6 +766,7 @@ export function createFilePreviewController(params: {
     xlsxRows,
     openPreview,
     closePreview,
+    retainContent,
     handleOpenChange,
     cancelPendingAction,
     confirmDiscardAndContinue,

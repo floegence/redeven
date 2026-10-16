@@ -77,6 +77,7 @@ export function FilePreviewHost() {
   return (
     <FilePreviewSurface
       open={filePreview.controller.open()}
+      retainContent={filePreview.controller.retainContent}
       onOpenChange={filePreview.controller.handleOpenChange}
       item={filePreview.controller.item()}
       descriptor={filePreview.controller.descriptor()}

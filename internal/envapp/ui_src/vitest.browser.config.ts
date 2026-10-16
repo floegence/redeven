@@ -129,6 +129,35 @@ export default mergeConfig(viteConfig, defineConfig({
         ? { port: configuredBrowserPort }
         : undefined,
       commands: {
+        inspectFilePreviewDismissal: async ({ page }) => {
+          const host = await frameForSelector(page, 'iframe.html-preview-frame');
+          const previewElement = host.locator('iframe.html-preview-frame');
+          const preview = await (await previewElement.elementHandle())?.contentFrame();
+          if (!preview) throw new Error('HTML preview document is unavailable');
+          await preview.getByRole('heading', { name: 'Bear cycling' }).waitFor();
+          await preview.evaluate(() => { document.documentElement.style.background = '#fff9ea'; });
+          await host.locator('.floe-floating-window-motion').evaluate(async element => {
+            await Promise.all(element.getAnimations().map(animation => animation.finished));
+          });
+          const bounds = await previewElement.boundingBox();
+          if (!bounds) throw new Error('HTML preview bounds are unavailable');
+          const sample = { x: Math.floor(bounds.x + bounds.width / 2), y: Math.floor(bounds.y + bounds.height / 2) };
+          const brightness: number[] = [];
+          const capture = async () => {
+            const png = PNG.sync.read(await page.screenshot({ type: 'png', scale: 'css' }));
+            const offset = (sample.y * png.width + sample.x) * 4;
+            brightness.push((png.data[offset]! + png.data[offset + 1]! + png.data[offset + 2]!) / 3);
+          };
+          await capture();
+          await host.locator('[data-floe-floating-window-control="close"]').evaluate(element => (element as HTMLButtonElement).click());
+          const started = Date.now();
+          while (Date.now() - started < 400) {
+            await capture();
+            if (await host.locator('[data-floe-geometry-surface="floating-window"]').count() === 0) break;
+          }
+          await capture();
+          return { brightness };
+        },
         downloadFlowerAnswerEvidence: async ({ page }) => {
           const frame = await frameForSelector(page, '.flower-answer-actions');
           const downloaded = page.waitForEvent('download');
