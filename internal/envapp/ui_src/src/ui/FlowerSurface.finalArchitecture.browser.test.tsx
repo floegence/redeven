@@ -343,7 +343,7 @@ describe('Flower final thread cache and workspace transport', () => {
       subagents: [child],
     });
 
-    await waitFor(() => runtime.querySelector('.flower-header-icon-badge')?.textContent === '1');
+    await waitFor(() => runtime.querySelector('[data-flower-subagent-count]')?.getAttribute('data-flower-subagent-count') === '1');
     expect(runtime.querySelector(`[data-thread-id="${child.thread_id}"]`)).toBeNull();
     const trigger = runtime.querySelector('button[aria-controls="flower-subagents-dropdown"]') as HTMLButtonElement;
     trigger.click();
@@ -389,7 +389,7 @@ describe('Flower final thread cache and workspace transport', () => {
       thread_id: parent.thread_id,
       subagents: [],
     });
-    await waitFor(() => runtime.querySelector('.flower-header-icon-badge') === null);
+    await waitFor(() => runtime.querySelector('[data-flower-subagent-count]') === null);
     expect(document.querySelector('[data-flower-subagent-detail="open"]')).not.toBeNull();
 
     stream.push({
@@ -648,7 +648,7 @@ describe('Flower final thread cache and workspace transport', () => {
       thread_id: parent.thread_id,
       subagents: [child],
     });
-    await waitFor(() => runtime.querySelector('.flower-header-icon-badge')?.textContent === '1');
+    await waitFor(() => runtime.querySelector('[data-flower-subagent-count]')?.getAttribute('data-flower-subagent-count') === '1');
     (runtime.querySelector('button[aria-controls="flower-subagents-dropdown"]') as HTMLButtonElement).click();
     await waitFor(() => Boolean(document.querySelector('[data-flower-subagent-row="0"]')));
     (document.querySelector('[data-flower-subagent-row="0"]') as HTMLButtonElement).click();

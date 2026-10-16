@@ -1373,49 +1373,6 @@
   border-radius: 0.5rem;
 }
 
-.flower-header-icon-badge {
-  position: absolute;
-  top: -0.25rem;
-  right: -0.25rem;
-  min-width: 1rem;
-  max-width: 1.7rem;
-  height: 1rem;
-  border-radius: 9999px;
-  background: color-mix(in srgb, var(--primary) 86%, var(--foreground) 14%);
-  color: var(--primary-foreground, var(--redeven-surface-highlight-source));
-  padding: 0 0.25rem;
-  font-size: 0.625rem;
-  font-variant-numeric: tabular-nums;
-  font-weight: 700;
-  line-height: 1rem;
-  overflow: hidden;
-  text-align: center;
-  white-space: nowrap;
-  box-shadow: 0 0 0 2px var(--flower-chat-surface, var(--background));
-}
-
-.flower-header-icon-badge[data-running='true'] {
-  overflow: visible;
-}
-
-.flower-header-icon-badge[data-running='true']::after {
-  content: "";
-  position: absolute;
-  inset: -0.1875rem;
-  pointer-events: none;
-  border: 1.5px solid color-mix(in srgb, var(--primary) 22%, transparent);
-  border-top-color: color-mix(in srgb, var(--primary) 88%, var(--redeven-surface-highlight-source) 12%);
-  border-right-color: color-mix(in srgb, var(--primary) 58%, transparent);
-  border-radius: inherit;
-  animation: flower-subagent-badge-ring-spin 920ms linear infinite;
-}
-
-@keyframes flower-subagent-badge-ring-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 .flower-composer-footer {
   display: flex;
   align-items: flex-end;
@@ -11587,8 +11544,7 @@ button.flower-attachment-preview-trigger:disabled {
   .flower-compaction-divider-running-clock::after,
   .flower-thread-wave-bar,
   .flower-subagents-dropdown,
-  .flower-subagent-dropdown-action,
-  .flower-header-icon-badge[data-running='true']::after {
+  .flower-subagent-dropdown-action {
     animation: none !important;
     transform: none !important;
   }

@@ -227,6 +227,7 @@ main() {
         src/ui/FlowerSurface.subagentDisclosure.browser.test.tsx \
         src/ui/FlowerSurface.activityTiming.browser.test.tsx \
         src/ui/FlowerSurface.subagentAppearance.browser.test.tsx \
+        src/ui/FlowerSurface.subagentHeader.browser.test.tsx \
         src/ui/FlowerSurface.reasoningSelection.browser.test.tsx \
         src/ui/FlowerSurface.terminalActivity.browser.test.tsx \
         src/ui/FlowerSurface.toolFailures.browser.test.tsx \

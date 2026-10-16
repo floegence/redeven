@@ -43,7 +43,7 @@ describe('Subagent identity and reading surfaces', () => {
       runtime.style.height = '900px';
       await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-avatar-parent"] button')));
       (runtime.querySelector('[data-thread-id="thread-avatar-parent"] button') as HTMLButtonElement).click();
-      await waitFor(() => presented && runtime.querySelector('.flower-header-icon-badge')?.textContent === '5');
+      await waitFor(() => presented && runtime.querySelector('[data-flower-subagent-count]')?.getAttribute('data-flower-subagent-count') === '5');
       const trigger = runtime.querySelector('button[aria-controls="flower-subagents-dropdown"]') as HTMLButtonElement;
       trigger.click();
       await waitFor(() => document.querySelectorAll('[data-flower-subagent-row]').length === 2);
@@ -125,9 +125,9 @@ it('preserves disclosure choice during live updates and keeps keyboard focus on 
   const push = async (subagents: typeof children) => {
     await waitFor(() => emit !== undefined);
     emit!({ schema_version: 1, kind: 'thread.batch', thread_id: parent.thread_id, subagents });
-    await waitFor(() => Number(runtime.querySelector('.flower-header-icon-badge')?.textContent ?? 0) === subagents.length);
+    await waitFor(() => Number(runtime.querySelector('[data-flower-subagent-count]')?.getAttribute('data-flower-subagent-count') ?? 0) === subagents.length);
   };
-  await waitFor(() => runtime.querySelector('.flower-header-icon-badge')?.textContent === '1');
+  await waitFor(() => runtime.querySelector('[data-flower-subagent-count]')?.getAttribute('data-flower-subagent-count') === '1');
   const trigger = runtime.querySelector<HTMLButtonElement>('button[aria-controls="flower-subagents-dropdown"]')!;
   trigger.click();
   await waitFor(() => Boolean(document.querySelector('[data-flower-subagent-disclosure]')));
