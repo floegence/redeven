@@ -335,6 +335,7 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
   const deploymentFailureCopy = (): EnvAppTranslationKey => {
     switch (deploymentResult()?.code) {
       case 'canceled': return 'remoteDesktop.deployCanceled';
+      case 'operation_timeout': return 'remoteDesktop.deployTimeout';
       case 'administrator_required': case 'authorization_failed': case 'authorization_unavailable': case 'authentication_challenge_unsupported': case 'authorization_timeout': return 'remoteDesktop.deployAuthFailed';
       case 'runtime_identity_changed': return 'remoteDesktop.deployIdentityFailed';
       case 'installation_ownership_conflict': case 'retained_version_untrusted': case 'deployment_path_untrusted': return 'remoteDesktop.deployOwnershipFailed';

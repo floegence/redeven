@@ -70,6 +70,9 @@ can fail only its exact submitted state; late rejection cannot replace a newer
 challenge, cancellation, or an authoritative completed result.
 If commit wins a cancellation race, preparation remains complete but viewer
 opening stays canceled; the user can return to connection options.
+Manager timeouts identify the expired operation and offer recheck/retry. An
+unconfirmed rollback describes only the unknown recovery outcome; it does not
+infer an SSH disconnect from a missing rollback event.
 Cancellation, retry and recovery use the same surface and restore focus
 to the action that started the flow.
 

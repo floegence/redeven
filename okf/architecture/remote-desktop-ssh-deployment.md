@@ -34,7 +34,7 @@ it never infers NOPASSWD from an unrelated command. Root authorization uses syst
 su in a private SSH PTY, checks the expected challenge and disabled echo, and sends
 one password. PAM rejection, missing tools, locked root and unsupported multi-step
 challenges end authorization with method switching and dismissal available.
-Nothing changes root SSH, PAM, sudo policy, desktop ACLs or host packages.
+Root SSH, PAM, sudo policy, desktop ACLs and host packages remain unchanged.
 
 Passwords pass only through the transient UI, trusted Desktop main process and
 system elevation program. They never enter Runtime APIs, daemon/manager requests,
@@ -86,7 +86,7 @@ operation. File and directory publication is synchronized; committed or restored
 journals retire atomically before repeatable garbage collection. Recovery never
 claims to restore already interrupted connections.
 
-Both pipe and PTY use the same versioned JSON control protocol with confirmation,
+Pipe and PTY use the same versioned JSON control protocol with confirmation,
 commit, cancel and five-second heartbeat messages. Fifteen seconds without peer
 liveness cancels management. State/authentication reads allow 10 seconds; transfer
 stalls allow 30 seconds; media preparation allows 20 minutes; interruption consent
@@ -94,7 +94,7 @@ allows two minutes; application allows two minutes; rollback allows 20 seconds.
 Desktop retains management transport for 40 seconds after cancel, covering peer
 loss detection and rollback, and reports unknown recovery if no result arrives.
 Temporary staging cleanup is separately
-bounded. No UI owner remains permanently blocked by cleanup.
+bounded.
 
 ## Product interaction and physical limits
 
@@ -106,7 +106,7 @@ bounded cleanup. A later attempt rechecks authoritative state. After commit,
 capture or viewer-open failures retry without administrator authorization; failed
 or late viewer sessions are released. Popup denial retains a reopening action.
 
-Physical qualification covers supported Linux GNOME/GDM outputs, including login,
+Physical qualification covers Linux GNOME/GDM outputs, including login,
 lock and active sessions. It does not create headless or virtual desktops. Root
 credentials cannot replace network reachability, verified SSH host identity, PAM
 authorization or usable scanout. GPU/capture failures remain capability diagnostics.
@@ -117,21 +117,36 @@ Portal/macOS flows retain their owning contracts.
 
 ## Validation evidence
 
-The recovery change has focused deployment, transport, launcher, API and locale
-coverage and consumes published Floe Native Apps v0.23.3 after its release
-qualification and Go proxy/checksum verification. Linux root fixtures verify
+Focused deployment, transport, launcher, API and locale tests consume published
+Floe Native Apps v0.23.3 after release and Go proxy/checksum verification. Linux root fixtures verify
 self-reported live identity, media command acceptance and both architecture
 service-kit bytes. A disposable Linux SSH server exercised real sudo and su/PAM for sudo
 password, root password, both wrong-password paths, command-specific NOPASSWD and
 locked root. Special-character credentials stayed out of arguments and diagnostic
-results. The fixture manager covered the control protocol; it did not qualify a
-real systemd deployment or physical capture.
+results. That fixture covers authorization, not systemd or capture.
 
-The original udesk26 evidence identified an old executable fingerprint retained
-by the stopped-service start path. This change has not completed a fresh udesk26
-picture, input or reconnect acceptance: noninteractive SSH authentication was
-unavailable. Real systemd fault injection and physical-seat acceptance remain
-required; source tests, isolated PAM and browser fixtures do not replace them.
+On 2026-10-16 UTC, udesk26 passed physical acceptance on Ubuntu 26.04.1,
+kernel 7.0.0-38-generic and GNOME Wayland (1920 x 1280). Commit 6ed831ea96ea,
+epoch 62, consumed published Floe Native Apps v0.23.3 at 3fec2a1d6390. Isolated
+Runtime PID 100958 used port 45741 and state
+/tmp/redeven-ssh-desktop-acceptance-20261016; Desktop used ports 45731-45733.
+Active/stopped version-2 installations with stale fingerprints migrated to
+version 3 after actual Runtime admission. The viewer painted GNOME; a temporary
+GTK entry/button recorded real keyboard/pointer input. Idempotent ensure retained
+service PID 101943 and its viewer. Canceling media preparation or letting consent
+expire preserved the original service and allowed retry.
+
+Real systemd tests counted a view-only attachment before separate consent.
+Cancellation at verification restored exact policy/unit bytes and active/enabled
+state, then retired the journal. Reconnect painted and delivered pointer input
+without administrator authorization. SIGKILL at verification preserved the journal;
+the next normal Desktop ensure recovered, verified and committed. Sanitized evidence resides under that local path.
+
+udesk26 used NOPASSWD with root locked; password evidence comes from the isolated
+PAM fixture. This run did not requalify GDM, lock-screen, macOS or Portal. Cleanup
+preserved original Runtime PID 98456 and GNOME, restored its compatible v0.22.48
+service and rebound its actual image. That Runtime reported active service and
+ready screen/input. Test processes/SSH authorization were removed; no service retained the test image.
 
 # Evidence
 
