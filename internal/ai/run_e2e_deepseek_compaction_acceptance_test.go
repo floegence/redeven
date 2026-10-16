@@ -123,7 +123,7 @@ func TestE2E_FlowerDeepSeekContextCompaction(t *testing.T) {
 			automatic := strings.HasPrefix(scenario, "automatic")
 			// Every filler enters through production Send with bounded text/reference
 			// snapshots. Later inputs and questions never contain the answers.
-			maxRounds := 24
+			maxRounds := 32
 			if !automatic {
 				maxRounds = 3
 			}
@@ -278,7 +278,7 @@ func requireDeepSeekQualificationUsage(t *testing.T, detail *FlowerThreadDetail,
 		t.Fatal("real provider did not report canonical native usage")
 	}
 	usage := *detail.Thread.ContextUsage.Confirmed
-	if usage.InputTokens <= 0 || usage.ContextWindowTokens != int64(window) || usage.OutputHeadroomTokens <= 0 {
+	if usage.InputTokens <= 0 || usage.ContextWindowTokens != int64(window) || usage.OutputHeadroomTokens <= 0 || usage.OutputControl != "client" || usage.RequestOutputTokens <= 0 || usage.SafetyMarginTokens != min(int64(window)/100, 4096) {
 		t.Fatal("native usage has no input or configured budget")
 	}
 	return usage

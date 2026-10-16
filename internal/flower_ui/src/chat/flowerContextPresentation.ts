@@ -18,18 +18,24 @@ export function buildFlowerContextWindow(usage: FlowerContextUsage) {
   if (input === undefined || !Number.isFinite(input) || input < 0
     || capacity === undefined || !Number.isFinite(capacity) || capacity <= 0) return null;
   const used = Math.min(input, capacity);
-  const headroom = sample?.output_headroom_tokens ?? 0;
-  const reserved = Number.isFinite(headroom) ? Math.min(Math.max(0, headroom), capacity - used) : 0;
   return {
     input,
     capacity,
     estimated: !usage.confirmed,
     segments: [
       { key: 'input' as const, tokens: input },
-      ...(reserved > 0 ? [{ key: 'outputReserve' as const, tokens: reserved }] : []),
-      { key: 'freeSpace' as const, tokens: capacity - used - reserved },
+      { key: 'freeSpace' as const, tokens: capacity - used },
     ].map((segment) => ({ ...segment, share: Math.min(1, segment.tokens / capacity) * 100 })),
   };
+}
+
+// Budget facts stay on their originating request. Missing facts never inherit
+// an older request ceiling, including after canonical compaction invalidation.
+export function flowerRequestOutputSample(usage: FlowerContextUsage) {
+  const samples = [usage.confirmed, usage.estimate].filter((sample): sample is FlowerContextSample =>
+    !!sample);
+  return samples.sort((a, b) => b.updated_at_ms - a.updated_at_ms
+    || (a.run_id && a.run_id === b.run_id ? (b.step_index ?? 0) - (a.step_index ?? 0) : 0))[0];
 }
 
 export const FLOWER_CONTEXT_SOURCES = [

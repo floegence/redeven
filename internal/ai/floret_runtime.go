@@ -147,6 +147,9 @@ func (r *run) prepareFloretHostedAgent(ctx context.Context, req RunRequest, prov
 		withFloretAttachmentToolRead(r.attachmentToolReadEnabled),
 		withFloretRequestAdmission(r.admitFloretProviderRequest),
 	)
+	if capability.OutputControl != "" {
+		flProvider.outputControl = flprovider.OutputControl(capability.OutputControl)
+	}
 	labels := flruntime.RunLabels{Correlation: map[string]string{
 		"thread_id":  strings.TrimSpace(r.threadID),
 		"turn_id":    strings.TrimSpace(r.turnID),
@@ -287,15 +290,9 @@ func floretModelContextPolicy(contextWindow int, requestedMaxOutput int, capabil
 	if contextWindow <= 0 {
 		contextWindow = modelGatewayDefaultContextWindowTokens
 	}
-	maxOutput := requestedMaxOutput
-	if maxOutput <= 0 {
-		maxOutput = capabilityMaxOutput
-	}
 	return flconfig.ContextPolicy{
-		ContextWindowTokens:   int64(contextWindow),
-		MaxOutputTokens:       int64(maxOutput),
-		ReservedOutputTokens:  int64(maxOutput),
-		MaxCompactionFailures: 2,
+		ContextWindowTokens: int64(contextWindow), ModelMaxOutputTokens: int64(capabilityMaxOutput),
+		MaxOutputTokens: int64(requestedMaxOutput), MaxCompactionFailures: 2,
 	}
 }
 

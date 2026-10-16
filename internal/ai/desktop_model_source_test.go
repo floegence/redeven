@@ -312,6 +312,25 @@ func TestDesktopModelSourceModelSnapshotPublishesSanitizedDeepSeekCapability(t *
 	}
 }
 
+func TestDesktopModelSourcePreservesOutputControlDeclaration(t *testing.T) {
+	for _, control := range []string{"client", "server", ""} {
+		t.Run(control, func(t *testing.T) {
+			capability := sanitizeDesktopModelSourceCapability("desktop:model", contextmodel.ModelCapability{OutputControl: control})
+			raw, err := json.Marshal(DesktopModelSourceModel{ID: "desktop:model", Capability: &capability})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var snapshot DesktopModelSourceModel
+			if err := json.Unmarshal(raw, &snapshot); err != nil {
+				t.Fatal(err)
+			}
+			if got := desktopModelSourceModelCapability(snapshot).OutputControl; got != control {
+				t.Fatalf("remote output control = %q, want %q", got, control)
+			}
+		})
+	}
+}
+
 func TestDesktopModelSourceModelCapabilityFallsBackToLegacyV1Fields(t *testing.T) {
 	t.Parallel()
 
@@ -336,6 +355,9 @@ func TestDesktopModelSourceModelCapabilityFallsBackToLegacyV1Fields(t *testing.T
 		t.Fatalf("Capability=%+v, want omitted v1 field", legacyModel.Capability)
 	}
 	capability := desktopModelSourceModelCapability(legacyModel)
+	if capability.OutputControl != "" {
+		t.Fatal("legacy snapshot must not invent output control")
+	}
 	if capability.MaxContextTokens != 800_000 || capability.MaxOutputTokens != 384_000 {
 		t.Fatalf("capability limits=(%d,%d), want legacy values", capability.MaxContextTokens, capability.MaxOutputTokens)
 	}

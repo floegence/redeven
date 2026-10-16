@@ -193,6 +193,22 @@ func TestResolver_Resolve_DoesNotUseModelNameSubstringHeuristics(t *testing.T) {
 	}
 }
 
+func TestResolverOutputControlMatchesProviderTransport(t *testing.T) {
+	for _, tc := range []struct{ providerType, auth, control string }{
+		{"openai", "", "client"},
+		{"deepseek", "", "client"},
+		{"chatgpt", "", "server"},
+		{"openai", config.AIAuthChatGPT, "server"},
+	} {
+		t.Run(tc.providerType+tc.auth, func(t *testing.T) {
+			capability, err := NewResolver().Resolve(t.Context(), config.AIProvider{ID: "provider", Type: tc.providerType, AuthMethod: tc.auth}, "provider/model")
+			if err != nil || capability.OutputControl != tc.control {
+				t.Fatalf("output control = %q, want %q: %v", capability.OutputControl, tc.control, err)
+			}
+		})
+	}
+}
+
 func TestAdaptAttachments_DegradeUnsupportedModes(t *testing.T) {
 	t.Parallel()
 

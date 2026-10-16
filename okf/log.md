@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-16: Request output budgets
+
+- Adopt published Floret v7.48.1 [request output budgets](ai/model-context-runtime.md), frozen output refitting and domain 18; distinguish input capacity, request controls and composition estimates in Flower.
+
 ## 2026-10-16: Subagent header avatar stack
 
 - Replace the [Subagent header](ui/flower-subagent-detail.md) badge with three rotating canonical portraits and exact remaining counts. Preserve static waiting states, gray settled inventory, accessible status summaries, surface-local detail access, and reduced-motion behavior.

@@ -66,6 +66,20 @@ func TestProviderPreparationFreezesDispatchedWireAndEstimate(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			original := prepared.RenderedPayloadFingerprint()
+			fitted, err := prepared.(interface {
+				withMaxOutputTokens(context.Context, int64) (preparedModelGatewayTurn, error)
+			}).withMaxOutputTokens(t.Context(), 1234)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if fitted.RenderedPayloadFingerprint() == original || prepared.RenderedPayloadFingerprint() != original {
+				t.Fatal("refit must create a new frozen body")
+			}
+			if err := prepared.Close(); err != nil {
+				t.Fatal(err)
+			}
+			prepared = fitted
 			defer prepared.Close()
 			if calls.Load() != 0 {
 				t.Fatal("preparation dispatched network work")
@@ -83,6 +97,14 @@ func TestProviderPreparationFreezesDispatchedWireAndEstimate(t *testing.T) {
 				t.Fatal(err)
 			}
 			actual := <-wire
+			var final map[string]any
+			if err := json.Unmarshal(actual, &final); err != nil {
+				t.Fatal(err)
+			}
+			field := prepared.(*preparedModelWire).outputField
+			if final[field] != float64(1234) {
+				t.Fatalf("final output limit: %v", final[field])
+			}
 			if !bytes.Equal(raw, actual) || prepared.RenderedPayloadFingerprint() != fmt.Sprintf("sha256:%x", sha256.Sum256(actual)) {
 				t.Fatal("dispatched bytes differ from prepared fingerprint")
 			}

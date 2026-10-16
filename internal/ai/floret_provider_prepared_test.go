@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -68,6 +69,18 @@ func TestFloretProviderPreparedRequestFreezesCompleteRenderedPayload(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
+	original := prepared.RenderedPayloadFingerprint()
+	fitted, err := prepared.(flprovider.PreparedRequestOutputLimiter).WithMaxOutputTokens(t.Context(), 1234)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolveCalls != 1 || prepared.RenderedPayloadFingerprint() != original || fitted.RenderedPayloadFingerprint() == original {
+		t.Fatal("output refit changed or reread frozen input")
+	}
+	if err := prepared.Close(); err != nil {
+		t.Fatal(err)
+	}
+	prepared = fitted
 	handle, ok := prepared.(*preparedFloretModelRequest)
 	if !ok {
 		t.Fatalf("prepared request type = %T", prepared)
@@ -116,6 +129,9 @@ func TestFloretProviderPreparedRequestFreezesCompleteRenderedPayload(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
+	if replay.RenderedPayloadFingerprint() != prepared.RenderedPayloadFingerprint() || !reflect.DeepEqual(replay.TokenEstimate(), estimate) {
+		t.Fatal("retry changed finalized request fingerprint or estimate")
+	}
 	replayStream, err := replay.Stream(t.Context())
 	if err != nil {
 		t.Fatal(err)
@@ -132,6 +148,11 @@ func TestFloretProviderPreparedRequestFreezesCompleteRenderedPayload(t *testing.
 	defer gateway.mu.Unlock()
 	if len(gateway.requests) != 2 {
 		t.Fatalf("rendered model requests = %d, want 2", len(gateway.requests))
+	}
+	for _, request := range gateway.requests {
+		if request.Budgets.MaxOutputToken != 1234 {
+			t.Fatalf("retry lost finalized output limit: %d", request.Budgets.MaxOutputToken)
+		}
 	}
 	if len(gateway.requests) != 2 || (gateway.requests[0].ReusePolicy == nil || gateway.requests[0].ReusePolicy.ProviderStateAllowed || gateway.requests[0].ReusePolicy.PromptCacheEnabled || gateway.requests[0].ReusePolicy.PreferContinuation) {
 		t.Fatalf("prepared isolation lost: %+v", gateway.requests[0].ReusePolicy)

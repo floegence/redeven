@@ -12,6 +12,47 @@ Redeven persists product model and reasoning preferences, provider credentials, 
 
 # Contract
 
+## Request output budgets
+
+Redeven passes model output capability as Floret ModelMaxOutputTokens, and
+only an explicit per-request limit as MaxOutputTokens. It never maps capability
+to a fixed output reservation. Published Floret v7.48.1 owns the complete-request
+projection, 90% default compaction threshold, shared bounded safety margin, exact
+explicit limits, reasoning minimum and bounded overflow/continuation behavior.
+Frozen transports change only generation controls; attachments and environment
+facts are not collected again. Network retries replay the finalized payload.
+
+Client-controlled providers report the actual finalized request limit. ChatGPT
+reports server management; Desktop snapshots carry the resolved provider control
+mode. Missing remote capability fails explicitly. Historical requests retain their
+original snapshots; Floret exclusively migrates its own domain schema to 18.
+
+Flower displays input and the remaining shared window. Request output limits and
+compaction thresholds appear separately. Composition uses its own disjoint
+estimate total, independent of measured usage. Shared floating layers own panel
+placement in Activity and Workbench; Escape, outside clicks and the close control
+preserve navigation and focus recovery.
+
+Qualification on 2026-10-16 used published Floret v7.48.1 with GOWORK=off.
+The AI/context packages, shared presentation and mapper tests, both hosts'
+localization, Env App typecheck/lint and 29 context-panel/recovery browser tests
+passed. All four real DeepSeek compaction scenarios passed without skips.
+With the configured 950,000-token window and 393,216-token model output
+capability, the threshold remained 855,000; native input reached 821,686
+before the next request compacted, and settled at 51,366 after recall. These
+native totals are observations, not replacements for the projected input budget.
+The run log is /tmp/redeven-budget-deepseek-merged.log; reports remain in its
+private temporary report directory. This qualifies DeepSeek only; other
+protocols use deterministic frozen-request tests.
+
+The broader Desktop client run had 422 passing tests and two failures. Focused
+runs on both this change and unchanged main reproduced the same failures:
+EndpointsPopover's host-only-address outside-dismissal assertion and
+FlowerNavigation's runtime-replacement request-count assertion. They remain
+baseline issues, are outside this budget change and are not counted as passes.
+The comparison logs are /tmp/redeven-budget-desktop-failures-focused.log and
+/tmp/redeven-budget-desktop-main-baseline.log.
+
 ## Mechanism
 
 Model reasoning capability, stream fields, history replay, and immutable thread settings are governed by [model reasoning capabilities and transport](model-reasoning-runtime.md).

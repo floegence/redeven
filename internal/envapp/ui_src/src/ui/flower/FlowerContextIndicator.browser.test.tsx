@@ -45,7 +45,7 @@ function theme(preset: typeof builtInShellThemePresets[number]) {
  document.documentElement.classList.toggle('dark', preset.mode === 'dark');
  for (const [name, value] of Object.entries(preset.semanticTokens ?? {})) if (value) document.documentElement.style.setProperty(name, value);
 }
-function mount(locale: () => RedevenLocale, usage: () => FlowerContextUsage) {
+function mount(locale: () => RedevenLocale, usage: () => FlowerContextUsage, projected = false) {
  const copy = () => {
   const i18n = createTestI18nHelpers(locale());
   return createLocalizedFlowerSurfaceCopy({ locale: locale(), t: (key, params) => i18n.t(key as EnvAppTranslationKey, params),
@@ -53,9 +53,13 @@ function mount(locale: () => RedevenLocale, usage: () => FlowerContextUsage) {
  };
  const host = document.createElement('div');
  host.style.cssText = 'position:fixed;inset:0;padding:24px;box-sizing:border-box;display:flex;align-items:flex-end;justify-content:flex-end;font-family:system-ui;background:var(--background);--flower-chat-surface:var(--background);--flower-chat-surface-border:var(--border);--flower-chat-surface-elevated:var(--card);--redeven-surface-shadow-source:#000';
+ if (projected) {
+  host.setAttribute('data-floe-dialog-surface-host', 'true');
+  host.style.cssText += ';inset:auto;left:20px;top:20px;width:700px;height:600px;transform:scale(.8);transform-origin:top left';
+ }
  document.body.append(host);
  dispose = render(() => <FlowerComposerContextIndicator copy={copy()} usage={usage()} />, host);
- return { host, copy, trigger: host.querySelector<HTMLElement>('[role="progressbar"]')!, panel: host.querySelector<HTMLElement>('[role="region"]')! };
+ return { host, copy, trigger: host.querySelector<HTMLElement>('[role="progressbar"]')!, panel: document.getElementById(host.querySelector<HTMLElement>('[role="progressbar"]')!.getAttribute('aria-controls')!)! };
 }
 for (const locale of ['en-US', 'zh-CN'] as const) for (const dark of [false, true]) {
  it('shows explicit sources, flat bars and stable keyboard interaction in ' + locale + ', dark=' + dark, async () => {
@@ -152,3 +156,22 @@ for (const mode of ['relative', 'historical', 'media'] as const) {
   await userEvent.keyboard('{Escape}');expect(document.activeElement).toBe(trigger);
  });
 }
+
+it('uses shared projected placement and restores focus after touch and keyboard close', async()=>{
+ await page.viewport(820,700);
+ const {host,trigger,panel}=mount(()=> 'en-US',()=>fixture(),true);
+ trigger.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,pointerType:'touch'}));
+ trigger.click();
+ await expect.poll(()=>getComputedStyle(panel).opacity).toBe('1');
+ const layer=panel.closest('[data-floe-local-interaction-surface="true"]');
+ expect(layer).toBeTruthy();expect(host.contains(layer)).toBe(true);
+ expect(panel.style.position).not.toBe('fixed');expect(panel.style.left).toBe('');expect(panel.style.top).toBe('');
+ expect(panel.getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
+ expect(panel.getBoundingClientRect().right).toBeLessThanOrEqual(820);
+ panel.querySelector<HTMLButtonElement>('.flower-context-close')!.click();
+ expect(panel.getAttribute('aria-hidden')).toBe('true');expect(document.activeElement).toBe(trigger);
+ await userEvent.keyboard('{Enter}');
+ expect(panel.dataset.open).toBe('true');
+ await userEvent.keyboard('{Escape}');
+ expect(panel.getAttribute('aria-hidden')).toBe('true');expect(document.activeElement).toBe(trigger);
+});

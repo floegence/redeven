@@ -410,6 +410,9 @@ export type FlowerContextSample = Readonly<{
   threshold_tokens?: number;
   request_safe_limit_tokens?: number;
   output_headroom_tokens?: number;
+  request_output_tokens?: number;
+  output_control?: 'client' | 'server';
+  safety_margin_tokens?: number;
   used_ratio?: number;
   threshold_ratio?: number;
   pressure_status: FlowerContextPressureStatus;

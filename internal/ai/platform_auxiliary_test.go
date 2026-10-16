@@ -39,8 +39,8 @@ func TestPlatformAuxiliaryIdentityIsStableAndRequestScoped(t *testing.T) {
 	}
 	req.MaxOutputTokens = 4096
 	bounded, err := p.turnRequest(t.Context(), req)
-	if err != nil || bounded.Budgets.MaxOutputToken != 512 {
-		t.Fatalf("platform output exceeded published bound: %d, %v", bounded.Budgets.MaxOutputToken, err)
+	if err != nil || bounded.Budgets.MaxOutputToken != 4096 {
+		t.Fatalf("gateway changed authoritative Floret output limit: %d, %v", bounded.Budgets.MaxOutputToken, err)
 	}
 }
 
@@ -63,6 +63,15 @@ func TestPlatformAutomaticTitleAndManualCompaction(t *testing.T) {
 			}
 			if in.AttemptID == "" || in.LogicalRequestID == "" || in.RunID == "" {
 				t.Error("missing operation identity")
+			}
+			var payload struct {
+				MaxOutputTokens int64 `json:"max_output_tokens"`
+			}
+			if err := json.Unmarshal(in.Payload, &payload); err != nil {
+				t.Fatal(err)
+			}
+			if payload.MaxOutputTokens <= 0 || payload.MaxOutputTokens > 2048 {
+				t.Errorf("request output %d exceeds model capability 2048", payload.MaxOutputTokens)
 			}
 			mu.Lock()
 			if _, seen := requests[in.AttemptID]; seen {

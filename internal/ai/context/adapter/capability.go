@@ -43,6 +43,10 @@ func (r *Resolver) Resolve(_ context.Context, provider config.AIProvider, modelI
 	cap := defaultCapability(provider, modelName, wireModelName)
 	cap.ProviderID = providerID
 	cap.ProviderType = providerType
+	cap.OutputControl = "client"
+	if providerType == "chatgpt" || provider.EffectiveAuthMethod() == config.AIAuthChatGPT {
+		cap.OutputControl = "server"
+	}
 	cap.ResolverVersion = capabilityResolverVersion
 	cap.ModelName = modelName
 	cap.WireModelName = wireModelName

@@ -1082,6 +1082,14 @@ Use this checklist when reviewing any Redeven plugin integration change:
 
 ## Flower / Floret Boundary
 
+Floret owns request input projection and output fitting. Pass model capability
+separately from explicit request limits; never turn model maximum output into
+fixed input reservation. Gateways must declare client or server output control,
+and refit frozen input without repeated attachment reads or authorization.
+Flower consumes request-scoped facts and keeps composition estimates independent
+of provider-measured usage. Floret alone migrates its opaque storage.
+
+
 Redeven consumes the published `github.com/floegence/floret/v7` typed thread runtime. Redeven owns product authorization, attachment resolution, effect execution, provider configuration, read acknowledgement, and UI mapping. Floret owns each thread current view, canonical journal, queue, interactions, effect-attempt identity, immutable provider checkpoints, context lineage, and restart recovery.
 
 Product handlers perform authorization and DTO mapping, then call typed `View`, `Send`, `Respond`, `Cancel`, `Retry`, `Subscribe`, or optional `ThreadContextCompactor.CompactContext` and `ThreadSteeringController.Steer` / `SteerQueued` operations. Parent guidance uses steering; ordinary user Send retains queue semantics. They must not wait for provider work or maintain receipt, admission, authority, recovery, projection, replay, or lifecycle mirrors. Effects execute only through the exact one-shot authorization supplied by the Floret invocation. Standalone `/compact` uses the dedicated context command, never ordinary Send, fabricated user input, or a host-owned compaction lifecycle. Manual and automatic compaction share the released Floret implementation. An irreversible effect with an unknown outcome is a terminal `effect_outcome_unknown` failure; Redeven must not retry it or expose a retry command.

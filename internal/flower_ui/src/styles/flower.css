@@ -2083,10 +2083,7 @@
 
 .flower-composer-context-tooltip {
   box-sizing: border-box;
-  position: absolute;
-  right: 0;
-  bottom: calc(100% + 0.55rem);
-  z-index: 20;
+  position: relative;
   width: min(23rem, calc(100vw - 2rem));
   max-height: min(34rem, calc(100dvh - 4.5rem));
   overflow-y: auto;
@@ -2113,12 +2110,6 @@
   transform: translateY(0);
 }
 
-.flower-composer-context-indicator[data-context-placement='below-start'] .flower-composer-context-tooltip {
-  left: 0;
-  right: auto;
-  top: calc(100% + 0.55rem);
-  bottom: auto;
-}
 
 .flower-handler-stack {
   display: flex;
@@ -10064,12 +10055,6 @@ button.flower-attachment-preview-trigger:disabled {
   position: static;
 }
 
-.flower-subagent-detail-context .flower-composer-context-indicator[data-context-placement='below-start'] .flower-composer-context-tooltip {
-  left: auto;
-  right: 1rem;
-  top: calc(100% + 0.5rem);
-  width: min(23rem, calc(100cqw - 2rem));
-}
 
 .flower-subagent-detail-overview-meta .flower-subagent-status-text,
 .flower-subagent-detail-agent-type {
@@ -12062,7 +12047,6 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
   user-select: text;
 }
 .flower-composer-context-tooltip [data-category='input'] { --flower-context-color: var(--info, var(--primary)); }
-.flower-composer-context-tooltip [data-category='outputReserve'] { --flower-context-color: color-mix(in srgb, var(--muted-foreground) 64%, transparent); }
 .flower-composer-context-tooltip [data-category='freeSpace'] { --flower-context-color: color-mix(in srgb, var(--muted-foreground) 20%, transparent); }
 .flower-composer-context-tooltip [data-category='execution_environment'] { --flower-context-color: var(--redeven-categorical-graph-1, var(--chart-2, var(--info, var(--primary)))); }
 .flower-composer-context-tooltip [data-category='delegation'] { --flower-context-color: var(--redeven-categorical-graph-5, var(--chart-5, var(--primary))); }
@@ -12240,3 +12224,10 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
   grid-template-columns: 0.5rem minmax(0, 1fr) 3.1rem;
 }
 .flower-composer-context-tooltip [data-category='protocol_framing'] { --flower-context-color: var(--muted-foreground); }
+
+.flower-context-budget-facts { display: grid; gap: 0.35rem; margin-block: 0.65rem; }
+.flower-context-budget-facts > div { display: flex; justify-content: space-between; gap: 1rem; }
+.flower-context-shared-space { color: var(--muted-foreground); font-size: 0.6875rem; }
+.flower-context-close { cursor: pointer; border: 0; background: transparent; color: inherit; border-radius: 0.25rem; padding: 0.25rem; }
+.flower-context-close:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.flower-context-panel-layer { pointer-events: none; }
