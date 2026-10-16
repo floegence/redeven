@@ -121,9 +121,9 @@ content weight. Flower estimates category token amounts by allocating the displa
 used-context total according to those shares, regardless of tokenizer quality or
 media coverage. Child amounts allocate their parent total by their group shares.
 Integer rounding preserves category and group sums; every amount carries an
-approximation mark, including tooltips and accessible labels. A short proportional
-estimate label explains the calculation. Legacy records retain a historical
-estimate label. A missing used-context total leaves shares only; a missing
+approximation mark, including tooltips and accessible labels. The calculation
+and historical status stay in tooltips and accessible labels rather than adding
+another visible heading or badge. A missing used-context total leaves shares only; a missing
 breakdown shows an unavailable state. These are display estimates, not
 provider-measured category counts or changes to Floret's budget calculations.
 Content and protocol framing share the upstream counting core; safety margins
@@ -145,9 +145,14 @@ Shared context framing is explicit formatting overhead rather than a second
 auto-loaded snapshot breakdown. Retained historical updates and removals count
 through Floret's canonical request renderer.
 
+The popup keeps one header with the total and a trailing close button, the
+capacity bar and legend, source bars, and compact cache rates. Budget thresholds,
+request output limits and explanatory paragraphs are not shown in this popup.
 The indicator opens and dismisses by mouse, touch or keyboard. A keyed source
 keeps its disclosure state and keyboard focus through live reordering. Theme
-colors, bounded scrolling and localized labels work at narrow widths. Snapshot
+colors, bounded scrolling and localized labels work at narrow widths. Measured
+panel dimensions refresh placement after disclosure, content and viewport size
+changes; the shared floating layer owns projection and boundary clamping. Snapshot
 collection and use identities remain in canonical transport; the usage chart
 never presents current collection metadata as past request composition. Updates
 do not create chat bubbles or block navigation. Subtask details use the same

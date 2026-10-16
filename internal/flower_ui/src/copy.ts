@@ -662,11 +662,6 @@ export type FlowerSurfaceCopy = Readonly<{
       categoryLabels: Readonly<Record<FlowerContextCategory, string>>;
       sourceLabels: Readonly<Record<FlowerContextSource, string>>;
       input: string;
-      compactThreshold: string;
-      requestOutputLimit: string;
-      serverManaged: string;
-      sharedSpace: string;
-      proportionalEstimate: string;
       close: string;
       freeSpace: string;
       estimated: string;
@@ -1110,11 +1105,6 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
         reasoning_tokens: 'Reasoning', attachment_tokens: 'Images & files', framing_tokens: 'Protocol formatting',
       },
       input: 'Input usage',
-      compactThreshold: 'Auto-compaction threshold',
-      requestOutputLimit: 'Latest request output limit',
-      serverManaged: 'Managed by server',
-      sharedSpace: 'Remaining window is shared by input and output.',
-      proportionalEstimate: "Estimated by share",
       close: 'Close context details',
       freeSpace: 'Remaining window',
       estimated: 'Estimated',

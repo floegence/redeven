@@ -29,15 +29,6 @@ export function buildFlowerContextWindow(usage: FlowerContextUsage) {
   };
 }
 
-// Budget facts stay on their originating request. Missing facts never inherit
-// an older request ceiling, including after canonical compaction invalidation.
-export function flowerRequestOutputSample(usage: FlowerContextUsage) {
-  const samples = [usage.confirmed, usage.estimate].filter((sample): sample is FlowerContextSample =>
-    !!sample);
-  return samples.sort((a, b) => b.updated_at_ms - a.updated_at_ms
-    || (a.run_id && a.run_id === b.run_id ? (b.step_index ?? 0) - (a.step_index ?? 0) : 0))[0];
-}
-
 export const FLOWER_CONTEXT_SOURCES = [
   'system_prompt', 'system_tools', 'mcp_tools', 'provider_tools', 'messages',
   'tool_outputs', 'skills', 'rule_files', 'environment', 'summary', 'reasoning',

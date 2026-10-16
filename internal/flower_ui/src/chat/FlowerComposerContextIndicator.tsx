@@ -5,7 +5,7 @@ import type { FlowerContextSourceRow } from './flowerContextPresentation';
 
 import type { FlowerContextUsage, FlowerModelContext } from '../contracts/flowerSurfaceContracts';
 import type { FlowerSurfaceCopy } from '../copy';
-import { buildFlowerComposerContextIndicatorView, buildFlowerContextWindow, buildFlowerContextComposition, flowerRequestOutputSample, formatContextAmount } from './flowerContextPresentation';
+import { buildFlowerComposerContextIndicatorView, buildFlowerContextWindow, buildFlowerContextComposition, formatContextAmount } from './flowerContextPresentation';
 
 export function FlowerComposerContextIndicator(props: {
   usage?: FlowerContextUsage;
@@ -16,8 +16,6 @@ export function FlowerComposerContextIndicator(props: {
   const labels = () => props.copy.chat.contextIndicator;
   const view = createMemo(() => buildFlowerComposerContextIndicatorView(props.usage ?? {}, props.copy));
   const contextWindow = createMemo(() => buildFlowerContextWindow(props.usage ?? {}));
-  const requestOutput = createMemo(() => flowerRequestOutputSample(props.usage ?? {}));
-  const threshold = createMemo(() => (props.usage?.estimate ?? props.usage?.confirmed)?.threshold_tokens);
   const composition = createMemo(() => buildFlowerContextComposition(props.usage ?? {}));
   const disclosures = new Map<string, HTMLElement>();
   const expanded = new Set<string>();
@@ -54,20 +52,37 @@ export function FlowerComposerContextIndicator(props: {
   onCleanup(cancelDismiss);
   let container: HTMLDivElement | undefined;
   let panel: HTMLDivElement | undefined;
-  const [position, setPosition] = createSignal({ x: 0, y: 0 });
+  const [layout, setLayout] = createSignal({ position: { x: 0, y: 0 }, size: { width: 368, height: 500 } });
   const containsFocus = () => !!(container?.contains(document.activeElement) || panel?.contains(document.activeElement));
   const close = () => { trigger?.focus({ preventScroll: true }); setTooltipOpen(false); };
   const escape = (event: KeyboardEvent) => {
     if (event.key === 'Escape' && tooltipOpen()) { event.stopPropagation(); event.preventDefault(); close(); }
   };
-  createEffect(() => {
-    if (!tooltipOpen() || !trigger) return;
-    const rect = trigger.getBoundingClientRect();
-    setPosition({ x: props.placement === 'below-start' ? rect.left : rect.right - 368,
-      y: props.placement === 'below-start' ? rect.bottom + 8 : rect.top - (panel?.offsetHeight || 500) - 8 });
-  });
   let trigger: HTMLDivElement | undefined;
   const [anchor, setAnchor] = createSignal<HTMLElement>();
+  createEffect(() => {
+    if (!tooltipOpen() || !trigger || !panel) return;
+    const placement = props.placement;
+    const measure = () => {
+      const rect = trigger!.getBoundingClientRect();
+      const { width, height } = panel!.getBoundingClientRect();
+      setLayout({ size: { width, height }, position: {
+        x: placement === 'below-start' ? rect.left : rect.right - width,
+        y: placement === 'below-start' ? rect.bottom + 8 : rect.top - height - 8,
+      } });
+    };
+    measure();
+    const observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(measure);
+    observer?.observe(panel);
+    observer?.observe(trigger);
+    window.addEventListener('resize', measure);
+    window.addEventListener('scroll', measure, true);
+    onCleanup(() => {
+      observer?.disconnect();
+      window.removeEventListener('resize', measure);
+      window.removeEventListener('scroll', measure, true);
+    });
+  });
   onMount(() => {
     setAnchor(trigger);
     const dismiss = (event: PointerEvent) => { if (container && !container.contains(event.target as Node) && !panel?.contains(event.target as Node)) setTooltipOpen(false); };
@@ -121,7 +136,7 @@ export function FlowerComposerContextIndicator(props: {
           }
         }}
       />
-      <SurfaceFloatingLayer owner={anchor()} position={position()} estimatedSize={{ width: 368, height: 500 }} class="flower-context-panel-layer" data-flower-floating-layer="true">
+      <SurfaceFloatingLayer owner={anchor()} position={layout().position} estimatedSize={layout().size} class="flower-context-panel-layer" data-flower-floating-layer="true">
       <div
         ref={panel}
         onKeyDown={escape}
@@ -138,7 +153,6 @@ export function FlowerComposerContextIndicator(props: {
       >
         <div class="flower-context-heading">
           <span>{labels().label}</span>
-          <button type="button" class="flower-context-close" aria-label={labels().close} onClick={close}><X size={14} aria-hidden="true" /></button>
           <span class="flower-context-total" title={contextWindow() ? `${labels().tokens(String(contextWindow()!.input))} / ${labels().tokens(String(contextWindow()!.capacity))}` : undefined}>
             <Show when={contextWindow()}>{(window) => <>
               <Show when={window().estimated}><span title={labels().estimated} aria-label={labels().estimated}>≈ </span></Show>
@@ -147,6 +161,7 @@ export function FlowerComposerContextIndicator(props: {
             </>}</Show>
             <span class="flower-context-ratio">{contextWindow() ? `(${view().ratioValue})` : view().ratioValue}</span>
           </span>
+          <button type="button" class="flower-context-close" aria-label={labels().close} onClick={close}><X size={14} aria-hidden="true" /></button>
         </div>
         <div class="flower-context-stacked-bar flower-context-window-bar" aria-hidden="true">
           <Show when={contextWindow()} fallback={<span data-category="input" style={{ width: `${view().progressValue ?? 0}%` }} />}>
@@ -163,19 +178,8 @@ export function FlowerComposerContextIndicator(props: {
             }</For>
           </div>
         }</Show>
-        <div class="flower-context-shared-space">{labels().sharedSpace}</div>
-        <div class="flower-context-budget-facts">
-          <div><span>{labels().compactThreshold}</span><strong>{threshold() ? formatContextAmount(threshold()!) : labels().unavailable}</strong></div>
-          <div><span>{labels().requestOutputLimit}</span><strong>{requestOutput()?.output_control === 'server' ? labels().serverManaged
-            : requestOutput()?.output_control === 'client' && requestOutput()?.request_output_tokens
-              ? formatContextAmount(requestOutput()!.request_output_tokens!) : labels().unavailable}</strong></div>
-        </div>
         <Show when={composition()}>
-          <div class="flower-context-categories flower-context-composition" role="group" aria-label={labels().composition} data-token-amounts={composition()?.showTokenAmounts ? 'true' : 'false'}>
-            <div class="flower-context-heading">
-              <span>{labels().composition}</span>
-              <span class="flower-context-estimate" title={!composition()?.showTokenAmounts ? labels().relativeHint : composition()?.historical ? labels().historicalHint : labels().compositionHint}>{composition()?.historical ? labels().historical : composition()?.showTokenAmounts ? labels().proportionalEstimate : labels().textShare}</span>
-            </div>
+          <div class="flower-context-categories flower-context-composition" role="group" aria-label={labels().composition} title={!composition()?.showTokenAmounts ? labels().relativeHint : composition()?.historical ? labels().historicalHint : labels().compositionHint} data-token-amounts={composition()?.showTokenAmounts ? 'true' : 'false'}>
             <For each={[...categories().rows.keys()]}>{(key) => {
               const row = () => categories().rows.get(key)!;
               const description = () => [labels().sourceLabels[key], composition()?.historical ? labels().historical : composition()?.showTokenAmounts ? labels().estimated : labels().textShare, ...(composition()?.showTokenAmounts ? ['≈' + labels().tokens(String(row().tokens))] : []), percent(row().share)].join(' · ');
