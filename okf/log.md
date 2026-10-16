@@ -16,6 +16,11 @@
 - Use the shared Activity thumbnail for [image reads](ai/image-read-and-retention.md#authorized-previews), matching computer and browser screenshot details.
 - Preserve authorized loading, retry, saved-image inspection and collapse behavior; retain ordinary assistant image presentation.
 
+## 2026-10-15: Auto-loaded context category bars
+
+- Keep [auto-loaded context](ai/flower-managed-model-context.md#presentation) collapsed as a section; opening it reveals all category bars without nested expansion or raw prompt text.
+- Distinguish current-snapshot Unicode character counts and shares from request-scoped input token estimates; retain theme colors, live focus and bounded narrow-window layout.
+
 ## 2026-10-15: Inline conversation title editing
 
 - Edit the [header title](ui/flower-thread-sidebar.md#rename-from-the-conversation-header) in place with save/cancel controls, Enter/Escape, blur saving and input-method protection.

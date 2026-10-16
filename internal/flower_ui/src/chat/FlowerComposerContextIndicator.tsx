@@ -3,7 +3,7 @@ import { ChevronRight } from 'lucide-solid';
 
 import type { FlowerContextUsage, FlowerModelContext } from '../contracts/flowerSurfaceContracts';
 import type { FlowerSurfaceCopy } from '../copy';
-import { buildFlowerComposerContextIndicatorView, buildFlowerContextWindow, buildFlowerContextComposition, formatContextAmount } from './flowerContextPresentation';
+import { buildFlowerComposerContextIndicatorView, buildFlowerContextWindow, buildFlowerContextComposition, buildFlowerModelContextDistribution, formatContextAmount } from './flowerContextPresentation';
 
 export function FlowerComposerContextIndicator(props: {
   usage?: FlowerContextUsage;
@@ -16,7 +16,8 @@ export function FlowerComposerContextIndicator(props: {
   const contextWindow = createMemo(() => buildFlowerContextWindow(props.usage ?? {}));
   const composition = createMemo(() => buildFlowerContextComposition(props.usage ?? {}));
   const [factsExpanded, setFactsExpanded] = createSignal(false);
-  const sections = createMemo(() => new Map((props.modelContext?.snapshot.sections ?? []).map(section => [section.key, {
+  const distribution = createMemo(() => buildFlowerModelContextDistribution(props.modelContext?.snapshot.sections ?? []));
+  const sections = createMemo(() => new Map(distribution().rows.map(section => [section.key, {
     ...section, label: labels().sectionLabels[section.key] ?? section.title,
   }])));
   const percent = (share: number) => labels().percent(Math.round(share * 10) / 10);
@@ -155,21 +156,27 @@ export function FlowerComposerContextIndicator(props: {
               <ChevronRight class="flower-context-chevron" aria-hidden="true" />
               <span>{labels().runtimeFacts}</span>
               <span class="flower-model-context-status" role="img" aria-label={factStatus()} title={factStatus()} data-used={props.modelContext?.used_at ? 'true' : undefined} />
+              <Show when={factsExpanded()}><span class="flower-model-context-unit" title={labels().textShare}>{labels().characters(formatContextAmount(distribution().total))}</span></Show>
             </summary>
-            <Show when={factsExpanded()}><For each={[...sections().keys()]}>{(key) => {
-              const section = () => sections().get(key)!;
-              const [expanded, setExpanded] = createSignal(false);
-              return (
-                <details data-category={key} onToggle={(event) => { event.stopPropagation(); setExpanded(event.currentTarget.open); }}>
-                  <summary class="flower-model-context-row" title={section().title}>
-                    <i class="flower-context-swatch" aria-hidden="true" />
-                    <span class="flower-model-context-label">{section().label}</span>
-                    <ChevronRight class="flower-context-chevron" aria-hidden="true" />
-                  </summary>
-                  <Show when={expanded()}><pre>{section().text}</pre></Show>
-                </details>
-              );
-            }}</For></Show>
+            <Show when={factsExpanded()}>
+              <div class="flower-model-context-distribution" role="group" aria-label={labels().textShare}>
+                <For each={[...sections().keys()]}>{(key) => {
+                  const section = () => sections().get(key)!;
+                  const description = () => [section().label, labels().characters(String(section().characters)), percent(section().share)].join(' · ');
+                  return (
+                    <div class="flower-model-context-row" data-category={key} aria-label={description()} title={description()}>
+                      <i class="flower-context-swatch" aria-hidden="true" />
+                      <span class="flower-model-context-label">{section().label}</span>
+                      <span class="flower-model-context-amount">{formatContextAmount(section().characters)}</span>
+                      <span class="flower-model-context-share">{percent(section().share)}</span>
+                      <div class="flower-model-context-track" aria-hidden="true">
+                        <span class="flower-model-context-fill" style={{ width: `${section().share}%` }} />
+                      </div>
+                    </div>
+                  );
+                }}</For>
+              </div>
+            </Show>
           </details>
         </Show>
         <div class="flower-context-cache-stats">

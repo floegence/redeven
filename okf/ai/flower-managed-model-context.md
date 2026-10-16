@@ -59,12 +59,16 @@ usage and composition come from the same request. Older samples show unavailable
 composition until a new request supplies it. Discarded original tool artifacts
 never count as model input. Expanded-media budgets come from prepared input.
 
-Complete selectable auto-loaded text remains in a secondary collapsed inspector.
+Auto-loaded context remains collapsed until the user opens its section. One
+disclosure reveals every category as a horizontal bar with aligned character
+counts and shares, sorted by size. Categories have no nested disclosures or raw
+prompt-text blocks. These Unicode character shares describe the current snapshot
+only; they are not token estimates or part of the request-scoped composition.
 Category colors use the host theme's categorical tokens. The native capacity
 bar, output headroom and free space stay separate from estimated composition.
 Collection and request-use times remain in the status indicator's accessible
-label and hover text. Stable partition keys preserve focus and expanded text
-during refresh. Updates do not create chat bubbles, take focus or block
+label and hover text. Stable partition keys preserve the section's disclosure
+state and focus during refresh. Updates do not create chat bubbles, take focus or block
 navigation. Keyboard, touch and mouse can open and dismiss the panel; failure
 shows source diagnostics and a safe retry action. Subtask details use the same
 component and bounded detail cache.

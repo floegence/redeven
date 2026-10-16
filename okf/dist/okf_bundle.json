@@ -9976,7 +9976,7 @@
         "title": "Flower managed runtime facts",
         "type": "AI Context Contract"
       },
-      "body_length": 4430,
+      "body_length": 4758,
       "summary": "Flower consumes published Floret v7.40.0. One complete collector supplies six\nstable partitions: execution environment, date/timezone, repository state, rule\nsources, available skills, and delegation. Floret owns chronological admission,\nsemantic changes, user-role model-context messages, compaction and recovery.\nThe product owns collection and authorized presentation only.",
       "sections": [
         {
@@ -9997,8 +9997,8 @@
           "id": "presentation",
           "title": "Presentation",
           "level": 1,
-          "body": "Authorized canonical reads and the existing workspace subscription carry the\nsame snapshot, record location, changed/removed keys and latest request use.\nThe primary shared context panel shows a request-scoped breakdown of used\nmodel input: system instructions, tool definitions, user/assistant messages,\ntool calls, retained tool outputs, managed context updates, conversation\nsummaries, retained reasoning and expanded images/files. Floret owns the\nsemantic offline BPE estimates; Flower maps the published contract without\nrebuilding provider history. Categories use one horizontal stacked bar and\naligned localized rows, sorted by size. Estimated token counts and shares are\nvisibly identified; they are not scaled to the native capacity total. Confirmed\nusage and composition come from the same request. Older samples show unavailable\ncomposition until a new request supplies it. Discarded original tool artifacts\nnever count as model input. Expanded-media budgets come from prepared input.\n\nComplete selectable auto-loaded text remains in a secondary collapsed inspector.\nCategory colors use the host theme's categorical tokens. The native capacity\nbar, output headroom and free space stay separate from estimated composition.\nCollection and request-use times remain in the status indicator's accessible\nlabel and hover text. Stable partition keys preserve focus and expanded text\nduring refresh. Updates do not create chat bubbles, take focus or block\nnavigation. Keyboard, touch and mouse can open and dismiss the panel; failure\nshows source diagnostics and a safe retry action. Subtask details use the same\ncomponent and bounded detail cache.",
-          "char_count": 1651
+          "body": "Authorized canonical reads and the existing workspace subscription carry the\nsame snapshot, record location, changed/removed keys and latest request use.\nThe primary shared context panel shows a request-scoped breakdown of used\nmodel input: system instructions, tool definitions, user/assistant messages,\ntool calls, retained tool outputs, managed context updates, conversation\nsummaries, retained reasoning and expanded images/files. Floret owns the\nsemantic offline BPE estimates; Flower maps the published contract without\nrebuilding provider history. Categories use one horizontal stacked bar and\naligned localized rows, sorted by size. Estimated token counts and shares are\nvisibly identified; they are not scaled to the native capacity total. Confirmed\nusage and composition come from the same request. Older samples show unavailable\ncomposition until a new request supplies it. Discarded original tool artifacts\nnever count as model input. Expanded-media budgets come from prepared input.\n\nAuto-loaded context remains collapsed until the user opens its section. One\ndisclosure reveals every category as a horizontal bar with aligned character\ncounts and shares, sorted by size. Categories have no nested disclosures or raw\nprompt-text blocks. These Unicode character shares describe the current snapshot\nonly; they are not token estimates or part of the request-scoped composition.\nCategory colors use the host theme's categorical tokens. The native capacity\nbar, output headroom and free space stay separate from estimated composition.\nCollection and request-use times remain in the status indicator's accessible\nlabel and hover text. Stable partition keys preserve the section's disclosure\nstate and focus during refresh. Updates do not create chat bubbles, take focus or block\nnavigation. Keyboard, touch and mouse can open and dismiss the panel; failure\nshows source diagnostics and a safe retry action. Subtask details use the same\ncomponent and bounded detail cache.",
+          "char_count": 1979
         }
       ],
       "snippet": "Flower consumes published Floret v7.40.0. One complete collector supplies six stable partitions: execution environment, date/timezone, repository state, rule sources, available skills, and delegation. Floret owns chronological admission,",
@@ -42549,5 +42549,5 @@
       ]
     }
   ],
-  "source_sha256": "bf44add459de4af1968a31ab465ca2c375b57a1e6614b4e632962bab7682a9d4"
+  "source_sha256": "06dc5bcdad44347f41f854a2f8398577654a12a411f6634f11c4c67880a905a1"
 }
