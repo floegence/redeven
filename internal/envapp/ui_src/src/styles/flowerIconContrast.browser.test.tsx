@@ -4,25 +4,18 @@ import '../ui/flower-feature.css';
 import { builtInShellThemePresets } from '@floegence/floe-webapp-core/themes';
 import { render } from 'solid-js/web';
 import { commands, page } from 'vitest/browser';
-import { afterEach, beforeAll, expect, it } from 'vitest';
+import { afterEach, expect, it } from 'vitest';
 import { FlowerIcon } from '../../../../flower_ui/src/icons/FlowerIcon';
 import { FlowerNavigationIcon, FlowerWorkbenchIcon } from '../../../../flower_ui/src/icons/FlowerSoftAuraIcon';
 import { FlowerProgressIndicator } from '../../../../flower_ui/src/chat/FlowerProgressIndicator';
 
 let dispose: (() => void) | undefined;
-let flowerAsset: string;
 const media = commands as unknown as {
-  emulateMediaPreferences: (preferences: { reducedMotion: 'reduce' | 'no-preference' }) => Promise<void>;
+  emulateMediaPreferences: (preferences: { reducedMotion?: 'reduce' | 'no-preference'; colorScheme?: 'light' | 'dark' | null }) => Promise<void>;
 };
 
-beforeAll(async () => {
-  const response = await fetch(`${import.meta.env.BASE_URL}flower.svg`);
-  expect(response.ok).toBe(true);
-  flowerAsset = await response.text();
-});
-
 afterEach(async () => {
-  await media.emulateMediaPreferences({ reducedMotion: 'no-preference' });
+  await media.emulateMediaPreferences({ reducedMotion: 'no-preference', colorScheme: null });
   dispose?.();
   document.body.replaceChildren();
   document.documentElement.removeAttribute('style');
@@ -42,15 +35,43 @@ function mount() {
       <FlowerIcon class="h-5 w-5" />
       <FlowerWorkbenchIcon class="h-[18px] w-[18px]" />
       <FlowerProgressIndicator progress={{ kind: 'waiting_response', runID: 'icon-contrast' }} label="Waiting for model response" />
-      <div class="h-6 w-6" data-static-icon />
     </div>)}
   </div>, host);
-  const asset = new DOMParser().parseFromString(flowerAsset, 'image/svg+xml');
-  expect(asset.querySelector('parsererror')).toBeNull();
-  for (const target of host.querySelectorAll('[data-static-icon]')) {
-    target.append(document.importNode(asset.documentElement, true));
-  }
   return host;
+}
+
+function applyTheme(preset: typeof builtInShellThemePresets[number]) {
+  const root = document.documentElement;
+  root.removeAttribute('style');
+  root.classList.toggle('dark', preset.mode === 'dark');
+  root.classList.toggle('light', preset.mode === 'light');
+  root.dataset.floeShellTheme = preset.name;
+  for (const [name, value] of Object.entries(preset.semanticTokens ?? {})) {
+    if (value) root.style.setProperty(name, value);
+  }
+}
+
+function expectOriginalDarkArtwork(svg: SVGSVGElement, styleOf: typeof getComputedStyle, asset = false) {
+  const petals = svg.querySelectorAll('path');
+  expect(petals).toHaveLength(5);
+  petals.forEach((petal, index) => {
+    const style = styleOf(petal);
+    expect(style.fill).toBe('rgb(255, 255, 255)');
+    expect(style.stroke).toBe(asset ? 'rgb(100, 116, 139)' : style.color);
+    expect(parseFloat(style.strokeWidth)).toBe(.45);
+    expect(Number(style.strokeOpacity)).toBe(index % 2 === 0 ? .18 : .13);
+    expect(Number(style.opacity)).toBe(index % 2 === 0 ? .95 : .85);
+  });
+  const center = svg.querySelector<SVGCircleElement>('circle[r="3"], circle[r="3.0"]')!;
+  expect(styleOf(center).fill).toContain('url(');
+  expect(styleOf(center).stroke).toBe('none');
+  const gradient = svg.querySelector('radialGradient:last-child')!;
+  expect([...gradient.querySelectorAll('stop')].map(stop => styleOf(stop).stopColor))
+    .toEqual(['rgb(253, 230, 138)', 'rgb(251, 191, 36)', 'rgb(245, 158, 11)']);
+  const core = svg.querySelector<SVGCircleElement>('circle[r="1.5"]')!;
+  expect(styleOf(core).display).not.toBe('none');
+  expect(styleOf(core).fill).toBe('rgb(245, 158, 11)');
+  expect(Number(styleOf(core).opacity)).toBe(.45);
 }
 
 function contrastChecks() {
@@ -72,24 +93,20 @@ function contrastChecks() {
   return { rgb, composite, contrast };
 }
 
-it('keeps the bloom recognizable at navigation, title and progress sizes across shell themes', async () => {
+it('keeps the outlined bloom recognizable across light shell themes', async () => {
   await page.viewport(960, 500);
+  await media.emulateMediaPreferences({ reducedMotion: 'reduce' });
   const host = mount();
   const { rgb, composite, contrast } = contrastChecks();
-  for (const preset of builtInShellThemePresets) {
-    const root = document.documentElement;
-    root.removeAttribute('style');
-    root.classList.toggle('dark', preset.mode === 'dark');
-    root.classList.toggle('light', preset.mode === 'light');
-    root.dataset.floeShellTheme = preset.name;
-    for (const [name, value] of Object.entries(preset.semanticTokens ?? {})) {
-      if (value) root.style.setProperty(name, value);
-    }
+  for (const preset of builtInShellThemePresets.filter(preset => preset.mode === 'light')) {
+    applyTheme(preset);
     for (const surface of host.querySelectorAll<HTMLElement>('[data-icon-surface]')) {
       const background = rgb(getComputedStyle(surface).backgroundColor);
-      expect(surface.querySelector('[data-static-icon] svg')?.querySelectorAll('path')).toHaveLength(5);
       for (const petal of surface.querySelectorAll<SVGPathElement>('svg path')) {
         const style = getComputedStyle(petal);
+        expect(style.stroke).toBe('rgb(105, 119, 136)');
+        expect(Number(style.strokeOpacity)).toBe(1);
+        expect(Number(style.opacity)).toBe(1);
         const fill = composite(rgb(style.fill), background, Number(style.fillOpacity) * Number(style.opacity));
         const stroke = composite(rgb(style.stroke), background, Number(style.strokeOpacity) * Number(style.opacity));
         expect.soft(Math.max(contrast(fill, background), contrast(stroke, background)), `${preset.name}: visible petal boundary`).toBeGreaterThanOrEqual(3);
@@ -104,18 +121,78 @@ it('keeps the bloom recognizable at navigation, title and progress sizes across 
   await page.screenshot({ element: host, path: '__screenshots__/flower-icon-contrast.png' });
 });
 
-it('animates only the progress flower center and respects reduced motion', async () => {
+it('preserves the original bloom in every dark theme after switching from light', async () => {
+  await media.emulateMediaPreferences({ reducedMotion: 'reduce' });
   const host = mount();
+  const icons = [...host.querySelectorAll<SVGSVGElement>('svg')];
+  for (const preset of builtInShellThemePresets.filter(preset => preset.mode === 'dark')) {
+    applyTheme(builtInShellThemePresets.find(preset => preset.mode === 'light')!);
+    expect(getComputedStyle(icons[0].querySelector('path')!).stroke).toBe('rgb(105, 119, 136)');
+    applyTheme(preset);
+    for (const icon of icons) expectOriginalDarkArtwork(icon, getComputedStyle);
+  }
+  await page.screenshot({ element: host, path: '__screenshots__/flower-icon-dark.png' });
+});
+
+it.each(['light', 'dark'] as const)('uses the matching %s artwork in the standalone SVG', async (mode) => {
+  await media.emulateMediaPreferences({ colorScheme: mode });
+  const frame = document.createElement('iframe');
+  frame.width = '16';
+  frame.height = '16';
+  frame.style.colorScheme = mode;
+  frame.src = `${import.meta.env.BASE_URL}flower.svg`;
+  await new Promise<void>((resolve, reject) => {
+    frame.onload = () => resolve();
+    frame.onerror = () => reject(new Error('Flower SVG could not load'));
+    document.body.append(frame);
+  });
+  const svg = frame.contentDocument!.documentElement as unknown as SVGSVGElement;
+  const styleOf = frame.contentWindow!.getComputedStyle.bind(frame.contentWindow);
+  if (mode === 'dark') {
+    expectOriginalDarkArtwork(svg, styleOf, true);
+    expect(styleOf(svg.querySelector('circle[r="11"]')!).display).not.toBe('none');
+  } else {
+    for (const petal of svg.querySelectorAll('path')) {
+      expect(styleOf(petal).stroke).toBe('rgb(105, 119, 136)');
+      expect(parseFloat(styleOf(petal).strokeWidth)).toBe(1.4);
+      expect(Number(styleOf(petal).opacity)).toBe(1);
+    }
+  }
+});
+
+it.each(['light', 'dark'])('rotates the whole progress flower and respects reduced motion in %s mode', async (mode) => {
+  document.documentElement.classList.add(mode);
   await media.emulateMediaPreferences({ reducedMotion: 'no-preference' });
-  const progress = host.querySelector<HTMLElement>('.flower-model-status-flower')!;
-  const center = progress.querySelector<SVGCircleElement>('circle')!;
-  expect(getComputedStyle(progress).animationName).toBe('none');
-  expect(getComputedStyle(center).animationName).not.toBe('none');
-  for (const petal of progress.querySelectorAll('path')) expect(getComputedStyle(petal).animationName).toBe('none');
+  const host = mount();
+  const flowers = host.querySelectorAll<HTMLElement>('.flower-model-status-flower');
+  expect(flowers).toHaveLength(4);
+  for (const progress of flowers) {
+    const style = getComputedStyle(progress);
+    expect(style.animationName).toBe('flower-model-status-flower-twirl');
+    expect(style.animationDuration).toBe('2.6s');
+    expect(style.animationIterationCount).toBe('infinite');
+    const animations = progress.getAnimations();
+    expect(animations).toHaveLength(1);
+    const animation = animations[0];
+    expect(animation.playState).toBe('running');
+    animation.pause();
+    animation.currentTime = 0;
+    const initialTransform = getComputedStyle(progress).transform;
+    animation.currentTime = 884;
+    const rotatedTransform = getComputedStyle(progress).transform;
+    expect(rotatedTransform).not.toBe(initialTransform);
+    const matrix = new DOMMatrixReadOnly(rotatedTransform);
+    expect(Math.atan2(matrix.b, matrix.a) * 180 / Math.PI).toBeCloseTo(142, 1);
+    for (const part of progress.querySelectorAll('path, circle')) {
+      expect(getComputedStyle(part).animationName).toBe('none');
+    }
+  }
   for (const icon of host.querySelectorAll('.redeven-flower-soft-aura')) {
     expect(icon.getAnimations({ subtree: true })).toHaveLength(0);
   }
   await media.emulateMediaPreferences({ reducedMotion: 'reduce' });
-  expect(progress.getAnimations({ subtree: true })).toHaveLength(0);
-  expect(getComputedStyle(center).transform).toBe('none');
+  for (const progress of flowers) {
+    expect(progress.getAnimations({ subtree: true })).toHaveLength(0);
+    expect(getComputedStyle(progress).transform).toBe('none');
+  }
 });

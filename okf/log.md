@@ -1,5 +1,11 @@
 # Redeven OKF Update Log
 
+## 2026-10-15: Restore Flower motion and dark artwork
+
+- Restore the original [whole-bloom progress rotation](ui/flower-output-progress.md#progress-symbol) and reduced-motion behavior.
+- Limit the outlined white artwork to light themes; preserve the original translucent petals and gradient center in dark themes.
+- Verify actual rotation in both light and dark modes; the outline visibility change must not alter progress animation.
+
 ## 2026-10-15 — Compact web-search details
 
 - Document browser-style query fields and one-line sources in [activity interaction](ui/flower-activity-interaction.md#web-search-details).

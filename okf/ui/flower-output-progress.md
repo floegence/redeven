@@ -48,17 +48,20 @@ numerical updates are readable without repeated automatic announcements.
 
 ## Progress symbol
 
-The shared Flower mark retains five opaque white petals and a warm yellow
-center. A slate outline makes the bloom readable on light surfaces independently
-of inherited text color; white petals preserve its identity on dark surfaces.
-Navigation, headers and the standalone SVG use the same artwork. Compact
-progress, companion and Workbench slots strengthen the petal stroke without
-enlarging their layout boxes or adding a badge or glow.
+The shared Flower mark retains its five-petal geometry. Only light themes use
+opaque white petals, a slate outline and a flat warm yellow center. Dark themes
+keep the original alternating petal opacity, subtle inherited-color strokes
+and radial-gradient center. Navigation and headers follow the shell theme; the
+standalone SVG follows its color scheme and retains its original dark artwork.
+Compact progress, companion and Workbench slots strengthen only the light-theme
+stroke without enlarging their layout boxes or adding a badge or glow.
 
-During model progress only the center gently breathes; the petals remain still
-so the 16px silhouette stays readable. Reduced-motion preferences stop the
-animation completely. The symbol is decorative beside the existing localized
-status text and does not create another live announcement or execution state.
+During model progress the entire bloom rotates on its established 2.6-second
+loop, including the original easing, lift and scale. The outline treatment
+changes only the artwork, not when or how the symbol animates. Reduced-motion
+preferences stop the animation completely. The symbol is decorative beside the
+existing localized status text and does not create another live announcement or
+execution state.
 
 ## Edit arguments
 
@@ -116,8 +119,9 @@ facts, and supersede every provisional count.
 
 # Evidence
 
-- `redeven:internal/flower_ui/src/icons/FlowerIcon.tsx` — Shared opaque petal outline and warm center artwork.
-- `redeven:internal/flower_ui/src/styles/flower.css` — Compact progress sizing and reduced-motion center animation.
+- `redeven:internal/flower_ui/src/icons/FlowerIcon.tsx` — Shared petal geometry, light outline and original dark gradient artwork.
+- `redeven:internal/flower_ui/src/icons/flower-icon.css` — Shell-theme artwork selection and compact sizing.
+- `redeven:internal/flower_ui/src/styles/flower.css` — Compact progress sizing, whole-bloom rotation and reduced-motion suppression.
 - `redeven:internal/envapp/ui_src/src/styles/flowerIconContrast.browser.test.tsx` — Rendered theme contrast, 16px stroke, static asset and motion acceptance.
 - `redeven:internal/ai/flower_argument_preview.go` — Bounded incremental JSON and patch parsing without effects.
 - `redeven:internal/ai/flower_argument_preview_test.go` — Byte partitions, Unicode, invalid JSON, independent calls and patch formats.
