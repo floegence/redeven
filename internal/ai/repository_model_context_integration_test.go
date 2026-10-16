@@ -89,15 +89,13 @@ func TestModelContextGitChangesStayInToolHistory(t *testing.T) {
 	runPromptWorkspaceGit(t, repo, "add", "second.txt", "AGENTS.md")
 	runPromptWorkspaceGit(t, repo, "commit", "-m", "add tracked fixtures")
 	commands := []string{
+		"cat AGENTS.md",
 		"printf 'first edit\n' >> README.md",
 		"printf 'same file edit\n' >> README.md",
 		"printf 'second file edit\n' >> second.txt",
-		"git add README.md",
-		"git checkout -b context-changed && git branch --set-upstream-to=context-upstream",
-		"git -c user.name=Tester -c user.email=tester@example.com commit -m 'record staged edit'",
+		"git add README.md && printf 'untracked\n' > scratch.txt",
+		"git checkout -b context-changed && git branch --set-upstream-to=context-upstream && git -c user.name=Tester -c user.email=tester@example.com commit -m 'record staged edit'",
 		"git branch --unset-upstream && git add second.txt && git reset HEAD -- second.txt",
-		"printf 'untracked\n' > scratch.txt",
-		"cat AGENTS.md",
 		"git status --short --branch && git diff -- second.txt",
 	}
 	var mu sync.Mutex
@@ -150,11 +148,18 @@ func TestModelContextGitChangesStayInToolHistory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	terminal, err := runTypedTurnForTest(t, t.Context(), svc, meta, "git-on-demand", RunStartRequest{
-		ThreadID: thread.ThreadID, Model: "openai/gpt-5-mini", Input: RunInput{Text: "Edit two files, check the rules, and inspect Git explicitly."}, Options: RunOptions{PermissionType: config.AIPermissionFullAccess},
+	_, err = svc.SendUserTurn(t.Context(), meta, SendUserTurnRequest{
+		ClientRequestID: "git-on-demand", ThreadID: thread.ThreadID, Model: "openai/gpt-5-mini", Input: RunInput{Text: "Read the rules, edit two files, and inspect Git explicitly."}, Options: RunOptions{PermissionType: config.AIPermissionFullAccess},
 	})
 	if err != nil {
-		t.Fatalf("turn=%+v err=%v", terminal, err)
+		t.Fatal(err)
+	}
+	// This exercises several real terminal round trips; it has no latency SLA.
+	terminal := waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(view *ThreadView) bool {
+		return view.RunStatus == "success" || view.RunStatus == "failed"
+	}, time.Minute)
+	if terminal.RunStatus != "success" {
+		t.Fatalf("turn failed: %s", terminal.RunError)
 	}
 	mu.Lock()
 	defer mu.Unlock()
@@ -211,8 +216,8 @@ func TestModelContextGitChangesStayInToolHistory(t *testing.T) {
 			t.Fatalf("command %d did not complete successfully: %s", i, output.Output)
 		}
 	}
-	if !strings.Contains(outputs[len(outputs)-2].Output, "RULES_READ_ON_DEMAND") {
-		t.Fatalf("rule read lost: %+v", outputs[len(outputs)-2])
+	if !strings.Contains(outputs[0].Output, "RULES_READ_ON_DEMAND") {
+		t.Fatalf("rule read lost: %+v", outputs[0])
 	}
 	var gitResult struct {
 		Data struct {
