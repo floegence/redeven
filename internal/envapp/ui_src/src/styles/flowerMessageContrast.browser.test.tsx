@@ -85,7 +85,7 @@ function mount() {
           </div>
           <div class="flower-message-bubble flower-message-bubble-framed flower-message-bubble-user">
             <span class="flower-message-plain-text" data-copy>Make my messages easier to recognize.</span>
-            <FlowerMarkdownBlock content={'**Readable text** and [a helpful link](https://example.com). Use `--theme`.\n\n> Keep quoted instructions clear.\n\n| Setting | Value |\n| --- | --- |\n| Theme | Auto |\n\n```\nplain code remains readable\n```'} copyCodeLabel="Copy code" codeCopiedLabel="Copied" />
+            <FlowerMarkdownBlock content={'**Readable text** and [a helpful link](https://example.com). Use `--theme` and [`the theme guide`](https://example.com/theme).\n\n> Keep quoted instructions clear.\n\n| Setting | Value |\n| --- | --- |\n| Theme | Auto |\n\n```\nplain code remains readable\n```'} copyCodeLabel="Copy code" codeCopiedLabel="Copied" />
           </div>
         </div>
       </div>
@@ -159,6 +159,60 @@ it.each(['standard', 'soft-neumorphic'])('keeps sent messages and selected text 
     await userEvent.unhover(summary);
   }
 });
+
+it.each(['standard', 'soft-neumorphic'])('renders quiet inline references with the published theme palette and %s material', async (material) => {
+  const host = mount();
+  const { rgb, contrast } = colors();
+  const assistant = host.querySelector<HTMLElement>('.flower-message-bubble-assistant')!;
+  const inlineHost = document.createElement('div');
+  assistant.append(inlineHost);
+  const longPath = '/workspace/project/' + 'deeply-nested-reference/'.repeat(10) + 'ThemeProvider.tsx';
+  const disposeInline = render(() => <FlowerMarkdownBlock content={'Review `' + longPath + '` before continuing.'} copyCodeLabel="Copy code" codeCopiedLabel="Copied" />, inlineHost);
+  const selectedInline = host.querySelector<HTMLElement>('.flower-message-bubble-user .flower-chat-md-inline-code')!;
+  const retainedRange = document.createRange(); retainedRange.selectNodeContents(selectedInline);
+  window.getSelection()!.addRange(retainedRange);
+  try {
+    for (const width of [900, 320]) {
+      await page.viewport(width, 900);
+      for (const preset of builtInShellThemePresets) {
+        applyTheme(preset, material);
+        // Exercise the published stylesheet, not inline semantic-token injection.
+        document.documentElement.removeAttribute('style');
+        const label = [preset.name, material, width].join('/');
+        expect(window.getSelection()!.toString(), label).toBe(selectedInline.textContent);
+        const tokens = preset.semanticTokens!;
+        expect(tokens['--inline-code-foreground'], label).toBeTruthy();
+        expect(tokens['--inline-code-background'], label).toBeTruthy();
+        const nodes = [...host.querySelectorAll<HTMLElement>('.flower-chat-md-inline-code')].filter(node => !node.closest('a'));
+        expect(nodes.length).toBe(2);
+        for (const node of nodes) {
+          const style = getComputedStyle(node);
+          expect(rgb(style.color), label).toEqual(rgb(tokens['--inline-code-foreground']!));
+          expect(rgb(style.backgroundColor), label).toEqual(rgb(tokens['--inline-code-background']!));
+          expect(style.borderTopWidth, label).toBe('0px');
+          expect(style.fontWeight, label).toBe('400');
+          expect(contrast(rgb(style.color), rgb(style.backgroundColor)), label).toBeGreaterThanOrEqual(preset.name === 'hc-light' ? 7 : 4.5);
+          const range = document.createRange(); range.selectNodeContents(node);
+          const selection = window.getSelection()!; selection.removeAllRanges(); selection.addRange(range);
+          expect(selection.toString(), label).toBe(node.textContent);
+          const selected = getComputedStyle(node, '::selection');
+          expect(contrast(rgb(selected.color), rgb(selected.backgroundColor)), label).toBeGreaterThanOrEqual(4.5);
+          expect(contrast(rgb(selected.backgroundColor), rgb(style.backgroundColor)), label).toBeGreaterThanOrEqual(1.5);
+          expect([...node.getClientRects()].every(rect => rect.left >= 0 && rect.right <= width), label).toBe(true);
+        }
+        expect(host.scrollWidth, label).toBeLessThanOrEqual(width);
+        if (width === 320) expect(nodes[0].getClientRects().length, label).toBeGreaterThan(1);
+        if (width === 900 && material === 'standard') {
+          window.getSelection()!.removeAllRanges();
+          await page.screenshot({ element: host, path: '__screenshots__/flower-inline-' + preset.name + '.png' });
+          window.getSelection()!.addRange(retainedRange);
+        }
+      }
+    }
+  } finally {
+    disposeInline();
+  }
+}, 30_000);
 
 it('keeps external pages compact, visibly navigable and keyboard accessible at mobile width', async () => {
   await page.viewport(390, 800);

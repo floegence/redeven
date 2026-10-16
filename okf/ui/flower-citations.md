@@ -42,6 +42,22 @@ Display parsing never writes back to canonical messages or provider cache input.
 catalog. New messages preserve complete sources; old records lacking sources
 remain readable without rewriting historical data.
 
+## Inline-code references
+
+Inline Markdown code uses the published Floe `--inline-code-foreground` and
+`--inline-code-background` pair. Each of the 26 shell themes owns its palette;
+Flower does not keep another color table. The span has a quiet fill, no border,
+regular monospace text and cloned rounded decoration when a long path wraps.
+Native selection reverses the readable token pair without changing the text.
+User bubbles use the same opaque inset, preserving contrast independently of the
+bubble accent. Linked code retains visible link styling; code links in user
+bubbles use the inset foreground. Forced colors use system colors. Fenced code,
+copy behavior and canonical content remain independent.
+
+Browser acceptance covers all presets and both surface materials at desktop and
+320px widths, exact published token consumption, text/selection contrast, native
+selection, long paths, links, user bubbles and forced colors.
+
 ## Source-card presentation
 
 Sources start collapsed, showing the count and a deduplicated stack of up to
