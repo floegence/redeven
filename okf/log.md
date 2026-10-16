@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-16: Subagent inline capsules
+
+- Present [Subagent management targets](ui/flower-subagent-detail.md) as direct avatar capsules with current status, stable multi-child window switching, and responsive floating detail geometry. Preserve historical operation outcomes and canonical interaction ownership.
+
 ## 2026-10-16: Final-only answer actions
 
 - Show [answer actions and completion time](ui/flower-citations.md#final-answer-actions) only for canonical final items; keep intermediate narration, active streams and unconfirmed outcomes free of final-answer controls.

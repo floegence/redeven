@@ -30,6 +30,7 @@ export type SubagentDetailWindowProps = Readonly<{
   status: FlowerSubagentPanelStatus;
   statusLabel: string;
   statusIndicator: JSX.Element;
+  agentSwitcher?: JSX.Element;
   syncNotice?: JSX.Element;
   runProgress?: JSX.Element;
   agentTypeLabel: string;
@@ -315,6 +316,7 @@ export function SubagentDetailWindow(props: SubagentDetailWindowProps): JSX.Elem
             </div>
           </div>
         </header>
+        {props.agentSwitcher}
         {props.syncNotice}
         {props.runProgress}
 
