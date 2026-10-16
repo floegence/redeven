@@ -160,7 +160,7 @@ vi.mock('@floegence/floe-webapp-core/icons', async (importOriginal) => {
     Zap: actual.Zap,
     MonitorPointer: actual.MonitorPointer,
     Paperclip: Icon,
-    Pencil: Icon,
+    Pencil: actual.Pencil,
     Pin: Icon,
     Plus: Icon,
     Refresh: actual.Refresh,

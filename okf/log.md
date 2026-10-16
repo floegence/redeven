@@ -1,5 +1,10 @@
 # Redeven OKF Update Log
 
+## 2026-10-15: Conversation title shortcut
+
+- Add a pencil beside the [conversation header title](ui/flower-thread-sidebar.md#rename-from-the-conversation-header), using the existing rename dialog, canonical title updates and focus restoration.
+- Preserve the action beside truncated titles and during running work; hide it for new conversations and hosts without rename capability.
+
 ## 2026-10-15: Bounded FlowNode stream recovery
 
 - Adopt published Floret v7.42.0 for one [physical-request timeout and recovery owner](ai/model-provider-surface-and-history.md), semantic progress, and canonical timeout details.
