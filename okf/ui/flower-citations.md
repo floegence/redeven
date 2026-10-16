@@ -45,13 +45,11 @@ remain readable without rewriting historical data.
 ## Source-card presentation
 
 Sources start collapsed, showing the count and a deduplicated stack of up to
-four website icons plus an overflow count. The toggle and copy action remain
-independent. Expanded sources use quiet 36px single rows with unboxed numbers,
+four website icons plus an overflow count. The source toggle is independent of the answer action row above it. Sources never expose their own copy button. Expanded sources use quiet 36px single rows with unboxed numbers,
 16px site icons, truncated titles, aligned hostnames and external-link arrows.
 Below 420px of available content width, hostnames move under titles in 52px
 rows. The whole row remains a keyboard-focusable HTTP(S) link with complete
-title and destination in its tooltip. Copy preserves the exact bibliography
-and localized completion labels. Inline citations retain their existing links.
+title and destination in its tooltip. The answer copy action preserves the complete message and localized completion labels. Inline citations retain their existing links.
 
 ## Website icons
 
@@ -111,3 +109,19 @@ enable this assistant-specific presentation.
 - [CJK emphasis, literal code and stable streaming controls](../../internal/envapp/ui_src/src/ui/FlowerMarkdown.emphasis.browser.test.tsx)
 - [Chromium streaming and layout evidence](../../internal/envapp/ui_src/src/ui/FlowerMarkdown.citations.browser.test.tsx)
 - [Flower UI checks](../../scripts/check_flower_ui.sh)
+
+## Final answer actions
+
+Each final assistant answer ends with one quiet icon row above its sources:
+Copy, Export HTML (download into a tray), and Fork (branch plus). The stable
+completion time sits at the right; its tooltip contains the full local date.
+Buttons are 32px with 18px strokes, or 44px for coarse pointers. Labels remain
+available through tooltips and accessible names. Text keeps native selection.
+Copy remains available during streaming; export and Fork wait for completion.
+
+HTML export uses the shared safe Markdown renderer, excludes reasoning and UI
+controls, preserves source links and writes an independent UTF-8 document.
+No favicon or network request is needed. The Fork adapter passes source_item_id
+to the published Floret v7.46.1 SourceItemID contract. Floret owns canonical
+anchor resolution and request-key replay; product code only authorizes and maps
+DTOs. Retrying a transport failure reuses the key for that thread and answer.

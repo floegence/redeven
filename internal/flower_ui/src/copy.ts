@@ -601,6 +601,9 @@ export type FlowerSurfaceCopy = Readonly<{
     copyCommand: string;
     commandCopied: string;
     copyMessage: string;
+    exportAnswerHTML: string;
+    answerExported: string;
+    forkFromAnswer: string;
     messageCopied: string;
     loadErrorTitle: string;
     threadLoadErrorTitle: string;
@@ -1019,6 +1022,9 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     copyCommand: 'Copy command',
     commandCopied: 'Command copied',
     copyMessage: 'Copy message',
+    exportAnswerHTML: 'Export HTML',
+    answerExported: 'Export started',
+    forkFromAnswer: 'Fork from this answer',
     messageCopied: 'Copied',
     loadErrorTitle: 'Flower could not load.',
     threadLoadErrorTitle: 'Conversation could not load.',

@@ -1,3 +1,5 @@
+import { FlowerAnswerActions } from './FlowerAnswerActions';
+import { flowerAnswerHTML, downloadFlowerAnswer } from './chat/markdown/flowerAnswerExport';
 import { flowerToolCallPreviewIdentity } from './toolCallPreview';
 import { flowerQueuedDraftReferences } from './composer/flowerQueuedDraft';
 import { flowerMessageTextForCopy } from './chat/markdown/flowerCitations';
@@ -1001,7 +1003,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [threadDetailLoadingIDs, setThreadDetailLoadingIDs] = createSignal<ReadonlySet<string>>(new Set());
   const [localReadVisibilityRevision, setLocalReadVisibilityRevision] = createSignal(0);
   const [threadActionBusy, setThreadActionBusy] = createSignal<{ threadID: string; action: FlowerThreadMenuAction } | null>(null);
-  const forkRequests = new Map<string, Readonly<{ client_request_id: string; title: string }>>();
+  const forkRequests = new Map<string, Readonly<{ client_request_id: string; title: string; source_item_id?: string }>>();
   const [createdForkThreadID, setCreatedForkThreadID] = createSignal('');
   const [pinMutation, setPinMutation] = createSignal<ReadonlyMap<string, {
     pinned_at_ms: number; pin_rank: number; settings_revision?: number;
@@ -4217,7 +4219,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       || !surfaceEngaged() || !transcriptVisible() || companionCollapsed() || sidePanel() !== 'chat')) setTranscriptMenu(null);
   });
 
-  const handleThreadMenuAction = async (action: FlowerThreadMenuAction, item: FlowerThreadListItem, restore?: HTMLElement) => {
+  const handleThreadMenuAction = async (action: FlowerThreadMenuAction, item: FlowerThreadListItem, restore?: HTMLElement, sourceItemID?: string) => {
     if (action === 'reference') { addThreadReference(item); return; }
     if (action === 'pin') { toggleThreadPin(item); restoreThreadMenuFocus(restore); return; }
     if (action === 'browse_workdir' || action === 'terminal_workdir' || action === 'copy_workdir') {
@@ -4251,13 +4253,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           if (!props.adapter.forkThread) return;
           setThreadActionBusy({ threadID: item.thread_id, action });
           {
-            const request = forkRequests.get(item.thread_id) ?? {
+            const requestKey = JSON.stringify([item.thread_id, sourceItemID ?? '']);
+            const request = forkRequests.get(requestKey) ?? {
               client_request_id: createFlowerClientRequestID(),
               title: flowerForkTitle(item.title, copy().threadList.forkSuffix),
+              ...(sourceItemID ? { source_item_id: sourceItemID } : {}),
             };
-            forkRequests.set(item.thread_id, request);
+            forkRequests.set(requestKey, request);
             const forked = await props.adapter.forkThread(item.thread_id, request);
-            forkRequests.delete(item.thread_id);
+            forkRequests.delete(requestKey);
             setThreadCache((cache) => cache.replaceSummary(forked));
             setCreatedForkThreadID(forked.thread_id);
             shouldRestoreFocus = false;
@@ -10208,16 +10212,43 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const cancellation = currentThread.cancellation;
       return cancellation != null && cancellation.turn_id === currentMessage.turn_id && cancellation.run_id === currentMessage.run_id;
     });
+    const answerTime = () => {
+      const turn = thread()?.turns?.find(value => value.turn_id === message().turn_id);
+      const ended = turn?.ended_at ? Date.parse(turn.ended_at) : NaN;
+      return Number.isFinite(ended) ? ended : message().created_at_ms;
+    };
+    const AnswerFooter: Component = () => <Show when={showCopyAction()}>
+      <FlowerAnswerActions
+        copyButton={<MessageCopyButton message={message()} text={copyText()} placement="assistant" />}
+        timestamp={answerTime()}
+        exportLabel={copy().chat.exportAnswerHTML} exportedLabel={copy().chat.answerExported}
+        forkLabel={copy().chat.forkFromAnswer} forkBusyLabel={copy().threadList.forkCreating}
+        settled={message().status === 'complete' && message().live !== true}
+        forkBusy={threadActionBusy() !== null}
+        onExport={() => {
+          try {
+            downloadFlowerAnswer(flowerAnswerHTML({ content: message().content, blocks: message().blocks, sources: message().sources ?? block().sources ?? [], title: thread()?.title || 'Flower', timestamp: answerTime(), sourcesLabel: copy().chat.citationSources, unavailableLabel: copy().chat.citationUnavailable }), answerTime());
+            return true;
+          } catch (error) { notifyThreadActionError(getErrorMessage(error)); return false; }
+        }}
+        onFork={props.adapter.forkThread && thread() && thread()?.status !== 'read_only' ? () => {
+          const current = thread();
+          const item = current ? projectFlowerThreadListItem(current, copy().threadList.untitled) : undefined;
+          if (item) void handleThreadMenuAction('fork', item, undefined, message().id);
+        } : undefined}
+      />
+    </Show>;
     const assistantCopyLayout = createMemo(() => message().role === 'assistant' && block().block_type !== 'thinking');
     const ContentBody: Component = () => (
       <Show
         when={markdown()}
-        fallback={<span class="flower-message-plain-text">{block().content}</span>}
+        fallback={<><span class="flower-message-plain-text">{block().content}</span><AnswerFooter /></>}
       >
         <FlowerMarkdownBlock
           content={block().content}
+          footer={assistantCopyLayout() ? <AnswerFooter /> : undefined}
           sources={message().role === 'assistant' ? block().sources : undefined}
-          citationLabels={message().role === 'assistant' ? { sources: copy().chat.citationSources, unavailable: copy().chat.citationUnavailable, copy: copy().chat.citationCopySources } : undefined}
+          citationLabels={message().role === 'assistant' ? { sources: copy().chat.citationSources, unavailable: copy().chat.citationUnavailable } : undefined}
           streaming={streaming()}
           mediaLabels={message().role === 'assistant' ? copy().chat.media : undefined}
           mediaEnabled={message().role === 'assistant'}
@@ -10240,9 +10271,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           <div class="flower-message-assistant-copy-body">
             <ContentBody />
           </div>
-          <Show when={showCopyAction()}>
-            <MessageCopyButton message={message()} text={copyText()} placement="assistant" />
-          </Show>
         </div>
       </Show>
     );
@@ -10492,7 +10520,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const streamingBlockKey = createMemo(() => activeCursor() ? lastContentBlockKey(blocks()) : '');
     const copyText = createMemo(() => messageCopyText(message(), blocks()));
     const messageTime = createMemo(() => formatMessageTime(message().created_at_ms));
-    const assistantCopyBlockKey = createMemo(() => message().role === 'assistant' ? lastCopyableContentBlockKey(blocks()) : '');
+    const assistantCopyBlockKey = createMemo(() => {
+      const turn = thread()?.turns?.find(value => value.turn_id === message().turn_id);
+      const finalAnswer = !turn?.final_boundary_complete || turn.final_item_ids.includes(message().id);
+      return message().role === 'assistant' && finalAnswer ? lastCopyableContentBlockKey(blocks()) : '';
+    });
     const canActivateContextChip = (chip: FlowerChatContextChip): boolean => {
       const action = chip.action;
       if (!action) return false;

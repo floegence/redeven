@@ -4,6 +4,10 @@
 
 - Replace mixed role/loading categories with explicit request sources, published Floret v7.45.0 attribution and flat horizontal tool details; preserve native usage and keyboard focus.
 
+## 2026-10-15: Final answer actions
+
+- Document the compact [answer actions](ui/flower-citations.md#final-answer-actions), safe standalone HTML export, canonical historical Fork anchors and separate source disclosure.
+
 ## 2026-10-15: Animate Flower during startup readiness
 
 - Use the [existing whole-bloom rotation](architecture/ai-readiness-lifecycle.md#env-app-maintenance-presentation) while Flower is opening, backing up, or restoring; preserve each theme's artwork and stop motion when requested.

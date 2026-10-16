@@ -129,6 +129,17 @@ export default mergeConfig(viteConfig, defineConfig({
         ? { port: configuredBrowserPort }
         : undefined,
       commands: {
+        downloadFlowerAnswerEvidence: async ({ page }) => {
+          const frame = await frameForSelector(page, '.flower-answer-actions');
+          const downloaded = page.waitForEvent('download');
+          await frame.getByRole('button', { name: 'Export HTML', exact: true }).click();
+          const download = await downloaded;
+          const stream = await download.createReadStream();
+          if (!stream) throw new Error('Answer download is unavailable');
+          const chunks: Buffer[] = [];
+          for await (const chunk of stream) chunks.push(Buffer.from(chunk));
+          return { name: download.suggestedFilename(), html: Buffer.concat(chunks).toString('utf8'), error: await download.failure() };
+        },
         compareSemanticPresentation: async ({ page }, selector: string) => {
           const frame = await frameForSelector(page, selector);
           const surface = frame.locator(selector).first();
