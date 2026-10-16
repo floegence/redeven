@@ -172,7 +172,7 @@ vi.mock('@floegence/floe-webapp-core/icons', async (importOriginal) => {
     Stop: Icon,
     Terminal: Icon,
     Trash: Icon,
-    X: Icon,
+    X: actual.X,
     XCircle: Icon,
   };
 });

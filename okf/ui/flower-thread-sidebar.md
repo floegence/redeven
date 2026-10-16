@@ -24,14 +24,29 @@ title when the host supports renaming. It remains available during execution
 and detail loading; new conversations without a ThreadID have no rename action.
 Long titles truncate while the button retains its hit area and the complete
 title remains available as a tooltip. Touch layouts use the header's 44px target.
+During inline editing, narrow headers move their other actions to a second row
+so the input and controls remain usable.
 
-The button opens the same rename dialog as the sidebar menu and double click,
-prefilled from the current canonical title. The input focuses with its text
-selected. Enter saves, Escape cancels, and closing restores focus to the pencil.
-Failed saves retain the draft and expose the existing error feedback. Successful
-saves update the header and sidebar through the canonical thread cache.
+The pencil replaces the title with an inline input, prefilled from the current
+canonical title with its text selected. A checkmark saves; a close icon or Escape
+cancels. Enter saves unless an input method is composing. Leaving the title
+controls saves a changed nonempty draft without reclaiming focus. Empty or
+unchanged drafts close without a request. Explicit save or cancel returns focus
+to the pencil while focus remains in the editor; a completed request never takes
+focus from the composer. Failed saves keep the input and draft with accessible
+inline feedback. Saving prevents duplicate requests while navigation remains available.
+
+Switching conversations dismisses the inline editor. A pending save still updates
+its own canonical thread, but cannot close or overwrite another title editor or
+reclaim its focus. The sidebar menu and double click retain their existing rename
+dialog. Both entry points share one rename owner and canonical save path; header
+and sidebar titles update through the existing thread cache.
 
 ## Selection and navigation
+
+Deferred conversation selection keeps the focus owner from the original selection
+intent. Finishing a load cannot reclaim focus after the user moves to the title
+controls or another surface.
 
 The mobile chat header opens the conversation drawer with a list-menu icon in a
 quiet rounded-square control, with a 44px touch target and localized accessible
