@@ -92,7 +92,7 @@ describe('Subagent identity and reading surfaces', () => {
       await page.viewport(540, 800);
       await waitFor(() => windowSurface.getBoundingClientRect().width < 540);
       expect(windowSurface.scrollWidth).toBeLessThanOrEqual(windowSurface.clientWidth + 1);
-      expect(avatar.getBoundingClientRect().width).toBeGreaterThanOrEqual(36);
+      expect(avatar.getBoundingClientRect().width).toBe(24);
       await page.screenshot({ element: windowSurface, path: `__screenshots__/subagent-appearance/detail-narrow-${theme}.png` });
     });
   }

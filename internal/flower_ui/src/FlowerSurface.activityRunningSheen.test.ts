@@ -244,8 +244,8 @@ describe('Flower activity status presentation', () => {
     expect(detailActiveRule).toContain('border-color: var(--flower-subagent-window-border-active)');
     expect(detailActiveRule).not.toContain('box-shadow:');
     expect(detailOverviewRule).toContain('background: var(--flower-subagent-window-surface-soft)');
-    expect(detailAvatarRule).toContain('width: 2.75rem');
-    expect(detailAvatarRule).toContain('height: 2.75rem');
+    expect(detailAvatarRule).toContain('width: 1.5rem');
+    expect(detailAvatarRule).toContain('height: 1.5rem');
     expect(runningStatusRule).toContain('color: var(--primary)');
     expect(detailScrollRule).toContain('position: sticky');
     expect(css).not.toContain('.flower-subagent-detail-bottom-dock');
@@ -280,20 +280,19 @@ describe('Flower activity status presentation', () => {
     expect(detail).not.toContain('data-text=');
   });
 
-  it('keeps the SubAgent overview on one line and adapts it inside narrow windows', () => {
+  it('shares the compact SubAgent overview between switching and metadata inside narrow windows', () => {
     const css = flowerStyles();
     const overviewRule = cssRule(css, '.flower-subagent-detail-overview');
-    const copyRule = cssRule(css, '.flower-subagent-detail-overview-copy');
+    const switcherRule = cssRule(css, '.flower-subagent-switcher');
     const metaRule = cssRule(css, '.flower-subagent-detail-overview-meta');
-    const descriptionRule = cssRule(css, '.flower-subagent-detail-description');
 
     expect(overviewRule).toContain('align-items: center');
-    expect(copyRule).toContain('display: flex');
-    expect(copyRule).toContain('align-items: center');
+    expect(overviewRule).toContain('display: flex');
+    expect(overviewRule).toContain('flex-wrap: wrap');
+    expect(switcherRule).toContain('flex-wrap: wrap');
+    expect(switcherRule).not.toContain('border-bottom');
     expect(metaRule).toContain('flex-wrap: nowrap');
     expect(metaRule).toContain('overflow: hidden');
-    expect(descriptionRule).toContain('text-overflow: ellipsis');
-    expect(descriptionRule).toContain('white-space: nowrap');
     expect(css).toContain('@container flower-subagent-window (max-width: 560px)');
     expect(css).toContain('.flower-subagent-detail-agent-type {\n    display: none;');
   });

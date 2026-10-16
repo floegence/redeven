@@ -9965,6 +9965,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     });
     const hasDetails = createMemo(() => presentation().detailBlocks.length > 0);
     const subagentOperation = () => item().renderer === 'subagent' || item().renderer === 'subagent_operation';
+    const inlineSubagent = createMemo(() => presentation().detailBlocks.find((block) => (
+      block.kind === 'subagents' && block.subagents.action === 'spawn'
+      && block.subagents.items.length === 1 && Boolean(block.subagents.items[0]?.open_messages)
+    )));
     const expandable = createMemo(() => !subagentOperation() && ((presentation().suppressEmptyDisclosure
       || item().renderer === 'web_search' && !item().tool_name?.startsWith('okf.')) ? hasDetails() : item().kind === 'tool' || hasDetails()));
     const open = () => expandable() && disclosureControl.open();
@@ -10020,13 +10024,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         <span class="flower-activity-inline-icon">
           <FlowerToolIcon toolName={item().tool_name} source={item().metadata?.source} webOperation={webOperation()} running={livePresentationConfirmed() && displayStatus() === 'running'} />
         </span>
-        <span class="flower-activity-inline-copy">
+        <div class="flower-activity-inline-copy">
           <span class="flower-activity-inline-title" data-floe-progress-shimmer={livePresentationConfirmed() && displayStatus() === 'running' ? 'text' : undefined}>{activityTitle(displayTitle())}</span>
+          <Show when={inlineSubagent()}>{(block) => (
+            <ActivityDetailBlock threadID={timeline().thread_id ?? ''} block={block() as FlowerNonTerminalDetailBlock} />
+          )}</Show>
           <Show when={!subagentOperation() && presentation().meta}>
             {(meta) => <span class="flower-activity-inline-detail">{meta()}</span>}
           </Show>
           {changeStats(() => item().argument_preview ?? presentation().changeStats, () => item().argument_preview !== undefined)}
-        </span>
+        </div>
         <Show when={duration()}>
           {(value) => <span class="flower-activity-inline-duration">{value()}</span>}
         </Show>
@@ -10037,7 +10044,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     );
     return (
       <div
-        class={cn('flower-activity-inline-row', `flower-activity-inline-row-${displayStatus()}`, item().renderer === 'web_search' && 'flower-activity-inline-row-web-search', subagentOperation() && 'flower-activity-inline-row-subagents')}
+        class={cn('flower-activity-inline-row', `flower-activity-inline-row-${displayStatus()}`, item().renderer === 'web_search' && 'flower-activity-inline-row-web-search', subagentOperation() && 'flower-activity-inline-row-subagents', inlineSubagent() && 'flower-activity-inline-row-single-subagent')}
         data-flower-activity-item-id={item().item_id}
         data-flower-activity-status={displayStatus()}
         data-flower-activity-approval-state={item().approval_state}
@@ -10065,7 +10072,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           {fileActionButtons(rowFileAction, rowAttachmentPreviewTarget)}
         </div>
         <Show when={subagentOperation()}>
-          <For each={detailKeys()}>{(key) => {
+          <For each={detailKeys().filter((key) => detailsByKey().get(key) !== inlineSubagent())}>{(key) => {
             const block = createMemo(() => detailsByKey().get(key)!);
             return <ActivityDetailBlock threadID={timeline().thread_id ?? ''} block={block() as FlowerNonTerminalDetailBlock} />;
           }}</For>
