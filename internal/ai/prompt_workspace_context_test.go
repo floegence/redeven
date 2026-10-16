@@ -14,22 +14,6 @@ import (
 	flruntime "github.com/floegence/floret/v7/runtime"
 )
 
-type fakePromptSubagentRuntime struct {
-	items []subagentSnapshot
-	err   error
-}
-
-func (f fakePromptSubagentRuntime) manage(context.Context, string, map[string]any) (map[string]any, error) {
-	return nil, nil
-}
-
-func (f fakePromptSubagentRuntime) release() {}
-
-func (f fakePromptSubagentRuntime) snapshots(context.Context) ([]subagentSnapshot, error) {
-	out := append([]subagentSnapshot(nil), f.items...)
-	return out, f.err
-}
-
 func runPromptWorkspaceGit(t *testing.T, dir string, args ...string) string {
 	t.Helper()
 	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
@@ -96,59 +80,6 @@ func TestCollectPromptRepoRuleFiles_DiscoversScopedSources(t *testing.T) {
 	}
 }
 
-func TestCollectPromptDelegationState_SummarizesActiveSubagents(t *testing.T) {
-	t.Parallel()
-
-	r := &run{
-		allowSubagentDelegate: true,
-		subagentRuntime: fakePromptSubagentRuntime{
-			items: []subagentSnapshot{
-				{
-					ThreadID:           "subagent_running",
-					TaskName:           "Parser worker",
-					LastMessagePreview: "Patch parser",
-					AgentType:          subagentAgentTypeWorker,
-					Status:             subagentStatusRunning,
-					UpdatedAtMS:        200,
-					CreatedAtMS:        100,
-				},
-				{
-					ThreadID:           "subagent_queued",
-					TaskName:           "Reviewer",
-					LastMessagePreview: "Review diff",
-					AgentType:          subagentAgentTypeReviewer,
-					Status:             subagentStatusQueued,
-					UpdatedAtMS:        100,
-					CreatedAtMS:        50,
-				},
-				{
-					ThreadID:           "subagent_completed",
-					TaskName:           "Explorer",
-					LastMessagePreview: "Summarize findings",
-					AgentType:          subagentAgentTypeExplore,
-					Status:             subagentStatusCompleted,
-					UpdatedAtMS:        50,
-					CreatedAtMS:        25,
-				},
-			},
-		},
-	}
-
-	state := collectPromptDelegationState(t.Context(), r)
-	if !state.Enabled {
-		t.Fatalf("expected delegation to be enabled")
-	}
-	if state.ActiveCount != 2 || state.RunningCount != 1 || state.QueuedCount != 1 || state.CompletedCount != 1 {
-		t.Fatalf("unexpected delegation counts: %+v", state)
-	}
-	if len(state.Items) != 2 {
-		t.Fatalf("preview item count=%d, want 2", len(state.Items))
-	}
-	if state.Items[0].ID != "subagent_running" {
-		t.Fatalf("first preview item=%q, want subagent_running", state.Items[0].ID)
-	}
-}
-
 func TestBuildPromptWorkspaceContextSection_RendersStructuredFacts(t *testing.T) {
 	t.Parallel()
 
@@ -169,22 +100,8 @@ func TestBuildPromptWorkspaceContextSection_RendersStructuredFacts(t *testing.T)
 				ScopeDir: "/workspace/repo",
 			},
 		},
-		Delegation: promptDelegationState{
-			Enabled:      true,
-			ActiveCount:  1,
-			RunningCount: 1,
-			Items: []promptDelegationItem{
-				{
-					ID:        "subagent_1",
-					AgentType: "worker",
-					Status:    "running",
-					Title:     "Rule sync",
-					Objective: "Sync repo rules",
-				},
-			},
-		},
 	}
-	section := strings.Join(append(append(renderPromptEnvironmentFactsLines(workspace.Environment), renderPromptRepoRuleLines(workspace.RepoRules, nil)...), renderPromptDelegationLines(workspace.Delegation)...), "\n")
+	section := strings.Join(append(renderPromptEnvironmentFactsLines(workspace.Environment), renderPromptRepoRuleLines(workspace.RepoRules, nil)...), "\n")
 
 	for _, want := range []string{
 		"- Shell: /bin/zsh",
@@ -192,7 +109,7 @@ func TestBuildPromptWorkspaceContextSection_RendersStructuredFacts(t *testing.T)
 		"- Permission type: approval_required",
 		"/workspace/repo/AGENTS.md",
 		"readable; contents not loaded",
-		"Rule sync -- objective: Sync repo rules",
+		"- Subagent delegation available: true",
 	} {
 		if !strings.Contains(section, want) {
 			t.Fatalf("workspace context section missing %q: %q", want, section)
@@ -208,7 +125,7 @@ func TestModelContextSnapshotCarriesCompleteStablePartitions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(first.Sections) != 5 {
+	if len(first.Sections) != 4 {
 		t.Fatalf("sections=%+v", first.Sections)
 	}
 	text := modelContextSnapshotText(first)
@@ -266,15 +183,10 @@ func TestModelContextCollectorRefreshesDateAndSkillsWithoutGitUpdates(t *testing
 			t.Fatalf("changed section %s was stale", key)
 		}
 	}
-	for _, key := range []string{"execution_environment", "repository_rules", "delegation"} {
+	for _, key := range []string{"execution_environment", "repository_rules"} {
 		if current[key] != previous[key] {
 			t.Fatalf("unrelated section %s changed", key)
 		}
-	}
-	r.subagentRuntime = fakePromptSubagentRuntime{err: errors.New("delegation read failed")}
-	unavailable, err := r.collectModelContextSnapshot(t.Context(), FlowerPermissionFullAccess, now)
-	if err != nil || !strings.Contains(sections(unavailable)["delegation"], "earlier delegation facts are no longer current") {
-		t.Fatalf("optional probe retained false facts: %v", err)
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()

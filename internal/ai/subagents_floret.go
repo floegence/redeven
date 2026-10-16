@@ -48,7 +48,6 @@ const (
 type subagentRuntime interface {
 	manage(context.Context, string, map[string]any) (map[string]any, error)
 	release()
-	snapshots(context.Context) ([]subagentSnapshot, error)
 }
 
 type subagentCapabilityContract struct {

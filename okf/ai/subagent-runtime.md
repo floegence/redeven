@@ -3,7 +3,7 @@ type: AI Tool Contract
 title: Flower subagent runtime
 description: Floret v7 child threads, parent membership, bounded status, and complete handoffs.
 tags: [ai, floret, subagents, permissions]
-timestamp: 2026-10-15T00:00:00Z
+timestamp: 2026-10-16T00:00:00Z
 ---
 # Summary
 
@@ -33,6 +33,19 @@ Each child execution proves parent-child membership through the typed runtime an
 
 Flower detail reads canonical child current state and typed activity through the parent-scoped product route. It does not parse metadata into messages, reconstruct activity from audits, or maintain a second child transcript. Flower Stop requests graceful cancellation of the selected thread and every existing descendant through published Floret `CancelInput.IncludeDescendants`. Children retain their canonical histories and queued inputs; independent root threads keep running. Each child settles its own confirmed effects, so parent settlement is not a barrier proving every child is already idle. Thread deletion follows the canonical Floret tree deletion contract.
 
+Child status is observed on demand through list, inspect and wait, never through
+an automatically maintained model-context overview. Completion and full final
+text reach the parent in inspect/wait handoffs; failures and cancellation reach
+it as explicit result items, and a wait timeout returns its current bounded
+items and any completed handoffs. Input and approval attention remain canonical
+child interactions visible through existing reads and the workspace stream;
+inspect/wait retain the pending-input summary. Wait subscribes to canonical
+updates and returns at completion or its deadline; input attention alone is not
+a new early-return condition. The workspace stream updates the UI, not parent
+model history. The current product has no separate child-to-parent message tool
+or automatic completion wakeup. This change does not add either capability or
+weaken the existing child input, approval, steering or final-result paths.
+
 # Boundaries
 
 Task labels and previews are presentation, not identity or results. Redeven must not query Floret storage, persist child lifecycle or handoff projections, infer membership from activity, or reintroduce publication, permission-snapshot, recovery, receipt, output-budget, or authority-barrier state.
@@ -43,6 +56,7 @@ Task labels and previews are presentation, not identity or results. Redeven must
 - `redeven:internal/ai/subagents_floret.go` - Adapts subagent operations to typed Floret v7 child Thread methods.
 - `redeven:internal/ai/floret_tools.go` - Maps SubAgent calls and results into the typed operation Activity without losing action or target order.
 - `redeven:internal/ai/subagents_handoff_test.go` - Proves complete handoffs, timeout behavior, identity failures, and Activity separation.
+- `redeven:internal/ai/delegation_model_context_test.go` - Checks actual provider requests for absent automatic overviews, one-time removal, capability refresh, and preserved management results.
 - `redeven:internal/ai/subagents_failure_test.go` - Proves canonical failure delivery to the parent model across list, wait, inspect, and retry.
 - `redeven:internal/ai/subagent_input_operations_test.go` - Proves immediate provider interruption, task identity, queue consumption, and authorization failures.
 - `redeven:internal/ai/types.go` - Exposes canonical child `thread_id` in product views.

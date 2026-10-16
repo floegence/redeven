@@ -7,9 +7,9 @@ timestamp: 2026-10-16T00:00:00Z
 ---
 # Summary
 
-Flower consumes published Floret v7.46.1. One complete collector supplies five
+Flower consumes published Floret v7.46.1. One complete collector supplies four
 stable partitions: execution environment, date/timezone, repository rule
-sources, available skills, and delegation. Floret owns chronological admission,
+sources, and available skills. Floret owns chronological admission,
 semantic changes, user-role model-context messages, compaction and recovery.
 The product owns collection and authorized presentation only.
 
@@ -61,7 +61,6 @@ Prepared network attempts remain immutable. Steering, authorization and unknown
 effect termination retain their existing boundaries.
 
 Required rule or catalog failures terminate with model_context_unavailable.
-Optional delegation probe failures explicitly invalidate previous facts.
 Collection honors cancellation. Repository root discovery retains its
 three-second limit and is used only to bound applicable rule sources.
 Safe retry collects again and preserves confirmed tool results. Unknown effects
@@ -81,6 +80,18 @@ marks those facts as no longer current. Unchanged later requests do not append
 another removal, including after restart. No journal rewrite or schema change
 is involved. Explicit Git calls and their complete results remain normal tool
 history.
+
+Delegation availability remains an execution-environment fact, with current tool
+definitions and existing permission and child-management instructions. Provider
+preparation never reads the child inventory for automatic context. Counts,
+ordinary lifecycle changes, latest-message previews, preview selection/order,
+and child-read errors cannot append managed facts. Explicit status reads and
+complete results follow the [subagent tool contract](subagent-runtime.md).
+
+Existing threads omit the old delegation key in their next complete snapshot.
+Floret's normal missing-key semantics append one removal, leave old history
+immutable, and suppress further unchanged updates. No new thread, storage
+migration, historical text parsing, or product-owned snapshot is required.
 
 # Boundaries
 
@@ -138,6 +149,7 @@ component and bounded detail cache.
 - [Shared panel](../../internal/flower_ui/src/chat/FlowerComposerContextIndicator.tsx)
 - [Refresh and confirmed-effect retry regression](../../internal/ai/model_context_runtime_integration_test.go)
 - [Provider-visible Git removal and retained dynamic facts](../../internal/ai/repository_model_context_integration_test.go)
+- [Delegation removal and provider-visible result regressions](../../internal/ai/delegation_model_context_test.go)
 - [Skill cache and repaired-source regression](../../internal/ai/skill_model_context_test.go)
 - [Provider-visible skill reads, catalog measurements and compaction](../../internal/ai/skill_read_runtime_test.go)
 - [Panel interaction tests](../../internal/envapp/ui_src/src/ui/FlowerComposerContextIndicator.test.tsx)
