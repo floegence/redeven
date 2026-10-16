@@ -216,7 +216,7 @@ func TestFlowerLiveFragmentsCoalesceOnlyUnsentPureTextGrowth(t *testing.T) {
 
 func TestFlowerLiveProgressCoalescingRetainsAttemptAndPreviewBoundaries(t *testing.T) {
 	started := time.Date(2026, 10, 15, 0, 0, 0, 0, time.UTC)
-	for _, boundary := range []string{"numbers", "first_output", "attempt", "complete", "removed", "unknown_count"} {
+	for _, boundary := range []string{"numbers", "first_output", "attempt", "complete", "removed", "unknown_count", "progress_presence", "first_output_time", "started_at"} {
 		t.Run(boundary, func(t *testing.T) {
 			before := flruntime.ThreadView{ThreadID: "thread", TurnID: "turn", RunID: "run", Activity: flruntime.ThreadActivityActive, ViewVersion: 1,
 				RunProgress: &flruntime.ThreadRunProgress{Phase: flruntime.ThreadRunPhaseStreaming, Request: &flruntime.ProviderRequestProgress{
@@ -245,6 +245,14 @@ func TestFlowerLiveProgressCoalescingRetainsAttemptAndPreviewBoundaries(t *testi
 				after.ToolCallPreviews = nil
 			case "unknown_count":
 				after.ToolCallPreviews[0].Preview.Deletions = new(int)
+			case "progress_presence":
+				after.RunProgress.Request.LastProgressAt = &started
+			case "first_output_time":
+				before.RunProgress.Request.FirstOutputAt = &started
+				next := started.Add(time.Second)
+				after.RunProgress.Request.FirstOutputAt = &next
+			case "started_at":
+				after.RunProgress.Request.StartedAt = started.Add(time.Second)
 			}
 			left := newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{SchemaVersion: 1, Kind: FlowerLiveStreamThreadBatch, Current: &before})
 			right := newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{SchemaVersion: 1, Kind: FlowerLiveStreamThreadBatch, Current: &after})

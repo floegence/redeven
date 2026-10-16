@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/floegence/floret/v7/identity"
 	flruntime "github.com/floegence/floret/v7/runtime"
@@ -15,11 +16,18 @@ func TestFlowerLiveInterleavedLargeTextGrowthRemainsBounded(t *testing.T) {
 			svc, sub := subscribeFlowerFragmentTest(t)
 			sub.subscriber.initializing = initializing
 			latest := make([]*flowerLiveEncodedBatch, 3)
+			started := time.Date(2026, 10, 16, 12, 42, 0, 0, time.UTC)
+			firstOutput := started.Add(time.Second)
 			for tick := range 40 {
 				for index := range latest {
 					current := largeFlowerLiveCurrent()
 					current.ThreadID = identity.ThreadID(fmt.Sprintf("thread-stream-%d", index))
 					current.ViewVersion = uint64(tick + 1)
+					progressAt := firstOutput.Add(time.Duration(tick) * 50 * time.Millisecond)
+					current.RunProgress = &flruntime.ThreadRunProgress{Phase: flruntime.ThreadRunPhaseStreaming, Request: &flruntime.ProviderRequestProgress{
+						LogicalRequestID: "request-progress", AttemptID: "attempt-progress", AttemptEpoch: 1,
+						StartedAt: started, FirstOutputAt: &firstOutput, LastProgressAt: &progressAt, EstimatedOutputTokens: int64(10 + tick),
+					}}
 					current.Items[len(current.Items)-1].Text += string(bytes.Repeat([]byte("."), tick))
 					envelope := FlowerLiveStreamEnvelope{SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamThreadBatch, ThreadID: "thread-parent"}
 					if index == 0 {
@@ -129,5 +137,76 @@ func TestFlowerLiveLargeBaselineAcceptsConcurrentLiveWork(t *testing.T) {
 	}
 	if svc.flowerLiveQueuedBytes != 0 {
 		t.Fatal("baseline and concurrent live work leaked retained bytes")
+	}
+}
+
+func TestFlowerLiveProgressTimestampsDoNotExhaustSubscriberQueue(t *testing.T) {
+	for _, child := range []bool{false, true} {
+		t.Run(fmt.Sprintf("child_%t", child), func(t *testing.T) {
+			svc, sub := subscribeFlowerFragmentTest(t)
+			started := time.Date(2026, 10, 16, 12, 42, 0, 0, time.UTC)
+			firstOutput := started.Add(time.Second)
+			var latest *flowerLiveEncodedBatch
+			for tick := range flowerLiveSubscriberBatchLimit + 10 {
+				current := largeFlowerLiveCurrent()
+				current.Items = current.Items[len(current.Items)-1:]
+				current.ViewVersion = uint64(tick + 1)
+				current.Items[0].Text += string(bytes.Repeat([]byte("."), tick))
+				progressAt := firstOutput.Add(time.Duration(tick) * 50 * time.Millisecond)
+				current.RunProgress = &flruntime.ThreadRunProgress{
+					Phase: flruntime.ThreadRunPhaseStreaming,
+					Request: &flruntime.ProviderRequestProgress{
+						LogicalRequestID: "request-progress", AttemptID: "attempt-progress", AttemptEpoch: 1,
+						StartedAt: started, FirstOutputAt: &firstOutput, LastProgressAt: &progressAt,
+						EstimatedOutputTokens: int64(10 + tick),
+					},
+				}
+				envelope := FlowerLiveStreamEnvelope{SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamThreadBatch, ThreadID: current.ThreadID.String()}
+				if child {
+					envelope.ThreadID, envelope.SubagentCurrent = "thread-parent", &current
+				} else {
+					envelope.Current = &current
+				}
+				latest = newFlowerLiveEncodedBatch(envelope)
+				enqueueFlowerFragmentTest(t, svc, sub, latest)
+				if current.RunProgress.Request.LastProgressAt == nil || !current.RunProgress.Request.LastProgressAt.Equal(progressAt) {
+					t.Fatal("comparison mutated the runtime progress timestamp")
+				}
+			}
+			if sub.subscriber.closed || len(sub.subscriber.queue) != 1 {
+				t.Fatal("ordinary provider progress retained stale snapshots or closed the subscriber")
+			}
+			if got := nextFlowerLiveStreamFrame(t, sub); !bytes.Equal(got.Data, latest.data) {
+				t.Fatal("coalescing lost the latest complete snapshot or progress timestamp")
+			}
+			if svc.flowerLiveQueuedBytes != 0 {
+				t.Fatal("progress coalescing leaked retained bytes")
+			}
+		})
+	}
+}
+
+func TestFlowerLiveProgressOnlyTimestampsRemainBounded(t *testing.T) {
+	svc, sub := subscribeFlowerFragmentTest(t)
+	started := time.Date(2026, 10, 16, 12, 42, 0, 0, time.UTC)
+	var latest *flowerLiveEncodedBatch
+	for tick := range flowerLiveSubscriberBatchLimit + 10 {
+		progressAt := started.Add(time.Duration(tick+1) * time.Second)
+		current := flruntime.ThreadView{
+			ThreadID: "thread-progress", TurnID: "turn-progress", RunID: "run-progress",
+			Activity: flruntime.ThreadActivityActive, ViewVersion: uint64(tick + 1),
+			RunProgress: &flruntime.ThreadRunProgress{Phase: flruntime.ThreadRunPhaseWaitingResponse, Request: &flruntime.ProviderRequestProgress{
+				LogicalRequestID: "request-progress", AttemptID: "attempt-progress", AttemptEpoch: 1,
+				StartedAt: started, LastProgressAt: &progressAt,
+			}},
+		}
+		latest = newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamThreadBatch, Current: &current})
+		enqueueFlowerFragmentTest(t, svc, sub, latest)
+	}
+	if len(sub.subscriber.queue) != 1 || sub.subscriber.closed {
+		t.Fatal("progress-only updates exhausted the observer queue")
+	}
+	if got := nextFlowerLiveStreamFrame(t, sub); !bytes.Equal(got.Data, latest.data) || svc.flowerLiveQueuedBytes != 0 {
+		t.Fatal("progress-only updates lost the latest timestamp or leaked bytes")
 	}
 }
