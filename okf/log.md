@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-16: Stronger inline reference colors
+
+- Adopt Floe v0.86.43 saturated nonpurple colors for [inline code references](ui/flower-citations.md#inline-code-references) across all 26 themes. Keep fills quiet and preserve wrapping, links, native selection and forced colors.
+
 ## 2026-10-16: Subagent inline capsules
 
 - Present [Subagent management targets](ui/flower-subagent-detail.md) as direct avatar capsules with current status, stable multi-child window switching, and responsive floating detail geometry. Preserve historical operation outcomes and canonical interaction ownership.

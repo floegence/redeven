@@ -160,7 +160,7 @@ it.each(['standard', 'soft-neumorphic'])('keeps sent messages and selected text 
   }
 });
 
-it.each(['standard', 'soft-neumorphic'])('renders quiet inline references with the published theme palette and %s material', async (material) => {
+it.each(['standard', 'soft-neumorphic'])('renders saturated nonpurple references with quiet fills and %s material', async (material) => {
   const host = mount();
   const { rgb, contrast } = colors();
   const assistant = host.querySelector<HTMLElement>('.flower-message-bubble-assistant')!;
@@ -187,6 +187,16 @@ it.each(['standard', 'soft-neumorphic'])('renders quiet inline references with t
         expect(nodes.length).toBe(2);
         for (const node of nodes) {
           const style = getComputedStyle(node);
+          const [red, green, blue] = rgb(style.color).slice(0, 3).map(value => value / 255);
+          const maximum = Math.max(red, green, blue), minimum = Math.min(red, green, blue);
+          const delta = maximum - minimum;
+          const saturation = delta / (1 - Math.abs(maximum + minimum - 1));
+          const sector = maximum === red ? (green - blue) / delta
+            : maximum === green ? (blue - red) / delta + 2 : (red - green) / delta + 4;
+          const hue = (sector * 60 + 360) % 360;
+          expect(saturation, label + ': chromatic emphasis').toBeGreaterThanOrEqual(0.55);
+          expect(hue < 245 || hue > 330, label + ': avoid purple accents').toBe(true);
+          expect(contrast(rgb(style.backgroundColor), rgb(getComputedStyle(document.documentElement).getPropertyValue('--background'))), label + ': quiet fill').toBeLessThan(1.2);
           expect(rgb(style.color), label).toEqual(rgb(tokens['--inline-code-foreground']!));
           expect(rgb(style.backgroundColor), label).toEqual(rgb(tokens['--inline-code-background']!));
           expect(style.borderTopWidth, label).toBe('0px');
