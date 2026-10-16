@@ -379,7 +379,58 @@ func TestFlowerSubagentResultsReachProviderWithoutAutomaticOverview(t *testing.T
 			if err != nil {
 				t.Fatal(err)
 			}
-			delegationContextSend(t, service, created.ThreadID, "read-results", nil)
+			if action == subagentActionWait {
+				if _, err := service.Send(t.Context(), flruntime.SendInput{ThreadID: created.ThreadID, RequestKey: "read-results", Input: flruntime.UserInput{Text: "read-results"}}); err != nil {
+					t.Fatal(err)
+				}
+				updates, err := service.Subscribe(t.Context())
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer updates.Close()
+				for {
+					current, err := service.View(t.Context(), created.ThreadID)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if current.Attention.InputCount > 0 {
+						var interaction string
+						for _, value := range current.Interactions {
+							if !value.Resolved && value.Kind == flruntime.ThreadInteractionInput {
+								interaction = value.ID
+								break
+							}
+						}
+						if interaction == "" {
+							t.Fatal("wait attention did not create canonical input")
+						}
+						if _, err := service.Respond(t.Context(), flruntime.RespondInput{ThreadID: created.ThreadID, InteractionID: interaction, Answers: []flruntime.InteractionAnswer{{Input: map[string]string{"subagent_attention": "Continue using available results"}}}, RequestKey: "continue-wait"}); err != nil {
+							t.Fatal(err)
+						}
+						break
+					}
+					if _, err := updates.Next(t.Context()); err != nil {
+						t.Fatal(err)
+					}
+				}
+				for {
+					current, err := service.View(t.Context(), created.ThreadID)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if current.Activity == flruntime.ThreadActivityIdle {
+						if current.LastOutcome == nil || *current.LastOutcome != flruntime.TurnOutcomeCompleted {
+							t.Fatalf("outcome=%v failure=%v", current.LastOutcome, current.Failure)
+						}
+						break
+					}
+					if _, err := updates.Next(t.Context()); err != nil {
+						t.Fatal(err)
+					}
+				}
+			} else {
+				delegationContextSend(t, service, created.ThreadID, "read-results", nil)
+			}
 			requests := gateway.Requests()
 			if len(requests) != 2 {
 				t.Fatalf("requests=%d", len(requests))
@@ -445,8 +496,8 @@ func TestFlowerSubagentResultsReachProviderWithoutAutomaticOverview(t *testing.T
 					t.Fatal("input request summary lost")
 				}
 			}
-			if action == subagentActionWait && !data.TimedOut {
-				t.Fatal("wait timeout lost")
+			if action == subagentActionWait && data.TimedOut {
+				t.Fatal("child attention was misclassified as timeout")
 			}
 		})
 	}

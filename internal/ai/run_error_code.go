@@ -40,6 +40,13 @@ const (
 	runErrorCodeContextFixedOverhead        = "context_fixed_overhead"
 	runErrorCodeContextCompactionLimit      = "context_compaction_limit"
 	runErrorCodeFloretEngineFailed          = "floret_engine_failed"
+	runErrorCodeRepeatedTools               = "floret_repeated_tool_calls"
+	runErrorCodeNoProgress                  = "floret_no_progress"
+	runErrorCodeDuplicateCallID             = "floret_duplicate_tool_call_id"
+	runErrorCodeStopHookLoop                = "floret_stop_hook_loop"
+	runErrorCodeToolDispatch                = "floret_tool_dispatch_failed"
+	runErrorCodeStorage                     = "floret_storage_failed"
+	runErrorCodeAuthorization               = "floret_authorization_failed"
 	runErrorCodeFloretControlContract       = "floret_control_contract_failed"
 	runErrorCodeFloretAdmissionBlocked      = "floret_thread_admission_blocked"
 	runErrorCodeFloretAuthorityConsistency  = "floret_authority_consistency_failed"
@@ -93,6 +100,20 @@ func userFacingRunError(code string, fallback string) string {
 		return "The system instructions and tool definitions exceed the model's available context. Increase the serving context window or choose a model with more context, then retry. Compressing chat history cannot resolve this."
 	case runErrorCodeContextCompactionLimit:
 		return "The conversation still exceeds the model's context limit after compression. Shorten the input or choose a model with more context, then retry."
+	case runErrorCodeRepeatedTools:
+		return "Repeated identical tool requests made no effective progress, so this turn was stopped. Confirmed results and completed child reports are preserved. Retry to continue from saved progress."
+	case runErrorCodeNoProgress:
+		return "The agent made no progress, so this turn was stopped. Saved results are preserved. Add guidance or retry."
+	case runErrorCodeDuplicateCallID:
+		return "The model returned duplicate tool call IDs. Saved results are preserved. Retry or choose another model."
+	case runErrorCodeStopHookLoop:
+		return "A stop hook repeatedly requested continuation. Saved results are preserved. Check the hook configuration before retrying."
+	case runErrorCodeToolDispatch:
+		return "A tool could not execute. Confirmed results are preserved. Check the tool and retry."
+	case runErrorCodeStorage:
+		return "Conversation storage failed. Check available disk space and storage access before retrying."
+	case runErrorCodeAuthorization:
+		return "Tool authorization could not be verified. Check permissions and retry."
 	case runErrorCodeFloretEngineFailed:
 		return "Flower could not finish this turn because the orchestration engine failed."
 	case runErrorCodeFloretControlContract:
@@ -102,7 +123,7 @@ func userFacingRunError(code string, fallback string) string {
 	case runErrorCodeFloretAuthorityConsistency:
 		return "Flower could not finish this turn because the committed tool result could not be verified. The tool was not run again; start a new reply to continue."
 	case runErrorCodeFloretEffectOutcomeUnknown:
-		return "Some operations may have completed, but their results could not be confirmed. The task was stopped to avoid duplicate execution."
+		return "Some operations may have completed, but their results could not be confirmed. The task was stopped to avoid duplicate execution. Verify the actual effects before starting new work; this turn cannot be retried."
 	default:
 		if fallback != "" {
 			return fallback
@@ -237,6 +258,9 @@ func projectFloretTurnFailure(failure *flruntime.ThreadTurnFailure, fallbackCode
 		return fallbackCode, userFacingRunError(fallbackCode, "")
 	}
 	message := strings.TrimSpace(failure.Message)
+	if code := floretLoopFailureCode(failure); code != "" {
+		return code, userFacingRunError(code, "")
+	}
 	switch failure.Code {
 	case flruntime.ThreadTurnFailureModelContextUnavailable:
 		return runErrorCodeModelContextUnavailable, userFacingRunError(runErrorCodeModelContextUnavailable, message)
@@ -262,12 +286,14 @@ func projectFloretTurnFailure(failure *flruntime.ThreadTurnFailure, fallbackCode
 		return "floret_turn_interrupted", "Flower's runtime stopped before this reply finished. Start a new reply to continue."
 	case flruntime.ThreadTurnFailureCancelled:
 		return "", ""
-	case flruntime.ThreadTurnFailureToolDispatch,
-		flruntime.ThreadTurnFailureAuthorizationUnavailable,
-		flruntime.ThreadTurnFailureAuthorizationContract,
-		flruntime.ThreadTurnFailureStorage,
-		flruntime.ThreadTurnFailureEngineContract:
-		return runErrorCodeFloretEngineFailed, userFacingRunError(runErrorCodeFloretEngineFailed, message)
+	case flruntime.ThreadTurnFailureToolDispatch:
+		return runErrorCodeToolDispatch, userFacingRunError(runErrorCodeToolDispatch, "")
+	case flruntime.ThreadTurnFailureStorage:
+		return runErrorCodeStorage, userFacingRunError(runErrorCodeStorage, "")
+	case flruntime.ThreadTurnFailureAuthorizationUnavailable, flruntime.ThreadTurnFailureAuthorizationContract:
+		return runErrorCodeAuthorization, userFacingRunError(runErrorCodeAuthorization, "")
+	case flruntime.ThreadTurnFailureEngineContract:
+		return runErrorCodeFloretEngineFailed, userFacingRunError(runErrorCodeFloretEngineFailed, "")
 	case flruntime.ThreadTurnFailureLegacyUnclassified:
 		return projectRunFailure(message, fallbackCode)
 	default:
@@ -337,9 +363,30 @@ func providerHTTPStatusFromSDKError(text string) (int, bool) {
 
 // Only validated provider envelopes, engine-authored content-filter copy and
 // typed failure fields cross this boundary. Raw upstream bodies stay private.
+func floretLoopFailureCode(failure *flruntime.ThreadTurnFailure) string {
+	if failure == nil || failure.Validate() != nil {
+		return ""
+	}
+	switch failure.Reason {
+	case flruntime.ThreadTurnFailureRepeatedToolCalls:
+		return runErrorCodeRepeatedTools
+	case flruntime.ThreadTurnFailureNoProgress:
+		return runErrorCodeNoProgress
+	case flruntime.ThreadTurnFailureDuplicateToolCallID:
+		return runErrorCodeDuplicateCallID
+	case flruntime.ThreadTurnFailureStopHookLoop:
+		return runErrorCodeStopHookLoop
+	default:
+		return ""
+	}
+}
 func canonicalFailureDetail(failure *flruntime.ThreadTurnFailure) string {
 	if failure == nil {
 		return ""
+	}
+	if code := floretLoopFailureCode(failure); code != "" {
+		raw, _ := json.MarshalIndent(map[string]string{"code": code, "failure_code": string(failure.Code), "reason": string(failure.Reason)}, "", "  ")
+		return string(raw)
 	}
 	switch failure.Code {
 	case flruntime.ThreadTurnFailureProvider:
@@ -387,6 +434,25 @@ func canonicalFailureDetail(failure *flruntime.ThreadTurnFailure) string {
 	default:
 		return ""
 	}
+}
+
+// scopedFailureDetail adds only canonical execution identity to allowlisted diagnostics.
+func scopedFailureDetail(failure *flruntime.ThreadTurnFailure, threadID, turnID, runID string) string {
+	detail := canonicalFailureDetail(failure)
+	if failure == nil || detail == "" || floretLoopFailureCode(failure) == "" {
+		return detail
+	}
+	var fields map[string]string
+	if json.Unmarshal([]byte(detail), &fields) != nil {
+		return ""
+	}
+	for key, value := range map[string]string{"thread_id": threadID, "turn_id": turnID, "run_id": runID} {
+		if value != "" {
+			fields[key] = value
+		}
+	}
+	raw, _ := json.MarshalIndent(fields, "", "  ")
+	return string(raw)
 }
 
 func chatGPTRunFailureCode(code string) string {

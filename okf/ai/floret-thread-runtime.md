@@ -14,6 +14,11 @@ Floret v7 `ThreadService` is the sole owner of active and canonical thread lifec
 
 ## Typed runtime
 
+Published Floret v7.50.0 adds optional `ThreadWaiter` and typed canonical
+failure reasons without changing required ThreadService methods or schema 19.
+[Child waiting](subagent-runtime.md) uses this single upstream owner; the host
+maps bounded-wait facts and [safe failure recovery](../ui/flower-failure-recovery.md).
+
 Published Floret v7.42.0 supplies request-scoped received-output progress and
 separate in-memory tool argument previews. The Engine calculates them from
 validated stream fragments and the thread actor owns their current snapshot.

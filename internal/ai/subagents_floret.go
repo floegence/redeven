@@ -417,63 +417,35 @@ func (runtime *floretSubagentRuntime) wait(ctx context.Context, args map[string]
 	}
 	requested, effective, source := subagentTimeoutDecision(args)
 	targets := normalizeSubagentThreadIDs(args["ids"])
-	waitCtx, cancel := context.WithTimeout(ctxOrBackground(ctx), time.Duration(effective)*time.Millisecond)
-	defer cancel()
-	subscription, err := threads.Subscribe(waitCtx)
+	ids := make([]identity.ThreadID, len(targets))
+	for i, id := range targets {
+		ids[i] = identity.ThreadID(id)
+	}
+	waiter, ok := threads.(flruntime.ThreadWaiter)
+	if !ok {
+		return nil, errors.New("subagent thread waiting is unavailable")
+	}
+	parentID := identity.ThreadID(parent.threadID)
+	result, err := waiter.WaitThreads(ctxOrBackground(ctx), flruntime.WaitThreadsInput{
+		Scope: flruntime.ThreadScope{ParentID: &parentID}, ThreadIDs: ids, Timeout: time.Duration(effective) * time.Millisecond, PendingParentEvents: true,
+	})
 	if err != nil {
 		return nil, err
 	}
-	defer subscription.Close()
-	timedOut := false
-	reason := "completed"
-	eventPage := flruntime.ParentEventPage{Events: []flruntime.ParentEvent{}}
-	events, hasEvents := threads.(flruntime.ThreadParentEventService)
-	sourceIDs := make([]identity.ThreadID, len(targets))
-	for i, id := range targets {
-		sourceIDs[i] = identity.ThreadID(id)
+	snapshots := make([]subagentSnapshot, 0, len(result.Threads))
+	selectedIDs := make([]string, 0, len(result.Threads))
+	for _, summary := range result.Threads {
+		snapshots = append(snapshots, subagentSnapshotFromSummary(summary))
+		selectedIDs = append(selectedIDs, summary.ID.String())
 	}
-	var snapshots []subagentSnapshot
-	for {
-		snapshots, err = runtime.snapshots(waitCtx)
-		if err != nil {
-			if errors.Is(err, context.DeadlineExceeded) {
-				timedOut = true
-				break
-			}
-			return nil, err
-		}
-		selected := selectSubagentSnapshots(snapshots, targets)
-		if hasEvents {
-			eventPage, err = events.ListParentEvents(waitCtx, flruntime.ListParentEventsInput{ThreadID: identity.ThreadID(parent.threadID), SourceThreadIDs: sourceIDs, PendingOnly: true, Limit: 100})
-			if err != nil {
-				if errors.Is(err, context.DeadlineExceeded) && ctxOrBackground(ctx).Err() == nil {
-					timedOut = true
-					snapshots = selected
-					break
-				}
-				return nil, err
-			}
-			if len(eventPage.Events) > 0 {
-				reason = "events"
-				snapshots = selected
-				break
-			}
-		}
-		if allSubagentsTerminal(selected) {
-			snapshots = selected
-			break
-		}
-		if _, err = subscription.Next(waitCtx); err != nil {
-			if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
-				timedOut = true
-				snapshots = selected
-				break
-			}
-			return nil, err
-		}
-	}
+	timedOut := result.Reason == flruntime.ThreadWaitTimedOut
+	reason := string(result.Reason)
 	if timedOut {
 		reason = "wait_timeout"
+	}
+	eventPage := flruntime.ParentEventPage{Events: []flruntime.ParentEvent{}}
+	if result.ParentEvents != nil {
+		eventPage = *result.ParentEvents
 	}
 	items := boundedSubagentStatusItems(snapshots)
 	handoffs, err := completedSubagentHandoffs(ctxOrBackground(ctx), threads, snapshots)
@@ -485,16 +457,10 @@ func (runtime *floretSubagentRuntime) wait(ctx context.Context, args map[string]
 		"requested_timeout_ms": requested, "effective_timeout_ms": effective,
 		"timeout_ms": effective, "timeout_source": source, "timed_out": timedOut,
 		"items": items, "handoffs": handoffs, "reason": reason, "events": eventPage,
+		"selected_ids": selectedIDs, "missing_ids": result.MissingThreadIDs,
 		"counts": subagentModelStatusCounts(items), "agent_count": len(items),
-	}
-	if len(targets) > 0 {
-		out["requested_count"] = len(targets)
-		out["found_count"] = len(items)
-		out["missing_count"] = len(targets) - len(items)
-	} else {
-		out["requested_count"] = len(items)
-		out["found_count"] = len(items)
-		out["missing_count"] = 0
+		"requested_count": len(items) + len(result.MissingThreadIDs),
+		"found_count":     len(items), "missing_count": len(result.MissingThreadIDs),
 	}
 	return out, nil
 }
@@ -514,15 +480,6 @@ func selectSubagentSnapshots(items []subagentSnapshot, targets []string) []subag
 		}
 	}
 	return out
-}
-
-func allSubagentsTerminal(items []subagentSnapshot) bool {
-	for _, item := range items {
-		if !isSubagentTerminalStatus(item.Status) {
-			return false
-		}
-	}
-	return true
 }
 
 func (runtime *floretSubagentRuntime) list(ctx context.Context, args map[string]any) (map[string]any, error) {

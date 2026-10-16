@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { withFlowerRequestDeadline } from './requestDeadline';
+import { FlowerRequestDeadlineError, withFlowerRequestDeadline } from './requestDeadline';
 
 afterEach(() => vi.useRealTimers());
 
@@ -9,7 +9,7 @@ it('releases a stalled save without replaying or publishing its late response', 
   const operation = vi.fn(() => new Promise<string>(resolve => { finish = resolve; }));
   const saved = vi.fn();
   const pending = withFlowerRequestDeadline(operation, 'Check settings before retrying').then(saved);
-  const failed = expect(pending).rejects.toThrow('Check settings before retrying');
+  const failed = expect(pending).rejects.toBeInstanceOf(FlowerRequestDeadlineError);
   await vi.advanceTimersByTimeAsync(120_000);
   await failed;
   finish('late saved settings');

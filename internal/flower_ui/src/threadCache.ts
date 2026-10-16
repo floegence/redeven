@@ -172,8 +172,8 @@ export type ThreadCache = {
   select(id: string | null): ThreadCache;
   invalidateRuntimeVersions(): ThreadCache;
   replaceSummary(summary: FlowerThreadSnapshot): ThreadCache;
-  replaceSummaries(summaries: readonly FlowerThreadSnapshot[]): ThreadCache;
-  resetRootSummaries(summaries: readonly FlowerThreadSnapshot[]): ThreadCache;
+  replaceSummaries(summaries: readonly FlowerThreadSnapshot[], retainedSelectedID?: string): ThreadCache;
+  resetRootSummaries(summaries: readonly FlowerThreadSnapshot[], retainedSelectedID?: string): ThreadCache;
   receiveView(
     view: ThreadView,
     options?: Readonly<{ preserveSummary?: boolean }>,
@@ -321,25 +321,24 @@ function createCache(
       next.set(id, receiveSummary(summaries.get(id), summary));
       return createCache(selectedId, next, views, clock + 1);
     },
-    replaceSummaries(nextSummaries) {
+    replaceSummaries(nextSummaries, retainedSelectedID) {
       const next = new Map<string, FlowerThreadSnapshot>();
       for (const summary of nextSummaries) {
         const id = summary.thread_id.trim();
         if (id) next.set(id, receiveSummary(summaries.get(id), summary));
+      }
+      // Root inventory does not decide whether an explicitly opened child exists.
+      // Keep only the selected child while its normal detail read revalidates it.
+      if (selectedId && selectedId === retainedSelectedID && !next.has(selectedId)) {
+        const selected = summaries.get(selectedId);
+        if (selected) next.set(selectedId, selected);
       }
       return createCache(selectedId, next, views, clock + 1);
     },
-    resetRootSummaries(nextSummaries) {
-      const next = new Map<string, FlowerThreadSnapshot>();
-      for (const summary of nextSummaries) {
-        const id = summary.thread_id.trim();
-        if (id) next.set(id, receiveSummary(summaries.get(id), summary));
-      }
-      const nextViews = new Map<string, CacheEntry>();
-      for (const [id, view] of views) {
-        if (next.has(id)) nextViews.set(id, view);
-      }
-      return createCache(selectedId && next.has(selectedId) ? selectedId : null, next, nextViews, clock + 1);
+    resetRootSummaries(nextSummaries, retainedSelectedID) {
+      const replaced = this.replaceSummaries(nextSummaries, retainedSelectedID);
+      return replaced.selectedId && !replaced.summaries.has(replaced.selectedId) && replaced.selectedId !== retainedSelectedID
+        ? replaced.select(null) : replaced;
     },
     receiveView(view, options) {
       return receive({ ...view, thread: detailOnly(view.thread) }, threadTitleSnapshot(view.thread), options);

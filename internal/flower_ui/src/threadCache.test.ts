@@ -424,6 +424,19 @@ describe('ThreadCache', () => {
     expect(cache.selectedId).toBeNull();
   });
 
+  it('retains only an explicitly selected child through a root baseline until detail revalidation', () => {
+    let cache = receive(receive(createThreadCache(), view('root', 2, 'root')), view('child', 1, 'child')).select('child');
+    cache = cache.resetRootSummaries([thread('root', 3, '')], 'child');
+    expect(cache.selectedId).toBe('child');
+    expect(cache.views.get('child')?.thread.messages[0]?.content).toBe('child');
+    cache = cache.replaceSummaries([thread('root', 4, '')], 'child');
+    expect(cache.selectedId).toBe('child');
+    expect(cache.views.has('child')).toBe(true);
+    cache = cache.select('root').resetRootSummaries([thread('root', 4, '')], 'child');
+    expect([...cache.summaries.keys()]).toEqual(['root']);
+    expect(cache.views.has('child')).toBe(false);
+  });
+
   it('applies a Subagent inventory only to an existing parent detail', () => {
     const inventory = [{
       parent_thread_id: 'root', thread_id: 'child', task_name: 'Research models', title: 'Research models', title_status: 'ready' as const, title_generation: 1, status: 'running',

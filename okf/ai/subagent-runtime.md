@@ -66,12 +66,21 @@ delegated work is reviewed. `subagent_events` lists metadata or reads one event
 or a fixed closed range with explicit pagination, preserving complete report text.
 These are engineering limits, not measured context savings.
 
-Wait subscribes before reading facts, returns early for pending events from its
-selected direct children (all when omitted), and preserves existing status,
-failure and full handoffs. `reason` distinguishes `events`, `completed` and
-`wait_timeout`. Its event references omit report bodies; only canonical admission
-automatically adds those previews. Admitted events cannot repeatedly wake wait.
-The original input/approval state and UI responses remain authoritative.
+Published Floret v7.50.0 optional `ThreadWaiter` owns bounded waiting.
+Redeven maps its selected snapshots and `completed`, `attention_required`,
+`missing`, `events` and `wait_timeout` outcomes; it has no subscription/read
+loop. Omitted targets freeze at wait start. Missing children never count as
+completed. Cancellation and Host shutdown retain their own errors. A normal
+single deadline may repeat without a cumulative limit; only a successful,
+nonempty wait that actually used its deadline receives bounded-wait metadata.
+Engine alone evaluates every call in a repeated batch, so waits cannot exempt
+side effects or polling with unchanged progress. Full handoffs remain intact.
+
+Child approval/input pauses the parent through the completed tool's canonical
+InputRequired interaction. The shared UI opens the child in the ordinary chat
+interaction surface, provides Return to parent, and requires deliberate parent
+continuation after handling the request or using available results. Stop and
+navigation remain available. No passive event wakes an idle or failed parent.
 
 The compact [event panel](../ui/flower-subagent-detail.md) shows source, kind,
 received versus added-to-context state, full read and source navigation. Both

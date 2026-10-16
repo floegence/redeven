@@ -7,7 +7,7 @@ import { flowerMessageTextForCopy } from './chat/markdown/flowerCitations';
 import { flowerDraftReferenceIdentity, flowerDraftReferenceContextItem, flowerDraftReferenceDescription } from './composer/flowerDraftReferenceModel';
 import type { ThreadReferenceSnapshot } from './contextActionWire';
 import { withFlowerModelDirectory } from './modelDirectory';
-import { withFlowerRequestDeadline } from './requestDeadline';
+import { FlowerRequestDeadlineError, withFlowerRequestDeadline } from './requestDeadline';
 import { FileItemIcon } from '@floegence/floe-webapp-core/file-browser';
 import { flowerMenuModels } from './modelMenu';
 import { flowerDirectoryDesktopStatus } from './modelDirectory';
@@ -309,23 +309,10 @@ type FlowerMessageAttachmentPreviewTarget = Readonly<{
   url: string;
 }>;
 
-function messageHasUserRejectedTool(message: FlowerChatMessage): boolean {
-  return (message.blocks ?? []).some((block) => (
-    block.type === 'activity-timeline'
-    && block.items.some((item) => item.approval_state === 'rejected' || item.status === 'declined')
-  ));
-}
-
-function latestThreadFailureIsUserRejectedTool(thread: FlowerThreadSnapshot | null | undefined): boolean {
-  const latestAssistantMessage = [...(thread?.messages ?? [])].reverse().find(message => message.role === 'assistant');
-  return latestAssistantMessage ? messageHasUserRejectedTool(latestAssistantMessage) : false;
-}
-
 function runErrorNoticeVisible(thread: FlowerThreadSnapshot | null | undefined, error = thread?.error): boolean {
   const code = trimString(error?.code);
   return (Boolean(trimString(error?.message)) || thread?.status === 'failed')
-    && code !== 'runtime_restarted' && code !== 'floret_turn_interrupted'
-    && !(code === 'floret_engine_failed' && latestThreadFailureIsUserRejectedTool(thread));
+    && code !== 'runtime_restarted' && code !== 'floret_turn_interrupted';
 }
 
 type FlowerComposerControlID = 'permission' | 'model_reasoning' | 'read_only';
@@ -1067,6 +1054,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [pendingModelPatch, setPendingModelPatch] = createSignal<PendingModelPatch | null>(null);
   const [pendingReasoningThreadIDs, setPendingReasoningThreadIDs] = createSignal<ReadonlySet<string>>(new Set());
   const [activeSubagentDetail, setActiveSubagentDetail] = createSignal<ActiveSubagentDetail | null>(null);
+  const [attentionNavigation, setAttentionNavigation] = createSignal<{parentThreadID: string; childThreadID: string} | null>(null);
+  const handleChildAttention = (parentThreadID: string, childThreadID: string) => {
+    setAttentionNavigation({ parentThreadID, childThreadID });
+    selectThread(childThreadID);
+  };
   const subagentDetailOpen = createMemo(() => activeSubagentDetail() !== null);
   const activeSubagentID = () => activeSubagentDetail()?.childThreadID ?? '';
   const subagentDetail = () => activeSubagentDetail()?.detail ?? null;
@@ -1638,6 +1630,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const inputRequestIsSubmitting = () => decisionIsSubmitting(selectedThreadID(), selectedInputRequest()?.prompt_id ?? '');
   const approvalActionCanDecide = (action: FlowerApprovalAction): boolean => (
     action.can_approve
+    && Boolean(selectedThread()?.approval_actions?.some(candidate => candidate.action_id === action.action_id))
     && approvalActionIsPrimarySurface(action)
     && action.status === 'pending'
     && action.state === 'requested'
@@ -2565,6 +2558,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         return copy().chat.runErrors.contextFixedOverhead;
       case 'context_compaction_limit':
         return copy().chat.runErrors.contextCompactionLimit;
+      case 'floret_repeated_tool_calls': return copy().chat.runErrors.repeatedToolCalls;
+      case 'floret_no_progress': return copy().chat.runErrors.noProgress;
+      case 'floret_duplicate_tool_call_id': return copy().chat.runErrors.duplicateToolCallID;
+      case 'floret_stop_hook_loop': return copy().chat.runErrors.stopHookLoop;
+      case 'floret_tool_dispatch_failed': return copy().chat.runErrors.toolDispatchFailed;
+      case 'floret_storage_failed': return copy().chat.runErrors.storageFailed;
+      case 'floret_authorization_failed': return copy().chat.runErrors.authorizationFailed;
       case 'floret_engine_failed':
         return copy().chat.runErrors.floretEngineFailed;
       case 'floret_control_contract_failed':
@@ -2659,7 +2659,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   ].join('\x1f');
   const threadItems = createMemo(() => {
     localReadVisibilityRevision();
-		return threads().map((t) => {
+		return threads().filter(thread => !thread.parent_thread_id).map((t) => {
       const visibleThread = threadWithPinnedPresentation(threadWithLocalReadVisibility(t));
       const sig = threadItemSignature(visibleThread);
       const cached = threadItemCache.get(t.thread_id);
@@ -2687,7 +2687,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const companionThreadItems = createMemo<readonly FlowerCompanionThreadListItem[]>(() => {
     companionRunRevision();
     const cache = threadCache();
-    return threads().map((summary) => {
+    return threads().filter(thread => !thread.parent_thread_id).map((summary) => {
       const visibleSummary = threadWithPinnedPresentation(threadWithLocalReadVisibility(summary));
       const item = projectFlowerThreadListItem(visibleSummary, copy().threadList.untitled);
       const detail = cache.views.get(summary.thread_id)?.thread;
@@ -3384,7 +3384,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       // load transcripts, or replace the list with a loading/error surface.
       const summaries = await withFlowerThreadListTimeout(props.adapter.listThreads());
       if (generation !== pinMutationGeneration) return;
-      setThreadCache((cache) => cache.replaceSummaries(summaries.filter((thread) => !retiredThreadIDs.has(thread.thread_id))));
+      setThreadCache((cache) => cache.replaceSummaries(summaries.filter((thread) => !retiredThreadIDs.has(thread.thread_id)), attentionNavigation()?.childThreadID));
     } catch {
       if (generation === pinMutationGeneration && saved) notifyThreadActionError(copy().threadList.pinRefreshFailed);
     } finally {
@@ -3580,8 +3580,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     // the cache. Rendering must never be the first place malformed history is
     // discovered.
     buildFlowerTimelineEntries(live.thread);
+    const navigation = attentionNavigation();
     return receiveThreadDetail({
-      thread: { ...live.thread },
+      thread: { ...live.thread, ...(navigation?.childThreadID === live.thread.thread_id ? { parent_thread_id: navigation.parentThreadID } : {}) },
       version: Math.max(1, Math.floor(Number(live.current.view_version) || 0)),
     }, source, live.current);
   };
@@ -4407,7 +4408,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const selectedID = selectedThreadID();
       const selectedSummary = next.find((thread) => thread.thread_id === selectedID) ?? null;
       const selectedDetailCurrent = !selectedID || threadCache().views.has(selectedID);
-      const pendingSelectedMissing = Boolean(selectedID && !selectedSummary && !selectedDetailCurrent);
+      const pendingSelectedMissing = Boolean(selectedID && !selectedSummary && !selectedDetailCurrent && attentionNavigation()?.childThreadID !== selectedID);
       if (pendingSelectedMissing) {
         cancelDeferredThreadSelection();
         cancelThreadSelectionTransaction();
@@ -4417,9 +4418,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       if (selectedID && selectedDetailCurrent && selectedSummary?.read_status.is_unread) {
         persistThreadRead(selectedID, selectedSummary.read_status.snapshot, threadLoadSequence);
       }
-      setThreadCache((cache) => cache.replaceSummaries(next));
+      setThreadCache((cache) => cache.replaceSummaries(next, attentionNavigation()?.childThreadID));
       const currentSelection = selectedThreadID();
-      if (currentSelection && !next.some((thread) => thread.thread_id === currentSelection) && !threadCache().views.has(currentSelection)) {
+      if (currentSelection && !next.some((thread) => thread.thread_id === currentSelection) && !threadCache().views.has(currentSelection) && attentionNavigation()?.childThreadID !== currentSelection) {
         cancelDeferredThreadSelection();
         cancelThreadSelectionTransaction();
         closeSubagentOverlays();
@@ -4845,7 +4846,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           if (surfaceDisposed || !transportOutbox().entries.has(entry.requestId)) return;
         }
         const receipt = entry.operation === 'context_compaction'
-          ? await adapter.compactThreadContext!(entry.threadId, { storage_generation: entry.input.storage_generation ?? '', client_request_id: entry.requestId }).then(current => ({ client_request_id: entry.requestId, thread_id: entry.threadId, current }))
+          ? await withFlowerRequestDeadline(() => adapter.compactThreadContext!(entry.threadId, { storage_generation: entry.input.storage_generation ?? '', client_request_id: entry.requestId }), copy().settings.dialog.catalog.retryTimedOut).then(current => ({ client_request_id: entry.requestId, thread_id: entry.threadId, current }))
           : await adapter.launchTurn(input);
         if (surfaceDisposed) return;
         if (trimString(receipt.client_request_id) !== entry.requestId) {
@@ -4854,7 +4855,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         if (entry.operation === 'context_compaction') {
           pendingAdmissionHandoffs.get(entry.requestId)?.settle(receipt.thread_id, false);
           pendingAdmissionHandoffs.delete(entry.requestId);
-          if (receipt.current && requestEpoch === liveTransport.connectionEpoch()) applyRuntimeCurrent(receipt.current);
+          if (receipt.current?.thread_id !== entry.threadId) throw flowerTurnAdmissionError('unknown', new Error('Context recovery returned a different thread.'));
+          if (requestEpoch === liveTransport.connectionEpoch()) {
+            applyRuntimeCurrent(receipt.current);
+            if (entry.parentThreadId) acceptActiveSubagentCurrent(entry.parentThreadId, receipt.current);
+          }
           setTransportOutbox(outbox => outbox.drop(entry.requestId));
         } else applyAcceptedTurnLaunchReceipt(receipt, requestEpoch);
       };
@@ -4870,7 +4875,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           setTransportOutbox(outbox => outbox.put({ ...retained, terminalError: 'storage_restored', delivery: 'failed', deliveryError: getErrorMessage(error) }));
           return;
         }
-        const unknown = flowerTurnAdmissionFailureKind(error) === 'unknown';
+        const unknown = error instanceof FlowerRequestDeadlineError || flowerTurnAdmissionFailureKind(error) === 'unknown';
         if (entry.operation === 'context_compaction') {
           const code = error && typeof error === 'object' && 'code' in error ? error.code : '';
           notifyComposerError(code === 'context_compaction_busy' ? copy().chat.compactContextBusy : getErrorMessage(error));
@@ -4932,8 +4937,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const incoming = (envelope.summaries ?? [])
         .filter((summary) => !retiredThreadIDs.has(summary.thread_id));
       if (envelope.kind === 'ready') {
-        setThreadCache((cache) => cache.resetRootSummaries(incoming));
-        if (selectedID && !incoming.some((summary) => summary.thread_id === selectedID)) {
+        const retainedChild = attentionNavigation()?.childThreadID === selectedID ? selectedID : undefined;
+        setThreadCache((cache) => cache.resetRootSummaries(incoming, retainedChild));
+        if (selectedID && !threadCache().selectedId) {
           closeSubagentOverlays();
           setSelectedThreadID('');
         }
@@ -4969,6 +4975,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (envelope.kind === 'thread.batch' && envelope.subagent_current) {
       const parentThreadID = trimString(envelope.thread_id);
       acceptActiveSubagentCurrent(parentThreadID, envelope.subagent_current, undefined, envelope.model_context ?? undefined, envelope.context_usage ?? undefined);
+      const navigation = attentionNavigation();
+      if (navigation?.parentThreadID === parentThreadID && navigation.childThreadID === selectedThreadID() && navigation.childThreadID === envelope.subagent_current.thread_id) {
+        applyRuntimeCurrent(envelope.subagent_current, envelope.context_usage, envelope.context_compactions, envelope.timeline_decorations, 'live_current', undefined, envelope.model_context);
+      }
       return;
     }
     if (envelope.current) {
@@ -5163,13 +5173,39 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (request && request.threadID !== trimString(selectedThreadID())) setProviderFocusRequest(undefined);
   });
   let providerFocusSequence = 0;
-  const configureCurrentProvider = async () => {
-    const modelID = trimString(selectedThread()?.model_id) || selectedComposerModelID();
-    const slash = modelID.indexOf('/');
-    const request = { providerID: slash > 0 ? modelID.slice(0, slash) : '', modelName: slash > 0 ? modelID.slice(slash + 1) : '', threadID: trimString(selectedThreadID()), sequence: ++providerFocusSequence };
+  const [configuringProviderThreadID, setConfiguringProviderThreadID] = createSignal('');
+  const configureThreadProvider = async (target: FlowerThreadSnapshot | null | undefined) => {
+    const threadID = trimString(target?.thread_id);
+    if (!threadID || configuringProviderThreadID() === threadID) return;
+    const sequence = ++providerFocusSequence;
+    const requestEpoch = liveTransport.connectionEpoch();
+    setConfiguringProviderThreadID(threadID);
     setProviderFocusRequest(undefined);
-    await openSettings();
-    if (request.sequence === providerFocusSequence && request.threadID === trimString(selectedThreadID()) && sidePanel() === 'settings') setProviderFocusRequest(request);
+    try {
+      let selectionSequence = threadLoadSequence;
+      const stillTargeted = () => !surfaceDisposed && sequence === providerFocusSequence
+        && requestEpoch === liveTransport.connectionEpoch() && selectionSequence === threadLoadSequence
+        && threadID === trimString(selectedThreadID());
+      const child = activeSubagentDetail();
+      if (child?.childThreadID === threadID) {
+        setAttentionNavigation({ parentThreadID: child.parentThreadID, childThreadID: threadID });
+        const loading = loadAndSelectThread(threadID);
+        selectionSequence = threadLoadSequence;
+        await loading;
+      }
+      if (!stillTargeted()) return;
+      const current = threadCache().views.get(threadID)?.thread;
+      if (!current) return;
+      const modelID = trimString(current.model_id) || selectedComposerModelID();
+      const slash = modelID.indexOf('/');
+      const request = { providerID: slash > 0 ? modelID.slice(0, slash) : '', modelName: slash > 0 ? modelID.slice(slash + 1) : '', threadID, sequence };
+      await readDetail(openSettings);
+      if (stillTargeted() && sidePanel() === 'settings') setProviderFocusRequest(request);
+    } catch (error) {
+      if (!surfaceDisposed && sequence === providerFocusSequence) notifyThreadActionError(getErrorMessage(error));
+    } finally {
+      if (sequence === providerFocusSequence) setConfiguringProviderThreadID('');
+    }
   };
 
   const openSettings = () => {
@@ -6495,12 +6531,21 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return event.key === 'Enter' && !event.shiftKey;
   };
 
-  const executeCompactContextCommand = async () => {
-    const threadID = trimString(selectedThreadID());
+  const executeCompactContextCommand = async (target = selectedThread(), stillTargeted = () => true) => {
+    const threadID = trimString(target?.thread_id);
+    const child = trimString(target?.parent_thread_id);
+    const fromComposer = threadID === selectedThreadID();
+    const requestEpoch = liveTransport.connectionEpoch();
+    const selectionSequence = threadLoadSequence;
+    const childGeneration = activeSubagentDetail()?.generation;
+    const targetCurrent = () => !surfaceDisposed && requestEpoch === liveTransport.connectionEpoch()
+      && selectionSequence === threadLoadSequence
+      && (fromComposer ? selectedThreadID() === threadID
+        : activeSubagentID() === threadID && activeSubagentDetail()?.generation === childGeneration);
     if (!threadID) { notifyComposerError(copy().chat.compactContextEmpty); return; }
-    if (threadLoadError() || selectedThreadReadOnly()) return;
+    if (props.adapter.canMutate === false || (fromComposer && (threadLoadError() || selectedThreadReadOnly()))) return;
     if (!props.adapter.compactThreadContext) { notifyComposerError(copy().chat.compactContextUnavailable); return; }
-    const thread = selectedThread();
+    const thread = target;
     if (thread?.active_run_id || thread?.queued_turn_count || thread?.input_request || thread?.approval_pending) {
       notifyComposerError(copy().chat.compactContextBusy);
       return;
@@ -6510,7 +6555,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       notifyComposerError(pendingOperation.delivery === 'unknown' ? copy().chat.sendUnknownDescription : copy().chat.compactContextBusy);
       return;
     }
-    const sessionKey = currentComposerSessionKey();
+    const sessionKey = fromComposer ? currentComposerSessionKey() : threadID;
     if (launchChatTurnInFlight.has(sessionKey)) return;
     launchChatTurnInFlight.add(sessionKey);
     setPreparingSendRevision(revision => revision + 1);
@@ -6520,14 +6565,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const requestID = createFlowerClientRequestID();
     try {
       if (outboxResendInFlight.has(requestID)) return;
-      const storageGeneration = await props.adapter.resolveStorageGeneration?.() ?? '';
-      if (surfaceDisposed) return;
+      const storageGeneration = await withFlowerRequestDeadline(() => props.adapter.resolveStorageGeneration?.() ?? Promise.resolve(''), copy().settings.dialog.catalog.retryTimedOut);
+      if (!targetCurrent() || !stillTargeted()) return;
       outboxOperations.set(requestID, { adapter: props.adapter });
-      pendingAdmissionHandoffs.set(requestID, { sessionKey, selectionSequence: threadLoadSequence, settle: () => {
+      if (fromComposer) pendingAdmissionHandoffs.set(requestID, { sessionKey, selectionSequence: threadLoadSequence, settle: () => {
         if (session.snapshot().text_revision === frozen.text_revision && (frozenCommand.kind === 'intent' || frozenCommand.kind === 'suggest')) updateComposerSessionText(sessionKey, '');
       } });
       setTransportOutbox(outbox => outbox.put({
         operation: 'context_compaction', requestId: requestID, threadId: threadID,
+        ...(child ? { parentThreadId: child } : {}),
         input: { client_request_id: requestID, thread_id: threadID, storage_generation: storageGeneration, prompt: '' },
         attachmentLabels: [], createdAtMs: Date.now(), delivery: 'pending',
       }));
@@ -6719,7 +6765,32 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
   const refreshOutboxEntry = (entry: TransportOutboxEntry) => {
     if (isPendingDraftKey(entry.threadId)) { void refreshDirectory(); return; }
+    if (entry.parentThreadId && activeSubagentID() === entry.threadId) { void refreshActiveSubagentDetail(); return; }
     void requestThreadDetail(entry.threadId, 'user_action', true).catch(error => notifyThreadActionError(getErrorMessage(error)));
+  };
+  const outboxRecoveryActions = (entry: Accessor<TransportOutboxEntry>) => {
+    const unknown = () => entry().delivery === 'unknown';
+    const failed = () => entry().delivery === 'failed';
+    const settled = () => entry().delivery === 'accepted';
+    const recoveryCopy = () => Boolean(entry().terminalError);
+    const mutableUnsent = () => { outboxRetryTick(); return (!unknown() || recoveryCopy()) && !settled() && !outboxResendInFlight.has(entry().requestId); };
+    const emptyDraft = () => { const value = reactiveDraftSnapshotFor(entry().threadId).value; return !value.text && !value.references.length && !value.attachments.length; };
+    return <>
+      <Show when={(failed() || unknown()) && !recoveryCopy()}><button type="button" class="flower-queued-turn-action" aria-label={copy().chat.retrySend} title={copy().chat.retrySend}
+        onClick={() => retryOutboxEntry(entry())}><Refresh aria-hidden="true" /></button></Show>
+      <Show when={unknown() || settled() || recoveryCopy()}><button type="button" class="flower-queued-turn-action" aria-label={copy().chat.refreshSend} title={copy().chat.refreshSend}
+        onClick={() => refreshOutboxEntry(entry())}><Refresh aria-hidden="true" /></button></Show>
+      <Show when={(failed() || unknown()) && !entry().operation}><button type="button" class="flower-queued-turn-action" aria-label={copy().chat.restoredInputCopy} title={copy().chat.restoredInputCopy}
+        onClick={() => void writeClipboardText(entry().draftText ?? entry().input.prompt, copy().chat.restoredInputCopy).catch(error => notifyThreadActionError(getErrorMessage(error)))}><Copy aria-hidden="true" /></button></Show>
+      <Show when={mutableUnsent()}>
+        <Show when={!entry().operation}><button type="button" class="flower-queued-turn-action" aria-label={copy().chat.restoreSend} title={copy().chat.restoreSend}
+          disabled={!emptyDraft()}
+          onClick={() => restoreUnsentOutboxEntry(entry())}><Pencil aria-hidden="true" /></button></Show>
+        <button type="button" class="flower-queued-turn-action flower-queued-turn-delete" aria-label={recoveryCopy() ? copy().chat.removeRecoveryCopy : copy().chat.deleteUnsent}
+          title={recoveryCopy() ? copy().chat.removeRecoveryCopyDescription : copy().chat.deleteUnsent}
+          onClick={() => discardUnsentOutboxEntry(entry())}><Trash aria-hidden="true" /></button>
+      </Show>
+    </>;
   };
   const canonicalReferencePreviewAvailable = () => Boolean(props.adapter.openCanonicalReference || props.adapter.resolveCanonicalReference);
   const openQueuedPathPreview = async (
@@ -6831,14 +6902,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             const dragging = () => queuedTurnReorder()?.draggedQueueID === queueID();
             const failed = () => transport()?.delivery === 'failed' || Boolean(transport()?.terminalError && transport()?.delivery !== 'unknown' && transport()?.delivery !== 'accepted');
             const unknown = () => transport()?.delivery === 'unknown';
-            const settled = () => transport()?.delivery === 'accepted';
-            const recoveryCopy = () => Boolean(transport()?.terminalError);
-            const mutableUnsent = () => { outboxRetryTick(); return Boolean(transport() && (!unknown() || recoveryCopy()) && !settled() && !outboxResendInFlight.has(row().requestKey)); };
-            const emptyDraft = () => { const value = reactiveDraftSnapshotFor(currentComposerSessionKey()).value; return !value.text && !value.references.length && !value.attachments.length; };
             const status = () => transport() ? failed() ? copy().chat.sendFailed : unknown() ? copy().chat.sendUnknown
               : transport()?.operation ? copy().chat.sendWaiting : copy().chat.pendingQueueAdmission : copy().chat.pendingQueued;
             const deliveryDescription = () => transport()?.terminalError === 'attachments_unavailable_after_restart' ? copy().chat.attachmentRecoveryDescription
-              : transport()?.terminalError === 'storage_restored' ? copy().chat.restoredInputDescription
+              : transport()?.terminalError === 'storage_restored' ? transport()?.operation === 'context_compaction' ? copy().chat.compactionStorageRestored : copy().chat.restoredInputDescription
               : transport()?.terminalError === 'preparation_unavailable_after_restart' ? copy().chat.sendPreparationRecoveryDescription
               : unknown() ? copy().chat.sendUnknownDescription : '';
             return <div class="flower-queued-turn-item" role="listitem" aria-label={`${status()}: ${label()}`} aria-description={deliveryDescription() || undefined}
@@ -6878,20 +6945,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     disabled={queuedTurnSendPending(trimString(selectedThreadID())) || queueTakeBackPending().has(trimString(selectedThreadID()))} aria-label={copy().chat.queuedDelete} title={copy().chat.queuedDelete}
                     data-flower-queued-turn-delete={queueID()} onClick={event => { event.stopPropagation(); void deleteQueuedTurn(turn()); }}><Trash aria-hidden="true" /></button></Show>
                 </>}>
-                  {entry => <>
-                    <Show when={(failed() || unknown()) && !entry().terminalError}><button type="button" class="flower-queued-turn-action" aria-label={copy().chat.retrySend} title={copy().chat.retrySend}
-                      onClick={() => retryOutboxEntry(entry())}><Refresh aria-hidden="true" /></button></Show>
-                    <Show when={unknown() || settled() || recoveryCopy()}><button type="button" class="flower-queued-turn-action" aria-label={copy().chat.refreshSend} title={copy().chat.refreshSend}
-                      onClick={() => refreshOutboxEntry(entry())}><Refresh aria-hidden="true" /></button></Show>
-                    <Show when={(failed() || unknown()) && !entry().operation}><button type="button" class="flower-queued-turn-action" aria-label={copy().chat.restoredInputCopy} title={copy().chat.restoredInputCopy}
-                      onClick={() => void writeClipboardText(entry().draftText ?? entry().input.prompt, copy().chat.restoredInputCopy).catch(error => notifyThreadActionError(getErrorMessage(error)))}><Copy aria-hidden="true" /></button></Show>
-                    <Show when={mutableUnsent() && !entry().operation}><button type="button" class="flower-queued-turn-action" aria-label={copy().chat.restoreSend} title={copy().chat.restoreSend}
-                      disabled={!emptyDraft()}
-                      onClick={() => restoreUnsentOutboxEntry(entry())}><Pencil aria-hidden="true" /></button>
-                      <button type="button" class="flower-queued-turn-action flower-queued-turn-delete" aria-label={recoveryCopy() ? copy().chat.removeRecoveryCopy : copy().chat.deleteUnsent}
-                        title={recoveryCopy() ? copy().chat.removeRecoveryCopyDescription : copy().chat.deleteUnsent}
-                        onClick={() => discardUnsentOutboxEntry(entry())}><Trash aria-hidden="true" /></button></Show>
-                  </>}
+                  {entry => outboxRecoveryActions(entry)}
                 </Show>
               </div>
 
@@ -7000,20 +7054,19 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     );
   };
 
-  const runErrorNotice = (error: FlowerThreadSnapshot['error']) => {
+  const runErrorNotice = (error: FlowerThreadSnapshot['error'], targetThread: Accessor<FlowerThreadSnapshot | null | undefined>) => {
     const code = trimString(error?.code);
     const contextFailure = code === 'context_budget_invalid' || code === 'context_fixed_overhead' || code === 'context_compaction_limit';
-    const retryPending = () => retryingThreads().has(trimString(selectedThreadID()));
-    const retryBlocked = () => retryPending() || ['running', 'waiting_approval', 'waiting_user'].includes(selectedThread()?.status ?? '');
+    const retryPending = () => retryingThreads().has(trimString(targetThread()?.thread_id));
+    const retryBlocked = () => props.adapter.canMutate === false || code === 'floret_effect_outcome_unknown' || retryPending() || ['running', 'waiting_approval', 'waiting_user'].includes(targetThread()?.status ?? '');
     const [detailsCopied, setDetailsCopied] = createSignal(false);
-    const stoppedUnknown = () => code === 'floret_effect_outcome_unknown' && selectedThread()?.cancellation?.source === 'user_stop';
-    const continuationFailure = createMemo(() => (
-      code === 'floret_control_contract_failed'
-      || (
-        flowerTimelineHasUserRejectedTool(selectedTimelineEntries())
-        && (code === 'provider_unreachable' || code === 'provider_stream_interrupted')
-      )
-    ));
+    const stoppedUnknown = () => code === 'floret_effect_outcome_unknown' && targetThread()?.cancellation?.source === 'user_stop';
+    const continuationFailure = createMemo(() => {
+      const thread = targetThread();
+      return code === 'floret_control_contract_failed'
+        || Boolean(thread && flowerTimelineHasUserRejectedTool(buildFlowerTimelineEntries(thread))
+          && (code === 'provider_unreachable' || code === 'provider_stream_interrupted'));
+    });
     const actionable = code === 'chatgpt_review_required' || code === 'chatgpt_storage_unavailable' || code === 'chatgpt_authorization_required' || code === 'chatgpt_plan_permission_required' || code === 'provider_auth_failed'
       || code === 'provider_missing_key'
       || code === 'provider_model_unavailable'
@@ -7021,23 +7074,39 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       || code === 'provider_stream_interrupted'
       || code === 'model_gateway_contract_failed';
     const retryContinuation = async () => {
-      const threadID = trimString(selectedThreadID());
+      const threadID = trimString(targetThread()?.thread_id);
       if (!threadID || retryBlocked()) return;
       setRetryingThreads(previous => new Set([...previous, threadID]));
       try {
         const requestEpoch = liveTransport.connectionEpoch();
         const selectionSequence = threadLoadSequence;
-        beginThreadDetailDisplayCycle(threadID);
-        const current = await requestThreadDetail(threadID, 'user_action', true);
-        if (!current || surfaceDisposed || requestEpoch !== liveTransport.connectionEpoch()
-          || selectionSequence !== threadLoadSequence || selectedThreadID() !== threadID
-          || current.status !== 'failed' || current.error?.code === 'floret_effect_outcome_unknown') return;
+        const childSelection = activeSubagentDetail();
+        const child = childSelection?.childThreadID === threadID ? childSelection : null;
+        const stillTargeted = () => !surfaceDisposed && requestEpoch === liveTransport.connectionEpoch()
+          && selectionSequence === threadLoadSequence
+          && (child ? activeSubagentDetail()?.childThreadID === threadID && activeSubagentDetail()?.parentThreadID === child.parentThreadID && activeSubagentDetail()?.generation === child.generation
+            : selectedThreadID() === threadID);
+        let current: FlowerThreadSnapshot | null;
+        if (child) {
+          const detail = await withFlowerRequestDeadline(() => props.adapter.loadSubagentDetail(child.parentThreadID, threadID), copy().settings.dialog.catalog.retryTimedOut);
+          if (!stillTargeted()) return;
+          if (detail.summary.thread_id !== threadID || detail.summary.parent_thread_id !== child.parentThreadID || detail.current.thread_id !== threadID) throw new Error('Subagent recovery returned a different thread.');
+          current = projectSubagentDetailThread(detail);
+          acceptActiveSubagentCurrent(child.parentThreadID, detail.current, detail.summary, detail.model_context, detail.context_usage);
+        } else {
+          beginThreadDetailDisplayCycle(threadID);
+          current = await requestThreadDetail(threadID, 'user_action', true);
+        }
+        if (!current || !stillTargeted() || current.status !== 'failed' || current.error?.code === 'floret_effect_outcome_unknown') return;
         if (current.current_execution?.turn_kind === 'context_compaction') {
-          await executeCompactContextCommand();
+          await executeCompactContextCommand(current, stillTargeted);
           return;
         }
         const live = await withFlowerRequestDeadline(() => props.adapter.retryThread(threadID), copy().settings.dialog.catalog.retryTimedOut);
-        receiveThreadView(live, 'user_action', requestEpoch);
+        if (!stillTargeted()) return;
+        if (live.thread.thread_id !== threadID || live.current.thread_id !== threadID) throw new Error('Retry returned a different thread.');
+        if (child) acceptActiveSubagentCurrent(child.parentThreadID, live.current);
+        else receiveThreadView(live, 'user_action', requestEpoch);
       } catch (error) {
         reportThreadDetailDiagnostic(threadID, 'request_or_mapping', 'user_action', error);
         notifyThreadActionError(getErrorMessage(error));
@@ -7045,8 +7114,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         setRetryingThreads(previous => { const next = new Set(previous); next.delete(threadID); return next; });
       }
     };
+    const runtimeFailure = code.startsWith('floret_') && code !== 'floret_effect_outcome_unknown';
+    const retryableRuntimeFailure = ['floret_engine_failed', 'floret_control_contract_failed', 'floret_repeated_tool_calls', 'floret_no_progress', 'floret_duplicate_tool_call_id', 'floret_stop_hook_loop', 'floret_tool_dispatch_failed', 'floret_storage_failed', 'floret_authorization_failed'].includes(code);
     const providerFailure = code.startsWith('provider_') || code.startsWith('chatgpt_');
-    const diagnostics = () => (contextFailure || providerFailure || code === 'model_context_unavailable') && trimString(error?.detail) ? (
+    const diagnostics = () => (contextFailure || providerFailure || runtimeFailure || code === 'model_context_unavailable') && trimString(error?.detail) ? (
       <details class="flower-error-details">
         <summary>{copy().chat.runErrorDetails}</summary>
         <pre>{trimString(error?.detail)}</pre>
@@ -7057,11 +7128,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     ) : undefined;
     const action = () => providerFailure ? (
       <>
-        <Button size="sm" variant="ghost" disabled={retryBlocked()} onClick={() => void configureCurrentProvider()}>{copy().settings.dialog.catalog.searchConfigure}</Button>
+        <Button size="sm" variant="ghost" disabled={retryBlocked() || configuringProviderThreadID() === trimString(targetThread()?.thread_id)} onClick={() => void configureThreadProvider(targetThread())}>{copy().settings.dialog.catalog.searchConfigure}</Button>
         <Button size="sm" variant="ghost" disabled={retryBlocked()} onClick={() => void retryContinuation()}>{copy().chat.retryReply}</Button>
         <Show when={code === 'chatgpt_usage_unavailable'}><a href="https://chatgpt.com/settings/usage" target="_blank" rel="noopener noreferrer" class="cursor-pointer whitespace-nowrap text-sm font-medium text-primary hover:underline">{copy().settings.dialog.chatGPT.manageUsage}</a></Show>
       </>
-    ) : code === 'model_context_unavailable' || code === 'floret_engine_failed' ? (
+    ) : code === 'model_context_unavailable' || retryableRuntimeFailure ? (
       <Button size="sm" variant="ghost" disabled={retryBlocked()} onClick={() => void retryContinuation()}>{copy().chat.retryReply}</Button>
     ) : contextFailure ? (
       <>
@@ -8644,6 +8715,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const focusComposerIfConnected = () => { if (composerRef?.isConnected) composerRef.focus({ preventScroll: true }); };
 
+  const isSubagentAttention = (request: FlowerInputRequest) => request.tool_name === 'subagents' && request.questions.some(question => question.id === 'subagent_attention');
+  const subagentAttentionChoice = (label: string) => label === 'Continue after handling the child thread' ? copy().chat.subagentWaitAfterHandling : label === 'Continue using available results' ? copy().chat.subagentWaitAvailable : label;
+
   const inputRequestPrompt = (
     request: Accessor<FlowerInputRequest | null | undefined>,
     options: Readonly<{ surface?: 'history' | 'composer' }> = {},
@@ -8663,6 +8737,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           tabIndex={composerSurface ? -1 : undefined}
           aria-label={chatCopyValue('inputRequestTitle', 'Waiting for your reply')}
         >
+          <Show when={isSubagentAttention(inputRequest())}>
+            <div class="flower-input-request-description">{copy().chat.subagentWaitDescription}</div>
+            <div class="flower-error-actions">
+              <For each={selectedSubagentItems().filter(item => item.status === 'waiting_input')}>
+                {(item) => <Button size="sm" variant="ghost" class="flower-attention-child" onClick={() => handleChildAttention(item.parentThreadID, item.threadID)}>{item.displayName || item.taskName || item.threadID}</Button>}
+              </For>
+            </div>
+          </Show>
           <Show when={!isToolOriginComputerInput(inputRequest())}>
           <Show when={!composerSurface}>
           <div class="flower-input-request-heading">
@@ -8682,7 +8764,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   : '';
                 const customSelected = () => questionDraft(question().id).answer_kind === 'custom';
                 const showCustomChoice = () => questionMode(question()) === 'select_or_write';
-                const summary = () => trimString(inputRequest().public_summary);
+                const summary = () => isSubagentAttention(inputRequest()) ? '' : trimString(inputRequest().public_summary);
                 const questionText = () => trimString(question().question);
                 const showSummary = () => summary().length > 0 && summary() !== questionText() && summary() !== trimString(question().header) && question().id === inputRequest().questions[0]?.id;
                 return (
@@ -8696,7 +8778,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                       <Show when={trimString(question().header) && question().header !== question().question}>
                         <div class="flower-input-request-question-header">{question().header}</div>
                       </Show>
-                      <div class="flower-input-request-question-text">{question().question}</div>
+                      <div class="flower-input-request-question-text">{isSubagentAttention(inputRequest()) ? copy().chat.subagentWaitQuestion : question().question}</div>
                       <Show when={showSummary()}>
                         <div class="flower-input-request-description">{summary()}</div>
                       </Show>
@@ -8705,7 +8787,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                       <Suspense fallback={<div class="h-20 animate-pulse rounded-md bg-muted/40" aria-hidden="true" />}>
                         <FlowerInputChoices
                           threadID={selectedThreadID()}
-                          question={question()}
+                          question={isSubagentAttention(inputRequest()) ? { ...question(), choices: question().choices?.map(choice => ({ ...choice, label: subagentAttentionChoice(choice.label) })) } : question()}
                           selectedChoiceID={selectedChoiceID()}
                           customSelected={customSelected()}
                           showCustomChoice={showCustomChoice()}
@@ -10781,25 +10863,32 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   }
 
 
-  const compactionDividerEntry = (entry: Accessor<Extract<FlowerTimelineEntry, { type: 'context_compaction' }>>) => {
+  const compactionDividerEntry = (entry: Accessor<Extract<FlowerTimelineEntry, { type: 'context_compaction' }>>, target: Accessor<FlowerThreadSnapshot | null | undefined>) => {
     const decoration = createMemo(() => entry().decoration);
     return <FlowerContextCompactionDivider decoration={decoration()} copy={copy()}
-      onRetry={selectedThread()?.current_execution?.turn_kind === 'context_compaction' && !selectedThread()?.active_run_id
+      onRetry={target()?.current_execution?.turn_kind === 'context_compaction' && !target()?.active_run_id
         && (decoration().compaction.status === 'failed' || decoration().compaction.status === 'cancelled')
-        && decoration().compaction.run_id === selectedThread()?.current_execution?.run_id ? () => void executeCompactContextCommand() : undefined} />;
+        && decoration().compaction.run_id === target()?.current_execution?.run_id ? () => void executeCompactContextCommand(target()) : undefined} />;
   };
 
-  const inputRequestEntry = (entry: Accessor<FlowerTimelineEntry>) => {
+  const inputRequestEntry = (entry: Accessor<FlowerTimelineEntry>, thread: Accessor<FlowerThreadSnapshot | null | undefined>) => {
     const request = createMemo(() => {
       const value = entry();
       if (value.type !== 'input_request') return null;
-      return trimString(visibleInputRequest(selectedThread())?.prompt_id) === trimString(value.request.prompt_id)
+      return trimString(visibleInputRequest(thread())?.prompt_id) === trimString(value.request.prompt_id)
         ? null
         : value.request;
     });
     return (
       <Show when={request()}>
-        {(value) => inputRequestPrompt(value)}
+        {(value) => <Show when={thread()?.thread_id === selectedThreadID()} fallback={
+          <section class="flower-input-request-panel" aria-label={copy().chat.inputRequestTitle}>
+            <For each={value().questions}>{question => <div class="flower-input-request-question-copy">
+              <div class="flower-input-request-question-text">{isSubagentAttention(value()) ? copy().chat.subagentWaitQuestion : question.question}</div>
+              <For each={question.choices}>{choice => <p>{isSubagentAttention(value()) ? subagentAttentionChoice(choice.label) : choice.label}</p>}</For>
+            </div>}</For>
+          </section>
+        }>{inputRequestPrompt(value)}</Show>}
       </Show>
     );
   };
@@ -10815,7 +10904,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           const code = trimString(value().code);
           if (code === 'runtime_restarted') return runtimeRestartedDivider();
           if (!runErrorNoticeVisible(thread(), value())) return null;
-          return runErrorNotice(value());
+          return runErrorNotice(value(), thread);
         }}
       </Show>
     );
@@ -10851,9 +10940,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       case 'queued_turn':
         return queuedTurnEntry(() => entry() as Extract<FlowerTimelineEntry, { type: 'queued_turn' }>);
       case 'context_compaction':
-        return compactionDividerEntry(() => entry() as Extract<FlowerTimelineEntry, { type: 'context_compaction' }>);
+        return compactionDividerEntry(() => entry() as Extract<FlowerTimelineEntry, { type: 'context_compaction' }>, thread);
       case 'input_request':
-        return inputRequestEntry(entry);
+        return inputRequestEntry(entry, thread);
       case 'error':
         return errorEntry(entry, thread);
     }
@@ -11133,7 +11222,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       error={subagentDetailError()}
       detailAvailable={Boolean(subagentDetailThread())}
       entries={subagentDetailTimelineEntries()}
-      inputControls={<Show when={subagentDetail()?.current.queue?.length}>
+      inputControls={<>
+      <Show when={subagentDetailThread()?.status === 'waiting_user' || subagentDetailThread()?.status === 'waiting_approval'}>
+        <Button size="sm" variant="outline" onClick={() => { const active = activeSubagentDetail(); if (active) handleChildAttention(active.parentThreadID, active.childThreadID); }}>{copy().chat.subagentHandleRequest}</Button>
+      </Show>
+      <For each={transportOutbox().forThread(activeSubagentID()).filter(entry => entry.operation === 'context_compaction')}>{entry => (
+        <div class="flower-error-card" role="status" data-flower-child-compaction-delivery={entry.delivery}>
+          <div class="flower-error-copy"><p>{entry.terminalError === 'storage_restored' ? copy().chat.compactionStorageRestored : entry.delivery === 'unknown' ? copy().chat.sendUnknownDescription : copy().chat.compactContext}</p>
+            <div class="flower-queued-turn-actions">{outboxRecoveryActions(() => entry)}</div>
+          </div>
+        </div>
+      )}</For>
+      <Show when={subagentDetail()?.current.queue?.length}>
         <section class="flower-subagent-inputs" aria-label={subagentsCopy().input.queueTitle}>
           <h3>{subagentsCopy().input.queueTitle}</h3>
           <For each={subagentDetail()?.current.queue}>{(item) => <div class="flower-subagent-input-row" data-flower-subagent-input-id={item.id}>
@@ -11152,7 +11252,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             <Show when={subagentInputCommand(item.id)?.error}><p role="alert">{subagentInputCommand(item.id)?.error}</p></Show>
           </div>}</For>
         </section>
-      </Show>}
+      </Show></>}
 
       renderEntry={(entry) => timelineEntry(entry, subagentDetailScroll, subagentDetailThread)}
       contextIndicator={<Show when={subagentDetailThread()?.model_context}><FlowerComposerContextIndicator placement="below-start" usage={subagentDetailThread()?.context_usage ?? {}} modelContext={subagentDetailThread()?.model_context} copy={copy()} /></Show>}
@@ -12778,6 +12878,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         onClose={() => setAttachmentPreview(null)}
       />
       {workspaceSyncNotice()}
+      <Show when={attentionNavigation() && selectedThreadID() === attentionNavigation()?.childThreadID}>
+        <div class="flower-error-actions"><Button size="sm" variant="ghost" onClick={() => { const navigation = attentionNavigation(); if (navigation) { selectThread(navigation.parentThreadID); setAttentionNavigation(null); } }}>{copy().chat.subagentReturnParent}</Button></div>
+      </Show>
       <div class="flower-chat-main" data-flower-action-layout={bottomActionMode()} data-setup-welcome={showSetupWelcome() && !companionCollapsed() ? 'true' : undefined}>
         <div
           ref={(node) => {

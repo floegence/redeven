@@ -16,13 +16,55 @@ import (
 
 type subagentHandoffTestRuntime struct {
 	flruntime.ThreadService
-	summaries []flruntime.ThreadSummary
-	views     map[identity.ThreadID]flruntime.ThreadView
-	viewErrs  map[identity.ThreadID]error
+	summaries  []flruntime.ThreadSummary
+	views      map[identity.ThreadID]flruntime.ThreadView
+	viewErrs   map[identity.ThreadID]error
+	waitResult *flruntime.ThreadWaitResult
 }
 
 func (runtime *subagentHandoffTestRuntime) List(context.Context, flruntime.ThreadScope) ([]flruntime.ThreadSummary, error) {
 	return append([]flruntime.ThreadSummary(nil), runtime.summaries...), nil
+}
+
+func (runtime *subagentHandoffTestRuntime) WaitThreads(ctx context.Context, in flruntime.WaitThreadsInput) (flruntime.ThreadWaitResult, error) {
+	if err := ctx.Err(); err != nil {
+		return flruntime.ThreadWaitResult{}, err
+	}
+	if runtime.waitResult != nil {
+		return *runtime.waitResult, nil
+	}
+	selected := runtime.summaries
+	var missing []identity.ThreadID
+	if len(in.ThreadIDs) > 0 {
+		selected = nil
+		for _, id := range in.ThreadIDs {
+			found := false
+			for _, summary := range runtime.summaries {
+				if summary.ID == id {
+					selected = append(selected, summary)
+					found = true
+				}
+			}
+			if !found {
+				missing = append(missing, id)
+			}
+		}
+	}
+	out := flruntime.ThreadWaitResult{Threads: selected, MissingThreadIDs: missing, Reason: flruntime.ThreadWaitCompleted}
+	if len(missing) > 0 {
+		out.Reason = flruntime.ThreadWaitMissing
+		return out, nil
+	}
+	for _, summary := range selected {
+		if summary.Attention.InputCount > 0 || summary.Attention.ApprovalCount > 0 {
+			out.Reason = flruntime.ThreadWaitAttentionRequired
+			return out, nil
+		}
+		if summary.Activity == flruntime.ThreadActivityActive {
+			out.Reason = flruntime.ThreadWaitTimedOut
+		}
+	}
+	return out, nil
 }
 
 func (runtime *subagentHandoffTestRuntime) View(ctx context.Context, threadID identity.ThreadID) (flruntime.ThreadView, error) {

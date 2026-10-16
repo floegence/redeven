@@ -169,7 +169,7 @@ func TestProjectFloretTurnFailureUsesTypedCanonicalCode(t *testing.T) {
 				Code:    flruntime.ThreadTurnFailureStorage,
 				Message: "private repository write failed",
 			},
-			wantCode: runErrorCodeFloretEngineFailed, hiddenText: "repository write",
+			wantCode: runErrorCodeStorage, hiddenText: "repository write",
 		},
 		{
 			name: "control contract",
