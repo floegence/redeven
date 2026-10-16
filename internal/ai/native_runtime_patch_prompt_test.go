@@ -1,31 +1,25 @@
 package ai
 
-import (
-	"strings"
-	"testing"
-)
+import "testing"
 
 func TestBuildLayeredSystemPrompt_DocumentsCanonicalPatchUsage(t *testing.T) {
 	t.Parallel()
-
 	prompt := buildPromptForToolRoutingTest(t)
-
-	if !strings.Contains(prompt, "Prefer apply_patch for patch-shaped edits inside the run working directory") {
-		t.Fatalf("prompt missing file mutation workflow guidance: %q", prompt)
+	for _, contract := range []string{"Prefer apply_patch for patch-shaped edits", "After rejection reread and regenerate", "inspect partial changes", "Do not fall back to shell overwrites", "another authorized worktree use absolute-path file tools"} {
+		assertPromptContains(t, prompt, contract)
 	}
-	if !strings.Contains(prompt, "send exactly one canonical patch document from `*** Begin Patch` to `*** End Patch`") {
-		t.Fatalf("prompt missing canonical patch envelope guidance: %q", prompt)
+	// Format belongs to the tool contract, not a second system tutorial.
+	found := false
+	for _, def := range builtInToolDefinitions() {
+		if def.Name == "apply_patch" {
+			found = true
+			for _, contract := range []string{"*** Begin Patch", "*** End Patch", "*** Add File:", "*** Update File:", "*** Move to:", "every content line must start with"} {
+				assertPromptContains(t, def.Description, contract)
+			}
+		}
 	}
-	if !strings.Contains(prompt, "do NOT send `diff --git` or raw `---` / `+++` diffs for normal edits") {
-		t.Fatalf("prompt missing no-unified-diff guidance: %q", prompt)
+	if !found {
+		t.Fatal("patch definition missing")
 	}
-	if !strings.Contains(prompt, "prefix every new content line with `+`") {
-		t.Fatalf("prompt missing add-file content-line prefix guidance: %q", prompt)
-	}
-	if !strings.Contains(prompt, "re-read the current file contents and regenerate a fresh canonical patch") {
-		t.Fatalf("prompt missing apply_patch recovery guidance: %q", prompt)
-	}
-	if !strings.Contains(prompt, "do NOT fall back to shell redirection or ad-hoc file overwrite commands for normal edits") {
-		t.Fatalf("prompt missing no-shell-overwrite recovery rule: %q", prompt)
-	}
+	assertPromptNotContains(t, prompt, "*** Add File:")
 }

@@ -3275,16 +3275,9 @@ func (r *run) buildCreativeSystemPrompt() string {
 
 func buildMarkdownOutputContractLines() []string {
 	return []string{
-		"# Markdown Output Contract",
-		"- Show requested images and screenshots in the chat with ![descriptive title](source). Use the exact computer:// reference returned by a screenshot tool, or an absolute path to an existing local image; never invent a screenshot or media source.",
-		"- Show video and audio with ![descriptive title](/absolute/path/clip.mp4) or the corresponding audio file. HTTP(S) media URLs also work. Put each media reference on its own line with blank lines around it.",
-		"- Link web pages using [descriptive title](https://example.com). To preview a self-contained HTML file inline, use [descriptive title](/absolute/path/report.html), or a fenced code block whose info string is `html preview`. Ordinary `html` fences remain code.",
-		"- HTML previews support inline CSS and JavaScript in an isolated frame. They cannot access the shell, storage, network, external scripts, frames, forms, or local sibling assets. Keep previews self-contained; use embedded data images. Local HTML previews are limited to 1 MB and local media to 64 MiB.",
-		"- If you use markdown, keep it structurally valid while streaming and after completion.",
-		"- Put headings, lists, blockquotes, and thematic breaks on their own lines.",
-		"- Separate block-level elements with a blank line.",
-		"- Do NOT append prose on the same line after a heading, thematic break, or standalone emphasized paragraph.",
-		"- If strict markdown would be awkward, prefer plain paragraphs over broken markdown.",
+		"# Output Integration",
+		"- Embed requested images, screenshots, audio and video as ![title](source) on separate lines. Use exact returned computer:// references, existing absolute paths or supported HTTP(S) media URLs; never invent media.",
+		"- For an interactive HTML preview, use an absolute .html link or a fenced block with the exact info string `html preview`; an ordinary `html` fence only shows code. Keep previews self-contained (inline CSS/JS, embedded images): no network, storage, shell, external scripts, frames, forms or sibling assets. Limits: HTML 1 MB, local media 64 MiB.",
 	}
 }
 

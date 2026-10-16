@@ -73,8 +73,10 @@ func TestComputerNavigationDefinitionMatchesRuntimeAndPrompt(t *testing.T) {
 			if !strings.Contains(strings.ToLower(definition.Description), strings.ToLower(term)) {
 				t.Fatalf("definition omits %q", term)
 			}
+		}
+		for _, term := range []string{"Approval Required", "observe"} {
 			if !strings.Contains(prompt, term) {
-				t.Fatalf("prompt omits %q", term)
+				t.Fatalf("prompt omits policy %q", term)
 			}
 		}
 		return

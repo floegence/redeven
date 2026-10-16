@@ -64,8 +64,8 @@ func TestFlowerPromptSeparatesResearchFromInteractiveFallback(t *testing.T) {
 func TestFlowerPromptScopesDelegationAndTodos(t *testing.T) {
 	prompt := buildPromptForToolSetTest(t, FlowerPermissionFullAccess, []ToolDef{{Name: "subagents"}, {Name: "write_todos"}})
 	assertPromptContains(t, prompt, "User and applicable repository restrictions take precedence over these delegation defaults")
-	assertPromptContains(t, prompt, "at most one todo as in_progress")
-	assertPromptContains(t, prompt, "an empty list explicitly clears")
+	assertPromptContains(t, prompt, "at most one active task")
+	assertPromptContains(t, prompt, "clear obsolete work")
 	if strings.Count(prompt, "# Interaction Policy") != 1 {
 		t.Fatal("expected one interaction policy owner")
 	}

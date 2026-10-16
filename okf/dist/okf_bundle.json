@@ -4248,7 +4248,7 @@
               "prompts"
             ],
             "summary": "Flower uses one task, interaction and recovery policy across its three profiles.\nThe current tool surface supplies operation instructions; admitted context carries\ncomplete facts and rule-source manifests. Missing capabilities and invalid context\nproduce concrete recovery conditions without a second lifecycle or silent clipping.",
-            "section_count": 2
+            "section_count": 3
           },
           {
             "concept_id": "ai.model-context-runtime",
@@ -10159,7 +10159,7 @@
         "flower",
         "prompts"
       ],
-      "timestamp": "2026-10-15T00:00:00Z",
+      "timestamp": "2026-10-16T00:00:00Z",
       "frontmatter": {
         "description": "Unify task, interaction and recovery instructions with actual capabilities and complete authorized rule sources.",
         "tags": [
@@ -10168,19 +10168,26 @@
           "flower",
           "prompts"
         ],
-        "timestamp": "2026-10-15T00:00:00Z",
+        "timestamp": "2026-10-16T00:00:00Z",
         "title": "Flower prompt and rule sources",
         "type": "AI Prompt Contract"
       },
-      "body_length": 5283,
+      "body_length": 9066,
       "summary": "Flower uses one task, interaction and recovery policy across its three profiles.\nThe current tool surface supplies operation instructions; admitted context carries\ncomplete facts and rule-source manifests. Missing capabilities and invalid context\nproduce concrete recovery conditions without a second lifecycle or silent clipping.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "One task policy, interaction policy, and failure-recovery policy govern all three\nFlower profiles. Profiles express persona and user-interaction differences.\nOperational guidance comes from the selected `runToolSurface`, including actual\ncontrol signals, rather than permission-mode guesses. Supplied material may be\nanswered directly; current file, external, and execution claims require evidence.\nUser and repository restrictions override generic delegation advice.\n\nRuntime context admits rule-source descriptors: absolute path, applicable\ndirectory, and readable status. Discovery uses the authorized filesystem Registry\nand checks symlinks; it does not inject rule bodies or previews. Supported names\nremain `AGENTS.md`, `CLAUDE.md`, `.develop.md`, and `.introduce.md`. Before a governed\noperation, Flower reads every applicable source to its end with current tools.\nAnother worktree or target directory requires discovery along its own repository\nancestor path. Specific directory rules override ancestor defaults; incompatible\nsame-scope rules use the interaction policy. Unreadable sources or missing reading\ncapabilities block affected operations while independent work may continue.\n\nThe complete runtime snapshot and assembled input pass published Floret public\nvalidation before execution authority is saved. No final host-side clipping hides\nsources or skill entries. Overflow rejects admission, releases the send operation\nand workload lease, and permits a corrected input with the same request identity.\nEarlier canonical context and provider checkpoints remain immutable. Skill\ncatalogs are admission facts; current capabilities alone supply activation advice.\n\nWhen a decision requires the user and `ask_user` is supplied, Flower uses the\nstructured canonical interaction. Without that capability, the main assistant\nfinishes with the blocker and recovery condition; a child reports to its parent.\nThere is no host waiting state or duplicate question before tool approval.\n\nA running command is observed through its existing process identity and cursor;\nrepeated observations are valid when state may change. Timeouts do not establish\nthat an effect never executed and do not independently authorize replay. An\nunknown effect remains terminal. Denials cannot be bypassed with another tool.\nSchema correction, approval, cancellation and restart recovery remain Floret-owned.\nTodos permit at most one `in_progress` item and an explicit empty-list clear.\n\nThe working directory is a relative-path default. Configured filesystem roots\nand their read/write permissions define authorization; task scope and repository\nrules determine relevant work. Authorized sibling worktrees use explicit terminal\n`cwd`/`workdir` and absolute file paths. `apply_patch` remains confined to the run\nworking directory, so another worktree uses `file.edit` or `file.write` when\nsupplied. The unreachable `file.read` definition and dispatch are removed;\n`read_file` keeps the shared bounded reader and complete typed pagination fields.\nHistorical canonical file actions remain readable without restoring that tool.\n\nOrdinary research uses available research tools directly. User acceptance is\nrequired when substituting a text-page alternative for an explicitly requested\ninteractive GUI operation. A blocked target cannot be fetched through a substitute.",
-          "char_count": 3347
+          "body": "One task policy, interaction policy, and failure-recovery policy govern all three\nFlower profiles. Profiles express persona and user-interaction differences.\nOperational guidance comes from the selected `runToolSurface`, including actual\ncontrol signals, rather than permission-mode guesses. Supplied material may be\nanswered directly; current file, external, and execution claims require evidence.\nUser and repository restrictions override generic delegation advice.\n\nRuntime context admits rule-source descriptors: absolute path, applicable\ndirectory, and readable status. Discovery uses the authorized filesystem Registry\nand checks symlinks; it does not inject rule bodies or previews. Supported names\nremain `AGENTS.md`, `CLAUDE.md`, `.develop.md`, and `.introduce.md`. Before a governed\noperation, Flower reads every applicable source to its end with current tools.\nAnother worktree or target directory requires discovery along its own repository\nancestor path. Specific directory rules override ancestor defaults; incompatible\nsame-scope rules use the interaction policy. Unreadable sources or missing reading\ncapabilities block affected operations while independent work may continue.\n\nThe complete runtime snapshot and assembled input pass published Floret public\nvalidation before execution authority is saved. No final host-side clipping hides\nsources or skill entries. Overflow rejects admission, releases the send operation\nand workload lease, and permits a corrected input with the same request identity.\nEarlier canonical context and provider checkpoints remain immutable. Skill\ncatalogs are admission facts; current capabilities alone supply activation advice.\n\nWhen a decision requires the user and `ask_user` is supplied, Flower uses the\nstructured canonical interaction. Without that capability, the main assistant\nfinishes with the blocker and recovery condition; a child reports to its parent.\nThere is no host waiting state or duplicate question before tool approval.\n\nA running command is observed through its existing process identity and cursor;\nrepeated observations are valid when state may change. Timeouts do not establish\nthat an effect never executed and do not independently authorize replay. An\nunknown effect remains terminal. Denials cannot be bypassed with another tool.\nSchema correction, approval, cancellation and restart recovery remain Floret-owned.\nTodos permit at most one `in_progress` item and an explicit empty-list clear.\nFinite running commands require another `terminal.read` in the same turn, not a\npromise to wait after completion. Unknown effects cannot become retry choices.\n\nThe working directory is a relative-path default. Configured filesystem roots\nand their read/write permissions define authorization; task scope and repository\nrules determine relevant work. Authorized sibling worktrees use explicit terminal\n`cwd`/`workdir` and absolute file paths. `apply_patch` remains confined to the run\nworking directory, so another worktree uses `file.edit` or `file.write` when\nsupplied. The unreachable `file.read` definition and dispatch are removed;\n`read_file` keeps the shared bounded reader and complete typed pagination fields.\nHistorical canonical file actions remain readable without restoring that tool.\n\nOrdinary research uses available research tools directly. User acceptance is\nrequired when substituting a text-page alternative for an explicitly requested\ninteractive GUI operation. A blocked target cannot be fetched through a substitute.",
+          "char_count": 3506
+        },
+        {
+          "id": "prompt-budget-and-qualification",
+          "title": "Prompt Budget And Qualification",
+          "level": 1,
+          "body": "System instructions keep product behavior and boundaries. Tool argument formats\nand API tutorials belong to the existing supplied tool definitions; ordinary\nMarkdown needs no tutorial. Output instructions retain only Redeven-specific\nmedia references, the exact `html preview` fence and preview isolation limits.\nConcise policies retain complete rule reading, user interaction, denial, Stop,\nunknown-effect handling, browser identity and observed GUI verification.\nThe system contains no tool JSON envelopes, argument-field recipes or scripting\nAPI examples. Short behavioral reminders keep greetings brief, preserve real\nchoice interaction and continue observing finite commands in the current turn.\n\nThe full built-in qualification surface has a deterministic 16,000-byte system\nbudget. This is a regression guard, not a tokenizer or total-request measurement.\nPermission/profile/allowlist tests require guidance to match supplied tools.\nDefinitions retain operational details; focused input-array and child-result\nclarifications are measured as tool overhead, not credited as system savings.\n\n`scripts/check_flower_prompt_deepseek.sh` is an opt-in paid qualification lane. It\nreads the selected local DeepSeek provider and its effective `deepseek-flash`\nconfiguration through production parsers, without modifying source state. It\nrequires a fresh report directory and normally repeats 24 behavior cases three\ntimes. Model-proposed operations in those cases are not executed; synthetic\nreceipts allow denial, unknown-effect and GUI recovery checks without effects.\nEvery historical and returned call must satisfy the actual tool schema.\n\nA separate production Service exercise performs code repair and complete rule\nreading in a disposable project, waits through real terminal continuation,\nchecks restart recall, resumes a structured answer and reads a file in readonly\nmode. It never controls the user's browser or launches subagents. Reports retain\nprompt/tool hashes, synthetic inputs, outputs, errors and usage; credentials stay\noutside reports. Missing configuration, skipped tests and absent reports fail\nqualification. DeepSeek total input includes both cache-miss and cache-read\ntokens. Baseline snapshots can be supplied through\n`REDEVEN_FLOWER_PROMPT_BASELINE_DIR` for the same fixtures and tool definitions;\nfailures remain visible rather than being repaired by a test-owned retry loop.\nFreeze cases, oracles, prompt sources and repetition count before comparison.\nRun each version once under the same tool definitions; retain every result,\nincluding prior failures. Compare real multi-turn execution for both versions\nas well as single-response routing. A historical 119/120 result remains a\nfailure record, never proof that a later candidate passes. Report system size\nand complete provider input separately, including cache-read tokens.\nThis lane is strict and stochastic: a malformed provider function-call payload\nremains a failure even when other repetitions and production execution pass.\nPassing deterministic checks or isolated execution must not be described as\npassing the full paid lane. Prompt reduction does not guarantee provider syntax.",
+          "char_count": 3167
         },
         {
           "id": "boundaries",
@@ -10240,6 +10247,21 @@
           "id": "redeven:internal/ai/tools/orchestrator_test.go:0:timeout and denial advice cannot authorize unsafe replay or bypass.",
           "source": "redeven:internal/ai/tools/orchestrator_test.go",
           "description": "Timeout and denial advice cannot authorize unsafe replay or bypass."
+        },
+        {
+          "id": "redeven:internal/ai/prompt_qualification_test.go:0:size budget, schema-valid fixtures and real-provider behavior comparison.",
+          "source": "redeven:internal/ai/prompt_qualification_test.go",
+          "description": "Size budget, schema-valid fixtures and real-provider behavior comparison."
+        },
+        {
+          "id": "redeven:internal/ai/prompt_runtime_qualification_test.go:0:isolated real execution, terminal continuation, restart, structured answer and readonly checks.",
+          "source": "redeven:internal/ai/prompt_runtime_qualification_test.go",
+          "description": "Isolated real execution, terminal continuation, restart, structured answer and readonly checks."
+        },
+        {
+          "id": "redeven:scripts/check_flower_prompt_deepseek.sh:0:explicit paid qualification with unchanged-source and complete-report checks.",
+          "source": "redeven:scripts/check_flower_prompt_deepseek.sh",
+          "description": "Explicit paid qualification with unchanged-source and complete-report checks."
         }
       ],
       "snippet": "Flower uses one task, interaction and recovery policy across its three profiles. The current tool surface supplies operation instructions; admitted context carries complete facts and rule-source manifests. Missing capabilities and invalid c",
@@ -42983,5 +43005,5 @@
       ]
     }
   ],
-  "source_sha256": "a9fe5db75b78e9406669c948112f2daec4fd53e1461a016e9f8ed59139adea49"
+  "source_sha256": "6e71b686f32e0545d27f3b62331cfed0ca586ab5e1e8392015d55623ee1914ce"
 }
