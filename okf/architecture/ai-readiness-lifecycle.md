@@ -155,6 +155,8 @@ remaining time, or polling countdown. The announcement-focused heading has no
 visual focus frame; interactive controls retain visible keyboard focus.
 The initial 150 ms delay applies once per busy period; phase changes update the
 same visible surface, retaining open details, keyboard focus, and animation nodes.
+While busy, the mark uses the [shared whole-bloom progress rotation](../ui/flower-output-progress.md#progress-symbol)
+without changing either theme's artwork.
 Startup details can be expanded throughout preparation to read the phase
 explanation, data-preservation statement, workspace availability, and diagnostics.
 After ten seconds the UI shows real elapsed time without live-region announcements;
@@ -208,5 +210,5 @@ integrity check succeeds. Readiness history is not recovery authority.
 - `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.localAccess.e2e.test.tsx:1` - Verifies initial lock, grant, revocation, stable Activity ownership, and one fresh readiness request after local or remote regrant.
 - `redeven:internal/envapp/ui_src/src/ui/flower/AIReadinessBoundary.tsx:1` - Lazily admits the Flower subtree only for operational readiness while keeping maintenance local and diagnostics on the same source.
 - `redeven:internal/envapp/ui_src/src/ui/pages/settings/AIReadinessSettingsSection.tsx:1` - Projects unified Flower maintenance and administrator recovery actions.
-- `redeven:internal/envapp/ui_src/src/ui/flower/AIReadinessBoundary.browser.test.tsx:1` - Verifies narrow reflow, zoom, forced colors, reduced motion, overflow, and local interaction behavior in Chromium.
+- `redeven:internal/envapp/ui_src/src/ui/flower/AIReadinessBoundary.browser.test.tsx:1` - Verifies rotation and theme artwork alongside narrow reflow, zoom, forced colors, reduced motion, overflow, and local interaction behavior in Chromium.
 - `redeven:scripts/check_floret_dependency_boundary.sh:1` - Rejects fixed service pointers, raw accessors, misplaced constructors, and readiness storage coupling.
