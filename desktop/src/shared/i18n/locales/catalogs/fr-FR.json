@@ -1,4 +1,11 @@
 {
+  "interactionContinuity": {
+    "accepted": "Opération acceptée. En attente des détails d’exécution.",
+  "unavailable": "La cible ou son accès a changé. Votre saisie est conservée. Vérifiez la cible actuelle avant de continuer.",
+  "revalidate": "Vérifier la cible actuelle",
+  "pending": "En attente de prise en charge de l’opération…",
+  "rejected": "L’opération n’a pas pu être prise en charge. Vérifiez la connexion et réessayez."
+},
   "sessionRestart": {
     "preparing": "Préparation du redémarrage",
     "restarting": "Redémarrage de l’environnement d’exécution",

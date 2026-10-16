@@ -38,6 +38,7 @@ export function EnvironmentAccessWorkflow(props: Props) {
   const security = createTwoFactorSettings({
     get environmentID() { return props.snapshot.environment_id; },
     get runtimeStartedAt() { return props.snapshot.runtime_started_at_unix_ms; },
+    get available() { return props.available; },
     get open() { return props.open && Boolean(props.security); },
     get i18n() { return props.i18n; },
     manage: request => props.security!(request),
@@ -131,7 +132,7 @@ export function EnvironmentAccessWorkflow(props: Props) {
   const blocked = (restart: boolean) => validationMessage()
     || (restart && props.connectionDirty ? t('settings.resolveConnectionDraft') : '')
     || (restart && props.draft.local_ui_protocol === 'https' && !certificateReady() ? t('settings.certificateRestartBlocked') : '');
-  const canSave = (restart: boolean) => !saving() && !blocked(restart)
+  const canSave = (restart: boolean) => props.available !== false && !saving() && !blocked(restart)
     && (pending() || (restart && savedPending()));
   async function save(restart: boolean) {
     if (!canSave(restart)) return;
@@ -290,7 +291,7 @@ export function EnvironmentAccessWorkflow(props: Props) {
           <Show when={page() === 'prepare'}>{steps()}</Show>
         </Show>
         <div hidden={page() !== 'prepare' && page() !== 'certificate'} inert={page() !== 'prepare' && page() !== 'certificate'}>
-          <Show when={props.open && props.certificate}><LocalCertificateSettings environmentID={props.snapshot.environment_id} i18n={props.i18n} manage={props.certificate!} remote={remote()} onReadiness={setCertificateReady} onReport={setCertificateReport} copyText={props.copyEnvironmentValue} /></Show>
+          <Show when={props.open && props.certificate}><LocalCertificateSettings available={props.available} environmentID={props.snapshot.environment_id} i18n={props.i18n} manage={props.certificate!} remote={remote()} onReadiness={setCertificateReady} onReport={setCertificateReport} copyText={props.copyEnvironmentValue} /></Show>
         </div>
         <Show when={page() === 'prepare' && validation().password_error_key === 'settings.sharedPasswordRequired'}><div class="access-flow-notice"><span>{t('settings.sharedPasswordRequired')}</span><Button size="sm" onClick={() => go('password')}>{t('security.newPassword')}</Button></div></Show>
         <Show when={page() === 'prepare'}><p class="access-flow-notice"><Lock class="h-4 w-4" aria-hidden="true" />{t(props.runtimeRestartAvailable ? 'accessFlow.restartHandoff' : 'settings.applyNextStartHelp')}</p></Show>

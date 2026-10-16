@@ -6,7 +6,6 @@ import {
   gatewaySourceIDsWithActiveOverlay,
   gatewaySourceOverlayOpenFor,
   openGatewaySourceOverlayState,
-  reconcileGatewaySourceOverlayState,
 } from './gatewaySourceOverlayState';
 
 describe('gatewaySourceOverlayState', () => {
@@ -17,22 +16,9 @@ describe('gatewaySourceOverlayState', () => {
     expect(closeGatewaySourceOverlayState(open, 'action_popover', 'gw_demo')).toEqual(closedGatewaySourceOverlayState());
   });
 
-  it('keeps a user-open Gateway overlay across refresh while the Gateway source still exists', () => {
-    const state = openGatewaySourceOverlayState('action_popover', 'gw_demo');
 
-    expect(reconcileGatewaySourceOverlayState(state, [
-      { gateway_id: 'gw_demo' },
-      { gateway_id: 'gw_other' },
-    ])).toEqual(state);
-  });
 
-  it('closes a user-open Gateway overlay only when its Gateway source is gone', () => {
-    const state = openGatewaySourceOverlayState('action_popover', 'gw_demo');
 
-    expect(reconcileGatewaySourceOverlayState(state, [
-      { gateway_id: 'gw_other' },
-    ])).toEqual(closedGatewaySourceOverlayState());
-  });
 
   it('keeps the active Gateway card rendered when refresh filters temporarily hide it', () => {
     const state = openGatewaySourceOverlayState('action_popover', 'gw_hidden');

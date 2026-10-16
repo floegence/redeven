@@ -1,5 +1,5 @@
-import { Button, Dialog, StableText } from '@floegence/floe-webapp-core/ui';
-import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from 'solid-js';
+import { Button, Dialog, StableText, KeyedFor } from '@floegence/floe-webapp-core/ui';
+import { createEffect, createMemo, createSignal, on, onCleanup, Show } from 'solid-js';
 import type { DesktopCloudRuntimeLinkTargetID } from '../shared/providerRuntimeLinkTarget';
 import type { GatewayMembershipStatus } from '../shared/gatewayJoin';
 import type { DesktopI18n } from '../shared/i18n';
@@ -7,13 +7,16 @@ import type { DesktopI18n } from '../shared/i18n';
 /** The Runtime owns the selected member and verifies Cloud interruption consent. */
 export function RuntimeGatewayConnectionsDialog(props: Readonly<{
   targetID: DesktopCloudRuntimeLinkTargetID;
+  available?: boolean;
   i18n: DesktopI18n;
   mode?: 'leave' | 'publish';
   gatewayID?: string;
+  authorityKey?: string;
   onClose: () => void;
   onChanged: () => void;
   focusOwner?: () => void;
 }>) {
+  const unavailable = () => props.available === false;
   const [status, setStatus] = createSignal<GatewayMembershipStatus>();
   const [selected, setSelected] = createSignal('');
   const [busy, setBusy] = createSignal(false);
@@ -36,40 +39,46 @@ export function RuntimeGatewayConnectionsDialog(props: Readonly<{
   };
   onCleanup(() => { generation++; });
 
-  // Equivalent snapshots do not reinitialize a target's confirmation session.
-  createEffect(on([targetID, mode, gatewayID], ([target, operation, requestedGateway]) => {
+  const [invalidated, setInvalidated] = createSignal(false);
+  async function revalidate(requestedGateway = selected()) {
+    if (unavailable() || !mode() || busy()) return;
     const current = ++generation;
-    if (!operation) return;
-    setDisplayMode(operation);
-    setError('');
-    setStatus(undefined);
-    setSelected('');
-    setBusy(false);
-    void (async () => {
-      try {
-        const result = await window.redevenDesktopLauncher?.performAction({
-          kind: 'manage_runtime_gateway', runtime_target_id: target, operation: 'status',
-        });
-        if (current !== generation) return;
-        if (!result?.ok || !result.gateway_membership) {
-          setError(text('gatewayJoin.failed'));
-          return;
-        }
-        setStatus(result.gateway_membership);
-        const available = result.gateway_membership.memberships ?? [];
-        if (requestedGateway && available.some(item => item.gateway_id === requestedGateway)) setSelected(requestedGateway);
-        else if (!requestedGateway && available.length === 1) setSelected(available[0]!.gateway_id!);
-        queueMicrotask(() => available.length > 1 && !requestedGateway ? select?.focus() : confirm?.focus());
-      } catch {
-        if (current === generation) setError(text('gatewayJoin.failed'));
-      }
-    })();
-  }));
+    setBusy(true); setError('');
+    try {
+      const result = await window.redevenDesktopLauncher?.performAction({
+        kind: 'manage_runtime_gateway', runtime_target_id: targetID(), operation: 'status',
+      });
+      if (current !== generation || unavailable()) return;
+      if (!result?.ok || !result.gateway_membership) { setError(text('gatewayJoin.failed')); return; }
+      setStatus(result.gateway_membership);
+      const available = result.gateway_membership.memberships ?? [];
+      if (requestedGateway) setSelected(requestedGateway);
+      else if (available.length === 1) setSelected(available[0]!.gateway_id!);
+      setInvalidated(false);
+    } catch { if (current === generation) setError(text('gatewayJoin.failed')); }
+    finally { if (current === generation) setBusy(false); }
+  }
+  // IMPORTANT: Opening initializes once; changed authority retains the UI and revokes submission.
+  createEffect(on([mode, targetID, gatewayID, () => props.available, () => props.authorityKey],
+    ([operation, target, requested, available, authority], previous) => {
+      const opening = !!operation && (!previous?.[0] || previous[0] !== operation);
+      const changed = previous && (target !== previous[1] || requested !== previous[2]
+        || available !== previous[3] || authority !== previous[4]);
+      if (!opening && !changed && operation) return;
+      generation++; setBusy(false);
+      if (!operation) return;
+      if (opening) {
+        setDisplayMode(operation); setStatus(undefined); setSelected(requested ?? ''); setInvalidated(false);
+        void revalidate(requested);
+      } else if (!status() && previous?.[2] === undefined && requested && available !== false) {
+        setSelected(requested); void revalidate(requested);
+      } else setInvalidated(true);
+    }));
 
   async function submit() {
     const target = member();
     const operation = mode();
-    if (!target || !operation || busy()) return;
+    if (!target || !operation || busy() || unavailable() || invalidated()) return;
     const current = generation;
     setBusy(true);
     setError('');
@@ -94,7 +103,7 @@ export function RuntimeGatewayConnectionsDialog(props: Readonly<{
     }
   }
 
-  const submitDisabled = () => !mode() || busy() || !member() || member()?.phase === 'removal_pending'
+  const submitDisabled = () => invalidated() || unavailable() || !mode() || busy() || !member() || member()?.phase === 'removal_pending'
     || mode() === 'publish' && Boolean(status()?.existing_environment_id) && !status()?.cloud_enrollment_required;
 
   return (
@@ -108,10 +117,10 @@ export function RuntimeGatewayConnectionsDialog(props: Readonly<{
             <select ref={select} class="w-full cursor-pointer rounded-md border border-border bg-background px-3 py-2.5"
               value={selected()} disabled={busy()} onChange={event => {
                 setSelected(event.currentTarget.value);
-                            setError('');
+                setError('');
               }}>
               <option value="" disabled>{text('gatewayConnections.select')}</option>
-              <For each={members()}>{item => <option value={item.gateway_id}>{item.gateway_name || item.gateway_id}</option>}</For>
+              <KeyedFor each={members()} by={item => item.gateway_id!}>{item => <option value={item().gateway_id}>{item().gateway_name || item().gateway_id}</option>}</KeyedFor>
             </select>
           </label>
         </Show>
@@ -134,6 +143,7 @@ export function RuntimeGatewayConnectionsDialog(props: Readonly<{
         <Show when={status() && gatewayID() && !member() && members().length}>
           <p class="text-sm text-muted-foreground">{text('gatewayConnections.empty')}</p>
         </Show>
+        <Show when={unavailable() || invalidated()}><p role="alert" class="text-sm text-warning">{text('interactionContinuity.unavailable')}</p><Button variant="outline" disabled={unavailable() || busy()} onClick={() => void revalidate()}>{text('interactionContinuity.revalidate')}</Button></Show>
         <Show when={error()}><p role="alert" class="text-sm text-error">{error()}</p></Show>
         <div class="flex flex-wrap justify-end gap-2">
           <Button variant="ghost" class="cursor-pointer whitespace-nowrap" onClick={close}>{text('common.cancel')}</Button>

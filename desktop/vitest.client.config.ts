@@ -8,6 +8,7 @@ export default defineConfig({
   resolve: {
     conditions: ['browser'], dedupe: ['solid-js'],
     alias: [
+      { find: /^lucide-solid$/, replacement: fileURLToPath(new URL('./node_modules/lucide-solid/dist/source/lucide-solid.jsx', import.meta.url)) },
       { find: /^@floegence\/floe-webapp-core\/graph\.css$/, replacement: `${coreDist}graph.css` },
       { find: /^@floegence\/floe-webapp-core\/(chat|chat-media|code-highlight|file-browser|graph|icons|layout|loading|markdown|ui)$/, replacement: `${coreDist}$1.js` },
       { find: /^@floegence\/floe-webapp-core$/, replacement: `${coreDist}index.js` },

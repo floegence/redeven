@@ -6,6 +6,7 @@ import { desktopCertificateIdentity, isCertificateReplacement, type DesktopCerti
 import type { DesktopI18n, DesktopTranslationKey } from '../shared/i18n';
 
 export function LocalCertificateSettings(props: Readonly<{
+  available?: boolean;
   environmentID: string;
   i18n: DesktopI18n;
   manage: (request: DesktopCertificateRequest) => Promise<DesktopCertificateReport>;
@@ -14,6 +15,8 @@ export function LocalCertificateSettings(props: Readonly<{
   onReport?: (report: DesktopCertificateReport | undefined) => void;
   copyText: (value: string, label: string) => Promise<void>;
 }>) {
+  const [authorityRevoked, setAuthorityRevoked] = createSignal(false);
+  const unavailable = () => props.available === false || authorityRevoked();
   const [report, setReport] = createSignal<DesktopCertificateReport>();
   createEffect(() => props.onReport?.(report()));
   const [operation, setOperation] = createSignal<DesktopCertificateOperation>();
@@ -41,21 +44,21 @@ export function LocalCertificateSettings(props: Readonly<{
   const failed = () => report()?.status === 'failed' && !legacyUntrusted();
 
   async function perform(action: DesktopCertificateOperation, environmentID = props.environmentID): Promise<void> {
-    if (operation()) return;
+    if (operation() || unavailable()) return;
     const requestRevision = ++revision;
     setOperation(action);
     setQueryFailed(false);
     props.onReadiness(false);
     try {
       const result = await props.manage({ environment_id: environmentID, operation: action, ...(isCertificateReplacement(action) ? { confirmed: true } : {}) });
-      if (revision !== requestRevision || props.environmentID !== environmentID) return;
+      if (revision !== requestRevision || props.environmentID !== environmentID || unavailable()) return;
       setReport(result);
       setConfirmation(undefined);
       if (isCertificateReplacement(action)) queueMicrotask(() => manageButton?.focus({ preventScroll: true }));
       setQueryFailed(result.status === 'failed' && (action === 'status' || result.failure_stage === 'status' || result.failure_stage === 'verify')
         && !['local_ui_device_ca_untrusted', 'local_ui_device_ca_missing', 'local_ui_device_ca_invalid', 'local_ui_device_ca_expired', 'local_ui_device_ca_not_yet_valid'].includes(result.code));
     } catch {
-      if (revision !== requestRevision || props.environmentID !== environmentID) return;
+      if (revision !== requestRevision || props.environmentID !== environmentID || unavailable()) return;
       setReport((previous) => ({ ...previous, status: 'failed', code: 'local_ui_device_ca_operation_failed', failure_stage: 'status' }));
       setQueryFailed(true);
     } finally {
@@ -70,6 +73,7 @@ export function LocalCertificateSettings(props: Readonly<{
   const environmentID = createMemo(() => props.environmentID);
   createEffect(on(environmentID, (id) => {
     revision += 1;
+    setAuthorityRevoked(false);
     setCopyFailed(false);
     setManaging(false);
     setConfirmation(undefined);
@@ -78,6 +82,11 @@ export function LocalCertificateSettings(props: Readonly<{
     setQueryFailed(false);
     void perform('status', id);
   }));
+
+  createEffect(on(() => props.available, value => {
+    if (value !== false) return;
+    revision++; setAuthorityRevoked(true); setOperation(undefined); setCopying(false); props.onReadiness(false);
+  }, { defer: true }));
 
   const identityKey = (): DesktopTranslationKey => {
     if (!report() && operation()) return 'environmentStatus.checking';
@@ -113,7 +122,7 @@ export function LocalCertificateSettings(props: Readonly<{
 
   async function copyDetails(): Promise<void> {
     if (copying()) return;
-    const target = environmentID();
+    const target = environmentID(), current = revision;
     setCopying(true);
     setCopyFailed(false);
     try {
@@ -125,18 +134,20 @@ export function LocalCertificateSettings(props: Readonly<{
         failed() ? report()?.message : '',
       ].filter(Boolean).join('\n'), props.i18n.t('settings.certificateDetails'));
     } catch {
-      if (environmentID() === target) setCopyFailed(true);
+      if (environmentID() === target && revision === current) setCopyFailed(true);
     } finally {
-      setCopying(false);
+      if (revision === current) setCopying(false);
     }
   }
 
   return (
     <section aria-label={props.i18n.t('settings.certificateSetup')} aria-busy={Boolean(operation())}
       class="environment-certificate-setting min-w-0 overflow-hidden">
+      <Show when={authorityRevoked()}><p role="alert" class="text-xs text-warning">{props.i18n.t('interactionContinuity.unavailable')}</p>
+        <Button size="sm" variant="outline" disabled={props.available === false} onClick={() => { setAuthorityRevoked(false); setConfirmation(undefined); void perform('status'); }}>{props.i18n.t('interactionContinuity.revalidate')}</Button></Show>
       <header class="environment-certificate-header flex items-center justify-between gap-3">
         <h4 class="text-xs font-semibold text-foreground">{props.i18n.t('settings.certificateSetup')}</h4>
-        <Button size="icon" variant="ghost" class="h-7 w-7 shrink-0" disabled={Boolean(operation())}
+        <Button size="icon" variant="ghost" class="h-7 w-7 shrink-0" disabled={unavailable() || Boolean(operation())}
           aria-label={props.i18n.t('settings.certificateRefresh')} title={props.i18n.t('settings.certificateRefresh')}
           onClick={() => void perform('status')}>
           <Refresh class="h-3.5 w-3.5" classList={{ 'animate-spin': operation() === 'status' }} aria-hidden="true" />
@@ -156,16 +167,16 @@ export function LocalCertificateSettings(props: Readonly<{
             </div>
             <Show when={identity() === 'ready' && validUntil()}><p class="mt-1 text-xs text-muted-foreground">{validUntil()}</p></Show>
           </div>
-          <Show when={report()?.can_export && identity() === 'ready'}><Button size="sm" variant="outline" disabled={Boolean(operation())} loading={operation() === 'export'} onClick={() => void perform('export')} icon={Download}>{props.i18n.t('accessFlow.exportCertificate')}</Button></Show>
+          <Show when={report()?.can_export && identity() === 'ready'}><Button size="sm" variant="outline" disabled={unavailable() || Boolean(operation())} loading={operation() === 'export'} onClick={() => void perform('export')} icon={Download}>{props.i18n.t('accessFlow.exportCertificate')}</Button></Show>
           <Show when={report()?.can_manage}>
-            <Button ref={manageButton} size="sm" variant="outline" class="min-h-8" disabled={Boolean(operation())}
+            <Button ref={manageButton} size="sm" variant="outline" class="min-h-8" disabled={unavailable() || Boolean(operation())}
               aria-expanded={managing()} aria-controls={managementID}
               onClick={() => { setManaging(!managing()); setConfirmation(undefined); }}>
               {props.i18n.t('settings.certificateManage')}<ChevronDown class="ml-1.5 h-3.5 w-3.5" aria-hidden="true" />
             </Button>
           </Show>
           <Show when={identity() === 'missing'}>
-            <Button size="sm" class="min-h-8 text-left" disabled={Boolean(operation())}
+            <Button size="sm" class="min-h-8 text-left" disabled={unavailable() || Boolean(operation())}
               loading={operation() === 'setup' || operation() === 'generate'} onClick={() => void perform('generate')}>
               {props.i18n.t('settings.generateCertificate')}
             </Button>
@@ -186,7 +197,7 @@ export function LocalCertificateSettings(props: Readonly<{
                 <div class="flex flex-wrap justify-end gap-2">
                   <Button ref={cancelButton} size="sm" variant="ghost" disabled={Boolean(operation())} onClick={cancelConfirmation}>{props.i18n.t('common.cancel')}</Button>
                   <Button size="sm" variant={confirmation() === 'remove' ? 'destructive' : 'default'} class="min-h-8"
-                    disabled={Boolean(operation())} loading={isCertificateReplacement(operation())} onClick={() => void perform(confirmation()!)}>
+                    disabled={unavailable() || Boolean(operation())} loading={isCertificateReplacement(operation())} onClick={() => void perform(confirmation()!)}>
                     {props.i18n.t(confirmation() === 'import' ? 'settings.certificateChooseFiles' : actionKey(confirmation()!))}
                   </Button>
                 </div>
@@ -220,7 +231,7 @@ export function LocalCertificateSettings(props: Readonly<{
               <p class="max-w-prose text-xs leading-relaxed text-muted-foreground">{props.i18n.t(report()?.certificate_kind === 'server' ? 'settings.certificateServerTrustHelp' : canInstall() ? 'settings.certificateTrustScope' : 'settings.certificateManualTrust')}</p>
             </div>
             <Show when={canInstall() && report()?.trust !== 'trusted'}>
-              <Button size="sm" class="min-h-8 text-left" disabled={Boolean(operation())}
+              <Button size="sm" class="min-h-8 text-left" disabled={unavailable() || Boolean(operation())}
                 loading={operation() === 'install'} onClick={() => void perform('install')}>
                 {props.i18n.t('settings.trustCertificate')}
               </Button>

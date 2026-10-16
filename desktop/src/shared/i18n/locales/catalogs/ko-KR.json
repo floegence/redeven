@@ -1,4 +1,11 @@
 {
+  "interactionContinuity": {
+    "accepted": "작업이 접수되었습니다. 실행 세부 정보를 기다리는 중입니다.",
+  "unavailable": "대상 또는 접근 권한이 변경되었습니다. 입력 내용은 유지됩니다. 계속하기 전에 현재 대상을 확인하세요.",
+  "revalidate": "현재 대상 확인",
+  "pending": "작업 접수를 기다리는 중…",
+  "rejected": "작업이 접수되지 않았습니다. 연결을 확인한 후 다시 시도하세요."
+},
   "sessionRestart": {
     "preparing": "다시 시작 준비 중",
     "restarting": "런타임 다시 시작 중",

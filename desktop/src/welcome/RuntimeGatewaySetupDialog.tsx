@@ -1,3 +1,4 @@
+import type { DesktopCloudRuntimeLinkTargetID } from '../shared/providerRuntimeLinkTarget';
 import type { DesktopGatewaySource } from '../shared/desktopGateway';
 import { Button, Dialog, StableText } from '@floegence/floe-webapp-core/ui';
 import { createEffect, createMemo, createSignal, on, onCleanup, Show } from 'solid-js';
@@ -5,6 +6,7 @@ import type { DesktopEnvironmentEntry, DesktopLauncherActionProgress } from '../
 import type { DesktopI18n } from '../shared/i18n';
 import { runtimeGatewayAccessPresentation, type RuntimeGatewayRecovery } from '../shared/runtimeGatewayAccessPresentation';
 import { RuntimeGatewayJoinPanel } from './RuntimeGatewayJoinPanel';
+import { environmentInteractionIdentity } from './environmentInteractionIdentity';
 
 /** One enrollment session survives direct-executor recovery and observational snapshots. */
 export function RuntimeGatewaySetupDialog(props: Readonly<{
@@ -12,6 +14,7 @@ export function RuntimeGatewaySetupDialog(props: Readonly<{
   environment?: DesktopEnvironmentEntry;
   i18n: DesktopI18n;
   operationBusy?: boolean;
+  available?: boolean;
   progress?: DesktopLauncherActionProgress | null;
   progressDetail?: string;
   refresh: (environment: DesktopEnvironmentEntry) => Promise<boolean>;
@@ -26,6 +29,7 @@ export function RuntimeGatewaySetupDialog(props: Readonly<{
   const [verificationResetRequest, setVerificationResetRequest] = createSignal(0);
   let generation = 0;
   const environmentID = createMemo(() => props.environment?.id ?? '');
+  const available = createMemo(() => props.available !== false);
   const managementCoordinates = createMemo(() => {
     const environment = props.environment;
     if (!environment) return '';
@@ -34,9 +38,10 @@ export function RuntimeGatewaySetupDialog(props: Readonly<{
       environment.managed_runtime_host_access, environment.managed_runtime_placement,
     ]);
   });
+  const retainedTarget = createMemo<DesktopCloudRuntimeLinkTargetID | undefined>(previous => props.environment ? props.environment.provider_runtime_link_target?.id ?? previous : undefined);
   const presentation = createMemo(() => props.environment && runtimeGatewayAccessPresentation(props.environment));
   const canConnect = createMemo(() => ['ready', 'connection_required'].includes(presentation()?.phase ?? ''));
-  const submissionBlocked = () => !canConnect() || busy() || !!props.operationBusy;
+  const submissionBlocked = () => props.available === false || !props.environment?.provider_runtime_link_target || !canConnect() || busy() || !!props.operationBusy;
   const progressText = () => props.progressDetail || (props.progress?.detail_key ? props.i18n.t(props.progress.detail_key)
     : props.progress?.title_key ? props.i18n.t(props.progress.title_key) : '');
   const recovery = () => presentation()?.recovery;
@@ -64,7 +69,7 @@ export function RuntimeGatewaySetupDialog(props: Readonly<{
 
   async function refresh(continueAfterCheck = true) {
     const environment = props.environment;
-    if (!environment || busy() || props.operationBusy) return;
+    if (!environment || props.available === false || busy() || props.operationBusy) return;
     const current = generation;
     setPending('refresh'); setError('');
     try {
@@ -75,7 +80,7 @@ export function RuntimeGatewaySetupDialog(props: Readonly<{
   }
   async function recover() {
     const environment = props.environment, operation = recovery();
-    if (!environment || !operation || !presentation()?.recovery_enabled || busy() || props.operationBusy) return;
+    if (!environment || props.available === false || !operation || !presentation()?.recovery_enabled || busy() || props.operationBusy) return;
     if (operation === 'refresh') return refresh();
     const current = generation;
     setPending(operation); setError('');
@@ -91,21 +96,25 @@ export function RuntimeGatewaySetupDialog(props: Readonly<{
     } catch { if (current === generation) setError(props.i18n.t('gatewayJoin.recoveryFailed')); }
     finally { if (current === generation) setPending(null); }
   }
-  createEffect(on([environmentID, managementCoordinates], ([id]) => {
-    generation++; setPending(null); setError(''); setConnectionRequest(0);
-    // Checking is read-only; opening never starts, restarts or updates the Runtime.
-    if (id && presentation()?.phase !== 'ready') void refresh(false);
+  createEffect(on([environmentID, managementCoordinates, available], ([id], previous) => {
+    generation++; setPending(null);
+    if (id !== previous?.[0]) {
+      setError(''); setConnectionRequest(0);
+      // Checking is read-only; opening never starts, restarts or updates the Runtime.
+      if (id && presentation()?.phase !== 'ready') void refresh(false);
+    } else if (id) setError(props.i18n.t('interactionContinuity.unavailable'));
   }));
   onCleanup(() => { generation++; });
   return <Dialog open={!!props.environment} onOpenChange={value => { if (!value) props.close(); }} title={props.i18n.t('gatewayJoin.title')}
     closeLabel={props.i18n.t('common.close')}
     class="redeven-gateway-dialog redeven-gateway-join-dialog redeven-gateway-wizard-dialog" contentClass="redeven-gateway-join-content">
-    <Show when={props.environment?.provider_runtime_link_target?.id} keyed>{targetID =>
-      <RuntimeGatewayJoinPanel wizard connectionRequest={connectionRequest()} verificationResetRequest={verificationResetRequest()} gateways={props.gateways} embedded targetID={targetID} targetLabel={props.environment?.label}
+    <Show when={retainedTarget()}>{targetID =>
+      <RuntimeGatewayJoinPanel wizard connectionRequest={connectionRequest()} verificationResetRequest={verificationResetRequest()} gateways={props.gateways} embedded targetID={targetID()} targetLabel={props.environment?.label}
         i18n={props.i18n} onClose={props.close} canConnect={canConnect()} submissionBlocked={submissionBlocked()}
         runtimeStartedAtUnixMS={props.environment?.runtime_started_at_unix_ms}
         managementCoordinates={managementCoordinates()}
-        preparation={<> <Show when={!canConnect()}><section class="redeven-gateway-join-section" data-gateway-preparation={presentation()?.phase}>
+        authorityKey={JSON.stringify([props.available !== false, props.environment && environmentInteractionIdentity(props.environment)])}
+        preparation={<> <Show when={props.available === false}><p role="alert">{props.i18n.t('interactionContinuity.unavailable')}</p></Show> <Show when={!canConnect()}><section class="redeven-gateway-join-section" data-gateway-preparation={presentation()?.phase}>
           <p class="text-sm text-muted-foreground">{detail()}</p>
           <Show when={recovery() === 'restart' || recovery() === 'update'}><p class="text-sm text-muted-foreground">{props.i18n.t('gatewayJoin.recoveryImpact')}</p></Show>
         </section></Show>

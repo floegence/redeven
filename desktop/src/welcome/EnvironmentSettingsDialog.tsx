@@ -1,5 +1,5 @@
 import { Show, createMemo, createUniqueId, type JSX } from 'solid-js';
-import { Dialog, Tabs, TabPanel, createFloatingPresence } from '@floegence/floe-webapp-core/ui';
+import { Button, Dialog, Tabs, TabPanel, createFloatingPresence } from '@floegence/floe-webapp-core/ui';
 import type { DesktopI18n } from '../shared/i18n';
 import type { DesktopEnvironmentEntry } from '../shared/desktopLauncherIPC';
 import { environmentHasAccessSettings, type EnvironmentSettingsTab } from './environmentSettingsSession';
@@ -24,6 +24,9 @@ export function EnvironmentSettingsReveal(props: { open: boolean; children: JSX.
 
 export function EnvironmentSettingsDialog(props: {
   open: boolean;
+  unavailable?: boolean;
+  canRevalidate?: boolean;
+  onRevalidate?: () => void;
   environment: DesktopEnvironmentEntry | null;
   tab: EnvironmentSettingsTab;
   i18n: DesktopI18n;
@@ -51,6 +54,7 @@ export function EnvironmentSettingsDialog(props: {
     title={dialogTitle()}
     closeLabel={props.i18n.t('common.close')} escapeKeyPhase="bubble"
     class={`redeven-environment-settings-dialog${hasTabs() ? ' environment-settings-with-tabs' : ''}`} contentClass="environment-settings-content">
+    <Show when={props.unavailable}><p role="alert" class="px-5 py-3 text-sm text-warning">{props.i18n.t('interactionContinuity.unavailable')}</p><Button class="mx-5 mb-3" variant="outline" disabled={!props.canRevalidate} onClick={props.onRevalidate}>{props.i18n.t('interactionContinuity.revalidate')}</Button></Show>
     <Show when={hasTabs()}>
       <Tabs items={[
         { id: 'connection', domId: tabID('connection'), panelId: panelID('connection'), label: props.i18n.t('settings.connectionTab') },

@@ -11,6 +11,8 @@ Wipe-data reinstall is Desktop's final recovery path for a broken managed Redeve
 
 # Contract
 
+Interaction sessions follow [Desktop interaction continuity](desktop-interaction-continuity.md), including authority invalidation, retained drafts, explicit visibility and stale-completion fencing.
+
 ## Confirmation and prerequisites
 
 Preview is local and non-destructive. It shows one short risk statement, with host, container, root, affected registrations, and process details collapsed. A saved `remote_default` root is shown as the user-facing `~/.redeven`; Desktop does not connect merely to expand the remote home directory. Confirmation binds the saved host/user/port, exact container engine/id when present, registered Runtime root identity, mode, preflight, and operation identity. Execution resolves the physical absolute root through the confirmed direct channel and rejects any mismatch before target mutation.

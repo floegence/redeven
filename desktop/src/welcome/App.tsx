@@ -1,3 +1,4 @@
+import { environmentInteractionIdentity, gatewayInteractionIdentity } from './environmentInteractionIdentity';
 import { RuntimeGatewaySetupDialog } from './RuntimeGatewaySetupDialog';
 import { RuntimeComponentTransferProgress } from './RuntimeComponentTransferProgress';
 import { GatewayCloudPanel } from './GatewayCloudPanel';
@@ -18,7 +19,6 @@ import {
   CardTitle,
   Checkbox,
   CommandPalette,
-  ConfirmDialog,
   createFloatingPresence,
   Dialog,
   Input,
@@ -26,7 +26,7 @@ import {
   Switch,
   Tag,
 } from '@floegence/floe-webapp-core/ui';
-import { handleMenuKeyboardNavigation } from '@floegence/floe-webapp-core/ui';
+import { KeyedFor, handleMenuKeyboardNavigation } from '@floegence/floe-webapp-core/ui';
 import { GatewayMark } from './GatewayMark';
 import { GatewayEnvironmentList } from './GatewayEnvironmentList';
 import { GatewayClientsPanel } from './GatewayClientsPanel';
@@ -41,7 +41,7 @@ import { DesktopFlowerRuntimeBoundary } from './flower/DesktopFlowerRuntimeBound
 import { runtimeFlowerBlocker } from '../shared/runtimeFlowerAccess';
 import { buildRuntimeConnectionRows, isShareableConnectionAddress, type DesktopShareableConnectionAddress, type AddressRecoveryTarget } from '../shared/desktopEnvironmentConnection';
 import type { DesktopCertificateRequest, DesktopCertificateReport } from '../shared/desktopCertificate';
-import { For, Index, Show, batch, createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, onMount, type JSX } from 'solid-js';
+import { For, Show, batch, createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, onMount, type JSX } from 'solid-js';
 import { Dynamic, Portal } from 'solid-js/web';
 import { Motion, Presence } from 'solid-motionone';
 import qrcode from 'qrcode-generator';
@@ -52,6 +52,7 @@ import {
   FloeProvider,
   useCommand,
   useTheme,
+  useOverlayMask,
 } from '@floegence/floe-webapp-core';
 import {
   AlertCircle,
@@ -289,11 +290,11 @@ import {
   gatewaySourceIDsWithActiveOverlay,
   gatewaySourceOverlayOpenFor,
   openGatewaySourceOverlayState,
-  reconcileGatewaySourceOverlayState,
 } from './gatewaySourceOverlayState';
 import {
   environmentActionForLauncherRetry,
   groupedVisibleOperationNextActions,
+  operationNextActionKey,
 } from './operationNextActions';
 import {
   advanceEnvironmentOpenFlowStage,
@@ -313,6 +314,7 @@ import {
 import {
   createEnvironmentLifecycleAttempt, type EnvironmentLifecycleAttempt, type EnvironmentSettingsRestartSource,
 } from './environmentLifecycleDisclosure';
+import type { EnvironmentLifecycleDisclosureState } from './environmentLifecycleDisclosure';
 import {
   environmentProgressMeterPercent,
   environmentProgressElapsedSeconds,
@@ -435,6 +437,9 @@ type RuntimeContainerConnectionDialogState = Readonly<{
 
 type GatewaySetupDialogState = Readonly<{
   opening_id: number;
+  interaction_identity?: string;
+  authority_revoked?: boolean;
+  created_gateway_id?: string;
   mode: 'create' | 'edit';
   gateway_id: string;
   display_name: string;
@@ -1919,6 +1924,7 @@ function createGatewaySetupDialogState(
   const authMode = (trimString(overrides.auth_mode) as DesktopSSHAuthMode) || DEFAULT_DESKTOP_SSH_AUTH_MODE;
   const state: GatewaySetupDialogState = {
     opening_id: ++gatewaySetupOpeningSequence,
+    interaction_identity: overrides.interaction_identity,
     mode: overrides.mode ?? 'create',
     focus_section: overrides.focus_section,
     gateway_id: trimString(overrides.gateway_id),
@@ -2618,6 +2624,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const [runtimeContainerOptionsKey, setRuntimeContainerOptionsKey] = createSignal('');
   const [controlPlaneDialogState, setControlPlaneDialogState] = createSignal<ControlPlaneDialogState>(null);
   const [deleteTarget, setDeleteTarget] = createSignal<DesktopEnvironmentEntry | null>(null);
+  const [deleteAuthorityRevoked, setDeleteAuthorityRevoked] = createSignal(false);
+  const currentDeleteTarget = () => snapshot().environments.find(value => value.id === deleteTarget()?.id);
+  const deleteOwnerAvailable = () => { const target = deleteTarget(), current = currentDeleteTarget(); return !!target && !!current?.can_delete && environmentInteractionIdentity(current) === environmentInteractionIdentity(target) && !deleteAuthorityRevoked(); };
+  createEffect(on(deleteTarget, () => setDeleteAuthorityRevoked(false)));
+  createEffect(() => { if (deleteTarget() && (!currentDeleteTarget()?.can_delete || environmentInteractionIdentity(currentDeleteTarget()!) !== environmentInteractionIdentity(deleteTarget()!))) setDeleteAuthorityRevoked(true); });
   const [deleteReplacement, setDeleteReplacement] = createSignal('');
   createEffect(on(deleteTarget, () => setDeleteReplacement('')));
   const deleteReplacementRoutes = () => deleteTarget()?.access_routes?.filter(route => route.environment_id !== deleteTarget()?.id) ?? [];
@@ -2625,16 +2636,19 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     && route.id === deleteTarget()?.default_access_route_id) && deleteReplacementRoutes().length > 0;
   let deletedGatewayFocus: HTMLElement | undefined;
   const [deleteGatewayTarget, setDeleteGatewayTarget] = createSignal<DesktopGatewaySource | null>(null);
+  const [deleteGatewayAuthorityRevoked, setDeleteGatewayAuthorityRevoked] = createSignal(false);
+  const currentDeleteGateway = () => snapshot().gateway_sources.find(value => value.gateway_id === deleteGatewayTarget()?.gateway_id);
+  const deleteGatewayOwnerAvailable = () => { const target = deleteGatewayTarget(), current = currentDeleteGateway(); return !!target && !!current && gatewayInteractionIdentity(current) === gatewayInteractionIdentity(target) && !deleteGatewayAuthorityRevoked(); };
+  createEffect(on(deleteGatewayTarget, () => setDeleteGatewayAuthorityRevoked(false)));
+  createEffect(() => { if (deleteGatewayTarget() && (!currentDeleteGateway() || gatewayInteractionIdentity(currentDeleteGateway()!) !== gatewayInteractionIdentity(deleteGatewayTarget()!))) setDeleteGatewayAuthorityRevoked(true); });
   const [providerRuntimeLinkConfirmation, setCloudRuntimeLinkConfirmation] = createSignal<CloudRuntimeLinkConfirmationState | null>(null);
   const [providerRuntimeLinkCloudEnvironmentID, setCloudRuntimeLinkCloudEnvironmentID] = createSignal('');
   const [signOutControlPlaneTarget, setSignOutControlPlaneTarget] = createSignal<DesktopControlPlaneSummary | null>(null);
-  createEffect(() => {
-    const target = signOutControlPlaneTarget();
-    if (target && !snapshot().control_planes.some(source => (
-      source.cloud.cloud_origin === target.cloud.cloud_origin
-      && source.cloud.cloud_id === target.cloud.cloud_id
-    ))) setSignOutControlPlaneTarget(null);
-  });
+  const [signOutAuthorityRevoked, setSignOutAuthorityRevoked] = createSignal(false);
+  createEffect(on(signOutControlPlaneTarget, () => setSignOutAuthorityRevoked(false)));
+  const signOutIdentityAvailable = () => { const target = signOutControlPlaneTarget(); return !!target && snapshot().control_planes.some(source => source.cloud.cloud_origin === target.cloud.cloud_origin && source.cloud.cloud_id === target.cloud.cloud_id && source.account.user_public_id === target.account.user_public_id); };
+  const signOutOwnerAvailable = () => !signOutAuthorityRevoked() && signOutIdentityAvailable();
+  createEffect(() => { if (signOutControlPlaneTarget() && !signOutIdentityAvailable()) setSignOutAuthorityRevoked(true); });
   const [flowerTurnLauncherOpen, setFlowerTurnLauncherOpen] = createSignal(false);
   const flowerTurnLauncherViewportInsets = createAskFlowerWindowViewportInsets({
     open: flowerTurnLauncherOpen,
@@ -2716,12 +2730,21 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   createEffect(() => {
     const entries = snapshot().environments;
     const session = settingsSession();
-    // A connection save can replace its registration ID before the reply rebinds the dialog.
-    if (session && !session.saving && !entries.some(entry => entry.id === session.environment.id)) settingsController.close();
+    // IMPORTANT: Background removal invalidates submission, never the user's settings draft.
+    if (session && !session.authority_revoked) {
+      const current = entries.find(entry => entry.id === session.environment.id);
+      if (!current?.can_edit || environmentInteractionIdentity(current) !== environmentInteractionIdentity(session.environment)) settingsController.revokeAuthority();
+    }
     const contextAction = flowerTurnLauncherIntent()?.context_action as ContextActionEnvelope | undefined;
     const contextOwner = contextAction?.source.surface === 'desktop_welcome_environment_card' ? contextAction.source.surface_id : undefined;
     if (contextOwner && !entries.some(entry => entry.id === contextOwner)) closeFlowerTurnLauncher();
   });
+  const settingsOwnerAvailable = () => {
+    const opening = settingsSession();
+    if (!opening || opening.authority_revoked) return false;
+    const current = snapshot().environments.find(entry => entry.id === opening.environment.id);
+    return !!current && current.can_edit && environmentInteractionIdentity(current) === environmentInteractionIdentity(opening.environment);
+  };
   const settingsSurface = (): DesktopSettingsSurfaceSnapshot => {
     const saved = settingsBaselineSurface();
     const environment = selectedSettingsEnvironmentEntry()!;
@@ -2860,14 +2883,15 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       : i18n().t('environmentCenter.connectToProvider')
   ));
   const providerRuntimeLinkDialogOpen = createMemo(() => providerRuntimeLinkConfirmation() !== null);
-  const providerRuntimeLinkSnapshot = createMemo<RuntimeServiceSnapshot | undefined>(() => (
-    environmentRuntimeServiceSnapshot(providerRuntimeLinkConfirmation()?.environment ?? null)
-  ));
+  const currentLinkEnvironment = () => snapshot().environments.find(entry => entry.id === providerRuntimeLinkConfirmation()?.environment.id);
+  const linkIdentity = (entry: DesktopEnvironmentEntry | undefined) => JSON.stringify([entry?.provider_runtime_link_target?.id, entry?.provider_runtime_link_target?.cloud_link_binding, entry?.managed_runtime_host_access, entry?.managed_runtime_placement]);
+  const linkConfirmationCurrent = () => !!currentLinkEnvironment() && linkIdentity(currentLinkEnvironment()) === linkIdentity(providerRuntimeLinkConfirmation()?.environment);
+  const providerRuntimeLinkSnapshot = createMemo<RuntimeServiceSnapshot | undefined>(() => environmentRuntimeServiceSnapshot(currentLinkEnvironment() ?? null));
   const providerRuntimeLinkActiveWorkLabel = createMemo(() => (
     localizedRuntimeServiceWorkload(i18n(), providerRuntimeLinkSnapshot()?.active_workload)
   ));
   const providerRuntimeLinkCandidates = createMemo(() => (
-    providerRuntimeLinkConfirmation()?.environment.provider_environment_candidates ?? []
+    currentLinkEnvironment()?.provider_environment_candidates ?? []
   ));
   const providerRuntimeLinkBusy = createMemo(() => (
     providerRuntimeLinkConfirmation()?.action === 'disconnect'
@@ -2875,7 +2899,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       : busyStateMatchesAction(busyState(), 'connect_cloud_runtime')
   ));
   const providerRuntimeLinkCandidatePlans = createMemo(() => {
-    const target = providerRuntimeLinkConfirmation()?.environment.provider_runtime_link_target;
+    const target = currentLinkEnvironment()?.provider_runtime_link_target;
     if (!target) {
       return [] as readonly Readonly<{
         candidate: DesktopCloudEnvironmentCandidate;
@@ -2898,7 +2922,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     )) ?? null
   ));
   const providerRuntimeLinkConfirmDisabled = createMemo(() => (
-    providerRuntimeLinkBusy()
+    !linkConfirmationCurrent() || providerRuntimeLinkBusy()
     || (
       providerRuntimeLinkConfirmation()?.action === 'connect'
       && providerRuntimeLinkSelectedPlan()?.canConnect !== true
@@ -3105,13 +3129,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       openSettingsSurface(snapshot().settings_environment_id);
     }
   }));
-  createEffect(() => {
-    const opening = settingsSession();
-    if (opening && !opening.saving && !snapshot().environments.some(entry => entry.id === opening.environment.id)) {
-      cancelSettings();
-      showActionToast(i18n().t('environmentCenter.environmentRegistrationUnavailable'), 'error');
-    }
-  });
 
   {
     let previousIssueKey = '';
@@ -3742,6 +3759,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       ? {
           mode: 'edit',
           gateway_id: gateway.gateway_id,
+          interaction_identity: gatewayInteractionIdentity(gateway),
           display_name: gateway.display_name,
           connection_kind: gateway.connection_kind,
           ssh_destination: gateway.ssh_details?.ssh_destination,
@@ -4559,10 +4577,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
   async function confirmCloudRuntimeLinkAction(): Promise<void> {
     const confirmation = providerRuntimeLinkConfirmation();
-    if (!confirmation) {
-      return;
-    }
-    const latestEnvironment = await loadLatestEnvironmentEntry(confirmation.environment.id) ?? confirmation.environment;
+    if (!confirmation || !linkConfirmationCurrent() || providerRuntimeLinkConfirmDisabled()) return;
+    const latestEnvironment = await loadLatestEnvironmentEntry(confirmation.environment.id);
+    if (providerRuntimeLinkConfirmation() !== confirmation || !latestEnvironment || linkIdentity(latestEnvironment) !== linkIdentity(confirmation.environment)) return;
     const providerEnvironmentID = providerRuntimeLinkCloudEnvironmentID();
     if (confirmation.action === 'connect') {
       if (providerEnvironmentID === '') {
@@ -4586,7 +4603,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     const ok = confirmation.action === 'disconnect'
       ? await disconnectProviderRuntime(latestEnvironment, providerEnvironmentID, 'connect')
       : await connectProviderRuntime(latestEnvironment, providerEnvironmentID, 'connect');
-    if (ok) {
+    if (ok && providerRuntimeLinkConfirmation() === confirmation) {
       closeCloudRuntimeLinkConfirmation();
     }
   }
@@ -4973,10 +4990,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       if (attempted.opened) {
         return { close_panel: true, next_session: null };
       }
-      if (attempted.operation_key) {
-        publishSession(null);
-        return { close_panel: true, next_session: null };
-      }
+      if (attempted.operation_key) return failOpenFlow(checking, attempted.message || i18n().t('environmentOpenFlow.openFailedDetail'), attempted.recovery);
       return failOpenFlow(
         checking,
         attempted.message || i18n().t('environmentOpenFlow.openFailedDetail'),
@@ -5412,11 +5426,13 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
   async function saveSettings(options: Readonly<{ restartRuntime?: boolean; continueTwoFactor?: boolean }> = {}): Promise<void> {
     const opening = settingsSession();
-    if (!opening?.access || opening.saving) return;
+    if (!opening?.access || opening.saving || !settingsOwnerAvailable()) return;
     const environment = selectedSettingsEnvironmentEntry()!;
     if (options.restartRuntime && (environment.runtime_operations.restart.availability !== 'available' || connectionSettingsDirty())) return;
     setSettingsError('');
     if (!await settingsController.saveAccess(options.restartRuntime ? 'restart' : 'save')) return;
+    const currentTarget = snapshot().environments.find(entry => entry.id === opening.environment.id);
+    if (!currentTarget || environmentInteractionIdentity(currentTarget) !== environmentInteractionIdentity(opening.environment)) return;
     if (options.restartRuntime) {
       const foreground = settingsController.current(opening);
       if (foreground) cancelSettings();
@@ -5610,9 +5626,26 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     return errors;
   }
 
+  const gatewaySetupOwnerAvailable = () => {
+    const state = gatewaySetupDialogState();
+    if (!state) return false;
+    if (state.mode === 'create') return true;
+    if (state.authority_revoked) return false;
+    const current = snapshot().gateway_sources.find(source => source.gateway_id === state.gateway_id);
+    return current ? !state.interaction_identity || gatewayInteractionIdentity(current) === state.interaction_identity : !state.interaction_identity && state.created_gateway_id === state.gateway_id;
+  };
+  createEffect(() => {
+    const state = gatewaySetupDialogState();
+    if (!state || state.mode !== 'edit' || !state.interaction_identity || state.authority_revoked) return;
+    const source = snapshot().gateway_sources.find(source => source.gateway_id === state.gateway_id);
+    if (!source || gatewayInteractionIdentity(source) !== state.interaction_identity) {
+      setGatewaySetupDialogState(current => current?.opening_id === state.opening_id ? { ...current, authority_revoked: true } : current);
+    }
+  });
+
   async function saveGatewayFromDialog(): Promise<void> {
     const state = gatewaySetupDialogState();
-    if (!state || busyState().action !== IDLE_LAUNCHER_BUSY_STATE.action) {
+    if (!state || !gatewaySetupOwnerAvailable() || busyState().action !== IDLE_LAUNCHER_BUSY_STATE.action) {
       return;
     }
     const errors = validateGatewaySetupDialogFields(state);
@@ -5652,7 +5685,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     setGatewaySetupRecovery(null);
     setGatewaySetupDialogError('');
     setGatewaySetupTechnicalDetail('');
-    const current = () => gatewaySetupDialogState()?.opening_id === state.opening_id;
+    const current = () => gatewaySetupDialogState()?.opening_id === state.opening_id && gatewaySetupDialogState()?.interaction_identity === state.interaction_identity && gatewaySetupOwnerAvailable();
     const result = await performLauncherActionSilently(action);
     if (!current()) return;
     if (!result.ok) {
@@ -5661,7 +5694,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       const gatewayID = result.raw_failure?.gateway_id;
       if (gatewayID) {
         setGatewaySetupRecovery(gatewayActionRecovery(gatewayID, result));
-        setGatewaySetupDialogState(draft => draft ? { ...draft, gateway_id: gatewayID, mode: 'edit' } : draft);
+        setGatewaySetupDialogState(draft => draft ? { ...draft, gateway_id: gatewayID, mode: 'edit', created_gateway_id: draft.mode === 'create' ? gatewayID : draft.created_gateway_id } : draft);
       }
       return;
     }
@@ -5688,12 +5721,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     await refreshSnapshot().catch(error => showActionToast(getErrorMessage(error), 'error'));
   }
 
-  async function runGatewayLauncherAction(request: DesktopLauncherActionRequest): Promise<void> {
-    const result = await performLauncherAction(request);
-    if (!result) {
-      return;
-    }
-    await refreshSnapshot();
+  async function runGatewayLauncherAction(request: DesktopLauncherActionRequest): Promise<GatewayLauncherActionResult> {
+    const result = await performLauncherActionSilently(request);
+    if (!result.ok) return result;
+    await refreshSnapshot().catch(error => showActionToast(getErrorMessage(error), 'error'));
     switch (result.outcome) {
       case 'paired_gateway':
         showActionToast(i18n().t('toast.gatewayPaired'));
@@ -5731,6 +5762,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       default:
         break;
     }
+    return result;
   }
 
   async function openGatewayEnvironment(
@@ -5809,6 +5841,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   }
   function connectionSaveBlocked(): boolean {
     const session = settingsSession();
+    if (session && !settingsOwnerAvailable()) return true;
     if (!session?.access?.dirty || !session.connection || !session.connection_baseline) return false;
     const fields = ['ssh_destination', 'ssh_port', 'runtime_root', 'container_engine', 'container_id'] as const;
     return fields.some(key => Reflect.get(session.connection!, key) !== Reflect.get(session.connection_baseline!, key));
@@ -5834,6 +5867,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       root: environment?.managed_runtime_placement?.runtime_root ?? '' };
   }
   async function saveWSLSettingsLabel(): Promise<void> {
+    if (!settingsOwnerAvailable()) return;
     const opening = settingsSession();
     const environment = opening?.environment;
     if (!opening || opening.saving || environment?.registration_ref?.kind !== 'runtime_target'
@@ -5879,7 +5913,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
     setConnectionDialogFieldErrors({});
     const opening = settingsSession();
-    if (opening?.saving || connectionSaveBlocked()) return;
+    if (opening?.saving || connectionSaveBlocked() || opening && !settingsOwnerAvailable()) return;
     if (opening) settingsController.update({ saving: 'connection' });
     let saved: string | false = false;
     if (state.connection_kind === 'ssh_environment') {
@@ -5929,7 +5963,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       if (saved) {
         const environment = snapshot().environments.find(entry => entry.id === saved);
         if (environment) settingsController.savedConnection(environment, createEnvironmentConnectionDraft(environment));
-        else cancelSettings();
+        else { settingsController.update({ saving: null }); setConnectionDialogError(i18n().t('interactionContinuity.unavailable')); }
       } else settingsController.update({ saving: null });
     } else if (!opening && saved && connectionDialogState() === state) {
       if (joinGatewayAfterCreate() && state.connection_kind !== 'external_local_ui') setGatewaySetupEnvironmentID(saved);
@@ -5982,7 +6016,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
   async function deleteEnvironment(): Promise<void> {
     const target = deleteTarget();
-    if (!target || (target.registration_ref?.kind === 'gateway_environment' && busyState().action !== IDLE_LAUNCHER_BUSY_STATE.action)) {
+    if (!target || !deleteOwnerAvailable() || busyState().action !== IDLE_LAUNCHER_BUSY_STATE.action) {
       return;
     }
     const hadBackgroundOperation = deleteTargetOperation() !== null;
@@ -6012,7 +6046,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       }
       await refreshSnapshot();
       // A deleted row cannot receive the dialog's normal focus return.
-      setDeleteTarget(null);
+      if (deleteTarget() === target) setDeleteTarget(null);
 
       showActionToast(
         removedDefaultWSLEnvironment
@@ -6031,23 +6065,21 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
   async function signOutControlPlane(): Promise<void> {
     const target = signOutControlPlaneTarget();
-    if (!target) {
-      return;
-    }
+    if (!target || !signOutOwnerAvailable()) return;
     const result = await performLauncherAction({
       kind: 'sign_out_control_plane',
       cloud_origin: target.cloud.cloud_origin,
       cloud_id: target.cloud.cloud_id,
     });
     if (result?.outcome === 'signed_out_control_plane') {
-      setSignOutControlPlaneTarget(null);
+      if (signOutControlPlaneTarget() === target) setSignOutControlPlaneTarget(null);
       showActionToast(i18n().t('environmentCenter.cloudSignedOut'));
     }
   }
 
   async function deleteGateway(): Promise<void> {
     const target = deleteGatewayTarget();
-    if (!target) {
+    if (!target || !deleteGatewayOwnerAvailable() || busyState().action !== IDLE_LAUNCHER_BUSY_STATE.action) {
       return;
     }
     const result = await performLauncherAction({
@@ -6055,7 +6087,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       gateway_id: target.gateway_id,
     });
     if (result?.outcome === 'deleted_gateway') {
-      setDeleteGatewayTarget(null);
+      if (deleteGatewayTarget() === target) setDeleteGatewayTarget(null);
       showActionToast(i18n().t('environmentCenter.gatewayRemoved'), 'info');
     }
   }
@@ -6568,18 +6600,20 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         perform={performDesktopUpdateAction}
       />
 
-      <EnvironmentSettingsDialog open={Boolean(settingsSession())} environment={settingsSession()?.environment ?? null}
+      <EnvironmentSettingsDialog open={Boolean(settingsSession())} environment={settingsSession()?.environment ?? null} unavailable={!settingsOwnerAvailable()}
         tab={settingsPresentation()?.tab ?? 'connection'} i18n={i18n()} onClose={cancelSettings}
+        canRevalidate={!!snapshot().environments.find(entry => entry.id === settingsSession()?.environment.id)?.can_edit}
+        onRevalidate={() => { const entry = snapshot().environments.find(entry => entry.id === settingsSession()?.environment.id); if (entry?.can_edit) settingsController.revalidate(entry); }}
         onPresenceChange={setSettingsPresent}
         onTabChange={settingsController.selectTab}
         connection={(
-          <Show when={settingsPresentation()?.token} keyed>{(_token) => (
+          <Show when={settingsPresentation()?.opening_id} keyed>{(_token) => (
             <Show when={settingsPresentation()?.connection} fallback={(
               <EnvironmentSettingsPanel footer={<>
                 <Button variant="ghost" onClick={cancelSettings}>{i18n().t('common.close')}</Button>
                 <Show when={connectionSettingsDirty()}><Button variant="ghost" disabled={Boolean(settingsSession()?.saving)} onClick={settingsController.resetConnection}>{i18n().t('settings.discardConnectionChanges')}</Button></Show>
                 <Show when={settingsPresentation()?.environment.managed_runtime_host_access?.kind === 'wsl_host'}>
-                  <Button disabled={!settingsSession() || Boolean(settingsSession()?.saving) || !settingsSession()?.metadata_label.trim()
+                  <Button disabled={!settingsOwnerAvailable() || !settingsSession() || Boolean(settingsSession()?.saving) || !settingsSession()?.metadata_label.trim()
                     || settingsSession()?.metadata_label === settingsSession()?.environment.label} onClick={() => void saveWSLSettingsLabel()}>
                     {i18n().t('sshSettings.saveChanges')}
                   </Button>
@@ -6640,7 +6674,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           )}</Show>
         )}
         access={(
-          <Show when={settingsPresentation()?.token} keyed>{(dialogToken) => {
+          <Show when={settingsPresentation()?.opening_id} keyed>{(openingID) => {
             const environmentID = settingsPresentation()!.environment.id;
             return <Show when={Boolean(settingsPresentation()?.access)} fallback={(
               <EnvironmentSettingsPanel footer={<Button variant="ghost" onClick={cancelSettings}>{i18n().t('common.close')}</Button>}>
@@ -6660,9 +6694,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
               </EnvironmentSettingsPanel>
             )}>
       <EnvironmentAccessSettingsForm
+        available={settingsOwnerAvailable()}
         security={window.redevenDesktopSettings?.security ? async request => {
           const opening = settingsSession();
-          const result = await window.redevenDesktopSettings!.security!({ ...request, environment_id: environmentID, dialog_token: dialogToken });
+          if (!opening || opening.opening_id !== openingID || !settingsOwnerAvailable()) throw new Error('SETTINGS_CLOSED');
+          const result = await window.redevenDesktopSettings!.security!({ ...request, environment_id: environmentID, dialog_token: opening.token });
+          if (!settingsController.current(opening) || !settingsOwnerAvailable()) throw new Error('SETTINGS_CLOSED');
           if (opening && settingsController.current(opening) && request.action === 'commit') await settingsController.loadAccess();
           return result;
         } : undefined}
@@ -6688,7 +6725,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         focusAccess={settingsPresentation()?.focus_access}
         certificate={props.runtime.settings.certificate ? async request => {
           const opening = settingsSession();
+          if (!opening || opening.opening_id !== openingID || !settingsOwnerAvailable()) throw new Error('SETTINGS_CLOSED');
           const result = await props.runtime.settings.certificate!(request);
+          if (!settingsController.current(opening) || !settingsOwnerAvailable()) throw new Error('SETTINGS_CLOSED');
           if (opening && settingsController.current(opening) && request.operation !== 'status') await settingsController.loadAccess();
           return result;
         } : undefined}
@@ -6720,6 +6759,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       <ConnectionDialog {...connectionFormProps} state={newConnectionState()} />
 
       <GatewaySetupDialog
+        available={gatewaySetupOwnerAvailable()}
+        canRevalidate={!!snapshot().gateway_sources.find(source => source.gateway_id === gatewaySetupDialogState()?.gateway_id)}
+        onRevalidate={() => { const source = snapshot().gateway_sources.find(source => source.gateway_id === gatewaySetupDialogState()?.gateway_id); if (source) setGatewaySetupDialogState(state => state ? { ...state, interaction_identity: gatewayInteractionIdentity(source), authority_revoked: false } : state); }}
         restoreFocus={() => { if (!gatewaySetupDialogState()) gatewaySetupReturnFocus?.focus(); }}
         gateway={snapshot().gateway_sources.find(source => source.gateway_id === gatewaySetupDialogState()?.gateway_id)}
         targets={snapshot().environments.flatMap(entry => entry.provider_runtime_link_target ? [entry.provider_runtime_link_target] : [])}
@@ -6796,13 +6838,14 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           <Button variant="ghost" disabled={busyStateMatchesAction(busyState(), 'delete_environment')}
             onClick={() => { setDeleteTarget(null); }}>{i18n().t('common.cancel')}</Button>
           <Button variant="destructive" loading={busyStateMatchesAction(busyState(), 'delete_environment')}
-            disabled={deleteNeedsReplacement() && !deleteReplacementRoutes().some(route => route.id === deleteReplacement())}
+            disabled={!deleteOwnerAvailable() || busyState().action !== IDLE_LAUNCHER_BUSY_STATE.action || deleteNeedsReplacement() && !deleteReplacementRoutes().some(route => route.id === deleteReplacement())}
             onClick={() => void deleteEnvironment()}>
             {i18n().t('confirm.removeEnvironmentConfirm')}
           </Button>
         </>}
       >
         <div class="space-y-2">
+          <Show when={!deleteOwnerAvailable()}><p role="alert">{i18n().t('interactionContinuity.unavailable')}</p><Button variant="outline" disabled={!currentDeleteTarget()?.can_delete} onClick={() => { const current = currentDeleteTarget(); if (current?.can_delete) { setDeleteTarget(current); setDeleteAuthorityRevoked(false); } }}>{i18n().t('interactionContinuity.revalidate')}</Button></Show>
           <Show when={deleteNeedsReplacement()}>
             <fieldset class="redeven-access-settings" disabled={busyStateMatchesAction(busyState(), 'delete_environment')}>
               <legend>{i18n().t('gatewayAccess.chooseReplacement')}</legend>
@@ -6835,7 +6878,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         </div>
       </Dialog>
 
-      <ConfirmDialog
+      <Dialog
         open={signOutControlPlaneTarget() !== null}
         onOpenChange={(open) => {
           if (!open) {
@@ -6843,21 +6886,22 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           }
         }}
         title={i18n().t('confirm.cloudSignOutTitle')}
-        confirmText={i18n().t('environmentCenter.cloudSignOut')}
-        cancelText={i18n().t('common.cancel')}
-        variant="default"
-        loading={busyStateMatchesAction(busyState(), 'sign_out_control_plane')}
-        onConfirm={() => void signOutControlPlane()}
+        closeLabel={i18n().t('common.close')}
+        footer={<>
+          <Button variant="ghost" onClick={() => setSignOutControlPlaneTarget(null)}>{i18n().t('common.cancel')}</Button>
+          <Button disabled={!signOutOwnerAvailable() || busyStateMatchesAction(busyState(), 'sign_out_control_plane')}
+            loading={busyStateMatchesAction(busyState(), 'sign_out_control_plane')} onClick={() => void signOutControlPlane()}>{i18n().t('environmentCenter.cloudSignOut')}</Button>
+        </>}
       >
-        <div class="space-y-2">
+        <div class="space-y-2"><Show when={!signOutOwnerAvailable()}><p role="alert">{i18n().t('interactionContinuity.unavailable')}</p><Button variant="outline" disabled={!signOutIdentityAvailable()} onClick={() => { if (signOutIdentityAvailable()) setSignOutAuthorityRevoked(false); }}>{i18n().t('interactionContinuity.revalidate')}</Button></Show>
           <p class="text-[length:var(--floe-type-body)]">
             {i18n().t('confirm.cloudSignOutQuestion', { label: signOutControlPlaneTarget()?.account.user_display_name || signOutControlPlaneTarget()?.display_label || 'Redeven Cloud' })}
           </p>
           <p class="text-xs text-muted-foreground">{i18n().t('confirm.cloudSignOutDescription')}</p>
         </div>
-      </ConfirmDialog>
+      </Dialog>
 
-      <ConfirmDialog
+      <Dialog
         open={deleteGatewayTarget() !== null}
         onOpenChange={(open) => {
           if (!open) {
@@ -6865,12 +6909,14 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           }
         }}
         title={i18n().t('confirm.deleteGatewayTitle')}
-        confirmText={i18n().t('confirm.deleteGatewayConfirm')}
-        variant="destructive"
-        loading={busyStateMatchesAction(busyState(), 'delete_gateway')}
-        onConfirm={() => void deleteGateway()}
+        closeLabel={i18n().t('common.close')}
+        footer={<><Button variant="ghost" onClick={() => setDeleteGatewayTarget(null)}>{i18n().t('common.cancel')}</Button>
+          <Button variant="destructive" loading={busyStateMatchesAction(busyState(), 'delete_gateway')}
+            disabled={!deleteGatewayOwnerAvailable() || busyState().action !== IDLE_LAUNCHER_BUSY_STATE.action}
+            onClick={() => void deleteGateway()}>{i18n().t('confirm.deleteGatewayConfirm')}</Button></>}
       >
         <div class="space-y-2">
+          <Show when={!deleteGatewayOwnerAvailable()}><p role="alert">{i18n().t('interactionContinuity.unavailable')}</p><Button variant="outline" disabled={!currentDeleteGateway()} onClick={() => { const current = currentDeleteGateway(); if (current) { setDeleteGatewayTarget(current); setDeleteGatewayAuthorityRevoked(false); } }}>{i18n().t('interactionContinuity.revalidate')}</Button></Show>
           <p class="text-[length:var(--floe-type-body)]">
             {i18n().t('confirm.deleteGatewayQuestion', {
               label: deleteGatewayTarget()?.display_name ?? '',
@@ -6880,7 +6926,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             {i18n().t('confirm.deleteGatewayDescription')}
           </p>
         </div>
-      </ConfirmDialog>
+      </Dialog>
 
       <Dialog
         open={providerRuntimeLinkDialogOpen()}
@@ -6911,6 +6957,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         )}
       >
         <div class="space-y-2">
+          <Show when={!linkConfirmationCurrent()}><p role="alert" class="text-warning">{i18n().t('interactionContinuity.unavailable')}</p><Button variant="outline" onClick={() => {
+            const environment = currentLinkEnvironment(); const current = providerRuntimeLinkConfirmation();
+            if (environment && current) setCloudRuntimeLinkConfirmation({ ...current, environment });
+          }}>{i18n().t('interactionContinuity.revalidate')}</Button></Show>
           <p class="text-[length:var(--floe-type-body)]">
             <Show
               when={providerRuntimeLinkConfirmation()?.action === 'disconnect'}
@@ -7339,7 +7389,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
   openSettingsSurface: (environmentID?: string) => void;
   openCreateConnectionDialog: (message?: string, preferredKind?: ConnectionDialogKind) => void;
   openCreateGatewaySetup: (gateway?: DesktopGatewaySource, focusSection?: DesktopGatewayResolveFocus) => void;
-  runGatewayLauncherAction: (request: DesktopLauncherActionRequest) => Promise<void>;
+  runGatewayLauncherAction: (request: DesktopLauncherActionRequest) => Promise<GatewayLauncherActionResult>;
   openGatewayMembers: (gateway: DesktopGatewaySource) => void;
   openCreateControlPlaneDialog: (message?: string) => void;
   refreshAllEnvironmentRuntimes: () => Promise<void>;
@@ -8092,7 +8142,7 @@ export function EndpointsPopover(props: Readonly<{
   configureAddress?: (target: AddressRecoveryTarget) => void;
 }>) {
   let anchorRef: HTMLButtonElement | undefined;
-  let popoverRef: HTMLDivElement | undefined;
+  const [popoverRef, setPopoverRef] = createSignal<HTMLDivElement>();
 
   const presence = createFloatingPresence({ open: () => props.open, exitDurationMs: 140 });
   const popoverID = createUniqueId();
@@ -8118,32 +8168,10 @@ export function EndpointsPopover(props: Readonly<{
     ? props.endpoints.filter(isShareableConnectionAddress).find(row => row.id === lastSharedID())
     : undefined);
 
-  const handlePointerDown = (event: MouseEvent) => {
-    if (popoverRef?.contains(event.target as Node) || anchorRef?.contains(event.target as Node)) {
-      return;
-    }
-    props.onOpenChange(false);
-  };
-
-  const handleKeyDown = (event: KeyboardEvent) => {
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      close();
-    }
-  };
-
-  createEffect(() => {
-    if (props.open) {
-      queueMicrotask(() => {
-        if (props.open) popoverRef?.querySelector('button')?.focus({ preventScroll: true });
-      });
-      document.addEventListener('mousedown', handlePointerDown);
-      document.addEventListener('keydown', handleKeyDown);
-      onCleanup(() => {
-        document.removeEventListener('mousedown', handlePointerDown);
-        document.removeEventListener('keydown', handleKeyDown);
-      });
-    }
+  useOverlayMask({ open: () => props.open, root: popoverRef,
+    containsTarget: target => target instanceof Node && (anchorRef?.contains(target) === true || popoverRef()?.contains(target) === true),
+    onClose: close, onInteractOutside: () => props.onOpenChange(false),
+    lockBodyScroll: false, trapFocus: false, escapeKeyPhase: 'bubble',
   });
 
   return (
@@ -8175,10 +8203,10 @@ export function EndpointsPopover(props: Readonly<{
           role={props.open ? 'dialog' : undefined}
           ariaModal={false}
           ariaLabel={props.i18n.t('environmentCenter.environmentEndpoints')}
-          interactive={props.open}
+          interactive={props.open} inactive={!props.open}
           class={cn('redeven-endpoints-surface z-[225] text-popover-foreground', presence.exiting() && 'redeven-endpoints-surface--closing')}
           onOverlayRef={(element) => {
-            popoverRef = element;
+            setPopoverRef(element);
           }}
         >
           <div
@@ -8725,6 +8753,7 @@ export function EnvironmentProgressPanel(props: Readonly<{
   primaryAction?: EnvironmentActionModel;
   settingsRestart?: EnvironmentSettingsRestartSource;
   primaryActionBusy?: boolean;
+  authorityRevoked?: boolean;
   cancelOperation: (progress: DesktopLauncherActionProgress) => void;
   dismissOperation: (progress: DesktopLauncherActionProgress) => void;
   copyOperationDiagnostics: (progress: DesktopLauncherActionProgress) => void;
@@ -8778,7 +8807,8 @@ export function EnvironmentProgressPanel(props: Readonly<{
     return environmentProgressMeterPercent(props.progress);
   });
   const canCancel = createMemo(() => (
-    props.progress.subject_kind !== 'gateway'
+    !props.authorityRevoked
+    && props.progress.subject_kind !== 'gateway'
     && props.progress.cancelable === true
     && props.progress.status === 'running'
   ));
@@ -8812,9 +8842,9 @@ export function EnvironmentProgressPanel(props: Readonly<{
   const phaseSequence = createMemo<readonly { phase: string; key: string; label: string; status?: string; detail?: string; tasks?: readonly import('../shared/desktopLauncherIPC').DesktopComponentTaskProgress[] }[]>(() => {
     const steps = stepProgress();
     if (steps) {
-      return steps.steps.map((step, index) => ({
+      return steps.steps.map((step) => ({
         phase: step.id,
-        key: `step:${index}:${step.id}`,
+        key: `step:${step.id}`,
         label: step.label_key ? props.i18n.t(step.label_key) : localizedGatewayCheckStepLabel(props.i18n, step.id, step.label),
         status: step.status,
         detail: step.detail_key ? props.i18n.t(step.detail_key) : localizedGatewayCheckStepDetail(props.i18n, step.detail),
@@ -8825,7 +8855,7 @@ export function EnvironmentProgressPanel(props: Readonly<{
     const open = openConnection();
     if (open) {
       return openConnectionPhaseSequence(open.location)
-        .map((p, index) => ({ phase: p, key: `open:${index}:${p}`, label: localizedOpenConnectionPhaseLabel(props.i18n, p) }));
+        .map((p) => ({ phase: p, key: `open:${p}`, label: localizedOpenConnectionPhaseLabel(props.i18n, p) }));
     }
     if (!current) {
       return [];
@@ -8906,39 +8936,44 @@ export function EnvironmentProgressPanel(props: Readonly<{
   const renderNextActionGroups = () => (
     <Show when={nextActionGroups().length > 0}>
       <div class="redeven-action-popover__action-stack">
-        <For each={nextActionGroups()}>
+        <KeyedFor each={nextActionGroups()} by={group => group.kind}>
           {(group) => (
             <div
               class="redeven-action-popover__actions"
-              data-layout={group.kind}
+              data-layout={group().kind}
             >
-              <For each={group.actions}>
+              <KeyedFor each={group().actions} by={operationNextActionKey}>
                 {(action) => (
                   <Button
                     size="sm"
-                    variant={action.kind === 'copy_diagnostics' ? 'ghost' : 'outline'}
-                    class={action.kind === 'copy_diagnostics' ? 'redeven-copy-action' : 'justify-center gap-1.5'}
-                    onClick={() => props.runNextAction?.(action, props.progress)}
+                    variant={action().kind === 'copy_diagnostics' ? 'ghost' : 'outline'}
+                    class={action().kind === 'copy_diagnostics' ? 'redeven-copy-action' : 'justify-center gap-1.5'}
+                    disabled={props.authorityRevoked && action().kind !== 'copy_diagnostics' && action().kind !== 'dismiss'}
+                    onClick={() => {
+                      if (!props.authorityRevoked || action().kind === 'copy_diagnostics' || action().kind === 'dismiss') {
+                        props.runNextAction?.(action(), props.progress);
+                      }
+                    }}
                   >
                     <Show
-                      when={action.kind === 'refresh_status'}
-                      fallback={action.kind === 'update_runtime'
+                      when={action().kind === 'refresh_status'}
+                      fallback={action().kind === 'update_runtime'
                           ? <Refresh class="h-3.5 w-3.5" />
-                        : action.kind === 'manage_desktop_update'
+                        : action().kind === 'manage_desktop_update'
                           ? <ExternalLink class="h-3.5 w-3.5" />
-                        : action.kind === 'copy_diagnostics'
+                        : action().kind === 'copy_diagnostics'
                           ? <Copy class="h-3.5 w-3.5" />
                           : null}
                     >
                       <Refresh class="h-3.5 w-3.5" />
                     </Show>
-                    {localizedNextActionLabel(props.i18n, action)}
+                    {localizedNextActionLabel(props.i18n, action())}
                   </Button>
                 )}
-              </For>
+              </KeyedFor>
             </div>
           )}
-        </For>
+        </KeyedFor>
       </div>
     </Show>
   );
@@ -9043,14 +9078,14 @@ export function EnvironmentProgressPanel(props: Readonly<{
               role="list"
               aria-label={props.i18n.t('progress.environmentProgress')}
             >
-              <Index each={phaseSequence()}>
+              <KeyedFor each={phaseSequence()} by={step => step.key}>
                 {(step, index) => {
                   const state = () => stepState(
-                    index,
+                    index(),
                     stepProgress()?.active_step_id ?? runtimeLifecycle()?.phase ?? openConnection()?.phase,
                     phaseStatus(),
                   );
-                  const isLast = () => index === phaseSequence().length - 1;
+                  const isLast = () => index() === phaseSequence().length - 1;
                   return (
                     <div
                       class="redeven-environment-progress__step"
@@ -9076,29 +9111,29 @@ export function EnvironmentProgressPanel(props: Readonly<{
                         </Show>
                         <Show when={step().tasks && step().tasks!.length > 0}>
                           <div class="redeven-environment-progress__component-tasks" role="list" aria-label={props.i18n.t('progress.componentTasks')}>
-                            <For each={step().tasks ?? []}>
+                            <KeyedFor each={step().tasks ?? []} by={task => task.id}>
                               {(task) => (
-                                <div class="redeven-environment-progress__component-task" role="listitem" data-status={task.status}>
+                                <div class="redeven-environment-progress__component-task" role="listitem" data-status={task().status}>
                                   <span class="redeven-environment-progress__component-task-name">
-                                    {props.i18n.t(task.id === 'gateway'
+                                    {props.i18n.t(task().id === 'gateway'
                                       ? 'progress.componentName.gateway'
                                       : 'progress.componentName.runtime')}
                                   </span>
-                                  <span class="redeven-environment-progress__component-task-phase">{task.phase === 'transferring' && task.transfer_kind
-                                    ? props.i18n.t(task.transfer_kind === 'upload' ? 'progress.transferUploading' : 'progress.transferDownloading')
-                                    : props.i18n.t(`progress.componentPhase.${task.phase}` as 'progress.componentPhase.preparing')}</span>
-                                  <span class="redeven-environment-progress__component-task-strategy">{props.i18n.t(task.strategy === 'desktop_upload' ? 'common.desktopUpload' : 'common.remoteInstall')}</span>
-                                  <RuntimeComponentTransferProgress task={task} i18n={props.i18n} active={state() === 'active' && props.progress.status === 'running'} />
+                                  <span class="redeven-environment-progress__component-task-phase">{task().phase === 'transferring' && task().transfer_kind
+                                    ? props.i18n.t(task().transfer_kind === 'upload' ? 'progress.transferUploading' : 'progress.transferDownloading')
+                                    : props.i18n.t(`progress.componentPhase.${task().phase}` as 'progress.componentPhase.preparing')}</span>
+                                  <span class="redeven-environment-progress__component-task-strategy">{props.i18n.t(task().strategy === 'desktop_upload' ? 'common.desktopUpload' : 'common.remoteInstall')}</span>
+                                  <RuntimeComponentTransferProgress task={task()} i18n={props.i18n} active={state() === 'active' && props.progress.status === 'running'} />
                                 </div>
                               )}
-                            </For>
+                            </KeyedFor>
                           </div>
                         </Show>
                       </span>
                     </div>
                   );
                 }}
-              </Index>
+              </KeyedFor>
             </div>
             <div
               class="redeven-environment-progress__meter"
@@ -9183,8 +9218,8 @@ export function EnvironmentProgressPanel(props: Readonly<{
                   variant="default"
                   class="w-full justify-center gap-1.5"
                   loading={action().loading}
-                  disabled={action().disabled}
-                  onClick={() => props.runPrimaryAction?.(action().action)}
+                  disabled={props.authorityRevoked || action().disabled}
+                  onClick={() => { if (!props.authorityRevoked) props.runPrimaryAction?.(action().action); }}
                 >
                   <Show
                     when={action().icon === 'alert_triangle'}
@@ -9306,10 +9341,10 @@ function EnvironmentPrimaryActionPanel(
           class="redeven-environment-progress__steps mt-3"
           aria-label={props.i18n.t('environmentOpenFlow.progressLabel')}
         >
-          <Index each={openFlowSteps()}>
+          <KeyedFor each={openFlowSteps()} by={step => step.key}>
             {(step, index) => {
               const state = () => step().state;
-              const isLast = () => index === openFlowSteps().length - 1;
+              const isLast = () => index() === openFlowSteps().length - 1;
               return (
                 <div class="redeven-environment-progress__step" data-state={state()}>
                   <div class="redeven-environment-progress__step-connector">
@@ -9326,42 +9361,42 @@ function EnvironmentPrimaryActionPanel(
                 </div>
               );
             }}
-          </Index>
+          </KeyedFor>
         </div>
       </Show>
       <Show when={props.overlay.actions.length > 0}>
         <div class="redeven-action-popover__actions">
-          <For each={props.overlay.actions}>
+          <KeyedFor each={props.overlay.actions} by={item => item.action.intent}>
             {(item) => {
               const loading = () =>
-                isEnvironmentActionBusy(item.action, props.operationState, props.busyState, props.environmentID);
-              const isSecondary = item.emphasis === 'secondary';
-              const secondaryIconOnly = () => isSecondary && props.overlay.actions.length > 1;
-              const showsRefreshIcon = item.action.intent === 'refresh_runtime';
+                isEnvironmentActionBusy(item().action, props.operationState, props.busyState, props.environmentID);
+              const isSecondary = () => item().emphasis === 'secondary';
+              const secondaryIconOnly = () => isSecondary() && props.overlay.actions.length > 1;
+              const showsRefreshIcon = () => item().action.intent === 'refresh_runtime';
               return (
                 <div class={secondaryIconOnly() ? 'relative' : 'relative flex-1'}>
                   <Button
                     size="sm"
-                    variant={item.emphasis === 'primary' ? 'default' : 'outline'}
+                    variant={item().emphasis === 'primary' ? 'default' : 'outline'}
                     class={
                       secondaryIconOnly()
                         ? 'aspect-square p-0'
-                        : cn('w-full justify-center', showsRefreshIcon && 'gap-1.5')
+                        : cn('w-full justify-center', showsRefreshIcon() && 'gap-1.5')
                     }
                     loading={loading()}
                     disabled={panelBusy() && !loading()}
-                    onClick={() => props.onRunAction(item.action)}
-                    title={secondaryIconOnly() ? item.label : undefined}
-                    aria-label={secondaryIconOnly() ? item.label : undefined}
+                    onClick={() => props.onRunAction(item().action)}
+                    title={secondaryIconOnly() ? item().label : undefined}
+                    aria-label={secondaryIconOnly() ? item().label : undefined}
                   >
                     <Show
                       when={secondaryIconOnly()}
                       fallback={
                         <>
-                          <Show when={showsRefreshIcon}>
+                          <Show when={showsRefreshIcon()}>
                             <Refresh class="h-3.5 w-3.5" />
                           </Show>
-                          {item.label}
+                          {item().label}
                         </>
                       }
                     >
@@ -9371,7 +9406,7 @@ function EnvironmentPrimaryActionPanel(
                 </div>
               );
             }}
-          </For>
+          </KeyedFor>
         </div>
       </Show>
     </div>
@@ -9470,6 +9505,8 @@ export function EnvironmentSplitActionButton(
     onGuidanceOpenChange: (open: boolean) => void;
     progressOpen: boolean;
     settingsRestart?: EnvironmentSettingsRestartSource;
+    lifecycleDisclosure?: EnvironmentLifecycleDisclosureState;
+    ownerAvailable?: boolean;
     onProgressOpenChange: (open: boolean) => void;
     guidanceSession: EnvironmentGuidanceSessionState;
     busyState?: DesktopLauncherBusyState;
@@ -9482,6 +9519,7 @@ export function EnvironmentSplitActionButton(
     onRunAction: (action: EnvironmentActionModel) => void;
     onRunGuidanceAction: (action: EnvironmentActionModel) => void;
     gatewayActions?: readonly Readonly<{
+      id: string;
       label: string;
       disabled?: boolean;
       tone?: 'primary' | 'danger';
@@ -9490,15 +9528,15 @@ export function EnvironmentSplitActionButton(
   }>,
 ) {
   const hasMenuActions = createMemo(() => props.presentation.menu_actions.length > 0 || !!props.gatewayActions?.length);
-  const menuGroups = createMemo(() => {
+  const menuGroups = createMemo<readonly { id: string; actions: readonly EnvironmentActionMenuItemModel[]; gatewayActions: NonNullable<typeof props.gatewayActions> }[]>(() => {
     const actions = props.presentation.menu_actions;
-    if (!props.gatewayActions?.length) return [{ actions, gatewayActions: [] }];
+    if (!props.gatewayActions?.length) return [{ id: 'runtime', actions, gatewayActions: [] }];
     const cloudIndex = actions.findIndex(item => item.action.intent === 'connect_cloud_runtime'
       || item.action.intent === 'disconnect_cloud_runtime');
     const accessIndex = cloudIndex < 0 ? actions.length : cloudIndex;
     return [
-      { actions: actions.slice(0, accessIndex), gatewayActions: [] },
-      { actions: actions.slice(accessIndex), gatewayActions: props.gatewayActions },
+      { id: 'runtime', actions: actions.slice(0, accessIndex), gatewayActions: [] },
+      { id: 'access', actions: actions.slice(accessIndex), gatewayActions: props.gatewayActions },
     ].filter(group => group.actions.length > 0 || group.gatewayActions.length);
   });
   const guidanceNotice = createMemo(() => guidanceSessionNotice(props.guidanceSession));
@@ -9574,13 +9612,27 @@ export function EnvironmentSplitActionButton(
     };
   });
   const panelProgress = createMemo(() => props.operationState.panelProgress);
+  const revalidationAction = createMemo(() => {
+    const intent = props.lifecycleDisclosure?.intent;
+    const mode = panelProgress()?.reinstall_preview?.mode
+      ?? panelProgress()?.next_actions?.find(action => action.kind === 'reinstall_target')?.mode;
+    return props.presentation.menu_actions.find(item => item.action.intent === intent
+      && (intent !== 'reinstall_target' || !mode || item.action.reinstall_mode === mode))?.action
+      ?? (props.presentation.primary_action.intent === intent ? props.presentation.primary_action : undefined);
+  });
+  const revalidateOperation = () => {
+    const action = revalidationAction();
+    if (props.ownerAvailable !== false && action?.enabled) props.onRunAction({ ...action, operation_key: undefined, preflight_id: undefined });
+  };
+
   const settingsPending = createMemo(() => Boolean(props.settingsRestart) && panelProgress() === null);
   const settingsProgressLabel = createMemo(() => props.i18n.t(
     panelProgress()?.status === 'succeeded' ? 'progress.ready'
       : panelProgress()?.status === 'canceled' ? 'progress.canceled'
       : props.settingsRestart?.submissionError() ? 'progress.restartFailed' : 'progress.restartingEllipsis',
   ));
-  const hasPanelProgress = createMemo(() => panelProgress() !== null || settingsPending());
+  const admissionPending = createMemo(() => Boolean(props.lifecycleDisclosure) && !panelProgress() && !props.settingsRestart);
+  const hasPanelProgress = createMemo(() => panelProgress() !== null || settingsPending() || admissionPending());
   const progressPanelVisible = createMemo(() => props.progressOpen && hasPanelProgress());
   createEffect(() => {
     const source = props.settingsRestart;
@@ -9673,33 +9725,23 @@ export function EnvironmentSplitActionButton(
 
     menuFocusFrame = requestAnimationFrame(() => {
       menuFocusFrame = 0;
-      firstEnabledMenuItem(menuRef)?.focus();
+      if (!menuRef?.contains(document.activeElement)) firstEnabledMenuItem(menuRef)?.focus();
     });
 
-    const handlePointerDown = (event: MouseEvent) => {
-      if (!menuContainsTarget(event.target)) {
-        closeMenu();
-      }
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (menuContainsTarget(event.target) && event.key !== 'Tab' && handleMenuKeyboardNavigation(event, {
-        onDismiss: () => {
-          closeMenu();
-          rootRef?.querySelector<HTMLButtonElement>('[aria-haspopup="menu"]')?.focus();
-        },
-      })) return;
-      if (event.key === 'Escape') {
-        closeMenu();
-      }
-    };
-    document.addEventListener('mousedown', handlePointerDown);
-    document.addEventListener('keydown', handleKeyDown);
-    onCleanup(() => {
-      clearMenuFocusFrame();
-      document.removeEventListener('mousedown', handlePointerDown);
-      document.removeEventListener('keydown', handleKeyDown);
-    });
+    onCleanup(clearMenuFocusFrame);
   });
+  const [menuLayerRoot, setMenuLayerRoot] = createSignal<HTMLDivElement>();
+  useOverlayMask({ open: () => props.menuOpen, root: menuLayerRoot,
+    // IMPORTANT: The destination owns focus during menu-to-operation handoff; deferred restoration would dismiss it.
+    containsTarget: menuContainsTarget, lockBodyScroll: false, trapFocus: false, restoreFocus: false, escapeKeyPhase: 'bubble',
+    onClose: closeMenu,
+    onInteractOutside: event => { if (!menuContainsTarget(event.target)) closeMenu(); },
+  });
+  const handleMenuKeyDown = (event: KeyboardEvent) => {
+    if (menuContainsTarget(event.target)) handleMenuKeyboardNavigation(event, {
+      onDismiss: () => { closeMenu(); rootRef?.querySelector<HTMLButtonElement>('[aria-haspopup="menu"]')?.focus(); },
+    });
+  };
 
   onCleanup(() => {
     clearMenuFocusFrame();
@@ -9755,6 +9797,7 @@ export function EnvironmentSplitActionButton(
               <div style={{ display: 'grid' }}>
                 <div
                   class="redeven-popover-panel-collapse"
+                  inert={progressPanelVisible()} aria-hidden={progressPanelVisible() || undefined}
                   classList={{
                     'redeven-popover-panel-collapse--open': !progressPanelVisible(),
                   }}
@@ -9780,11 +9823,29 @@ export function EnvironmentSplitActionButton(
                 </div>
                 <div
                   class="redeven-popover-panel-collapse"
+                  inert={!progressPanelVisible()} aria-hidden={!progressPanelVisible() || undefined}
                   classList={{
                     'redeven-popover-panel-collapse--open': progressPanelVisible(),
                   }}
                 >
                   <div>
+                    <Show when={admissionPending()}>
+                      <div class="redeven-action-popover redeven-environment-progress" data-redeven-action-popover-initial-focus="" tabIndex={-1} aria-live="polite">
+                        <div class="redeven-environment-progress__body">
+                          <div class="redeven-action-popover__title">{props.i18n.t('progress.environmentProgress')}</div>
+                          <div class="redeven-environment-progress__target">{props.environmentLabel}</div>
+                          <p class="redeven-action-popover__detail" role={props.lifecycleDisclosure?.submission === 'failed' ? 'alert' : 'status'}>{props.i18n.t(props.lifecycleDisclosure?.submission === 'failed' ? 'interactionContinuity.rejected' : 'interactionContinuity.pending')}</p>
+                        </div>
+                        <div class="redeven-action-popover__action-footer redeven-action-popover__actions">
+                          <Show when={props.lifecycleDisclosure?.submission === 'failed'}><Button size="sm" onClick={() => {
+                            const intent = props.lifecycleDisclosure?.intent;
+                            const action = props.presentation.menu_actions.find(item => item.action.intent === intent)?.action;
+                            if (action?.enabled) props.onRunAction(action);
+                          }}>{props.i18n.t('common.retry')}</Button></Show>
+                          <Button size="sm" variant="outline" onClick={() => props.onProgressOpenChange(false)}>{props.i18n.t('common.close')}</Button>
+                        </div>
+                      </div>
+                    </Show>
                     <Show when={settingsPending()}>
                       <div class="redeven-action-popover redeven-environment-progress" data-redeven-action-popover-initial-focus="" tabIndex={-1} aria-live="polite">
                         <div class="redeven-environment-progress__body">
@@ -9801,6 +9862,12 @@ export function EnvironmentSplitActionButton(
                         </Show>
                       </div>
                     </Show>
+                    <Show when={props.lifecycleDisclosure?.authority_revoked}>
+                      <div class="redeven-action-popover__notice" data-tone="warning">
+                        <p role="alert">{props.i18n.t('interactionContinuity.unavailable')}</p>
+                        <Button size="sm" variant="outline" disabled={props.ownerAvailable === false || !revalidationAction()?.enabled} onClick={revalidateOperation}>{props.i18n.t('interactionContinuity.revalidate')}</Button>
+                      </div>
+                    </Show>
                     <Show when={panelProgress()}>
                       {(p) => (
                         <EnvironmentProgressPanel
@@ -9809,6 +9876,7 @@ export function EnvironmentSplitActionButton(
                           settingsRestart={settingsRestartPanelSource()}
                           primaryAction={props.presentation.primary_action}
                           primaryActionBusy={props.operationState.actionsDisabled}
+                          authorityRevoked={props.lifecycleDisclosure?.authority_revoked}
                           cancelOperation={props.cancelOperation}
                           dismissOperation={(progress) => {
                             props.dismissOperation(progress);
@@ -9928,7 +9996,7 @@ export function EnvironmentSplitActionButton(
                   }
                   onClick={() => {
                     closeMenu();
-                    if (props.settingsRestart) { props.onProgressOpenChange(!props.progressOpen); return; }
+                    if (hasPanelProgress()) { props.onProgressOpenChange(!props.progressOpen); return; }
                     if (primaryFallbackRunsAction()) {
                       props.onGuidanceOpenChange(false);
                       props.onProgressOpenChange(false);
@@ -10000,47 +10068,48 @@ export function EnvironmentSplitActionButton(
           anchorRef={rootRef}
           placement="top"
           role="menu"
+          onKeyDown={handleMenuKeyDown}
           ariaLabel={props.presentation.menu_button_label}
           interactive
           hideArrow
           class="redeven-split-menu z-[230]"
           onOverlayRef={(element) => {
-            menuRef = element;
+            menuRef = element; setMenuLayerRoot(element);
           }}
         >
-          <For each={menuGroups()}>
+          <KeyedFor each={menuGroups()} by={group => group.id}>
             {(group, index) => <>
                 <Show when={index() > 0}>
                   <div class="my-1 border-t border-border/60" role="separator" />
                 </Show>
-                <For each={group.gatewayActions}>
+                <KeyedFor each={group().gatewayActions} by={action => action.id}>
                   {(action) => (
                     <button
                       type="button"
                       role="menuitem"
                       class="redeven-split-menu-item"
-                      data-tone={action.tone ?? "primary"}
-                      disabled={action.disabled}
+                      data-tone={action().tone ?? "primary"}
+                      disabled={action().disabled}
                       onClick={() => {
-                        if (action.disabled) return;
+                        if (action().disabled) return;
                         closeMenu();
-                        action.onRun();
+                        action().onRun();
                       }}
                     >
                       <span class="redeven-split-menu-item-icon"><Link /></span>
-                      <span class="redeven-control-label">{action.label}</span>
+                      <span class="redeven-control-label">{action().label}</span>
                     </button>
                   )}
-                </For>
-                <For each={group.actions}>
-                  {(item: EnvironmentActionMenuItemModel) => {
-                    const icon = () => splitMenuIcon(item.action.intent);
-                    const tone = () => splitMenuItemToneData(item.action.intent);
+                </KeyedFor>
+                <KeyedFor each={group().actions} by={item => item.id}>
+                  {(item) => {
+                    const icon = () => splitMenuIcon(item().action.intent);
+                    const tone = () => splitMenuItemToneData(item().action.intent);
                     const disabledByOperation = () =>
-                      props.operationState.actionsDisabled && environmentActionUsesLifecycleOwner(item.action);
+                      props.operationState.actionsDisabled && environmentActionUsesLifecycleOwner(item().action);
                     const disabledReason = () => {
-                      if (!item.action.enabled) {
-                        return item.action.disabled_reason;
+                      if (!item().action.enabled) {
+                        return item().action.disabled_reason;
                       }
                       if (!disabledByOperation()) {
                         return undefined;
@@ -10049,13 +10118,13 @@ export function EnvironmentSplitActionButton(
                       return activeProgress
                         ? props.i18n.t('environmentAction.blockedByActiveOperation', {
                             operation: localizedProgressTitle(props.i18n, activeProgress),
-                            action: item.label,
+                            action: item().label,
                           })
                         : props.i18n.t('environmentAction.waitForOperationAcceptance', {
-                            action: item.label,
+                            action: item().label,
                           });
                     };
-                    const disabled = () => !item.action.enabled || disabledByOperation();
+                    const disabled = () => !item().action.enabled || disabledByOperation();
                     return (
                       <button
                         type="button"
@@ -10063,16 +10132,16 @@ export function EnvironmentSplitActionButton(
                         class="redeven-split-menu-item"
                         data-tone={tone() || undefined}
                         disabled={disabled()}
-                        title={disabledReason() ?? item.label}
+                        title={disabledReason() ?? item().label}
                         aria-describedby={
-                          disabled() && disabledReason() ? `${props.environmentID}-${item.id}-disabled-reason` : undefined
+                          disabled() && disabledReason() ? `${props.environmentID}-${item().id}-disabled-reason` : undefined
                         }
                         onClick={() => {
                           if (disabled()) {
                             return;
                           }
                           closeMenu();
-                          props.onRunAction(item.action);
+                          props.onRunAction(item().action);
                         }}
                       >
                         <Show when={icon()}>
@@ -10085,18 +10154,18 @@ export function EnvironmentSplitActionButton(
                             );
                           }}
                         </Show>
-                        <span class="redeven-control-label">{item.label}</span>
+                        <span class="redeven-control-label">{item().label}</span>
                         <Show when={disabled() && disabledReason()}>
-                          <span id={`${props.environmentID}-${item.id}-disabled-reason`} class="sr-only">
+                          <span id={`${props.environmentID}-${item().id}-disabled-reason`} class="sr-only">
                             {disabledReason()}
                           </span>
                         </Show>
                       </button>
                     );
                   }}
-                </For>
+                </KeyedFor>
             </>}
-          </For>
+          </KeyedFor>
         </DesktopAnchoredOverlaySurface>
       </Show>
     </div>
@@ -10350,7 +10419,7 @@ function GatewaySourcesPanel(props: Readonly<{
   gatewaySourceFilter: string;
   gatewayQuery: string;
   openCreateGatewaySetup: (gateway?: DesktopGatewaySource, focusSection?: DesktopGatewayResolveFocus) => void;
-  runGatewayLauncherAction: (request: DesktopLauncherActionRequest) => Promise<void>;
+  runGatewayLauncherAction: (request: DesktopLauncherActionRequest) => Promise<GatewayLauncherActionResult>;
   openGatewayMembers: (gateway: DesktopGatewaySource) => void;
   editEnvironment: (environment: DesktopEnvironmentEntry) => void;
   deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
@@ -10383,14 +10452,17 @@ function GatewaySourcesPanel(props: Readonly<{
       return updated;
     });
   };
-  const gatewaySourcesByID = createMemo(() => {
-    const record: Record<string, DesktopGatewaySource> = {};
-    for (const gateway of props.gatewaySources) {
-      record[gateway.gateway_id] = gateway;
+  const [nestedGatewayOwners, setNestedGatewayOwners] = createSignal<ReadonlySet<string>>(new Set());
+  const gatewaySourcesByID = createMemo<Record<string, DesktopGatewaySource>>(previous => {
+    const record = Object.fromEntries(props.gatewaySources.map(gateway => [gateway.gateway_id, gateway]));
+    const active = activeGatewayOverlayState();
+    if (active.kind !== 'none' && previous?.[active.gateway_id] && !record[active.gateway_id]) {
+      record[active.gateway_id] = previous[active.gateway_id]!;
     }
+    for (const id of nestedGatewayOwners()) if (!record[id] && previous?.[id]) record[id] = previous[id]!;
     return record;
-  });
-  const gatewaySourceIDs = createMemo(() => props.gatewaySources.map((gateway) => gateway.gateway_id));
+  }, {});
+  const gatewaySourceIDs = createMemo(() => Object.keys(gatewaySourcesByID()));
   const gatewayEntriesByGatewayID = createMemo(() => {
     const record: Record<string, DesktopEnvironmentEntry[]> = {};
     for (const entry of props.gatewayEntries) {
@@ -10414,13 +10486,10 @@ function GatewaySourcesPanel(props: Readonly<{
   });
   const visibleGatewaySourceIDs = createMemo(() => visibleGatewaySources().map((gateway) => gateway.gateway_id));
   const renderedGatewaySourceIDs = createMemo(() => gatewaySourceIDsWithActiveOverlay(
-    visibleGatewaySourceIDs(),
+    [...new Set([...visibleGatewaySourceIDs(), ...nestedGatewayOwners()])],
     gatewaySourceIDs(),
     activeGatewayOverlayState(),
   ));
-  createEffect(() => {
-    setActiveGatewayOverlayState((current) => reconcileGatewaySourceOverlayState(current, props.gatewaySources));
-  });
   const setGatewayActionPopoverOpen = (gatewayID: string, open: boolean) => {
     setActiveGatewayOverlayState((current) => (
       open
@@ -10438,7 +10507,7 @@ function GatewaySourcesPanel(props: Readonly<{
 
   return (
     <Show
-      when={props.gatewaySources.length > 0}
+      when={gatewaySourceIDs().length > 0}
       fallback={(
         <div class="redeven-empty-panel rounded-lg border border-dashed border-border/70 bg-card/70 px-5 py-8 text-center">
           <div class="mx-auto flex h-11 w-11 items-center justify-center rounded-md border border-border/70 bg-muted/20 text-muted-foreground">
@@ -10481,6 +10550,11 @@ function GatewaySourcesPanel(props: Readonly<{
                 <GatewaySourceCard
                   i18n={props.i18n}
                   gateway={gateway()}
+                  available={props.gatewaySources.some(source => source.gateway_id === gatewayID)}
+                  onInteractionActive={active => setNestedGatewayOwners(current => {
+                    if (current.has(gatewayID) === active) return current;
+                    const next = new Set(current); if (active) next.add(gatewayID); else next.delete(gatewayID); return next;
+                  })}
                   gatewayEntries={gatewayEntriesByGatewayID()[gatewayID] ?? []}
                   foregroundAction={foregroundGatewayAction(gatewayID)}
                   setForegroundAction={(next) => setForegroundGatewayAction(gatewayID, next)}
@@ -10528,6 +10602,8 @@ function gatewaySourceMatchesQuery(gateway: DesktopGatewaySource, query: string)
   return searchable.some((value) => trimString(value).toLowerCase().includes(normalizedQuery));
 }
 
+type GatewayLauncherActionResult = Extract<DesktopLauncherActionResult, Readonly<{ ok: true }>> | SilentLauncherActionFailure;
+
 type GatewayForegroundActionSnapshot = Readonly<{
   gateway_id: string;
   started_at_unix_ms: number;
@@ -10536,7 +10612,9 @@ type GatewayForegroundActionSnapshot = Readonly<{
   panel_model: GatewayActionPanelModel;
   owns_progress: boolean;
   operation_key?: string;
-  pending_progress?: DesktopLauncherActionProgress;
+  last_progress?: DesktopLauncherActionProgress;
+  admission?: 'pending' | 'accepted' | 'failed';
+  admission_error?: string;
 }>;
 
 type GatewayDiagnosisResultSnapshot = Readonly<{
@@ -10546,18 +10624,6 @@ type GatewayDiagnosisResultSnapshot = Readonly<{
   gateway: DesktopGatewaySource;
   panel_model: GatewayActionPanelModel;
 }>;
-
-const GATEWAY_REFRESH_STEP_DEFINITIONS: readonly Readonly<{
-  id: string;
-  label: string;
-}>[] = [
-  { id: 'checking_gateway_service', label: 'Checking Gateway service' },
-  { id: 'checking_gateway_package', label: 'Checking Gateway package' },
-  { id: 'fetching_pairing_challenge', label: 'Fetching pairing challenge' },
-  { id: 'saving_trust_profile', label: 'Saving trust profile' },
-  { id: 'refreshing_gateway_catalog', label: 'Refreshing Gateway catalog' },
-  { id: 'gateway_refreshed', label: 'Gateway refreshed' },
-];
 
 function gatewayOperationKeyForAction(gateway: DesktopGatewaySource, action: GatewaySourceActionModel): string | undefined {
   switch (action.intent) {
@@ -10571,56 +10637,6 @@ function gatewayOperationKeyForAction(gateway: DesktopGatewaySource, action: Gat
       return `${gateway.gateway_id}:${action.intent}`;
     default:
       return undefined;
-  }
-}
-
-function pendingGatewayRefreshProgress(
-  gateway: DesktopGatewaySource,
-  operationKey: string,
-  startedAtUnixMS: number,
-): DesktopLauncherActionProgress {
-  return {
-    action: 'refresh_gateway',
-    title_key: 'progress.checkingGateway',
-    environment_label: gateway.display_name,
-    active_progress_surface: 'gateway',
-    operation_key: operationKey,
-    subject_kind: 'gateway',
-    subject_id: gateway.gateway_id,
-    gateway_id: gateway.gateway_id,
-    started_at_unix_ms: startedAtUnixMS,
-    updated_at_unix_ms: startedAtUnixMS,
-    status: 'running',
-    phase: 'checking_gateway_service',
-    title: 'Refresh Gateway',
-    detail: `Desktop is checking ${gateway.display_name} and refreshing its environment catalog.`,
-    step_progress: {
-      active_step_id: 'checking_gateway_service',
-      steps: GATEWAY_REFRESH_STEP_DEFINITIONS.map((step, index) => ({
-        id: step.id,
-        label: step.label,
-        status: index === 0 ? 'running' : 'pending',
-      })),
-    },
-    cancelable: false,
-  };
-}
-
-function pendingGatewayForegroundProgress(
-  gateway: DesktopGatewaySource,
-  action: GatewaySourceActionModel,
-  operationKey: string | undefined,
-  startedAtUnixMS: number,
-): DesktopLauncherActionProgress | null {
-  if (!operationKey) {
-    return null;
-  }
-  switch (action.intent) {
-    case 'refresh_gateway':
-    case 'pair_gateway':
-      return pendingGatewayRefreshProgress(gateway, operationKey, startedAtUnixMS);
-    default:
-      return null;
   }
 }
 
@@ -10892,6 +10908,8 @@ function gatewaySourceActionForLifecycleProgress(
 }
 
 function GatewaySourceCard(props: Readonly<{
+  available: boolean;
+  onInteractionActive: (active: boolean) => void;
   i18n: DesktopI18n;
   gateway: DesktopGatewaySource;
   gatewayEntries: readonly DesktopEnvironmentEntry[];
@@ -10908,7 +10926,7 @@ function GatewaySourceCard(props: Readonly<{
   moreActionsMenuOpen: boolean;
   onMoreActionsMenuOpenChange: (open: boolean) => void;
   openCreateGatewaySetup: (gateway?: DesktopGatewaySource, focusSection?: DesktopGatewayResolveFocus) => void;
-  runGatewayLauncherAction: (request: DesktopLauncherActionRequest) => Promise<void>;
+  runGatewayLauncherAction: (request: DesktopLauncherActionRequest) => Promise<GatewayLauncherActionResult>;
   openGatewayMembers: (gateway: DesktopGatewaySource) => void;
   editEnvironment: (environment: DesktopEnvironmentEntry) => void;
   deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
@@ -10921,17 +10939,11 @@ function GatewaySourceCard(props: Readonly<{
   const row = createMemo(() => buildGatewaySourceRowModel(props.gateway));
   const foregroundAction = () => props.foregroundAction;
   const setForegroundAction = props.setForegroundAction;
-  const [foregroundPendingProgress, setForegroundPendingProgress] = createSignal<DesktopLauncherActionProgress | null>(null);
   const [retainedDiagnosisResult, setRetainedDiagnosisResult] = createSignal<GatewayDiagnosisResultSnapshot | null>(null);
   let foregroundTerminalClearTimer: ReturnType<typeof setTimeout> | null = null;
   let foregroundTerminalClearKey: string | null = null;
-  let actionPopoverExitTask: (() => void) | null = null;
-  const clearForegroundPendingProgress = () => {
-    setForegroundPendingProgress(null);
-    setForegroundAction((current) => current?.pending_progress
-      ? { ...current, pending_progress: undefined }
-      : current);
-  };
+  const foregroundSessionKey = () => { const value = foregroundAction(); return value ? JSON.stringify([value.gateway_id, value.started_at_unix_ms, value.action.intent]) : ''; };
+  let actionPopoverExitTask: { owner: string; task: () => void } | null = null;
   const clearForegroundTerminalClearTimer = () => {
     if (!foregroundTerminalClearTimer) {
       foregroundTerminalClearKey = null;
@@ -10940,9 +10952,6 @@ function GatewaySourceCard(props: Readonly<{
     clearTimeout(foregroundTerminalClearTimer);
     foregroundTerminalClearTimer = null;
     foregroundTerminalClearKey = null;
-  };
-  const setForegroundPendingProgressForRequest = (progress: DesktopLauncherActionProgress | null) => {
-    setForegroundPendingProgress(progress);
   };
   const selectedGatewayWorkflowProgress = createMemo(() => {
     const foreground = foregroundAction();
@@ -10998,15 +11007,9 @@ function GatewaySourceCard(props: Readonly<{
       : null;
   });
   createEffect(() => {
-    const foreground = foregroundAction();
-    const pending = foreground?.pending_progress ?? foregroundPendingProgress();
-    if (!foreground || !pending) {
-      return;
-    }
     const progress = selectedGatewayWorkflowProgress() ?? busyGatewayWorkflowProgress();
-    if (progress) {
-      clearForegroundPendingProgress();
-    }
+    const foreground = foregroundAction();
+    if (progress && foreground && foreground.last_progress !== progress) setForegroundAction({ ...foreground, last_progress: progress });
   });
   const foregroundDiagnosisBelongsToRefresh = createMemo(() => gatewayForegroundDiagnosisBelongsToRefresh(props.gateway, foregroundAction()));
   const affectedSessions = createMemo<readonly GatewayActionAffectedSession[]>(() => (
@@ -11022,17 +11025,13 @@ function GatewaySourceCard(props: Readonly<{
     if (foreground && !foreground.owns_progress) {
       return null;
     }
-    const pending = foreground?.pending_progress ?? foregroundPendingProgress();
     const selected = foreground
       ? selectedGatewayWorkflowProgress() ?? busyGatewayWorkflowProgress()
       : (props.actionPopoverOpen ? selectedGatewayForegroundRecoveryProgress() : null);
     if (selected?.action === 'refresh_gateway' && selected.status === 'succeeded') {
       return selected;
     }
-    if (pending && !selected) {
-      return pending;
-    }
-    return selected;
+    return selected ?? foreground?.last_progress ?? null;
   });
   const foregroundCanReleaseAfterPopoverClose = (): boolean => {
     const foreground = foregroundAction();
@@ -11048,12 +11047,11 @@ function GatewaySourceCard(props: Readonly<{
     const exitTask = actionPopoverExitTask;
     actionPopoverExitTask = null;
     if (exitTask) {
-      exitTask();
+      if (!props.actionPopoverOpen && foregroundSessionKey() === exitTask.owner) exitTask.task();
       return;
     }
     if (!props.actionPopoverOpen && foregroundCanReleaseAfterPopoverClose()) {
       setForegroundAction(null);
-      clearForegroundPendingProgress();
     }
   };
   const selectedGatewayRefreshDiagnosisResult = createMemo<GatewayDiagnosisResultSnapshot | null>(() => {
@@ -11197,34 +11195,13 @@ function GatewaySourceCard(props: Readonly<{
   const foregroundWantsPopover = createMemo(() => (
     foregroundAction()?.owns_progress === true
       && (
-        foregroundPendingProgress() !== null
+        foregroundAction()?.admission === 'pending'
         || gatewayProgressIsActive(visibleGatewayProgress())
       )
   ));
-  const guidePanelHasState = createMemo(() => (
-    foregroundAction() !== null
-      || retainedDiagnosisResult() !== null
-      || visibleGatewayDiagnosisResult() !== null
-  ));
-  const foregroundCanShowGuidePanel = createMemo(() => {
-    const foreground = foregroundAction();
-    if (!foreground?.owns_progress) {
-      return true;
-    }
-    return foregroundPendingProgress() !== null
-      || props.gateway.service_state?.status === 'needs_reinstall'
-      || visibleGatewayDiagnosisResult() !== null
-      || gatewayProgressNeedsAttention(visibleGatewayProgress());
-  });
-  const guidePanelVisible = createMemo(() => (
-    props.actionPopoverOpen
-    && guidePanelHasState()
-    && foregroundCanShowGuidePanel()
-    && !hasProgressPanel()
-    && visiblePanelModel().execution_mode !== 'direct'
-  ));
   const progressPanelVisible = createMemo(() => props.actionPopoverOpen && hasProgressPanel());
-  const actionPopoverOpen = createMemo(() => progressPanelVisible() || guidePanelVisible());
+  // IMPORTANT: Observations update content; only explicit session events control popup visibility.
+  const actionPopoverOpen = () => props.actionPopoverOpen;
   const [environmentsOpen, setEnvironmentsOpen] = createSignal(false);
   const environmentListID = createUniqueId();
   const [directoryHelpOpen, setDirectoryHelpOpen] = createSignal(false);
@@ -11303,42 +11280,20 @@ function GatewaySourceCard(props: Readonly<{
       moreActionsFocusFrame = 0;
       if (!moreActionsOverlayRef?.contains(document.activeElement)) firstEnabledMenuItem(moreActionsOverlayRef)?.focus();
     });
-    const handleMouseDown = (event: MouseEvent) => {
-      if (!moreActionsContainsTarget(event.target)) {
-        closeMoreActions();
-      }
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        closeMoreActions();
-        moreActionsAnchorRef?.querySelector('button')?.focus();
-      } else if (moreActionsContainsTarget(event.target)) {
-        if (event.key === 'Tab') {
-          moreActionsAnchorRef?.querySelector('button')?.focus();
-          closeMoreActions();
-          return;
-        }
-        const items = Array.from(moreActionsOverlayRef?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not([disabled])') ?? []);
-        if (!items.length) return;
-        const current = items.findIndex(item => item === document.activeElement);
-        const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1
-          : event.key === 'ArrowDown' ? (current + 1) % items.length
-            : event.key === 'ArrowUp' ? (current + items.length - 1) % items.length : -1;
-        if (next >= 0) {
-          event.preventDefault();
-          items[next].focus();
-        }
-      }
-    };
-    document.addEventListener('mousedown', handleMouseDown);
-    document.addEventListener('keydown', handleKeyDown);
-    onCleanup(() => {
-      clearMoreActionsFocusFrame();
-      document.removeEventListener('mousedown', handleMouseDown);
-      document.removeEventListener('keydown', handleKeyDown);
-    });
+    onCleanup(clearMoreActionsFocusFrame);
   });
+  const [moreActionsLayerRoot, setMoreActionsLayerRoot] = createSignal<HTMLDivElement>();
+  useOverlayMask({ open: () => props.moreActionsMenuOpen, root: moreActionsLayerRoot,
+    containsTarget: moreActionsContainsTarget, lockBodyScroll: false, trapFocus: false, escapeKeyPhase: 'bubble',
+    onClose: closeMoreActions,
+    onInteractOutside: event => { if (!moreActionsContainsTarget(event.target)) closeMoreActions(); },
+  });
+  const handleMoreActionsKeyDown = (event: KeyboardEvent) => {
+    handleMenuKeyboardNavigation(event, {
+      onDismiss: () => { closeMoreActions(); moreActionsAnchorRef?.querySelector('button')?.focus(); },
+    });
+  };
+
   onCleanup(() => {
     clearMoreActionsFocusFrame();
     moreActionsOverlayRef = undefined;
@@ -11360,7 +11315,6 @@ function GatewaySourceCard(props: Readonly<{
       actionPopoverExitTask = null;
       setForegroundAction(null);
       setRetainedDiagnosisResult(null);
-      clearForegroundPendingProgress();
   });
   onCleanup(() => {
     clearForegroundTerminalClearTimer();
@@ -11469,8 +11423,7 @@ function GatewaySourceCard(props: Readonly<{
         )
       ) {
         setForegroundAction(null);
-        clearForegroundPendingProgress();
-        props.onActionPopoverOpenChange(false);
+          props.onActionPopoverOpenChange(false);
       }
     }, GATEWAY_TERMINAL_PROGRESS_VISIBLE_MS);
   });
@@ -11517,7 +11470,6 @@ function GatewaySourceCard(props: Readonly<{
       owns_progress: true,
       operation_key: progress.operation_key ?? gatewayOperationKeyForAction(props.gateway, action),
     });
-    clearForegroundPendingProgress();
   };
   let handledLifecycleProgressFocusRequestID = 0;
   createEffect(() => {
@@ -11550,7 +11502,7 @@ function GatewaySourceCard(props: Readonly<{
     request: DesktopLauncherActionRequest,
   ): GatewayActionPanelModel => {
     setRetainedDiagnosisResult(null);
-    const startedAtUnixMS = Date.now();
+    const startedAtUnixMS = Math.max(Date.now(), (foregroundAction()?.started_at_unix_ms ?? 0) + 1);
     const ownsProgress = presentationCanStartProgress(action);
     const panelModel = buildGatewayActionPresentation({
       gateway: props.gateway,
@@ -11558,9 +11510,6 @@ function GatewaySourceCard(props: Readonly<{
       affected_sessions: affectedSessions(),
     });
     const operationKey = gatewayOperationKeyForAction(props.gateway, action);
-    const pendingProgress = ownsProgress
-      ? pendingGatewayForegroundProgress(props.gateway, action, operationKey, startedAtUnixMS)
-      : null;
     setForegroundAction({
       gateway_id: props.gateway.gateway_id,
       started_at_unix_ms: startedAtUnixMS,
@@ -11572,11 +11521,27 @@ function GatewaySourceCard(props: Readonly<{
       },
       owns_progress: ownsProgress,
       ...(operationKey ? { operation_key: operationKey } : {}),
-      ...(pendingProgress ? { pending_progress: pendingProgress } : {}),
+      admission: 'pending',
     });
-    setForegroundPendingProgressForRequest(pendingProgress);
     return panelModel;
   };
+  let foregroundSubmissionKey = '';
+  async function submitForegroundRequest(request: DesktopLauncherActionRequest): Promise<void> {
+    const key = foregroundSessionKey();
+    if (foregroundAction()?.admission === 'pending' && foregroundSubmissionKey === key) return;
+    foregroundSubmissionKey = key;
+    try {
+      const result = await props.runGatewayLauncherAction(request);
+      if (foregroundSessionKey() !== key) return;
+      const accepted = result?.ok === true;
+      setForegroundAction(current => current ? { ...current, admission: accepted ? 'accepted' : 'failed',
+        admission_error: accepted ? undefined : result?.message || props.i18n.t('interactionContinuity.rejected') } : current);
+    } catch {
+      if (foregroundSessionKey() !== key) return;
+      setForegroundAction(current => current ? { ...current, admission: 'failed',
+        admission_error: props.i18n.t('interactionContinuity.rejected') } : current);
+    }
+  }
   const launcherRequestForGatewayAction = (action: GatewaySourceActionModel): DesktopLauncherActionRequest | null => {
     switch (action.intent) {
     case 'start_gateway':
@@ -11611,6 +11576,8 @@ function GatewaySourceCard(props: Readonly<{
     }
   };
   const runGatewayActionAsForeground = (action: GatewaySourceActionModel): boolean => {
+    if (!props.available) return false;
+    if (foregroundAction()?.admission === 'pending') { props.onActionPopoverOpenChange(true); return true; }
     const request = launcherRequestForGatewayAction(action);
     if (!request) {
       return false;
@@ -11623,23 +11590,20 @@ function GatewaySourceCard(props: Readonly<{
     }
     rememberForegroundRequest(action, request);
     props.onActionPopoverOpenChange(true);
-    window.setTimeout(() => {
-      void props.runGatewayLauncherAction(request);
-    }, 0);
+    void submitForegroundRequest(request);
     return true;
   };
   const runAction = (action: GatewaySourceActionModel) => {
+    if (!props.available) return;
     if (action.intent === 'view_gateway_environments') {
       props.onActionPopoverOpenChange(false);
       setForegroundAction(null);
-      clearForegroundPendingProgress();
       setEnvironmentsOpen(true);
       return;
     }
     if (action.intent === 'manage_gateway_members') {
       props.onActionPopoverOpenChange(false);
       setForegroundAction(null);
-      clearForegroundPendingProgress();
       setEnvironmentsOpen(true);
       props.openGatewayMembers(props.gateway);
       return;
@@ -11647,7 +11611,6 @@ function GatewaySourceCard(props: Readonly<{
     if (action.intent === 'setup_gateway' || (action.intent === 'pair_gateway' && props.gateway.connection_kind === 'url')) {
       props.onActionPopoverOpenChange(false);
       setForegroundAction(null);
-      clearForegroundPendingProgress();
       props.openCreateGatewaySetup(props.gateway);
       return;
     }
@@ -11658,7 +11621,6 @@ function GatewaySourceCard(props: Readonly<{
     });
     if (!action.enabled && presentation.execution_mode === 'direct') {
       setForegroundAction(null);
-      clearForegroundPendingProgress();
       return;
     }
     const ownsProgress = presentationCanStartProgress(action);
@@ -11668,7 +11630,7 @@ function GatewaySourceCard(props: Readonly<{
       }
       rememberForegroundAction(action, true);
       props.onActionPopoverOpenChange(true);
-      void runGatewaySourceAction(action, props.gateway, props.openCreateGatewaySetup, props.runGatewayLauncherAction);
+      void runGatewaySourceAction(action, props.gateway, props.openCreateGatewaySetup, submitForegroundRequest);
       return;
     }
     if (presentation.execution_mode !== 'direct') {
@@ -11683,47 +11645,26 @@ function GatewaySourceCard(props: Readonly<{
       rememberForegroundAction(action, true);
     }
     props.onActionPopoverOpenChange(ownsProgress);
-    void runGatewaySourceAction(action, props.gateway, props.openCreateGatewaySetup, props.runGatewayLauncherAction);
+    void runGatewaySourceAction(action, props.gateway, props.openCreateGatewaySetup, submitForegroundRequest);
     if (!ownsProgress) {
       setForegroundAction(null);
-      clearForegroundPendingProgress();
     }
-  };
-  const runMoreMenuActionAfterMenuClose = (action: GatewaySourceActionModel) => {
-    window.setTimeout(() => {
-      runAction(action);
-    }, 0);
   };
   const runMoreMenuAction = (action: GatewaySourceActionModel) => {
-    const presentation = buildGatewayActionPresentation({
-      gateway: props.gateway,
-      clicked_action: action,
-      affected_sessions: affectedSessions(),
-    });
-    if (presentationCanStartProgress(action) && presentation.execution_mode !== 'confirm') {
-      closeMoreActions();
-      window.setTimeout(() => {
-        if (!runGatewayActionAsForeground(action)) {
-          runAction(action);
-        }
-      }, 0);
-      return;
-    }
-    closeMoreActions();
-    runMoreMenuActionAfterMenuClose(action);
+    if (!props.available) return;
+    batch(() => { closeMoreActions(); runAction(action); });
   };
   const runPanelAction = (action: GatewaySourceActionModel) => {
+    if (!props.available) return;
     if (action.intent === 'view_gateway_environments') {
       props.onActionPopoverOpenChange(false);
       setForegroundAction(null);
-      clearForegroundPendingProgress();
       setEnvironmentsOpen(true);
       return;
     }
     if (action.intent === 'manage_gateway_members') {
       props.onActionPopoverOpenChange(false);
       setForegroundAction(null);
-      clearForegroundPendingProgress();
       setEnvironmentsOpen(true);
       props.openGatewayMembers(props.gateway);
       return;
@@ -11731,7 +11672,6 @@ function GatewaySourceCard(props: Readonly<{
     if (action.intent === 'setup_gateway' || (action.intent === 'pair_gateway' && props.gateway.connection_kind === 'url')) {
       props.onActionPopoverOpenChange(false);
       setForegroundAction(null);
-      clearForegroundPendingProgress();
       props.openCreateGatewaySetup(props.gateway);
       return;
     }
@@ -11742,7 +11682,7 @@ function GatewaySourceCard(props: Readonly<{
     });
     const ownsProgress = presentationCanStartProgress(action);
     if (!ownsProgress && presentation.execution_mode === 'direct') {
-      void runGatewaySourceAction(action, props.gateway, props.openCreateGatewaySetup, props.runGatewayLauncherAction);
+      void runGatewaySourceAction(action, props.gateway, props.openCreateGatewaySetup, submitForegroundRequest);
       return;
     }
     if (ownsProgress && runGatewayActionAsForeground(action)) {
@@ -11750,17 +11690,16 @@ function GatewaySourceCard(props: Readonly<{
     }
     rememberForegroundAction(action, ownsProgress);
     props.onActionPopoverOpenChange(true);
-    void runGatewaySourceAction(action, props.gateway, props.openCreateGatewaySetup, props.runGatewayLauncherAction);
+    void runGatewaySourceAction(action, props.gateway, props.openCreateGatewaySetup, submitForegroundRequest);
   };
   const runForegroundRequest = (request: DesktopLauncherActionRequest, action?: GatewaySourceActionModel) => {
+    if (!props.available || foregroundAction()?.admission === 'pending') return;
     const foregroundActionModel = action ?? gatewaySourceActionForLauncherRequest(request);
     if (foregroundActionModel) {
       rememberForegroundRequest(foregroundActionModel, request);
     }
     props.onActionPopoverOpenChange(true);
-    window.setTimeout(() => {
-      void props.runGatewayLauncherAction(request);
-    }, 0);
+    void submitForegroundRequest(request);
   };
   const runForegroundRequestFromProgress = (
     request: DesktopLauncherActionRequest,
@@ -11775,10 +11714,11 @@ function GatewaySourceCard(props: Readonly<{
     props.onActionPopoverOpenChange(false);
   };
   const closeActionPopoverAfterExit = (task: () => void) => {
-    actionPopoverExitTask = task;
+    actionPopoverExitTask = { owner: foregroundSessionKey(), task };
     closeActionPopover();
   };
   const openActionPopover = () => {
+    if (foregroundAction()?.admission) { props.onActionPopoverOpenChange(true); return; }
     if (visibleGatewayProgress() || retainedDiagnosisResult()) {
       props.onActionPopoverOpenChange(true);
       return;
@@ -11800,7 +11740,7 @@ function GatewaySourceCard(props: Readonly<{
   const moreActionsLabel = createMemo(() => props.i18n.t('environmentCenter.moreActions'));
   const moreActionsForLabel = createMemo(() => props.i18n.t('environmentCenter.moreActionsForLabel', { label: row().label }));
   const localizedGatewayActionLabel = (action: GatewaySourceActionModel) => localizedGatewaySourceActionLabel(props.i18n, action);
-  const primaryHasGuide = createMemo(() => primaryActionPresentation().execution_mode !== 'direct');
+  const primaryHasGuide = createMemo(() => !!foregroundAction() || primaryActionPresentation().execution_mode !== 'direct');
   const actionStartsWorkflowImmediately = (action: GatewaySourceActionModel): boolean => {
     if (!action.enabled || !presentationCanStartProgress(action)) {
       return false;
@@ -11816,6 +11756,7 @@ function GatewaySourceCard(props: Readonly<{
     !action.enabled || primaryActionRunning() || menuActionRunning(action)
   );
   const runPrimaryAction = () => {
+    if (foregroundAction()?.admission) { props.onActionPopoverOpenChange(true); return; }
     const currentProgress = visibleGatewayProgress();
     if (currentProgress && progressPresentation()) {
       props.onActionPopoverOpenChange(true);
@@ -11835,7 +11776,7 @@ function GatewaySourceCard(props: Readonly<{
   };
 
   return (
-    <section class="redeven-gateway-card" data-gateway-id={props.gateway.gateway_id} aria-labelledby={gatewayHeadingID}>
+    <section class="redeven-gateway-card" data-gateway-id={props.gateway.gateway_id} aria-labelledby={gatewayHeadingID}><Show when={!props.available}><p role="alert">{props.i18n.t('interactionContinuity.unavailable')}</p></Show>
       <div class="redeven-gateway-card__main">
         <div class="redeven-gateway-card__identity">
           <span class="redeven-gateway-card__mark" aria-hidden="true"><GatewayMark /></span>
@@ -11869,7 +11810,7 @@ function GatewaySourceCard(props: Readonly<{
           </div>
         </div>
         <div class="redeven-gateway-card__actions">
-          <Show when={props.gateway.connection_kind !== 'url'}><GatewayCloudPanel gatewayID={props.gateway.gateway_id} gatewayName={row().label} i18n={props.i18n} disabled={primaryActionRunning()} /></Show>
+          <GatewayCloudPanel showTrigger={props.gateway.connection_kind !== 'url'} available={props.available && props.gateway.connection_kind !== 'url'} onOpenChange={props.onInteractionActive} gatewayID={props.gateway.gateway_id} gatewayName={row().label} i18n={props.i18n} disabled={primaryActionRunning()} />
           <DesktopActionPopover
             open={actionPopoverOpen()}
             onOpenChange={(open) => {
@@ -11888,6 +11829,9 @@ function GatewaySourceCard(props: Readonly<{
                     i18n={props.i18n}
                     gateway={props.gateway}
                     model={visiblePanelModel()}
+                    admission={foregroundAction()?.admission}
+                    admissionError={foregroundAction()?.admission_error}
+                    retry={() => { const request = foregroundAction()?.panel_model.continuation_action; if (request) runForegroundRequest(request); }}
                     runAction={runPanelAction}
                     runGatewayLauncherAction={runForegroundRequest}
                     foregroundActionBusy={foregroundActionBusy}
@@ -11904,7 +11848,6 @@ function GatewaySourceCard(props: Readonly<{
                       closeActionPopoverAfterExit(() => {
                         props.dismissOperation(currentProgress);
                         setForegroundAction(null);
-                        setForegroundPendingProgress(null);
                       });
                     }}
                     copyOperationDiagnostics={props.copyOperationDiagnostics}
@@ -11917,8 +11860,7 @@ function GatewaySourceCard(props: Readonly<{
                           closeActionPopoverAfterExit(() => {
                             props.dismissOperation(currentProgress);
                             setForegroundAction(null);
-                            setForegroundPendingProgress(null);
-                          });
+                              });
                           break;
                         case 'refresh_status':
                         case 'update_runtime':
@@ -11972,9 +11914,9 @@ function GatewaySourceCard(props: Readonly<{
                     primaryBlocked() && 'redeven-split-action-trigger--blocked',
                   )}
                   icon={PrimaryActionIcon}
-                  loading={primaryBusy()}
+                  aria-busy={primaryBusy()}
                   data-floe-progress-shimmer={primaryBusy() ? 'surface' : undefined}
-                  disabled={!displayedPrimaryAction().enabled && !primaryBlocked()}
+                  disabled={!props.available || !displayedPrimaryAction().enabled && !primaryBlocked()}
                   aria-disabled={primaryBlocked() ? true : undefined}
                   aria-haspopup={primaryHasGuide() ? 'dialog' : undefined}
                   aria-expanded={primaryHasGuide() ? props.actionPopoverOpen : undefined}
@@ -12036,33 +11978,33 @@ function GatewaySourceCard(props: Readonly<{
                   hideArrow
                   class={cn('redeven-split-menu redeven-gateway-menu z-[230] max-w-[min(20rem,calc(100vw-1rem))]', moreActionsPresence.exiting() && 'redeven-gateway-menu--closing')}
                   onOverlayRef={(element) => {
-                    moreActionsOverlayRef = element;
+                    moreActionsOverlayRef = element; setMoreActionsLayerRoot(element);
                   }}
                 >
-                  <div role="none" inert={moreActionsPresence.exiting()} aria-hidden={moreActionsPresence.exiting()}>
-                    <For each={menuActions()}>
+                  <div role="none" onKeyDown={handleMoreActionsKeyDown} inert={moreActionsPresence.exiting()} aria-hidden={moreActionsPresence.exiting()}>
+                    <KeyedFor each={menuActions()} by={action => action.intent}>
                       {(action) => (
                         <button
                           type="button"
                           role="menuitem"
                           class="redeven-split-menu-item"
-                          data-tone={gatewaySplitMenuItemToneData(action.intent) || undefined}
-                          disabled={menuItemDisabled(action)}
-                          title={!action.enabled ? action.disabled_reason : undefined}
+                          data-tone={gatewaySplitMenuItemToneData(action().intent) || undefined}
+                          disabled={!props.available || menuItemDisabled(action())}
+                          title={!action().enabled ? action().disabled_reason : undefined}
                           onClick={() => {
-                            if (menuItemDisabled(action)) {
+                            if (menuItemDisabled(action())) {
                               return;
                             }
-                            runMoreMenuAction(action);
+                            runMoreMenuAction(action());
                           }}
                         >
                           <span class="redeven-split-menu-item-icon">
-                            <GatewaySourceActionIcon intent={action.intent} class="h-3.5 w-3.5" />
+                            <GatewaySourceActionIcon intent={action().intent} class="h-3.5 w-3.5" />
                           </span>
-                          {localizedGatewayActionLabel(action)}
+                          {localizedGatewayActionLabel(action())}
                         </button>
                       )}
-                    </For>
+                    </KeyedFor>
                     <Show when={menuActions().length > 0}><div class="my-1 border-t border-border/60" role="separator" /></Show>
                     <button type="button" role="menuitem" class="redeven-split-menu-item" onClick={() => {
                       closeMoreActions(); moreActionsAnchorRef?.querySelector('button')?.focus(); props.openCreateGatewaySetup(props.gateway);
@@ -12127,6 +12069,9 @@ function GatewayActionPanel(props: Readonly<{
   i18n: DesktopI18n;
   gateway: DesktopGatewaySource;
   model: GatewayActionPanelModel;
+  admission?: 'pending' | 'accepted' | 'failed';
+  admissionError?: string;
+  retry: () => void;
   runAction: (action: GatewaySourceActionModel) => void;
   runGatewayLauncherAction: (request: DesktopLauncherActionRequest, action?: GatewaySourceActionModel) => void;
   foregroundActionBusy: (action: GatewaySourceActionModel) => boolean;
@@ -12158,6 +12103,10 @@ function GatewayActionPanel(props: Readonly<{
   return (
     <div class="redeven-action-popover redeven-gateway-action-panel" tabIndex={-1} aria-label={panelAriaLabel()}>
       <div class="redeven-gateway-action-panel__body">
+        <Show when={props.admission === 'pending'}><p role="status">{props.i18n.t('interactionContinuity.pending')}</p></Show>
+        <Show when={props.admission === 'accepted'}><p role="status">{props.i18n.t('interactionContinuity.accepted')}</p></Show>
+        <Show when={props.admission === 'failed'}><p role="alert">{props.admissionError || props.i18n.t('interactionContinuity.rejected')}</p><Button onClick={props.retry}>{props.i18n.t('common.retry')}</Button></Show>
+        <Button variant="ghost" onClick={props.close}>{props.i18n.t('common.close')}</Button>
         <div class="redeven-gateway-action-panel__hero">
           <span class="redeven-action-popover__status-icon" data-tone={tone()}>
             <Show when={props.model.tone === 'error'} fallback={props.model.tone === 'warning' ? <AlertTriangle /> : <ShieldCheck />}>
@@ -12232,7 +12181,7 @@ function GatewayActionPanel(props: Readonly<{
                 variant="default"
                 class="redeven-gateway-action-panel__primary-action justify-center gap-1.5"
                 loading={props.foregroundActionBusy(action())}
-                disabled={!action().enabled}
+                disabled={!action().enabled || props.admission === 'pending'}
                 onClick={runPanelPrimary}
               >
                 <GatewaySourceActionIcon intent={action().intent} />
@@ -12531,6 +12480,7 @@ function DesktopUpdateDialog(props: Readonly<{
 }
 
 export function EnvironmentAccessSettingsForm(props: Readonly<{
+  available?: boolean;
   open: boolean;
   snapshot: DesktopSettingsSurfaceSnapshot;
   baselineSnapshot: DesktopSettingsSurfaceSnapshot;
@@ -13363,6 +13313,9 @@ function GatewayActionRecoveryNotice(props: Readonly<{
 }
 
 function GatewaySetupDialog(props: Readonly<{
+  available: boolean;
+  canRevalidate: boolean;
+  onRevalidate: () => void;
   restoreFocus: () => void;
   gateway?: DesktopGatewaySource;
   targets: readonly DesktopCloudRuntimeLinkTarget[];
@@ -13392,8 +13345,13 @@ function GatewaySetupDialog(props: Readonly<{
 }>) {
   const connectionKind = createMemo(() => props.state?.connection_kind ?? 'url');
   const tabs = ['connection', 'runtimes', 'clients'] as const;
-  const canManage = createMemo(() => connectionKind() !== 'url' && props.gateway?.permissions?.manage_members === true);
-  const activeTab = createMemo(() => canManage() ? props.state?.settings_tab ?? 'connection' : 'connection');
+  const canManage = createMemo(() => props.available && connectionKind() !== 'url' && props.gateway?.permissions?.manage_members === true);
+  const managedOpening = createMemo<{ id: number; managed: boolean } | null>(previous => {
+    const state = props.state;
+    return state ? { id: state.opening_id, managed: canManage() || (previous?.id === state.opening_id && previous.managed) } : null;
+  }, null);
+  const managedSession = () => managedOpening()?.managed === true;
+  const activeTab = createMemo(() => managedSession() ? props.state?.settings_tab ?? 'connection' : 'connection');
   function selectTab(tab: typeof tabs[number]) {
     props.updateField('settings_tab', tab);
     const panels = document.querySelector<HTMLElement>('.redeven-gateway-settings-panels');
@@ -13441,7 +13399,7 @@ function GatewaySetupDialog(props: Readonly<{
             size="sm"
             variant="default"
             loading={busyStateMatchesAction(props.busyState, 'upsert_gateway')}
-            disabled={props.busyState.action !== IDLE_LAUNCHER_BUSY_STATE.action}
+            disabled={!props.available || props.busyState.action !== IDLE_LAUNCHER_BUSY_STATE.action}
             onClick={() => {
               void props.onSave();
             }}
@@ -13452,9 +13410,9 @@ function GatewaySetupDialog(props: Readonly<{
         </div>
       )}
     >
-      <div class="redeven-gateway-settings-body">
+      <div class="redeven-gateway-settings-body"><Show when={!props.available}><p role="alert">{props.i18n.t('interactionContinuity.unavailable')}</p><Button variant="outline" disabled={!props.canRevalidate} onClick={props.onRevalidate}>{props.i18n.t('interactionContinuity.revalidate')}</Button></Show>
         <div class="redeven-gateway-authority">{props.i18n.t(connectionKind() === 'url' ? 'gatewayClients.clientOnly' : props.gateway?.permissions?.manage_members ? 'gatewayClients.hostAccess' : 'gatewayClients.hostVerification')}</div>
-        <Show when={props.gateway?.permissions?.manage_members && connectionKind() !== 'url'}>
+        <Show when={managedSession()}>
           <div class="redeven-gateway-settings-tablist" role="tablist" aria-label={props.i18n.t('environmentCenter.gatewayActionOpenSettings')}>
             <For each={tabs}>{tab => <button type="button" class="redeven-gateway-settings-tab cursor-pointer" id={'gateway-settings-tab-' + tab} role="tab" aria-controls={'gateway-settings-panel-' + tab} aria-selected={activeTab() === tab} tabIndex={activeTab() === tab ? 0 : -1} onClick={() => selectTab(tab)} onKeyDown={event => {
               const index = tabs.indexOf(tab);
@@ -13464,7 +13422,7 @@ function GatewaySetupDialog(props: Readonly<{
           </div>
         </Show>
         <div class="redeven-gateway-settings-panels">
-        <div id="gateway-settings-panel-connection" class={cn('redeven-gateway-settings-panel', activeTab() !== 'connection' && 'redeven-gateway-settings-panel--inactive')} role={canManage() ? 'tabpanel' : undefined} aria-labelledby={canManage() ? 'gateway-settings-tab-connection' : undefined} aria-hidden={canManage() && activeTab() !== 'connection' ? 'true' : undefined} inert={canManage() && activeTab() !== 'connection'}>
+        <div id="gateway-settings-panel-connection" class={cn('redeven-gateway-settings-panel', activeTab() !== 'connection' && 'redeven-gateway-settings-panel--inactive')} role={managedSession() ? 'tabpanel' : undefined} aria-labelledby={managedSession() ? 'gateway-settings-tab-connection' : undefined} aria-hidden={managedSession() && activeTab() !== 'connection' ? 'true' : undefined} inert={managedSession() && activeTab() !== 'connection'}>
         <div class="redeven-gateway-settings-section redeven-gateway-connection-kind">
           <div class="redeven-gateway-eyebrow">
             {props.i18n.t('connectionDialog.gatewayTransport')}
@@ -13836,10 +13794,10 @@ function GatewaySetupDialog(props: Readonly<{
           </div>
         </Show>
 
-        <Show when={props.gateway?.permissions?.manage_members && connectionKind() !== 'url'}><GatewayMembersPanel gateway={props.gateway} i18n={props.i18n} targets={props.targets} refresh={props.refresh} section="connection" /></Show>
+        <Show when={managedSession()}><GatewayMembersPanel available={canManage()} gateway={props.gateway} i18n={props.i18n} targets={props.targets} refresh={props.refresh} section="connection" /></Show>
         </div>
-        <Show when={canManage()}><div id="gateway-settings-panel-runtimes" class={cn('redeven-gateway-settings-panel', activeTab() !== 'runtimes' && 'redeven-gateway-settings-panel--inactive')} role="tabpanel" aria-labelledby="gateway-settings-tab-runtimes" aria-hidden={activeTab() !== 'runtimes' ? 'true' : undefined} inert={activeTab() !== 'runtimes'}><GatewayMembersPanel gateway={props.gateway} i18n={props.i18n} targets={props.targets} refresh={props.refresh} section="runtimes" /></div></Show>
-        <Show when={canManage()}><div id="gateway-settings-panel-clients" class={cn('redeven-gateway-settings-panel', activeTab() !== 'clients' && 'redeven-gateway-settings-panel--inactive')} role="tabpanel" aria-labelledby="gateway-settings-tab-clients" aria-hidden={activeTab() !== 'clients' ? 'true' : undefined} inert={activeTab() !== 'clients'}><GatewayClientsPanel gatewayID={props.gateway!.gateway_id} i18n={props.i18n} /></div></Show>
+        <Show when={managedSession()}><div id="gateway-settings-panel-runtimes" class={cn('redeven-gateway-settings-panel', activeTab() !== 'runtimes' && 'redeven-gateway-settings-panel--inactive')} role="tabpanel" aria-labelledby="gateway-settings-tab-runtimes" aria-hidden={activeTab() !== 'runtimes' ? 'true' : undefined} inert={activeTab() !== 'runtimes'}><GatewayMembersPanel available={canManage()} gateway={props.gateway} i18n={props.i18n} targets={props.targets} refresh={props.refresh} section="runtimes" /></div></Show>
+        <Show when={managedSession()}><div id="gateway-settings-panel-clients" class={cn('redeven-gateway-settings-panel', activeTab() !== 'clients' && 'redeven-gateway-settings-panel--inactive')} role="tabpanel" aria-labelledby="gateway-settings-tab-clients" aria-hidden={activeTab() !== 'clients' ? 'true' : undefined} inert={activeTab() !== 'clients'}><GatewayClientsPanel available={canManage()} gatewayID={props.state?.gateway_id ?? ''} i18n={props.i18n} /></div></Show>
         </div>
         <Show when={props.recovery}>
           {recovery => <GatewayActionRecoveryNotice i18n={props.i18n} recovery={recovery()}

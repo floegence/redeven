@@ -6,8 +6,8 @@ export function runGatewaySourceAction(
   action: GatewaySourceActionModel,
   gateway: DesktopGatewaySource,
   openCreateGatewaySetup: (gateway?: DesktopGatewaySource) => void,
-  runGatewayLauncherAction: (request: DesktopLauncherActionRequest) => Promise<void>,
-): Promise<void> | void {
+  runGatewayLauncherAction: (request: DesktopLauncherActionRequest) => Promise<unknown>,
+): Promise<unknown> | void {
   if (!action.enabled) {
     return;
   }

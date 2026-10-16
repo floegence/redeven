@@ -1,0 +1,31 @@
+name: Interaction continuity qualification
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  continuity:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+      - name: Install published dependencies
+        run: |
+          npm install -g pnpm@10.32.1
+          pnpm --dir desktop install --frozen-lockfile
+          pnpm --dir internal/envapp/ui_src install --frozen-lockfile
+      - name: Install qualification browser
+        run: pnpm --dir internal/envapp/ui_src exec playwright install --with-deps chromium
+      - name: Verify interaction continuity
+        run: |
+          node scripts/check_interaction_continuity.mjs
+          pnpm --dir desktop run test:interaction-continuity:browser
+          node desktop/scripts/check-settings-restart.mjs
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: interaction-continuity
+          path: desktop/dist/interaction-continuity-acceptance/

@@ -20,6 +20,23 @@ function rect(left: number, top: number, width: number, height: number): DOMRect
 }
 
 describe('desktopOverlayPosition', () => {
+  it.each([-40, 10, 900])('keeps recovery controls reachable when the retained anchor is at %i', anchorTop => {
+    const position = resolveDesktopAnchoredOverlayPosition({
+      anchorRect: rect(200, anchorTop, 48, 28), overlayWidth: 304, overlayHeight: 700,
+      viewportWidth: 430, viewportHeight: 320, placementLock: 'top-inline-shift',
+    });
+    expect(position.top).toBeGreaterThanOrEqual(8);
+    expect(position.maxHeight).toBeGreaterThanOrEqual(160);
+    expect(position.top + Math.min(700, position.maxHeight!)).toBeLessThanOrEqual(312);
+  });
+  it('bounds an unlocked tall surface in a short viewport', () => {
+    const position = resolveDesktopAnchoredOverlayPosition({
+      anchorRect: rect(200, 80, 48, 28), overlayWidth: 304, overlayHeight: 700,
+      viewportWidth: 430, viewportHeight: 320,
+    });
+    expect(position.maxHeight).toBe(304);
+    expect(position.top).toBe(8);
+  });
   it('keeps the preferred top placement when enough space exists', () => {
     const position = resolveDesktopAnchoredOverlayPosition({
       anchorRect: rect(200, 180, 48, 28),
@@ -221,7 +238,7 @@ describe('desktopOverlayPosition', () => {
     expect(position.top).toBe(8);
     expect(position.left).toBe(12);
     expect(position.arrowOffset).toBe(186);
-    expect(position.maxHeight).toBe(2);
+    expect(position.maxHeight).toBe(384);
   });
 
   it('keeps a short locked Gateway action popover attached above the trigger when it fits', () => {
@@ -240,7 +257,7 @@ describe('desktopOverlayPosition', () => {
     expect(position.top).toBe(42);
     expect(position.left).toBe(12);
     expect(position.arrowOffset).toBe(186);
-    expect(position.maxHeight).toBe(104);
+    expect(position.maxHeight).toBe(384);
   });
 
   it('keeps a tall locked Gateway action popover inside the viewport', () => {

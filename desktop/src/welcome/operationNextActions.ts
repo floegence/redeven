@@ -38,7 +38,7 @@ export function environmentActionForLauncherRetry(
   }
 }
 
-function operationNextActionKey(action: DesktopLauncherOperationNextAction): string {
+export function operationNextActionKey(action: DesktopLauncherOperationNextAction): string {
   switch (action.kind) {
     case 'refresh_status':
     case 'update_runtime':

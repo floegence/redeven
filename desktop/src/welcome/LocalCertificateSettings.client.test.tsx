@@ -16,15 +16,15 @@ function button(label: string) {
 }
 function mount(manage: (request: DesktopCertificateRequest) => Promise<DesktopCertificateReport>, remote = false) {
   const host = document.createElement('div'); document.body.append(host);
-  const [snapshot, setSnapshot] = createSignal({ environment_id: 'local' });
-  const setEnvironmentID = (id: string) => setSnapshot({ environment_id: id });
+  const [snapshot, setSnapshot] = createSignal({ environment_id: 'local', available: true });
+  const setEnvironmentID = (id: string) => setSnapshot(previous => ({ ...previous, environment_id: id }));
   const refreshSnapshot = () => setSnapshot((previous) => ({ ...previous }));
   const onReadiness = vi.fn();
   const copyText = vi.fn<(value: string, label: string) => Promise<void>>().mockResolvedValue(undefined);
-  const dispose = render(() => <LocalCertificateSettings environmentID={snapshot().environment_id} i18n={createDesktopI18n('en-US')}
+  const dispose = render(() => <LocalCertificateSettings available={snapshot().available} environmentID={snapshot().environment_id} i18n={createDesktopI18n('en-US')}
     manage={manage} remote={remote} onReadiness={onReadiness} copyText={copyText} />, host);
   disposers.push(dispose);
-  return { setEnvironmentID, refreshSnapshot, onReadiness, copyText, dispose };
+  return { setAvailable: (available: boolean) => setSnapshot(previous => ({ ...previous, available })), setEnvironmentID, refreshSnapshot, onReadiness, copyText, dispose };
 }
 afterEach(() => { for (const dispose of disposers.splice(0)) dispose(); document.body.replaceChildren(); });
 
@@ -217,4 +217,16 @@ it('shows a failed creation beside its action even while the identity is missing
   expect(document.querySelector('[role="alert"]')?.textContent).toContain('access was denied');
   expect(test.onReadiness).toHaveBeenLastCalledWith(false);
   expect(button('Create certificate').disabled).toBe(false);
+});
+
+it('retains certificate confirmation after authority loss and requires a fresh confirmation after verification', async () => {
+  const manage = vi.fn(async () => ready); const test = mount(manage); await settle();
+  button('Manage certificate').click(); button('Remove certificate').click();
+  test.setAvailable(false); await settle(); test.setAvailable(true); await settle();
+  expect(button('Remove certificate').disabled).toBe(true);
+  button('Remove certificate').click(); expect(manage).toHaveBeenCalledTimes(1);
+  button('Verify current target').click(); await settle();
+  expect(manage).toHaveBeenCalledTimes(2); expect(button('Remove certificate').disabled).toBe(false);
+  button('Remove certificate').click(); expect(manage).toHaveBeenCalledTimes(2);
+  button('Remove certificate').click(); await settle(); expect(manage).toHaveBeenCalledTimes(3);
 });

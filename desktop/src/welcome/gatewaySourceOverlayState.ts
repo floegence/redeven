@@ -4,10 +4,6 @@ export type GatewaySourceOverlayState =
   | Readonly<{ kind: 'none' }>
   | Readonly<{ kind: GatewaySourceOverlayKind; gateway_id: string }>;
 
-export type GatewaySourceOverlayEntry = Readonly<{
-  gateway_id: string;
-}>;
-
 export function closedGatewaySourceOverlayState(): GatewaySourceOverlayState {
   return { kind: 'none' };
 }
@@ -44,18 +40,7 @@ export function closeGatewaySourceOverlayState(
     : state;
 }
 
-export function reconcileGatewaySourceOverlayState(
-  state: GatewaySourceOverlayState,
-  gatewaySources: readonly GatewaySourceOverlayEntry[],
-): GatewaySourceOverlayState {
-  if (state.kind === 'none') {
-    return state;
-  }
 
-  return gatewaySources.some((gateway) => gateway.gateway_id === state.gateway_id)
-    ? state
-    : closedGatewaySourceOverlayState();
-}
 
 export function gatewaySourceIDsWithActiveOverlay(
   visibleGatewayIDs: readonly string[],

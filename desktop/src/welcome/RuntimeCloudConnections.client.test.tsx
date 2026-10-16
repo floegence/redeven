@@ -1,5 +1,6 @@
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {render} from 'solid-js/web';
+import {createSignal} from 'solid-js';
 import {RuntimeCloudConnections} from './RuntimeCloudConnections';
 import {createDesktopI18n} from '../shared/i18n';
 import {controlText} from '../testSupport/controlText';
@@ -32,7 +33,7 @@ it('can resume explicit intent after disconnect',async()=>{
  expect(perform).toHaveBeenCalledWith({kind:'manage_runtime_cloud',runtime_target_id:'ssh:runtime',operation:'retry',expected_association_revision:1});
 });
 it('queries the original unknown result, confirms once, and never displays a committed cancellation as undone',async()=>{
- window.localStorage.setItem('redeven-cloud-route:ssh:runtime:1',id);
+ window.localStorage.setItem('redeven-cloud-route:' + JSON.stringify(['ssh:runtime','https://cloud.example',null,null,1]),id);
  const perform=vi.fn().mockImplementation(async request=>request.operation==='query'?{ok:true,cloud_route_operation:operation}:request.operation==='commit'?{ok:false,message:'lost response'}:{ok:true,cloud_route_operation:{...operation,state:'committed',committed_route_revision:4}});
  const f=mount(perform);await settle();button('cloudRoute.pendingOperation').click();await settle();
  expect(document.querySelector('select')?.disabled).toBe(true);
@@ -40,10 +41,55 @@ it('queries the original unknown result, confirms once, and never displays a com
  expect(document.body.textContent).toContain('lost response');
  button('common.cancel').click();await settle();
  expect(perform.mock.calls.map(([r])=>[r.operation,r.operation_id])).toEqual([['query',id],['commit',id],['cancel',id]]);
- expect(window.localStorage.getItem('redeven-cloud-route:ssh:runtime:1')).toBeNull();expect(f.changed).toHaveBeenCalledOnce();
+ expect(window.localStorage.getItem('redeven-cloud-route:' + JSON.stringify(['ssh:runtime','https://cloud.example',null,null,1]))).toBeNull();expect(f.changed).toHaveBeenCalledOnce();
 });
 it('does not start a new operation when local storage is corrupt',async()=>{
- window.localStorage.setItem('redeven-cloud-route:ssh:runtime:1','corrupt');const perform=vi.fn();mount(perform);await settle();
+ window.localStorage.setItem('redeven-cloud-route:' + JSON.stringify(['ssh:runtime','https://cloud.example',null,null,1]),'corrupt');const perform=vi.fn();mount(perform);await settle();
  button('cloudRoute.change').click();await settle();expect(button('cloudRoute.verify').disabled).toBe(true);expect(perform).not.toHaveBeenCalled();
- button('cloudRoute.reviewCurrent').click();await settle();expect(button('cloudRoute.verify').disabled).toBe(false);
+ button('cloudRoute.reviewCurrent').click();await settle();expect(document.body.textContent).not.toContain(i18n.t('cloudRoute.ready'));
+ const current=document.querySelector<HTMLSelectElement>('[role="dialog"] select')!;current.value='direct';current.dispatchEvent(new Event('change',{bubbles:true}));
+ expect(button('cloudRoute.verify').disabled).toBe(false);
+});
+it('recovers an operation persisted by the previous storage contract before admitting another',async()=>{
+ window.localStorage.setItem('redeven-cloud-route:ssh:runtime:1',id);
+ const perform=vi.fn().mockResolvedValue({ok:true,cloud_route_operation:operation});mount(perform);await settle();
+ button('cloudRoute.change').click();await settle();
+ expect(document.body.textContent).not.toContain(i18n.t('cloudRoute.verify'));
+ button('cloudRoute.query').click();await settle();
+ expect(perform).toHaveBeenCalledWith(expect.objectContaining({operation:'query',operation_id:id}));
+});
+
+it('keeps selection after identity replacement and ignores a closed opening completion',async()=>{
+ let complete!:(result:unknown)=>void;
+ const perform=vi.fn(()=>new Promise(resolve=>{complete=resolve;}));
+ vi.stubGlobal('redevenDesktopLauncher',{performAction:perform});
+ const [binding,setBinding]=createSignal({state:'linked' as const,remote_enabled:true,cloud_origin:'https://cloud.example',cloud_id:'original',cloud});
+ dispose=render(()=><RuntimeCloudConnections targetID="ssh:runtime" binding={binding()} memberships={[]} i18n={i18n} onChanged={()=>{}} openInBrowser={()=>{}}/>,document.body);
+ await settle();button('cloudRoute.change').click();await settle();
+ const dialog=document.querySelector('[role="dialog"]')!,select=dialog.querySelector('select')!;
+ select.value='direct';select.dispatchEvent(new Event('change',{bubbles:true}));
+ button('cloudRoute.verify').click();await settle();
+ setBinding({...binding(),cloud_id:'replacement'});await settle();
+ expect(document.querySelector('[role="dialog"]')).toBe(dialog);expect(select.value).toBe('direct');
+ expect(button('interactionContinuity.revalidate')).toBeTruthy();
+ button('common.close').click();await settle();button('cloudRoute.change').click();await settle();
+ complete({ok:true,cloud_route_operation:{...operation,state:'committed'}});await settle();
+ expect(document.querySelector('[role="dialog"]')).toBeTruthy();
+ expect(document.body.textContent).not.toContain(i18n.t('cloudRoute.ready'));
+ const current=document.querySelector<HTMLSelectElement>('[role="dialog"] select')!;current.value='direct';current.dispatchEvent(new Event('change',{bubbles:true}));
+ expect(button('cloudRoute.verify').disabled).toBe(false);
+});
+
+it('never revives route consent when authority disappears and returns', async () => {
+ const perform=vi.fn().mockImplementation(async request=>({ok:true,cloud_route_operation:{...operation,operation_id:request.operation_id}}));
+ vi.stubGlobal('redevenDesktopLauncher',{performAction:perform});
+ const [available,setAvailable]=createSignal(true);
+ dispose=render(()=><RuntimeCloudConnections available={available()} targetID="ssh:runtime" binding={{state:'linked',remote_enabled:true,cloud_origin:'https://cloud.example',cloud}} memberships={[]} i18n={i18n} onChanged={()=>{}} openInBrowser={()=>{}}/>,document.body);
+ await settle();button('cloudRoute.change').click();await settle();
+ const select=document.querySelector<HTMLSelectElement>('[role="dialog"] select')!;select.value='direct';select.dispatchEvent(new Event('change',{bubbles:true}));
+ button('cloudRoute.verify').click();await settle();expect(button('cloudRoute.confirm').disabled).toBe(false);
+ setAvailable(false);await settle();setAvailable(true);await settle();
+ expect(button('cloudRoute.confirm').disabled).toBe(true);button('cloudRoute.confirm').click();expect(perform).toHaveBeenCalledTimes(1);
+ expect(select.value).toBe('direct');button('interactionContinuity.revalidate').click();await settle();
+ expect(document.body.textContent).not.toContain(i18n.t('cloudRoute.ready'));expect(button('cloudRoute.query').disabled).toBe(false);
 });

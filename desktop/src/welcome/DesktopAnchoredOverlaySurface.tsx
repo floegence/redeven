@@ -22,10 +22,12 @@ type DesktopAnchoredOverlaySurfaceProps = Readonly<{
   ariaLabel?: string;
   class?: string;
   interactive?: boolean;
+  inactive?: boolean;
   positionFrozen?: boolean;
   onMouseEnter?: JSX.EventHandlerUnion<HTMLDivElement, MouseEvent>;
   onMouseLeave?: JSX.EventHandlerUnion<HTMLDivElement, MouseEvent>;
   onPointerDownCapture?: (event: PointerEvent) => void;
+  onKeyDown?: JSX.EventHandler<HTMLDivElement, KeyboardEvent>;
   onFocusIn?: JSX.EventHandlerUnion<HTMLDivElement, FocusEvent>;
   onFocusOut?: JSX.EventHandlerUnion<HTMLDivElement, FocusEvent>;
   onOverlayRef?: (element: HTMLDivElement | undefined) => void;
@@ -44,6 +46,7 @@ export function DesktopAnchoredOverlaySurface(props: DesktopAnchoredOverlaySurfa
   let frame = 0;
   let followUpFrames = 0;
   let overlayRef: HTMLDivElement | undefined;
+  let retainedAnchorRect: DOMRect | undefined;
   let pointerCaptureElement: HTMLDivElement | undefined;
 
   const handlePointerDownCapture = (event: PointerEvent) => {
@@ -71,11 +74,13 @@ export function DesktopAnchoredOverlaySurface(props: DesktopAnchoredOverlaySurfa
       return;
     }
     const currentOverlay = overlayElement() ?? overlayRef;
-    if (!props.anchorRef || !currentOverlay || typeof window === 'undefined') {
+    if (!currentOverlay || typeof window === 'undefined') {
       return;
     }
 
-    const anchorRect = props.anchorRef.getBoundingClientRect();
+    if (props.anchorRef?.isConnected) retainedAnchorRect = props.anchorRef.getBoundingClientRect();
+    const anchorRect = retainedAnchorRect;
+    if (!anchorRect) return;
     const overlayRect = currentOverlay.getBoundingClientRect();
     const viewport = window.visualViewport;
     const viewportWidth = viewport?.width ?? window.innerWidth;
@@ -165,6 +170,7 @@ export function DesktopAnchoredOverlaySurface(props: DesktopAnchoredOverlaySurfa
     clearFrame();
   });
 
+  // IMPORTANT: Exiting or hidden surfaces must stop accepting keyboard and pointer input immediately.
   return (
     <Portal>
       <div
@@ -180,6 +186,8 @@ export function DesktopAnchoredOverlaySurface(props: DesktopAnchoredOverlaySurfa
             schedulePositionSettlingUpdates();
           }
         }}
+        inert={props.interactive !== true || !position()}
+        aria-hidden={props.inactive || !position() ? true : undefined}
         role={props.role}
         aria-modal={props.ariaModal}
         aria-label={props.ariaLabel}
@@ -202,6 +210,7 @@ export function DesktopAnchoredOverlaySurface(props: DesktopAnchoredOverlaySurfa
         }}
         onMouseEnter={props.onMouseEnter}
         onMouseLeave={props.onMouseLeave}
+        onKeyDown={props.onKeyDown}
         onFocusIn={props.onFocusIn}
         onFocusOut={props.onFocusOut}
       >

@@ -13,6 +13,8 @@ Desktop derives connection presentation from host access, process placement, Run
 
 # Contract
 
+Open sessions follow [Desktop interaction continuity](desktop-interaction-continuity.md).
+
 ## Connection information and address actions
 
 Connection details identify the selected Environment before listing access addresses. Native host connections identify this device; SSH connections show the saved authority and explicit port when configured; WSL shows the distribution and Linux user; container placement additionally names its engine and container reference. Desktop never substitutes an SSH alias for a Runtime URL host or relies on WSL localhost forwarding.
@@ -29,7 +31,7 @@ Health and attach reports may include `local_ui_address_issues` with `interface_
 
 Popover sharing is keyed by Environment and address-row identity. Snapshot refresh preserves the open popover and removes only an absent or no-longer-shareable selection. Settings also clear sharing when their Environment changes. Keyboard dismissal restores trigger focus; explanatory rows retain native text selection.
 
-Refresh continuity includes component and DOM identity. Cards, semantic facts, and connection rows use stable IDs with live snapshot values. Refresh must preserve entry motion, focus, text selection, scroll, copy feedback, expanded listeners, and still-valid QR panels. Changed values appear immediately; invalid addresses disappear, and removing an owner closes its surfaces. Usable addresses precede internal listeners in deterministic numeric order independent of report order and locale. Client and browser regressions publish fresh snapshots during interaction.
+Refresh continuity includes component and DOM identity. Cards, semantic facts, and connection rows use stable IDs with live snapshot values. Refresh must preserve entry motion, focus, text selection, scroll, copy feedback, expanded listeners, and still-valid QR panels. Changed values appear immediately; invalid addresses disappear, and removing an owner retains open sessions with invalidated authority. Usable addresses precede internal listeners in deterministic numeric order independent of report order and locale. Client and browser regressions publish fresh snapshots during interaction.
 
 The endpoint popover has one compact Environment heading and flat connection facts. Settings retain their existing label/value placement. Hostnames and URLs use the product sans-serif face without changing copied content. Opening, closing, and QR disclosure use brief transitions; reduced motion removes movement. QR expansion retains panel width, and motion never alters anchor measurements. Closing content immediately becomes non-interactive; reopening cancels stale dismissal. Opening focuses the panel; Escape and Close restore the trigger. A QR selection must remain public and shareable. Connection rows, QR sharing and settings diagnostics follow the [runtime settings copy hierarchy](../ui/runtime-settings.md#navigation-and-visual-hierarchy). They retain the same muted glyph and neutral hover treatment; success feedback reserves its width and does not animate the icon.
 

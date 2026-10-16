@@ -266,7 +266,8 @@ it.each(['restart', 'update'] as const)('retains the enrollment session across f
   expect(document.body.textContent).toContain('Office');
   button(operation === 'restart' ? 'environmentAction.restartRuntime' : 'environmentAction.updateRuntime').click(); await settle();
   expect(document.querySelector('input')).toBe(inputs[0]);
-  expect(document.querySelector('[data-gateway-step]')?.getAttribute('data-gateway-step')).toBe('1');
+  expect(document.querySelector('[data-gateway-step]')?.getAttribute('data-gateway-step')).toBe('2');
+  expect((button('gatewayJoin.confirmEnable') as HTMLButtonElement).disabled).toBe(true);
   button('gatewayJoin.verify').click(); await settle();
   expect(controlText(button('gatewayJoin.confirmEnable'))).toBe(i18n.t('gatewayJoin.confirmEnable'));
   expect(recover).toHaveBeenNthCalledWith(1, blocked, operation);
@@ -323,9 +324,10 @@ it.each(['preview', 'join', 'join_rejection'] as const)('invalidates replaced Ru
   if (operation === 'join_rejection') reject(new Error('Connection closed after Runtime replacement'));
   else complete(operation === 'preview' ? { ok: true, gateway_preview: preview } : { ok: false, gateway_error_code: 'GATEWAY_MEMBERSHIP_CONFLICT' });
   await settle();
-  expect(document.querySelector('.redeven-gateway-join-summary')).toBeNull();
-  expect(document.querySelector('[data-gateway-step]')?.getAttribute('data-gateway-step')).toBe('1');
-  expect(document.body.textContent).toContain(i18n.t(operation === 'join_rejection' ? 'gatewayJoin.failed' : 'gatewayJoin.changed'));
+  expect(document.querySelector('[data-gateway-step]')?.getAttribute('data-gateway-step')).toBe(operation === 'preview' ? '1' : '2');
+  if (operation !== 'preview') expect((button('gatewayJoin.confirmEnable') as HTMLButtonElement).disabled).toBe(true);
+  expect((button('gatewayJoin.verify') as HTMLButtonElement).disabled).toBe(false);
+  expect(document.body.textContent).toContain(i18n.t('gatewayJoin.changed'));
   expect(inputs.map(input => input.value)).toEqual(['https://office.example', 'retained-code']);
   expect(perform.mock.calls.filter(([request]) => request.operation === requestedOperation)).toHaveLength(1);
 });
