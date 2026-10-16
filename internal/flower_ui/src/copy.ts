@@ -654,6 +654,10 @@ export type FlowerSurfaceCopy = Readonly<{
       textShare: string;
       composition: string;
       compositionHint: string;
+      relativeHint: string;
+      historical: string;
+      historicalHint: string;
+      distributionUnavailable: string;
       categoryLabels: Readonly<Record<FlowerContextCategory, string>>;
       sourceLabels: Readonly<Record<FlowerContextSource, string>>;
       input: string;
@@ -1079,21 +1083,25 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       unknownPercent: '—',
       unavailable: 'Not available',
       currentContents: 'Current contents', currentContentsHint: 'Current text by character count; token totals include retained updates.', collected: 'Loaded', used: 'Last used', updated: 'Updated', removed: 'Removed',
-      textShare: 'Current auto-loaded context by character count',
-      composition: 'Used context',
-      compositionHint: 'Estimated tokens and share of model input. Category estimates may differ from the measured total.',
+      textShare: 'Relative shares',
+      composition: 'Content distribution',
+      compositionHint: 'Estimated content of this request. Safety reserves are excluded; the provider confirms the total.',
+      relativeHint: 'Relative shares only: a matching vocabulary or complete text input is unavailable.',
+      historical: 'Historical shares',
+      historicalHint: 'Historical estimate; token amounts are unavailable.',
+      distributionUnavailable: 'No distribution available',
       sourceLabels: {
         system_prompt: 'System prompt', system_tools: 'System tool definitions', mcp_tools: 'MCP tool definitions', provider_tools: 'Provider tool definitions',
         messages: 'Messages', tool_outputs: 'Tool execution outputs', skills: 'Skill catalog', rule_files: 'Rule file index', environment: 'Environment',
         summary: 'Conversation summary', reasoning: 'Reasoning', attachments: 'Images & files',
-        context_framing: 'Context formatting', unattributed_tools: 'Tools without source data', unattributed_context: 'Context without source data',
+        protocol_framing: 'Protocol formatting', context_framing: 'Context wrappers', unattributed_tools: 'Tools without source data', unattributed_context: 'Context without source data',
       },
       categoryLabels: {
         system_tokens: 'System instructions', tool_definition_tokens: 'Tool definitions',
         user_tokens: 'Your messages', assistant_tokens: 'Assistant messages',
         tool_call_tokens: 'Tool calls', tool_result_tokens: 'Tool execution outputs',
         model_context_tokens: 'Auto-loaded context', compaction_tokens: 'Conversation summary',
-        reasoning_tokens: 'Reasoning', attachment_tokens: 'Images & files',
+        reasoning_tokens: 'Reasoning', attachment_tokens: 'Images & files', framing_tokens: 'Protocol formatting',
       },
       input: 'Used',
       outputReserve: 'Output reserve',

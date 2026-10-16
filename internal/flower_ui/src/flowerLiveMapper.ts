@@ -326,7 +326,16 @@ function mapContextBreakdown(raw: unknown): FlowerContextBreakdown | undefined {
   if (raw === undefined || raw === null) return undefined;
   const record = recordValue(raw);
   if (!record || !trim(record.source)) throw new Error('context breakdown requires an estimate source');
-  const result: { source: string } & Partial<Record<typeof FLOWER_CONTEXT_CATEGORIES[number], number>> = { source: trim(record.source) };
+  const result: { source: string; tokenizer?: string; quality?: 'token_estimate' | 'relative_weight' } & Partial<Record<typeof FLOWER_CONTEXT_CATEGORIES[number], number>> = { source: trim(record.source) };
+  if (record.quality !== undefined) {
+    if (record.quality !== 'token_estimate' && record.quality !== 'relative_weight') throw new Error('invalid context quality');
+    result.quality = record.quality;
+  }
+  if (record.tokenizer !== undefined) {
+    if (typeof record.tokenizer !== 'string') throw new Error('invalid context tokenizer');
+    result.tokenizer = record.tokenizer;
+  }
+  if (result.quality === 'token_estimate' && (!result.tokenizer || Number(record.attachment_tokens ?? 0) > 0)) throw new Error('incomplete context vocabulary coverage');
   for (const key of FLOWER_CONTEXT_CATEGORIES) {
     if (record[key] === undefined) continue;
     const value = record[key];

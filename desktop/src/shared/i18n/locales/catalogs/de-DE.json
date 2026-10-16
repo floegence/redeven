@@ -1,11 +1,11 @@
 {
   "interactionContinuity": {
     "accepted": "Vorgang angenommen. Ausführungsdetails stehen noch aus.",
-  "unavailable": "Das Ziel oder der Zugriff hat sich geändert. Ihre Eingaben bleiben erhalten. Prüfen Sie das aktuelle Ziel, bevor Sie fortfahren.",
-  "revalidate": "Aktuelles Ziel prüfen",
-  "pending": "Warten auf die Annahme des Vorgangs…",
-  "rejected": "Der Vorgang konnte nicht angenommen werden. Prüfen Sie die Verbindung und versuchen Sie es erneut."
-},
+    "unavailable": "Das Ziel oder der Zugriff hat sich geändert. Ihre Eingaben bleiben erhalten. Prüfen Sie das aktuelle Ziel, bevor Sie fortfahren.",
+    "revalidate": "Aktuelles Ziel prüfen",
+    "pending": "Warten auf die Annahme des Vorgangs…",
+    "rejected": "Der Vorgang konnte nicht angenommen werden. Prüfen Sie die Verbindung und versuchen Sie es erneut."
+  },
   "sessionRestart": {
     "preparing": "Neustart wird vorbereitet",
     "restarting": "Laufzeit wird neu gestartet",
@@ -528,9 +528,9 @@
       "toolArgumentPreviewTooltip": "Diese Zeilenzahlen zeigen eine Vorschau der vorbereiteten Änderungen. Die tatsächlichen Änderungen werden nach Abschluss des Werkzeugs angezeigt.",
       "contextIndicatorCurrentContents": "Aktueller Inhalt",
       "contextIndicatorCurrentContentsHint": "Aktueller Text nach Zeichenanzahl; die Token-Summe enthält auch beibehaltene frühere Aktualisierungen.",
-      "contextIndicatorTextShare": "Aktuell automatisch geladener Kontext nach Zeichenanzahl",
-      "contextIndicatorComposition": "Verwendeter Kontext",
-      "contextIndicatorCompositionHint": "Geschätzte Tokens und Anteile der Modelleingabe. Die Summe kann vom Messwert abweichen.",
+      "contextIndicatorTextShare": "Relative Anteile",
+      "contextIndicatorComposition": "Inhaltsverteilung",
+      "contextIndicatorCompositionHint": "Geschätzter Inhalt dieser Anfrage ohne Sicherheitsreserve. Die Gesamtnutzung bestätigt der Modellanbieter.",
       "contextIndicatorSourceSystemPrompt": "Systemprompt",
       "contextIndicatorSourceSystemTools": "Systemwerkzeug-Definitionen",
       "contextIndicatorSourceMcpTools": "MCP-Werkzeugdefinitionen",
@@ -538,7 +538,7 @@
       "contextIndicatorSourceMessages": "Nachrichten",
       "contextIndicatorSourceSkills": "Skill-Katalog",
       "contextIndicatorSourceRuleFiles": "Regeldatei-Index",
-      "contextIndicatorSourceContextFraming": "Kontextformatierung",
+      "contextIndicatorSourceContextFraming": "Kontextumhüllung",
       "contextIndicatorSourceUnknownTools": "Werkzeuge ohne Herkunftsdaten",
       "contextIndicatorSourceUnknownContext": "Kontext ohne Herkunftsdaten",
       "contextIndicatorSystemTokens": "Systemanweisungen",
@@ -756,7 +756,12 @@
       "citationUnavailable": "Quelle nicht verfügbar",
       "queuedEdit": "Ins Eingabefeld zurückholen",
       "queueTakeBackConflict": "Diese Nachricht wurde bereits gestartet oder geändert. Aktualisiere die Ansicht und versuche es erneut.",
-      "queueTakeBackUnknown": "Die Nachricht ist wieder im Eingabefeld. Das Entfernen aus der Warteschlange konnte nicht bestätigt werden. Prüfe die Warteschlange vor dem Senden."
+      "queueTakeBackUnknown": "Die Nachricht ist wieder im Eingabefeld. Das Entfernen aus der Warteschlange konnte nicht bestätigt werden. Prüfe die Warteschlange vor dem Senden.",
+      "contextIndicatorRelativeHint": "Nur relative Anteile: Passendes Vokabular oder vollständiger Texteingang fehlt.",
+      "contextIndicatorHistorical": "Historische Anteile",
+      "contextIndicatorHistoricalHint": "Historische Schätzung ohne Tokenzahlen.",
+      "contextIndicatorDistributionUnavailable": "Keine Verteilung verfügbar",
+      "contextIndicatorProtocolFraming": "Protokollformatierung"
     },
     "threadList": {
       "title": "Unterhaltungen",

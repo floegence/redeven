@@ -1,11 +1,11 @@
 {
   "interactionContinuity": {
     "accepted": "操作已受理，正在等待执行详情。",
-  "unavailable": "目标或访问权限已变化。已保留你的输入，请验证当前目标后继续。",
-  "revalidate": "验证当前目标",
-  "pending": "正在等待操作受理…",
-  "rejected": "操作未能受理。请检查连接后重试。"
-},
+    "unavailable": "目标或访问权限已变化。已保留你的输入，请验证当前目标后继续。",
+    "revalidate": "验证当前目标",
+    "pending": "正在等待操作受理…",
+    "rejected": "操作未能受理。请检查连接后重试。"
+  },
   "sessionRestart": {
     "preparing": "正在准备重启",
     "restarting": "正在重启运行时",
@@ -530,9 +530,9 @@
       "toolArgumentPreviewTooltip": "行数为待应用修改的预览，工具完成后显示实际改动。",
       "contextIndicatorCurrentContents": "当前内容",
       "contextIndicatorCurrentContentsHint": "当前文本按字符统计；该类 token 总量包含保留的历史更新。",
-      "contextIndicatorTextShare": "当前自动加载上下文的字符分布",
-      "contextIndicatorComposition": "已用上下文",
-      "contextIndicatorCompositionHint": "各类模型输入的估算 token 数和占比，与实测总量可能存在差异。",
+      "contextIndicatorTextShare": "相对占比",
+      "contextIndicatorComposition": "内容分布",
+      "contextIndicatorCompositionHint": "本次请求的内容估算，不含安全余量；总量以模型提供商确认为准。",
       "contextIndicatorSourceSystemPrompt": "系统提示词",
       "contextIndicatorSourceSystemTools": "系统工具定义",
       "contextIndicatorSourceMcpTools": "MCP 工具定义",
@@ -540,7 +540,7 @@
       "contextIndicatorSourceMessages": "消息",
       "contextIndicatorSourceSkills": "技能目录",
       "contextIndicatorSourceRuleFiles": "规则文件索引",
-      "contextIndicatorSourceContextFraming": "格式开销",
+      "contextIndicatorSourceContextFraming": "上下文包装",
       "contextIndicatorSourceUnknownTools": "工具（来源未记录）",
       "contextIndicatorSourceUnknownContext": "上下文（来源未记录）",
       "contextIndicatorSystemTokens": "系统指令",
@@ -756,7 +756,12 @@
       "citationUnavailable": "来源不可用",
       "queuedEdit": "取回到输入框",
       "queueTakeBackConflict": "这条排队消息已开始执行或发生变化，请刷新后重试。",
-      "queueTakeBackUnknown": "消息已放回输入框，但尚未确认退出队列，请检查队列后再发送。"
+      "queueTakeBackUnknown": "消息已放回输入框，但尚未确认退出队列，请检查队列后再发送。",
+      "contextIndicatorRelativeHint": "仅显示相对占比：暂无匹配词表，或输入包含无法可靠拆分的内容。",
+      "contextIndicatorHistorical": "历史占比",
+      "contextIndicatorHistoricalHint": "历史估算，仅供比较相对占比，不显示 token 数。",
+      "contextIndicatorDistributionUnavailable": "暂无分布",
+      "contextIndicatorProtocolFraming": "协议格式开销"
     },
     "threadList": {
       "title": "对话",

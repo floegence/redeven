@@ -70,7 +70,7 @@ func (p *deepSeekProvider) prepareTurn(ctx context.Context, req ModelGatewayRequ
 		request.PreviousState = &flprovider.State{Kind: state.Kind, ID: state.ID, Attributes: cloneStringMap(state.Attributes)}
 	}
 	for _, message := range req.Messages {
-		mapped := flprovider.Message{Role: flprovider.MessageRole(message.Role)}
+		mapped := flprovider.Message{Role: flprovider.MessageRole(message.Role), Attribution: cloneMessageAttribution(message.Attribution)}
 		for _, part := range message.Content {
 			switch part.Type {
 			case "text", "attachment_manifest":
@@ -117,7 +117,7 @@ func (p *deepSeekProvider) prepareTurn(ctx context.Context, req ModelGatewayRequ
 		} else if err := json.Unmarshal(tool.InputSchema, &schema); err != nil {
 			return nil, fmt.Errorf("DeepSeek tool %s schema: %w", tool.Name, err)
 		}
-		request.Tools = append(request.Tools, fltools.ToolDefinition{Name: aliases.wireName(tool.Name), Description: tool.Description, InputSchema: schema, Strict: p.strictTools})
+		request.Tools = append(request.Tools, fltools.ToolDefinition{Name: aliases.wireName(tool.Name), Description: tool.Description, InputSchema: schema, Strict: p.strictTools, Annotations: map[string]any{"source": tool.Source, "namespace": tool.Namespace, "canonical_name": tool.Name}})
 	}
 	preparer, ok := gateway.(flprovider.RequestPreparer)
 	if !ok {

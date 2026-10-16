@@ -79,7 +79,7 @@ func TestE2E_FlowerPromptDeepSeekRuntime(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		return waitForDeepSeekAskUserDetail(t, ctx, svc, meta, thread.ThreadID, func(d *FlowerThreadDetail) bool {
+		detail := waitForDeepSeekAskUserDetail(t, ctx, svc, meta, thread.ThreadID, func(d *FlowerThreadDetail) bool {
 			if d.Current.TurnID != response.Current.TurnID || d.Current.Activity != flruntime.ThreadActivityIdle || d.Current.LastOutcome == nil {
 				return false
 			}
@@ -89,6 +89,8 @@ func TestE2E_FlowerPromptDeepSeekRuntime(t *testing.T) {
 			}
 			return true
 		})
+		assertQualificationContextAttribution(t, detail)
+		return detail
 	}
 	detail := send("repair", "Fix Add in this fixture project. Follow its repository rules and verify the existing tests. Work only inside this workspace; no subagents. Reply concisely in Chinese with the result.")
 	code, err := os.ReadFile(filepath.Join(workspace, "calc.py"))

@@ -229,11 +229,18 @@ func TestDeepSeekPreparedDesktopImageUsesUpstreamBudgetAndExactBody(t *testing.T
 	}
 	defer prepared.Close()
 	estimate := prepared.TokenEstimate()
-	if estimate.EstimatedInputTokens < 1024 || estimate.EstimatedInputTokens > 200000 || estimate.Source != "deepseek_v4_tokenizer_image_tokens_v3" {
+	if estimate.EstimatedInputTokens < 1024 || estimate.EstimatedInputTokens > 200000 || estimate.Source != "rendered_deepseek_v4_content_v3" || estimate.Breakdown.Quality != "relative_weight" || estimate.AttachmentTokens < 1024 {
 		t.Fatalf("desktop image did not use upstream visual estimate: %+v", estimate)
 	}
 	if admissions != 0 || resolutions != 1 {
 		t.Fatal("preparation must resolve once without sending or acquiring admission")
+	}
+	if estimate.Breakdown.Details == nil || len(estimate.Breakdown.Details.Items) == 0 {
+		t.Fatal("missing tool source details")
+	}
+	estimate.Breakdown.Details.Items[0].Key = "mutated-by-consumer"
+	if prepared.TokenEstimate().Breakdown.Details.Items[0].Key == "mutated-by-consumer" {
+		t.Fatal("consumer mutation changed prepared estimate")
 	}
 	dataURL = "data:image/png;base64,AQID"
 	stream, err := prepared.Stream(t.Context())

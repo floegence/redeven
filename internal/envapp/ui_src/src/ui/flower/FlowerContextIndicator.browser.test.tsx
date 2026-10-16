@@ -21,9 +21,9 @@ afterEach(() => {
 });
 const base = { phase: 'provider_usage', pressure_status: 'stable', input_tokens: 95400, context_window_tokens: 1000000, output_headroom_tokens: 33000, updated_at_ms: 1 } as const;
 function fixture(mcpTokens = 48700): FlowerContextUsage {
- return { confirmed: { ...base, breakdown: { source: 'semantic_input_bpe_v2', system_tokens: 3700,
+ return { confirmed: { ...base, breakdown: { source: 'rendered_deepseek_v4_content_v3', quality: 'token_estimate', tokenizer: 'deepseek_v4', system_tokens: 3700,
   tool_definition_tokens: mcpTokens + 30700, user_tokens: 4200, assistant_tokens: 3000, tool_call_tokens: 1700,
-  tool_result_tokens: 2000, model_context_tokens: 6200, details: { items: [
+  tool_result_tokens: 2000, framing_tokens: 240, model_context_tokens: 6200, details: { items: [
    { category: 'tool_definition', key: 'search', source: 'mcp', namespace: 'docs', tokens: mcpTokens - 4000 },
    { category: 'tool_definition', key: 'read', source: 'mcp', namespace: 'docs', tokens: 2000 },
    { category: 'tool_definition', key: 'query', source: 'mcp', namespace: 'database', tokens: 2000 },
@@ -70,7 +70,7 @@ for (const locale of ['en-US', 'zh-CN'] as const) for (const dark of [false, tru
   expect(panel.textContent).toContain(copy().chat.contextIndicator.sourceLabels.system_prompt);
   expect(panel.querySelector('pre')).toBeNull();
   const rows = [...panel.querySelectorAll<HTMLElement>('.flower-context-composition-row')];
-  expect(rows.length).toBe(9);
+  expect(rows.length).toBe(10);
   for (const row of rows) {
    expect(row.querySelector('.flower-model-context-fill')).not.toBeNull();
    expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth);
@@ -127,3 +127,28 @@ it('keeps all locales and themes within a narrow card', async () => {
   }
  }
 });
+
+for (const mode of ['relative', 'historical', 'media'] as const) {
+ it('presents share-only '+mode+' data without leaking token amounts', async () => {
+  await page.viewport(320,480);
+  theme(builtInShellThemePresets.find(preset => preset.name === 'classic-dark')!);
+  const value=fixture(); const {quality: _quality,tokenizer: _tokenizer,...historical}=value.confirmed!.breakdown!;
+  const breakdown=mode==='historical'?historical:{...historical,quality:'relative_weight' as const,...(mode==='media'?{attachment_tokens:100}:{})};
+  const [usage,setUsage]=createSignal<FlowerContextUsage>({...value,confirmed:{...value.confirmed!,breakdown}});
+  const {trigger,panel,copy}=mount(()=>'zh-CN',usage);trigger.focus();
+  await expect.poll(()=>getComputedStyle(panel).opacity).toBe('1');
+  const distribution=panel.querySelector('.flower-context-composition')!;
+  const summary=distribution.querySelector<HTMLElement>('[data-category="mcp_tools"] summary')!;
+  summary.focus();await userEvent.keyboard('{Enter}');
+  expect(distribution.querySelector('.flower-model-context-amount')).toBeNull();
+  expect(distribution.textContent).not.toContain('≈');
+  for(const row of distribution.querySelectorAll('[title],[aria-label]')){
+   expect(row.getAttribute('title')??'').not.toContain('48700');
+   expect(row.getAttribute('aria-label')??'').not.toContain('48700');
+  }
+  expect(panel.scrollWidth).toBe(panel.clientWidth);
+  setUsage({confirmed:base});
+  await expect.poll(()=>panel.textContent).toContain(copy().chat.contextIndicator.distributionUnavailable);
+  await userEvent.keyboard('{Escape}');expect(document.activeElement).toBe(trigger);
+ });
+}

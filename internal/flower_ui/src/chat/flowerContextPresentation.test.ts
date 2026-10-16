@@ -234,3 +234,22 @@ describe('request source attribution', () => {
     expect(old.rows[0].key).toBe('unattributed_context');
   });
 });
+
+
+describe('distribution quality', () => {
+  it('keeps protocol formatting separate from content and budget reserves', () => {
+    const result = buildFlowerContextComposition({ estimate: { phase: 'projected_request', pressure_status: 'stable', updated_at_ms: 1,
+      input_tokens: 900, breakdown: { source: 'rendered', quality: 'token_estimate', tokenizer: 'deepseek_v4', user_tokens: 100, framing_tokens: 20 } } })!;
+    expect(result.total).toBe(120);
+    expect(result.showTokenAmounts).toBe(true);
+    expect(result.rows.find(row => row.key === 'protocol_framing')?.share).toBeCloseTo(100 / 6);
+  });
+  it('uses relative shares for unknown vocabularies, media and historical records', () => {
+    for (const metadata of [{}, { quality: 'relative_weight' as const }, { quality: 'token_estimate' as const, tokenizer: 'deepseek_v4', attachment_tokens: 10 }]) {
+      const result = buildFlowerContextComposition({ confirmed: { phase: 'provider_usage', pressure_status: 'stable', updated_at_ms: 1,
+        breakdown: { source: 'recorded', user_tokens: 100, ...metadata } } })!;
+      expect(result.showTokenAmounts).toBe(false);
+      expect(result.historical).toBe(!metadata.quality);
+    }
+  });
+});

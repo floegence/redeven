@@ -319,6 +319,10 @@ describe('Flower workspace synchronization recovery', () => {
 
 
 describe('Canonical managed facts on the existing workspace transport', () => {
+ const sourceUsage = { confirmed: { phase: 'provider_usage', pressure_status: 'stable', updated_at_ms: 1, input_tokens: 100, context_window_tokens: 1000,
+  breakdown: { source: 'prepared_content_v3', quality: 'token_estimate', tokenizer: 'deepseek_v4', model_context_tokens: 60,
+   details: { items: [{ category: 'model_context', key: 'skills', tokens: 60 }] } } } } as const;
+
  it('updates background detail without creating user messages or changing selection', async () => {
   const first = thread({ thread_id: 'facts-background-first', title: 'First conversation' });
   const second = thread({ thread_id: 'facts-background-second', title: 'Second conversation' });
@@ -328,7 +332,7 @@ describe('Canonical managed facts on the existing workspace transport', () => {
   const connectLiveStream = vi.fn(async function* (input: FlowerLiveStreamConnectInput): AsyncIterable<FlowerLiveStreamEnvelope> {
    yield { schema_version: 1, kind: 'ready', summaries: [first, second] };
    await publish.promise;
-   yield { schema_version: 1, kind: 'thread.batch', thread_id: second.thread_id, model_context: facts };
+   yield { schema_version: 1, kind: 'thread.batch', thread_id: second.thread_id, model_context: facts, context_usage: sourceUsage };
    await waitForAbort(input);
   });
   const surface = renderSurfaceWithAdapter({ ...adapter(true), listThreads: vi.fn(async () => [first, second]),
@@ -340,13 +344,13 @@ describe('Canonical managed facts on the existing workspace transport', () => {
   await flush(); publish.resolve(); await flush();
   expect(surface.querySelector('.flower-model-context-details')?.textContent ?? '').not.toContain('Background catalog changed');
   selectThread(surface, second.thread_id);
-  await waitFor(() => !surface.querySelector('.flower-thread-loading') && Boolean(surface.querySelector('.flower-model-context-details summary')));
+  await waitFor(() => !surface.querySelector('.flower-thread-loading') && Boolean(surface.querySelector('[data-category="skills"]')));
   await flush();
   const contextTrigger = surface.querySelector('[role="progressbar"]') as HTMLElement;
   contextTrigger.focus();
-  (surface.querySelector('.flower-model-context-details summary') as HTMLElement).click();
+  expect(surface.querySelector('[data-category="skills"]')?.textContent).toContain('≈60');
   expect(document.activeElement).toBe(contextTrigger);
-  await waitFor(() => surface.querySelector('.flower-model-context-details')?.textContent?.includes('Background catalog changed') ?? false);
+  expect(surface.textContent).not.toContain('Background catalog changed');
   expect(surface.querySelectorAll('.flower-user-message')).toHaveLength(0);
   expect(connectLiveStream).toHaveBeenCalledTimes(1);
  });
@@ -360,7 +364,7 @@ describe('Canonical managed facts on the existing workspace transport', () => {
   const connectLiveStream = vi.fn(async function* (input: FlowerLiveStreamConnectInput): AsyncIterable<FlowerLiveStreamEnvelope> {
    yield { schema_version: 1, kind: 'ready', summaries: [parent] };
    await publish.promise;
-   yield { schema_version: 1, kind: 'thread.batch', thread_id: parent.thread_id, subagent_current: detail.current, model_context: facts };
+   yield { schema_version: 1, kind: 'thread.batch', thread_id: parent.thread_id, subagent_current: detail.current, model_context: facts, context_usage: sourceUsage };
    await waitForAbort(input);
   });
   const loadThread = vi.fn(async () => liveBootstrap(parent));
@@ -377,10 +381,9 @@ describe('Canonical managed facts on the existing workspace transport', () => {
   (document.querySelector('[data-flower-subagent-row="0"]') as HTMLButtonElement).click();
   await waitFor(() => Boolean(document.querySelector('[data-flower-subagent-detail="open"]')));
   await flush();publish.resolve();
-  await waitFor(() => Boolean(document.querySelector('[data-flower-subagent-detail="open"] .flower-model-context-details summary')));
-  (document.querySelector('[data-flower-subagent-detail="open"] .flower-model-context-details summary') as HTMLElement).click();
-  await waitFor(() => document.querySelector('[data-flower-subagent-detail="open"] .flower-model-context-details')?.textContent?.includes('Current child catalog') ?? false);
-  expect(surface.querySelector('.flower-composer .flower-model-context-details')).toBeNull();
+  await waitFor(() => document.querySelector('[data-flower-subagent-detail="open"] [data-category="skills"]')?.textContent?.includes('≈60') ?? false);
+  expect(document.body.textContent).not.toContain('Current child catalog');
+  expect(surface.querySelector('.flower-composer [data-category="skills"]')).toBeNull();
  });
 });
 

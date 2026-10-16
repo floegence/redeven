@@ -14,7 +14,7 @@ const facts: FlowerModelContext = { snapshot: { sections: [{ key: 'skills', titl
  entry_id: 'facts', path_depth: 1, turn_id: 'turn', run_id: 'run', updated_at: '2026-10-15T12:00:00Z', changed_keys: ['skills'], removed_keys: [] };
 const sample = { phase: 'provider_usage', pressure_status: 'stable', updated_at_ms: 1, input_tokens: 600, context_window_tokens: 1000, output_headroom_tokens: 200 } as const;
 function fixture(mcpTokens = 200): FlowerContextUsage {
- return { confirmed: { ...sample, breakdown: { source: 'semantic_input_bpe_v2', system_tokens: 50, tool_definition_tokens: mcpTokens + 100,
+ return { confirmed: { ...sample, breakdown: { source: 'rendered_deepseek_v4_content_v3', quality: 'token_estimate', tokenizer: 'deepseek_v4', system_tokens: 50, tool_definition_tokens: mcpTokens + 100,
   user_tokens: 40, assistant_tokens: 30, tool_call_tokens: 10, tool_result_tokens: 100, model_context_tokens: 120,
   details: { items: [
    { category: 'tool_definition', key: 'docs.search', source: 'mcp', namespace: 'docs', tokens: mcpTokens },
@@ -84,6 +84,26 @@ describe('Flower context source breakdown', () => {
   expect(host.querySelector('[data-category="unattributed_tools"] summary')).toBeNull();
   expect(host.textContent).not.toContain('Skill catalog');
   expect(mount().host.querySelector('.flower-context-composition')).toBeNull();
+ });
+ it.each(['relative', 'historical', 'media'] as const)('hides every estimated amount for %s distributions', mode => {
+  const value = fixture(); const breakdown = value.confirmed!.breakdown!;
+  const { quality: _quality, tokenizer: _tokenizer, ...historical } = breakdown;
+  const metadata = mode === 'historical' ? historical : { ...breakdown, quality: 'relative_weight' as const, ...(mode === 'media' ? { attachment_tokens: 100 } : {}) };
+  const { host } = mount(() => ({ ...value, confirmed: { ...value.confirmed!, breakdown: metadata } }));
+  const distribution = host.querySelector('.flower-context-composition')!;
+  expect(distribution.querySelector('.flower-model-context-amount')).toBeNull();
+  expect(distribution.textContent).not.toContain('≈');
+  expect(distribution.textContent).toContain(mode === 'historical' ? 'Historical shares' : 'Relative shares');
+  for (const row of distribution.querySelectorAll('[title], [aria-label]')) {
+   expect(row.getAttribute('title') ?? '').not.toContain('tokens');
+   expect(row.getAttribute('aria-label') ?? '').not.toContain('tokens');
+  }
+ });
+ it('keeps the displayed request authoritative when its distribution is missing', () => {
+  const value = { confirmed: { ...sample }, estimate: fixture().confirmed };
+  const { host } = mount(() => value);
+  expect(host.textContent).toContain('No distribution available');
+  expect(host.querySelector('.flower-context-composition')).toBeNull();
  });
  it('rejects malformed, duplicate and mismatched source allocations at the wire boundary', () => {
   expect(mapContextUsage(JSON.parse(JSON.stringify(fixture())))).toEqual(fixture());

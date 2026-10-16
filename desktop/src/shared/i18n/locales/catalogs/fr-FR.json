@@ -1,11 +1,11 @@
 {
   "interactionContinuity": {
     "accepted": "Opération acceptée. En attente des détails d’exécution.",
-  "unavailable": "La cible ou son accès a changé. Votre saisie est conservée. Vérifiez la cible actuelle avant de continuer.",
-  "revalidate": "Vérifier la cible actuelle",
-  "pending": "En attente de prise en charge de l’opération…",
-  "rejected": "L’opération n’a pas pu être prise en charge. Vérifiez la connexion et réessayez."
-},
+    "unavailable": "La cible ou son accès a changé. Votre saisie est conservée. Vérifiez la cible actuelle avant de continuer.",
+    "revalidate": "Vérifier la cible actuelle",
+    "pending": "En attente de prise en charge de l’opération…",
+    "rejected": "L’opération n’a pas pu être prise en charge. Vérifiez la connexion et réessayez."
+  },
   "sessionRestart": {
     "preparing": "Préparation du redémarrage",
     "restarting": "Redémarrage de l’environnement d’exécution",
@@ -528,9 +528,9 @@
       "toolArgumentPreviewTooltip": "Ces nombres de lignes donnent un aperçu des modifications en cours de préparation. Les modifications réelles sont affichées une fois l’outil terminé.",
       "contextIndicatorCurrentContents": "Contenu actuel",
       "contextIndicatorCurrentContentsHint": "Texte actuel en nombre de caractères ; le total de tokens inclut les mises à jour précédentes conservées.",
-      "contextIndicatorTextShare": "Contexte actuel chargé automatiquement, en nombre de caractères",
-      "contextIndicatorComposition": "Contexte utilisé",
-      "contextIndicatorCompositionHint": "Tokens et parts estimés de l’entrée du modèle. Le total peut différer de la mesure.",
+      "contextIndicatorTextShare": "Parts relatives",
+      "contextIndicatorComposition": "Répartition du contenu",
+      "contextIndicatorCompositionHint": "Contenu estimé de cette requête, hors marge de sécurité. Le fournisseur confirme le total.",
       "contextIndicatorSourceSystemPrompt": "Prompt système",
       "contextIndicatorSourceSystemTools": "Définitions des outils système",
       "contextIndicatorSourceMcpTools": "Définitions des outils MCP",
@@ -538,7 +538,7 @@
       "contextIndicatorSourceMessages": "Messages",
       "contextIndicatorSourceSkills": "Catalogue de compétences",
       "contextIndicatorSourceRuleFiles": "Index des fichiers de règles",
-      "contextIndicatorSourceContextFraming": "Formatage du contexte",
+      "contextIndicatorSourceContextFraming": "Enveloppes du contexte",
       "contextIndicatorSourceUnknownTools": "Outils sans données de provenance",
       "contextIndicatorSourceUnknownContext": "Contexte sans données de provenance",
       "contextIndicatorSystemTokens": "Instructions système",
@@ -756,7 +756,12 @@
       "citationUnavailable": "Source indisponible",
       "queuedEdit": "Reprendre dans le champ de saisie",
       "queueTakeBackConflict": "Ce message a déjà démarré ou a été modifié. Actualisez la vue et réessayez.",
-      "queueTakeBackUnknown": "Le message a été remis dans le champ de saisie, mais son retrait de la file n’a pas pu être confirmé. Vérifiez la file avant de l’envoyer."
+      "queueTakeBackUnknown": "Le message a été remis dans le champ de saisie, mais son retrait de la file n’a pas pu être confirmé. Vérifiez la file avant de l’envoyer.",
+      "contextIndicatorRelativeHint": "Parts relatives uniquement : vocabulaire adapté ou entrée textuelle complète indisponible.",
+      "contextIndicatorHistorical": "Parts historiques",
+      "contextIndicatorHistoricalHint": "Estimation historique sans nombre de tokens.",
+      "contextIndicatorDistributionUnavailable": "Répartition indisponible",
+      "contextIndicatorProtocolFraming": "Formatage du protocole"
     },
     "threadList": {
       "title": "Discussions",

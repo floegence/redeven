@@ -42,6 +42,26 @@ describe('Flower context usage contract', () => {
   const estimate = { ...confirmed, phase: 'projected_request', input_tokens: 82346, updated_at_ms: 11 };
   const thread_usage = { input_tokens: 50, output_tokens: 20, cache_read_tokens: 45, cache_write_tokens: 5 };
 
+  it.each([
+    { source: 'rendered_content_v3', tokenizer: 'deepseek_v4', quality: 'token_estimate', framing_tokens: 40 },
+    { source: 'rendered_content_v3', quality: 'relative_weight', attachment_tokens: 4096 },
+    { source: 'semantic_input_bpe_v1', user_tokens: 100 },
+  ])('preserves distribution quality on live and restored snapshots %j', breakdown => {
+    const wire = { confirmed: { ...confirmed, breakdown } };
+    expect(mapContextUsage(wire)?.confirmed?.breakdown).toEqual(breakdown);
+    expect(mapContextUsage(JSON.parse(JSON.stringify(wire)))).toEqual(mapContextUsage(wire));
+  });
+
+  it.each([
+    { quality: 'precise', tokenizer: 'deepseek_v4' },
+    { quality: 'token_estimate' },
+    { quality: 'token_estimate', tokenizer: '' },
+    { quality: 'token_estimate', tokenizer: 'deepseek_v4', attachment_tokens: 1 },
+    { quality: 'relative_weight', tokenizer: 7 },
+  ])('rejects unsupported distribution claims %j', metadata => {
+    expect(() => mapContextUsage({ confirmed: { ...confirmed, breakdown: { source: 'rendered_content_v3', ...metadata } } })).toThrow();
+  });
+
   it('maps the same confirmed and estimated samples for live and reconnect', () => {
     const wire = { confirmed, estimate, thread_usage, recent_request_usage: {input_tokens: 30, output_tokens: 5, cache_read_tokens: 60, cache_write_tokens: 10} };
     expect(mapContextUsage(wire)).toEqual(wire);

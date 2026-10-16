@@ -35,7 +35,7 @@ export function buildFlowerContextWindow(usage: FlowerContextUsage) {
 export const FLOWER_CONTEXT_SOURCES = [
   'system_prompt', 'system_tools', 'mcp_tools', 'provider_tools', 'messages',
   'tool_outputs', 'skills', 'rule_files', 'environment', 'summary', 'reasoning',
-  'attachments', 'context_framing', 'unattributed_tools', 'unattributed_context',
+  'attachments', 'protocol_framing', 'context_framing', 'unattributed_tools', 'unattributed_context',
 ] as const;
 export type FlowerContextSource = typeof FLOWER_CONTEXT_SOURCES[number];
 export type FlowerContextSourceRow = { key: FlowerContextSource; tokens: number; share: number;
@@ -63,6 +63,7 @@ export function buildFlowerContextComposition(usage: FlowerContextUsage) {
   add('summary', breakdown.compaction_tokens ?? 0);
   add('reasoning', breakdown.reasoning_tokens ?? 0);
   add('attachments', breakdown.attachment_tokens ?? 0);
+  add('protocol_framing', breakdown.framing_tokens ?? 0);
   if (breakdown.details) {
     for (const item of breakdown.details.items) {
       if (item.category === 'tool_definition') {
@@ -89,7 +90,7 @@ export function buildFlowerContextComposition(usage: FlowerContextUsage) {
     row.items.sort((a, b) => b.tokens - a.tokens || a.key.localeCompare(b.key));
     for (const item of row.items) item.share = item.tokens / row.tokens * 100;
   }
-  return { total, rows: ordered };
+  return { total, rows: ordered, showTokenAmounts: breakdown.quality === 'token_estimate' && !!breakdown.tokenizer && !breakdown.attachment_tokens, historical: !breakdown.quality };
 }
 
 export type FlowerComposerContextIndicatorView = Readonly<{

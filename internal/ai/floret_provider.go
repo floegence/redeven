@@ -204,14 +204,18 @@ func estimateGatewayInput(providerType string, req ModelGatewayRequest) (flprovi
 	for _, tool := range req.Tools {
 		definitions = append(definitions, modelTool{Name: tool.Name, Description: tool.Description, InputSchema: tool.InputSchema})
 	}
+	modelMessages := append([]Message(nil), req.Messages...)
+	for i := range modelMessages {
+		modelMessages[i].Attribution = nil
+	}
 	payload, err := json.Marshal(struct {
 		Messages []Message   `json:"messages"`
 		Tools    []modelTool `json:"tools"`
-	}{req.Messages, definitions})
+	}{modelMessages, definitions})
 	if err != nil {
 		return flprovider.TokenEstimate{}, err
 	}
-	return flprovider.EstimateRenderedRequest(flprovider.RenderedRequest{Provider: providerType, Model: req.Model, Format: flprovider.RequestFormatJSON, Payload: payload})
+	return flprovider.EstimateRenderedRequest(flprovider.RenderedRequest{Provider: providerType, Model: req.Model, Format: flprovider.RequestFormatJSON, Payload: payload, Attribution: renderedContextAttribution(flprovider.RequestFormatJSON, payload, req, providerToolAliases{})})
 }
 
 func (p *floretProviderAdapter) streamPreparedTurn(ctx context.Context, providerReq flprovider.Request, execute func(context.Context, func(StreamEvent)) (ModelGatewayResult, error)) <-chan flprovider.Event {
@@ -354,7 +358,7 @@ func (p *preparedFloretModelRequest) TokenEstimate() flprovider.TokenEstimate {
 	if p == nil {
 		return flprovider.TokenEstimate{}
 	}
-	return p.estimate
+	return cloneModelTokenEstimate(p.estimate)
 }
 
 func (p *preparedFloretModelRequest) RenderedPayloadFingerprint() string {
@@ -645,7 +649,7 @@ func (p *floretProviderAdapter) floretMessagesToFlowerWithResolver(ctx context.C
 				Text:       msg.ToolResult.Text,
 			})
 		}
-		out = append(out, Message{Role: string(msg.Role), Content: parts})
+		out = append(out, Message{Role: string(msg.Role), Content: parts, Attribution: cloneMessageAttribution(msg.Attribution)})
 	}
 	return out, nil
 }
@@ -707,6 +711,8 @@ func flowerToolsFromFloret(defs []fltools.ToolDefinition) ([]ToolDef, error) {
 		}
 		out = append(out, ToolDef{
 			Name:        name,
+			Source:      annotationString(def.Annotations, "source"),
+			Namespace:   annotationString(def.Annotations, "namespace"),
 			Strict:      def.Strict,
 			Description: strings.TrimSpace(def.Description),
 			InputSchema: b,

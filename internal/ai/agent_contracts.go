@@ -60,8 +60,9 @@ type ContentPart struct {
 }
 
 type Message struct {
-	Role    string        `json:"role"`
-	Content []ContentPart `json:"content"`
+	Attribution *flprovider.MessageAttribution `json:"attribution,omitempty"`
+	Role        string                         `json:"role"`
+	Content     []ContentPart                  `json:"content"`
 }
 
 type ProviderControls struct {

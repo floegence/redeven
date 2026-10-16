@@ -251,7 +251,7 @@ func (p *openAIProvider) prepareTurn(ctx context.Context, req ModelGatewayReques
 			return nil, err
 		}
 	}
-	return newPreparedModelWire(p.providerType, req.Model, flprovider.RequestFormatOpenAIResponses, params, func(ctx context.Context, payload []byte, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
+	return newPreparedModelWire(p.providerType, req.Model, flprovider.RequestFormatOpenAIResponses, params, req, aliases, func(ctx context.Context, payload []byte, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
 		return p.streamResponsesTurn(ctx, aliases, payload, onEvent, chatGPTStreamContext{Request: req, Records: records, Canonical: canonical})
 	})
 }
@@ -776,7 +776,7 @@ func (p *openAIProvider) prepareChatTurn(ctx context.Context, req ModelGatewayRe
 	}
 
 	model := req.Model
-	return newPreparedModelWire(p.providerType, model, flprovider.RequestFormatOpenAIChat, params, func(ctx context.Context, payload []byte, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
+	return newPreparedModelWire(p.providerType, model, flprovider.RequestFormatOpenAIChat, params, req, aliases, func(ctx context.Context, payload []byte, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
 		return p.streamPreparedChatTurn(ctx, model, capability, aliases, signatures, payload, onEvent)
 	})
 }
@@ -1052,7 +1052,7 @@ func (p *moonshotProvider) prepareTurn(ctx context.Context, req ModelGatewayRequ
 		params.Tools = tools
 	}
 
-	return newPreparedModelWire("moonshot", req.Model, flprovider.RequestFormatOpenAIChat, params, func(ctx context.Context, payload []byte, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
+	return newPreparedModelWire("moonshot", req.Model, flprovider.RequestFormatOpenAIChat, params, req, aliases, func(ctx context.Context, payload []byte, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
 		return p.streamPreparedTurn(ctx, aliases, payload, onEvent)
 	})
 }
@@ -2162,7 +2162,7 @@ func (p *anthropicProvider) prepareTurn(ctx context.Context, req ModelGatewayReq
 		params.System = []anthropic.TextBlockParam{{Text: strings.TrimSpace(system)}}
 	}
 
-	return newPreparedModelWire("anthropic", req.Model, flprovider.RequestFormatAnthropic, params, func(ctx context.Context, payload []byte, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
+	return newPreparedModelWire("anthropic", req.Model, flprovider.RequestFormatAnthropic, params, req, providerToolAliases{}, func(ctx context.Context, payload []byte, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
 		return p.streamPreparedTurn(ctx, payload, onEvent)
 	})
 }

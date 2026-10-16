@@ -1,11 +1,11 @@
 {
   "interactionContinuity": {
     "accepted": "操作が受け付けられました。実行の詳細を待っています。",
-  "unavailable": "対象またはアクセス権が変更されました。入力内容は保持されています。続行する前に現在の対象を確認してください。",
-  "revalidate": "現在の対象を確認",
-  "pending": "操作の受け付けを待っています…",
-  "rejected": "操作を受け付けられませんでした。接続を確認して再試行してください。"
-},
+    "unavailable": "対象またはアクセス権が変更されました。入力内容は保持されています。続行する前に現在の対象を確認してください。",
+    "revalidate": "現在の対象を確認",
+    "pending": "操作の受け付けを待っています…",
+    "rejected": "操作を受け付けられませんでした。接続を確認して再試行してください。"
+  },
   "sessionRestart": {
     "preparing": "再起動を準備しています",
     "restarting": "ランタイムを再起動しています",
@@ -528,9 +528,9 @@
       "toolArgumentPreviewTooltip": "行数は準備中の変更のプレビューです。ツールの完了後に実際の変更が表示されます。",
       "contextIndicatorCurrentContents": "現在の内容",
       "contextIndicatorCurrentContentsHint": "現在のテキストの文字数比率。token の合計には保持中の過去の更新も含みます。",
-      "contextIndicatorTextShare": "現在の自動読み込みコンテキストの文字数比率",
-      "contextIndicatorComposition": "使用中のコンテキスト",
-      "contextIndicatorCompositionHint": "モデル入力の推定トークン数と割合。実測合計と異なる場合があります。",
+      "contextIndicatorTextShare": "相対比率",
+      "contextIndicatorComposition": "内容の内訳",
+      "contextIndicatorCompositionHint": "今回のリクエストの推定内訳です。安全余裕は含まず、合計はモデル提供元の実測値を優先します。",
       "contextIndicatorSourceSystemPrompt": "システムプロンプト",
       "contextIndicatorSourceSystemTools": "システムツール定義",
       "contextIndicatorSourceMcpTools": "MCP ツール定義",
@@ -538,7 +538,7 @@
       "contextIndicatorSourceMessages": "メッセージ",
       "contextIndicatorSourceSkills": "スキル一覧",
       "contextIndicatorSourceRuleFiles": "ルールファイル一覧",
-      "contextIndicatorSourceContextFraming": "コンテキスト書式",
+      "contextIndicatorSourceContextFraming": "コンテキストのラッパー",
       "contextIndicatorSourceUnknownTools": "出所が未記録のツール",
       "contextIndicatorSourceUnknownContext": "出所が未記録のコンテキスト",
       "contextIndicatorSystemTokens": "システム指示",
@@ -756,7 +756,12 @@
       "citationUnavailable": "出典を利用できません",
       "queuedEdit": "入力欄に戻す",
       "queueTakeBackConflict": "このメッセージは実行を開始したか、変更されています。更新して再試行してください。",
-      "queueTakeBackUnknown": "メッセージを入力欄に戻しました。キューから削除されたことを確認できませんでした。送信前にキューを確認してください。"
+      "queueTakeBackUnknown": "メッセージを入力欄に戻しました。キューから削除されたことを確認できませんでした。送信前にキューを確認してください。",
+      "contextIndicatorRelativeHint": "対応する語彙または完全なテキスト入力がないため、相対比率のみ表示します。",
+      "contextIndicatorHistorical": "過去の比率",
+      "contextIndicatorHistoricalHint": "過去の推定値です。トークン数は表示しません。",
+      "contextIndicatorDistributionUnavailable": "内訳はありません",
+      "contextIndicatorProtocolFraming": "プロトコルの書式"
     },
     "threadList": {
       "title": "会話",

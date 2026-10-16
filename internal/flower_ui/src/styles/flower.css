@@ -12234,3 +12234,9 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
 .flower-chat-md-block:has(.flower-answer-actions) .flower-chat-source-list { margin-top: 0.5rem; }
 @media (pointer: coarse) { .flower-answer-action, .flower-answer-actions .flower-message-copy-button { width: 2.75rem; height: 2.75rem; } }
 @media (prefers-reduced-motion: reduce) { .flower-answer-action, .flower-answer-actions .flower-message-copy-button { transition: none; } }
+
+.flower-context-composition[data-token-amounts='false'] .flower-context-composition-row,
+.flower-context-composition[data-token-amounts='false'] .flower-model-context-row {
+  grid-template-columns: 0.5rem minmax(0, 1fr) 3.1rem;
+}
+.flower-composer-context-tooltip [data-category='protocol_framing'] { --flower-context-color: var(--muted-foreground); }

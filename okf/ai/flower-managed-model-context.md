@@ -7,7 +7,7 @@ timestamp: 2026-10-16T00:00:00Z
 ---
 # Summary
 
-Flower consumes published Floret v7.46.1. One complete collector supplies four
+Flower consumes published Floret v7.47.1. One complete collector supplies four
 stable partitions: execution environment, date/timezone, repository rule
 sources, and available skills. Floret owns chronological admission,
 semantic changes, user-role model-context messages, compaction and recovery.
@@ -109,13 +109,18 @@ The shared context panel groups the displayed request by explicit source:
 system prompt, system tool definitions, MCP tool definitions, provider tool
 definitions, messages, retained tool execution outputs, skill catalog, repository
 rule sources, environment, summaries,
-retained reasoning, expanded media and formatting overhead. Floret v7.45.0
+retained reasoning, expanded media, context wrappers and protocol formatting. Floret v7.47.1
 provides exact tool names with registry source/namespace annotations and
 canonical managed-section token estimates. Flower groups only its known source
 values and section keys. It never guesses from tool names or parses prompt text.
 
-Every source uses an aligned horizontal bar with approximate tokens and share
-of the estimated input. Native input, output reserve and free capacity remain a
+Every source uses an aligned horizontal bar and a share of this request's
+content weight. Only an explicit token-estimate quality with matching tokenizer
+and complete textual coverage shows approximate token amounts. Proxy vocabularies,
+media and opaque input show relative shares only, including tooltips and accessible
+text. Legacy records show labeled historical shares; absent breakdowns show an
+unavailable state. Content and protocol framing share the upstream counting core;
+safety margins and media budget reserves do not enter category shares. Native input, output reserve and free capacity remain a
 separate capacity bar. Parent source weights replace their detailed weights;
 they are never added twice or scaled to match native usage. Confirmed total and
 composition describe the same request; newer snapshots and projected requests
