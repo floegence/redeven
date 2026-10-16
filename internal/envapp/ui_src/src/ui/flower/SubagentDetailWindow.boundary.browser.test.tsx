@@ -124,7 +124,11 @@ async function mountWindow(theme: Theme, withContext = false) {
     () => (
       <LayoutProvider>
         <SubagentDetailWindow {...windowProps(open(), setOpen)} contextIndicator={withContext ? <FlowerComposerContextIndicator
-          placement="below-start" copy={DEFAULT_FLOWER_SURFACE_COPY} modelContext={{
+          placement="below-start" copy={DEFAULT_FLOWER_SURFACE_COPY} usage={{
+            confirmed: { phase: 'provider_usage', pressure_status: 'stable', updated_at_ms: 1,
+              breakdown: { source: 'semantic_input_bpe_v2', tool_definition_tokens: 30,
+                details: { items: [{ category: 'tool_definition', source: 'builtin', key: 'terminal.exec', tokens: 30 }] } } },
+          }} modelContext={{
             snapshot: { sections: [{ key: 'skills', title: 'Available skills', text: 'Complete current catalog' }] },
             entry_id: 'context-entry', path_depth: 1, turn_id: 'turn-child', run_id: 'run-child',
             updated_at: '2026-10-15T12:00:00Z', changed_keys: ['skills'], removed_keys: [],
@@ -172,10 +176,11 @@ describe('Subagent detail window boundary', () => {
     expect(bounds.bottom).toBeLessThanOrEqual(windowBounds.bottom);
     const target = document.elementFromPoint(bounds.left + 20, bounds.top + 20);
     expect(target !== null && panel.contains(target), target?.outerHTML).toBe(true);
-    expect(panel.querySelectorAll('.flower-model-context-bar')).toHaveLength(1);
+    expect(panel.querySelectorAll('.flower-context-composition-row')).toHaveLength(1);
     expect(panel.querySelector('pre')).toBeNull();
     panel.querySelector<HTMLElement>('summary')!.click();
-    await expect.poll(() => panel.textContent).toContain('Complete current catalog');
+    await expect.poll(() => panel.textContent).toContain('terminal.exec');
+    expect(panel.textContent).not.toContain('Complete current catalog');
     trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     await nextFrame();
     expect(panel.getAttribute('data-open')).toBeNull();

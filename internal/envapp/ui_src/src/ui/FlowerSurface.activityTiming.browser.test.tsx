@@ -97,9 +97,9 @@ describe('Flower management operation execution timing', () => {
     };
     checkSettledRows(runtime);
     const spawnRow = row(runtime, 'spawn-first');
-    (spawnRow.querySelector('.flower-activity-inline-button') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(spawnRow.querySelector('.flower-activity-subagents-item')));
-    expect(spawnRow.querySelector('.flower-activity-subagents-item-meta')?.textContent).not.toMatch(/\d+(?:ms|s|m)/);
+    expect(spawnRow.querySelector('[data-flower-disclosure-trigger]')).toBeNull();
+    expect(spawnRow.querySelector('[data-flower-subagent-capsule]')).not.toBeNull();
+    expect(spawnRow.querySelector('.flower-subagent-capsule-status')?.textContent).not.toMatch(/\d+(?:ms|s|m)/);
     expect(duration(runtime, 'active-wait')).toBe('2s');
 
     vi.setSystemTime(now + 60_000);

@@ -9758,10 +9758,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     </div>
   );
 
-  const subagentsDetailForPresentation = (presentation: FlowerActivityPresentation) => (
-    presentation.detailBlocks.find((block): block is Extract<FlowerActivityDetailBlock, { kind: 'subagents' }> => block.kind === 'subagents')?.subagents
-  );
-
   const openSubagentMessages = (agent: FlowerActivitySubagentDetailItem) => {
     const action = agent.open_messages;
     if (!action?.thread_id) return;
@@ -9808,50 +9804,33 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     </section>
   );
 
-  const subagentsDetailBlock = (block: Accessor<Extract<FlowerActivityDetailBlock, { kind: 'subagents' }>>) => {
-    const detail = () => block().subagents;
-    return (
-      <section class="flower-activity-subagents-panel" aria-label="Subagents">
-        <Show when={detail().items.length > 0}>
-          <div class="flower-activity-subagents-list" role="list">
-            <FlowerKeyedList scope={selectedThreadID()} focusFallback={focusComposerIfConnected} each={detail().items} identity={(agent) => agent.open_messages?.thread_id ?? agent}>
-              {(agent) => (
-                <div class="flower-activity-subagents-item" role="listitem">
-                  <div class="flower-activity-subagents-item-main">
-                    <div class="flower-activity-subagents-item-head">
-                      <span class="flower-activity-subagents-item-title-row">
-                        <span class="flower-activity-subagents-item-title">{agent().name}</span>
-                        <Show when={agent().open_messages}>
-                          <button
-                            type="button"
-                            class="flower-activity-subagents-open"
-                            aria-label={`Open subagent messages for ${agent().name}`}
-                            title="Open subagent messages"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              openSubagentMessages(agent());
-                            }}
-                          >
-                            <ExternalLink class="h-3.5 w-3.5" />
-                          </button>
-                        </Show>
-                      </span>
-                      <Show when={agent().show_status}>
-                        <span class="flower-activity-subagents-item-meta">{agent().status}</span>
-                      </Show>
-                    </div>
-                    <Show when={agent().description}>
-                      {(description) => <div class="flower-activity-subagents-item-task">{description()}</div>}
-                    </Show>
-                  </div>
-                </div>
-              )}
-            </FlowerKeyedList>
-          </div>
-        </Show>
-      </section>
-    );
-  };
+  const subagentsDetailBlock = (block: Accessor<Extract<FlowerActivityDetailBlock, { kind: 'subagents' }>>) => (
+    <section class="flower-activity-subagents-panel" aria-label={subagentsCopy().title}>
+      <div class="flower-activity-subagents-list" role="list">
+        <FlowerKeyedList scope={selectedThreadID()} focusFallback={focusComposerIfConnected} each={block().subagents.items} identity={(agent) => agent.open_messages?.thread_id ?? agent}>
+          {(agent) => {
+            const current = createMemo(() => selectedSubagentItems().find((item) => item.threadID === agent().open_messages?.thread_id));
+            const status = () => current()?.status ?? normalizeSubagentPanelStatus(agent().raw_status);
+            const title = () => [agent().name, subagentStatusLabel(status()), subagentsCopy().openThread].join('. ');
+            return <div class="flower-activity-subagents-item" role="listitem">
+              <Show when={agent().open_messages} fallback={<span class="flower-activity-subagent-unavailable">{agent().name}</span>}>
+                <button type="button" class="flower-subagent-capsule"
+                  data-flower-subagent-capsule={agent().open_messages?.thread_id}
+                  data-flower-subagent-status={status()}
+                  aria-label={title()} title={[title(), agent().description].filter(Boolean).join('\n')}
+                  aria-pressed={activeSubagentID() === agent().open_messages?.thread_id}
+                  onClick={() => openSubagentMessages(agent())}>
+                  <SubagentAvatar threadID={agent().open_messages!.thread_id} class="flower-subagent-capsule-avatar" />
+                  <span class="flower-subagent-capsule-name">{presentSubagentTaskName(agent().name)}</span>
+                  <span class="flower-subagent-capsule-status" aria-hidden="true">{subagentStatusIndicator(status())}</span>
+                </button>
+              </Show>
+            </div>;
+          }}
+        </FlowerKeyedList>
+      </div>
+    </section>
+  );
 
   const ActivityDetailBlock: Component<{
     threadID: string;
@@ -9982,10 +9961,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         setOpenActivityRuns((current) => ({ ...current, [key]: open }));
       },
     });
-    const subagentsDetail = createMemo(() => subagentsDetailForPresentation(presentation()));
     const hasDetails = createMemo(() => presentation().detailBlocks.length > 0);
-    const expandable = createMemo(() => (presentation().suppressEmptyDisclosure
-      || item().renderer === 'web_search' && !item().tool_name?.startsWith('okf.')) ? hasDetails() : item().kind === 'tool' || hasDetails());
+    const subagentOperation = () => item().renderer === 'subagent' || item().renderer === 'subagent_operation';
+    const expandable = createMemo(() => !subagentOperation() && ((presentation().suppressEmptyDisclosure
+      || item().renderer === 'web_search' && !item().tool_name?.startsWith('okf.')) ? hasDetails() : item().kind === 'tool' || hasDetails()));
     const open = () => expandable() && disclosureControl.open();
     let toggleButtonRef: HTMLButtonElement | undefined;
     let detailPanelRef: HTMLDivElement | undefined;
@@ -10041,7 +10020,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         </span>
         <span class="flower-activity-inline-copy">
           <span class="flower-activity-inline-title" data-floe-progress-shimmer={livePresentationConfirmed() && displayStatus() === 'running' ? 'text' : undefined}>{activityTitle(displayTitle())}</span>
-          <Show when={presentation().meta}>
+          <Show when={!subagentOperation() && presentation().meta}>
             {(meta) => <span class="flower-activity-inline-detail">{meta()}</span>}
           </Show>
           {changeStats(() => item().argument_preview ?? presentation().changeStats, () => item().argument_preview !== undefined)}
@@ -10056,7 +10035,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     );
     return (
       <div
-        class={cn('flower-activity-inline-row', `flower-activity-inline-row-${displayStatus()}`, item().renderer === 'web_search' && 'flower-activity-inline-row-web-search', subagentsDetail() && 'flower-activity-inline-row-subagents')}
+        class={cn('flower-activity-inline-row', `flower-activity-inline-row-${displayStatus()}`, item().renderer === 'web_search' && 'flower-activity-inline-row-web-search', subagentOperation() && 'flower-activity-inline-row-subagents')}
         data-flower-activity-item-id={item().item_id}
         data-flower-activity-status={displayStatus()}
         data-flower-activity-approval-state={item().approval_state}
@@ -10083,6 +10062,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           </Show>
           {fileActionButtons(rowFileAction, rowAttachmentPreviewTarget)}
         </div>
+        <Show when={subagentOperation()}>
+          <For each={detailKeys()}>{(key) => {
+            const block = createMemo(() => detailsByKey().get(key)!);
+            return <ActivityDetailBlock threadID={timeline().thread_id ?? ''} block={block() as FlowerNonTerminalDetailBlock} />;
+          }}</For>
+        </Show>
         <Show when={disclosure.mounted()}>
           <div
             ref={(node) => {
@@ -11087,6 +11072,19 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const subagentDetailMounted = createMemo<boolean>((mounted) => mounted || subagentDetailOpen(), false);
   const subagentDetailDialog = () => (
     <SubagentDetailWindow
+      agentSwitcher={<Show when={selectedSubagentItems().length > 1}>
+        <nav class="flower-subagent-switcher" data-flower-subagent-switcher aria-label={subagentsCopy().title}>
+          <FlowerKeyedList scope={selectedThreadID()} each={selectedSubagentItems()} identity={(item) => item.threadID}>
+            {(item) => <button type="button" class="flower-subagent-switch" data-flower-subagent-switch={item().threadID}
+              aria-pressed={activeSubagentID() === item().threadID}
+              aria-label={[subagentRowTitle(item()), subagentStatusLabel(item().status), subagentsCopy().openThread].join('. ')}
+              title={[subagentRowTitle(item()), subagentStatusLabel(item().status)].join(' · ')}
+              onClick={() => void openSubagentDetail(item())}>
+              <SubagentAvatar threadID={item().threadID} class="flower-subagent-switch-avatar" />
+            </button>}
+          </FlowerKeyedList>
+        </nav>
+      </Show>}
       syncNotice={workspaceSyncNotice()}
       runProgress={<Show when={subagentDetailRunProgress()}>{(progress) => (
         <div class="flower-subagent-detail-progress">
@@ -11151,7 +11149,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       showScrollToLatest={showSubagentDetailScrollToLatestButton()}
       onScrollToLatest={() => subagentDetailScroll.scrollToBottom({ smooth: true })}
       onRetryLoad={retrySubagentDetailLoad}
-      viewportLeftInset={Math.max(12, threadRailWidth() + 12)}
+      viewportLeftInset={presentation() === 'full' && !navigationOverlay() && threadNavigationOpen() ? threadRailWidth() + 12 : 12}
       zIndex={FLOWER_SURFACE_LAYER.subagentWindow}
       threadLoadingLabel={copy().chat.threadLoading}
       scrollToLatestLabel={copy().chat.scrollToLatest}

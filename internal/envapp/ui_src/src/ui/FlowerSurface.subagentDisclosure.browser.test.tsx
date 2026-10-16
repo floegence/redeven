@@ -1,251 +1,158 @@
 import '../index.css';
 import './flower-feature.css';
 
-import { commands, page } from 'vitest/browser';
+import { page, userEvent } from 'vitest/browser';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { FlowerActivityItem, FlowerLiveStreamEnvelope } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import { activityItem, activityTimeline, adapter, deferred, liveBootstrap, renderSurfaceWithAdapterProps, subagentDetail, subagentSummary, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 
-import type { FlowerChatMessage } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
-import {
-  activityItem,
-  activityTimeline,
-  adapter,
-  liveBootstrap,
-  renderSurfaceWithAdapterProps,
-  subagentSummary,
-  thread,
-  waitFor,
-} from './FlowerSurface.navigation.testHarness';
+const parentID = 'capsule-parent';
+const targets = Array.from({ length: 8 }, (_, index) => ({
+  thread_id: 'capsule-child-' + index,
+  task_name: index === 7 ? 'Review deployment compatibility and migration requirements across all supported environments' : 'Research task ' + (index + 1),
+  task_description: 'Verify original evidence for task ' + (index + 1),
+  status: ['running', 'waiting_input', 'completed', 'failed', 'queued', 'canceled', 'timed_out', 'running'][index]!,
+}));
 
-const mediaCommands = commands as unknown as Readonly<{
-  emulateMediaPreferences: (preferences: Readonly<{
-    reducedMotion?: null | 'reduce' | 'no-preference';
-  }>) => Promise<void>;
-}>;
-
-function textMessage(index: number): FlowerChatMessage {
-  return {
-    id: `text-${index}`,
-    turn_id: `turn-${index}`,
-    role: 'assistant',
-    content: `Context line ${index}: ${'stable transcript content '.repeat(5)}`,
-    status: 'complete',
-    created_at_ms: index + 1,
-  };
+function operation(id: string, action: string, count: number, overrides: Partial<FlowerActivityItem> = {}) {
+  return { id: 'message-' + id, turn_id: 'parent-turn', role: 'assistant' as const, content: '', status: 'complete' as const, created_at_ms: 100,
+    blocks: [activityTimeline({ thread_id: parentID, run_id: 'parent-run', turn_id: 'parent-turn',
+      items: [activityItem({ item_id: id, tool_id: id, tool_name: 'subagents', renderer: 'subagent_operation', status: 'success',
+        payload: { action, targets: targets.slice(0, count), requested_count: count, completed_count: 0 }, ...overrides })] })] };
 }
 
-function subagentMessage(
-  itemID: string,
-  targets: readonly Readonly<{ thread_id: string; task_name: string; task_description: string; status: string }>[],
-  createdAt: number,
-): FlowerChatMessage {
-  const turnID = `turn-${itemID}`;
-  return {
-    id: `message-${itemID}`,
-    turn_id: turnID,
-    role: 'assistant',
-    content: '',
-    status: 'complete',
-    created_at_ms: createdAt,
-    blocks: [activityTimeline({
-      thread_id: 'thread-subagent-disclosure',
-      run_id: turnID,
-      turn_id: turnID,
-      status: 'running',
-      items: [activityItem({
-        item_id: itemID,
-        tool_id: itemID,
-        tool_name: 'subagents',
-        renderer: 'subagent_operation',
-        status: 'running',
-        label: 'subagents',
-        payload: {
-          action: 'wait',
-          targets,
-          requested_count: targets.length,
-          completed_count: 0,
-        },
-      })],
-    })],
-  };
+function detailFor(summary: ReturnType<typeof subagentSummary>) {
+  const base = subagentDetail({ summary });
+  return { ...base, current: { ...base.current, run_progress: { phase: 'streaming' as const }, items: base.current.items!.filter(item => item.kind !== 'tool') } };
 }
 
-function fixtureThread() {
-  const targets = [
-    { thread_id: 'thread-big-tech', task_name: 'Big Tech AI News', task_description: 'Research company news.', status: 'running' },
-    { thread_id: 'thread-models', task_name: 'AI Models and Products', task_description: 'Research model releases.', status: 'running' },
-    { thread_id: 'thread-policy', task_name: 'AI Policy and Business', task_description: 'Research policy news.', status: 'running' },
-  ] as const;
-  return thread({
-    thread_id: 'thread-subagent-disclosure',
-    title: 'Subagent disclosure motion',
-    status: 'running',
-    messages: [
-      ...Array.from({ length: 10 }, (_, index) => textMessage(index)),
-      subagentMessage('wait-one', targets.slice(0, 1), 20),
-      ...Array.from({ length: 8 }, (_, index) => textMessage(index + 20)),
-      subagentMessage('wait-three', targets, 40),
-    ],
-    subagents: targets.map((target, index) => subagentSummary({
-      parent_thread_id: 'thread-subagent-disclosure',
-      ...target,
-      created_at_ms: 100 + index,
-      updated_at_ms: 200 + index,
-    })),
+function mount(messages = [operation('spawn', 'spawn', 1)], count = 1, options: Partial<ReturnType<typeof adapter>> = {}) {
+  const summaries = targets.slice(0, count).map(target => subagentSummary({ ...target, parent_thread_id: parentID, title: target.task_name, created_at_ms: Date.now() - 60_000, updated_at_ms: Date.now() }));
+  const snapshot = thread({ thread_id: parentID, status: 'running', messages, subagents: summaries });
+  const loadDetail = vi.fn(async (_parent: string, child: string) => detailFor(summaries.find(summary => summary.thread_id === child)!));
+  const runtime = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: vi.fn(async () => [snapshot]),
+    loadThread: vi.fn(async () => liveBootstrap(snapshot)), loadSubagentDetail: loadDetail, ...options },
+  { focusThreadRequest: { request_id: 'focus-capsules', thread_id: parentID } });
+  runtime.style.height = '850px';
+  return { runtime, summaries, loadDetail };
+}
+
+function row(runtime: HTMLElement, id: string) {
+  return runtime.querySelector<HTMLElement>('[data-flower-activity-item-id="' + id + '"]')!;
+}
+
+afterEach(() => document.documentElement.classList.remove('dark', 'light'));
+
+describe('Subagent inline capsules', () => {
+  it('opens one agent immediately with keyboard and no disclosure or switcher', async () => {
+    await page.viewport(1100, 900);
+    const pending = deferred<ReturnType<typeof subagentDetail>>();
+    const { runtime, summaries } = mount(undefined, 1, { loadSubagentDetail: vi.fn(() => pending.promise) });
+    await waitFor(() => Boolean(row(runtime, 'spawn')));
+    const activity = row(runtime, 'spawn');
+    expect(activity.querySelector('[aria-expanded], [data-flower-disclosure-trigger]')).toBeNull();
+    const capsule = activity.querySelector<HTMLButtonElement>('[data-flower-subagent-capsule]')!;
+    expect(capsule).not.toBeNull();
+    expect(capsule.querySelector('[data-flower-subagent-avatar]')).not.toBeNull();
+    expect(capsule.getBoundingClientRect().width).toBeLessThan(activity.getBoundingClientRect().width - 50);
+    expect(getComputedStyle(capsule).cursor).toBe('pointer');
+    capsule.focus();
+    await userEvent.keyboard('{Enter}');
+    await waitFor(() => Boolean(document.querySelector('[data-flower-subagent-detail="open"]')));
+    expect(document.querySelector('[data-flower-subagent-switcher]')).toBeNull();
+    expect(document.querySelector('.flower-subagent-detail-loading')).not.toBeNull();
+    pending.resolve(detailFor(summaries[0]!));
+    await waitFor(() => Boolean(document.querySelector('.flower-subagent-detail-transcript')));
+    expect(document.querySelector('.flower-subagent-detail-avatar')?.getAttribute('data-flower-subagent-avatar'))
+      .toBe(capsule.querySelector('[data-flower-subagent-avatar]')?.getAttribute('data-flower-subagent-avatar'));
   });
-}
 
-async function nextFrame(): Promise<void> {
-  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-}
-
-async function mountFixture() {
-  const snapshot = fixtureThread();
-  let contentPresented = false;
-  const runtime = renderSurfaceWithAdapterProps({
-    ...adapter(true),
-    listThreads: vi.fn(async () => [snapshot]),
-    loadThread: vi.fn(async () => liveBootstrap(snapshot, 1)),
-  }, {
-    onThreadSelectionEvent: (event) => {
-      if (event.value === snapshot.thread_id && event.phase === 'content_presented') contentPresented = true;
-    },
+  it.each(['spawn', 'list', 'inspect', 'wait', 'send_input', 'close', 'close_all'])('presents a single %s target without a disclosure', async (action) => {
+    const { runtime } = mount([operation(action, action, 1)]);
+    await waitFor(() => Boolean(row(runtime, action)));
+    const activity = row(runtime, action);
+    expect(activity.querySelectorAll('[data-flower-subagent-capsule]')).toHaveLength(1);
+    expect(activity.querySelector('[aria-expanded], .flower-activity-inline-details')).toBeNull();
+    expect(activity.querySelector('[data-flower-subagent-capsule]')?.getAttribute('aria-label')).toContain(targets[0]!.task_name);
   });
-  runtime.style.height = '680px';
-  await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${snapshot.thread_id}"] button`)));
-  (runtime.querySelector(`[data-thread-id="${snapshot.thread_id}"] button`) as HTMLButtonElement).click();
-  // Detail hydration may render rows before the deferred selection commit.
-  // Start motion measurements after selection has finished restoring its tail.
-  await waitFor(() => contentPresented && Boolean(runtime.querySelector('[data-flower-activity-item-id="wait-three"]')));
-  return {
-    runtime,
-    transcript: runtime.querySelector('.flower-chat-transcript') as HTMLDivElement,
-  };
-}
 
-async function sampleDisclosure(
-  runtime: HTMLElement,
-  itemID: string,
-): Promise<Readonly<{ titleOffsets: readonly number[]; heights: readonly number[]; interpolationErrors: readonly number[] }>> {
-  const row = runtime.querySelector(`[data-flower-activity-item-id="${itemID}"]`) as HTMLDivElement;
-  const button = row.querySelector('.flower-activity-inline-button') as HTMLButtonElement;
-  const titleTop = button.getBoundingClientRect().top;
-  button.click();
-  await waitFor(() => Boolean(row.querySelector('.flower-activity-inline-details')));
-  const titleOffsets: number[] = [];
-  const heights: number[] = [];
-  const interpolationErrors: number[] = [];
-  for (let index = 0; index < 32; index += 1) {
-    await nextFrame();
-    titleOffsets.push(button.getBoundingClientRect().top - titleTop);
-    const details = row.querySelector('.flower-activity-inline-details') as HTMLDivElement;
-    const height = details.getBoundingClientRect().height;
-    heights.push(height);
-    const effect = details.getAnimations()[0]?.effect as KeyframeEffect | undefined;
-    const progress = effect?.getComputedTiming().progress;
-    if (effect && typeof progress === 'number') {
-      const keyframes = effect.getKeyframes();
-      const from = Number.parseFloat(String(keyframes[0]?.height));
-      const to = Number.parseFloat(String(keyframes.at(-1)?.height));
-      if (Number.isFinite(from) && Number.isFinite(to)) {
-        interpolationErrors.push(Math.abs(height - (from + (to - from) * progress)));
+  for (const theme of ['light', 'dark'] as const) {
+    it('wraps lifecycle operations and switches agents in ' + theme + ' mode', async () => {
+      await page.viewport(1100, 900);
+      document.documentElement.classList.add(theme);
+      const actions = ['spawn', 'list', 'inspect', 'wait', 'send_input', 'close', 'close_all'];
+      const { runtime, loadDetail } = mount(actions.map(action => operation(action, action, 8)), 8);
+      await waitFor(() => Boolean(row(runtime, 'close_all')));
+      for (const action of actions) {
+        const activity = row(runtime, action);
+        expect(activity.querySelectorAll('[data-flower-subagent-capsule]')).toHaveLength(8);
+        expect(activity.querySelector('[aria-expanded], .flower-activity-inline-details')).toBeNull();
+        expect(activity.textContent).not.toContain('capsule-child');
       }
-    }
+      row(runtime, 'spawn').querySelector<HTMLButtonElement>('[data-flower-subagent-capsule]')!.click();
+      await waitFor(() => Boolean(document.querySelector('.flower-subagent-detail-transcript')));
+      const window = document.querySelector<HTMLElement>('.flower-subagent-detail-window')!;
+      const switcher = document.querySelector<HTMLElement>('[data-flower-subagent-switcher]')!;
+      expect(switcher.querySelectorAll('button')).toHaveLength(8);
+      expect(switcher.querySelectorAll('[aria-pressed="true"]')).toHaveLength(1);
+      const second = switcher.querySelector<HTMLButtonElement>('[data-flower-subagent-switch="capsule-child-1"]')!;
+      second.click();
+      await waitFor(() => second.getAttribute('aria-pressed') === 'true');
+      expect(loadDetail).toHaveBeenLastCalledWith(parentID, 'capsule-child-1');
+      expect(document.querySelectorAll('[data-flower-subagent-detail="open"]')).toHaveLength(1);
+      expect(document.querySelector('.flower-subagent-detail-window')).toBe(window);
+      await page.screenshot({ path: '__screenshots__/subagent-capsules/window-' + theme + '.png' });
+      await page.viewport(320, 750);
+      const list = row(runtime, 'spawn').querySelector<HTMLElement>('.flower-activity-subagents-list')!;
+      await waitFor(() => window.getBoundingClientRect().width < 320);
+      expect(getComputedStyle(list).flexWrap).toBe('wrap');
+      expect(list.scrollWidth).toBeLessThanOrEqual(list.clientWidth + 1);
+      for (const capsule of runtime.querySelectorAll<HTMLElement>('[data-flower-subagent-capsule]')) {
+        expect(capsule.scrollWidth).toBeLessThanOrEqual(capsule.clientWidth + 1);
+      }
+      expect(switcher.scrollWidth).toBeLessThanOrEqual(switcher.clientWidth + 1);
+      await page.screenshot({ path: '__screenshots__/subagent-capsules/narrow-' + theme + '.png' });
+    });
   }
-  return { titleOffsets, heights, interpolationErrors };
-}
 
-function expectContinuousInterpolation(sample: Awaited<ReturnType<typeof sampleDisclosure>>) {
-  // Equal easing covers different pixel distances for one and three targets.
-  // Verify the rendered keyframes rather than imposing a content-size limit.
-  expect(sample.interpolationErrors.length).toBeGreaterThanOrEqual(4);
-  expect(Math.max(...sample.interpolationErrors)).toBeLessThanOrEqual(1);
-  expect(new Set(sample.heights.map(height => Math.round(height))).size).toBeGreaterThanOrEqual(5);
-}
-
-afterEach(async () => {
-  document.documentElement.classList.remove('dark');
-  await mediaCommands.emulateMediaPreferences({ reducedMotion: 'no-preference' });
-});
-
-describe('Flower Subagent disclosure motion', () => {
-  it('uses one disclosure guide without adding a rail to every subagent', async () => {
-    await page.viewport(1100, 720);
-    const { runtime } = await mountFixture();
-    const row = runtime.querySelector('[data-flower-activity-item-id="wait-three"]') as HTMLDivElement;
-    const button = row.querySelector('.flower-activity-inline-button') as HTMLButtonElement;
-    button.click();
-    await waitFor(() => Boolean(row.querySelector('.flower-activity-inline-details-content')));
-
-    const content = row.querySelector('.flower-activity-inline-details-content') as HTMLDivElement;
-    const items = [...row.querySelectorAll<HTMLElement>('.flower-activity-subagents-item')];
-    expect(getComputedStyle(content).borderLeftWidth).toBe('1px');
-    expect(items).toHaveLength(3);
-    expect(items.every((item) => getComputedStyle(item).borderLeftWidth === '0px')).toBe(true);
-    expect(items.every((item) => getComputedStyle(item).paddingLeft === '0px')).toBe(true);
+  it('updates live status without rewriting historical outcomes or replacing focused capsules', async () => {
+    let emit: ((value: FlowerLiveStreamEnvelope | null) => void) | undefined;
+    const { runtime, summaries } = mount([operation('wait', 'wait', 2), operation('timeout', 'wait', 1, {
+      payload: { action: 'wait', targets: targets.slice(0, 1), requested_count: 1, completed_count: 0, timed_out: true },
+    })], 2, {
+      async *connectLiveStream({ signal }) {
+        while (!signal.aborted) {
+          const value = await new Promise<FlowerLiveStreamEnvelope | null>(resolve => {
+            emit = resolve;
+            signal.addEventListener('abort', () => resolve(null), { once: true });
+          });
+          if (!value) return;
+          emit = undefined;
+          yield value;
+        }
+      },
+    });
+    await waitFor(() => Boolean(row(runtime, 'timeout')) && Boolean(emit));
+    const activity = row(runtime, 'wait');
+    const title = activity.querySelector('.flower-activity-inline-title')!.textContent;
+    const capsule = activity.querySelector<HTMLButtonElement>('[data-flower-subagent-capsule="capsule-child-0"]')!;
+    capsule.focus();
+    emit!({ schema_version: 1, kind: 'thread.batch', thread_id: parentID, subagents: summaries.map(summary => ({ ...summary, status: 'completed' })) });
+    await waitFor(() => capsule.dataset.flowerSubagentStatus === 'completed');
+    expect(document.activeElement).toBe(capsule);
+    expect(activity.querySelector('[data-flower-subagent-capsule="capsule-child-0"]')).toBe(capsule);
+    expect(activity.querySelector('.flower-activity-inline-title')!.textContent).toBe(title);
+    expect(row(runtime, 'timeout').textContent).toContain('Wait timed out');
+    expect(row(runtime, 'timeout').querySelector('[data-flower-subagent-capsule]')?.getAttribute('data-flower-subagent-status')).toBe('completed');
   });
 
-  it('keeps one and three-target titles anchored through continuous open and close motion', async () => {
-    await page.viewport(1100, 720);
-    await mediaCommands.emulateMediaPreferences({ reducedMotion: 'no-preference' });
-    const { runtime, transcript } = await mountFixture();
-    const transcriptBounds = transcript.getBoundingClientRect();
-
-    const oneButton = runtime.querySelector('[data-flower-activity-item-id="wait-one"] .flower-activity-inline-button') as HTMLButtonElement;
-    transcript.scrollTop += oneButton.getBoundingClientRect().top - (transcriptBounds.top + transcript.clientHeight / 2);
-    await nextFrame();
-    const one = await sampleDisclosure(runtime, 'wait-one');
-    expect(Math.max(...one.titleOffsets.map(Math.abs))).toBeLessThanOrEqual(1);
-    expect(one.heights[0]).toBeLessThan(one.heights.at(-1)!);
-    expect(one.heights.every((height, index) => index === 0 || height + 0.5 >= one.heights[index - 1]!)).toBe(true);
-    expectContinuousInterpolation(one);
-
-    const oneRow = runtime.querySelector('[data-flower-activity-item-id="wait-one"]') as HTMLDivElement;
-    const oneTop = oneButton.getBoundingClientRect().top;
-    oneButton.click();
-    for (let index = 0; index < 28; index += 1) {
-      await nextFrame();
-      expect(Math.abs(oneButton.getBoundingClientRect().top - oneTop)).toBeLessThanOrEqual(1);
-    }
-    await waitFor(() => oneRow.querySelector('.flower-activity-inline-details') === null);
-
-    transcript.scrollTop = transcript.scrollHeight;
-    await nextFrame();
-    const three = await sampleDisclosure(runtime, 'wait-three');
-    expect(Math.max(...three.titleOffsets.map(Math.abs))).toBeLessThanOrEqual(1);
-    expect(three.heights[0]).toBeLessThan(three.heights.at(-1)!);
-    expect(three.heights.every((height, index) => index === 0 || height + 0.5 >= three.heights[index - 1]!)).toBe(true);
-    expectContinuousInterpolation(three);
-    expect(transcript.scrollHeight).toBeGreaterThan(transcript.clientHeight);
-  });
-
-  it('yields the viewport anchor to manual scrolling and uses an immediate stable height for reduced motion', async () => {
-    await page.viewport(1100, 720);
-    await mediaCommands.emulateMediaPreferences({ reducedMotion: 'no-preference' });
-    const { runtime, transcript } = await mountFixture();
-    transcript.scrollTop = transcript.scrollHeight;
-    await nextFrame();
-
-    const row = runtime.querySelector('[data-flower-activity-item-id="wait-three"]') as HTMLDivElement;
-    const button = row.querySelector('.flower-activity-inline-button') as HTMLButtonElement;
-    button.click();
-    await waitFor(() => Boolean(row.querySelector('.flower-activity-inline-details')));
-    for (let index = 0; index < 4; index += 1) await nextFrame();
-    transcript.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: -120 }));
-    transcript.scrollTop = Math.max(0, transcript.scrollTop - 80);
-    const manualScrollTop = transcript.scrollTop;
-    for (let index = 0; index < 28; index += 1) await nextFrame();
-    expect(Math.abs(transcript.scrollTop - manualScrollTop)).toBeLessThanOrEqual(1);
-
-    button.click();
-    await waitFor(() => row.querySelector('.flower-activity-inline-details') === null);
-    await mediaCommands.emulateMediaPreferences({ reducedMotion: 'reduce' });
-    const titleTop = button.getBoundingClientRect().top;
-    button.click();
-    await waitFor(() => row.getAttribute('data-state') === 'open');
-    const panel = row.querySelector('.flower-activity-inline-details') as HTMLDivElement;
-    const content = row.querySelector('.flower-activity-inline-details-content') as HTMLDivElement;
-    expect(Math.abs(button.getBoundingClientRect().top - titleTop)).toBeLessThanOrEqual(1);
-    expect(Math.abs(panel.getBoundingClientRect().height - content.getBoundingClientRect().height)).toBeLessThanOrEqual(1);
-    expect(panel.getAnimations()).toHaveLength(0);
+  it('shows failed creation inline without inventing a clickable agent', async () => {
+    const { runtime } = mount([operation('failed', 'spawn', 0, { status: 'error',
+      payload: { action: 'spawn', targets: [], error: { message: 'The child limit was reached.' } } })], 0);
+    await waitFor(() => Boolean(row(runtime, 'failed')));
+    const activity = row(runtime, 'failed');
+    expect(activity.textContent).toContain('Failed to create subagent');
+    expect(activity.textContent).toContain('The child limit was reached.');
+    expect(activity.querySelector('[data-flower-subagent-capsule], [aria-expanded]')).toBeNull();
   });
 });

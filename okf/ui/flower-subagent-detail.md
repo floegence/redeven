@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower subagent detail presentation
 description: Parent header membership, canonical thread routing, and child execution detail and canonical input controls.
 tags: [ai, flower, subagents, ui]
-timestamp: 2026-10-15T00:00:00Z
+timestamp: 2026-10-16T00:00:00Z
 ---
 # Summary
 
@@ -18,7 +18,7 @@ Thread-level child membership comes from Floret v7 `ThreadRuntime.List` scoped b
 
 `FlowerSubagentSummary` contains `parent_thread_id`, canonical child `thread_id`, required `task_name`, task description, agent type, context mode, status, timing, and current control flags. There is no `subagent_id` or `title` compatibility field. Activity payloads route `Open messages` with `thread_id` only. Delegated approval presentation uses `child_thread_id`; it does not duplicate the same identity under another name.
 
-SubAgent tool rows are action-first. One localized formatter combines the typed operation action with the Activity lifecycle and outcome counts, so spawn, wait, list, inspect, send-input, close, and close-all never collapse to the ambiguous title “Subagents.” A collapsed multi-target row shows the first two task names plus the remaining count; expanded detail preserves every requested target in request order. Unknown or invalid operation data uses a neutral operation title and never guesses from a generic label.
+SubAgent tool rows are action-first. One localized formatter combines the typed operation action with the Activity lifecycle and outcome counts, so spawn, wait, list, inspect, send-input, close, and close-all never collapse to the ambiguous title “Subagents.” Every target appears immediately as an inline capsule in request order, with its canonical portrait, compact task name, and status glyph. A single capsule keeps its natural width; multiple capsules wrap within the transcript. Management tools have no disclosure or chevron. Clicking or activating a capsule opens the existing floating detail window directly. Operation errors remain visible inline; a failed creation without a canonical child identity never fabricates a clickable capsule. Unknown or invalid operation data uses a neutral operation title and never guesses from a generic label.
 
 Historical management rows describe their own invocation. Published Floret v7.32.1
 supplies canonical dispatch/result timestamps; each row displays that fixed
@@ -28,6 +28,11 @@ clock. Missing execution boundaries leave duration unavailable, without a
 turn-duration or child-clock substitute. Saved target statuses and wait counts
 remain facts at the operation boundary. Current inventory may fill missing task
 identity by exact `thread_id`, but cannot rewrite those outcomes or supply timing.
+Capsule glyphs independently follow current canonical membership status, falling
+back to the recorded target status when membership is temporarily absent. Their
+accessible names expose the full task name and localized status; hover titles
+also retain the task description. Live status changes retain the same capsule
+and keyboard focus.
 Current child status and runtime appear in the child dropdown and detail overview;
 later child turns, live replacements, history reloads, and terminal refresh cannot
 restart an old management row's timer.
@@ -43,6 +48,8 @@ HTTP and SSE pass through the same safe current projection and the same selectio
 The detail window maps canonical child messages, interactions, and Activity into the shared renderers with one keyed reconciliation path. Ledger groups and their nested entries render from stable semantic keys and read changing content through accessors; object identity, status, payload, position, and `view_version` never own component lifetime. An activity phase keeps one root and body owner while it grows from one operation to many: the single-operation form hides only the group summary, so an already-open tool row, disclosure controller, and terminal viewport remain mounted. Every ledger disclosure stores its first default and later user choice in that keyed owner; there is no batch-only state map or parallel open authority.
 
 [Activity disclosure interaction](flower-activity-interaction.md) owns the shared native activation, floating controls, and scroll policy. The parent transcript and child detail each pass their own viewport controller to the shared renderer; opening a child tool cannot change parent following or anchoring. Native ledger summaries use the same press protection while retaining keyed grouping and initial-open rules. Later child currents request layout measurement without claiming follow intent. The selection and its current view are bounded human UI state; neither is injected into the parent model context or persisted as another transcript.
+
+The detail window hides its avatar switcher for a single child. With multiple canonical members, a wrapping avatar strip switches the same stable window through the existing parent-scoped selection and load path. It never changes the parent conversation. Narrow layouts reserve only the visible navigation inset, keeping detail usable when the rail becomes an overlay.
 
 The detail has no independent chat composer. Historical queued inputs offer Steer now and Remove through one parent-scoped operation boundary shared by Env App and Desktop. Each row freezes its full-input fingerprint; a conflict refreshes canonical detail and preserves usable controls. Busy and failure state belongs only to that row. Navigation, closing the window, and parent Stop remain available. Selection identity and connection epoch prevent late operation responses from reopening a window or replacing another child's content. Reconnection uses the existing live/current refresh, without polling.
 
@@ -69,5 +76,6 @@ Flower must not recover a missing child identity from activity sidecars, a title
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.finalArchitecture.browser.test.tsx` - Proves streamed current replacement preserves the window, activity row, terminal viewport, disclosure motion, and parent scroll isolation.
 - `redeven:internal/flower_ui/src/flowerActivityPresentation.ts` - Formats localized operation titles and exact ordered target summaries.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.activityTiming.browser.test.tsx` - Verifies invocation duration across clock ticks, child reruns, terminal replacement and reload.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.subagentDisclosure.browser.test.tsx` - Verifies direct activation, management operations, multi-child switching, live status and focus stability, failed creation, themes, and narrow wrapping.
 
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.subagentSteering.browser.test.tsx` - Verifies row-scoped operations, stable windows, recoverable conflicts, Stop availability, and late-response isolation.
