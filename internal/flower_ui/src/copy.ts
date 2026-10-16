@@ -661,7 +661,12 @@ export type FlowerSurfaceCopy = Readonly<{
       categoryLabels: Readonly<Record<FlowerContextCategory, string>>;
       sourceLabels: Readonly<Record<FlowerContextSource, string>>;
       input: string;
-      outputReserve: string;
+      compactThreshold: string;
+      requestOutputLimit: string;
+      serverManaged: string;
+      sharedSpace: string;
+      estimateTotal: string;
+      close: string;
       freeSpace: string;
       estimated: string;
       characters: (value: string) => string;
@@ -994,7 +999,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       openSettings: 'Open settings',
     },
     runErrors: {
-      contextBudgetInvalid: "The output allowance leaves no room for input. Increase the model's configured context window or lower its output limit, then retry. For Ollama, set num_ctx in the Modelfile and reload the model.",
+      contextBudgetInvalid: "The request's context and output settings are incompatible. Check the model's context window, output limit, reasoning settings and provider output-control support, then retry. For Ollama, set num_ctx in the Modelfile and reload the model.",
       contextFixedOverhead: "The system instructions and tool definitions exceed the model's available context. Increase the serving context window or choose a model with more context, then retry. Compressing chat history cannot resolve this.",
       contextCompactionLimit: "The conversation still exceeds the model's context limit after compression. Shorten the input or choose a model with more context, then retry.",
       providerAuthFailed: 'The selected AI provider rejected the saved credentials. Open Settings and update the Local AI Profile key.',
@@ -1084,8 +1089,8 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       unavailable: 'Not available',
       currentContents: 'Current contents', currentContentsHint: 'Current text by character count; token totals include retained updates.', collected: 'Loaded', used: 'Last used', updated: 'Updated', removed: 'Removed',
       textShare: 'Relative shares',
-      composition: 'Content distribution',
-      compositionHint: 'Estimated content of this request. Safety reserves are excluded; the provider confirms the total.',
+      composition: 'Input composition estimate',
+      compositionHint: 'Shares use the estimated total below, independently of measured input.',
       relativeHint: 'Relative shares only: a matching vocabulary or complete text input is unavailable.',
       historical: 'Historical shares',
       historicalHint: 'Historical estimate; token amounts are unavailable.',
@@ -1103,9 +1108,14 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
         model_context_tokens: 'Auto-loaded context', compaction_tokens: 'Conversation summary',
         reasoning_tokens: 'Reasoning', attachment_tokens: 'Images & files', framing_tokens: 'Protocol formatting',
       },
-      input: 'Used',
-      outputReserve: 'Output reserve',
-      freeSpace: 'Free space',
+      input: 'Input usage',
+      compactThreshold: 'Auto-compaction threshold',
+      requestOutputLimit: 'Latest request output limit',
+      serverManaged: 'Managed by server',
+      sharedSpace: 'Remaining window is shared by input and output.',
+      estimateTotal: 'Estimated total',
+      close: 'Close context details',
+      freeSpace: 'Remaining window',
       estimated: 'Estimated',
       characters: (value) => `${value} chars`,
       tokens: (value) => `${value} tokens`,

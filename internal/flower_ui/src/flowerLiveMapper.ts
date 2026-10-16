@@ -385,6 +385,13 @@ function mapContextSample(raw: unknown): FlowerContextSample | null {
   const thresholdTokens = optionalInteger(record.threshold_tokens);
   const requestSafeLimitTokens = optionalInteger(record.request_safe_limit_tokens);
   const outputHeadroomTokens = optionalInteger(record.output_headroom_tokens);
+  const outputControl = record.output_control;
+  const requestOutputTokens = record.request_output_tokens === undefined ? undefined : nonNegativeInteger(record.request_output_tokens, 'request_output_tokens');
+  const safetyMarginTokens = record.safety_margin_tokens === undefined ? undefined : nonNegativeInteger(record.safety_margin_tokens, 'safety_margin_tokens');
+  if (outputControl !== undefined && outputControl !== 'client' && outputControl !== 'server') throw new Error('Invalid output control');
+  if (!outputControl && ((requestOutputTokens ?? 0) > 0 || (safetyMarginTokens ?? 0) > 0)) throw new Error('Output budget requires control mode');
+  if ((safetyMarginTokens ?? 0) > 4096) throw new Error('Invalid safety margin');
+  if (outputControl === 'server' && (requestOutputTokens ?? 0) > 0) throw new Error('Server output cannot claim a client limit');
   const usedRatio = clampRatio(record.used_ratio);
   const thresholdRatio = clampRatio(record.threshold_ratio);
   return {
@@ -397,6 +404,9 @@ function mapContextSample(raw: unknown): FlowerContextSample | null {
     ...(thresholdTokens ? { threshold_tokens: thresholdTokens } : {}),
     ...(requestSafeLimitTokens ? { request_safe_limit_tokens: requestSafeLimitTokens } : {}),
     ...(outputHeadroomTokens ? { output_headroom_tokens: outputHeadroomTokens } : {}),
+    ...(outputControl ? { output_control: outputControl } : {}),
+    ...(requestOutputTokens !== undefined ? { request_output_tokens: requestOutputTokens } : {}),
+    ...(safetyMarginTokens !== undefined ? { safety_margin_tokens: safetyMarginTokens } : {}),
     ...(usedRatio !== undefined ? { used_ratio: usedRatio } : {}),
     ...(thresholdRatio !== undefined ? { threshold_ratio: thresholdRatio } : {}),
     pressure_status: pressureStatus,

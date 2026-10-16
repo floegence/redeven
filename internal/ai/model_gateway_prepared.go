@@ -15,6 +15,7 @@ import (
 type preparedModelWire struct {
 	mu          sync.Mutex
 	consumed    bool
+	outputField string
 	payload     []byte
 	estimate    flprovider.TokenEstimate
 	fingerprint string
@@ -41,7 +42,13 @@ func newPreparedModelWire(providerType, model string, format flprovider.RequestF
 	if err != nil {
 		return nil, err
 	}
-	return &preparedModelWire{payload: raw, estimate: estimate, fingerprint: fmt.Sprintf("sha256:%x", sha256.Sum256(raw)), execute: execute}, nil
+	field := "max_tokens"
+	if format == flprovider.RequestFormatOpenAIResponses {
+		field = "max_output_tokens"
+	} else if _, ok := body["max_completion_tokens"]; ok {
+		field = "max_completion_tokens"
+	}
+	return &preparedModelWire{outputField: field, payload: raw, estimate: estimate, fingerprint: fmt.Sprintf("sha256:%x", sha256.Sum256(raw)), execute: execute}, nil
 }
 func (p *preparedModelWire) TokenEstimate() flprovider.TokenEstimate {
 	return cloneModelTokenEstimate(p.estimate)
@@ -70,7 +77,31 @@ func (p *preparedModelWire) Close() error {
 func (p *preparedModelWire) replay(_ context.Context, _ flprovider.Request) (preparedModelGatewayTurn, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return &preparedModelWire{payload: bytes.Clone(p.payload), estimate: p.estimate, fingerprint: p.fingerprint, execute: p.execute}, nil
+	return &preparedModelWire{outputField: p.outputField, payload: bytes.Clone(p.payload), estimate: p.estimate, fingerprint: p.fingerprint, execute: p.execute}, nil
+}
+
+func (p *preparedModelWire) withMaxOutputTokens(ctx context.Context, limit int64) (preparedModelGatewayTurn, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if limit <= 0 {
+		return nil, errors.New("output limit must be positive")
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.consumed {
+		return nil, errors.New("prepared wire already used or closed")
+	}
+	var body map[string]json.RawMessage
+	if err := json.Unmarshal(p.payload, &body); err != nil {
+		return nil, err
+	}
+	body[p.outputField], _ = json.Marshal(limit)
+	raw, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	return &preparedModelWire{outputField: p.outputField, payload: raw, estimate: p.estimate, fingerprint: fmt.Sprintf("sha256:%x", sha256.Sum256(raw)), execute: p.execute}, nil
 }
 
 func cloneModelTokenEstimate(value flprovider.TokenEstimate) flprovider.TokenEstimate {

@@ -21,9 +21,10 @@ type floretProviderAdapter struct {
 	base     ModelGateway
 	identity flprovider.Identity
 
-	providerType string
-	modelName    string
-	webSearch    string
+	providerType  string
+	modelName     string
+	webSearch     string
+	outputControl flprovider.OutputControl
 
 	controls                   ProviderControls
 	budgets                    TurnBudgets
@@ -72,6 +73,13 @@ func newFloretProviderAdapter(base ModelGateway, providerType string, modelName 
 		controls:     controls,
 		budgets:      budgets,
 	}
+	switch adapter.providerType {
+	case "chatgpt":
+		adapter.outputControl = flprovider.OutputControlServer
+	case DesktopModelSourceProviderType: // The remote model snapshot must declare control.
+	default:
+		adapter.outputControl = flprovider.OutputControlClient
+	}
 	for _, option := range options {
 		if option != nil {
 			option(adapter)
@@ -91,7 +99,9 @@ func (p *floretProviderAdapter) Capabilities() flprovider.Capabilities {
 	if p == nil {
 		return flprovider.Capabilities{}
 	}
-	return floretModelGatewayCapabilities(p.controls.ReasoningCapability)
+	result := floretModelGatewayCapabilities(p.controls.ReasoningCapability)
+	result.OutputControl = p.outputControl
+	return result
 }
 
 func withFloretAttachmentResolver(resolver func(context.Context, flruntime.MessageAttachment) (ContentPart, error), supportsImageInput bool, supportsFileInput bool) floretProviderAdapterOption {
@@ -502,9 +512,6 @@ func (p *floretProviderAdapter) turnRequest(ctx context.Context, req flprovider.
 	budgets := p.budgets
 	if req.MaxOutputTokens > 0 {
 		budgets.MaxOutputToken = int(req.MaxOutputTokens)
-		if p.providerType == platformGatewayProviderType && p.budgets.MaxOutputToken > 0 && budgets.MaxOutputToken > p.budgets.MaxOutputToken {
-			budgets.MaxOutputToken = p.budgets.MaxOutputToken
-		}
 	}
 	webSearch, err := p.requestWebSearchMode(req.HostedTools)
 	if err != nil {
@@ -813,4 +820,54 @@ func normalizeFloretUsage(usage flprovider.Usage) flprovider.Usage {
 		usage.Available = true
 	}
 	return usage
+}
+
+// WithMaxOutputTokens derives a new single-use handle from frozen input only.
+func (p *preparedFloretModelRequest) WithMaxOutputTokens(ctx context.Context, limit int64) (flprovider.PreparedRequest, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if limit <= 0 {
+		return nil, errors.New("output limit must be positive")
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.closed || p.streamed {
+		return nil, errors.New("prepared model request already used or closed")
+	}
+	if p.adapter.Capabilities().OutputControl != flprovider.OutputControlClient {
+		return nil, errors.New("provider cannot enforce client output limit")
+	}
+	req := p.providerRequest
+	req.MaxOutputTokens = limit
+	input := req
+	input.AttemptID = ""
+	input.AttemptEpoch = 0
+	raw, err := json.Marshal(input)
+	if err != nil {
+		return nil, err
+	}
+	result := &preparedFloretModelRequest{adapter: p.adapter, providerRequest: req, frozenProviderInput: raw, estimate: p.estimate}
+	if p.transport != nil {
+		limiter, ok := p.transport.(interface {
+			withMaxOutputTokens(context.Context, int64) (preparedModelGatewayTurn, error)
+		})
+		if !ok {
+			return nil, errors.New("prepared transport lacks frozen output control")
+		}
+		result.transport, err = limiter.withMaxOutputTokens(ctx, limit)
+		if err != nil {
+			return nil, err
+		}
+		result.fingerprint = result.transport.RenderedPayloadFingerprint()
+	} else {
+		result.request = p.request
+		result.request.Budgets.MaxOutputToken = int(limit)
+		payload, err := json.Marshal(result.request)
+		if err != nil {
+			return nil, err
+		}
+		result.fingerprint = fmt.Sprintf("sha256:%x", sha256.Sum256(payload))
+	}
+	return result, nil
 }

@@ -1,10 +1,11 @@
 import { For, Show, createEffect, createMemo, createSignal, createUniqueId, onCleanup, onMount } from 'solid-js';
-import { ChevronRight } from 'lucide-solid';
+import { SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
+import { ChevronRight, X } from 'lucide-solid';
 import type { FlowerContextSourceRow } from './flowerContextPresentation';
 
 import type { FlowerContextUsage, FlowerModelContext } from '../contracts/flowerSurfaceContracts';
 import type { FlowerSurfaceCopy } from '../copy';
-import { buildFlowerComposerContextIndicatorView, buildFlowerContextWindow, buildFlowerContextComposition, formatContextAmount } from './flowerContextPresentation';
+import { buildFlowerComposerContextIndicatorView, buildFlowerContextWindow, buildFlowerContextComposition, flowerRequestOutputSample, formatContextAmount } from './flowerContextPresentation';
 
 export function FlowerComposerContextIndicator(props: {
   usage?: FlowerContextUsage;
@@ -15,6 +16,8 @@ export function FlowerComposerContextIndicator(props: {
   const labels = () => props.copy.chat.contextIndicator;
   const view = createMemo(() => buildFlowerComposerContextIndicatorView(props.usage ?? {}, props.copy));
   const contextWindow = createMemo(() => buildFlowerContextWindow(props.usage ?? {}));
+  const requestOutput = createMemo(() => flowerRequestOutputSample(props.usage ?? {}));
+  const threshold = createMemo(() => (props.usage?.estimate ?? props.usage?.confirmed)?.threshold_tokens);
   const composition = createMemo(() => buildFlowerContextComposition(props.usage ?? {}));
   const disclosures = new Map<string, HTMLElement>();
   const expanded = new Set<string>();
@@ -50,9 +53,24 @@ export function FlowerComposerContextIndicator(props: {
   const cancelDismiss = () => { clearTimeout(dismissTimer); };
   onCleanup(cancelDismiss);
   let container: HTMLDivElement | undefined;
+  let panel: HTMLDivElement | undefined;
+  const [position, setPosition] = createSignal({ x: 0, y: 0 });
+  const containsFocus = () => !!(container?.contains(document.activeElement) || panel?.contains(document.activeElement));
+  const close = () => { trigger?.focus({ preventScroll: true }); setTooltipOpen(false); };
+  const escape = (event: KeyboardEvent) => {
+    if (event.key === 'Escape' && tooltipOpen()) { event.stopPropagation(); event.preventDefault(); close(); }
+  };
+  createEffect(() => {
+    if (!tooltipOpen() || !trigger) return;
+    const rect = trigger.getBoundingClientRect();
+    setPosition({ x: props.placement === 'below-start' ? rect.left : rect.right - 368,
+      y: props.placement === 'below-start' ? rect.bottom + 8 : rect.top - (panel?.offsetHeight || 500) - 8 });
+  });
   let trigger: HTMLDivElement | undefined;
+  const [anchor, setAnchor] = createSignal<HTMLElement>();
   onMount(() => {
-    const dismiss = (event: PointerEvent) => { if (container && !container.contains(event.target as Node)) setTooltipOpen(false); };
+    setAnchor(trigger);
+    const dismiss = (event: PointerEvent) => { if (container && !container.contains(event.target as Node) && !panel?.contains(event.target as Node)) setTooltipOpen(false); };
     document.addEventListener('pointerdown', dismiss);
     onCleanup(() => document.removeEventListener('pointerdown', dismiss));
   });
@@ -72,20 +90,14 @@ export function FlowerComposerContextIndicator(props: {
       data-context-ratio={dataRatio()}
       data-context-placement={props.placement ?? 'above-end'}
       onPointerEnter={() => { cancelDismiss(); setTooltipOpen(true); }}
-      onPointerLeave={(event) => {
-        if (!event.currentTarget.contains(document.activeElement)) dismissTimer = setTimeout(() => setTooltipOpen(false), 150);
+      onPointerLeave={() => {
+        if (!containsFocus()) dismissTimer = setTimeout(() => setTooltipOpen(false), 150);
       }}
       onFocusIn={() => { cancelDismiss(); setTooltipOpen(true); }}
       onFocusOut={() => {
-        queueMicrotask(() => { if (container && !container.contains(document.activeElement)) setTooltipOpen(false); });
+        queueMicrotask(() => { if (!containsFocus()) setTooltipOpen(false); });
       }}
-      onKeyDown={(event) => {
-        if (event.key === 'Escape' && tooltipOpen()) {
-          event.stopPropagation();
-          trigger?.focus();
-          setTooltipOpen(false);
-        }
-      }}
+      onKeyDown={escape}
     >
       <div
         ref={trigger}
@@ -109,7 +121,13 @@ export function FlowerComposerContextIndicator(props: {
           }
         }}
       />
+      <SurfaceFloatingLayer owner={anchor()} position={position()} estimatedSize={{ width: 368, height: 500 }} class="flower-context-panel-layer" data-flower-floating-layer="true">
       <div
+        ref={panel}
+        onKeyDown={escape}
+        onPointerEnter={cancelDismiss}
+        onPointerLeave={() => { if (!containsFocus()) dismissTimer = setTimeout(() => setTooltipOpen(false), 150); }}
+        onFocusOut={() => queueMicrotask(() => { if (!containsFocus()) setTooltipOpen(false); })}
         id={tooltipID}
         role="region"
         tabIndex={-1}
@@ -120,6 +138,7 @@ export function FlowerComposerContextIndicator(props: {
       >
         <div class="flower-context-heading">
           <span>{labels().label}</span>
+          <button type="button" class="flower-context-close" aria-label={labels().close} onClick={close}><X size={14} aria-hidden="true" /></button>
           <span class="flower-context-total" title={contextWindow() ? `${labels().tokens(String(contextWindow()!.input))} / ${labels().tokens(String(contextWindow()!.capacity))}` : undefined}>
             <Show when={contextWindow()}>{(window) => <>
               <Show when={window().estimated}><span title={labels().estimated} aria-label={labels().estimated}>≈ </span></Show>
@@ -144,11 +163,18 @@ export function FlowerComposerContextIndicator(props: {
             }</For>
           </div>
         }</Show>
+        <div class="flower-context-shared-space">{labels().sharedSpace}</div>
+        <div class="flower-context-budget-facts">
+          <div><span>{labels().compactThreshold}</span><strong>{threshold() ? formatContextAmount(threshold()!) : labels().unavailable}</strong></div>
+          <div><span>{labels().requestOutputLimit}</span><strong>{requestOutput()?.output_control === 'server' ? labels().serverManaged
+            : requestOutput()?.output_control === 'client' && requestOutput()?.request_output_tokens
+              ? formatContextAmount(requestOutput()!.request_output_tokens!) : labels().unavailable}</strong></div>
+        </div>
         <Show when={composition()}>
           <div class="flower-context-categories flower-context-composition" role="group" aria-label={labels().composition} data-token-amounts={composition()?.showTokenAmounts ? 'true' : 'false'}>
             <div class="flower-context-heading">
               <span>{labels().composition}</span>
-              <span class="flower-context-estimate" title={composition()?.showTokenAmounts ? labels().compositionHint : composition()?.historical ? labels().historicalHint : labels().relativeHint}>{composition()?.showTokenAmounts ? labels().estimated : composition()?.historical ? labels().historical : labels().textShare}</span>
+              <span class="flower-context-estimate" title={composition()?.showTokenAmounts ? labels().compositionHint : composition()?.historical ? labels().historicalHint : labels().relativeHint}>{composition()?.showTokenAmounts ? labels().estimateTotal + ': ≈' + formatContextAmount(composition()!.total) : composition()?.historical ? labels().historical : labels().textShare}</span>
             </div>
             <For each={[...categories().rows.keys()]}>{(key) => {
               const row = () => categories().rows.get(key)!;
@@ -192,6 +218,7 @@ export function FlowerComposerContextIndicator(props: {
           <div class="flower-composer-context-warning">{view().warning}</div>
         </Show>
       </div>
+      </SurfaceFloatingLayer>
     </div>
   );
 }

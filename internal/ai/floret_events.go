@@ -432,11 +432,12 @@ func flowerContextSampleFromFloret(status *observation.ContextStatus) (FlowerCon
 		ThresholdTokens:        pressure.ThresholdTokens,
 		RequestSafeLimitTokens: pressure.RequestSafeLimit,
 		OutputHeadroomTokens:   pressure.OutputHeadroomTokens,
-		UsedRatio:              status.UsedRatio,
-		ThresholdRatio:         status.ThresholdRatio,
-		PressureStatus:         pressureStatus,
-		Source:                 source,
-		UpdatedAtMs:            updatedAt,
+		RequestOutputTokens:    pressure.RequestOutputTokens, OutputControl: pressure.OutputControl, SafetyMarginTokens: pressure.SafetyMarginTokens,
+		UsedRatio:      status.UsedRatio,
+		ThresholdRatio: status.ThresholdRatio,
+		PressureStatus: pressureStatus,
+		Source:         source,
+		UpdatedAtMs:    updatedAt,
 	}, nil
 }
 

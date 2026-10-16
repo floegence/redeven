@@ -8,6 +8,7 @@ import (
 
 // ModelCapability defines provider/model feature support for runtime setup.
 type ModelCapability struct {
+	OutputControl                  string                       `json:"output_control,omitempty"`
 	ProviderID                     string                       `json:"provider_id"`
 	ProviderType                   string                       `json:"provider_type,omitempty"`
 	ResolverVersion                int                          `json:"resolver_version,omitempty"`

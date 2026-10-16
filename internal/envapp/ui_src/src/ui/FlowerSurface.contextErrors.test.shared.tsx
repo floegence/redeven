@@ -8,7 +8,7 @@ const detail = 'context_window_tokens=3891 reserved_output_tokens=4096 request_s
 
 describe('Flower context failure recovery', () => {
   it.each([
-    ['context_budget_invalid', 'The output allowance leaves no room for input.'],
+    ['context_budget_invalid', "The request's context and output settings are incompatible."],
     ['context_fixed_overhead', 'The system instructions and tool definitions'],
     ['context_compaction_limit', 'The conversation still exceeds'],
   ])('explains %s and exposes deliberate recovery without automatic retry', async (code, guidance) => {

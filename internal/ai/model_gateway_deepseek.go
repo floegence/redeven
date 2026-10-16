@@ -218,3 +218,15 @@ func (p *deepSeekPreparedTurn) replay(ctx context.Context, next flprovider.Reque
 	}
 	return &deepSeekPreparedTurn{PreparedRequest: prepared, aliases: p.aliases}, nil
 }
+
+func (p *deepSeekPreparedTurn) withMaxOutputTokens(ctx context.Context, limit int64) (preparedModelGatewayTurn, error) {
+	limiter, ok := p.PreparedRequest.(flprovider.PreparedRequestOutputLimiter)
+	if !ok {
+		return nil, errors.New("DeepSeek transport lacks frozen output control")
+	}
+	prepared, err := limiter.WithMaxOutputTokens(ctx, limit)
+	if err != nil {
+		return nil, err
+	}
+	return &deepSeekPreparedTurn{PreparedRequest: prepared, aliases: p.aliases}, nil
+}

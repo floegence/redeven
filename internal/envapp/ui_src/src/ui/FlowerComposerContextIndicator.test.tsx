@@ -3,7 +3,7 @@ import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FlowerComposerContextIndicator } from '../../../../flower_ui/src/chat/FlowerComposerContextIndicator';
-import { buildFlowerContextWindow } from '../../../../flower_ui/src/chat/flowerContextPresentation';
+import { buildFlowerContextWindow, flowerRequestOutputSample } from '../../../../flower_ui/src/chat/flowerContextPresentation';
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../../../../flower_ui/src/copy';
 import { mapContextUsage } from '../../../../flower_ui/src/flowerLiveMapper';
 import type { FlowerContextUsage, FlowerModelContext } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
@@ -30,8 +30,8 @@ function mount(usage?: () => FlowerContextUsage) {
  const host = document.createElement('div'); document.body.append(host);
  disposers.push(render(() => <FlowerComposerContextIndicator usage={usage?.()} modelContext={facts} copy={DEFAULT_FLOWER_SURFACE_COPY} />, host));
  const trigger = host.querySelector<HTMLElement>('[role="progressbar"]')!;
- const panel = host.querySelector<HTMLElement>('[role="region"]')!;
- trigger.focus(); return { host, trigger, panel };
+ const panel = document.getElementById(trigger.getAttribute('aria-controls')!)!;
+ trigger.focus(); return { host: panel, trigger, panel };
 }
 
 describe('Flower context source breakdown', () => {
@@ -120,7 +120,7 @@ describe('Flower context source breakdown', () => {
 describe('Flower context capacity partitions', () => {
  it('partitions measured capacity independently from source estimates', () => {
   expect(buildFlowerContextWindow({ confirmed: sample })).toEqual({ input: 600, capacity: 1000, estimated: false, segments: [
-   { key: 'input', tokens: 600, share: 60 }, { key: 'outputReserve', tokens: 200, share: 20 }, { key: 'freeSpace', tokens: 200, share: 20 },
+   { key: 'input', tokens: 600, share: 60 }, { key: 'freeSpace', tokens: 400, share: 40 },
   ] });
   expect(buildFlowerContextWindow({ confirmed: sample, estimate: { ...sample, phase: 'projected_request', input_tokens: 900 } })?.input).toBe(600);
   expect(buildFlowerContextWindow({ estimate: { ...sample, phase: 'projected_request' } })?.estimated).toBe(true);
@@ -129,5 +129,47 @@ describe('Flower context capacity partitions', () => {
   expect(buildFlowerContextWindow({})).toBeNull();
   expect(buildFlowerContextWindow({ confirmed: { ...sample, context_window_tokens: 0 } })).toBeNull();
   expect(buildFlowerContextWindow({ confirmed: { ...sample, input_tokens: 1200 } })?.segments).toEqual([{ key: 'input', tokens: 1200, share: 100 }, { key: 'freeSpace', tokens: 0, share: 0 }]);
+ });
+});
+
+describe('Flower request budget facts', () => {
+ it('keeps output facts on the latest request and respects canonical invalidation', () => {
+  const confirmed = { ...sample, output_control: 'client' as const, request_output_tokens: 100 };
+  const estimate = { ...sample, phase: 'projected_request' as const, updated_at_ms: 2, output_control: 'client' as const, request_output_tokens: 50 };
+  expect(flowerRequestOutputSample({ confirmed, estimate })).toBe(estimate);
+  expect(flowerRequestOutputSample({ confirmed: { ...confirmed, run_id: 'run', step_index: 1 },
+   estimate: { ...estimate, updated_at_ms: 1, run_id: 'run', step_index: 2 } })?.request_output_tokens).toBe(50);
+  expect(flowerRequestOutputSample({})).toBeUndefined();
+  expect(flowerRequestOutputSample({ estimate: { ...sample, phase: 'projected_request' } })?.output_control).toBeUndefined();
+  expect(flowerRequestOutputSample({ confirmed, estimate: { ...sample, phase: 'projected_request', updated_at_ms: 3 } })?.output_control).toBeUndefined();
+ });
+ it('shows measured input and independently totaled estimates without reserving model output', () => {
+  const usage=fixture();
+  const {host}=mount(()=>({...usage, confirmed:{...usage.confirmed!, input_tokens:68400,context_window_tokens:950000,threshold_tokens:855000,request_output_tokens:393216,output_control:'client',safety_margin_tokens:4096}}));
+  expect(host.querySelector('[data-category="outputReserve"]')).toBeNull();
+  expect(host.textContent).toContain('Auto-compaction threshold');
+  expect(host.textContent).toContain('855k');
+  expect(host.textContent).toContain('393.2k');
+  expect(host.textContent).toContain('Input composition estimate');
+  expect(host.textContent).toContain('Estimated total: ≈650');
+ });
+ it('shows server management and never infers historical output limits', () => {
+  const [usage,update]=createSignal<FlowerContextUsage>({confirmed:{...sample,output_control:'server',safety_margin_tokens:10}});
+  const {host}=mount(usage);
+  expect(host.textContent).toContain('Managed by server');
+  update({confirmed:sample});
+  expect(host.querySelector('.flower-context-budget-facts')?.textContent).toContain('Not available');
+  expect(host.querySelector('.flower-context-budget-facts')?.textContent).not.toContain('200');
+ });
+ it('closes through its visible button and restores trigger focus',()=>{
+  const {panel,trigger}=mount(()=>fixture());
+  panel.querySelector<HTMLButtonElement>('.flower-context-close')!.click();
+  expect(panel.getAttribute('aria-hidden')).toBe('true');
+  expect(document.activeElement).toBe(trigger);
+ });
+ it('rejects invalid output budget contracts',()=>{
+  for(const fields of [{output_control:'server',request_output_tokens:100},{request_output_tokens:100},{output_control:'client',request_output_tokens:-1},{output_control:'client',safety_margin_tokens:4097}]){
+   expect(()=>mapContextUsage({confirmed:{...sample,...fields}})).toThrow();
+  }
  });
 });

@@ -117,6 +117,9 @@ type FlowerContextUsage struct {
 }
 
 type FlowerContextSample struct {
+	RequestOutputTokens    int64                      `json:"request_output_tokens,omitempty"`
+	OutputControl          string                     `json:"output_control,omitempty"`
+	SafetyMarginTokens     int64                      `json:"safety_margin_tokens,omitempty"`
 	Breakdown              *flconfig.ContextBreakdown `json:"breakdown,omitempty"`
 	RunID                  string                     `json:"run_id,omitempty"`
 	StepIndex              int                        `json:"step_index,omitempty"`

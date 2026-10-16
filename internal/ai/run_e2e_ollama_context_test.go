@@ -287,7 +287,7 @@ func assertOllamaContextUsage(t *testing.T, detail *FlowerThreadDetail, recorder
 	if usage.ContextWindowTokens != int64(window) || usage.OutputHeadroomTokens <= 0 || usage.RequestSafeLimitTokens != int64(window)-usage.OutputHeadroomTokens {
 		t.Fatalf("invalid served context budget: %+v", usage)
 	}
-	if usage.InputTokens >= usage.RequestSafeLimitTokens || last.MaxOutputTokens != usage.OutputHeadroomTokens {
+	if usage.InputTokens >= usage.RequestSafeLimitTokens || last.MaxOutputTokens != usage.RequestOutputTokens {
 		t.Fatalf("real request exceeded its input/output budget: usage=%+v request=%+v", usage, last)
 	}
 	if math.Abs(usage.UsedRatio-float64(usage.InputTokens)/float64(window)) > 1e-9 {
