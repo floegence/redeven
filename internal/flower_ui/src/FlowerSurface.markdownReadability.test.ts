@@ -63,9 +63,13 @@ describe('Flower markdown readability', () => {
     expect(dividerRule).toContain('margin: 2em 0 1.25em');
     expect(dividerRule).toContain('var(--flower-chat-surface-border) 58%');
     expect(headingRule).toContain('margin: 1.5em 0 0.6em');
-    expect(inlineCodeRule).toContain('background: var(--flower-chat-surface-soft)');
+    expect(inlineCodeRule).toContain('background: var(--inline-code-background)');
+    expect(inlineCodeRule).toContain('color: var(--inline-code-foreground)');
+    expect(inlineCodeRule).toContain('border: 0');
+    expect(inlineCodeRule).toContain('overflow-wrap: anywhere');
+    expect(inlineCodeRule).toContain('box-decoration-break: clone');
     expect(inlineCodeRule).toContain('font-family: var(--flower-chat-md-code-font)');
-    expect(inlineCodeRule).toContain('font-weight: 500');
+    expect(inlineCodeRule).toContain('font-weight: 400');
     expect(codeBlockRule).toContain('font-family: var(--flower-chat-md-code-font)');
     expect(codeBlockRule).toContain('font-size: 0.875em');
     expect(codeBlockRule).toContain('line-height: 1.65');

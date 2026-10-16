@@ -5160,22 +5160,31 @@ button.flower-composer-context-source:focus-visible,
 }
 
 .flower-chat-md-inline-code {
-  border: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 76%, var(--foreground) 24%);
-  border-radius: 0.28rem;
-  background: var(--flower-chat-surface-soft);
-  padding: 0.07rem 0.3rem;
-  color: color-mix(in srgb, var(--foreground) 92%, var(--primary) 8%);
+  border: 0;
+  border-radius: 0.25rem;
+  background: var(--inline-code-background);
+  padding: 0.12em 0.36em;
+  color: var(--inline-code-foreground);
   font-family: var(--flower-chat-md-code-font);
-  font-size: 0.9em;
-  font-weight: 500;
-  line-height: 1.5;
+  font-size: 0.91em;
+  font-weight: 400;
+  line-height: inherit;
   white-space: break-spaces;
+  overflow-wrap: anywhere;
+  word-break: normal;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
 }
 
-.flower-message-bubble-user .flower-chat-md-inline-code {
-  border-color: color-mix(in srgb, var(--primary) 32%, var(--foreground) 18%);
-  background: var(--flower-chat-surface-soft);
-  color: var(--flower-user-inset-foreground);
+/* A code link has its own reading surface inside the colored user bubble. */
+.flower-message-bubble-user .flower-chat-md-link .flower-chat-md-inline-code {
+  color: var(--inline-code-foreground);
+}
+
+.flower-chat-md-inline-code::selection,
+.flower-message-bubble-user .flower-chat-md-inline-code::selection {
+  background: var(--inline-code-foreground);
+  color: var(--inline-code-background);
 }
 
 .flower-chat-md-blockquote {
@@ -5269,8 +5278,8 @@ button.flower-composer-context-source:focus-visible,
 }
 
 /* Theme-colored insets need a selection distinct from their own surface. */
-.flower-message-bubble-user :is(.flower-chat-md-inline-code, .flower-chat-md-code-block)::selection,
-.flower-message-bubble-user :is(.flower-chat-md-inline-code, .flower-chat-md-code-block) ::selection,
+.flower-message-bubble-user .flower-chat-md-code-block::selection,
+.flower-message-bubble-user .flower-chat-md-code-block ::selection,
 .flower-queued-turn-bubble::selection,
 .flower-queued-turn-bubble ::selection {
   background: var(--flower-user-inset-foreground);
@@ -5278,6 +5287,18 @@ button.flower-composer-context-source:focus-visible,
 }
 
 @media (forced-colors: active) {
+  .flower-chat-md-inline-code,
+  .flower-message-bubble-user .flower-chat-md-link .flower-chat-md-inline-code {
+    background: Canvas;
+    color: CanvasText;
+    forced-color-adjust: auto;
+  }
+
+  .flower-chat-md-inline-code::selection {
+    background: Highlight;
+    color: HighlightText;
+  }
+
   .flower-message-bubble-user {
     --flower-user-bubble-background: Highlight;
     --flower-user-bubble-foreground: HighlightText;

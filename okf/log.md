@@ -10,6 +10,10 @@
 
 - Reduce [answer action](ui/flower-citations.md#final-answer-actions) icon weight, desktop target size and spacing while preserving touch targets, keyboard focus, confirmation feedback and source disclosure.
 
+## 2026-10-16: Theme-aware inline references
+
+- Consume Floe v0.86.39 paired colors for [inline code references](ui/flower-citations.md#inline-code-references) across all 26 themes, preserving wrapping, links, native selection and forced colors.
+
 ## 2026-10-15 — Context source breakdown
 
 - Replace mixed role/loading categories with explicit request sources, published Floret v7.45.0 attribution and flat horizontal tool details; preserve native usage and keyboard focus.
