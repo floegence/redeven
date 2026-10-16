@@ -36,22 +36,22 @@ func TestLinuxSystemServiceStatusSkipsUserDesktopPreparation(t *testing.T) {
 	}
 }
 
-func TestLinuxRuntimeRejectsPrivilegedServiceMutation(t *testing.T) {
+func TestLinuxSSHPhysicalMissingServiceNeverSelectsPortal(t *testing.T) {
 	m := New(t.TempDir(), nil, nil)
 	defer m.Close()
+	m.serviceStatus = func(context.Context) (nativeapps.ServiceStatus, error) {
+		return nativeapps.ServiceStatus{State: nativeapps.ServiceNotInstalled, Backend: "linux-drm-kms"}, nativeapps.ErrServiceNotInstalled
+	}
 	m.factory = func(context.Context) (Transport, error) {
-		t.Fatal("Runtime launched a helper to request authority")
+		t.Fatal("SSH physical target selected Portal")
 		return nil, ErrUnavailable
 	}
-	m.allowed = func(owner string) bool { return owner == "alice" }
-	for _, operation := range []func(context.Context, string) (nativeapps.ServiceStatus, error){m.InstallLoginService, m.UninstallLoginService} {
-		status, err := operation(context.Background(), "alice")
-		if status.State != nativeapps.ServiceAuthorization || !errors.Is(err, ErrServiceAuthorization) {
-			t.Fatalf("unexpected authorization: %+v %v", status, err)
-		}
-		if _, err := operation(context.Background(), "bob"); !errors.Is(err, ErrForbidden) {
-			t.Fatal("service mutation escaped owner permission")
-		}
+	status, err := m.StatusTarget(t.Context(), "alice", "ssh_physical")
+	if err != nil || status.Setup != nil || status.LoginService.State != nativeapps.ServiceNotInstalled {
+		t.Fatalf("physical target: %+v %v", status, err)
+	}
+	if _, err = m.openTarget(t.Context(), true); !errors.Is(err, nativeapps.ErrServiceNotInstalled) {
+		t.Fatalf("physical open: %v", err)
 	}
 }
 

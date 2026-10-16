@@ -21,18 +21,18 @@ import (
 const ViewerPath = "/_redeven_desktop/"
 
 var (
-	ErrAuthorizationBusy    = errors.New("desktop authorization is in use")
-	ErrUnavailable          = errors.New("remote desktop unavailable")
-	ErrInvalid              = errors.New("invalid remote desktop request")
-	ErrForbidden            = errors.New("remote desktop owner required")
-	ErrNotFound             = errors.New("remote desktop session not found")
-	ErrControlInUse         = errors.New("remote desktop control requires takeover")
-	ErrServiceUnsupported   = errors.New("login-screen service is unsupported")
-	ErrServiceAuthorization = errors.New("administrator authorization is required")
-	ErrServiceUnavailable   = errors.New("login-screen service is unavailable")
+	ErrAuthorizationBusy  = errors.New("desktop authorization is in use")
+	ErrUnavailable        = errors.New("remote desktop unavailable")
+	ErrInvalid            = errors.New("invalid remote desktop request")
+	ErrForbidden          = errors.New("remote desktop owner required")
+	ErrNotFound           = errors.New("remote desktop session not found")
+	ErrControlInUse       = errors.New("remote desktop control requires takeover")
+	ErrServiceUnsupported = errors.New("login-screen service is unsupported")
+	ErrServiceUnavailable = errors.New("login-screen service is unavailable")
 )
 
 type CreateRequest struct {
+	Target    string `json:"target,omitempty"`
 	Mode      string `json:"mode"`
 	DisplayID string `json:"display_id"`
 	Locale    string `json:"locale"`
@@ -60,6 +60,7 @@ type Status struct {
 	LoginService   nativeapps.ServiceStatus           `json:"login_service"`
 }
 type ownedSession struct {
+	physical   bool
 	view       Session
 	owner      string
 	unattended bool
@@ -108,6 +109,12 @@ func randomID() string {
 }
 
 func (m *Manager) Status(ctx context.Context, owner string) (Status, error) {
+	return m.StatusTarget(ctx, owner, "")
+}
+func (m *Manager) StatusTarget(ctx context.Context, owner, target string) (Status, error) {
+	if target != "" && target != "ssh_physical" {
+		return Status{}, ErrInvalid
+	}
 	status := Status{Capabilities: nativeapps.HostDesktopCapabilities{State: "unsupported", Displays: []nativeapps.HostDesktopDisplay{}}, LoginService: nativeapps.ServiceStatus{State: nativeapps.ServiceUnsupported}}
 	m.mu.Lock()
 	status.ControlInUse = m.controller != ""
@@ -119,7 +126,7 @@ func (m *Manager) Status(ctx context.Context, owner string) (Status, error) {
 	if runtime.GOOS == "linux" {
 		service, err := m.serviceStatus(ctx)
 		status.LoginService = service
-		if service.State == nativeapps.ServiceNotInstalled {
+		if service.State == nativeapps.ServiceNotInstalled && target != "ssh_physical" {
 			setup, err := m.SetupStatus(owner)
 			if err != nil {
 				return status, err
@@ -136,7 +143,7 @@ func (m *Manager) Status(ctx context.Context, owner string) (Status, error) {
 			return status, nil
 		}
 	}
-	connection, err := m.factory(ctx)
+	connection, err := m.openTarget(ctx, target == "ssh_physical")
 	if err != nil {
 		status.Capabilities.State = "unavailable"
 		return status, nil
@@ -169,32 +176,10 @@ func (m *Manager) Status(ctx context.Context, owner string) (Status, error) {
 }
 
 func (m *Manager) SystemServiceStatus(ctx context.Context, owner string) (nativeapps.ServiceStatus, error) {
-	return m.serviceCommand(ctx, owner, "service_status")
+	return m.serviceCommand(ctx, owner)
 }
 
-func (m *Manager) InstallLoginService(ctx context.Context, owner string) (nativeapps.ServiceStatus, error) {
-	status, err := m.serviceCommand(ctx, owner, "service_install")
-	if err != nil && errors.Is(err, nativeapps.ErrServiceAuthorization) {
-		return status, ErrServiceAuthorization
-	}
-	if err != nil && errors.Is(err, nativeapps.ErrServiceUnsupported) {
-		return status, ErrServiceUnsupported
-	}
-	return status, err
-}
-
-func (m *Manager) UninstallLoginService(ctx context.Context, owner string) (nativeapps.ServiceStatus, error) {
-	status, err := m.serviceCommand(ctx, owner, "service_uninstall")
-	if errors.Is(err, nativeapps.ErrServiceAuthorization) {
-		return status, ErrServiceAuthorization
-	}
-	if err != nil && errors.Is(err, nativeapps.ErrServiceUnsupported) {
-		return status, ErrServiceUnsupported
-	}
-	return status, err
-}
-
-func (m *Manager) serviceCommand(ctx context.Context, owner, method string) (nativeapps.ServiceStatus, error) {
+func (m *Manager) serviceCommand(ctx context.Context, owner string) (nativeapps.ServiceStatus, error) {
 	status := nativeapps.ServiceStatus{State: nativeapps.ServiceUnsupported}
 	if owner == "" {
 		return status, ErrForbidden
@@ -209,9 +194,6 @@ func (m *Manager) serviceCommand(ctx context.Context, owner, method string) (nat
 		return status, ErrServiceUnsupported
 	}
 	if m.serviceStatus != nil {
-		if method != "service_status" {
-			return nativeapps.ServiceStatus{State: nativeapps.ServiceAuthorization, Backend: "linux-drm-kms", Reason: "ssh_administrator_authorization_required"}, nativeapps.ErrServiceAuthorization
-		}
 		status, err := m.serviceStatus(ctx)
 		if status.State == nativeapps.ServiceNotInstalled && errors.Is(err, nativeapps.ErrServiceNotInstalled) {
 			err = nil
@@ -223,7 +205,7 @@ func (m *Manager) serviceCommand(ctx context.Context, owner, method string) (nat
 		return status, ErrServiceUnavailable
 	}
 	defer connection.Close()
-	if err = connection.Send(nativeapps.HostDesktopCommand{Version: 1, ID: 1, Method: method, Service: nativeapps.LoginScreenService}, false); err != nil {
+	if err = connection.Send(nativeapps.HostDesktopCommand{Version: 1, ID: 1, Method: "service_status", Service: nativeapps.LoginScreenService}, false); err != nil {
 		return status, err
 	}
 	select {
@@ -249,7 +231,7 @@ func (m *Manager) serviceCommand(ctx context.Context, owner, method string) (nat
 }
 
 func (m *Manager) Create(ctx context.Context, owner string, req CreateRequest, unattended bool) (Session, error) {
-	if owner == "" || req.Mode != "view" && req.Mode != "control" || len(req.Locale) > 32 || len(req.Theme) > 80 || len(req.HostName) > 256 || len(req.DisplayID) > 128 {
+	if req.Target != "" && req.Target != "ssh_physical" || owner == "" || req.Mode != "view" && req.Mode != "control" || len(req.Locale) > 32 || len(req.Theme) > 80 || len(req.HostName) > 256 || len(req.DisplayID) > 128 {
 		return Session{}, ErrInvalid
 	}
 	m.mu.Lock()
@@ -275,7 +257,7 @@ func (m *Manager) Create(ctx context.Context, owner string, req CreateRequest, u
 	}
 	// Desktop window admission and target ownership use the registered origin;
 	// the viewer path belongs to navigation, not to the service identity.
-	session := &ownedSession{view: Session{ID: randomID(), ForwardID: forward.Forward.ForwardID, TargetURL: forward.Forward.TargetURL, Mode: req.Mode, DisplayID: req.DisplayID, Locale: req.Locale, Theme: req.Theme, HostName: req.HostName}, owner: owner, unattended: unattended, takeover: req.Takeover, expires: time.Now().Add(2 * time.Minute)}
+	session := &ownedSession{physical: req.Target == "ssh_physical", view: Session{ID: randomID(), ForwardID: forward.Forward.ForwardID, TargetURL: forward.Forward.TargetURL, Mode: req.Mode, DisplayID: req.DisplayID, Locale: req.Locale, Theme: req.Theme, HostName: req.HostName}, owner: owner, unattended: unattended, takeover: req.Takeover, expires: time.Now().Add(2 * time.Minute)}
 	m.sessions[session.view.ID] = session
 	if req.Mode == "control" {
 		if err := m.claimLocked(session); err != nil {
@@ -521,4 +503,18 @@ func (m *Manager) RevokeDisallowed(allowed func(owner string) bool) {
 			m.removeLocked(s)
 		}
 	}
+}
+
+func (m *Manager) openTarget(ctx context.Context, physical bool) (Transport, error) {
+	if physical && runtime.GOOS == "linux" {
+		status, err := m.serviceStatus(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if status.State != nativeapps.ServiceActive {
+			return nil, ErrServiceUnavailable
+		}
+		return nativeapps.OpenLoginScreenSession(ctx, nativeapps.LoginServiceSocket)
+	}
+	return m.factory(ctx)
 }

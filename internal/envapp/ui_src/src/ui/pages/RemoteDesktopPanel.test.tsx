@@ -8,7 +8,7 @@ import { LocalApiError } from '../services/localApi';
 import type { RemoteDesktopStatus } from '../services/remoteDesktopApi';
 
 const state = vi.hoisted(() => ({
-  label: 'server', hostname: 'server.example', local: true, full: true, desktop: true,
+  ssh: false, label: 'server', hostname: 'server.example', local: true, full: true, desktop: true,
   status: vi.fn(), create: vi.fn(), open: vi.fn(), disconnect: vi.fn(), save: vi.fn(), forget: vi.fn(), permission: vi.fn(),
   deployment: vi.fn(), progress: vi.fn(),
 }));
@@ -16,7 +16,7 @@ vi.mock('./EnvContext', () => ({ useEnvContext: () => ({
   env: () => ({ name: state.local ? 'Local Environment' : 'Research host', agent: { hostname: state.hostname }, permissions: { can_read: true, can_write: state.full, can_execute: state.full } }),
   env_id: () => 'env-fixture', localRuntime: () => state.local ? {} : null,
 }) }));
-vi.mock('../services/desktopSessionContext', () => ({ readDesktopSessionContextSnapshot: () => state.label ? { label: state.label } : null }));
+vi.mock('../services/desktopSessionContext', () => ({ readDesktopSessionContextSnapshot: () => state.label ? { label: state.label, target_kind: state.ssh ? 'ssh_environment' : 'local' } : null }));
 vi.mock('../services/desktopShellBridge', () => ({ desktopShellWebServiceWindowOpenAvailable: () => state.desktop,
   remoteDesktopDeploymentInDesktopShell: state.deployment, onRemoteDesktopDeploymentProgress: state.progress,
 }));
@@ -30,7 +30,7 @@ const ready: RemoteDesktopStatus = {
 };
 let host: HTMLElement, dispose: (() => void) | undefined;
 beforeEach(() => {
-  vi.resetAllMocks(); state.label = 'server'; state.hostname = 'server.example'; state.local = true; state.full = true; state.desktop = true;
+  vi.resetAllMocks(); state.ssh = false; state.label = 'server'; state.hostname = 'server.example'; state.local = true; state.full = true; state.desktop = true;
   state.status.mockResolvedValue(structuredClone(ready));
   state.create.mockResolvedValue({ id: 'one', forward_id: 'pf-one', target_url: 'http://127.0.0.1:40201' });
   state.open.mockResolvedValue(undefined); state.disconnect.mockResolvedValue(undefined); state.save.mockResolvedValue({ unattended: true });
@@ -222,40 +222,28 @@ it.each(['unknown', 'revoked', 'unsupported'] as const)('does not call %s approv
   expect(button('Connect to desktop').disabled).toBe(false);
 });
 
-it('confirms administrator scope in Env App and keeps the entered credential masked during SSH authorization', async () => {
-  state.status.mockResolvedValue({ ...ready, capabilities: { ...ready.capabilities, backend: 'wayland', state: 'host_action_required' }, login_service: { state: 'not_installed', backend: 'linux-drm-kms' } });
+it('requests a masked password only for a matching challenge and clears it after submission', async () => {
+  state.ssh = true;
+  state.status.mockResolvedValue({ ...ready, capabilities: { ...ready.capabilities, backend: 'linux-drm-kms', state: 'host_action_required' }, login_service: { state: 'not_installed', backend: 'linux-drm-kms' } });
   let finish!: (value: object) => void;
-  state.deployment.mockImplementation(request => request.action === 'capabilities' ? Promise.resolve({ ok: true, available: true }) : new Promise(resolve => { finish = resolve; }));
-  await mount(); await vi.waitFor(() => expect(button('Set up')).toBeDefined());
-  expect(host.textContent).not.toContain('Confirm screen sharing on the host');
-  button('Set up').click();
-  const flow = document.querySelector<HTMLElement>('.remote-desktop-deployment-flow')!;
-  expect(flow.textContent).toContain('root system service');
-  expect(flow.textContent).toContain('opens no public port');
-  expect(document.querySelector('[role=dialog]')).toBeNull();
-  expect(state.deployment.mock.calls.filter(([request]) => request.action === 'manage')).toHaveLength(0);
-  let password = flow.querySelector<HTMLInputElement>('input[type=password]')!;
-  password.value = 'ephemeral-fixture'; password.dispatchEvent(new Event('input', { bubbles: true }));
-  [...flow.querySelectorAll('button')].find(item => controlText(item) === 'Authorize and continue')!.click();
-  await vi.waitFor(() => expect(state.deployment).toHaveBeenCalledWith({ action: 'manage', operation: 'install', confirmed: true, administratorPassword: 'ephemeral-fixture' }));
-  password = flow.querySelector<HTMLInputElement>('input[type=password]')!;
-  expect(password.value).toBe('ephemeral-fixture'); expect(password.disabled).toBe(true);
-  finish({ ok: false, code: 'authorization_failed' });
-  await vi.waitFor(() => expect(flow.querySelector('[role=alert]')?.textContent).toContain('Administrator authorization was not accepted'));
-  password = flow.querySelector<HTMLInputElement>('input[type=password]')!;
-  await vi.waitFor(() => expect(password.disabled).toBe(false));
-  expect(password.value).toBe('');
-  expect(state.permission).not.toHaveBeenCalled();
-  expect(state.create).not.toHaveBeenCalled();
-
-  const installed: RemoteDesktopStatus = { ...ready, capabilities: { ...ready.capabilities, backend: 'linux-drm-kms', state: 'ready' }, login_service: { state: 'active', backend: 'linux-drm-kms' } };
-  state.status.mockResolvedValue(installed);
-  state.deployment.mockImplementation(request => Promise.resolve(request.action === 'capabilities' ? { ok: true, available: true } : { ok: true }));
-  password.value = 'retry-fixture'; password.dispatchEvent(new Event('input', { bubbles: true }));
-  [...flow.querySelectorAll('button')].find(item => controlText(item) === 'Authorize and continue')!.click();
-  await vi.waitFor(() => expect(state.create).toHaveBeenCalledOnce());
-  await vi.waitFor(() => expect(document.querySelector('.remote-desktop-deployment-flow')).toBeNull());
-  expect(state.deployment.mock.calls.filter(([request]) => request.action === 'manage')).toHaveLength(2);
+  state.deployment.mockImplementation(request => request.action === 'capabilities' ? Promise.resolve({ok:true,available:true}) : request.action === 'respond' ? Promise.resolve({ok:true}) : new Promise(resolve => { finish=resolve; }));
+  await mount(); await vi.waitFor(() => expect(button('Connect to desktop')).toBeDefined()); button('Connect to desktop').click();
+  expect(host.querySelector('input[type=password]')).toBeNull();
+  expect(host.textContent).toContain('root system service'); expect(document.querySelector('[role=dialog]')).toBeNull();
+  button('Authorize and continue').click();
+  await vi.waitFor(() => expect(state.deployment.mock.calls.some(([r]) => r.action==='manage')).toBe(true));
+  const current=state.deployment.mock.calls.find(([r])=>r.action==='manage')![0];
+  const report=state.progress.mock.calls[0][0];
+  report({operation_id:'stale',stage:'authorization_required',challenge_id:'old'});
+  expect(host.querySelector('input[type=password]')).toBeNull();
+  report({operation_id:current.operationId,stage:'authorization_required',challenge_id:'password',host:'host.example',ssh_user:'tang'});
+  const password=host.querySelector<HTMLInputElement>('input[type=password]')!;
+  password.value='ephemeral-fixture';password.dispatchEvent(new Event('input',{bubbles:true}));button('Authorize and continue').click();
+  expect(host.querySelector('input[type=password]')).toBeNull();
+  await vi.waitFor(()=>expect(state.deployment).toHaveBeenCalledWith({action:'respond',operationId:current.operationId,challengeId:'password',administratorPassword:'ephemeral-fixture'}));
+  finish({ok:false,code:'authorization_failed'});
+  await vi.waitFor(()=>expect(host.querySelector('[role=alert]')?.textContent).toContain('Administrator authorization was not accepted'));
+  expect(host.querySelector('input[type=password]')).toBeNull();expect(state.permission).not.toHaveBeenCalled();expect(state.create).not.toHaveBeenCalled();
 });
 
 it('continues from authorized setup to the desktop in the same dialog flow', async () => {
@@ -263,18 +251,13 @@ it('continues from authorized setup to the desktop in the same dialog flow', asy
   const installed: RemoteDesktopStatus = { ...ready, capabilities: { ...ready.capabilities, backend: 'linux-drm-kms', state: 'ready' }, login_service: { state: 'active', backend: 'linux-drm-kms' } };
   state.status.mockResolvedValueOnce(setupNeeded);
   let finishDeployment!: (value: object) => void, finishConnection!: (value: object) => void;
-  state.deployment.mockImplementation(request => request.action === 'capabilities' ? Promise.resolve({ ok: true, available: true }) : new Promise(resolve => { finishDeployment = resolve; }));
+  state.ssh = true; state.deployment.mockImplementation(request => request.action === 'capabilities' ? Promise.resolve({ ok: true, available: true }) : new Promise(resolve => { finishDeployment = resolve; }));
   state.create.mockImplementation(() => new Promise(resolve => { finishConnection = resolve; }));
-  await mount(); await vi.waitFor(() => expect(button('Set up')).toBeDefined());
-  button('Set up').click();
+  await mount(); await vi.waitFor(() => expect(button('Connect to desktop')).toBeDefined());
+  button('Connect to desktop').click();
   const flow = document.querySelector<HTMLElement>('.remote-desktop-deployment-flow')!;
-  const password = flow.querySelector<HTMLInputElement>('input[type=password]')!;
-  password.value = 'ephemeral-fixture'; password.dispatchEvent(new Event('input', { bubbles: true }));
-  [...flow.querySelectorAll('button')].find(item => controlText(item) === 'Authorize and continue')!.click();
-  const pendingPassword = flow.querySelector<HTMLInputElement>('input[type=password]')!;
-  await vi.waitFor(() => expect(pendingPassword.disabled).toBe(true));
-  expect(pendingPassword.value).toBe('ephemeral-fixture');
-  expect(flow.querySelector('.remote-desktop-flow-stage[data-phase="applying"]')?.textContent).toContain('Applying remote desktop changes');
+  button('Authorize and continue').click();
+  expect(flow.querySelector('input[type=password]')).toBeNull();
 
   let finishStatus!: (value: RemoteDesktopStatus) => void;
   state.status.mockImplementation(() => new Promise(resolve => { finishStatus = resolve; }));
@@ -294,14 +277,14 @@ it('continues from authorized setup to the desktop in the same dialog flow', asy
 
 it('does not connect automatically after a service-management action from advanced options', async () => {
   state.status.mockResolvedValue({ ...ready, capabilities: { ...ready.capabilities, backend: 'linux-drm-kms', state: 'ready' }, login_service: { state: 'active', backend: 'linux-drm-kms' } });
-  state.deployment.mockImplementation(request => Promise.resolve(request.action === 'capabilities' ? { ok: true, available: true } : { ok: true }));
+  state.ssh = true; state.deployment.mockImplementation(request => Promise.resolve(request.action === 'capabilities' ? { ok: true, available: true } : { ok: true }));
   await mount();
   host.querySelector<HTMLDetailsElement>('.remote-desktop-options')!.open = true;
-  const update = [...host.querySelectorAll<HTMLButtonElement>('.remote-desktop-options button')].find(item => controlText(item) === 'Update remote desktop')!;
+  const update = [...host.querySelectorAll<HTMLButtonElement>('.remote-desktop-options button')].find(item => controlText(item) === 'Prepare remote desktop')!;
   update.click();
   const flow = document.querySelector<HTMLElement>('.remote-desktop-deployment-flow')!;
   [...flow.querySelectorAll('button')].find(item => controlText(item) === 'Authorize and continue')!.click();
-  await vi.waitFor(() => expect(state.deployment).toHaveBeenCalledWith(expect.objectContaining({ action: 'manage', operation: 'update' })));
+  await vi.waitFor(() => expect(state.deployment).toHaveBeenCalledWith(expect.objectContaining({ action: 'manage', operation: 'ensure' })));
   [...flow.querySelectorAll('button')].find(item => controlText(item) === 'Back to connection')!.click();
   await vi.waitFor(() => expect(document.querySelector('.remote-desktop-deployment-flow')).toBeNull());
   expect(state.create).not.toHaveBeenCalled();
@@ -311,10 +294,10 @@ it('keeps a failed post-setup connection recoverable without repeating authoriza
   const setupNeeded = { ...ready, capabilities: { ...ready.capabilities, backend: 'linux-drm-kms', state: 'host_action_required' }, login_service: { state: 'not_installed', backend: 'linux-drm-kms' } };
   const installed = { ...ready, capabilities: { ...ready.capabilities, backend: 'linux-drm-kms', state: 'ready' }, login_service: { state: 'active', backend: 'linux-drm-kms' } };
   state.status.mockResolvedValueOnce(setupNeeded).mockResolvedValue(installed);
-  state.deployment.mockImplementation(request => Promise.resolve(request.action === 'capabilities' ? { ok: true, available: true } : { ok: true }));
+  state.ssh = true; state.deployment.mockImplementation(request => Promise.resolve(request.action === 'capabilities' ? { ok: true, available: true } : { ok: true }));
   state.create.mockRejectedValueOnce(new LocalApiError({ status: 503, code: 'DESKTOP_UNAVAILABLE', message: 'Remote desktop request failed' }));
-  await mount(); await vi.waitFor(() => expect(button('Set up')).toBeDefined());
-  button('Set up').click();
+  await mount(); await vi.waitFor(() => expect(button('Connect to desktop')).toBeDefined());
+  button('Connect to desktop').click();
   const flow = document.querySelector<HTMLElement>('.remote-desktop-deployment-flow')!;
   [...flow.querySelectorAll('button')].find(item => controlText(item) === 'Authorize and continue')!.click();
   await vi.waitFor(() => expect(flow.querySelector('[role=alert]')?.textContent).toContain('Could not connect to the desktop'));
@@ -329,17 +312,17 @@ it('keeps a failed post-setup connection recoverable without repeating authoriza
 it('does not let a canceled retry skip a newer authorization step', async () => {
   const installed: RemoteDesktopStatus = { ...ready, capabilities: { ...ready.capabilities, backend: 'linux-drm-kms', state: 'ready' }, login_service: { state: 'active', backend: 'linux-drm-kms' } };
   state.status.mockResolvedValueOnce({ ...installed, login_service: { state: 'not_installed', backend: 'linux-drm-kms' } }).mockResolvedValue(installed);
-  state.deployment.mockImplementation(request => Promise.resolve(request.action === 'capabilities' ? { ok: true, available: true } : { ok: true }));
+  state.ssh = true; state.deployment.mockImplementation(request => Promise.resolve(request.action === 'capabilities' ? { ok: true, available: true } : { ok: true }));
   state.create.mockRejectedValueOnce(new LocalApiError({ status: 503, code: 'DESKTOP_UNAVAILABLE', message: 'Remote desktop request failed' }));
-  await mount(); await vi.waitFor(() => expect(button('Set up')).toBeDefined());
-  button('Set up').click(); button('Authorize and continue').click();
+  await mount(); await vi.waitFor(() => expect(button('Connect to desktop')).toBeDefined());
+  button('Connect to desktop').click(); button('Authorize and continue').click();
   await vi.waitFor(() => expect(button('Connect to desktop')?.disabled).toBe(false));
   let finishStatus!: (value: RemoteDesktopStatus) => void;
   state.status.mockImplementation(() => new Promise(resolve => { finishStatus = resolve; }));
   button('Connect to desktop').click();
   button('Back to connection').click();
   host.querySelector<HTMLDetailsElement>('.remote-desktop-options')!.open = true;
-  button('Update remote desktop').click();
+  button('Prepare remote desktop').click();
   expect(host.querySelector('[data-phase=authorizing]')).not.toBeNull();
   state.status.mockResolvedValue(installed); finishStatus(installed);
   await vi.waitFor(() => expect(button('Authorize and continue')?.disabled).toBe(false));
@@ -350,8 +333,8 @@ it('does not let a canceled retry skip a newer authorization step', async () => 
 it('cancels post-setup status checking without opening the late desktop', async () => {
   state.status.mockResolvedValueOnce({ ...ready, capabilities: { ...ready.capabilities, backend: 'linux-drm-kms', state: 'setup_required' }, login_service: { state: 'not_installed', backend: 'linux-drm-kms' } });
   let finishStatus!: (value: RemoteDesktopStatus) => void;
-  state.deployment.mockImplementation(request => Promise.resolve(request.action === 'capabilities' ? { ok: true, available: true } : { ok: true }));
-  await mount(); button('Set up').click();
+  state.ssh = true; state.deployment.mockImplementation(request => Promise.resolve(request.action === 'capabilities' ? { ok: true, available: true } : { ok: true }));
+  await mount(); button('Connect to desktop').click();
   state.status.mockImplementation(() => new Promise(resolve => { finishStatus = resolve; }));
   button('Authorize and continue').click();
   await vi.waitFor(() => expect(host.querySelector('[data-phase="connecting"]')).not.toBeNull());
@@ -365,9 +348,9 @@ it('cancels post-setup status checking without opening the late desktop', async 
 it('retains successful preparation when a competing controller requires takeover', async () => {
   const installed = { ...ready, capabilities: { ...ready.capabilities, backend: 'linux-drm-kms' }, login_service: { state: 'active', backend: 'linux-drm-kms' } };
   state.status.mockResolvedValueOnce({ ...installed, capabilities: { ...installed.capabilities, state: 'setup_required' }, login_service: { ...installed.login_service, state: 'not_installed' } }).mockResolvedValue(installed);
-  state.deployment.mockImplementation(request => Promise.resolve(request.action === 'capabilities' ? { ok: true, available: true } : { ok: true }));
+  state.ssh = true; state.deployment.mockImplementation(request => Promise.resolve(request.action === 'capabilities' ? { ok: true, available: true } : { ok: true }));
   state.create.mockRejectedValueOnce(new LocalApiError({ status: 409, code: 'DESKTOP_CONTROL_IN_USE', message: 'Control already in use' }));
-  await mount(); button('Set up').click(); button('Authorize and continue').click();
+  await mount(); button('Connect to desktop').click(); button('Authorize and continue').click();
   await vi.waitFor(() => expect(button('Take control')).toBeTruthy());
   expect(document.querySelector('[role=dialog]')).toBeNull();
   button('Take control').click();
@@ -377,6 +360,7 @@ it('retains successful preparation when a competing controller requires takeover
 });
 
 it('waits for cancellation rollback and explains its observed outcome', async () => {
+  state.ssh=true;
   state.status.mockResolvedValue({ ...ready, login_service: { state: 'stopped', backend: 'linux-drm-kms' } });
   let finish!: (value: object) => void;
   state.deployment.mockImplementation(request => {
@@ -384,11 +368,11 @@ it('waits for cancellation rollback and explains its observed outcome', async ()
     if (request.action === 'cancel') { finish({ ok: false, code: 'canceled', rollback: 'complete' }); return Promise.resolve({ ok: true }); }
     return new Promise(resolve => { finish = resolve; });
   });
-  await mount(); await vi.waitFor(() => expect(button('Start')).toBeDefined());
-  button('Start').click();
+  await mount(); await vi.waitFor(() => expect(button('Connect to desktop')).toBeDefined());
+  button('Connect to desktop').click();
   const flow = document.querySelector<HTMLElement>('.remote-desktop-deployment-flow')!;
   [...flow.querySelectorAll('button')].find(item => controlText(item) === 'Authorize and continue')!.click();
-  await vi.waitFor(() => expect(state.deployment).toHaveBeenCalledWith(expect.objectContaining({ action: 'manage', operation: 'start' })));
+  await vi.waitFor(() => expect(state.deployment).toHaveBeenCalledWith(expect.objectContaining({ action: 'manage', operation: 'ensure' })));
   [...flow.querySelectorAll('button')].find(item => controlText(item) === 'Cancel')!.click();
   await vi.waitFor(() => expect(flow.querySelector('[role=alert]')?.textContent).toContain('previous system state was restored'));
   expect(flow.textContent).toContain('Operation canceled');
@@ -396,7 +380,7 @@ it('waits for cancellation rollback and explains its observed outcome', async ()
 });
 
 it('shows the actual unsupported graphics reason without an unusable connection button', async () => {
-  state.deployment.mockResolvedValue({ ok: true, available: true });
+  state.ssh = true; state.deployment.mockResolvedValue({ ok: true, available: true });
   state.status.mockResolvedValue({ ...ready, capabilities: { ...ready.capabilities, backend: 'linux-drm-kms', state: 'unavailable', screen: false, input: false, reason: 'GPU_SCANOUT_UNSUPPORTED' }, login_service: { state: 'active', backend: 'linux-drm-kms' } });
   await mount(); expect(button('Connect to desktop').disabled).toBe(true);
   expect(host.textContent).toContain('graphics device cannot provide');
@@ -407,8 +391,8 @@ it('shows the actual unsupported graphics reason without an unusable connection 
 it('refreshes an unavailable post-setup desktop in place without offering an impossible connection', async () => {
   const installed: RemoteDesktopStatus = { ...ready, capabilities: { ...ready.capabilities, backend: 'linux-drm-kms', state: 'unavailable', screen: false, input: false, reason: 'GPU_SCANOUT_UNSUPPORTED' }, login_service: { state: 'active', backend: 'linux-drm-kms' } };
   state.status.mockResolvedValueOnce({ ...installed, login_service: { state: 'not_installed', backend: 'linux-drm-kms' } }).mockResolvedValue(installed);
-  state.deployment.mockImplementation(request => Promise.resolve(request.action === 'capabilities' ? { ok: true, available: true } : { ok: true }));
-  await mount(); button('Set up').click(); button('Authorize and continue').click();
+  state.ssh = true; state.deployment.mockImplementation(request => Promise.resolve(request.action === 'capabilities' ? { ok: true, available: true } : { ok: true }));
+  await mount(); button('Connect to desktop').click(); button('Authorize and continue').click();
   await vi.waitFor(() => expect(host.querySelector('[data-phase=failed]')?.textContent).toContain('graphics device cannot provide'));
   const flow = host.querySelector('.remote-desktop-deployment-flow');
   expect(button('Connect to desktop')).toBeUndefined();
@@ -426,26 +410,27 @@ it('refreshes an unavailable post-setup desktop in place without offering an imp
 });
 
 it('offers an explicit update for an incompatible service instead of installing again', async () => {
-  state.deployment.mockResolvedValue({ ok: true, available: true });
+  state.ssh = true; state.deployment.mockResolvedValue({ ok: true, available: true });
   state.status.mockResolvedValue({ ...ready, capabilities: { ...ready.capabilities, backend: 'linux-drm-kms', state: 'unavailable', screen: false, input: false, reason: 'SERVICE_UPDATE_REQUIRED' }, login_service: { state: 'failed', backend: 'linux-drm-kms', reason: 'SERVICE_UPDATE_REQUIRED' } });
   await mount();
-  await vi.waitFor(() => expect(button('Update remote desktop')).toBeDefined());
+  await vi.waitFor(() => expect(button('Connect to desktop')).toBeDefined());
   expect(host.textContent).toContain('Update remote desktop in the Env App');
   host.querySelector<HTMLButtonElement>('.remote-desktop-connect')!.click();
   const flow = document.querySelector<HTMLElement>('.remote-desktop-deployment-flow')!;
-  expect(flow.textContent).toContain('Update remote desktop');
+  expect(flow.textContent).toContain('Prepare remote desktop');
   expect(state.create).not.toHaveBeenCalled();
   [...flow.querySelectorAll('button')].find(item => controlText(item) === 'Authorize and continue')!.click();
-  await vi.waitFor(() => expect(state.deployment).toHaveBeenCalledWith(expect.objectContaining({ action: 'manage', operation: 'update', confirmed: true })));
+  await vi.waitFor(() => expect(state.deployment).toHaveBeenCalledWith(expect.objectContaining({ action: 'manage', operation: 'ensure', confirmed: true })));
 });
 
 it('finishes the operation before refreshing status and allows the canceled result to close', async () => {
+  state.ssh=true;
   state.status.mockResolvedValueOnce({ ...ready, login_service: { state: 'stopped', backend: 'linux-drm-kms' } });
   state.status.mockImplementation(() => new Promise(() => {}));
   state.deployment.mockImplementation(request => Promise.resolve(request.action === 'capabilities'
     ? { ok: true, available: true } : { ok: false, code: 'canceled', rollback: 'complete' }));
-  await mount(); await vi.waitFor(() => expect(button('Start')).toBeDefined());
-  button('Start').click();
+  await mount(); await vi.waitFor(() => expect(button('Connect to desktop')).toBeDefined());
+  button('Connect to desktop').click();
   const flow = document.querySelector<HTMLElement>('.remote-desktop-deployment-flow')!;
   [...flow.querySelectorAll('button')].find(item => controlText(item) === 'Authorize and continue')!.click();
   await vi.waitFor(() => expect(flow.querySelector('[role=alert]')?.textContent).toContain('Operation canceled'));
@@ -456,11 +441,107 @@ it('finishes the operation before refreshing status and allows the canceled resu
 
 it('does not offer target-side consent or deployment on an unsupported SSH operating system', async () => {
   state.status.mockResolvedValue({ ...ready, capabilities: { ...ready.capabilities, screen: false, input: false }, login_service: { state: 'unsupported', backend: 'darwin' } });
-  state.deployment.mockResolvedValue({ ok: true, available: true });
+  state.ssh = true; state.deployment.mockResolvedValue({ ok: true, available: true });
   await mount();
   await vi.waitFor(() => expect(state.deployment).toHaveBeenCalledWith({ action: 'capabilities' }));
   expect(button('Connect to desktop').disabled).toBe(true);
   expect(host.textContent).toContain('SSH is not supported on this operating system');
   expect(host.textContent).not.toContain('Allow screen recording');
   expect(host.textContent).not.toContain('Allow accessibility');
+});
+
+it('switches password identity by retiring the old operation and ignores its late challenge', async () => {
+ state.ssh=true;
+ state.status.mockResolvedValue({...ready,login_service:{state:'stopped',backend:'linux-drm-kms'}});
+ let finish!: (value:object)=>void;
+ state.deployment.mockImplementation(request=>request.action==='capabilities'?Promise.resolve({ok:true,available:true}):request.action==='cancel'?Promise.resolve({ok:true}):new Promise(resolve=>{finish=resolve;}));
+ await mount();button('Connect to desktop').click();button('Authorize and continue').click();
+ await vi.waitFor(()=>expect(state.deployment.mock.calls.some(([r])=>r.action==='manage')).toBe(true));
+ const old=state.deployment.mock.calls.find(([r])=>r.action==='manage')![0];
+ const report=state.progress.mock.calls[0][0];report({operation_id:old.operationId,stage:'authorization_required',challenge_id:'old-password'});
+ const selector=host.querySelector<HTMLSelectElement>('.remote-desktop-credential select')!;selector.value='root';selector.dispatchEvent(new Event('change',{bubbles:true}));
+ await vi.waitFor(()=>expect(state.deployment).toHaveBeenCalledWith({action:'cancel',operationId:old.operationId}));
+ await vi.waitFor(()=>expect(button('Authorize and continue')).toBeDefined());
+ report({operation_id:old.operationId,stage:'authorization_required',challenge_id:'late-password'});
+ expect(host.querySelector('input[type=password]')).toBeNull();finish({ok:false,code:'canceled'});
+ expect(host.textContent).not.toContain('Operation canceled');
+ button('Authorize and continue').click();
+ await vi.waitFor(()=>expect(state.deployment.mock.calls.filter(([r])=>r.action==='manage')).toHaveLength(2));
+ const next=state.deployment.mock.calls.filter(([r])=>r.action==='manage')[1][0];expect(next.operationId).not.toBe(old.operationId);expect(next.administratorMethod).toBe('root');finish({ok:false,code:'canceled'});
+});
+it('allows dismissal while rollback is pending and rejects late interruption events', async () => {
+ state.ssh=true;state.status.mockResolvedValue({...ready,login_service:{state:'stopped',backend:'linux-drm-kms'}});
+ let finish!: (value:object)=>void;
+ state.deployment.mockImplementation(request=>request.action==='capabilities'?Promise.resolve({ok:true,available:true}):request.action==='cancel'?Promise.resolve({ok:true}):new Promise(resolve=>{finish=resolve;}));
+ await mount();button('Connect to desktop').click();button('Authorize and continue').click();
+ await vi.waitFor(()=>expect(state.deployment.mock.calls.some(([r])=>r.action==='manage')).toBe(true));
+ const old=state.deployment.mock.calls.find(([r])=>r.action==='manage')![0];button('Cancel').click();button('Cancel').click();
+ expect(host.querySelector('.remote-desktop-deployment-flow')).toBeNull();
+ state.progress.mock.calls[0][0]({operation_id:old.operationId,stage:'confirmation_required',challenge_id:'late',policy_digest:'a'.repeat(64)});
+ expect(host.querySelector('.remote-desktop-deployment-flow')).toBeNull();finish({ok:false,code:'canceled',rollback:'complete'});
+});
+
+it.each(['ready', 'unavailable'] as const)('ensures an active SSH service for the current Runtime when admission is %s', async admission => {
+  state.ssh = true;
+  const installed: RemoteDesktopStatus = { ...ready, capabilities: { ...ready.capabilities, backend: 'linux-drm-kms', state: admission, screen: admission === 'ready', input: admission === 'ready' }, login_service: { state: 'active', backend: 'linux-drm-kms' } };
+  state.status.mockResolvedValueOnce(installed).mockResolvedValue({ ...installed, capabilities: { ...ready.capabilities, backend: 'linux-drm-kms' } });
+  state.deployment.mockImplementation(request => Promise.resolve(request.action === 'capabilities' ? { ok: true, available: true } : { ok: true }));
+  await mount();
+  await vi.waitFor(() => expect(state.deployment).toHaveBeenCalledWith({ action: 'capabilities' }));
+  expect(button('Connect to desktop').disabled).toBe(false);
+  button('Connect to desktop').click();
+  expect(state.create).not.toHaveBeenCalled();
+  button('Authorize and continue').click();
+  await vi.waitFor(() => expect(state.deployment).toHaveBeenCalledWith(expect.objectContaining({ action: 'manage', operation: 'ensure' })));
+  await vi.waitFor(() => expect(state.create).toHaveBeenCalledOnce());
+});
+
+it.each(['complete', 'next_challenge', 'canceling'] as const)('ignores a late challenge rejection after %s', async transition => {
+  state.ssh = true;
+  state.status.mockResolvedValue({ ...ready, login_service: { state: 'active', backend: 'linux-drm-kms' } });
+  let finish!: (value: object) => void, respond!: (value: object) => void;
+  state.deployment.mockImplementation(request => {
+    if (request.action === 'capabilities') return Promise.resolve({ ok: true, available: true });
+    if (request.action === 'respond') return new Promise(resolve => { respond = resolve; });
+    if (request.action === 'manage') return new Promise(resolve => { finish = resolve; });
+    return Promise.resolve({ ok: true });
+  });
+  await mount();
+  button('Prepare remote desktop').click();
+  button('Authorize and continue').click();
+  const current = state.deployment.mock.calls.find(([request]) => request.action === 'manage')![0];
+  const report = state.progress.mock.calls[0][0];
+  report({ operation_id: current.operationId, stage: 'authorization_required', challenge_id: 'password' });
+  const password = host.querySelector<HTMLInputElement>('input[type=password]')!;
+  password.value = 'ephemeral-fixture'; password.dispatchEvent(new Event('input', { bubbles: true }));
+  button('Authorize and continue').click();
+  if (transition === 'complete') {
+    finish({ ok: true });
+    await vi.waitFor(() => expect(host.querySelector('[data-phase=complete]')).toBeTruthy());
+  } else if (transition === 'next_challenge') {
+    report({ operation_id: current.operationId, stage: 'confirmation_required', challenge_id: 'interrupt', policy_digest: 'a'.repeat(64) });
+  } else {
+    button('Cancel').click();
+  }
+  respond({ ok: false, code: 'challenge_expired' });
+  await new Promise(resolve => setTimeout(resolve, 0));
+  expect(host.textContent).not.toContain('challenge_expired');
+  expect(state.deployment.mock.calls.filter(([request]) => request.action === 'cancel')).toHaveLength(transition === 'canceling' ? 1 : 0);
+  if (transition === 'complete') expect(host.querySelector('[data-phase=complete]')).toBeTruthy();
+  if (transition === 'next_challenge') expect(host.textContent).toContain('Interrupt existing connections?');
+  if (transition !== 'complete') finish({ ok: false, code: 'canceled', rollback: 'complete' });
+});
+
+it('does not open a viewer when cancellation races a committed preparation', async () => {
+  state.ssh = true;
+  state.status.mockResolvedValue({ ...ready, login_service: { state: 'active', backend: 'linux-drm-kms' } });
+  let finish!: (value: object) => void;
+  state.deployment.mockImplementation(request => request.action === 'capabilities'
+    ? Promise.resolve({ ok: true, available: true }) : request.action === 'manage'
+      ? new Promise(resolve => { finish = resolve; }) : Promise.resolve({ ok: true }));
+  await mount(); button('Connect to desktop').click(); button('Authorize and continue').click();
+  button('Cancel').click(); finish({ ok: true });
+  await vi.waitFor(() => expect(host.querySelector('[data-phase=complete]')).toBeTruthy());
+  expect(state.create).not.toHaveBeenCalled(); expect(state.open).not.toHaveBeenCalled();
+  button('Back to connection').click(); expect(host.querySelector('.remote-desktop-connect')).toBeTruthy();
 });

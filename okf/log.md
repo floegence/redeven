@@ -16,6 +16,10 @@
 
 - Remove automatic delegation counts and rolling child previews from [managed runtime facts](ai/flower-managed-model-context.md). Preserve environment capability, current tools, canonical interactions and [explicit subagent results](ai/subagent-runtime.md). Existing threads retire the old key once through Floret's normal complete-snapshot semantics; deterministic provider-request tests cover churn, errors, removal and handoffs.
 
+## 2026-10-16: Verified SSH physical-desktop recovery
+
+- Unify [SSH preparation](architecture/remote-desktop-ssh-deployment.md) around the published ensure transaction, separate root/sudo authorization and interruption consent, and actual Runtime admission before commit. Preserve durable rollback, existing installation identities and explicit physical targeting. Record isolated PAM evidence and outstanding physical-host acceptance without promoting source tests into a platform claim.
+
 ## 2026-10-16: Fresh explicit skill reads
 
 - Keep [skill catalogs and bodies](ai/flower-managed-model-context.md#skill-catalog-and-explicit-reads) separate: explicit reads revalidate current sources and instructions, activation retains identity only, and repeated reads remain available after compaction. Preserve historical results and prepared requests, measure catalog replacement bytes, and retain the existing snapshot protocol.

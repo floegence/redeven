@@ -176,13 +176,18 @@ func TestRemoteDesktopDeploymentAuditRejectsCredentialsAndUnconfirmedOutcomes(t 
 		body   string
 		status int
 	}{
-		{`{"operation":"install","phase":"authorize"}`, 200},
-		{`{"operation":"stop","phase":"result","outcome":"canceled","rollback":"complete"}`, 200},
-		{`{"operation":"install","phase":"authorize","administratorPassword":"fixture-only"}`, 400},
-		{`{"operation":"install","phase":"authorize","runtime_pid":42}`, 400},
-		{`{"operation":"install","phase":"result"}`, 400},
+		{`{"operation":"ensure","operation_id":"operation-fixture","phase":"authorize"}`, 200},
+		{`{"operation":"stop","operation_id":"fixture-operation","phase":"result","outcome":"canceled","rollback":"complete"}`, 200},
+		{`{"operation":"ensure","operation_id":"operation-fixture","phase":"authorize","administratorPassword":"fixture-only"}`, 400},
+		{`{"operation":"ensure","operation_id":"operation-fixture","phase":"authorize","runtime_pid":42}`, 400},
+		{`{"operation":"ensure","operation_id":"operation-fixture","phase":"result"}`, 400},
 		{`{"operation":"shell","phase":"authorize"}`, 400},
-		{`{"operation":"install","phase":"authorize","outcome":"success"}`, 400},
+		{`{"operation":"ensure","operation_id":"bad id","phase":"authorize"}`, 400},
+		{`{"operation":"ensure","operation_id":"operation","phase":"verify","challenge_id":"bad id","policy_digest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}`, 400},
+		{`{"operation":"ensure","operation_id":"operation","phase":"verify","challenge_id":"challenge","policy_digest":"zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"}`, 400},
+		{`{"operation":"start","operation_id":"operation","phase":"authorize"}`, 400},
+
+		{`{"operation":"ensure","operation_id":"operation-fixture","phase":"authorize","outcome":"success"}`, 400},
 	} {
 		r := httptest.NewRequest("POST", remoteDesktopAPI+"/service/deployment", strings.NewReader(test.body))
 		r.Header.Set("Origin", envOriginWithChannel("ch_desktop"))
@@ -209,6 +214,21 @@ func TestRemoteDesktopDeploymentAuditRejectsCredentialsAndUnconfirmedOutcomes(t 
 			if strings.Contains(test.body, `"phase":"result"`) && response.Data.RuntimePID != 0 {
 				t.Fatal("result response exposed unneeded process information")
 			}
+		}
+	}
+}
+
+func TestRemoteDesktopRetiredMutationRoutesAreUnavailable(t *testing.T) {
+	manager := remotedesktop.New(t.TempDir(), nil, nil)
+	defer manager.Close()
+	server := &Server{remoteDesktop: manager, resolveSessionMeta: resolveMetaForTest("ch_desktop", session.Meta{UserPublicID: "alice", CanRead: true, CanWrite: true, CanExecute: true})}
+	for _, route := range []struct{ method, path string }{{"POST", "/service/install"}, {"DELETE", "/service/install"}, {"DELETE", "/service"}} {
+		r := httptest.NewRequest(route.method, remoteDesktopAPI+route.path, strings.NewReader("{}"))
+		r.Header.Set("Origin", envOriginWithChannel("ch_desktop"))
+		w := httptest.NewRecorder()
+		server.handleRemoteDesktopAPI(w, r)
+		if w.Code != 404 {
+			t.Fatalf("retired mutation remains callable: %s %s %d", route.method, route.path, w.Code)
 		}
 	}
 }

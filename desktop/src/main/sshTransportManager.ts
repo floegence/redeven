@@ -44,6 +44,8 @@ export type SSHCommandOptions = Readonly<{
 }>;
 
 export type SSHStreamOptions = Readonly<{
+  pty?: boolean;
+  sensitive?: boolean;
   signal?: AbortSignal;
   onStderr?: (chunk: string) => void;
   timeout_ms?: number;
@@ -245,12 +247,14 @@ function authArgs(target: DesktopSSHHostAccessDetails): string[] {
     : ['-o', 'BatchMode=no', '-o', 'NumberOfPasswordPrompts=3'];
 }
 
-function sharedArgs(entry: TransportEntry): string[] {
+function sharedArgs(entry: TransportEntry, pty = false): string[] {
   return [
-    '-T',
+    pty ? '-tt' : '-T',
     '-x',
     '-o', `ConnectTimeout=${entry.target.connect_timeout_seconds}`,
-    '-o', 'RequestTTY=no',
+    '-o', pty ? 'RequestTTY=force' : 'RequestTTY=no',
+    // PTY closure notices must not enter the administrator challenge protocol.
+    ...(pty ? ['-o', 'LogLevel=ERROR'] : []),
     '-o', 'ForwardX11=no',
     '-o', 'ForwardX11Trusted=no',
     '-o', 'ForwardAgent=no',
@@ -624,7 +628,7 @@ export class DefaultDesktopSSHTransportManager implements DesktopSSHTransportMan
         let terminationRequested = false;
         let timedOut = false;
         const child = this.deps.spawnProcess(entry.sshBinary, [
-          ...sharedArgs(entry),
+          ...sharedArgs(entry, options.pty),
           ...targetArgs(entry.target),
           command,
         ], {
@@ -642,8 +646,7 @@ export class DefaultDesktopSSHTransportManager implements DesktopSSHTransportMan
         child.stderr.setEncoding('utf8');
         let stderr = '';
         child.stderr.on('data', (chunk: string) => {
-          stderr = appendRecent(stderr, chunk);
-          options.onStderr?.(chunk);
+          if (!options.sensitive) { stderr = appendRecent(stderr, chunk); options.onStderr?.(chunk); }
         });
         const result = new Promise<DesktopSSHCommandResult>((resolve, reject) => {
           child.once('error', reject);
