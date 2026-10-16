@@ -96,7 +96,7 @@ func TestFlowerRuleSourcesReportUnreadableAndIncompleteDiscovery(t *testing.T) {
 		}
 	}
 	r := newRun(runOptions{AgentHomeDir: root, WorkingDir: root, FilesystemScope: flowerTestFilesystemScope(t, root)})
-	files, err := r.collectPromptRepoRuleFiles(t.Context(), root, root)
+	files, err := r.collectPromptRepoRuleFiles(t.Context(), root)
 	if err != nil || len(files) != 2 || files[0].ReadError == "" || files[1].ReadError == "" {
 		t.Fatalf("unreadable sources lost: %+v, %v", files, err)
 	}
@@ -106,12 +106,12 @@ func TestFlowerRuleSourcesReportUnreadableAndIncompleteDiscovery(t *testing.T) {
 			t.Fatal(err)
 		}
 		t.Cleanup(func() { _ = os.Chmod(path, 0o600) })
-		files, err = r.collectPromptRepoRuleFiles(t.Context(), root, root)
+		files, err = r.collectPromptRepoRuleFiles(t.Context(), root)
 		if err != nil || len(files) != 3 || files[2].ReadError == "" {
 			t.Fatalf("unreadable file was omitted or marked readable: %+v, %v", files, err)
 		}
 	}
-	_, err = r.collectPromptRepoRuleFiles(t.Context(), filepath.Join(root, "missing"), root)
+	_, err = r.collectPromptRepoRuleFiles(t.Context(), filepath.Join(root, "missing"))
 	if err == nil {
 		t.Fatal("incomplete discovery must be explicit")
 	}

@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -18,7 +17,7 @@ import (
 
 const (
 	promptDelegationPreviewItems = 3
-	promptGitProbeTimeout        = 3 * time.Second
+	promptRuleRootProbeTimeout   = 3 * time.Second
 )
 
 var promptRepoRuleCandidateNames = []string{
@@ -30,7 +29,6 @@ var promptRepoRuleCandidateNames = []string{
 
 type promptWorkspaceContext struct {
 	Environment    promptEnvironmentFacts
-	Repository     promptRepositoryState
 	RepoRules      []promptRepoRuleFile
 	RepoRulesError error
 	Delegation     promptDelegationState
@@ -51,22 +49,6 @@ type promptFilesystemRootFact struct {
 	Path  string
 	Read  bool
 	Write bool
-}
-
-type promptRepositoryState struct {
-	Unavailable     string
-	Available       bool
-	RepoRoot        string
-	RelativeWorkdir string
-	Branch          string
-	Upstream        string
-	DetachedHead    bool
-	LinkedWorktree  bool
-	AheadCount      int
-	BehindCount     int
-	StagedCount     int
-	UnstagedCount   int
-	UntrackedCount  int
 }
 
 type promptRepoRuleFile struct {
@@ -101,8 +83,7 @@ func collectPromptWorkspaceContext(ctx context.Context, r *run, permission Flowe
 	workspace := promptWorkspaceContext{
 		Environment: collectPromptEnvironmentFacts(r, permission),
 	}
-	workspace.Repository = collectPromptRepositoryState(ctx, workspace.Environment.WorkingDir)
-	workspace.RepoRules, workspace.RepoRulesError = r.collectPromptRepoRuleFiles(ctx, workspace.Environment.WorkingDir, workspace.Repository.RepoRoot)
+	workspace.RepoRules, workspace.RepoRulesError = r.collectPromptRepoRuleFiles(ctx, workspace.Environment.WorkingDir)
 	workspace.Delegation = collectPromptDelegationState(ctx, r)
 	return workspace
 }
@@ -133,125 +114,7 @@ func collectPromptEnvironmentFacts(r *run, permission FlowerPermissionType) prom
 	return out
 }
 
-func collectPromptRepositoryState(parent context.Context, workingDir string) promptRepositoryState {
-	workingDir = strings.TrimSpace(workingDir)
-	if workingDir == "" {
-		return promptRepositoryState{}
-	}
-
-	ctx, cancel := context.WithTimeout(parent, promptGitProbeTimeout)
-	defer cancel()
-
-	repoRoot, err := gitutil.ResolveTopLevel(ctx, workingDir)
-	if err != nil {
-		if strings.Contains(err.Error(), "not a git repository") {
-			return promptRepositoryState{}
-		}
-		return promptRepositoryState{Unavailable: "Git repository probe unavailable"}
-	}
-	state := promptRepositoryState{
-		Available: true,
-		RepoRoot:  filepath.Clean(repoRoot),
-	}
-	if rel, err := filepath.Rel(state.RepoRoot, workingDir); err == nil {
-		state.RelativeWorkdir = filepath.Clean(rel)
-	}
-	if strings.TrimSpace(state.RelativeWorkdir) == "" {
-		state.RelativeWorkdir = "."
-	}
-
-	branch := strings.TrimSpace(readPromptGitOptional(ctx, state.RepoRoot, "symbolic-ref", "--quiet", "--short", "HEAD"))
-	if branch == "" {
-		branch = strings.TrimSpace(readPromptGitOptional(ctx, state.RepoRoot, "rev-parse", "--short", "HEAD"))
-		state.DetachedHead = branch != ""
-	}
-	state.Branch = branch
-
-	upstream := strings.TrimSpace(readPromptGitOptional(ctx, state.RepoRoot, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"))
-	state.Upstream = upstream
-	if upstream != "" {
-		state.AheadCount, state.BehindCount = readPromptGitAheadBehind(ctx, state.RepoRoot)
-	}
-
-	gitDir := resolvePromptGitPath(ctx, state.RepoRoot, "rev-parse", "--git-dir")
-	commonDir := resolvePromptGitPath(ctx, state.RepoRoot, "rev-parse", "--git-common-dir")
-	if gitDir != "" && commonDir != "" && filepath.Clean(gitDir) != filepath.Clean(commonDir) {
-		state.LinkedWorktree = true
-	}
-
-	statusRaw, err := gitutil.RunCombinedOutput(ctx, state.RepoRoot, nil, "status", "--porcelain=1", "--untracked-files=normal")
-	if err != nil || ctx.Err() != nil {
-		return promptRepositoryState{Unavailable: "Git repository status unavailable"}
-	}
-	state.StagedCount, state.UnstagedCount, state.UntrackedCount = parsePromptGitStatusCounts(string(statusRaw))
-	return state
-}
-
-func readPromptGitOptional(ctx context.Context, repoRoot string, args ...string) string {
-	out, err := gitutil.RunCombinedOutput(ctx, repoRoot, nil, args...)
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(out))
-}
-
-func resolvePromptGitPath(ctx context.Context, repoRoot string, args ...string) string {
-	raw := strings.TrimSpace(readPromptGitOptional(ctx, repoRoot, args...))
-	if raw == "" {
-		return ""
-	}
-	if filepath.IsAbs(raw) {
-		return filepath.Clean(raw)
-	}
-	return filepath.Clean(filepath.Join(repoRoot, raw))
-}
-
-func readPromptGitAheadBehind(ctx context.Context, repoRoot string) (int, int) {
-	raw := readPromptGitOptional(ctx, repoRoot, "rev-list", "--left-right", "--count", "HEAD...@{upstream}")
-	if raw == "" {
-		return 0, 0
-	}
-	fields := strings.Fields(raw)
-	if len(fields) < 2 {
-		return 0, 0
-	}
-	ahead, errAhead := strconv.Atoi(strings.TrimSpace(fields[0]))
-	behind, errBehind := strconv.Atoi(strings.TrimSpace(fields[1]))
-	if errAhead != nil || errBehind != nil {
-		return 0, 0
-	}
-	if ahead < 0 {
-		ahead = 0
-	}
-	if behind < 0 {
-		behind = 0
-	}
-	return ahead, behind
-}
-
-func parsePromptGitStatusCounts(raw string) (staged int, unstaged int, untracked int) {
-	for _, line := range strings.Split(strings.TrimSpace(raw), "\n") {
-		line = strings.TrimRight(line, "\r")
-		if len(line) < 2 {
-			continue
-		}
-		x := line[0]
-		y := line[1]
-		if x == '?' && y == '?' {
-			untracked++
-			continue
-		}
-		if x != ' ' {
-			staged++
-		}
-		if y != ' ' {
-			unstaged++
-		}
-	}
-	return staged, unstaged, untracked
-}
-
-func (r *run) collectPromptRepoRuleFiles(ctx context.Context, workingDir, repoRoot string) ([]promptRepoRuleFile, error) {
+func (r *run) collectPromptRepoRuleFiles(ctx context.Context, workingDir string) ([]promptRepoRuleFile, error) {
 	if r == nil || strings.TrimSpace(workingDir) == "" {
 		return nil, nil
 	}
@@ -259,6 +122,11 @@ func (r *run) collectPromptRepoRuleFiles(ctx context.Context, workingDir, repoRo
 	if err != nil {
 		return nil, errors.New("repository rule discovery requires an authorized working directory")
 	}
+	// Git root discovery bounds applicable rule sources; workspace status is
+	// queried only through tools when the model needs it.
+	probeCtx, cancel := context.WithTimeout(ctx, promptRuleRootProbeTimeout)
+	repoRoot, _ := gitutil.ResolveTopLevel(probeCtx, workingDir)
+	cancel()
 	files := []promptRepoRuleFile{}
 	for _, dir := range promptRuleSearchDirs(workingDir, repoRoot) {
 		if err := ctx.Err(); err != nil {
@@ -443,7 +311,6 @@ func (r *run) collectModelContextSnapshot(ctx context.Context, permission Flower
 	snapshot := &flruntime.ModelContextSnapshot{Sections: []flruntime.ModelContextSection{
 		{Key: "execution_environment", Title: "Execution environment", Text: strings.Join(runtimeLines, "\n")},
 		{Key: "local_time", Title: "Date and timezone", Text: strings.Join(renderPromptLocalTimeContextLines(currentPromptLocalTimeContext(now)), "\n")},
-		{Key: "repository", Title: "Repository state", Text: strings.Join(renderPromptRepositoryStateLines(workspace.Repository), "\n")},
 		{Key: "repository_rules", Title: "Repository rule sources", Text: strings.Join(renderPromptRepoRuleLines(workspace.RepoRules, nil), "\n")},
 		{Key: "skills", Title: "Available skills", Text: skills},
 		{Key: "delegation", Title: "Delegation state", Text: strings.Join(renderPromptDelegationLines(workspace.Delegation), "\n")},
@@ -489,42 +356,6 @@ func renderPromptEnvironmentFactsLines(env promptEnvironmentFacts) []string {
 	permissionType := env.PermissionType
 	lines = append(lines, fmt.Sprintf("- Permission type: %s", permissionTypeString(permissionType)))
 	lines = append(lines, fmt.Sprintf("- Subagent delegation available: %t", env.SubagentDelegation))
-	return lines
-}
-
-func renderPromptRepositoryStateLines(repo promptRepositoryState) []string {
-	if repo.Unavailable != "" {
-		return []string{"- " + repo.Unavailable + "; earlier repository facts are no longer current."}
-	}
-	if !repo.Available {
-		return []string{"- Git repository detected from the current working directory: false"}
-	}
-	lines := []string{
-		"- Git repository detected from the current working directory: true",
-		fmt.Sprintf("- Repository root: %s", repo.RepoRoot),
-	}
-	if rel := strings.TrimSpace(repo.RelativeWorkdir); rel != "" {
-		lines = append(lines, fmt.Sprintf("- Working directory relative to repository root: %s", rel))
-	}
-	if branch := strings.TrimSpace(repo.Branch); branch != "" {
-		if repo.DetachedHead {
-			lines = append(lines, fmt.Sprintf("- HEAD state: detached at %s", branch))
-		} else {
-			lines = append(lines, fmt.Sprintf("- Current branch: %s", branch))
-		}
-	}
-	if upstream := strings.TrimSpace(repo.Upstream); upstream != "" {
-		lines = append(lines,
-			fmt.Sprintf("- Upstream branch: %s", upstream),
-			fmt.Sprintf("- Ahead/behind vs upstream: ahead=%d, behind=%d", repo.AheadCount, repo.BehindCount),
-		)
-	}
-	lines = append(lines, fmt.Sprintf("- Linked worktree checkout: %t", repo.LinkedWorktree))
-	if repo.StagedCount == 0 && repo.UnstagedCount == 0 && repo.UntrackedCount == 0 {
-		lines = append(lines, "- Workspace changes: clean")
-	} else {
-		lines = append(lines, fmt.Sprintf("- Workspace changes: staged=%d, unstaged=%d, untracked=%d", repo.StagedCount, repo.UnstagedCount, repo.UntrackedCount))
-	}
 	return lines
 }
 

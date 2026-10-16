@@ -4650,7 +4650,7 @@
               "flower",
               "recovery"
             ],
-            "summary": "Flower consumes published Floret v7.40.0. One complete collector supplies six\nstable partitions: execution environment, date/timezone, repository state, rule\nsources, available skills, and delegation. Floret owns chronological admission,\nsemantic changes, user-role model-context messages, compaction and recovery.\nThe product owns collection and authorized presentation only.",
+            "summary": "Flower consumes published Floret v7.46.1. One complete collector supplies five\nstable partitions: execution environment, date/timezone, repository rule\nsources, available skills, and delegation. Floret owns chronological admission,\nsemantic changes, user-role model-context messages, compaction and recovery.\nThe product owns collection and authorized presentation only.",
             "section_count": 3
           }
         ]
@@ -10028,7 +10028,7 @@
         "flower",
         "recovery"
       ],
-      "timestamp": "2026-10-15T00:00:00Z",
+      "timestamp": "2026-10-16T00:00:00Z",
       "frontmatter": {
         "description": "One snapshot collector supplies canonical facts through published Floret admission and request boundaries.",
         "tags": [
@@ -10037,19 +10037,19 @@
           "flower",
           "recovery"
         ],
-        "timestamp": "2026-10-15T00:00:00Z",
+        "timestamp": "2026-10-16T00:00:00Z",
         "title": "Flower managed runtime facts",
         "type": "AI Context Contract"
       },
-      "body_length": 5250,
-      "summary": "Flower consumes published Floret v7.40.0. One complete collector supplies six\nstable partitions: execution environment, date/timezone, repository state, rule\nsources, available skills, and delegation. Floret owns chronological admission,\nsemantic changes, user-role model-context messages, compaction and recovery.\nThe product owns collection and authorized presentation only.",
+      "body_length": 6267,
+      "summary": "Flower consumes published Floret v7.46.1. One complete collector supplies five\nstable partitions: execution environment, date/timezone, repository rule\nsources, available skills, and delegation. Floret owns chronological admission,\nsemantic changes, user-role model-context messages, compaction and recovery.\nThe product owns collection and authorized presentation only.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Admission and the existing dynamic tool surface invoke the same collector. Each\nlogical provider request uses the current execution configuration and the same\nresolved permission for tools and facts. Dates change only on date/timezone\nchanges. Skill rediscovery uses one authoritative catalog and deterministic\ntext; disabled or newly restricted skills cannot reuse an activation cache.\nLoaded skill instructions remain historical model facts.\n\nUserInput.Context retains ordinary submitted facts and references. Automatic\nfacts use ModelContextSnapshot, never historical free-text parsing. Queue edits\nretain their admitted snapshot; queued execution collects current facts.\nPrepared network attempts remain immutable. Steering, authorization and unknown\neffect termination retain their existing boundaries.\n\nRequired rule or catalog failures terminate with model_context_unavailable.\nOptional Git/delegation probe failures explicitly invalidate previous facts.\nCollection honors cancellation and the existing three-second Git limit.\nSafe retry collects again and preserves confirmed tool results. Unknown effects\nnever replay. Floret keeps exact compaction-cut baselines, chronological tails,\nfork-point facts, and permanent schema migrations; hosts do not inspect storage.",
-          "char_count": 1274
+          "body": "Admission and the existing dynamic tool surface invoke the same collector. Each\nlogical provider request uses the current execution configuration and the same\nresolved permission for tools and facts. Dates change only on date/timezone\nchanges. Skill rediscovery uses one authoritative catalog and deterministic\ntext; disabled or newly restricted skills cannot reuse an activation cache.\nLoaded skill instructions remain historical model facts.\n\nUserInput.Context retains ordinary submitted facts and references. Automatic\nfacts use ModelContextSnapshot, never historical free-text parsing. Queue edits\nretain their admitted snapshot; queued execution collects current facts.\nPrepared network attempts remain immutable. Steering, authorization and unknown\neffect termination retain their existing boundaries.\n\nRequired rule or catalog failures terminate with model_context_unavailable.\nOptional delegation probe failures explicitly invalidate previous facts.\nCollection honors cancellation. Repository root discovery retains its\nthree-second limit and is used only to bound applicable rule sources.\nSafe retry collects again and preserves confirmed tool results. Unknown effects\nnever replay. Floret keeps exact compaction-cut baselines, chronological tails,\nfork-point facts, and permanent schema migrations; hosts do not inspect storage.\n\nGit workspace details are queried on demand through existing tools. The\ncollector does not run status, branch, upstream, ahead/behind or worktree probes,\nand file edits do not append repository background updates. Working directory\nand authorized filesystem roots remain execution environment facts. Rule\ndiscovery lists source paths and scopes without loading their contents; the\nmodel reads applicable rules through existing tools.\n\nExisting threads retain historical repository snapshots. The next complete\nsnapshot omits the repository key, so Floret's existing section-removal message\nmarks those facts as no longer current. Unchanged later requests do not append\nanother removal, including after restart. No journal rewrite or schema change\nis involved. Explicit Git calls and their complete results remain normal tool\nhistory.",
+          "char_count": 2173
         },
         {
           "id": "boundaries",
@@ -10066,7 +10066,7 @@
           "char_count": 2471
         }
       ],
-      "snippet": "Flower consumes published Floret v7.40.0. One complete collector supplies six stable partitions: execution environment, date/timezone, repository state, rule sources, available skills, and delegation. Floret owns chronological admission,",
+      "snippet": "Flower consumes published Floret v7.46.1. One complete collector supplies five stable partitions: execution environment, date/timezone, repository rule sources, available skills, and delegation. Floret owns chronological admission,",
       "backlinks": [
         {
           "label": "Model context usage and compaction",
@@ -43005,5 +43005,5 @@
       ]
     }
   ],
-  "source_sha256": "f4957b97f16c18a637e2c75612065cc1ab79731eeb0b57a48dd34e3fc2bd12cf"
+  "source_sha256": "c07cefd2ba1451edf86f74345ce9a99b62632391bf10c97b4065f6262c3a3725"
 }
