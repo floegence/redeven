@@ -9614,7 +9614,7 @@ export function EnvironmentSplitActionButton(
   const panelProgress = createMemo(() => props.operationState.panelProgress);
   const revalidationAction = createMemo(() => {
     const intent = props.lifecycleDisclosure?.intent;
-    const mode = panelProgress()?.reinstall_preview?.mode
+    const mode = props.lifecycleDisclosure?.reinstall_mode ?? panelProgress()?.reinstall_preview?.mode
       ?? panelProgress()?.next_actions?.find(action => action.kind === 'reinstall_target')?.mode;
     return props.presentation.menu_actions.find(item => item.action.intent === intent
       && (intent !== 'reinstall_target' || !mode || item.action.reinstall_mode === mode))?.action
@@ -9837,11 +9837,7 @@ export function EnvironmentSplitActionButton(
                           <p class="redeven-action-popover__detail" role={props.lifecycleDisclosure?.submission === 'failed' ? 'alert' : 'status'}>{props.i18n.t(props.lifecycleDisclosure?.submission === 'failed' ? 'interactionContinuity.rejected' : 'interactionContinuity.pending')}</p>
                         </div>
                         <div class="redeven-action-popover__action-footer redeven-action-popover__actions">
-                          <Show when={props.lifecycleDisclosure?.submission === 'failed'}><Button size="sm" onClick={() => {
-                            const intent = props.lifecycleDisclosure?.intent;
-                            const action = props.presentation.menu_actions.find(item => item.action.intent === intent)?.action;
-                            if (action?.enabled) props.onRunAction(action);
-                          }}>{props.i18n.t('common.retry')}</Button></Show>
+                          <Show when={props.lifecycleDisclosure?.submission === 'failed'}><Button size="sm" disabled={props.ownerAvailable === false || !revalidationAction()?.enabled} onClick={revalidateOperation}>{props.i18n.t('common.retry')}</Button></Show>
                           <Button size="sm" variant="outline" onClick={() => props.onProgressOpenChange(false)}>{props.i18n.t('common.close')}</Button>
                         </div>
                       </div>

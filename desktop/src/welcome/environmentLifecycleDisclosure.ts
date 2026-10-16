@@ -47,6 +47,7 @@ export type EnvironmentLifecycleDisclosureState = Readonly<{
   last_progress?: DesktopLauncherActionProgress;
   submission?: 'pending' | 'accepted' | 'failed';
   admission_attempt?: EnvironmentLifecycleAttempt;
+  reinstall_mode?: EnvironmentActionModel['reinstall_mode'];
   settings_restart?: EnvironmentSettingsRestartSource;
   authority_key?: string;
   authority_revoked?: boolean;

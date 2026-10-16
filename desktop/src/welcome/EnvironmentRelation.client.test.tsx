@@ -934,14 +934,14 @@ describe('background interaction continuity', () => {
     controls.forEach((control, index) => expect(menu.querySelectorAll('button')[index]).toBe(control));
     expect(document.activeElement).toBe(focus);
   });
-  it('opens lifecycle progress before admission and retains it through refresh and rejection', async () => {
+  it.each(['erase', 'keep'])('opens lifecycle progress before admission and preserves %s data selection on retry', async mode => {
     const f = await runtimeGatewayBackgroundProbeFixture('ssh');
     const h = await mount(f.snapshot());
     let reject!: () => void;
     h.performAction.mockImplementation(() => new Promise(resolve => { reject = () => resolve({ ok: false, message: 'Admission rejected', code: 'action_invalid', scope: 'environment' } as DesktopLauncherActionResult); }));
     button(document.querySelector('[data-environment-group]')!, 'Actions').click(); await settle();
     const menu = document.querySelector('[role="menu"]')!;
-    const action = [...menu.querySelectorAll<HTMLButtonElement>('button')].find(control => !control.disabled && /Uninstall/.test(controlText(control)))!;
+    const action = [...menu.querySelectorAll<HTMLButtonElement>('button')].find(control => !control.disabled && controlText(control).includes(`Uninstall (${mode} data)`))!;
     expect(action).toBeTruthy(); action.click(); await settle();
     const panel = document.querySelector('.redeven-environment-progress');
     expect(panel).not.toBeNull();
@@ -950,5 +950,9 @@ describe('background interaction continuity', () => {
     reject(); await settle();
     expect(document.querySelector('.redeven-environment-progress')?.querySelector('[role="alert"]')).not.toBeNull();
     expect(h.performAction).toHaveBeenCalledTimes(1);
+    button(panel!, 'Retry').click(); await settle();
+    expect(h.performAction).toHaveBeenCalledTimes(2);
+    expect(h.performAction.mock.calls[1][0]).toMatchObject({ kind: 'preview_reinstall_target', mode: mode === 'keep' ? 'preserve_data' : 'wipe_data' });
+    reject(); await settle();
   });
 });
