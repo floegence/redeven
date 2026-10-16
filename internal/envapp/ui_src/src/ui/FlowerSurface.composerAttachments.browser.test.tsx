@@ -13,8 +13,10 @@ import type {
 } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import {
   adapter,
+  deferred,
   renderSurfaceWithAdapter,
   renderSurfaceWithAdapterProps,
+  settingsSnapshot,
   waitFor,
 } from './FlowerSurface.navigation.testHarness';
 import {
@@ -51,6 +53,44 @@ async function imageFile(name: string): Promise<File> {
 }
 
 describe('Flower composer attachment browser presentation', () => {
+  it('keeps a Flash image queued through capability loading and stages it without reselection', async () => {
+    await page.viewport(1100, 800);
+    const modelID = 'deepseek/deepseek-flash';
+    const pending = deferred<FlowerAttachmentCapability>();
+    const capability: FlowerAttachmentCapability = {
+      model_id: modelID, revision: 'flash-browser-capability', enabled: true, supports_long_text: true,
+      max_attachments: 10, max_file_size_bytes: 1_000_000, max_total_size_bytes: 2_000_000,
+      routes: { 'image/png': 'native_full_content' },
+    };
+    const loadAttachmentCapability = vi.fn(() => pending.promise);
+    const uploadAttachment = vi.fn(async (input: FlowerAttachmentUploadInput): Promise<FlowerStagedAttachment> => ({
+      attachment_id: 'upl_flash_browser', name: input.file.name, mime_type: input.file.type,
+      size_bytes: input.file.size, digest_sha256: 'a'.repeat(64), locator: 'attachment://v1/upl_flash_browser/diagram.png',
+      source: input.source, capability_revision: input.capability_revision,
+    }));
+    const runtime = renderSurfaceWithAdapter({ ...adapter(true), listThreads: async () => [],
+      loadSettings: async () => ({ ...settingsSnapshot(), model_profile: { schema_version: 1, current_model_id: modelID,
+        providers: [{ id: 'deepseek', name: 'DeepSeek', type: 'deepseek', models: [{ model_name: 'deepseek-flash', input_modalities: ['text', 'image'] }] }],
+      }, provider_secrets: [{ provider_id: 'deepseek', provider_api_key_configured: true, web_search_api_key_configured: false }] }),
+      loadAttachmentCapability, uploadAttachment,
+    });
+    runtime.style.cssText = 'width:100%;height:760px';
+    await waitFor(() => loadAttachmentCapability.mock.calls.length > 0);
+    const transfer = new DataTransfer();
+    transfer.items.add(await imageFile('diagram.png'));
+    const picker = runtime.querySelector<HTMLInputElement>('input[type="file"]')!;
+    Object.defineProperty(picker, 'files', { configurable: true, value: transfer.files });
+    picker.dispatchEvent(new Event('change', { bubbles: true }));
+    await waitFor(() => Boolean(runtime.querySelector('[data-attachment-status="queued"]')));
+    expect(runtime.querySelector('.flower-attachment-error')).toBeNull();
+    expect(uploadAttachment).not.toHaveBeenCalled();
+    pending.resolve(capability);
+    await waitFor(() => Boolean(runtime.querySelector('[data-attachment-status="staged_ready"]')));
+    expect(uploadAttachment).toHaveBeenCalledOnce();
+    expect(uploadAttachment.mock.calls[0][0].model_id).toBe(modelID);
+    expect(runtime.querySelector('.flower-attachment-feedback')).toBeNull();
+  });
+
   it.each([false, true])('reveals removal through hover, keyboard, or touch without moving attachments (touch=%s)', async (touch) => {
     await page.viewport(900, 720);
     const media = commands as unknown as { emulateTouchInput: (enabled: boolean) => Promise<void> };

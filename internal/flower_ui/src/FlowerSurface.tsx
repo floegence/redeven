@@ -2004,7 +2004,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     });
     void ensureAttachmentStagingScope(sessionKey).catch(() => {
       operation.controller.markStagingUnavailable();
-      notifyComposerError(attachmentCopy().unavailable);
+      notifyComposerError(attachmentCopy().errorUploadFailed);
     });
   };
   createEffect(() => {
@@ -2887,10 +2887,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         || currentComposerSessionKey() !== sessionKey
         || selectedComposerModelID() !== modelID
       ) return;
-      controller.setCapability(capability.model_id === modelID ? capability : null);
+      if (capability.model_id === modelID) controller.setCapability(capability);
+      else controller.markCapabilityUnavailable();
     }).catch(() => {
       if (sequence === attachmentCapabilitySequence && currentComposerSessionKey() === sessionKey) {
-        controller.setCapability(null);
+        controller.markCapabilityUnavailable();
       }
     });
   });
@@ -5579,18 +5580,19 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           try {
             const capability = await props.adapter.loadAttachmentCapability(launchModelID);
             if (!submissionCurrent() || capabilitySequence !== attachmentCapabilitySequence) return;
-            launchController.setCapability(capability.model_id === launchModelID ? capability : null);
+            if (capability.model_id !== launchModelID) throw new Error('Attachment capability model identity changed.');
+            launchController.setCapability(capability);
           } catch {
             if (submissionCurrent() && capabilitySequence === attachmentCapabilitySequence) {
-              launchController.setCapability(null);
-              notifyComposerError(attachmentCopy().unavailable);
+              launchController.markCapabilityUnavailable();
+              notifyComposerError(attachmentCopy().errorUploadFailed);
             }
             return;
           }
         }
         if (!launchStagingScope) {
           try { launchStagingScope = await ensureAttachmentStagingScope(submissionScopeKey()); }
-          catch { notifyComposerError(attachmentCopy().unavailable); return; }
+          catch { notifyComposerError(attachmentCopy().errorUploadFailed); return; }
         }
         attachmentSnapshot = launchController.snapshot();
         attachmentItems = attachmentItemsForSubmission(attachmentSnapshot);
@@ -12410,13 +12412,24 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     disabled={!composerAttachmentEditingAllowed()}
                     onRetry={(localID) => {
                       const operation = currentComposerDraftOperation();
-                      void ensureAttachmentStagingScope(operation.sessionKey).then(() => {
-                        if (!composerDraftOperationCurrent(operation) || draftSubmissionActive(operation.session.snapshot().value)) return;
+                      const modelID = selectedComposerModelID();
+                      void ensureAttachmentStagingScope(operation.sessionKey).then(async () => {
+                        if (!composerDraftOperationCurrent(operation) || selectedComposerModelID() !== modelID
+                          || draftSubmissionActive(operation.session.snapshot().value)) return;
+                        if (!operation.controller.snapshot().capability && props.adapter.loadAttachmentCapability) {
+                          const capability = await props.adapter.loadAttachmentCapability(modelID);
+                          if (!composerDraftOperationCurrent(operation) || selectedComposerModelID() !== modelID) return;
+                          if (capability.model_id !== modelID) throw new Error('Attachment capability model identity changed.');
+                          operation.controller.setCapability(capability);
+                        }
+                        if (!composerDraftOperationCurrent(operation) || selectedComposerModelID() !== modelID
+                          || draftSubmissionActive(operation.session.snapshot().value)) return;
                         operation.controller.retry(localID);
                       }).catch(() => {
-                        if (!composerDraftOperationCurrent(operation) || draftSubmissionActive(operation.session.snapshot().value)) return;
+                        if (!composerDraftOperationCurrent(operation) || selectedComposerModelID() !== modelID
+                          || draftSubmissionActive(operation.session.snapshot().value)) return;
                         operation.controller.markStagingUnavailable();
-                        notifyComposerError(attachmentCopy().unavailable);
+                        notifyComposerError(attachmentCopy().errorUploadFailed);
                       });
                     }}
                     onReselect={reselectAttachment}

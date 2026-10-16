@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower composer attachments
 description: Connection-local attachment staging, long-text conversion, and canonical timeline presentation.
 tags: [ui, flower, attachments, composer, accessibility]
-timestamp: 2026-10-14T00:00:00Z
+timestamp: 2026-10-16T00:00:00Z
 ---
 # Summary
 
@@ -13,6 +13,8 @@ timestamp: 2026-10-14T00:00:00Z
 - Failure boundary: invalid Unicode, capability drift, quota, upload, restore, or pre-acceptance failure preserves the connection-local editor and never synthesizes user text.
 
 # Contract
+
+An attachment selected while the model capability snapshot is loading stays queued with its local bytes. The controller validates the resolved snapshot before uploading and starts supported files automatically. A failed or mismatched capability read preserves the image and exposes retry, which reloads the selected model capability. Upload request, integrity, idempotency and staging failures use upload feedback; only a resolved disabled capability attributes rejection to the selected model.
 
 The attachment lane is part of the composer rather than a separate modal workflow. Each item has a stable size, status, progress treatment, and icon action set. File selection, drop, and paste converge on the same controller and closed capability snapshot. Upload order is preserved independently of completion order. Failed items retain retry or reselect actions, cancellation is immediate, incompatible items remain legible, and sending is enabled only when every included item is ready. Attachment-only turns are valid and never receive invented prompt copy.
 
