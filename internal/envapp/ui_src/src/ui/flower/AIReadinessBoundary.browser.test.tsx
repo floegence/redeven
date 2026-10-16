@@ -354,6 +354,55 @@ describe('AIReadinessBoundary browser layout', () => {
     await expectAuditedVisualEvidence(320, 720);
   });
 
+  it.each(['light', 'dark'])('rotates the loading flower and respects reduced motion in %s mode', async (mode) => {
+    document.documentElement.classList.toggle('dark', mode === 'dark');
+    await mediaCommands.emulateMediaPreferences({ reducedMotion: 'no-preference' });
+    const { host } = mountHarness(blockedReason('', { state: 'verifying' }));
+    await sizeReadinessSurface(1280, 720);
+    await expect.element(page.getByRole('heading', { name: 'Checking the final details' })).toBeVisible();
+    const bloom = host.querySelector<HTMLElement>('.flower-readiness-art__bloom')!;
+    const style = getComputedStyle(bloom);
+    expect(style.animationName).toBe('flower-model-status-flower-twirl');
+    expect(style.animationDuration).toBe('2.6s');
+    expect(style.animationIterationCount).toBe('infinite');
+
+    const animations = bloom.getAnimations();
+    expect(animations).toHaveLength(1);
+    const animation = animations[0];
+    expect(animation.playState).toBe('running');
+    animation.pause();
+    animation.currentTime = 0;
+    const initialTransform = getComputedStyle(bloom).transform;
+    animation.currentTime = 884;
+    const rotatedTransform = getComputedStyle(bloom).transform;
+    expect(rotatedTransform).not.toBe(initialTransform);
+    const matrix = new DOMMatrixReadOnly(rotatedTransform);
+    expect(Math.atan2(matrix.b, matrix.a) * 180 / Math.PI).toBeCloseTo(142, 1);
+    for (const part of bloom.querySelectorAll('path, circle')) {
+      expect(getComputedStyle(part).animationName).toBe('none');
+    }
+    const petals = bloom.querySelectorAll('path');
+    expect(petals).toHaveLength(5);
+    petals.forEach((petal, index) => {
+      const petalStyle = getComputedStyle(petal);
+      expect(petalStyle.fill).toBe('rgb(255, 255, 255)');
+      expect(petalStyle.stroke).toBe(mode === 'dark' ? petalStyle.color : 'rgb(105, 119, 136)');
+      expect(parseFloat(petalStyle.strokeWidth)).toBe(mode === 'dark' ? 0.45 : 1.15);
+      expect(Number(petalStyle.opacity)).toBe(mode === 'dark' ? (index % 2 === 0 ? 0.95 : 0.85) : 1);
+    });
+    const centerStyle = getComputedStyle(bloom.querySelector('.redeven-flower-icon-center')!);
+    if (mode === 'dark') {
+      expect(centerStyle.fill).toContain('url(');
+      expect(centerStyle.stroke).toBe('none');
+    } else {
+      expect(centerStyle.fill).toBe('rgb(233, 177, 59)');
+    }
+
+    await mediaCommands.emulateMediaPreferences({ reducedMotion: 'reduce' });
+    expect(bloom.getAnimations({ subtree: true })).toHaveLength(0);
+    expect(getComputedStyle(bloom).transform).toBe('none');
+  });
+
   it('commits retry pending within the input turn and before the next animation frame', async () => {
     await page.viewport(1280, 720);
     const result = deferred<AIReadinessSnapshot>();

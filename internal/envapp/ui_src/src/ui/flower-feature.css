@@ -187,7 +187,8 @@
 .flower-readiness-art__bloom {
   width: 100%;
   height: 100%;
-  animation: flower-readiness-breathe 4.8s ease-in-out infinite;
+  transform-origin: 50% 50%;
+  animation: flower-model-status-flower-twirl 2.6s infinite;
 }
 
 .flower-readiness-art__bloom svg { width: 100%; height: 100%; }
@@ -362,11 +363,6 @@
 @keyframes flower-readiness-enter {
   from { transform: translateY(4px); }
   to { transform: translateY(0); }
-}
-
-@keyframes flower-readiness-breathe {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-2px); }
 }
 
 @keyframes flower-readiness-progress {

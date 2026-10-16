@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-15: Animate Flower during startup readiness
+
+- Use the [existing whole-bloom rotation](architecture/ai-readiness-lifecycle.md#env-app-maintenance-presentation) while Flower is opening, backing up, or restoring; preserve each theme's artwork and stop motion when requested.
+
 ## 2026-10-15: Restore Flower motion and dark artwork
 
 - Restore the original [whole-bloom progress rotation](ui/flower-output-progress.md#progress-symbol) and reduced-motion behavior.
