@@ -476,7 +476,6 @@ export const enUS = {
       webSearch: {
         ...flowerSurfaceEnUS.chat.webSearch,
         sources: plural(flowerSurfaceEnUS.chat.webSearch.sources.forms),
-        queries: plural(flowerSurfaceEnUS.chat.webSearch.queries.forms),
         showMore: plural(flowerSurfaceEnUS.chat.webSearch.showMore.forms),
       },
     },

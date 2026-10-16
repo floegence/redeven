@@ -5126,23 +5126,12 @@
       "webSearch": {
         "search": "검색",
         "openPage": "페이지 열기",
-        "findInPage": "페이지 내 찾기",
-        "webActivity": "웹 검색",
-        "noDetails": "세부 정보가 제공되지 않았습니다",
-        "noSources": "반환된 출처가 없습니다",
-        "sourcesUnavailable": "검색 완료 · 출처가 기록되지 않음",
+        "findInPage": "찾기",
         "sourcesTitle": "출처",
-        "queryLabel": "검색어",
-        "targetLabel": "웹 페이지",
-        "patternLabel": "찾을 텍스트",
         "showLess": "간략히 보기",
         "sources": {
           "one": "출처 {count}개",
           "other": "출처 {count}개"
-        },
-        "queries": {
-          "one": "검색어 {count}개",
-          "other": "검색어 {count}개"
         },
         "showMore": {
           "other": "나머지 {count}개 표시"

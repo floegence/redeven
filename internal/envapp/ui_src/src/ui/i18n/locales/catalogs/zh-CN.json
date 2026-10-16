@@ -5126,23 +5126,12 @@
       "webSearch": {
         "search": "搜索",
         "openPage": "打开网页",
-        "findInPage": "页内查找",
-        "webActivity": "网页搜索",
-        "noDetails": "未提供详情",
-        "noSources": "未返回来源",
-        "sourcesUnavailable": "搜索完成 · 未记录来源",
+        "findInPage": "查找",
         "sourcesTitle": "来源",
-        "queryLabel": "搜索词",
-        "targetLabel": "网页",
-        "patternLabel": "查找内容",
         "showLess": "收起",
         "sources": {
           "one": "{count} 个来源",
           "other": "{count} 个来源"
-        },
-        "queries": {
-          "one": "共 {count} 个查询",
-          "other": "共 {count} 个查询"
         },
         "showMore": {
           "other": "显示其余 {count} 个"

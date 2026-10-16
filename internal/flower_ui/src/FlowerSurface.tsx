@@ -9057,6 +9057,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         </>
       );
     }
+    if (title.kind === 'web_search') {
+      return <>
+        <strong class="flower-activity-inline-title-verb">Web Search:</strong>
+        <span class="flower-activity-inline-title-target" title={title.url || title.text}>{title.text}</span>
+      </>;
+    }
     if (title.kind === 'web_fetch') {
       return (
         <>
@@ -10002,6 +10008,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         ? attachmentPreviewTargetForActivity(item(), timeline(), title.display_name)
         : null;
     });
+    const webOperation = createMemo(() => {
+      const title = presentation().title;
+      return title.kind === 'web_search' ? title.operation : undefined;
+    });
     const displayStatus = createMemo(() => item().status);
     const controlError = createMemo(() => (
       item().kind === 'control'
@@ -10019,7 +10029,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const activityRowContent = () => (
       <>
         <span class="flower-activity-inline-icon">
-          <FlowerToolIcon toolName={item().tool_name} source={item().metadata?.source} running={livePresentationConfirmed() && displayStatus() === 'running'} />
+          <FlowerToolIcon toolName={item().tool_name} source={item().metadata?.source} webOperation={webOperation()} running={livePresentationConfirmed() && displayStatus() === 'running'} />
         </span>
         <span class="flower-activity-inline-copy">
           <span class="flower-activity-inline-title" data-floe-progress-shimmer={livePresentationConfirmed() && displayStatus() === 'running' ? 'text' : undefined}>{activityTitle(displayTitle())}</span>

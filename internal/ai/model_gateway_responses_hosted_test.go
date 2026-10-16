@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	flprovider "github.com/floegence/floret/v7/provider"
+	fltools "github.com/floegence/floret/v7/tools"
 	oresponses "github.com/openai/openai-go/v3/responses"
 )
 
@@ -56,6 +57,16 @@ func TestResponsesHostedEventsPreserveSearchDetails(t *testing.T) {
 			if tc.resultCount > 0 && (result.Results[0].URL != "https://example.com/news" || result.Results[0].Title != "") {
 				t.Fatalf("URL-only source changed: %+v", result.Results)
 			}
+			presentation := &fltools.ActivityPresentation{Renderer: fltools.ActivityRendererWebSearch, Payload: fltools.WebSearchActivityPayload{ResultsProvided: result.ResultsProvided}}
+			payload := presentation.Payload.(fltools.WebSearchActivityPayload)
+			for _, source := range result.Results {
+				payload.Results = append(payload.Results, fltools.WebSearchActivityResult{Title: source.Title, URL: source.URL, Snippet: source.Snippet})
+			}
+			presentation.Payload = payload
+			if err := presentation.Validate(); err != nil {
+				t.Fatalf("provider sources rejected by published Floret: %v", err)
+			}
+
 			if (result.Error != nil) != (tc.status == "failed") {
 				t.Fatalf("failure status changed: %+v", result)
 			}

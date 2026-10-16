@@ -18,6 +18,19 @@ describe('semantic tool icons', () => {
   expect(host.querySelector('[data-flower-writing-part="ink"]'), name).not.toBeNull();
   expect(flowerToolMotion[name].tracks).toHaveLength(2);
  });
+ it('distinguishes search, open and find icons and updates when the provider identifies the operation', () => {
+  const [operation, setOperation] = createSignal<string | undefined>();
+  const host = document.createElement('div');
+  disposers.push(render(() => <FlowerToolIcon toolName="web_search" webOperation={operation()} running={false} />, host));
+  const search = host.querySelector('svg')!.outerHTML;
+  setOperation('open_page');
+  const open = host.querySelector('svg')!.outerHTML;
+  setOperation('find_in_page');
+  const find = host.querySelector('svg')!.outerHTML;
+  expect(new Set([search, open, find]).size).toBe(3);
+  setOperation('search');
+  expect(host.querySelector('svg')!.outerHTML).toBe(search);
+ });
  it('uses the same terminal glyph for starting a command and reading its output', () => {
   const host = document.createElement('div');
   disposers.push(render(() => <><FlowerToolIcon toolName="terminal.exec" running={false} /><FlowerToolIcon toolName="terminal.read" running={false} /></>, host));

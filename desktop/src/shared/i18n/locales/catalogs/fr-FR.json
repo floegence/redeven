@@ -215,28 +215,14 @@
       "webSearch": {
         "search": "Rechercher",
         "openPage": "Ouvrir la page",
-        "findInPage": "Rechercher dans la page",
-        "webActivity": "Recherche web",
-        "noDetails": "Détails non fournis",
-        "noSources": "Aucune source renvoyée",
-        "sourcesUnavailable": "Recherche terminée · Sources non enregistrées",
+        "findInPage": "Rechercher",
         "sourcesTitle": "Sources",
-        "queryLabel": "Requêtes de recherche",
-        "targetLabel": "Page web",
-        "patternLabel": "Texte à rechercher",
         "showLess": "Afficher moins",
         "sources": {
           "kind": "plural",
           "forms": {
             "one": "{count} source",
             "other": "{count} sources"
-          }
-        },
-        "queries": {
-          "kind": "plural",
-          "forms": {
-            "one": "{count} requête",
-            "other": "{count} requêtes"
           }
         },
         "showMore": {

@@ -1783,3 +1783,5 @@ Label automatically loaded project rules, skills and environment information as
 auto-loaded context across Flower surfaces. Keep status times and failure
 guidance readable without exposing engine terminology. See
 [Flower managed model context](ai/flower-managed-model-context.md).
+
+- 2026-10-15: Replace Web Search input repetition and missing-source placeholders with deterministic operation rows and provider-result-only details; consume the upstream URL-only source fix.

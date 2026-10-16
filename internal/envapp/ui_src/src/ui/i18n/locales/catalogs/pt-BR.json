@@ -5126,23 +5126,12 @@
       "webSearch": {
         "search": "Pesquisar",
         "openPage": "Abrir página",
-        "findInPage": "Buscar na página",
-        "webActivity": "Pesquisa na web",
-        "noDetails": "Detalhes não fornecidos",
-        "noSources": "Nenhuma fonte retornada",
-        "sourcesUnavailable": "Busca concluída · Fontes não registradas",
+        "findInPage": "Localizar",
         "sourcesTitle": "Fontes",
-        "queryLabel": "Termos de pesquisa",
-        "targetLabel": "Página da web",
-        "patternLabel": "Texto a buscar",
         "showLess": "Mostrar menos",
         "sources": {
           "one": "{count} fonte",
           "other": "{count} fontes"
-        },
-        "queries": {
-          "one": "{count} consulta",
-          "other": "{count} consultas"
         },
         "showMore": {
           "other": "Mostrar mais {count}"

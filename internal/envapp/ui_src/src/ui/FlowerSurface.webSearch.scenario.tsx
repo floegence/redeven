@@ -10,9 +10,9 @@ export async function assertWebSearchSurface() {
   thread_id:base.thread_id,activity:'idle',view_version:1,turn_id:'turn-search',run_id:'run-search',last_outcome:'completed',interactions:[],
   items:[
    {id:'user-search',turn_id:'turn-search',run_id:'run-search',ordinal:1,kind:'user',text:'长沙天气'},
-   ...[{id:'opaque',payload:{}},{id:'search',payload:{operation:'search',query:'长沙天气',results_provided:true,results}}].map((entry,index) => ({
+   ...[{id:'opaque',payload:{}},{id:'search',payload:{operation:'search',query:'长沙天气',results_provided:true,results}},{id:'open',payload:{operation:'open_page',url:'https://github.com/floegence/redeven'}},{id:'find',payload:{operation:'find_in_page',url:'https://github.com/floegence/redeven',pattern:'Runtime'}},{id:'failure',payload:{operation:'search',query:'failed request',error:{message:'Search provider failed'}}}].map((entry,index) => ({
     id:entry.id,turn_id:'turn-search',run_id:'run-search',ordinal:index+2,kind:'tool' as const,
-    activity:{item_id:entry.id,tool_id:entry.id,tool_name:'web_search',kind:'hosted_tool' as const,status:'success' as const,severity:'quiet' as const,needs_attention:false,requires_approval:false,
+    activity:{item_id:entry.id,tool_id:entry.id,tool_name:'web_search',kind:'hosted_tool' as const,status:entry.id === 'failure' ? 'error' as const : 'success' as const,severity:'quiet' as const,needs_attention:false,requires_approval:false,
      presentation:{label:'Web search',renderer:'web_search' as const,payload:entry.payload}},
    })),
   ],
@@ -23,15 +23,24 @@ export async function assertWebSearchSurface() {
  (runtime.querySelector(`[data-thread-id="${summary.thread_id}"] button`) as HTMLButtonElement).click();
  await waitFor(()=>Boolean(runtime.querySelector('[data-flower-activity-item-id="opaque"]')));
  const opaque=runtime.querySelector('[data-flower-activity-item-id="opaque"]')!;
- expect(opaque.textContent).toContain('Details not provided');
+ expect(opaque.textContent).toContain('Web Search:');
+ expect(opaque.textContent).not.toContain('not provided');
  expect(opaque.querySelector('[data-flower-disclosure-trigger]')).toBeNull();
  const search=runtime.querySelector('[data-flower-activity-item-id="search"]')!;
  expect(search.textContent).toContain('长沙天气');
  expect(search.textContent).toContain('7 sources');
  (search.querySelector('[data-flower-disclosure-trigger]') as HTMLButtonElement).click();
  await waitFor(()=>search.querySelectorAll('.flower-web-operation li').length===3);
- const query=search.querySelector<HTMLInputElement>('input[readonly]')!;
- expect(query.value).toBe('长沙天气');
+ expect(search.querySelector('input')).toBeNull();
+ const details=search.querySelector('.flower-web-operation')!;
+ expect(details.textContent).not.toContain('长沙天气');
+ expect(details.querySelector('.flower-activity-detail-heading')).toBeNull();
+ expect(details.textContent).toContain('Sunny forecast');
+ for (const id of ['open','find']) {
+  const operation=runtime.querySelector(`[data-flower-activity-item-id="${id}"]`)!;
+  expect(operation.querySelector('[data-flower-disclosure-trigger]')).toBeNull();
+ }
+ expect(runtime.querySelector('[data-flower-activity-item-id="find"]')?.textContent).toContain('Find “Runtime” @site:github.com');
  expect(search.querySelectorAll('details')).toHaveLength(0);
  const link=search.querySelector<HTMLAnchorElement>('.flower-web-operation a')!;
  expect(link.href).toBe('https://weather.example/1');
@@ -41,5 +50,12 @@ export async function assertWebSearchSurface() {
  more.click();
  expect(search.querySelectorAll('.flower-web-operation li')).toHaveLength(7);
  expect(search.querySelector('[data-flower-disclosure-trigger]')?.getAttribute('aria-expanded')).toBe('true');
+ const failure=runtime.querySelector('[data-flower-activity-item-id="failure"]')!;
+ const failureTrigger=failure.querySelector<HTMLButtonElement>('[data-flower-disclosure-trigger]')!;
+ expect(failureTrigger).not.toBeNull();
+ failureTrigger.click();
+ await waitFor(()=>Boolean(failure.textContent?.includes('Search provider failed')));
+ expect(failure.querySelector('.flower-web-operation')).toBeNull();
+ failureTrigger.click();
  return runtime;
 }

@@ -660,8 +660,8 @@ describe('Desktop shared i18n helpers', () => {
     expect(en.tn('plural.environmentCount', 2)).toBe('2 environments');
 
     const ru = createDesktopI18n('ru-RU');
-    expect(ru.tn('flowerSurface.chat.webSearch.queries', 2)).toBe('2 запроса');
-    expect(ru.tn('flowerSurface.chat.webSearch.queries', 5)).toBe('5 запросов');
+    expect(ru.tn('flowerSurface.chat.webSearch.sources', 2)).toBe('2 источника');
+    expect(ru.tn('flowerSurface.chat.webSearch.sources', 5)).toBe('5 источников');
     expect(ru.tn('plural.environmentCount', 1)).toBe('1 окружение');
     expect(ru.tn('plural.environmentCount', 2)).toBe('2 окружения');
     expect(ru.tn('plural.environmentCount', 5)).toBe('5 окружений');

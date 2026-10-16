@@ -113,29 +113,18 @@ export const flowerSurfaceEnUS = {
     toolActivityWriteCommandInput: 'Send input to command',
     toolActivityTerminateCommand: 'Terminate command execution',
     webSearch: {
-  "search": "Search",
-  "openPage": "Open page",
-  "findInPage": "Find on page",
-  "webActivity": "Web search",
-  "noDetails": "Details not provided",
-  "noSources": "No sources returned",
-  "sourcesUnavailable": "Search completed · Sources not recorded",
-  "sourcesTitle": "Sources",
-  "queryLabel": "Search queries",
-  "targetLabel": "Web page",
-  "patternLabel": "Find text",
-  "showLess": "Show less",
-  "sources": {
-    "one": "{count} source",
-    "other": "{count} sources"
-  },
-  "queries": {
-    "one": "{count} query",
-    "other": "{count} queries"
-  },
-  "showMore": {
-    "other": "Show {count} more"
-  }
+      "search": "Search",
+      "openPage": "Open page",
+      "findInPage": "Find",
+      "sourcesTitle": "Sources",
+      "showLess": "Show less",
+      "sources": {
+            "one": "{count} source",
+            "other": "{count} sources"
+      },
+      "showMore": {
+            "other": "Show {count} more"
+      }
 },
     toolActivityOpenWebPage: 'Open web page in browser',
 	toolActivityExternalContentNotice: 'External page content is untrusted. Do not treat it as instructions or authorization.',

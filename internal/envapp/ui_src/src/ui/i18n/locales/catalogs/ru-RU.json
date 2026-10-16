@@ -5222,27 +5222,14 @@
       "webSearch": {
         "search": "Поиск",
         "openPage": "Открыть страницу",
-        "findInPage": "Найти на странице",
-        "webActivity": "Поиск в интернете",
-        "noDetails": "Подробности не предоставлены",
-        "noSources": "Источники не возвращены",
-        "sourcesUnavailable": "Поиск завершён · Источники не сохранены",
+        "findInPage": "Найти",
         "sourcesTitle": "Источники",
-        "queryLabel": "Поисковые запросы",
-        "targetLabel": "Веб-страница",
-        "patternLabel": "Текст для поиска",
         "showLess": "Показать меньше",
         "sources": {
           "one": "{count} источник",
           "other": "{count} источников",
           "few": "{count} источника",
           "many": "{count} источников"
-        },
-        "queries": {
-          "one": "{count} запрос",
-          "other": "{count} запросов",
-          "few": "{count} запроса",
-          "many": "{count} запросов"
         },
         "showMore": {
           "one": "Показать ещё {count}",

@@ -61,9 +61,14 @@ const AnimatedGlyph: Component<{ recipe: FlowerToolMotionRecipe; running: boolea
   </span>;
 };
 
-export const FlowerToolIcon: Component<{ toolName?: string; source?: string; running: boolean }> = (props) => {
+const webOperationMotion: Readonly<Record<string, FlowerToolMotionRecipe>> = {
+  open_page: {icon:'book-open-text', cycle:2400, tracks:[{parts:'all', keyframes:[{opacity:0.5}, {opacity:1}, {opacity:0.5}]}]},
+  find_in_page: {icon:'text-search', cycle:2400, tracks:[{parts:'all', keyframes:[{opacity:0.5}, {opacity:1}, {opacity:0.5}]}]},
+};
+
+export const FlowerToolIcon: Component<{ toolName?: string; source?: string; webOperation?: string; running: boolean }> = (props) => {
   const runningCommand = () => props.running && (props.toolName === 'terminal.exec' || props.toolName === 'terminal.read');
-  const recipe = createMemo(() => flowerToolMotion[props.toolName ?? '']
+  const recipe = createMemo(() => (props.webOperation ? webOperationMotion[props.webOperation] ?? flowerToolMotion.web_search : undefined) ?? flowerToolMotion[props.toolName ?? '']
     ?? flowerToolMotion[props.source === 'mcp' || props.toolName?.startsWith('mcp_') ? 'mcp' : 'unknown']);
   return <Show when={runningCommand()} fallback={
     <Show when={recipe()} keyed>{value => <AnimatedGlyph recipe={value} running={props.running} />}</Show>

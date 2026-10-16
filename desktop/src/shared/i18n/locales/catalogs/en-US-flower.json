@@ -84,28 +84,14 @@
     "webSearch": {
       "search": "Search",
       "openPage": "Open page",
-      "findInPage": "Find on page",
-      "webActivity": "Web search",
-      "noDetails": "Details not provided",
-      "noSources": "No sources returned",
-      "sourcesUnavailable": "Search completed · Sources not recorded",
+      "findInPage": "Find",
       "sourcesTitle": "Sources",
-      "queryLabel": "Search queries",
-      "targetLabel": "Web page",
-      "patternLabel": "Find text",
       "showLess": "Show less",
       "sources": {
         "kind": "plural",
         "forms": {
           "one": "{count} source",
           "other": "{count} sources"
-        }
-      },
-      "queries": {
-        "kind": "plural",
-        "forms": {
-          "one": "{count} query",
-          "other": "{count} queries"
         }
       },
       "showMore": {

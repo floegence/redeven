@@ -46,21 +46,27 @@ panel containing focus, the trigger receives focus with `preventScroll`.
 
 ## Web search details
 
-Expanded searches show each recorded query in a compact, read-only browser-style
-field with a search glyph. The existing Floe input-surface contract owns focus;
-native selection and copying remain available. The collapsed tool row, timing,
-icon, indentation and disclosure behavior remain unchanged.
+Web operations share the fixed `Web Search:` prefix and localized action text.
+Search uses the actual first query, retaining `site:` syntax, plus the remaining
+query count. Open shows the returned URL. Find shows the exact pattern and
+`@site:host`. Distinct search, open-page and find icons reflect the operation.
+Titles are deterministic provider facts; no additional model request is made.
 
-Sources use one line per entry and start with three entries. A title shares the
-line with its domain; a URL-only source displays its domain and path. Long text
-ellipsizes while the actual safe link and full address remain available. Supplied
-snippets stay in the source tooltip instead of adding permanent rows. One native,
-keyboard-accessible control reveals or hides the remaining entries without
-replacing itself. Unsafe links remain plain text. No per-entry address disclosure
-or card is added. Historical searches with no saved source list say that the
-search completed without recorded sources; an explicitly empty source list and
-an actual failure retain their distinct feedback. Report citations never become
-invented per-search results.
+Expanded details contain only actual per-call results and errors, never the
+header's query, URL, pattern or status. Operations without results or errors
+have no disclosure, including explicit empty results and historical activities
+whose result presentation was not retained. No missing-data placeholder appears.
+
+Sources start with three entries. Titles and snippets are optional; URL-only
+sources show their domain and path. Safe links retain their full address and
+open in a new tab; unsafe addresses remain selectable plain text. Supplied
+snippets remain visible beside the link when space permits and wrap naturally.
+Domains sit next to titles, and no repeated Sources heading adds vertical space.
+One keyboard-accessible control reveals
+the remaining entries while retaining focus. Long links ellipsize and snippets
+wrap at narrow widths. No content is generated or fetched to fill gaps; answer
+citations never become invented per-call results. Floret v7.44.1 preserves
+URL-only sources through validation and canonical restart.
 
 ## Semantic tool icons
 

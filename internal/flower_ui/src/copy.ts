@@ -26,11 +26,9 @@ export type FlowerTurnProcessCopy = Readonly<{
 }>;
 
 export type FlowerWebSearchCopy = Readonly<{
- search: string; openPage: string; findInPage: string; webActivity: string;
- noDetails: string; noSources: string; sourcesUnavailable: string;
- sourcesTitle: string; queryLabel: string; targetLabel: string; patternLabel: string;
- sources: (count: number) => string; queries: (count: number) => string;
- showMore: (count: number) => string; showLess: string;
+  search: string; openPage: string; findInPage: string;
+  sourcesTitle: string; sources: (count: number) => string;
+  showMore: (count: number) => string; showLess: string;
 }>;
 
 export type FlowerThreadTimeGroup = 'today' | 'yesterday' | 'this_week' | 'older';
@@ -876,11 +874,9 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     toolActivityWriteCommandInput: 'Send input to command',
     toolActivityTerminateCommand: 'Terminate command execution',
     webSearch: {
-      search: 'Search', openPage: 'Open page', findInPage: 'Find on page', webActivity: 'Web search',
-      noDetails: 'Details not provided', noSources: 'No sources returned', sourcesUnavailable: 'Search completed · Sources not recorded',
-      sourcesTitle: 'Sources', queryLabel: 'Search queries', targetLabel: 'Web page', patternLabel: 'Find text',
+      search: 'Search', openPage: 'Open page', findInPage: 'Find',
+      sourcesTitle: 'Sources',
       sources: (count) => `${count} ${count === 1 ? 'source' : 'sources'}`,
-      queries: (count) => `${count} ${count === 1 ? 'query' : 'queries'}`,
       showMore: (count) => `Show ${count} more`, showLess: 'Show less',
     },
     toolActivityOpenWebPage: 'Open web page in browser',
