@@ -8244,6 +8244,13 @@ button.flower-composer-context-source:focus-visible,
   transition: border-color 120ms ease-out;
 }
 
+/* Keep the editor boundary steady while retaining the published forced-colors focus treatment. */
+@media (forced-colors: none) {
+  .flower-composer {
+    --floe-input-focus-color: var(--input);
+  }
+}
+
 /* The companion owns the collapsed outline; only an open editor paints its own surface. */
 .flower-surface:where(:not(.flower-surface-companion-collapsed)) .flower-composer {
   border: 1px solid var(--input);

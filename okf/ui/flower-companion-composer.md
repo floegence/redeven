@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower companion composer and motion
 description: Preserve one native editor while placing tools below text and dissolving detail into the compact companion entry.
 tags: [ui, flower, companion, composer, motion]
-timestamp: 2026-10-13T05:15:00Z
+timestamp: 2026-10-16T08:00:00Z
 ---
 # Summary
 
@@ -35,6 +35,8 @@ Opening animates the width and height of one shell together, growing upward and 
 
 The published `BottomBarCompanion` owns the collapsed surface's only visible outline, background, radius, and clipping. The retained Flower composer has no border, background, radius, shadow, or backdrop filter while collapsed, including focused, loading, pending-action, and attachment-drag states. Expanded content remains mounted during the closing geometry transition; a reversible 120ms opacity transition fades it out before shrinking geometry can clip the header into the compact entry. The compact layout returns invisibly when the shell reaches its anchor, then fades in through the same transition. Rapid reopening reverses from the current opacity without timers or another content owner; reduced motion keeps content opaque and disables the dissolve. Expanded and transitioning companion shells use one opaque published popover surface and neutral floating shadow. Their editor retains one input boundary without an additional shadow. The brand icon and collapsed running, waiting, completion, and failure states have no breathing, sweeping light, or halo; state text and local progress symbols remain visible. Non-collapsed editors own their ordinary composer decoration independently. Flower's custom composer uses its own structural styles rather than borrowing the upstream `ChatInput` skin. Visual regression fixtures must include the production `flower-surface` class and verify computed styles; source-rule presence alone cannot prove CSS cascade behavior.
 
+In ordinary color modes, the dedicated page and expanded companion composers keep the same input-border color, width, background, and shadow when their text editor gains or loses focus. The product maps the published `--floe-input-focus-color` token to the resting `--input` color instead of implementing a separate focus rule. Forced-colors mode retains the published focus treatment, and toolbar buttons retain their keyboard focus indicators.
+
 # Boundaries
 
 This concept owns content presentation only. Floe owns geometry and phase completion; the Activity companion contract owns placement, dismissal and reads. The dissolve adds no focus manager, editor copy, timer or lifecycle state. [Flower companion presence](flower-companion-presence.md) remains the owner of status precedence and workspace observation.
@@ -43,6 +45,7 @@ This concept owns content presentation only. Floe owns geometry and phase comple
 
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Retained editor and explicit entry decisions.
 - `redeven:internal/flower_ui/src/styles/flower.css` - Compact content isolation and expanded text/toolbar layout.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.composerFocus.browser.test.tsx` - Stable resting appearance across focus cycles in both themes and presentations, with forced-colors focus preserved.
 - `redeven:internal/envapp/ui_src/src/ui/activity-flower-shell.css` - Phase-driven content opacity and theme treatment.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.companionEntry.browser.test.tsx` - Published shell geometry, closing opacity, reversal, tool alignment and retained drafts.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.companionAppearance.browser.test.tsx` - Production outline, editor identity, selection and composition.
