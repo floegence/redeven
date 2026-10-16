@@ -138,8 +138,12 @@ queue-count limit. Initialization, queued and actively transmitted envelope
 bytes remain subject to the 32 MiB global retained-byte limit. The server
 produces only the next requested fragment; it never enqueues all fragments.
 Only unsent root or child currents with cumulative live assistant/thinking text
-growth may coalesce. The actual ThreadID and parent route must match. A newer
-current removes its older unsent predecessor across independent other-thread
+or replaceable progress-number growth may coalesce. Within an existing provider
+attempt, advancing `last_progress_at` values do not create ordering barriers;
+timestamp presence, request identity, start and first-output boundaries still do.
+The complete transmitted snapshot retains the latest progress timestamp. The
+actual ThreadID and parent route must match. A newer current removes its older
+unsent predecessor across independent other-thread
 currents, then appends at the FIFO tail. Same-thread semantic changes and
 auxiliary envelopes are barriers. Encoding freezes the eligible text and a
 fingerprint of every other public field once, outside subscriber fanout; queue

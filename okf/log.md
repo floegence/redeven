@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-16: Flower provider progress queue continuity
+
+- Keep unsent [workspace live currents](ui/flower-live-timeline.md) coalescible as provider activity timestamps advance. Preserve complete latest timestamps and request, first-output, tool, interaction and terminal ordering boundaries; cover root, child, progress-only and interleaved large-history workloads.
+
 ## 2026-10-16: Stable Subagent navigation
 
 - Keep [Subagent switcher](ui/flower-subagent-detail.md) avatars in creation order and reserve independent navigation, metadata, and context geometry across selection, deferred loading, and live status updates. Cover wide, intermediate, and narrow windows with browser coordinate assertions.

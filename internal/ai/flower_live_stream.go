@@ -684,6 +684,12 @@ func compareFlowerLiveCurrent(envelope FlowerLiveStreamEnvelope) *flowerLiveCurr
 		request := *progress.Request
 		comparison.metrics = append(comparison.metrics, request.EstimatedOutputTokens)
 		request.EstimatedOutputTokens = 0
+		// Advancing provider activity is replaceable progress within the same
+		// attempt. Preserve timestamp presence and first-output boundaries.
+		if request.LastProgressAt != nil {
+			comparison.metrics = append(comparison.metrics, request.LastProgressAt.UnixNano())
+			request.LastProgressAt = new(time.Time)
+		}
 		progress.Request = &request
 		normalized.RunProgress = &progress
 	}
