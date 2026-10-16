@@ -33,7 +33,11 @@ The 50,000-token target guides tail selection; it does not require a fixed-lengt
 
 Workspace live frames and bootstrap/reconnect use the same public canonical context reader. Redeven neither stores compaction lifecycle records nor accumulates usage. Floret supplies `AfterItemID`; Redeven uses that exact anchor and stable operation identity for one divider. Empty history has no invented anchor and displays a noop notice. Fork, pagination, refresh, and reconnect preserve canonical operation identity.
 
-Native usage remains preferred to estimates. After its invalidation, the composer displays the installed estimate with the estimated tone. Cumulative thread totals survive installation. Cache hit rate is `cache_read / (input + cache_read + cache_write)` over those disjoint buckets. Pressure supplies only actionable warnings. No host watermark or second ledger is retained.
+Native usage remains preferred to estimates. After its invalidation, the composer displays the installed estimate with the estimated tone.
+
+The context panel shows measured input and model capacity, with an explicit approximation mark when only an estimate is available. A stacked capacity bar separates used input, available output reserve and free space; missing counts remain unavailable. Runtime fact categories have their own character-based distribution, never inferred token allocations. Latest and cumulative cache rates remain in the compact footer.
+
+Cumulative thread totals survive installation. Cache hit rate is `cache_read / (input + cache_read + cache_write)` over those disjoint buckets. Pressure supplies only actionable warnings. No host watermark or second ledger is retained.
 
 Run input limits remain cumulative Floret `TurnLimits.MaxInputTokens`. Explicit output limits also supply context headroom; otherwise the resolved model capability supplies headroom while the provider request retains its normal unset output option. Redeven does not invent a total budget or infer serving capacity from model weights.
 

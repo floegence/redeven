@@ -35,10 +35,10 @@ describe('flower context presentation', () => {
       pressure_status: 'near_threshold',
     }), DEFAULT_FLOWER_SURFACE_COPY);
     expect(view).toMatchObject({
-      ariaLabel: 'Context', ratioValue: '91%',
+      ariaLabel: 'Context window', ratioValue: '91%',
       cacheHitLabel: 'Session cache hit rate', cacheHitValue: '—', tone: 'warning',
       ratio: 0.91, progressValue: 91, warning: 'Near limit',
-      ariaValueText: 'Context: 91%, Latest request cache hit rate: Not available, Session cache hit rate: Not available, Near limit',
+      ariaValueText: 'Context window: 91%, Latest request cache hit rate: Not available, Session cache hit rate: Not available, Near limit',
     });
   });
 
@@ -49,7 +49,7 @@ describe('flower context presentation', () => {
     expect(unknown.progressValue).toBeNull();
     expect(unknown.ratioValue).toBe('—');
     expect(unknown.warning).toBe('');
-    expect(unknown.ariaValueText).toBe('Context: Not available, Latest request cache hit rate: Not available, Session cache hit rate: Not available');
+    expect(unknown.ariaValueText).toBe('Context window: Not available, Latest request cache hit rate: Not available, Session cache hit rate: Not available');
   });
 
   it('localizes tooltip percentages and accessible usage', () => {
@@ -58,7 +58,7 @@ describe('flower context presentation', () => {
     } };
     const view = buildFlowerComposerContextIndicatorView(usage({ input_tokens: 72000, context_window_tokens: 100000 }), copy);
     expect(view.ratioValue).toBe('72% 已用');
-    expect(view.ariaValueText).toBe('Context: 72% 已用, Latest request cache hit rate: Not available, Session cache hit rate: Not available');
+    expect(view.ariaValueText).toBe('Context window: 72% 已用, Latest request cache hit rate: Not available, Session cache hit rate: Not available');
   });
 
   it('calculates the whole-conversation cache hit rate from disjoint input buckets', () => {
