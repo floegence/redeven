@@ -5169,8 +5169,8 @@
       "waitingForModelContinuation": "等待模型继续",
       "waitSeconds": "{seconds} s",
       "outputTokensTooltip": "当前模型请求已接收输出的估算值，包含思考内容和工具参数。计费用量单独统计。",
-      "toolGeneratingArguments": "正在生成参数",
-      "toolArgumentPreviewTooltip": "行数随参数生成实时更新；工具完成后显示实际改动。",
+      "toolPreparingChanges": "正在准备修改",
+      "toolArgumentPreviewTooltip": "行数为待应用修改的预览，工具完成后显示实际改动。",
       "placeholder": "询问Flower...",
       "fromSource": "来自 {source}",
       "modelLabel": "模型",
@@ -5634,8 +5634,8 @@
       "outputTokens": "{count} tokens",
       "outputTokensTooltip": "当前模型请求已接收输出的估算值，包含思考内容和工具参数。计费用量单独统计。",
       "waitSeconds": "{seconds} s",
-      "toolArgumentPreviewTooltip": "行数随参数生成实时更新；工具完成后显示实际改动。",
-      "toolGeneratingArguments": "正在生成参数"
+      "toolArgumentPreviewTooltip": "行数为待应用修改的预览，工具完成后显示实际改动。",
+      "toolPreparingChanges": "正在准备修改"
     },
     "threadList": {
       "title": "对话",

@@ -1,5 +1,10 @@
 # Redeven OKF Update Log
 
+## 2026-10-15: Clear edit preparation status
+
+- Describe streamed [edit preparation](ui/flower-output-progress.md#edit-arguments) as Preparing changes across Desktop and Env App locales.
+- Explain provisional line counts in user terms while preserving approval, execution and confirmed-result boundaries.
+
 ## 2026-10-15: Flower outline visibility
 
 - Keep the shared white-petal Flower mark readable on light surfaces with opaque slate outlines and stronger strokes in compact slots.

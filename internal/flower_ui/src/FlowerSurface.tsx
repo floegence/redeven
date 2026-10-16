@@ -9891,7 +9891,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               {block().call.name === 'apply_patch' ? copy().chat.toolActivity.patch : copy().chat.toolActivity.edit}
               <Show when={block().call.preview?.display_name}>{(name) => <> <span class="flower-activity-file-name">{name()}</span></>}</Show>
             </span>
-            <span class="flower-activity-inline-detail">{copy().chat.outputProgress.generating}</span>
+            <span class="flower-activity-inline-detail">{copy().chat.outputProgress.preparingChanges}</span>
             {changeStats(() => block().call.preview ?? undefined, () => true)}
           </span>
         </div>

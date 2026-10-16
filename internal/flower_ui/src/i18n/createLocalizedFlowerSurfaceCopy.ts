@@ -554,7 +554,7 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
         elapsed: (seconds) => t(i18n, k('chat.waitSeconds'), { seconds }),
         waitingForContinuation: t(i18n, k('chat.waitingForModelContinuation')),
         outputTooltip: t(i18n, k('chat.outputTokensTooltip')),
-        generating: t(i18n, k('chat.toolGeneratingArguments')),
+        preparingChanges: t(i18n, k('chat.toolPreparingChanges')),
         previewTooltip: t(i18n, k('chat.toolArgumentPreviewTooltip')),
       },
       liveProgressTool: t(i18n, k('chat.liveProgressTool')),

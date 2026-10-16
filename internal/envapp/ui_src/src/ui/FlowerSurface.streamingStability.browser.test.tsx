@@ -170,6 +170,9 @@ describe('Flower complete interaction subtree stability', () => {
     const row = runtime.querySelector('[data-flower-tool-row-identity]')!;
     const icon = row.querySelector('.flower-tool-icon')!;
     expect(icon.getAnimations({ subtree: true }).length).toBeGreaterThan(0);
+    expect(row.querySelector('.flower-activity-inline-detail')?.textContent).toBe('Preparing changes');
+    expect(row.textContent).not.toContain('Generating arguments');
+    expect(row.querySelector('.flower-activity-inline-change-stats')?.getAttribute('title')).toBe('These line counts preview the changes being prepared. Actual changes are shown after the tool finishes.');
     expect(row.textContent).toContain('+8');
     expect(row.querySelector('button')).toBeNull();
     await media.emulateMediaPreferences({ reducedMotion: 'reduce' });
@@ -188,12 +191,14 @@ describe('Flower complete interaction subtree stability', () => {
         presentation: { renderer: 'file', payload: { operation: 'write', display_name: 'example.ts' } } } };
     fixture.replace({ ...base, view_version: 4, run_progress: null, attention: { approval_count: 1 }, interactions: [{ id: 'approval-preview', turn_id: base.turn_id!, run_id: base.run_id!, kind: 'approval', tool_call_id: call.call_id, approval: { tool_call_id: call.call_id, tool_name: call.name, label: 'Write example.ts' } }], tool_call_previews: [{ ...call, arguments_complete: true }], items: [...base.items!, tool] });
     await waitFor(() => Boolean(row.querySelector('[data-flower-activity-status="waiting"]')));
+    expect(row.textContent).not.toContain('Preparing changes');
     expect(runtime.querySelector('[data-flower-tool-row-identity]')).toBe(row);
     expect(row.textContent).toContain('+8');
     expect(row.querySelector('.flower-tool-icon')!.getAnimations({ subtree: true })).toHaveLength(0);
     expect(runtime.querySelectorAll('[data-flower-tool-row-identity]')).toHaveLength(1);
     fixture.replace({ ...base, view_version: 5, run_progress: { phase: 'tool_execution' }, tool_call_previews: [{ ...call, arguments_complete: true }], items: [...base.items!, { ...tool, activity: { ...tool.activity, status: 'running' } }] });
     await waitFor(() => Boolean(row.querySelector('[data-flower-activity-status="running"]')));
+    expect(row.textContent).not.toContain('Preparing changes');
     expect(runtime.querySelector('[data-flower-tool-row-identity]')).toBe(row);
     expect(row.querySelector('.flower-tool-icon')!.getAnimations({ subtree: true }).length).toBeGreaterThan(0);
     fixture.replace({ ...base, view_version: 6, run_progress: { phase: 'tool_execution' }, tool_call_previews: [], items: [...base.items!, { ...tool, activity: { ...tool.activity, status: 'success', presentation: { renderer: 'file', payload: { operation: 'write', display_name: 'example.ts', change_type: 'noop' } } } }] });

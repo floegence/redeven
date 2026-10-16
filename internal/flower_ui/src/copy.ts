@@ -636,7 +636,7 @@ export type FlowerSurfaceCopy = Readonly<{
       elapsed: (seconds: number) => string;
       outputTooltip: string;
       waitingForContinuation: string;
-      generating: string;
+      preparingChanges: string;
       previewTooltip: string;
     }>;
     liveProgressTool: string;
@@ -1059,8 +1059,8 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       elapsed: (seconds) => `${seconds} s`,
       waitingForContinuation: 'Waiting for model to continue',
       outputTooltip: 'Estimated output received for this model request, including reasoning and tool arguments. Billing usage is reported separately.',
-      generating: 'Generating arguments',
-      previewTooltip: 'Line counts update as arguments arrive. Actual changes are shown after the tool finishes.',
+      preparingChanges: 'Preparing changes',
+      previewTooltip: 'These line counts preview the changes being prepared. Actual changes are shown after the tool finishes.',
     },
     liveProgressTool: 'Using a tool',
     liveProgressOutput: 'Writing the reply',
