@@ -14,14 +14,11 @@ export type RemoteDesktopStatus = {
   login_service?: LoginServiceStatus;
 };
 export type RemoteDesktopSession = { id: string; forward_id: string; target_url: string; mode: 'view' | 'control'; display_id: string; locale: string; theme: string; host_name: string };
-export const getRemoteDesktopStatus = () => fetchSessionJSON<RemoteDesktopStatus>(api, { method: 'GET' });
+export const getRemoteDesktopStatus = (physical = false) => fetchSessionJSON<RemoteDesktopStatus>(api + (physical ? '?target=ssh_physical' : ''), { method: 'GET', signal: AbortSignal.timeout(10_000) });
 export const prepareRemoteDesktop = () => fetchSessionJSON(api + '/setup', { method: 'POST', body: JSON.stringify({ request_id: crypto.randomUUID() }) });
 export const cancelRemoteDesktopPreparation = (id: string) => fetchSessionJSON(api + '/setup/' + encodeURIComponent(id), { method: 'DELETE' });
 export const setRemoteDesktopUnattended = (unattended: boolean) => fetchSessionJSON(api + '/settings', { method: 'PUT', body: JSON.stringify({ unattended }) });
-export const createRemoteDesktop = (request: Omit<RemoteDesktopSession, 'id' | 'forward_id' | 'target_url'> & { takeover: boolean }) => fetchSessionJSON<RemoteDesktopSession>(api + '/sessions', { method: 'POST', body: JSON.stringify(request) });
+export const createRemoteDesktop = (request: Omit<RemoteDesktopSession, 'id' | 'forward_id' | 'target_url'> & { takeover: boolean; target?: 'ssh_physical' }) => fetchSessionJSON<RemoteDesktopSession>(api + '/sessions', { method: 'POST', body: JSON.stringify(request) });
 export const disconnectRemoteDesktop = (id: string) => fetchSessionJSON(api + '/sessions/' + encodeURIComponent(id), { method: 'DELETE' });
 
 export const forgetRemoteDesktopAuthorization = () => fetchSessionJSON(api + '/authorization', { method: 'DELETE' });
-export const installRemoteDesktopLoginService = () => fetchSessionJSON<LoginServiceStatus>(api + '/service/install', { method: 'POST', body: '{}' });
-export const cancelRemoteDesktopLoginService = () => fetchSessionJSON<LoginServiceStatus>(api + '/service/install', { method: 'DELETE' });
-export const uninstallRemoteDesktopLoginService = () => fetchSessionJSON<LoginServiceStatus>(api + '/service', { method: 'DELETE' });

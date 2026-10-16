@@ -62,8 +62,8 @@ func TestLoginServiceStatusAndAuthorizationAreExplicit(t *testing.T) {
 	if err != nil || status.State != nativeapps.ServiceNotInstalled {
 		t.Fatalf("service status: %+v, %v", status, err)
 	}
-	status, err = m.InstallLoginService(context.Background(), "alice")
-	if status.State != nativeapps.ServiceAuthorization || !errors.Is(err, ErrServiceAuthorization) {
+	status, err = m.SystemServiceStatus(context.Background(), "alice")
+	if status.State != nativeapps.ServiceAuthorization || !errors.Is(err, nativeapps.ErrServiceAuthorization) {
 		t.Fatalf("authorization result: %+v, %v", status, err)
 	}
 }

@@ -96,6 +96,14 @@ audio and painted authority under the [desktop session contract](remote-desktop.
 The next attachment attempts a saved successor grant. Old connections and
 generations cannot transfer authority to it.
 
+# SSH physical target
+
+SSH physical-desktop status and creation explicitly select the installed service.
+They never fall back to a Portal request when service preparation or authentication
+fails. Administrator preparation and Runtime image admission follow the canonical
+[SSH deployment contract](remote-desktop-ssh-deployment.md). This does not change
+local current-user Portal sharing or macOS system permission flows.
+
 # Evidence
 
 - `internal/config/config.go` and `internal/config/remote_desktop_test.go`: effective migration and explicit opt-out.

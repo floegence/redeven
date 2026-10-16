@@ -7,6 +7,15 @@ import { enUSDebugConsole } from './debugConsole';
 
 export const enUS = defineDictionary({
   remoteDesktop: {
+    "deployEnsure": "Prepare remote desktop",
+    "deployAuthMethod": "Administrator authorization",
+    "deploySudoPassword": "SSH user’s sudo password",
+    "deployRootPassword": "root password",
+    "deployInterruptTitle": "Interrupt existing connections?",
+    "deployInterruptHint": "Applying these changes will end existing remote desktop connections. Continue?",
+    "deployInterruptUnknown": "This service cannot report existing connections reliably. These changes may interrupt them. Continue?",
+    "deployInterruptConfirm": "Interrupt and continue",
+
     "deploymentComplete": "Remote desktop changes are complete.",
     "backToConnection": "Back to connection",
     "connectionProgress": "Remote desktop connection progress",
@@ -15,16 +24,12 @@ export const enUS = defineDictionary({
     "connectStep": "Connect",
     "connectionContinuing": "The service is ready. Opening the desktop in the next step…",
     "deployPlatformUnsupported": "Remote desktop deployment through SSH is not supported on this operating system.",
-    "deploySetupAction": "Set up",
-    "deployStartAction": "Start",
     "deploySetup": "Set up remote desktop",
     "deployUpdate": "Update remote desktop",
-    "deployStart": "Start remote desktop",
     "deployStop": "Stop remote desktop",
     "deployUninstall": "Uninstall remote desktop",
     "deployScope": "This action manages a root system service on this host. It can wake displays, capture the desktop and login or lock screen, and inject keyboard and mouse input. It uses a private local socket, opens no public port, and can be uninstalled here. It cannot unlock encrypted disks.",
     "deployHint": "Set up remote desktop through this SSH connection. No confirmation on the host’s screen is needed.",
-    "deployPassword": "Administrator password (if required)",
     "deployPasswordHint": "Used only for this SSH operation. Redeven does not save it or send it to the desktop service.",
     "deployConfirm": "Authorize and continue",
     "deployChecking": "Checking the SSH host…",
@@ -36,8 +41,14 @@ export const enUS = defineDictionary({
     "deployRolledBack": "The previous system state was restored.",
     "deployRollbackFailed": "Rollback could not finish. Check the service state before retrying.",
     "deployRollbackUnknown": "Rollback could not be confirmed because the SSH connection was interrupted.",
+    "deployIdentityFailed": "The Runtime changed. Recheck the environment and connect again.",
+    "deployOwnershipFailed": "The installation could not be verified. Review diagnostics before changing host files.",
+    "deployVersionFailed": "This service version is unsupported. Update Redeven and retry.",
+    "deployTransportFailed": "The SSH management connection was interrupted. Recheck the service before retrying.",
+    "deployVerificationFailed": "Runtime authentication failed. Review the rollback result, recheck the environment and retry.",
+    "deployProtocolFailed": "This administrator interaction or protocol is unsupported. Switch authorization method or update Redeven.",
     "deployFailed": "Remote desktop changes did not complete. Check the connection and retry.",
-    "deployAuthFailed": "Administrator authorization was not accepted. Enter the sudo password for the SSH account and retry.",
+    "deployAuthFailed": "Administrator authorization was not accepted. Choose the correct password identity and try again.",
     "deploySSHRequired": "This action requires a Redeven Desktop SSH connection to a supported Linux host.",
     "serviceStopped": "Remote desktop is stopped",
     "serviceUpdateRequired": "Update remote desktop in the Env App to use this Runtime version.",
@@ -168,7 +179,6 @@ export const enUS = defineDictionary({
     ,"install": "Allow and connect"
     ,"loginServiceInstallConfirm": "To connect before login or while the host is locked, Redeven needs a root/administrator service that can read the lock screen and inject physical keyboard and pointer events. It does not listen on a public port, can be disabled at any time, and cannot unlock FileVault, BitLocker, or other encrypted disks. The operating system will ask for administrator authorization next."
     ,"loginServiceUninstallConfirm": "Disable lock-screen access? Existing desktop sessions will remain unchanged."
-    ,"serviceInstallFailed": "Could not enable lock-screen access"
     ,"unlockHint": "Unlock mode sends only physical keyboard and pointer events. Clipboard, paste, shortcuts, and ordinary controls stay disabled."
     ,"startUnlock": "Start unlocking"
     ,"unlocking": "Unlocking host…"

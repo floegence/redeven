@@ -87,7 +87,7 @@ func (m *Manager) runAttachment(s *ownedSession, a *attachment) {
 			s.expires = time.Now().Add(2 * time.Minute)
 		}
 	}()
-	native, err := m.factory(context.Background())
+	native, err := m.openTarget(context.Background(), s.physical)
 	if err != nil {
 		close(a.initialized)
 		return

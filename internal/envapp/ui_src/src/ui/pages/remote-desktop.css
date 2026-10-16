@@ -51,6 +51,7 @@
 .remote-desktop-service-status { margin-top: 14px; color: var(--muted-foreground); font-size: 12px; }
 .remote-desktop-service-actions { margin: 0 0 16px; }
 .remote-desktop-credential { display: grid; gap: 8px; min-width: 0; }
+.remote-desktop-credential select { box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%; padding: 9px 10px; border: 1px solid var(--input); border-radius: 7px; background: var(--background); color: var(--foreground); cursor: pointer; text-overflow: ellipsis; }
 .remote-desktop-credential input { box-sizing: border-box; width: 100%; min-width: 0; padding: 9px 10px; border: 1px solid var(--input); border-radius: 7px; background: var(--background); color: var(--foreground); }
 .remote-desktop-credential-hint, .remote-desktop-deployment-result { color: var(--muted-foreground); font-size: 12px; line-height: 1.6; }
 .remote-desktop-deployment-progress { margin-top: 16px; }

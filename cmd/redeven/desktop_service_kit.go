@@ -39,13 +39,14 @@ func (c *cli) desktopServiceKitCmd(args []string) int {
 }
 
 // This command runs as the SSH user before administrator authorization. The
-// cache belongs to the selected Runtime; the result is a verified SDK archive.
+// cache belongs to that SSH identity, including an existing root SSH session;
+// the result is a verified SDK archive. This command never elevates.
 func (c *cli) desktopServiceMediaCmd(args []string) int {
 	flags := flag.NewFlagSet("desktop-service-media", flag.ContinueOnError)
 	flags.SetOutput(c.stderr)
-	cache := flags.String("cache", "", "absolute Runtime media cache")
+	cache := flags.String("cache", "", "absolute SSH-identity media cache")
 	output := flags.String("output", "", "new absolute media archive")
-	if flags.Parse(args) != nil || flags.NArg() != 0 || !filepath.IsAbs(*cache) || !filepath.IsAbs(*output) || os.Geteuid() == 0 {
+	if flags.Parse(args) != nil || flags.NArg() != 0 || !filepath.IsAbs(*cache) || !filepath.IsAbs(*output) {
 		return 2
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

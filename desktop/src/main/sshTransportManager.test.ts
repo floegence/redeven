@@ -405,6 +405,23 @@ describe('DefaultDesktopSSHTransportManager', () => {
     });
   });
 
+  it('opts into a private PTY and omits sensitive stderr from retained results and callbacks', async () => {
+    const fixture=managerFixture();
+    const lease=await fixture.manager.acquire({target:target(),credentialScope:'environment-a'});
+    const ordinary=lease.stream('ordinary');await ordinary.closed;
+    const child=fakeProcess({longLived:true});
+    fixture.spawnProcess.mockImplementationOnce((_command,args)=>{fixture.calls.push([...args]);return child;});
+    const onStderr=vi.fn();
+    const secret=lease.stream('private-authorize',{pty:true,sensitive:true,onStderr});
+    child.stderr.write('private PAM output');child.kill('SIGTERM');
+    expect(await secret.result).toMatchObject({stderr:''});await secret.closed.catch(()=>{});
+    expect(onStderr).not.toHaveBeenCalled();
+    expect(fixture.calls.find(args=>args.at(-1)==='ordinary')).toContain('RequestTTY=no');
+    expect(fixture.calls.find(args=>args.at(-1)==='private-authorize')).toEqual(expect.arrayContaining(['-tt','RequestTTY=force']));
+    expect(fixture.calls.find(args=>args.at(-1)==='private-authorize')).toContain('LogLevel=ERROR');
+    await lease.release();await fixture.manager.dispose();
+  });
+
   it('treats an explicitly killed streaming command as caller-owned closure', async () => {
     const fixture = managerFixture();
     const lease = await fixture.manager.acquire({

@@ -53,7 +53,7 @@ When a target needs SSH service preparation, authorization and desktop opening
 remain one continuous flow in the existing Remote desktop dialog. The panel
 advances in place through authorization, host preparation and connection; it
 does not open a second dialog or return to the initial connection form between
-steps. The current step, retained authorization input state, progress, failure
+steps. The current step, operation-bound authorization challenge, progress, failure
 diagnostic and next action stay visible together. A completed service-management
 action shows its result until the user returns to connection options. A connect
 action continues automatically to viewer admission after successful preparation.
@@ -61,6 +61,15 @@ If preparation succeeds but capture remains unavailable, the same failure step
 names the host reason and offers Refresh. Refresh never silently opens a desktop.
 Connect appears only after current host capability admits it, and transient
 connection failures can retry without repeating administrator authorization.
+Password input clears as soon as it is submitted. Sudo-user and root passwords
+have distinct labels and can be switched without leaving the dialog. Existing
+attachments require a separate interruption confirmation. Cancel during apply
+starts bounded rollback; the user can close while Desktop collects its result.
+Stale operation/challenge events cannot affect a new attempt. A challenge response
+can fail only its exact submitted state; late rejection cannot replace a newer
+challenge, cancellation, or an authoritative completed result.
+If commit wins a cancellation race, preparation remains complete but viewer
+opening stays canceled; the user can return to connection options.
 Cancellation, retry and recovery use the same surface and restore focus
 to the action that started the flow.
 
@@ -128,7 +137,7 @@ product adapters must not weaken either boundary to accept malformed session dat
 - `internal/envapp/ui_src/src/styles/navigationIcons.browser.test.tsx`: actual-size silhouettes, theme and high-contrast checks.
 - `internal/envapp/ui_src/src/ui/pages/RemoteDesktopPanel.tsx`: target identity, state-derived actions, settings and window lifecycle.
 - `internal/envapp/ui_src/src/ui/pages/RemoteDesktopPanel.test.tsx`: connection failure retention, display selection, takeover and cancellation.
-- `internal/envapp/ui_src/src/ui/pages/RemoteDesktopPanel.browser.test.tsx`: same-dialog stage progression, masked pending credentials, responsive actions and reduced motion.
+- `internal/envapp/ui_src/src/ui/pages/RemoteDesktopPanel.browser.test.tsx`: same-dialog stage progression, masked transient credentials, responsive actions and reduced motion.
 - `internal/envapp/ui_src/src/styles/remoteDesktopLauncher.browser.test.tsx`: shipped locales/themes, narrow layout, keyboard navigation and settings rollback.
 - `internal/envapp/ui_src/src/ui/services/graphicalSessionTransport.test.ts`: management and window admission use the active Flowersec carrier.
 - `internal/envapp/ui_src/src/ui/pages/remoteDesktopLaunchContract.test.tsx`: production API client, route opener and Desktop validator exercised together.

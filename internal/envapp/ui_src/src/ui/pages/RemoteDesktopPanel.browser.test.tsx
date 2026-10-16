@@ -8,7 +8,7 @@ import { loadEnvAppDictionary } from '../i18n/locales';
 import { writeStoredLanguagePreference } from '../i18n/storage';
 import { RemoteDesktopLauncher } from './RemoteDesktopPanel';
 
-const state = vi.hoisted(() => ({ status: vi.fn(), deployment: vi.fn(), create: vi.fn(), open: vi.fn() }));
+const state = vi.hoisted(() => ({ status: vi.fn(), deployment: vi.fn(), create: vi.fn(), open: vi.fn(), progress: vi.fn() }));
 const setupNeeded = {
   capabilities: { backend: 'linux-drm-kms', state: 'setup_required', screen: false, input: false, audio: false, clipboard: false, unattended: true, displays: [] },
   login_service: { state: 'not_installed', backend: 'linux-drm-kms' },
@@ -19,11 +19,11 @@ vi.mock('./EnvContext', () => ({ useEnvContext: () => ({
   env: () => ({ name: 'Qualification host', permissions: { can_read: true, can_write: true, can_execute: true } }),
   env_id: () => 'desktop-layout', localRuntime: () => ({}),
 }) }));
-vi.mock('../services/desktopSessionContext', async original => ({ ...await original<object>(), readDesktopSessionContextSnapshot: () => ({ label: 'Qualification host' }) }));
+vi.mock('../services/desktopSessionContext', async original => ({ ...await original<object>(), readDesktopSessionContextSnapshot: () => ({ label: 'Qualification host', target_kind: 'ssh_environment' }) }));
 vi.mock('../services/desktopShellBridge', async original => ({ ...await original<object>(),
   desktopShellWebServiceWindowOpenAvailable: () => true,
   remoteDesktopDeploymentInDesktopShell: state.deployment,
-  onRemoteDesktopDeploymentProgress: () => () => {},
+  onRemoteDesktopDeploymentProgress: state.progress,
 }));
 vi.mock('../services/remoteDesktopApi', async original => ({ ...await original<object>(), getRemoteDesktopStatus: state.status, createRemoteDesktop: state.create }));
 vi.mock('../services/webServiceWindows', async original => ({ ...await original<object>(), resolveWebServiceOpenRoute: () => ({ kind: 'local_proxy', url: '/pf/one/' }), openWebServiceRoute: state.open }));
@@ -31,7 +31,7 @@ vi.mock('../services/webServiceWindows', async original => ({ ...await original<
 let dispose: (() => void) | undefined;
 beforeEach(() => {
   vi.resetAllMocks(); state.status.mockResolvedValue(setupNeeded);
-  state.deployment.mockResolvedValue({ ok: true, available: true }); state.open.mockResolvedValue(undefined);
+  state.progress.mockReturnValue(() => {});state.deployment.mockResolvedValue({ ok: true, available: true }); state.open.mockResolvedValue(undefined);
 });
 afterEach(() => { dispose?.(); document.body.replaceChildren(); writeStoredLanguagePreference('system'); });
 
@@ -40,7 +40,7 @@ it.each(SUPPORTED_LOCALES)('centers the primary label and keeps SSH authorizatio
   await loadEnvAppDictionary(locale);
   writeStoredLanguagePreference(locale);
   let finishDeployment!: (value: object) => void;
-  state.deployment.mockImplementation(request => request.action === 'capabilities' ? Promise.resolve({ ok: true, available: true }) : new Promise(resolve => { finishDeployment = resolve; }));
+  state.deployment.mockImplementation(request => request.action === 'capabilities' ? Promise.resolve({ ok: true, available: true }) : request.action === 'respond' ? Promise.resolve({ok:true}) : new Promise(resolve => { finishDeployment = resolve; queueMicrotask(()=>state.progress.mock.calls[0][0]({operation_id:request.operationId,stage:'authorization_required',challenge_id:'password',host:'host.example',ssh_user:'tang'})); }));
   const host = document.createElement('main'); document.body.append(host);
   dispose = render(() => <I18nProvider><RemoteDesktopLauncher /></I18nProvider>, host);
   await expect.poll(() => document.documentElement.lang).toBe(locale);
@@ -68,6 +68,8 @@ it.each(SUPPORTED_LOCALES)('centers the primary label and keeps SSH authorizatio
     expect(control.scrollWidth).toBeLessThanOrEqual(control.clientWidth + 1);
     if (control.tagName === 'BUTTON') expect(getComputedStyle(control).whiteSpace).toBe('nowrap');
   }
+  await userEvent.click(flow.querySelector<HTMLButtonElement>('.remote-desktop-flow-footer > button:last-child')!);
+  await expect.poll(()=>flow.querySelector('input[type=password]')).not.toBeNull();
   await page.elementLocator(flow.querySelector<HTMLInputElement>('input[type=password]')!).fill('ephemeral-fixture');
   await userEvent.keyboard('{Enter}');
   await expect.poll(() => flow.querySelector('[data-phase=applying]')).not.toBeNull();
@@ -87,7 +89,7 @@ it.each(['no-preference', 'reduce'] as const)('advances one dialog with visible 
     await page.viewport(1000, 850);
     await loadEnvAppDictionary('en-US'); writeStoredLanguagePreference('en-US');
     let finishDeployment!: (value: object) => void, finishConnection!: (value: object) => void;
-    state.deployment.mockImplementation(request => request.action === 'capabilities' ? Promise.resolve({ ok: true, available: true }) : new Promise(resolve => { finishDeployment = resolve; }));
+    state.deployment.mockImplementation(request => request.action === 'capabilities' ? Promise.resolve({ ok: true, available: true }) : request.action === 'respond' ? Promise.resolve({ok:true}) : new Promise(resolve => { finishDeployment = resolve; queueMicrotask(()=>state.progress.mock.calls[0][0]({operation_id:request.operationId,stage:'authorization_required',challenge_id:'password',host:'host.example',ssh_user:'tang'})); }));
     state.create.mockImplementation(() => new Promise(resolve => { finishConnection = resolve; }));
     const host = document.createElement('main'); document.body.append(host);
     dispose = render(() => <I18nProvider><RemoteDesktopLauncher /></I18nProvider>, host);
@@ -102,12 +104,13 @@ it.each(['no-preference', 'reduce'] as const)('advances one dialog with visible 
     await Promise.allSettled(dialog.getAnimations({ subtree: true }).filter(animation => animation.effect?.getTiming().iterations !== Infinity).map(animation => animation.finished));
     const initialHeight = dialog.getBoundingClientRect().height;
     const actionWidth = flow.querySelector('.remote-desktop-flow-footer > button:last-child')!.getBoundingClientRect().width;
+    await userEvent.click(flow.querySelector<HTMLButtonElement>('.remote-desktop-flow-footer > button:last-child')!);
+    await expect.poll(()=>flow.querySelector('input[type=password]')).not.toBeNull();
     const password = flow.querySelector<HTMLInputElement>('input[type=password]')!;
     await page.elementLocator(password).fill('ephemeral-fixture');
     await userEvent.keyboard('{Enter}');
     await expect.poll(() => flow.querySelector('[data-phase="applying"]')).not.toBeNull();
-    const pending = flow.querySelector<HTMLInputElement>('input[type=password]')!;
-    expect(pending.value).toBe('ephemeral-fixture'); expect(pending.disabled).toBe(true);
+    expect(flow.querySelector('input[type=password]')).toBeNull();
     expect(flow.querySelector('[aria-current=step]')?.textContent).toContain('Prepare host');
     expect(getComputedStyle(flow.querySelector('.remote-desktop-flow-spinner')!).animationName).toBe(reducedMotion === 'reduce' ? 'none' : 'remote-desktop-flow-spin');
     expect(document.querySelectorAll('[role=dialog]')).toHaveLength(1);

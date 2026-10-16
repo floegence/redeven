@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -12,6 +12,9 @@ import (
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/remotedesktop"
 )
+
+var desktopDeploymentID = regexp.MustCompile(`^[a-zA-Z0-9-]{1,80}$`)
+var desktopDeploymentDigest = regexp.MustCompile(`^[a-f0-9]{64}$`)
 
 const remoteDesktopAPI = "/_redeven_proxy/api/remote-desktop"
 
@@ -41,7 +44,7 @@ func (g *Server) handleRemoteDesktopAPI(w http.ResponseWriter, r *http.Request) 
 		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 		defer cancel()
 		var status remotedesktop.Status
-		status, err = g.remoteDesktop.Status(ctx, owner)
+		status, err = g.remoteDesktop.StatusTarget(ctx, owner, r.URL.Query().Get("target"))
 		if err == nil {
 			cfg, loadErr := g.loadConfigLocked()
 			if loadErr != nil {
@@ -101,16 +104,41 @@ func (g *Server) handleRemoteDesktopAPI(w http.ResponseWriter, r *http.Request) 
 		// This endpoint authorizes and audits the Desktop SSH transaction. It
 		// never accepts credentials or executes privileged host operations.
 		var request struct {
-			Operation string `json:"operation"`
-			Phase     string `json:"phase"`
-			Outcome   string `json:"outcome,omitempty"`
-			Rollback  string `json:"rollback,omitempty"`
+			Operation    string `json:"operation"`
+			Phase        string `json:"phase"`
+			OperationID  string `json:"operation_id"`
+			ChallengeID  string `json:"challenge_id,omitempty"`
+			PolicyDigest string `json:"policy_digest,omitempty"`
+			Outcome      string `json:"outcome,omitempty"`
+			Rollback     string `json:"rollback,omitempty"`
 		}
 		if decodeManagedJSON(r, &request) != nil || !desktopDeploymentOperation(request.Operation) ||
-			(request.Phase != "authorize" && request.Phase != "result") ||
+			!desktopDeploymentID.MatchString(request.OperationID) ||
+			(request.Phase != "authorize" && request.Phase != "verify" && request.Phase != "result") ||
 			(request.Phase == "authorize" && (request.Outcome != "" || request.Rollback != "")) ||
 			(request.Phase == "result" && request.Outcome != "success" && request.Outcome != "failure" && request.Outcome != "canceled") ||
 			(request.Rollback != "" && request.Rollback != "complete" && request.Rollback != "failed" && request.Rollback != "unknown") {
+			err = remotedesktop.ErrInvalid
+			break
+		}
+		if request.Phase == "verify" {
+			if !desktopDeploymentID.MatchString(request.ChallengeID) || !desktopDeploymentDigest.MatchString(request.PolicyDigest) || request.Outcome != "" || request.Rollback != "" {
+				err = remotedesktop.ErrInvalid
+				break
+			}
+			ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+			defer cancel()
+			var digest string
+			digest, err = nativeapps.VerifyLoginServiceAdmission(ctx, nativeapps.LoginServiceSocket, nativeapps.LoginServiceAdmissionProof{OperationID: request.OperationID, ChallengeID: request.ChallengeID, PolicyDigest: request.PolicyDigest})
+			if err != nil || digest != request.PolicyDigest {
+				err = remotedesktop.ErrServiceUnavailable
+				break
+			}
+			value = map[string]any{"authorized": true, "operation_id": request.OperationID, "challenge_id": request.ChallengeID, "policy_digest": digest}
+			g.appendAudit(meta, "remote_desktop_service_verify", "success", map[string]any{"operation_id": request.OperationID}, nil)
+			break
+		}
+		if request.ChallengeID != "" || request.PolicyDigest != "" {
 			err = remotedesktop.ErrInvalid
 			break
 		}
@@ -122,23 +150,14 @@ func (g *Server) handleRemoteDesktopAPI(w http.ResponseWriter, r *http.Request) 
 			map[string]any{"rollback": request.Rollback}, nil)
 		value = map[string]any{"authorized": true}
 		if request.Phase == "authorize" {
-			value = map[string]any{"authorized": true, "runtime_pid": os.Getpid(), "media_cache": g.remoteDesktop.ServiceMediaCache()}
+			identity, identityErr := desktopRuntimeIdentity()
+			if identityErr != nil {
+				err = remotedesktop.ErrServiceUnavailable
+				break
+			}
+			identity["authorized"] = true
+			value = identity
 		}
-	case r.URL.Path == remoteDesktopAPI+"/service/install" && r.Method == http.MethodPost:
-		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
-		defer cancel()
-		value, err = g.remoteDesktop.InstallLoginService(ctx, owner)
-		action = "remote_desktop_service_install"
-	case r.URL.Path == remoteDesktopAPI+"/service/install" && r.Method == http.MethodDelete:
-		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
-		defer cancel()
-		value, err = g.remoteDesktop.UninstallLoginService(ctx, owner)
-		action = "remote_desktop_service_install_cancel"
-	case r.URL.Path == remoteDesktopAPI+"/service" && r.Method == http.MethodDelete:
-		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
-		defer cancel()
-		value, err = g.remoteDesktop.UninstallLoginService(ctx, owner)
-		action = "remote_desktop_service_uninstall"
 	case r.URL.Path == remoteDesktopAPI+"/setup" && r.Method == http.MethodPost:
 		var req struct {
 			RequestID string `json:"request_id"`
@@ -227,7 +246,7 @@ func (g *Server) handleRemoteDesktopAPI(w http.ResponseWriter, r *http.Request) 
 }
 func desktopDeploymentOperation(operation string) bool {
 	switch operation {
-	case "install", "update", "start", "stop", "uninstall":
+	case "ensure", "stop", "uninstall":
 		return true
 	}
 	return false
@@ -245,8 +264,6 @@ func writeDesktopError(w http.ResponseWriter, err error) {
 		status, code = http.StatusConflict, "DESKTOP_CONTROL_IN_USE"
 	case errors.Is(err, remotedesktop.ErrAuthorizationBusy):
 		status, code = http.StatusConflict, "DESKTOP_AUTHORIZATION_BUSY"
-	case errors.Is(err, remotedesktop.ErrServiceAuthorization):
-		status, code = http.StatusConflict, "DESKTOP_SERVICE_AUTHORIZATION_REQUIRED"
 	case errors.Is(err, remotedesktop.ErrServiceUnsupported):
 		status, code = http.StatusNotImplemented, "DESKTOP_SERVICE_UNSUPPORTED"
 	case errors.Is(err, remotedesktop.ErrServiceUnavailable):

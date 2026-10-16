@@ -27,6 +27,7 @@ import { BROWSER_PACKAGE_CHANNEL, BROWSER_PACKAGE_PROGRESS_CHANNEL, parseBrowser
 import { HostApplicationComponents } from './hostApplicationComponents';
 import { RemoteDesktopDeployment, DesktopDeploymentPermissionError } from './remoteDesktopDeployment';
 import { loadDesktopServiceKit } from './remoteDesktopServiceKit';
+import { runtimeExecutableFromArchive } from './runtimeArchive';
 import { REMOTE_DESKTOP_DEPLOYMENT_CHANNEL, REMOTE_DESKTOP_DEPLOYMENT_PROGRESS, parseDesktopDeploymentRequest } from '../shared/remoteDesktopDeployment';
 import { HOST_APPLICATION_COMPONENTS_CHANNEL, HOST_APPLICATION_COMPONENTS_PROGRESS, type HostApplicationComponentsRequest } from '../shared/hostApplicationComponents';
 import { desktopEnvironmentID } from './desktopPreferences';
@@ -20061,10 +20062,11 @@ if (!app.requestSingleInstanceLock()) {
     const record = sessionRecordForWebContentsID(event.sender.id);
     const request = parseDesktopDeploymentRequest(value);
     if (!record || record.closing || record.root_window.webContentsID !== event.sender.id || event.senderFrame !== event.sender.mainFrame || !request) return { ok: false, code: 'invalid_request' };
-    if (request.action === 'cancel') { await remoteDesktopDeployment.cancel(event.sender.id); return { ok: true }; }
+    if (request.action === 'cancel') { await remoteDesktopDeployment.cancel(event.sender.id, request.operationId); return { ok: true }; }
     if (record.target.kind !== 'ssh_environment') return { ok: false, available: false, code: 'unsupported_target' };
     const target = record.target;
-    if (request.action === 'capabilities') return { ok: true, available: true };
+    if (request.action === 'capabilities') return { ok: true, available: true, host: target.ssh_destination };
+    if (request.action === 'respond') return remoteDesktopDeployment.respond(event.sender.id, request);
     const owner = event.sender.id;
     if (!remoteDesktopDeploymentOwners.has(owner)) {
       remoteDesktopDeploymentOwners.add(owner);
@@ -20073,17 +20075,18 @@ if (!app.requestSingleInstanceLock()) {
       });
       event.sender.once('destroyed', () => { void remoteDesktopDeployment.cancel(owner); remoteDesktopDeploymentOwners.delete(owner); });
     }
-    const audit = async (phase: 'authorize' | 'result', outcome?: string, rollback?: string, signal?: AbortSignal) => {
+    const audit = async (phase: 'authorize' | 'verify' | 'result', outcome?: string, rollback?: string, signal?: AbortSignal, proof?: {challenge_id:string;policy_digest:string}) => {
       const url = new URL('/_redeven_proxy/api/remote-desktop/service/deployment', record.allowed_base_url).toString();
       const response = await event.sender.session.fetch(url, { method: 'POST',
         signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(10_000)]) : AbortSignal.timeout(10_000),
         headers: Object.fromEntries(Object.entries(desktopPrivateBridgeRequestHeaders(record.transport, record.startup, url, { 'Content-Type': 'application/json' }))
           .map(([name, value]) => [name, Array.isArray(value) ? value.join(', ') : value])),
-        body: JSON.stringify({ operation: request.operation, phase, ...(outcome ? { outcome } : {}), ...(rollback ? { rollback } : {}) }),
+        body: JSON.stringify({ operation: request.operation, operation_id:request.operationId, phase, ...proof, ...(outcome ? { outcome } : {}), ...(rollback ? { rollback } : {}) }),
       });
       const value = await response.json();
       if (!response.ok || value.ok !== true) throw new DesktopDeploymentPermissionError();
-      return phase === 'authorize' ? { runtimePID: Number(value.data?.runtime_pid), mediaCache: String(value.data?.media_cache ?? '') } : undefined;
+      if (phase === 'verify' && (value.data?.authorized !== true || value.data?.operation_id !== request.operationId || value.data?.challenge_id !== proof?.challenge_id || value.data?.policy_digest !== proof?.policy_digest)) throw new Error('Runtime verification response mismatch');
+      return phase === 'authorize' ? { runtimePID: Number(value.data?.runtime_pid), runtimeUID: Number(value.data?.runtime_uid), runtimeGID: Number(value.data?.runtime_gid), runtimeStart: String(value.data?.runtime_start ?? ''), runtimeSHA256: String(value.data?.runtime_sha256 ?? '') } : undefined;
     };
     let lease: Awaited<ReturnType<typeof desktopSSHTransportManager.acquire>> | undefined;
     try {
@@ -20095,9 +20098,21 @@ if (!app.requestSingleInstanceLock()) {
         const saved = preferences.saved_runtime_targets.find(savedTarget => savedTarget.id === target.environment_id);
         lease = await desktopSSHTransportManager.acquire({ target, credentialScope: target.environment_id,
           sshPassword: saved?.ssh_password_configured ? saved.ssh_password : undefined, signal });
-        return { lease, runtimePID: Number(authority?.runtimePID), mediaCache: authority?.mediaCache ?? '',
-          loadKit: (architecture, signal) => loadDesktopServiceKit(bundledRuntimeExecutablePath(), architecture, signal) };
-      }, request.operation, request.administratorPassword, progress => {
+        return { lease, runtimePID: Number(authority?.runtimePID), runtimeUID: Number(authority?.runtimeUID), runtimeGID: Number(authority?.runtimeGID), runtimeStart: authority?.runtimeStart ?? '', runtimeSHA256: authority?.runtimeSHA256 ?? '',
+          verifyRuntime: async (_operationId, challengeId, policyDigest, signal) => { await audit('verify', undefined, undefined, signal, {challenge_id:challengeId,policy_digest:policyDigest}); },
+          loadKit: async (architecture, signal) => {
+            const kit = await loadDesktopServiceKit(bundledRuntimeExecutablePath(), architecture, signal);
+            if (request.operation !== 'ensure') return kit;
+            const asset = await prepareDesktopRuntimeUploadAsset({
+              runtimeReleaseTag: resolveSSHRuntimeReleaseTag(), releaseBaseURL: target.release_base_url,
+              assetCacheRoot: desktopRuntimePackageCacheRoot(),
+              sourceRuntimeRoot: compact(process.env.REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT) || undefined,
+              platform: resolveDesktopSSHRemotePlatform('Linux', architecture === 'amd64' ? 'x86_64' : 'aarch64'),
+              fetchPolicy: runtimeReleaseFetchPolicy(45_000, signal), signal,
+            });
+            return {...kit, files:new Map([...kit.files, ['redeven', runtimeExecutableFromArchive(asset.archiveData)]])};
+          } };
+      }, request, progress => {
         if (!event.sender.isDestroyed()) event.sender.send(REMOTE_DESKTOP_DEPLOYMENT_PROGRESS, progress);
       });
       await audit('result', result.ok ? 'success' : result.code === 'canceled' ? 'canceled' : 'failure', result.rollback).catch(() => {});

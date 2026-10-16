@@ -12,13 +12,13 @@ import { LocalApiError } from '../ui/services/localApi';
 import { expectSingleLineButtonLabels } from '../test/buttonLayoutAssertions';
 import type { RemoteDesktopStatus } from '../ui/services/remoteDesktopApi';
 
-const state = vi.hoisted(() => ({ locale: 'zh-CN' as RedevenLocale, status: vi.fn(), create: vi.fn(), open: vi.fn(), save: vi.fn(), forget: vi.fn(), prepare: vi.fn(), cancel: vi.fn(), deployment: vi.fn(), permission: vi.fn(), full: true }));
+const state = vi.hoisted(() => ({ locale: 'zh-CN' as RedevenLocale, ssh:false, status: vi.fn(), create: vi.fn(), open: vi.fn(), save: vi.fn(), forget: vi.fn(), prepare: vi.fn(), cancel: vi.fn(), deployment: vi.fn(), permission: vi.fn(), full: true }));
 vi.mock('../ui/i18n', () => ({ useI18n: () => ({ ...createTestI18nHelpers(state.locale), locale: () => state.locale }) }));
 vi.mock('../ui/pages/EnvContext', () => ({ useEnvContext: () => ({
   env: () => ({ name: 'Local Environment', agent: { hostname: 'server.local' }, permissions: { can_read: true, can_write: state.full, can_execute: state.full } }),
   env_id: () => 'fixture', localRuntime: () => ({}),
 }) }));
-vi.mock('../ui/services/desktopSessionContext', async importOriginal => ({ ...await importOriginal<object>(), readDesktopSessionContextSnapshot: () => ({ label: 'server' }) }));
+vi.mock('../ui/services/desktopSessionContext', async importOriginal => ({ ...await importOriginal<object>(), readDesktopSessionContextSnapshot: () => ({ label: 'server', ...(state.ssh?{target_kind:'ssh_environment'}:{}) }) }));
 vi.mock('../ui/services/desktopShellBridge', async original => ({ ...await original<object>(), desktopShellWebServiceWindowOpenAvailable: () => true, remoteDesktopDeploymentInDesktopShell: state.deployment }));
 vi.mock('../ui/services/webServiceWindows', async original => ({ ...await original<object>(), resolveWebServiceOpenRoute: () => ({ kind: 'local_proxy', url: '/pf/one/' }), openWebServiceRoute: state.open }));
 vi.mock('../ui/services/remoteDesktopApi', () => ({ getRemoteDesktopStatus: state.status, createRemoteDesktop: state.create, setRemoteDesktopUnattended: state.save, forgetRemoteDesktopAuthorization: state.forget, disconnectRemoteDesktop: vi.fn(), prepareRemoteDesktop: state.prepare, cancelRemoteDesktopPreparation: state.cancel }));
@@ -29,7 +29,7 @@ let dispose: (() => void) | undefined;
 let renderErrors: string[] = [];
 beforeEach(() => {
   renderErrors = [];
-  vi.resetAllMocks(); state.locale = 'zh-CN'; state.full = true;
+  vi.resetAllMocks(); state.locale = 'zh-CN'; state.full = true; state.ssh=false;
   state.status.mockResolvedValue(structuredClone(ready)); state.create.mockResolvedValue({ id: 'one', forward_id: 'pf-one', target_url: 'http://127.0.0.1:40201' }); state.open.mockResolvedValue(undefined); state.deployment.mockResolvedValue({ ok: true, available: false });
   document.documentElement.dataset.floeShellTheme = 'porcelain-dark'; document.documentElement.classList.add('dark');
 });
@@ -107,12 +107,13 @@ it('keeps errors visible with diagnostic details and closes the launcher after a
 });
 
 it('keeps login-screen deployment inside the same connection dialog flow', async () => {
+  state.ssh=true;
   const first = { ...ready, capabilities: { ...ready.capabilities, backend: 'linux-drm-kms' as const, state: 'setup_required' as const, screen: false, input: false, audio: false, clipboard: false, displays: [] }, login_service: { state: 'not_installed' as const, backend: 'linux-drm-kms' as const } };
   const installed = { ...ready, capabilities: { ...ready.capabilities, backend: 'linux-drm-kms' as const, state: 'ready' as const }, login_service: { state: 'active' as const, backend: 'linux-drm-kms' as const } };
   state.status.mockResolvedValueOnce(first).mockResolvedValue(installed);
   state.deployment.mockImplementation((request: { action: string }) => request.action === 'capabilities' ? Promise.resolve({ ok: true, available: true }) : Promise.resolve({ ok: true }));
   const { dialog, copy } = await launch(390);
-  await page.elementLocator(dialog).getByRole('button', { name: copy.t('remoteDesktop.deploySetupAction'), exact: true }).click();
+  await page.elementLocator(dialog).getByRole('button', { name: copy.t('remoteDesktop.connect'), exact: true }).click();
   const flow = dialog.querySelector<HTMLElement>('.remote-desktop-deployment-flow')!;
   expect(flow).not.toBeNull();
   expect(document.querySelectorAll('[role=dialog]')).toHaveLength(1);
@@ -123,10 +124,11 @@ it('keeps login-screen deployment inside the same connection dialog flow', async
 });
 
 it('keeps the authorization action label centered without an empty icon slot', async () => {
+  state.ssh=true;
   state.status.mockResolvedValue({ ...ready, capabilities: { ...ready.capabilities, backend: 'linux-drm-kms' as const, state: 'setup_required' as const, screen: false, input: false, audio: false, clipboard: false, displays: [] }, login_service: { state: 'not_installed' as const, backend: 'linux-drm-kms' as const } });
   state.deployment.mockResolvedValue({ ok: true, available: true });
   const { dialog, copy } = await launch(390);
-  await page.elementLocator(dialog).getByRole('button', { name: copy.t('remoteDesktop.deploySetupAction'), exact: true }).click();
+  await page.elementLocator(dialog).getByRole('button', { name: copy.t('remoteDesktop.connect'), exact: true }).click();
   const flow = dialog.querySelector<HTMLElement>('.remote-desktop-deployment-flow')!;
   const confirm = page.elementLocator(flow).getByRole('button', { name: copy.t('remoteDesktop.deployConfirm'), exact: true });
   await expect.element(confirm).toBeVisible();
