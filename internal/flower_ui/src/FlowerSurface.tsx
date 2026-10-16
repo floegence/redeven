@@ -9863,7 +9863,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           <FlowerActivityPreview block={blockOfKind('structured_rows')()} copy={copy().chat} />
         </Show>
       </Match>
-      <Match when={detailProps.block.kind === 'image'}><MarkdownMedia class={blockOfKind('image')().resource_ref.startsWith('computer://') ? 'flower-activity-screenshot' : undefined} source={{ kind: 'image', src: blockOfKind('image')().resource_ref, title: blockOfKind('image')().name }} labels={{ ...copy().chat.media, unavailable: blockOfKind('image')().resource_ref.startsWith('computer://') ? copy().chat.computerScreenshotLoadFailed : copy().chat.media.unavailable }} resolve={resolveActivityMedia()} /></Match>
+      <Match when={detailProps.block.kind === 'image'}><MarkdownMedia class="flower-activity-image-thumbnail" source={{ kind: 'image', src: blockOfKind('image')().resource_ref, title: blockOfKind('image')().name }} labels={{ ...copy().chat.media, unavailable: blockOfKind('image')().resource_ref.startsWith('computer://') ? copy().chat.computerScreenshotLoadFailed : copy().chat.media.unavailable }} resolve={resolveActivityMedia()} /></Match>
       <Match when={detailProps.block.kind === 'subagents'}>{subagentsDetailBlock(blockOfKind('subagents'))}</Match>
       <Match when={detailProps.block.kind === 'web_search'}>{webSearchBlock(blockOfKind('web_search'))}</Match>
       <Match when={detailProps.block.kind === 'web_fetch'}>{webFetchBlock(blockOfKind('web_fetch'))}</Match>

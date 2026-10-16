@@ -10714,7 +10714,7 @@
         "security",
         "tools"
       ],
-      "timestamp": "2026-10-11T00:00:00Z",
+      "timestamp": "2026-10-15T00:00:00Z",
       "frontmatter": {
         "description": "Authorized image reads produce immutable native model attachments with canonical retention and preview membership.",
         "tags": [
@@ -10724,19 +10724,19 @@
           "security",
           "tools"
         ],
-        "timestamp": "2026-10-11T00:00:00Z",
+        "timestamp": "2026-10-15T00:00:00Z",
         "title": "Direct image reading and tool media retention",
         "type": "AI Media Contract"
       },
-      "body_length": 5291,
+      "body_length": 5657,
       "summary": "`image.read(file_path, target_id)` reads an image directly in every permission\nmode. Redeven owns authorization and immutable bytes; Floret owns the typed\nattachment, model history and canonical membership. File references stay file\nreferences. The tool creates native image content without a browser, temporary\nHTTP server, path-to-image inference or Base64 in ordinary result JSON.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Authorized reads\n\nThe shared read-only tool checks model image capability, `CanRead`, filesystem\nscope and `ToolTargetPolicy`. An explicit unavailable target fails rather than\nusing another device. Local and routed results follow the same snapshot path.\nPNG, JPEG, WebP and GIF are detected from actual bytes; file extensions are not\nauthority. Files are at most 10 MiB, each side at most 16,384 pixels and the\nimage at most 32 megapixels. Resolution is preserved. GIF explicitly returns\nits first frame as PNG. Damage, limits, cancellation and permission failures\nreturn actionable tool errors without admitting an image descriptor.\n\nOnly typed executor attachments supply native image parts. Floret retains the\ndescriptor and resolves it through the same provider preparation boundary as\nuploaded images and screenshots. Ordinary JSON, path text and opaque strings\ncannot create model or preview authority. Text file tools retain their existing\ncontract. A model that cannot read images gets an explicit error; switching a\nthread with retained image context to such a model returns\n`thread_image_model_unsupported`. Flower preserves the current model and keeps\nthe model picker available for a compatible selection.\n\nProvider wire adapters preserve image parts rather than reducing tool results\nto text. OpenAI Responses uses the officially supported typed\n`function_call_output.output` content array from the released Go SDK. Its\n[function calling contract](https://developers.openai.com/api/docs/guides/function-calling)\nallows images and files in tool output. Native image budgeting inspects these\nprotocol parts and does not count Base64 transport as ordinary text.\n\n## Immutable bytes and retention\n\nOne `toolMediaStore` owns image snapshots and existing Computer keyframes under\nthe original `computer/keyframes` root. Image identity is\n`image://\u003csha256\u003e/\u003cpng|jpeg|webp\u003e`; Computer identity remains unchanged. Digest,\nformat and byte count are checked on resolution. Changes or deletion of the\nsource file cannot alter subsequent sends, retry, restart, fork or compaction.\nMissing or corrupt bytes fail explicitly without rereading the source.\n\nFloret v7.28.0 `Host.MediaInventory` is the complete retention authority across\narchived threads, inactive branches, queue facts and shared fork history.\nDescriptors are retention facts, never access credentials. Startup before\nactivation, periodic maintenance and thread deletion share one collection\nentry point. Its media write gate spans inventory acquisition and removal;\nordinary collection requires canonical `Idle`. Active execution defers\ncollection, and inventory failure retains all bytes. The last canonical owner\nreleases a snapshot; another retained branch or thread preserves it.\n\nNew storage snapshots include tool media. Restoring an old supported snapshot\npreserves stopped live media in staged storage; historical restore journals\nretain their exact original root list. Staged verification skips collection.\nNo product or Floret storage schema changes.\n\n## Authorized previews\n\nThe resolver is the only membership and endpoint authorization entry point.\nIt reads product thread ownership and one public canonical view, without the\nfull product detail mapper. GET\n`/threads/\u003cthread\u003e/tool-media/\u003cdigest\u003e/\u003cformat\u003e` requires an exact canonical\n`tool_image` target reference. Cross-thread and cross-endpoint access fails.\nThe response is bounded, uses a closed image MIME set and `no-store`.\n\nEnv App and Desktop use authenticated binary transport. Activity and assistant\nMarkdown use the published Floe media component, localized loading/retry and\nshared preview. The browser receives a temporary Blob URL and opaque resource\nidentity, never a storage path or provider credential.",
-          "char_count": 3751
+          "body": "## Authorized reads\n\nThe shared read-only tool checks model image capability, `CanRead`, filesystem\nscope and `ToolTargetPolicy`. An explicit unavailable target fails rather than\nusing another device. Local and routed results follow the same snapshot path.\nPNG, JPEG, WebP and GIF are detected from actual bytes; file extensions are not\nauthority. Files are at most 10 MiB, each side at most 16,384 pixels and the\nimage at most 32 megapixels. Resolution is preserved. GIF explicitly returns\nits first frame as PNG. Damage, limits, cancellation and permission failures\nreturn actionable tool errors without admitting an image descriptor.\n\nOnly typed executor attachments supply native image parts. Floret retains the\ndescriptor and resolves it through the same provider preparation boundary as\nuploaded images and screenshots. Ordinary JSON, path text and opaque strings\ncannot create model or preview authority. Text file tools retain their existing\ncontract. A model that cannot read images gets an explicit error; switching a\nthread with retained image context to such a model returns\n`thread_image_model_unsupported`. Flower preserves the current model and keeps\nthe model picker available for a compatible selection.\n\nProvider wire adapters preserve image parts rather than reducing tool results\nto text. OpenAI Responses uses the officially supported typed\n`function_call_output.output` content array from the released Go SDK. Its\n[function calling contract](https://developers.openai.com/api/docs/guides/function-calling)\nallows images and files in tool output. Native image budgeting inspects these\nprotocol parts and does not count Base64 transport as ordinary text.\n\n## Immutable bytes and retention\n\nOne `toolMediaStore` owns image snapshots and existing Computer keyframes under\nthe original `computer/keyframes` root. Image identity is\n`image://\u003csha256\u003e/\u003cpng|jpeg|webp\u003e`; Computer identity remains unchanged. Digest,\nformat and byte count are checked on resolution. Changes or deletion of the\nsource file cannot alter subsequent sends, retry, restart, fork or compaction.\nMissing or corrupt bytes fail explicitly without rereading the source.\n\nFloret v7.28.0 `Host.MediaInventory` is the complete retention authority across\narchived threads, inactive branches, queue facts and shared fork history.\nDescriptors are retention facts, never access credentials. Startup before\nactivation, periodic maintenance and thread deletion share one collection\nentry point. Its media write gate spans inventory acquisition and removal;\nordinary collection requires canonical `Idle`. Active execution defers\ncollection, and inventory failure retains all bytes. The last canonical owner\nreleases a snapshot; another retained branch or thread preserves it.\n\nNew storage snapshots include tool media. Restoring an old supported snapshot\npreserves stopped live media in staged storage; historical restore journals\nretain their exact original root list. Staged verification skips collection.\nNo product or Floret storage schema changes.\n\n## Authorized previews\n\nThe resolver is the only membership and endpoint authorization entry point.\nIt reads product thread ownership and one public canonical view, without the\nfull product detail mapper. GET\n`/threads/\u003cthread\u003e/tool-media/\u003cdigest\u003e/\u003cformat\u003e` requires an exact canonical\n`tool_image` target reference. Cross-thread and cross-endpoint access fails.\nThe response is bounded, uses a closed image MIME set and `no-store`.\n\nEnv App and Desktop use authenticated binary transport. Activity and assistant\nMarkdown use the published Floe media component, localized loading/retry and\nshared preview. The browser receives a temporary Blob URL and opaque resource\nidentity, never a storage path or provider credential.\n\nExpanded image-tool Activity details use the same compact thumbnail as\n[Computer screenshots](computer-use-media.md), without a decorative canvas or\nseparate preview toolbar. Clicking the thumbnail opens the retained image;\nloading and retry stay bounded, and collapsing details unmounts the thumbnail.\nAssistant Markdown images retain their existing presentation.",
+          "char_count": 4117
         },
         {
           "id": "boundaries",
@@ -10750,6 +10750,12 @@
       "links": [
         {
           "label": "Computer media",
+          "path": "ai/computer-use-media.md",
+          "concept_id": "ai.computer-use-media",
+          "title": "Computer use media and visual requests"
+        },
+        {
+          "label": "Computer screenshots",
           "path": "ai/computer-use-media.md",
           "concept_id": "ai.computer-use-media",
           "title": "Computer use media and visual requests"
@@ -42543,5 +42549,5 @@
       ]
     }
   ],
-  "source_sha256": "5cf828ce02cb2cd877d8f8c1bbfcb7051b4e1b7e01b2ea1455f9fe663aee4e3f"
+  "source_sha256": "7b5c13469837d1e4a4527a495d22a60edd9f05eb9e1e5e1cfa499d526509b235"
 }

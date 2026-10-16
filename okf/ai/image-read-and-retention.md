@@ -3,7 +3,7 @@ type: AI Media Contract
 title: Direct image reading and tool media retention
 description: Authorized image reads produce immutable native model attachments with canonical retention and preview membership.
 tags: [ai, tools, images, media, security]
-timestamp: 2026-10-11T00:00:00Z
+timestamp: 2026-10-15T00:00:00Z
 ---
 # Summary
 
@@ -78,6 +78,12 @@ Env App and Desktop use authenticated binary transport. Activity and assistant
 Markdown use the published Floe media component, localized loading/retry and
 shared preview. The browser receives a temporary Blob URL and opaque resource
 identity, never a storage path or provider credential.
+
+Expanded image-tool Activity details use the same compact thumbnail as
+[Computer screenshots](computer-use-media.md), without a decorative canvas or
+separate preview toolbar. Clicking the thumbnail opens the retained image;
+loading and retry stay bounded, and collapsing details unmounts the thumbnail.
+Assistant Markdown images retain their existing presentation.
 
 # Boundaries
 

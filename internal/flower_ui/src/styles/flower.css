@@ -5906,21 +5906,21 @@ button.flower-composer-context-source:focus-visible,
   overflow-wrap: anywhere;
 }
 
-.flower-activity-screenshot[data-media-kind='image'] {
+.flower-activity-image-thumbnail[data-media-kind='image'] {
   width: 20rem;
   max-width: 100%;
   margin: 0.25rem 0 0.5rem;
 }
 
-.flower-activity-screenshot[data-media-kind='image'] .chat-media-viewport {
+.flower-activity-image-thumbnail[data-media-kind='image'] .chat-media-viewport {
   min-height: 0;
   padding: 0;
   border-radius: 0.5rem;
   background: transparent;
 }
 
-.flower-activity-screenshot[data-media-kind='image'] .chat-media-viewport::before,
-.flower-activity-screenshot .chat-media-header { display: none; }
+.flower-activity-image-thumbnail[data-media-kind='image'] .chat-media-viewport::before,
+.flower-activity-image-thumbnail .chat-media-header { display: none; }
 .flower-activity-detail-section { display: contents; }
 
 .flower-computer-stage { min-width: 0; min-height: 0; }
