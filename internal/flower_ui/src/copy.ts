@@ -1,3 +1,4 @@
+import type { FlowerContextSource } from './chat/flowerContextPresentation';
 import { extensionI18n, type ExtensionI18n } from './extensions/context';
 import { markdownMediaEnUS, type FlowerMarkdownMediaCopy } from './chat/markdown/mediaCopy';
 import { toolActivityEnUS, type FlowerToolActivityCopy } from './toolActivityCopy';
@@ -651,6 +652,7 @@ export type FlowerSurfaceCopy = Readonly<{
       composition: string;
       compositionHint: string;
       categoryLabels: Readonly<Record<FlowerContextCategory, string>>;
+      sourceLabels: Readonly<Record<FlowerContextSource, string>>;
       input: string;
       outputReserve: string;
       freeSpace: string;
@@ -1074,6 +1076,12 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       textShare: 'Current auto-loaded context by character count',
       composition: 'Used context',
       compositionHint: 'Estimated tokens and share of model input. Category estimates may differ from the measured total.',
+      sourceLabels: {
+        system_prompt: 'System prompt', system_tools: 'System tools', mcp_tools: 'MCP tools', provider_tools: 'Provider tools',
+        messages: 'Messages', tool_outputs: 'Tool outputs', skills: 'Skill catalog', rule_files: 'Rule file index', environment: 'Environment',
+        summary: 'Conversation summary', reasoning: 'Reasoning', attachments: 'Images & files',
+        context_framing: 'Context formatting', unattributed_tools: 'Tools without source data', unattributed_context: 'Context without source data',
+      },
       categoryLabels: {
         system_tokens: 'System instructions', tool_definition_tokens: 'Tool definitions',
         user_tokens: 'Your messages', assistant_tokens: 'Assistant messages',

@@ -59,6 +59,9 @@ func TestFloretNativeWebFetchPermissionResolvesForEveryProductMode(t *testing.T)
 			if !ok {
 				t.Fatal("web_fetch native factory is missing")
 			}
+			if tool.Definition.Annotations["source"] != "floret" || tool.Definition.Annotations["namespace"] != "floret.web" {
+				t.Fatalf("native tool provenance missing: %+v", tool.Definition.Annotations)
+			}
 			if tool.Definition.Permission.Mode != fltools.PermissionAsk {
 				t.Fatalf("base permission=%q, want ask", tool.Definition.Permission.Mode)
 			}

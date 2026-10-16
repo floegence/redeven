@@ -45,7 +45,13 @@ func buildFloretNativeTool(def ToolDef, snapshot PermissionSnapshot) (fltools.To
 	if !ok {
 		return fltools.Tool{}, false
 	}
-	return factory(def, snapshot), true
+	tool := factory(def, snapshot)
+	if tool.Definition.Annotations == nil {
+		tool.Definition.Annotations = map[string]any{}
+	}
+	tool.Definition.Annotations["source"] = def.Source
+	tool.Definition.Annotations["namespace"] = def.Namespace
+	return tool, true
 }
 
 func isFloretNativeTool(toolName string) bool {

@@ -1,4 +1,4 @@
-import { buildFlowerContextComposition, buildFlowerModelContextDistribution } from './flowerContextPresentation';
+import { buildFlowerContextComposition } from './flowerContextPresentation';
 import { describe, expect, it } from 'vitest';
 
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../copy';
@@ -190,33 +190,47 @@ describe('used context composition', () => {
     const result = buildFlowerContextComposition({ confirmed: { ...base, breakdown: { source: 'semantic_input_bpe_v1', tool_result_tokens: 300, user_tokens: 100 } },
       estimate: { ...base, phase: 'projected_request', breakdown: { source: 'next', tool_result_tokens: 90000 } } })!;
     expect(result.total).toBe(400);
-    expect(result.rows).toEqual([{ key: 'tool_result_tokens', tokens: 300, share: 75 }, { key: 'user_tokens', tokens: 100, share: 25 }]);
+    expect(result.rows.map(({ key, tokens, share }) => ({ key, tokens, share }))).toEqual([{ key: 'tool_outputs', tokens: 300, share: 75 }, { key: 'messages', tokens: 100, share: 25 }]);
     expect(buildFlowerContextComposition({ confirmed: base, estimate: { ...base, breakdown: { source: 'next', user_tokens: 10 } } })).toBeNull();
     expect(buildFlowerContextComposition({ estimate: { ...base, breakdown: { source: 'empty' } } })).toBeNull();
   });
 });
 
-describe('auto-loaded context text distribution', () => {
-  it('counts Unicode characters and sorts by size without mutating canonical sections', () => {
-    const sections = [
-      { key: 'local_time', title: 'Time', text: '' },
-      { key: 'repository', title: 'Repository', text: '🌸a' },
-      { key: 'skills', title: 'Skills', text: 'abcd' },
-    ] as const;
-    const result = buildFlowerModelContextDistribution(sections);
-    expect(result.total).toBe(6);
-    expect(result.rows.map(({ key, characters, share }) => ({ key, characters, share }))).toEqual([
-      { key: 'skills', characters: 4, share: 4 / 6 * 100 },
-      { key: 'repository', characters: 2, share: 2 / 6 * 100 },
-      { key: 'local_time', characters: 0, share: 0 },
-    ]);
-    expect(sections.map(section => section.key)).toEqual(['local_time', 'repository', 'skills']);
-  });
 
-  it('keeps empty categories at zero without inventing token usage or percentages', () => {
-    expect(buildFlowerModelContextDistribution([])).toEqual({ total: 0, rows: [] });
-    expect(buildFlowerModelContextDistribution([{ key: 'skills', title: 'Skills', text: '' }])).toEqual({
-      total: 0, rows: [{ key: 'skills', title: 'Skills', text: '', characters: 0, share: 0 }],
-    });
+describe('request source attribution', () => {
+  it('separates registry origins and managed sections without adding parent weights again', () => {
+    const sample = { phase: 'provider_usage', pressure_status: 'stable', updated_at_ms: 1 } as const;
+    const result = buildFlowerContextComposition({ confirmed: { ...sample, breakdown: { source: 'semantic_input_bpe_v2',
+      system_tokens: 100, tool_definition_tokens: 600, model_context_tokens: 240,
+      user_tokens: 30, assistant_tokens: 20, tool_call_tokens: 10, tool_result_tokens: 50,
+      details: { items: [
+        { category: 'tool_definition', key: 'opaque', source: 'mcp', namespace: 'docs', tokens: 300 },
+        { category: 'tool_definition', key: 'terminal.exec', source: 'builtin', tokens: 200 },
+        { category: 'tool_definition', key: 'web_search', source: 'provider', tokens: 100 },
+        { category: 'model_context', key: 'skills', tokens: 100 },
+        { category: 'model_context', key: 'repository_rules', tokens: 70 },
+        { category: 'model_context', key: 'execution_environment', tokens: 40 },
+        { category: 'model_context', key: '', tokens: 30 },
+      ] },
+    } } })!;
+    expect(result.total).toBe(1050);
+    const rows = new Map(result.rows.map(row => [row.key, row]));
+    expect(rows.get('mcp_tools')).toMatchObject({ tokens: 300, items: [{ label: 'docs · opaque', tokens: 300 }] });
+    expect(rows.get('system_tools')?.tokens).toBe(200);
+    expect(rows.get('provider_tools')?.tokens).toBe(100);
+    expect(rows.get('messages')?.tokens).toBe(60);
+    expect(rows.get('skills')?.tokens).toBe(100);
+    expect(rows.get('rule_files')?.tokens).toBe(70);
+    expect(rows.get('environment')?.tokens).toBe(40);
+    expect(rows.get('context_framing')?.tokens).toBe(30);
+    expect(result.rows.reduce((sum, row) => sum + row.share, 0)).toBeCloseTo(100);
+  });
+  it('does not infer origins from names or allocate historical samples from current snapshots', () => {
+    const base = { phase: 'provider_usage', pressure_status: 'stable', updated_at_ms: 1 } as const;
+    const current = buildFlowerContextComposition({ confirmed: { ...base, breakdown: { source: 'v2', tool_definition_tokens: 20,
+      details: { items: [{ category: 'tool_definition', key: 'mcp_looks_external', tokens: 20 }] } } } })!;
+    expect(current.rows[0].key).toBe('unattributed_tools');
+    const old = buildFlowerContextComposition({ confirmed: { ...base, breakdown: { source: 'v1', model_context_tokens: 30 } } })!;
+    expect(old.rows[0].key).toBe('unattributed_context');
   });
 });

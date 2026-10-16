@@ -393,7 +393,12 @@ export const FLOWER_CONTEXT_CATEGORIES = [
   'reasoning_tokens', 'attachment_tokens',
 ] as const;
 export type FlowerContextCategory = typeof FLOWER_CONTEXT_CATEGORIES[number];
-export type FlowerContextBreakdown = Readonly<{ source: string } & Partial<Record<FlowerContextCategory, number>>>;
+export type FlowerContextTokenDetail = Readonly<{
+  category: 'tool_definition' | 'model_context'; key: string; source?: string; namespace?: string; tokens: number;
+}>;
+export type FlowerContextBreakdown = Readonly<{
+  source: string; details?: Readonly<{ items: readonly FlowerContextTokenDetail[] }>;
+} & Partial<Record<FlowerContextCategory, number>>>;
 
 export type FlowerContextSample = Readonly<{
   breakdown?: FlowerContextBreakdown;

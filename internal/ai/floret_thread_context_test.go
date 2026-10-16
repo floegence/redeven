@@ -56,7 +56,9 @@ func TestPublishedFloretUsageReachesLiveAndCanonicalFlowerProjections(t *testing
 				liveUsage <- usage
 			}
 		}}}
-		return flruntime.NewAgent(agentConfig, gateway, flruntime.WithAgentEventSink(floretEventSink{run: adapterRun}))
+		return flruntime.NewAgent(agentConfig, gateway, flruntime.WithAgentEventSink(floretEventSink{run: adapterRun}), flruntime.WithAgentDynamicToolSurface(func(context.Context, flruntime.ToolSurfaceRequest) (flruntime.ToolSurface, error) {
+			return flruntime.ToolSurface{ModelContextSnapshot: &flruntime.ModelContextSnapshot{Sections: []flruntime.ModelContextSection{{Key: "skills", Title: "Available skills", Text: "Test skill catalog"}}}}, nil
+		}))
 	}))
 	if err != nil {
 		t.Fatal(err)
@@ -101,6 +103,15 @@ func TestPublishedFloretUsageReachesLiveAndCanonicalFlowerProjections(t *testing
 	if projected.Usage.Confirmed.Breakdown == nil || projected.Usage.Confirmed.Breakdown.UserTokens <= 0 || projected.Usage.Estimate.Breakdown == nil || projected.Usage.Estimate.Breakdown.AssistantTokens <= 0 {
 		t.Fatalf("input breakdown missing: %+v", projected.Usage)
 	}
+	if projected.Usage.Confirmed.Breakdown.Details == nil || len(projected.Usage.Confirmed.Breakdown.Details.Items) == 0 {
+		t.Fatal("published request attribution did not reach Flower canonical projection")
+	}
+	canonicalTokens := pending.ContextUsage.Confirmed.RequestEstimate.Breakdown.Details.Items[0].Tokens
+	projected.Usage.Confirmed.Breakdown.Details.Items[0].Tokens = -1
+	if pending.ContextUsage.Confirmed.RequestEstimate.Breakdown.Details.Items[0].Tokens != canonicalTokens {
+		t.Fatal("Flower DTO mutation reached canonical attribution")
+	}
+	projected.Usage.Confirmed.Breakdown.Details.Items[0].Tokens = canonicalTokens
 	var latest FlowerContextUsage
 	for len(contextUsageSnapshots) > 0 {
 		latest = <-contextUsageSnapshots

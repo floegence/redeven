@@ -415,6 +415,11 @@ func flowerContextSampleFromFloret(status *observation.ContextStatus) (FlowerCon
 	var breakdown *flconfig.ContextBreakdown
 	if status.RequestEstimate.Breakdown.Source != "" {
 		value := status.RequestEstimate.Breakdown
+		if value.Details != nil {
+			details := *value.Details
+			details.Items = append([]flconfig.ContextTokenDetail(nil), details.Items...)
+			value.Details = &details
+		}
 		breakdown = &value
 	}
 	return FlowerContextSample{
