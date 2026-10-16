@@ -1,7 +1,7 @@
 import { Show, createMemo, type Component } from 'solid-js';
 import { Dynamic } from 'solid-js/web';
 import { FileItemIcon } from '@floegence/floe-webapp-core/file-browser';
-import { Activity, FileText, Terminal, MessageSquare } from '@floegence/floe-webapp-core/icons';
+import { Activity, Code, FileText, Terminal, MessageSquare } from '@floegence/floe-webapp-core/icons';
 import type { FlowerTurnLauncherContextTone } from '../flowerTurnLauncherCopy';
 
 /** A page frame with a quoted context marker, distinct from file references. */
@@ -16,12 +16,13 @@ const FlowerPageContextIcon: Component<{ class?: string }> = props => (
 export function FlowerContextIcon(props: {
   tone: FlowerTurnLauncherContextTone | 'page_context';
   name: string;
+  size?: 16 | 24;
 }) {
-  const fileIdentity = () => ['file', 'directory', 'selection', 'attachment'].includes(props.tone);
-  const contextualIcon = createMemo(() => props.tone === 'thread' ? MessageSquare : props.tone === 'page_context' ? FlowerPageContextIcon : props.tone === 'terminal'
+  const fileIdentity = () => ['file', 'directory', 'attachment'].includes(props.tone);
+  const contextualIcon = createMemo(() => props.tone === 'selection' ? Code : props.tone === 'thread' ? MessageSquare : props.tone === 'page_context' ? FlowerPageContextIcon : props.tone === 'terminal'
     ? Terminal
     : props.tone === 'environment' || props.tone === 'process' ? Activity : FileText);
-  return <Show when={fileIdentity()} fallback={<Dynamic component={contextualIcon()} class="size-4 shrink-0" aria-hidden="true" />}>
-    <FileItemIcon size={16} item={{ name: props.name, type: props.tone === 'directory' ? 'folder' : 'file' }} class="size-4 shrink-0" />
+  return <Show when={fileIdentity()} fallback={<Dynamic component={contextualIcon()} size={props.size ?? 16} class={props.size === 24 ? 'size-6 shrink-0' : 'size-4 shrink-0'} aria-hidden="true" />}>
+    <FileItemIcon size={props.size ?? 16} item={{ name: props.name, type: props.tone === 'directory' ? 'folder' : 'file' }} class={props.size === 24 ? 'size-6 shrink-0' : 'size-4 shrink-0'} />
   </Show>;
 }

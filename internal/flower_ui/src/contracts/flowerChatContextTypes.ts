@@ -2,7 +2,7 @@ import type { ThreadReferenceSnapshot } from '../contextActionWire';
 import type { FlowerTurnLauncherContextTone } from '../flowerTurnLauncherCopy';
 import type { FlowerLinkedContextSourceSurface } from './flowerSurfaceContracts';
 
-export type FlowerChatContextTone = FlowerTurnLauncherContextTone;
+export type FlowerChatContextTone = FlowerTurnLauncherContextTone | 'page_context';
 
 export type FlowerChatContextSnapshotAction =
   | Readonly<{ type: 'open_thread_preview'; title: string; subtitle: string; body: string; thread: ThreadReferenceSnapshot; context_index: number; truncated?: boolean }>

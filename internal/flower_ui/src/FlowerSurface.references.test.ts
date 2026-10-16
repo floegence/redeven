@@ -14,19 +14,13 @@ describe('Flower canonical reference presentation', () => {
 
     expect(source).toContain('parseChatMessageReferences(msg.references');
     expect(source).toContain('parseChatContextAction(turn().context_action)');
-    expect(source).toContain('linkedContextLabel={copy().chat.linkedContextLabel}');
     expect(source).not.toContain('parseChatContextAction(msg.context_action)');
   });
 
-  it('keeps uploaded attachments and linked references in the unified user bubble', () => {
+  it('uses one resource composition for admitted and queued user messages', () => {
     const source = fs.readFileSync(surfacePath, 'utf8');
-    const unifiedBubble = source.indexOf('flower-chat-context-unified-bubble');
-    const attachment = source.indexOf('messageAttachmentBlock(value)', unifiedBubble);
-    const references = source.indexOf('<FlowerChatContextChips', unifiedBubble);
-
-    expect(unifiedBubble).toBeGreaterThanOrEqual(0);
-    expect(attachment).toBeGreaterThan(unifiedBubble);
-    expect(references).toBeGreaterThan(attachment);
+    expect(source.match(/<FlowerUserMessageBody/g)).toHaveLength(2);
+    expect(source).not.toContain('flower-chat-context-unified-bubble');
   });
 
   it('constrains long Unicode labels and details without horizontal overlap on narrow surfaces', () => {
@@ -37,7 +31,8 @@ describe('Flower canonical reference presentation', () => {
     expect(css).toContain('.flower-chat-context-chip-label');
     expect(css).toContain('text-overflow: ellipsis');
     expect(css).toContain('@media (max-width: 640px)');
-    expect(css).toContain('grid-template-columns: minmax(0, 1fr)');
+    expect(css).toContain('@container (max-width: 19rem)');
+    expect(css).not.toContain('flower-chat-context-chips-divider');
   });
 
   it('gives the keyboard and pointer active candidate a stable theme accent without changing geometry', () => {

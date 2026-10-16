@@ -80,6 +80,17 @@ describe('Flower chat linked context parser', () => {
     expect(JSON.stringify(display)).not.toContain('resource_ref');
   });
 
+  it('recognizes frozen Activity page facts without changing preview content or authority', () => {
+    const text = JSON.stringify({ environment: { id: 'env', name: 'Development' }, page: { id: 'files', name: 'Files' }, captured_at: '2026-10-16T00:00:00Z', state: { directory: '/workspace' } });
+    const display = parseChatMessageReferences([{ reference_id: 'page', kind: 'text', label: 'Files', text }]);
+    expect(display?.chips[0]).toMatchObject({ tone: 'page_context', action: { type: 'open_text_preview', body: text } });
+    expect(parseChatContextAction({ ...baseAction, source: { surface: 'flower_composer' }, context: [{ kind: 'text_snapshot', title: 'Files', content: text }] })?.chips[0])
+      .toMatchObject({ tone: 'page_context', action: { type: 'open_text_preview', body: text } });
+    for (const ordinary of ['selected code', '{"page":{"id":"files"}}', text.slice(0, -2)]) {
+      expect(parseChatMessageReferences([{ reference_id: 'text', kind: 'text', label: 'Files', text: ordinary }])?.chips[0].tone).toBe('selection');
+    }
+  });
+
   it('returns no canonical reference display for an empty list', () => {
     expect(parseChatMessageReferences([])).toBeNull();
   });
