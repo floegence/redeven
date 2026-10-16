@@ -265,12 +265,19 @@ func TestFloretSubagentModelResultPreservesLongHandoffAndBoundsActivity(t *testi
 
 func TestSubagentPromptUsesOneHandoffContract(t *testing.T) {
 	prompt := buildPromptSubagentSection(promptProfileSpec{}).render()
-	if !strings.Contains(prompt, "handoffs[].content") || !strings.Contains(prompt, "last_message_preview") {
+	if !strings.Contains(prompt, "inspect full results and structured failures") {
 		t.Fatalf("prompt does not describe the handoff contract:\n%s", prompt)
 	}
-	for _, required := range []string{"items[].failure.code", "items[].failure.message", "do not infer a cause", "effect_outcome_unknown"} {
+	for _, required := range []string{"never infer them from previews", "Integrate findings and close children"} {
 		if !strings.Contains(prompt, required) {
 			t.Fatalf("prompt is missing failure guidance %q:\n%s", required, prompt)
+		}
+	}
+	assertPromptContains(t, buildPromptToolFailureRecoverySection().render(), "effect_outcome_unknown is terminal")
+	for _, def := range builtInToolDefinitions() {
+		if def.Name == "subagents" {
+			assertPromptContains(t, def.Description, "handoffs[].content")
+			assertPromptContains(t, def.Description, "items[].failure")
 		}
 	}
 	for _, stale := range []string{"final_handoff_report", "progress_summary"} {

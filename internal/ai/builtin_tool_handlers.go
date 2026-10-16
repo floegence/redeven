@@ -506,15 +506,17 @@ func redevenAskUserSignalInputSchema(base map[string]any) map[string]any {
 			},
 		},
 		"required_from_user": map[string]any{
-			"type":     "array",
-			"minItems": 1,
-			"maxItems": 8,
-			"items":    map[string]any{"type": "string", "maxLength": 200},
+			"type":        "array",
+			"description": "An array of concrete inputs or decisions needed from the user, even for one item, for example [\"Choose a region\"]. Never use a scalar or unquoted prose.",
+			"minItems":    1,
+			"maxItems":    8,
+			"items":       map[string]any{"type": "string", "maxLength": 200},
 		},
 		"evidence_refs": map[string]any{
-			"type":     "array",
-			"maxItems": 12,
-			"items":    map[string]any{"type": "string", "maxLength": 120},
+			"type":        "array",
+			"description": "Actual blocking tool call IDs, or an empty array when there is no tool evidence.",
+			"maxItems":    12,
+			"items":       map[string]any{"type": "string", "maxLength": 120},
 		},
 	}
 	schema["required"] = []string{"questions", "reason_code", "required_from_user", "evidence_refs"}
@@ -759,7 +761,7 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:         "subagents",
-			Description:  "Manage parent-owned subagents. Use spawn with a short 1-5 word English Title Case task_name such as Safety Review, required task_description, agent_type, and message to start a durable child thread. Never use snake_case or kebab-case names. Use wait/list/inspect to observe children, send_input to immediately guide a child, and close/close_all to stop child threads.",
+			Description:  "Manage parent-owned subagents. Use spawn with a short 1-5 word English Title Case task_name such as Safety Review, required task_description, agent_type, and message to start a durable child thread. Never use snake_case or kebab-case names. Use wait/list/inspect to observe children, send_input to immediately guide a child, and close/close_all to stop child threads. Read completed reports from handoffs[].content and failures from items[].failure; last_message_preview is only a preview.",
 			InputSchema:  toSchema(subagentsToolInputSchema()),
 			Mutating:     false,
 			Visibility:   ToolVisibilityDelegationControl,

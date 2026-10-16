@@ -1831,3 +1831,13 @@ guidance readable without exposing engine terminology. See
 [Flower managed model context](ai/flower-managed-model-context.md).
 
 - 2026-10-15: Replace Web Search input repetition and missing-source placeholders with deterministic operation rows and provider-result-only details; consume the upstream URL-only source fix.
+
+## 2026-10-16 — Test-driven Flower prompt reduction
+
+Remove repeated Markdown, patch and Computer Use tutorials from the system
+prompt while preserving product output integration and safety boundaries. Add a
+deterministic size budget and an opt-in configured DeepSeek flash qualification
+lane with frozen original/candidate comparisons and isolated production
+execution for both versions. Separate system savings from complete request
+input, include tool-definition growth, and retain every failed batch. See
+[Flower prompt and rule sources](ai/flower-prompt-and-rule-sources.md).

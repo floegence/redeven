@@ -3,7 +3,7 @@ type: AI Prompt Contract
 title: Flower prompt and rule sources
 description: Unify task, interaction and recovery instructions with actual capabilities and complete authorized rule sources.
 tags: [ai, flower, prompts, context]
-timestamp: 2026-10-15T00:00:00Z
+timestamp: 2026-10-16T00:00:00Z
 ---
 # Summary
 
@@ -49,6 +49,8 @@ that an effect never executed and do not independently authorize replay. An
 unknown effect remains terminal. Denials cannot be bypassed with another tool.
 Schema correction, approval, cancellation and restart recovery remain Floret-owned.
 Todos permit at most one `in_progress` item and an explicit empty-list clear.
+Finite running commands require another `terminal.read` in the same turn, not a
+promise to wait after completion. Unknown effects cannot become retry choices.
 
 The working directory is a relative-path default. Configured filesystem roots
 and their read/write permissions define authorization; task scope and repository
@@ -62,6 +64,53 @@ Historical canonical file actions remain readable without restoring that tool.
 Ordinary research uses available research tools directly. User acceptance is
 required when substituting a text-page alternative for an explicitly requested
 interactive GUI operation. A blocked target cannot be fetched through a substitute.
+
+# Prompt Budget And Qualification
+
+System instructions keep product behavior and boundaries. Tool argument formats
+and API tutorials belong to the existing supplied tool definitions; ordinary
+Markdown needs no tutorial. Output instructions retain only Redeven-specific
+media references, the exact `html preview` fence and preview isolation limits.
+Concise policies retain complete rule reading, user interaction, denial, Stop,
+unknown-effect handling, browser identity and observed GUI verification.
+The system contains no tool JSON envelopes, argument-field recipes or scripting
+API examples. Short behavioral reminders keep greetings brief, preserve real
+choice interaction and continue observing finite commands in the current turn.
+
+The full built-in qualification surface has a deterministic 16,000-byte system
+budget. This is a regression guard, not a tokenizer or total-request measurement.
+Permission/profile/allowlist tests require guidance to match supplied tools.
+Definitions retain operational details; focused input-array and child-result
+clarifications are measured as tool overhead, not credited as system savings.
+
+`scripts/check_flower_prompt_deepseek.sh` is an opt-in paid qualification lane. It
+reads the selected local DeepSeek provider and its effective `deepseek-flash`
+configuration through production parsers, without modifying source state. It
+requires a fresh report directory and normally repeats 24 behavior cases three
+times. Model-proposed operations in those cases are not executed; synthetic
+receipts allow denial, unknown-effect and GUI recovery checks without effects.
+Every historical and returned call must satisfy the actual tool schema.
+
+A separate production Service exercise performs code repair and complete rule
+reading in a disposable project, waits through real terminal continuation,
+checks restart recall, resumes a structured answer and reads a file in readonly
+mode. It never controls the user's browser or launches subagents. Reports retain
+prompt/tool hashes, synthetic inputs, outputs, errors and usage; credentials stay
+outside reports. Missing configuration, skipped tests and absent reports fail
+qualification. DeepSeek total input includes both cache-miss and cache-read
+tokens. Baseline snapshots can be supplied through
+`REDEVEN_FLOWER_PROMPT_BASELINE_DIR` for the same fixtures and tool definitions;
+failures remain visible rather than being repaired by a test-owned retry loop.
+Freeze cases, oracles, prompt sources and repetition count before comparison.
+Run each version once under the same tool definitions; retain every result,
+including prior failures. Compare real multi-turn execution for both versions
+as well as single-response routing. A historical 119/120 result remains a
+failure record, never proof that a later candidate passes. Report system size
+and complete provider input separately, including cache-read tokens.
+This lane is strict and stochastic: a malformed provider function-call payload
+remains a failure even when other repetitions and production execution pass.
+Passing deterministic checks or isolated execution must not be described as
+passing the full paid lane. Prompt reduction does not guarantee provider syntax.
 
 # Boundaries
 
@@ -82,3 +131,6 @@ loader, provider checkpoint rewrite or parallel waiting lifecycle.
 - `redeven:internal/ai/floret_ask_user_integration_test.go` - A fresh supplied-prompt analysis completes without tools and accepts follow-up input.
 - `redeven:internal/ai/thread_permission_admission_test.go` - Actual provider requests match live permission surfaces.
 - `redeven:internal/ai/tools/orchestrator_test.go` - Timeout and denial advice cannot authorize unsafe replay or bypass.
+- `redeven:internal/ai/prompt_qualification_test.go` - Size budget, schema-valid fixtures and real-provider behavior comparison.
+- `redeven:internal/ai/prompt_runtime_qualification_test.go` - Isolated real execution, terminal continuation, restart, structured answer and readonly checks.
+- `redeven:scripts/check_flower_prompt_deepseek.sh` - Explicit paid qualification with unchanged-source and complete-report checks.

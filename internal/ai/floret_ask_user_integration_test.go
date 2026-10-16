@@ -133,11 +133,9 @@ func TestRedevenHostedRunAskUserWaitsAndResumesWithoutAuthorityCorruption(t *tes
 		t.Fatal("provider request omitted System Prompt instructions")
 	}
 	for _, instruction := range []string{
-		"Keep each choice label as a concise option name or decision summary",
-		"put examples, supporting context, real differences, or consequences in the optional `description` field instead of appending them to the label",
-		"Do not invent details, repeat the label, or fill space",
-		"a self-explanatory choice may omit `description`",
-		"choice labels, descriptions, and input placeholders in the user's conversation language",
+		"short headers/labels and nonredundant descriptions",
+		"omit obvious explanations",
+		"Use the user's language",
 	} {
 		if !strings.Contains(systemContent, instruction) {
 			t.Errorf("provider System Prompt omitted Ask User copy guidance: %q", instruction)
