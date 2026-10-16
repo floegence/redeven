@@ -1,5 +1,10 @@
 # Redeven OKF Update Log
 
+## 2026-10-15: Flower outline visibility
+
+- Keep the shared white-petal Flower mark readable on light surfaces with opaque slate outlines and stronger strokes in compact slots.
+- Replace whole-bloom progress rotation with [center-only breathing](ui/flower-output-progress.md#progress-symbol), preserving reduced-motion behavior and existing status semantics.
+
 ## 2026-10-15: Context distribution card
 
 - Present [context capacity](ai/model-context-usage-and-compaction.md) as measured input, output reserve and free space, with explicit estimates.
