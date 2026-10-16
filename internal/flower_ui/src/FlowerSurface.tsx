@@ -36,7 +36,7 @@ import { Dynamic } from 'solid-js/web';
 import { For, Match, Show, Suspense, Switch, batch, createEffect, createMemo, createResource, createSignal, lazy, on, onCleanup, onMount, untrack } from 'solid-js';
 import { cn, useMobileLayout, createAdaptiveSidebar, createRetainedContent } from '@floegence/floe-webapp-core';
 import type { UIFirstSelectionEvent } from '@floegence/floe-webapp-core';
-import { AlertCircle, AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Copy, ExternalLink, FileText, Globe, GripVertical, Link, Menu, MoreHorizontal, MonitorPointer, Paperclip, Pencil, Plus, Refresh, Search, Send, Settings, Shield, Terminal, Trash, XCircle, Zap } from '@floegence/floe-webapp-core/icons';
+import { AlertCircle, AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Copy, ExternalLink, FileText, Globe, GripVertical, Link, Menu, MoreHorizontal, MonitorPointer, Paperclip, Pencil, Plus, Refresh, Search, Send, Settings, Shield, Terminal, Trash, X, XCircle, Zap } from '@floegence/floe-webapp-core/icons';
 import { createInputHistoryController, MarkdownMedia, type InputHistoryEntry, type MarkdownMediaProps } from '@floegence/floe-webapp-core/chat';
 import { flowerInputHistoryEntries } from './composer/flowerInputHistory';
 
@@ -1024,7 +1024,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (!pin || (pin.settings_revision !== undefined && thread.settings_revision >= pin.settings_revision)) return thread;
     return { ...thread, pinned_at_ms: pin.pinned_at_ms, pin_rank: pin.pin_rank };
   };
-  const [renameThreadID, setRenameThreadID] = createSignal('');
+  const [renameTarget, setRenameTarget] = createSignal<Readonly<{ threadID: string; placement: 'dialog' | 'header' }> | null>(null);
+  const renameThreadID = () => renameTarget()?.threadID ?? '';
+  const headerTitleEditing = () => renameTarget()?.placement === 'header' && renameThreadID() === selectedThreadID();
   const [renameDraft, setRenameDraft] = createSignal('');
   const [renameError, setRenameError] = createSignal('');
   const [renameSaving, setRenameSaving] = createSignal(false);
@@ -1145,6 +1147,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let renameDialogRef: HTMLDivElement | undefined;
   let renameInputRef: HTMLInputElement | undefined;
   let renameRestoreRef: HTMLElement | undefined;
+  let headerRenameTriggerRef: HTMLButtonElement | undefined;
   let threadSwitcherTriggerRef: HTMLButtonElement | undefined;
   let threadSwitcherRef: HTMLDivElement | undefined;
   let selectedThreadTailRevealFrame = 0;
@@ -4027,25 +4030,42 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     notifySuccess(copy().threadList.copied(label));
   };
 
-  const openRenameDialog = (threadID: string, title: string, restore?: HTMLElement) => {
-    setRenameThreadID(trimString(threadID));
+  const openRename = (threadID: string, title: string, restore?: HTMLElement, placement: 'dialog' | 'header' = 'dialog') => {
+    if (renameSaving()) return;
     setRenameDraft(title);
     setRenameError('');
     renameRestoreRef = restore;
+    setRenameTarget({ threadID: trimString(threadID), placement });
     queueMicrotask(() => {
       renameInputRef?.focus();
       renameInputRef?.select();
     });
   };
 
-  const closeRenameDialog = () => {
-    if (renameSaving()) return;
-    setRenameThreadID('');
+  const finishRename = (target: ReturnType<typeof renameTarget>, restoreFocus: boolean) => {
+    if (!target || renameTarget() !== target) return;
+    const restore = target.placement === 'header' ? headerRenameTriggerRef : renameRestoreRef;
+    const shouldRestoreFocus = restoreFocus && (target.placement !== 'header'
+      || Boolean(headerRenameTriggerRef?.parentElement?.contains(document.activeElement)));
+    setRenameTarget(null);
     setRenameDraft('');
     setRenameError('');
-    renameRestoreRef?.focus();
+    setRenameSaving(false);
     renameRestoreRef = undefined;
+    if (shouldRestoreFocus) queueMicrotask(() => restore?.focus({ preventScroll: true }));
   };
+
+  const closeRename = () => {
+    if (!renameSaving()) finishRename(renameTarget(), true);
+  };
+
+  createEffect(() => {
+    const target = renameTarget();
+    if (target?.placement === 'header' && (target.threadID !== selectedThreadID()
+      || presentation() !== 'full' || visiblePanel() !== 'chat' || !props.adapter.renameThread)) {
+      finishRename(target, false);
+    }
+  });
 
   const openDeleteDialog = (item: FlowerThreadListItem, restore?: HTMLElement) => {
     setDeleteTarget({ item, restore });
@@ -4060,23 +4080,26 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     restoreThreadMenuFocus(restore);
   };
 
-  const submitRename = async () => {
-    const threadID = renameThreadID();
-    if (!threadID || !props.adapter.renameThread || renameUnchanged()) return;
+  const submitRename = async (restoreFocus = true) => {
+    const target = renameTarget();
+    if (!target || !props.adapter.renameThread || renameSaving()) return;
+    if (renameUnchanged()) {
+      if (target.placement === 'header') finishRename(target, restoreFocus);
+      return;
+    }
+    if (target.placement === 'header' && !trimString(renameDraft())) return;
     setRenameSaving(true);
     setRenameError('');
     try {
       const requestEpoch = liveTransport.connectionEpoch();
-      const live = await props.adapter.renameThread(threadID, renameDraft());
+      const live = await props.adapter.renameThread(target.threadID, renameDraft());
       receiveThreadView(live, 'user_action', requestEpoch);
-      setRenameThreadID('');
-      setRenameDraft('');
-      renameRestoreRef?.focus();
-      renameRestoreRef = undefined;
+      finishRename(target, restoreFocus);
     } catch (error) {
-      setRenameError(getErrorMessage(error));
+      if (renameTarget() === target) setRenameError(getErrorMessage(error));
+      else notifyThreadActionError(getErrorMessage(error));
     } finally {
-      setRenameSaving(false);
+      if (renameTarget() === target) setRenameSaving(false);
     }
   };
 
@@ -4213,7 +4236,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           return;
         case 'rename':
           if (!props.adapter.renameThread) return;
-          openRenameDialog(item.thread_id, item.title, restore);
+          openRename(item.thread_id, item.title, restore);
           return;
         case 'delete':
           if (!props.adapter.deleteThread) return;
@@ -4259,6 +4282,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     threadID: string,
     revalidateWarmDetail = false,
     claimedSequence?: number,
+    focusOwner = typeof document === 'undefined' ? null : document.activeElement,
   ) => {
     const tid = trimString(threadID);
     if (!tid || retiredThreadIDs.has(tid)) return;
@@ -4268,7 +4292,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     ) {
       return;
     }
-    const focusOwner = typeof document === 'undefined' ? null : document.activeElement;
     setThreadNavigationOpen(false);
     cancelDeferredThreadSelection();
     closeSubagentOverlays();
@@ -4321,11 +4344,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       cancelThreadSelectionTransaction();
     }
   };
-  const scheduleThreadSelectionAfterPaint = (threadID: string, claimedSequence: number) => {
+  const scheduleThreadSelectionAfterPaint = (threadID: string, claimedSequence: number, focusOwner: Element | null) => {
     const tid = trimString(threadID);
     if (!tid) return;
     if (typeof window === 'undefined') {
-      void loadAndSelectThread(tid, false, claimedSequence);
+      void loadAndSelectThread(tid, false, claimedSequence, focusOwner);
       return;
     }
     cancelDeferredThreadSelection();
@@ -4340,7 +4363,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           emitThreadSelectionEvent(transaction, 'intent_presented');
           emitThreadSelectionEvent(transaction, 'commit_started');
         }
-        void loadAndSelectThread(tid, false, claimedSequence);
+        void loadAndSelectThread(tid, false, claimedSequence, focusOwner);
         if (transaction?.value === tid && threadSelectionTransaction === transaction) {
           emitThreadSelectionEvent(transaction, 'committed');
         }
@@ -6021,6 +6044,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   const selectThread = (threadID: string) => {
+    const focusOwner = typeof document === 'undefined' ? null : document.activeElement;
     const requestID = trimString(props.focusThreadRequest?.request_id);
     if (requestID) props.onFocusThreadRequestConsumed?.(requestID);
     const tid = trimString(threadID);
@@ -6047,7 +6071,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     transcriptScroll.startFollowing();
     closeSubagentOverlays();
     setSelectedThreadID(tid);
-    scheduleThreadSelectionAfterPaint(tid, claimedSequence);
+    scheduleThreadSelectionAfterPaint(tid, claimedSequence, focusOwner);
   };
 
   let embeddedSessionKey = '';
@@ -12584,7 +12608,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         aria-hidden={companionCollapsed() ? 'true' : undefined}
         inert={companionCollapsed()}
       >
-        <div class="flower-chat-header-row">
+        <div class="flower-chat-header-row" data-title-editing={headerTitleEditing() ? 'true' : undefined}>
           <Show
             when={presentation() === 'companion'}
             fallback={(
@@ -12605,23 +12629,56 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   <span aria-hidden="true"><Menu class="h-5 w-5" /></span>
                 </button>
                 <FlowerIcon class="h-5 w-5 text-primary" />
-                <div class="flower-chat-header-identity min-w-0">
-                  <div class="flower-chat-header-title truncate" title={selectedThreadTitle()}>{selectedThreadTitle()}</div>
+                <div class="flower-chat-header-identity min-w-0" data-editing={headerTitleEditing() ? 'true' : undefined}
+                  onFocusOut={(event) => {
+                    if (!headerTitleEditing() || renameSaving() || event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+                    if (!trimString(renameDraft())) finishRename(renameTarget(), false);
+                    else void submitRename(false);
+                  }}
+                >
+                  <Show when={headerTitleEditing()} fallback={<div class="flower-chat-header-title truncate" title={selectedThreadTitle()}>{selectedThreadTitle()}</div>}>
+                    <div class="flower-chat-header-title-field" aria-busy={renameSaving() ? 'true' : undefined}>
+                      <input ref={renameInputRef} class="flower-chat-header-title-input"
+                        aria-label={copy().threadList.renameTitle}
+                        value={renameDraft()} readOnly={renameSaving()}
+                        aria-invalid={renameError() ? 'true' : undefined}
+                        aria-describedby={renameError() ? 'flower-header-rename-error' : undefined}
+                        onInput={(event) => { setRenameDraft(event.currentTarget.value); setRenameError(''); }}
+                        onKeyDown={(event) => {
+                          if (event.isComposing) return;
+                          if (event.key === 'Enter') { event.preventDefault(); event.stopPropagation(); void submitRename(); }
+                          if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closeRename(); }
+                        }}
+                      />
+                      <Show when={renameError()}>{message => <p id="flower-header-rename-error" class="flower-chat-header-title-error" role="alert">{message()}</p>}</Show>
+                    </div>
+                  </Show>
                   <Show when={props.adapter.renameThread && selectedThreadID()}>
                     <button
+                      ref={headerRenameTriggerRef}
                       type="button"
                       class="flower-chat-header-rename flower-header-icon-button"
-                      aria-label={copy().threadList.renameTitle}
-                      title={copy().threadList.renameTitle}
-                      aria-haspopup="dialog"
-                      onClick={(event) => openRenameDialog(
+                      aria-label={headerTitleEditing() ? (renameSaving() ? copy().threadList.saving : copy().threadList.save) : copy().threadList.renameTitle}
+                      title={headerTitleEditing() ? copy().threadList.save : copy().threadList.renameTitle}
+                      aria-disabled={headerTitleEditing() && (renameSaving() || !trimString(renameDraft())) ? 'true' : undefined}
+                      onClick={(event) => headerTitleEditing() ? void submitRename() : openRename(
                         selectedThreadID(),
                         canonicalFlowerThreadSnapshotTitle(selectedThreadSummary()) || canonicalFlowerThreadSnapshotTitle(selectedThread()),
                         event.currentTarget,
+                        'header',
                       )}
                     >
-                      <Pencil class="h-3.5 w-3.5" aria-hidden="true" />
+                      <Show when={headerTitleEditing()} fallback={<Pencil class="h-3.5 w-3.5" aria-hidden="true" />}>
+                        <Show when={renameSaving()} fallback={<Check class="h-3.5 w-3.5" aria-hidden="true" />}>
+                          <Refresh class="h-3.5 w-3.5 motion-safe:animate-spin" aria-hidden="true" />
+                        </Show>
+                      </Show>
                     </button>
+                    <Show when={headerTitleEditing()}>
+                      <button type="button" class="flower-chat-header-rename-cancel flower-header-icon-button"
+                        aria-label={copy().threadList.cancel} title={copy().threadList.cancel}
+                        disabled={renameSaving()} onClick={closeRename}><X class="h-3.5 w-3.5" aria-hidden="true" /></button>
+                    </Show>
                   </Show>
                 </div>
               </div>
@@ -12975,8 +13032,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           </Show>
         </div>
       </ConfirmDialog>
-      <Show when={renameThreadID()}>
-        <div class="flower-rename-backdrop" role="presentation" onMouseDown={closeRenameDialog}>
+      <Show when={renameTarget()?.placement === 'dialog'}>
+        <div class="flower-rename-backdrop" role="presentation" onMouseDown={closeRename}>
           <div
             ref={renameDialogRef}
             class="flower-rename-dialog"
@@ -12987,7 +13044,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             onKeyDown={(event) => {
               if (event.key === 'Escape') {
                 event.preventDefault();
-                closeRenameDialog();
+                closeRename();
                 return;
               }
               if (event.key !== 'Tab') return;
@@ -13033,7 +13090,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               {(message) => <p id="flower-thread-rename-error" class="flower-rename-error" role="alert">{message()}</p>}
             </Show>
             <div class="flower-rename-actions">
-              <button type="button" class="flower-rename-secondary" disabled={renameSaving()} onClick={closeRenameDialog}>{copy().threadList.cancel}</button>
+              <button type="button" class="flower-rename-secondary" disabled={renameSaving()} onClick={closeRename}>{copy().threadList.cancel}</button>
               <button
                 type="button"
                 class="flower-rename-primary"

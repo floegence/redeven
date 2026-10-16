@@ -32,8 +32,8 @@ describe('Flower canonical title synchronization', () => {
     publishTitle.resolve();
     await waitFor(() => title(runtime) === 'Hi');
     runtime.querySelector<HTMLButtonElement>('.flower-chat-header-rename')!.click();
-    expect(runtime.querySelector<HTMLInputElement>('.flower-rename-input')!.value).toBe('Hi');
-    runtime.querySelector<HTMLButtonElement>('.flower-rename-secondary')!.click();
+    expect(runtime.querySelector<HTMLInputElement>('.flower-chat-header-title-input')!.value).toBe('Hi');
+    runtime.querySelector<HTMLButtonElement>('.flower-chat-header-rename-cancel')!.click();
     publishBody.resolve();
     await waitFor(() => runtime.textContent?.includes('Hello from Flower.') ?? false);
     detail.resolve(liveBootstrap(initial, 1));

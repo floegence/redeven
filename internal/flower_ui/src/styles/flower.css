@@ -1202,6 +1202,58 @@
   gap: 0.375rem;
 }
 
+.flower-chat-header-identity[data-editing="true"] {
+  flex: 1 1 0;
+  max-width: 32rem;
+}
+
+.flower-chat-header-title-field {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.flower-chat-header-title-input {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  height: 1.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  padding: 0 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--foreground);
+  background: var(--background);
+}
+
+.flower-chat-header-title-error {
+  margin: 0.25rem 0 0;
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
+  color: var(--redeven-status-error-foreground);
+}
+
+.flower-chat-header-rename:disabled,
+.flower-chat-header-rename[aria-disabled="true"],
+.flower-chat-header-rename-cancel:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+@container flower-chat (max-width: 36rem) {
+  .flower-chat-header-row[data-title-editing="true"] {
+    flex-wrap: wrap;
+  }
+
+  .flower-chat-header-row[data-title-editing="true"] > :first-child {
+    flex-basis: 100%;
+  }
+
+  .flower-chat-header-row[data-title-editing="true"] .flower-chat-header-actions {
+    flex: 1 1 100%;
+  }
+}
+
 .flower-working-directory-control {
   display: inline-flex;
   min-width: 0;
@@ -11688,6 +11740,9 @@ button.flower-attachment-preview-trigger:disabled {
     min-height: 44px;
   }
 
+  .flower-chat-header-title-input { min-height: 44px; }
+
+  .flower-chat-header-title-input,
   .flower-composer textarea,
   .flower-composer input[type='password'],
   .flower-reasoning-menu-budget { font-size: 1rem; }

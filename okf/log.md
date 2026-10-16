@@ -1,5 +1,10 @@
 # Redeven OKF Update Log
 
+## 2026-10-15: Inline conversation title editing
+
+- Edit the [header title](ui/flower-thread-sidebar.md#rename-from-the-conversation-header) in place with save/cancel controls, Enter/Escape, blur saving and input-method protection.
+- Share the existing sidebar rename owner and canonical save path; retain failed drafts and isolate pending results when conversations change.
+
 ## 2026-10-15: Compact screenshot tool previews
 
 - Show computer and browser screenshots as [compact thumbnails](ai/computer-use-media.md) in expanded Activity details, without the decorative media canvas.
@@ -8,6 +13,7 @@
 ## 2026-10-15 — Used context composition
 
 - Document request-scoped used-input estimates, retained tool output, native-total authority and compact localized presentation in [managed context](ai/flower-managed-model-context.md).
+
 
 ## 2026-10-15: Distinct subagent identities and compact dropdown
 
@@ -18,6 +24,7 @@
 
 - Describe streamed [edit preparation](ui/flower-output-progress.md#edit-arguments) as Preparing changes across Desktop and Env App locales.
 - Explain provisional line counts in user terms while preserving approval, execution and confirmed-result boundaries.
+
 
 ## 2026-10-15: Flower outline visibility
 
