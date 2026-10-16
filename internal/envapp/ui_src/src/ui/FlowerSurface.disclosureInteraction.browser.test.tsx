@@ -241,7 +241,7 @@ describe('Activity disclosure interaction', () => {
     (runtime.querySelector(`[data-thread-id="${parent.thread_id}"] button`) as HTMLButtonElement).click();
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-activity-item-id="write"]')));
     live.push({ schema_version: 1, kind: 'thread.batch', thread_id: parent.thread_id, subagents: [child] });
-    await waitFor(() => runtime.querySelector('.flower-header-icon-badge')?.textContent === '1');
+    await waitFor(() => runtime.querySelector('[data-flower-subagent-count]')?.getAttribute('data-flower-subagent-count') === '1');
     runtime.querySelector<HTMLButtonElement>('button[aria-controls="flower-subagents-dropdown"]')!.click();
     await waitFor(() => Boolean(document.querySelector('[data-flower-subagent-row="0"]')));
     document.querySelector<HTMLButtonElement>('[data-flower-subagent-row="0"]')!.click();

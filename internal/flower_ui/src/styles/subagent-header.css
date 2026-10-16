@@ -1,0 +1,115 @@
+.flower-header-icon-button.flower-subagent-header-button {
+  width: auto;
+  min-width: 2rem;
+  padding: 0 0.25rem;
+  border-radius: 0.5rem;
+}
+
+.flower-subagent-header-stack {
+  --flower-stack-size: 1.625rem;
+  --flower-stack-step: 0.8125rem;
+  position: relative;
+  display: inline-block;
+  width: calc(var(--flower-stack-size) + (var(--flower-stack-count) - 1) * var(--flower-stack-step));
+  height: var(--flower-stack-size);
+  flex: 0 0 auto;
+  isolation: isolate;
+}
+
+.flower-subagent-header-stack[data-overflow='true'] {
+  width: calc(var(--flower-stack-size) + var(--flower-stack-overflow-width) + 2 * var(--flower-stack-step) + 0.1875rem);
+}
+
+.flower-subagent-header-portrait {
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: var(--flower-stack-size);
+  height: var(--flower-stack-size);
+  z-index: calc(var(--flower-stack-slot) + 1);
+  transform: translateX(calc(var(--flower-stack-slot) * var(--flower-stack-step)));
+}
+
+.flower-subagent-header-portrait .flower-subagent-avatar {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  border: 2px solid var(--flower-chat-surface, var(--background));
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--foreground) 10%, transparent);
+  transition: filter 240ms ease, opacity 240ms ease;
+}
+
+.flower-subagent-header-stack[data-flower-subagent-stack='running'] .flower-subagent-header-portrait[data-front='true']::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 0.4375rem;
+  height: 0.4375rem;
+  border-radius: 50%;
+  background: var(--redeven-status-success);
+  box-shadow: 0 0 0 2px var(--flower-chat-surface, var(--background));
+}
+
+.flower-subagent-header-overflow {
+  position: absolute;
+  top: 0;
+  left: calc(var(--flower-stack-size) + 2 * var(--flower-stack-step) + 0.1875rem);
+  display: flex;
+  width: var(--flower-stack-overflow-width);
+  height: var(--flower-stack-size);
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--muted);
+  color: var(--foreground);
+  font-size: 0.625rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.flower-subagent-header-stack[data-flower-subagent-stack='settled'] .flower-subagent-avatar {
+  filter: grayscale(1);
+  opacity: 0.58;
+}
+
+.flower-subagent-header-stack[data-flower-subagent-stack='settled'] .flower-subagent-header-overflow {
+  color: var(--muted-foreground);
+  opacity: 0.65;
+}
+
+.flower-subagent-header-stack[data-moving='true'] .flower-subagent-header-portrait {
+  animation: flower-subagent-stack-advance 720ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.flower-subagent-header-stack[data-moving='true'] .flower-subagent-header-portrait[data-departing='true'] {
+  animation-name: flower-subagent-stack-recede;
+}
+
+.flower-subagent-header-stack[data-moving='true'][data-replacing='true'] .flower-subagent-header-portrait[data-departing='true'] {
+  animation-name: flower-subagent-stack-replace;
+}
+
+@keyframes flower-subagent-stack-advance {
+  to { transform: translateX(calc((var(--flower-stack-slot) + 1) * var(--flower-stack-step))); z-index: calc(var(--flower-stack-slot) + 2); }
+}
+
+@keyframes flower-subagent-stack-recede {
+  0% { transform: translateX(calc(var(--flower-stack-slot) * var(--flower-stack-step))); z-index: 4; }
+  28% { transform: translate(calc(var(--flower-stack-slot) * var(--flower-stack-step) + 0.1875rem), -0.25rem) scale(0.95); z-index: 4; }
+  72% { transform: translate(-0.1875rem, -0.25rem) scale(0.93); z-index: 0; }
+  100% { transform: translateX(0); z-index: 0; }
+}
+
+@keyframes flower-subagent-stack-replace {
+  0% { transform: translateX(calc(var(--flower-stack-slot) * var(--flower-stack-step))); z-index: 4; opacity: 1; }
+  28% { transform: translate(calc(var(--flower-stack-slot) * var(--flower-stack-step) + 0.1875rem), -0.25rem) scale(0.95); z-index: 4; opacity: 1; }
+  46%, 54% { transform: translate(-0.1875rem, -0.25rem) scale(0.93); z-index: 0; opacity: 0; }
+  100% { transform: translateX(0); z-index: 0; opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flower-subagent-header-stack .flower-subagent-header-portrait { animation: none !important; }
+  .flower-subagent-header-stack .flower-subagent-avatar { transition: none; }
+}

@@ -164,20 +164,16 @@ describe('Flower activity status presentation', () => {
     expect(terminalContentRule).toContain('padding-left: 0');
   });
 
-  it('animates only the subagent badge ring when a subagent is running', () => {
-    const css = flowerStyles();
-    const badgeRule = cssRule(css, '.flower-header-icon-badge');
-    const runningRule = cssRule(css, ".flower-header-icon-badge[data-running='true']");
-    const ringRule = cssRule(css, ".flower-header-icon-badge[data-running='true']::after");
-
-    expect(badgeRule).not.toContain('animation:');
-    expect(runningRule).toContain('overflow: visible');
-    expect(ringRule).toContain('border-top-color');
-    expect(ringRule).toContain('animation: flower-subagent-badge-ring-spin 920ms linear infinite');
-    expect(css).toContain('@keyframes flower-subagent-badge-ring-spin');
-    expect(css).toContain(".flower-header-icon-badge[data-running='true']::after {");
-    expect(css).toContain("@media (prefers-reduced-motion: reduce)");
-    expect(css).toContain(".flower-header-icon-badge[data-running='true']::after {\n    animation: none !important;");
+  it('replaces the retired badge ring with bounded circular portraits', () => {
+    const css = fs.readFileSync(path.join(repoRoot, 'internal/flower_ui/src/styles/subagent-header.css'), 'utf8');
+    expect(cssRule(css, '.flower-subagent-header-stack')).toContain('isolation: isolate');
+    expect(cssRule(css, '.flower-subagent-header-portrait .flower-subagent-avatar')).toContain('border-radius: 50%');
+    expect(css).toContain('filter: grayscale(1)');
+    expect(css).toContain('@keyframes flower-subagent-stack-recede');
+    expect(css).toContain('@keyframes flower-subagent-stack-replace');
+    expect(css).toContain('.flower-subagent-header-stack .flower-subagent-header-portrait { animation: none !important; }');
+    expect(flowerStyles()).not.toContain('flower-subagent-badge-ring-spin');
+    expect(flowerStyles()).not.toContain('.flower-header-icon-badge');
   });
 
   it('uses named layers and dedicated ledger tokens for subagent overlays', () => {

@@ -82,6 +82,7 @@ import {
 import { FlowerContextCompactionDivider } from './chat/FlowerContextCompactionDivider';
 import { compactionDividerDetail } from './chat/flowerContextPresentation';
 import { SubagentAvatar } from './SubagentAvatar';
+import { SubagentAvatarStack } from './SubagentAvatarStack';
 import { FlowerThinkingDisclosure } from './FlowerThinkingDisclosure';
 import { FlowerTurnTimeline } from './FlowerTurnTimeline';
 import { createFlowerTurnDisclosureStore } from './flowerTurnDisclosure';
@@ -6449,7 +6450,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   );
   const selectedActiveSubagentItems = createMemo(() => selectedSubagentItems().filter((item) => subagentStatusIsActive(item.status)));
   const selectedSettledSubagentItems = createMemo(() => selectedSubagentItems().filter((item) => !subagentStatusIsActive(item.status)));
-  const selectedRunningSubagentCount = createMemo(() => selectedSubagentItems().filter((item) => item.status === 'running').length);
+  const selectedRunningSubagentItems = createMemo(() => selectedSubagentItems().filter((item) => item.status === 'running'));
+  const subagentHeaderItems = createMemo(() => {
+    const running = selectedRunningSubagentItems();
+    const active = selectedActiveSubagentItems();
+    return [...(running.length ? running : active.length ? active : selectedSubagentItems())].sort((left, right) => (
+      left.createdAtMs - right.createdAtMs || left.threadID.localeCompare(right.threadID)
+    ));
+  });
+  const subagentHeaderState = () => selectedRunningSubagentItems().length ? 'running' as const
+    : selectedActiveSubagentItems().length ? 'active' as const : 'settled' as const;
   // Navigation follows immutable creation identity, not the dropdown's live priority.
   const subagentSwitcherItems = createMemo(() => [...selectedSubagentItems()].sort((left, right) => (
     left.createdAtMs - right.createdAtMs || left.threadID.localeCompare(right.threadID)
@@ -10876,11 +10886,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         return <Clock class="flower-subagent-status-indicator flower-subagent-status-indicator-unknown h-3.5 w-3.5" aria-hidden="true" />;
     }
   };
-  const subagentBadgeLabel = () => subagentsCopy().activity.agentsCount(String(selectedSubagentItems().length));
-  const subagentBadgeText = () => {
-    const count = selectedSubagentItems().length;
-    return count > 99 ? '99+' : String(count);
-  };
   const subagentRowTitle = (item: FlowerSubagentPanelItem): string => (
     trimString(item.displayName) || trimString(item.title) || trimString(item.taskName) || subagentsCopy().typeLabels.unknown
   );
@@ -12532,8 +12537,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const computerHeaderLabel = () => isBrowserInstallInput(selectedInputRequest()) || isBrowserConnectionInput(selectedInputRequest())
     ? selectedComputerAssistance().title
     : `${computerStageHistorical() ? copy().chat.computerViewLastScreenshot : copy().chat.computerStageRestore}. ${copy().chat.computerStageStatus[computerStageSessionState()]}`;
-  const subagentHeaderLabel = () => selectedSubagentItems().length > 0
-    ? `${subagentsCopy().openLabel} · ${subagentBadgeLabel()}` : subagentsCopy().openLabel;
+  const subagentHeaderLabel = () => {
+    const items = selectedSubagentItems();
+    if (!items.length) return subagentsCopy().openLabel;
+    const statuses = [...new Set(items.map(item => item.status))];
+    return `${subagentsCopy().openLabel} · ${statuses.map(status => (
+      `${subagentStatusLabel(status)}: ${subagentsCopy().activity.agentsCount(String(items.filter(item => item.status === status).length))}`
+    )).join(' · ')}`;
+  };
   const headerActionDefinitions: readonly (Omit<FlowerConversationAction, 'label' | 'disabled'> & {
     visible: Accessor<boolean>;
     label: Accessor<string>;
@@ -12599,7 +12610,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               <button
                 ref={element => { subagentTriggerRef = element; }}
                 type="button"
-                class={cn('flower-header-icon-button', (subagentDropdownOpen() || activeSubagentID()) && 'flower-header-icon-button-active')}
+                class={cn('flower-header-icon-button', selectedSubagentItems().length > 0 && 'flower-subagent-header-button', (subagentDropdownOpen() || activeSubagentID()) && 'flower-header-icon-button-active')}
+                data-flower-subagent-count={selectedSubagentItems().length || undefined}
                 aria-label={action.label()}
                 title={action.label()}
                 aria-haspopup="dialog"
@@ -12607,15 +12619,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 aria-controls="flower-subagents-dropdown"
                 onClick={event => action.run(event.currentTarget)}
               >
-                {action.icon()}
-                <Show when={selectedSubagentItems().length > 0}>
-                  <span
-                    class="flower-header-icon-badge"
-                    data-running={livePresentationConfirmed() && selectedRunningSubagentCount() > 0 && !subagentDropdownOpen() ? 'true' : 'false'}
-                    aria-hidden="true"
-                  >
-                    {subagentBadgeText()}
-                  </span>
+                <Show when={selectedSubagentItems().length > 0} fallback={action.icon()}>
+                  <SubagentAvatarStack threadIDs={subagentHeaderItems().map(item => item.threadID)} state={subagentHeaderState()}
+                    animate={livePresentationConfirmed() && !subagentDropdownOpen()} />
                 </Show>
               </button>
             </div>

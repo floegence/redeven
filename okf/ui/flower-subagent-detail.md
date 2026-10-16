@@ -14,6 +14,8 @@ timestamp: 2026-10-16T00:00:00Z
 
 # Contract
 
+The parent header replaces the numeric robot badge with at most three circular canonical portraits and a separate `+N` remainder. Running children own the stack whenever present; every running identity can rotate into the foreground without increasing the visible portrait count. With no running children, waiting, queued, and unknown children retain static color; only a fully settled inventory becomes gray. The remainder counts the represented pool minus three and disappears at three or fewer. The accessible header label and existing dropdown preserve every lifecycle status, including failures and waiting input. Rotation pauses for keyboard focus, pointer hover, an open dropdown, hidden documents, unconfirmed live presentation, and reduced-motion preferences; timers are local presentation state and are disposed with the component. The existing surface-local floating layer, keyboard activation, Escape dismissal, and detail routing remain authoritative.
+
 Thread-level child membership comes from Floret v7 `ThreadRuntime.List` scoped by canonical parent id. Redeven maps that list into `thread.subagents` for membership and summary presentation only. An empty or updated list never clears the current open child detail. The header dropdown never scans transcript activity, audit rows, or product settings to infer membership.
 
 `FlowerSubagentSummary` contains `parent_thread_id`, canonical child `thread_id`, required `task_name`, task description, agent type, context mode, status, timing, and current control flags. There is no `subagent_id` or `title` compatibility field. Activity payloads route `Open messages` with `thread_id` only. Delegated approval presentation uses `child_thread_id`; it does not duplicate the same identity under another name.
@@ -60,6 +62,9 @@ Canonical steering renders as one stable user message with pending, applied, or 
 Flower must not recover a missing child identity from activity sidecars, a title, a delegated approval alias, a fallback thread id, or local state. It must not humanize an absent task name into a role-based label. Redeven does not read Floret storage tables, persist child membership, poll child detail, rebuild it from detail events, or maintain a second transcript authority; optional child product settings contain presentation and policy only.
 
 # Evidence
+
+- `redeven:internal/flower_ui/src/SubagentAvatarStack.tsx` - Owns bounded portrait rotation and local motion cleanup.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.subagentHeader.browser.test.tsx` - Verifies running overflow, live completion, gray settlement, motion preferences, themes, and narrow header access.
 
 - `redeven:internal/ai/types.go:172` - Backend SubAgent summaries expose canonical thread identity only.
 - `redeven:internal/ai/subagents_floret.go` - Membership and detail read through parent-scoped Floret v7 typed APIs.

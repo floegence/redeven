@@ -237,7 +237,7 @@ it.each(['normal-child', 'failed-child'] as const)('uses the child thread facts 
   root.querySelector<HTMLButtonElement>('[data-thread-id="parent"] button')!.click();
   await waitFor(() => Boolean(root.querySelector('[data-flower-message-id="user"]')));
   live.envelope({ schema_version: 1, kind: 'thread.batch', thread_id: 'parent', subagents: [child] });
-  await waitFor(() => Boolean(root.querySelector('[data-flower-subagent-count="1"], .flower-header-icon-badge')));
+  await waitFor(() => Boolean(root.querySelector('[data-flower-subagent-count="1"]')));
   root.querySelector<HTMLButtonElement>('button[aria-controls="flower-subagents-dropdown"]')!.click();
   await waitFor(() => Boolean(document.querySelector('[data-flower-subagent-row="0"]')));
   document.querySelector<HTMLButtonElement>('[data-flower-subagent-row="0"]')!.click();
