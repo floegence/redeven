@@ -5130,7 +5130,7 @@
         "webActivity": "Búsqueda web",
         "noDetails": "No se proporcionaron detalles",
         "noSources": "No se devolvieron fuentes",
-        "sourcesUnavailable": "No se proporcionaron detalles de las fuentes",
+        "sourcesUnavailable": "Búsqueda completada · Fuentes no guardadas",
         "sourcesTitle": "Fuentes",
         "queryLabel": "Consultas de búsqueda",
         "targetLabel": "Página web",

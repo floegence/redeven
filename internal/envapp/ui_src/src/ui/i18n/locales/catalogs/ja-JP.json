@@ -5130,7 +5130,7 @@
         "webActivity": "ウェブ検索",
         "noDetails": "詳細情報は提供されていません",
         "noSources": "ソースは返されませんでした",
-        "sourcesUnavailable": "ソースの詳細情報は提供されていません",
+        "sourcesUnavailable": "検索完了 · ソース未記録",
         "sourcesTitle": "ソース",
         "queryLabel": "検索語句",
         "targetLabel": "ウェブページ",

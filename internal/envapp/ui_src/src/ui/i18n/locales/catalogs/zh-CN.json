@@ -5130,7 +5130,7 @@
         "webActivity": "网页搜索",
         "noDetails": "未提供详情",
         "noSources": "未返回来源",
-        "sourcesUnavailable": "未提供来源详情",
+        "sourcesUnavailable": "搜索完成 · 未记录来源",
         "sourcesTitle": "来源",
         "queryLabel": "搜索词",
         "targetLabel": "网页",

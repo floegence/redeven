@@ -29,12 +29,15 @@ export async function assertWebSearchSurface() {
  expect(search.textContent).toContain('长沙天气');
  expect(search.textContent).toContain('7 sources');
  (search.querySelector('[data-flower-disclosure-trigger]') as HTMLButtonElement).click();
- await waitFor(()=>search.querySelectorAll('.flower-web-operation li').length===5);
+ await waitFor(()=>search.querySelectorAll('.flower-web-operation li').length===3);
+ const query=search.querySelector<HTMLInputElement>('input[readonly]')!;
+ expect(query.value).toBe('长沙天气');
+ expect(search.querySelectorAll('details')).toHaveLength(0);
  const link=search.querySelector<HTMLAnchorElement>('.flower-web-operation a')!;
  expect(link.href).toBe('https://weather.example/1');
  expect(link.target).toBe('_blank');
  const more=search.querySelector<HTMLButtonElement>('.flower-web-operation-more')!;
- expect(more.textContent).toContain('Show 2 more');
+ expect(more.textContent).toContain('Show 4 more');
  more.click();
  expect(search.querySelectorAll('.flower-web-operation li')).toHaveLength(7);
  expect(search.querySelector('[data-flower-disclosure-trigger]')?.getAttribute('aria-expanded')).toBe('true');

@@ -5130,7 +5130,7 @@
         "webActivity": "Recherche web",
         "noDetails": "Détails non fournis",
         "noSources": "Aucune source renvoyée",
-        "sourcesUnavailable": "Détails des sources non fournis",
+        "sourcesUnavailable": "Recherche terminée · Sources non enregistrées",
         "sourcesTitle": "Sources",
         "queryLabel": "Requêtes de recherche",
         "targetLabel": "Page web",

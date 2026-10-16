@@ -219,7 +219,7 @@
         "webActivity": "網頁搜尋",
         "noDetails": "未提供詳細資訊",
         "noSources": "未傳回來源",
-        "sourcesUnavailable": "未提供來源詳細資訊",
+        "sourcesUnavailable": "搜尋完成 · 未記錄來源",
         "sourcesTitle": "來源",
         "queryLabel": "搜尋詞",
         "targetLabel": "網頁",
