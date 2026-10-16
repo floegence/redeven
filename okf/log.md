@@ -8,6 +8,10 @@
 
 - Adopt Floe v0.86.43 saturated nonpurple colors for [inline code references](ui/flower-citations.md#inline-code-references) across all 26 themes. Keep fills quiet and preserve wrapping, links, native selection and forced colors.
 
+## 2026-10-16: Compact Subagent creation and header
+
+- Move [Subagent work descriptions](ui/flower-subagent-detail.md) into the native floating header, share the overview between avatar switching and metadata, and place single creation capsules directly on compact tool title rows.
+
 ## 2026-10-16: Subagent inline capsules
 
 - Present [Subagent management targets](ui/flower-subagent-detail.md) as direct avatar capsules with current status, stable multi-child window switching, and responsive floating detail geometry. Preserve historical operation outcomes and canonical interaction ownership.

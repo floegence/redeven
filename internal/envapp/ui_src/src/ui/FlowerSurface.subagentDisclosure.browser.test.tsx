@@ -53,6 +53,11 @@ describe('Subagent inline capsules', () => {
     expect(activity.querySelector('[aria-expanded], [data-flower-disclosure-trigger]')).toBeNull();
     const capsule = activity.querySelector<HTMLButtonElement>('[data-flower-subagent-capsule]')!;
     expect(capsule).not.toBeNull();
+    const line = activity.querySelector<HTMLElement>('.flower-activity-inline-line')!;
+    expect(line.contains(capsule)).toBe(true);
+    expect(capsule.getBoundingClientRect().height).toBeLessThanOrEqual(28);
+    expect(activity.getBoundingClientRect().height).toBeLessThanOrEqual(32);
+    expect(activity.querySelector('.flower-activity-inline-title')?.textContent).not.toContain(targets[0]!.task_name);
     expect(capsule.querySelector('[data-flower-subagent-avatar]')).not.toBeNull();
     expect(capsule.getBoundingClientRect().width).toBeLessThan(activity.getBoundingClientRect().width - 50);
     expect(getComputedStyle(capsule).cursor).toBe('pointer');
@@ -65,6 +70,25 @@ describe('Subagent inline capsules', () => {
     await waitFor(() => Boolean(document.querySelector('.flower-subagent-detail-transcript')));
     expect(document.querySelector('.flower-subagent-detail-avatar')?.getAttribute('data-flower-subagent-avatar'))
       .toBe(capsule.querySelector('[data-flower-subagent-avatar]')?.getAttribute('data-flower-subagent-avatar'));
+  });
+
+  it('keeps a long single creation on the title line in a narrow transcript', async () => {
+    await page.viewport(320, 750);
+    const { runtime } = mount([operation('long-spawn', 'spawn', 1, {
+      payload: { action: 'spawn', targets: [targets[7]], requested_count: 1 },
+    })], 8);
+    await waitFor(() => Boolean(row(runtime, 'long-spawn')));
+    const activity = row(runtime, 'long-spawn');
+    const line = activity.querySelector<HTMLElement>('.flower-activity-inline-line')!;
+    const capsule = activity.querySelector<HTMLElement>('[data-flower-subagent-capsule]')!;
+    const title = activity.querySelector<HTMLElement>('.flower-activity-inline-title')!;
+    expect(line.contains(capsule)).toBe(true);
+    expect(capsule.getBoundingClientRect().left).toBeGreaterThan(title.getBoundingClientRect().right);
+    expect(activity.scrollWidth).toBeLessThanOrEqual(activity.clientWidth + 1);
+    expect(capsule.getBoundingClientRect().right).toBeLessThanOrEqual(line.getBoundingClientRect().right);
+    expect(capsule.getAttribute('aria-label')).toContain(targets[7]!.task_name);
+    expect(getComputedStyle(capsule.querySelector('.flower-subagent-capsule-name')!).textOverflow).toBe('ellipsis');
+    await page.screenshot({ path: '__screenshots__/subagent-capsules/single-inline-narrow.png' });
   });
 
   it.each(['spawn', 'list', 'inspect', 'wait', 'send_input', 'close', 'close_all'])('presents a single %s target without a disclosure', async (action) => {
@@ -92,12 +116,22 @@ describe('Subagent inline capsules', () => {
       row(runtime, 'spawn').querySelector<HTMLButtonElement>('[data-flower-subagent-capsule]')!.click();
       await waitFor(() => Boolean(document.querySelector('.flower-subagent-detail-transcript')));
       const window = document.querySelector<HTMLElement>('.flower-subagent-detail-window')!;
+      const geometry = window.closest<HTMLElement>('[data-floe-geometry-surface]')!;
+      await waitFor(() => geometry.dataset.floatingPresence === 'open' && getComputedStyle(geometry).opacity === '1');
       const switcher = document.querySelector<HTMLElement>('[data-flower-subagent-switcher]')!;
       expect(switcher.querySelectorAll('button')).toHaveLength(8);
+      expect(window.querySelector('.flower-subagent-detail-overview')?.contains(switcher)).toBe(true);
+      const header = window.querySelector<HTMLElement>('[data-floe-floating-window-titlebar]')!;
+      expect(header.textContent).toContain(targets[0]!.task_description);
+      expect(header.querySelector('[data-flower-subagent-avatar]')).not.toBeNull();
+      expect(window.querySelector('.flower-subagent-detail-description')).toBeNull();
+      const overview = window.querySelector<HTMLElement>('.flower-subagent-detail-overview')!;
+      expect(overview.getBoundingClientRect().height).toBeLessThan(56);
       expect(switcher.querySelectorAll('[aria-pressed="true"]')).toHaveLength(1);
       const second = switcher.querySelector<HTMLButtonElement>('[data-flower-subagent-switch="capsule-child-1"]')!;
       second.click();
       await waitFor(() => second.getAttribute('aria-pressed') === 'true');
+      expect(header.textContent).toContain(targets[1]!.task_description);
       expect(loadDetail).toHaveBeenLastCalledWith(parentID, 'capsule-child-1');
       expect(document.querySelectorAll('[data-flower-subagent-detail="open"]')).toHaveLength(1);
       expect(document.querySelector('.flower-subagent-detail-window')).toBe(window);
@@ -115,9 +149,9 @@ describe('Subagent inline capsules', () => {
     });
   }
 
-  it('updates live status without rewriting historical outcomes or replacing focused capsules', async () => {
+  it.each(['spawn', 'wait'])('updates live %s status without rewriting historical outcomes or replacing focused capsules', async (action) => {
     let emit: ((value: FlowerLiveStreamEnvelope | null) => void) | undefined;
-    const { runtime, summaries } = mount([operation('wait', 'wait', 2), operation('timeout', 'wait', 1, {
+    const { runtime, summaries } = mount([operation('live', action, action === 'spawn' ? 1 : 2), operation('timeout', 'wait', 1, {
       payload: { action: 'wait', targets: targets.slice(0, 1), requested_count: 1, completed_count: 0, timed_out: true },
     })], 2, {
       async *connectLiveStream({ signal }) {
@@ -133,7 +167,7 @@ describe('Subagent inline capsules', () => {
       },
     });
     await waitFor(() => Boolean(row(runtime, 'timeout')) && Boolean(emit));
-    const activity = row(runtime, 'wait');
+    const activity = row(runtime, 'live');
     const title = activity.querySelector('.flower-activity-inline-title')!.textContent;
     const capsule = activity.querySelector<HTMLButtonElement>('[data-flower-subagent-capsule="capsule-child-0"]')!;
     capsule.focus();

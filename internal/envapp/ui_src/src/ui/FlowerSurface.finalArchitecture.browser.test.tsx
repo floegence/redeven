@@ -361,7 +361,7 @@ describe('Flower final thread cache and workspace transport', () => {
     await waitFor(() => Boolean(document.querySelector('[data-flower-subagent-detail="open"]')));
 
     const detail = document.querySelector('[data-flower-subagent-detail="open"]') as HTMLElement;
-    const detailAvatar = detail.querySelector('[data-flower-subagent-avatar]') as HTMLElement;
+    const detailAvatar = detail.closest('.flower-subagent-detail-window')!.querySelector('[data-flower-subagent-avatar]') as HTMLElement;
     const statusText = detail.querySelector('.flower-subagent-status-text') as HTMLElement;
     const detailWindow = document.querySelector<HTMLElement>('[data-floe-geometry-surface="floating-window"]');
     expect(detailWindow).not.toBeNull();

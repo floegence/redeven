@@ -347,7 +347,7 @@ describe('presentFlowerActivityItem', () => {
     const presentation = presentFlowerActivityItem(operation, {
       subagentSummaries: [subagentSummary({ status: 'completed', created_at_ms: 1000, updated_at_ms: 5000 })],
     });
-    expect(presentation.label).toBe('Created subagent · Review API boundary');
+    expect(presentation.label).toBe('Created subagent');
     const detail = presentation.detailBlocks.find(block => block.kind === 'subagents');
     expect(detail).toMatchObject({ subagents: { items: [{ raw_status: 'running', open_messages: { thread_id: 'child-thread-1' } }] } });
     expect(JSON.stringify(detail)).not.toContain('elapsed_mode');
@@ -694,8 +694,8 @@ describe('presentFlowerActivityItem', () => {
       },
     }));
 
-    expect(presentation.label).toBe('Created subagent · Review API boundary');
-    expect(presentation.title).toEqual({ kind: 'plain', text: 'Created subagent · Review API boundary' });
+    expect(presentation.label).toBe('Created subagent');
+    expect(presentation.title).toEqual({ kind: 'plain', text: 'Created subagent' });
     expect(presentation.meta).toBe('Review the API boundary and identify contract risks.');
     expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`).join('\n')).not.toContain('child-thread-1');
     expect(presentation.detailBlocks[0]).toMatchObject({
@@ -761,7 +761,7 @@ describe('presentFlowerActivityItem', () => {
     expect(failed.label).toBe(failedTitle);
   });
 
-  it('names the exact Subagent in create progress, success, and failure titles', () => {
+  it('retains the task in creation titles while no canonical capsule can open it', () => {
     const present = (status: 'running' | 'success' | 'error') => presentFlowerActivityItem(item({
       tool_name: 'subagents',
       renderer: 'subagent_operation',

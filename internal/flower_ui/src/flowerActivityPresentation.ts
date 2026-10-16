@@ -857,7 +857,7 @@ function subagentActionTitle(
   const statusTitle = (status: string, fallback: string): string => (
     actionTitle && normalizedAction !== 'unknown' ? `${actionTitle} · ${status}` : fallback
   );
-  const singleName = items.length === 1 ? trimString(items[0]?.name) : '';
+  const singleName = items.length === 1 && !items[0]?.open_messages ? trimString(items[0]?.name) : '';
   const withSingleName = (title: string): string => singleName ? `${title} · ${singleName}` : title;
   if (normalizedAction === 'spawn') {
     if (item.status === 'error') return withSingleName(activityCopy.titles.createFailed);

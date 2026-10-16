@@ -275,7 +275,8 @@ export function SubagentDetailWindow(props: SubagentDetailWindowProps): JSX.Elem
     <FloatingWindow
       open={props.open}
       onOpenChange={props.onOpenChange}
-      title={props.title}
+      title={[props.title, props.description].filter(Boolean).join(' · ')}
+      titleIcon={<SubagentAvatar threadID={props.threadID} class="flower-subagent-detail-avatar" />}
       class="flower-subagent-detail-window"
       defaultSize={{ width: 820, height: 680 }}
       minSize={{ width: 480, height: 360 }}
@@ -290,33 +291,27 @@ export function SubagentDetailWindow(props: SubagentDetailWindowProps): JSX.Elem
         data-flower-subagent-status={props.status}
       >
         <header ref={overview} tabIndex={-1} class="flower-subagent-detail-overview">
-          <SubagentAvatar threadID={props.threadID} class="flower-subagent-detail-avatar" />
-          <div class="flower-subagent-detail-overview-copy">
-            {props.contextIndicator}
-            <Show when={props.description}>
-              <p class="flower-subagent-detail-description" title={props.description}>{props.description}</p>
-            </Show>
-            <div class="flower-subagent-detail-overview-meta">
-              <FeedbackIndicator label={props.title} closeLabel={props.copy.feedbackClose} restoreFocus={() => overview} entries={props.detailAvailable && props.error ? [{ id: 'detail', severity: 'error', summary: props.error, actions: <Button size="sm" variant="outline" disabled={props.loading} onClick={props.onRetryLoad}>{props.copy.detailRetry}</Button> }] : []} />
-              <span class={cn('flower-subagent-status-label', `flower-subagent-status-label-${props.status}`)}>
-                {props.statusIndicator}
-                <span class="flower-subagent-status-text">
-                  {props.statusLabel}
-                </span>
+          {props.contextIndicator}
+          {props.agentSwitcher}
+          <div class="flower-subagent-detail-overview-meta">
+            <FeedbackIndicator label={props.title} closeLabel={props.copy.feedbackClose} restoreFocus={() => overview} entries={props.detailAvailable && props.error ? [{ id: 'detail', severity: 'error', summary: props.error, actions: <Button size="sm" variant="outline" disabled={props.loading} onClick={props.onRetryLoad}>{props.copy.detailRetry}</Button> }] : []} />
+            <span class={cn('flower-subagent-status-label', `flower-subagent-status-label-${props.status}`)}>
+              {props.statusIndicator}
+              <span class="flower-subagent-status-text">
+                {props.statusLabel}
               </span>
-              <Show when={props.agentTypeLabel}>
-                <span class="flower-subagent-detail-agent-type">{props.agentTypeLabel}</span>
-              </Show>
-              <Show when={props.elapsedLabel}>
-                <span class="flower-subagent-detail-elapsed">
-                  <Clock class="h-3 w-3" aria-hidden="true" />
-                  <span>{props.elapsedLabel}</span>
-                </span>
-              </Show>
-            </div>
+            </span>
+            <Show when={props.agentTypeLabel}>
+              <span class="flower-subagent-detail-agent-type">{props.agentTypeLabel}</span>
+            </Show>
+            <Show when={props.elapsedLabel}>
+              <span class="flower-subagent-detail-elapsed">
+                <Clock class="h-3 w-3" aria-hidden="true" />
+                <span>{props.elapsedLabel}</span>
+              </span>
+            </Show>
           </div>
         </header>
-        {props.agentSwitcher}
         {props.syncNotice}
         {props.runProgress}
 
