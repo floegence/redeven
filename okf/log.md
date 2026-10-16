@@ -1865,3 +1865,13 @@ lane with frozen original/candidate comparisons and isolated production
 execution for both versions. Separate system savings from complete request
 input, include tool-definition growth, and retain every failed batch. See
 [Flower prompt and rule sources](ai/flower-prompt-and-rule-sources.md).
+
+## 2026-10-16 — Request-scoped context distribution
+
+Adopt published Floret v7.47.1 for unified frozen-request estimates and typed
+source attribution. Keep content shares separate from safety reserves and
+native totals; show token amounts only with a matching vocabulary and complete
+text coverage. Document relative-only, historical and unavailable states in
+[context usage](ai/model-context-usage-and-compaction.md). See the
+[qualification report](operations/flower-context-distribution-qualification.md) for fixed
+samples, real tasks, the corrected compaction oracle and retained failures.

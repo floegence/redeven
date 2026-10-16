@@ -23,7 +23,7 @@ type preparedModelWire struct {
 
 // Freeze the SDK-rendered body once. Estimation and dispatch use these exact
 // bytes, including tool aliases, reasoning controls and restored signatures.
-func newPreparedModelWire(providerType, model string, format flprovider.RequestFormat, params any, execute func(context.Context, []byte, func(StreamEvent)) (ModelGatewayResult, error)) (*preparedModelWire, error) {
+func newPreparedModelWire(providerType, model string, format flprovider.RequestFormat, params any, req ModelGatewayRequest, aliases providerToolAliases, execute func(context.Context, []byte, func(StreamEvent)) (ModelGatewayResult, error)) (*preparedModelWire, error) {
 	raw, err := json.Marshal(params)
 	if err != nil {
 		return nil, err
@@ -37,14 +37,16 @@ func newPreparedModelWire(providerType, model string, format flprovider.RequestF
 	if err != nil {
 		return nil, err
 	}
-	estimate, err := flprovider.EstimateRenderedRequest(flprovider.RenderedRequest{Provider: providerType, Model: model, Format: format, Payload: raw})
+	estimate, err := flprovider.EstimateRenderedRequest(flprovider.RenderedRequest{Provider: providerType, Model: model, Format: format, Payload: raw, Attribution: renderedContextAttribution(format, raw, req, aliases)})
 	if err != nil {
 		return nil, err
 	}
 	return &preparedModelWire{payload: raw, estimate: estimate, fingerprint: fmt.Sprintf("sha256:%x", sha256.Sum256(raw)), execute: execute}, nil
 }
-func (p *preparedModelWire) TokenEstimate() flprovider.TokenEstimate { return p.estimate }
-func (p *preparedModelWire) RenderedPayloadFingerprint() string      { return p.fingerprint }
+func (p *preparedModelWire) TokenEstimate() flprovider.TokenEstimate {
+	return cloneModelTokenEstimate(p.estimate)
+}
+func (p *preparedModelWire) RenderedPayloadFingerprint() string { return p.fingerprint }
 func (p *preparedModelWire) StreamTurn(ctx context.Context, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
 	p.mu.Lock()
 	execute, payload := p.execute, p.payload
@@ -69,4 +71,13 @@ func (p *preparedModelWire) replay(_ context.Context, _ flprovider.Request) (pre
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return &preparedModelWire{payload: bytes.Clone(p.payload), estimate: p.estimate, fingerprint: p.fingerprint, execute: p.execute}, nil
+}
+
+func cloneModelTokenEstimate(value flprovider.TokenEstimate) flprovider.TokenEstimate {
+	if value.Breakdown.Details != nil {
+		details := *value.Breakdown.Details
+		details.Items = append(details.Items[:0:0], details.Items...)
+		value.Breakdown.Details = &details
+	}
+	return value
 }

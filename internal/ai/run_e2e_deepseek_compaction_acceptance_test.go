@@ -236,6 +236,7 @@ func TestE2E_FlowerDeepSeekContextCompaction(t *testing.T) {
 				detail = sendDeepSeekQualificationInput(t, ctx, svc, meta, threadID, "second-recall", RunInput{Text: "Repeat the exact durable marker and rollout port for the ongoing project. Reply with both values only. Do not call tools."})
 				assertOllamaContextRecall(t, detail, marker)
 			}
+			assertQualificationContextAttribution(t, detail)
 			saveCompactionQualificationJSON(t, filepath.Join(directory, "canonical.json"), detail)
 		})
 	}
@@ -307,5 +308,85 @@ func saveCompactionQualificationJSON(t *testing.T, path string, value any) {
 	}
 	if err := os.WriteFile(path, raw, 0600); err != nil {
 		t.Error(err)
+	}
+}
+
+// Validate category provenance independently of native totals. The fixture's
+// collector always supplies these non-secret managed sections.
+func assertQualificationContextAttribution(t *testing.T, detail *FlowerThreadDetail) {
+	t.Helper()
+	usage := detail.Thread.ContextUsage
+	if usage == nil || usage.Confirmed == nil || usage.Confirmed.Breakdown == nil {
+		t.Fatal("confirmed distribution unavailable")
+	}
+	b := usage.Confirmed.Breakdown
+	if (b.Quality != "token_estimate" && b.Quality != "relative_weight") || b.Tokenizer != "deepseek_v4" || b.Details == nil {
+		t.Fatalf("unexpected distribution quality: %+v", b)
+	}
+	keys := map[string]bool{}
+	for _, item := range b.Details.Items {
+		if item.Category == "model_context" && item.Tokens > 0 {
+			keys[item.Key] = true
+		}
+	}
+	for _, key := range []string{"skills", "repository_rules", "execution_environment", "local_time"} {
+		if !keys[key] {
+			t.Errorf("missing canonical context source %s", key)
+		}
+	}
+}
+
+// Read completed qualification state through the public service after an oracle
+// correction. This does not dispatch, retry or replace any recorded model call.
+func TestRecordedDeepSeekContextAttribution(t *testing.T) {
+	root := os.Getenv("REDEVEN_FLOWER_RECORDED_CONTEXT_REPORT_DIR")
+	if root == "" {
+		t.Skip("set a completed synthetic qualification report directory")
+	}
+	provider, model, key := loadPromptQualificationProfile(t)
+	provider.ModelSelection = nil
+	provider.Models = []config.AIProviderModel{model}
+	provider.BaseURL = "https://example.invalid/v1"
+	for _, scenario := range []string{"small_history", "manual", "automatic", "automatic_configured_window"} {
+		t.Run(scenario, func(t *testing.T) {
+			directory := filepath.Join(root, scenario)
+			raw, err := os.ReadFile(filepath.Join(directory, "report.json"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var report struct {
+				ThreadID string `json:"thread_id"`
+				Before   int64  `json:"before_input_tokens"`
+				After    int64  `json:"after_input_tokens"`
+			}
+			if err = json.Unmarshal(raw, &report); err != nil {
+				t.Fatal(err)
+			}
+			state := filepath.Join(t.TempDir(), "state")
+			if err = os.CopyFS(state, os.DirFS(filepath.Join(directory, "state"))); err != nil {
+				t.Fatal(err)
+			}
+			svc, err := NewService(Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: state, AgentHomeDir: filepath.Join(directory, "home"), Shell: "/bin/sh", Config: &config.AIConfig{CurrentModelID: provider.ID + "/" + model.ModelName, Providers: []config.AIProvider{provider}}, ResolveProviderAPIKey: func(id string) (string, bool, error) { return key, id == provider.ID, nil }})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer svc.Close()
+			meta := &session.Meta{EndpointID: "env_compaction_qualification", ChannelID: "channel_compaction", NamespacePublicID: "namespace_compaction", UserPublicID: "user_compaction", UserEmail: "compaction@example.invalid", CanRead: true, CanWrite: true, CanExecute: true, CanAdmin: true}
+			detail, err := svc.GetFlowerThreadDetail(t.Context(), meta, report.ThreadID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if detail.Current.Activity != flruntime.ThreadActivityIdle || detail.Current.LastOutcome == nil || *detail.Current.LastOutcome != flruntime.TurnOutcomeCompleted {
+				t.Fatal("recorded turn did not complete")
+			}
+			assertQualificationContextAttribution(t, detail)
+			if scenario != "small_history" {
+				if report.After <= 0 || report.After >= report.Before {
+					t.Fatal("native input did not decrease")
+				}
+				assertOllamaContextRecall(t, detail, "COMPACTION_FACT_9C47_"+scenario)
+			}
+			t.Logf("recorded scenario=%s quality=%s native_before=%d native_after=%d sources=verified", scenario, detail.Thread.ContextUsage.Confirmed.Breakdown.Quality, report.Before, report.After)
+		})
 	}
 }

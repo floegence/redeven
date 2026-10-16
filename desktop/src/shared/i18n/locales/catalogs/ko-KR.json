@@ -1,11 +1,11 @@
 {
   "interactionContinuity": {
     "accepted": "작업이 접수되었습니다. 실행 세부 정보를 기다리는 중입니다.",
-  "unavailable": "대상 또는 접근 권한이 변경되었습니다. 입력 내용은 유지됩니다. 계속하기 전에 현재 대상을 확인하세요.",
-  "revalidate": "현재 대상 확인",
-  "pending": "작업 접수를 기다리는 중…",
-  "rejected": "작업이 접수되지 않았습니다. 연결을 확인한 후 다시 시도하세요."
-},
+    "unavailable": "대상 또는 접근 권한이 변경되었습니다. 입력 내용은 유지됩니다. 계속하기 전에 현재 대상을 확인하세요.",
+    "revalidate": "현재 대상 확인",
+    "pending": "작업 접수를 기다리는 중…",
+    "rejected": "작업이 접수되지 않았습니다. 연결을 확인한 후 다시 시도하세요."
+  },
   "sessionRestart": {
     "preparing": "다시 시작 준비 중",
     "restarting": "런타임 다시 시작 중",
@@ -528,9 +528,9 @@
       "toolArgumentPreviewTooltip": "이 줄 수는 준비 중인 변경 사항의 미리 보기입니다. 도구 실행이 완료되면 실제 변경 사항이 표시됩니다.",
       "contextIndicatorCurrentContents": "현재 내용",
       "contextIndicatorCurrentContentsHint": "현재 텍스트의 글자 수 비율입니다. token 합계에는 유지된 이전 업데이트도 포함됩니다.",
-      "contextIndicatorTextShare": "현재 자동으로 불러온 컨텍스트의 글자 수 분포",
-      "contextIndicatorComposition": "사용한 컨텍스트",
-      "contextIndicatorCompositionHint": "모델 입력의 추정 토큰 수와 비율입니다. 실측 합계와 다를 수 있습니다.",
+      "contextIndicatorTextShare": "상대 비율",
+      "contextIndicatorComposition": "내용 분포",
+      "contextIndicatorCompositionHint": "이 요청의 추정 내용입니다. 안전 여유는 제외하며 전체 사용량은 모델 제공업체의 측정값을 우선합니다.",
       "contextIndicatorSourceSystemPrompt": "시스템 프롬프트",
       "contextIndicatorSourceSystemTools": "시스템 도구 정의",
       "contextIndicatorSourceMcpTools": "MCP 도구 정의",
@@ -538,7 +538,7 @@
       "contextIndicatorSourceMessages": "메시지",
       "contextIndicatorSourceSkills": "스킬 목록",
       "contextIndicatorSourceRuleFiles": "규칙 파일 목록",
-      "contextIndicatorSourceContextFraming": "컨텍스트 서식",
+      "contextIndicatorSourceContextFraming": "컨텍스트 래퍼",
       "contextIndicatorSourceUnknownTools": "출처가 기록되지 않은 도구",
       "contextIndicatorSourceUnknownContext": "출처가 기록되지 않은 컨텍스트",
       "contextIndicatorSystemTokens": "시스템 지침",
@@ -756,7 +756,12 @@
       "citationUnavailable": "출처를 사용할 수 없음",
       "queuedEdit": "입력창으로 가져오기",
       "queueTakeBackConflict": "이 대기 중인 메시지가 이미 실행을 시작했거나 변경되었습니다. 새로고침한 후 다시 시도하세요.",
-      "queueTakeBackUnknown": "메시지를 입력창으로 가져왔지만 대기열에서 제거되었는지 확인하지 못했습니다. 보내기 전에 대기열을 확인하세요."
+      "queueTakeBackUnknown": "메시지를 입력창으로 가져왔지만 대기열에서 제거되었는지 확인하지 못했습니다. 보내기 전에 대기열을 확인하세요.",
+      "contextIndicatorRelativeHint": "일치하는 어휘표나 완전한 텍스트 입력이 없어 상대 비율만 표시합니다.",
+      "contextIndicatorHistorical": "이전 비율",
+      "contextIndicatorHistoricalHint": "이전 추정값입니다. 토큰 수는 표시하지 않습니다.",
+      "contextIndicatorDistributionUnavailable": "분포 정보 없음",
+      "contextIndicatorProtocolFraming": "프로토콜 형식"
     },
     "threadList": {
       "title": "대화",

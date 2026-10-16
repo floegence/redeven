@@ -1,11 +1,11 @@
 {
   "interactionContinuity": {
     "accepted": "Операция принята. Ожидание сведений о выполнении.",
-  "unavailable": "Цель или права доступа изменились. Введённые данные сохранены. Проверьте текущую цель, прежде чем продолжить.",
-  "revalidate": "Проверить текущую цель",
-  "pending": "Ожидание принятия операции…",
-  "rejected": "Не удалось принять операцию. Проверьте соединение и повторите попытку."
-},
+    "unavailable": "Цель или права доступа изменились. Введённые данные сохранены. Проверьте текущую цель, прежде чем продолжить.",
+    "revalidate": "Проверить текущую цель",
+    "pending": "Ожидание принятия операции…",
+    "rejected": "Не удалось принять операцию. Проверьте соединение и повторите попытку."
+  },
   "sessionRestart": {
     "preparing": "Подготовка к перезапуску",
     "restarting": "Перезапуск среды выполнения",
@@ -535,9 +535,9 @@
       "toolArgumentPreviewTooltip": "Это предварительное количество строк в подготавливаемых изменениях. Фактические изменения отображаются после завершения работы инструмента.",
       "contextIndicatorCurrentContents": "Текущее содержимое",
       "contextIndicatorCurrentContentsHint": "Текущий текст по числу символов; сумма токенов включает сохранённые предыдущие обновления.",
-      "contextIndicatorTextShare": "Текущий автоматически загруженный контекст по числу символов",
-      "contextIndicatorComposition": "Использованный контекст",
-      "contextIndicatorCompositionHint": "Оценка токенов и долей входных данных модели. Сумма может отличаться от измеренной.",
+      "contextIndicatorTextShare": "Относительные доли",
+      "contextIndicatorComposition": "Распределение содержимого",
+      "contextIndicatorCompositionHint": "Оценка содержимого этого запроса без запаса безопасности. Итог подтверждает поставщик модели.",
       "contextIndicatorSourceSystemPrompt": "Системный промпт",
       "contextIndicatorSourceSystemTools": "Определения системных инструментов",
       "contextIndicatorSourceMcpTools": "Определения инструментов MCP",
@@ -545,7 +545,7 @@
       "contextIndicatorSourceMessages": "Сообщения",
       "contextIndicatorSourceSkills": "Каталог навыков",
       "contextIndicatorSourceRuleFiles": "Список файлов правил",
-      "contextIndicatorSourceContextFraming": "Форматирование контекста",
+      "contextIndicatorSourceContextFraming": "Обёртки контекста",
       "contextIndicatorSourceUnknownTools": "Инструменты без данных об источнике",
       "contextIndicatorSourceUnknownContext": "Контекст без данных об источнике",
       "contextIndicatorSystemTokens": "Системные инструкции",
@@ -769,7 +769,12 @@
       "citationUnavailable": "Источник недоступен",
       "queuedEdit": "Вернуть в поле ввода",
       "queueTakeBackConflict": "Это сообщение уже начало выполняться или было изменено. Обновите список и попробуйте снова.",
-      "queueTakeBackUnknown": "Сообщение возвращено в поле ввода, но удаление из очереди не подтверждено. Проверьте очередь перед отправкой."
+      "queueTakeBackUnknown": "Сообщение возвращено в поле ввода, но удаление из очереди не подтверждено. Проверьте очередь перед отправкой.",
+      "contextIndicatorRelativeHint": "Только относительные доли: нет подходящего словаря или полного текстового ввода.",
+      "contextIndicatorHistorical": "Исторические доли",
+      "contextIndicatorHistoricalHint": "Историческая оценка без количества токенов.",
+      "contextIndicatorDistributionUnavailable": "Распределение недоступно",
+      "contextIndicatorProtocolFraming": "Форматирование протокола"
     },
     "threadList": {
       "title": "Беседы",

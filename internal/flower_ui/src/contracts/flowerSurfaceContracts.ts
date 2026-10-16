@@ -390,14 +390,14 @@ export type FlowerContextUsage = Readonly<{
 export const FLOWER_CONTEXT_CATEGORIES = [
   'system_tokens', 'tool_definition_tokens', 'user_tokens', 'assistant_tokens',
   'tool_call_tokens', 'tool_result_tokens', 'model_context_tokens', 'compaction_tokens',
-  'reasoning_tokens', 'attachment_tokens',
+  'reasoning_tokens', 'attachment_tokens', 'framing_tokens',
 ] as const;
 export type FlowerContextCategory = typeof FLOWER_CONTEXT_CATEGORIES[number];
 export type FlowerContextTokenDetail = Readonly<{
   category: 'tool_definition' | 'model_context'; key: string; source?: string; namespace?: string; tokens: number;
 }>;
 export type FlowerContextBreakdown = Readonly<{
-  source: string; details?: Readonly<{ items: readonly FlowerContextTokenDetail[] }>;
+  source: string; tokenizer?: string; quality?: 'token_estimate' | 'relative_weight'; details?: Readonly<{ items: readonly FlowerContextTokenDetail[] }>;
 } & Partial<Record<FlowerContextCategory, number>>>;
 
 export type FlowerContextSample = Readonly<{

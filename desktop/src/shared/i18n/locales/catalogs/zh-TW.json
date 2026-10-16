@@ -1,11 +1,11 @@
 {
   "interactionContinuity": {
     "accepted": "操作已受理，正在等待執行詳細資訊。",
-  "unavailable": "目標或存取權限已變更。已保留你的輸入，請驗證目前目標後繼續。",
-  "revalidate": "驗證目前目標",
-  "pending": "正在等候操作受理…",
-  "rejected": "操作未能受理。請檢查連線後重試。"
-},
+    "unavailable": "目標或存取權限已變更。已保留你的輸入，請驗證目前目標後繼續。",
+    "revalidate": "驗證目前目標",
+    "pending": "正在等候操作受理…",
+    "rejected": "操作未能受理。請檢查連線後重試。"
+  },
   "sessionRestart": {
     "preparing": "正在準備重新啟動",
     "restarting": "正在重新啟動執行階段",
@@ -528,9 +528,9 @@
       "toolArgumentPreviewTooltip": "行數為待套用變更的預覽，工具完成後顯示實際變更。",
       "contextIndicatorCurrentContents": "目前內容",
       "contextIndicatorCurrentContentsHint": "目前文字依字元統計；此類 token 總量包含保留的歷史更新。",
-      "contextIndicatorTextShare": "目前自動載入上下文的字元分布",
-      "contextIndicatorComposition": "已用上下文",
-      "contextIndicatorCompositionHint": "各類模型輸入的估算 token 數和占比，可能與實測總量不同。",
+      "contextIndicatorTextShare": "相對占比",
+      "contextIndicatorComposition": "內容分布",
+      "contextIndicatorCompositionHint": "本次請求的內容估算，不含安全餘量；總量以模型提供商確認為準。",
       "contextIndicatorSourceSystemPrompt": "系統提示詞",
       "contextIndicatorSourceSystemTools": "系統工具定義",
       "contextIndicatorSourceMcpTools": "MCP 工具定義",
@@ -538,7 +538,7 @@
       "contextIndicatorSourceMessages": "訊息",
       "contextIndicatorSourceSkills": "技能目錄",
       "contextIndicatorSourceRuleFiles": "規則檔案索引",
-      "contextIndicatorSourceContextFraming": "格式開銷",
+      "contextIndicatorSourceContextFraming": "上下文包裝",
       "contextIndicatorSourceUnknownTools": "工具（未記錄來源）",
       "contextIndicatorSourceUnknownContext": "上下文（未記錄來源）",
       "contextIndicatorSystemTokens": "系統指令",
@@ -756,7 +756,12 @@
       "citationUnavailable": "來源無法使用",
       "queuedEdit": "取回到輸入框",
       "queueTakeBackConflict": "這則佇列訊息已開始執行或有變更，請重新整理後再試。",
-      "queueTakeBackUnknown": "訊息已放回輸入框，但尚未確認移出佇列，請檢查佇列後再傳送。"
+      "queueTakeBackUnknown": "訊息已放回輸入框，但尚未確認移出佇列，請檢查佇列後再傳送。",
+      "contextIndicatorRelativeHint": "僅顯示相對占比：暫無相符詞表，或輸入包含無法可靠拆分的內容。",
+      "contextIndicatorHistorical": "歷史占比",
+      "contextIndicatorHistoricalHint": "歷史估算，僅供比較相對占比，不顯示 token 數。",
+      "contextIndicatorDistributionUnavailable": "暫無分布",
+      "contextIndicatorProtocolFraming": "協定格式開銷"
     },
     "threadList": {
       "title": "對話",
