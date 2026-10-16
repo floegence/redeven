@@ -12573,7 +12573,23 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 </button>
                 <FlowerIcon class="h-5 w-5 text-primary" />
                 <div class="flower-chat-header-identity min-w-0">
-				  <div class="flower-chat-header-title truncate">{selectedThreadTitle()}</div>
+                  <div class="flower-chat-header-title truncate" title={selectedThreadTitle()}>{selectedThreadTitle()}</div>
+                  <Show when={props.adapter.renameThread && selectedThreadID()}>
+                    <button
+                      type="button"
+                      class="flower-chat-header-rename flower-header-icon-button"
+                      aria-label={copy().threadList.renameTitle}
+                      title={copy().threadList.renameTitle}
+                      aria-haspopup="dialog"
+                      onClick={(event) => openRenameDialog(
+                        selectedThreadID(),
+                        canonicalFlowerThreadSnapshotTitle(selectedThreadSummary()) || canonicalFlowerThreadSnapshotTitle(selectedThread()),
+                        event.currentTarget,
+                      )}
+                    >
+                      <Pencil class="h-3.5 w-3.5" aria-hidden="true" />
+                    </button>
+                  </Show>
                 </div>
               </div>
             )}
@@ -12973,7 +12989,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   setRenameError('');
                 }}
                 onKeyDown={(event) => {
-                  if (event.key === 'Enter') {
+                  if (event.key === 'Enter' && !event.isComposing) {
                     event.preventDefault();
                     void submitRename();
                   }

@@ -16,7 +16,7 @@ describe('Flower canonical title synchronization', () => {
     const publishBody = deferred<void>();
     const loadThread = vi.fn(() => detail.promise);
     const runtime = renderSurfaceWithAdapter({
-      ...adapter(true), listThreads: vi.fn(async () => [initial]), loadThread,
+      ...adapter(true), listThreads: vi.fn(async () => [initial]), loadThread, renameThread: vi.fn(),
       connectLiveStream: async function* ({ signal }) {
         yield { schema_version: 1, kind: 'ready' as const, summaries: [initial] };
         await publishTitle.promise;
@@ -31,6 +31,9 @@ describe('Flower canonical title synchronization', () => {
     await waitFor(() => loadThread.mock.calls.length === 1);
     publishTitle.resolve();
     await waitFor(() => title(runtime) === 'Hi');
+    runtime.querySelector<HTMLButtonElement>('.flower-chat-header-rename')!.click();
+    expect(runtime.querySelector<HTMLInputElement>('.flower-rename-input')!.value).toBe('Hi');
+    runtime.querySelector<HTMLButtonElement>('.flower-rename-secondary')!.click();
     publishBody.resolve();
     await waitFor(() => runtime.textContent?.includes('Hello from Flower.') ?? false);
     detail.resolve(liveBootstrap(initial, 1));

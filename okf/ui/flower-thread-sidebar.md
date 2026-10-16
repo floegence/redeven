@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower conversation sidebar
 description: Select conversations clearly and reorder endpoint-owned pins without interrupting live interactions.
 tags: [flower, sidebar, navigation, pins, interaction]
-timestamp: 2026-10-13T00:00:00Z
+timestamp: 2026-10-15T00:00:00Z
 ---
 
 # Summary
@@ -16,6 +16,20 @@ failures undo only the current operation's presentation and reconcile through th
 existing workspace summary stream or one explicit post-command read.
 
 # Contract
+
+## Rename from the conversation header
+
+The full conversation header places a quiet pencil button beside the current
+title when the host supports renaming. It remains available during execution
+and detail loading; new conversations without a ThreadID have no rename action.
+Long titles truncate while the button retains its hit area and the complete
+title remains available as a tooltip. Touch layouts use the header's 44px target.
+
+The button opens the same rename dialog as the sidebar menu and double click,
+prefilled from the current canonical title. The input focuses with its text
+selected. Enter saves, Escape cancels, and closing restores focus to the pencil.
+Failed saves retain the draft and expose the existing error feedback. Successful
+saves update the header and sidebar through the canonical thread cache.
 
 ## Selection and navigation
 
@@ -158,6 +172,7 @@ owns the broader interaction and runtime boundaries.
 
 # Evidence
 
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.titleRename.browser.test.tsx` - Header rename, save/cancel focus, failed saves, narrow titles and host capability.
 - `redeven:internal/flower_ui/src/threads/FlowerThreadSwitcher.test.tsx` - Companion and sidebar order parity, filtering, status independence and keyboard selection.
 - `redeven:internal/flower_ui/src/threads/threadListModel.ts` - One canonical filter, comparator and pin/date grouping model.
 - `redeven:internal/flower_ui/src/threads/FlowerThreadList.tsx` - Shared interaction and menu actions.
