@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"runtime"
 	"sort"
 	"strings"
@@ -252,21 +253,52 @@ func defaultMonitorCollectors() monitorCollectors {
 			return memoryUsage{totalBytes: stats.Total, usedBytes: usedBytes}, nil
 		},
 		readNetworkCounters: func(ctx context.Context) (networkCounters, error) {
-			ioStats, err := gopsutilNet.IOCountersWithContext(ctx, false)
-			if err != nil {
-				return networkCounters{}, err
-			}
-			if len(ioStats) == 0 {
-				return networkCounters{}, nil
-			}
-			return networkCounters{
-				bytesReceived: ioStats[0].BytesRecv,
-				bytesSent:     ioStats[0].BytesSent,
-			}, nil
+			return readNetworkCounters(ctx, net.Interfaces, gopsutilNet.IOCountersWithContext)
 		},
 		collectProcessMetrics: collectProcessMetrics,
 		killProcess:           killProcessByPID,
 	}
+}
+
+func readNetworkCounters(
+	ctx context.Context,
+	listInterfaces func() ([]net.Interface, error),
+	readIOCounters func(context.Context, bool) ([]gopsutilNet.IOCountersStat, error),
+) (networkCounters, error) {
+	if err := ctx.Err(); err != nil {
+		return networkCounters{}, err
+	}
+	interfaces, err := listInterfaces()
+	if err != nil {
+		return networkCounters{}, fmt.Errorf("list network interfaces: %w", err)
+	}
+	if err := ctx.Err(); err != nil {
+		return networkCounters{}, err
+	}
+	ioStats, err := readIOCounters(ctx, true)
+	if err != nil {
+		return networkCounters{}, fmt.Errorf("read network interface counters: %w", err)
+	}
+	if err := ctx.Err(); err != nil {
+		return networkCounters{}, err
+	}
+	flagsByName := make(map[string]net.Flags, len(interfaces))
+	for _, iface := range interfaces {
+		flagsByName[iface.Name] = iface.Flags
+	}
+	var counters networkCounters
+	for _, stats := range ioStats {
+		flags, ok := flagsByName[stats.Name]
+		if !ok {
+			return networkCounters{}, fmt.Errorf("network interface %q has counters but no interface metadata", stats.Name)
+		}
+		if flags&net.FlagLoopback != 0 {
+			continue
+		}
+		counters.bytesReceived += stats.BytesRecv
+		counters.bytesSent += stats.BytesSent
+	}
+	return counters, nil
 }
 
 func (s *Service) runLoop(ctx context.Context, interval time.Duration, refresh func(context.Context)) {

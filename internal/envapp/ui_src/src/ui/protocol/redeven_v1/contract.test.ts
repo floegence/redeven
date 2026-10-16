@@ -89,6 +89,10 @@ describe('Redeven v1 terminal notifications', () => {
       cpuUsage: 17.5,
       memoryTotalBytes: 17_179_869_184,
       memoryUsedBytes: 9_663_676_416,
+      networkBytesReceived: 1,
+      networkBytesSent: 2,
+      networkSpeedReceived: 3,
+      networkSpeedSent: 4,
       timestampMs: 1234,
     });
     expect(redevenV1TypeIds.monitor.sysMonitor).toBe(3001);
