@@ -379,6 +379,24 @@ it('waits for cancellation rollback and explains its observed outcome', async ()
   expect(document.querySelector('.remote-desktop-deployment-flow')).not.toBeNull();
 });
 
+it('explains a manager timeout without claiming that SSH disconnected and allows retry', async () => {
+  state.ssh = true;
+  state.status.mockResolvedValue({ ...ready, login_service: { state: 'stopped', backend: 'linux-drm-kms' } });
+  state.deployment.mockImplementation(request => Promise.resolve(request.action === 'capabilities'
+    ? { ok: true, available: true }
+    : { ok: false, code: 'operation_timeout', rollback: 'unknown' }));
+  await mount();
+  button('Connect to desktop').click();
+  button('Authorize and continue').click();
+  await vi.waitFor(() => expect(host.querySelector('[role=alert]')?.textContent).toContain('operation timed out'));
+  expect(host.textContent).toContain('Recheck the service state before retrying');
+  expect(host.textContent).not.toContain('SSH connection was interrupted');
+  expect(button('Authorize and continue').disabled).toBe(false);
+  expect(button('Cancel').disabled).toBe(false);
+  button('Cancel').click();
+  expect(host.querySelector('.remote-desktop-deployment-flow')).toBeNull();
+});
+
 it('shows the actual unsupported graphics reason without an unusable connection button', async () => {
   state.ssh = true; state.deployment.mockResolvedValue({ ok: true, available: true });
   state.status.mockResolvedValue({ ...ready, capabilities: { ...ready.capabilities, backend: 'linux-drm-kms', state: 'unavailable', screen: false, input: false, reason: 'GPU_SCANOUT_UNSUPPORTED' }, login_service: { state: 'active', backend: 'linux-drm-kms' } });
