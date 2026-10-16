@@ -1,9 +1,16 @@
 # Redeven OKF Update Log
 
+## 2026-10-15: Context distribution card
+
+- Present [context capacity](ai/model-context-usage-and-compaction.md) as measured input, output reserve and free space, with explicit estimates.
+- Give [runtime facts](ai/flower-managed-model-context.md) a shared stacked color bar, matching category rows, character counts and on-demand full text.
+- Keep cache rates, theme colors, narrow-window geometry, keyboard dismissal and live disclosure state consistent across hosts.
+
 ## 2026-10-15: Conversation title shortcut
 
 - Add a pencil beside the [conversation header title](ui/flower-thread-sidebar.md#rename-from-the-conversation-header), using the existing rename dialog, canonical title updates and focus restoration.
 - Preserve the action beside truncated titles and during running work; hide it for new conversations and hosts without rename capability.
+
 
 ## 2026-10-15: Bounded FlowNode stream recovery
 

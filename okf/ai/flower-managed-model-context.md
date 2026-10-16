@@ -47,10 +47,12 @@ enforced at actual tool authorization, independently of displayed historical fac
 
 Authorized canonical reads and the existing workspace subscription carry the
 same snapshot, record location, changed/removed keys and latest request use.
-The shared context panel summarizes partitions as compact horizontal bars with
-localized labels. Bar percentages represent each partition's share of runtime
-fact text by Unicode character count; they are separate from provider token
-usage. Complete selectable text appears only when a partition is expanded.
+The shared context panel summarizes partitions in one stacked color bar and
+aligned, localized category rows with matching swatches, character counts and
+percentages. These shares use Unicode character counts, separate from the
+provider-token capacity bar above them. Category colors use the host theme's
+categorical tokens and remain stable across snapshot refreshes. Complete
+selectable text appears only when a partition is expanded.
 Collection and request-use times remain in the status indicator's accessible
 label and hover text. Stable partition keys preserve focus and expanded text
 during refresh. Updates do not create chat bubbles, take focus or block

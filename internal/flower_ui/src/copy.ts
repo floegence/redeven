@@ -650,6 +650,14 @@ export type FlowerSurfaceCopy = Readonly<{
       unavailable: string;
       runtimeFacts: string; collected: string; used: string; updated: string; removed: string;
       textShare: string;
+      input: string;
+      outputReserve: string;
+      freeSpace: string;
+      estimated: string;
+      characters: (value: string) => string;
+      tokens: (value: string) => string;
+      recentCacheHitShortLabel: string;
+      cacheHitShortLabel: string;
       sectionLabels: Readonly<Record<string, string>>;
       recentCacheHitLabel: string;
       cacheHitLabel: string;
@@ -1057,7 +1065,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     liveProgressTool: 'Using a tool',
     liveProgressOutput: 'Writing the reply',
     contextIndicator: {
-      label: 'Context',
+      label: 'Context window',
       nearThreshold: 'Near limit',
       willCompact: 'Compacting soon',
       hardLimit: 'At limit',
@@ -1065,6 +1073,14 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       unavailable: 'Not available',
       runtimeFacts: 'Runtime facts', collected: 'Collected', used: 'Used by latest request', updated: 'Updated', removed: 'Removed',
       textShare: 'Share of runtime fact text (characters)',
+      input: 'Used',
+      outputReserve: 'Output reserve',
+      freeSpace: 'Free space',
+      estimated: 'Estimated',
+      characters: (value) => `${value} chars`,
+      tokens: (value) => `${value} tokens`,
+      recentCacheHitShortLabel: 'Latest cache hit',
+      cacheHitShortLabel: 'Session cache hit',
       sectionLabels: {
         delegation: 'Delegation', execution_environment: 'Environment', local_time: 'Date & time',
         repository: 'Repository', repository_rules: 'Rules', skills: 'Skills',

@@ -1,3 +1,5 @@
+import { builtInShellThemePresets } from '@floegence/floe-webapp-core/themes';
+import '../../index.css';
 import { afterEach, expect, it } from 'vitest';
 import { page, userEvent } from 'vitest/browser';
 import { createSignal } from 'solid-js';
@@ -6,12 +8,18 @@ import { FlowerComposerContextIndicator } from '../../../../../flower_ui/src/cha
 import { createLocalizedFlowerSurfaceCopy } from '../../../../../flower_ui/src/i18n/createLocalizedFlowerSurfaceCopy';
 import { mapContextUsage } from '../../../../../flower_ui/src/flowerLiveMapper';
 import type { FlowerContextUsage, FlowerModelContext } from '../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import type { RedevenLocale } from '../i18n/localeMeta';
 import type { EnvAppTranslationKey } from '../i18n/locales';
 import { createTestI18nHelpers } from '../i18n/locales/testDictionaries';
 import '../../../../../flower_ui/src/styles/flower.css';
 
 let dispose: (() => void) | undefined;
-afterEach(() => { dispose?.(); document.body.replaceChildren(); });
+afterEach(() => {
+  dispose?.();
+  document.body.replaceChildren();
+  document.documentElement.removeAttribute('style');
+  document.documentElement.classList.remove('dark', 'light');
+});
 
 for (const locale of ['en-US', 'zh-CN'] as const) {
   for (const dark of [false, true]) {
@@ -23,9 +31,14 @@ for (const locale of ['en-US', 'zh-CN'] as const) {
         tn: (key, count, params) => i18n.tn(key as EnvAppTranslationKey, count, params),
       });
       const host = document.createElement('div');
-      host.style.cssText = `position:fixed;inset:0;padding:24px;box-sizing:border-box;display:flex;align-items:flex-end;justify-content:flex-end;font-family:system-ui;background:${dark ? '#191b1a' : '#fafaf7'};--foreground:${dark ? '#ededeb' : '#242721'};--muted-foreground:${dark ? '#a8ada5' : '#6c7466'};--primary:#76826a;--flower-chat-surface:${dark ? '#232621' : '#fafaf7'};--flower-chat-surface-border:${dark ? '#41483c' : '#dedfd7'};--background:var(--flower-chat-surface);--popover:var(--flower-chat-surface);--redeven-surface-shadow-source:#000;--redeven-status-warning-foreground:#b78330;--destructive:#dc4545`;
+      host.style.cssText = 'position:fixed;inset:0;padding:24px;box-sizing:border-box;display:flex;align-items:flex-end;justify-content:flex-end;font-family:system-ui;background:var(--background);--flower-chat-surface:var(--background);--flower-chat-surface-border:var(--border);--flower-chat-surface-elevated:var(--card);--redeven-status-warning-foreground:var(--warning)';
+      const preset = builtInShellThemePresets.find(preset => preset.name === `classic-${dark ? 'dark' : 'light'}`)!;
+      document.documentElement.classList.toggle('dark', dark);
+      for (const [name, value] of Object.entries(preset.semanticTokens ?? {})) {
+        if (value) document.documentElement.style.setProperty(name, value);
+      }
       document.body.append(host);
-      const confirmed = { run_id: 'previous', phase: 'provider_usage', pressure_status: 'stable', input_tokens: 71872, context_window_tokens: 950000, updated_at_ms: 1 };
+      const confirmed = { run_id: 'previous', phase: 'provider_usage', pressure_status: 'stable', input_tokens: 71872, context_window_tokens: 950000, output_headroom_tokens: 64000, updated_at_ms: 1 };
       const estimate = { ...confirmed, run_id: 'current', phase: 'projected_request', input_tokens: 291336, updated_at_ms: 2 };
       const thread_usage = { input_tokens: 55, output_tokens: 10, cache_read_tokens: 45, cache_write_tokens: 0 };
       const [usage, setUsage] = createSignal<FlowerContextUsage>(mapContextUsage({ estimate })!);
@@ -41,7 +54,7 @@ for (const locale of ['en-US', 'zh-CN'] as const) {
       progress.focus();
       const tooltip = host.querySelector<HTMLElement>('[role="region"]')!;
       expect(tooltip.dataset.open).toBe('true');
-      expect(tooltip.querySelectorAll('.flower-composer-context-tooltip-row')).toHaveLength(3);
+      expect(tooltip.querySelectorAll('.flower-context-window-stat')).toHaveLength(3);
       expect(tooltip.textContent).not.toContain('291,336');
       await userEvent.keyboard('{Escape}');
       expect(tooltip.getAttribute('aria-hidden')).toBe('true');
@@ -50,12 +63,13 @@ for (const locale of ['en-US', 'zh-CN'] as const) {
 
       setUsage(mapContextUsage({ confirmed, estimate, thread_usage })!);
       expect(progress.getAttribute('aria-valuenow')).toBe('8');
-      expect(tooltip.textContent).toBe(`${copy.chat.contextIndicator.label}8%${copy.chat.contextIndicator.recentCacheHitLabel}—${copy.chat.contextIndicator.cacheHitLabel}45%`);
+      expect(tooltip.querySelector('.flower-context-heading')?.textContent).toBe(`${copy.chat.contextIndicator.label}71.9k / 950k (8%)`);
+      expect(tooltip.querySelector('.flower-context-cache-stats')?.textContent).toBe(`${copy.chat.contextIndicator.recentCacheHitShortLabel}—${copy.chat.contextIndicator.cacheHitShortLabel}45%`);
       expect(host.querySelector('.flower-composer-context-sample-label')).toBeNull();
       const rect = tooltip.getBoundingClientRect();
       expect(rect.left).toBeGreaterThanOrEqual(0);
       expect(rect.right).toBeLessThanOrEqual(window.innerWidth);
-      expect(rect.height).toBeLessThan(80);
+      expect(rect.height).toBeLessThan(180);
       expect(tooltip.scrollWidth).toBeLessThanOrEqual(tooltip.clientWidth);
       await expect.poll(() => getComputedStyle(tooltip).opacity).toBe('1');
       if (import.meta.env.VITE_FLOWER_CONTEXT_SCREENSHOTS === '1') {
@@ -95,16 +109,18 @@ for (const locale of ['en-US', 'zh-CN'] as const) {
           { key: 'skills', title: 'Available skills', text: 'Complete selectable catalog\n' + 'F'.repeat(800) },
         ] },
       };
+      setUsage(mapContextUsage({ confirmed, thread_usage, recent_request_usage: { input_tokens: 25, output_tokens: 10, cache_read_tokens: 75, cache_write_tokens: 0 } })!);
       setFacts(context);
       progress.focus();
       await expect.poll(() => tooltip.getBoundingClientRect().height).toBeGreaterThan(200);
       const chartBounds = tooltip.getBoundingClientRect();
-      expect(chartBounds.height).toBeLessThan(280);
+      expect(chartBounds.height).toBeLessThan(380);
       expect(chartBounds.top).toBeGreaterThanOrEqual(0);
       expect(chartBounds.left).toBeGreaterThanOrEqual(0);
       expect(chartBounds.right).toBeLessThanOrEqual(window.innerWidth);
       expect(tooltip.scrollHeight).toBe(tooltip.clientHeight);
-      expect(tooltip.querySelectorAll('.flower-model-context-bar')).toHaveLength(6);
+      expect(tooltip.querySelectorAll('.flower-model-context-bar')).toHaveLength(1);
+      expect(tooltip.querySelectorAll('.flower-model-context-bar > span')).toHaveLength(6);
       expect(tooltip.querySelector('pre')).toBeNull();
       expect(tooltip.querySelector('.flower-model-context-time')).toBeNull();
       const rows = [...tooltip.querySelectorAll<HTMLElement>('.flower-model-context-row')];
@@ -112,9 +128,15 @@ for (const locale of ['en-US', 'zh-CN'] as const) {
         expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth);
         expect(getComputedStyle(row).cursor).toBe('pointer');
       }
+      const segmentColors = [...tooltip.querySelectorAll<HTMLElement>('.flower-model-context-bar > span')].map(segment => getComputedStyle(segment).backgroundColor);
+      const swatchColors = rows.map(row => getComputedStyle(row.querySelector('.flower-context-swatch')!).backgroundColor);
+      expect(segmentColors).toEqual(swatchColors);
+      expect(new Set(segmentColors).size).toBe(6);
+      const amountColumns = rows.map(row => row.querySelector('.flower-model-context-amount')!.getBoundingClientRect().right);
+      expect(new Set(amountColumns).size).toBe(1);
       expect(rows.at(-1)!.textContent).toContain(copy.chat.contextIndicator.sectionLabels.skills);
       if (import.meta.env.VITE_FLOWER_CONTEXT_SCREENSHOTS === '1') {
-        await page.screenshot({ path: `__screenshots__/context-bars-${locale}-${dark ? 'dark' : 'light'}.png` });
+        await page.screenshot({ path: `__screenshots__/context-breakdown-${locale}-${dark ? 'dark' : 'light'}.png` });
       }
       rows.at(-1)!.focus();
       await userEvent.keyboard('{Enter}');
@@ -125,6 +147,61 @@ for (const locale of ['en-US', 'zh-CN'] as const) {
       expect(tooltip.querySelector('pre')?.textContent).toContain('Updated');
       await userEvent.keyboard('{Escape}');
       expect(tooltip.getAttribute('aria-hidden')).toBe('true');
+      expect(document.activeElement).toBe(progress);
     });
   }
 }
+
+it('keeps localized legends inside a narrow card and follows every shipped theme', async () => {
+  await page.viewport(320, 480);
+  const host = document.createElement('div');
+  host.style.cssText = 'position:fixed;inset:0;padding:16px;display:flex;align-items:flex-end;justify-content:flex-end;--flower-chat-surface-border:var(--border);--flower-chat-surface:var(--background);--redeven-surface-shadow-source:#000';
+  document.body.append(host);
+  const facts: FlowerModelContext = {
+    entry_id: 'facts', path_depth: 1, turn_id: 'turn', run_id: 'run', updated_at: '2026-10-15T12:00:00Z', changed_keys: [], removed_keys: [],
+    snapshot: { sections: ['delegation', 'execution_environment', 'local_time', 'repository', 'repository_rules', 'skills']
+      .map((key, index) => ({ key, title: key, text: 'A'.repeat((index + 1) * 100) })) },
+  };
+  const [locale, setLocale] = createSignal<RedevenLocale>('en-US');
+  const copy = () => {
+    const i18n = createTestI18nHelpers(locale());
+    return createLocalizedFlowerSurfaceCopy({ locale: locale(),
+      t: (key, params) => i18n.t(key as EnvAppTranslationKey, params),
+      tn: (key, count, params) => i18n.tn(key as EnvAppTranslationKey, count, params),
+    });
+  };
+  const applyTheme = (preset: typeof builtInShellThemePresets[number]) => {
+    document.documentElement.classList.toggle('dark', preset.mode === 'dark');
+    for (const [name, value] of Object.entries(preset.semanticTokens ?? {})) {
+      if (value) document.documentElement.style.setProperty(name, value);
+    }
+  };
+  applyTheme(builtInShellThemePresets.find(preset => preset.name === 'classic-dark')!);
+  dispose = render(() => <FlowerComposerContextIndicator modelContext={facts} copy={copy()}
+    usage={{ confirmed: { phase: 'provider_usage', pressure_status: 'stable', input_tokens: 85400, context_window_tokens: 1000000, output_headroom_tokens: 64000, updated_at_ms: 1 } }} />, host);
+  const trigger = host.querySelector<HTMLElement>('[role="progressbar"]')!;
+  trigger.focus();
+  const panel = host.querySelector<HTMLElement>('[role="region"]')!;
+  await expect.poll(() => getComputedStyle(panel).opacity).toBe('1');
+  for (const value of ['en-US', 'zh-CN', 'zh-TW', 'ja-JP', 'ko-KR', 'de-DE', 'fr-FR', 'es-ES', 'pt-BR', 'ru-RU'] as const) {
+    setLocale(value);
+    expect(panel.scrollWidth, value).toBe(panel.clientWidth);
+    expect(panel.scrollHeight, value).toBe(panel.clientHeight);
+    for (const row of panel.querySelectorAll<HTMLElement>('.flower-model-context-row, .flower-context-window-stat')) {
+      expect(row.scrollWidth, `${value}: ${row.textContent}`).toBeLessThanOrEqual(row.clientWidth);
+    }
+    expect(panel.getBoundingClientRect().top, value).toBeGreaterThanOrEqual(0);
+    if (import.meta.env.VITE_FLOWER_CONTEXT_SCREENSHOTS === '1' && value === 'de-DE') {
+      await page.screenshot({ path: '__screenshots__/context-breakdown-de-DE-dark.png' });
+    }
+  }
+  setLocale('en-US');
+  for (const preset of builtInShellThemePresets) {
+    applyTheme(preset);
+    const swatches = [...panel.querySelectorAll<HTMLElement>('.flower-model-context-row .flower-context-swatch')];
+    const segments = [...panel.querySelectorAll<HTMLElement>('.flower-model-context-bar > span')];
+    expect(swatches.map(node => getComputedStyle(node).backgroundColor), preset.name)
+      .toEqual(segments.map(node => getComputedStyle(node).backgroundColor));
+    expect(panel.scrollWidth, preset.name).toBe(panel.clientWidth);
+  }
+});

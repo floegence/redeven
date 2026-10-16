@@ -4,6 +4,34 @@ import { DEFAULT_FLOWER_SURFACE_COPY } from '../copy';
 import { trimString } from '../flowerSurfaceModel';
 
 export type FlowerContextTone = 'stable' | 'warning' | 'danger' | 'estimated';
+
+export function formatContextAmount(value: number): string {
+  if (value >= 1_000_000) return `${Number((value / 1_000_000).toFixed(1))}M`;
+  if (value >= 1_000) return `${Number((value / 1_000).toFixed(1))}k`;
+  return String(value);
+}
+
+export function buildFlowerContextWindow(usage: FlowerContextUsage) {
+  const sample = usage.confirmed ?? usage.estimate;
+  const input = sample?.input_tokens;
+  const capacity = sample?.context_window_tokens;
+  if (input === undefined || !Number.isFinite(input) || input < 0
+    || capacity === undefined || !Number.isFinite(capacity) || capacity <= 0) return null;
+  const used = Math.min(input, capacity);
+  const headroom = sample?.output_headroom_tokens ?? 0;
+  const reserved = Number.isFinite(headroom) ? Math.min(Math.max(0, headroom), capacity - used) : 0;
+  return {
+    input,
+    capacity,
+    estimated: !usage.confirmed,
+    segments: [
+      { key: 'input' as const, tokens: input },
+      ...(reserved > 0 ? [{ key: 'outputReserve' as const, tokens: reserved }] : []),
+      { key: 'freeSpace' as const, tokens: capacity - used - reserved },
+    ].map((segment) => ({ ...segment, share: Math.min(1, segment.tokens / capacity) * 100 })),
+  };
+}
+
 export type FlowerComposerContextIndicatorView = Readonly<{
   ariaLabel: string;
   ariaValueText: string;

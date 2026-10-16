@@ -3,6 +3,7 @@ import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FlowerComposerContextIndicator } from '../../../../flower_ui/src/chat/FlowerComposerContextIndicator';
+import { buildFlowerContextWindow } from '../../../../flower_ui/src/chat/flowerContextPresentation';
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../../../../flower_ui/src/copy';
 import type { FlowerModelContext } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 
@@ -50,7 +51,7 @@ describe('Flower managed context panel', () => {
   expect(status().getAttribute('aria-label')).toContain(DEFAULT_FLOWER_SURFACE_COPY.chat.contextIndicator.used);
   expect(host.textContent).not.toContain(DEFAULT_FLOWER_SURFACE_COPY.chat.contextIndicator.used);
  });
- it('scales category bars by Unicode text share and refreshes the existing panel', () => {
+ it('sizes stacked segments and aligned category amounts by Unicode text share and refreshes the existing panel', () => {
   const [context, update] = createSignal({ ...facts, snapshot: { sections: [
    { key: 'skills', title: 'Available skills', text: '😀😀😀' },
    { key: 'repository', title: 'Repository state', text: 'A' },
@@ -61,13 +62,43 @@ describe('Flower managed context panel', () => {
   trigger.focus();
   const shares = () => [...host.querySelectorAll('.flower-model-context-share')].map(row => row.textContent);
   expect(shares()).toEqual(['75%', '25%']);
-  expect(host.querySelector('.flower-model-context-fill')?.getAttribute('style')).toContain('75%');
+  expect([...host.querySelectorAll('.flower-model-context-amount')].map(row => row.textContent)).toEqual(['3', '1']);
+  expect(host.querySelector('.flower-model-context-heading')?.textContent).toContain('4 chars');
+  expect([...host.querySelectorAll('.flower-model-context-bar > span')].map(row => row.getAttribute('data-category'))).toEqual(['skills', 'repository']);
+  expect(host.querySelector('.flower-model-context-bar > span')?.getAttribute('style')).toContain('75%');
   update({ ...facts, snapshot: { sections: [{ key: 'repository', title: 'Repository state', text: '' }] } });
   expect(shares()).toEqual(['0%']);
-  expect(host.querySelector('.flower-model-context-fill')?.getAttribute('style')).toContain('0%');
+  expect(host.querySelector('.flower-model-context-bar > span')?.getAttribute('style')).toContain('0%');
   expect(document.activeElement).toBe(trigger);
   expect(host.querySelector('[role="region"]')?.getAttribute('data-open')).toBe('true');
   update({ ...facts, snapshot: { sections: [] } });
   expect(host.querySelector('.flower-model-context-details')).toBeNull();
+ });
+});
+
+
+describe('Flower context capacity partitions', () => {
+ const sample = { phase: 'provider_usage', pressure_status: 'stable', updated_at_ms: 1,
+  input_tokens: 600, context_window_tokens: 1000, output_headroom_tokens: 200 } as const;
+ it('partitions measured capacity without treating runtime character shares as tokens', () => {
+  expect(buildFlowerContextWindow({ confirmed: sample })).toEqual({ input: 600, capacity: 1000, estimated: false, segments: [
+   { key: 'input', tokens: 600, share: 60 }, { key: 'outputReserve', tokens: 200, share: 20 }, { key: 'freeSpace', tokens: 200, share: 20 },
+  ] });
+  expect(buildFlowerContextWindow({ confirmed: sample, estimate: { ...sample, phase: 'projected_request', input_tokens: 900 } })?.input).toBe(600);
+  expect(buildFlowerContextWindow({ estimate: { ...sample, phase: 'projected_request' } })?.estimated).toBe(true);
+ });
+ it('handles unknown, empty and exhausted windows without negative or invented allocations', () => {
+  expect(buildFlowerContextWindow({})).toBeNull();
+  expect(buildFlowerContextWindow({ confirmed: { ...sample, input_tokens: undefined } })).toBeNull();
+  expect(buildFlowerContextWindow({ confirmed: { ...sample, context_window_tokens: 0 } })).toBeNull();
+  expect(buildFlowerContextWindow({ confirmed: { ...sample, input_tokens: 0 } })?.segments).toEqual([
+   { key: 'input', tokens: 0, share: 0 }, { key: 'outputReserve', tokens: 200, share: 20 }, { key: 'freeSpace', tokens: 800, share: 80 },
+  ]);
+  const overflow = buildFlowerContextWindow({ confirmed: { ...sample, input_tokens: 1200 } })!;
+  expect(overflow.input).toBe(1200);
+  expect(overflow.segments).toEqual([{ key: 'input', tokens: 1200, share: 100 }, { key: 'freeSpace', tokens: 0, share: 0 }]);
+  expect(buildFlowerContextWindow({ confirmed: { ...sample, output_headroom_tokens: undefined } })?.segments).toEqual([
+   { key: 'input', tokens: 600, share: 60 }, { key: 'freeSpace', tokens: 400, share: 40 },
+  ]);
  });
 });
