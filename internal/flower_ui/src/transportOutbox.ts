@@ -21,6 +21,8 @@ export type TransportOutboxEntry = Readonly<{
   /** Captured input cannot dispatch until the transport owner completes preparation. */
   preparation?: 'pending';
   operation?: 'context_compaction';
+  /** Product routing for a child command; canonical lifecycle stays upstream. */
+  parentThreadId?: string;
   requestId: string;
   threadId: string;
   input: TransportOutboxInput;

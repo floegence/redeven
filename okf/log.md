@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-16: Bounded child waits and precise failure recovery
+
+- Adopt released Floret v7.50.0 [canonical waiting](ai/subagent-runtime.md), preserve passive parent events and full handoffs, and expose [typed failure causes and target-specific recovery](ui/flower-failure-recovery.md). Child attention retains explicit parent continuation, Stop and navigation.
+
 ## 2026-10-16: Passive parent events
 
 - Adopt published Floret v7.49.0 canonical [important child events](ai/subagent-runtime.md), child-only reports, explicit full reads and event-aware wait. Keep idle parents passive, retain complete handoffs, and distinguish receipt from context admission in the shared UI.

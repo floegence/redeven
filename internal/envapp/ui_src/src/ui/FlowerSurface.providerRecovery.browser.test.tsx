@@ -5,10 +5,67 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import { page, userEvent } from 'vitest/browser';
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../../../../flower_ui/src/copy';
 import type { FlowerSettingsDraft, FlowerSettingsSnapshot } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
-import { adapter, deferred, flowerSurfaceNotifications, liveBootstrap, renderSurfaceWithAdapterProps, settingsSnapshot, thread, waitFor } from './FlowerSurface.navigation.testHarness';
+import { adapter, deferred, flowerSurfaceNotifications, liveBootstrap, renderSurfaceWithAdapterProps, settingsSnapshot, subagentSummary, subagentDetail, runtimeCurrentView, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 
 const copy = DEFAULT_FLOWER_SURFACE_COPY;
 beforeEach(() => page.viewport(1100, 900));
+
+async function mountChildProviderRecovery() {
+  const child = subagentSummary({ status: 'failed', can_interrupt: false });
+  const parent = thread({ thread_id: child.parent_thread_id, title: 'Parent provider chat', subagents: [child] });
+  const failed = thread({ thread_id: child.thread_id, title: child.title, model_id: 'child-provider/child-model', status: 'failed', error: { code: 'provider_missing_key', message: 'missing key' } });
+  const initial = settingsSnapshot();
+  const snapshot: FlowerSettingsSnapshot = { ...initial, provider_secrets: [...initial.provider_secrets, { provider_id: 'child-provider', provider_api_key_configured: true, web_search_api_key_configured: false }], model_profile: { ...initial.model_profile!, providers: [
+    ...initial.model_profile!.providers,
+    { id: 'child-provider', name: 'Child Provider', type: 'openai', models: [{ model_name: 'child-model', context_window: 128000, input_modalities: ['text'] }] },
+  ] } };
+  const base = adapter();
+  const loadThread = vi.fn(async (id: string) => liveBootstrap(id === parent.thread_id ? parent : failed));
+  const surface = renderSurfaceWithAdapterProps({ ...base, loadSettings: async () => snapshot, loadThread, listThreads: async () => [parent],
+    loadSubagentDetail: async () => subagentDetail({ summary: child, current: runtimeCurrentView(failed, 7) }) },
+  { focusThreadRequest: { request_id: 'child-provider', thread_id: parent.thread_id } });
+  await waitFor(() => surface.querySelector('button[aria-controls="flower-subagents-dropdown"]') !== null);
+  surface.querySelector<HTMLButtonElement>('button[aria-controls="flower-subagents-dropdown"]')!.click();
+  document.querySelector<HTMLButtonElement>('[data-flower-subagent-disclosure]')?.click();
+  await waitFor(() => document.querySelector('[data-flower-subagent-row]') !== null);
+  document.querySelector<HTMLButtonElement>('[data-flower-subagent-row]')!.click();
+  await waitFor(() => document.querySelector('.flower-subagent-detail-window .flower-run-error') !== null);
+  const configure = () => [...document.querySelectorAll<HTMLButtonElement>('.flower-subagent-detail-window .flower-run-error button')].find(button => button.textContent === copy.settings.dialog.catalog.searchConfigure)!;
+  return { surface, child, parent, failed, loadThread, configure, base };
+}
+
+it('configures the failed child provider and retains an explicit return to its parent', async () => {
+  const state = await mountChildProviderRecovery();
+  await userEvent.click(state.configure());
+  await waitFor(() => document.querySelector('.flower-provider-dialog') !== null);
+  expect(state.loadThread).toHaveBeenCalledWith(state.child.thread_id);
+  expect(document.querySelector('.flower-provider-dialog')?.textContent).toContain('Child Provider');
+  await waitFor(() => document.querySelector<HTMLInputElement>('.flower-provider-dialog input[placeholder="model-name"]')?.value === 'child-model');
+  await userEvent.click(page.getByRole('button', { name: copy.settings.dialog.discard, exact: true }));
+  await waitFor(() => !document.querySelector('.flower-provider-dialog') && Boolean(state.surface.querySelector('.flower-run-error')));
+  expect(state.surface.textContent).toContain(state.child.title);
+  const returnToParent = [...state.surface.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === copy.chat.subagentReturnParent)!;
+  expect(returnToParent).toBeDefined();
+  returnToParent.click();
+  await waitFor(() => state.surface.textContent?.includes(state.parent.title) === true);
+  expect(state.base.retryThread).not.toHaveBeenCalled();
+});
+
+it('ignores a late child settings read after returning to the parent', async () => {
+  const state = await mountChildProviderRecovery();
+  const pending = deferred<ReturnType<typeof liveBootstrap>>();
+  state.loadThread.mockImplementationOnce(() => pending.promise);
+  state.configure().click();
+  await waitFor(() => state.loadThread.mock.calls.some(call => call[0] === state.child.thread_id));
+  const returnToParent = [...state.surface.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === copy.chat.subagentReturnParent)!;
+  expect(returnToParent).toBeDefined();
+  returnToParent.click();
+  await waitFor(() => state.surface.textContent?.includes(state.parent.title) === true);
+  pending.resolve(liveBootstrap(state.failed));
+  await Promise.resolve(); await Promise.resolve();
+  expect(document.querySelector('.flower-provider-dialog')).toBeNull();
+  expect(state.surface.textContent).toContain(state.parent.title);
+});
 
 async function mount(options: { missingProvider?: boolean; code?: string } = {}) {
   const failed = thread({ messages: [

@@ -131,7 +131,7 @@ func flowerCurrentJSONAt(current flruntime.ThreadView, sampledAt time.Time) (jso
 		}
 		root["run_error_code"] = code
 		root["error"] = message
-		if detail := canonicalFailureDetail(current.Failure); detail != "" {
+		if detail := scopedFailureDetail(current.Failure, current.ThreadID.String(), current.TurnID.String(), current.RunID.String()); detail != "" {
 			root["run_error_detail"] = detail
 		}
 	}

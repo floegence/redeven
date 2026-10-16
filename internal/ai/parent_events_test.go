@@ -159,8 +159,8 @@ type parentEventWaitRuntime struct {
 	*subagentHandoffTestRuntime
 	mu          sync.Mutex
 	events      []flruntime.ParentEvent
-	subscribed  chan struct{}
-	onSubscribe func()
+	waitStarted chan struct{}
+	onWait      func()
 }
 
 func (s *parentEventWaitRuntime) ReportToParent(context.Context, flruntime.ReportToParentInput) (flruntime.ParentEventReceipt, error) {
@@ -194,23 +194,34 @@ func (s *parentEventWaitRuntime) ListParentEvents(_ context.Context, in flruntim
 	}
 	return page, nil
 }
-func (s *parentEventWaitRuntime) Subscribe(ctx context.Context) (*flruntime.WorkspaceSubscription, error) {
-	subscription, err := s.ThreadService.Subscribe(ctx)
-	close(s.subscribed)
-	if s.onSubscribe != nil {
-		s.onSubscribe()
+func (s *parentEventWaitRuntime) WaitThreads(ctx context.Context, in flruntime.WaitThreadsInput) (flruntime.ThreadWaitResult, error) {
+	close(s.waitStarted)
+	if s.onWait != nil {
+		s.onWait()
 	}
-	return subscription, err
+	out, err := s.subagentHandoffTestRuntime.WaitThreads(ctx, in)
+	if err != nil {
+		return out, err
+	}
+	page, err := s.ListParentEvents(ctx, flruntime.ListParentEventsInput{ThreadID: *in.Scope.ParentID, SourceThreadIDs: in.ThreadIDs, PendingOnly: true})
+	if err != nil {
+		return out, err
+	}
+	out.ParentEvents = &page
+	if len(page.Events) > 0 {
+		out.Reason = flruntime.ThreadWaitEvents
+	}
+	return out, nil
 }
 
-func TestFlowerParentEventWaitSubscribesBeforeCheckingAndDoesNotRepeatAdmitted(t *testing.T) {
+func TestFlowerParentEventWaitMapsCanonicalWaitResultAndDoesNotRepeatAdmitted(t *testing.T) {
 	now := time.Now()
 	running := flruntime.ThreadSummary{ID: "child", TaskName: "Research", Activity: flruntime.ThreadActivityActive, CreatedAt: now, UpdatedAt: now}
 	adapter, base := newParentEventWaitAdapter(t, []flruntime.ThreadSummary{running})
-	runtime := &parentEventWaitRuntime{subagentHandoffTestRuntime: base, subscribed: make(chan struct{})}
+	runtime := &parentEventWaitRuntime{subagentHandoffTestRuntime: base, waitStarted: make(chan struct{})}
 	adapter.service.threadRuntime = runtime
 	// Install the canonical fact after subscription, before the first read.
-	runtime.onSubscribe = func() {
+	runtime.onWait = func() {
 		runtime.mu.Lock()
 		defer runtime.mu.Unlock()
 		runtime.events = []flruntime.ParentEvent{{ID: "event", ParentThreadID: "thread-parent", SourceThreadID: "other", SourceTurnID: "turn-other", SourceRunID: "run-other", Kind: flruntime.ParentEventReport}, {ID: "selected", ParentThreadID: "thread-parent", SourceThreadID: "child", SourceTurnID: "turn-child", SourceRunID: "run-child", Kind: flruntime.ParentEventInputRequired, Message: "FULL_BODY_NOT_IN_WAIT"}}
@@ -226,12 +237,12 @@ func TestFlowerParentEventWaitSubscribesBeforeCheckingAndDoesNotRepeatAdmitted(t
 	if strings.Contains(string(raw), "FULL_BODY_NOT_IN_WAIT") || strings.Contains(string(raw), "other") {
 		t.Fatal("wait copied body or wrong target")
 	}
-	runtime.onSubscribe = nil
+	runtime.onWait = nil
 
 	runtime.mu.Lock()
 	runtime.events[1].Admitted = true
 	runtime.mu.Unlock()
-	runtime.subscribed = make(chan struct{})
+	runtime.waitStarted = make(chan struct{})
 	out, err = adapter.wait(t.Context(), map[string]any{"ids": []any{"child"}, "timeout_ms": 10})
 	if err != nil || out["reason"] != "wait_timeout" {
 		t.Fatalf("busy loop after admission: %+v %v", out, err)
@@ -286,7 +297,7 @@ func TestFlowerParentEventReadsRecheckRecipientAuthority(t *testing.T) {
 
 func TestFlowerParentEventWaitWithoutTargetsIncludesEveryDirectChild(t *testing.T) {
 	adapter, base := newParentEventWaitAdapter(t, []flruntime.ThreadSummary{{ID: "child", Activity: flruntime.ThreadActivityActive}})
-	runtime := &parentEventWaitRuntime{subagentHandoffTestRuntime: base, subscribed: make(chan struct{}), events: []flruntime.ParentEvent{{ID: "event", SourceThreadID: "child", Kind: flruntime.ParentEventReport}}}
+	runtime := &parentEventWaitRuntime{subagentHandoffTestRuntime: base, waitStarted: make(chan struct{}), events: []flruntime.ParentEvent{{ID: "event", SourceThreadID: "child", Kind: flruntime.ParentEventReport}}}
 	adapter.service.threadRuntime = runtime
 	out, err := adapter.wait(t.Context(), map[string]any{"timeout_ms": 1})
 	if err != nil || out["reason"] != "events" {
@@ -315,12 +326,9 @@ type parentEventSubscribeBarrier struct {
 	once    sync.Once
 }
 
-func (s *parentEventSubscribeBarrier) ListParentEvents(ctx context.Context, input flruntime.ListParentEventsInput) (flruntime.ParentEventPage, error) {
-	page, err := s.ThreadParentEventService.ListParentEvents(ctx, input)
-	if input.PendingOnly && len(page.Events) == 0 {
-		s.once.Do(func() { close(s.checked) })
-	}
-	return page, err
+func (s *parentEventSubscribeBarrier) WaitThreads(ctx context.Context, input flruntime.WaitThreadsInput) (flruntime.ThreadWaitResult, error) {
+	s.once.Do(func() { close(s.checked) })
+	return s.ThreadService.(flruntime.ThreadWaiter).WaitThreads(ctx, input)
 }
 
 func TestFlowerParentEventProductEffectAndPassiveNaturalRequest(t *testing.T) {
@@ -395,7 +403,7 @@ func TestFlowerParentEventProductEffectAndPassiveNaturalRequest(t *testing.T) {
 	select {
 	case <-barrier.checked:
 	case <-time.After(5 * time.Second):
-		t.Fatal("wait did not check after subscribing")
+		t.Fatal("canonical wait was not invoked")
 	}
 	release()
 	select {

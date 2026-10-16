@@ -569,6 +569,13 @@ export type FlowerSurfaceCopy = Readonly<{
       switchModel: string;
       openSettings: string;
     }>;
+    subagentWaitDescription: string;
+    subagentWaitQuestion: string;
+    subagentHandleRequest: string;
+    compactionStorageRestored: string;
+    subagentReturnParent: string;
+    subagentWaitAfterHandling: string;
+    subagentWaitAvailable: string;
     runErrors: Readonly<{
       providerAuthFailed: string;
       providerMissingKey: string;
@@ -585,6 +592,13 @@ export type FlowerSurfaceCopy = Readonly<{
       contextBudgetInvalid: string;
       contextFixedOverhead: string;
       contextCompactionLimit: string;
+      repeatedToolCalls: string;
+      noProgress: string;
+      duplicateToolCallID: string;
+      stopHookLoop: string;
+      toolDispatchFailed: string;
+      storageFailed: string;
+      authorizationFailed: string;
       floretEngineFailed: string;
       floretControlContractFailed: string;
       floretAuthorityConsistencyFailed: string;
@@ -994,6 +1008,13 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       switchModel: 'Switch model',
       openSettings: 'Open settings',
     },
+    subagentWaitDescription: "A child thread needs approval or input. Open it to handle the request, then return and explicitly continue this parent. You can also continue using available results or stop.",
+    subagentHandleRequest: "Handle request",
+    compactionStorageRestored: "Storage was restored, so this compression request cannot be sent again. Remove it, refresh the thread, then start compression again if needed.",
+    subagentReturnParent: "Return to parent",
+    subagentWaitQuestion: "How should the parent continue?",
+    subagentWaitAfterHandling: "Continue after handling the child thread",
+    subagentWaitAvailable: "Continue using available results",
     runErrors: {
       contextBudgetInvalid: "The request's context and output settings are incompatible. Check the model's context window, output limit, reasoning settings and provider output-control support, then retry. For Ollama, set num_ctx in the Modelfile and reload the model.",
       contextFixedOverhead: "The system instructions and tool definitions exceed the model's available context. Increase the serving context window or choose a model with more context, then retry. Compressing chat history cannot resolve this.",
@@ -1010,11 +1031,18 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       providerRequestInvalid: "The selected AI provider rejected Flower's request format. Update Redeven and retry.",
       providerRequestRejected: "The selected AI provider rejected Flower's request. Check the diagnostic details and try again later.",
       modelGatewayContractFailed: 'The model source returned an incomplete tool call. No tool was run. Try again or choose another model.',
+      repeatedToolCalls: "Repeated identical tool requests made no effective progress, so this turn was stopped. Confirmed results and completed child reports are preserved. Retry to continue from saved progress.",
+      noProgress: "The agent made no progress, so this turn was stopped. Saved results are preserved. Add guidance or retry.",
+      duplicateToolCallID: "The model returned duplicate tool call IDs. Saved results are preserved. Retry or choose another model.",
+      stopHookLoop: "A stop hook repeatedly requested continuation. Saved results are preserved. Check the hook configuration before retrying.",
+      toolDispatchFailed: "A tool could not execute. Confirmed results are preserved. Check the tool and retry.",
+      storageFailed: "Conversation storage failed. Check available disk space and storage access before retrying.",
+      authorizationFailed: "Tool authorization could not be verified. Check permissions and retry.",
       floretEngineFailed: 'Flower could not finish this turn because the orchestration engine failed.',
       floretControlContractFailed: 'Flower could not generate a valid question. The reply so far has been preserved. Retry to continue.',
       floretAuthorityConsistencyFailed: 'Flower could not finish this turn because the committed tool result could not be verified. The tool was not run again; start a new reply to continue.',
       modelContextUnavailable: 'Could not load the current context. Resolve the issue shown in the error details, then retry.',
-      floretEffectOutcomeUnknown: 'Some operations may have completed, but their results could not be confirmed. The task was stopped to avoid duplicate execution.',
+      floretEffectOutcomeUnknown: 'Some operations may have completed, but their results could not be confirmed. The task was stopped to avoid duplicate execution. Verify the actual effects before starting new work; this turn cannot be retried.',
       runtimeRestarted: 'The local runtime restarted before this reply finished. Start a new reply when the runtime is ready.',
     },
     copyCode: 'Copy code',

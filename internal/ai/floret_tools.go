@@ -8,6 +8,7 @@ import (
 	"math"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/floegence/floret/v7/identity"
 	flruntime "github.com/floegence/floret/v7/runtime"
@@ -799,10 +800,23 @@ func floretToolResultFromFlower(r *run, result ToolResult) (fltools.Result, erro
 	}
 	attachments := floretToolAttachments(result.Attachments)
 	var outputPolicy *fltools.OutputPolicy
-	if strings.TrimSpace(result.ToolName) == "subagent_events" {
-		// Explicit event pages are already bounded by item count and report size.
-		// Keep the complete page; the normal request budget still applies.
+	if name := strings.TrimSpace(result.ToolName); name == "subagents" || name == "subagent_events" {
+		// Explicit child reports must remain complete through savepoints and retry.
+		// The normal provider request budget still applies to the full result.
 		outputPolicy = &fltools.OutputPolicy{VisibleMaxBytes: len(text) + 1, VisibleMaxLines: strings.Count(string(text), "\n") + 1, Strategy: fltools.OutputHead, PreserveFull: true}
+	}
+	var boundedWait *fltools.BoundedWait
+	var inputRequired *fltools.InputRequest
+	if result.ToolName == "subagents" && !isError {
+		data, _ := structured["data"].(map[string]any)
+		if anyToString(data["action"]) == subagentActionWait {
+			if readBoolField(data, "timed_out") && readInt64Field(data, "found_count") > 0 && readInt64Field(data, "missing_count") == 0 {
+				boundedWait = &fltools.BoundedWait{Timeout: time.Duration(readInt64Field(data, "effective_timeout_ms")) * time.Millisecond, TimedOut: true}
+			}
+			if anyToString(data["reason"]) == string(flruntime.ThreadWaitAttentionRequired) {
+				inputRequired = &fltools.InputRequest{Summary: "A child thread needs your approval or input. Open the child thread to handle it, then explicitly continue this parent.", Questions: []fltools.InputQuestion{{ID: "subagent_attention", Prompt: "How should the parent continue?", Kind: "select", Options: []string{"Continue after handling the child thread", "Continue using available results"}}}}
+			}
+		}
 	}
 	return fltools.Result{
 		CallID:       strings.TrimSpace(result.ToolID),
@@ -815,6 +829,7 @@ func floretToolResultFromFlower(r *run, result ToolResult) (fltools.Result, erro
 		IsError:      isError,
 		DispatchErr:  dispatchErr,
 		OutputPolicy: outputPolicy,
+		BoundedWait:  boundedWait, InputRequired: inputRequired,
 	}, nil
 }
 
