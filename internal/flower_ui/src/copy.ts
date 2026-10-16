@@ -648,7 +648,7 @@ export type FlowerSurfaceCopy = Readonly<{
       hardLimit: string;
       unknownPercent: string;
       unavailable: string;
-      runtimeFacts: string; collected: string; used: string; updated: string; removed: string;
+      currentContents: string; currentContentsHint: string; collected: string; used: string; updated: string; removed: string;
       textShare: string;
       composition: string;
       compositionHint: string;
@@ -1074,8 +1074,8 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       hardLimit: 'At limit',
       unknownPercent: '—',
       unavailable: 'Not available',
-      runtimeFacts: 'Auto-loaded context', collected: 'Loaded', used: 'Last used', updated: 'Updated', removed: 'Removed',
-      textShare: 'Auto-loaded context text share (characters)',
+      currentContents: 'Current contents', currentContentsHint: 'Current text by character count; token totals include retained updates.', collected: 'Loaded', used: 'Last used', updated: 'Updated', removed: 'Removed',
+      textShare: 'Current auto-loaded context by character count',
       composition: 'Used context',
       compositionHint: 'Estimated tokens and share of model input. Category estimates may differ from the measured total.',
       categoryLabels: {

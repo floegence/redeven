@@ -19,6 +19,7 @@
 ## 2026-10-15: Auto-loaded context category bars
 
 - Keep [auto-loaded context](ai/flower-managed-model-context.md#presentation) collapsed as a section; opening it reveals all category bars without nested expansion or raw prompt text.
+- Put that disclosure on its single used-context token row, with one shared localized name and an indented current-contents breakdown instead of a separate peer section.
 - Distinguish current-snapshot Unicode character counts and shares from request-scoped input token estimates; retain theme colors, live focus and bounded narrow-window layout.
 
 ## 2026-10-15: Inline conversation title editing

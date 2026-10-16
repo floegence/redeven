@@ -59,11 +59,16 @@ usage and composition come from the same request. Older samples show unavailable
 composition until a new request supplies it. Discarded original tool artifacts
 never count as model input. Expanded-media budgets come from prepared input.
 
-Auto-loaded context remains collapsed until the user opens its section. One
-disclosure reveals every category as a horizontal bar with aligned character
+Auto-loaded context is one disjoint category of used context, not a second
+peer breakdown. Its token row is the only disclosure and remains collapsed
+until opened. The row reveals current contents as horizontal bars with aligned character
 counts and shares, sorted by size. Categories have no nested disclosures or raw
 prompt-text blocks. These Unicode character shares describe the current snapshot
-only; they are not token estimates or part of the request-scoped composition.
+only. A short inline explanation identifies this character basis and states
+that the parent token count includes retained historical updates. Snapshot shares
+are not token estimates or a proportional split of the parent token count.
+When request composition is unavailable, the same row remains inspectable with
+unavailable token values; current text never fabricates a request estimate.
 Category colors use the host theme's categorical tokens. The native capacity
 bar, output headroom and free space stay separate from estimated composition.
 Collection and request-use times remain in the status indicator's accessible

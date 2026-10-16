@@ -160,6 +160,11 @@ for (const locale of ['en-US', 'zh-CN'] as const) {
       expect(tooltip.querySelector('pre')).toBeNull();
       expect(tooltip.querySelector('.flower-model-context-time')).toBeNull();
       const rows = [...tooltip.querySelectorAll<HTMLElement>('.flower-context-composition-row')];
+      expect(tooltip.querySelectorAll('.flower-model-context-details')).toHaveLength(1);
+      expect(disclosure.closest('.flower-context-composition')).not.toBeNull();
+      expect(disclosure.textContent).toContain(copy.chat.contextIndicator.categoryLabels.model_context_tokens);
+      expect(disclosure.textContent).toContain('≈5.1k');
+      expect(disclosure.textContent).toContain('7.2%');
       for (const row of rows) {
         expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth);
       }
@@ -176,6 +181,17 @@ for (const locale of ['en-US', 'zh-CN'] as const) {
       disclosure.focus();
       await userEvent.keyboard('{Enter}');
       await expect.poll(() => tooltip.querySelectorAll('.flower-model-context-row').length).toBe(6);
+      expect(tooltip.querySelector('.flower-model-context-current-heading')?.textContent).toContain(copy.chat.contextIndicator.currentContents);
+      expect(tooltip.querySelector('.flower-model-context-hint')?.textContent).toBe(copy.chat.contextIndicator.currentContentsHint);
+      setUsage(mapContextUsage({ confirmed: { ...confirmed, breakdown: {
+        source: 'semantic_input_bpe_v1', system_tokens: 3400, tool_definition_tokens: 23500,
+        user_tokens: 4200, assistant_tokens: 3000, tool_call_tokens: 1700,
+        tool_result_tokens: 29000, model_context_tokens: 26000, compaction_tokens: 800,
+      } } })!);
+      expect(tooltip.querySelector('.flower-model-context-disclosure')).toBe(disclosure);
+      expect(document.activeElement).toBe(disclosure);
+      expect(tooltip.querySelector('details')?.open).toBe(true);
+      expect(disclosure.textContent).toContain('≈26k');
       expect(tooltip.getBoundingClientRect().top).toBeGreaterThanOrEqual(0);
       expect(tooltip.getBoundingClientRect().height).toBeLessThanOrEqual(408);
       expect(tooltip.scrollWidth).toBe(tooltip.clientWidth);
