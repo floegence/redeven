@@ -3,7 +3,7 @@ import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FlowerComposerContextIndicator } from '../../../../flower_ui/src/chat/FlowerComposerContextIndicator';
-import { buildFlowerContextWindow, flowerRequestOutputSample } from '../../../../flower_ui/src/chat/flowerContextPresentation';
+import { buildFlowerContextWindow } from '../../../../flower_ui/src/chat/flowerContextPresentation';
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../../../../flower_ui/src/copy';
 import { mapContextUsage } from '../../../../flower_ui/src/flowerLiveMapper';
 import type { FlowerContextUsage, FlowerModelContext } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
@@ -35,6 +35,16 @@ function mount(usage?: () => FlowerContextUsage) {
 }
 
 describe('Flower context source breakdown', () => {
+ it('keeps the popup focused on usage and source bars without explanatory blocks', () => {
+  const value=fixture();
+  const {host}=mount(()=>({...value,confirmed:{...value.confirmed!,threshold_tokens:397000,request_output_tokens:1000,output_control:'client'}}));
+  for(const text of ['Remaining window is shared by input and output.','Auto-compaction threshold','Latest request output limit','Input composition estimate','Estimated by share']) {
+   expect(host.textContent).not.toContain(text);
+  }
+  expect(host.querySelectorAll('.flower-context-heading')).toHaveLength(1);
+  expect(host.querySelectorAll('.flower-context-composition-row').length).toBeGreaterThan(0);
+  expect(host.querySelector('.flower-model-context-amount')?.textContent).toMatch(/^≈\d/);
+ });
  it('displays real source names and horizontal bars with flat detail rows', async () => {
   const { host } = mount(() => fixture());
   for (const text of ['System prompt', 'System tool definitions', 'MCP tool definitions', 'Skill catalog', 'Rule file index', 'Messages', 'Tool execution outputs']) expect(host.textContent).toContain(text);
@@ -92,7 +102,7 @@ describe('Flower context source breakdown', () => {
   const { host } = mount(() => ({ ...value, confirmed: { ...value.confirmed!, breakdown: metadata } }));
   const distribution = host.querySelector('.flower-context-composition')!;
   expect(distribution.textContent).toContain('≈');
-  expect(distribution.textContent).toContain(mode === 'historical' ? 'Historical estimate' : 'Estimated by share');
+  expect(distribution.getAttribute('title')).toBe(mode === 'historical' ? DEFAULT_FLOWER_SURFACE_COPY.chat.contextIndicator.historicalHint : DEFAULT_FLOWER_SURFACE_COPY.chat.contextIndicator.compositionHint);
   for (const row of distribution.querySelectorAll('.flower-context-composition-row')) {
    expect(row.querySelector('.flower-model-context-amount')?.textContent).toMatch(/^≈\d/);
    expect(row.getAttribute('aria-label')).toContain('≈');
@@ -106,7 +116,7 @@ describe('Flower context source breakdown', () => {
   const { host } = mount(() => ({ confirmed: { ...value.confirmed!, input_tokens: undefined }, estimate: { ...value.confirmed!, input_tokens: 1000 } }));
   const distribution = host.querySelector('.flower-context-composition')!;
   expect(distribution.querySelector('.flower-model-context-amount')).toBeNull();
-  expect(distribution.textContent).toContain('Relative shares');
+  expect(distribution.getAttribute('title')).toBe(DEFAULT_FLOWER_SURFACE_COPY.chat.contextIndicator.relativeHint);
   expect(distribution.textContent).not.toContain('≈');
  });
  it('keeps the displayed request authoritative when its distribution is missing', () => {
@@ -142,35 +152,23 @@ describe('Flower context capacity partitions', () => {
  });
 });
 
-describe('Flower request budget facts', () => {
- it('keeps output facts on the latest request and respects canonical invalidation', () => {
-  const confirmed = { ...sample, output_control: 'client' as const, request_output_tokens: 100 };
-  const estimate = { ...sample, phase: 'projected_request' as const, updated_at_ms: 2, output_control: 'client' as const, request_output_tokens: 50 };
-  expect(flowerRequestOutputSample({ confirmed, estimate })).toBe(estimate);
-  expect(flowerRequestOutputSample({ confirmed: { ...confirmed, run_id: 'run', step_index: 1 },
-   estimate: { ...estimate, updated_at_ms: 1, run_id: 'run', step_index: 2 } })?.request_output_tokens).toBe(50);
-  expect(flowerRequestOutputSample({})).toBeUndefined();
-  expect(flowerRequestOutputSample({ estimate: { ...sample, phase: 'projected_request' } })?.output_control).toBeUndefined();
-  expect(flowerRequestOutputSample({ confirmed, estimate: { ...sample, phase: 'projected_request', updated_at_ms: 3 } })?.output_control).toBeUndefined();
- });
- it('shows measured input and proportional estimates without reserving model output', () => {
+describe('Flower compact context popup', () => {
+ it('keeps measured input and proportional amounts without showing request budgets', () => {
   const usage=fixture();
   const {host}=mount(()=>({...usage, confirmed:{...usage.confirmed!, input_tokens:68400,context_window_tokens:950000,threshold_tokens:855000,request_output_tokens:393216,output_control:'client',safety_margin_tokens:4096}}));
   expect(host.querySelector('[data-category="outputReserve"]')).toBeNull();
-  expect(host.textContent).toContain('Auto-compaction threshold');
-  expect(host.textContent).toContain('855k');
-  expect(host.textContent).toContain('393.2k');
-  expect(host.textContent).toContain('Input composition estimate');
-  expect(host.textContent).toContain('Estimated by share');
+  expect(host.textContent).not.toContain('855k');
+  expect(host.textContent).not.toContain('393.2k');
+  expect(host.querySelector('.flower-context-total')?.textContent).toContain('68.4k');
   expect(host.querySelector('[data-category="mcp_tools"] .flower-model-context-amount')?.textContent).toBe('≈21k');
  });
- it('shows server management and never infers historical output limits', () => {
+ it('keeps server-managed and missing output facts out of the popup', () => {
   const [usage,update]=createSignal<FlowerContextUsage>({confirmed:{...sample,output_control:'server',safety_margin_tokens:10}});
   const {host}=mount(usage);
-  expect(host.textContent).toContain('Managed by server');
+  const original=host.textContent;
+  expect(original).not.toContain('Managed by server');
   update({confirmed:sample});
-  expect(host.querySelector('.flower-context-budget-facts')?.textContent).toContain('Not available');
-  expect(host.querySelector('.flower-context-budget-facts')?.textContent).not.toContain('200');
+  expect(host.textContent).toBe(original);
  });
  it('closes through its visible button and restores trigger focus',()=>{
   const {panel,trigger}=mount(()=>fixture());

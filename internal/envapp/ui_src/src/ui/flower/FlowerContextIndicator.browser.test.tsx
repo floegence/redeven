@@ -45,7 +45,7 @@ function theme(preset: typeof builtInShellThemePresets[number]) {
  document.documentElement.classList.toggle('dark', preset.mode === 'dark');
  for (const [name, value] of Object.entries(preset.semanticTokens ?? {})) if (value) document.documentElement.style.setProperty(name, value);
 }
-function mount(locale: () => RedevenLocale, usage: () => FlowerContextUsage, projected = false) {
+function mount(locale: () => RedevenLocale, usage: () => FlowerContextUsage, projected = false, placement: 'above-end' | 'below-start' = 'above-end') {
  const copy = () => {
   const i18n = createTestI18nHelpers(locale());
   return createLocalizedFlowerSurfaceCopy({ locale: locale(), t: (key, params) => i18n.t(key as EnvAppTranslationKey, params),
@@ -58,7 +58,7 @@ function mount(locale: () => RedevenLocale, usage: () => FlowerContextUsage, pro
   host.style.cssText += ';inset:auto;left:20px;top:20px;width:700px;height:600px;transform:scale(.8);transform-origin:top left';
  }
  document.body.append(host);
- dispose = render(() => <FlowerComposerContextIndicator copy={copy()} usage={usage()} />, host);
+ dispose = render(() => <FlowerComposerContextIndicator copy={copy()} usage={usage()} placement={placement} />, host);
  return { host, copy, trigger: host.querySelector<HTMLElement>('[role="progressbar"]')!, panel: document.getElementById(host.querySelector<HTMLElement>('[role="progressbar"]')!.getAttribute('aria-controls')!)! };
 }
 for (const locale of ['en-US', 'zh-CN'] as const) for (const dark of [false, true]) {
@@ -73,6 +73,13 @@ for (const locale of ['en-US', 'zh-CN'] as const) for (const dark of [false, tru
   expect(panel.textContent).toContain(copy().chat.contextIndicator.sourceLabels.system_tools);
   expect(panel.textContent).toContain(copy().chat.contextIndicator.sourceLabels.system_prompt);
   expect(panel.querySelector('pre')).toBeNull();
+  expect(panel.querySelectorAll('.flower-context-heading')).toHaveLength(1);
+  expect(panel.querySelector('.flower-context-budget-facts, .flower-context-shared-space, .flower-context-estimate')).toBeNull();
+  const heading = panel.querySelector<HTMLElement>('.flower-context-heading')!;
+  const closeButton = heading.querySelector<HTMLElement>('.flower-context-close')!;
+  const total = heading.querySelector<HTMLElement>('.flower-context-total')!;
+  expect(closeButton.getBoundingClientRect().right).toBeCloseTo(heading.getBoundingClientRect().right, 0);
+  expect(total.getBoundingClientRect().right).toBeLessThan(closeButton.getBoundingClientRect().left);
   const rows = [...panel.querySelectorAll<HTMLElement>('.flower-context-composition-row')];
   expect(rows.length).toBe(10);
   for (const row of rows) {
@@ -91,12 +98,14 @@ for (const locale of ['en-US', 'zh-CN'] as const) for (const dark of [false, tru
   expect(category.textContent).toContain('docs · search');
   expect(category.querySelector('.flower-model-context-row details, .flower-model-context-row summary')).toBeNull();
   expect(category.querySelectorAll('.flower-model-context-row .flower-model-context-track')).toHaveLength(3);
+  await expect.poll(() => panel.getBoundingClientRect().bottom).toBeLessThanOrEqual(712);
   if (import.meta.env.VITE_FLOWER_CONTEXT_SCREENSHOTS === '1') await page.screenshot({ path: '__screenshots__/context-sources-expanded-' + locale + '-' + (dark ? 'dark' : 'light') + '.png' });
   setUsage(fixture(6000));
   await expect.poll(() => document.activeElement).toBe(summary);
   expect(panel.dataset.open).toBe('true');
   expect(category.open).toBe(true);
   expect(panel.querySelector('[data-category="mcp_tools"] summary')).toBe(summary);
+  await expect.poll(() => panel.getBoundingClientRect().bottom).toBeLessThanOrEqual(712);
   await userEvent.keyboard('{Escape}');
   expect(document.activeElement).toBe(trigger);
   expect(panel.getAttribute('aria-hidden')).toBe('true');
@@ -122,6 +131,7 @@ it('keeps all locales and themes within a narrow card', async () => {
   expect(panel.scrollWidth, value).toBe(panel.clientWidth);
   expect(panel.getBoundingClientRect().top, value).toBeGreaterThanOrEqual(0);
   expect(panel.getBoundingClientRect().height, value).toBeLessThanOrEqual(408);
+  await expect.poll(() => panel.getBoundingClientRect().bottom, { message: value }).toBeLessThanOrEqual(472);
   for (const row of panel.querySelectorAll<HTMLElement>('.flower-context-composition-row, .flower-model-context-row')) expect(row.scrollWidth, value).toBeLessThanOrEqual(row.clientWidth);
  }
  for (const preset of builtInShellThemePresets) {
@@ -131,6 +141,33 @@ it('keeps all locales and themes within a narrow card', async () => {
   }
  }
 });
+
+for (const placement of ['above-end', 'below-start'] as const) {
+ it('keeps expanded content reachable after viewport resize with ' + placement + ' placement', async () => {
+  await page.viewport(440, 720);
+  theme(builtInShellThemePresets.find(preset => preset.name === 'classic-dark')!);
+  const { host, trigger, panel } = mount(() => 'zh-CN', () => fixture(), false, placement);
+  if (placement === 'below-start') { host.style.alignItems = 'flex-start'; host.style.justifyContent = 'flex-start'; }
+  trigger.focus();
+  await expect.poll(() => getComputedStyle(panel).opacity).toBe('1');
+  const summary = panel.querySelector<HTMLElement>('[data-category="mcp_tools"] summary')!;
+  summary.focus(); await userEvent.keyboard('{Enter}');
+  await page.viewport(320, 480);
+  await expect.poll(() => panel.getBoundingClientRect().bottom).toBeLessThanOrEqual(472);
+  expect(panel.getBoundingClientRect().top).toBeGreaterThanOrEqual(8);
+  expect(panel.getBoundingClientRect().left).toBeGreaterThanOrEqual(8);
+  expect(panel.getBoundingClientRect().right).toBeLessThanOrEqual(312);
+  expect(document.activeElement).toBe(summary);
+  panel.scrollTop = panel.scrollHeight;
+  const footer = panel.querySelector<HTMLElement>('.flower-context-cache-stats')!;
+  await expect.poll(() => footer.getBoundingClientRect().bottom).toBeLessThanOrEqual(panel.getBoundingClientRect().bottom);
+  expect(footer.getBoundingClientRect().top).toBeGreaterThan(panel.getBoundingClientRect().top);
+  if (import.meta.env.VITE_FLOWER_CONTEXT_SCREENSHOTS === '1') await page.screenshot({ path: '__screenshots__/context-narrow-' + placement + '.png' });
+  await userEvent.keyboard('{Escape}');
+  expect(panel.getAttribute('aria-hidden')).toBe('true');
+  expect(document.activeElement).toBe(trigger);
+ });
+}
 
 for (const mode of ['relative', 'historical', 'media'] as const) {
  it('presents proportional token estimates for '+mode+' data', async () => {
@@ -146,7 +183,7 @@ for (const mode of ['relative', 'historical', 'media'] as const) {
   summary.focus();await userEvent.keyboard('{Enter}');
   expect(distribution.getAttribute('data-token-amounts')).toBe('true');
   expect(distribution.textContent).toContain('≈');
-  expect(distribution.textContent).toContain(mode==='historical'?copy().chat.contextIndicator.historical:copy().chat.contextIndicator.proportionalEstimate);
+  expect(distribution.getAttribute('title')).toBe(mode==='historical'?copy().chat.contextIndicator.historicalHint:copy().chat.contextIndicator.compositionHint);
   for(const row of distribution.querySelectorAll('.flower-context-composition-row, .flower-model-context-row')){
    expect(row.querySelector('.flower-model-context-amount')?.textContent).toMatch(/^≈\d/);
    expect((row as HTMLElement).scrollWidth).toBeLessThanOrEqual((row as HTMLElement).clientWidth);
@@ -169,6 +206,10 @@ it('uses shared projected placement and restores focus after touch and keyboard 
  expect(panel.style.position).not.toBe('fixed');expect(panel.style.left).toBe('');expect(panel.style.top).toBe('');
  expect(panel.getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
  expect(panel.getBoundingClientRect().right).toBeLessThanOrEqual(820);
+ const summary = panel.querySelector<HTMLElement>('[data-category="mcp_tools"] summary')!;
+ summary.focus(); await userEvent.keyboard('{Enter}');
+ await expect.poll(() => panel.getBoundingClientRect().bottom).toBeLessThanOrEqual(host.getBoundingClientRect().bottom);
+ expect(panel.getBoundingClientRect().top).toBeGreaterThanOrEqual(host.getBoundingClientRect().top);
  panel.querySelector<HTMLButtonElement>('.flower-context-close')!.click();
  expect(panel.getAttribute('aria-hidden')).toBe('true');expect(document.activeElement).toBe(trigger);
  await userEvent.keyboard('{Enter}');
