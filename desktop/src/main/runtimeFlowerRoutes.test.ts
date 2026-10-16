@@ -4,6 +4,16 @@ import { runtimeFlowerMethodAllowed, runtimeFlowerPath } from './runtimeFlowerRo
 
 const base = '/_redeven_proxy/api/ai/computer';
 
+it('allows only read-only, single-origin source icon requests', () => {
+  const path = '/_redeven_proxy/api/flower/source-icon?origin=https%3A%2F%2Fexample.com';
+  expect(runtimeFlowerPath(path)).toBe(path);
+  expect(runtimeFlowerMethodAllowed(path, 'GET')).toBe(true);
+  expect(runtimeFlowerMethodAllowed(path, 'POST')).toBe(false);
+  for (const suffix of ['', '?origin=', '?origin=a&origin=b', '?origin=a&extra=1']) {
+    expect(() => runtimeFlowerPath('/_redeven_proxy/api/flower/source-icon' + suffix)).toThrow();
+  }
+});
+
 describe('Flower admitted attachment preview routes', () => {
   const upload = '/_redeven_proxy/api/ai/uploads/upl_preview';
   it.each(['turn_id=turn_1', 'queue_id=queue%3Arequest-second'])('allows scoped GET previews: %s', scope => {

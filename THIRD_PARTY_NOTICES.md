@@ -1306,6 +1306,192 @@ The Docker and Podman marks identify the corresponding local container service. 
 | Docker | MIT | [default](https://github.com/glincker/thesvg/blob/64a0c342e2ca60c3297080a7af41af9b3d2c9869/public/icons/docker/default.svg)<br>[mono](https://github.com/glincker/thesvg/blob/64a0c342e2ca60c3297080a7af41af9b3d2c9869/public/icons/docker/mono.svg) | `internal/envapp/ui_src/public/container-service-icons/docker-default.svg`<br>`internal/envapp/ui_src/public/container-service-icons/docker-mono.svg` | Trailing newline only |
 | Podman | MIT | [default](https://github.com/glincker/thesvg/blob/64a0c342e2ca60c3297080a7af41af9b3d2c9869/public/icons/podman/default.svg)<br>[mono](https://github.com/glincker/thesvg/blob/64a0c342e2ca60c3297080a7af41af9b3d2c9869/public/icons/podman/mono.svg) | `internal/envapp/ui_src/public/container-service-icons/podman-default.svg`<br>`internal/envapp/ui_src/public/container-service-icons/podman-mono.svg` | Trailing newline only |
 
+## Bundled Flower Source Icons
+
+Flower identifies common source websites with 27 marks bundled unchanged from theSVG revision bdfcb7cf0209c140f38afeb73ebccd432eff5c92. The pinned [icon metadata](https://github.com/glincker/thesvg/blob/bdfcb7cf0209c140f38afeb73ebccd432eff5c92/src/data/icons.json) declares each asset's MIT or CC0-1.0 license. Monochrome assets use a theme-aware alpha mask; color assets retain their original colors. Website names and marks remain the property of their respective owners and imply no endorsement. Fetched favicons are disposable Runtime presentation resources and are not redistributed in this bundle.
+
+| Brand asset | License | Pinned source | Bundled file | Modification |
+| --- | --- | --- | --- | --- |
+| Anthropic | CC0-1.0 | [public/icons/anthropic/mono.svg](https://github.com/glincker/thesvg/blob/bdfcb7cf0209c140f38afeb73ebccd432eff5c92/public/icons/anthropic/mono.svg) | internal/flower_ui/src/assets/source-icons/anthropic.svg | No; theme-aware alpha mask |
+| Apple | CC0-1.0 | [public/icons/apple/mono.svg](https://github.com/glincker/thesvg/blob/bdfcb7cf0209c140f38afeb73ebccd432eff5c92/public/icons/apple/mono.svg) | internal/flower_ui/src/assets/source-icons/apple.svg | No; theme-aware alpha mask |
+| arXiv | CC0-1.0 | [public/icons/arxiv/default.svg](https://github.com/glincker/thesvg/blob/bdfcb7cf0209c140f38afeb73ebccd432eff5c92/public/icons/arxiv/default.svg) | internal/flower_ui/src/assets/source-icons/arxiv.svg | No |
+| AWS | MIT | [public/icons/aws/icon.svg](https://github.com/glincker/thesvg/blob/bdfcb7cf0209c140f38afeb73ebccd432eff5c92/public/icons/aws/icon.svg) | internal/flower_ui/src/assets/source-icons/aws.svg | No |
+| Bing | MIT | [public/icons/bing/default.svg](https://github.com/glincker/thesvg/blob/bdfcb7cf0209c140f38afeb73ebccd432eff5c92/public/icons/bing/default.svg) | internal/flower_ui/src/assets/source-icons/bing.svg | No |
+| Cloudflare | CC0-1.0 | [public/icons/cloudflare/default.svg](https://github.com/glincker/thesvg/blob/bdfcb7cf0209c140f38afeb73ebccd432eff5c92/public/icons/cloudflare/default.svg) | internal/flower_ui/src/assets/source-icons/cloudflare.svg | No |
+| Discord | CC0-1.0 | [public/icons/discord/default.svg](https://github.com/glincker/thesvg/blob/bdfcb7cf0209c140f38afeb73ebccd432eff5c92/public/icons/discord/default.svg) | internal/flower_ui/src/assets/source-icons/discord.svg | No |
+| Figma | CC0-1.0 | [public/icons/figma/default.svg](https://github.com/glincker/thesvg/blob/bdfcb7cf0209c140f38afeb73ebccd432eff5c92/public/icons/figma/default.svg) | internal/flower_ui/src/assets/source-icons/figma.svg | No |
+| GitHub | CC0-1.0 | [public/icons/github/mono.svg](https://github.com/glincker/thesvg/blob/bdfcb7cf0209c140f38afeb73ebccd432eff5c92/public/icons/github/mono.svg) | internal/flower_ui/src/assets/source-icons/github.svg | No; theme-aware alpha mask |
+| Google | CC0-1.0 | [public/icons/google/default.svg](https://github.com/glincker/thesvg/blob/bdfcb7cf0209c140f38afeb73ebccd432eff5c92/public/icons/google/default.svg) | internal/flower_ui/src/assets/source-icons/google.svg | No |
+| Medium | CC0-1.0 | [public/icons/medium/mono.svg](https://github.com/glincker/thesvg/blob/bdfcb7cf0209c140f38afeb73ebccd432eff5c92/public/icons/medium/mono.svg) | internal/flower_ui/src/assets/source-icons/medium.svg | No; theme-aware alpha mask |
+| Microsoft | MIT | [public/icons/microsoft/default.svg](https://github.com/glincker/thesvg/blob/bdfcb7cf0209c140f38afeb73ebccd432eff5c92/public/icons/microsoft/default.svg) | internal/flower_ui/src/assets/source-icons/microsoft.svg | No |
+| Notion | CC0-1.0 | [public/icons/notion/default.svg](https://github.com/glincker/thesvg/blob/bdfcb7cf0209c140f38afeb73ebccd432eff5c92/public/icons/notion/default.svg) | internal/flower_ui/src/assets/source-icons/notion.svg | No |
+| NVIDIA | CC0-1.0 | [public/icons/nvidia/default.svg](https://github.com/glincker/thesvg/blob/bdfcb7cf0209c140f38afeb73ebccd432eff5c92/public/icons/nvidia/default.svg) | internal/flower_ui/src/assets/source-icons/nvidia.svg | No |
+| OpenAI | MIT | [public/icons/openai/light.svg](https://github.com/glincker/thesvg/blob/bdfcb7cf0209c140f38afeb73ebccd432eff5c92/public/icons/openai/light.svg) | internal/flower_ui/src/assets/source-icons/openai.svg | No; theme-aware alpha mask |
+| Reddit | CC0-1.0 | [public/icons/reddit/default.svg](https://github.com/glincker/thesvg/blob/bdfcb7cf0209c140f38afeb73ebccd432eff5c92/public/icons/reddit/default.svg) | internal/flower_ui/src/assets/source-icons/reddit.svg | No |
+| Vercel | CC0-1.0 | [public/icons/vercel/mono.svg](https://github.com/glincker/thesvg/blob/bdfcb7cf0209c140f38afeb73ebccd432eff5c92/public/icons/vercel/mono.svg) | internal/flower_ui/src/assets/source-icons/vercel.svg | No; theme-aware alpha mask |
+| Wikipedia | CC0-1.0 | [public/icons/wikipedia/mono.svg](https://github.com/glincker/thesvg/blob/bdfcb7cf0209c140f38afeb73ebccd432eff5c92/public/icons/wikipedia/mono.svg) | internal/flower_ui/src/assets/source-icons/wikipedia.svg | No; theme-aware alpha mask |
+| X | CC0-1.0 | [public/icons/x/mono.svg](https://github.com/glincker/thesvg/blob/bdfcb7cf0209c140f38afeb73ebccd432eff5c92/public/icons/x/mono.svg) | internal/flower_ui/src/assets/source-icons/x.svg | No; theme-aware alpha mask |
+| YouTube | CC0-1.0 | [public/icons/youtube/default.svg](https://github.com/glincker/thesvg/blob/bdfcb7cf0209c140f38afeb73ebccd432eff5c92/public/icons/youtube/default.svg) | internal/flower_ui/src/assets/source-icons/youtube.svg | No |
+| Stack Overflow | CC0-1.0 | [public/icons/stack-overflow/default.svg](https://github.com/glincker/thesvg/blob/bdfcb7cf0209c140f38afeb73ebccd432eff5c92/public/icons/stack-overflow/default.svg) | internal/flower_ui/src/assets/source-icons/stack-overflow.svg | No |
+| Mozilla | CC0-1.0 | [public/icons/mozilla/mono.svg](https://github.com/glincker/thesvg/blob/bdfcb7cf0209c140f38afeb73ebccd432eff5c92/public/icons/mozilla/mono.svg) | internal/flower_ui/src/assets/source-icons/mozilla.svg | No; theme-aware alpha mask |
+| npm | CC0-1.0 | [public/icons/npm/default.svg](https://github.com/glincker/thesvg/blob/bdfcb7cf0209c140f38afeb73ebccd432eff5c92/public/icons/npm/default.svg) | internal/flower_ui/src/assets/source-icons/npm.svg | No |
+| GitLab | CC0-1.0 | [public/icons/gitlab/default.svg](https://github.com/glincker/thesvg/blob/bdfcb7cf0209c140f38afeb73ebccd432eff5c92/public/icons/gitlab/default.svg) | internal/flower_ui/src/assets/source-icons/gitlab.svg | No |
+| Baidu | CC0-1.0 | [public/icons/baidu/default.svg](https://github.com/glincker/thesvg/blob/bdfcb7cf0209c140f38afeb73ebccd432eff5c92/public/icons/baidu/default.svg) | internal/flower_ui/src/assets/source-icons/baidu.svg | No |
+| Zhihu | CC0-1.0 | [public/icons/zhihu/default.svg](https://github.com/glincker/thesvg/blob/bdfcb7cf0209c140f38afeb73ebccd432eff5c92/public/icons/zhihu/default.svg) | internal/flower_ui/src/assets/source-icons/zhihu.svg | No |
+| Bilibili | CC0-1.0 | [public/icons/bilibili/default.svg](https://github.com/glincker/thesvg/blob/bdfcb7cf0209c140f38afeb73ebccd432eff5c92/public/icons/bilibili/default.svg) | internal/flower_ui/src/assets/source-icons/bilibili.svg | No |
+
+### theSVG MIT License
+
+```text
+MIT License
+
+Copyright (c) 2025 thesvg.org
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+### Creative Commons CC0-1.0 License
+
+```text
+Creative Commons Legal Code
+
+CC0 1.0 Universal
+
+    CREATIVE COMMONS CORPORATION IS NOT A LAW FIRM AND DOES NOT PROVIDE
+    LEGAL SERVICES. DISTRIBUTION OF THIS DOCUMENT DOES NOT CREATE AN
+    ATTORNEY-CLIENT RELATIONSHIP. CREATIVE COMMONS PROVIDES THIS
+    INFORMATION ON AN "AS-IS" BASIS. CREATIVE COMMONS MAKES NO WARRANTIES
+    REGARDING THE USE OF THIS DOCUMENT OR THE INFORMATION OR WORKS
+    PROVIDED HEREUNDER, AND DISCLAIMS LIABILITY FOR DAMAGES RESULTING FROM
+    THE USE OF THIS DOCUMENT OR THE INFORMATION OR WORKS PROVIDED
+    HEREUNDER.
+
+Statement of Purpose
+
+The laws of most jurisdictions throughout the world automatically confer
+exclusive Copyright and Related Rights (defined below) upon the creator
+and subsequent owner(s) (each and all, an "owner") of an original work of
+authorship and/or a database (each, a "Work").
+
+Certain owners wish to permanently relinquish those rights to a Work for
+the purpose of contributing to a commons of creative, cultural and
+scientific works ("Commons") that the public can reliably and without fear
+of later claims of infringement build upon, modify, incorporate in other
+works, reuse and redistribute as freely as possible in any form whatsoever
+and for any purposes, including without limitation commercial purposes.
+These owners may contribute to the Commons to promote the ideal of a free
+culture and the further production of creative, cultural and scientific
+works, or to gain reputation or greater distribution for their Work in
+part through the use and efforts of others.
+
+For these and/or other purposes and motivations, and without any
+expectation of additional consideration or compensation, the person
+associating CC0 with a Work (the "Affirmer"), to the extent that he or she
+is an owner of Copyright and Related Rights in the Work, voluntarily
+elects to apply CC0 to the Work and publicly distribute the Work under its
+terms, with knowledge of his or her Copyright and Related Rights in the
+Work and the meaning and intended legal effect of CC0 on those rights.
+
+1. Copyright and Related Rights. A Work made available under CC0 may be
+protected by copyright and related or neighboring rights ("Copyright and
+Related Rights"). Copyright and Related Rights include, but are not
+limited to, the following:
+
+  i. the right to reproduce, adapt, distribute, perform, display,
+     communicate, and translate a Work;
+ ii. moral rights retained by the original author(s) and/or performer(s);
+iii. publicity and privacy rights pertaining to a person's image or
+     likeness depicted in a Work;
+ iv. rights protecting against unfair competition in regards to a Work,
+     subject to the limitations in paragraph 4(a), below;
+  v. rights protecting the extraction, dissemination, use and reuse of data
+     in a Work;
+ vi. database rights (such as those arising under Directive 96/9/EC of the
+     European Parliament and of the Council of 11 March 1996 on the legal
+     protection of databases, and under any national implementation
+     thereof, including any amended or successor version of such
+     directive); and
+vii. other similar, equivalent or corresponding rights throughout the
+     world based on applicable law or treaty, and any national
+     implementations thereof.
+
+2. Waiver. To the greatest extent permitted by, but not in contravention
+of, applicable law, Affirmer hereby overtly, fully, permanently,
+irrevocably and unconditionally waives, abandons, and surrenders all of
+Affirmer's Copyright and Related Rights and associated claims and causes
+of action, whether now known or unknown (including existing as well as
+future claims and causes of action), in the Work (i) in all territories
+worldwide, (ii) for the maximum duration provided by applicable law or
+treaty (including future time extensions), (iii) in any current or future
+medium and for any number of copies, and (iv) for any purpose whatsoever,
+including without limitation commercial, advertising or promotional
+purposes (the "Waiver"). Affirmer makes the Waiver for the benefit of each
+member of the public at large and to the detriment of Affirmer's heirs and
+successors, fully intending that such Waiver shall not be subject to
+revocation, rescission, cancellation, termination, or any other legal or
+equitable action to disrupt the quiet enjoyment of the Work by the public
+as contemplated by Affirmer's express Statement of Purpose.
+
+3. Public License Fallback. Should any part of the Waiver for any reason
+be judged legally invalid or ineffective under applicable law, then the
+Waiver shall be preserved to the maximum extent permitted taking into
+account Affirmer's express Statement of Purpose. In addition, to the
+extent the Waiver is so judged Affirmer hereby grants to each affected
+person a royalty-free, non transferable, non sublicensable, non exclusive,
+irrevocable and unconditional license to exercise Affirmer's Copyright and
+Related Rights in the Work (i) in all territories worldwide, (ii) for the
+maximum duration provided by applicable law or treaty (including future
+time extensions), (iii) in any current or future medium and for any number
+of copies, and (iv) for any purpose whatsoever, including without
+limitation commercial, advertising or promotional purposes (the
+"License"). The License shall be deemed effective as of the date CC0 was
+applied by Affirmer to the Work. Should any part of the License for any
+reason be judged legally invalid or ineffective under applicable law, such
+partial invalidity or ineffectiveness shall not invalidate the remainder
+of the License, and in such case Affirmer hereby affirms that he or she
+will not (i) exercise any of his or her remaining Copyright and Related
+Rights in the Work or (ii) assert any associated claims and causes of
+action with respect to the Work, in either case contrary to Affirmer's
+express Statement of Purpose.
+
+4. Limitations and Disclaimers.
+
+ a. No trademark or patent rights held by Affirmer are waived, abandoned,
+    surrendered, licensed or otherwise affected by this document.
+ b. Affirmer offers the Work as-is and makes no representations or
+    warranties of any kind concerning the Work, express, implied,
+    statutory or otherwise, including without limitation warranties of
+    title, merchantability, fitness for a particular purpose, non
+    infringement, or the absence of latent or other defects, accuracy, or
+    the present or absence of errors, whether or not discoverable, all to
+    the greatest extent permissible under applicable law.
+ c. Affirmer disclaims responsibility for clearing rights of other persons
+    that may apply to the Work or any use thereof, including without
+    limitation any person's Copyright and Related Rights in the Work.
+    Further, Affirmer disclaims responsibility for obtaining any necessary
+    consents, permissions or other rights required for any use of the
+    Work.
+ d. Affirmer understands and acknowledges that Creative Commons is not a
+    party to this document and has no duty or obligation with respect to
+    this CC0 or use of the Work.
+```
+
 ## Bundled Environment platform icons
 
 The Apple, Linux, Linux distribution and Windows marks identify the operating system of the Runtime shown in a Desktop Environment card. When the system is unknown, the Virtual Machine asset from the Azure collection supplies a default device illustration; it does not identify an OS, virtualization technology or cloud provider. Assets are bundled unchanged from theSVG revision `8731f4b62fea303b022e4aa0125783aeb42c3ea5` and display their original colors. Apple uses the upstream black and white variants for light and dark themes respectively. The pinned [upstream icon metadata](https://github.com/glincker/thesvg/blob/8731f4b62fea303b022e4aa0125783aeb42c3ea5/src/data/icons.json) declares CC0-1.0 for Apple, Linux and most distribution marks and MIT for Windows and Virtual Machine. Debian, Gentoo and Rocky Linux retain their respective CC-BY-SA-3.0, CC-BY-SA-2.5 and CC-BY-SA-4.0 terms. Their original brand sources are linked per asset, and the unmodified SVGs remain available at the pinned source paths. Debian artwork belongs to Software in the Public Interest; Gentoo artwork belongs to its respective creators and the Gentoo Foundation; Rocky Linux artwork belongs to the Rocky Enterprise Software Foundation. Fedora is declared Custom and retains the official Fedora Trademark Guidelines below. Fedora and the Fedora logo are trademarks of Red Hat, Inc. The marks identify actual Runtime systems and imply no endorsement. Product names and trademarks remain the property of their respective owners; copyright licenses do not grant trademark rights or imply endorsement.

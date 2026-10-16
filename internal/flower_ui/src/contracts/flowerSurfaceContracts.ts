@@ -1521,6 +1521,7 @@ export type FlowerSurfaceAdapter = Readonly<{
   previewStagedAttachment?: (attachment: FlowerStagedAttachment, scope: FlowerAttachmentStagingScope) => void | Promise<void>;
   loadComputerFrame?: (input: FlowerComputerFrameSource & Readonly<{ signal: AbortSignal }>) => Promise<Blob>;
   loadToolImage?: (input: Readonly<{ thread_id: string; resource_ref: string; signal: AbortSignal }>) => Promise<Blob>;
+  resolveSourceIcon?: (origin: string) => Promise<Readonly<{ data_url?: string; expires_at: string }>>;
   loadMessageAttachment?: (input: Readonly<{ url: string; signal: AbortSignal }>) => Promise<Blob>;
   openMessageFile?: (input: Readonly<{ path: string; action: 'preview' | 'reveal'; kind?: 'file' | 'directory'; signal?: AbortSignal }>) => Promise<void>;
   openMessageURL?: (input: Readonly<{ url: string; signal: AbortSignal }>) => Promise<void>;

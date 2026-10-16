@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { page } from 'vitest/browser';
 import '../index.css';
 import { FlowerMarkdownBlock } from '../../../../flower_ui/src/chat/markdown/FlowerMarkdownBlock';
+import { createFlowerSourceIconResolver, type FlowerSourceIcon } from '../../../../flower_ui/src/chat/markdown/flowerSourceIcons';
 import type { FlowerCitationSource } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import '../../../../flower_ui/src/styles/flower.css';
 
@@ -58,6 +59,57 @@ describe('Flower canonical citations in Chromium', () => {
     expect(root.querySelectorAll('a.flower-chat-citation')).toHaveLength(1);
   });
 
+  it('retains collapsed site icons and allows interaction while favicon requests are pending', async () => {
+    const bibliography = '[1] GitHub\nhttps://github.com/project\n\n[2] Unknown source\nhttps://unknown.example/article\n\n[3] Same site\nhttps://unknown.example/other';
+    let finish!: (icon: FlowerSourceIcon) => void;
+    const request = vi.fn(() => new Promise<FlowerSourceIcon>(resolve => { finish = resolve; }));
+    const resolve = createFlowerSourceIconResolver(request);
+    root = document.createElement('div'); document.body.appendChild(root);
+    dispose = render(() => <div class="flower-chat-shell" style={{ width: '640px' }}>
+      <FlowerMarkdownBlock content={'```text\n' + bibliography + '\n```'} citationLabels={{ sources: 'Sources', unavailable: 'Unavailable', copy: 'Copy sources' }} resolveSourceIcon={resolve} copyCodeLabel="Copy" codeCopiedLabel="Copied" />
+      <textarea aria-label="Message" />
+    </div>, root);
+    await expect.poll(() => request.mock.calls.length).toBe(1);
+    const toggle = root.querySelector<HTMLButtonElement>('.flower-chat-source-toggle')!;
+    const list = root.querySelector<HTMLOListElement>('.flower-chat-source-grid')!;
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(list.hidden).toBe(true);
+    expect(root.querySelectorAll('.flower-chat-source-sites .flower-chat-source-icon')).toHaveLength(2);
+    await expect.poll(() => root.querySelectorAll('.flower-chat-source-sites [data-loaded]').length).toBe(1);
+    expect(root.querySelector('.flower-chat-source-sites')!.getBoundingClientRect().height).toBeGreaterThan(0);
+    toggle.click(); await frame();
+    expect(list.hidden).toBe(false);
+    expect(root.querySelector('.flower-chat-source-card')!.getBoundingClientRect().height).toBeLessThanOrEqual(38);
+    const input = root.querySelector('textarea')!;
+    input.focus(); input.value = 'Continue working'; input.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    expect(document.activeElement).toBe(input);
+    const copy = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue();
+    root.querySelector<HTMLButtonElement>('.flower-chat-source-copy')!.click();
+    await expect.poll(() => copy.mock.calls[0]?.[0]).toBe(bibliography);
+    toggle.click(); await frame();
+    expect(list.hidden).toBe(true);
+    expect(root.querySelector('.flower-chat-source-sites')!.getBoundingClientRect().height).toBeGreaterThan(0);
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="teal"/></svg>';
+    finish({ data_url: 'data:image/svg+xml;base64,' + btoa(svg), expires_at: new Date(Date.now() + 90 * 86400000).toISOString() });
+    await expect.poll(() => root.querySelectorAll('.flower-chat-source-icon[data-loaded]').length).toBe(5);
+    expect(root.querySelectorAll('.flower-chat-source-sites [data-loaded]')).toHaveLength(2);
+    toggle.click(); toggle.click();
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(root.querySelector('.flower-chat-source-sites .flower-chat-source-brand')!.getBoundingClientRect().width).toBe(16);
+  });
+
+  it('keeps generated icons after a failed request', async () => {
+    root = document.createElement('div'); document.body.appendChild(root);
+    const resolve = createFlowerSourceIconResolver(async () => { throw new Error('offline'); });
+    dispose = render(() => <FlowerMarkdownBlock content={'```text\n[1] Missing\nhttps://unavailable.example\n```'} resolveSourceIcon={resolve} citationLabels={{ sources: 'Sources', unavailable: 'Unavailable' }} copyCodeLabel="Copy" codeCopiedLabel="Copied" />, root);
+    await frame();
+    const node = root.querySelector<HTMLElement>('.flower-chat-source-icon')!;
+    expect(node.textContent).toBe('U');
+    expect(node.querySelector('img')).toBeNull();
+    root.querySelector<HTMLButtonElement>('.flower-chat-source-toggle')!.click();
+    expect(root.querySelector<HTMLOListElement>('.flower-chat-source-grid')!.hidden).toBe(false);
+  });
+
   it.each(['classic-light', 'classic-dark'])('renders readable source cards, exact copy and narrow layouts in %s', async theme => {
     await page.viewport(1060, 900);
     document.documentElement.classList.toggle('dark', theme === 'classic-dark');
@@ -67,7 +119,7 @@ describe('Flower canonical citations in Chromium', () => {
     const [content, setContent] = createSignal(`# Report\n\nFirst paragraph.\n\nSecond paragraph.\n\n## Findings\n\n- First finding\n- Second finding\n\n### References\n\n\`\`\`text\n${bibliography}`);
     root = document.createElement('div'); root.style.width = '960px'; document.body.appendChild(root);
     const [copyLabel, setCopyLabel] = createSignal('Copy sources');
-    dispose = render(() => <div class="flower-chat-shell" style={{ padding: '24px' }}>
+    dispose = render(() => <div class="flower-chat-shell" style={{ padding: '24px', transform: 'translate(0px, 0px)' }}>
       <div class="flower-message-bubble flower-message-bubble-assistant"><FlowerMarkdownBlock content={content()} streaming={true} citationLabels={{ sources: 'Sources', unavailable: 'Unavailable', copy: copyLabel() }} copyCodeLabel="Copy code" codeCopiedLabel="Copied" /></div>
       <div class="flower-composer">
         <textarea aria-label="Message" />
@@ -94,18 +146,32 @@ describe('Flower canonical citations in Chromium', () => {
     expect(root.querySelectorAll('.flower-chat-source-card')[1].getAttribute('href')).toBe(bibliography.split('\n').at(-1));
     const write = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue();
     const button = root.querySelector<HTMLButtonElement>('.flower-chat-source-copy')!;
+    const bounds = button.getBoundingClientRect();
+    const glyph = button.querySelector('svg')!.getBoundingClientRect();
+    expect(glyph.left).toBeGreaterThanOrEqual(bounds.left);
+    expect(glyph.right).toBeLessThanOrEqual(bounds.right);
+    expect(glyph.top).toBeGreaterThanOrEqual(bounds.top);
+    expect(glyph.bottom).toBeLessThanOrEqual(bounds.bottom);
     button.click();
     await expect.poll(() => write.mock.calls[0]?.[0]).toBe(bibliography);
     expect(button.getAttribute('aria-label')).toBe('Copied');
     expect(root.querySelector('.flower-chat-md-code-block')).toBeNull();
     await page.screenshot({ element: root, path: `__screenshots__/flower-source-cards-${theme}.png` });
+    const toggle = root.querySelector<HTMLButtonElement>('.flower-chat-source-toggle')!;
+    toggle.click(); await frame();
+    await expect.poll(() => root.querySelectorAll('.flower-chat-source-icon[data-loaded]').length).toBe(2);
+    await page.screenshot({ element: root, path: `__screenshots__/flower-source-cards-expanded-${theme}.png` });
+    toggle.click();
     root.style.width = '320px'; await frame();
     expect(root.scrollWidth).toBeLessThanOrEqual(321);
+    root.querySelector<HTMLButtonElement>('.flower-chat-source-toggle')!.click();
+    await frame();
     const first = root.querySelector<HTMLElement>('.flower-chat-source-card')!;
     const second = root.querySelectorAll<HTMLElement>('.flower-chat-source-card')[1];
     expect(second.getBoundingClientRect().top).toBeGreaterThan(first.getBoundingClientRect().top);
     first.focus();
     expect(getComputedStyle(first).outlineStyle).toBe('solid');
+    await page.screenshot({ element: root, path: `__screenshots__/flower-source-cards-narrow-${theme}.png` });
     setCopyLabel('複製來源'); await frame();
     expect(root.querySelector('.flower-chat-source-copy')?.getAttribute('aria-label')).toBe('複製來源');
   });

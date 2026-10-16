@@ -160,6 +160,7 @@ export type RuntimeFlowerSurfaceAdapterOptions = Readonly<{
   previewStagedAttachment?: FlowerSurfaceAdapter['previewStagedAttachment'];
   loadComputerFrame?: FlowerSurfaceAdapter['loadComputerFrame'];
   loadToolImage?: FlowerSurfaceAdapter['loadToolImage'];
+  resolveSourceIcon?: FlowerSurfaceAdapter['resolveSourceIcon'];
   loadMessageAttachment?: FlowerSurfaceAdapter['loadMessageAttachment'];
   openMessageFile?: FlowerSurfaceAdapter['openMessageFile'];
   openMessageURL?: FlowerSurfaceAdapter['openMessageURL'];
@@ -526,6 +527,7 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
     ...(options.computerFrameRate ? { computerFrameRate: options.computerFrameRate } : {}),
     ...(options.loadComputerFrame ? { loadComputerFrame: options.loadComputerFrame } : {}),
     ...(options.loadToolImage ? { loadToolImage: options.loadToolImage } : {}),
+    ...(options.resolveSourceIcon ? { resolveSourceIcon: options.resolveSourceIcon } : {}),
     ...(options.loadMessageAttachment ? { loadMessageAttachment: options.loadMessageAttachment } : {}),
     ...(options.openMessageFile ? { openMessageFile: options.openMessageFile } : {}),
     ...(options.openMessageURL ? { openMessageURL: options.openMessageURL } : {}),

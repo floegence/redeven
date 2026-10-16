@@ -10,6 +10,12 @@
 - Show computer and browser screenshots as [compact thumbnails](ai/computer-use-media.md) in expanded Activity details, without the decorative media canvas.
 - Retain saved-image inspection, bounded loading and retry, manual disclosure and authorized media resolution.
 
+## 2026-10-15: Compact Flower sources and website icons
+
+- Keep [sources](ui/flower-citations.md) compact, with collapsed website summaries and independent copy controls.
+- Bundle audited theSVG marks and resolve other favicons asynchronously through a disposable 90-day Runtime cache.
+- Preserve interaction during delayed or failed icons, public-network egress boundaries and canonical source ownership.
+
 ## 2026-10-15 — Used context composition
 
 - Document request-scoped used-input estimates, retained tool output, native-total authority and compact localized presentation in [managed context](ai/flower-managed-model-context.md).

@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower citations
 description: Canonical assistant source ownership, safe links, and provider marker presentation.
 tags: [ai, flower, markdown, citations]
-timestamp: 2026-10-14T00:00:00Z
+timestamp: 2026-10-15T00:00:00Z
 ---
 # Summary
 
@@ -44,14 +44,41 @@ remain readable without rewriting historical data.
 
 ## Source-card presentation
 
-Source cards show a numbered badge, complete title, source hostname, a compact
-URL preview and an external-link affordance. The whole row is a keyboard-
-focusable HTTP(S) link; the exact destination remains in its `href` and native
-tooltip. Long titles wrap and URL previews truncate within the card. The list
-uses two columns when space permits and one column on narrow surfaces, without
-horizontal scrolling. Copy sources preserves the full bibliography text and
-uses localized copy/completion labels. Inline provider citations retain their
-source titles, with a quiet bordered treatment and visible keyboard focus.
+Sources start collapsed, showing the count and a deduplicated stack of up to
+four website icons plus an overflow count. The toggle and copy action remain
+independent. Expanded sources use quiet 36px single rows with unboxed numbers,
+16px site icons, truncated titles, aligned hostnames and external-link arrows.
+Below 420px of available content width, hostnames move under titles in 52px
+rows. The whole row remains a keyboard-focusable HTTP(S) link with complete
+title and destination in its tooltip. Copy preserves the exact bibliography
+and localized completion labels. Inline citations retain their existing links.
+
+## Website icons
+
+The shared Flower UI bundles 27 common website marks from pinned theSVG assets
+with audited per-icon licenses. Domain matching respects label boundaries.
+Monochrome marks use theme-aware alpha masks; color marks keep their colors.
+Each source renders a generated hostname initial immediately. Icon enhancement
+runs independently after Markdown rendering; collapse/expand never restarts it.
+The adapter deduplicates pending origin requests and limits concurrency to four.
+Delayed, missing or failed icons never disable copy, links, navigation or input.
+Disposed regions ignore late completions.
+
+For unbundled sites, both carriers use the authenticated read-only Runtime
+endpoint at `/_redeven_proxy/api/flower/source-icon`. The Runtime fetches the
+origin favicon or a declared icon from its homepage, verifies the content and
+persists bytes and expiry under `cache/flower-source-icons` for 90 days. Restart
+and remount reuse those bytes; failures receive a 24-hour negative cache.
+This disposable presentation cache never changes canonical conversation data.
+Desktop resource requests use an already running Runtime and skip model setup.
+
+Remote icon work has a six-second total budget, four concurrent fetches,
+bounded redirects and a 256 KiB body limit. Public-network validation applies
+to every DNS result and redirect, and dialing uses the validated numeric IP.
+Requests carry no user credentials or cookies. SVG content must be inert vector
+geometry; raster dimensions are bounded and large raster images are reduced.
+Generated icons remain visible if content validation, persistence or loading
+fails. The renderer receives image bytes, never a third-party tracking URL.
 
 ## Authored bibliography
 
@@ -74,6 +101,10 @@ enable this assistant-specific presentation.
 - [Authored bibliography and source cards](../../internal/flower_ui/src/chat/markdown/flowerSourceCards.ts)
 - [Bibliography rejection and copy fixtures](../../internal/flower_ui/src/chat/markdown/flowerSourceCards.test.ts)
 - [Shared Markdown rendering](../../internal/flower_ui/src/chat/markdown/FlowerMarkdownBlock.tsx)
+- [Async icon enhancement and bounded resolver](../../internal/flower_ui/src/chat/markdown/flowerSourceIcons.ts)
+- [Runtime icon cache and fetch policy](../../internal/codeapp/appserver/flower_source_icon.go)
+- [Cache, restart and egress regressions](../../internal/codeapp/appserver/flower_source_icon_test.go)
+- [Bundled icon provenance](../../assets/flower_source_icons.json)
 - [Current-view projection regression](../../internal/flower_ui/src/runtimeCurrentView.test.ts)
 - [History mapper regression](../../internal/flower_ui/src/flowerLiveMapper.test.ts)
 - [Citation and Markdown fixtures](../../internal/flower_ui/src/chat/markdown/flowerCitations.test.ts)

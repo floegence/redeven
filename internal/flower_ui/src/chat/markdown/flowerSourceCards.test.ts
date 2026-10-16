@@ -5,6 +5,19 @@ const bibliography = '[1] Hermes v0.22.0\nhttps://github.com/NousResearch/hermes
 const fence = (text = bibliography, lang = 'text') => ({ text, lang, raw: `\`\`\`${lang}\n${text}\n\`\`\`\n` });
 
 describe('Flower source cards', () => {
+  it('starts collapsed with a deduplicated website icon summary and compact rows', () => {
+    const html = renderFlowerSourceCards([
+      { url: 'https://github.com/one' }, { url: 'https://github.com/two' },
+      { url: 'https://unknown.example/article' },
+    ], { sources: 'Sources' });
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).toContain('flower-chat-source-sites');
+    expect(html.split('data-flower-source-origin="https://github.com"').length - 1).toBe(3);
+    expect(html).not.toContain('flower-chat-source-url');
+    expect(html).toContain(' hidden');
+    expect(renderFlowerSourceCards([], { sources: 'Sources' })).toBe('');
+  });
+
   it('presents an explicit bibliography without changing authored numbering or URLs', () => {
     const sources = parseFlowerSourceFence(fence());
     expect(sources?.map(source => source.number)).toEqual(['1', '14']);
