@@ -877,7 +877,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     toolActivityTerminateCommand: 'Terminate command execution',
     webSearch: {
       search: 'Search', openPage: 'Open page', findInPage: 'Find on page', webActivity: 'Web search',
-      noDetails: 'Details not provided', noSources: 'No sources returned', sourcesUnavailable: 'Source details not provided',
+      noDetails: 'Details not provided', noSources: 'No sources returned', sourcesUnavailable: 'Search completed · Sources not recorded',
       sourcesTitle: 'Sources', queryLabel: 'Search queries', targetLabel: 'Web page', patternLabel: 'Find text',
       sources: (count) => `${count} ${count === 1 ? 'source' : 'sources'}`,
       queries: (count) => `${count} ${count === 1 ? 'query' : 'queries'}`,

@@ -1,5 +1,10 @@
 # Redeven OKF Update Log
 
+## 2026-10-15 — Compact web-search details
+
+- Document browser-style query fields and one-line sources in [activity interaction](ui/flower-activity-interaction.md#web-search-details).
+- Preserve native search action, multi-query and requested source facts through the [provider adapter](ai/model-provider-surface-and-history.md#native-web-search-observation).
+
 ## 2026-10-15: Compact image tool previews
 
 - Use the shared Activity thumbnail for [image reads](ai/image-read-and-retention.md#authorized-previews), matching computer and browser screenshot details.

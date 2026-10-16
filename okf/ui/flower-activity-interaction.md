@@ -44,6 +44,24 @@ Triggers expose a pointer cursor, focus indication, `aria-expanded`, and
 `aria-controls`. Enter and Space retain native activation. Before closing a
 panel containing focus, the trigger receives focus with `preventScroll`.
 
+## Web search details
+
+Expanded searches show each recorded query in a compact, read-only browser-style
+field with a search glyph. The existing Floe input-surface contract owns focus;
+native selection and copying remain available. The collapsed tool row, timing,
+icon, indentation and disclosure behavior remain unchanged.
+
+Sources use one line per entry and start with three entries. A title shares the
+line with its domain; a URL-only source displays its domain and path. Long text
+ellipsizes while the actual safe link and full address remain available. Supplied
+snippets stay in the source tooltip instead of adding permanent rows. One native,
+keyboard-accessible control reveals or hides the remaining entries without
+replacing itself. Unsafe links remain plain text. No per-entry address disclosure
+or card is added. Historical searches with no saved source list say that the
+search completed without recorded sources; an explicitly empty source list and
+an actual failure retain their distinct feedback. Report citations never become
+invented per-search results.
+
 ## Semantic tool icons
 
 Collapsed rows retain their compact geometry. Each registered tool, the hosted

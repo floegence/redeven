@@ -1,23 +1,29 @@
-import { createMemo, createSignal, For, Show } from 'solid-js';
+import { createMemo, createSignal, createUniqueId, For, Show } from 'solid-js';
+import { ChevronDown, Search } from '@floegence/floe-webapp-core/icons';
 import type { FlowerWebSearchCopy } from './copy';
 import type { FlowerWebOperationDetail } from './flowerActivityPresentation';
 import { safeWebFetchURL } from './flowerActivityPresentation';
 
+const collapsedSourceCount = 3;
+
 export function WebSearchActivity(props: {search: FlowerWebOperationDetail; copy: FlowerWebSearchCopy; openLabel: string}) {
   const [expanded, setExpanded] = createSignal(false);
+  const listId = createUniqueId();
   const queries = createMemo(() => props.search.query.split('\n').map((query) => query.trim()).filter(Boolean));
-  const visible = createMemo(() => expanded() ? props.search.results : props.search.results.slice(0, 5));
+  const visible = createMemo(() => expanded() ? props.search.results : props.search.results.slice(0, collapsedSourceCount));
   const link = (url: string, title: string) => {
     const safe = safeWebFetchURL(url);
     return <Show when={safe} fallback={<span>{title}</span>}>
-      <a href={safe} target="_blank" rel="noopener noreferrer" title={`${props.openLabel}: ${url}`} onClick={(event) => event.stopPropagation()}>{title}</a>
+      <a href={safe} target="_blank" rel="noopener noreferrer" title={props.openLabel + ': ' + url} onClick={(event) => event.stopPropagation()}>{title}</a>
     </Show>;
   };
   return <section class="flower-activity-web-panel flower-web-operation">
     <Show when={queries().length}>
       <div class="flower-activity-web-section">
-        <div class="flower-activity-detail-heading">{props.copy.queryLabel}</div>
-        <For each={queries()}>{(query) => <p class="flower-web-operation-value">{query}</p>}</For>
+        <For each={queries()}>{(query) => <div class="flower-web-operation-searchbox" data-floe-input-surface>
+          <Search aria-hidden="true" />
+          <input type="text" readOnly value={query} aria-label={props.copy.queryLabel} title={query} spellcheck={false} />
+        </div>}</For>
       </div>
     </Show>
     <Show when={props.search.url}>
@@ -34,26 +40,33 @@ export function WebSearchActivity(props: {search: FlowerWebOperationDetail; copy
     </Show>
     <Show when={props.search.results.length}>
       <div class="flower-activity-web-section">
-        <div class="flower-activity-detail-heading">{props.copy.sourcesTitle}</div>
-        <ul class="flower-activity-web-list">
-          <For each={visible()}>{(entry) => {
+        <div class="flower-activity-detail-heading">{props.copy.sourcesTitle} · {props.search.results.length}</div>
+        <ul id={listId} class="flower-activity-web-list" aria-label={props.copy.sourcesTitle}>
+          <For each={visible()}>{(entry, index) => {
             const safe = safeWebFetchURL(entry.url);
-            const domain = safe ? new URL(safe).host : '';
-            return <li class="flower-activity-web-entry">
-              <div class="flower-activity-web-entry-title">{link(entry.url, entry.title || entry.url)}</div>
-              <Show when={entry.url}>
-                <details class="flower-web-operation-address">
-                  <summary class="flower-activity-web-entry-meta" title={entry.url}>{domain || props.copy.targetLabel}</summary>
-                  <div class="flower-web-operation-url">{entry.url}</div>
-                </details>
+            const url = safe ? new URL(safe) : undefined;
+            const title = entry.title.trim();
+            const tooltip = [title, entry.url, entry.snippet].filter(Boolean).join('\n');
+            const content = <>
+              <span class="flower-web-operation-source-primary">{title || url?.host || entry.url}</span>
+              <Show when={url}>
+                <span class="flower-web-operation-source-secondary" classList={{ 'flower-web-operation-source-domain': Boolean(title) }}>
+                  {title ? url?.host : (url?.pathname ?? '') + (url?.search ?? '') + (url?.hash ?? '')}
+                </span>
               </Show>
-              <Show when={entry.snippet}><p class="flower-activity-web-entry-snippet">{entry.snippet}</p></Show>
+            </>;
+            return <li class="flower-activity-web-entry">
+              <span class="flower-web-operation-source-number" aria-hidden="true">{index() + 1}.</span>
+              <Show when={safe} fallback={<span class="flower-web-operation-source" title={tooltip}>{content}</span>}>
+                <a class="flower-web-operation-source" href={safe} target="_blank" rel="noopener noreferrer" title={tooltip} aria-label={props.openLabel + ': ' + (title ? title + ' · ' : '') + entry.url} onClick={(event) => event.stopPropagation()}>{content}</a>
+              </Show>
             </li>;
           }}</For>
         </ul>
-        <Show when={props.search.results.length > 5}>
-          <button type="button" class="flower-web-operation-more" aria-expanded={expanded()} onClick={() => setExpanded(!expanded())}>
-            {expanded() ? props.copy.showLess : props.copy.showMore(props.search.results.length - 5)}
+        <Show when={props.search.results.length > collapsedSourceCount}>
+          <button type="button" class="flower-web-operation-more" aria-expanded={expanded()} aria-controls={listId} onClick={() => setExpanded(!expanded())}>
+            {expanded() ? props.copy.showLess : props.copy.showMore(props.search.results.length - collapsedSourceCount)}
+            <ChevronDown aria-hidden="true" />
           </button>
         </Show>
       </div>

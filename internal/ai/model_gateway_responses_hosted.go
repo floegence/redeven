@@ -25,7 +25,10 @@ func (h *responsesHostedEvents) item(item oresponses.ResponseOutputItemUnion) {
 		return
 	}
 	action := item.Action
-	args := map[string]string{"action": action.Type}
+	args := map[string]any{"type": action.Type}
+	if len(action.Queries) > 0 {
+		args["queries"] = action.Queries
+	}
 	for key, value := range map[string]string{"query": action.Query, "url": action.URL, "pattern": action.Pattern} {
 		if value != "" {
 			args[key] = value
@@ -49,8 +52,8 @@ func (h *responsesHostedEvents) item(item oresponses.ResponseOutputItemUnion) {
 		result.Text = "Web search failed"
 		result.Error = &flprovider.HostedToolResultError{Code: "search_failed", Message: result.Text}
 	}
-	// The pinned SDK retains newer source fields in RawJSON. Project only public
-	// source fields; never persist arbitrary provider output as tool metadata.
+	// Project only public source fields, including optional titles retained by
+	// the SDK in RawJSON; never persist arbitrary provider output as metadata.
 	var sourceItem struct {
 		Action struct {
 			Sources []struct {

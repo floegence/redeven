@@ -219,7 +219,7 @@
         "webActivity": "웹 검색",
         "noDetails": "세부 정보가 제공되지 않았습니다",
         "noSources": "반환된 출처가 없습니다",
-        "sourcesUnavailable": "출처 세부 정보가 제공되지 않았습니다",
+        "sourcesUnavailable": "검색 완료 · 출처가 기록되지 않음",
         "sourcesTitle": "출처",
         "queryLabel": "검색어",
         "targetLabel": "웹 페이지",

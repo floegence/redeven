@@ -119,7 +119,7 @@ export const flowerSurfaceEnUS = {
   "webActivity": "Web search",
   "noDetails": "Details not provided",
   "noSources": "No sources returned",
-  "sourcesUnavailable": "Source details not provided",
+  "sourcesUnavailable": "Search completed · Sources not recorded",
   "sourcesTitle": "Sources",
   "queryLabel": "Search queries",
   "targetLabel": "Web page",

@@ -1560,6 +1560,7 @@ func decorateResponsesParams(params *oresponses.ResponseNewParams, webSearchMode
 	case providerWebSearchModeOpenAIResponsesBuiltin:
 		if tools != nil {
 			*tools = append(*tools, oresponses.ToolParamOfWebSearch(oresponses.WebSearchToolTypeWebSearch))
+			params.Include = append(params.Include, oresponses.ResponseIncludableWebSearchCallActionSources)
 		}
 	case providerWebSearchModeQwenResponsesWebSearch:
 		if tools != nil {

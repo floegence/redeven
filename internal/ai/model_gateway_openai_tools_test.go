@@ -896,6 +896,7 @@ func TestDecorateResponsesParams_WebSearchPayloads(t *testing.T) {
 			mode: providerWebSearchModeOpenAIResponsesBuiltin,
 			wantSubstr: []string{
 				`"type":"web_search"`,
+				`"include":["web_search_call.action.sources"]`,
 			},
 		},
 		{
@@ -904,7 +905,7 @@ func TestDecorateResponsesParams_WebSearchPayloads(t *testing.T) {
 			wantSubstr: []string{
 				`"type":"web_search"`,
 			},
-			denySubstr: []string{`"enable_search":true`},
+			denySubstr: []string{`"enable_search":true`, `web_search_call.action.sources`},
 		},
 		{
 			name:       "disabled",

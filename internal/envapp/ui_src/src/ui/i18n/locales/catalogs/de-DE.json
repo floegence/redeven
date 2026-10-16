@@ -5130,7 +5130,7 @@
         "webActivity": "Websuche",
         "noDetails": "Keine Details bereitgestellt",
         "noSources": "Keine Quellen zurückgegeben",
-        "sourcesUnavailable": "Keine Quellendetails bereitgestellt",
+        "sourcesUnavailable": "Suche abgeschlossen · Quellen nicht gespeichert",
         "sourcesTitle": "Quellen",
         "queryLabel": "Suchanfragen",
         "targetLabel": "Webseite",

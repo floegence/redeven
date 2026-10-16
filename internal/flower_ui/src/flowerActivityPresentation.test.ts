@@ -1025,7 +1025,7 @@ describe('presentFlowerActivityItem', () => {
       const p = presentFlowerActivityItem(item({tool_name:'web_search',renderer:'web_search',payload:{query:'weather',results_provided:provided}}));
       const block = p.detailBlocks[0];
       expect(block.kind).toBe('web_operation');
-      if (block.kind === 'web_operation') expect(block.search.notice).toBe(provided ? 'No sources returned' : 'Source details not provided');
+      if (block.kind === 'web_operation') expect(block.search.notice).toBe(provided ? 'No sources returned' : 'Search completed · Sources not recorded');
     }
   });
 

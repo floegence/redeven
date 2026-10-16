@@ -11,6 +11,17 @@ Floret owns the provider-visible history and render lineage for each Turn. Redev
 
 # Contract
 
+## Native web-search observation
+
+OpenAI Responses hosted search requests include
+`web_search_call.action.sources` so returned source URLs can reach the canonical
+Activity. The provider adapter passes the action `type`, supplied singular or
+multiple queries, target URL and find pattern through the existing published
+Floret hosted-tool contract. It projects only supplied source URLs and optional
+titles, preserving the distinction between an absent source list and an explicit
+empty list. It neither invents titles or snippets nor assigns final-answer
+citations to individual searches. Qwen requests keep their existing tool shape.
+
 ## Provider surface and history
 
 Flower's provider prefix has one owner. Published Floret v7.37.0 keeps one append-only canonical history and keys each render lineage by the complete provider request surface: provider, model, reasoning, System Prompt, local and hosted tools, adapter, context policy, and provider-state compatibility. Accepted user input, reasoning, assistant text, historical tool calls, and results enter later requests exactly once. `ask_user` remains an Assistant tool call and its durable public answer is the matching Tool result, never a synthetic Assistant explanation plus User JSON. Secret answers leave one redacted Tool result while the real value exists only in the current resume overlay. A provider-surface change sends the full canonical history on its own lineage and clears incompatible exact-surface continuation. Native state marked `canonical_history` remains eligible only when the adapter validates its canonical prefix. It does not compact unless the selected model's context window is actually insufficient. Completed compaction starts one new global generation; other prefix shrinkage or mutation fails as `context_prefix_drift`.
