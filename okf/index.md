@@ -315,6 +315,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Model request reuse](ai/model-request-reuse.md) - Execute canonical cache/continuation decisions with bounded OpenAI connections and recent/cumulative usage.
 - [Model context usage and compaction](ai/model-context-usage-and-compaction.md) - Account usage, context pressure, compaction, and capacity failures through typed runtime facts.
 - [Flower Ollama context qualification](operations/flower-ollama-context-qualification.md) - Verify the selected installed model's real compaction, token accounting, live context, and restart recovery in isolated state.
+- [Flower context distribution qualification](operations/flower-context-distribution-qualification.md) - Compare frozen-request estimates with fixed native usage and preserve real task, compaction and presentation evidence.
 - [Flower Ollama task qualification](operations/flower-ollama-task-qualification.md) - Exercise real selected-model tasks, interruption, queue controls, approvals, restart, checkpoint retry, and child-agent handoffs.
 - [DeepSeek Responses](ai/deepseek-responses.md) - Share Floret stateless transport and enforce documented web tool limits.
 - [Flower canonical thread queries](ai/flower-thread-queries.md) - Authorize active-path search, exact counts and bounded content reads through released Floret tools.
