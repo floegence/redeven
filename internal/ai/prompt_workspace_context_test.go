@@ -60,68 +60,10 @@ func initPromptWorkspaceRepo(t *testing.T) string {
 	return repo
 }
 
-func TestCollectPromptRepositoryState_ReportsDirtyCounts(t *testing.T) {
-	t.Parallel()
-
-	repo := initPromptWorkspaceRepo(t)
-	readmePath := filepath.Join(repo, "README.md")
-	if err := os.WriteFile(readmePath, []byte("hello\nstaged\n"), 0o644); err != nil {
-		t.Fatalf("write staged README: %v", err)
-	}
-	runPromptWorkspaceGit(t, repo, "add", "README.md")
-	if err := os.WriteFile(readmePath, []byte("hello\nstaged\nunstaged\n"), 0o644); err != nil {
-		t.Fatalf("write unstaged README: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(repo, "note.txt"), []byte("scratch\n"), 0o644); err != nil {
-		t.Fatalf("write untracked file: %v", err)
-	}
-
-	state := collectPromptRepositoryState(t.Context(), repo)
-	if !state.Available {
-		t.Fatalf("expected repository state to be available")
-	}
-	if state.StagedCount != 1 || state.UnstagedCount != 1 || state.UntrackedCount != 1 {
-		t.Fatalf("unexpected dirty counts: %+v", state)
-	}
-	if state.RelativeWorkdir != "." {
-		t.Fatalf("relative workdir=%q, want .", state.RelativeWorkdir)
-	}
-}
-
-func TestCollectPromptRepositoryState_ReportsLinkedWorktree(t *testing.T) {
-	t.Parallel()
-
-	repo := initPromptWorkspaceRepo(t)
-	branch := "feat-worktree-context"
-	worktree := filepath.Join(t.TempDir(), "wt")
-	runPromptWorkspaceGit(t, repo, "branch", branch)
-	runPromptWorkspaceGit(t, repo, "worktree", "add", worktree, branch)
-	if err := os.WriteFile(filepath.Join(worktree, "worktree-note.txt"), []byte("hello\n"), 0o644); err != nil {
-		t.Fatalf("write worktree file: %v", err)
-	}
-
-	state := collectPromptRepositoryState(t.Context(), worktree)
-	if !state.Available {
-		t.Fatalf("expected worktree repository state to be available")
-	}
-	if !state.LinkedWorktree {
-		t.Fatalf("expected linked worktree to be detected: %+v", state)
-	}
-	if state.Branch != branch {
-		t.Fatalf("branch=%q, want %q", state.Branch, branch)
-	}
-	if state.RepoRoot != filepath.Clean(worktree) {
-		t.Fatalf("repo root=%q, want %q", state.RepoRoot, worktree)
-	}
-	if state.UntrackedCount != 1 {
-		t.Fatalf("untracked_count=%d, want 1", state.UntrackedCount)
-	}
-}
-
 func TestCollectPromptRepoRuleFiles_DiscoversScopedSources(t *testing.T) {
 	t.Parallel()
 
-	root := t.TempDir()
+	root := initPromptWorkspaceRepo(t)
 	nested := filepath.Join(root, "nested", "deeper")
 	if err := os.MkdirAll(nested, 0o755); err != nil {
 		t.Fatalf("mkdir nested: %v", err)
@@ -136,7 +78,7 @@ func TestCollectPromptRepoRuleFiles_DiscoversScopedSources(t *testing.T) {
 		t.Fatalf("write CLAUDE.md: %v", err)
 	}
 
-	files, err := newRun(runOptions{AgentHomeDir: root, WorkingDir: nested}).collectPromptRepoRuleFiles(t.Context(), nested, root)
+	files, err := newRun(runOptions{AgentHomeDir: root, WorkingDir: nested}).collectPromptRepoRuleFiles(t.Context(), nested)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -221,19 +163,6 @@ func TestBuildPromptWorkspaceContextSection_RendersStructuredFacts(t *testing.T)
 			PermissionType:     FlowerPermissionApprovalRequired,
 			SubagentDelegation: true,
 		},
-		Repository: promptRepositoryState{
-			Available:       true,
-			RepoRoot:        "/workspace/repo",
-			RelativeWorkdir: "internal/ai",
-			Branch:          "feat/workspace-context",
-			Upstream:        "origin/main",
-			LinkedWorktree:  true,
-			AheadCount:      2,
-			BehindCount:     1,
-			StagedCount:     1,
-			UnstagedCount:   2,
-			UntrackedCount:  3,
-		},
 		RepoRules: []promptRepoRuleFile{
 			{
 				Path:     "/workspace/repo/AGENTS.md",
@@ -255,13 +184,12 @@ func TestBuildPromptWorkspaceContextSection_RendersStructuredFacts(t *testing.T)
 			},
 		},
 	}
-	section := strings.Join(append(append(append(renderPromptEnvironmentFactsLines(workspace.Environment), renderPromptRepositoryStateLines(workspace.Repository)...), renderPromptRepoRuleLines(workspace.RepoRules, nil)...), renderPromptDelegationLines(workspace.Delegation)...), "\n")
+	section := strings.Join(append(append(renderPromptEnvironmentFactsLines(workspace.Environment), renderPromptRepoRuleLines(workspace.RepoRules, nil)...), renderPromptDelegationLines(workspace.Delegation)...), "\n")
 
 	for _, want := range []string{
 		"- Shell: /bin/zsh",
 		"- Filesystem roots: Home=/workspace/home (read-write); Computer=/ (read-only)",
 		"- Permission type: approval_required",
-		"- Repository root: /workspace/repo",
 		"/workspace/repo/AGENTS.md",
 		"readable; contents not loaded",
 		"Rule sync -- objective: Sync repo rules",
@@ -280,7 +208,7 @@ func TestModelContextSnapshotCarriesCompleteStablePartitions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(first.Sections) != 6 {
+	if len(first.Sections) != 5 {
 		t.Fatalf("sections=%+v", first.Sections)
 	}
 	text := modelContextSnapshotText(first)
@@ -295,7 +223,7 @@ func TestModelContextSnapshotCarriesCompleteStablePartitions(t *testing.T) {
 	}
 }
 
-func TestModelContextCollectorRefreshesDateRepositoryAndSkillsWithoutUnrelatedChanges(t *testing.T) {
+func TestModelContextCollectorRefreshesDateAndSkillsWithoutGitUpdates(t *testing.T) {
 	root := initPromptWorkspaceRepo(t)
 	writeContextTestSkill(t, root, "First catalog")
 	mgr := newSkillManager(root, root)
@@ -330,7 +258,10 @@ func TestModelContextCollectorRefreshesDateRepositoryAndSkillsWithoutUnrelatedCh
 		t.Fatal(err)
 	}
 	current := sections(next)
-	for _, key := range []string{"local_time", "repository", "skills"} {
+	if _, exists := current["repository"]; exists {
+		t.Fatal("automatic snapshot contains Git repository facts")
+	}
+	for _, key := range []string{"local_time", "skills"} {
 		if current[key] == previous[key] {
 			t.Fatalf("changed section %s was stale", key)
 		}

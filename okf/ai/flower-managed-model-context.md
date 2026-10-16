@@ -3,12 +3,12 @@ type: AI Context Contract
 title: Flower managed runtime facts
 description: One snapshot collector supplies canonical facts through published Floret admission and request boundaries.
 tags: [ai, flower, context, recovery]
-timestamp: 2026-10-15T00:00:00Z
+timestamp: 2026-10-16T00:00:00Z
 ---
 # Summary
 
-Flower consumes published Floret v7.40.0. One complete collector supplies six
-stable partitions: execution environment, date/timezone, repository state, rule
+Flower consumes published Floret v7.46.1. One complete collector supplies five
+stable partitions: execution environment, date/timezone, repository rule
 sources, available skills, and delegation. Floret owns chronological admission,
 semantic changes, user-role model-context messages, compaction and recovery.
 The product owns collection and authorized presentation only.
@@ -29,11 +29,26 @@ Prepared network attempts remain immutable. Steering, authorization and unknown
 effect termination retain their existing boundaries.
 
 Required rule or catalog failures terminate with model_context_unavailable.
-Optional Git/delegation probe failures explicitly invalidate previous facts.
-Collection honors cancellation and the existing three-second Git limit.
+Optional delegation probe failures explicitly invalidate previous facts.
+Collection honors cancellation. Repository root discovery retains its
+three-second limit and is used only to bound applicable rule sources.
 Safe retry collects again and preserves confirmed tool results. Unknown effects
 never replay. Floret keeps exact compaction-cut baselines, chronological tails,
 fork-point facts, and permanent schema migrations; hosts do not inspect storage.
+
+Git workspace details are queried on demand through existing tools. The
+collector does not run status, branch, upstream, ahead/behind or worktree probes,
+and file edits do not append repository background updates. Working directory
+and authorized filesystem roots remain execution environment facts. Rule
+discovery lists source paths and scopes without loading their contents; the
+model reads applicable rules through existing tools.
+
+Existing threads retain historical repository snapshots. The next complete
+snapshot omits the repository key, so Floret's existing section-removal message
+marks those facts as no longer current. Unchanged later requests do not append
+another removal, including after restart. No journal rewrite or schema change
+is involved. Explicit Git calls and their complete results remain normal tool
+history.
 
 # Boundaries
 
@@ -90,5 +105,6 @@ component and bounded detail cache.
 - [Live transport](../../internal/ai/flower_live_stream.go)
 - [Shared panel](../../internal/flower_ui/src/chat/FlowerComposerContextIndicator.tsx)
 - [Refresh and confirmed-effect retry regression](../../internal/ai/model_context_runtime_integration_test.go)
+- [Provider-visible Git removal and retained dynamic facts](../../internal/ai/repository_model_context_integration_test.go)
 - [Skill cache and repaired-source regression](../../internal/ai/skill_model_context_test.go)
 - [Panel interaction tests](../../internal/envapp/ui_src/src/ui/FlowerComposerContextIndicator.test.tsx)
