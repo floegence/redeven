@@ -5874,6 +5874,17 @@
         "failed": "Der Vorgang konnte nicht bestätigt werden. Aktualisieren Sie die Details und versuchen Sie es erneut.",
         "changed": "Diese Eingabe wurde geändert oder bereits verarbeitet. Die Details wurden aktualisiert.",
         "busy": "Der Subagent wird gerade beendet oder komprimiert seinen Kontext. Versuche es danach erneut."
+      },
+      "events": {
+        "title": "Wichtige Ereignisse",
+        "received": "Empfangen",
+        "admitted": "Zum Kontext hinzugefügt",
+        "read": "Vollständiges Ereignis lesen",
+        "more": "Weitere Ereignisse laden",
+        "report": "Bericht",
+        "input": "Eingabe erforderlich",
+        "approval": "Genehmigung erforderlich",
+        "interrupted": "Unterbrochen"
       }
     },
     "settings": {

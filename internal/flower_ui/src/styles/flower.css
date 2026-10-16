@@ -9642,11 +9642,29 @@ button.flower-attachment-preview-trigger:disabled {
   color: var(--primary);
 }
 
+.flower-subagents-dropdown-content {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.flower-parent-events {
+  min-width: 0;
+  padding: 0.25rem 0.75rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.flower-parent-events h3 { margin-bottom: 0.5rem; }
+.flower-parent-events button { cursor: pointer; white-space: nowrap; }
+.flower-parent-events button:disabled { cursor: default; }
+.flower-parent-events [data-parent-event-body] { overflow-wrap: anywhere; }
+
 .flower-subagents-dropdown-list {
   display: grid;
   align-content: start;
   min-height: 0;
-  overflow-y: auto;
+  overflow-y: visible;
   background: transparent;
   padding: 0.25rem 0.5rem 0.5rem;
   scrollbar-width: thin;

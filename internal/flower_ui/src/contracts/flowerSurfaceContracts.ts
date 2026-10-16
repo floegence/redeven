@@ -690,6 +690,7 @@ export type FlowerQueuedTurnAttachment = Readonly<{
 }>;
 
 export type FlowerThreadSnapshot = Readonly<{
+  parent_events?: FlowerParentEventPage;
   turns?: readonly FlowerRuntimeTurn[];
   cancellation?: FlowerThreadCancellation;
   thread_id: string;
@@ -929,7 +930,16 @@ export type FlowerRuntimeTurn = Readonly<{
   final_boundary_complete: boolean;
 }>;
 
+export type FlowerParentEvent = Readonly<{
+  id: string; parent_thread_id: string; source_thread_id: string; source_turn_id: string; source_run_id: string;
+  source_entry_id: string; kind: 'report' | 'completed' | 'failed' | 'cancelled' | 'interrupted' | 'timed_out' | 'input_required' | 'approval_required';
+  reason_code?: string; interaction_id?: string; message?: string; received_at: string; admitted: boolean; resolved?: boolean;
+}>;
+export type FlowerParentEventPage = Readonly<{ events: readonly FlowerParentEvent[]; first_event_id?: string; last_event_id?: string; next_after_event_id?: string }>;
+export type FlowerParentEventQuery = Readonly<{ action: 'list' | 'read'; event_id?: string; first_event_id?: string; last_event_id?: string; after_event_id?: string; limit?: number }>;
+
 export type FlowerRuntimeCurrentView = Readonly<{
+  parent_events?: FlowerParentEventPage;
   turns?: readonly FlowerRuntimeTurn[] | null;
   turn_kind?: 'context_compaction';
   cancellation?: FlowerThreadCancellation;
@@ -1500,6 +1510,7 @@ export type FlowerSurfaceAdapter = Readonly<{
   listThreads: () => Promise<readonly FlowerThreadSnapshot[]>;
   loadThread: (threadID: string) => Promise<FlowerThreadView>;
   connectLiveStream?: (input: FlowerLiveStreamConnectInput) => AsyncIterable<FlowerLiveStreamEnvelope>;
+  readParentEvents?: (threadID: string, query: FlowerParentEventQuery) => Promise<FlowerParentEventPage>;
   loadSubagentDetail: (parentThreadID: string, childThreadID: string) => Promise<FlowerSubagentDetail>;
   operateSubagentInput?: (parentThreadID: string, childThreadID: string, input: FlowerSubagentInputOperation) => Promise<FlowerSubagentDetail>;
   markThreadRead: (threadID: string, snapshot: FlowerThreadActivitySnapshot) => Promise<FlowerThreadReadStatus>;

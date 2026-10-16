@@ -54,3 +54,26 @@ func TestServerFlowerSubagentInputValidatesPermissionAndStrictBody(t *testing.T)
 		})
 	}
 }
+
+func TestServerFlowerParentEventsRejectsUnauthorizedAndNonStrictRequests(t *testing.T) {
+	for _, test := range []struct {
+		name, body, query string
+		read              bool
+		status            int
+	}{
+		{"permission", `{}`, "", false, http.StatusForbidden},
+		{"route injection", `{"action":"read","event_id":"event","parent_thread_id":"other"}`, "", true, http.StatusBadRequest},
+		{"trailing body", `{} {}`, "", true, http.StatusBadRequest},
+		{"null", `null`, "", true, http.StatusBadRequest},
+		{"query", `{"action":"list"}`, "?force=true", true, http.StatusBadRequest},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			provider := &controlledAIServiceProvider{snapshot: AIReadinessSnapshot{State: AIReadinessReady}}
+			server, origin := newAIReadinessTestServer(t, provider, session.Meta{CanRead: test.read})
+			response := serveAIReadinessTestRequest(server, origin, http.MethodPost, "/_redeven_proxy/api/ai/threads/parent/subagent-events"+test.query, []byte(test.body))
+			if response.Code != test.status {
+				t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+			}
+		})
+	}
+}

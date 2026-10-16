@@ -86,7 +86,9 @@ definitions and existing permission and child-management instructions. Provider
 preparation never reads the child inventory for automatic context. Counts,
 ordinary lifecycle changes, latest-message previews, preview selection/order,
 and child-read errors cannot append managed facts. Explicit status reads and
-complete results follow the [subagent tool contract](subagent-runtime.md).
+complete results and passive canonical important events follow the
+[subagent tool contract](subagent-runtime.md). Parent events are typed canonical
+messages; they never restore the removed delegation snapshot category.
 
 Existing threads omit the old delegation key in their next complete snapshot.
 Floret's normal missing-key semantics append one removal, leave old history

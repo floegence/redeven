@@ -1,3 +1,4 @@
+import { ParentEventsPanel } from './ParentEventsPanel';
 import { FlowerAnswerActions } from './FlowerAnswerActions';
 import { flowerAnswerHTML, downloadFlowerAnswer } from './chat/markdown/flowerAnswerExport';
 import { flowerToolCallPreviewIdentity } from './toolCallPreview';
@@ -11016,58 +11017,65 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               </span>
             </Show>
           </div>
-          <Show
-            when={selectedSubagentItems().length > 0}
-            fallback={(
-              <div class="flower-subagents-dropdown-empty">
-                <Bot class="h-4 w-4" />
-                <span>{subagentsCopy().emptyTitle}</span>
+          <div class="flower-subagents-dropdown-content" {...props.approvalScrollViewportProps}>
+            <ParentEventsPanel threadID={selectedThreadID()} page={selectedThread()?.parent_events} copy={subagentsCopy()}
+              read={props.adapter.readParentEvents}
+              sourceName={(id) => { const item = selectedSubagentItems().find((value) => value.threadID === id); return item ? subagentRowTitle(item) : id; }}
+              canOpenSource={(id) => selectedSubagentItems().some((value) => value.threadID === id)}
+              onOpenSource={(id) => { const item = selectedSubagentItems().find((value) => value.threadID === id); if (item) openSubagentDetail(item); }} />
+            <Show
+              when={selectedSubagentItems().length > 0}
+              fallback={(
+                <div class="flower-subagents-dropdown-empty">
+                  <Bot class="h-4 w-4" />
+                  <span>{subagentsCopy().emptyTitle}</span>
+                </div>
+              )}
+            >
+              <div class="flower-subagents-dropdown-list">
+                <Show when={selectedActiveSubagentCount() > 0}>
+                  {subagentDropdownList('active', () => subagentsCopy().activeLabel, selectedActiveSubagentItems)}
+                </Show>
+                <Show when={selectedSettledSubagentCount() > 0}>
+                  <section class="flower-subagents-dropdown-ended">
+                    <button
+                      type="button"
+                      class="flower-subagents-dropdown-disclosure"
+                      data-flower-subagent-disclosure="true"
+                      aria-expanded={settledSubagentsExpanded()}
+                      aria-controls="flower-subagents-ended-list"
+                      onClick={() => setSettledSubagentsExpanded((expanded) => !expanded)}
+                    >
+                      <ChevronRight class="flower-subagents-dropdown-disclosure-chevron h-3 w-3" aria-hidden="true" />
+                      <span>{subagentsCopy().completedLabel}</span>
+                      <span class="flower-subagents-dropdown-count">{selectedSettledSubagentCount()}</span>
+                      <Show when={selectedFailedSubagentCount() > 0}>
+                        <span class="flower-subagents-dropdown-failed-count">
+                          {subagentStatusIndicator('failed')}
+                          {selectedFailedSubagentCount()} {subagentStatusLabel('failed')}
+                        </span>
+                      </Show>
+                      <Show when={!settledSubagentsExpanded()}>
+                        <span class="flower-subagents-dropdown-avatar-summary" aria-hidden="true">
+                          <For each={selectedSettledSubagentItems().slice(0, 2)}>{(item) => (
+                            <SubagentAvatar threadID={item.threadID} class="flower-subagent-summary-avatar" />
+                          )}</For>
+                          <Show when={selectedSettledSubagentCount() > 2}>
+                            <span class="flower-subagents-dropdown-overflow">+{selectedSettledSubagentCount() - 2}</span>
+                          </Show>
+                        </span>
+                      </Show>
+                    </button>
+                    <div id="flower-subagents-ended-list" hidden={!settledSubagentsExpanded()}>
+                      <Show when={settledSubagentsExpanded()}>
+                        {subagentDropdownList('completed', () => subagentsCopy().completedLabel, selectedSettledSubagentItems)}
+                      </Show>
+                    </div>
+                  </section>
+                </Show>
               </div>
-            )}
-          >
-            <div class="flower-subagents-dropdown-list">
-              <Show when={selectedActiveSubagentCount() > 0}>
-                {subagentDropdownList('active', () => subagentsCopy().activeLabel, selectedActiveSubagentItems)}
-              </Show>
-              <Show when={selectedSettledSubagentCount() > 0}>
-                <section class="flower-subagents-dropdown-ended">
-                  <button
-                    type="button"
-                    class="flower-subagents-dropdown-disclosure"
-                    data-flower-subagent-disclosure="true"
-                    aria-expanded={settledSubagentsExpanded()}
-                    aria-controls="flower-subagents-ended-list"
-                    onClick={() => setSettledSubagentsExpanded((expanded) => !expanded)}
-                  >
-                    <ChevronRight class="flower-subagents-dropdown-disclosure-chevron h-3 w-3" aria-hidden="true" />
-                    <span>{subagentsCopy().completedLabel}</span>
-                    <span class="flower-subagents-dropdown-count">{selectedSettledSubagentCount()}</span>
-                    <Show when={selectedFailedSubagentCount() > 0}>
-                      <span class="flower-subagents-dropdown-failed-count">
-                        {subagentStatusIndicator('failed')}
-                        {selectedFailedSubagentCount()} {subagentStatusLabel('failed')}
-                      </span>
-                    </Show>
-                    <Show when={!settledSubagentsExpanded()}>
-                      <span class="flower-subagents-dropdown-avatar-summary" aria-hidden="true">
-                        <For each={selectedSettledSubagentItems().slice(0, 2)}>{(item) => (
-                          <SubagentAvatar threadID={item.threadID} class="flower-subagent-summary-avatar" />
-                        )}</For>
-                        <Show when={selectedSettledSubagentCount() > 2}>
-                          <span class="flower-subagents-dropdown-overflow">+{selectedSettledSubagentCount() - 2}</span>
-                        </Show>
-                      </span>
-                    </Show>
-                  </button>
-                  <div id="flower-subagents-ended-list" hidden={!settledSubagentsExpanded()}>
-                    <Show when={settledSubagentsExpanded()}>
-                      {subagentDropdownList('completed', () => subagentsCopy().completedLabel, selectedSettledSubagentItems)}
-                    </Show>
-                  </div>
-                </section>
-              </Show>
-            </div>
-          </Show>
+            </Show>
+          </div>
         </div>
       </SurfaceFloatingLayer>
     </Show>

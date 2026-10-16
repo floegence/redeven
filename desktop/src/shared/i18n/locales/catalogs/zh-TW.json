@@ -864,6 +864,17 @@
       "suggestionsLabel": "從一個建議開始"
     },
     "subagents": {
+      "events": {
+        "title": "重要事件",
+        "received": "已接收",
+        "admitted": "已加入上下文",
+        "read": "檢視完整事件",
+        "more": "載入更多事件",
+        "report": "回報",
+        "input": "需要輸入",
+        "approval": "需要核准",
+        "interrupted": "已中斷"
+      },
       "title": "子代理",
       "description": "目前 Flower 對話中託管的委派工作。",
       "openLabel": "開啟子代理",

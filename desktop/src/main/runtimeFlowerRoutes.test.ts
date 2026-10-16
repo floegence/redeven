@@ -172,3 +172,10 @@ it('allows parent-scoped child input only through the exact POST route', () => {
   for (const method of ['GET', 'PUT', 'PATCH', 'DELETE'] as const) expect(runtimeFlowerMethodAllowed(path, method)).toBe(false);
   for (const suffix of ['?force=true', '/extra', '/']) expect(() => runtimeFlowerPath(path + suffix)).toThrow();
 });
+
+it('allows full event reads only through the recipient POST route', () => {
+ const path = '/_redeven_proxy/api/ai/threads/parent/subagent-events';
+ expect(runtimeFlowerMethodAllowed(path, 'POST')).toBe(true);
+ for (const method of ['GET', 'PUT', 'PATCH', 'DELETE'] as const) expect(runtimeFlowerMethodAllowed(path, method)).toBe(false);
+ for (const suffix of ['?target=other', '/extra', '/']) expect(() => runtimeFlowerPath(path + suffix)).toThrow();
+});

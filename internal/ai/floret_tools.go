@@ -137,6 +137,9 @@ func buildFloretTools(r *run, activeTools []ToolDef, state *floretToolRuntimeSta
 				}
 				ctx = contextWithFloretToolExecutionAuthorization(ctx, call.ID, call.Name, effectAttemptID, authorizedSnapshot, policy.ApprovalDecision, true, inv.HostContext)
 				ctx = contextWithToolAuthorizationSnapshot(ctx, authorizedSnapshot)
+				if call.Name == "report_to_parent" {
+					return execRun.reportToParent(ctx, inv)
+				}
 				handler := &builtInToolHandler{
 					r:        execRun,
 					toolName: call.Name,
@@ -395,7 +398,7 @@ func modelToolResultPayload(result ToolResult) (map[string]any, error) {
 		"truncated":   result.Truncated,
 		"content_ref": strings.TrimSpace(result.ContentRef),
 	}
-	preserveSubagentData := strings.TrimSpace(result.ToolName) == "subagents" && result.Data != nil
+	preserveSubagentData := (strings.TrimSpace(result.ToolName) == "subagents" || strings.TrimSpace(result.ToolName) == "subagent_events") && result.Data != nil
 	if result.Data != nil && !preserveSubagentData {
 		raw["data"] = result.Data
 	}
@@ -428,7 +431,7 @@ func floretToolDefinitionForSnapshot(def ToolDef, authorizationSnapshot Permissi
 		}
 	}
 	effects := floretToolEffects(def)
-	readOnly := !def.Mutating && !floretToolOpenWorld(def) && toolName != "terminal.exec"
+	readOnly := !def.Mutating && !floretToolOpenWorld(def) && toolName != "terminal.exec" && toolName != "report_to_parent"
 	permissionType := authorizationSnapshot.PermissionType
 	if permissionType == "" {
 		return fltools.Definition{}, fmt.Errorf("permission snapshot for Floret tool %s is missing permission type", toolName)
@@ -740,7 +743,7 @@ func floretToolEffects(def ToolDef) []fltools.Effect {
 		return []fltools.Effect{fltools.EffectNetwork}
 	case "use_skill":
 		return []fltools.Effect{fltools.EffectNetwork}
-	case "file.edit", "file.write", "apply_patch":
+	case "report_to_parent", "file.edit", "file.write", "apply_patch":
 		return []fltools.Effect{fltools.EffectWrite}
 	default:
 		return []fltools.Effect{fltools.EffectRead}
@@ -768,7 +771,10 @@ func floretToolResultFromFlower(r *run, result ToolResult) (fltools.Result, erro
 			},
 		}, nil
 	}
-	text, _ := json.Marshal(structured)
+	text, err := json.Marshal(structured)
+	if err != nil {
+		return fltools.Result{}, fmt.Errorf("encode %s tool result: %w", result.ToolName, err)
+	}
 	status := strings.TrimSpace(anyToString(structured["status"]))
 	metadata := map[string]any(nil)
 	dispatchErr := result.dispatchErr
@@ -792,16 +798,23 @@ func floretToolResultFromFlower(r *run, result ToolResult) (fltools.Result, erro
 		return fltools.Result{}, err
 	}
 	attachments := floretToolAttachments(result.Attachments)
+	var outputPolicy *fltools.OutputPolicy
+	if strings.TrimSpace(result.ToolName) == "subagent_events" {
+		// Explicit event pages are already bounded by item count and report size.
+		// Keep the complete page; the normal request budget still applies.
+		outputPolicy = &fltools.OutputPolicy{VisibleMaxBytes: len(text) + 1, VisibleMaxLines: strings.Count(string(text), "\n") + 1, Strategy: fltools.OutputHead, PreserveFull: true}
+	}
 	return fltools.Result{
-		CallID:      strings.TrimSpace(result.ToolID),
-		Name:        strings.TrimSpace(result.ToolName),
-		Text:        string(text),
-		Structured:  structured,
-		Metadata:    metadata,
-		Activity:    activity,
-		Attachments: attachments,
-		IsError:     isError,
-		DispatchErr: dispatchErr,
+		CallID:       strings.TrimSpace(result.ToolID),
+		Name:         strings.TrimSpace(result.ToolName),
+		Text:         string(text),
+		Structured:   structured,
+		Metadata:     metadata,
+		Activity:     activity,
+		Attachments:  attachments,
+		IsError:      isError,
+		DispatchErr:  dispatchErr,
+		OutputPolicy: outputPolicy,
 	}, nil
 }
 

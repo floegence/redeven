@@ -64,6 +64,8 @@ const writingPencilMotion: FlowerToolMotionRecipe = {
 const terminalCommandIcon: FlowerToolMotionRecipe = { icon: 'square-terminal', cycle: 1350, tracks: [] };
 
 export const flowerToolMotion: Readonly<Record<string, FlowerToolMotionRecipe>> = {
+  "report_to_parent": { icon: 'message-square-text', cycle: 2300, tracks: [] },
+  "subagent_events": { icon: 'list-tree', cycle: 2300, tracks: [] },
   "file.edit": writingPencilMotion,
   "file.write": writingPencilMotion,
   "apply_patch": writingPencilMotion,

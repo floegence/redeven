@@ -411,7 +411,7 @@ func (runtime *floretSubagentRuntime) closeAll(ctx context.Context, toolCallID s
 }
 
 func (runtime *floretSubagentRuntime) wait(ctx context.Context, args map[string]any) (map[string]any, error) {
-	_, _, threads, err := runtime.boundaries()
+	_, parent, threads, err := runtime.boundaries()
 	if err != nil {
 		return nil, err
 	}
@@ -425,6 +425,13 @@ func (runtime *floretSubagentRuntime) wait(ctx context.Context, args map[string]
 	}
 	defer subscription.Close()
 	timedOut := false
+	reason := "completed"
+	eventPage := flruntime.ParentEventPage{Events: []flruntime.ParentEvent{}}
+	events, hasEvents := threads.(flruntime.ThreadParentEventService)
+	sourceIDs := make([]identity.ThreadID, len(targets))
+	for i, id := range targets {
+		sourceIDs[i] = identity.ThreadID(id)
+	}
 	var snapshots []subagentSnapshot
 	for {
 		snapshots, err = runtime.snapshots(waitCtx)
@@ -436,6 +443,22 @@ func (runtime *floretSubagentRuntime) wait(ctx context.Context, args map[string]
 			return nil, err
 		}
 		selected := selectSubagentSnapshots(snapshots, targets)
+		if hasEvents {
+			eventPage, err = events.ListParentEvents(waitCtx, flruntime.ListParentEventsInput{ThreadID: identity.ThreadID(parent.threadID), SourceThreadIDs: sourceIDs, PendingOnly: true, Limit: 100})
+			if err != nil {
+				if errors.Is(err, context.DeadlineExceeded) && ctxOrBackground(ctx).Err() == nil {
+					timedOut = true
+					snapshots = selected
+					break
+				}
+				return nil, err
+			}
+			if len(eventPage.Events) > 0 {
+				reason = "events"
+				snapshots = selected
+				break
+			}
+		}
 		if allSubagentsTerminal(selected) {
 			snapshots = selected
 			break
@@ -449,6 +472,9 @@ func (runtime *floretSubagentRuntime) wait(ctx context.Context, args map[string]
 			return nil, err
 		}
 	}
+	if timedOut {
+		reason = "wait_timeout"
+	}
 	items := boundedSubagentStatusItems(snapshots)
 	handoffs, err := completedSubagentHandoffs(ctxOrBackground(ctx), threads, snapshots)
 	if err != nil {
@@ -458,7 +484,7 @@ func (runtime *floretSubagentRuntime) wait(ctx context.Context, args map[string]
 		"status": "ok", "action": subagentActionWait, "ids": targets, "target_ids": targets,
 		"requested_timeout_ms": requested, "effective_timeout_ms": effective,
 		"timeout_ms": effective, "timeout_source": source, "timed_out": timedOut,
-		"items": items, "handoffs": handoffs,
+		"items": items, "handoffs": handoffs, "reason": reason, "events": eventPage,
 		"counts": subagentModelStatusCounts(items), "agent_count": len(items),
 	}
 	if len(targets) > 0 {
@@ -992,6 +1018,7 @@ func buildFlowerSubagentPrompt(spec flowerSubagentPromptSpec) string {
 		"- Finish the delegated slice independently and verify concrete claims with tools when needed.",
 		"- Do not delegate, spawn child work, or ask the user for input.",
 		"- Return a focused final handoff with summary, evidence, verification, open risks, and parent actions.",
+		"- Use report_to_parent for important discoveries, blockers, or help while working. Ordinary progress needs no report. Completion is delivered automatically; reporting does not end your mission.",
 	}
 	if normalizeSubagentContextMode(spec.ContextMode) == subagentContextModeFullHistory {
 		lines = append(lines, "- Use the inherited parent history only when it is relevant to this mission.")

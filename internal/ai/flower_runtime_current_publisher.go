@@ -301,6 +301,16 @@ func (builder *flowerRuntimeBoundaryBuilder) addInt(value int64) {
 func flowerRuntimeCurrentBoundaryKey(current flruntime.ThreadView) string {
 	var builder flowerRuntimeBoundaryBuilder
 	builder.add(string(current.Activity))
+	if current.ParentEvents != nil {
+		for _, event := range current.ParentEvents.Events {
+			builder.add(event.ID)
+			builder.addBool(event.Admitted)
+			builder.addBool(event.Resolved)
+		}
+		builder.add(current.ParentEvents.FirstEventID)
+		builder.add(current.ParentEvents.LastEventID)
+		builder.add(current.ParentEvents.NextAfterEventID)
+	}
 	if current.Cancellation != nil {
 		builder.add(current.Cancellation.ThreadID.String())
 		builder.add(current.Cancellation.TurnID.String())

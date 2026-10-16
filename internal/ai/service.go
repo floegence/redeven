@@ -1587,6 +1587,10 @@ func (s *Service) prepareThreadEffect(meta *session.Meta, executionKey string, r
 		TargetResolver:     targetResolver, InteractionSafetyGate: interactionSafetyGate,
 		PublishComputerFrame: func(frame FlowerComputerFrame) { _ = s.PublishFlowerComputerFrame(metaRef, frame) },
 	})
+	if strings.TrimSpace(settings.ParentThreadID) != "" {
+		builder.subagentDepth = 1
+		builder.allowSubagentDelegate = false
+	}
 	builder.setPermissionState(permission, PermissionSnapshot{})
 	builder.subagentRuntime = newServiceFloretSubagentRuntime(s, builder)
 	return &threadEffect{

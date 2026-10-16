@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-16: Passive parent events
+
+- Adopt published Floret v7.49.0 canonical [important child events](ai/subagent-runtime.md), child-only reports, explicit full reads and event-aware wait. Keep idle parents passive, retain complete handoffs, and distinguish receipt from context admission in the shared UI.
+
 ## 2026-10-16: Request output budgets
 
 - Adopt published Floret v7.48.1 [request output budgets](ai/model-context-runtime.md), frozen output refitting and domain 18; distinguish input capacity, request controls and composition estimates in Flower.
