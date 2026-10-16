@@ -276,6 +276,8 @@ describe('completed turn process disclosure', () => {
     live.envelope({ schema_version: 1, kind: 'thread.batch', thread_id: 'parent', subagents: [child] });
     await waitFor(() => Boolean(root.querySelector('[data-flower-subagent-count="1"], .flower-header-icon-badge')));
     root.querySelector<HTMLButtonElement>('button[aria-controls="flower-subagents-dropdown"]')!.click();
+    await waitFor(() => Boolean(document.querySelector('[data-flower-subagent-disclosure]')));
+    document.querySelector<HTMLButtonElement>('[data-flower-subagent-disclosure]')!.click();
     await waitFor(() => Boolean(document.querySelector('[data-flower-subagent-row="0"]')));
     document.querySelector<HTMLButtonElement>('[data-flower-subagent-row="0"]')!.click();
     await waitFor(() => Boolean(document.querySelector('.flower-subagent-detail-transcript .flower-turn-summary-button')));

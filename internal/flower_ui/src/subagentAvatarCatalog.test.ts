@@ -1,30 +1,28 @@
 import { describe, expect, it } from 'vitest';
-import { SUBAGENT_AVATAR_PALETTES, SUBAGENT_AVATAR_PORTRAITS, subagentAvatarArtwork, subagentAvatarIdentity } from './subagentAvatarCatalog';
+import { SUBAGENT_AVATAR_PORTRAITS, subagentAvatarIdentity } from './subagentAvatarCatalog';
 
 describe('Subagent avatar catalog', () => {
-  it('provides 99 distinct portraits and 36 distinct artwork palettes', () => {
-    expect(SUBAGENT_AVATAR_PORTRAITS).toHaveLength(99);
-    expect(new Set(SUBAGENT_AVATAR_PORTRAITS.map((portrait) => portrait.id)).size).toBe(99);
-    expect(new Set(SUBAGENT_AVATAR_PORTRAITS.map((_, index) => subagentAvatarArtwork(index))).size).toBe(99);
-    expect(SUBAGENT_AVATAR_PALETTES).toHaveLength(36);
-    expect(new Set(SUBAGENT_AVATAR_PALETTES.map((palette) => JSON.stringify(palette))).size).toBe(36);
+  it('provides 36 original silhouettes with their own fixed colors', () => {
+    expect(SUBAGENT_AVATAR_PORTRAITS).toHaveLength(36);
+    expect(new Set(SUBAGENT_AVATAR_PORTRAITS.map((portrait) => portrait.id)).size).toBe(36);
+    expect(new Set(SUBAGENT_AVATAR_PORTRAITS.map((portrait) => portrait.art)).size).toBe(36);
+    expect(new Set(SUBAGENT_AVATAR_PORTRAITS.map((portrait) => portrait.art.match(/fill="([^"]+)"/)?.[1])).size).toBe(36);
+    for (const portrait of SUBAGENT_AVATAR_PORTRAITS) {
+      expect(portrait.art).toMatch(/^<rect width="100" height="100" fill="#[A-Fa-f0-9]+"\/>/);
+      expect(portrait.art).not.toMatch(/<script|<foreignObject|\son[a-z]+=|(?:href|url)\s*[=(]|var\(/i);
+    }
   });
 
-  it('distributes stable identities across the complete catalog without putting identity into SVG', () => {
-    const portraits = new Set<number>();
-    const palettes = new Set<number>();
+  it('keeps each thread identity stable across the complete catalog', () => {
+    const identities = new Set<string>();
     for (let index = 0; index < 10_000; index++) {
-      const threadID = `thread-${index}`;
+      const threadID = 'thread-' + index;
       const identity = subagentAvatarIdentity(threadID);
-      expect(subagentAvatarIdentity(threadID)).toEqual(identity);
-      expect(subagentAvatarArtwork(identity.portrait)).toContain('<circle cx="32" cy="32" r="32" fill="var(--avatar-background)"/>');
-      expect(subagentAvatarArtwork(identity.portrait)).not.toContain('<rect width="64" height="64" rx="20"');
-      portraits.add(identity.portrait);
-      palettes.add(identity.palette);
+      expect(subagentAvatarIdentity(threadID)).toBe(identity);
+      expect(SUBAGENT_AVATAR_PORTRAITS).toContain(identity);
+      identities.add(identity.id);
     }
-    expect(portraits.size).toBe(99);
-    expect(palettes.size).toBe(36);
-    const identity = subagentAvatarIdentity('<script>alert("identity")</script>');
-    expect(subagentAvatarArtwork(identity.portrait)).not.toContain('script');
+    expect(identities.size).toBe(36);
+    expect(subagentAvatarIdentity('<script>alert("identity")</script>').art).not.toContain('script');
   });
 });

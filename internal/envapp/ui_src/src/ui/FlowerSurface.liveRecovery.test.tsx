@@ -292,6 +292,8 @@ describe('Flower workspace synchronization recovery', () => {
     selectThread(surface, parent.thread_id);
     await waitFor(() => surface.querySelector('button[aria-controls="flower-subagents-dropdown"] .flower-header-icon-badge')?.textContent === '1');
     (surface.querySelector('button[aria-controls="flower-subagents-dropdown"]') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(document.querySelector('[data-flower-subagent-disclosure]')));
+    document.querySelector<HTMLButtonElement>('[data-flower-subagent-disclosure]')!.click();
     await waitFor(() => document.querySelector('[data-flower-subagent-row="0"]') !== null);
     (document.querySelector('[data-flower-subagent-row="0"]') as HTMLButtonElement).click();
     await waitFor(() => loadSubagentDetail.mock.calls.length === 1);
@@ -369,6 +371,8 @@ describe('Canonical managed facts on the existing workspace transport', () => {
   await waitFor(() => loadThread.mock.calls.length > 0 && !surface.querySelector('.flower-thread-loading'));
   await waitFor(() => surface.querySelector('button[aria-controls="flower-subagents-dropdown"] .flower-header-icon-badge')?.textContent === '1');
   (surface.querySelector('button[aria-controls="flower-subagents-dropdown"]') as HTMLButtonElement).click();
+  await waitFor(() => Boolean(document.querySelector('[data-flower-subagent-disclosure]')));
+  document.querySelector<HTMLButtonElement>('[data-flower-subagent-disclosure]')!.click();
   await waitFor(() => Boolean(document.querySelector('[data-flower-subagent-row="0"]')));
   (document.querySelector('[data-flower-subagent-row="0"]') as HTMLButtonElement).click();
   await waitFor(() => Boolean(document.querySelector('[data-flower-subagent-detail="open"]')));
