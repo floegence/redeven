@@ -425,25 +425,26 @@ describe('FlowerSurface navigation', () => {
   it('focuses Flower settings from a host navigation request', async () => {
     const runtime = renderSurfaceWithAdapterProps(adapter(true), { settingsFocusRequest: 1 });
 
-    await waitFor(() => Boolean(runtime.querySelector('.flower-settings-providers-section')));
+    await waitFor(() => Boolean(document.querySelector('.flower-settings-providers-section')));
 
-    expect(runtime.querySelector('[data-flower-panel="chat"]')?.hasAttribute('hidden')).toBe(true);
-    expect(runtime.querySelector<HTMLElement>('[data-flower-panel="chat"]')?.inert).toBe(true);
+    expect(runtime.querySelector('[data-flower-panel="chat"]')?.hasAttribute('hidden')).toBe(false);
+    expect(runtime.querySelector<HTMLElement>('.flower-component-main')?.inert).toBe(true);
     expect(runtime.querySelector('.flower-composer textarea')).not.toBeNull();
-    expect(runtime.textContent).toContain('OpenAI');
+    expect(document.querySelector('.flower-settings-dialog')?.textContent).toContain('OpenAI');
   });
 
-  it('returns from settings to the chat panel with an icon-only control', async () => {
+  it('closes the settings dialog with an icon-only control', async () => {
     const runtime = renderSurface();
     await flush();
     const editor = runtime.querySelector('.flower-composer textarea');
 
     (runtime.querySelector('button[aria-label="Flower settings"]') as HTMLButtonElement).click();
     await flush();
-    expect(runtime.querySelector('[data-flower-panel="chat"]')?.hasAttribute('hidden')).toBe(true);
+    expect(runtime.querySelector('[data-flower-panel="chat"]')?.hasAttribute('hidden')).toBe(false);
     expect(runtime.querySelector('.flower-composer textarea')).toBe(editor);
 
-    const back = runtime.querySelector('.flower-component-main button[aria-label="Back to chat"]') as HTMLButtonElement | null;
+    await waitFor(() => !!document.querySelector('.flower-settings-dialog'));
+    const back = document.querySelector('.flower-settings-dialog button[aria-label="Close"]') as HTMLButtonElement | null;
     expect(back).toBeTruthy();
     expect(back?.textContent?.trim()).toBe('');
 
@@ -452,6 +453,7 @@ describe('FlowerSurface navigation', () => {
 
     expect(runtime.querySelector('.flower-chat-shell')).toBeTruthy();
     expect(runtime.querySelector('[data-flower-panel="chat"]')?.hasAttribute('hidden')).toBe(false);
+    await waitFor(() => !document.querySelector('.flower-settings-dialog'));
     expect(runtime.querySelector<HTMLElement>('[data-flower-panel="settings"]')?.inert).toBe(true);
     expect(runtime.querySelector('.flower-composer textarea')).toBe(editor);
   });
@@ -567,18 +569,18 @@ describe('FlowerSurface navigation', () => {
     (runtime.querySelector('button[aria-label="Flower settings"]') as HTMLButtonElement).click();
     await flush();
 
-    expect(runtime.querySelector<HTMLElement>('.flower-settings-title-feedback [role="status"]')?.style.visibility).toBe('hidden');
-    expect(runtime.querySelector('.flower-settings-current-model')).toBeTruthy();
-    expect(runtime.textContent).toContain('Configure models and the default Flower permission for the Local AI Profile.');
+    expect(document.querySelector<HTMLElement>('.flower-settings-title-feedback [role="status"]')?.style.visibility).toBe('hidden');
+    expect(document.querySelector('.flower-settings-current-model')).toBeTruthy();
+    expect(document.querySelector('.flower-settings-dialog')?.textContent).toContain('Configure models and the default Flower permission for the Local AI Profile.');
 
-    const fullAccessButton = Array.from(runtime.querySelectorAll('.flower-settings-policy-card'))
+    const fullAccessButton = Array.from(document.querySelectorAll('.flower-settings-policy-card'))
       .find((button) => button.textContent?.includes('Full access')) as HTMLButtonElement | undefined;
     fullAccessButton?.click();
     await wait(850);
     await flush();
 
     expect(surfaceAdapter.saveDefaultPermission).toHaveBeenCalledTimes(1);
-    expect(runtime.querySelector('.flower-settings-title-feedback')?.textContent).toContain('Saved');
+    expect(document.querySelector('.flower-settings-title-feedback')?.textContent).toContain('Saved');
   }, 5000);
 
   it('coalesces rapid default permission changes to the latest selection', async () => {
@@ -594,8 +596,8 @@ describe('FlowerSurface navigation', () => {
 
     (runtime.querySelector('button[aria-label="Flower settings"]') as HTMLButtonElement).click();
     await flush();
-    const permissionButtons = Array.from(runtime.querySelectorAll<HTMLButtonElement>('.flower-settings-policy-card'));
-    permissionButtons.find((button) => button.textContent?.includes('Read-only'))?.click();
+    const permissionButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('.flower-settings-policy-card'));
+    permissionButtons.find((button) => button.textContent?.includes('Read only'))?.click();
     permissionButtons.find((button) => button.textContent?.includes('Full access'))?.click();
 
     await wait(850);
@@ -743,12 +745,12 @@ describe('FlowerSurface navigation', () => {
     (runtime.querySelector('button[aria-label="Flower settings"]') as HTMLButtonElement).click();
     await flush();
 
-    expect(runtime.querySelector('.flower-settings-current-model')?.textContent).toContain('No model selected');
-    (Array.from(runtime.querySelectorAll('button'))
+    expect(document.querySelector('.flower-settings-current-model')?.textContent).toContain('No model selected');
+    (Array.from(document.querySelectorAll('button'))
       .find((button) => button.textContent?.includes('Add provider')) as HTMLButtonElement).click();
     await flush();
 
-    expect(runtime.querySelector('[role="dialog"]')?.textContent).toContain('Provider type');
+    expect(document.querySelector('.flower-provider-dialog')?.textContent).toContain('Provider type');
   });
 
   it('keeps the remote provider editor visible when Desktop models are also available', async () => {
@@ -775,12 +777,12 @@ describe('FlowerSurface navigation', () => {
     (runtime.querySelector('button[aria-label="Flower settings"]') as HTMLButtonElement).click();
     await flush();
 
-    await waitFor(() => Boolean(runtime.querySelector('.flower-settings-model-name')));
-    expect(runtime.querySelector('.flower-settings-model-name')?.textContent).toBe('gpt-5.2');
-    expect(runtime.querySelector('.flower-settings-model-provider')?.textContent).toBe('OpenAI');
-    expect(runtime.querySelector('.flower-settings-policy-card')).toBeTruthy();
-    expect(runtime.querySelector('.flower-settings-providers-section')).toBeTruthy();
-    expect(runtime.textContent).toContain('Add provider');
+    await waitFor(() => Boolean(document.querySelector('.flower-settings-model-name')));
+    expect(document.querySelector('.flower-settings-model-name')?.textContent).toBe('gpt-5.2');
+    expect(document.querySelector('.flower-settings-model-provider')?.textContent).toBe('OpenAI');
+    expect(document.querySelector('.flower-settings-policy-card')).toBeTruthy();
+    expect(document.querySelector('.flower-settings-providers-section')).toBeTruthy();
+    expect(document.querySelector('.flower-settings-dialog')?.textContent).toContain('Add provider');
     expect(runtime.textContent).toContain('OpenAI');
     expect(runtime.textContent).toContain('gpt-5.2');
     await wait(850);
@@ -1600,7 +1602,7 @@ describe('FlowerSurface navigation', () => {
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-context-source"] button')));
     (runtime.querySelector('[data-thread-id="thread-context-source"] button') as HTMLButtonElement).click();
     await waitFor(() => Boolean(runtime.querySelector('.flower-error-card')));
-    expect(runtime.querySelector('.flower-error-card')?.textContent).toContain('Repair the source and retry.');
+    expect(runtime.querySelector('.flower-error-card')?.textContent).toContain('Could not load the current context. Resolve the issue shown in the error details, then retry.');
     expect(runtime.querySelector('.flower-error-details')?.textContent).toContain('Skill catalog source cannot be read.');
     const retry = [...runtime.querySelectorAll<HTMLButtonElement>('.flower-error-actions button')].find(button => button.textContent?.includes('Retry'));
     expect(retry).toBeDefined(); retry!.click();

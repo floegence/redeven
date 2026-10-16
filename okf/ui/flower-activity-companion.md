@@ -38,9 +38,12 @@ Redeven owns one stable product Portal around exactly one `EnvAIPage`. That owne
 
 [Flower companion composer and motion](flower-companion-composer.md) owns native editor identity, explicit compact entry, text and toolbar layout, autosizing, content dissolve, and surface treatment. These presentation rules do not change the placement or lifecycle owner.
 
-The compact entry always presents chat. Settings or extensions remain visible
-through the published closing phase and its content dissolve, then the active
-panel resets to chat at complete collapse. Explicit shortcut activation restores
+The compact entry always presents chat. Extensions remain visible through the
+published closing phase and its content dissolve, then the active panel resets
+to chat at complete collapse. Settings open in a document-level dialog; its
+controls, nested editors and backdrop are owned companion interactions. Closing
+settings leaves the companion expanded; host collapse dismisses the dialog and
+resets to chat without losing the retained settings form. Explicit shortcut activation restores
 chat before requesting expansion, including reversal during closing. Panel reset
 neither creates a conversation nor refreshes page references; actual new-draft
 activation retains the existing reference-refresh rules. Settings and extension

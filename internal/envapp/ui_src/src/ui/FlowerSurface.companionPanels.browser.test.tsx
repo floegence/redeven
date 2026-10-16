@@ -11,7 +11,7 @@ import { FlowerSurface, createFlowerComposerDraftCoordinator, type FlowerSurface
 import type { FlowerSurfaceAdapter } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import type { FlowerExtensionsAdapter } from '../../../../flower_ui/src/extensions/types';
 import { withModelDirectoryFixture } from '../../../../flower_ui/testing/modelDirectoryFixture';
-import { adapter, thread, liveBootstrap, waitFor } from './FlowerSurface.navigation.testHarness';
+import { adapter, thread, liveBootstrap, settingsSnapshot, waitFor } from './FlowerSurface.navigation.testHarness';
 
 beforeEach(async () => { await page.viewport(1280, 850); });
 
@@ -24,17 +24,29 @@ function mountPanels(options: {
 } = {}) {
   const threads = options.selected ? [thread()] : [];
   const base = adapter(true);
+  let snapshot = withModelDirectoryFixture(settingsSnapshot());
+  const mutations = {
+    ...options.adapter,
+    ...(options.adapter?.saveDefaultPermission ? { saveDefaultPermission: vi.fn(async (permission: Parameters<FlowerSurfaceAdapter['saveDefaultPermission']>[0]) => {
+      snapshot = withModelDirectoryFixture(await options.adapter!.saveDefaultPermission!(permission));
+      return snapshot;
+    }) } : {}),
+    ...(options.adapter?.saveModelProfile ? { saveModelProfile: vi.fn(async (draft: Parameters<FlowerSurfaceAdapter['saveModelProfile']>[0]) => {
+      snapshot = withModelDirectoryFixture(await options.adapter!.saveModelProfile!(draft));
+      return snapshot;
+    }) } : {}),
+  };
   const surfaceAdapter = {
     ...base,
-    loadSettings: async () => withModelDirectoryFixture(await base.loadSettings()),
-    loadModelDirectory: async () => withModelDirectoryFixture(await base.loadSettings()).model_directory!,
+    loadSettings: async () => snapshot,
+    loadModelDirectory: async () => snapshot.model_directory!,
     listThreads: vi.fn(async () => threads),
     loadThread: vi.fn(async () => liveBootstrap(thread())),
     connectLiveStream: vi.fn(async function* (input) {
       yield { schema_version: 1 as const, kind: 'ready' as const, summaries: threads };
       await new Promise<void>(resolve => input.signal.addEventListener('abort', () => resolve(), { once: true }));
     }),
-    ...options.adapter,
+    ...mutations,
   } satisfies FlowerSurfaceAdapter;
   const runtime = document.createElement('div');
   const mount = document.createElement('div');
@@ -57,7 +69,11 @@ function mountPanels(options: {
   const dispose = render(() => <>
     <BottomBarCompanion retained visible={!full()} open={open()} anchor={anchor} mount={mount}
       id="panels-companion" label="Flower" class="flower-activity-companion" expandedWidth={544}
-      contentHostRef={setContentHost} onPhaseChange={setPhase} onDismiss={reason => {
+      contentHostRef={setContentHost} onPhaseChange={setPhase}
+      isOwnedInteraction={event => event.target instanceof Element && Boolean(
+        event.target.closest('.flower-settings-dialog')
+        || event.target.closest('[data-floe-dialog-overlay-root]')?.querySelector('.flower-settings-dialog')
+      )} onDismiss={reason => {
         if (reason !== 'escape') outside.focus();
         setOpen(false);
         if (reason === 'escape') setComposerFocus(value => value + 1);
@@ -90,11 +106,11 @@ async function ready(fixture: Panels) {
 }
 async function settings(fixture: Panels) {
   fixture.openSettings();
-  await waitFor(() => !!fixture.root().querySelector('.flower-settings-providers-section'));
-  return fixture.root().querySelector<HTMLElement>('.flower-settings-surface')!;
+  await waitFor(() => !!document.querySelector('.flower-settings-dialog .flower-settings-providers-section'));
+  return document.querySelector<HTMLElement>('.flower-settings-surface')!;
 }
 
-it('restores the compact chat entry after leaving full-page settings and retains both panels', async () => {
+it('restores the compact chat entry after leaving settings and retains the dialog form', async () => {
   const capture = vi.fn(() => ({ label: 'Files', title: 'Files', content: '{"page":"files"}' }));
   const fixture = mountPanels({ full: true, capture });
   await ready(fixture);
@@ -102,12 +118,13 @@ it('restores the compact chat entry after leaving full-page settings and retains
   await userEvent.fill(editor, 'Retained draft');
   editor.setSelectionRange(2, 7);
   const panel = await settings(fixture);
-  const disclosure = panel.querySelector<HTMLDetailsElement>('.flower-settings-provider-details')!;
-  disclosure.querySelector('summary')!.click();
-  expect(disclosure.open).toBe(true);
+  const disclosure = panel.querySelector<HTMLButtonElement>('.flower-settings-provider-disclosure')!;
+  disclosure.click();
+  expect(disclosure.getAttribute('aria-expanded')).toBe('true');
   fixture.outside.focus();
   fixture.setFull(false);
   await waitFor(() => fixture.phase() === 'collapsed');
+  await waitFor(() => !document.querySelector('.flower-settings-dialog'));
   expect(panel.getClientRects()).toHaveLength(0);
   expect(editorFor(fixture)).toBe(editor);
   expect(editor.getBoundingClientRect().height).toBeGreaterThan(0);
@@ -119,8 +136,8 @@ it('restores the compact chat entry after leaving full-page settings and retains
   expect(editor.value).toBe('Retained draft');
   expect(capture).toHaveBeenCalledTimes(2);
   await settings(fixture);
-  expect(fixture.root().querySelector('.flower-settings-surface')).toBe(panel);
-  expect(disclosure.open).toBe(true);
+  expect(document.querySelector('.flower-settings-surface')).toBe(panel);
+  expect(disclosure.getAttribute('aria-expanded')).toBe('true');
   expect(editor.isConnected).toBe(true);
   expect(fixture.surfaceAdapter.connectLiveStream).toHaveBeenCalledTimes(1);
 });
@@ -134,11 +151,12 @@ it('keeps the ordinary editor mounted and inert while settings is active', async
   const panel = await settings(fixture);
   expect(editor.isConnected).toBe(true);
   expect(editor.closest('[inert]')).not.toBeNull();
-  expect(editor.getClientRects()).toHaveLength(0);
-  fixture.outside.focus();
+  expect(editor.getBoundingClientRect().height).toBeGreaterThan(0);
+  const modalFocus = document.activeElement;
   editor.focus();
-  expect(document.activeElement).toBe(fixture.outside);
-  panel.querySelector<HTMLButtonElement>('button[aria-label="Back to chat"]')!.click();
+  expect(document.activeElement).toBe(modalFocus);
+  await userEvent.keyboard('{Escape}');
+  await waitFor(() => !document.querySelector('.flower-settings-dialog'));
   expect(editorFor(fixture)).toBe(editor);
   expect(editor.value).toBe('Selection and draft');
   expect([editor.selectionStart, editor.selectionEnd]).toEqual([2, 9]);
@@ -146,9 +164,8 @@ it('keeps the ordinary editor mounted and inert while settings is active', async
   expect(panel.getClientRects()).toHaveLength(0);
 });
 
-it.each(['outside', 'header', 'escape'] as const)('retains settings through %s dismissal and resets only at complete collapse', async reason => {
-  const capture = vi.fn(() => ({ label: 'Files', title: 'Files', content: 'Frozen page' }));
-  const fixture = mountPanels({ selected: true, capture });
+it.each(['header', 'escape'] as const)('dismisses settings with %s while retaining the expanded companion', async reason => {
+  const fixture = mountPanels({ selected: true });
   await ready(fixture);
   fixture.setOpen(true);
   await waitFor(() => fixture.phase() === 'expanded');
@@ -156,31 +173,20 @@ it.each(['outside', 'header', 'escape'] as const)('retains settings through %s d
   await userEvent.fill(editor, 'Existing conversation draft');
   editor.setSelectionRange(1, 5);
   const panel = await settings(fixture);
-  expect(panel.querySelector('button[aria-label="Collapse Flower"]')).not.toBeNull();
-  expect(fixture.root().querySelectorAll('button[aria-label="Collapse Flower"]')).toHaveLength(1);
-  if (reason === 'header') panel.querySelector<HTMLButtonElement>('button[aria-label="Collapse Flower"]')!.click();
-  else if (reason === 'outside') await userEvent.click(fixture.outside);
+  if (reason === 'header') await userEvent.click(page.getByRole('button', { name: 'Close', exact: true }));
   else {
     panel.querySelector<HTMLButtonElement>('[role="radio"]')!.focus();
     await userEvent.keyboard('{Escape}');
   }
-  await waitFor(() => fixture.phase() === 'collapsing');
-  expect(fixture.root().dataset.flowerSidePanel).toBe('settings');
-  expect(panel.getClientRects()).toHaveLength(1);
-  await waitFor(() => fixture.phase() === 'collapsed');
+  await waitFor(() => !document.querySelector('.flower-settings-dialog'));
+  expect(fixture.phase()).toBe('expanded');
   expect(fixture.root().dataset.flowerSidePanel).toBe('chat');
   expect(panel.getClientRects()).toHaveLength(0);
   expect(panel.closest('[inert]')).not.toBeNull();
   expect(editorFor(fixture)).toBe(editor);
-  expect(editor.getBoundingClientRect().height).toBeGreaterThan(0);
   expect(editor.value).toBe('Existing conversation draft');
-  if (reason === 'escape') expect(document.activeElement).toBe(editor);
-  else expect(document.activeElement).toBe(fixture.outside);
-  await userEvent.click(editor);
-  await waitFor(() => fixture.phase() === 'expanded');
+  expect([editor.selectionStart, editor.selectionEnd]).toEqual([1, 5]);
   expect(fixture.root().dataset.flowerSelectedThreadId).toBe('thread-1');
-  expect(fixture.root().querySelector('[data-reference-kind="page_context"]')).toBeNull();
-  expect(capture).not.toHaveBeenCalled();
   expect(fixture.surfaceAdapter.connectLiveStream).toHaveBeenCalledTimes(1);
 });
 
@@ -193,8 +199,8 @@ it('opens chat when explicit editing reverses settings dismissal and preserves i
   await userEvent.fill(editor, 'IME draft');
   editor.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
   const panel = await settings(fixture);
-  const details = panel.querySelector<HTMLDetailsElement>('details')!;
-  details.open = true;
+  const details = panel.querySelector<HTMLButtonElement>('.flower-settings-provider-disclosure')!;
+  details.click();
   fixture.collapse();
   await waitFor(() => fixture.phase() === 'collapsing');
   editor.click();
@@ -205,11 +211,11 @@ it('opens chat when explicit editing reverses settings dismissal and preserves i
   expect(editor.value).toBe('IME draft');
   editor.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true }));
   await settings(fixture);
-  expect(details.open).toBe(true);
+  expect(details.getAttribute('aria-expanded')).toBe('true');
   fixture.outside.focus();
   fixture.focusComposer();
   await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-  expect(document.activeElement).toBe(fixture.outside);
+  expect(document.activeElement).not.toBe(editor);
   expect(fixture.surfaceAdapter.launchTurn).not.toHaveBeenCalled();
 });
 
@@ -236,7 +242,7 @@ it.each(['success', 'failure'] as const)('preserves a pending settings save and 
   await userEvent.click(editorFor(fixture));
   await waitFor(() => fixture.phase() === 'expanded');
   await settings(fixture);
-  expect(fixture.root().querySelector('.flower-settings-surface')).toBe(panel);
+  expect(document.querySelector('.flower-settings-surface')).toBe(panel);
   expect(panel.textContent).toContain(outcome === 'failure' ? 'Settings save unavailable' : 'Saved');
   expect(panel.querySelectorAll('[role="radio"]')[outcome === 'failure' ? 1 : 2].getAttribute('aria-checked')).toBe('true');
   expect(saveDefaultPermission).toHaveBeenCalledTimes(1);
@@ -269,7 +275,7 @@ it.each(['success', 'failure'] as const)('retains provider saving and its %s res
   expect(editorFor(fixture)).toBe(editor);
   expect(editor.value).toBe('Provider transition draft');
   await settings(fixture);
-  expect(fixture.root().querySelector('.flower-settings-surface')).toBe(panel);
+  expect(document.querySelector('.flower-settings-surface')).toBe(panel);
   expect(toggle().disabled).toBe(true);
   expect(panel.querySelector('.flower-settings-title-feedback')!.textContent).toContain('Saving');
   if (outcome === 'failure') rejectSave(new Error('Provider save unavailable'));
@@ -346,7 +352,7 @@ it.each([{ theme: 'light', width: 1280, height: 32 }, { theme: 'dark', width: 36
     await waitFor(() => fixture.phase() === 'expanded');
     const panel = await settings(fixture);
     const close = panel.querySelector<HTMLButtonElement>('button[aria-label="Collapse Flower"]')!;
-    expect(close.getBoundingClientRect().right).toBeLessThanOrEqual(fixture.root().getBoundingClientRect().right + 1);
+    expect(document.querySelector('.flower-settings-dialog')!.getBoundingClientRect().right).toBeLessThanOrEqual(width);
     close.click();
     await waitFor(() => fixture.phase() === 'collapsing');
     const tail: number[] = [];
@@ -359,6 +365,7 @@ it.each([{ theme: 'light', width: 1280, height: 32 }, { theme: 'dark', width: 36
     }
     expect(tail.length).toBeGreaterThan(0);
     expect(Math.max(...tail)).toBeLessThanOrEqual(0.01);
+    await waitFor(() => !document.querySelector('.flower-settings-dialog'));
     expect(panel.getClientRects()).toHaveLength(0);
     expect(fixture.mount.querySelector('#panels-companion')!.getBoundingClientRect().height).toBe(height);
     expect(editorFor(fixture).getBoundingClientRect().height).toBeGreaterThan(0);

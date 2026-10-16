@@ -286,6 +286,8 @@ const FLOWER_RELATED_SURFACE_SELECTOR = [
   '.flower-subagent-detail-window',
   '.flower-working-dir-picker',
   '.flower-provider-dialog',
+  '.flower-settings-dialog',
+  '.flower-model-selection-dialog',
   '[data-flower-floating-layer]',
 ].join(', ');
 
@@ -3384,7 +3386,10 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     || activityFlowerCompanionPhase() !== 'collapsed'
   ));
   const activityFlowerInteractionOwned = (event: PointerEvent | KeyboardEvent) => (
-    event.target instanceof Element && Boolean(event.target.closest(FLOWER_RELATED_SURFACE_SELECTOR))
+    event.target instanceof Element && Boolean(
+      event.target.closest(FLOWER_RELATED_SURFACE_SELECTOR)
+      || event.target.closest('[data-floe-dialog-overlay-root]')?.querySelector(FLOWER_RELATED_SURFACE_SELECTOR)
+    )
   );
   const dismissActivityFlowerCompanion = (reason: BottomBarCompanionDismissReason) => {
     if (reason === 'outside-pointer' && flowerProductPanelRef?.contains(document.activeElement)) {

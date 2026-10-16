@@ -946,7 +946,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [threadListError, setThreadListError] = createSignal('');
   const [historyFilter, setHistoryFilter] = createSignal('');
   const [sidePanel, setSidePanel] = createSignal<FlowerSurfacePanel>('chat');
-  const visiblePanel = () => companionCollapsed() ? 'chat' : sidePanel();
+  const visiblePanel = () => companionCollapsed() || sidePanel() === 'settings' ? 'chat' : sidePanel();
+  const [settingsDialogPresent, setSettingsDialogPresent] = createSignal(false);
+  let settingsRestoreFocus: HTMLElement | null = null;
   createEffect(on(companionCollapsed, (collapsed) => {
     // Shell keeps companionOpen true through closing; reset only at its final phase.
     if (collapsed) setSidePanel('chat');
@@ -5167,6 +5169,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   const openSettings = () => {
+    if (sidePanel() !== 'settings') settingsRestoreFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setThreadNavigationOpen(false);
     closeSubagentOverlays();
     setSidePanel('settings');
@@ -12639,7 +12642,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               </Match>
             </Switch></Show>}</For>
             {subagentDropdown()}
-            <Show when={visiblePanel() === 'chat'}>{props.headerTrailingActions}</Show>
+            <Show when={sidePanel() === 'chat'}>{props.headerTrailingActions}</Show>
           </div>
   );
 
@@ -12838,8 +12841,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const ThreadRail = createRetainedContent(() => (
       <aside class="flower-component-thread-rail" aria-label={copy().chat.conversationsAria}
-        inert={navigationOverlay() && !threadNavigationOpen()}
-        aria-hidden={navigationOverlay() && !threadNavigationOpen() ? 'true' : undefined}>
+        inert={settingsDialogPresent() || (navigationOverlay() && !threadNavigationOpen())}
+        aria-hidden={settingsDialogPresent() || (navigationOverlay() && !threadNavigationOpen()) ? 'true' : undefined}>
         <div class="flower-mobile-drawer-handle" aria-hidden="true" />
         <div class="flower-sidebar-actions">
           <h2 class="flower-mobile-drawer-title">{copy().chat.conversationsAria}</h2>
@@ -12906,9 +12909,42 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       </aside>
   ));
 
+  const SettingsContent = createRetainedContent(() => (
+    <div class="min-h-0" data-flower-panel="settings" hidden={!settingsDialogPresent() && sidePanel() !== 'settings'}
+      inert={!settingsDialogPresent()} aria-hidden={!settingsDialogPresent()}>
+      <Show when={settingsOpened()}>
+        <Suspense fallback={<div class="p-4 flower-body-copy text-muted-foreground" role="status">{copy().chat.loadingSettings}</div>}>
+          <FlowerSettingsSurface
+            onDiscoverModels={props.adapter.discoverProviderModels}
+            chatGPTAuth={props.adapter.chatGPTAuth ? accountAction : undefined}
+            loadChatGPTAccounts={props.adapter.loadChatGPTAccounts}
+            snapshot={snapshot()}
+            providerFocusRequest={providerFocusRequest()}
+            onProviderRecoveryFinished={() => {
+              if (providerFocusRequest()?.threadID === trimString(selectedThreadID())) returnToChat();
+              setProviderFocusRequest(undefined);
+            }}
+            copy={copy().settings}
+            onSaveDefaultPermission={saveDefaultPermission}
+            onSaveComputerUseEnabled={props.adapter.saveComputerUseEnabled ? saveComputerUseEnabled : undefined}
+            onSaveAutoUpdateModelCatalog={props.adapter.saveAutoUpdateModelCatalog ? saveAutoUpdateModelCatalog : undefined}
+            computerCopy={copy().computer}
+            onOpenComputerSettings={props.adapter.computerManagement ? () => { returnToChat(); setComputerDialog('settings'); } : undefined}
+            onSaveModelProfile={saveModelProfile}
+            saveError={saveError()}
+            savedAt={savedAt()}
+            saving={settingsSaving()}
+            dialog
+            headerTrailingActions={sidePanel() === 'settings' ? props.headerTrailingActions : undefined}
+          />
+        </Suspense>
+      </Show>
+    </div>
+  ));
+
   const conversationPanel = () => (
-      <section class="flower-component-main" inert={threadDrawerPresent()}
-        aria-hidden={threadDrawerPresent() ? 'true' : undefined}>
+      <section class="flower-component-main" inert={threadDrawerPresent() || settingsDialogPresent()}
+        aria-hidden={threadDrawerPresent() || settingsDialogPresent() ? 'true' : undefined}>
         <div class="h-full min-h-0" data-flower-panel="chat" hidden={visiblePanel() !== 'chat'}
           aria-hidden={visiblePanel() !== 'chat'} inert={visiblePanel() !== 'chat'}>
           {chatPanel()}
@@ -12919,36 +12955,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             <FlowerExtensionsSurface adapter={adapter()} i18n={copy().extensions} onBack={returnToChat}
               headerTrailingActions={visiblePanel() === 'extensions' ? props.headerTrailingActions : undefined} />
           </Suspense>}</Show>
-        </div>
-        <div class="h-full min-h-0" data-flower-panel="settings" hidden={visiblePanel() !== 'settings'}
-          aria-hidden={visiblePanel() !== 'settings'} inert={visiblePanel() !== 'settings'}>
-          <Show when={settingsOpened()}>
-            <Suspense fallback={<div class="p-4 flower-body-copy text-muted-foreground" role="status">{copy().chat.loadingSettings}</div>}>
-              <FlowerSettingsSurface
-                onDiscoverModels={props.adapter.discoverProviderModels}
-                chatGPTAuth={props.adapter.chatGPTAuth ? accountAction : undefined}
-                loadChatGPTAccounts={props.adapter.loadChatGPTAccounts}
-                snapshot={snapshot()}
-                providerFocusRequest={providerFocusRequest()}
-                onProviderRecoveryFinished={() => {
-                  if (providerFocusRequest()?.threadID === trimString(selectedThreadID())) returnToChat();
-                  setProviderFocusRequest(undefined);
-                }}
-                copy={copy().settings}
-                onSaveDefaultPermission={saveDefaultPermission}
-                onSaveComputerUseEnabled={props.adapter.saveComputerUseEnabled ? saveComputerUseEnabled : undefined}
-                onSaveAutoUpdateModelCatalog={props.adapter.saveAutoUpdateModelCatalog ? saveAutoUpdateModelCatalog : undefined}
-                computerCopy={copy().computer}
-                onOpenComputerSettings={props.adapter.computerManagement ? () => { returnToChat(); setComputerDialog('settings'); } : undefined}
-                onSaveModelProfile={saveModelProfile}
-                saveError={saveError()}
-                savedAt={savedAt()}
-                saving={settingsSaving()}
-                onBackToChat={returnToChat}
-                headerTrailingActions={visiblePanel() === 'settings' ? props.headerTrailingActions : undefined}
-              />
-            </Suspense>
-          </Show>
         </div>
       </section>
   );
@@ -12986,6 +12992,33 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       data-flower-side-panel={sidePanel()}
       style={{ '--flower-thread-rail-width': `${threadRailWidth()}px` }}
     >
+      <Show when={!settingsDialogPresent()}><div hidden inert aria-hidden="true"><SettingsContent /></div></Show>
+      <DialogPlacementProvider mode="global">
+        <Dialog open={sidePanel() === 'settings' && !companionCollapsed() && surfaceEngaged()}
+          onOpenChange={open => { if (!open) returnToChat(); }}
+          onPresenceChange={present => {
+            setSettingsDialogPresent(present);
+            if (!present) queueMicrotask(() => {
+              if (sidePanel() === 'settings' || !surfaceEngaged() || companionCollapsed()) return;
+              if (document.activeElement === document.body || document.activeElement === surfaceRef) settingsRestoreFocus?.focus({ preventScroll: true });
+            });
+          }}
+          presentation="dialog"
+          title={copy().settings.title}
+          closeLabel={copy().computer.close}
+          bodyDescription={copy().settings.description}
+          escapeKeyPhase="bubble"
+          onKeyDown={event => {
+            if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing) return;
+            event.preventDefault();
+            event.stopPropagation();
+            returnToChat();
+          }}
+          class="flower-settings-dialog"
+          contentClass="flower-settings-dialog-content">
+          <SettingsContent />
+        </Dialog>
+      </DialogPlacementProvider>
       <Show when={!props.embeddedConversation}><Show when={navigationOverlay()} fallback={<ThreadRail />}>
         <DialogPlacementProvider mode="auto">
           <Dialog open={threadDrawerOpen() && surfaceEngaged()}

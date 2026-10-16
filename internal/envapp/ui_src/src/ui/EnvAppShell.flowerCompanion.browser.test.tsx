@@ -840,6 +840,10 @@ vi.mock('./pages/EnvAIPage', () => ({
           >
             Flower provider dialog
           </button>
+          <div data-floe-dialog-overlay-root="settings-contract" style={{ position: 'fixed', top: '160px', left: '8px', 'z-index': 200 }}>
+            <div class="flower-settings-dialog"><button type="button" data-testid="activity-flower-settings-action">Settings action</button></div>
+            <button type="button" data-testid="activity-flower-settings-backdrop">Settings backdrop</button>
+          </div>
         </Portal>
       </div>
     );
@@ -1872,6 +1876,10 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     expect(fixture.product.dataset.presentation).toBe('expanded');
 
     await userEvent.click(providerDialog);
+    await flushAsync();
+    expect(fixture.product.dataset.presentation).toBe('expanded');
+    await userEvent.click(document.querySelector<HTMLButtonElement>('[data-testid="activity-flower-settings-action"]')!);
+    await userEvent.click(document.querySelector<HTMLButtonElement>('[data-testid="activity-flower-settings-backdrop"]')!);
     await flushAsync();
     expect(fixture.product.dataset.presentation).toBe('expanded');
 
