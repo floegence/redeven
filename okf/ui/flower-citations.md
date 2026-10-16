@@ -46,8 +46,11 @@ remain readable without rewriting historical data.
 
 Inline Markdown code uses the published Floe `--inline-code-foreground` and
 `--inline-code-background` pair. Each of the 26 shell themes owns its palette;
-Flower does not keep another color table. The span has a quiet fill, no border,
-regular monospace text and cloned rounded decoration when a long path wraps.
+Flower does not keep another color table. Floe v0.86.43 selects saturated blue,
+teal, ochre and gold reference text for each theme, avoiding purple accents and
+separating references from the surrounding prose. The span has a quiet fill,
+no border, regular monospace text and cloned rounded decoration when a long
+path wraps.
 Native selection reverses the readable token pair without changing the text.
 User bubbles use the same opaque inset, preserving contrast independently of the
 bubble accent. Linked code retains visible link styling; code links in user
