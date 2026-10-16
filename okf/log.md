@@ -4,6 +4,10 @@
 
 - Replace the [Subagent header](ui/flower-subagent-detail.md) badge with three rotating canonical portraits and exact remaining counts. Preserve static waiting states, gray settled inventory, accessible status summaries, surface-local detail access, and reduced-motion behavior.
 
+## 2026-10-16: On-demand subagent context
+
+- Remove automatic delegation counts and rolling child previews from [managed runtime facts](ai/flower-managed-model-context.md). Preserve environment capability, current tools, canonical interactions and [explicit subagent results](ai/subagent-runtime.md). Existing threads retire the old key once through Floret's normal complete-snapshot semantics; deterministic provider-request tests cover churn, errors, removal and handoffs.
+
 ## 2026-10-16: Fresh explicit skill reads
 
 - Keep [skill catalogs and bodies](ai/flower-managed-model-context.md#skill-catalog-and-explicit-reads) separate: explicit reads revalidate current sources and instructions, activation retains identity only, and repeated reads remain available after compaction. Preserve historical results and prepared requests, measure catalog replacement bytes, and retain the existing snapshot protocol.

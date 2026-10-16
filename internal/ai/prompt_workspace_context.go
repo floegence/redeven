@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
@@ -15,10 +14,7 @@ import (
 	"github.com/floegence/redeven/internal/gitutil"
 )
 
-const (
-	promptDelegationPreviewItems = 3
-	promptRuleRootProbeTimeout   = 3 * time.Second
-)
+const promptRuleRootProbeTimeout = 3 * time.Second
 
 var promptRepoRuleCandidateNames = []string{
 	"AGENTS.md",
@@ -31,7 +27,6 @@ type promptWorkspaceContext struct {
 	Environment    promptEnvironmentFacts
 	RepoRules      []promptRepoRuleFile
 	RepoRulesError error
-	Delegation     promptDelegationState
 }
 
 type promptEnvironmentFacts struct {
@@ -57,34 +52,11 @@ type promptRepoRuleFile struct {
 	ReadError string
 }
 
-type promptDelegationState struct {
-	Unavailable    string
-	Enabled        bool
-	ActiveCount    int
-	QueuedCount    int
-	RunningCount   int
-	WaitingCount   int
-	CompletedCount int
-	FailedCount    int
-	CanceledCount  int
-	TimedOutCount  int
-	Items          []promptDelegationItem
-}
-
-type promptDelegationItem struct {
-	ID        string
-	AgentType string
-	Status    string
-	Title     string
-	Objective string
-}
-
 func collectPromptWorkspaceContext(ctx context.Context, r *run, permission FlowerPermissionType) promptWorkspaceContext {
 	workspace := promptWorkspaceContext{
 		Environment: collectPromptEnvironmentFacts(r, permission),
 	}
 	workspace.RepoRules, workspace.RepoRulesError = r.collectPromptRepoRuleFiles(ctx, workspace.Environment.WorkingDir)
-	workspace.Delegation = collectPromptDelegationState(ctx, r)
 	return workspace
 }
 
@@ -202,71 +174,6 @@ func promptRuleSearchDirs(workingDir string, repoRoot string) []string {
 	return dirs
 }
 
-func collectPromptDelegationState(ctx context.Context, r *run) promptDelegationState {
-	out := promptDelegationState{}
-	if r == nil {
-		return out
-	}
-	out.Enabled = r.allowSubagentDelegate
-	if r.subagentRuntime == nil {
-		return out
-	}
-
-	snapshots, err := r.subagentRuntime.snapshots(ctx)
-	if err != nil {
-		out.Unavailable = "Delegation state is unavailable: " + err.Error()
-		return out
-	}
-	if len(snapshots) == 0 {
-		return out
-	}
-	sort.Slice(snapshots, func(i, j int) bool {
-		if snapshots[i].UpdatedAtMS == snapshots[j].UpdatedAtMS {
-			if snapshots[i].CreatedAtMS == snapshots[j].CreatedAtMS {
-				return snapshots[i].ThreadID < snapshots[j].ThreadID
-			}
-			return snapshots[i].CreatedAtMS > snapshots[j].CreatedAtMS
-		}
-		return snapshots[i].UpdatedAtMS > snapshots[j].UpdatedAtMS
-	})
-
-	for _, snapshot := range snapshots {
-		status := strings.TrimSpace(snapshot.Status)
-		switch status {
-		case subagentStatusQueued:
-			out.QueuedCount++
-			out.ActiveCount++
-		case subagentStatusRunning:
-			out.RunningCount++
-			out.ActiveCount++
-		case subagentStatusWaiting:
-			out.WaitingCount++
-			out.ActiveCount++
-		case subagentStatusCompleted:
-			out.CompletedCount++
-		case subagentStatusFailed:
-			out.FailedCount++
-		case subagentStatusCanceled:
-			out.CanceledCount++
-		case subagentStatusTimedOut:
-			out.TimedOutCount++
-		default:
-			out.ActiveCount++
-		}
-		if isSubagentTerminalStatus(status) || len(out.Items) >= promptDelegationPreviewItems {
-			continue
-		}
-		out.Items = append(out.Items, promptDelegationItem{
-			ID:        strings.TrimSpace(snapshot.ThreadID),
-			AgentType: strings.TrimSpace(snapshot.AgentType),
-			Status:    status,
-			Title:     strings.TrimSpace(snapshot.TaskName),
-			Objective: strings.TrimSpace(snapshot.LastMessagePreview),
-		})
-	}
-	return out
-}
-
 // collectModelContextSnapshot is the sole Flower runtime fact collector. Floret
 // owns comparison, chronological admission, rendering and durable history.
 func (r *run) collectModelContextSnapshot(ctx context.Context, permission FlowerPermissionType, now func() time.Time) (*flruntime.ModelContextSnapshot, error) {
@@ -313,7 +220,6 @@ func (r *run) collectModelContextSnapshot(ctx context.Context, permission Flower
 		{Key: "local_time", Title: "Date and timezone", Text: strings.Join(renderPromptLocalTimeContextLines(currentPromptLocalTimeContext(now)), "\n")},
 		{Key: "repository_rules", Title: "Repository rule sources", Text: strings.Join(renderPromptRepoRuleLines(workspace.RepoRules, nil), "\n")},
 		{Key: "skills", Title: "Available skills", Text: skills},
-		{Key: "delegation", Title: "Delegation state", Text: strings.Join(renderPromptDelegationLines(workspace.Delegation), "\n")},
 	}}
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -370,36 +276,6 @@ func renderPromptRepoRuleLines(files []promptRepoRuleFile, discoveryErr error) [
 	}
 	if discoveryErr != nil {
 		lines = append(lines, "- Rule discovery incomplete: "+discoveryErr.Error()+". Pause affected operations until the applicable rules can be inspected.")
-	}
-	return lines
-}
-
-func renderPromptDelegationLines(state promptDelegationState) []string {
-	if state.Unavailable != "" {
-		return []string{fmt.Sprintf("- Subagent delegation available: %t", state.Enabled), "- " + state.Unavailable + "; earlier delegation facts are no longer current."}
-	}
-	if !state.Enabled {
-		return []string{"- Subagent delegation available: false"}
-	}
-	lines := []string{
-		"- Subagent delegation available: true",
-		fmt.Sprintf("- Subagent counts: active=%d, queued=%d, running=%d, waiting_input=%d, completed=%d, failed=%d, canceled=%d, timed_out=%d", state.ActiveCount, state.QueuedCount, state.RunningCount, state.WaitingCount, state.CompletedCount, state.FailedCount, state.CanceledCount, state.TimedOutCount),
-	}
-	if len(state.Items) == 0 {
-		lines = append(lines, "- Active subagent preview: none")
-		return lines
-	}
-	for _, item := range state.Items {
-		title := strings.TrimSpace(item.Title)
-		if title == "" {
-			title = strings.TrimSpace(item.ID)
-		}
-		switch {
-		case title != "" && strings.TrimSpace(item.Objective) != "":
-			lines = append(lines, fmt.Sprintf("- Active subagent [%s/%s] %s -- objective: %s", item.AgentType, item.Status, title, item.Objective))
-		case title != "":
-			lines = append(lines, fmt.Sprintf("- Active subagent [%s/%s] %s", item.AgentType, item.Status, title))
-		}
 	}
 	return lines
 }

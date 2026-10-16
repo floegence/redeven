@@ -1094,8 +1094,11 @@ Submitted references and ordinary user-supplied facts retain the published
 MessageReference and UserInput.Context contracts. Automatic runtime facts use
 one complete ModelContextSnapshot collector at admission and the existing
 ToolSurface provider-request/compaction boundary. Its stable partitions cover
-execution environment, date/timezone, repository state, rule sources, skills,
-and delegation. The same resolved permission governs tool definitions and facts.
+execution environment, date/timezone, repository state, rule sources, and skills.
+Delegation availability stays in execution environment and current tool definitions;
+child counts, statuses and rolling previews never enter automatic model context.
+Use explicit subagent reads for status and full handoffs. The same resolved
+permission governs tool definitions and facts.
 Floret v7.40.0 owns validation, semantic comparison, typed durable admission,
 ordered user-role context projection, exact compaction baselines, and retry,
 fork and restart recovery. Never reconstruct provider history, parse historical
