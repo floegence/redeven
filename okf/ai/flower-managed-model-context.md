@@ -48,8 +48,9 @@ enforced at actual tool authorization, independently of displayed historical fac
 Authorized canonical reads and the existing workspace subscription carry the
 same snapshot, record location, changed/removed keys and latest request use.
 The shared context panel groups the displayed request by explicit source:
-system prompt, system tools, MCP tools, provider tools, messages, retained tool
-outputs, skill catalog, repository rule sources, environment, summaries,
+system prompt, system tool definitions, MCP tool definitions, provider tool
+definitions, messages, retained tool execution outputs, skill catalog, repository
+rule sources, environment, summaries,
 retained reasoning, expanded media and formatting overhead. Floret v7.45.0
 provides exact tool names with registry source/namespace annotations and
 canonical managed-section token estimates. Flower groups only its known source

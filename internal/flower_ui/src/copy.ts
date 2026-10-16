@@ -1077,15 +1077,15 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       composition: 'Used context',
       compositionHint: 'Estimated tokens and share of model input. Category estimates may differ from the measured total.',
       sourceLabels: {
-        system_prompt: 'System prompt', system_tools: 'System tools', mcp_tools: 'MCP tools', provider_tools: 'Provider tools',
-        messages: 'Messages', tool_outputs: 'Tool outputs', skills: 'Skill catalog', rule_files: 'Rule file index', environment: 'Environment',
+        system_prompt: 'System prompt', system_tools: 'System tool definitions', mcp_tools: 'MCP tool definitions', provider_tools: 'Provider tool definitions',
+        messages: 'Messages', tool_outputs: 'Tool execution outputs', skills: 'Skill catalog', rule_files: 'Rule file index', environment: 'Environment',
         summary: 'Conversation summary', reasoning: 'Reasoning', attachments: 'Images & files',
         context_framing: 'Context formatting', unattributed_tools: 'Tools without source data', unattributed_context: 'Context without source data',
       },
       categoryLabels: {
         system_tokens: 'System instructions', tool_definition_tokens: 'Tool definitions',
         user_tokens: 'Your messages', assistant_tokens: 'Assistant messages',
-        tool_call_tokens: 'Tool calls', tool_result_tokens: 'Tool outputs',
+        tool_call_tokens: 'Tool calls', tool_result_tokens: 'Tool execution outputs',
         model_context_tokens: 'Auto-loaded context', compaction_tokens: 'Conversation summary',
         reasoning_tokens: 'Reasoning', attachment_tokens: 'Images & files',
       },

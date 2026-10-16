@@ -37,7 +37,7 @@ function mount(usage?: () => FlowerContextUsage) {
 describe('Flower context source breakdown', () => {
  it('displays real source names and horizontal bars with flat detail rows', async () => {
   const { host } = mount(() => fixture());
-  for (const text of ['System prompt', 'System tools', 'MCP tools', 'Skill catalog', 'Rule file index', 'Messages', 'Tool outputs']) expect(host.textContent).toContain(text);
+  for (const text of ['System prompt', 'System tool definitions', 'MCP tool definitions', 'Skill catalog', 'Rule file index', 'Messages', 'Tool execution outputs']) expect(host.textContent).toContain(text);
   expect(host.textContent).not.toContain('Auto-loaded context');
   expect(host.textContent).not.toContain('chars');
   expect(host.textContent).not.toContain('Complete selectable catalog');
