@@ -48,6 +48,13 @@ type SkillActivation struct {
 	ActivatedAt     int64                `json:"activated_at_unix_ms"`
 }
 
+// skillActivationState records activation identity, never reusable instructions.
+type skillActivationState struct {
+	ActivationID string
+	ContentRef   string
+	ActivatedAt  int64
+}
+
 type SkillCatalog struct {
 	CatalogVersion int64                `json:"catalog_version"`
 	Skills         []SkillCatalogEntry  `json:"skills"`
@@ -115,7 +122,7 @@ type skillManager struct {
 	sourcePath       string
 	discovered       map[string]SkillMeta
 	candidatesByName map[string][]SkillMeta
-	active           map[string]SkillActivation
+	active           map[string]skillActivationState
 
 	disabledPaths map[string]struct{}
 	sources       map[string]SkillSourceRecord
@@ -166,7 +173,7 @@ func newSkillManager(workspace string, stateDir string) *skillManager {
 		sourcePath:       sourcePath,
 		discovered:       map[string]SkillMeta{},
 		candidatesByName: map[string][]SkillMeta{},
-		active:           map[string]SkillActivation{},
+		active:           map[string]skillActivationState{},
 		disabledPaths:    map[string]struct{}{},
 		sources:          map[string]SkillSourceRecord{},
 		embedded:         embedded,
@@ -704,7 +711,7 @@ func (m *skillManager) listLocked(mode string) []SkillMeta {
 	return out
 }
 
-func (m *skillManager) Activate(name string, mode string, implicit bool) (SkillActivation, bool, error) {
+func (m *skillManager) Activate(ctx context.Context, name string, mode string, implicit bool) (SkillActivation, bool, error) {
 	if m == nil {
 		return SkillActivation{}, false, fmt.Errorf("nil skill manager")
 	}
@@ -715,85 +722,58 @@ func (m *skillManager) Activate(name string, mode string, implicit bool) (SkillA
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if err := m.discoverLocked(ctx); err != nil {
+		return SkillActivation{}, false, err
+	}
+	if len(m.catalogErrors) != 0 {
+		return SkillActivation{}, false, fmt.Errorf("skill catalog source %q: %s", m.catalogErrors[0].Path, m.catalogErrors[0].Message)
+	}
 	meta, ok := m.resolveCandidateLocked(name, mode, implicit)
 	if !ok {
 		return SkillActivation{}, false, fmt.Errorf("unknown skill: %s", name)
 	}
-	if activation, ok := m.active[name]; ok && activation.ContentRef == meta.Path {
-		return activation, true, nil
-	}
-	body, err := m.skillBodyLocked(meta)
+	current, body, err := m.skillContentLocked(meta)
 	if err != nil {
+		delete(m.active, name)
 		return SkillActivation{}, false, err
 	}
-	activationID := fmt.Sprintf("skill_%d", time.Now().UnixNano())
-	activation := SkillActivation{
-		ActivationID:    activationID,
-		Name:            meta.Name,
-		RootDir:         filepath.Dir(meta.Path),
-		Priority:        meta.Priority,
-		Content:         body,
-		ContentRef:      meta.Path,
-		PermissionHints: append([]string(nil), meta.PermissionHints...),
-		Dependencies:    append([]SkillMCPDependency(nil), meta.Dependencies...),
-		ActivatedAt:     time.Now().UnixMilli(),
+	if current.Name != name || !skillMatchesPermission(current.PermissionHints, mode) || (implicit && !current.AllowImplicitInvocation) {
+		delete(m.active, name)
+		return SkillActivation{}, false, fmt.Errorf("skill is no longer available: %s", name)
 	}
-	m.active[name] = activation
-	return activation, false, nil
+	if err := ctx.Err(); err != nil {
+		return SkillActivation{}, false, err
+	}
+	state, alreadyActive := m.active[name]
+	alreadyActive = alreadyActive && state.ContentRef == current.Path
+	if !alreadyActive {
+		state = skillActivationState{
+			ActivationID: fmt.Sprintf("skill_%d", time.Now().UnixNano()),
+			ContentRef:   current.Path,
+			ActivatedAt:  time.Now().UnixMilli(),
+		}
+	}
+	activation := SkillActivation{
+		ActivationID:    state.ActivationID,
+		Name:            current.Name,
+		RootDir:         filepath.Dir(current.Path),
+		Priority:        current.Priority,
+		Content:         body,
+		ContentRef:      current.Path,
+		PermissionHints: append([]string(nil), current.PermissionHints...),
+		Dependencies:    append([]SkillMCPDependency(nil), current.Dependencies...),
+		ActivatedAt:     state.ActivatedAt,
+	}
+	m.active[name] = state
+	return activation, alreadyActive, nil
 }
 
-func (m *skillManager) skillBodyLocked(meta SkillMeta) (string, error) {
-	if m == nil {
-		return "", fmt.Errorf("nil skill manager")
-	}
+func (m *skillManager) skillContentLocked(meta SkillMeta) (SkillMeta, string, error) {
 	p := filepath.Clean(strings.TrimSpace(meta.Path))
 	if content := strings.TrimSpace(m.embedded[p]); content != "" {
-		_, body, err := parseSkillContent(p, meta.Scope, content)
-		return body, err
+		return parseSkillContent(p, meta.Scope, content)
 	}
-	_, body, err := parseSkillFile(p, meta.Scope)
-	return body, err
-}
-
-func (m *skillManager) Active() []SkillActivation {
-	if m == nil {
-		return nil
-	}
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	out := make([]SkillActivation, 0, len(m.active))
-	for _, item := range m.active {
-		out = append(out, item)
-	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].Priority == out[j].Priority {
-			return out[i].Name < out[j].Name
-		}
-		return out[i].Priority > out[j].Priority
-	})
-	return out
-}
-
-func (m *skillManager) Deactivate(name string) {
-	if m == nil {
-		return
-	}
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return
-	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	delete(m.active, name)
-}
-
-func (m *skillManager) DeactivateAll() {
-	if m == nil {
-		return
-	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.active = map[string]SkillActivation{}
+	return parseSkillFile(p, meta.Scope)
 }
 
 func (m *skillManager) loadStateLocked() error {

@@ -40,7 +40,7 @@ func (r *run) activateSkill(ctx context.Context, name string) (SkillActivation, 
 	if !ok || snapshot.PermissionType == "" {
 		return SkillActivation{}, false, errors.New("skill activation authorization snapshot is unavailable")
 	}
-	activation, alreadyActive, err := mgr.Activate(name, permissionTypeString(snapshot.PermissionType), false)
+	activation, alreadyActive, err := mgr.Activate(ctx, name, permissionTypeString(snapshot.PermissionType), false)
 	if err != nil {
 		r.recordRunDiagnostic("skill.activate.error", RealtimeStreamKindLifecycle, map[string]any{"name": strings.TrimSpace(name), "error": err.Error()})
 		return SkillActivation{}, false, err

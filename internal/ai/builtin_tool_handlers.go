@@ -750,7 +750,7 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:         "use_skill",
-			Description:  "Load and activate a skill by name.",
+			Description:  "Read the currently available skill instructions by name and record activation. Every explicit call returns the full current body, including repeated reads after context compaction.",
 			InputSchema:  toSchema(map[string]any{"type": "object", "properties": map[string]any{"name": map[string]any{"type": "string"}, "reason": map[string]any{"type": "string"}}, "required": []string{"name"}, "additionalProperties": false}),
 			Mutating:     false,
 			Visibility:   ToolVisibilityStandard,

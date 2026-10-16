@@ -22,6 +22,38 @@ changes. Skill rediscovery uses one authoritative catalog and deterministic
 text; disabled or newly restricted skills cannot reuse an activation cache.
 Loaded skill instructions remain historical model facts.
 
+## Skill catalog and explicit reads
+
+The automatic skill catalog contains current available names and descriptions in
+stable priority/name order. Identical rediscovery and body-only edits do not
+append a catalog update. Changes to names, descriptions or the permission-filtered
+available set replace the complete skills section through Floret's existing
+snapshot contract. Other fact sections retain their own unchanged contracts.
+
+Every explicit `use_skill` rereads and parses the current document after fresh
+source, enablement and permission checks. In-process activation state holds only
+identity, path and first activation time. `already_active` means the same skill
+path was activated previously; it does not establish body freshness or model
+visibility. Successful repeated reads keep `activation_id` and return the full
+current body, including after compaction. Disabled, deleted, restricted, unreadable
+or invalid skills cannot return older instructions as current content. Source
+failures are explicit, and cancelled reads do not publish an activation.
+
+Body changes do not inject instructions automatically. Earlier tool results and
+prepared network attempts retain their original bytes; subsequent reads add new
+tool results. Compaction may summarize an earlier body while retaining the catalog,
+so activation state must never suppress an explicit reread.
+
+The deterministic 27-entry fixture measures a 2,397-byte initial catalog and a
+2,396-byte full replacement for one description edit (2,477 bytes as section JSON).
+Twelve logical requests covering stable scans, body edits, metadata changes,
+availability and permission changes produce nine skill-section messages. This
+bounded fixture does not justify a per-skill delta protocol. Whole-request wire
+bytes and body tool-result bytes are reported separately by the regression tests;
+these are byte measurements, not tokenizer counts or production change rates.
+
+## Snapshot lifecycle
+
 UserInput.Context retains ordinary submitted facts and references. Automatic
 facts use ModelContextSnapshot, never historical free-text parsing. Queue edits
 retain their admitted snapshot; queued execution collects current facts.
@@ -107,4 +139,5 @@ component and bounded detail cache.
 - [Refresh and confirmed-effect retry regression](../../internal/ai/model_context_runtime_integration_test.go)
 - [Provider-visible Git removal and retained dynamic facts](../../internal/ai/repository_model_context_integration_test.go)
 - [Skill cache and repaired-source regression](../../internal/ai/skill_model_context_test.go)
+- [Provider-visible skill reads, catalog measurements and compaction](../../internal/ai/skill_read_runtime_test.go)
 - [Panel interaction tests](../../internal/envapp/ui_src/src/ui/FlowerComposerContextIndicator.test.tsx)

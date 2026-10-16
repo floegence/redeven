@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-16: Fresh explicit skill reads
+
+- Keep [skill catalogs and bodies](ai/flower-managed-model-context.md#skill-catalog-and-explicit-reads) separate: explicit reads revalidate current sources and instructions, activation retains identity only, and repeated reads remain available after compaction. Preserve historical results and prepared requests, measure catalog replacement bytes, and retain the existing snapshot protocol.
+
 ## 2026-10-16: Query Flower Git details on demand
 
 - Remove automatic repository state collection and injection from [managed runtime facts](ai/flower-managed-model-context.md). Preserve rule-root discovery, necessary environment and tool refreshes, and explicit Git tool history. Existing threads retire the old category once through published Floret snapshot-removal semantics, including across restart.
