@@ -4,12 +4,14 @@ import './flower-feature.css';
 import { commands, page, userEvent } from 'vitest/browser';
 import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import type {
   FlowerAttachmentCapability,
   FlowerAttachmentUploadInput,
   FlowerStagedAttachment,
+  FlowerRuntimeCurrentView,
+  FlowerSurfaceAdapter,
 } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import {
   adapter,
@@ -17,6 +19,7 @@ import {
   renderSurfaceWithAdapter,
   renderSurfaceWithAdapterProps,
   settingsSnapshot,
+  thread,
   waitFor,
 } from './FlowerSurface.navigation.testHarness';
 import {
@@ -25,6 +28,7 @@ import {
 } from '../../../../flower_ui/src/attachments/FlowerAttachmentLane';
 import type { FlowerAttachmentItem } from '../../../../flower_ui/src/attachments/createFlowerAttachmentController';
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../../../../flower_ui/src/copy';
+import { applyFlowerRuntimeCurrentView } from '../../../../flower_ui/src/runtimeCurrentView';
 
 function expectHorizontallyContained(child: DOMRect, parent: DOMRect): void {
   expect(child.left).toBeGreaterThanOrEqual(parent.left - 1);
@@ -53,6 +57,96 @@ async function imageFile(name: string): Promise<File> {
 }
 
 describe('Flower composer attachment browser presentation', () => {
+  it.each([false, true])('keeps the exact body with an uploaded image through send and history reload (file=%s)', async (withFile) => {
+    await page.viewport(1200, 900);
+    const body = 'Explain the attached diagram.\n\nKeep this second paragraph after sending.';
+    const modelID = 'deepseek/deepseek-flash';
+    const image = await imageFile('diagram.png');
+    const files = withFile ? [image, new File(['Review notes'], 'notes.txt', { type: 'text/plain' })] : [image];
+    const conversation = thread({ thread_id: 'mixed-send-thread', model_id: modelID, messages: [] });
+    let messageID = '';
+    let current: FlowerRuntimeCurrentView = { thread_id: conversation.thread_id, view_version: 0, activity: 'idle', items: [] };
+    const launchTurn = vi.fn<FlowerSurfaceAdapter['launchTurn']>(async input => {
+      messageID = `user:${input.client_request_id}`;
+      current = {
+        thread_id: conversation.thread_id, view_version: 1, activity: 'active',
+        turn_id: 'mixed-turn', run_id: 'mixed-run', run_progress: { phase: 'preparing' },
+        items: [{
+          id: messageID, turn_id: 'mixed-turn', run_id: 'mixed-run', ordinal: 1, kind: 'user',
+          text: input.prompt,
+          attachments: (input.attachment_ids ?? []).map(id => {
+            const file = files.find(file => id === `upl_${file.name}`)!;
+            return { name: file.name, mime_type: file.type, size_bytes: file.size,
+              url: `/uploads/${id}?thread_id=mixed-send-thread&turn_id=mixed-turn` };
+          }),
+        }],
+      };
+      return { client_request_id: input.client_request_id, thread_id: conversation.thread_id, current };
+    });
+    const surfaceAdapter: FlowerSurfaceAdapter = {
+      ...adapter(true), listThreads: async () => current.items?.length ? [applyFlowerRuntimeCurrentView(conversation, current)] : [],
+      loadThread: vi.fn(async () => ({ thread: applyFlowerRuntimeCurrentView(conversation, current), current })), launchTurn,
+      loadSettings: async () => ({ ...settingsSnapshot(), model_profile: { schema_version: 1, current_model_id: modelID,
+        providers: [{ id: 'deepseek', name: 'DeepSeek', type: 'deepseek', models: [{ model_name: 'deepseek-flash', input_modalities: ['text', 'image'] }] }],
+      }, provider_secrets: [{ provider_id: 'deepseek', provider_api_key_configured: true, web_search_api_key_configured: false }] }),
+      loadAttachmentCapability: async () => ({ model_id: modelID, revision: 'mixed-send', enabled: true, supports_long_text: true,
+        max_attachments: 10, max_file_size_bytes: 1_000_000, max_total_size_bytes: 2_000_000,
+        routes: { 'image/png': 'native_full_content', 'text/plain': 'tool_read' },
+      }),
+      uploadAttachment: async input => ({ attachment_id: `upl_${input.file.name}`, name: input.file.name,
+        mime_type: input.file.type, size_bytes: input.file.size, digest_sha256: 'a'.repeat(64),
+        locator: `attachment://v1/upl_${input.file.name}/${input.file.name}`,
+        source: input.source, capability_revision: input.capability_revision,
+      }),
+      loadMessageAttachment: vi.fn(async input => files.find(file => input.url.includes(`/upl_${file.name}?`))!),
+    };
+    const write = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue();
+    onTestFinished(() => write.mockRestore());
+    const runtime = renderSurfaceWithAdapter(surfaceAdapter);
+    runtime.style.cssText = 'width:100%;height:820px';
+    await waitFor(() => Boolean(runtime.querySelector('.flower-composer textarea:not(:disabled)')));
+    const transfer = new DataTransfer();
+    files.forEach(file => transfer.items.add(file));
+    const picker = runtime.querySelector<HTMLInputElement>('input[type="file"]')!;
+    Object.defineProperty(picker, 'files', { configurable: true, value: transfer.files });
+    picker.dispatchEvent(new Event('change', { bubbles: true }));
+    await waitFor(() => runtime.querySelectorAll('[data-attachment-status="staged_ready"]').length === files.length);
+    const editor = runtime.querySelector<HTMLTextAreaElement>('.flower-composer textarea')!;
+    editor.value = body;
+    editor.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: body }));
+    await userEvent.click(runtime.querySelector('.flower-composer-submit')!);
+    await waitFor(() => launchTurn.mock.calls.length === 1);
+    expect(launchTurn).toHaveBeenCalledWith(expect.objectContaining({ prompt: body, attachment_ids: files.map(file => `upl_${file.name}`) }));
+
+    async function expectCompleteMessage(host: HTMLElement) {
+      await waitFor(() => Boolean(host.querySelector(`[data-flower-message-id="${messageID}"]`)));
+      const message = host.querySelector<HTMLElement>(`[data-flower-message-id="${messageID}"]`)!;
+      expect(message.querySelectorAll('.flower-message-bubble-user')).toHaveLength(1);
+      const bubble = message.querySelector<HTMLElement>('.flower-message-bubble-user')!;
+      expect(Array.from(bubble.querySelectorAll('p')).map(p => p.textContent)).toEqual(body.split('\n\n'));
+      expect(bubble.getBoundingClientRect().height).toBeGreaterThan(0);
+      await waitFor(() => Boolean(message.querySelector<HTMLImageElement>('.flower-message-image img')?.naturalWidth));
+      expect(bubble.querySelector('.flower-message-image')).toBeNull();
+      expect(message.querySelectorAll('.flower-message-file')).toHaveLength(withFile ? 1 : 0);
+      await userEvent.click(message.querySelector('.flower-message-copy-button-user')!);
+      expect(write).toHaveBeenLastCalledWith(body);
+      return message;
+    }
+    await expectCompleteMessage(runtime);
+    expect(editor.value).toBe('');
+    runtime.style.display = 'none';
+    const reloaded = renderSurfaceWithAdapterProps(surfaceAdapter, {
+      focusThreadRequest: { request_id: 'reopen-mixed', thread_id: conversation.thread_id },
+    });
+    reloaded.style.cssText = 'width:100%;height:820px';
+    const message = await expectCompleteMessage(reloaded);
+    expect(surfaceAdapter.loadThread).toHaveBeenCalledWith(conversation.thread_id);
+    message.setAttribute('data-testid', 'mixed-sent-message');
+    await page.screenshot({ element: page.getByTestId('mixed-sent-message'), path: `./__screenshots__/flower-mixed-sent-${withFile ? 'image-file' : 'image'}.png` });
+    await page.viewport(375, 900);
+    await expectCompleteMessage(reloaded);
+  });
+
   it('keeps a Flash image queued through capability loading and stages it without reselection', async () => {
     await page.viewport(1100, 800);
     const modelID = 'deepseek/deepseek-flash';

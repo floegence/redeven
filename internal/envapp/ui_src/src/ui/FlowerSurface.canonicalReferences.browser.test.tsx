@@ -42,7 +42,7 @@ describe('Flower canonical reference browser presentation', () => {
         content: '请检查这些引用和附件是否按照原始消息完整展示。',
         status: 'complete',
         created_at_ms: 1_000,
-        blocks: [{ type: 'text', content: 'Please review these references and attachments.' },
+        blocks: [
           { type: 'image', src: 'https://example.test/attachments/design.png', alt: 'design.png' }, {
           type: 'file',
           name: 'deployment-observability-and-reliability-review-notes.txt',
@@ -120,6 +120,8 @@ describe('Flower canonical reference browser presentation', () => {
     await waitFor(() => Boolean(runtime.querySelector<HTMLImageElement>('.flower-message-image img')?.naturalWidth));
     const message = runtime.querySelector('[data-flower-message-id="entry-canonical-reference-browser"]') as HTMLElement;
     const bubble = message.querySelector('.flower-message-bubble-user') as HTMLElement;
+    expect(bubble).not.toBeNull();
+    expect(bubble.querySelector('p')?.textContent).toBe(canonicalThread.messages[0]!.content);
     expect(message.querySelector('.flower-chat-context-unified-bubble')).toBeNull();
     expect(bubble.querySelector('.flower-chat-context-chips')).toBeNull();
     expect(bubble.querySelector('.flower-message-file')).toBeNull();

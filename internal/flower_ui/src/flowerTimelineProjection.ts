@@ -208,19 +208,20 @@ function contentBlocksFromMessage(threadID: string, message: FlowerChatMessage):
     const content = String(block.content ?? '');
     return content.trim() ? [{ type: 'content', key: `${message.id}:block:${index}`, block_index: index, block_type: block.type, content, sources: block.sources }] : [];
   });
-  if (projectedBlocks.length > 0) return projectedBlocks;
+  // Attachments do not represent the independent canonical message body.
+  if (projectedBlocks.some(block => block.type !== 'image' && block.type !== 'file')) return projectedBlocks;
 
   const content = String(message.content ?? '');
   return content.trim()
-    ? [{
+    ? [...projectedBlocks, {
       type: 'content',
       key: `${message.id}:content`,
-      block_index: 0,
+      block_index: message.blocks?.length ?? 0,
       block_type: 'markdown',
       content,
       sources: message.sources,
     }]
-    : [];
+    : projectedBlocks;
 }
 
 function queuedTurnBlocks(turn: FlowerQueuedTurn): readonly FlowerRenderableMessageBlock[] {
