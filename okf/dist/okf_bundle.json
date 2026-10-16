@@ -35290,7 +35290,7 @@
         "flower",
         "markdown"
       ],
-      "timestamp": "2026-10-15T00:00:00Z",
+      "timestamp": "2026-10-16T00:00:00Z",
       "frontmatter": {
         "description": "Canonical assistant source ownership, safe links, and provider marker presentation.",
         "tags": [
@@ -35299,11 +35299,11 @@
           "flower",
           "markdown"
         ],
-        "timestamp": "2026-10-15T00:00:00Z",
+        "timestamp": "2026-10-16T00:00:00Z",
         "title": "Flower citations",
         "type": "UI Contract"
       },
-      "body_length": 8388,
+      "body_length": 8875,
       "summary": "- Authority: published Floret v7.32.0 assistant messages own durable sources; Flower reads current views and historical pages through the existing thread projection.\n- Outcome: provider citation markers in prose become readable links with source titles. Copying a message removes those markers.\n- Invariants: ranges use end-exclusive Unicode code-point indices in the exact assistant text. URLs must be HTTP(S), without credentials, whitespace or control characters. Marker identifiers never establish a URL.\n- Failure boundary: unmatched sources appear at the end of the completed message. Historical provider markers without stored sources show localized unavailable text; Flower never reconstructs missing provider facts. Explicit Markdown bibliographies remain authored content.",
       "sections": [
         {
@@ -42676,5 +42676,5 @@
       ]
     }
   ],
-  "source_sha256": "5b282691820b65fc810c3b4ed925ab41423eb8df5884cf9d39501b797ffc0f4a"
+  "source_sha256": "1e2ea0642333ef73af3cf817b0c521a70c4796896a7970d2e75b83c89d56d16c"
 }

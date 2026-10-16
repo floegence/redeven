@@ -30,17 +30,38 @@ it.each([{ theme: 'light', width: 1100 }, { theme: 'dark', width: 1100 }, { them
   const buttons = toolbar.querySelectorAll<HTMLButtonElement>('button');
   expect(buttons).toHaveLength(3);
   expect([...buttons].map(button => button.textContent)).toEqual(['', '', '']);
-  expect([...buttons].map(button => button.getBoundingClientRect().width)).toEqual([32, 32, 32]);
-  for (const icon of toolbar.querySelectorAll<SVGElement>('svg')) expect(getComputedStyle(icon).width).toBe('18px');
+  expect([...buttons].map(button => [button.getBoundingClientRect().width, button.getBoundingClientRect().height])).toEqual([[28, 28], [28, 28], [28, 28]]);
+  for (const icon of toolbar.querySelectorAll<SVGElement>('svg')) {
+    expect(getComputedStyle(icon).width).toBe('14px');
+    expect(getComputedStyle(icon).strokeWidth).toBe('1.75px');
+  }
+  expect(getComputedStyle(toolbar).marginTop).toBe('8px');
+  const idleColors = [...buttons].map(button => getComputedStyle(button).color);
+  expect(new Set(idleColors).size).toBe(1);
+  expect(idleColors[0]).toMatch(/ \/ 0\.72\)$/);
   expect(toolbar.querySelector('time')?.dateTime).toBe(new Date(timestamp).toISOString());
   expect(toolbar.querySelector('time')?.title).toBe(new Date(timestamp).toLocaleString());
   expect(message.querySelector('.flower-chat-source-copy')).toBeNull();
   const sources = message.querySelector<HTMLElement>('.flower-chat-source-list')!;
   expect(toolbar.getBoundingClientRect().bottom).toBeLessThanOrEqual(sources.getBoundingClientRect().top);
   expect(message.querySelector('.flower-chat-source-sites')!.getBoundingClientRect().height).toBeGreaterThan(0);
-  buttons[0].focus();
-  expect(getComputedStyle(buttons[0]).outlineStyle).toBe('solid');
-  buttons[0].blur();
+  const idleBounds = toolbar.getBoundingClientRect().toJSON();
+  for (const button of buttons) {
+    button.focus();
+    await new Promise(resolve => setTimeout(resolve, 150));
+    expect(getComputedStyle(button).outlineStyle).toBe('solid');
+    expect(getComputedStyle(button).color).not.toBe(idleColors[0]);
+    expect(toolbar.getBoundingClientRect().toJSON()).toEqual(idleBounds);
+    button.blur();
+  }
+  await userEvent.hover(buttons[0]);
+  await new Promise(resolve => setTimeout(resolve, 150));
+  expect(getComputedStyle(buttons[0]).color).not.toBe(idleColors[0]);
+  expect(getComputedStyle(buttons[0]).backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
+  expect(toolbar.getBoundingClientRect().toJSON()).toEqual(idleBounds);
+  await userEvent.unhover(buttons[0]);
+  await new Promise(resolve => setTimeout(resolve, 150));
+  expect(getComputedStyle(buttons[0]).color).toBe(idleColors[0]);
   if (width === 320) message.querySelector<HTMLButtonElement>('.flower-chat-source-toggle')!.click();
   expect(message.scrollWidth).toBeLessThanOrEqual(message.clientWidth + 1);
   expect(toolbar.getBoundingClientRect().bottom).toBeLessThanOrEqual(sources.getBoundingClientRect().top);
@@ -65,7 +86,13 @@ it('exports a standalone document with sources and no interactive controls', asy
   expect(doc.querySelectorAll('section a')).toHaveLength(2);
   expect(doc.querySelector('time')?.dateTime).toBe(new Date(timestamp).toISOString());
   expect(doc.querySelectorAll('button,script,iframe')).toHaveLength(0);
-  expect(runtime.querySelector('[aria-label="Export started"]')).not.toBeNull();
+  const exportedButton = runtime.querySelector<HTMLButtonElement>('[aria-label="Export started"]')!;
+  expect(exportedButton).not.toBeNull();
+  await userEvent.unhover(exportedButton);
+  exportedButton.blur();
+  await new Promise(resolve => setTimeout(resolve, 150));
+  expect(getComputedStyle(exportedButton).color).not.toBe(getComputedStyle(runtime.querySelector('.flower-message-copy-button')!).color);
+  expect(getComputedStyle(exportedButton.querySelector('svg')!).width).toBe('14px');
 });
 
 it('downloads a real HTML file through the browser', async () => {
