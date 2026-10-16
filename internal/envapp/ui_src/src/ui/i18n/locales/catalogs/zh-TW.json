@@ -5126,23 +5126,12 @@
       "webSearch": {
         "search": "搜尋",
         "openPage": "開啟網頁",
-        "findInPage": "頁內尋找",
-        "webActivity": "網頁搜尋",
-        "noDetails": "未提供詳細資訊",
-        "noSources": "未傳回來源",
-        "sourcesUnavailable": "搜尋完成 · 未記錄來源",
+        "findInPage": "尋找",
         "sourcesTitle": "來源",
-        "queryLabel": "搜尋詞",
-        "targetLabel": "網頁",
-        "patternLabel": "尋找內容",
         "showLess": "收合",
         "sources": {
           "one": "{count} 個來源",
           "other": "{count} 個來源"
-        },
-        "queries": {
-          "one": "共 {count} 個查詢",
-          "other": "共 {count} 個查詢"
         },
         "showMore": {
           "other": "顯示其餘 {count} 個"

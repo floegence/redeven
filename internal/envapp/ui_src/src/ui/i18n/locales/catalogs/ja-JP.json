@@ -5126,23 +5126,12 @@
       "webSearch": {
         "search": "検索",
         "openPage": "ページを開く",
-        "findInPage": "ページ内検索",
-        "webActivity": "ウェブ検索",
-        "noDetails": "詳細情報は提供されていません",
-        "noSources": "ソースは返されませんでした",
-        "sourcesUnavailable": "検索完了 · ソース未記録",
+        "findInPage": "検索",
         "sourcesTitle": "ソース",
-        "queryLabel": "検索語句",
-        "targetLabel": "ウェブページ",
-        "patternLabel": "検索するテキスト",
         "showLess": "表示を減らす",
         "sources": {
           "one": "ソース {count} 件",
           "other": "ソース {count} 件"
-        },
-        "queries": {
-          "one": "検索 {count} 件",
-          "other": "検索 {count} 件"
         },
         "showMore": {
           "other": "残り {count} 件を表示"

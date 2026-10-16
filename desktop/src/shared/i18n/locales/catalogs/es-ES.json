@@ -215,28 +215,14 @@
       "webSearch": {
         "search": "Buscar",
         "openPage": "Abrir página",
-        "findInPage": "Buscar en la página",
-        "webActivity": "Búsqueda web",
-        "noDetails": "No se proporcionaron detalles",
-        "noSources": "No se devolvieron fuentes",
-        "sourcesUnavailable": "Búsqueda completada · Fuentes no guardadas",
+        "findInPage": "Buscar",
         "sourcesTitle": "Fuentes",
-        "queryLabel": "Consultas de búsqueda",
-        "targetLabel": "Página web",
-        "patternLabel": "Texto que buscar",
         "showLess": "Mostrar menos",
         "sources": {
           "kind": "plural",
           "forms": {
             "one": "{count} fuente",
             "other": "{count} fuentes"
-          }
-        },
-        "queries": {
-          "kind": "plural",
-          "forms": {
-            "one": "{count} consulta",
-            "other": "{count} consultas"
           }
         },
         "showMore": {

@@ -48,6 +48,12 @@ export type FlowerActivityTitle =
     text: string;
   }>
   | Readonly<{
+    kind: 'web_search';
+    text: string;
+    operation: string;
+    url: string;
+  }>
+  | Readonly<{
     kind: 'web_fetch';
     url: string;
   }>;
@@ -124,11 +130,7 @@ export type FlowerActivityWebSearchDetail = Readonly<{
 }>;
 
 export type FlowerWebOperationDetail = Readonly<{
-  query: string;
-  url: string;
-  pattern: string;
   results: readonly FlowerActivityWebSearchEntry[];
-  notice: string;
 }>;
 
 export type FlowerActivityWebFetchDetail = Readonly<{
@@ -479,6 +481,8 @@ function titleText(title: FlowerActivityTitle): string {
       return title.command;
     case 'plain':
       return title.text;
+    case 'web_search':
+      return ['Web Search:', title.text].filter(Boolean).join(' ');
     case 'web_fetch':
       return title.url ? `Web fetch · ${title.url}` : 'Web fetch';
   }
@@ -1240,25 +1244,21 @@ function presentationForWebSearch(item: FlowerActivityItem, copy?: FlowerActivit
   const results = asArray(payload.results).map((value) => {
     const result = asRecord(value);
     return {title:payloadValue(result, 'title'), url:payloadValue(result, 'url'), snippet:payloadValue(result, 'snippet'), source:''};
-  }).filter((result) => result.title || result.url);
-  const provided = payload.results_provided === true || results.length > 0;
-  const titleParts = operation === 'open_page' ? [words.openPage, domain]
-    : operation === 'find_in_page' ? [words.findInPage, pattern ? `“${pattern}”` : '', domain]
-      : [operation === 'search' ? words.search : words.webActivity, queries[0]];
-  const label = titleParts.filter(Boolean).join(' · ');
+  }).filter((result) => result.url);
+  const queryText = queries.length > 1 ? `${queries[0]} +${queries.length - 1}` : queries[0];
+  const titleParts = operation === 'open_page' ? [words.openPage, url]
+    : operation === 'find_in_page' ? [words.findInPage, pattern ? `“${pattern}”` : '', safeURL ? `@site:${domain}` : url]
+      : [operation === 'search' ? words.search : '', queryText];
+  const title: FlowerActivityTitle = {kind:'web_search', text:titleParts.filter(Boolean).join(' '), operation, url};
   const active = item.status === 'running' || item.status === 'pending' || item.status === 'waiting';
   const failed = item.status === 'error' || item.status === 'canceled' || item.status === 'declined';
-  const notice = active || failed || results.length > 0 ? '' : provided ? words.noSources : words.sourcesUnavailable;
-  const hasFacts = Boolean(query || url || pattern || results.length);
   const status = (copy?.statuses ?? DEFAULT_FLOWER_SURFACE_COPY.chat.toolStatuses)[item.status];
-  const meta = [queries.length > 1 ? words.queries(queries.length) : '', results.length ? words.sources(results.length) : '',
-    active || failed || !hasFacts ? status : '', !hasFacts && !active && !failed ? (provided ? words.noSources : words.noDetails) : '',
-  ].filter(Boolean).join(' · ');
+  const meta = [results.length ? words.sources(results.length) : '', active || failed ? status : ''].filter(Boolean).join(' · ');
   const detailBlocks: FlowerActivityDetailBlock[] = [];
   const error = errorDetailBlockForItem(item, payload);
-  if (hasFacts) detailBlocks.push({kind:'web_operation', search:{query, url, pattern, results, notice}});
+  if (results.length) detailBlocks.push({kind:'web_operation', search:{results}});
   if (error) detailBlocks.push(error);
-  return {label, title:{kind:'plain',text:label},meta,detailLines:[],detailBlocks};
+  return {label:titleText(title), title, meta, detailLines:[], detailBlocks};
 }
 
 export function safeWebFetchURL(value: string): string {
