@@ -83,12 +83,12 @@ describe('Flower setup browser presentation', () => {
       .toBe(getComputedStyle(originalCard.querySelector('.flower-setup-action-arrow')!).color);
     expect(actionStyle.cursor).toBe('pointer');
     action.click();
-    await waitFor(() => Boolean(runtime.querySelector('.flower-settings-providers-section')));
-    const add = [...runtime.querySelectorAll<HTMLButtonElement>('.flower-settings-providers-section button')]
+    await waitFor(() => Boolean(document.querySelector('.flower-settings-providers-section')));
+    const add = [...document.querySelectorAll<HTMLButtonElement>('.flower-settings-providers-section button')]
       .find(button => button.textContent?.includes('Add provider'))!;
     add.click();
-    await waitFor(() => Boolean(document.querySelector('[role="dialog"]')));
-    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Provider type');
+    await waitFor(() => Boolean(document.querySelector('.flower-provider-dialog')));
+    expect(document.querySelector('.flower-provider-dialog')?.textContent).toContain('Provider type');
   });
 
   it('returns to the existing composer draft when model refresh completes setup', async () => {

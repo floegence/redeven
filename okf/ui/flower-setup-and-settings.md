@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower setup and settings
 description: First-time model setup, actionable starter tasks, and shared provider, permission, and computer settings.
 tags: [ai, flower, settings, onboarding]
-timestamp: 2026-10-14T10:19:00Z
+timestamp: 2026-10-16T00:00:00Z
 ---
 # Summary
 
@@ -13,8 +13,9 @@ setup actions. Configured new conversations offer starter tasks as editable
 drafts; selecting one never launches a turn. Settings use flat sections and
 preserve drafts, model-source identity and permission ownership. Connection
 failures and configured profiles needing repair retain their recovery controls.
-Chat stays mounted across panel switches. Inactive panels cannot paint, receive
-input, or acknowledge reads; settings save progress and errors survive hiding.
+Settings open in a shared modal dialog over the mounted chat. Background chat
+and navigation stay visible but inert until the dialog finishes closing; covered
+chat does not acknowledge reads. Settings save progress and errors survive hiding.
 
 # Contract
 
@@ -24,7 +25,7 @@ The welcome replaces disabled suggestions only when no thread is selected, no
 provider is configured, no model is usable, and the Desktop source is absent,
 `not_configured`, or `empty`. It identifies Flower and offers a visible settings
 action. In a Desktop `local_host` session, the sole destination is the current
-Flower surface's settings panel; it must not open or focus another
+Flower surface's settings dialog; it must not open or focus another
 Welcome window or identify the local environment as remote. In a Desktop
 `remote_desktop` session, Desktop Flower settings and the current remote
 environment's Flower settings appear as separate, fully readable buttons. An
@@ -160,18 +161,25 @@ belong to [Flower provider configuration](flower-provider-configuration.md).
 
 ## Retained panels
 
-FlowerSurface owns one active chat/settings/extensions panel. Chat and its
-ordinary textarea remain mounted; settings and extensions load on first visit
-and remain mounted afterwards. Native `hidden`, `inert`, and `aria-hidden`
-exclude inactive panels from paint, pointer input, keyboard focus and accessible
-navigation. Hidden chat does not acknowledge transcript reads. Switching panels
-preserves the selected thread, draft, selection, IME, form choices, extension
-filters and tabs, pending saves and errors without adding a connection or state
-copy. Optional header trailing actions let hosts supply their existing controls.
+FlowerSurface owns chat and extensions plus one lazily loaded settings form.
+Every settings entry, including the conversation header, setup action, model
+menu and host request, opens the published Floe Dialog at document level. The
+header contains the localized settings title and close control; guidance belongs
+in the body. A bounded, scrollable body adapts to the visible viewport.
+Chat remains painted behind the dialog with its original textarea, selected
+thread, draft, selection and live transport. Background chat and the thread rail
+are inert and excluded from accessibility navigation through the exit animation.
+Escape, the close control and backdrop dismiss the dialog; focus returns to the
+opening control when that control remains available. Nested provider/model
+editors keep their existing save, cancel and recovery behavior.
 
+The same retained settings content moves into a hidden, inert holder after the
+dialog closes, preserving form choices, disclosure state, pending saves and
+errors. Extensions retain their existing page and inactive-panel semantics.
 The [Activity companion contract](flower-activity-companion.md#stable-flower-placement)
-owns the complete-collapse reset and explicit shortcut activation. Returning to
-chat through that reset does not discard the previously visited settings form.
+owns complete-collapse reset and explicit shortcut activation. Settings dialog
+interactions belong to the companion; closing the dialog leaves the companion
+expanded, while the host collapse action closes both without discarding forms.
 
 ## Saving and ownership
 

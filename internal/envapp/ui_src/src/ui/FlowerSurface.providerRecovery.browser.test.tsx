@@ -40,10 +40,10 @@ async function mount(options: { missingProvider?: boolean; code?: string } = {})
 it('opens the current provider and model and returns to the failed chat on cancel', async () => {
   const { surface, configure, retryThread } = await mount();
   await userEvent.click(configure());
-  await expect.element(page.getByRole('dialog')).toBeVisible();
+  await expect.element(page.getByRole('dialog', { name: copy.settings.dialog.editTitle, exact: true })).toBeVisible();
   expect(document.querySelector('[data-flower-model-search]')).not.toBeNull();
   await userEvent.click(page.getByRole('button', { name: copy.settings.dialog.discard, exact: true }));
-  await waitFor(() => !document.querySelector('[role=dialog]') && Boolean(surface.querySelector('.flower-error-card')));
+  await waitFor(() => !document.querySelector('.flower-provider-dialog') && Boolean(surface.querySelector('.flower-error-card')));
   expect(retryThread).not.toHaveBeenCalled();
   expect(surface.querySelector('.flower-composer-submit')).not.toBeNull();
 });
@@ -55,7 +55,7 @@ it('retains a failed save, saves once on repeated clicks, then retries manually 
   await waitFor(() => Boolean(document.querySelector('[data-flower-provider-search] input')));
   await userEvent.click(document.querySelector('[data-flower-provider-search] input')!);
   await userEvent.click(page.getByRole('button', { name: copy.settings.dialog.saveProvider, exact: true }));
-  await waitFor(() => document.querySelector('[role=dialog]')?.textContent?.includes('settings save unavailable') === true);
+  await waitFor(() => document.querySelector('.flower-provider-dialog')?.textContent?.includes('settings save unavailable') === true);
   expect(retryThread).not.toHaveBeenCalled();
   const saving = deferred<typeof snapshot>();
   saveModelProfile.mockImplementationOnce(() => saving.promise);
@@ -66,7 +66,7 @@ it('retains a failed save, saves once on repeated clicks, then retries manually 
   const draft = saveModelProfile.mock.calls[1][0];
   expect(draft.model_profile!.providers[0].web_search?.enabled).toBe(true);
   saving.resolve({ ...snapshot, model_profile: draft.model_profile! });
-  await waitFor(() => !document.querySelector('[role=dialog]') && Boolean(surface.querySelector('.flower-error-card')));
+  await waitFor(() => !document.querySelector('.flower-provider-dialog') && Boolean(surface.querySelector('.flower-error-card')));
   expect(retryThread).not.toHaveBeenCalled();
   const pending = deferred<ReturnType<typeof liveBootstrap>>();
   retryThread.mockImplementationOnce(() => pending.promise);
@@ -88,16 +88,16 @@ it('can leave a pending save and ignores its late dialog completion', async () =
   await userEvent.click(configure());
   await userEvent.click(page.getByRole('button', { name: copy.settings.dialog.saveProvider, exact: true }));
   await waitFor(() => saveModelProfile.mock.calls.length === 1);
-  await userEvent.click(page.getByRole('button', { name: copy.settings.dialog.catalog.settingsCloseSaving, exact: true }));
-  await waitFor(() => !document.querySelector('[role=dialog]') && Boolean(surface.querySelector('.flower-error-card')));
+  await userEvent.click(page.getByRole('dialog', { name: copy.settings.dialog.editTitle, exact: true }).getByRole('button', { name: copy.settings.dialog.catalog.settingsCloseSaving, exact: true }));
+  await waitFor(() => !document.querySelector('.flower-provider-dialog') && Boolean(surface.querySelector('.flower-error-card')));
   expect(surface.querySelector('.flower-composer-submit')).not.toBeNull();
   await userEvent.click(configure());
-  await expect.element(page.getByRole('dialog')).toBeVisible();
+  await expect.element(page.getByRole('dialog', { name: copy.settings.dialog.editTitle, exact: true })).toBeVisible();
   saving.resolve(snapshot);
   await waitFor(() => !(page.getByRole('button', { name: copy.settings.dialog.saveProvider, exact: true }).element() as HTMLButtonElement).disabled);
-  await expect.element(page.getByRole('dialog')).toBeVisible();
+  await expect.element(page.getByRole('dialog', { name: copy.settings.dialog.editTitle, exact: true })).toBeVisible();
   await userEvent.click(page.getByRole('button', { name: copy.settings.dialog.discard, exact: true }));
-  await waitFor(() => !document.querySelector('[role=dialog]'));
+  await waitFor(() => !document.querySelector('.flower-provider-dialog'));
 });
 
 it('keeps the new chat selected when a provider save finishes after navigation', async () => {
@@ -108,9 +108,9 @@ it('keeps the new chat selected when a provider save finishes after navigation',
   await userEvent.click(page.getByRole('button', { name: copy.settings.dialog.saveProvider, exact: true }));
   await waitFor(() => saveModelProfile.mock.calls.length === 1);
   setFocusThreadRequest({ request_id: 'other-chat', thread_id: 'thread-2' });
-  await waitFor(() => !document.querySelector('[role=dialog]') && surface.textContent?.includes('Other chat') === true);
+  await waitFor(() => !document.querySelector('.flower-provider-dialog') && surface.textContent?.includes('Other chat') === true);
   saving.resolve(snapshot);
-  await waitFor(() => surface.querySelector('[data-flower-panel=settings]')?.hasAttribute('hidden') === true);
+  await waitFor(() => document.querySelector('[data-flower-panel=settings]')?.hasAttribute('hidden') === true);
   expect(surface.querySelector('.flower-error-card')).toBeNull();
   expect(surface.querySelector('.flower-composer-submit')).not.toBeNull();
 });
@@ -118,9 +118,9 @@ it('keeps the new chat selected when a provider save finishes after navigation',
 it('retains back navigation when the failed provider has been removed', async () => {
   const { surface, configure } = await mount({ missingProvider: true });
   await userEvent.click(configure());
-  await waitFor(() => surface.textContent?.includes(copy.settings.dialog.providerRemoved) === true);
-  expect(document.querySelector('[role=dialog]')).toBeNull();
-  await userEvent.click(page.getByRole('button', { name: copy.settings.backToChat, exact: true }));
+  await waitFor(() => document.querySelector('.flower-settings-dialog')?.textContent?.includes(copy.settings.dialog.providerRemoved) === true);
+  expect(document.querySelector('.flower-provider-dialog')).toBeNull();
+  await userEvent.click(page.getByRole('button', { name: copy.computer.close, exact: true }));
   await waitFor(() => Boolean(surface.querySelector('.flower-error-card')));
 });
 
@@ -129,9 +129,9 @@ it('refreshes canonical settings before opening recovery after an uncertain save
   const reload = deferred<typeof snapshot>();
   loadSettings.mockImplementationOnce(() => reload.promise);
   await userEvent.click(configure());
-  expect(document.querySelector('[role=dialog]')).toBeNull();
+  expect(document.querySelector('.flower-provider-dialog')).toBeNull();
   reload.resolve(snapshot);
-  await expect.element(page.getByRole('dialog')).toBeVisible();
+  await expect.element(page.getByRole('dialog', { name: copy.settings.dialog.editTitle, exact: true })).toBeVisible();
   expect(loadSettings).toHaveBeenLastCalledWith(true);
 });
 

@@ -71,7 +71,7 @@ it('searches a bounded menu, preserves a selected alias, and opens model managem
   [...menu.querySelectorAll('button')].find((button) => button.textContent?.includes('Show all selected models'))!.click();
   expect(menu.querySelectorAll('.flower-model-menu-item')).toHaveLength(32);
   [...menu.querySelectorAll('button')].find((button) => button.textContent?.includes('Manage models'))!.click();
-  await waitFor(() => Boolean(surface.querySelector('.flower-settings-surface')));
+  await waitFor(() => Boolean(document.querySelector('.flower-settings-surface')));
   expect(document.querySelector('.flower-model-menu')).toBeNull();
   expect(snapshot.model_profile.current_model_id).toBe('local/agent-q8');
 });
@@ -92,8 +92,8 @@ it('saves a missing selected model without inventing capacity or losing its iden
   const surface = renderSurfaceWithAdapter({ ...adapter(), loadSettings: async () => snapshot, saveModelProfile, listThreads: async () => [] });
   await waitFor(() => Boolean(surface.querySelector('button[aria-label="Flower settings"]')));
   surface.querySelector<HTMLButtonElement>('button[aria-label="Flower settings"]')!.click();
-  await waitFor(() => Boolean(surface.querySelector('button[aria-label="Edit provider"]')));
-  surface.querySelector<HTMLButtonElement>('button[aria-label="Edit provider"]')!.click();
+  await waitFor(() => Boolean(document.querySelector('button[aria-label="Edit provider"]')));
+  document.querySelector<HTMLButtonElement>('button[aria-label="Edit provider"]')!.click();
   await waitFor(() => [...document.querySelectorAll('button')].some((button) => button.textContent === 'Save provider'));
   [...document.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent === 'Save provider')!.click();
   await waitFor(() => saveModelProfile.mock.calls.length === 1);

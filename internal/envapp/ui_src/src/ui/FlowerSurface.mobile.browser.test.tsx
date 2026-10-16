@@ -262,9 +262,11 @@ describe('Flower mobile navigation', () => {
     await waitFor(() => Boolean(runtime.querySelector('.flower-composer textarea:not(:disabled)')));
     await userEvent.click(page.getByRole('button', { name: DEFAULT_FLOWER_SURFACE_COPY.chat.conversationsAria, exact: true }));
     setSettingsRequest(1);
-    await vi.waitFor(() => expect(runtime.querySelector('.flower-settings-providers-section')).toBeTruthy());
+    await vi.waitFor(() => expect(document.querySelector('.flower-settings-dialog .flower-settings-providers-section')).toBeTruthy());
     const detail = runtime.querySelector<HTMLElement>('.flower-component-main')!;
-    await vi.waitFor(() => expect(detail.inert).toBe(false));
+    await vi.waitFor(() => expect(detail.inert).toBe(true));
+    const dialog = document.querySelector<HTMLElement>('.flower-settings-dialog')!;
+    expect(dialog.getBoundingClientRect().right).toBeLessThanOrEqual(390);
     expect(detail.getBoundingClientRect().height).toBeGreaterThanOrEqual(700);
   });
 

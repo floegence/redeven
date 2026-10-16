@@ -299,7 +299,7 @@ vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => {
   ),
   Dialog: (props: any) => props.presentation ? <Dynamic component={actual.Dialog} {...props} /> : (
     <Show when={props.open}>
-      <div role="dialog">{props.children}{props.footer}</div>
+      <div role="dialog" aria-label={props.title} class={props.class}>{props.children}{props.footer}</div>
     </Show>
   ),
   ConfirmDialog: (props: any) => (

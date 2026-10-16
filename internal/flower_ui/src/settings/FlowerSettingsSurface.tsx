@@ -150,6 +150,7 @@ export type FlowerSettingsSurfaceProps = Readonly<{
   saving?: boolean;
   copy?: FlowerSettingsCopy;
   onBackToChat?: () => void;
+  dialog?: boolean;
   headerTrailingActions?: JSX.Element;
 }>;
 
@@ -588,28 +589,30 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
       <div class="flower-panel flower-scroll flower-settings-surface">
         <div class="flower-settings-frame">
           <header class="flower-settings-title-row">
-            <div class="flex min-w-0 items-start gap-2.5">
-              <Show when={props.onBackToChat}>
-                <button
-                  type="button"
-                  class="flower-header-icon-button flower-settings-back-button mt-0.5"
-                  aria-label={copy().backToChat}
-                  title={copy().backToChat}
-                  onClick={() => props.onBackToChat?.()}
-                >
-                  <ChevronLeft class="h-4 w-4" />
-                </button>
-              </Show>
-              <div class="min-w-0">
-                <div class="flex min-w-0 items-center gap-2">
-                  <FlowerIcon class="h-5 w-5" />
-                  <h2 class="flower-settings-title">{copy().title}</h2>
+            <Show when={!props.dialog}>
+              <div class="flex min-w-0 items-start gap-2.5">
+                <Show when={props.onBackToChat}>
+                  <button
+                    type="button"
+                    class="flower-header-icon-button flower-settings-back-button mt-0.5"
+                    aria-label={copy().backToChat}
+                    title={copy().backToChat}
+                    onClick={() => props.onBackToChat?.()}
+                  >
+                    <ChevronLeft class="h-4 w-4" />
+                  </button>
+                </Show>
+                <div class="min-w-0">
+                  <div class="flex min-w-0 items-center gap-2">
+                    <FlowerIcon class="h-5 w-5" />
+                    <h2 class="flower-settings-title">{copy().title}</h2>
+                  </div>
+                  <p class="mt-1 text-xs text-muted-foreground">
+                    {copy().description}
+                  </p>
                 </div>
-                <p class="mt-1 text-xs text-muted-foreground">
-                  {copy().description}
-                </p>
               </div>
-            </div>
+            </Show>
             <div class="flower-settings-title-actions">
               <div class="flower-settings-title-feedback" aria-live="polite">
                 <FlowerAutoSaveIndicator
