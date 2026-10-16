@@ -2659,8 +2659,8 @@
     "startAndOpen": "起動して開く",
     "requestAccess": "アクセスをリクエスト",
     "retryInitialization": "初期化を再試行",
-    "reinstallRedevenWipeData": "アンインストール（データを消去）",
-    "reinstallRedevenKeepData": "アンインストール（データを保持）",
+    "reinstallRedevenWipeData": "再インストール（データを消去）",
+    "reinstallRedevenKeepData": "再インストール（データを保持）",
     "blockedByActiveOperation": "{operation} を実行中です。完了またはキャンセルしてから {action} を実行してください。",
     "waitForOperationAcceptance": "現在の操作を開始しています。{action} を実行する前にお待ちください。",
     "disconnectLegacyControlPlane": "旧コントロールプレーンのリンクを解除"

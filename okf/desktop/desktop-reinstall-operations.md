@@ -15,6 +15,8 @@ Interaction sessions follow [Desktop interaction continuity](desktop-interaction
 
 ## Confirmation and prerequisites
 
+Environment card menus name both data modes as **Reinstall**, never **Uninstall**. Both select `reinstall_target`: `wipe_data` clears the confirmed root before installing and verifying a fresh Runtime, while `preserve_data` replaces managed Runtime files and retains user data. The menu label, confirmation, initial request and retry must preserve that exact mode.
+
 Preview is local and non-destructive. It shows one short risk statement, with host, container, root, affected registrations, and process details collapsed. A saved `remote_default` root is shown as the user-facing `~/.redeven`; Desktop does not connect merely to expand the remote home directory. Confirmation binds the saved host/user/port, exact container engine/id when present, registered Runtime root identity, mode, preflight, and operation identity. Execution resolves the physical absolute root through the confirmed direct channel and rejects any mismatch before target mutation.
 
 One Reinstall selection owns one current-process disclosure from preflight through execution. It opens before preview and binds the first matching new operation or the exact existing identity returned by Desktop; unrelated old progress cannot replace it. A later selection transfers ownership, user closure survives snapshot refreshes, and conflict or recovery focus uses the same state.

@@ -2659,8 +2659,8 @@
     "startAndOpen": "시작하고 열기",
     "requestAccess": "액세스 요청",
     "retryInitialization": "초기화 다시 시도",
-    "reinstallRedevenWipeData": "제거(데이터 삭제)",
-    "reinstallRedevenKeepData": "제거(데이터 유지)",
+    "reinstallRedevenWipeData": "재설치(데이터 삭제)",
+    "reinstallRedevenKeepData": "재설치(데이터 유지)",
     "blockedByActiveOperation": "{operation} 작업이 진행 중입니다. 완료하거나 취소한 후 {action} 작업을 실행하세요.",
     "waitForOperationAcceptance": "현재 작업을 시작하고 있습니다. 잠시 후 {action} 작업을 실행하세요.",
     "disconnectLegacyControlPlane": "레거시 제어 플레인 연결 해제"

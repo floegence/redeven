@@ -2381,7 +2381,24 @@ describe('buildEnvironmentCardModel', () => {
       expect(buildProviderBackedEnvironmentActionModel(entry!).action_presentation.menu_actions).toEqual(
         expect.arrayContaining([expect.objectContaining({
           id: 'reinstall_target_wipe',
-          label: 'Uninstall (erase data)',
+          label: 'Reinstall (erase data)',
+          label_key: 'environmentAction.reinstallRedevenWipeData',
+          action: expect.objectContaining({
+            intent: 'reinstall_target',
+            label: 'Reinstall (erase data)',
+            label_key: 'environmentAction.reinstallRedevenWipeData',
+            reinstall_mode: 'wipe_data',
+          }),
+        }), expect.objectContaining({
+          id: 'reinstall_target_preserve',
+          label: 'Reinstall (keep data)',
+          label_key: 'environmentAction.reinstallRedevenKeepData',
+          action: expect.objectContaining({
+            intent: 'reinstall_target',
+            label: 'Reinstall (keep data)',
+            label_key: 'environmentAction.reinstallRedevenKeepData',
+            reinstall_mode: 'preserve_data',
+          }),
         })]),
       );
     }

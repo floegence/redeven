@@ -473,7 +473,7 @@ describe('linked environment owner interactions', () => {
       const cloudIndex = items.findIndex(item => item.textContent?.trim() === cloudLabel);
       expect(gatewayIndex).toBeGreaterThan(0);
       expect(cloudIndex).toBe(gatewayIndex + 1);
-      expect(items[gatewayIndex - 1].textContent).toContain('Uninstall');
+      expect(controlText(items[gatewayIndex - 1])).toBe('Reinstall (keep data)');
       expect(items[gatewayIndex].previousElementSibling?.getAttribute('role')).toBe('separator');
       expect(items[cloudIndex].previousElementSibling).toBe(items[gatewayIndex]);
       expect(menu.querySelectorAll('[role="separator"]')).toHaveLength(1);
@@ -941,8 +941,9 @@ describe('background interaction continuity', () => {
     h.performAction.mockImplementation(() => new Promise(resolve => { reject = () => resolve({ ok: false, message: 'Admission rejected', code: 'action_invalid', scope: 'environment' } as DesktopLauncherActionResult); }));
     button(document.querySelector('[data-environment-group]')!, 'Actions').click(); await settle();
     const menu = document.querySelector('[role="menu"]')!;
-    const action = [...menu.querySelectorAll<HTMLButtonElement>('button')].find(control => !control.disabled && controlText(control).includes(`Uninstall (${mode} data)`))!;
+    const action = [...menu.querySelectorAll<HTMLButtonElement>('button')].find(control => !control.disabled && controlText(control).includes(`Reinstall (${mode} data)`))!;
     expect(action).toBeTruthy(); action.click(); await settle();
+    expect(h.performAction.mock.calls[0][0]).toMatchObject({ kind: 'preview_reinstall_target', mode: mode === 'keep' ? 'preserve_data' : 'wipe_data' });
     const panel = document.querySelector('.redeven-environment-progress');
     expect(panel).not.toBeNull();
     h.publish(structuredClone(f.snapshot())); await settle();

@@ -6,7 +6,7 @@ import { continuityAffected, continuityTests, continuityLocales, continuityViewp
 const read = path => readFileSync(new URL('../' + path, import.meta.url), 'utf8');
 test('continuity has nonempty required behavior suites and propagates failures', () => {
   assert.deepEqual(Object.keys(continuityTests), ['state', 'client']);
-  const required = ['desktopOverlayPosition', 'environmentLifecycleDisclosure', 'environmentGuidanceSession', 'environmentLibraryOverlayState', 'environmentSettingsSession', 'EnvironmentRelation', 'DesktopActionPopover', 'RuntimeCloudConnections', 'RuntimeGatewayJoinPanel', 'RuntimeGatewayConnectionsDialog', 'gatewaySourceOverlayState', 'RuntimeGatewaySetupDialog', 'EnvironmentSettingsEntry', 'EnvironmentSettingsDialog.accessibility', 'EnvironmentAccessSettingsForm', 'TwoFactorSettings', 'LocalCertificateSettings', 'GatewaySetup', 'GatewayMembersDialog', 'GatewayClientsPanel', 'GatewayCloudPanel'];
+  const required = ['desktopI18n', 'viewModel', 'desktopOverlayPosition', 'environmentLifecycleDisclosure', 'environmentGuidanceSession', 'environmentLibraryOverlayState', 'environmentSettingsSession', 'EnvironmentRelation', 'DesktopActionPopover', 'RuntimeCloudConnections', 'RuntimeGatewayJoinPanel', 'RuntimeGatewayConnectionsDialog', 'gatewaySourceOverlayState', 'RuntimeGatewaySetupDialog', 'EnvironmentSettingsEntry', 'EnvironmentSettingsDialog.accessibility', 'EnvironmentAccessSettingsForm', 'TwoFactorSettings', 'LocalCertificateSettings', 'GatewaySetup', 'GatewayMembersDialog', 'GatewayClientsPanel', 'GatewayCloudPanel'];
   const tests = Object.values(continuityTests).flat();
   assert.equal(tests.length, required.length);
   for (const name of required) assert.ok(tests.some(path => path.includes('/' + name + '.')), name);

@@ -2663,8 +2663,8 @@
     "startAndOpen": "Démarrer et ouvrir",
     "requestAccess": "Demander l’accès",
     "retryInitialization": "Réessayer l’initialisation",
-    "reinstallRedevenWipeData": "Désinstaller (effacer les données)",
-    "reinstallRedevenKeepData": "Désinstaller (conserver les données)",
+    "reinstallRedevenWipeData": "Réinstaller (effacer les données)",
+    "reinstallRedevenKeepData": "Réinstaller (conserver les données)",
     "blockedByActiveOperation": "{operation} est en cours. Terminez ou annulez l’opération avant d’exécuter {action}.",
     "waitForOperationAcceptance": "L’opération actuelle démarre. Attendez avant d’exécuter {action}.",
     "disconnectLegacyControlPlane": "Déconnecter la liaison héritée au plan de contrôle"
