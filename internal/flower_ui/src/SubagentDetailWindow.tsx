@@ -291,9 +291,9 @@ export function SubagentDetailWindow(props: SubagentDetailWindowProps): JSX.Elem
         data-flower-subagent-status={props.status}
       >
         <header ref={overview} tabIndex={-1} class="flower-subagent-detail-overview">
-          {props.contextIndicator}
           {props.agentSwitcher}
           <div class="flower-subagent-detail-overview-meta">
+            <div class="flower-subagent-detail-context">{props.contextIndicator}</div>
             <FeedbackIndicator label={props.title} closeLabel={props.copy.feedbackClose} restoreFocus={() => overview} entries={props.detailAvailable && props.error ? [{ id: 'detail', severity: 'error', summary: props.error, actions: <Button size="sm" variant="outline" disabled={props.loading} onClick={props.onRetryLoad}>{props.copy.detailRetry}</Button> }] : []} />
             <span class={cn('flower-subagent-status-label', `flower-subagent-status-label-${props.status}`)}>
               {props.statusIndicator}
@@ -302,7 +302,7 @@ export function SubagentDetailWindow(props: SubagentDetailWindowProps): JSX.Elem
               </span>
             </span>
             <Show when={props.agentTypeLabel}>
-              <span class="flower-subagent-detail-agent-type">{props.agentTypeLabel}</span>
+              <span class="flower-subagent-detail-agent-type" title={props.agentTypeLabel}>{props.agentTypeLabel}</span>
             </Show>
             <Show when={props.elapsedLabel}>
               <span class="flower-subagent-detail-elapsed">
