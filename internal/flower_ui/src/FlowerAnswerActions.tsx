@@ -28,12 +28,12 @@ export const FlowerAnswerActions: Component<{
           if (reset !== undefined) clearTimeout(reset);
           reset = setTimeout(() => setExported(false), 1600);
         }}>
-        <Show when={exported()} fallback={<Download size={18} strokeWidth={2} aria-hidden="true" />}><Check size={18} strokeWidth={2} aria-hidden="true" /></Show>
+        <Show when={exported()} fallback={<Download size={14} strokeWidth={1.75} aria-hidden="true" />}><Check size={14} strokeWidth={1.75} aria-hidden="true" /></Show>
       </button>
       <Show when={props.onFork}>
         <button type="button" class="flower-answer-action" aria-label={props.forkBusy ? props.forkBusyLabel : props.forkLabel} title={props.forkBusy ? props.forkBusyLabel : props.forkLabel}
           disabled={!props.settled || props.forkBusy} aria-busy={props.forkBusy} onClick={() => props.onFork?.()}>
-          <GitBranchPlus size={18} strokeWidth={2} aria-hidden="true" />
+          <GitBranchPlus size={14} strokeWidth={1.75} aria-hidden="true" />
         </button>
       </Show>
     </div>

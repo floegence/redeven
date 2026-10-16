@@ -6,6 +6,10 @@
   retained conversation with modal focus isolation, viewport scrolling and
   companion-owned interactions; preserve form state and in-flight saves.
 
+## 2026-10-16: Quieter answer actions
+
+- Reduce [answer action](ui/flower-citations.md#final-answer-actions) icon weight, desktop target size and spacing while preserving touch targets, keyboard focus, confirmation feedback and source disclosure.
+
 ## 2026-10-15 — Context source breakdown
 
 - Replace mixed role/loading categories with explicit request sources, published Floret v7.45.0 attribution and flat horizontal tool details; preserve native usage and keyboard focus.

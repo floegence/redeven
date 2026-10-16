@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower citations
 description: Canonical assistant source ownership, safe links, and provider marker presentation.
 tags: [ai, flower, markdown, citations]
-timestamp: 2026-10-15T00:00:00Z
+timestamp: 2026-10-16T00:00:00Z
 ---
 # Summary
 
@@ -108,6 +108,7 @@ enable this assistant-specific presentation.
 - [Citation and Markdown fixtures](../../internal/flower_ui/src/chat/markdown/flowerCitations.test.ts)
 - [CJK emphasis, literal code and stable streaming controls](../../internal/envapp/ui_src/src/ui/FlowerMarkdown.emphasis.browser.test.tsx)
 - [Chromium streaming and layout evidence](../../internal/envapp/ui_src/src/ui/FlowerMarkdown.citations.browser.test.tsx)
+- [Rendered answer action geometry and interaction coverage](../../internal/envapp/ui_src/src/ui/FlowerSurface.answerActions.browser.test.tsx)
 - [Flower UI checks](../../scripts/check_flower_ui.sh)
 
 ## Final answer actions
@@ -115,8 +116,13 @@ enable this assistant-specific presentation.
 Each final assistant answer ends with one quiet icon row above its sources:
 Copy, Export HTML (download into a tray), and Fork (branch plus). The stable
 completion time sits at the right; its tooltip contains the full local date.
-Buttons are 32px with 18px strokes, or 44px for coarse pointers. Labels remain
-available through tooltips and accessible names. Text keeps native selection.
+Desktop buttons are 28px with 14px icons and 1.75px strokes; coarse pointers
+retain 44px targets with the same compact icons. The row sits 8px below the
+answer. Idle icons use a quieter theme-derived color and stay discoverable;
+hover adds a subtle face, keyboard focus restores full contrast with a visible
+outline, and copy/export confirmation uses the theme accent. Interaction never
+changes row geometry. Labels remain available through tooltips and accessible
+names. Text keeps native selection.
 Copy remains available during streaming; export and Fork wait for completion.
 
 HTML export uses the shared safe Markdown renderer, excludes reasoning and UI

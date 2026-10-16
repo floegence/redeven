@@ -12237,12 +12237,13 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
 .flower-model-context-distribution { display: grid; gap: 0.5rem; max-height: 13rem; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
 .flower-context-composition-row .flower-model-context-track { height: 0.1875rem; }
 
-.flower-answer-actions { display: flex; align-items: center; justify-content: space-between; gap: 1rem; min-width: 0; margin-top: 0.75rem; font-family: var(--font-sans); line-height: 1; }
+.flower-answer-actions { display: flex; align-items: center; justify-content: space-between; gap: 1rem; min-width: 0; margin-top: 0.5rem; font-family: var(--font-sans); line-height: 1; }
 .flower-answer-action-buttons { display: flex; align-items: center; gap: 0.125rem; }
-.flower-answer-action, .flower-answer-actions .flower-message-copy-button { display: inline-flex; position: relative; align-items: center; justify-content: center; flex: 0 0 auto; width: 2rem; height: 2rem; margin: 0; padding: 0; border: 0; border-radius: 0.375rem; background: transparent; color: var(--muted-foreground); opacity: 1; cursor: pointer; transition: color 120ms ease, background-color 120ms ease; }
-.flower-answer-actions svg { width: 1.125rem; height: 1.125rem; stroke-width: 2; }
-.flower-answer-action:hover, .flower-answer-actions .flower-message-copy-button:hover { background: var(--muted); color: var(--foreground); }
-.flower-answer-action:focus-visible, .flower-answer-actions .flower-message-copy-button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.flower-answer-action, .flower-answer-actions .flower-message-copy-button { display: inline-flex; position: relative; align-items: center; justify-content: center; flex: 0 0 auto; width: 1.75rem; height: 1.75rem; margin: 0; padding: 0; border: 0; border-radius: 0.375rem; background: transparent; color: color-mix(in srgb, var(--muted-foreground) 72%, transparent); opacity: 1; cursor: pointer; transition: color 120ms ease, background-color 120ms ease; }
+.flower-answer-actions svg { width: 0.875rem; height: 0.875rem; stroke-width: 1.75; }
+.flower-answer-action:not(:disabled):hover, .flower-answer-actions .flower-message-copy-button:hover { background: color-mix(in srgb, var(--foreground) 6%, transparent); color: var(--foreground); }
+.flower-answer-action:focus-visible, .flower-answer-actions .flower-message-copy-button:focus-visible { color: var(--foreground); outline: 2px solid var(--primary); outline-offset: 2px; }
+.flower-answer-action[data-exported='true'], .flower-answer-actions .flower-message-copy-button[data-copied='true'] { color: color-mix(in srgb, var(--primary) 72%, var(--foreground) 18%); }
 .flower-answer-action:disabled { opacity: 0.35; cursor: default; background: transparent; }
 .flower-answer-time { flex: 0 0 auto; color: var(--muted-foreground); font-size: 0.6875rem; font-variant-numeric: tabular-nums; white-space: nowrap; user-select: text; }
 .flower-chat-md-block:has(.flower-answer-actions) .flower-chat-source-list { margin-top: 0.5rem; }
