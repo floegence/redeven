@@ -599,7 +599,7 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
         requestOutputLimit: t(i18n, k('chat.contextIndicatorRequestOutputLimit')),
         serverManaged: t(i18n, k('chat.contextIndicatorServerManaged')),
         sharedSpace: t(i18n, k('chat.contextIndicatorSharedSpace')),
-        estimateTotal: t(i18n, k('chat.contextIndicatorEstimateTotal')),
+        proportionalEstimate: t(i18n, k('chat.contextIndicatorProportionalEstimate')),
         close: t(i18n, k('chat.contextIndicatorClose')),
         freeSpace: t(i18n, k('chat.contextIndicatorFreeSpace')),
         estimated: t(i18n, k('chat.contextIndicatorEstimated')),

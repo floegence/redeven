@@ -665,7 +665,7 @@ export type FlowerSurfaceCopy = Readonly<{
       requestOutputLimit: string;
       serverManaged: string;
       sharedSpace: string;
-      estimateTotal: string;
+      proportionalEstimate: string;
       close: string;
       freeSpace: string;
       estimated: string;
@@ -1090,10 +1090,10 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       currentContents: 'Current contents', currentContentsHint: 'Current text by character count; token totals include retained updates.', collected: 'Loaded', used: 'Last used', updated: 'Updated', removed: 'Removed',
       textShare: 'Relative shares',
       composition: 'Input composition estimate',
-      compositionHint: 'Shares use the estimated total below, independently of measured input.',
-      relativeHint: 'Relative shares only: a matching vocabulary or complete text input is unavailable.',
-      historical: 'Historical shares',
-      historicalHint: 'Historical estimate; token amounts are unavailable.',
+      compositionHint: "Token amounts are estimated from used context and each share.",
+      relativeHint: "Only shares are available because the used context total is missing.",
+      historical: "Historical estimate",
+      historicalHint: "Estimates use historical shares and the recorded context total.",
       distributionUnavailable: 'No distribution available',
       sourceLabels: {
         system_prompt: 'System prompt', system_tools: 'System tool definitions', mcp_tools: 'MCP tool definitions', provider_tools: 'Provider tool definitions',
@@ -1113,7 +1113,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       requestOutputLimit: 'Latest request output limit',
       serverManaged: 'Managed by server',
       sharedSpace: 'Remaining window is shared by input and output.',
-      estimateTotal: 'Estimated total',
+      proportionalEstimate: "Estimated by share",
       close: 'Close context details',
       freeSpace: 'Remaining window',
       estimated: 'Estimated',

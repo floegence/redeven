@@ -62,7 +62,7 @@ describe('Flower context source breakdown', () => {
   expect(host.querySelector('[data-category="mcp_tools"] summary')).toBe(summary);
   await expect.poll(() => document.activeElement).toBe(summary);
   expect(category.open).toBe(true);
-  expect(summary.textContent).toContain('≈20');
+  expect(summary.querySelector('.flower-model-context-amount')?.textContent).toBe('≈25');
  });
  it('dismisses through Escape, outside click and focus navigation', async () => {
   const { trigger, panel } = mount(() => fixture());
@@ -85,19 +85,29 @@ describe('Flower context source breakdown', () => {
   expect(host.textContent).not.toContain('Skill catalog');
   expect(mount().host.querySelector('.flower-context-composition')).toBeNull();
  });
- it.each(['relative', 'historical', 'media'] as const)('hides every estimated amount for %s distributions', mode => {
+ it.each(['relative', 'historical', 'media'] as const)('shows proportional estimated amounts for %s distributions', mode => {
   const value = fixture(); const breakdown = value.confirmed!.breakdown!;
   const { quality: _quality, tokenizer: _tokenizer, ...historical } = breakdown;
   const metadata = mode === 'historical' ? historical : { ...breakdown, quality: 'relative_weight' as const, ...(mode === 'media' ? { attachment_tokens: 100 } : {}) };
   const { host } = mount(() => ({ ...value, confirmed: { ...value.confirmed!, breakdown: metadata } }));
   const distribution = host.querySelector('.flower-context-composition')!;
-  expect(distribution.querySelector('.flower-model-context-amount')).toBeNull();
-  expect(distribution.textContent).not.toContain('≈');
-  expect(distribution.textContent).toContain(mode === 'historical' ? 'Historical shares' : 'Relative shares');
-  for (const row of distribution.querySelectorAll('[title], [aria-label]')) {
-   expect(row.getAttribute('title') ?? '').not.toContain('tokens');
-   expect(row.getAttribute('aria-label') ?? '').not.toContain('tokens');
+  expect(distribution.textContent).toContain('≈');
+  expect(distribution.textContent).toContain(mode === 'historical' ? 'Historical estimate' : 'Estimated by share');
+  for (const row of distribution.querySelectorAll('.flower-context-composition-row')) {
+   expect(row.querySelector('.flower-model-context-amount')?.textContent).toMatch(/^≈\d/);
+   expect(row.getAttribute('aria-label')).toContain('≈');
+   expect(row.querySelector('.flower-model-context-amount')?.getAttribute('title')).toContain('Estimated: ≈');
   }
+  const amount = distribution.querySelector('[data-category="mcp_tools"] .flower-model-context-amount')!;
+  expect(amount.textContent).toBe(mode === 'media' ? '≈160' : '≈185');
+ });
+ it('shows shares without amounts only when the displayed input total is missing', () => {
+  const value = fixture();
+  const { host } = mount(() => ({ confirmed: { ...value.confirmed!, input_tokens: undefined }, estimate: { ...value.confirmed!, input_tokens: 1000 } }));
+  const distribution = host.querySelector('.flower-context-composition')!;
+  expect(distribution.querySelector('.flower-model-context-amount')).toBeNull();
+  expect(distribution.textContent).toContain('Relative shares');
+  expect(distribution.textContent).not.toContain('≈');
  });
  it('keeps the displayed request authoritative when its distribution is missing', () => {
   const value = { confirmed: { ...sample }, estimate: fixture().confirmed };
@@ -143,7 +153,7 @@ describe('Flower request budget facts', () => {
   expect(flowerRequestOutputSample({ estimate: { ...sample, phase: 'projected_request' } })?.output_control).toBeUndefined();
   expect(flowerRequestOutputSample({ confirmed, estimate: { ...sample, phase: 'projected_request', updated_at_ms: 3 } })?.output_control).toBeUndefined();
  });
- it('shows measured input and independently totaled estimates without reserving model output', () => {
+ it('shows measured input and proportional estimates without reserving model output', () => {
   const usage=fixture();
   const {host}=mount(()=>({...usage, confirmed:{...usage.confirmed!, input_tokens:68400,context_window_tokens:950000,threshold_tokens:855000,request_output_tokens:393216,output_control:'client',safety_margin_tokens:4096}}));
   expect(host.querySelector('[data-category="outputReserve"]')).toBeNull();
@@ -151,7 +161,8 @@ describe('Flower request budget facts', () => {
   expect(host.textContent).toContain('855k');
   expect(host.textContent).toContain('393.2k');
   expect(host.textContent).toContain('Input composition estimate');
-  expect(host.textContent).toContain('Estimated total: ≈650');
+  expect(host.textContent).toContain('Estimated by share');
+  expect(host.querySelector('[data-category="mcp_tools"] .flower-model-context-amount')?.textContent).toBe('≈21k');
  });
  it('shows server management and never infers historical output limits', () => {
   const [usage,update]=createSignal<FlowerContextUsage>({confirmed:{...sample,output_control:'server',safety_margin_tokens:10}});

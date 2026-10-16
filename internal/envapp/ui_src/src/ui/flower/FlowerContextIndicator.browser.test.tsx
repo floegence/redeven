@@ -133,7 +133,7 @@ it('keeps all locales and themes within a narrow card', async () => {
 });
 
 for (const mode of ['relative', 'historical', 'media'] as const) {
- it('presents share-only '+mode+' data without leaking token amounts', async () => {
+ it('presents proportional token estimates for '+mode+' data', async () => {
   await page.viewport(320,480);
   theme(builtInShellThemePresets.find(preset => preset.name === 'classic-dark')!);
   const value=fixture(); const {quality: _quality,tokenizer: _tokenizer,...historical}=value.confirmed!.breakdown!;
@@ -144,11 +144,12 @@ for (const mode of ['relative', 'historical', 'media'] as const) {
   const distribution=panel.querySelector('.flower-context-composition')!;
   const summary=distribution.querySelector<HTMLElement>('[data-category="mcp_tools"] summary')!;
   summary.focus();await userEvent.keyboard('{Enter}');
-  expect(distribution.querySelector('.flower-model-context-amount')).toBeNull();
-  expect(distribution.textContent).not.toContain('≈');
-  for(const row of distribution.querySelectorAll('[title],[aria-label]')){
-   expect(row.getAttribute('title')??'').not.toContain('48700');
-   expect(row.getAttribute('aria-label')??'').not.toContain('48700');
+  expect(distribution.getAttribute('data-token-amounts')).toBe('true');
+  expect(distribution.textContent).toContain('≈');
+  expect(distribution.textContent).toContain(mode==='historical'?copy().chat.contextIndicator.historical:copy().chat.contextIndicator.proportionalEstimate);
+  for(const row of distribution.querySelectorAll('.flower-context-composition-row, .flower-model-context-row')){
+   expect(row.querySelector('.flower-model-context-amount')?.textContent).toMatch(/^≈\d/);
+   expect((row as HTMLElement).scrollWidth).toBeLessThanOrEqual((row as HTMLElement).clientWidth);
   }
   expect(panel.scrollWidth).toBe(panel.clientWidth);
   setUsage({confirmed:base});
