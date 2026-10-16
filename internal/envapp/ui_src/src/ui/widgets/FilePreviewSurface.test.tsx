@@ -4,6 +4,11 @@ import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FilePreviewSurface } from './FilePreviewSurface';
 
+vi.mock('../primitives/EnvAppModal', () => ({
+  Dialog: (props: any) => props.open ? <div data-testid="dialog" class={props.class}>{props.title}{props.children}{props.footer}</div> : null,
+  ConfirmDialog: (props: any) => props.open ? <div data-testid="confirm-dialog">{props.title}{props.bodyDescription}</div> : null,
+}));
+
 const layoutState = vi.hoisted(() => ({
   mobile: false,
 }));

@@ -54,6 +54,182 @@ afterEach(() => {
 });
 
 describe('createFilePreviewController', () => {
+  it('retains presentation references only until the mounted preview releases them', async () => {
+    const file = { id: '/report.html', name: 'report.html', path: '/report.html', type: 'file' } satisfies FileItem;
+    openReadFileStreamChannelMock.mockResolvedValue(createTextChannel('<h1>Report</h1>'));
+    let controller!: ReturnType<typeof createFilePreviewController>;
+    const dispose = createRoot(disposeRoot => {
+      controller = createFilePreviewController({ client: () => ({} as any), rpc: () => null, canWrite: () => true });
+      return disposeRoot;
+    });
+    try {
+      await controller.openPreview(file);
+      const release = controller.retainContent();
+      const bytes = controller.bytes();
+      controller.closePreview();
+      expect(controller.open()).toBe(false);
+      expect(controller.item()).toBe(file);
+      expect(controller.bytes()).toBe(bytes);
+      expect(controller.text()).toBe('<h1>Report</h1>');
+      controller.beginEditing();
+      controller.updateDraft('Stale edit');
+      await controller.retry();
+      expect(controller.editing()).toBe(false);
+      expect(controller.draftText()).toBe('<h1>Report</h1>');
+      expect(openReadFileStreamChannelMock).toHaveBeenCalledOnce();
+      release();
+      expect(controller.item()).toBeNull();
+      expect(controller.bytes()).toBeNull();
+      expect(controller.text()).toBe('');
+      release();
+    } finally { dispose(); }
+  });
+
+  it('does not let an older presentation release clear a reopened preview', async () => {
+    const first = { id: '/first.html', name: 'first.html', path: '/first.html', type: 'file' } satisfies FileItem;
+    const second = { ...first, id: '/second.html', name: 'second.html', path: '/second.html' };
+    openReadFileStreamChannelMock.mockImplementation(async ({ path }) => createTextChannel(path));
+    let controller!: ReturnType<typeof createFilePreviewController>;
+    const dispose = createRoot(disposeRoot => {
+      controller = createFilePreviewController({ client: () => ({} as any), rpc: () => null, canWrite: () => false });
+      return disposeRoot;
+    });
+    try {
+      await controller.openPreview(first);
+      const releaseFirst = controller.retainContent();
+      controller.closePreview();
+      await controller.openPreview(second);
+      const releaseSecond = controller.retainContent();
+      releaseFirst();
+      expect(controller.open()).toBe(true);
+      expect(controller.text()).toBe('/second.html');
+      controller.closePreview();
+      releaseFirst();
+      expect(controller.item()).toBe(second);
+      releaseSecond();
+      expect(controller.item()).toBeNull();
+    } finally { dispose(); }
+  });
+
+  it('cancels an in-flight read immediately while the exiting presentation remains mounted', async () => {
+    const file = { id: '/report.html', name: 'report.html', path: '/report.html', type: 'file' } satisfies FileItem;
+    const read = deferred<Uint8Array<ArrayBuffer>>();
+    const channel = createTextChannel('X');
+    channel.channel.reader.readExactly.mockImplementation(() => read.promise);
+    openReadFileStreamChannelMock.mockResolvedValue(channel);
+    let controller!: ReturnType<typeof createFilePreviewController>;
+    const dispose = createRoot(disposeRoot => {
+      controller = createFilePreviewController({ client: () => ({} as any), rpc: () => null, canWrite: () => false });
+      return disposeRoot;
+    });
+    try {
+      const opening = controller.openPreview(file);
+      await vi.waitFor(() => expect(channel.channel.reader.readExactly).toHaveBeenCalledOnce());
+      const release = controller.retainContent();
+      controller.closePreview();
+      expect(channel.channel.stream.reset).toHaveBeenCalledOnce();
+      expect(channel.channel.close).toHaveBeenCalledOnce();
+      expect(controller.item()).toBe(file);
+      read.resolve(new Uint8Array([88]));
+      await opening;
+      expect(controller.text()).toBe('');
+      release();
+      expect(controller.item()).toBeNull();
+      expect(controller.loading()).toBe(false);
+    } finally { dispose(); }
+  });
+
+  it('releases retained content on owner disposal without waiting for a surface callback', async () => {
+    openReadFileStreamChannelMock.mockResolvedValue(createTextChannel('<h1>Report</h1>'));
+    let controller!: ReturnType<typeof createFilePreviewController>;
+    const dispose = createRoot(disposeRoot => {
+      controller = createFilePreviewController({ client: () => ({} as any), rpc: () => null, canWrite: () => false });
+      return disposeRoot;
+    });
+    await controller.openPreview({ id: '/report.html', name: 'report.html', path: '/report.html', type: 'file' });
+    const release = controller.retainContent();
+    dispose();
+    expect(controller.item()).toBeNull();
+    expect(controller.bytes()).toBeNull();
+    expect(controller.text()).toBe('');
+    release();
+  });
+
+  it('keeps a dirty draft through confirmed exit and releases its bytes afterwards', async () => {
+    const file = { id: '/report.html', name: 'report.html', path: '/report.html', type: 'file' } satisfies FileItem;
+    openReadFileStreamChannelMock.mockResolvedValue(createTextChannel('<h1>Saved</h1>'));
+    let controller!: ReturnType<typeof createFilePreviewController>;
+    const dispose = createRoot(disposeRoot => {
+      controller = createFilePreviewController({ client: () => ({} as any), rpc: () => null, canWrite: () => true });
+      return disposeRoot;
+    });
+    try {
+      await controller.openPreview(file);
+      const release = controller.retainContent();
+      controller.beginEditing();
+      controller.updateDraft('<h1>Draft</h1>');
+      controller.closePreview();
+      expect(controller.open()).toBe(true);
+      expect(controller.closeConfirmOpen()).toBe(true);
+      await controller.confirmDiscardAndContinue();
+      expect(controller.open()).toBe(false);
+      expect(controller.closeConfirmOpen()).toBe(false);
+      expect(controller.editing()).toBe(true);
+      expect(controller.draftText()).toBe('<h1>Draft</h1>');
+      expect(await controller.saveCurrent()).toBe(false);
+      release();
+      expect(controller.item()).toBeNull();
+      expect(controller.draftText()).toBe('');
+      expect(controller.dirty()).toBe(false);
+    } finally { dispose(); }
+  });
+
+  it('revokes an image object URL only when its exiting presentation releases', async () => {
+    const file = { id: '/photo.png', name: 'photo.png', path: '/photo.png', type: 'file' } satisfies FileItem;
+    const createUrl = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:preview-image');
+    const revokeUrl = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
+    openReadFileStreamChannelMock.mockResolvedValue(createTextChannel('image bytes'));
+    let controller!: ReturnType<typeof createFilePreviewController>;
+    const dispose = createRoot(disposeRoot => {
+      controller = createFilePreviewController({ client: () => ({} as any), rpc: () => null, canWrite: () => false });
+      return disposeRoot;
+    });
+    try {
+      await controller.openPreview(file);
+      const release = controller.retainContent();
+      controller.closePreview();
+      expect(controller.objectUrl()).toBe('blob:preview-image');
+      expect(revokeUrl).not.toHaveBeenCalled();
+      release();
+      expect(controller.objectUrl()).toBe('');
+      expect(revokeUrl).toHaveBeenCalledExactlyOnceWith('blob:preview-image');
+    } finally { dispose(); createUrl.mockRestore(); revokeUrl.mockRestore(); }
+  });
+
+  it('rejects an image load that closes while stream teardown is pending', async () => {
+    const file = { id: '/photo.png', name: 'photo.png', path: '/photo.png', type: 'file' } satisfies FileItem;
+    const closed = deferred<undefined>();
+    const channel = createTextChannel('image bytes');
+    channel.channel.close.mockImplementation(() => closed.promise);
+    openReadFileStreamChannelMock.mockResolvedValue(channel);
+    const createUrl = vi.spyOn(URL, 'createObjectURL');
+    let controller!: ReturnType<typeof createFilePreviewController>;
+    const dispose = createRoot(disposeRoot => {
+      controller = createFilePreviewController({ client: () => ({} as any), rpc: () => null, canWrite: () => false });
+      return disposeRoot;
+    });
+    try {
+      const opening = controller.openPreview(file);
+      await vi.waitFor(() => expect(channel.channel.close).toHaveBeenCalled());
+      controller.closePreview();
+      closed.resolve(undefined);
+      await opening;
+      expect(createUrl).not.toHaveBeenCalled();
+      expect(controller.bytes()).toBeNull();
+      expect(controller.objectUrl()).toBe('');
+    } finally { dispose(); createUrl.mockRestore(); }
+  });
+
   it('opens HTML in page mode and preserves save, discard, and dirty-close behavior', async () => {
     const file = { id: '/workspace/report.html', name: 'report.html', path: '/workspace/report.html', type: 'file' } satisfies FileItem;
     const original = '<h1>Original report</h1>';

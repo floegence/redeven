@@ -69,6 +69,7 @@ function createPreviewContext(openPreview: FilePreviewContextValue['openPreview'
       xlsxRows: () => [],
       openPreview: vi.fn(async () => undefined),
       closePreview: vi.fn(),
+      retainContent: vi.fn(() => vi.fn()),
       handleOpenChange: vi.fn(),
       cancelPendingAction: vi.fn(),
       confirmDiscardAndContinue: vi.fn(async () => undefined),

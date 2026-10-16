@@ -1,4 +1,4 @@
-import { Show, createMemo, createSignal } from 'solid-js';
+import { Show, createMemo, createSignal, onCleanup } from 'solid-js';
 import { useLayout } from '@floegence/floe-webapp-core';
 import type { FilePreviewPanelProps } from './FilePreviewPanel';
 import { FilePreviewPanel } from './FilePreviewPanel';
@@ -9,6 +9,13 @@ import { useI18n } from '../i18n';
 export interface FilePreviewSurfaceProps extends FilePreviewPanelProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  retainContent?: () => () => void;
+}
+
+function RetainedFilePreviewPanel(props: FilePreviewPanelProps & Pick<FilePreviewSurfaceProps, 'retainContent'>) {
+  const release = props.retainContent?.();
+  if (release) onCleanup(release);
+  return <FilePreviewPanel {...props} />;
 }
 
 export function FilePreviewSurface(props: FilePreviewSurfaceProps) {
@@ -33,7 +40,7 @@ export function FilePreviewSurface(props: FilePreviewSurfaceProps) {
       persistenceKey="file-preview"
       surfaceRef={setFloatingSurfaceEl}
     >
-      <FilePreviewPanel
+      <RetainedFilePreviewPanel
         {...props}
         surface={isMobile() ? 'main' : 'window'}
         showHeader={isMobile()}
