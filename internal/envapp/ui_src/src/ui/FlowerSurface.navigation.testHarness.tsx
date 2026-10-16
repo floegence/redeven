@@ -622,6 +622,7 @@ export function runtimeCurrentView(
     ...(threadValue.status === 'success' ? { last_outcome: 'completed' as const } : {}),
     ...(threadValue.status === 'failed' ? { last_outcome: 'failed' as const } : {}),
     ...(threadValue.status === 'canceled' ? { last_outcome: 'cancelled' as const } : {}),
+    turns: threadValue.turns,
     items,
     queue: (threadValue.queued_turns ?? []).map((queued) => ({
       id: queued.queue_id,

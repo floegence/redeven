@@ -139,7 +139,11 @@ hover adds a subtle face, keyboard focus restores full contrast with a visible
 outline, and copy/export confirmation uses the theme accent. Interaction never
 changes row geometry. Labels remain available through tooltips and accessible
 names. Text keeps native selection.
-Copy remains available during streaming; export and Fork wait for completion.
+The row appears only for items named by a complete canonical final-answer
+boundary with matching turn and run identity. Intermediate narration and
+streaming text have no answer actions or completion timestamp, including when
+process details are expanded. Missing or incomplete boundaries never imply a
+final answer. Earlier confirmed answers retain their row during later turns.
 
 HTML export uses the shared safe Markdown renderer, excludes reasoning and UI
 controls, preserves source links and writes an independent UTF-8 document.

@@ -71,6 +71,54 @@ const hidden = (root: HTMLElement, id: string) => message(root, id).closest('.fl
 afterEach(async () => { document.getSelection()?.removeAllRanges(); await media.emulateMediaPreferences({ reducedMotion: 'no-preference', forcedColors: 'none' }); });
 
 describe('completed turn process disclosure', () => {
+  it('shows answer actions and time only after canonical final completion', async () => {
+    const { root, live } = await mount();
+    expect(message(root, 'progress').querySelector('.flower-answer-actions')).toBeNull();
+    expect(message(root, 'progress').querySelector('time')).toBeNull();
+    expect(message(root, 'final-a').querySelector('.flower-answer-actions')).toBeNull();
+    const final = message(root, 'final-a');
+    live.push(current(true));
+    await waitFor(() => Boolean(final.querySelector('.flower-answer-actions')));
+    expect(message(root, 'final-a')).toBe(final);
+    expect(final.querySelector('time')?.dateTime).toBe('2026-10-11T12:02:38.000Z');
+    expect(message(root, 'final-b').querySelector('.flower-answer-actions')).not.toBeNull();
+    summary(root)!.click();
+    await waitFor(() => !hidden(root, 'progress'));
+    expect(message(root, 'progress').querySelector('.flower-answer-actions')).toBeNull();
+    expect(message(root, 'progress').querySelector('time')).toBeNull();
+  });
+  it.each(['missing', 'incomplete', 'failed', 'cancelled', 'interrupted'] as const)('omits final answer actions for %s final authority', async (authority) => {
+    const { root } = await mount(current(true, {
+      turns: authority === 'missing' ? undefined : [turn({
+        outcome: authority === 'failed' || authority === 'cancelled' || authority === 'interrupted' ? authority : 'completed',
+        final_item_ids: [], final_boundary_complete: false,
+      })],
+      ...(authority === 'failed' || authority === 'cancelled' || authority === 'interrupted' ? { last_outcome: authority } : {}),
+    }));
+    expect(root.querySelector('.flower-answer-actions')).toBeNull();
+    expect(message(root, 'progress').querySelector('time')).toBeNull();
+    expect(message(root, 'final-a').querySelector('time')).toBeNull();
+  });
+  it('retains earlier final actions while a later turn is active', async () => {
+    const done = current(true);
+    const { root, live } = await mount(done);
+    const toolbar = message(root, 'final-a').querySelector('.flower-answer-actions');
+    live.push({ ...done, view_version: 3, turn_id: 'next-turn', run_id: 'next-run', activity: 'active',
+      last_outcome: undefined, run_progress: { phase: 'streaming' }, turns: [turn(), turn({
+        turn_id: 'next-turn', run_id: 'next-run', started_at: '2026-10-11T12:03:00Z', ended_at: undefined, outcome: undefined,
+        elapsed_ms: 0, waiting_ms: 0, work_duration_ms: 0, final_item_ids: [], final_boundary_complete: false,
+      })], items: [...done.items!,
+        { id: 'next-user', turn_id: 'next-turn', run_id: 'next-run', ordinal: 7, kind: 'user', text: 'Continue the review.' },
+        { id: 'next-progress', turn_id: 'next-turn', run_id: 'next-run', ordinal: 8, kind: 'assistant', text: 'Inspecting the next result.', live: true },
+      ],
+    });
+    await waitFor(() => Boolean(message(root, 'next-progress')));
+    expect(toolbar).not.toBeNull();
+    expect(message(root, 'final-a').querySelector('.flower-answer-actions')).toBe(toolbar);
+    expect(message(root, 'final-b').querySelector('.flower-answer-actions')).not.toBeNull();
+    expect(message(root, 'next-progress').querySelector('.flower-answer-actions')).toBeNull();
+    expect(message(root, 'next-progress').querySelector('time')).toBeNull();
+  });
   it.each(['canonical', 'legacy'] as const)('removes all inter-row spacing from long %s collapsed work', async (policy) => {
     const done = current(true);
     const thinking = done.items!.find((item) => item.id === 'thinking')!;

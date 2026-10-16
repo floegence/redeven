@@ -12,7 +12,10 @@ const answer = '# A considered answer\n\nA quiet toolbar keeps the reading flow 
 const timestamp = Date.parse('2026-10-15T18:42:00Z');
 function snapshot() {
   const sources = [{ title: 'GitHub', url: 'https://github.com/floegence' }, { title: 'Reference', url: 'https://example.com/reference' }];
-  return thread({ title: 'Answer actions', messages: [{ id: 'answer', turn_id: 'turn-answer', role: 'assistant', content: answer,
+  return thread({ title: 'Answer actions', turns: [{
+    turn_id: 'turn-answer', run_id: 'run-answer', started_at: new Date(timestamp - 1000).toISOString(), ended_at: new Date(timestamp).toISOString(),
+    outcome: 'completed', elapsed_ms: 1000, waiting_ms: 0, work_duration_ms: 1000, final_item_ids: ['answer'], final_boundary_complete: true,
+  }], messages: [{ id: 'answer', turn_id: 'turn-answer', run_id: 'run-answer', role: 'assistant', content: answer,
     status: 'complete', created_at_ms: timestamp, sources, blocks: [{ type: 'markdown', content: answer, sources }] }] });
 }
 
@@ -129,13 +132,12 @@ it('forks the clicked answer and reuses its request key after a transport failur
   await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="answer-branch"]')));
 });
 
-it('keeps export and fork unavailable while a response is streaming', async () => {
+it('keeps answer actions and time absent while a response is streaming', async () => {
   const fixture = streamingFixture(2, 0);
   const runtime = renderSurfaceWithAdapterProps({ ...fixture.adapter, forkThread: vi.fn() }, { focusThreadRequest: { request_id: 'stream', thread_id: fixture.thread.thread_id } });
-  await waitFor(() => Boolean(runtime.querySelector('.flower-answer-actions')));
-  expect(runtime.querySelector<HTMLButtonElement>('[aria-label="Export HTML"]')?.disabled).toBe(true);
-  expect(runtime.querySelector<HTMLButtonElement>('[aria-label="Fork from this answer"]')?.disabled).toBe(true);
-  expect(runtime.querySelector<HTMLButtonElement>('.flower-message-copy-button-assistant')?.disabled).toBe(false);
+  await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="streaming-tail"]')));
+  expect(runtime.querySelector('.flower-answer-actions')).toBeNull();
+  expect(runtime.querySelector('[data-flower-message-id="streaming-tail"] time')).toBeNull();
 });
 
 it('exports block content without hidden reasoning or active HTML', () => {
