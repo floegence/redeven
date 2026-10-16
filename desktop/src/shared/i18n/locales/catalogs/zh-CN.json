@@ -2659,8 +2659,8 @@
     "startAndOpen": "启动并打开",
     "requestAccess": "请求访问",
     "retryInitialization": "重试初始化",
-    "reinstallRedevenWipeData": "卸载（清除数据）",
-    "reinstallRedevenKeepData": "卸载（保留数据）",
+    "reinstallRedevenWipeData": "重装（清除数据）",
+    "reinstallRedevenKeepData": "重装（保留数据）",
     "blockedByActiveOperation": "“{operation}”正在进行。完成或取消后才能执行“{action}”。",
     "waitForOperationAcceptance": "当前操作正在开始，请稍候再执行“{action}”。",
     "disconnectLegacyControlPlane": "断开旧控制面绑定"

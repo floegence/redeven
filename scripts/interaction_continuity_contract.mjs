@@ -1,6 +1,8 @@
 // IMPORTANT: Keep interaction continuity executable at commit and integration boundaries.
 export const continuityTests = Object.freeze({
   state: [
+    'src/shared/i18n/desktopI18n.test.ts',
+    'src/welcome/viewModel.test.ts',
     'src/welcome/desktopOverlayPosition.test.ts',
     'src/welcome/environmentLifecycleDisclosure.test.ts',
     'src/welcome/environmentGuidanceSession.test.ts',

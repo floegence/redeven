@@ -2696,8 +2696,8 @@
     "startAndOpen": "Запустить и открыть",
     "requestAccess": "Запросить доступ",
     "retryInitialization": "Повторить инициализацию",
-    "reinstallRedevenWipeData": "Удалить (стереть данные)",
-    "reinstallRedevenKeepData": "Удалить (сохранить данные)",
+    "reinstallRedevenWipeData": "Переустановить (стереть данные)",
+    "reinstallRedevenKeepData": "Переустановить (сохранить данные)",
     "blockedByActiveOperation": "Выполняется операция «{operation}». Завершите или отмените её перед выполнением «{action}».",
     "waitForOperationAcceptance": "Текущая операция запускается. Подождите перед выполнением «{action}».",
     "disconnectLegacyControlPlane": "Отключить устаревшую привязку к плоскости управления"

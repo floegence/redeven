@@ -1547,13 +1547,14 @@ function runtimeMenuActions(environment: DesktopEnvironmentEntry): readonly Envi
     }
   }
   if (environmentSupportsDirectReinstall(environment)) {
+    // IMPORTANT: Both choices reinstall the Runtime; data mode never selects an uninstall-only path.
     items.push({
       id: 'reinstall_target_wipe',
-      label: 'Uninstall (erase data)',
+      label: 'Reinstall (erase data)',
       label_key: 'environmentAction.reinstallRedevenWipeData',
       action: {
         intent: 'reinstall_target',
-        label: 'Uninstall (erase data)',
+        label: 'Reinstall (erase data)',
         label_key: 'environmentAction.reinstallRedevenWipeData',
         enabled: true,
         variant: 'outline',
@@ -1561,11 +1562,11 @@ function runtimeMenuActions(environment: DesktopEnvironmentEntry): readonly Envi
       },
     }, {
       id: 'reinstall_target_preserve',
-      label: 'Uninstall (keep data)',
+      label: 'Reinstall (keep data)',
       label_key: 'environmentAction.reinstallRedevenKeepData',
       action: {
         intent: 'reinstall_target',
-        label: 'Uninstall (keep data)',
+        label: 'Reinstall (keep data)',
         label_key: 'environmentAction.reinstallRedevenKeepData',
         enabled: true,
         variant: 'outline',

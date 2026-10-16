@@ -412,6 +412,23 @@ describe('Desktop shared i18n dictionaries', () => {
     }));
   });
 
+  it.each([
+    ['en-US', 'Reinstall (erase data)', 'Reinstall (keep data)'],
+    ['zh-CN', '重装（清除数据）', '重装（保留数据）'],
+    ['zh-TW', '重新安裝（清除資料）', '重新安裝（保留資料）'],
+    ['ja-JP', '再インストール（データを消去）', '再インストール（データを保持）'],
+    ['ko-KR', '재설치(데이터 삭제)', '재설치(데이터 유지)'],
+    ['de-DE', 'Neu installieren (Daten löschen)', 'Neu installieren (Daten behalten)'],
+    ['fr-FR', 'Réinstaller (effacer les données)', 'Réinstaller (conserver les données)'],
+    ['es-ES', 'Reinstalar (borrar datos)', 'Reinstalar (conservar datos)'],
+    ['pt-BR', 'Reinstalar (apagar dados)', 'Reinstalar (manter dados)'],
+    ['ru-RU', 'Переустановить (стереть данные)', 'Переустановить (сохранить данные)'],
+  ] as const)('names both environment actions as reinstall in %s', (locale, wipe, preserve) => {
+    const i18n = createDesktopI18n(locale);
+    expect(i18n.t('environmentAction.reinstallRedevenWipeData')).toBe(wipe);
+    expect(i18n.t('environmentAction.reinstallRedevenKeepData')).toBe(preserve);
+  });
+
   it('keeps non-English dictionaries assignable to a widened message shape', () => {
     const zhCN: DesktopTranslationShape = DESKTOP_I18N_DICTIONARIES['zh-CN'];
     expect(zhCN.common.open).toBe('打开');
@@ -429,8 +446,8 @@ describe('Desktop shared i18n dictionaries', () => {
     expect(zhCN.environmentAction.restartRuntime).toBe('重启');
     expect(zhCN.environmentAction.updateRuntime).toBe('更新');
     expect(zhCN.environmentAction.reinstallRedeven).toBe('重装');
-    expect(zhCN.environmentAction.reinstallRedevenWipeData).toBe('卸载（清除数据）');
-    expect(zhCN.environmentAction.reinstallRedevenKeepData).toBe('卸载（保留数据）');
+    expect(zhCN.environmentAction.reinstallRedevenWipeData).toBe('重装（清除数据）');
+    expect(zhCN.environmentAction.reinstallRedevenKeepData).toBe('重装（保留数据）');
     expect(zhCN.runtimeMessage.runtimeReadyOpenDetail).toBe('运行时已就绪，现在可以打开。');
     expect(zhCN.runtimeMessage.restartRuntimeReady).toBe('Redeven Desktop 重新启动运行时且运行时报告就绪后，即可打开。');
     expect(zhCN.shell.backToEnvironments).toBe('返回环境');
