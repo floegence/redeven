@@ -456,6 +456,14 @@ var builtinDefinitions = map[string]Definition{
 			chipFields("truncated"),
 		),
 	},
+	"report_to_parent": {
+		Name: "report_to_parent", Mutating: false, RequiresApproval: false,
+		Presentation: withPresentationOptions(presentation(ToolPresentationDelegation, "readonly", "structured", "delegation", "args", "result", "error"), operation("report_to_parent"), callPayloadFields("message"), resultPayloadFields("accepted", "event_id", "parent_thread_id")),
+	},
+	"subagent_events": {
+		Name: "subagent_events", Mutating: false, RequiresApproval: false,
+		Presentation: withPresentationOptions(presentation(ToolPresentationDelegation, "readonly", "structured", "delegation", "args", "result", "error"), operation("subagent_events"), labelFields("action"), callPayloadFields("action", "event_id", "first_event_id", "last_event_id", "after_event_id", "limit"), resultPayloadFields("events", "first_event_id", "last_event_id", "next_after_event_id")),
+	},
 	"subagents": {
 		Name:             "subagents",
 		Mutating:         false,

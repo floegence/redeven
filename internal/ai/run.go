@@ -2258,6 +2258,8 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 		}
 		return out, nil
 
+	case "subagent_events":
+		return r.readSubagentEvents(ctx, args)
 	case "subagents":
 		if meta == nil || !meta.CanExecute {
 			return nil, errors.New("execute permission denied")

@@ -864,6 +864,17 @@
       "suggestionsLabel": "Mit einem Vorschlag beginnen"
     },
     "subagents": {
+      "events": {
+        "title": "Wichtige Ereignisse",
+        "received": "Empfangen",
+        "admitted": "Zum Kontext hinzugefügt",
+        "read": "Vollständiges Ereignis lesen",
+        "more": "Weitere Ereignisse laden",
+        "report": "Bericht",
+        "input": "Eingabe erforderlich",
+        "approval": "Genehmigung erforderlich",
+        "interrupted": "Unterbrochen"
+      },
       "title": "Sub-Agenten",
       "description": "Delegierte Arbeiten in der aktuellen Flower-Unterhaltung.",
       "openLabel": "Sub-Agenten öffnen",

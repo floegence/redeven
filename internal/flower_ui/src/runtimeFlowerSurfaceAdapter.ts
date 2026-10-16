@@ -36,7 +36,7 @@ import type {
   FlowerThreadPinPosition,
   FlowerLiveStreamConnectInput,
   FlowerLiveStreamEnvelope,
-  FlowerRuntimeCurrentView,
+  FlowerRuntimeCurrentView, FlowerParentEventQuery, FlowerParentEventPage,
 } from './contracts/flowerSurfaceContracts';
 import {
   mapFlowerContextCompactions,
@@ -114,6 +114,7 @@ export type FlowerRuntimeTransport = Readonly<{
   listThreads(): Promise<ListThreadsResponse>;
   loadThread(threadID: string): Promise<unknown>;
   connectLiveStream?: (input: FlowerLiveStreamConnectInput) => AsyncIterable<FlowerLiveTransportFrame>;
+  readParentEvents?(threadID: string, query: FlowerParentEventQuery): Promise<FlowerParentEventPage>;
   loadSubagentDetail(parentThreadID: string, childThreadID: string): Promise<LoadSubagentDetailResponse>;
   operateSubagentInput?(parentThreadID: string, childThreadID: string, input: FlowerSubagentInputOperation): Promise<LoadSubagentDetailResponse>;
   readTerminalProcess?(runID: string, processID: string, input: { after_seq: number }): Promise<FlowerTerminalProcessSnapshot>;
@@ -368,6 +369,7 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
         }
       },
     } : {}),
+    readParentEvents: options.transport.readParentEvents ? (threadID, query) => options.transport.readParentEvents!(threadID, query) : undefined,
     loadSubagentDetail: async (parentThreadID, childThreadID) => {
       const parentID = trim(parentThreadID);
       const childID = trim(childThreadID);

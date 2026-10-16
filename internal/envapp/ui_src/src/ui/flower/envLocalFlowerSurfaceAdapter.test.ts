@@ -2337,3 +2337,16 @@ it('preserves backend-verified browser admission without requiring a Desktop bri
   expect((await adapter.loadSettings()).auth_capabilities?.openai_chatgpt).toEqual({ available: true, binding_id: 'native-browser-handoff' });
   expect(await adapter.loadChatGPTAccounts?.()).toEqual({ accounts: {}, saved_accounts: [] });
 });
+
+it('reads complete parent events through the authorized recipient route', async () => {
+ const message = '界'.repeat(2700);
+ const event = { id: 'event', message };
+ fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+  expect(url).toBe('/_redeven_proxy/api/ai/threads/parent%2Fid/subagent-events');
+  expect(init?.method).toBe('POST');
+  expect(JSON.parse(String(init?.body))).toEqual({ action: 'read', event_id: 'event' });
+  return jsonResponse({ events: [event] });
+ });
+ const adapter = createEnvLocalFlowerSurfaceAdapter({ envPublicID: 'env', envLabel: 'Environment', rpc: { ai: {} } as never });
+ await expect(adapter.readParentEvents!('parent/id', { action: 'read', event_id: 'event' })).resolves.toEqual({ events: [event] });
+});

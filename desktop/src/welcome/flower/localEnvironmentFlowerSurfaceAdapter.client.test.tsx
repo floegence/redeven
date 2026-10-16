@@ -1603,3 +1603,12 @@ it('prepares queued draft resources and conditionally takes back through Desktop
   await expect(adapter.takeBackQueuedTurn!('thread-1', 'queue:first', fingerprint)).resolves.toEqual(current);
   expect(calls[1]).toMatchObject({ method: 'POST', path: '/_redeven_proxy/api/ai/threads/thread-1/queue/queue%3Afirst/take-back', body: { expected_input_fingerprint: fingerprint } });
 });
+
+it('reads full parent events using the current recipient runtime route', async () => {
+ const query = { action: 'read' as const, event_id: 'event' };
+ const result = { events: [{ id: 'event', message: '界'.repeat(2700) }] };
+ const bridge = bridgeFor(() => result);
+ const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge);
+ await expect(adapter.readParentEvents!('parent/id', query)).resolves.toEqual(result);
+ expect(bridge.requestRuntimeFlower).toHaveBeenCalledExactlyOnceWith({ method: 'POST', path: '/_redeven_proxy/api/ai/threads/parent%2Fid/subagent-events', body: query });
+});

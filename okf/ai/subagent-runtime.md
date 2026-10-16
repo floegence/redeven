@@ -1,7 +1,7 @@
 ---
 type: AI Tool Contract
 title: Flower subagent runtime
-description: Floret v7 child threads, parent membership, bounded status, and complete handoffs.
+description: Canonical child threads, passive important events, scoped reads, and complete handoffs.
 tags: [ai, floret, subagents, permissions]
 timestamp: 2026-10-16T00:00:00Z
 ---
@@ -33,18 +33,50 @@ Each child execution proves parent-child membership through the typed runtime an
 
 Flower detail reads canonical child current state and typed activity through the parent-scoped product route. It does not parse metadata into messages, reconstruct activity from audits, or maintain a second child transcript. Flower Stop requests graceful cancellation of the selected thread and every existing descendant through published Floret `CancelInput.IncludeDescendants`. Children retain their canonical histories and queued inputs; independent root threads keep running. Each child settles its own confirmed effects, so parent settlement is not a barrier proving every child is already idle. Thread deletion follows the canonical Floret tree deletion contract.
 
-Child status is observed on demand through list, inspect and wait, never through
-an automatically maintained model-context overview. Completion and full final
-text reach the parent in inspect/wait handoffs; failures and cancellation reach
-it as explicit result items, and a wait timeout returns its current bounded
-items and any completed handoffs. Input and approval attention remain canonical
-child interactions visible through existing reads and the workspace stream;
-inspect/wait retain the pending-input summary. Wait subscribes to canonical
-updates and returns at completion or its deadline; input attention alone is not
-a new early-return condition. The workspace stream updates the UI, not parent
-model history. The current product has no separate child-to-parent message tool
-or automatic completion wakeup. This change does not add either capability or
-weaken the existing child input, approval, steering or final-result paths.
+## Passive important events
+
+Flower enables published Floret v7.49.0 parent events. The child-only
+`report_to_parent({message})` accepts nonempty UTF-8 text up to 8 KiB. Invocation
+identity comes from the exact authorized tool call; Floret derives its direct
+parent. Readonly children may report to that parent without gaining routing,
+input-response, approval, or filesystem rights. Success returns `accepted`,
+a stable event ID and parent ThreadID, without ending the child mission.
+
+Floret atomically records references for completion, failure, cancellation,
+interruption, normalized execution timeout and input/approval attention alongside
+their canonical source. Ordinary running/queued changes, counts, message previews
+and status-read failures produce no automatic message. A wait deadline is only
+`wait_timeout`, never evidence of execution timeout. Completion does not copy a
+final handoff; failures contain reason codes rather than raw error strings.
+
+Received events stay in the canonical journal until the next natural logical
+provider boundary. Floret pairs complete tool calls/results first, admits one
+typed bounded projection, then applies request budgeting, compaction and freezing.
+Idle, stopped, naturally ended and human-waiting parents stay passive. No Send,
+Steer, timer, host receipt ledger or uncertain-effect replay delivers events.
+Resolved interactions no longer claim action is required. Admission means context
+placement, never proof of model reading. Retry, restart, fork and compaction use
+the same upstream projection. Domain 18→19 migration retains older history;
+opt-in bootstraps current unresolved interactions once without old terminal backfill.
+
+Each automatic item is bounded to 2 KiB / 512 estimated tokens; each admitted
+batch to 8 KiB / 2,048. Explicit reports preview at most 512 UTF-8 bytes. Overflow
+uses a fixed full-event range and requires explicit review before claiming all
+delegated work is reviewed. `subagent_events` lists metadata or reads one event
+or a fixed closed range with explicit pagination, preserving complete report text.
+These are engineering limits, not measured context savings.
+
+Wait subscribes before reading facts, returns early for pending events from its
+selected direct children (all when omitted), and preserves existing status,
+failure and full handoffs. `reason` distinguishes `events`, `completed` and
+`wait_timeout`. Its event references omit report bodies; only canonical admission
+automatically adds those previews. Admitted events cannot repeatedly wake wait.
+The original input/approval state and UI responses remain authoritative.
+
+The compact [event panel](../ui/flower-subagent-detail.md) shows source, kind,
+received versus added-to-context state, full read and source navigation. Both
+Env App and Desktop use an authorized recipient route with explicit pagination.
+The browser keeps only temporary reading/disclosure state.
 
 # Boundaries
 

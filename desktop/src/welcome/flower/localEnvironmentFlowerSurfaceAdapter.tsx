@@ -732,6 +732,7 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
       get subtitle() { return options.runtimeSubtitle ?? LOCAL_ENVIRONMENT_SUBTITLE; },
     },
     transport: {
+      readParentEvents: (threadID, query) => runtimeJSON(bridge, 'POST', '/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/subagent-events', query),
       listThreads: () => runtimeJSON(bridge, 'GET', '/_redeven_proxy/api/ai/threads?limit=200'),
 		loadThread: (threadID) => runtimeJSON(bridge, 'GET', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}`),
       connectLiveStream: async function* (input: FlowerLiveStreamConnectInput) {

@@ -329,6 +329,7 @@ export type FlowerProviderDialogCopy = Readonly<{
 }>;
 
 export type FlowerSubagentsCopy = Readonly<{
+  events: Readonly<Record<'title' | 'received' | 'admitted' | 'read' | 'more' | 'report' | 'input' | 'approval' | 'interrupted', string>>;
   title: string;
   description: string;
 	openLabel: string;
@@ -1361,6 +1362,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     completedLabel: 'Ended',
     threadIDLabel: 'Thread',
     lastMessageLabel: 'Latest handoff',
+    events: {"title": "Important events", "received": "Received", "admitted": "Added to context", "read": "Read full event", "more": "Load more events", "report": "Report", "input": "Input required", "approval": "Approval required", "interrupted": "Interrupted"},
     detailTimelineLabel: 'Subagent execution record',
     detailInstructionLabel: 'Delegated instruction',
     detailConstraintsLabel: 'Runtime constraints',

@@ -123,8 +123,9 @@ func openFloretHost(ctx context.Context, path string, progress func(FloretStoreS
 	source := flstorage.SQLite(path)
 	openPhase := "opening"
 	host, err := open(ctx, flruntime.Options{
-		Storage:        source,
-		DeferExecution: true,
+		Storage:            source,
+		EnableParentEvents: true,
+		DeferExecution:     true,
 		StartupProgress: flruntime.StartupProgressFunc(func(phase flruntime.StartupPhase) {
 			switch phase {
 			case flruntime.StartupPhaseMigrating:

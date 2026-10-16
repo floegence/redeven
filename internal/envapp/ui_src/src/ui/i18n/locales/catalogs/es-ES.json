@@ -5874,6 +5874,17 @@
         "failed": "No se pudo confirmar la operación. Actualiza los detalles y vuelve a intentarlo.",
         "changed": "Esta entrada cambió o ya se procesó. Se actualizaron los detalles.",
         "busy": "El subagente se está deteniendo o compactando el contexto. Vuelve a intentarlo cuando termine."
+      },
+      "events": {
+        "title": "Eventos importantes",
+        "received": "Recibido",
+        "admitted": "Añadido al contexto",
+        "read": "Leer evento completo",
+        "more": "Cargar más eventos",
+        "report": "Informe",
+        "input": "Se requiere información",
+        "approval": "Se requiere aprobación",
+        "interrupted": "Interrumpido"
       }
     },
     "settings": {

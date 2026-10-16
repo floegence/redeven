@@ -5134,6 +5134,29 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: view})
 			return
 
+		case action == "subagent-events" && r.Method == http.MethodPost && len(parts) == 2:
+			meta, ok := g.requirePermission(w, r, requiredPermissionRead)
+			if !ok {
+				return
+			}
+			var body *ai.ParentEventReadRequest
+			dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10))
+			dec.DisallowUnknownFields()
+			if r.URL.RawQuery != "" || dec.Decode(&body) != nil || body == nil || dec.Decode(&struct{}{}) != io.EOF {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid parent event read"})
+				return
+			}
+			if !g.requireAIService(w, aiSvc) {
+				return
+			}
+			page, err := aiSvc.GetFlowerParentEvents(r.Context(), meta, threadID, *body)
+			if err != nil {
+				writeJSON(w, aiThreadActionHTTPStatus(err), apiResp{OK: false, Error: err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: page})
+			return
+
 		case action == "subagents" && r.Method == http.MethodPost && len(parts) == 4 && strings.TrimSpace(parts[3]) == "input":
 			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
 			if !ok {

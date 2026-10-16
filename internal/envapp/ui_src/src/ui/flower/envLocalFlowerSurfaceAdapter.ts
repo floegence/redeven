@@ -578,6 +578,10 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
           yield frame;
         }
       },
+      readParentEvents: (threadID, query) => fetchLocalApiJSON(
+        '/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/subagent-events',
+        { method: 'POST', body: JSON.stringify(query) },
+      ),
       loadSubagentDetail: (parentThreadID, childThreadID) => fetchLocalApiJSON(
         `/_redeven_proxy/api/ai/threads/${encodeURIComponent(parentThreadID)}/subagents/${encodeURIComponent(childThreadID)}/detail`,
         { method: 'GET' },

@@ -265,6 +265,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Flower approval surface](ui/flower-approval-surface.md) - Review bounded approval queues, inspect commands, and decide exact one-time batches.
 - [Flower citations](ui/flower-citations.md) - Render canonical assistant sources safely and keep private provider markers out of prose and copied messages.
 - [Flower subagent detail presentation](ui/flower-subagent-detail.md) - Render parent-owned membership and read-only child execution detail.
+- [Flower parent event disclosure](ui/flower-parent-events.md) - Read complete child reports and distinguish receipt from canonical context admission.
 
 ## AI
 

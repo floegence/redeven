@@ -477,6 +477,7 @@ export function applyFlowerRuntimeCurrentView(
     queued_turn_count: queuedTurns.length,
     queued_turns: queuedTurns,
     restored_inputs: current.restored_inputs ?? [],
+    parent_events: current.parent_events,
     messages,
     turns,
     error: trim(current.error)

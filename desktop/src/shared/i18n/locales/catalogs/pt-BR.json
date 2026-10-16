@@ -864,6 +864,17 @@
       "suggestionsLabel": "Comece com uma sugestão"
     },
     "subagents": {
+      "events": {
+        "title": "Eventos importantes",
+        "received": "Recebido",
+        "admitted": "Adicionado ao contexto",
+        "read": "Ler evento completo",
+        "more": "Carregar mais eventos",
+        "report": "Relatório",
+        "input": "Entrada necessária",
+        "approval": "Aprovação necessária",
+        "interrupted": "Interrompido"
+      },
       "title": "Subagentes",
       "description": "Trabalho delegado gerenciado na conversa atual do Flower.",
       "openLabel": "Abrir subagentes",
