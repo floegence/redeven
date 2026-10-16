@@ -412,3 +412,14 @@ describe('Canonical managed model context', () => {
   expect(() => mapModelContext({ ...facts, ...override })).toThrow();
  });
 });
+
+it('retains request-scoped context categories and zero native input', () => {
+ const sample = { phase:'provider_usage', pressure_status:'stable', updated_at_ms:1, input_tokens:0,
+  breakdown:{ source:'semantic_input_bpe_v1', tool_result_tokens:1234, tool_call_tokens:70, attachment_tokens:4096 } };
+ const mapped = mapContextUsage({ confirmed:sample })!;
+ expect(mapped.confirmed?.input_tokens).toBe(0);
+ expect(mapped.confirmed?.breakdown).toEqual(sample.breakdown);
+ for (const value of [-1, 1.5, Number.MAX_SAFE_INTEGER+1, '100']) {
+  expect(() => mapContextUsage({ confirmed:{...sample, breakdown:{source:'test',tool_result_tokens:value}} })).toThrow();
+ }
+});

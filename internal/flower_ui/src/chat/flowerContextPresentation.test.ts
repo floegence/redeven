@@ -1,3 +1,4 @@
+import { buildFlowerContextComposition } from './flowerContextPresentation';
 import { describe, expect, it } from 'vitest';
 
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../copy';
@@ -182,3 +183,15 @@ describe('flower context presentation', () => {
   expect(view.ariaValueText).toContain('Latest request cache hit rate: 60%');
   expect(buildFlowerComposerContextIndicatorView({recent_request_usage:{input_tokens:100,output_tokens:1,cache_read_tokens:0,cache_write_tokens:0}},DEFAULT_FLOWER_SURFACE_COPY).recentCacheHitValue).toBe('0%');
  });
+
+describe('used context composition', () => {
+  it('uses the displayed request without rescaling estimates to native usage', () => {
+    const base = { phase: 'provider_usage', pressure_status: 'stable', updated_at_ms: 1, input_tokens: 10000 } as const;
+    const result = buildFlowerContextComposition({ confirmed: { ...base, breakdown: { source: 'semantic_input_bpe_v1', tool_result_tokens: 300, user_tokens: 100 } },
+      estimate: { ...base, phase: 'projected_request', breakdown: { source: 'next', tool_result_tokens: 90000 } } })!;
+    expect(result.total).toBe(400);
+    expect(result.rows).toEqual([{ key: 'tool_result_tokens', tokens: 300, share: 75 }, { key: 'user_tokens', tokens: 100, share: 25 }]);
+    expect(buildFlowerContextComposition({ confirmed: base, estimate: { ...base, breakdown: { source: 'next', user_tokens: 10 } } })).toBeNull();
+    expect(buildFlowerContextComposition({ estimate: { ...base, breakdown: { source: 'empty' } } })).toBeNull();
+  });
+});

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	flconfig "github.com/floegence/floret/v7/config"
 	"github.com/floegence/floret/v7/observation"
 	flruntime "github.com/floegence/floret/v7/runtime"
 )
@@ -411,7 +412,13 @@ func flowerContextSampleFromFloret(status *observation.ContextStatus) (FlowerCon
 	if err != nil {
 		return FlowerContextSample{}, err
 	}
+	var breakdown *flconfig.ContextBreakdown
+	if status.RequestEstimate.Breakdown.Source != "" {
+		value := status.RequestEstimate.Breakdown
+		breakdown = &value
+	}
 	return FlowerContextSample{
+		Breakdown:              breakdown,
 		RunID:                  runID,
 		StepIndex:              status.Step,
 		Phase:                  phase,

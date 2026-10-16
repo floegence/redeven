@@ -35,7 +35,7 @@ Workspace live frames and bootstrap/reconnect use the same public canonical cont
 
 Native usage remains preferred to estimates. After its invalidation, the composer displays the installed estimate with the estimated tone.
 
-The context panel shows measured input and model capacity, with an explicit approximation mark when only an estimate is available. A stacked capacity bar separates used input, available output reserve and free space; missing counts remain unavailable. Runtime fact categories have their own character-based distribution, never inferred token allocations. Latest and cumulative cache rates remain in the compact footer.
+The context panel shows measured input and model capacity, with an explicit approximation mark when only an estimate is available. A stacked capacity bar separates used input, available output reserve and free space; missing counts remain unavailable. The used-input breakdown shows request-scoped estimated tokens for instructions, conversation, tool definitions/calls/retained outputs, managed context, summaries, reasoning and expanded media. Estimates stay attached to the displayed request and are never rescaled to native totals. Auto-loaded text remains in a secondary collapsed inspector. Latest and cumulative cache rates remain in the compact footer.
 
 Cumulative thread totals survive installation. Cache hit rate is `cache_read / (input + cache_read + cache_write)` over those disjoint buckets. Pressure supplies only actionable warnings. No host watermark or second ledger is retained.
 

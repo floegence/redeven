@@ -387,7 +387,16 @@ export type FlowerContextUsage = Readonly<{
   thread_usage?: FlowerThreadTokenUsage;
 }>;
 
+export const FLOWER_CONTEXT_CATEGORIES = [
+  'system_tokens', 'tool_definition_tokens', 'user_tokens', 'assistant_tokens',
+  'tool_call_tokens', 'tool_result_tokens', 'model_context_tokens', 'compaction_tokens',
+  'reasoning_tokens', 'attachment_tokens',
+] as const;
+export type FlowerContextCategory = typeof FLOWER_CONTEXT_CATEGORIES[number];
+export type FlowerContextBreakdown = Readonly<{ source: string } & Partial<Record<FlowerContextCategory, number>>>;
+
 export type FlowerContextSample = Readonly<{
+  breakdown?: FlowerContextBreakdown;
   run_id?: string;
   step_index?: number;
   phase: FlowerContextUsagePhase;

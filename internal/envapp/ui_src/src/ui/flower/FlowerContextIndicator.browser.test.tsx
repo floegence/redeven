@@ -110,39 +110,48 @@ for (const locale of ['en-US', 'zh-CN'] as const) {
         ] },
       };
       setUsage(mapContextUsage({ confirmed, thread_usage, recent_request_usage: { input_tokens: 25, output_tokens: 10, cache_read_tokens: 75, cache_write_tokens: 0 } })!);
+      setUsage(mapContextUsage({ confirmed: { ...confirmed, breakdown: {
+        source: 'semantic_input_bpe_v1', system_tokens: 3400, tool_definition_tokens: 23500,
+        user_tokens: 4200, assistant_tokens: 3000, tool_call_tokens: 1700,
+        tool_result_tokens: 29000, model_context_tokens: 5100, compaction_tokens: 800,
+      } }, thread_usage, recent_request_usage: { input_tokens: 25, output_tokens: 10, cache_read_tokens: 75, cache_write_tokens: 0 } })!);
       setFacts(context);
       progress.focus();
       await expect.poll(() => tooltip.getBoundingClientRect().height).toBeGreaterThan(200);
       const chartBounds = tooltip.getBoundingClientRect();
-      expect(chartBounds.height).toBeLessThan(380);
+      expect(chartBounds.height).toBeLessThan(408);
       expect(chartBounds.top).toBeGreaterThanOrEqual(0);
       expect(chartBounds.left).toBeGreaterThanOrEqual(0);
       expect(chartBounds.right).toBeLessThanOrEqual(window.innerWidth);
       expect(tooltip.scrollHeight).toBe(tooltip.clientHeight);
-      expect(tooltip.querySelectorAll('.flower-model-context-bar')).toHaveLength(1);
-      expect(tooltip.querySelectorAll('.flower-model-context-bar > span')).toHaveLength(6);
+      expect(tooltip.querySelectorAll('.flower-context-composition-bar')).toHaveLength(1);
+      expect(tooltip.querySelectorAll('.flower-context-composition-bar > span')).toHaveLength(8);
       expect(tooltip.querySelector('pre')).toBeNull();
       expect(tooltip.querySelector('.flower-model-context-time')).toBeNull();
-      const rows = [...tooltip.querySelectorAll<HTMLElement>('.flower-model-context-row')];
+      const rows = [...tooltip.querySelectorAll<HTMLElement>('.flower-context-composition-row')];
       for (const row of rows) {
         expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth);
-        expect(getComputedStyle(row).cursor).toBe('pointer');
       }
-      const segmentColors = [...tooltip.querySelectorAll<HTMLElement>('.flower-model-context-bar > span')].map(segment => getComputedStyle(segment).backgroundColor);
+      const segmentColors = [...tooltip.querySelectorAll<HTMLElement>('.flower-context-composition-bar > span')].map(segment => getComputedStyle(segment).backgroundColor);
       const swatchColors = rows.map(row => getComputedStyle(row.querySelector('.flower-context-swatch')!).backgroundColor);
       expect(segmentColors).toEqual(swatchColors);
-      expect(new Set(segmentColors).size).toBe(6);
+      expect(new Set(segmentColors).size).toBe(8);
       const amountColumns = rows.map(row => row.querySelector('.flower-model-context-amount')!.getBoundingClientRect().right);
       expect(new Set(amountColumns).size).toBe(1);
-      expect(rows.at(-1)!.textContent).toContain(copy.chat.contextIndicator.sectionLabels.skills);
+      expect(rows[0]!.textContent).toContain(copy.chat.contextIndicator.categoryLabels.tool_result_tokens);
       if (import.meta.env.VITE_FLOWER_CONTEXT_SCREENSHOTS === '1') {
         await page.screenshot({ path: `__screenshots__/context-breakdown-${locale}-${dark ? 'dark' : 'light'}.png` });
       }
-      rows.at(-1)!.focus();
+      const disclosure = tooltip.querySelector<HTMLElement>('.flower-model-context-disclosure')!;
+      disclosure.focus();
+      await userEvent.keyboard('{Enter}');
+      await expect.poll(() => tooltip.querySelectorAll('.flower-model-context-row').length).toBe(6);
+      const skill = tooltip.querySelector<HTMLElement>('[data-category="skills"] > summary')!;
+      skill.focus();
       await userEvent.keyboard('{Enter}');
       await expect.poll(() => tooltip.querySelector('pre')?.textContent).toContain('Complete selectable catalog');
       setFacts({ ...context, snapshot: { sections: context.snapshot.sections.map(section => ({ ...section, text: section.text + '\nUpdated' })) } });
-      expect(document.activeElement).toBe(rows.at(-1));
+      expect(document.activeElement).toBe(skill);
       expect(tooltip.querySelector('details[open]')).not.toBeNull();
       expect(tooltip.querySelector('pre')?.textContent).toContain('Updated');
       await userEvent.keyboard('{Escape}');
@@ -178,7 +187,7 @@ it('keeps localized legends inside a narrow card and follows every shipped theme
   };
   applyTheme(builtInShellThemePresets.find(preset => preset.name === 'classic-dark')!);
   dispose = render(() => <FlowerComposerContextIndicator modelContext={facts} copy={copy()}
-    usage={{ confirmed: { phase: 'provider_usage', pressure_status: 'stable', input_tokens: 85400, context_window_tokens: 1000000, output_headroom_tokens: 64000, updated_at_ms: 1 } }} />, host);
+    usage={{ confirmed: { phase: 'provider_usage', pressure_status: 'stable', input_tokens: 85400, context_window_tokens: 1000000, output_headroom_tokens: 64000, updated_at_ms: 1, breakdown: { source:'semantic_input_bpe_v1', system_tokens:3400,tool_definition_tokens:23000,user_tokens:4000,assistant_tokens:3000,tool_call_tokens:1700,tool_result_tokens:29000,model_context_tokens:5100,compaction_tokens:800 } } }} />, host);
   const trigger = host.querySelector<HTMLElement>('[role="progressbar"]')!;
   trigger.focus();
   const panel = host.querySelector<HTMLElement>('[role="region"]')!;
@@ -187,7 +196,7 @@ it('keeps localized legends inside a narrow card and follows every shipped theme
     setLocale(value);
     expect(panel.scrollWidth, value).toBe(panel.clientWidth);
     expect(panel.scrollHeight, value).toBe(panel.clientHeight);
-    for (const row of panel.querySelectorAll<HTMLElement>('.flower-model-context-row, .flower-context-window-stat')) {
+    for (const row of panel.querySelectorAll<HTMLElement>('.flower-context-composition-row, .flower-context-window-stat')) {
       expect(row.scrollWidth, `${value}: ${row.textContent}`).toBeLessThanOrEqual(row.clientWidth);
     }
     expect(panel.getBoundingClientRect().top, value).toBeGreaterThanOrEqual(0);
@@ -198,8 +207,8 @@ it('keeps localized legends inside a narrow card and follows every shipped theme
   setLocale('en-US');
   for (const preset of builtInShellThemePresets) {
     applyTheme(preset);
-    const swatches = [...panel.querySelectorAll<HTMLElement>('.flower-model-context-row .flower-context-swatch')];
-    const segments = [...panel.querySelectorAll<HTMLElement>('.flower-model-context-bar > span')];
+    const swatches = [...panel.querySelectorAll<HTMLElement>('.flower-context-composition-row .flower-context-swatch')];
+    const segments = [...panel.querySelectorAll<HTMLElement>('.flower-context-composition-bar > span')];
     expect(swatches.map(node => getComputedStyle(node).backgroundColor), preset.name)
       .toEqual(segments.map(node => getComputedStyle(node).backgroundColor));
     expect(panel.scrollWidth, preset.name).toBe(panel.clientWidth);

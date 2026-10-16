@@ -6,7 +6,7 @@ import { reasoningControlEnUS, type ReasoningControlCopy } from './i18n/reasonin
 import { modelCatalogCopy, type ModelCatalogCopy } from './settings/modelCatalogCopy';
 import type { FilesystemPickerCopy } from './filePicker/filesystemPicker';
 import { filesystemPickerEnUS } from './i18n/filesystemPickerMessages';
-import type { FlowerActivityApprovalState, FlowerPermissionType, FlowerProviderType, FlowerThreadStatus } from './contracts/flowerSurfaceContracts';
+import type { FlowerActivityApprovalState, FlowerContextCategory, FlowerPermissionType, FlowerProviderType, FlowerThreadStatus } from './contracts/flowerSurfaceContracts';
 import type { FlowerProviderModelNoteKey } from './settings/providerModelNotes';
 import { localizedFlowerProviderModelNote } from './settings/providerModelNotes';
 import type { FlowerProviderTypeLabels } from './settings/providerTypeLabels';
@@ -650,6 +650,9 @@ export type FlowerSurfaceCopy = Readonly<{
       unavailable: string;
       runtimeFacts: string; collected: string; used: string; updated: string; removed: string;
       textShare: string;
+      composition: string;
+      compositionHint: string;
+      categoryLabels: Readonly<Record<FlowerContextCategory, string>>;
       input: string;
       outputReserve: string;
       freeSpace: string;
@@ -1004,7 +1007,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       floretEngineFailed: 'Flower could not finish this turn because the orchestration engine failed.',
       floretControlContractFailed: 'Flower could not generate a valid question. The reply so far has been preserved. Retry to continue.',
       floretAuthorityConsistencyFailed: 'Flower could not finish this turn because the committed tool result could not be verified. The tool was not run again; start a new reply to continue.',
-      modelContextUnavailable: 'Could not collect current runtime facts. Repair the source and retry.',
+      modelContextUnavailable: 'Could not load the current context. Resolve the issue shown in the error details, then retry.',
       floretEffectOutcomeUnknown: 'Some operations may have completed, but their results could not be confirmed. The task was stopped to avoid duplicate execution.',
       runtimeRestarted: 'The local runtime restarted before this reply finished. Start a new reply when the runtime is ready.',
     },
@@ -1071,8 +1074,17 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       hardLimit: 'At limit',
       unknownPercent: '—',
       unavailable: 'Not available',
-      runtimeFacts: 'Runtime facts', collected: 'Collected', used: 'Used by latest request', updated: 'Updated', removed: 'Removed',
-      textShare: 'Share of runtime fact text (characters)',
+      runtimeFacts: 'Auto-loaded context', collected: 'Loaded', used: 'Last used', updated: 'Updated', removed: 'Removed',
+      textShare: 'Auto-loaded context text share (characters)',
+      composition: 'Used context',
+      compositionHint: 'Estimated tokens and share of model input. Category estimates may differ from the measured total.',
+      categoryLabels: {
+        system_tokens: 'System instructions', tool_definition_tokens: 'Tool definitions',
+        user_tokens: 'Your messages', assistant_tokens: 'Assistant messages',
+        tool_call_tokens: 'Tool calls', tool_result_tokens: 'Tool outputs',
+        model_context_tokens: 'Auto-loaded context', compaction_tokens: 'Conversation summary',
+        reasoning_tokens: 'Reasoning', attachment_tokens: 'Images & files',
+      },
       input: 'Used',
       outputReserve: 'Output reserve',
       freeSpace: 'Free space',

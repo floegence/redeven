@@ -98,6 +98,9 @@ func TestPublishedFloretUsageReachesLiveAndCanonicalFlowerProjections(t *testing
 	if projected.Usage == nil || projected.Usage.Confirmed == nil || projected.Usage.Confirmed.InputTokens != 100 || projected.Usage.Estimate == nil {
 		t.Fatalf("pending context=%+v", projected.Usage)
 	}
+	if projected.Usage.Confirmed.Breakdown == nil || projected.Usage.Confirmed.Breakdown.UserTokens <= 0 || projected.Usage.Estimate.Breakdown == nil || projected.Usage.Estimate.Breakdown.AssistantTokens <= 0 {
+		t.Fatalf("input breakdown missing: %+v", projected.Usage)
+	}
 	var latest FlowerContextUsage
 	for len(contextUsageSnapshots) > 0 {
 		latest = <-contextUsageSnapshots
@@ -317,6 +320,7 @@ func TestFlowerThreadContextProjectionIncludesCanonicalUsage(t *testing.T) {
 			RunID: "run-context", ThreadID: "thread-context", TurnID: "turn-context", Step: 2,
 			Phase: observation.ContextPhaseProviderUsage, ObservedAt: observedAt,
 			Usage:           observation.ProviderUsage{Available: true, WindowInputTokens: 500, InputTokens: 30, CacheReadTokens: 60, CacheWriteTokens: 10},
+			RequestEstimate: config.RequestEstimate{Breakdown: config.ContextBreakdown{Source: "semantic_input_bpe_v1", ToolResultTokens: 200, ToolCallTokens: 40}},
 			ContextPressure: config.ContextPressure{ContextWindowTokens: 1000},
 			UsedRatio:       0.5, Status: observation.ContextStatusStable,
 		}},
@@ -329,6 +333,9 @@ func TestFlowerThreadContextProjectionIncludesCanonicalUsage(t *testing.T) {
 	}
 	if projection.Usage == nil || projection.Usage.Confirmed.InputTokens != 500 || projection.Usage.Confirmed.ContextWindowTokens != 1000 || projection.Usage.Confirmed.UpdatedAtMs != observedAt.UnixMilli() {
 		t.Fatalf("usage=%#v", projection.Usage)
+	}
+	if projection.Usage.Confirmed.Breakdown == nil || projection.Usage.Confirmed.Breakdown.ToolResultTokens != 200 || projection.Usage.Confirmed.Breakdown.ToolCallTokens != 40 {
+		t.Fatalf("canonical composition=%+v", projection.Usage.Confirmed)
 	}
 	if projection.Usage.ThreadUsage == nil || *projection.Usage.ThreadUsage != (FlowerThreadTokenUsage{
 		InputTokens: 120, OutputTokens: 30, CacheReadTokens: 75, CacheWriteTokens: 5,
