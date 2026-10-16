@@ -1,5 +1,10 @@
 # Redeven OKF Update Log
 
+## 2026-10-15: Compact screenshot tool previews
+
+- Show computer and browser screenshots as [compact thumbnails](ai/computer-use-media.md) in expanded Activity details, without the decorative media canvas.
+- Retain saved-image inspection, bounded loading and retry, manual disclosure and authorized media resolution.
+
 ## 2026-10-15 — Used context composition
 
 - Document request-scoped used-input estimates, retained tool output, native-total authority and compact localized presentation in [managed context](ai/flower-managed-model-context.md).

@@ -81,6 +81,12 @@ Choices stay local to the activity during the mounted UI session; reload restore
 the default. Completed turns containing a saved screenshot also default expanded
 through the existing turn disclosure store, preserving manual turn collapse.
 Other tools stay collapsed and may show attached images on expansion.
+Computer and browser screenshots in expanded Activity details use a compact
+thumbnail, bounded to 20rem wide with a 16:9 viewport and contain sizing. They
+omit the media canvas background, dot pattern, inset padding and separate
+preview toolbar. Clicking the thumbnail opens the saved image for inspection;
+loading, failure and retry retain the same bounded space. Collapsed Activity
+details unmount the thumbnail. Ordinary assistant media keeps its presentation.
 The published Floe `MarkdownMedia` owns proportional image display, enlargement,
 cancellation and retry. Retry rereads only the original saved image, never runs
 a screenshot tool. Resolution is bound to the owning Thread and resource, and
