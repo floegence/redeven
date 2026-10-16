@@ -1,5 +1,4 @@
-import { FLOWER_CONTEXT_CATEGORIES } from '../contracts/flowerSurfaceContracts';
-import type { FlowerContextCompaction, FlowerContextUsage, FlowerContextSample, FlowerModelContext, FlowerThreadTokenUsage } from '../contracts/flowerSurfaceContracts';
+import type { FlowerContextCompaction, FlowerContextUsage, FlowerContextSample, FlowerThreadTokenUsage, FlowerContextCategory } from '../contracts/flowerSurfaceContracts';
 import type { FlowerSurfaceCopy } from '../copy';
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../copy';
 import { trimString } from '../flowerSurfaceModel';
@@ -33,30 +32,64 @@ export function buildFlowerContextWindow(usage: FlowerContextUsage) {
   };
 }
 
-// Composition belongs to the same request as the displayed total. Never
-// substitute a newer request's categories or auto-loaded character counts.
+export const FLOWER_CONTEXT_SOURCES = [
+  'system_prompt', 'system_tools', 'mcp_tools', 'provider_tools', 'messages',
+  'tool_outputs', 'skills', 'rule_files', 'environment', 'summary', 'reasoning',
+  'attachments', 'context_framing', 'unattributed_tools', 'unattributed_context',
+] as const;
+export type FlowerContextSource = typeof FLOWER_CONTEXT_SOURCES[number];
+export type FlowerContextSourceRow = { key: FlowerContextSource; tokens: number; share: number;
+  items: { key: string; label?: string; category?: FlowerContextCategory; tokens: number; share: number }[] };
+
+// Attribution always belongs to the displayed request. Current snapshot text
+// and newer projected requests cannot be used to allocate confirmed usage.
 export function buildFlowerContextComposition(usage: FlowerContextUsage) {
   const breakdown = (usage.confirmed ?? usage.estimate)?.breakdown;
   if (!breakdown?.source) return null;
-  const rows = FLOWER_CONTEXT_CATEGORIES.map(key => ({ key, tokens: breakdown[key] ?? 0 }))
-    .filter(row => Number.isSafeInteger(row.tokens) && row.tokens > 0)
-    .sort((a, b) => b.tokens - a.tokens);
-  const total = rows.reduce((sum, row) => sum + row.tokens, 0);
-  if (!Number.isSafeInteger(total) || total <= 0) return null;
-  return { total, rows: rows.map(row => ({ ...row, share: row.tokens / total * 100 })) };
-}
-
-// Snapshot text has character counts, not request-scoped token measurements.
-export function buildFlowerModelContextDistribution(sections: FlowerModelContext['snapshot']['sections']) {
-  const rows = sections.map(section => {
-    let characters = 0;
-    for (let index = 0; index < section.text.length; characters++) {
-      index += section.text.codePointAt(index)! > 0xffff ? 2 : 1;
+  const rows = new Map<FlowerContextSource, FlowerContextSourceRow>();
+  const add = (key: FlowerContextSource, tokens: number, item?: Omit<FlowerContextSourceRow['items'][number], 'share'>) => {
+    if (!Number.isSafeInteger(tokens) || tokens <= 0) return;
+    const row = rows.get(key) ?? { key, tokens: 0, share: 0, items: [] };
+    row.tokens += tokens;
+    if (item) row.items.push({ ...item, share: 0 });
+    rows.set(key, row);
+  };
+  add('system_prompt', breakdown.system_tokens ?? 0);
+  for (const category of ['user_tokens', 'assistant_tokens', 'tool_call_tokens'] as const) {
+    const tokens = breakdown[category] ?? 0;
+    add('messages', tokens, { key: category, category, tokens });
+  }
+  add('tool_outputs', breakdown.tool_result_tokens ?? 0);
+  add('summary', breakdown.compaction_tokens ?? 0);
+  add('reasoning', breakdown.reasoning_tokens ?? 0);
+  add('attachments', breakdown.attachment_tokens ?? 0);
+  if (breakdown.details) {
+    for (const item of breakdown.details.items) {
+      if (item.category === 'tool_definition') {
+        const source = item.source === 'mcp' ? 'mcp_tools'
+          : item.source === 'provider' ? 'provider_tools'
+          : item.source === 'builtin' || item.source === 'floret' ? 'system_tools' : 'unattributed_tools';
+        add(source, item.tokens, { key: JSON.stringify([item.key, item.source, item.namespace]),
+          label: item.namespace ? item.namespace + ' · ' + item.key : item.key, tokens: item.tokens });
+      } else {
+        const source = item.key === 'skills' ? 'skills' : item.key === 'repository_rules' ? 'rule_files'
+          : ['execution_environment', 'local_time', 'repository', 'delegation'].includes(item.key) ? 'environment' : item.key ? 'unattributed_context' : 'context_framing';
+        add(source, item.tokens, { key: item.key, label: item.key || undefined, tokens: item.tokens });
+      }
     }
-    return { ...section, characters };
-  }).sort((a, b) => b.characters - a.characters);
-  const total = rows.reduce((sum, row) => sum + row.characters, 0);
-  return { total, rows: rows.map(row => ({ ...row, share: total > 0 ? row.characters / total * 100 : 0 })) };
+  } else {
+    add('unattributed_tools', breakdown.tool_definition_tokens ?? 0);
+    add('unattributed_context', breakdown.model_context_tokens ?? 0);
+  }
+  const total = [...rows.values()].reduce((sum, row) => sum + row.tokens, 0);
+  if (!Number.isSafeInteger(total) || total <= 0) return null;
+  const ordered = [...rows.values()].sort((a, b) => b.tokens - a.tokens || FLOWER_CONTEXT_SOURCES.indexOf(a.key) - FLOWER_CONTEXT_SOURCES.indexOf(b.key));
+  for (const row of ordered) {
+    row.share = row.tokens / total * 100;
+    row.items.sort((a, b) => b.tokens - a.tokens || a.key.localeCompare(b.key));
+    for (const item of row.items) item.share = item.tokens / row.tokens * 100;
+  }
+  return { total, rows: ordered };
 }
 
 export type FlowerComposerContextIndicatorView = Readonly<{

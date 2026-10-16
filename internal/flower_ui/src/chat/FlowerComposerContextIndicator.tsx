@@ -1,9 +1,10 @@
 import { For, Show, createEffect, createMemo, createSignal, createUniqueId, onCleanup, onMount } from 'solid-js';
 import { ChevronRight } from 'lucide-solid';
+import type { FlowerContextSourceRow } from './flowerContextPresentation';
 
 import type { FlowerContextUsage, FlowerModelContext } from '../contracts/flowerSurfaceContracts';
 import type { FlowerSurfaceCopy } from '../copy';
-import { buildFlowerComposerContextIndicatorView, buildFlowerContextWindow, buildFlowerContextComposition, buildFlowerModelContextDistribution, formatContextAmount } from './flowerContextPresentation';
+import { buildFlowerComposerContextIndicatorView, buildFlowerContextWindow, buildFlowerContextComposition, formatContextAmount } from './flowerContextPresentation';
 
 export function FlowerComposerContextIndicator(props: {
   usage?: FlowerContextUsage;
@@ -15,74 +16,33 @@ export function FlowerComposerContextIndicator(props: {
   const view = createMemo(() => buildFlowerComposerContextIndicatorView(props.usage ?? {}, props.copy));
   const contextWindow = createMemo(() => buildFlowerContextWindow(props.usage ?? {}));
   const composition = createMemo(() => buildFlowerContextComposition(props.usage ?? {}));
-  const [factsExpanded, setFactsExpanded] = createSignal(false);
-  const distribution = createMemo(() => buildFlowerModelContextDistribution(props.modelContext?.snapshot.sections ?? []));
-  const sections = createMemo(() => new Map(distribution().rows.map(section => [section.key, {
-    ...section, label: labels().sectionLabels[section.key] ?? section.title,
-  }])));
-  let loadedContextDisclosure: HTMLElement | undefined;
+  const disclosures = new Map<string, HTMLElement>();
+  const expanded = new Set<string>();
   const categories = createMemo(() => {
-    const focused = loadedContextDisclosure;
-    const restoreFocus = focused && focused === document.activeElement;
-    const rows = new Map(composition()?.rows.map(row => [row.key, row]));
-    if (sections().size > 0 && !rows.has('model_context_tokens')) {
-      rows.set('model_context_tokens', { key: 'model_context_tokens', tokens: 0, share: 0 });
-    }
-    return { rows, focused: restoreFocus ? focused : null };
+    const focused = [...disclosures.values()].find(element => element === document.activeElement);
+    return { rows: new Map(composition()?.rows.map(row => [row.key, row])), focused };
   });
   createEffect(() => {
     const focused = categories().focused;
-    if (focused?.isConnected && document.activeElement === document.body) focused.focus({ preventScroll: true });
+    // DOM moves temporarily blur a focused disclosure. Restore it after the
+    // keyed rows settle so keyboard events still reach the panel.
+    if (focused) queueMicrotask(() => {
+      if (focused.isConnected && document.activeElement === document.body) focused.focus({ preventScroll: true });
+    });
   });
   const percent = (share: number) => labels().percent(Math.round(share * 10) / 10);
-  const factStatus = createMemo(() => {
-    const context = props.modelContext;
-    if (!context) return '';
-    return [
-      `${labels().collected}: ${new Date(context.updated_at).toLocaleString()}`,
-      context.used_at ? `${labels().used}: ${new Date(context.used_at).toLocaleString()}` : '',
-      context.removed_keys.length ? `${labels().removed}: ${context.removed_keys.join(', ')}` : '',
-    ].filter(Boolean).join('\n');
-  });
-  const LoadedContext = (category: { tokens?: number; share?: number }) => (
-    <details class="flower-model-context-details" data-category="model_context_tokens" open={factsExpanded()} onToggle={(event) => setFactsExpanded(event.currentTarget.open)}>
-      <summary ref={loadedContextDisclosure} class="flower-context-composition-row flower-model-context-disclosure"
-        aria-label={[labels().categoryLabels.model_context_tokens, category.tokens === undefined ? labels().unavailable : labels().estimated + ' ' + labels().tokens(String(category.tokens)), category.share === undefined ? '' : percent(category.share)].filter(Boolean).join(' · ')}>
-        <i class="flower-context-swatch" aria-hidden="true" />
-        <span class="flower-model-context-category-label">
-          <span class="flower-model-context-label">{labels().categoryLabels.model_context_tokens}</span>
-          <ChevronRight class="flower-context-chevron" aria-hidden="true" />
-          <span class="flower-model-context-status" role="img" aria-label={factStatus()} title={factStatus()} data-used={props.modelContext?.used_at ? 'true' : undefined} />
-        </span>
-        <span class="flower-model-context-amount" title={category.tokens === undefined ? labels().unavailable : labels().tokens(String(category.tokens))}>{category.tokens === undefined ? labels().unknownPercent : '≈' + formatContextAmount(category.tokens)}</span>
-        <span class="flower-model-context-share">{category.share === undefined ? labels().unknownPercent : percent(category.share)}</span>
-      </summary>
-      <Show when={factsExpanded()}>
-        <div class="flower-model-context-distribution" role="group" aria-label={labels().textShare}>
-          <div class="flower-model-context-current-heading">
-            <span>{labels().currentContents}</span>
-            <span class="flower-model-context-unit">{labels().characters(formatContextAmount(distribution().total))}</span>
-          </div>
-          <p class="flower-model-context-hint">{labels().currentContentsHint}</p>
-          <For each={[...sections().keys()]}>{(key) => {
-            const section = () => sections().get(key)!;
-            const description = () => [section().label, labels().characters(String(section().characters)), percent(section().share)].join(' · ');
-            return (
-              <div class="flower-model-context-row" data-category={key} aria-label={description()} title={description()}>
-                <i class="flower-context-swatch" aria-hidden="true" />
-                <span class="flower-model-context-label">{section().label}</span>
-                <span class="flower-model-context-amount">{formatContextAmount(section().characters)}</span>
-                <span class="flower-model-context-share">{percent(section().share)}</span>
-                <div class="flower-model-context-track" aria-hidden="true">
-                  <span class="flower-model-context-fill" style={{ width: section().share + '%' }} />
-                </div>
-              </div>
-            );
-          }}</For>
-        </div>
+  const SourceRow = (rowProps: { row: FlowerContextSourceRow }) => <>
+    <i class="flower-context-swatch" aria-hidden="true" />
+    <span class="flower-model-context-category-label">
+      <span class="flower-model-context-label">{labels().sourceLabels[rowProps.row.key]}</span>
+      <Show when={rowProps.row.items.length > 1 || (rowProps.row.items.length > 0 && rowProps.row.key.endsWith('_tools'))}>
+        <ChevronRight class="flower-context-chevron" aria-hidden="true" />
       </Show>
-    </details>
-  );
+    </span>
+    <span class="flower-model-context-amount" title={labels().tokens(String(rowProps.row.tokens))}>≈{formatContextAmount(rowProps.row.tokens)}</span>
+    <span class="flower-model-context-share">{percent(rowProps.row.share)}</span>
+    <div class="flower-model-context-track" aria-hidden="true"><span class="flower-model-context-fill" style={{ width: rowProps.row.share + '%' }} /></div>
+  </>;
   const [tooltipOpen, setTooltipOpen] = createSignal(false);
   let dismissTimer: ReturnType<typeof setTimeout> | undefined;
   const cancelDismiss = () => { clearTimeout(dismissTimer); };
@@ -113,7 +73,10 @@ export function FlowerComposerContextIndicator(props: {
       onPointerLeave={(event) => {
         if (!event.currentTarget.contains(document.activeElement)) dismissTimer = setTimeout(() => setTooltipOpen(false), 150);
       }}
-      onFocusOut={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setTooltipOpen(false); }}
+      onFocusIn={() => { cancelDismiss(); setTooltipOpen(true); }}
+      onFocusOut={() => {
+        queueMicrotask(() => { if (container && !container.contains(document.activeElement)) setTooltipOpen(false); });
+      }}
       onKeyDown={(event) => {
         if (event.key === 'Escape' && tooltipOpen()) {
           event.stopPropagation();
@@ -179,30 +142,33 @@ export function FlowerComposerContextIndicator(props: {
             }</For>
           </div>
         }</Show>
-        <Show when={categories().rows.size > 0}>
-          <div class="flower-context-categories" classList={{ 'flower-context-composition': !!composition() }} role="group" aria-label={labels().composition}>
-            <Show when={composition()}>{(breakdown) => <>
-              <div class="flower-context-heading">
-                <span>{labels().composition}</span>
-                <span class="flower-context-estimate" title={labels().compositionHint}>{labels().estimated}</span>
-              </div>
-              <div class="flower-context-stacked-bar flower-context-composition-bar" aria-hidden="true">
-                <For each={breakdown().rows}>{(row) => <span data-category={row.key} style={{ width: row.share + '%' }} />}</For>
-              </div>
-            </>}</Show>
+        <Show when={composition()}>
+          <div class="flower-context-categories flower-context-composition" role="group" aria-label={labels().composition}>
+            <div class="flower-context-heading">
+              <span>{labels().composition}</span>
+              <span class="flower-context-estimate" title={labels().compositionHint}>{labels().estimated}</span>
+            </div>
             <For each={[...categories().rows.keys()]}>{(key) => {
               const row = () => categories().rows.get(key)!;
-              return <Show when={key === 'model_context_tokens' && sections().size > 0} fallback={
-                <div class="flower-context-composition-row" data-category={key}
-                  aria-label={[labels().categoryLabels[key], labels().estimated, labels().tokens(String(row().tokens)), percent(row().share)].join(' · ')}
-                  title={labels().categoryLabels[key] + ' · ' + labels().estimated + ' ' + labels().tokens(String(row().tokens))}>
-                  <i class="flower-context-swatch" aria-hidden="true" />
-                  <span class="flower-model-context-label">{labels().categoryLabels[key]}</span>
-                  <span class="flower-model-context-amount">≈{formatContextAmount(row().tokens)}</span>
-                  <span class="flower-model-context-share">{percent(row().share)}</span>
-                </div>
+              const description = () => [labels().sourceLabels[key], labels().estimated, labels().tokens(String(row().tokens)), percent(row().share)].join(' · ');
+              return <Show when={row().items.length > 1 || (row().items.length > 0 && key.endsWith('_tools'))} fallback={
+                <div class="flower-context-composition-row" data-category={key} aria-label={description()}><SourceRow row={row()} /></div>
               }>
-                <LoadedContext tokens={composition() ? row().tokens : undefined} share={composition() ? row().share : undefined} />
+                <details class="flower-model-context-details" data-category={key} open={expanded.has(key)}
+                  onToggle={(event) => { if (event.currentTarget.open) expanded.add(key); else expanded.delete(key); }}>
+                  <summary ref={element => { disclosures.set(key, element); }} class="flower-context-composition-row flower-model-context-disclosure" aria-label={description()}>
+                    <SourceRow row={row()} />
+                  </summary>
+                  <div class="flower-model-context-distribution" role="group" aria-label={labels().sourceLabels[key]}>
+                    <For each={row().items}>{(item) => <div class="flower-model-context-row" data-source-key={item.key}>
+                      <i class="flower-context-swatch" aria-hidden="true" />
+                      <span class="flower-model-context-label" title={item.label}>{item.category ? labels().categoryLabels[item.category] : labels().sectionLabels[item.key] ?? item.label ?? labels().sourceLabels[key]}</span>
+                      <span class="flower-model-context-amount" title={labels().tokens(String(item.tokens))}>≈{formatContextAmount(item.tokens)}</span>
+                      <span class="flower-model-context-share">{percent(item.share)}</span>
+                      <div class="flower-model-context-track" aria-hidden="true"><span class="flower-model-context-fill" style={{ width: item.share + '%' }} /></div>
+                    </div>}</For>
+                  </div>
+                </details>
               </Show>;
             }}</For>
           </div>

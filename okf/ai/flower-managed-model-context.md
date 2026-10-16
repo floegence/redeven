@@ -47,35 +47,38 @@ enforced at actual tool authorization, independently of displayed historical fac
 
 Authorized canonical reads and the existing workspace subscription carry the
 same snapshot, record location, changed/removed keys and latest request use.
-The primary shared context panel shows a request-scoped breakdown of used
-model input: system instructions, tool definitions, user/assistant messages,
-tool calls, retained tool outputs, managed context updates, conversation
-summaries, retained reasoning and expanded images/files. Floret owns the
-semantic offline BPE estimates; Flower maps the published contract without
-rebuilding provider history. Categories use one horizontal stacked bar and
-aligned localized rows, sorted by size. Estimated token counts and shares are
-visibly identified; they are not scaled to the native capacity total. Confirmed
-usage and composition come from the same request. Older samples show unavailable
-composition until a new request supplies it. Discarded original tool artifacts
-never count as model input. Expanded-media budgets come from prepared input.
+The shared context panel groups the displayed request by explicit source:
+system prompt, system tools, MCP tools, provider tools, messages, retained tool
+outputs, skill catalog, repository rule sources, environment, summaries,
+retained reasoning, expanded media and formatting overhead. Floret v7.45.0
+provides exact tool names with registry source/namespace annotations and
+canonical managed-section token estimates. Flower groups only its known source
+values and section keys. It never guesses from tool names or parses prompt text.
 
-Auto-loaded context is one disjoint category of used context, not a second
-peer breakdown. Its token row is the only disclosure and remains collapsed
-until opened. The row reveals current contents as horizontal bars with aligned character
-counts and shares, sorted by size. Categories have no nested disclosures or raw
-prompt-text blocks. These Unicode character shares describe the current snapshot
-only. A short inline explanation identifies this character basis and states
-that the parent token count includes retained historical updates. Snapshot shares
-are not token estimates or a proportional split of the parent token count.
-When request composition is unavailable, the same row remains inspectable with
-unavailable token values; current text never fabricates a request estimate.
-Category colors use the host theme's categorical tokens. The native capacity
-bar, output headroom and free space stay separate from estimated composition.
-Collection and request-use times remain in the status indicator's accessible
-label and hover text. Stable partition keys preserve the section's disclosure
-state and focus during refresh. Updates do not create chat bubbles, take focus or block
-navigation. Keyboard, touch and mouse can open and dismiss the panel; failure
-shows source diagnostics and a safe retry action. Subtask details use the same
+Every source uses an aligned horizontal bar with approximate tokens and share
+of the estimated input. Native input, output reserve and free capacity remain a
+separate capacity bar. Parent source weights replace their detailed weights;
+they are never added twice or scaled to match native usage. Confirmed total and
+composition describe the same request; newer snapshots and projected requests
+cannot fill gaps in an older sample. Historical missing source data is visibly
+unattributed, with no inferred MCP/system split or character-based allocation.
+
+Sources with multiple fragments and tool sources have one collapsed disclosure.
+Opening a source reveals flat horizontal rows; no item expands again or exposes
+raw prompt text. MCP entries identify the registered server namespace and tool.
+The skill row explicitly names the catalog; activated skill instructions returned
+by use_skill remain retained tool outputs. Repository rule sources identify the
+discovery list, not unread file contents; subsequent file reads remain outputs.
+Shared context framing is explicit formatting overhead rather than a second
+auto-loaded snapshot breakdown. Retained historical updates and removals count
+through Floret's canonical request renderer.
+
+The indicator opens and dismisses by mouse, touch or keyboard. A keyed source
+keeps its disclosure state and keyboard focus through live reordering. Theme
+colors, bounded scrolling and localized labels work at narrow widths. Snapshot
+collection and use identities remain in canonical transport; the usage chart
+never presents current collection metadata as past request composition. Updates
+do not create chat bubbles or block navigation. Subtask details use the same
 component and bounded detail cache.
 
 # Evidence

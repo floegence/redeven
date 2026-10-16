@@ -333,6 +333,33 @@ function mapContextBreakdown(raw: unknown): FlowerContextBreakdown | undefined {
     if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) throw new Error('invalid context breakdown tokens');
     result[key] = value;
   }
+  if (record.details !== undefined) {
+    const details = recordValue(record.details);
+    if (!details || !Array.isArray(details.items)) throw new Error('invalid context attribution');
+    const seen = new Set<string>();
+    const sums = { tool_definition: 0, model_context: 0 };
+    const items = details.items.map((raw: unknown) => {
+      const item = recordValue(raw);
+      if (!item || (item.category !== 'tool_definition' && item.category !== 'model_context')
+        || typeof item.key !== 'string' || (item.category === 'tool_definition' && !item.key)
+        || (item.source !== undefined && typeof item.source !== 'string')
+        || (item.namespace !== undefined && typeof item.namespace !== 'string')
+        || typeof item.tokens !== 'number' || !Number.isSafeInteger(item.tokens) || item.tokens < 0
+        || (item.category === 'model_context' && (item.source || item.namespace))) throw new Error('invalid context attribution item');
+      const category = item.category as 'tool_definition' | 'model_context';
+      const key = JSON.stringify([category, item.key, item.source ?? '', item.namespace ?? '']);
+      if (seen.has(key)) throw new Error('duplicate context attribution');
+      seen.add(key);
+      sums[category] += item.tokens;
+      if (!Number.isSafeInteger(sums[category])) throw new Error('context attribution overflow');
+      return { category, key: item.key, tokens: item.tokens,
+        ...(item.source ? { source: item.source as string } : {}),
+        ...(item.namespace ? { namespace: item.namespace as string } : {}),
+      };
+    });
+    if (sums.tool_definition !== (result.tool_definition_tokens ?? 0) || sums.model_context !== (result.model_context_tokens ?? 0)) throw new Error('context attribution totals disagree');
+    return { ...result, details: { items } };
+  }
   return result;
 }
 
