@@ -72,6 +72,13 @@ and image-only messages never create an empty text bubble. The same composition
 is used for queued transcript entries; the compact composer queue retains its
 own ordering and take-back interaction.
 
+Canonical runtime items carry message text separately from attachment blocks.
+Attachment-only blocks must retain that text as one body block; structured
+text or answered-question blocks already represent the body and must not
+duplicate aggregate message content. Sending and reopening history must show
+the same complete text beside its media, and copying must retain the original
+body.
+
 Cards align to the right, use three columns when space permits, two on narrow
 surfaces, and one below 19rem of available width. This follows the actual
 conversation container, including companion and Workbench placements. Names
@@ -122,6 +129,8 @@ layout, failed messages and forced colors. Code highlighting retains its indepen
 
 - [Resource placement, responsive cards and canonical preview identity](../../internal/envapp/ui_src/src/ui/FlowerSurface.canonicalReferences.browser.test.tsx)
 - [Image/file previews and attachment-only messages](../../internal/envapp/ui_src/src/ui/FlowerSurface.attachmentPreview.browser.test.tsx)
+- [Mixed text/image send, history reload and copy](../../internal/envapp/ui_src/src/ui/FlowerSurface.composerAttachments.browser.test.tsx)
+- [Canonical runtime-to-timeline text and attachment projection](../../internal/flower_ui/src/flowerTimelineProjection.test.ts)
 - [Stable resource nodes and empty-body handling](../../internal/envapp/ui_src/src/ui/flower/FlowerUserMessageBody.test.tsx)
 - [Shared message styles](../../internal/flower_ui/src/styles/flower.css)
 - [Shared transcript rendering](../../internal/flower_ui/src/FlowerSurface.tsx)

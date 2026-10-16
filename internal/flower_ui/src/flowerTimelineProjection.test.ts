@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { applyFlowerRuntimeCurrentView } from './runtimeCurrentView';
 
 import type {
   FlowerActivityItem,
@@ -284,7 +285,35 @@ describe('buildFlowerTimelineEntries', () => {
     }))).toThrow(/queued turn queue-invalid-attachment attachment 0 is invalid/);
   });
 
-  it('keeps canonical image and file attachments in their original block order', () => {
+  it.each([
+    { name: 'image', kinds: ['image'] },
+    { name: 'file', kinds: ['file'] },
+    { name: 'mixed', kinds: ['image', 'file'] },
+  ] as const)('keeps canonical message text beside $name attachments', ({ kinds }) => {
+    const body = 'Inspect these files.\n\nKeep the complete message body.';
+    const snapshot = applyFlowerRuntimeCurrentView(thread(), {
+      thread_id: 'thread-1', view_version: 1, activity: 'idle',
+      items: [{
+        id: 'entry-mixed', turn_id: 'turn-mixed', run_id: 'run-mixed',
+        ordinal: 1, kind: 'user', text: body,
+        attachments: kinds.map((kind) => kind === 'image'
+          ? { name: 'screen.png', mime_type: 'image/png', size_bytes: 12, url: '/uploads/image-1' }
+          : { name: 'notes.txt', mime_type: 'text/plain', size_bytes: 8, url: '/uploads/file-1' }),
+      }],
+    });
+    // Runtime items keep text in content and only attachments in blocks.
+    expect(snapshot.messages[0]?.content).toBe(body);
+    expect(snapshot.messages[0]?.blocks?.map(block => block.type)).toEqual(kinds);
+    const entry = buildFlowerTimelineEntries(snapshot)[0];
+    if (entry?.type !== 'message') throw new Error('expected message entry');
+    expect(entry.blocks.map(block => block.type)).toEqual([...kinds, 'content']);
+    expect(entry.blocks.at(-1)).toMatchObject({
+      type: 'content', key: 'entry-mixed:content', block_type: 'markdown', content: body,
+    });
+    expect(new Set(entry.blocks.map(block => block.key)).size).toBe(entry.blocks.length);
+  });
+
+  it('keeps structured user text beside attachments without duplicating aggregate content', () => {
     const entries = buildFlowerTimelineEntries(thread({
       messages: [{
         id: 'entry-attachments',
@@ -307,6 +336,16 @@ describe('buildFlowerTimelineEntries', () => {
     expect(entry?.type).toBe('message');
     if (entry?.type !== 'message') throw new Error('expected message entry');
     expect(entry.blocks.map((block) => block.type)).toEqual(['image', 'file', 'content']);
+    expect(entry.blocks.filter(block => block.type === 'content').map(block => block.content)).toEqual(['Inspect these files.']);
+  });
+
+  it.each(['', ' \n '])('keeps attachment-only messages free of empty body blocks (%j)', (content) => {
+    const entry = buildFlowerTimelineEntries(thread({ messages: [{
+      id: 'image-only', role: 'user', content, status: 'complete', created_at_ms: 2,
+      blocks: [{ type: 'image', src: '/uploads/image' }, { type: 'file', name: 'notes.txt', size: 8, mimeType: 'text/plain' }],
+    }] }))[0];
+    if (entry?.type !== 'message') throw new Error('expected message entry');
+    expect(entry.blocks.map(block => block.type)).toEqual(['image', 'file']);
   });
 
   it('keeps canonical activity render identity when final projection moves its block', () => {
