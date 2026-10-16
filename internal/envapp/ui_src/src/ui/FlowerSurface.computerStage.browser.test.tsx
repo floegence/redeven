@@ -541,7 +541,7 @@ it.each([1440, 390])('shows compact historical screenshot thumbnails with saved-
     await waitFor(() => Boolean(row(index)?.querySelector('.chat-media-image-button')));
     row(index)!.scrollIntoView();
     await waitFor(() => row(index)!.querySelector<HTMLImageElement>('.chat-media-image')?.naturalWidth === 1);
-    const thumbnail = row(index)!.querySelector<HTMLElement>('.flower-activity-screenshot')!;
+    const thumbnail = row(index)!.querySelector<HTMLElement>('.flower-activity-image-thumbnail')!;
     const viewport = thumbnail.querySelector<HTMLElement>('.chat-media-viewport')!;
     expect(thumbnail.getBoundingClientRect().width).toBeLessThanOrEqual(320);
     expect(viewport.getBoundingClientRect().height).toBeLessThanOrEqual(180);
@@ -556,7 +556,7 @@ it.each([1440, 390])('shows compact historical screenshot thumbnails with saved-
     await waitFor(() => document.querySelector('.chat-media-full-image') === null);
     row(index)!.querySelector<HTMLButtonElement>('[data-flower-disclosure-trigger]')!.click();
     await waitFor(() => row(index)!.dataset.state === 'closed');
-    expect(row(index)!.querySelector('.flower-activity-screenshot')).toBeNull();
+    expect(row(index)!.querySelector('.flower-activity-image-thumbnail')).toBeNull();
     row(index)!.querySelector<HTMLButtonElement>('[data-flower-disclosure-trigger]')!.click();
     await waitFor(() => row(index)!.querySelector<HTMLImageElement>('.chat-media-image')?.naturalWidth === 1);
   }

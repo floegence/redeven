@@ -2,11 +2,12 @@ import '../index.css';
 import './flower-feature.css';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { page } from 'vitest/browser';
-import { activityItem, activityTimeline, adapter, flowerSurfaceNotifications, liveBootstrap, renderSurfaceWithAdapter, settingsSnapshot, thread, waitFor } from './FlowerSurface.navigation.testHarness';
+import { activityItem, activityTimeline, adapter, flowerSurfaceNotifications, liveBootstrap, renderSurfaceWithAdapter, renderSurfaceWithAdapterProps, settingsSnapshot, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 
 beforeEach(() => page.viewport(1280, 900));
 
-it('loads an immutable tool image through thread authorization and offers preview recovery', async () => {
+it.each([1280, 390])('shows authorized tool image thumbnails with preview recovery at %s px', async (width) => {
+  await page.viewport(width, 900);
   const resourceRef = `image://${'a'.repeat(64)}/png`;
   const canvas = document.createElement('canvas'); canvas.width = 16; canvas.height = 12;
   canvas.getContext('2d')!.fillRect(0, 0, 16, 12);
@@ -20,19 +21,46 @@ it('loads an immutable tool image through thread authorization and offers previe
     target_refs: [{ kind: 'tool_image', label: 'chart.png', resource_ref: resourceRef }] });
   const seed = thread({ thread_id: 'image-thread', messages: [{ id: 'image-result', turn_id: 'image-turn', role: 'assistant', status: 'complete', content: '', created_at_ms: 2,
     blocks: [activityTimeline({ thread_id: 'image-thread', turn_id: 'image-turn', run_id: 'image-run', status: 'success', items: [item] })] }] });
-  const surface = renderSurfaceWithAdapter({ ...adapter(), listThreads: async () => [seed], loadThread: async () => liveBootstrap(seed, 1), loadToolImage, loadMessageFile });
-  await waitFor(() => Boolean(surface.querySelector('[data-thread-id="image-thread"] button')));
-  surface.querySelector<HTMLButtonElement>('[data-thread-id="image-thread"] button')!.click();
+  const surface = renderSurfaceWithAdapterProps(
+    { ...adapter(), listThreads: async () => [seed], loadThread: async () => liveBootstrap(seed, 1), loadToolImage, loadMessageFile },
+    { focusThreadRequest: { request_id: 'focus-image', thread_id: seed.thread_id }, layout: true },
+  );
   await waitFor(() => Boolean(surface.querySelector('[data-flower-activity-item-id="read-image"]')));
-  surface.querySelector<HTMLButtonElement>('[data-flower-activity-item-id="read-image"] .flower-activity-inline-button')!.click();
+  const row = surface.querySelector<HTMLElement>('[data-flower-activity-item-id="read-image"]')!;
+  const toggle = () => row.querySelector<HTMLButtonElement>('[data-flower-disclosure-trigger]')!.click();
+  const expectCompactThumbnail = () => {
+    const thumbnail = row.querySelector<HTMLElement>('[data-media-kind="image"]')!;
+    const viewport = thumbnail.querySelector<HTMLElement>('.chat-media-viewport')!;
+    expect(thumbnail.getBoundingClientRect().width).toBeGreaterThan(0);
+    expect(thumbnail.getBoundingClientRect().width).toBeLessThanOrEqual(320);
+    expect(viewport.getBoundingClientRect().height).toBeLessThanOrEqual(180.5);
+    expect(getComputedStyle(viewport).padding).toBe('0px');
+    expect(getComputedStyle(viewport).backgroundColor).toBe('rgba(0, 0, 0, 0)');
+    expect(getComputedStyle(viewport, '::before').display).toBe('none');
+    expect(getComputedStyle(thumbnail.querySelector('.chat-media-header')!).display).toBe('none');
+  };
+  expect(row.querySelector('[data-media-kind="image"]')).toBeNull();
+  toggle();
   const retry = () => [...surface.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.trim() === 'Retry');
   await waitFor(() => Boolean(retry()));
+  expectCompactThumbnail();
   retry()!.click();
   await waitFor(() => Boolean(surface.querySelector<HTMLImageElement>('.chat-media-image')?.naturalWidth));
   expect(loadToolImage).toHaveBeenCalledTimes(2);
   expect(loadToolImage).toHaveBeenLastCalledWith(expect.objectContaining({ thread_id: seed.thread_id, resource_ref: resourceRef, signal: expect.any(AbortSignal) }));
   expect(loadMessageFile).not.toHaveBeenCalled();
   expect(surface.querySelector('.chat-media-image')?.getAttribute('src')).toMatch(/^blob:/u);
+  expectCompactThumbnail();
+  row.querySelector<HTMLButtonElement>('.chat-media-image-button')!.click();
+  await waitFor(() => Boolean(document.querySelector('.chat-media-full-image')));
+  document.querySelector<HTMLButtonElement>('[aria-label="Close preview"]')!.click();
+  await waitFor(() => document.querySelector('.chat-media-full-image') === null);
+  toggle();
+  await waitFor(() => row.dataset.state === 'closed');
+  expect(row.querySelector('[data-media-kind="image"]')).toBeNull();
+  toggle();
+  await waitFor(() => Boolean(row.querySelector<HTMLImageElement>('.chat-media-image')?.naturalWidth));
+  expectCompactThumbnail();
 });
 
 it('retains the compatible model after an image-context rejection and allows another model', async () => {
