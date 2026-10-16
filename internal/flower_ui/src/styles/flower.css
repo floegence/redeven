@@ -4376,6 +4376,10 @@
   align-items: center;
   justify-content: center;
   color: var(--primary);
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+  will-change: transform;
+  animation: flower-model-status-flower-twirl 2.6s infinite;
 }
 
 .flower-model-status-flower-icon {
@@ -4383,12 +4387,6 @@
   display: block;
   width: 100%;
   height: 100%;
-}
-
-.flower-model-status-flower .redeven-flower-icon-center {
-  transform-box: fill-box;
-  transform-origin: 50% 50%;
-  animation: flower-model-status-center-breathe 2.6s ease-in-out infinite;
 }
 
 .flower-model-status-text {
@@ -4414,13 +4412,44 @@
   animation: flower-model-status-dots-reveal 1.5s steps(4, end) infinite;
 }
 
-@keyframes flower-model-status-center-breathe {
-  0%, 100% {
-    transform: scale(0.93);
+@keyframes flower-model-status-flower-twirl {
+  0% {
+    transform: translateY(0) rotate(0deg) scale(0.98);
+    animation-timing-function: cubic-bezier(0.55, 0, 1, 0.45);
   }
 
-  50% {
-    transform: scale(1.09);
+  12% {
+    transform: translateY(-0.5px) rotate(16deg) scale(1);
+    animation-timing-function: cubic-bezier(0.2, 0.82, 0.3, 1);
+  }
+
+  34% {
+    transform: translateY(-1px) rotate(142deg) scale(1.04);
+    animation-timing-function: linear;
+  }
+
+  62% {
+    transform: translateY(0.5px) rotate(292deg) scale(1.01);
+    animation-timing-function: cubic-bezier(0.42, 0, 0.78, 0.35);
+  }
+
+  80% {
+    transform: translateY(0) rotate(348deg) scale(0.99);
+    animation-timing-function: cubic-bezier(0.2, 0.8, 0.3, 1);
+  }
+
+  90% {
+    transform: translateY(-0.5px) rotate(360deg) scale(1);
+    animation-timing-function: cubic-bezier(0.65, 0, 0.8, 1);
+  }
+
+  95% {
+    transform: translateY(-0.25px) rotate(367deg) scale(1.02);
+    animation-timing-function: cubic-bezier(0.2, 0.9, 0.3, 1);
+  }
+
+  100% {
+    transform: translateY(0) rotate(360deg) scale(0.98);
   }
 }
 
@@ -11503,7 +11532,7 @@ button.flower-attachment-preview-trigger:disabled {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .flower-model-status-flower .redeven-flower-icon-center,
+  .flower-model-status-flower,
   .flower-model-status-dots,
   .flower-activity-waiting-clock,
   .flower-activity-waiting-clock::before,

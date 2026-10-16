@@ -1,9 +1,29 @@
 <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
   <style>
+    .flower-background, .flower-core { display: none; }
     @media (max-width: 16px) {
       svg { --flower-icon-petal-stroke: 1.4; }
     }
+    @media (prefers-color-scheme: dark) {
+      path { stroke: #64748b; stroke-width: 0.45; stroke-opacity: 0.18; stroke-linejoin: miter; opacity: 0.95; }
+      path:nth-child(even) { stroke-opacity: 0.13; opacity: 0.85; }
+      .flower-center { fill: url(#c); stroke: none; }
+      .flower-background, .flower-core { display: inline; }
+    }
   </style>
+  <defs>
+    <radialGradient id="bg" cx="35%" cy="35%" r="75%">
+      <stop offset="0%" stop-color="#94a3b8" stop-opacity="0.22" />
+      <stop offset="55%" stop-color="#cbd5e1" stop-opacity="0.18" />
+      <stop offset="100%" stop-color="#f59e0b" stop-opacity="0.14" />
+    </radialGradient>
+    <radialGradient id="c" cx="50%" cy="45%" r="50%">
+      <stop offset="0%" stop-color="#fde68a" />
+      <stop offset="65%" stop-color="#fbbf24" />
+      <stop offset="100%" stop-color="#f59e0b" />
+    </radialGradient>
+  </defs>
+  <circle class="flower-background" cx="12" cy="12" r="11" fill="url(#bg)" />
   <g fill="#ffffff" stroke="#697788" stroke-width="var(--flower-icon-petal-stroke, 1.15)" stroke-linejoin="round">
     <path d="M 12 12 C 9.8 10, 7.2 7, 8.2 4.5 C 8.7 3, 10.3 1.8, 12 1.8 C 13.7 1.8, 15.3 3, 15.8 4.5 C 16.8 7, 14.2 10, 12 12 Z" transform="rotate(0 12 12)" />
     <path d="M 12 12 C 9.8 10, 7.2 7, 8.2 4.5 C 8.7 3, 10.3 1.8, 12 1.8 C 13.7 1.8, 15.3 3, 15.8 4.5 C 16.8 7, 14.2 10, 12 12 Z" transform="rotate(72 12 12)" />
@@ -11,5 +31,6 @@
     <path d="M 12 12 C 9.8 10, 7.2 7, 8.2 4.5 C 8.7 3, 10.3 1.8, 12 1.8 C 13.7 1.8, 15.3 3, 15.8 4.5 C 16.8 7, 14.2 10, 12 12 Z" transform="rotate(216 12 12)" />
     <path d="M 12 12 C 9.8 10, 7.2 7, 8.2 4.5 C 8.7 3, 10.3 1.8, 12 1.8 C 13.7 1.8, 15.3 3, 15.8 4.5 C 16.8 7, 14.2 10, 12 12 Z" transform="rotate(288 12 12)" />
   </g>
-  <circle cx="12" cy="12" r="3" fill="#e9b13b" stroke="#a87013" stroke-width="0.75" />
+  <circle class="flower-center" cx="12" cy="12" r="3" fill="#e9b13b" stroke="#a87013" stroke-width="0.75" />
+  <circle class="flower-core" cx="12" cy="12" r="1.5" fill="#f59e0b" opacity="0.45" />
 </svg>

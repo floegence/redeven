@@ -760,6 +760,7 @@ export default mergeConfig(viteConfig, defineConfig({
         emulateMediaPreferences: async (
           { page },
           preferences: {
+            colorScheme?: null | 'light' | 'dark';
             forcedColors?: null | 'active' | 'none';
             reducedMotion?: null | 'reduce' | 'no-preference';
           },

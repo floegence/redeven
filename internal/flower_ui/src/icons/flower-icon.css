@@ -1,3 +1,25 @@
+.redeven-flower-icon-core { display: none; }
+
+.dark .redeven-flower-icon path {
+  stroke: currentColor;
+  stroke-width: 0.45;
+  stroke-opacity: 0.18;
+  stroke-linejoin: miter;
+  opacity: 0.95;
+}
+
+.dark .redeven-flower-icon path:nth-child(even) {
+  stroke-opacity: 0.13;
+  opacity: 0.85;
+}
+
+.dark .redeven-flower-icon-center {
+  fill: var(--flower-icon-center-gradient);
+  stroke: none;
+}
+
+.dark .redeven-flower-icon-core { display: inline; }
+
 .redeven-flower-soft-aura {
   display: inline-flex;
   align-items: center;

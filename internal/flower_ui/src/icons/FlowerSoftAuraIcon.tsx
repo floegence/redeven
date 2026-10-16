@@ -2,7 +2,6 @@ import type { Component, JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 
 import { FlowerIcon } from './FlowerIcon';
-import './flower-icon.css';
 
 export interface FlowerSoftAuraIconProps {
   class?: string;
