@@ -10526,9 +10526,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const copyText = createMemo(() => messageCopyText(message(), blocks()));
     const messageTime = createMemo(() => formatMessageTime(message().created_at_ms));
     const assistantCopyBlockKey = createMemo(() => {
-      const turn = thread()?.turns?.find(value => value.turn_id === message().turn_id);
-      const finalAnswer = !turn?.final_boundary_complete || turn.final_item_ids.includes(message().id);
-      return message().role === 'assistant' && finalAnswer ? lastCopyableContentBlockKey(blocks()) : '';
+      const currentMessage = message();
+      const turn = thread()?.turns?.find(value => value.turn_id === currentMessage.turn_id && value.run_id === currentMessage.run_id);
+      return currentMessage.role === 'assistant' && turn?.final_boundary_complete && turn.final_item_ids.includes(currentMessage.id)
+        ? lastCopyableContentBlockKey(blocks()) : '';
     });
     const canActivateContextChip = (chip: FlowerChatContextChip): boolean => {
       const action = chip.action;

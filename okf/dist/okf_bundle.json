@@ -35303,7 +35303,7 @@
         "title": "Flower citations",
         "type": "UI Contract"
       },
-      "body_length": 9809,
+      "body_length": 10110,
       "summary": "- Authority: published Floret v7.32.0 assistant messages own durable sources; Flower reads current views and historical pages through the existing thread projection.\n- Outcome: provider citation markers in prose become readable links with source titles. Copying a message removes those markers.\n- Invariants: ranges use end-exclusive Unicode code-point indices in the exact assistant text. URLs must be HTTP(S), without credentials, whitespace or control characters. Marker identifiers never establish a URL.\n- Failure boundary: unmatched sources appear at the end of the completed message. Historical provider markers without stored sources show localized unavailable text; Flower never reconstructs missing provider facts. Explicit Markdown bibliographies remain authored content.",
       "sections": [
         {
@@ -42676,5 +42676,5 @@
       ]
     }
   ],
-  "source_sha256": "3c5d965b22876a8d75f035b4ef9b3455a2aacef12c64245909c6452d52eb1d14"
+  "source_sha256": "f35632d3f7b7d416cfbf3c46cf318c6110cc5562a7a9034137046fe73e028e80"
 }

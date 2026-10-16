@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-16: Final-only answer actions
+
+- Show [answer actions and completion time](ui/flower-citations.md#final-answer-actions) only for canonical final items; keep intermediate narration, active streams and unconfirmed outcomes free of final-answer controls.
+
 ## 2026-10-16 — Flower settings dialog
 
 - Open [Flower settings](ui/flower-setup-and-settings.md#retained-panels) over the
