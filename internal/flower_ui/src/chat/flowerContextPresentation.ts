@@ -1,5 +1,5 @@
 import { FLOWER_CONTEXT_CATEGORIES } from '../contracts/flowerSurfaceContracts';
-import type { FlowerContextCompaction, FlowerContextUsage, FlowerContextSample, FlowerThreadTokenUsage } from '../contracts/flowerSurfaceContracts';
+import type { FlowerContextCompaction, FlowerContextUsage, FlowerContextSample, FlowerModelContext, FlowerThreadTokenUsage } from '../contracts/flowerSurfaceContracts';
 import type { FlowerSurfaceCopy } from '../copy';
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../copy';
 import { trimString } from '../flowerSurfaceModel';
@@ -44,6 +44,19 @@ export function buildFlowerContextComposition(usage: FlowerContextUsage) {
   const total = rows.reduce((sum, row) => sum + row.tokens, 0);
   if (!Number.isSafeInteger(total) || total <= 0) return null;
   return { total, rows: rows.map(row => ({ ...row, share: row.tokens / total * 100 })) };
+}
+
+// Snapshot text has character counts, not request-scoped token measurements.
+export function buildFlowerModelContextDistribution(sections: FlowerModelContext['snapshot']['sections']) {
+  const rows = sections.map(section => {
+    let characters = 0;
+    for (let index = 0; index < section.text.length; characters++) {
+      index += section.text.codePointAt(index)! > 0xffff ? 2 : 1;
+    }
+    return { ...section, characters };
+  }).sort((a, b) => b.characters - a.characters);
+  const total = rows.reduce((sum, row) => sum + row.characters, 0);
+  return { total, rows: rows.map(row => ({ ...row, share: total > 0 ? row.characters / total * 100 : 0 })) };
 }
 
 export type FlowerComposerContextIndicatorView = Readonly<{

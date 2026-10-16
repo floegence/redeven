@@ -13,7 +13,7 @@ const facts: FlowerModelContext = { snapshot: { sections: [{ key: 'skills', titl
  entry_id: 'facts-entry', path_depth: 1, turn_id: 'turn-a', run_id: 'run-a', updated_at: '2026-10-15T12:00:00Z', changed_keys: ['skills'], removed_keys: [] };
 
 describe('Flower managed context panel', () => {
- it('opens by touch, retains section focus and dismisses without trapping navigation', async () => {
+ it('opens the loaded context distribution with one disclosure and dismisses without trapping navigation', async () => {
   const host = document.createElement('div'); document.body.append(host);
   disposers.push(render(() => <FlowerComposerContextIndicator modelContext={facts} copy={DEFAULT_FLOWER_SURFACE_COPY} />, host));
   const trigger = host.querySelector('[role="progressbar"]') as HTMLElement;
@@ -22,16 +22,18 @@ describe('Flower managed context panel', () => {
   trigger.focus(); trigger.click();
   expect(panel.getAttribute('data-open')).toBe('true');
   const disclosure = host.querySelector('.flower-model-context-disclosure') as HTMLElement;
+  expect(host.querySelector('.flower-model-context-row')).toBeNull();
   disclosure.click();
   await expect.poll(() => host.querySelector('.flower-model-context-row')).not.toBeNull();
-  const summary = host.querySelector('.flower-model-context-row') as HTMLElement;
-  summary.tabIndex = 0; summary.focus();
+  disclosure.focus();
   expect(panel.getAttribute('data-open')).toBe('true');
   expect(host.querySelector('.flower-context-composition')).toBeNull();
   expect(host.textContent).not.toContain('Complete selectable catalog');
-  summary.click();
-  await expect.poll(() => host.textContent).toContain('Complete selectable catalog');
-  summary.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  expect(host.querySelector('.flower-model-context-row details, .flower-model-context-row summary, pre')).toBeNull();
+  expect(host.querySelector('.flower-model-context-row .flower-model-context-fill')?.getAttribute('style')).toContain('100%');
+  expect(host.querySelector('.flower-model-context-row')?.textContent).toContain('100%');
+  expect(host.textContent).toContain('27 chars');
+  disclosure.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
   expect(panel.getAttribute('aria-hidden')).toBe('true');
   trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
   expect(panel.getAttribute('data-open')).toBe('true');
@@ -41,6 +43,30 @@ describe('Flower managed context panel', () => {
   expect(panel.getAttribute('data-open')).toBe('true');
   const outside = document.createElement('button'); document.body.append(outside); outside.focus();
   expect(panel.getAttribute('aria-hidden')).toBe('true');
+ });
+ it('shows every loaded category as a bar and keeps disclosure focus during live updates', async () => {
+  const [context, update] = createSignal({ ...facts, snapshot: { sections: [
+   { key: 'skills', title: 'Skills', text: '🌸abc' },
+   { key: 'repository', title: 'Repository', text: 'xy' },
+   { key: 'local_time', title: 'Time', text: '' },
+  ] } });
+  const host = document.createElement('div'); document.body.append(host);
+  disposers.push(render(() => <FlowerComposerContextIndicator modelContext={context()} copy={DEFAULT_FLOWER_SURFACE_COPY} />, host));
+  (host.querySelector('[role="progressbar"]') as HTMLElement).focus();
+  const disclosure = host.querySelector('.flower-model-context-disclosure') as HTMLElement;
+  disclosure.click(); disclosure.focus();
+  await expect.poll(() => host.querySelectorAll('.flower-model-context-row').length).toBe(3);
+  const shares = () => [...host.querySelectorAll('.flower-model-context-row .flower-model-context-share')].map(row => row.textContent);
+  expect(shares()).toEqual(['66.7%', '33.3%', '0%']);
+  expect(host.querySelectorAll('.flower-model-context-track')).toHaveLength(3);
+  expect(host.querySelectorAll('details')).toHaveLength(1);
+  expect(host.querySelectorAll('summary')).toHaveLength(1);
+  update({ ...context(), snapshot: { sections: context().snapshot.sections.map(section => ({ ...section, text: section.key === 'repository' ? 'x'.repeat(12) : section.text })) } });
+  expect(shares()).toEqual(['75%', '25%', '0%']);
+  expect(document.activeElement).toBe(disclosure);
+  expect(host.querySelector('details')?.open).toBe(true);
+  disclosure.click();
+  await expect.poll(() => host.querySelector('.flower-model-context-row')).toBeNull();
  });
  it('distinguishes collected facts from their first request use and updates live', () => {
   const [context, update] = createSignal(facts);

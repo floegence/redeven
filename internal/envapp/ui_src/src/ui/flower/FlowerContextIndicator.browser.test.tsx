@@ -110,12 +110,43 @@ for (const locale of ['en-US', 'zh-CN'] as const) {
         ] },
       };
       setUsage(mapContextUsage({ confirmed, thread_usage, recent_request_usage: { input_tokens: 25, output_tokens: 10, cache_read_tokens: 75, cache_write_tokens: 0 } })!);
+      setFacts(context);
+      progress.focus();
+      const disclosure = tooltip.querySelector<HTMLElement>('.flower-model-context-disclosure')!;
+      expect(tooltip.querySelector('.flower-model-context-row')).toBeNull();
+      disclosure.focus();
+      await userEvent.keyboard('{Enter}');
+      await expect.poll(() => tooltip.querySelectorAll('.flower-model-context-row').length).toBe(6);
+      expect(tooltip.querySelectorAll('summary')).toHaveLength(1);
+      expect(tooltip.querySelector('pre')).toBeNull();
+      expect(tooltip.textContent).not.toContain('Complete selectable catalog');
+      const loadedRows = [...tooltip.querySelectorAll<HTMLElement>('.flower-model-context-row')];
+      expect(loadedRows[0]!.dataset.category).toBe('skills');
+      expect(loadedRows[0]!.textContent).toContain('80.5%');
+      for (const row of loadedRows) {
+        const track = row.querySelector<HTMLElement>('.flower-model-context-track')!;
+        const fill = row.querySelector<HTMLElement>('.flower-model-context-fill')!;
+        expect(track.getBoundingClientRect().width).toBeGreaterThan(100);
+        expect(getComputedStyle(fill).backgroundColor).toBe(getComputedStyle(row.querySelector('.flower-context-swatch')!).backgroundColor);
+        expect(fill.getBoundingClientRect().width).toBeGreaterThan(0);
+        expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth);
+      }
+      await expect.poll(() => getComputedStyle(tooltip).opacity).toBe('1');
+      expect(tooltip.getBoundingClientRect().top).toBeGreaterThanOrEqual(0);
+      if (import.meta.env.VITE_FLOWER_CONTEXT_SCREENSHOTS === '1') {
+        await page.screenshot({ path: `__screenshots__/context-loaded-${locale}-${dark ? 'dark' : 'light'}.png` });
+      }
+      setFacts({ ...context, snapshot: { sections: context.snapshot.sections.map(section => ({ ...section, text: section.text + '\nUpdated' })) } });
+      expect(document.activeElement).toBe(disclosure);
+      expect(tooltip.querySelector('details')?.open).toBe(true);
+      expect(tooltip.querySelector('.flower-model-context-row .flower-model-context-amount')?.textContent).toBe('836');
+      await userEvent.keyboard('{Enter}');
+      await expect.poll(() => tooltip.querySelector('.flower-model-context-row')).toBeNull();
       setUsage(mapContextUsage({ confirmed: { ...confirmed, breakdown: {
         source: 'semantic_input_bpe_v1', system_tokens: 3400, tool_definition_tokens: 23500,
         user_tokens: 4200, assistant_tokens: 3000, tool_call_tokens: 1700,
         tool_result_tokens: 29000, model_context_tokens: 5100, compaction_tokens: 800,
       } }, thread_usage, recent_request_usage: { input_tokens: 25, output_tokens: 10, cache_read_tokens: 75, cache_write_tokens: 0 } })!);
-      setFacts(context);
       progress.focus();
       await expect.poll(() => tooltip.getBoundingClientRect().height).toBeGreaterThan(200);
       const chartBounds = tooltip.getBoundingClientRect();
@@ -142,18 +173,23 @@ for (const locale of ['en-US', 'zh-CN'] as const) {
       if (import.meta.env.VITE_FLOWER_CONTEXT_SCREENSHOTS === '1') {
         await page.screenshot({ path: `__screenshots__/context-breakdown-${locale}-${dark ? 'dark' : 'light'}.png` });
       }
-      const disclosure = tooltip.querySelector<HTMLElement>('.flower-model-context-disclosure')!;
       disclosure.focus();
       await userEvent.keyboard('{Enter}');
       await expect.poll(() => tooltip.querySelectorAll('.flower-model-context-row').length).toBe(6);
-      const skill = tooltip.querySelector<HTMLElement>('[data-category="skills"] > summary')!;
-      skill.focus();
-      await userEvent.keyboard('{Enter}');
-      await expect.poll(() => tooltip.querySelector('pre')?.textContent).toContain('Complete selectable catalog');
-      setFacts({ ...context, snapshot: { sections: context.snapshot.sections.map(section => ({ ...section, text: section.text + '\nUpdated' })) } });
-      expect(document.activeElement).toBe(skill);
-      expect(tooltip.querySelector('details[open]')).not.toBeNull();
-      expect(tooltip.querySelector('pre')?.textContent).toContain('Updated');
+      expect(tooltip.getBoundingClientRect().top).toBeGreaterThanOrEqual(0);
+      expect(tooltip.getBoundingClientRect().height).toBeLessThanOrEqual(408);
+      expect(tooltip.scrollWidth).toBe(tooltip.clientWidth);
+      expect(tooltip.querySelectorAll('details, summary')).toHaveLength(2);
+      const lastBar = tooltip.querySelector<HTMLElement>('.flower-model-context-row:last-child .flower-model-context-track')!;
+      tooltip.scrollTop = tooltip.scrollHeight;
+      expect(lastBar.getBoundingClientRect().bottom).toBeLessThanOrEqual(tooltip.getBoundingClientRect().bottom);
+      if (import.meta.env.VITE_FLOWER_CONTEXT_SCREENSHOTS === '1') {
+        await page.viewport(440, 720);
+        tooltip.scrollTop = 0;
+        progress.focus();
+        expect(tooltip.scrollHeight).toBe(tooltip.clientHeight);
+        await page.screenshot({ path: `__screenshots__/context-expanded-${locale}-${dark ? 'dark' : 'light'}.png` });
+      }
       await userEvent.keyboard('{Escape}');
       expect(tooltip.getAttribute('aria-hidden')).toBe('true');
       expect(document.activeElement).toBe(progress);
@@ -192,11 +228,15 @@ it('keeps localized legends inside a narrow card and follows every shipped theme
   trigger.focus();
   const panel = host.querySelector<HTMLElement>('[role="region"]')!;
   await expect.poll(() => getComputedStyle(panel).opacity).toBe('1');
+  const disclosure = panel.querySelector<HTMLElement>('.flower-model-context-disclosure')!;
+  disclosure.focus();
+  await userEvent.keyboard('{Enter}');
+  await expect.poll(() => panel.querySelectorAll('.flower-model-context-row').length).toBe(6);
   for (const value of ['en-US', 'zh-CN', 'zh-TW', 'ja-JP', 'ko-KR', 'de-DE', 'fr-FR', 'es-ES', 'pt-BR', 'ru-RU'] as const) {
     setLocale(value);
     expect(panel.scrollWidth, value).toBe(panel.clientWidth);
-    expect(panel.scrollHeight, value).toBe(panel.clientHeight);
-    for (const row of panel.querySelectorAll<HTMLElement>('.flower-context-composition-row, .flower-context-window-stat')) {
+    expect(panel.getBoundingClientRect().height, value).toBeLessThanOrEqual(408);
+    for (const row of panel.querySelectorAll<HTMLElement>('.flower-context-composition-row, .flower-model-context-row, .flower-context-window-stat')) {
       expect(row.scrollWidth, `${value}: ${row.textContent}`).toBeLessThanOrEqual(row.clientWidth);
     }
     expect(panel.getBoundingClientRect().top, value).toBeGreaterThanOrEqual(0);
@@ -212,5 +252,9 @@ it('keeps localized legends inside a narrow card and follows every shipped theme
     expect(swatches.map(node => getComputedStyle(node).backgroundColor), preset.name)
       .toEqual(segments.map(node => getComputedStyle(node).backgroundColor));
     expect(panel.scrollWidth, preset.name).toBe(panel.clientWidth);
+    for (const row of panel.querySelectorAll('.flower-model-context-row')) {
+      expect(getComputedStyle(row.querySelector('.flower-model-context-fill')!).backgroundColor, preset.name)
+        .toBe(getComputedStyle(row.querySelector('.flower-context-swatch')!).backgroundColor);
+    }
   }
 });

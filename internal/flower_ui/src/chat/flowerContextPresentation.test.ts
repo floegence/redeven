@@ -1,4 +1,4 @@
-import { buildFlowerContextComposition } from './flowerContextPresentation';
+import { buildFlowerContextComposition, buildFlowerModelContextDistribution } from './flowerContextPresentation';
 import { describe, expect, it } from 'vitest';
 
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../copy';
@@ -193,5 +193,30 @@ describe('used context composition', () => {
     expect(result.rows).toEqual([{ key: 'tool_result_tokens', tokens: 300, share: 75 }, { key: 'user_tokens', tokens: 100, share: 25 }]);
     expect(buildFlowerContextComposition({ confirmed: base, estimate: { ...base, breakdown: { source: 'next', user_tokens: 10 } } })).toBeNull();
     expect(buildFlowerContextComposition({ estimate: { ...base, breakdown: { source: 'empty' } } })).toBeNull();
+  });
+});
+
+describe('auto-loaded context text distribution', () => {
+  it('counts Unicode characters and sorts by size without mutating canonical sections', () => {
+    const sections = [
+      { key: 'local_time', title: 'Time', text: '' },
+      { key: 'repository', title: 'Repository', text: '🌸a' },
+      { key: 'skills', title: 'Skills', text: 'abcd' },
+    ] as const;
+    const result = buildFlowerModelContextDistribution(sections);
+    expect(result.total).toBe(6);
+    expect(result.rows.map(({ key, characters, share }) => ({ key, characters, share }))).toEqual([
+      { key: 'skills', characters: 4, share: 4 / 6 * 100 },
+      { key: 'repository', characters: 2, share: 2 / 6 * 100 },
+      { key: 'local_time', characters: 0, share: 0 },
+    ]);
+    expect(sections.map(section => section.key)).toEqual(['local_time', 'repository', 'skills']);
+  });
+
+  it('keeps empty categories at zero without inventing token usage or percentages', () => {
+    expect(buildFlowerModelContextDistribution([])).toEqual({ total: 0, rows: [] });
+    expect(buildFlowerModelContextDistribution([{ key: 'skills', title: 'Skills', text: '' }])).toEqual({
+      total: 0, rows: [{ key: 'skills', title: 'Skills', text: '', characters: 0, share: 0 }],
+    });
   });
 });
