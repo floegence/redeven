@@ -50,7 +50,8 @@ export type FlowerContextSourceRow = { key: FlowerContextSource; tokens: number;
 // Attribution always belongs to the displayed request. Current snapshot text
 // and newer projected requests cannot be used to allocate confirmed usage.
 export function buildFlowerContextComposition(usage: FlowerContextUsage) {
-  const breakdown = (usage.confirmed ?? usage.estimate)?.breakdown;
+  const sample = usage.confirmed ?? usage.estimate;
+  const breakdown = sample?.breakdown;
   if (!breakdown?.source) return null;
   const rows = new Map<FlowerContextSource, FlowerContextSourceRow>();
   const add = (key: FlowerContextSource, tokens: number, item?: Omit<FlowerContextSourceRow['items'][number], 'share'>) => {
@@ -88,15 +89,33 @@ export function buildFlowerContextComposition(usage: FlowerContextUsage) {
     add('unattributed_tools', breakdown.tool_definition_tokens ?? 0);
     add('unattributed_context', breakdown.model_context_tokens ?? 0);
   }
-  const total = [...rows.values()].reduce((sum, row) => sum + row.tokens, 0);
-  if (!Number.isSafeInteger(total) || total <= 0) return null;
+  const weightTotal = [...rows.values()].reduce((sum, row) => sum + row.tokens, 0);
+  if (!Number.isSafeInteger(weightTotal) || weightTotal <= 0) return null;
   const ordered = [...rows.values()].sort((a, b) => b.tokens - a.tokens || FLOWER_CONTEXT_SOURCES.indexOf(a.key) - FLOWER_CONTEXT_SOURCES.indexOf(b.key));
   for (const row of ordered) {
-    row.share = row.tokens / total * 100;
+    row.share = row.tokens / weightTotal * 100;
     row.items.sort((a, b) => b.tokens - a.tokens || a.key.localeCompare(b.key));
     for (const item of row.items) item.share = item.tokens / row.tokens * 100;
   }
-  return { total, rows: ordered, showTokenAmounts: breakdown.quality === 'token_estimate' && !!breakdown.tokenizer && !breakdown.attachment_tokens, historical: !breakdown.quality };
+  const input = sample?.input_tokens;
+  const total = input !== undefined && Number.isSafeInteger(input) && input >= 0 ? input : null;
+  if (total !== null) {
+    // Round cumulative allocations so each group's displayed amounts add up.
+    const allocate = (entries: { tokens: number }[], amount: number) => {
+      const weight = entries.reduce((sum, entry) => sum + entry.tokens, 0);
+      let cumulative = 0;
+      let allocated = 0;
+      for (const entry of entries) {
+        cumulative += entry.tokens;
+        const next = Math.round(amount * (cumulative / weight));
+        entry.tokens = next - allocated;
+        allocated = next;
+      }
+    };
+    allocate(ordered, total);
+    for (const row of ordered) allocate(row.items, row.tokens);
+  }
+  return { total, rows: ordered, showTokenAmounts: total !== null, historical: !breakdown.quality };
 }
 
 export type FlowerComposerContextIndicatorView = Readonly<{

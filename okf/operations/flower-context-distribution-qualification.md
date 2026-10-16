@@ -116,6 +116,12 @@ portable committed fixtures. The 24 synthetic upstream fixtures are committed.
 
 ## Presentation and regression coverage
 
+The following records the original qualification behavior. The current
+[presentation contract](../ai/flower-managed-model-context.md#presentation)
+uses proportional token estimates for all recorded distribution qualities,
+including media and historical samples. This display-only follow-up does not
+change the estimator measurements or recorded live-task outcomes below.
+
 The displayed total prefers native usage. Its content distribution comes from
 the same request. Matching vocabulary plus complete text permits approximate
 token amounts and shares. Media, opaque inputs or unmatched vocabularies show

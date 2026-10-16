@@ -115,17 +115,23 @@ canonical managed-section token estimates. Flower groups only its known source
 values and section keys. It never guesses from tool names or parses prompt text.
 
 Every source uses an aligned horizontal bar and a share of this request's
-content weight. Only an explicit token-estimate quality with matching tokenizer
-and complete textual coverage shows approximate token amounts. Proxy vocabularies,
-media and opaque input show relative shares only, including tooltips and accessible
-text. Legacy records show labeled historical shares; absent breakdowns show an
-unavailable state. Content and protocol framing share the upstream counting core;
-safety margins and media budget reserves do not enter category shares. Native input, output reserve and free capacity remain a
-separate capacity bar. Parent source weights replace their detailed weights;
-they are never added twice or scaled to match native usage. Confirmed total and
-composition describe the same request; newer snapshots and projected requests
-cannot fill gaps in an older sample. Historical missing source data is visibly
-unattributed, with no inferred MCP/system split or character-based allocation.
+content weight. Flower estimates category token amounts by allocating the displayed
+used-context total according to those shares, regardless of tokenizer quality or
+media coverage. Child amounts allocate their parent total by their group shares.
+Integer rounding preserves category and group sums; every amount carries an
+approximation mark, including tooltips and accessible labels. A short proportional
+estimate label explains the calculation. Legacy records retain a historical
+estimate label. A missing used-context total leaves shares only; a missing
+breakdown shows an unavailable state. These are display estimates, not
+provider-measured category counts or changes to Floret's budget calculations.
+Content and protocol framing share the upstream counting core; safety margins
+and media budget reserves do not enter category shares. The capacity bar separates
+used input and remaining capacity; request output limits stay separate. Parent
+source weights replace their detailed weights and are never added twice.
+Confirmed total and composition describe the same request; newer snapshots and
+projected requests cannot fill gaps in an older sample. Historical missing source
+data is visibly unattributed, with no inferred MCP/system split or character-based
+allocation.
 
 Sources with multiple fragments and tool sources have one collapsed disclosure.
 Opening a source reveals flat horizontal rows; no item expands again or exposes

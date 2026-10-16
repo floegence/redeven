@@ -185,12 +185,12 @@ describe('flower context presentation', () => {
  });
 
 describe('used context composition', () => {
-  it('uses the displayed request without rescaling estimates to native usage', () => {
+  it('allocates the displayed input total using that same request distribution', () => {
     const base = { phase: 'provider_usage', pressure_status: 'stable', updated_at_ms: 1, input_tokens: 10000 } as const;
     const result = buildFlowerContextComposition({ confirmed: { ...base, breakdown: { source: 'semantic_input_bpe_v1', tool_result_tokens: 300, user_tokens: 100 } },
       estimate: { ...base, phase: 'projected_request', breakdown: { source: 'next', tool_result_tokens: 90000 } } })!;
-    expect(result.total).toBe(400);
-    expect(result.rows.map(({ key, tokens, share }) => ({ key, tokens, share }))).toEqual([{ key: 'tool_outputs', tokens: 300, share: 75 }, { key: 'messages', tokens: 100, share: 25 }]);
+    expect(result.total).toBe(10000);
+    expect(result.rows.map(({ key, tokens, share }) => ({ key, tokens, share }))).toEqual([{ key: 'tool_outputs', tokens: 7500, share: 75 }, { key: 'messages', tokens: 2500, share: 25 }]);
     expect(buildFlowerContextComposition({ confirmed: base, estimate: { ...base, breakdown: { source: 'next', user_tokens: 10 } } })).toBeNull();
     expect(buildFlowerContextComposition({ estimate: { ...base, breakdown: { source: 'empty' } } })).toBeNull();
   });
@@ -199,7 +199,7 @@ describe('used context composition', () => {
 
 describe('request source attribution', () => {
   it('separates registry origins and managed sections without adding parent weights again', () => {
-    const sample = { phase: 'provider_usage', pressure_status: 'stable', updated_at_ms: 1 } as const;
+    const sample = { phase: 'provider_usage', pressure_status: 'stable', updated_at_ms: 1, input_tokens: 1050 } as const;
     const result = buildFlowerContextComposition({ confirmed: { ...sample, breakdown: { source: 'semantic_input_bpe_v2',
       system_tokens: 100, tool_definition_tokens: 600, model_context_tokens: 240,
       user_tokens: 30, assistant_tokens: 20, tool_call_tokens: 10, tool_result_tokens: 50,
@@ -237,19 +237,55 @@ describe('request source attribution', () => {
 
 
 describe('distribution quality', () => {
-  it('keeps protocol formatting separate from content and budget reserves', () => {
+  it('includes protocol formatting in shares without adding budget reserves to the total', () => {
     const result = buildFlowerContextComposition({ estimate: { phase: 'projected_request', pressure_status: 'stable', updated_at_ms: 1,
       input_tokens: 900, breakdown: { source: 'rendered', quality: 'token_estimate', tokenizer: 'deepseek_v4', user_tokens: 100, framing_tokens: 20 } } })!;
-    expect(result.total).toBe(120);
+    expect(result.total).toBe(900);
     expect(result.showTokenAmounts).toBe(true);
+    expect(result.rows.find(row => row.key === 'protocol_framing')?.tokens).toBe(150);
     expect(result.rows.find(row => row.key === 'protocol_framing')?.share).toBeCloseTo(100 / 6);
   });
-  it('uses relative shares for unknown vocabularies, media and historical records', () => {
+  it('shows proportional amounts for unknown vocabularies, media and historical records', () => {
     for (const metadata of [{}, { quality: 'relative_weight' as const }, { quality: 'token_estimate' as const, tokenizer: 'deepseek_v4', attachment_tokens: 10 }]) {
       const result = buildFlowerContextComposition({ confirmed: { phase: 'provider_usage', pressure_status: 'stable', updated_at_ms: 1,
-        breakdown: { source: 'recorded', user_tokens: 100, ...metadata } } })!;
-      expect(result.showTokenAmounts).toBe(false);
+        input_tokens: 1100, breakdown: { source: 'recorded', user_tokens: 100, ...metadata } } })!;
+      expect(result.showTokenAmounts).toBe(true);
+      expect(result.total).toBe(1100);
+      expect(result.rows.reduce((sum, row) => sum + row.tokens, 0)).toBe(1100);
       expect(result.historical).toBe(!metadata.quality);
     }
+  });
+  it('keeps rounded category and nested allocations additive without changing their shares', () => {
+    const result = buildFlowerContextComposition({ confirmed: { phase: 'provider_usage', pressure_status: 'stable', updated_at_ms: 1,
+      input_tokens: 7, breakdown: { source: 'rendered', system_tokens: 2, tool_definition_tokens: 3, user_tokens: 1,
+        details: { items: [
+          { category: 'tool_definition', key: 'first', source: 'mcp', tokens: 1 },
+          { category: 'tool_definition', key: 'second', source: 'mcp', tokens: 1 },
+          { category: 'tool_definition', key: 'third', source: 'mcp', tokens: 1 },
+        ] } } } })!;
+    expect(result.rows.map(row => [row.key, row.tokens])).toEqual([['mcp_tools', 4], ['system_prompt', 2], ['messages', 1]]);
+    expect(result.rows.reduce((sum, row) => sum + row.tokens, 0)).toBe(7);
+    const group = result.rows[0];
+    expect(group.share).toBe(50);
+    expect(group.items.map(item => item.tokens)).toEqual([1, 2, 1]);
+    expect(group.items.reduce((sum, item) => sum + item.tokens, 0)).toBe(group.tokens);
+    expect(group.items.every(item => Math.abs(item.share - 100 / 3) < 1e-10)).toBe(true);
+  });
+  it('shows zero amounts but keeps only shares when the displayed request total is unavailable', () => {
+    const sample = { phase: 'provider_usage', pressure_status: 'stable', updated_at_ms: 1,
+      breakdown: { source: 'rendered', user_tokens: 2, system_tokens: 1 } } as const;
+    const zero = buildFlowerContextComposition({ confirmed: { ...sample, input_tokens: 0 } })!;
+    expect(zero.total).toBe(0);
+    expect(zero.showTokenAmounts).toBe(true);
+    expect(zero.rows.every(row => row.tokens === 0)).toBe(true);
+    for (const input_tokens of [undefined, NaN, Infinity, -1]) {
+      const unknown = buildFlowerContextComposition({ confirmed: { ...sample, input_tokens }, estimate: { ...sample, input_tokens: 100 } })!;
+      expect(unknown.total).toBeNull();
+      expect(unknown.showTokenAmounts).toBe(false);
+      expect(unknown.rows[0].share).toBeCloseTo(200 / 3);
+    }
+    const estimate = buildFlowerContextComposition({ estimate: { ...sample, phase: 'projected_request', input_tokens: 300 } })!;
+    expect(estimate.total).toBe(300);
+    expect(estimate.rows[0].tokens).toBe(200);
   });
 });
