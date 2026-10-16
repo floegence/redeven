@@ -7,6 +7,14 @@ timestamp: 2026-10-16T00:00:00Z
 ---
 # Summary
 
+Flower now consumes one frozen-request estimator for content distribution and
+safety budgets. This report records the fixed 24-request native-usage comparison,
+real DeepSeek Flash tasks, retained compaction-oracle failures and presentation
+regressions. Content amounts remain estimates; safety reserves and native totals
+have separate meanings. No production prompt is changed.
+
+# Contract
+
 Date: 2026-10-16. Upstream: published Floret v7.47.1, commit
 6962bd2. This task changes estimation, attribution and presentation, not prompts.
 
@@ -39,6 +47,8 @@ transient source intervals being lost when cached message snapshots or retry
 JSON were reconstructed. v7.47.1 preserves detached canonical intervals at those
 boundaries without persisting a parallel source projection. Cache reuse, frozen
 retry and consumer mutation tests cover that correction.
+
+# Evidence
 
 ## Fixed native-usage comparison
 
@@ -128,6 +138,13 @@ published Floret dependency boundaries, live protocol and generated OKF checks.
 Floret's complete Go suite, v7 compatibility, candidate and published-release
 adoption checks passed before release. Normal Redeven commit hooks are required.
 The Redeven push gate is intentionally excluded and no Redeven code is pushed.
+
+# Boundaries
+
+This evidence applies to the fixed synthetic inputs and recorded real tasks. It
+does not establish exact provider category counts or certify other providers
+through live calls. Other protocols are covered by deterministic request tests.
+Credentials and private runtime state stay outside maintained source.
 
 Earlier unrelated prompt qualification remains **119/120**, including its
 remaining failure. This report does not certify that prompt lane as all passed.
