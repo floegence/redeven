@@ -21,6 +21,7 @@ import type {
 } from '../shared/runtimeSecurity';
 
 export type TwoFactorSettingsProps = {
+  available?: boolean;
   environmentID: string;
   runtimeStartedAt?: number;
   configureHTTPS: () => void;
@@ -98,7 +99,7 @@ export function createTwoFactorSettings(props: TwoFactorSettingsProps) {
   ) => props.i18n.t(`security.${key}`);
   const close = () => {
     const id = operation()?.operation_id;
-    if (id)
+    if (id && props.available !== false)
       void props
         .manage({ action: 'cancel', operation_id: id })
         .catch(() => undefined);
@@ -118,7 +119,7 @@ export function createTwoFactorSettings(props: TwoFactorSettingsProps) {
     request: SecurityRequest,
     next?: 'scan' | 'recovery' | 'closed',
   ) => {
-    if (busy()) return;
+    if (busy() || props.available === false) return;
     const current = generation;
     setBusy(true);
     setError('');
@@ -197,19 +198,26 @@ export function createTwoFactorSettings(props: TwoFactorSettingsProps) {
       environmentID,
       (_, previous) => {
         const interrupted = previous !== undefined && view() !== 'closed';
-        close();
-        const current = generation;
-        setStatus(undefined);
-        if (props.open === false) return;
-        void run({ action: 'status' }).then(() => {
-          if (generation === current && interrupted && !error()) setError(props.i18n.t('security.runtimeChanged'));
-        });
+        if (props.open === false || !interrupted) {
+          close(); setStatus(undefined);
+          if (props.open !== false) void run({ action: 'status' });
+          return;
+        }
+        // IMPORTANT: Changed authority revokes consent, never the visible security draft or step.
+        generation++; setBusy(false); setOperation(undefined); setSaved(false);
+        setError(props.i18n.t('security.runtimeChanged'));
+
       },
     ),
   );
+  createEffect(on(() => props.available, value => {
+    if (value !== false) return;
+    generation++; setBusy(false); setOperation(undefined); setSaved(false);
+    setError(props.i18n.t('interactionContinuity.unavailable'));
+  }, { defer: true }));
   onCleanup(close);
   const begin = (selected: SecurityAction) => {
-    if (busy() || !status()) return;
+    if (busy() || !status() || props.available === false) return;
     if ((selected === 'setup' || selected === 'replace') && requiresHTTPS()) {
       close();
       props.configureHTTPS();
@@ -250,13 +258,15 @@ export function createTwoFactorSettings(props: TwoFactorSettingsProps) {
     );
   };
   const copy = async () => {
+    const current = generation;
+    if (!operation() || props.available === false) return;
     try {
       await navigator.clipboard.writeText(
         operation()?.recovery_codes?.join('\n') ?? '',
       );
-      setCopied(true);
+      if (current === generation) setCopied(true);
     } catch {
-      setError(text('download'));
+      if (current === generation) setError(text('download'));
     }
   };
   const download = () => {
@@ -272,11 +282,13 @@ export function createTwoFactorSettings(props: TwoFactorSettingsProps) {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
   const copyKey = async () => {
+    const current = generation;
+    if (!operation() || props.available === false) return;
     try {
       await navigator.clipboard.writeText(operation()?.secret ?? '');
-      setKeyCopied(true);
+      if (current === generation) setKeyCopied(true);
     } catch {
-      setError(text('retry'));
+      if (current === generation) setError(text('retry'));
     }
   };
   const isEnrollment = () => action() === 'setup' || action() === 'replace';
@@ -366,7 +378,7 @@ export function TwoFactorSettings(props: TwoFactorSettingsProps & {
             <Button
               size="sm"
               variant="outline"
-              disabled={!status() || busy()}
+              disabled={props.available === false || !status() || busy()}
               onClick={() =>
                 status()!.enabled && !status()!.recovery_pending
                   ? setView('manage')
@@ -409,13 +421,14 @@ export function TwoFactorSettings(props: TwoFactorSettingsProps & {
       <EnvironmentSettingsPanel footer={<>
         <div class="environment-access-actions">
         <Button size="sm" variant="ghost" class="environment-access-close" disabled={busy()} onClick={cancel}>{text('cancel')}</Button>
-        <Show when={view() === 'verifyOwner'}><Button size="sm" type="submit" form="two-factor-owner" disabled={busy() || !ownerReady()} loading={busy()}>{text('continue')}</Button></Show>
-        <Show when={view() === 'scan'}><Button size="sm" type="submit" form="two-factor-verify" disabled={busy() || !codeValid()} loading={busy()}>{text('continue')}</Button></Show>
-        <Show when={view() === 'recovery'}><Button size="sm" disabled={busy() || (action() !== 'disable' && !saved())} loading={busy()} onClick={commit}>
+        <Show when={view() === 'verifyOwner'}><Button size="sm" type="submit" form="two-factor-owner" disabled={props.available === false || busy() || !ownerReady()} loading={busy()}>{text('continue')}</Button></Show>
+        <Show when={view() === 'scan' && operation()}><Button size="sm" type="submit" form="two-factor-verify" disabled={props.available === false || busy() || !operation() || !codeValid()} loading={busy()}>{text('continue')}</Button></Show>
+        <Show when={view() === 'recovery' && operation()}><Button size="sm" disabled={props.available === false || busy() || !operation() || (action() !== 'disable' && !saved())} loading={busy()} onClick={commit}>
           {text(action() === 'setup' ? 'enable' : action() === 'disable' ? 'disable' : 'confirm')}
         </Button></Show>
       </div></>}>
         <div ref={flow} class="two-factor-flow">
+          <Show when={!operation() && (view() === 'scan' || view() === 'recovery')}><Button size="sm" disabled={props.available === false || busy()} onClick={() => { setView('verifyOwner'); }}>{props.i18n.t('interactionContinuity.revalidate')}</Button></Show>
           <Show when={error()}><div role="alert" class="environment-access-save-error"><AlertCircle size={18} aria-hidden="true" /><span>{error()}</span></div></Show>
           <Show
             when={
@@ -549,7 +562,7 @@ export function TwoFactorSettings(props: TwoFactorSettingsProps & {
 
             </form>
           </Show>
-          <Show when={view() === 'scan'}>
+          <Show when={view() === 'scan' && operation()}>
             <div class="two-factor-heading">
               <h3 tabindex="-1">{text('connectTitle')}</h3>
               <p>{text('scan')}</p>
@@ -606,7 +619,7 @@ export function TwoFactorSettings(props: TwoFactorSettingsProps & {
 
             </form>
           </Show>
-          <Show when={view() === 'recovery'}>
+          <Show when={view() === 'recovery' && operation()}>
             <Show when={action() === 'disable'}>
               <div class="two-factor-heading">
                 <span class="two-factor-emblem" aria-hidden="true">

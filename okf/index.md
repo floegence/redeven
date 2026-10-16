@@ -153,6 +153,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Desktop shell theme state](desktop/desktop-shell-theme-state.md) - Global source, per-mode Floe presets, renderer synchronization, and native window colors.
 - [Desktop runtime bridge](desktop/desktop-runtime-bridge.md) - Separate Desktop direct lifecycle coordination from Runtime and optional access transports.
 - [Desktop Environment library](desktop/desktop-environment-library.md) - Group trusted Runtime, Cloud and Gateway routes once and browse source grids with consistent counts.
+- [Preserve Desktop interaction sessions](desktop/desktop-interaction-continuity.md) - Keep dialogs, popups, drafts and handoffs continuous through background refresh and enforce regression gates.
 - [Environment card presentation](desktop/desktop-environment-card-presentation.md) - Preserve original Env card tabs, facts, split footer, focus and geometry across refreshes.
 - [Desktop Welcome navigation](desktop/desktop-welcome-navigation.md) - Switch Environments and Flower immediately while retaining page state and honoring explicit host requests.
 - [Desktop Environment connections](desktop/desktop-environment-connections.md) - Identify each connection's host and apply one address scope and sharing policy across cards and settings.

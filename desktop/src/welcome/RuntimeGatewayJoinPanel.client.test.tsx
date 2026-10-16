@@ -55,12 +55,12 @@ describe('Runtime Gateway address and code interaction',()=>{
   expect(document.activeElement).toBe(option);expect(button(i18n.t('gatewayJoin.confirmEnable')).disabled).toBe(false);
   expect(perform.mock.calls.filter(([request])=>request.operation==='preview')).toHaveLength(1);
  });
- it('loads changed invitation seeds and requires verification again',async()=>{
+ it('preserves the active invitation when parent invitation seeds change',async()=>{
   const perform=vi.fn().mockImplementation(async request=>request.operation==='preview'?verified():status({joined:false,phase:'not_joined'}));
   const {setInvitation}=mount(perform);await settle();button(i18n.t('gatewayJoin.verify')).click();await settle();
   setInvitation('https://new.example:7443','regenerated-code');await settle();
-  expect([...document.querySelectorAll<HTMLInputElement>('input')].map(input=>input.value)).toEqual(['https://new.example:7443','regenerated-code']);
-  expect(document.querySelector('.redeven-gateway-join-summary')).toBeNull();expect(button(i18n.t('gatewayJoin.verify')).disabled).toBe(false);
+  expect([...document.querySelectorAll<HTMLInputElement>('input')].map(input=>input.value)).toEqual(['https://gateway.internal:7443','123456789ABCDEFGHJKMNPQRSTV']);
+  expect(document.querySelector('.redeven-gateway-join-summary')).not.toBeNull();expect(button(i18n.t('gatewayJoin.confirmEnable')).disabled).toBe(false);
  });
  it('does not restore a consumed invitation code when the inventory refreshes',async()=>{
   const perform=vi.fn().mockImplementation(async request=>request.operation==='preview'?verified():status({joined:request.operation!=='status',phase:request.operation==='status'?'not_joined':'joined'}));
@@ -125,7 +125,7 @@ describe('Runtime Gateway address and code interaction',()=>{
   expect(document.body.textContent).not.toContain(preview.gateway_name);expect(button(i18n.t('gatewayJoin.verify'))).toBeDefined();
  });
  it('invalidates verification when the target changes',async()=>{
-  const perform=vi.fn().mockResolvedValueOnce(status({joined:false,phase:'not_joined'})).mockResolvedValueOnce(verified()).mockResolvedValue(status({joined:false,phase:'not_joined'}));const {setTarget}=mount(perform);await settle();button(i18n.t('gatewayJoin.verify')).click();await settle();setTarget('ssh:other');await settle();expect(document.body.textContent).not.toContain(preview.gateway_name);
+  const perform=vi.fn().mockResolvedValueOnce(status({joined:false,phase:'not_joined'})).mockResolvedValueOnce(verified()).mockResolvedValue(status({joined:false,phase:'not_joined'}));const {setTarget}=mount(perform);await settle();button(i18n.t('gatewayJoin.verify')).click();await settle();setTarget('ssh:other');await settle();expect(document.body.textContent).toContain(preview.gateway_name);expect(button(i18n.t('gatewayJoin.confirmEnable')).disabled).toBe(true);expect(button(i18n.t('gatewayJoin.verify')).disabled).toBe(false);
  });
  it.each([['GATEWAY_INVITATION_EXPIRED','expired'],['GATEWAY_INVITATION_USED','used'],['GATEWAY_UNREACHABLE','unreachable'],['GATEWAY_IDENTITY_FAILED','identityFailed'],['INVITATION_AUTHENTICATION_FAILED','invalid']] as const)('preserves input and explains %s',async(error,key)=>{
   const perform=vi.fn().mockResolvedValueOnce(status({joined:false,phase:'not_joined'})).mockResolvedValue({ok:false,code:'cloud_link_failed',gateway_error_code:error});mount(perform);await settle();button(i18n.t('gatewayJoin.verify')).click();await settle();expect(document.querySelector('[role="alert"]')?.textContent).toBe(i18n.t(`gatewayJoin.${key}`));expect(document.querySelectorAll('input')[1]?.value).toBe('123456789ABCDEFGHJKMNPQRSTV');

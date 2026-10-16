@@ -1,4 +1,11 @@
 {
+  "interactionContinuity": {
+    "accepted": "Operação aceita. Aguardando os detalhes da execução.",
+  "unavailable": "O destino ou o acesso mudou. Sua entrada foi preservada. Verifique o destino atual antes de continuar.",
+  "revalidate": "Verificar destino atual",
+  "pending": "Aguardando a aceitação da operação…",
+  "rejected": "Não foi possível aceitar a operação. Verifique a conexão e tente novamente."
+},
   "sessionRestart": {
     "preparing": "Preparando reinicialização",
     "restarting": "Reiniciando o ambiente de execução",

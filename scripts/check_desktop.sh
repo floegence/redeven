@@ -68,9 +68,12 @@ main() {
     # coverage is intentionally owned by the final main pre-push gate. Routine
     # commits stay fast, while the focused Runtime compatibility matrix always
     # runs because it protects the open boundary.
+    # The focused continuity contract also runs at commit/integration boundaries;
+    # browser qualification remains owned by this full mode and its manual workflow.
     if [ "$mode" = "full" ]; then
       "$SCRIPT_DIR/check_desktop_electron_test_runtime.sh" "$dir"
       npm run test
+      npm run test:interaction-continuity:browser
       node scripts/run-ssh-settings-check.mjs
       node scripts/check-environment-settings.mjs
       node scripts/check-settings-hit-targets.mjs

@@ -1,7 +1,3 @@
-import { isShareableConnectionAddress } from '../shared/desktopEnvironmentConnection';
-import type { DesktopEnvironmentEntry } from '../shared/desktopLauncherIPC';
-import { environmentSupportsGuidancePopover } from './environmentGuidanceSession';
-import { buildEnvironmentCardEndpointsModel } from './viewModel';
 
 export type EnvironmentLibraryOverlayKind = 'runtime_menu' | 'primary_action_guidance' | 'lifecycle_progress' | 'endpoints';
 
@@ -14,6 +10,7 @@ export function closedEnvironmentLibraryOverlayState(): EnvironmentLibraryOverla
   return { kind: 'none' };
 }
 
+/** IMPORTANT: Only explicit session events change visibility; snapshots do not own it. */
 export function openEnvironmentLibraryOverlayState(
   kind: EnvironmentLibraryOverlayKind,
   environmentID: string,
@@ -60,44 +57,4 @@ export function environmentEndpointOverlaySelectedIDFor(
   return state.kind === 'endpoints' && state.environment_id === environmentID
     ? state.selected_endpoint_id
     : undefined;
-}
-
-function entrySupportsPrimaryActionGuidance(environment: DesktopEnvironmentEntry): boolean {
-  return environmentSupportsGuidancePopover(environment);
-}
-
-export function reconcileEnvironmentLibraryOverlayState(
-  state: EnvironmentLibraryOverlayState,
-  entries: readonly DesktopEnvironmentEntry[],
-): EnvironmentLibraryOverlayState {
-  if (state.kind === 'none') {
-    return state;
-  }
-
-  const environment = entries.find((entry) => entry.id === state.environment_id);
-  if (!environment) {
-    return closedEnvironmentLibraryOverlayState();
-  }
-
-  if (state.kind === 'runtime_menu' || state.kind === 'lifecycle_progress') {
-    return state;
-  }
-
-  if (state.kind === 'endpoints') {
-    const endpoints = buildEnvironmentCardEndpointsModel(environment);
-    if (endpoints.length === 0) {
-      return closedEnvironmentLibraryOverlayState();
-    }
-    return state.selected_endpoint_id !== undefined
-      && !endpoints.filter(isShareableConnectionAddress).some((endpoint) => endpoint.id === state.selected_endpoint_id)
-      ? {
-          kind: 'endpoints',
-          environment_id: state.environment_id,
-        }
-      : state;
-  }
-
-  return entrySupportsPrimaryActionGuidance(environment)
-    ? state
-    : closedEnvironmentLibraryOverlayState();
 }

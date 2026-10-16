@@ -1,4 +1,11 @@
 {
+  "interactionContinuity": {
+    "accepted": "操作已受理，正在等待執行詳細資訊。",
+  "unavailable": "目標或存取權限已變更。已保留你的輸入，請驗證目前目標後繼續。",
+  "revalidate": "驗證目前目標",
+  "pending": "正在等候操作受理…",
+  "rejected": "操作未能受理。請檢查連線後重試。"
+},
   "sessionRestart": {
     "preparing": "正在準備重新啟動",
     "restarting": "正在重新啟動執行階段",

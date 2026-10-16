@@ -1,7 +1,6 @@
 import type { DesktopEnvironmentEntry } from '../shared/desktopLauncherIPC';
 import {
   buildProviderBackedEnvironmentActionModel,
-  environmentOpenFlow,
   type EnvironmentActionIntent,
   type EnvironmentPrimaryActionOverlayModel,
 } from './viewModel';
@@ -336,52 +335,7 @@ export function guidanceSessionNotice(
   }
 }
 
-export function reconcileEnvironmentGuidanceSession(
-  state: EnvironmentGuidanceSessionState,
-  entries: readonly DesktopEnvironmentEntry[],
-): EnvironmentGuidanceSessionState {
-  if (!state) {
-    return state;
-  }
-  const environment = entries.find((entry) => entry.id === state.environment_id);
-  if (!environment) {
-    return null;
-  }
-  if (state.pending_intent === null && state.retry_intent) {
-    if (state.retry_intent === 'open_with_preflight') {
-      return state;
-    }
-    const currentRetryIntent = (() => {
-      switch (environmentOpenFlow(environment)) {
-        case 'preflight':
-          return 'open_with_preflight' as const;
-        case 'initialize':
-          return 'initialize_and_open' as const;
-        case 'start':
-          return 'start_and_open' as const;
-        case 'request_access':
-          return 'request_open_access' as const;
-        case 'direct':
-          return null;
-      }
-    })();
-    if (!currentRetryIntent) {
-      return completeEnvironmentGuidanceSuccess(state, environment);
-    }
-    if (currentRetryIntent !== state.retry_intent) {
-      return { ...state, retry_intent: currentRetryIntent };
-    }
-  }
-  if (guidanceSessionOwnsOpenFlowPanel(state)) {
-    return state;
-  }
-  if (!environmentSupportsGuidancePopover(environment)) {
-    return guidanceSessionKeepsPopoverOpen(state)
-      ? completeEnvironmentGuidanceSuccess(state, environment)
-      : null;
-  }
-  return state;
-}
+
 
 export function environmentSupportsGuidancePopover(
   environment: DesktopEnvironmentEntry,

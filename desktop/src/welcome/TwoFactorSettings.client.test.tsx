@@ -183,7 +183,8 @@ it('preserves enrollment while the same environment status refreshes', async () 
   setSnapshot({ environmentID: 'other-environment', revision: 1 });
   await settle();
   expect(document.querySelector('.two-factor-qr img')).toBeNull();
-  expect(manage).toHaveBeenCalledWith({ action: 'cancel', operation_id: 'pending-operation' });
+  expect(document.body.textContent).toContain('Verify current target');
+  expect(document.querySelector('.two-factor-flow')).not.toBeNull();
 });
 
 it('invalidates enrollment once after a Runtime restart and offers inline retry', async () => {
@@ -199,11 +200,11 @@ it('invalidates enrollment once after a Runtime restart and offers inline retry'
   setStarted(2); await settle();
   expect(document.querySelector('.two-factor-qr')).toBeNull();
   expect(document.body.textContent).toContain('Runtime restarted');
-  expect(manage.mock.calls.filter(([request]) => request.action === 'status')).toHaveLength(2);
+  expect(manage.mock.calls.filter(([request]) => request.action === 'status')).toHaveLength(1);
   setStarted(2); await settle();
-  expect(manage.mock.calls.filter(([request]) => request.action === 'status')).toHaveLength(2);
-  click('Retry'); await settle();
-  expect(document.body.textContent).not.toContain('Runtime restarted');
+  expect(manage.mock.calls.filter(([request]) => request.action === 'status')).toHaveLength(1);
+  click('Verify current target'); await settle();
+  expect(document.querySelector('#two-factor-owner')).not.toBeNull();
 });
 
 it('does not repeat failed status queries until the user retries', async () => {

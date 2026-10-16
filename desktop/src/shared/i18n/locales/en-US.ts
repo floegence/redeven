@@ -2,6 +2,13 @@ import { plural, type DeepWidenMessages, type DotPathByLeaf, type PluralMessage 
 import flowerSurfaceEnUS from './catalogs/en-US-flower.json';
 
 export const enUS = {
+  interactionContinuity: {
+  "unavailable": "This target or its access has changed. Your input is preserved. Verify the current target before continuing.",
+  "revalidate": "Verify current target",
+  "accepted": "Operation accepted. Waiting for execution details.",
+  "pending": "Waiting for operation acceptance…",
+  "rejected": "The operation could not be accepted. Review the connection and retry."
+},
   cloudRoute: {
   "approval": "Cloud approval",
   "connection": "Cloud connection",

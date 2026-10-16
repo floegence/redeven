@@ -25,6 +25,13 @@ function harness(load = vi.fn(async () => result()), save = vi.fn(async () => re
 }
 
 describe('unified environment settings session', () => {
+  it('revalidates authority with a new token while preserving dirty drafts', async()=>{
+    const pending=deferred<DesktopSettingsResult>();const h=harness(undefined,vi.fn(()=>pending.promise));h.open(environment(),{name:'saved'});h.selectTab('access');await settle();
+    h.updateDraft(draft=>({...draft,local_ui_bind:'localhost:26000'}));h.update({connection:{name:'edited'}});const previous=h.session()!;const save=h.saveAccess();
+    h.revalidate(environment());
+    expect(h.session()?.token).not.toBe(previous.token);expect(h.session()?.connection).toEqual({name:'edited'});expect(h.session()?.access?.draft.local_ui_bind).toBe('localhost:26000');
+    pending.resolve(result());await save;expect(h.session()?.access?.draft.local_ui_bind).toBe('localhost:26000');
+  });
   it.each([true, false])('opens the same session without remote I/O and keeps it after load success=%s', async success => {
     const h = harness(vi.fn(async () => success ? result() : { ok: false as const, error: 'Permission denied' }));
     h.open(environment(), { name: 'saved' });

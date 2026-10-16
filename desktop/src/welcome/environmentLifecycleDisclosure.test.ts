@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { environmentInteractionIdentity } from './environmentInteractionIdentity';
 
 import { buildDesktopWelcomeSnapshot } from '../main/desktopWelcomeState';
 import type { DesktopLauncherActionKind, DesktopLauncherActionProgress } from '../shared/desktopLauncherIPC';
@@ -12,7 +13,7 @@ import {
   testLocalEnvironment,
 } from '../testSupport/desktopTestHelpers';
 import {
-  abandonEnvironmentLifecycleDisclosureAttempt,
+  settleEnvironmentLifecycleDisclosureAttempt,
   beginEnvironmentLifecycleDisclosure,
   bindEnvironmentLifecycleDisclosureOperation,
   closeEnvironmentLifecycleDisclosure,
@@ -37,6 +38,19 @@ function localEnvironmentEntry() {
   }
   return entry;
 }
+
+it('retains reinstall progress but permanently revokes old consent after target loss or identity replacement', () => {
+  const environment = localEnvironmentEntry();
+  const progress = reinstallProgress({ environmentID: environment.id, operationKey: 'reinstall', startedAt: 300, status: 'needs_confirmation' });
+  const opened = { ...focusEnvironmentLifecycleDisclosure(null, environment.id, progress)!, authority_key: environmentInteractionIdentity(environment) };
+  for (const entries of [[], [{ ...environment, verified_runtime_identity: 'replacement' }]]) {
+    const invalid = reconcileEnvironmentLifecycleDisclosure(opened, entries, []);
+    expect(invalid?.last_progress).toBe(progress);
+    expect(invalid?.visibility).toBe('open');
+    expect(invalid?.authority_revoked).toBe(true);
+    expect(reconcileEnvironmentLifecycleDisclosure(invalid, [environment], [progress])?.authority_revoked).toBe(true);
+  }
+});
 
 function lifecycleProgress(environmentID: string, startedAt = 100): DesktopLauncherActionProgress {
   return {
@@ -665,8 +679,8 @@ describe('environmentLifecycleDisclosure', () => {
     });
     const bound = reconcileEnvironmentLifecycleDisclosure(state, [environment], [current]);
 
-    expect(abandonEnvironmentLifecycleDisclosureAttempt(state, environment.id, attempt)).toBeNull();
-    expect(abandonEnvironmentLifecycleDisclosureAttempt(bound, environment.id, attempt)).toBe(bound);
+    expect(settleEnvironmentLifecycleDisclosureAttempt(state, environment.id, attempt, false)).toMatchObject({ submission: 'failed' });
+    expect(settleEnvironmentLifecycleDisclosureAttempt(bound, environment.id, attempt, false)).toBe(bound);
   });
 
   it('routes an exact external focus request through the same disclosure state', () => {
@@ -704,4 +718,10 @@ describe('environmentLifecycleDisclosure', () => {
       preflight_id: 'preflight-confirmation',
     })).toBe(false);
   });
+});
+
+it('retains an opened disclosure when an observational inventory temporarily omits its owner', () => {
+  const environment = localEnvironmentEntry();
+  const state = beginDisclosure(environment.id, 'update_runtime');
+  expect(reconcileEnvironmentLifecycleDisclosure(state, [], [])).toBe(state);
 });

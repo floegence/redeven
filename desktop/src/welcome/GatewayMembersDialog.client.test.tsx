@@ -7,6 +7,7 @@ import { controlText } from '../testSupport/controlText';
 import { catalogFixture, invitationFixture, memberFixture } from '../testSupport/gatewayMembershipFixture';
 import type { DesktopGatewaySource } from '../shared/desktopGateway';
 import type { DesktopLauncherActionResult } from '../shared/desktopLauncherIPC';
+import type { DesktopCloudRuntimeLinkTarget } from '../shared/providerRuntimeLinkTarget';
 
 let dispose: (() => void) | undefined;
 const settle = () => new Promise(resolve => setTimeout(resolve, 40));
@@ -26,15 +27,45 @@ function button(label: string) {
 function select(element: HTMLSelectElement, value: string) {
   element.value = value; element.dispatchEvent(new Event('change', { bubbles: true }));
 }
-function mount(perform: ReturnType<typeof vi.fn>, refresh = vi.fn(async () => {}), source = gateway, section: 'connection' | 'runtimes' = 'runtimes') {
+function mount(perform: ReturnType<typeof vi.fn>, refresh = vi.fn(async () => {}), source = gateway, section: 'connection' | 'runtimes' = 'runtimes', targets: readonly DesktopCloudRuntimeLinkTarget[] = []) {
   vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
   const root = document.createElement('div'); document.body.append(root);
   const [current, setCurrent] = createSignal<DesktopGatewaySource | undefined>(source);
-  dispose = render(() => <GatewayMembersPanel gateway={current()} section={section} targets={[]} i18n={i18n} refresh={refresh} />, root);
+  dispose = render(() => <GatewayMembersPanel gateway={current()} section={section} targets={targets} i18n={i18n} refresh={refresh} />, root);
   return setCurrent;
 }
 beforeEach(() => { vi.stubGlobal('CSS', { escape: (v: string) => v }); HTMLElement.prototype.scrollIntoView = vi.fn(); });
-afterEach(() => { dispose?.(); document.body.replaceChildren(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+afterEach(() => { dispose?.(); document.body.replaceChildren(); vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.useRealTimers(); });
+
+it('retains nested invitation consent on expiry but blocks submission until a fresh invitation is verified', async () => {
+  vi.useFakeTimers();
+  const delivery = { ...invitationFixture, expires_at_unix_ms: Date.now() + 1500 };
+  const perform = vi.fn().mockImplementation(async request => request.kind === 'invite_gateway_runtime'
+    ? { ok: true, gateway_invitation_code: delivery }
+    : request.operation === 'preview'
+      ? { ok: true, gateway_preview: { preview_id: 'preview', purpose: 'join', gateway_id: gateway.gateway_id, gateway_name: 'Office Gateway', target_runtime_id: 'runtime', expires_at_unix_ms: Date.now() + 60000 } }
+      : { ok: true, gateway_membership: { joined: false, phase: 'not_joined' } });
+  const target: DesktopCloudRuntimeLinkTarget = { id: 'ssh:runtime', kind: 'ssh_environment', environment_id: 'runtime', label: 'Runtime', runtime_key: 'runtime', runtime_url: 'https://runtime', runtime_running: true, runtime_openable: true, runtime_control_status: { state: 'available' }, provider_connection_state: 'unlinked', cloud_link_state: 'unbound', cloud_origin_supported: true, can_connect_cloud: true, can_disconnect_cloud: false };
+  mount(perform, undefined, gateway, 'runtimes', [target]);
+  await vi.advanceTimersByTimeAsync(40);
+  button(i18n.t('gatewayMembers.createInvitation')).click();
+  await vi.advanceTimersByTimeAsync(40);
+  select(document.querySelectorAll<HTMLSelectElement>('.redeven-gateway-invitation-card select')[1]!, target.id);
+  button(i18n.t('gatewayJoin.title')).click();
+  await vi.advanceTimersByTimeAsync(40);
+  button(i18n.t('gatewayJoin.verify')).click();
+  await vi.advanceTimersByTimeAsync(40);
+  const dialog = document.querySelector('[role="dialog"]');
+  const consent = button(i18n.t('gatewayJoin.confirmEnable'));
+  expect(consent.disabled).toBe(false);
+  await vi.advanceTimersByTimeAsync(2000);
+  expect(document.querySelector('[role="dialog"]')).toBe(dialog);
+  expect(document.querySelectorAll<HTMLInputElement>('[role="dialog"] input')[1]?.value).toBe(delivery.code);
+  expect(consent.disabled).toBe(true);
+  const count = perform.mock.calls.length; consent.click();
+  expect(perform).toHaveBeenCalledTimes(count);
+  expect(button(i18n.t('common.cancel')).disabled).toBe(false);
+});
 
 describe('Gateway member management', () => {
   it('keeps the connection editor focused on reachable addresses', async () => {
@@ -212,4 +243,14 @@ it('preserves listener and Host drafts, disclosure and focus across fresh Gatewa
  for(const [input,value] of [[binding,'0.0.0.0:7555'],[hosts,'draft.example']] as const){input.value=value;input.dispatchEvent(new Event('input',{bubbles:true}));}
  hosts.focus();setGateway(structuredClone(gateway));await settle();
  expect(binding.value).toBe('0.0.0.0:7555');expect(hosts.value).toBe('draft.example');expect(advanced.open).toBe(true);expect(document.activeElement).toBe(hosts);
+});
+
+it('retains delivered invitation content but revokes copy consent across permission loss and return', async () => {
+ const perform=vi.fn().mockResolvedValue({ok:true,outcome:'gateway_invitation_created',gateway_invitation_code:invitationFixture});
+ const setGateway=mount(perform);await settle();button(i18n.t('gatewayMembers.createInvitation')).click();await settle();
+ const copy=button(i18n.t('gatewayJoin.copyCode'));expect(copy.disabled).toBe(false);
+ setGateway({...gateway,permissions:{access:true,manage_members:false,configure_cloud:false}});await settle();
+ expect(button(i18n.t('gatewayJoin.copyCode'))).toBe(copy);expect(copy.disabled).toBe(true);
+ setGateway({...gateway});await settle();expect(copy.disabled).toBe(true);
+ button(i18n.t('gatewayMembers.createInvitation')).click();await settle();expect(copy.disabled).toBe(false);
 });

@@ -16,6 +16,8 @@ the draft owner or resize the window. The
 [settings session contract](desktop-environment-settings.md) owns authority,
 persistence, prerequisites and recovery; presentation adds no operation state.
 
+Interaction sessions follow [Desktop interaction continuity](desktop-interaction-continuity.md), including authority invalidation, retained drafts, explicit visibility and stale-completion fencing.
+
 # Contract
 
 ## Window and section hierarchy

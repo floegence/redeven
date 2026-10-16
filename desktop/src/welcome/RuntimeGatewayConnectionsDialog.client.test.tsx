@@ -16,10 +16,23 @@ function mount(members:unknown[],mode:'leave'|'publish'='leave',existing?:string
  const close=vi.fn(),changed=vi.fn(),root=document.createElement('div');document.body.append(root);
  const [open,setOpen]=createSignal<'leave'|'publish'|undefined>(mode);
  const [snapshot,setSnapshot]=createSignal({targetID:'ssh:runtime' as const});
- dispose=render(()=><RuntimeGatewayConnectionsDialog targetID={snapshot().targetID} gatewayID={gatewayID} i18n={i18n} mode={open()} onClose={()=>{close();setOpen(undefined);}} onChanged={changed}/>,root);
- return {perform,close,changed,refresh:()=>setSnapshot({targetID:'ssh:runtime'})};
+ const [available,setAvailable]=createSignal(true);
+ const [authority,setAuthority]=createSignal('original');
+ dispose=render(()=><RuntimeGatewayConnectionsDialog targetID={snapshot().targetID} gatewayID={gatewayID} available={available()} authorityKey={authority()} i18n={i18n} mode={open()} onClose={()=>{close();setOpen(undefined);}} onChanged={changed}/>,root);
+ return {perform,close,changed,setAvailable,setAuthority,refresh:()=>setSnapshot({targetID:'ssh:runtime'})};
 }
 beforeEach(()=>{vi.stubGlobal('CSS',{escape:(value:string)=>value});HTMLElement.prototype.scrollIntoView=vi.fn();});
+it('revokes consent without losing selection and ignores a late revoked completion',async()=>{
+ const f=mount([one,two]);await settle();const select=document.querySelector<HTMLSelectElement>('select')!;select.value='two';select.dispatchEvent(new Event('change',{bubbles:true}));
+ let complete!:(result:unknown)=>void;f.perform.mockImplementationOnce(()=>new Promise(resolve=>{complete=resolve;}));
+ button(i18n.t('gatewayConnections.unpair')).click();f.setAvailable(false);await settle();
+ expect(select.value).toBe('two');expect(button(i18n.t('common.cancel')).disabled).toBe(false);
+ complete({ok:true,gateway_membership:{joined:false,phase:'not_joined'}});await settle();
+ expect(f.close).not.toHaveBeenCalled();expect(f.changed).not.toHaveBeenCalled();
+ f.setAvailable(true);await settle();expect(button(i18n.t('gatewayConnections.unpair')).disabled).toBe(true);
+ button(i18n.t('interactionContinuity.revalidate')).click();await settle();
+ expect(select.value).toBe('two');expect(button(i18n.t('gatewayConnections.unpair')).disabled).toBe(false);
+});
 afterEach(()=>{dispose?.();document.body.replaceChildren();vi.unstubAllGlobals();vi.restoreAllMocks();});
 it('requires an explicit Gateway target and warns only for the selected Cloud owner',async()=>{
  const f=mount([one,two]);await settle();
@@ -75,4 +88,16 @@ it('directs an existing association to route changes instead of creating another
  expect(document.querySelector('input[type="radio"]')).toBeNull();
  expect(document.body.textContent).toContain(i18n.t('gatewayConnections.useRouteChange'));
  expect(f.perform).toHaveBeenCalledOnce();
+});
+
+it('requires revalidation after membership identity changes without replacing the selected member',async()=>{
+ const f=mount([one,two],'leave',undefined,'two');await settle();
+ const dialog=document.querySelector('[role="dialog"]');
+ f.setAuthority('replacement-member');await settle();
+ expect(document.querySelector('[role="dialog"]')).toBe(dialog);
+ expect(document.body.textContent).toContain('Lab');
+ expect(button(i18n.t('gatewayConnections.unpair')).disabled).toBe(true);
+ button(i18n.t('gatewayConnections.unpair')).click();expect(f.perform).toHaveBeenCalledOnce();
+ button(i18n.t('interactionContinuity.revalidate')).click();await settle();
+ expect(button(i18n.t('gatewayConnections.unpair')).disabled).toBe(false);
 });

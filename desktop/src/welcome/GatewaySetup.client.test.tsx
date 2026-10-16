@@ -44,22 +44,41 @@ async function mount(gateway?: DesktopGatewaySource, initialSnapshot?: DesktopWe
   const storage = new Map<string, string>();
   vi.stubGlobal('localStorage', { getItem: (key: string) => storage.get(key) ?? null, setItem: (key: string, value: string) => storage.set(key, value), removeItem: (key: string) => storage.delete(key), clear: () => storage.clear() });
   vi.stubGlobal('CSS', { escape: (value: string) => value });
-  const snapshot = initialSnapshot ?? buildDesktopWelcomeSnapshot({ preferences: testDesktopPreferences(), gatewaySources: gateway ? [gateway] : [] });
+  let snapshot = initialSnapshot ?? buildDesktopWelcomeSnapshot({ preferences: testDesktopPreferences(), gatewaySources: gateway ? [gateway] : [] });
   const performAction = vi.fn<(request: DesktopLauncherActionRequest) => Promise<DesktopLauncherActionResult>>(async () => ({ ok: true, outcome: 'saved_gateway' }));
+  let receive: ((value: DesktopWelcomeSnapshot) => void) | undefined;
   const host = document.createElement('div'); document.body.append(host);
   disposers.push(render(() => <DesktopWelcomeShell snapshot={snapshot} runtime={{
-    launcher: { getSnapshot: getSnapshot ?? (async () => snapshot), performAction, subscribeSnapshot: () => () => {}, getSSHConfigHosts: async () => [],
+    launcher: { getSnapshot: getSnapshot ?? (async () => snapshot), performAction, subscribeSnapshot: (listener: (value: DesktopWelcomeSnapshot) => void) => { receive = listener; return () => {}; }, getSSHConfigHosts: async () => [],
       listRuntimeContainers: async () => ({ ok: true, containers: [{ engine: 'docker', container_id: 'test-container-id',
         container_ref: 'qualification', container_label: 'Qualification container', image: 'debian', status_text: 'running' }] }) },
     settings: { cancel: () => {}, requestRuntimeFlower: async () => ({ ok: false, error: { message: 'No Runtime in this Gateway fixture' } }) },
   } as unknown as DesktopWelcomeRuntime} />, host));
   await settle();
   Object.defineProperty(HTMLElement.prototype, 'animate', { configurable: true, value: vi.fn(() => ({ cancel: vi.fn() }) as unknown as Animation) });
-  return performAction;
+  return Object.assign(performAction, { publish: (value: DesktopWelcomeSnapshot) => { snapshot = value; receive?.(value); }, snapshot });
 }
 afterEach(() => { for (const dispose of disposers.splice(0)) dispose(); document.body.replaceChildren(); vi.restoreAllMocks(); vi.unstubAllGlobals(); Reflect.deleteProperty(HTMLElement.prototype, 'animate'); });
 
 describe('Gateway setup and own-service actions', () => {
+  it('retains Gateway drafts through identity replacement and requires explicit verification after return', async () => {
+    const source = compactEnvironmentPreviewFixture().coverage.gateway_sources[0];
+    const perform = await mount(source); await openGatewayAccess();
+    input('gateway-name', 'Retained Gateway draft');
+    const dialog = document.querySelector('[role=dialog]');
+    const field = document.getElementById('gateway-name'); field?.focus();
+    perform.publish({ ...perform.snapshot, gateway_sources: [{ ...source, identity_fingerprint: 'changed-identity' }] }); await settle();
+    perform.publish(perform.snapshot); await settle();
+    expect(document.querySelector('[role=dialog]')).toBe(dialog);
+    expect(document.getElementById('gateway-name')).toBe(field);
+    expect((field as HTMLInputElement).value).toBe('Retained Gateway draft');
+    expect(button('Save Gateway').disabled).toBe(true);
+    button('Verify current target').click(); await settle();
+    expect(button('Save Gateway').disabled).toBe(false);
+    expect((field as HTMLInputElement).value).toBe('Retained Gateway draft');
+    expect(perform).not.toHaveBeenCalled();
+  });
+
   it.each([true, false])('uses matching icon containers for every Gateway menu action, member management=%s', async manageMembers => {
     const source = compactEnvironmentPreviewFixture().coverage.gateway_sources[0];
     const perform = await mount({ ...source, connection_kind: 'local_host', management_capability: 'managed_local_host',
@@ -320,6 +339,26 @@ describe('Gateway setup and own-service actions', () => {
     button('Gateways').click(); await settle();
     button('Start Gateway').click(); await settle();
     expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'start_gateway', gateway_id: 'managed-fixture' });
+  });
+
+  it.each(['rejected', 'exception', 'malformed'] as const)('keeps %s Gateway admission in the current popup with retry and close',async failure=>{
+    const perform=await mount(compactEnvironmentPreviewFixture().coverage.gateway_sources[0]);
+    let complete!:(value:DesktopLauncherActionResult)=>void;
+    perform.mockImplementationOnce(()=>new Promise(resolve=>{complete=resolve;}));
+    button('Gateways').click();await settle();button('Refresh').click();await settle();
+    const popup=document.querySelector('.redeven-gateway-action-popover-surface');
+    expect(popup?.textContent).toContain('Waiting for operation acceptance');
+    complete({ok:false,scope:'dialog',code:'action_invalid',message:'Admission refused'});await settle();
+    expect(document.querySelector('.redeven-gateway-action-popover-surface')).toBe(popup);
+    expect(popup?.textContent).toContain('Admission refused');
+    if (failure === 'exception') perform.mockRejectedValueOnce(new Error('Transport interrupted'));
+    if (failure === 'malformed') perform.mockResolvedValueOnce(undefined as unknown as DesktopLauncherActionResult);
+    button('Retry').click();await settle();expect(perform).toHaveBeenCalledTimes(2);
+    if (failure !== 'rejected') {
+      expect(document.querySelector('.redeven-gateway-action-popover-surface')).toBe(popup);
+      expect(button('Retry').disabled).toBe(false);
+    }
+    button('Close').click();await vi.waitFor(()=>expect(document.querySelector('.redeven-gateway-action-popover-surface')).toBeNull());
   });
 
 });

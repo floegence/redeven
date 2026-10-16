@@ -64,6 +64,23 @@ async function mount(load: (request: { environment_id: string }) => Promise<Desk
 afterEach(() => { for (const dispose of disposers.splice(0)) dispose(); document.body.replaceChildren(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe('environment card settings entry', () => {
+  it('retains a dirty settings opening across permission loss until explicit revalidation', async () => {
+    const h = await mount(async () => success);
+    button('Settings for Fixture SSH').click(); await settle();
+    const dialog = document.querySelector('[role=dialog]');
+    input('ssh-settings-label', 'Unsubmitted draft');
+    const name = document.getElementById('ssh-settings-label');
+    const original = h.snapshot;
+    h.publish({ ...original, environments: original.environments.map(entry => entry.id === id ? { ...entry, can_edit: false } : entry) }); await settle();
+    h.publish(original); await settle();
+    expect(document.querySelector('[role=dialog]')).toBe(dialog);
+    expect(document.getElementById('ssh-settings-label')).toBe(name);
+    expect((name as HTMLInputElement).value).toBe('Unsubmitted draft');
+    expect((button('Save changes') as HTMLButtonElement).disabled).toBe(true);
+    button('Verify current target').click(); await settle();
+    expect((button('Save changes') as HTMLButtonElement).disabled).toBe(false);
+    expect((name as HTMLInputElement).value).toBe('Unsubmitted draft');
+  });
   it.each([true, false])('keeps one window and connection drafts when access load succeeds=%s', async ok => {
     const h = await mount(async () => ok ? success : { ok: false, error: 'SSH connection refused' });
     button('Settings for Fixture SSH').click(); await settle();
@@ -498,14 +515,23 @@ describe('settings entry asynchronous isolation', () => {
     expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain('Old save rejected');
     expect((document.getElementById('ssh-settings-label') as HTMLInputElement).value).toBe('Other SSH');
   });
-  it('closes a deleted target and ignores its pending access response', async () => {
+  it('retains a deleted target draft while rejecting its pending access response', async () => {
     const old = deferred<DesktopSettingsResult>();
     const h = await mount(() => old.promise);
-    button('Settings for Fixture SSH').click(); await settle(); button('Access & security').click();
+    button('Settings for Fixture SSH').click(); await settle();
+    input('ssh-settings-label', 'Retained deleted connection');
+    const dialog = document.querySelector('[role=dialog]')!;
+    button('Access & security').click();
     h.publish({ ...h.snapshot, environments: h.snapshot.environments.filter(entry => entry.id !== id) });
     await new Promise(resolve => setTimeout(resolve, 250));
     old.resolve(success); await settle();
-    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(document.querySelector('[role=dialog]')).toBe(dialog);
+    expect(dialog.textContent).toContain('Verify current target');
+    button('Connection').click(); await settle();
+    expect((document.getElementById('ssh-settings-label') as HTMLInputElement).value).toBe('Retained deleted connection');
+    expect((button('Save changes') as HTMLButtonElement).disabled).toBe(true);
+    button('Cancel').click(); await new Promise(resolve => setTimeout(resolve, 250));
+    expect(document.querySelector('[role=dialog]')).toBeNull();
   });
   it('blocks a connection identity edit only while access changes remain, then rebinds the committed ID', async () => {
     const h = await mount(async request => success.ok ? { ...success, snapshot: { ...success.snapshot, environment_id: request.environment_id } } : success);
@@ -680,6 +706,8 @@ describe('environment card refresh continuity', () => {
     expect(panel!.textContent).not.toContain('192.0.2.20');
     h.publish({ ...h.snapshot, environments: h.snapshot.environments.filter(entry => entry.id !== id) });
     await settle();
+    expect(document.querySelector('.redeven-endpoints-popover')).not.toBeNull();
+    button('Close connection details').click(); await finishMotion();
     expect(document.querySelector('.redeven-endpoints-popover')).toBeNull();
   });
 });

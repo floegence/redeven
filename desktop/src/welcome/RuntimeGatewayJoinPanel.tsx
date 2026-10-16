@@ -1,8 +1,8 @@
 import type { DesktopGatewaySource } from '../shared/desktopGateway';
 import { localGatewaySuggestions } from './localGatewaySuggestions';
 import { Monitor, ArrowRight, Check } from '@floegence/floe-webapp-core/icons';
-import { Button, Dialog, Input, StableText, Stepper } from '@floegence/floe-webapp-core/ui';
-import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show, type JSX } from 'solid-js';
+import { Button, Dialog, Input, StableText, Stepper, KeyedFor } from '@floegence/floe-webapp-core/ui';
+import { createEffect, createMemo, createSignal, on, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import type { DesktopCloudRuntimeLinkTargetID } from '../shared/providerRuntimeLinkTarget';
 import type { GatewayJoinPreview, GatewayMembershipOperation, GatewayEnrollmentPurpose } from '../shared/gatewayJoin';
 import type { DesktopI18n } from '../shared/i18n';
@@ -14,11 +14,13 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
   purpose?: GatewayEnrollmentPurpose; embedded?: boolean; onClose?: () => void; openRequest?: number; hideTrigger?: boolean;
   connectionRequest?: number; verificationResetRequest?: number; wizard?: boolean; canConnect?: boolean; submissionBlocked?: boolean; runtimeStartedAtUnixMS?: number;
   managementCoordinates?: string; settingsAction?: JSX.Element; preparation?: JSX.Element; preparationActions?: JSX.Element;
+  authorityKey?: string;
 }>) {
   const [open, setOpen] = createSignal(false);
   const [address, setAddress] = createSignal(props.address ?? '');
   const [code, setCode] = createSignal(props.code ?? '');
   const [preview, setPreview] = createSignal<GatewayJoinPreview>();
+  const [previewInvalidated, setPreviewInvalidated] = createSignal(false);
   const [pending, setPending] = createSignal<'connecting' | 'verifying' | 'joining' | null>(null);
   const busy = () => pending() !== null;
   const [error, setError] = createSignal('');
@@ -28,6 +30,7 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
   const blocked = () => props.submissionBlocked === true;
   const runtimeStart = createMemo(() => props.runtimeStartedAtUnixMS);
   const managementCoordinates = createMemo(() => props.managementCoordinates);
+  const authorityKey = createMemo(() => props.authorityKey);
   const verificationResetRequest = createMemo(() => props.verificationResetRequest);
   const [step, setStep] = createSignal(0);
   const currentStep = createMemo(() => props.wizard ? step() : preview() ? 2 : 1);
@@ -53,17 +56,16 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
   const suggestions = createMemo(() => localGatewaySuggestions(props.gateways ?? [], props.targetID));
   function fillAddress(value: string) { invalidate(); setAddress(value); queueMicrotask(() => codeInput?.focus()); }
   const invalidate = () => { generation++; setPreview(undefined); setPending(null); setError(''); };
-  createEffect(on([targetID, initialAddress, initialCode, initialPurpose], ([, nextAddress, nextCode]) => {
-    invalidate(); statusGeneration++; clearTimeout(timer);
-    setAddress(nextAddress); setCode(nextCode); setStatusError('');
-    if (props.wizard) setStep(0);
-    else if (open()) void refresh();
+  createEffect(on([initialAddress, initialCode, initialPurpose], ([nextAddress, nextCode]) => {
+    if (open()) return;
+    invalidate(); setAddress(nextAddress); setCode(nextCode);
   }));
-  createEffect(on(managementCoordinates, () => {
-    invalidate(); statusGeneration++; clearTimeout(timer);
-    if (props.wizard) setStep(0);
+  // IMPORTANT: Identity changes revoke verification, never the user's draft or current step.
+  createEffect(on([targetID, managementCoordinates, authorityKey], () => {
+    generation++; statusGeneration++; clearTimeout(timer); setPending(null);
+    if (open()) { setPreviewInvalidated(true); setError(text('gatewayJoin.changed')); }
   }, { defer: true }));
-  createEffect(on(verificationResetRequest, () => { setPreview(undefined); }, { defer: true }));
+  createEffect(on(verificationResetRequest, () => { generation++; setPending(null); setPreviewInvalidated(true); }, { defer: true }));
   const close = () => { invalidate(); statusGeneration++; clearTimeout(timer); setCode(''); setStep(0); setOpen(false); props.onClose?.();
     queueMicrotask(() => trigger?.isConnected ? trigger.focus() : props.focusOwner?.()); };
   onCleanup(() => { generation++; statusGeneration++; clearTimeout(timer); clearInterval(expiryTimer); });
@@ -72,9 +74,8 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
   createEffect(on(runtimeStart, value => {
     if (!value) return;
     if (observedRuntimeStart && value !== observedRuntimeStart) {
-      setPreview(undefined);
+      generation++; statusGeneration++; setPending(null); setPreviewInvalidated(true);
       setError(text('gatewayJoin.changed'));
-      if (props.wizard && step() === 2 && !busy()) setStep(1);
     }
     observedRuntimeStart = value;
   }));
@@ -127,13 +128,14 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
       if (current !== generation) return;
       if (start && runtimeStart() && start !== runtimeStart()) { setError(text('gatewayJoin.changed')); return; }
       if (!result?.ok || !result.gateway_preview) { setError(errorText(result && !result.ok ? result.gateway_error_code : undefined)); return; }
-      setPreview(result.gateway_preview); setNow(Date.now()); if (props.wizard) setStep(2);
+      setPreview(result.gateway_preview); setPreviewInvalidated(false); setNow(Date.now()); if (props.wizard) setStep(2);
       queueMicrotask(focusConfirmation);
     } catch { if (current === generation) setError(text('gatewayJoin.unreachable')); }
     finally { if (current === generation) setPending(null); }
   }
   async function act(operation: GatewayMembershipOperation) {
-    if (blocked() || busy()) return;
+    const consent = preview();
+    if (blocked() || busy() || !consent || previewInvalidated() || consent.expires_at_unix_ms <= Date.now() || consent.purpose !== purpose() || operation !== purpose()) return;
     const current = generation; setPending('joining'); setError('');
     try {
       const result = await window.redevenDesktopLauncher?.performAction({kind:'manage_runtime_gateway',runtime_target_id:props.targetID,operation,
@@ -143,7 +145,7 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
         const code = result && !result.ok ? result.gateway_error_code : undefined;
         setError(errorText(code));
         if (code === 'GATEWAY_PREVIEW_CHANGED' || code === 'GATEWAY_PREVIEW_EXPIRED') {
-          setPreview(undefined);
+          setPreviewInvalidated(true);
         }
         return;
       }
@@ -189,16 +191,16 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
             <label class="redeven-gateway-join-field"><span>{text('gatewayJoin.address')}</span><Input ref={addressInput} value={address()} placeholder="https://gateway.example:7443" autocomplete="off" spellcheck={false} disabled={busy()}
               onInput={event => { invalidate(); setAddress(event.currentTarget.value); }} /></label>
             <Show when={suggestions().length}><div class="redeven-gateway-local-suggestions">
-              <For each={suggestions()}>{suggestion => {
-                const selected = () => address().trim() === suggestion.address;
-                const multipleEndpoints = () => suggestions().filter(item => item.gatewayID === suggestion.gatewayID).length > 1;
-                return <Button data-gateway-suggestion={suggestion.gatewayID} class="redeven-gateway-local-suggestion min-w-0 cursor-pointer" variant="ghost" disabled={busy()} aria-pressed={selected()} aria-label={text('gatewayDiscovery.useNamed',{name:suggestion.name,address:suggestion.address})} title={`${suggestion.name}\n${suggestion.address}`} onClick={() => fillAddress(suggestion.address)}>
+              <KeyedFor each={suggestions()} by={suggestion => suggestion.gatewayID + ":" + suggestion.address}>{suggestion => {
+                const selected = () => address().trim() === suggestion().address;
+                const multipleEndpoints = () => suggestions().filter(item => item.gatewayID === suggestion().gatewayID).length > 1;
+                return <Button data-gateway-suggestion={suggestion().gatewayID} class="redeven-gateway-local-suggestion min-w-0 cursor-pointer" variant="ghost" disabled={busy()} aria-pressed={selected()} aria-label={text('gatewayDiscovery.useNamed',{name:suggestion().name,address:suggestion().address})} title={`${suggestion().name}\n${suggestion().address}`} onClick={() => fillAddress(suggestion().address)}>
                   <Monitor class="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
                   <span data-gateway-local-label class="redeven-gateway-local-label">{text('gatewayDiscovery.local')}</span>
-                  <span class="redeven-gateway-local-name truncate" classList={{'font-mono':multipleEndpoints()}}>{multipleEndpoints() ? new URL(suggestion.address).host : suggestion.name}</span>
+                  <span class="redeven-gateway-local-name truncate" classList={{'font-mono':multipleEndpoints()}}>{multipleEndpoints() ? new URL(suggestion().address).host : suggestion().name}</span>
                   <span class="redeven-gateway-local-action"><StableText reserve={[text('gatewayDiscovery.useAddress'),text('gatewayDiscovery.filled')]}>{text(selected() ? 'gatewayDiscovery.filled' : 'gatewayDiscovery.useAddress')}</StableText><Show when={selected()} fallback={<ArrowRight class="h-3.5 w-3.5" aria-hidden="true" />}><Check class="h-3.5 w-3.5" aria-hidden="true" /></Show></span>
                 </Button>;
-              }}</For>
+              }}</KeyedFor>
             </div></Show>
           </div>
           <label class="redeven-gateway-join-field"><span>{text('gatewayJoin.code')}</span><Input ref={codeInput} value={code()} autocomplete="off" spellcheck={false} disabled={busy()}
@@ -219,8 +221,9 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
       <Show when={error() || (currentStep() !== 0 && statusError())}><p role="alert" class="text-sm text-error">{error() || statusError()}</p></Show>
       <Show when={!props.wizard || currentStep() > 0}><div class="redeven-gateway-step-actions">
         <Show when={preview() && (!props.wizard || currentStep() === 2)} fallback={<Button class="cursor-pointer whitespace-nowrap" disabled={busy() || blocked() || !address().trim() || !code().trim()} onClick={() => void verify()}><StableText reserve={[text('gatewayJoin.verify'),text('gatewayJoin.verifying')]}>{text(pending() === 'verifying' ? 'gatewayJoin.verifying' : 'gatewayJoin.verify')}</StableText></Button>}>
-          <Button ref={confirmButton} class="cursor-pointer whitespace-nowrap" disabled={busy() || blocked() || preview()!.expires_at_unix_ms <= now()} onClick={() => void act(purpose())}>{text('gatewayJoin.confirmEnable')}</Button>
+          <Button ref={confirmButton} class="cursor-pointer whitespace-nowrap" disabled={busy() || blocked() || previewInvalidated() || preview()!.expires_at_unix_ms <= now()} onClick={() => void act(purpose())}>{text('gatewayJoin.confirmEnable')}</Button>
         </Show>
+        <Show when={preview() && (previewInvalidated() || preview()!.expires_at_unix_ms <= now())}><Button variant="outline" disabled={busy() || blocked()} onClick={() => void verify()}>{text('gatewayJoin.verify')}</Button></Show>
       </div></Show>
     </div>
     <div class="redeven-gateway-join-actions">

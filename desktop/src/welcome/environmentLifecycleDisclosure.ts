@@ -1,3 +1,4 @@
+import { environmentInteractionIdentity } from './environmentInteractionIdentity';
 import type {
   DesktopEnvironmentEntry,
   DesktopLauncherActionKind,
@@ -44,7 +45,11 @@ export type EnvironmentLifecycleDisclosureState = Readonly<{
   operation_key: string;
   operation_binding: 'exact' | 'next_reinstall';
   last_progress?: DesktopLauncherActionProgress;
+  submission?: 'pending' | 'accepted' | 'failed';
+  admission_attempt?: EnvironmentLifecycleAttempt;
   settings_restart?: EnvironmentSettingsRestartSource;
+  authority_key?: string;
+  authority_revoked?: boolean;
 }> | null;
 
 function compact(value: unknown): string {
@@ -150,24 +155,23 @@ export function beginEnvironmentLifecycleDisclosure(
     started_at_unix_ms: attempt.started_at_unix_ms,
     operation_key: attempt.operation_key,
     operation_binding: intent === 'reinstall_target' ? 'next_reinstall' : 'exact',
+    submission: 'pending',
+    admission_attempt: attempt,
   };
 }
 
-export function abandonEnvironmentLifecycleDisclosureAttempt(
+/** Admission feedback belongs to the exact attempt, never to a later opening. */
+export function settleEnvironmentLifecycleDisclosureAttempt(
   state: EnvironmentLifecycleDisclosureState,
   environmentID: string,
   attempt: EnvironmentLifecycleAttempt,
+  accepted: boolean,
 ): EnvironmentLifecycleDisclosureState {
-  if (
-    !state
-    || state.environment_id !== environmentID
-    || state.operation_key !== attempt.operation_key
-    || state.started_at_unix_ms !== attempt.started_at_unix_ms
-    || state.last_progress
-  ) {
-    return state;
-  }
-  return null;
+  const admission = state?.admission_attempt ?? state;
+  if (!state || state.environment_id !== environmentID
+    || admission?.operation_key !== attempt.operation_key || admission.started_at_unix_ms !== attempt.started_at_unix_ms) return state;
+  const submission = accepted || state.last_progress ? 'accepted' : 'failed';
+  return state.submission === submission ? state : { ...state, submission };
 }
 
 export function bindEnvironmentLifecycleDisclosureOperation(
@@ -195,6 +199,7 @@ export function bindEnvironmentLifecycleDisclosureOperation(
     operation_key: operationKey,
     started_at_unix_ms: Math.floor(startedAtUnixMS),
     operation_binding: 'exact',
+    submission: 'accepted',
   };
 }
 
@@ -320,9 +325,12 @@ export function reconcileEnvironmentLifecycleDisclosure(
     return state;
   }
   const environment = entries.find((entry) => entry.id === state.environment_id);
-  if (!environment) {
-    return null;
+  // IMPORTANT: Observations may omit an owner or progress; only explicit session events close its presentation.
+  if (state.authority_key && (!environment || environmentInteractionIdentity(environment) !== state.authority_key)) {
+    // IMPORTANT: Retained progress never authorizes a replaced target; only a fresh review renews consent.
+    return state.authority_revoked ? state : { ...state, authority_revoked: true };
   }
+  if (!environment) return state;
   if (state.settings_restart && state.last_progress && progressIsTerminal(state.last_progress)
     && progressItems.some(candidate => compact(candidate.operation_key) !== state.operation_key
       && progressStartedAt(candidate) >= state.started_at_unix_ms
@@ -348,6 +356,7 @@ export function reconcileEnvironmentLifecycleDisclosure(
       operation_key: compact(progress.operation_key),
       operation_binding: 'exact',
       last_progress: progress,
+      submission: 'accepted',
     };
   }
   if (state.last_progress && progressIsTerminal(state.last_progress)) {

@@ -1,4 +1,11 @@
 {
+  "interactionContinuity": {
+    "accepted": "Vorgang angenommen. Ausführungsdetails stehen noch aus.",
+  "unavailable": "Das Ziel oder der Zugriff hat sich geändert. Ihre Eingaben bleiben erhalten. Prüfen Sie das aktuelle Ziel, bevor Sie fortfahren.",
+  "revalidate": "Aktuelles Ziel prüfen",
+  "pending": "Warten auf die Annahme des Vorgangs…",
+  "rejected": "Der Vorgang konnte nicht angenommen werden. Prüfen Sie die Verbindung und versuchen Sie es erneut."
+},
   "sessionRestart": {
     "preparing": "Neustart wird vorbereitet",
     "restarting": "Laufzeit wird neu gestartet",

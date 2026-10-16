@@ -110,13 +110,16 @@ export function resolveDesktopAnchoredOverlayPosition(options: Readonly<{
   }
 
   if (constrainToViewport) {
+    const viewportHeight = Math.max(0, options.viewportHeight - margin * 2);
     if (options.placementLock === 'top-inline-shift') {
       left = clamp(left, horizontalMargin, options.viewportWidth - overlayWidth - horizontalMargin);
-      const availableHeight = Math.max(0, options.anchorRect.top - margin - gap);
+      const availableHeight = Math.min(viewportHeight, Math.max(0, options.anchorRect.top - margin - gap));
       if (placement === 'top') {
-        maxHeight = Math.min(MAX_LOCKED_OVERLAY_HEIGHT, availableHeight);
+        // IMPORTANT: A retained or offscreen anchor must never clip every recovery and exit control.
+        const usableHeight = availableHeight >= Math.min(160, viewportHeight) ? availableHeight : viewportHeight;
+        maxHeight = Math.min(MAX_LOCKED_OVERLAY_HEIGHT, usableHeight);
         const positionedHeight = Math.min(options.overlayHeight, maxHeight);
-        top = Math.max(margin, options.anchorRect.top - gap - positionedHeight);
+        top = clamp(options.anchorRect.top - gap - positionedHeight, margin, options.viewportHeight - positionedHeight - margin);
       }
     } else if (allowMainAxisOverflow) {
       if (placement === 'top' || placement === 'bottom') {
@@ -125,8 +128,9 @@ export function resolveDesktopAnchoredOverlayPosition(options: Readonly<{
         top = clamp(top, margin, options.viewportHeight - options.overlayHeight - margin);
       }
     } else {
+      maxHeight = viewportHeight;
       left = clamp(left, horizontalMargin, options.viewportWidth - overlayWidth - horizontalMargin);
-      top = clamp(top, margin, options.viewportHeight - options.overlayHeight - margin);
+      top = clamp(top, margin, options.viewportHeight - Math.min(options.overlayHeight, maxHeight) - margin);
     }
   }
 

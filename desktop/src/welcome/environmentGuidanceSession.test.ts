@@ -5,19 +5,15 @@ import {
   testDesktopPreferences,
   testLocalEnvironment,
   testCloudEnvironment,
-  testProviderBoundLocalEnvironment,
-  testLocalEnvironmentSession,
 } from '../testSupport/desktopTestHelpers';
 import {
   closeEnvironmentGuidanceSession,
   completeEnvironmentGuidanceRefresh,
-  environmentSupportsGuidancePopover,
   failEnvironmentGuidanceIntent,
   guidanceSessionNotice,
   guidanceSessionOwnsOpenFlowPanel,
   isEnvironmentGuidancePendingIntent,
   openEnvironmentGuidanceSession,
-  reconcileEnvironmentGuidanceSession,
   startEnvironmentGuidanceIntent,
 } from './environmentGuidanceSession';
 
@@ -224,121 +220,9 @@ describe('environmentGuidanceSession', () => {
     }));
   });
 
-  it('settles the active session once the local runtime no longer exposes a guidance popover', () => {
-    const localServe = testProviderBoundLocalEnvironment('https://provider.example.invalid', 'env_demo', {
-      label: 'Demo Local Serve',
-    });
-    const snapshot = buildDesktopWelcomeSnapshot({
-      preferences: testDesktopPreferences({
-        local_environment: localServe,
-      }),
-      openSessions: [
-        testLocalEnvironmentSession(localServe, 'http://127.0.0.1:24001/'),
-      ],
-    });
-    const localEntry = snapshot.environments.find((entry) => entry.kind === 'local_environment');
 
-    expect(localEntry).toBeTruthy();
-    expect(environmentSupportsGuidancePopover(localEntry!)).toBe(false);
-    expect(reconcileEnvironmentGuidanceSession(
-      startEnvironmentGuidanceIntent(null, localEntry!.id, 'refresh_runtime'),
-      snapshot.environments,
-    )).toEqual({
-      environment_id: localEntry!.id,
-      pending_intent: null,
-      feedback: {
-        tone: 'success',
-        title: 'Runtime ready',
-        detail: 'The environment window is open and ready to focus.',
-      },
-    });
-  });
 
-  it('keeps settled success reconciliation referentially stable', () => {
-    const localServe = testProviderBoundLocalEnvironment('https://provider.example.invalid', 'env_demo', {
-      label: 'Demo Local Serve',
-    });
-    const snapshot = buildDesktopWelcomeSnapshot({
-      preferences: testDesktopPreferences({
-        local_environment: localServe,
-      }),
-      openSessions: [
-        testLocalEnvironmentSession(localServe, 'http://127.0.0.1:24001/'),
-      ],
-    });
-    const localEntry = snapshot.environments.find((entry) => entry.kind === 'local_environment');
 
-    expect(localEntry).toBeTruthy();
-    const settled = reconcileEnvironmentGuidanceSession(
-      startEnvironmentGuidanceIntent(null, localEntry!.id, 'refresh_runtime'),
-      snapshot.environments,
-    );
 
-    expect(reconcileEnvironmentGuidanceSession(settled, snapshot.environments)).toBe(settled);
-  });
 
-  it('replaces a stale Start and open retry when the refreshed target requires initialization', () => {
-    const snapshot = buildDesktopWelcomeSnapshot({
-      preferences: testDesktopPreferences({ local_environment: testLocalEnvironment() }),
-    });
-    const base = snapshot.environments.find((entry) => entry.kind === 'local_environment');
-    expect(base).toBeTruthy();
-    const missingRuntime = {
-      ...base!,
-      gateway_id: 'gw_local',
-      gateway_env_id: 'env_local',
-      runtime_health: {
-        ...base!.runtime_health,
-        status: 'offline' as const,
-        freshness: 'fresh' as const,
-      },
-      runtime_management: {
-        support: 'supported' as const,
-        authorization: {
-          state: 'allowed' as const,
-          grants: ['manage_runtime', 'deploy_custom_runtime', 'manage_runtime_binding'] as const,
-        },
-        readiness: 'ready' as const,
-        presentation_state: 'allowed' as const,
-        target: { lifecycle_target_id: 'rlt_local', target_generation: 1 },
-        compatibility: {
-          gateway_protocol: 'redeven-gateway-v6',
-          runtime_platform: 'darwin' as const,
-          runtime_architecture: 'arm64' as const,
-          runtime_service_protocol: 'redeven-runtime-v2',
-          compatibility_epoch: 9,
-          capabilities: ['runtime_operations_v2'],
-        },
-        operations: ['update_runtime', 'reconcile'] as const,
-        artifact_policies: ['custom_build'] as const,
-        checked_at_unix_ms: 10,
-      },
-      runtime_operations: {
-        ...base!.runtime_operations,
-        open: { ...base!.runtime_operations.open, availability: 'blocked' as const },
-        start: {
-          ...base!.runtime_operations.start,
-          availability: 'hidden' as const,
-          method: 'runtime_gateway' as const,
-          reason_code: undefined,
-        },
-        update: {
-          ...base!.runtime_operations.update,
-          availability: 'available' as const,
-          method: 'runtime_gateway' as const,
-          reason_code: undefined,
-        },
-      },
-    };
-    const failedStart = failEnvironmentGuidanceIntent(
-      startEnvironmentGuidanceIntent(null, base!.id, 'start_and_open'),
-      'The runtime is unavailable.',
-    );
-
-    expect(reconcileEnvironmentGuidanceSession(failedStart, [missingRuntime])).toMatchObject({
-      environment_id: base!.id,
-      pending_intent: null,
-      retry_intent: 'start_and_open',
-    });
-  });
 });

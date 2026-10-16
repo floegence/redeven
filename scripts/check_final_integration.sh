@@ -156,6 +156,7 @@ check_github_workflows() {
 }
 
 check_focused_changed_tests() {
+  node "$ROOT_DIR/scripts/check_interaction_continuity.mjs" --base "$base" --tip "$tip"
   local changed
   changed="$(git diff --name-only "${base}...${tip}")"
   if printf '%s\n' "$changed" | grep -q '^desktop/'; then

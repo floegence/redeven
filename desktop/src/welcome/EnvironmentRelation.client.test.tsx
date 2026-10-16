@@ -196,6 +196,33 @@ it.each(['stopped', 'management_unavailable', 'update_required', 'failed'] as co
 });
 
 describe('linked environment owner interactions', () => {
+  it('retains reinstall confirmation through target loss and return but requires a fresh review', async () => {
+    const fixture = runtimeGatewayAccessFixture('local', 'ready');
+    const runtime = fixture.environment;
+    const progress: DesktopLauncherActionProgress = { action: 'reinstall_target', environment_id: runtime.id,
+      operation_key: 'reinstall-consent', started_at_unix_ms: 300, status: 'needs_confirmation', phase: 'confirmation',
+      title: 'Review reinstall target', detail: 'Review the exact target',
+      next_actions: [{ kind: 'reinstall_target', environment_id: runtime.id, operation_key: 'reinstall-consent', preflight_id: 'old-preview', mode: 'preserve_data', label: 'Reinstall', label_key: 'common.reinstall' }],
+    };
+    const snapshot = { ...fixture.snapshot, action_progress: [progress] };
+    const h = await mount(snapshot);
+    const owner = document.querySelector<HTMLElement>(`[data-owner-id="${runtime.id}"]`)!;
+    button(owner, 'Needs attention Show details.').click(); await settle();
+    const panel = document.querySelector('.redeven-environment-progress')!;
+    const confirm = button(panel, 'Reinstall'); confirm.focus();
+    h.publish({ ...snapshot, environments: [] }); await settle();
+    expect(document.querySelector('.redeven-environment-progress')).toBe(panel);
+    expect(confirm.disabled).toBe(true);
+    confirm.click(); expect(h.performAction).not.toHaveBeenCalled();
+    h.publish(snapshot); await settle();
+    expect(confirm.disabled).toBe(true);
+    expect(button(document, 'Verify current target').disabled).toBe(false);
+    button(document, 'Verify current target').click(); await settle();
+    expect(h.performAction).toHaveBeenCalledExactlyOnceWith({ kind: 'preview_reinstall_target', environment_id: runtime.id, mode: 'preserve_data' });
+    expect(document.querySelector('.redeven-action-popover-surface')).not.toBeNull();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await vi.waitFor(() => expect(document.querySelector('.redeven-action-popover-surface')).toBeNull());
+  });
   it('updates the OS graphic in place while retaining title selection, card and access focus', async () => {
     const fixture = runtimeConnectionFixture({ kind: 'ssh_environment' });
     const runtime = fixture.snapshot.environments.find(entry => entry.kind === 'ssh_environment')!;
@@ -622,6 +649,23 @@ describe('linked environment owner interactions', () => {
       }),
     }));
   });
+  it('retains removal confirmation but requires explicit verification after delete capability returns', async () => {
+    const h = await mount();
+    const runtime = { ...h.runtime, kind: 'ssh_environment' as const, registration_ref: { kind: 'runtime_target' as const, id: 'ssh:fixture' as const }, can_delete: true };
+    h.publish({ ...h.snapshot, environments: [runtime, h.cloud] }); await settle();
+    await h.select('runtime');
+    button(h.owner('runtime'), 'Remove Development runtime · Runtime').click(); await settle();
+    const dialog = document.querySelector('[role="dialog"]')!;
+    h.publish({ ...h.snapshot, environments: [{ ...runtime, can_delete: false }, h.cloud] }); await settle();
+    expect(document.querySelector('[role="dialog"]')).toBe(dialog);
+    expect(button(dialog, 'Remove').disabled).toBe(true);
+    button(dialog, 'Remove').click(); expect(h.performAction).not.toHaveBeenCalled();
+    h.publish({ ...h.snapshot, environments: [runtime, h.cloud] }); await settle();
+    expect(button(dialog, 'Remove').disabled).toBe(true);
+    button(dialog, 'Verify current target').click(); await settle();
+    expect(button(dialog, 'Remove').disabled).toBe(false);
+    expect(button(dialog, 'Cancel').disabled).toBe(false);
+  });
   it('removes only the selected Runtime registration and retains the Cloud entry', async () => {
     const h = await mount();
     const registration = { kind: 'runtime_target' as const, id: 'ssh:fixture' as const };
@@ -680,7 +724,13 @@ describe('linked environment owner interactions', () => {
 
 const visibleCards = () => [...document.querySelectorAll<HTMLElement>('[data-environment-group]')].filter(el => !el.closest('[hidden]'));
 const activeOwner = (card: Element) => [...card.querySelectorAll<HTMLElement>('[data-owner-id]')].find(el => !el.closest('[aria-hidden="true"]'))!;
-const selectTab = async (card: Element, index: number) => { card.querySelectorAll<HTMLElement>('[role="tab"]')[index].click(); await settle(); };
+const selectTab = async (card: Element, index: number) => {
+  const tab = card.querySelectorAll<HTMLElement>('[role="tab"]')[index]; tab.click();
+  await vi.waitFor(() => expect(document.getElementById(tab.getAttribute('aria-controls')!)?.getAttribute('aria-hidden')).not.toBe('true'));
+  // Finish both paint stages of the published controlled-selection transaction.
+  await new Promise<void>(resolve => requestAnimationFrame(() => setTimeout(() => requestAnimationFrame(() => setTimeout(resolve)), 0)));
+  expect(tab.getAttribute('aria-selected')).toBe('true');
+};
 const searchFor = async (value: string) => {
   const search = document.querySelector<HTMLInputElement>('.redeven-header-separator input')!;
   search.value = value; search.dispatchEvent(new Event('input', { bubbles: true })); await settle();
@@ -770,7 +820,7 @@ describe('Redeven Cloud account overview', () => {
       cloud_origin: snapshot.control_planes[0].cloud.cloud_origin,
       cloud_id: snapshot.control_planes[0].cloud.cloud_id });
   });
-  it('cancels sign-out without a request and closes a confirmation when its account disappears', async () => {
+  it('retains sign-out confirmation with submission disabled when its account disappears', async () => {
     const { snapshot } = mixedEnvironmentFixture();
     const h = await mount(snapshot);
     button(document, 'Redeven Cloud').click(); await settle();
@@ -779,8 +829,18 @@ describe('Redeven Cloud account overview', () => {
     button(document.querySelector('[role="dialog"]')!, 'Cancel').click(); await settle();
     expect(h.performAction).not.toHaveBeenCalled();
     button(account, 'Sign out of Team account on this Desktop').click(); await settle();
+    const confirmation = document.querySelector('[role=dialog]')!;
     h.publish({ ...snapshot, control_planes: snapshot.control_planes.slice(1) }); await settle();
-    expect(document.querySelector('[role="dialog"][data-state="open"]')).toBeNull();
+    expect(document.querySelector('[role=dialog]')).toBe(confirmation);
+    expect(button(confirmation, 'Sign out').disabled).toBe(true);
+    expect(confirmation.querySelector('[role=alert]')).not.toBeNull();
+    h.publish(structuredClone(snapshot)); await settle();
+    expect(button(confirmation, 'Sign out').disabled).toBe(true);
+    button(confirmation, 'Verify current target').click(); await settle();
+    expect(button(confirmation, 'Sign out').disabled).toBe(false);
+    button(confirmation, 'Cancel').click(); await new Promise(resolve => setTimeout(resolve, 250));
+    expect(document.querySelector('[role=dialog]')).toBeNull();
+    expect(h.performAction).not.toHaveBeenCalled();
   });
   it('does not claim authorization or prior sync results before its first catalog', async () => {
     const { snapshot } = mixedEnvironmentFixture();
@@ -823,15 +883,20 @@ describe('perspective ownership across navigation and removal', () => {
     await h.select('cloud');
     expect(activeOwner(visibleCards()[0]).dataset.ownerRole).toBe('cloud');
   });
-  it('keeps opened settings on their original owner and closes them when that owner disappears', async () => {
+  it('keeps opened settings on their original owner with an exit when that owner disappears', async () => {
     const h = await mount();
     await h.select('cloud');
     button(h.owner('cloud'), 'Settings for Cloud workspace · Redeven Cloud').click(); await settle();
     await h.select('runtime');
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Cloud workspace');
     expect(h.settings.load).not.toHaveBeenCalled();
+    const dialog = document.querySelector('[role=dialog]')!;
     h.publish({ ...h.snapshot, environments: [h.runtime] }); await settle();
-    expect(document.querySelector('[role="dialog"][data-state="open"]')).toBeNull();
+    expect(document.querySelector('[role=dialog]')).toBe(dialog);
+    expect(dialog.textContent).toContain('Cloud workspace');
+    expect(dialog.querySelector('[role=alert]')).not.toBeNull();
+    button(dialog, 'Close').click(); await new Promise(resolve => setTimeout(resolve, 250));
+    expect(document.querySelector('[role=dialog]')).toBeNull();
   });
   it('keeps Flower context on its original owner and closes it when that owner disappears', async () => {
     const h = await mount();
@@ -841,5 +906,49 @@ describe('perspective ownership across navigation and removal', () => {
     expect(document.querySelector('.flower-turn-launcher-window')?.textContent).toContain('Cloud workspace');
     h.publish({ ...h.snapshot, environments: [h.runtime] }); await new Promise(resolve => setTimeout(resolve, 300));
     expect(document.querySelector('.flower-turn-launcher-window')).toBeNull();
+  });
+});
+
+describe('background interaction continuity', () => {
+  it('retains exactly one interaction host when an open Cloud owner changes groups', async () => {
+    const h = await mount(); await h.select('cloud');
+    button(h.owner('cloud'), 'Actions').click(); await settle();
+    const menu = document.querySelector('[role=menu]')!;
+    const control = menu.querySelector<HTMLButtonElement>('button:not(:disabled)')!; control.focus();
+    h.publish({ ...h.snapshot, environments: h.snapshot.environments.map(entry => entry.id === h.cloud.id
+      ? { ...entry, access_group_id: undefined } : entry) }); await settle();
+    expect(document.querySelectorAll(`[data-owner-id="${h.cloud.id}"]`)).toHaveLength(1);
+    expect(document.querySelector('[role=menu]')).toBe(menu);
+    expect(document.activeElement).toBe(control);
+  });
+  it('retains every open action control and keyboard focus across equivalent snapshots', async () => {
+    const f = await runtimeGatewayBackgroundProbeFixture('ssh');
+    const h = await mount(f.snapshot());
+    button(document.querySelector('[data-environment-group]')!, 'Actions').click(); await settle();
+    const menu = document.querySelector('[role="menu"]')!;
+    const controls = [...menu.querySelectorAll<HTMLButtonElement>('button')];
+    expect(controls.length).toBeGreaterThan(1);
+    const focus = controls.find(control => !control.disabled)!;
+    focus.focus(); h.publish(structuredClone(f.snapshot())); await settle();
+    expect(document.querySelector('[role="menu"]')).toBe(menu);
+    controls.forEach((control, index) => expect(menu.querySelectorAll('button')[index]).toBe(control));
+    expect(document.activeElement).toBe(focus);
+  });
+  it('opens lifecycle progress before admission and retains it through refresh and rejection', async () => {
+    const f = await runtimeGatewayBackgroundProbeFixture('ssh');
+    const h = await mount(f.snapshot());
+    let reject!: () => void;
+    h.performAction.mockImplementation(() => new Promise(resolve => { reject = () => resolve({ ok: false, message: 'Admission rejected', code: 'action_invalid', scope: 'environment' } as DesktopLauncherActionResult); }));
+    button(document.querySelector('[data-environment-group]')!, 'Actions').click(); await settle();
+    const menu = document.querySelector('[role="menu"]')!;
+    const action = [...menu.querySelectorAll<HTMLButtonElement>('button')].find(control => !control.disabled && /Uninstall/.test(controlText(control)))!;
+    expect(action).toBeTruthy(); action.click(); await settle();
+    const panel = document.querySelector('.redeven-environment-progress');
+    expect(panel).not.toBeNull();
+    h.publish(structuredClone(f.snapshot())); await settle();
+    expect(document.querySelector('.redeven-environment-progress')).toBe(panel);
+    reject(); await settle();
+    expect(document.querySelector('.redeven-environment-progress')?.querySelector('[role="alert"]')).not.toBeNull();
+    expect(h.performAction).toHaveBeenCalledTimes(1);
   });
 });

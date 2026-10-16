@@ -19,6 +19,7 @@ export function environmentHasAccessSettings(environment: DesktopEnvironmentEntr
   return environment.registration_ref?.kind === 'local_environment' || environment.registration_ref?.kind === 'runtime_target';
 }
 export type EnvironmentSettingsSession<C> = Readonly<{
+  opening_id: number;
   token: number;
   environment: DesktopEnvironmentEntry;
   tab: EnvironmentSettingsTab;
@@ -29,6 +30,7 @@ export type EnvironmentSettingsSession<C> = Readonly<{
   access_state: 'idle' | 'loading' | 'ready' | 'error';
   access_error: Extract<DesktopSettingsResult, { ok: false }> | null;
   saving: 'connection' | 'access' | null;
+  authority_revoked?: boolean;
   access_save_intent?: 'save' | 'restart';
   focus_two_factor?: boolean;
   focus_access?: AddressRecoveryTarget;
@@ -51,7 +53,7 @@ export function createEnvironmentSettingsController<C>(io: {
     const opening = session();
     if (!opening || opening.saving || !environmentHasAccessSettings(opening.environment)) return;
     const request = ++readSequence;
-    update({ access_state: 'loading', access_error: null });
+    update({ access_state: opening.access ? 'ready' : 'loading', access_error: null });
     let result: DesktopSettingsResult;
     try { result = await io.load(opening.environment.id, opening.token); }
     catch (error) { result = { ok: false, error: error instanceof Error ? error.message : String(error) }; }
@@ -86,11 +88,29 @@ export function createEnvironmentSettingsController<C>(io: {
   }
   return {
     session, update, current, loadAccess, saveAccess,
+    revokeAuthority() {
+      const opening = session();
+      if (!opening || opening.authority_revoked) return;
+      ++readSequence; io.closed?.(opening.token);
+      // A submitted connection edit may replace its registration before its response.
+      // Its explicit result can rebind this opening; security/access completions are revoked.
+      update({ token: opening.saving === 'connection' ? opening.token : ++sequence, authority_revoked: true,
+        saving: opening.saving === 'connection' ? 'connection' : null, access_save_intent: undefined });
+    },
+    revalidate(environment: DesktopEnvironmentEntry) {
+      const opening = session();
+      if (!opening || opening.environment.id !== environment.id) return;
+      ++readSequence;
+      io.closed?.(opening.token);
+      // IMPORTANT: Revalidation revokes old requests while preserving the opening's drafts and tab.
+      update({ token: ++sequence, environment, authority_revoked: false, saving: null, access_save_intent: undefined });
+      void loadAccess();
+    },
     open(environment: DesktopEnvironmentEntry, connection: C) {
       const previous = session();
       if (previous) io.closed?.(previous.token);
       const tab = environment.registration_ref?.kind === 'local_environment' ? 'access' : 'connection';
-      setSession({ token: ++sequence, environment, tab, metadata_label: environment.label, connection, connection_baseline: connection,
+      setSession({ opening_id: sequence + 1, token: ++sequence, environment, tab, metadata_label: environment.label, connection, connection_baseline: connection,
         access: null, access_state: 'idle', access_error: null, saving: null });
       if (tab === 'access') void loadAccess();
     },
@@ -117,7 +137,7 @@ export function createEnvironmentSettingsController<C>(io: {
     savedConnection(environment: DesktopEnvironmentEntry, connection: C) {
       const changed = session()?.environment.id !== environment.id;
       if (changed) { ++readSequence; const previous = session(); if (previous) io.closed?.(previous.token); }
-      update({ environment, metadata_label: environment.label, connection, connection_baseline: connection, saving: null,
+      update({ environment, authority_revoked: false, metadata_label: environment.label, connection, connection_baseline: connection, saving: null,
         ...(changed ? { token: ++sequence, access: null, access_state: 'idle' as const, access_error: null } : {}) });
     },
   };

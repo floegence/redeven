@@ -16,6 +16,8 @@
     "lint": "eslint \"src/**/*.ts\" \"src/**/*.tsx\" \"electron-builder.config.mjs\" \"eslint.config.mjs\" \"vite.welcome.config.mjs\" --max-warnings=0 && cd ../internal/flower_ui && NODE_PATH=../../desktop/node_modules ../../desktop/node_modules/.bin/eslint -c eslint.config.mjs \"src/**/*.{ts,tsx}\" --max-warnings=0 && cd ../tessiven_ui && NODE_PATH=../../desktop/node_modules ../../desktop/node_modules/.bin/eslint -c eslint.config.mjs \"src/**/*.{ts,tsx}\" --max-warnings=0",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.typecheck.json --noEmit",
     "test:runtime-compatibility": "vitest run src/shared/runtimeService.test.ts src/main/runtimeState.test.ts src/main/runtimeProcess.test.ts",
+    "test:interaction-continuity": "node ../scripts/check_interaction_continuity.mjs",
+    "test:interaction-continuity:browser": "node scripts/check-interaction-continuity.mjs",
     "test:startup-continuity": "node scripts/check-startup-continuity.mjs",
     "test:flower-media": "node scripts/check-flower-media.mjs",
     "test": "vitest run && vitest run --config vitest.client.config.ts",
@@ -124,8 +126,8 @@
     "vitest": "^4.1.11"
   },
   "dependencies": {
-    "@floegence/floe-webapp-boot": "0.86.39",
-    "@floegence/floe-webapp-core": "0.86.39",
+    "@floegence/floe-webapp-boot": "0.86.42",
+    "@floegence/floe-webapp-core": "0.86.42",
     "@floegence/flowersec-core": "5.11.1",
     "@floegence/redeven-service-templates": "https://github.com/floegence/redeven-service-templates/releases/download/v0.7.0/floegence-redeven-service-templates-0.7.0.tgz",
     "builder-util-runtime": "^9.7.0",
