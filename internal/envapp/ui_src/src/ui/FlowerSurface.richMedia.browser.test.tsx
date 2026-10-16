@@ -243,6 +243,19 @@ describe('Flower inline media', () => {
     expect(preview).toBeTruthy();
     expect(folder.title).toBe('Open containing folder');
     expect(preview.title).toBe('Preview image');
+    const canvas = media.querySelector<HTMLElement>('.chat-media-viewport')!;
+    const actions = folder.parentElement!;
+    expect(getComputedStyle(canvas, '::before').backgroundImage).toContain('radial-gradient');
+    expect(getComputedStyle(image).objectFit).toBe('contain');
+    expect(getComputedStyle(actions).backgroundColor).toBe('rgba(0, 0, 0, 0)');
+    expect(getComputedStyle(actions).borderWidth).toBe('0px');
+    expect(getComputedStyle(actions).opacity).toBe('1');
+    for (const button of [folder, preview]) {
+      const bounds = button.getBoundingClientRect();
+      expect(bounds.width).toBe(bounds.height);
+      expect(getComputedStyle(button).borderRadius).toBe('50%');
+      expect(bounds.bottom).toBeLessThanOrEqual(image.getBoundingClientRect().top);
+    }
     await userEvent.hover(trigger);
     await waitFor(() => getComputedStyle(folder.parentElement!).opacity === '1');
     await page.screenshot({ path: `./__screenshots__/redeven-flower-image-actions-${mode}.png` });
@@ -277,6 +290,7 @@ describe('Flower inline media', () => {
     await waitFor(() => image.getBoundingClientRect().width <= 390);
     expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
     expect(folder.getBoundingClientRect().right).toBeLessThanOrEqual(media.getBoundingClientRect().right);
+    expect(preview.getBoundingClientRect().bottom).toBeLessThanOrEqual(image.getBoundingClientRect().top);
   });
 
   it('opens a local HTML file in the existing floating preview and distinguishes expansion states', async () => {
