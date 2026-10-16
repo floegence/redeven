@@ -87,6 +87,12 @@ failures, refusal, cancellation or missing actual statistics never inherit
 preview counts. A typed `noop` result renders zero even when JSON omits zero
 integer fields.
 
+The edit row labels this phase Preparing changes. Its line-count tooltip
+explains that the values preview changes being prepared and that the completed
+tool supplies the actual counts. Desktop and Env App use the same localized
+copy. User-facing preparation text never exposes argument-generation details
+or claims that a file has already changed.
+
 While live presentation is confirmed, argument-generation rows animate the
 shared [writing pencil](flower-activity-interaction.md). This is generation
 feedback, not an Activity running status or evidence of dispatch. Reduced-motion preferences suppress

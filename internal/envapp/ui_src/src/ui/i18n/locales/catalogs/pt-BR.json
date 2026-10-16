@@ -5169,8 +5169,8 @@
       "waitingForModelContinuation": "Aguardando o modelo continuar",
       "waitSeconds": "{seconds} s",
       "outputTokensTooltip": "Estimativa da saída recebida nesta solicitação ao modelo, incluindo raciocínio e argumentos de ferramentas. O uso faturado é informado separadamente.",
-      "toolGeneratingArguments": "Gerando argumentos",
-      "toolArgumentPreviewTooltip": "A contagem de linhas é atualizada conforme os argumentos chegam. As alterações reais são exibidas quando a ferramenta termina.",
+      "toolPreparingChanges": "Preparando alterações",
+      "toolArgumentPreviewTooltip": "Estas contagens de linhas mostram uma prévia das alterações em preparação. As alterações reais são exibidas quando a ferramenta termina.",
       "placeholder": "Perguntar ao Flower...",
       "fromSource": "De {source}",
       "modelLabel": "Modelo",
@@ -5634,8 +5634,8 @@
       "outputTokens": "{count} tokens",
       "outputTokensTooltip": "Estimativa da saída recebida nesta solicitação ao modelo, incluindo raciocínio e argumentos de ferramentas. O uso faturado é informado separadamente.",
       "waitSeconds": "{seconds} s",
-      "toolArgumentPreviewTooltip": "A contagem de linhas é atualizada conforme os argumentos chegam. As alterações reais são exibidas quando a ferramenta termina.",
-      "toolGeneratingArguments": "Gerando argumentos"
+      "toolArgumentPreviewTooltip": "Estas contagens de linhas mostram uma prévia das alterações em preparação. As alterações reais são exibidas quando a ferramenta termina.",
+      "toolPreparingChanges": "Preparando alterações"
     },
     "threadList": {
       "title": "Conversas",

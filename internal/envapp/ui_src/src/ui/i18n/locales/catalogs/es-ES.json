@@ -5169,8 +5169,8 @@
       "waitingForModelContinuation": "Esperando a que el modelo continúe",
       "waitSeconds": "{seconds} s",
       "outputTokensTooltip": "Estimación de la salida recibida para esta solicitud al modelo, incluidos el razonamiento y los argumentos de herramientas. El uso facturado se informa por separado.",
-      "toolGeneratingArguments": "Generando argumentos",
-      "toolArgumentPreviewTooltip": "El número de líneas se actualiza a medida que llegan los argumentos. Los cambios reales se muestran cuando termina la herramienta.",
+      "toolPreparingChanges": "Preparando cambios",
+      "toolArgumentPreviewTooltip": "Estos recuentos de líneas muestran una vista previa de los cambios que se están preparando. Los cambios reales se muestran cuando termina la herramienta.",
       "placeholder": "Pregúntale a Flower...",
       "fromSource": "Desde {source}",
       "modelLabel": "Modelo",
@@ -5634,8 +5634,8 @@
       "outputTokens": "{count} tokens",
       "outputTokensTooltip": "Estimación de la salida recibida para esta solicitud al modelo, incluidos el razonamiento y los argumentos de herramientas. El uso facturado se informa por separado.",
       "waitSeconds": "{seconds} s",
-      "toolArgumentPreviewTooltip": "El número de líneas se actualiza a medida que llegan los argumentos. Los cambios reales se muestran cuando termina la herramienta.",
-      "toolGeneratingArguments": "Generando argumentos"
+      "toolArgumentPreviewTooltip": "Estos recuentos de líneas muestran una vista previa de los cambios que se están preparando. Los cambios reales se muestran cuando termina la herramienta.",
+      "toolPreparingChanges": "Preparando cambios"
     },
     "threadList": {
       "title": "Conversaciones",
