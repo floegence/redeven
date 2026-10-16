@@ -426,12 +426,14 @@ export function EnvironmentCardsPanel(
     environmentID: string,
     intent: EnvironmentLifecycleDisclosureIntent,
     attempt: EnvironmentLifecycleAttempt,
+    reinstallMode?: EnvironmentActionModel['reinstall_mode'],
   ) => {
     // IMPORTANT: Register the attempt and show its operation surface before any asynchronous admission.
     batch(() => {
       setGuidanceSessionState((current) => (current?.environment_id === environmentID ? null : current));
       setLifecycleDisclosureState((current) => ({ ...beginEnvironmentLifecycleDisclosure(current, environmentID, intent, attempt)!,
         authority_key: environmentInteractionIdentity(projectedEntriesByID()[environmentID]!),
+        reinstall_mode: reinstallMode,
       }));
       setActiveEnvironmentOverlayState(openEnvironmentLibraryOverlayState('lifecycle_progress', environmentID));
     });
@@ -580,8 +582,8 @@ export function EnvironmentCardsPanel(
       copyOperationDiagnostics={props.copyOperationDiagnostics}
       setGuidanceSession={(nextSession) => setGuidanceSessionState(nextSession)}
       guidanceCurrent={(session) => guidanceSessionState() === session}
-      beginLifecycleDisclosure={(intent, attempt) =>
-        beginLifecycleProgressDisclosure(environmentID, intent, attempt)
+      beginLifecycleDisclosure={(intent, attempt, mode) =>
+        beginLifecycleProgressDisclosure(environmentID, intent, attempt, mode)
       }
       settleLifecycleDisclosure={(attempt, accepted) => settleLifecycleProgressDisclosure(environmentID, attempt, accepted)}
       bindLifecycleDisclosure={(attempt, operation) =>
@@ -819,6 +821,7 @@ function EnvironmentOwnerSurface(
     beginLifecycleDisclosure: (
       intent: EnvironmentLifecycleDisclosureIntent,
       attempt: EnvironmentLifecycleAttempt,
+      reinstallMode?: EnvironmentActionModel['reinstall_mode'],
     ) => void;
     settleLifecycleDisclosure: (attempt: EnvironmentLifecycleAttempt, accepted: boolean) => void;
     bindLifecycleDisclosure: (attempt: EnvironmentLifecycleAttempt, operation: EnvironmentLifecycleAttempt) => void;
@@ -1143,7 +1146,7 @@ function EnvironmentOwnerSurface(
               let lifecycleAttempt: EnvironmentLifecycleAttempt | undefined;
               if (environmentActionStartsLifecycleDisclosure(action)) {
                 lifecycleAttempt = createEnvironmentLifecycleAttempt(props.environment.id, action.intent);
-                props.beginLifecycleDisclosure(action.intent, lifecycleAttempt);
+                props.beginLifecycleDisclosure(action.intent, lifecycleAttempt, action.reinstall_mode);
               } else if (isEnvironmentGuidancePendingIntent(action.intent)) {
                 props.setGuidanceSession(
                   startEnvironmentGuidanceIntent(props.guidanceSession, props.environment.id, action.intent),
@@ -1169,7 +1172,7 @@ function EnvironmentOwnerSurface(
               let lifecycleAttempt: EnvironmentLifecycleAttempt | undefined;
               if (environmentActionStartsLifecycleDisclosure(action)) {
                 lifecycleAttempt = createEnvironmentLifecycleAttempt(props.environment.id, action.intent);
-                props.beginLifecycleDisclosure(action.intent, lifecycleAttempt);
+                props.beginLifecycleDisclosure(action.intent, lifecycleAttempt, action.reinstall_mode);
               } else if (isEnvironmentGuidancePendingIntent(action.intent)) {
                 props.setGuidanceSession(
                   startEnvironmentGuidanceIntent(props.guidanceSession, props.environment.id, action.intent),
