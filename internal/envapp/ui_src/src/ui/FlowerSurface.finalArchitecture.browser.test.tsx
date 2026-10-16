@@ -369,7 +369,7 @@ describe('Flower final thread cache and workspace transport', () => {
     await waitFor(() => getComputedStyle(detailWindow!).opacity === '1');
     expect(detailAvatar.querySelector('svg')).not.toBeNull();
     expect(detailAvatar.dataset.flowerSubagentAvatar).toBe(rowAvatar?.dataset.flowerSubagentAvatar);
-    expect(detailAvatar.dataset.flowerSubagentAvatarPalette).toBe(rowAvatar?.dataset.flowerSubagentAvatarPalette);
+    expect(detailAvatar.querySelector('svg')?.innerHTML).toBe(rowAvatar?.querySelector('svg')?.innerHTML);
     expect(detail.querySelector('canvas[data-thinking-orb-state]')).toBeNull();
     expect(statusText.textContent).toBe('Running');
     expect(getComputedStyle(statusText).animationName).toBe('none');

@@ -1,5 +1,10 @@
 # Redeven OKF Update Log
 
+## 2026-10-15: Distinct subagent identities and compact dropdown
+
+- Replace the animal/accessory generator with 36 original fixed-palette [subagent avatars](ui/flower-subagent-detail.md).
+- Simplify the dropdown and default ended agents to a two-avatar summary with a remaining count, preserving live updates, failure visibility, keyboard control, and canonical detail routing.
+
 ## 2026-10-15: Clear edit preparation status
 
 - Describe streamed [edit preparation](ui/flower-output-progress.md#edit-arguments) as Preparing changes across Desktop and Env App locales.

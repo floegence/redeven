@@ -220,8 +220,10 @@ describe('Flower activity status presentation', () => {
     expect(runningTextRule).toContain('color: var(--foreground)');
     expect(runningTextRule).not.toContain('animation:');
     expect(runningTextRule).not.toContain('background-clip:');
-    expect(css).toContain(".flower-subagents-dropdown-metric[data-tone='completed']");
-    expect(css).toContain('.flower-subagents-dropdown-group-header');
+    expect(css).toContain('.flower-subagents-dropdown-disclosure');
+    expect(css).toContain('.flower-subagents-dropdown-avatar-summary');
+    expect(css).not.toContain('.flower-subagents-dropdown-metric');
+    expect(avatarRule).toContain('border-radius: 28%');
     expect(avatarRule).toContain('width: 2.25rem');
     expect(avatarRule).toContain('height: 2.25rem');
     expect(avatarRule).not.toContain('animation:');
