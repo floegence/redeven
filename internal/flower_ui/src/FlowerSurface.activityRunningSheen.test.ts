@@ -286,13 +286,13 @@ describe('Flower activity status presentation', () => {
     const switcherRule = cssRule(css, '.flower-subagent-switcher');
     const metaRule = cssRule(css, '.flower-subagent-detail-overview-meta');
 
-    expect(overviewRule).toContain('align-items: center');
-    expect(overviewRule).toContain('display: flex');
-    expect(overviewRule).toContain('flex-wrap: wrap');
+    expect(overviewRule).toContain('align-items: start');
+    expect(overviewRule).toContain('display: grid');
+    expect(overviewRule).toContain('grid-template-columns: minmax(0, 1fr) minmax(0, 15rem)');
     expect(switcherRule).toContain('flex-wrap: wrap');
     expect(switcherRule).not.toContain('border-bottom');
     expect(metaRule).toContain('flex-wrap: nowrap');
-    expect(metaRule).toContain('overflow: hidden');
+    expect(metaRule).toContain('min-height: 2rem');
     expect(css).toContain('@container flower-subagent-window (max-width: 560px)');
     expect(css).toContain('.flower-subagent-detail-agent-type {\n    display: none;');
   });

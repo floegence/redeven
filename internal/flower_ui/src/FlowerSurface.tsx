@@ -6450,6 +6450,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const selectedActiveSubagentItems = createMemo(() => selectedSubagentItems().filter((item) => subagentStatusIsActive(item.status)));
   const selectedSettledSubagentItems = createMemo(() => selectedSubagentItems().filter((item) => !subagentStatusIsActive(item.status)));
   const selectedRunningSubagentCount = createMemo(() => selectedSubagentItems().filter((item) => item.status === 'running').length);
+  // Navigation follows immutable creation identity, not the dropdown's live priority.
+  const subagentSwitcherItems = createMemo(() => [...selectedSubagentItems()].sort((left, right) => (
+    left.createdAtMs - right.createdAtMs || left.threadID.localeCompare(right.threadID)
+  )));
   const selectedActiveSubagentCount = createMemo(() => selectedActiveSubagentItems().length);
   const selectedSettledSubagentCount = createMemo(() => selectedSettledSubagentItems().length);
   const selectedFailedSubagentCount = createMemo(() => selectedSettledSubagentItems().filter((item) => item.status === 'failed' || item.status === 'timed_out').length);
@@ -11083,7 +11087,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     <SubagentDetailWindow
       agentSwitcher={<Show when={selectedSubagentItems().length > 1}>
         <nav class="flower-subagent-switcher" data-flower-subagent-switcher aria-label={subagentsCopy().title}>
-          <FlowerKeyedList scope={selectedThreadID()} each={selectedSubagentItems()} identity={(item) => item.threadID}>
+          <FlowerKeyedList scope={selectedThreadID()} each={subagentSwitcherItems()} identity={(item) => item.threadID}>
             {(item) => <button type="button" class="flower-subagent-switch" data-flower-subagent-switch={item().threadID}
               aria-pressed={activeSubagentID() === item().threadID}
               aria-label={[subagentRowTitle(item()), subagentStatusLabel(item().status), subagentsCopy().openThread].join('. ')}

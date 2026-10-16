@@ -37,6 +37,11 @@ function mount(messages = [operation('spawn', 'spawn', 1)], count = 1, options: 
   return { runtime, summaries, loadDetail };
 }
 
+async function settleDetailWindow(surface: HTMLElement): Promise<void> {
+  await waitFor(() => surface.dataset.floatingPresence === 'open');
+  await Promise.all(surface.getAnimations().map(animation => animation.finished));
+}
+
 function row(runtime: HTMLElement, id: string) {
   return runtime.querySelector<HTMLElement>('[data-flower-activity-item-id="' + id + '"]')!;
 }
@@ -116,8 +121,7 @@ describe('Subagent inline capsules', () => {
       row(runtime, 'spawn').querySelector<HTMLButtonElement>('[data-flower-subagent-capsule]')!.click();
       await waitFor(() => Boolean(document.querySelector('.flower-subagent-detail-transcript')));
       const window = document.querySelector<HTMLElement>('.flower-subagent-detail-window')!;
-      const geometry = window.closest<HTMLElement>('[data-floe-geometry-surface]')!;
-      await waitFor(() => geometry.dataset.floatingPresence === 'open' && getComputedStyle(geometry).opacity === '1');
+      await settleDetailWindow(window);
       const switcher = document.querySelector<HTMLElement>('[data-flower-subagent-switcher]')!;
       expect(switcher.querySelectorAll('button')).toHaveLength(8);
       expect(window.querySelector('.flower-subagent-detail-overview')?.contains(switcher)).toBe(true);
@@ -148,6 +152,114 @@ describe('Subagent inline capsules', () => {
       await page.screenshot({ path: '__screenshots__/subagent-capsules/narrow-' + theme + '.png' });
     });
   }
+
+  it.each([1100, 700, 320])('keeps avatar coordinates through deferred detail and metadata changes at %spx', async (width) => {
+    await page.viewport(width, 900);
+    const requests: Array<ReturnType<typeof deferred<ReturnType<typeof subagentDetail>>>> = [];
+    const { runtime, summaries } = mount([operation('spawn', 'spawn', 8)], 8, {
+      loadSubagentDetail: vi.fn(() => {
+        const request = deferred<ReturnType<typeof subagentDetail>>();
+        requests.push(request);
+        return request.promise;
+      }),
+    });
+    await waitFor(() => Boolean(row(runtime, 'spawn')));
+    row(runtime, 'spawn').querySelector<HTMLButtonElement>('[data-flower-subagent-capsule]')!.click();
+    await waitFor(() => requests.length === 1 && Boolean(document.querySelector('.flower-subagent-detail-window')));
+    const surface = document.querySelector<HTMLElement>('.flower-subagent-detail-window')!;
+    await settleDetailWindow(surface);
+    const switcher = surface.querySelector<HTMLElement>('[data-flower-subagent-switcher]')!;
+    const buttons = [...switcher.querySelectorAll<HTMLButtonElement>('button')];
+    const bounds = (element: HTMLElement) => {
+      const { x, y, width, height } = element.getBoundingClientRect();
+      return [x, y, width, height];
+    };
+    const positions = buttons.map(bounds);
+    const windowBounds = bounds(surface);
+    const overview = surface.querySelector<HTMLElement>('.flower-subagent-detail-overview')!;
+    const overviewBounds = bounds(overview);
+    const checkGeometry = () => {
+      expect(buttons.map(bounds)).toEqual(positions);
+      expect(bounds(surface)).toEqual(windowBounds);
+      expect(bounds(overview)).toEqual(overviewBounds);
+      expect(switcher.scrollWidth).toBeLessThanOrEqual(switcher.clientWidth + 1);
+      expect(surface.scrollWidth).toBeLessThanOrEqual(surface.clientWidth + 1);
+    };
+    const modelContext = {
+      snapshot: { sections: [{ key: 'skills', title: 'Skills', text: 'Current child catalog' }] },
+      entry_id: 'child-facts', path_depth: 1, turn_id: 'child-turn', run_id: 'child-run',
+      updated_at: '2026-10-16T12:00:00Z', changed_keys: ['skills'], removed_keys: [],
+    };
+    requests[0]!.resolve({ ...detailFor(summaries[0]!), model_context: modelContext });
+    await waitFor(() => Boolean(surface.querySelector('.flower-composer-context-progress')));
+    checkGeometry();
+    surface.querySelector<HTMLElement>('.flower-composer-context-progress')!.click();
+    const contextPanel = surface.querySelector<HTMLElement>('.flower-composer-context-tooltip')!;
+    await waitFor(() => getComputedStyle(contextPanel).opacity === '1');
+    expect(contextPanel.getBoundingClientRect().left).toBeGreaterThanOrEqual(surface.getBoundingClientRect().left);
+    expect(contextPanel.getBoundingClientRect().right).toBeLessThanOrEqual(surface.getBoundingClientRect().right);
+    expect(contextPanel.getBoundingClientRect().top).toBeGreaterThanOrEqual(overview.getBoundingClientRect().bottom);
+    checkGeometry();
+    for (const index of [1, 2, 6, 0]) {
+      const target = buttons.find(button => button.dataset.flowerSubagentSwitch === summaries[index]!.thread_id)!;
+      target.focus();
+      target.click();
+      await waitFor(() => Boolean(surface.querySelector('.flower-subagent-detail-loading')));
+      checkGeometry();
+      const detail = detailFor({ ...summaries[index]!, agent_type: index === 2 ? 'worker' : 'reviewer' });
+      requests.at(-1)!.resolve(index === 0 ? { ...detail, model_context: modelContext } : {
+        ...detail, current: { ...detail.current, activity: 'idle', run_progress: undefined },
+      });
+      await waitFor(() => Boolean(surface.querySelector('.flower-subagent-detail-transcript')));
+      checkGeometry();
+      expect(document.activeElement).toBe(target);
+      expect(surface.querySelector('[data-flower-subagent-switch="' + summaries[index]!.thread_id + '"]')).toBe(target);
+      expect(target.getAttribute('aria-pressed')).toBe('true');
+    }
+    await page.screenshot({ path: '__screenshots__/subagent-capsules/stable-switcher-' + width + '.png' });
+  });
+
+  it('keeps creation order and focused avatar positions through live membership updates', async () => {
+    await page.viewport(1100, 900);
+    let emit: ((value: FlowerLiveStreamEnvelope | null) => void) | undefined;
+    const { runtime, summaries } = mount([operation('spawn', 'spawn', 8)], 8, {
+      async *connectLiveStream({ signal }) {
+        while (!signal.aborted) {
+          const value = await new Promise<FlowerLiveStreamEnvelope | null>(resolve => {
+            emit = resolve;
+            signal.addEventListener('abort', () => resolve(null), { once: true });
+          });
+          if (!value) return;
+          emit = undefined;
+          yield value;
+        }
+      },
+    });
+    await waitFor(() => Boolean(row(runtime, 'spawn')) && Boolean(emit));
+    // Inventory order and equal creation timestamps must not inherit status priority.
+    const creationOrder = [summaries[3]!, summaries[1]!, ...summaries.filter((_, index) => index !== 3 && index !== 1)];
+    const createdAt = summaries[0]!.created_at_ms!;
+    const inventory = creationOrder.map((summary, index) => ({ ...summary, created_at_ms: createdAt + Math.floor(index / 2) }));
+    emit!({ schema_version: 1, kind: 'thread.batch', thread_id: parentID, subagents: inventory });
+    await waitFor(() => Boolean(emit));
+    row(runtime, 'spawn').querySelector<HTMLButtonElement>('[data-flower-subagent-capsule]')!.click();
+    await waitFor(() => Boolean(document.querySelector('.flower-subagent-detail-transcript')));
+    const surface = document.querySelector<HTMLElement>('.flower-subagent-detail-window')!;
+    await settleDetailWindow(surface);
+    const switcher = surface.querySelector<HTMLElement>('[data-flower-subagent-switcher]')!;
+    const buttons = [...switcher.querySelectorAll<HTMLButtonElement>('button')];
+    const positions = buttons.map(button => button.getBoundingClientRect().x);
+    const focused = buttons.find(button => button.dataset.flowerSubagentSwitch === summaries[0]!.thread_id)!;
+    focused.focus();
+    emit!({ schema_version: 1, kind: 'thread.batch', thread_id: parentID,
+      subagents: [...inventory].reverse().map((summary, index) => ({ ...summary, status: index === 0 ? 'running' : 'completed', task_name: 'Renamed task ' + index, updated_at_ms: Date.now() + index * 100 })) });
+    await waitFor(() => Boolean(emit) && focused.title.includes('Completed'));
+    expect([...switcher.querySelectorAll<HTMLButtonElement>('button')].map(button => button.dataset.flowerSubagentSwitch))
+      .toEqual(buttons.map(button => button.dataset.flowerSubagentSwitch));
+    expect(buttons.map(button => button.getBoundingClientRect().x)).toEqual(positions);
+    expect(document.activeElement).toBe(focused);
+    expect(buttons.map(button => button.dataset.flowerSubagentSwitch)).toEqual([1, 3, 0, 2, 4, 5, 6, 7].map(index => summaries[index]!.thread_id));
+  });
 
   it.each(['spawn', 'wait'])('updates live %s status without rewriting historical outcomes or replacing focused capsules', async (action) => {
     let emit: ((value: FlowerLiveStreamEnvelope | null) => void) | undefined;

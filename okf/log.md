@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-16: Stable Subagent navigation
+
+- Keep [Subagent switcher](ui/flower-subagent-detail.md) avatars in creation order and reserve independent navigation, metadata, and context geometry across selection, deferred loading, and live status updates. Cover wide, intermediate, and narrow windows with browser coordinate assertions.
+
 ## 2026-10-16: Inline reference optical emphasis
 
 - Increase [inline reference](ui/flower-citations.md#inline-code-references) reading size to 96% of surrounding prose, with medium weight 500 across themes. Preserve published theme colors and quiet fills, and cover mixed CJK/Latin prose in browser acceptance.
