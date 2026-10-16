@@ -505,7 +505,8 @@ it('opens user-only pixels for canonical takeover without submitting typing as c
   await waitFor(() => document.querySelector('.flower-computer-stage') === null);
 });
 
-it('opens the chosen historical screenshot after a newer semantic observation without starting live capture', async () => {
+it.each([1440, 390])('shows compact historical screenshot thumbnails with saved-image preview at %s px', async (width) => {
+  await page.viewport(width, 1000);
   const threadID = 'historical-computer-frame';
   const newerFrame = `computer://browser-main/${'b'.repeat(64)}`;
   const current = thread({ thread_id: threadID, status: 'success', active_run_id: 'history-run', messages: [{
@@ -540,11 +541,24 @@ it('opens the chosen historical screenshot after a newer semantic observation wi
     await waitFor(() => Boolean(row(index)?.querySelector('.chat-media-image-button')));
     row(index)!.scrollIntoView();
     await waitFor(() => row(index)!.querySelector<HTMLImageElement>('.chat-media-image')?.naturalWidth === 1);
+    const thumbnail = row(index)!.querySelector<HTMLElement>('.flower-activity-screenshot')!;
+    const viewport = thumbnail.querySelector<HTMLElement>('.chat-media-viewport')!;
+    expect(thumbnail.getBoundingClientRect().width).toBeLessThanOrEqual(320);
+    expect(viewport.getBoundingClientRect().height).toBeLessThanOrEqual(180);
+    expect(getComputedStyle(viewport).padding).toBe('0px');
+    expect(getComputedStyle(viewport).backgroundColor).toBe('rgba(0, 0, 0, 0)');
+    expect(getComputedStyle(viewport, '::before').display).toBe('none');
+    expect(getComputedStyle(thumbnail.querySelector('.chat-media-header')!).display).toBe('none');
     expect(loadComputerFrame).toHaveBeenCalledWith(expect.objectContaining({ thread_id: threadID, resource_ref: frame }));
     row(index)!.querySelector<HTMLButtonElement>('.chat-media-image-button')!.click();
     await waitFor(() => Boolean(document.querySelector('.chat-media-full-image')));
     document.querySelector<HTMLButtonElement>('[aria-label="Close preview"]')!.click();
     await waitFor(() => document.querySelector('.chat-media-full-image') === null);
+    row(index)!.querySelector<HTMLButtonElement>('[data-flower-disclosure-trigger]')!.click();
+    await waitFor(() => row(index)!.dataset.state === 'closed');
+    expect(row(index)!.querySelector('.flower-activity-screenshot')).toBeNull();
+    row(index)!.querySelector<HTMLButtonElement>('[data-flower-disclosure-trigger]')!.click();
+    await waitFor(() => row(index)!.querySelector<HTMLImageElement>('.chat-media-image')?.naturalWidth === 1);
   }
   expect(setComputerViewer).not.toHaveBeenCalled();
 });
