@@ -66,6 +66,7 @@ import {
   inspectFlowerText,
   replaceFlowerTextSelection,
 } from './attachments/flowerAttachmentModel';
+import { FlowerUserMessageBody } from './chat/FlowerUserMessageBody';
 import { FlowerChatContextChips } from './chat/FlowerChatContextChips';
 import { FlowerChatContextPreview, type FlowerContextSnapshotPreviewProps } from './chat/FlowerChatContextPreview';
 import { FlowerContextIcon } from './icons/FlowerContextIcon';
@@ -10370,7 +10371,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       when={block().type === 'image' ? block() as Extract<FlowerRenderableMessageBlock, { type: 'image' }> : null}
       fallback={(
         <a
-          class="flower-message-file"
+          class="flower-message-file flower-message-resource"
+          title={(block() as Extract<FlowerRenderableMessageBlock, { type: 'file' }>).name}
           href={(block() as Extract<FlowerRenderableMessageBlock, { type: 'file' }>).url || undefined}
           download={(block() as Extract<FlowerRenderableMessageBlock, { type: 'file' }>).url
             ? (block() as Extract<FlowerRenderableMessageBlock, { type: 'file' }>).name
@@ -10594,7 +10596,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         notifyThreadActionError(getErrorMessage(error));
       }
     };
-    const isUnifiedUserBubble = createMemo(() => message().role === 'user' && contextDisplay() !== null);
     return (
       <Show when={visible()}>
         <div
@@ -10607,9 +10608,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           data-flower-message-status={message().status}
         >
           <Show
-            when={isUnifiedUserBubble()}
+            when={message().role === 'user'}
             fallback={
-              <div class={cn('flower-message-block-stack', message().role === 'user' ? 'flower-message-block-stack-user' : 'flower-message-block-stack-assistant')}>
+              <div class="flower-message-block-stack flower-message-block-stack-assistant">
                 <For each={blockKeys()}>
                   {(blockKey) => {
                     const block = createMemo(() => blocksByKey().get(blockKey) ?? null);
@@ -10628,43 +10629,25 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     );
                   }}
                 </For>
-                <Show when={message().role === 'user' && (copyText() || messageTime())}>
-                  <div class="flower-message-action-row flower-message-action-row-user">
-                    <Show when={messageTime()}>
-                      {(value) => <time class="flower-message-time" datetime={new Date(message().created_at_ms).toISOString()}>{value()}</time>}
-                    </Show>
-                    <MessageCopyButton message={message()} text={copyText()} placement="user" />
-                  </div>
-                </Show>
               </div>
             }
           >
             <div class="flower-message-block-stack flower-message-block-stack-user">
-              <div class="flower-message-bubble flower-message-bubble-framed flower-message-bubble-user flower-chat-context-unified-bubble">
-                <For each={blockKeys()}>
-                  {(blockKey) => {
-                    const block = createMemo(() => blocksByKey().get(blockKey) ?? null);
-                    const content = createMemo(() => block()?.type === 'content' ? block() as Extract<FlowerRenderableMessageBlock, { type: 'content' }> : null);
-                    const attachment = createMemo(() => (
-                      block()?.type === 'image' || block()?.type === 'file'
-                        ? block() as Extract<FlowerRenderableMessageBlock, { type: 'image' | 'file' }>
-                        : null
-                    ));
-                    return (
-                      <Show when={content()} fallback={<Show when={attachment()}>{(value) => messageAttachmentBlock(value)}</Show>}>
-                        {(value) => <span class="flower-message-plain-text">{value().content}</span>}
-                      </Show>
-                    );
-                  }}
-                </For>
-                <FlowerChatContextChips
-                  contextDisplay={contextDisplay()!}
-                  linkedContextLabel={copy().chat.linkedContextLabel}
-                  truncatedLabel={copy().chat.truncatedLabel}
-                  canActivateChip={canActivateContextChip}
-                  onChipClick={activateContextChip}
-                />
-              </div>
+              <FlowerUserMessageBody
+                blocks={blocks()}
+                renderBlock={(block) => messageBlockView(message, block, streamingBlockKey, copyText, assistantCopyBlockKey, viewportScope, thread)}
+                references={(
+                  <Show when={contextDisplay()}>
+                    {(display) => <FlowerChatContextChips
+                      contextDisplay={display()}
+                      truncatedLabel={copy().chat.truncatedLabel}
+                      canActivateChip={canActivateContextChip}
+                      onChipClick={activateContextChip}
+                    />}
+                  </Show>
+                )}
+                hasReferences={Boolean(contextDisplay())}
+              />
               <Show when={copyText() || messageTime()}>
                 <div class="flower-message-action-row flower-message-action-row-user">
                   <Show when={messageTime()}>
@@ -10683,8 +10666,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   function queuedTurnEntry(entry: Accessor<Extract<FlowerTimelineEntry, { type: 'queued_turn' }>>) {
     const turn = createMemo<FlowerQueuedTurn>(() => entry().turn);
     const blocks = createMemo(() => entry().blocks);
-    const blockKeys = createMemo(() => blocks().map((block) => block.key));
-    const blocksByKey = createMemo(() => new Map(blocks().map((block) => [block.key, block] as const)));
     const contextDisplay = createMemo(() => parseChatContextAction(turn().context_action));
     const canActivateContextChip = (chip: FlowerChatContextChip): boolean => {
       const action = chip.action;
@@ -10763,45 +10744,21 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         data-flower-queued-turn-state="queued"
       >
         <div class="flower-message-block-stack flower-message-block-stack-user">
-          <Show
-            when={contextDisplay()}
-            fallback={(
-              <For each={blockKeys()}>
-                {(blockKey) => {
-                  const block = createMemo(() => blocksByKey().get(blockKey) ?? null);
-                  return <Show when={block()}>{(value) => queuedBlock(value)}</Show>;
-                }}
-              </For>
-            )}
-          >
-            {(display) => (
-              <div class="flower-message-bubble flower-message-bubble-framed flower-message-bubble-user flower-chat-context-unified-bubble flower-queued-turn-bubble">
-                <For each={blockKeys()}>
-                  {(blockKey) => {
-                    const block = createMemo(() => blocksByKey().get(blockKey) ?? null);
-                    const content = createMemo(() => block()?.type === 'content' ? block() as Extract<FlowerRenderableMessageBlock, { type: 'content' }> : null);
-                    const attachment = createMemo(() => (
-                      block()?.type === 'image' || block()?.type === 'file'
-                        ? block() as Extract<FlowerRenderableMessageBlock, { type: 'image' | 'file' }>
-                        : null
-                    ));
-                    return (
-                      <Show when={content()} fallback={<Show when={attachment()}>{(value) => messageAttachmentBlock(value)}</Show>}>
-                        {(value) => <span class="flower-message-plain-text">{value().content}</span>}
-                      </Show>
-                    );
-                  }}
-                </For>
-                <FlowerChatContextChips
+          <FlowerUserMessageBody
+            blocks={blocks()}
+            renderBlock={queuedBlock}
+            references={(
+              <Show when={contextDisplay()}>
+                {(display) => <FlowerChatContextChips
                   contextDisplay={display()}
-                  linkedContextLabel={copy().chat.linkedContextLabel}
                   truncatedLabel={copy().chat.truncatedLabel}
                   canActivateChip={canActivateContextChip}
                   onChipClick={activateContextChip}
-                />
-              </div>
+                />}
+              </Show>
             )}
-          </Show>
+            hasReferences={Boolean(contextDisplay())}
+          />
           <div class="flower-message-action-row flower-message-action-row-user flower-queued-turn-meta">
             <span class="flower-queued-turn-state">{copy().chat.pendingQueued}</span>
             <Show when={formatMessageTime(turn().created_at_ms)}>

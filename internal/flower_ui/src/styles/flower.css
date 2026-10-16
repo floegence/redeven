@@ -3477,7 +3477,7 @@
 
 .flower-message-bubble-user :is(.flower-chat-md-link, .flower-chat-md-blockquote,
   .flower-input-response-status, .flower-input-response-question,
-  .flower-input-response-answer-redacted, .flower-chat-context-chips-divider-label) {
+  .flower-input-response-answer-redacted) {
   color: inherit;
 }
 
@@ -3712,195 +3712,152 @@
   padding: 0 0.16rem;
 }
 
-/* ---- Unified user bubble (context + content in one frame) ---- */
-
-.flower-chat-context-unified-bubble {
+/* User media and resources live outside the text-only message bubble. */
+.flower-message-images,
+.flower-message-resources {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  width: min(100%, var(--flower-chat-user-bubble-width));
   min-width: 0;
 }
 
-/* ---- Chat context chips ---- */
-
-.flower-chat-context-chips {
-  margin-top: 0;
+.flower-message-images > :is(.flower-message-image, .flower-message-file) {
+  width: min(10rem, calc((100% - 0.5rem) / 2));
+  height: 7.5rem;
+  flex: 0 0 auto;
+  background: var(--card);
 }
 
-.flower-chat-context-chips-divider {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  margin: 0.2rem 0 0.35rem;
+.flower-message-images .flower-message-image img {
+  object-fit: contain;
 }
 
-.flower-chat-context-chips-divider::before,
-.flower-chat-context-chips-divider::after {
-  content: '';
-  flex: 1;
-  height: 1px;
-  background: color-mix(in srgb, var(--primary) 16%, transparent);
-}
-
-.flower-chat-context-chips-divider-label {
-  font-size: 0.625rem;
-  font-weight: 650;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: var(--muted-foreground);
-  white-space: nowrap;
-}
-
-.flower-chat-context-chips-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 0.25rem;
-}
-
-@media (min-width: 640px) {
-  .flower-chat-context-chips-grid {
-    grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr));
-  }
-}
-
-.flower-chat-context-chip {
-  display: flex;
-  min-width: 0;
-  align-items: flex-start;
-  gap: 0.35rem;
-  border: 1px solid;
-  border-radius: 0.5rem;
-  padding: 0.3rem 0.45rem;
-  font-size: 0.6875rem;
-  font-weight: 500;
-  text-align: left;
-  line-height: 1.3;
-  cursor: default;
-  transition: background-color 120ms ease, border-color 120ms ease;
-  max-width: 100%;
-  background: transparent;
-  color: inherit;
-  font-family: inherit;
-}
-
-.flower-chat-context-chip[data-flower-chat-context-interactive="true"] {
-  cursor: pointer;
-}
-
-.flower-chat-context-chip:focus-visible {
+.flower-message-images .flower-message-image:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
 
-.flower-chat-context-chip[data-tone="file"],
-.flower-chat-context-chip[data-tone="selection"] {
-  border-color: color-mix(in srgb, var(--primary) 20%, transparent);
-  background: color-mix(in srgb, var(--primary) 7%, transparent);
+.flower-message-resources {
+  container-type: inline-size;
 }
 
-.flower-chat-context-chip[data-tone="directory"] {
-  border-color: color-mix(in srgb, var(--redeven-categorical-1) 20%, transparent);
-  background: color-mix(in srgb, var(--redeven-categorical-1) 8%, transparent);
+.flower-chat-context-chips {
+  display: contents;
 }
 
-.flower-chat-context-chip[data-tone="terminal"] {
-  border-color: color-mix(in srgb, var(--redeven-categorical-2) 20%, transparent);
-  background: color-mix(in srgb, var(--redeven-categorical-2) 8%, transparent);
+.flower-message-resources .flower-message-resource {
+  flex: 0 0 calc((100% - 1rem) / 3);
+  width: calc((100% - 1rem) / 3);
+  max-width: 100%;
+  min-width: 0;
+  min-height: 3.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.625rem;
+  border: 1px solid var(--flower-chat-surface-border);
+  border-radius: 0.625rem;
+  background: var(--card);
+  color: var(--card-foreground);
+  font: inherit;
+  line-height: 1.4;
+  text-align: left;
+  text-decoration: none;
 }
 
-.flower-chat-context-chip[data-tone="process"] {
-  border-color: color-mix(in srgb, var(--redeven-categorical-3) 20%, transparent);
-  background: color-mix(in srgb, var(--redeven-categorical-3) 8%, transparent);
+@container (max-width: 34rem) {
+  .flower-message-resources .flower-message-resource {
+    flex-basis: calc((100% - 0.5rem) / 2);
+    width: calc((100% - 0.5rem) / 2);
+  }
 }
 
-.flower-chat-context-chip[data-tone="snapshot"] {
-  border-color: color-mix(in srgb, var(--redeven-categorical-4) 20%, transparent);
-  background: color-mix(in srgb, var(--redeven-categorical-4) 8%, transparent);
+@container (max-width: 19rem) {
+  .flower-message-resources .flower-message-resource {
+    flex-basis: 100%;
+    width: 100%;
+  }
 }
 
-.flower-chat-context-chip[data-tone="environment"] {
-  border-color: color-mix(in srgb, var(--redeven-categorical-5) 20%, transparent);
-  background: color-mix(in srgb, var(--redeven-categorical-5) 8%, transparent);
+.flower-chat-context-chip {
+  cursor: default;
 }
 
-.flower-chat-context-chip[data-tone="attachment"] {
-  border-color: color-mix(in srgb, var(--redeven-categorical-6) 20%, transparent);
-  background: color-mix(in srgb, var(--redeven-categorical-6) 8%, transparent);
+.flower-chat-context-chip[data-flower-chat-context-interactive='true'] {
+  cursor: pointer;
+}
+
+.flower-message-resources .flower-message-resource:is(a[href], button):hover {
+  border-color: color-mix(in srgb, var(--primary) 34%, var(--flower-chat-surface-border));
+  background: color-mix(in srgb, var(--primary) 7%, var(--card));
+}
+
+.flower-message-resources .flower-message-resource:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.flower-chat-context-chip[aria-busy='true'] {
+  cursor: progress;
 }
 
 .flower-chat-context-chip-icon {
-  margin-top: 0.05rem;
+  display: flex;
   flex-shrink: 0;
-  width: 1rem;
-  height: 1rem;
+  width: 1.5rem;
+  height: 1.5rem;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted-foreground);
 }
 
 .flower-chat-context-chip-icon svg {
+  display: block;
   width: 100%;
   height: 100%;
-  display: block;
 }
 
 .flower-chat-context-chip-text {
+  display: flex;
   min-width: 0;
   flex: 1;
+  flex-direction: column;
+  gap: 0.1rem;
   overflow-wrap: anywhere;
 }
 
 .flower-chat-context-chip-label {
   display: block;
   overflow: hidden;
+  font-size: var(--floe-type-body);
   text-overflow: ellipsis;
   white-space: nowrap;
   font-weight: 500;
-  line-height: 1.3;
 }
 
 .flower-chat-context-chip-detail {
-  display: block;
+  display: flex;
+  min-width: 0;
+  gap: 0.25rem;
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+}
+
+.flower-chat-context-chip-detail-text {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: var(--font-mono, monospace);
-  font-size: 0.625rem;
-  opacity: 0.75;
-  margin-top: 0.05rem;
 }
 
-.flower-message-bubble-user .flower-chat-context-chip {
-  border-color: color-mix(in srgb, currentColor 32%, transparent);
-  background: transparent;
-}
-
-.flower-message-bubble-user .flower-chat-context-chip:has([data-file-icon-kind]) {
-  align-items: center;
-}
-
-.flower-message-bubble-user .flower-chat-context-chip-icon:has([data-file-icon-kind]) {
-  width: 1.375rem;
-  height: 1.375rem;
-  margin-top: 0;
-  border-radius: 0.25rem;
-  background: var(--card);
-  padding: 0.1875rem;
-}
-
-.flower-message-bubble-user .flower-chat-context-chip:focus-visible {
-  outline-color: currentColor;
-}
-
-.flower-message-bubble-user .flower-chat-context-chip-detail {
-  opacity: 1;
-}
-
-.flower-message-bubble-user .flower-chat-context-chips-divider::before,
-.flower-message-bubble-user .flower-chat-context-chips-divider::after {
-  background: color-mix(in srgb, currentColor 24%, transparent);
+.flower-chat-context-chip-detail-text:empty {
+  display: none;
 }
 
 .flower-chat-context-chip-truncated {
-  display: inline-block;
-  margin-left: 0.25rem;
-  font-family: var(--font-mono, monospace);
-  font-weight: 700;
-  opacity: 0.9;
+  flex-shrink: 0;
+  font-weight: 600;
 }
 
 /* ---- Context preview window ---- */

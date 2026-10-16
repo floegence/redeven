@@ -28,6 +28,19 @@ function referenceTextPreview(text: string): string {
     : `${codePoints.slice(0, REFERENCE_DETAIL_CODE_POINTS).join('')}...`;
 }
 
+// Recognize the host's frozen Activity-page facts for presentation only. The
+// text remains opaque preview content and never grants navigation authority.
+function textReferenceTone(text: string): FlowerChatContextTone {
+  try {
+    const value = JSON.parse(text);
+    if (value && typeof value === 'object'
+      && typeof value.environment?.id === 'string' && typeof value.environment?.name === 'string'
+      && typeof value.page?.id === 'string' && typeof value.page?.name === 'string'
+      && typeof value.captured_at === 'string' && Number.isFinite(Date.parse(value.captured_at))) return 'page_context';
+  } catch { /* Ordinary selected text is not a page snapshot. */ }
+  return 'selection';
+}
+
 function buildCanonicalReferenceChip(
   reference: FlowerMessageReference,
   index: number,
@@ -48,7 +61,7 @@ function buildCanonicalReferenceChip(
   return {
     id: reference.reference_id,
     kind: reference.kind,
-    tone: referenceTone(reference.kind),
+    tone: reference.kind === 'text' ? textReferenceTone(reference.text ?? '') : referenceTone(reference.kind),
     label: reference.label,
     detail: preview,
     truncated: reference.truncated,
@@ -147,7 +160,7 @@ function buildTextSnapshotChip(item: Extract<ContextActionContextItem, { kind: '
   return {
     id: `ctx-${index}-snapshot`,
     kind: 'text_snapshot',
-    tone: 'snapshot',
+    tone: textReferenceTone(item.content) === 'page_context' ? 'page_context' : 'snapshot',
     label,
     detail,
     action: {

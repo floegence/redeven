@@ -23,7 +23,6 @@ function renderContext(action: unknown, canActivateChip?: Parameters<typeof Flow
   disposers.push(render(() => (
     <FlowerChatContextChips
       contextDisplay={display}
-      linkedContextLabel="Linked context"
 			truncatedLabel="Truncated"
       onChipClick={vi.fn()}
       canActivateChip={canActivateChip}
@@ -105,7 +104,6 @@ describe('Flower linked context chips', () => {
     disposers.push(render(() => (
       <FlowerChatContextChips
         contextDisplay={display}
-        linkedContextLabel="Linked references"
 			truncatedLabel="Truncated"
         onChipClick={vi.fn()}
       />
@@ -113,7 +111,8 @@ describe('Flower linked context chips', () => {
 
     const chips = host.querySelectorAll('[data-flower-chat-context-chip="true"]');
     expect(host.querySelector('[data-flower-context-authority]')?.getAttribute('data-flower-context-authority')).toBe('canonical_references');
-    expect(host.textContent).toContain('Linked references');
+    expect(host.textContent).not.toContain('Linked references');
+    expect(host.querySelector('.flower-chat-context-chips-divider')).toBeNull();
     expect(chips[0]?.textContent).toContain('Quoted selection');
     expect(chips[0]?.tagName).toBe('BUTTON');
     expect(chips[1]?.textContent).toContain('src');
@@ -134,7 +133,6 @@ describe('Flower linked context chips', () => {
 		disposers.push(render(() => (
 			<FlowerChatContextChips
 				contextDisplay={display()}
-				linkedContextLabel="Linked references"
 				truncatedLabel="Truncated"
 				onChipClick={activate}
 			/>
@@ -188,7 +186,6 @@ describe('Flower linked context chips', () => {
 		disposers.push(render(() => (
 			<FlowerChatContextChips
 				contextDisplay={display}
-				linkedContextLabel="Linked references"
 				truncatedLabel="Truncated"
 				onChipClick={onChipClick}
 			/>

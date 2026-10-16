@@ -72,19 +72,20 @@ function mount() {
         <FlowerMarkdownBlock content={'[Google Cloud source](https://example.com/cloud.html)\n\n![Android Agent announcement](https://example.com/android.htm?lang=en#details)\n\n[Read `the guide`](https://example.com/guide) and [details](#details).'} mediaEnabled copyCodeLabel="Copy code" codeCopiedLabel="Copied" mediaLabels={markdownMediaEnUS} />
       </div>
       <div class="flower-message-row flower-message-row-user">
-        <div class="flower-message-bubble flower-message-bubble-framed flower-message-bubble-user">
-          <span class="flower-message-plain-text" data-copy>Make my messages easier to recognize.</span>
-          <FlowerMarkdownBlock content={'**Readable text** and [a helpful link](https://example.com). Use `--theme`.\n\n> Keep quoted instructions clear.\n\n| Setting | Value |\n| --- | --- |\n| Theme | Auto |\n\n```\nplain code remains readable\n```'} copyCodeLabel="Copy code" codeCopiedLabel="Copied" />
-          <div class="flower-chat-context-chips-divider"><span class="flower-chat-context-chips-divider-label" data-copy>References</span></div>
-          <div class="flower-chat-context-chips-grid">
+        <div class="flower-message-block-stack flower-message-block-stack-user">
+          <div class="flower-message-resources">
             {['file', 'selection', 'directory', 'terminal', 'process', 'snapshot', 'environment', 'attachment'].map(tone => (
-              <button class="flower-chat-context-chip" data-tone={tone} data-flower-chat-context-interactive="true">
+              <button class="flower-message-resource flower-chat-context-chip" data-tone={tone} data-flower-chat-context-interactive="true">
                 <span class="flower-chat-context-chip-text">
                   <span class="flower-chat-context-chip-label" data-copy>{tone}</span>
                   <span class="flower-chat-context-chip-detail" data-copy>/workspace/readable-reference</span>
                 </span>
               </button>
             ))}
+          </div>
+          <div class="flower-message-bubble flower-message-bubble-framed flower-message-bubble-user">
+            <span class="flower-message-plain-text" data-copy>Make my messages easier to recognize.</span>
+            <FlowerMarkdownBlock content={'**Readable text** and [a helpful link](https://example.com). Use `--theme`.\n\n> Keep quoted instructions clear.\n\n| Setting | Value |\n| --- | --- |\n| Theme | Auto |\n\n```\nplain code remains readable\n```'} copyCodeLabel="Copy code" codeCopiedLabel="Copied" />
           </div>
         </div>
       </div>

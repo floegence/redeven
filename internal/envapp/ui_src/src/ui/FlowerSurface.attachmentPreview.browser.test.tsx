@@ -60,6 +60,11 @@ describe('Flower admitted attachment browser previews', () => {
     await waitFor(() => Boolean(surface.querySelector<HTMLImageElement>('.flower-message-image img')?.naturalWidth));
     const thumbnail = surface.querySelector<HTMLImageElement>('.flower-message-image img')!;
     expect(thumbnail.naturalWidth).toBe(240);
+    const message = surface.querySelector('[data-flower-message-id="attachment-message"]')!;
+    expect(message.querySelector('.flower-message-bubble-user')).toBeNull();
+    expect(thumbnail.closest('.flower-message-images')).not.toBeNull();
+    expect(message.querySelectorAll('.flower-message-resources .flower-message-file')).toHaveLength(2);
+    expect(thumbnail.getBoundingClientRect().height).toBeLessThanOrEqual(120);
     expect(thumbnail.src.startsWith('blob:')).toBe(true);
     expect(surface.querySelector('[data-image-fallback]')).toBeNull();
     const archive = surface.querySelectorAll('a.flower-message-file')[1] as HTMLElement;
