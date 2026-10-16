@@ -49,8 +49,11 @@ Inline Markdown code uses the published Floe `--inline-code-foreground` and
 Flower does not keep another color table. Floe v0.86.43 selects saturated blue,
 teal, ochre and gold reference text for each theme, avoiding purple accents and
 separating references from the surrounding prose. The span has a quiet fill,
-no border, regular monospace text and cloned rounded decoration when a long
-path wraps.
+no border and cloned rounded decoration when a long path wraps. Monospace text
+uses 96% of the surrounding reading size, with medium weight 500 across themes.
+The larger strokes keep references distinct beside
+CJK prose and bold text without strengthening the background or duplicating
+the published color palette.
 Native selection reverses the readable token pair without changing the text.
 User bubbles use the same opaque inset, preserving contrast independently of the
 bubble accent. Linked code retains visible link styling; code links in user
@@ -59,7 +62,8 @@ copy behavior and canonical content remain independent.
 
 Browser acceptance covers all presets and both surface materials at desktop and
 320px widths, exact published token consumption, text/selection contrast, native
-selection, long paths, links, user bubbles and forced colors.
+selection, medium reference weight, relative reading size, mixed CJK/Latin prose,
+long paths, links, user bubbles and forced colors.
 
 ## Source-card presentation
 

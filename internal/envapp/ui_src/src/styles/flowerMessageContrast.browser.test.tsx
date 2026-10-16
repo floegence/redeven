@@ -167,7 +167,8 @@ it.each(['standard', 'soft-neumorphic'])('renders saturated nonpurple references
   const inlineHost = document.createElement('div');
   assistant.append(inlineHost);
   const longPath = '/workspace/project/' + 'deeply-nested-reference/'.repeat(10) + 'ThemeProvider.tsx';
-  const disposeInline = render(() => <FlowerMarkdownBlock content={'Review `' + longPath + '` before continuing.'} copyCodeLabel="Copy code" codeCopiedLabel="Copied" />, inlineHost);
+  // CJK prose and bold Latin text reproduce the optical weight around a real reference.
+  const disposeInline = render(() => <FlowerMarkdownBlock content={'### 这个页面是什么\n\n你截的是 **Slack 官方帮助中心（Slack Help Center）**的一篇文章页面。从面包屑看，路径是：\n\n`Slack Help Center → Using Slack → Message features & tools`\n\n文章标题是 **《Use threads to organize discussions》**（用「话题串」来整理讨论）。\n\nReview `' + longPath + '` before continuing.'} copyCodeLabel="Copy code" codeCopiedLabel="Copied" />, inlineHost);
   const selectedInline = host.querySelector<HTMLElement>('.flower-message-bubble-user .flower-chat-md-inline-code')!;
   const retainedRange = document.createRange(); retainedRange.selectNodeContents(selectedInline);
   window.getSelection()!.addRange(retainedRange);
@@ -184,7 +185,7 @@ it.each(['standard', 'soft-neumorphic'])('renders saturated nonpurple references
         expect(tokens['--inline-code-foreground'], label).toBeTruthy();
         expect(tokens['--inline-code-background'], label).toBeTruthy();
         const nodes = [...host.querySelectorAll<HTMLElement>('.flower-chat-md-inline-code')].filter(node => !node.closest('a'));
-        expect(nodes.length).toBe(2);
+        expect(nodes.length).toBe(3);
         for (const node of nodes) {
           const style = getComputedStyle(node);
           const [red, green, blue] = rgb(style.color).slice(0, 3).map(value => value / 255);
@@ -200,7 +201,9 @@ it.each(['standard', 'soft-neumorphic'])('renders saturated nonpurple references
           expect(rgb(style.color), label).toEqual(rgb(tokens['--inline-code-foreground']!));
           expect(rgb(style.backgroundColor), label).toEqual(rgb(tokens['--inline-code-background']!));
           expect(style.borderTopWidth, label).toBe('0px');
-          expect(style.fontWeight, label).toBe('400');
+          expect(style.fontWeight, label + ': optical emphasis').toBe('500');
+          const bodySize = parseFloat(getComputedStyle(node.closest('.flower-chat-md-block')!).fontSize);
+          expect(parseFloat(style.fontSize) / bodySize, label + ': reference reading size').toBeCloseTo(0.96, 2);
           expect(contrast(rgb(style.color), rgb(style.backgroundColor)), label).toBeGreaterThanOrEqual(preset.name === 'hc-light' ? 7 : 4.5);
           const range = document.createRange(); range.selectNodeContents(node);
           const selection = window.getSelection()!; selection.removeAllRanges(); selection.addRange(range);
@@ -211,7 +214,11 @@ it.each(['standard', 'soft-neumorphic'])('renders saturated nonpurple references
           expect([...node.getClientRects()].every(rect => rect.left >= 0 && rect.right <= width), label).toBe(true);
         }
         expect(host.scrollWidth, label).toBeLessThanOrEqual(width);
-        if (width === 320) expect(nodes[0].getClientRects().length, label).toBeGreaterThan(1);
+        if (width === 320) {
+          for (const node of nodes.filter(node => node.textContent!.length > 60)) {
+            expect(node.getClientRects().length, label + ': wrapped reference').toBeGreaterThan(1);
+          }
+        }
         if (width === 900 && material === 'standard') {
           window.getSelection()!.removeAllRanges();
           await page.screenshot({ element: host, path: '__screenshots__/flower-inline-' + preset.name + '.png' });

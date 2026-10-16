@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-16: Inline reference optical emphasis
+
+- Increase [inline reference](ui/flower-citations.md#inline-code-references) reading size to 96% of surrounding prose, with medium weight 500 across themes. Preserve published theme colors and quiet fills, and cover mixed CJK/Latin prose in browser acceptance.
+
 ## 2026-10-16: Stronger inline reference colors
 
 - Adopt Floe v0.86.43 saturated nonpurple colors for [inline code references](ui/flower-citations.md#inline-code-references) across all 26 themes. Keep fills quiet and preserve wrapping, links, native selection and forced colors.
