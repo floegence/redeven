@@ -1127,7 +1127,8 @@ function EnvironmentOwnerSurface(
                 return;
               }
               if (action.continue_open_after_completion) {
-                await runOpenWithPreflight({
+                await runOpenWithPreflight(action.intent === 'restart_runtime' && props.environment.kind === 'local_environment'
+                  && props.environment.managed_runtime_placement?.kind !== 'container_process' ? action : {
                   intent: 'open_with_preflight',
                   label: props.i18n.t('environmentAction.open'),
                   enabled: true,
@@ -1169,6 +1170,11 @@ function EnvironmentOwnerSurface(
           onRunGuidanceAction={(action) => {
             if (!props.ownerAvailable || !action.enabled) return;
             void (async () => {
+              if (action.intent === 'restart_runtime' && action.continue_open_after_completion
+                && props.environment.kind === 'local_environment' && props.environment.managed_runtime_placement?.kind !== 'container_process') {
+                await runOpenWithPreflight(action);
+                return;
+              }
               let lifecycleAttempt: EnvironmentLifecycleAttempt | undefined;
               if (environmentActionStartsLifecycleDisclosure(action)) {
                 lifecycleAttempt = createEnvironmentLifecycleAttempt(props.environment.id, action.intent);

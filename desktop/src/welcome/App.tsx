@@ -4700,6 +4700,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
   async function attemptEnvironmentOpenSilently(
     environment: DesktopEnvironmentEntry,
+    runtimeRecovery?: 'restart',
   ): Promise<Readonly<{
     opened: boolean;
     message: string;
@@ -4711,6 +4712,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       request = {
         kind: 'open_local_environment',
         environment_id: environment.id,
+        ...(runtimeRecovery ? { runtime_recovery: runtimeRecovery } : {}),
         route: 'auto',
         ...(environment.managed_runtime_target_id ? { runtime_target_id: environment.managed_runtime_target_id } : {}),
         ...(environment.managed_runtime_placement_target_id ? { placement_target_id: environment.managed_runtime_placement_target_id } : {}),
@@ -4978,6 +4980,14 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       publishSession(nextSession);
       return { close_panel: false, next_session: nextSession };
     };
+    if (environment.kind === 'local_environment' && environment.managed_runtime_placement?.kind !== 'container_process'
+      && action.intent === 'restart_runtime' && action.continue_open_after_completion) {
+      const opening = startEnvironmentGuidanceIntent(null, environment.id, 'open_with_preflight');
+      publishSession(opening);
+      const attempted = await attemptEnvironmentOpenSilently(environment, 'restart');
+      return attempted.opened ? { close_panel: true, next_session: null }
+        : failOpenFlow(opening, attempted.message || i18n().t('environmentOpenFlow.openFailedDetail'), attempted.recovery);
+    }
     if (
       (environment.kind === 'local_environment' || environment.kind === 'ssh_environment') &&
       (action.intent === 'open_with_preflight' ||

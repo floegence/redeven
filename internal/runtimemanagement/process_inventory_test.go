@@ -84,15 +84,96 @@ func TestBuildRuntimeProcessInventorySeparatesIdentityLayoutAndAuthority(t *test
 		t.Fatalf("incomplete = %#v", got)
 	}
 	if got := byPID[14]; got.LayoutStatus != RuntimeProcessLayoutUnknown ||
-		got.StopAuthority != RuntimeProcessStopBlocked ||
-		got.ReasonCode != "runtime_layout_untrusted" {
+		got.StopAuthority != RuntimeProcessStopAutomatic ||
+		got.ReasonCode != "" {
 		t.Fatalf("untrusted layout = %#v", got)
 	}
-	if inventory.Summary.Automatic != 1 || inventory.Summary.Blocked != 2 {
+	if inventory.Summary.Automatic != 2 || inventory.Summary.Blocked != 1 {
 		t.Fatalf("summary = %#v", inventory.Summary)
 	}
 	if len(inventory.InventoryDigest) != 64 {
 		t.Fatalf("inventory digest = %q", inventory.InventoryDigest)
+	}
+}
+
+func TestRuntimeProcessInventoryCanonicalStateRootAndExactDirectory(t *testing.T) {
+	root := t.TempDir()
+	realRoot := filepath.Join(root, "state")
+	if err := os.MkdirAll(realRoot, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	alias := filepath.Join(root, "alias")
+	if err := os.Symlink(realRoot, alias); err != nil {
+		t.Skip(err)
+	}
+	options, err := normalizeRuntimeInventoryOptions(RuntimeProcessInventoryOptions{RuntimeRoot: filepath.Join(root, "install"), StateRoot: alias})
+	if err != nil {
+		t.Fatal(err)
+	}
+	executable := filepath.Join(root, "another-install", "redeven")
+	for _, tc := range []struct {
+		root  string
+		count int
+	}{{realRoot, 1}, {alias, 1}, {filepath.Join(alias, "child"), 0}, {root, 0}} {
+		inventory := buildRuntimeProcessInventory(options, runtimeProcessExecutionScope{UserIdentity: "tester", NamespaceID: "mnt:[current]"}, []runtimeProcessSnapshot{testSnapshot(options, 811, 1000, executable, tc.root)})
+		if len(inventory.Instances) != tc.count {
+			t.Fatalf("root %s: %#v", tc.root, inventory)
+		}
+	}
+}
+
+func TestRuntimeProcessInventoryRejectsUnconfirmedDefaultRoot(t *testing.T) {
+	for _, mutate := range []func(*runtimeLockMetadata){
+		func(m *runtimeLockMetadata) { m.PID++ },
+		func(m *runtimeLockMetadata) { m.StartedAtUnixMS = 999 },
+		func(m *runtimeLockMetadata) { m.StartedAtUnixMS = 0 },
+		func(m *runtimeLockMetadata) { m.StateRoot += "-other" },
+		func(m *runtimeLockMetadata) { m.BinaryPath += "-other" },
+		func(m *runtimeLockMetadata) { m.BinaryPath = "" },
+	} {
+		options := testInventoryOptions(t)
+		snapshot := testSnapshot(options, 812, 1000, filepath.Join(t.TempDir(), "redeven"), options.StateRoot)
+		snapshot.Args = []string{snapshot.ExecutablePath, "run"}
+		metadata := runtimeLockMetadata{PID: 812, StartedAtUnixMS: 1001, StateRoot: options.StateRoot, BinaryPath: snapshot.ExecutablePath}
+		mutate(&metadata)
+		body, _ := json.Marshal(metadata)
+		writeRuntimeLeaseTestFile(t, filepath.Join(options.StateRoot, "local-environment", "agent.lock"), body)
+		inventory := buildRuntimeProcessInventory(options, runtimeProcessExecutionScope{UserIdentity: "tester", NamespaceID: "mnt:[current]"}, []runtimeProcessSnapshot{snapshot})
+		if len(inventory.Instances) != 0 {
+			t.Fatalf("accepted unconfirmed metadata: %#v", metadata)
+		}
+	}
+}
+
+func TestRuntimeProcessInventoryFindsDefaultRootFromLiveMetadata(t *testing.T) {
+	options := testInventoryOptions(t)
+	snapshot := testSnapshot(options, 812, 1000, filepath.Join(t.TempDir(), "redeven"), options.StateRoot)
+	snapshot.Args = []string{snapshot.ExecutablePath, "run", "--mode", "local"}
+	body, _ := json.Marshal(runtimeLockMetadata{PID: 812, StartedAtUnixMS: 1001, InstanceID: "cli", StateRoot: options.StateRoot, BinaryPath: snapshot.ExecutablePath})
+	writeRuntimeLeaseTestFile(t, filepath.Join(options.StateRoot, "local-environment", "agent.lock"), body)
+	inventory := buildRuntimeProcessInventory(options, runtimeProcessExecutionScope{UserIdentity: "tester", NamespaceID: "mnt:[current]"}, []runtimeProcessSnapshot{snapshot})
+	if len(inventory.Instances) != 1 || inventory.Summary.Automatic != 1 {
+		t.Fatalf("inventory = %#v", inventory)
+	}
+	snapshot.ProcessStartedAtUnixMS = 2000
+	reused := buildRuntimeProcessInventory(options, runtimeProcessExecutionScope{UserIdentity: "tester", NamespaceID: "mnt:[current]"}, []runtimeProcessSnapshot{snapshot})
+	if len(reused.Instances) != 0 {
+		t.Fatalf("stale metadata matched reused pid: %#v", reused)
+	}
+}
+
+func TestRuntimeProcessInventoryResolvesRelativeRootAgainstProcessDirectory(t *testing.T) {
+	options := testInventoryOptions(t)
+	snapshot := testSnapshot(options, 813, 1000, filepath.Join(t.TempDir(), "redeven"), ".redeven")
+	snapshot.WorkingDirectory = filepath.Dir(options.StateRoot)
+	inventory := buildRuntimeProcessInventory(options, runtimeProcessExecutionScope{UserIdentity: "tester", NamespaceID: "mnt:[current]"}, []runtimeProcessSnapshot{snapshot})
+	if len(inventory.Instances) != 1 || inventory.Summary.Automatic != 1 {
+		t.Fatalf("inventory = %#v", inventory)
+	}
+	snapshot.WorkingDirectory = ""
+	inventory = buildRuntimeProcessInventory(options, runtimeProcessExecutionScope{UserIdentity: "tester", NamespaceID: "mnt:[current]"}, []runtimeProcessSnapshot{snapshot})
+	if len(inventory.Instances) != 0 {
+		t.Fatalf("guessed a relative root without process cwd: %#v", inventory)
 	}
 }
 
@@ -129,7 +210,7 @@ func TestBuildRuntimeProcessInventoryExcludesDifferentRuntimeScopes(t *testing.T
 	}
 }
 
-func TestBuildRuntimeProcessInventoryExcludesManagedExecutableFromAnotherRuntimeRoot(t *testing.T) {
+func TestBuildRuntimeProcessInventoryIncludesSameStateRootFromAnotherInstall(t *testing.T) {
 	root := t.TempDir()
 	options := RuntimeProcessInventoryOptions{
 		RuntimeRoot: filepath.Join(root, "desktop-a", "runtime"),
@@ -142,8 +223,8 @@ func TestBuildRuntimeProcessInventoryExcludesManagedExecutableFromAnotherRuntime
 		runtimeProcessExecutionScope{UserIdentity: "tester", NamespaceID: "mnt:[current]"},
 		[]runtimeProcessSnapshot{foreign},
 	)
-	if len(inventory.Instances) != 0 {
-		t.Fatalf("foreign runtime-root process was inventoried: %#v", inventory)
+	if len(inventory.Instances) != 1 || inventory.Summary.Automatic != 1 {
+		t.Fatalf("same-state-root process was not inventoried: %#v", inventory)
 	}
 }
 
@@ -180,7 +261,7 @@ func TestRuntimeProcessInventoryAllowsVerifiedAlternateBundle(t *testing.T) {
 	}
 }
 
-func TestRuntimeProcessInventoryBlocksUnprovenAlternateBundle(t *testing.T) {
+func TestRuntimeProcessInventoryAllowsAlternateInstallWithoutVersionMetadata(t *testing.T) {
 	for _, test := range []struct {
 		name string
 		lock *runtimeLockMetadata
@@ -211,10 +292,9 @@ func TestRuntimeProcessInventoryBlocksUnprovenAlternateBundle(t *testing.T) {
 				t.Fatalf("instances = %#v", inventory.Instances)
 			}
 			instance := inventory.Instances[0]
-			if instance.IdentityStatus != RuntimeProcessIdentityIncomplete ||
-				instance.LayoutStatus != RuntimeProcessLayoutUnknown ||
-				instance.StopAuthority != RuntimeProcessStopBlocked ||
-				instance.ReasonCode != "runtime_layout_untrusted" {
+			if instance.IdentityStatus != RuntimeProcessIdentityVerified ||
+				instance.StopAuthority != RuntimeProcessStopAutomatic ||
+				instance.ReasonCode != "" {
 				t.Fatalf("instance = %#v", instance)
 			}
 		})

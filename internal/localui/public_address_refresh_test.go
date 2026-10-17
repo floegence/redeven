@@ -16,13 +16,140 @@ import (
 	"slices"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
 	flowersec "github.com/floegence/flowersec/flowersec-go/v5"
 	"github.com/floegence/redeven/internal/accessgate"
+	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/runtimemanagement"
 )
+
+func TestDefaultPortFallbackPublishesActualURLsWithoutPendingSettings(t *testing.T) {
+	occupied, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer occupied.Close()
+	configured, _ := ParseBind(DefaultBind)
+	actual, listeners, switched, err := listenPublicAddressesWithDefaultFallback(configured, true, func(network, address string) (net.Listener, error) {
+		_, port, _ := net.SplitHostPort(address)
+		if port == "23998" {
+			listener, err := net.Listen("tcp4", occupied.Addr().String())
+			if err == nil {
+				listener.Close()
+				t.Fatal("test listener was not retained")
+			}
+			return nil, err
+		}
+		return net.Listen(network, address)
+	})
+	if err != nil || !switched || actual.Port() == configured.Port() {
+		t.Fatalf("fallback: %v %v %v", actual, switched, err)
+	}
+	defer closeNetworkListeners(listeners)
+	s := newTestServer(t, nil)
+	s.bind, s.configuredBind, s.defaultPortFallbackUsed = actual, configured, switched
+	s.protocol, s.stateRoot = "http", t.TempDir()
+	s.a = newRuntimeHealthTestAgent(t, s.configPath, s.accessGate)
+	layout, err := config.LocalEnvironmentStateLayout(s.stateRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := SaveRuntimeAccess(layout, RuntimeAccessUpdate{Bind: DefaultBind, Protocol: "http", PasswordMode: "keep"}); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := s.StartOnListeners(ctx, listeners, nil); err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if s.runtimeControl.accessCurrent.LocalUIBind != DefaultBind {
+		t.Fatal("ephemeral port became next-start settings")
+	}
+	for _, listener := range listeners {
+		_, port, _ := net.SplitHostPort(listener.Addr().String())
+		if port != fmt.Sprint(actual.Port()) {
+			t.Fatal("families have different ports")
+		}
+	}
+	if !slices.Contains(s.DisplayURLs(), formatHTTPURL("localhost", actual.Port())) {
+		t.Fatalf("actual URLs: %v", s.DisplayURLs())
+	}
+	if s.isAllowedPublicAuthority("localhost:23998") {
+		t.Fatal("old public authority remains admitted")
+	}
+	if len(s.publicAccessSnapshot().issues) != 1 || s.publicAccessSnapshot().issues[0].Code != runtimemanagement.LocalUIDefaultPortInUse {
+		t.Fatal("missing informational issue")
+	}
+	url := formatHTTPURL("127.0.0.1", actual.Port())
+	response, err := (&http.Client{Timeout: time.Second}).Get(url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("actual URL: %d", response.StatusCode)
+	}
+	for _, origin := range []struct {
+		value   string
+		allowed bool
+	}{{strings.TrimSuffix(url, "/"), true}, {"http://127.0.0.1:23998", false}} {
+		r := httptest.NewRequest(http.MethodGet, url, nil)
+		r.Header.Set("Origin", origin.value)
+		if s.authorizePublicWebSocketRequest(r) != origin.allowed {
+			t.Fatal("origin boundary changed")
+		}
+	}
+	checkPending := func(want bool) {
+		r := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:3000/v2/runtime/access", nil)
+		r.RemoteAddr = "127.0.0.1:10000"
+		r.Header.Set("Authorization", "Bearer "+s.runtimeControl.token)
+		w := httptest.NewRecorder()
+		s.runtimeControl.routes().ServeHTTP(w, r)
+		var body map[string]any
+		if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil || w.Code != 200 {
+			t.Fatalf("access: %s", w.Body)
+		}
+		if body["data"].(map[string]any)["restart_required"] != want {
+			t.Fatalf("pending %v: %s", want, w.Body)
+		}
+	}
+	checkPending(false)
+	if _, err := SaveRuntimeAccess(layout, RuntimeAccessUpdate{Bind: "localhost:25000", Protocol: "http", PasswordMode: "keep"}); err != nil {
+		t.Fatal(err)
+	}
+	checkPending(true)
+	connection, err := net.DialTimeout("tcp4", occupied.Addr().String(), time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	connection.Close()
+}
+
+func TestDefaultPortFallbackClosesEveryFailedAllocation(t *testing.T) {
+	bind, _ := ParseBind(DefaultBind)
+	var created []*closingListener
+	_, listeners, _, err := listenPublicAddressesWithDefaultFallback(bind, true, func(network, address string) (net.Listener, error) {
+		_, port, _ := net.SplitHostPort(address)
+		if port == "23998" || network == "tcp6" {
+			return nil, syscall.EADDRINUSE
+		}
+		listener := &closingListener{authorityTestListener: authorityTestListener{addr: &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 32123}}}
+		created = append(created, listener)
+		return listener, nil
+	})
+	if err == nil || len(listeners) != 0 || len(created) != 5 {
+		t.Fatal("allocation retry bound changed")
+	}
+	for _, listener := range created {
+		if !listener.closed {
+			t.Fatal("failed allocation leaked listener")
+		}
+	}
+}
 
 func TestNetworkAddressesFollowInterfaceChangesWithoutRestart(t *testing.T) {
 	listener, err := net.Listen("tcp4", "0.0.0.0:0")

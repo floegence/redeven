@@ -45,8 +45,9 @@ func unavailableAddressFamily(err error) bool {
 
 func listenPublicAddresses(bind BindSpec, listen func(string, string) (net.Listener, error)) ([]net.Listener, error) {
 	var listeners []net.Listener
+	port := bind.port
 	for _, spec := range bind.listenerSpecs() {
-		address := net.JoinHostPort(spec.host, strconv.Itoa(bind.port))
+		address := net.JoinHostPort(spec.host, strconv.Itoa(port))
 		listener, err := listen(spec.network(), address)
 		if err != nil {
 			if spec.optional && unavailableAddressFamily(err) {
@@ -56,11 +57,46 @@ func listenPublicAddresses(bind BindSpec, listen func(string, string) (net.Liste
 			return nil, fmt.Errorf("listen %s: %w", address, err)
 		}
 		listeners = append(listeners, listener)
+		if port == 0 {
+			_, actualPort, err := net.SplitHostPort(listener.Addr().String())
+			if err != nil {
+				closeNetworkListeners(listeners)
+				return nil, err
+			}
+			port, err = strconv.Atoi(actualPort)
+			if err != nil || port <= 0 {
+				closeNetworkListeners(listeners)
+				return nil, fmt.Errorf("invalid assigned Local UI port %q", actualPort)
+			}
+		}
 	}
 	if len(listeners) == 0 {
 		return nil, fmt.Errorf("no supported Local UI listener for %s", bind.ListenLabel())
 	}
 	return listeners, nil
+}
+
+// Keep every selected listener open until startup owns it, including while
+// binding the second loopback family to the same system-assigned port.
+func listenPublicAddressesWithDefaultFallback(bind BindSpec, allow bool, listen func(string, string) (net.Listener, error)) (BindSpec, []net.Listener, bool, error) {
+	listeners, err := listenPublicAddresses(bind, listen)
+	if err == nil || !allow || bind.ListenLabel() != DefaultBind || !errors.Is(err, syscall.EADDRINUSE) {
+		return bind, listeners, false, err
+	}
+	for attempt := 0; attempt < 5; attempt++ {
+		candidate := bind
+		candidate.port = 0
+		listeners, err = listenPublicAddresses(candidate, listen)
+		if err == nil {
+			_, rawPort, _ := net.SplitHostPort(listeners[0].Addr().String())
+			candidate.port, _ = strconv.Atoi(rawPort)
+			return candidate, listeners, true, nil
+		}
+		if !errors.Is(err, syscall.EADDRINUSE) {
+			break
+		}
+	}
+	return bind, nil, false, fmt.Errorf("allocate default Local UI fallback port: %w", err)
 }
 
 // publicAccessHosts is the sole host policy for startup and certificate preflight.

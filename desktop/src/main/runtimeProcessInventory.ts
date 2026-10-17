@@ -51,7 +51,7 @@ export class RuntimeProcessCommandError extends Error {
 
 export class RuntimeProcessIdentityBlockedError extends Error {
   constructor(readonly inventory: DesktopRuntimeProcessInventory) {
-    super('Runtime process inventory contains an instance whose core identity cannot be safely verified.');
+    super(`Desktop could not verify a Runtime process in ${inventory.scope.state_root}: ${inventory.instances.filter(instance => instance.stop_authority === 'blocked').map(instance => `PID ${instance.pid} (${instance.reason_code || 'runtime_identity_incomplete'})`).join(', ')}. Refresh the environment and try again.`);
     this.name = 'RuntimeProcessIdentityBlockedError';
   }
 }
@@ -183,12 +183,10 @@ export function parseDesktopRuntimeProcessInventory(raw: string): DesktopRuntime
     throw new Error('Runtime process inventory summary does not match its instances.');
   }
   for (const instance of instances) {
-    const verifiedLayout = instance.layout_status === 'current' || instance.layout_status === 'verified_alternate';
     const automaticInstance = instance.stop_authority === 'automatic'
-      && instance.identity_status === 'verified'
-      && verifiedLayout;
+      && instance.identity_status === 'verified';
     const blockedInstance = instance.stop_authority === 'blocked'
-      && (instance.identity_status === 'incomplete' || instance.layout_status === 'unknown');
+      && instance.identity_status === 'incomplete';
     if (!automaticInstance && !blockedInstance) {
       throw new Error('Runtime process inventory contains an inconsistent process authority.');
     }
@@ -246,7 +244,6 @@ export function desktopRuntimeProcessInventoryHasSingleUsable(
   return inventory.instances.length === 1
     && !!instance
     && instance.identity_status === 'verified'
-    && (instance.layout_status === 'current' || instance.layout_status === 'verified_alternate')
     && instance.stop_authority === 'automatic';
 }
 

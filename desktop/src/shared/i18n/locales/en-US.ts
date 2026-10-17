@@ -403,6 +403,7 @@ export const enUS = {
     failed: 'Your workspace could not reconnect',
     detail: 'Your workspace and unsent drafts are preserved.',
     reopen: 'Reopen environment',
+    reopenHint: 'Reopen the environment to retry the connection and restore your preserved workspace.',
     connectionCenter: 'Connection Center',
   },
   providerRecovery: {
@@ -1419,6 +1420,7 @@ export const enUS = {
     startRuntime: 'Start',
     stopRuntime: 'Stop',
     restartRuntime: 'Restart',
+    restartRuntimeAndOpen: 'Restart and open',
     updateRuntime: 'Update',
     updateRuntimeAndOpen: 'Update and open',
     updateAndRestart: 'Update and restart...',
@@ -1442,6 +1444,7 @@ export const enUS = {
     unavailableTrigger: '{label} is unavailable. Show recovery options.',
   },
   environmentConnection: {
+    defaultPortInUse: 'The default local port is in use. This Runtime is using the available address shown here.',
     interfaceScanFailed: "Network addresses could not be read. They will update automatically when the network is available.",
     boundAddressUnavailable: "The bound IP address is no longer available. Change the listening address in access settings and restart the Runtime.",
     certificateHostsNotCovered: "The HTTPS certificate does not cover some current network addresses. Update the certificate to use these addresses.",

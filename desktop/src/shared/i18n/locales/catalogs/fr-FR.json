@@ -13,6 +13,7 @@
     "failed": "Impossible de reconnecter votre espace de travail",
     "detail": "Votre espace de travail et vos brouillons non envoyés sont conservés.",
     "reopen": "Rouvrir l’environnement",
+    "reopenHint": "Rouvrez l’environnement pour réessayer la connexion et restaurer votre espace de travail conservé.",
     "connectionCenter": "Centre de connexion"
   },
   "accessFlow": {
@@ -2673,6 +2674,7 @@
     "startRuntime": "Démarrer",
     "stopRuntime": "Arrêter",
     "restartRuntime": "Redémarrer",
+    "restartRuntimeAndOpen": "Redémarrer et ouvrir",
     "updateRuntime": "Mettre à jour",
     "updateRuntimeAndOpen": "Mettre à jour et ouvrir",
     "updateAndRestart": "Mettre à jour et redémarrer...",
@@ -3317,6 +3319,7 @@
     "openViaDesktop": "Choisissez « {action} » dans Desktop pour ouvrir cet environnement.",
     "loopbackHelp": "Cette adresse de bouclage appartient à {host}. Des hôtes différents peuvent utiliser le même port. Elle ne permet pas d’accéder à cet environnement dans le navigateur de votre appareil.",
     "interfaceScanFailed": "Impossible de récupérer les adresses réseau. Elles seront mises à jour automatiquement lorsque le réseau sera disponible.",
+    "defaultPortInUse": "Le port local par défaut est déjà utilisé. Cet environnement d’exécution utilise l’adresse disponible affichée ici.",
     "boundAddressUnavailable": "L’adresse IP liée n’est plus disponible. Modifiez l’adresse d’écoute dans les paramètres d’accès et redémarrez l’environnement d’exécution.",
     "certificateHostsNotCovered": "Le certificat HTTPS ne couvre pas certaines adresses réseau actuelles. Mettez-le à jour pour utiliser ces adresses.",
     "certificateRefreshFailed": "Impossible de renouveler le certificat HTTPS. Seules les adresses couvertes par le certificat actuel sont disponibles. L’environnement d’exécution réessaiera automatiquement."

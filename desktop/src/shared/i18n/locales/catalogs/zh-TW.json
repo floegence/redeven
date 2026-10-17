@@ -13,6 +13,7 @@
     "failed": "工作區無法重新連線",
     "detail": "工作區和未傳送的草稿已保留。",
     "reopen": "重新開啟環境",
+    "reopenHint": "重新開啟環境，以重試連線並還原已保留的工作區。",
     "connectionCenter": "連線中心"
   },
   "accessFlow": {
@@ -2669,6 +2670,7 @@
     "startRuntime": "啟動",
     "stopRuntime": "停止",
     "restartRuntime": "重新啟動",
+    "restartRuntimeAndOpen": "重新啟動並開啟",
     "updateRuntime": "更新",
     "updateRuntimeAndOpen": "更新並開啟",
     "updateAndRestart": "更新並重新啟動...",
@@ -3311,6 +3313,7 @@
     "openViaDesktop": "透過 Desktop 的「{action}」進入此環境。",
     "loopbackHelp": "此回環位址屬於 {host} 本身。不同主機可以使用相同連接埠；它不是此裝置存取該環境的瀏覽器入口。",
     "interfaceScanFailed": "無法讀取網路位址。網路恢復後將自動更新。",
+    "defaultPortInUse": "預設本機連接埠已被占用。此執行階段正使用此處顯示的可用位址。",
     "boundAddressUnavailable": "綁定的 IP 位址已無法使用。請在存取設定中修改監聽位址，並重新啟動執行階段。",
     "certificateHostsNotCovered": "HTTPS 憑證未涵蓋部分目前的網路位址。請更新憑證後再使用這些位址。",
     "certificateRefreshFailed": "無法更新 HTTPS 憑證。目前僅提供現有憑證涵蓋的位址，執行階段將自動重試。"

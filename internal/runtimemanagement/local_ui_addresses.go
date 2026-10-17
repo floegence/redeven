@@ -8,6 +8,7 @@ type LocalUIAddressIssue struct {
 }
 
 const (
+	LocalUIDefaultPortInUse           = "default_port_in_use"
 	LocalUIInterfaceScanFailed        = "interface_scan_failed"
 	LocalUIBoundAddressUnavailable    = "bound_address_unavailable"
 	LocalUICertificateHostsNotCovered = "certificate_hosts_not_covered"

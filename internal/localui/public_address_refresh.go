@@ -39,6 +39,9 @@ func (s *Server) publicAccessSnapshot() publicAccessSnapshot {
 }
 
 func (s *Server) accessSnapshotForHosts(hosts []string, certificate *tls.Certificate, issues []runtimemanagement.LocalUIAddressIssue) publicAccessSnapshot {
+	if s.defaultPortFallbackUsed {
+		issues = append(slices.Clone(issues), runtimemanagement.LocalUIAddressIssue{Code: runtimemanagement.LocalUIDefaultPortInUse})
+	}
 	result := publicAccessSnapshot{hosts: slices.Clone(hosts), authorities: make(map[string]struct{}, len(hosts)), certificate: certificate, issues: issues}
 	for _, host := range hosts {
 		authority := net.JoinHostPort(host, strconv.Itoa(s.publicPort))

@@ -13,6 +13,7 @@
     "failed": "작업 공간에 다시 연결할 수 없습니다",
     "detail": "작업 공간과 보내지 않은 초안은 보존되었습니다.",
     "reopen": "환경 다시 열기",
+    "reopenHint": "환경을 다시 열어 연결을 재시도하고 보존된 작업 공간을 복원하세요.",
     "connectionCenter": "연결 센터"
   },
   "accessFlow": {
@@ -2669,6 +2670,7 @@
     "startRuntime": "시작",
     "stopRuntime": "중지",
     "restartRuntime": "다시 시작",
+    "restartRuntimeAndOpen": "다시 시작하고 열기",
     "updateRuntime": "업데이트",
     "updateRuntimeAndOpen": "업데이트 후 열기",
     "updateAndRestart": "업데이트 후 재시작...",
@@ -3311,6 +3313,7 @@
     "openViaDesktop": "Desktop에서 “{action}”을 선택해 이 환경을 여세요.",
     "loopbackHelp": "이 루프백 주소는 {host} 자체를 가리킵니다. 서로 다른 호스트는 같은 포트를 사용할 수 있습니다. 이 기기의 브라우저에서 해당 환경에 접속하는 주소가 아닙니다.",
     "interfaceScanFailed": "네트워크 주소를 가져올 수 없습니다. 네트워크를 사용할 수 있게 되면 자동으로 업데이트됩니다.",
+    "defaultPortInUse": "기본 로컬 포트가 사용 중입니다. 이 런타임은 여기에 표시된 사용 가능한 주소를 사용합니다.",
     "boundAddressUnavailable": "바인딩된 IP 주소를 더 이상 사용할 수 없습니다. 액세스 설정에서 수신 주소를 변경하고 런타임을 다시 시작하세요.",
     "certificateHostsNotCovered": "HTTPS 인증서가 현재 네트워크 주소 중 일부를 포함하지 않습니다. 해당 주소를 사용하려면 인증서를 업데이트하세요.",
     "certificateRefreshFailed": "HTTPS 인증서를 갱신할 수 없습니다. 현재 인증서에 포함된 주소만 사용할 수 있습니다. 런타임이 자동으로 다시 시도합니다."

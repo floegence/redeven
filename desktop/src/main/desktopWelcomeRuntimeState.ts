@@ -34,6 +34,7 @@ function runtimeStateFromStartup(
   return {
     local_ui_url: localUIURL,
     local_ui_urls: startup.local_ui_urls ?? [localUIURL],
+    local_ui_address_issues: startup.local_ui_address_issues,
     effective_run_mode: compact(startup.effective_run_mode),
     remote_enabled: startup.remote_enabled === true,
     access_point_origin: compact(startup.access_point_origin) || undefined,
@@ -131,6 +132,7 @@ function withCurrentRuntime(
   if (
     existingURL === nextURL
     && JSON.stringify(existingRuntime?.local_ui_urls ?? []) === JSON.stringify(currentRuntime?.local_ui_urls ?? [])
+    && JSON.stringify(existingRuntime?.local_ui_address_issues ?? []) === JSON.stringify(currentRuntime?.local_ui_address_issues ?? [])
     && (existingRuntime?.access_point_origin ?? '') === (currentRuntime?.access_point_origin ?? '')
     && (existingRuntime?.cloud_id ?? '') === (currentRuntime?.cloud_id ?? '')
     && (existingRuntime?.env_public_id ?? '') === (currentRuntime?.env_public_id ?? '')

@@ -328,6 +328,7 @@ Flags:
   --local-ui-bind <host:port>       Saved bind address, or localhost:23998 for a new environment.
   --local-ui-protocol <http|https>  Connection security (default: saved protocol or http).
   --local-ui-bind-override <addr>  One-start bind override; keeps the saved address.
+  --local-ui-default-port-fallback  Desktop only: use a free port if localhost:23998 is occupied.
   --cloud <url>           Cloud origin (default: https://redeven.com) for one-shot bootstrap.
   --env-id <env_public_id>          Environment public ID for one-shot bootstrap.
   --link-ticket <ticket>           Use the one-time link ticket directly.

@@ -1425,10 +1425,14 @@ describe('main routing', () => {
     expect(localOpenSrc).toContain("phase: 'checking_runtime_record'");
     expect(localOpenSrc).toContain('open_progress: buildOpenConnectionProgress({');
     expect(localOpenSrc).toContain('await refreshWelcomeRuntimeHealthForEnvironment(environment.id)');
-    expect(localOpenSrc).toContain('runtimeRecord = await attachLocalEnvironmentRuntime(environment)');
+    expect(localOpenSrc).toContain('? null : await attachLocalEnvironmentRuntime(environment)');
+    expect(localOpenSrc).toContain("options.runtimeRecovery !== 'restart' || restarted");
+    expect(localOpenSrc).toContain('runtime_recovery: options.runtimeRecovery');
+    expect(localOpenSrc).toContain('await restoreRuntimeRestartWindow(pending, signal');
+    expect(mainSrc).toContain("recovery_hint_key: 'sessionRestart.reopenHint'");
     expect(mainSrc).toContain('runtimeStartupTimeoutMs: DESKTOP_RUNTIME_STARTUP_TIMEOUT_MS');
     expect(localOpenSrc).toContain('localRuntimeHealthForOpenPreflight(environment.id)');
-    expect(localOpenSrc).toContain('finishLocalHostOpenFailure(operationKey, openTarget, signal, result, preferences)');
+    expect(localOpenSrc).toContain('finishLocalHostOpenFailure(operationKey, openTarget, signal, result, preferences,');
     expect(localOpenSrc).toContain("phase: 'checking_env_app_readiness'");
     expect(localOpenSrc).toContain("phase: 'opening_window'");
     expect(localOpenSrc).toContain("phase: 'open_ready'");

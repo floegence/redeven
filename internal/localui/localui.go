@@ -56,9 +56,11 @@ const (
 )
 
 type Options struct {
-	Logger   *slog.Logger
-	Bind     BindSpec
-	Protocol string
+	Logger                   *slog.Logger
+	Bind                     BindSpec
+	Protocol                 string
+	ConfiguredBind           BindSpec
+	AllowDefaultPortFallback bool
 
 	DisableSelfUpgrade bool
 	EffectiveRunMode   string
@@ -101,20 +103,23 @@ type Server struct {
 	nativeAccess      sync.Map // *nativeCodeAccess -> access-session cancellation
 	log               *slog.Logger
 
-	bind                   BindSpec
-	protocol               string
-	configPath             string
-	stateRoot              string
-	stateDir               string
-	runtimeControlSockPath string
-	version                string
-	selfUpgradeDisabled    bool
-	effectiveRunMode       string
-	remoteEnabled          bool
-	controlplaneBaseURL    string
-	controlplaneProviderID string
-	envPublicID            string
-	localPermissionCap     *config.PermissionSet
+	bind                     BindSpec
+	configuredBind           BindSpec
+	allowDefaultPortFallback bool
+	defaultPortFallbackUsed  bool
+	protocol                 string
+	configPath               string
+	stateRoot                string
+	stateDir                 string
+	runtimeControlSockPath   string
+	version                  string
+	selfUpgradeDisabled      bool
+	effectiveRunMode         string
+	remoteEnabled            bool
+	controlplaneBaseURL      string
+	controlplaneProviderID   string
+	envPublicID              string
+	localPermissionCap       *config.PermissionSet
 
 	appServer *appserver.Server
 	a         *agent.Agent
@@ -422,6 +427,10 @@ func New(opts Options) (*Server, error) {
 	}
 
 	logger := opts.Logger
+	configuredBind := opts.ConfiguredBind
+	if configuredBind.Host() == "" {
+		configuredBind = bind
+	}
 	if logger == nil {
 		logger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	}
@@ -454,6 +463,8 @@ func New(opts Options) (*Server, error) {
 	return &Server{
 		log:                       logger,
 		bind:                      bind,
+		configuredBind:            configuredBind,
+		allowDefaultPortFallback:  opts.AllowDefaultPortFallback,
 		protocol:                  opts.Protocol,
 		configPath:                configPath,
 		stateRoot:                 stateRoot,
@@ -661,15 +672,27 @@ func (s *Server) configureDesktopBridgeDirectHandler() error {
 	return nil
 }
 
+func (s *Server) appliedAccessBind() BindSpec {
+	if s.configuredBind.Host() != "" {
+		return s.configuredBind
+	}
+	return s.bind
+}
+
 func (s *Server) Start(ctx context.Context) error {
 	if s == nil || s.desktopBridgeServer != nil {
 		return nil
 	}
-	listeners, err := listenPublicAddresses(s.bind, net.Listen)
+	bind, listeners, switched, err := listenPublicAddressesWithDefaultFallback(s.bind, s.allowDefaultPortFallback, net.Listen)
 	if err != nil {
 		return err
 	}
-	return s.StartOnListeners(ctx, listeners, nil)
+	s.bind, s.defaultPortFallbackUsed = bind, switched
+	if err := s.StartOnListeners(ctx, listeners, nil); err != nil {
+		closeNetworkListeners(listeners)
+		return err
+	}
+	return nil
 }
 
 func (s *Server) StartOnListeners(ctx context.Context, listeners []net.Listener, runtimeControlListener net.Listener) error {
@@ -750,7 +773,7 @@ func (s *Server) StartOnListeners(ctx context.Context, listeners []net.Listener,
 
 	runtimeControl.accessCertificateFingerprint = deviceIdentityServingFingerprint(s.deviceCA)
 	runtimeControl.accessCurrent = config.EnvironmentCatalogAccess{
-		LocalUIBind: s.bind.ListenLabel(), LocalUIProtocol: s.protocol, LocalUIPasswordConfigured: s.accessEnabled(),
+		LocalUIBind: s.appliedAccessBind().ListenLabel(), LocalUIProtocol: s.protocol, LocalUIPasswordConfigured: s.accessEnabled(),
 	}
 	runtimeControl.accessPasswordHash, err = accessgate.ReadPasswordHash(accessLayout.StateDir)
 	if err != nil {
@@ -997,6 +1020,13 @@ func (s *Server) DisplayURLs() []string {
 		return nil
 	}
 	return s.publicAccessSnapshot().publicURLs()
+}
+
+func (s *Server) LocalUIAddressIssues() []runtimemanagement.LocalUIAddressIssue {
+	if s == nil {
+		return nil
+	}
+	return append([]runtimemanagement.LocalUIAddressIssue(nil), s.publicAccessSnapshot().issues...)
 }
 
 type apiResp struct {

@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -35,7 +38,7 @@ describe('RuntimeLifecycleCoordinator', () => {
     );
   });
 
-  it('does not create a second owner when registrations disagree only about the state-root projection', () => {
+  it('separates local data roots that share an installation', () => {
     const hostAccess = { kind: 'local_host' as const };
     const first = runtimeLifecycleTargetKey(hostAccess, {
       kind: 'host_process',
@@ -47,7 +50,27 @@ describe('RuntimeLifecycleCoordinator', () => {
       runtime_root: '/srv/redeven',
       runtime_state_root: '/srv/redeven/state-b',
     });
-    expect(second).toBe(first);
+    expect(second).not.toBe(first);
+  });
+
+  it('coordinates the same local data root across different installations', () => {
+    const first = runtimeLifecycleTargetKey({ kind: 'local_host' }, { kind: 'host_process', runtime_root: '/opt/desktop-a', runtime_state_root: '/srv/redeven-data' });
+    const second = runtimeLifecycleTargetKey({ kind: 'local_host' }, { kind: 'host_process', runtime_root: '/opt/desktop-b', runtime_state_root: '/srv/redeven-data' });
+    expect(first).toBe(second);
+  });
+
+  it('uses one local target for symlink aliases including not-yet-created children', () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'redeven-coordinator-'));
+    try {
+      fs.mkdirSync(path.join(directory, 'data'));
+      fs.symlinkSync(path.join(directory, 'data'), path.join(directory, 'alias'), 'dir');
+      const key = (root: string) => runtimeLifecycleTargetKey({ kind: 'local_host' }, {
+        kind: 'host_process', runtime_root: '/another-install', runtime_state_root: root,
+      });
+      expect(key(path.join(directory, 'data'))).toBe(key(path.join(directory, 'alias')));
+      expect(key(path.join(directory, 'data/new'))).toBe(key(path.join(directory, 'alias/new')));
+      expect(key(path.join(directory, 'data/new'))).not.toBe(key(path.join(directory, 'data')));
+    } finally { fs.rmSync(directory, { recursive: true, force: true }); }
   });
 
   it('separates SSH and container runtime identities', () => {

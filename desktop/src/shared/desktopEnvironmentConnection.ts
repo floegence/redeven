@@ -144,6 +144,7 @@ export function buildRuntimeConnectionRows(input: Readonly<{
 }>): readonly DesktopConnectionRow[] {
   const addresses = connectionAddressRows(input.urls, input.context);
   const diagnostics: Record<LocalUIAddressIssueCode, { key: DesktopTranslationKey; recovery?: AddressRecoveryTarget }> = {
+    default_port_in_use: { key: 'environmentConnection.defaultPortInUse' },
     interface_scan_failed: { key: 'environmentConnection.interfaceScanFailed' },
     bound_address_unavailable: { key: 'environmentConnection.boundAddressUnavailable', recovery: 'access' },
     certificate_hosts_not_covered: { key: 'environmentConnection.certificateHostsNotCovered', recovery: 'certificate' },

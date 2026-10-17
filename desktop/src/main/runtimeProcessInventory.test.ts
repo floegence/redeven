@@ -41,6 +41,12 @@ const inventory = {
 };
 
 describe('runtimeProcessInventory', () => {
+  it('allows a verified same-directory process independently of installation layout or version metadata', () => {
+    const observed = parseDesktopRuntimeProcessInventory(JSON.stringify({ ...inventory, instances: [{ ...inventory.instances[0], layout_status: 'unknown', runtime_version: undefined }] }));
+    expect(() => requireDesktopRuntimeProcessIdentity(observed)).not.toThrow();
+    expect(desktopRuntimeProcessInventoryHasSingleUsable(observed)).toBe(true);
+    expect(desktopRuntimeProcessInventoryHasSingleCurrent(observed)).toBe(false);
+  });
   it('parses the strict schema 3 process inventory', () => {
     expect(parseDesktopRuntimeProcessInventory(JSON.stringify(inventory))).toMatchObject({
       schema_version: 3,

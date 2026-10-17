@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/netip"
 	"reflect"
+	"strconv"
 	"syscall"
 	"testing"
 	"time"
@@ -17,6 +18,123 @@ type closingListener struct {
 }
 
 func (l *closingListener) Close() error { l.closed = true; return nil }
+
+func TestDefaultPortFallbackKeepsBothFamiliesOnOnePort(t *testing.T) {
+	for _, occupied := range []string{"tcp4", "tcp6"} {
+		t.Run(occupied, func(t *testing.T) {
+			bind, _ := ParseBind(DefaultBind)
+			var created []*closingListener
+			listen := func(network, address string) (net.Listener, error) {
+				_, port, _ := net.SplitHostPort(address)
+				if port == "23998" && network == occupied {
+					return nil, syscall.EADDRINUSE
+				}
+				if port == "0" {
+					port = "32123"
+				}
+				if port != "23998" && port != "32123" {
+					t.Fatalf("unexpected port: %s", port)
+				}
+				if network == "tcp6" && port == "32123" && created[len(created)-1].closed {
+					t.Fatal("released primary listener before binding IPv6")
+				}
+				host := "127.0.0.1"
+				if network == "tcp6" {
+					host = "::1"
+				}
+				listener := &closingListener{authorityTestListener: authorityTestListener{addr: &net.TCPAddr{IP: net.ParseIP(host), Port: mustTestPort(t, port)}}}
+				created = append(created, listener)
+				return listener, nil
+			}
+			actual, listeners, switched, err := listenPublicAddressesWithDefaultFallback(bind, true, listen)
+			if err != nil || !switched || actual.ListenLabel() != "localhost:32123" || len(listeners) != 2 {
+				t.Fatalf("fallback = %v, %v, %v, %v", actual, listeners, switched, err)
+			}
+			defer closeNetworkListeners(listeners)
+			if occupied == "tcp6" && !created[0].closed {
+				t.Fatal("leaked default IPv4 listener")
+			}
+		})
+	}
+}
+
+func mustTestPort(t *testing.T, raw string) int {
+	t.Helper()
+	port, err := strconv.Atoi(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return port
+}
+
+func TestDefaultPortFallbackIsExplicitAndBounded(t *testing.T) {
+	for _, tc := range []struct {
+		bind    string
+		allow   bool
+		failure error
+		calls   int
+	}{
+		{DefaultBind, false, syscall.EADDRINUSE, 1},
+		{"localhost:24000", true, syscall.EADDRINUSE, 1},
+		{"127.0.0.1:23998", true, syscall.EADDRINUSE, 1},
+		{"0.0.0.0:23998", true, syscall.EADDRINUSE, 1},
+		{DefaultBind, true, syscall.EACCES, 1},
+		{DefaultBind, true, syscall.EADDRINUSE, 6},
+	} {
+		bind, _ := ParseBind(tc.bind)
+		calls := 0
+		_, listeners, switched, err := listenPublicAddressesWithDefaultFallback(bind, tc.allow, func(string, string) (net.Listener, error) { calls++; return nil, tc.failure })
+		if !errors.Is(err, tc.failure) || len(listeners) != 0 || switched || calls != tc.calls {
+			t.Fatalf("%+v: calls=%d switched=%v error=%v", tc, calls, switched, err)
+		}
+	}
+}
+
+func TestDefaultPortFallbackRetriesCompetitionAndClosesRejectedListeners(t *testing.T) {
+	bind, _ := ParseBind(DefaultBind)
+	var created []*closingListener
+	secondaryAttempts := 0
+	actual, listeners, switched, err := listenPublicAddressesWithDefaultFallback(bind, true, func(network, address string) (net.Listener, error) {
+		_, port, _ := net.SplitHostPort(address)
+		if port == "23998" {
+			return nil, syscall.EADDRINUSE
+		}
+		if network == "tcp6" {
+			secondaryAttempts++
+			if secondaryAttempts < 3 {
+				return nil, syscall.EADDRINUSE
+			}
+		}
+		listener := &closingListener{authorityTestListener: authorityTestListener{addr: &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 32123}}}
+		created = append(created, listener)
+		return listener, nil
+	})
+	if err != nil || !switched || actual.Port() != 32123 || secondaryAttempts != 3 {
+		t.Fatalf("fallback: %v %v %v", actual, switched, err)
+	}
+	defer closeNetworkListeners(listeners)
+	if !created[0].closed || !created[1].closed || created[2].closed {
+		t.Fatalf("listener cleanup: %#v", created)
+	}
+}
+
+func TestDefaultPortFallbackAllowsUnavailableAddressFamily(t *testing.T) {
+	bind, _ := ParseBind(DefaultBind)
+	actual, listeners, switched, err := listenPublicAddressesWithDefaultFallback(bind, true, func(network, address string) (net.Listener, error) {
+		if network == "tcp4" {
+			return nil, syscall.EAFNOSUPPORT
+		}
+		_, port, _ := net.SplitHostPort(address)
+		if port == "23998" {
+			return nil, syscall.EADDRINUSE
+		}
+		return &closingListener{authorityTestListener: authorityTestListener{addr: &net.TCPAddr{IP: net.ParseIP("::1"), Port: 32123}}}, nil
+	})
+	if err != nil || !switched || actual.Port() != 32123 || len(listeners) != 1 {
+		t.Fatalf("fallback: %v %v %v", actual, switched, err)
+	}
+	closeNetworkListeners(listeners)
+}
 
 func TestPublicWildcardListenersReachBothLoopbackFamilies(t *testing.T) {
 	for _, family := range []struct{ network, host string }{{"tcp4", "0.0.0.0"}, {"tcp6", "::"}} {

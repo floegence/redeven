@@ -73,6 +73,9 @@ export function buildDesktopRuntimeArgs(
   if (localUIBind !== canonicalLocalUIBind(access.local_ui_bind)) {
     args.push('--local-ui-bind-override', localUIBind);
   }
+  if (!String(options.localUIBind ?? '').trim() && localUIBind === 'localhost:23998') {
+    args.push('--local-ui-default-port-fallback');
+  }
   // Runtime owns the persisted verifier. Cached Desktop settings may predate
   // enrollment; only an explicit access-settings operation may clear it.
 	if (!isLoopbackOnlyBind(parsedBind)) {

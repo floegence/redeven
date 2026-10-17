@@ -459,6 +459,46 @@ describe('runtimeProcess', () => {
     }
   });
 
+  it('rejects status published by a different PID than the verified directory inventory', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-runtime-wrong-status-'));
+    const stateRoot = path.join(dir, 'state');
+    const statusFile = path.join(dir, 'status.json');
+    const inventoryFile = path.join(dir, 'inventory.json');
+    const executablePath = await writeFakeRuntimeExecutable(dir);
+    try {
+      await writeJSON(statusFile, runtimeStatusPayload('http://127.0.0.1:43123/'));
+      await writeJSON(inventoryFile, processInventoryPayload({ stateRoot, executablePath, authority: 'automatic', pid: 999999 }));
+      await expect(attachManagedRuntimeFromStatus({
+        executablePath, stateRoot,
+        env: { REDEVEN_TEST_STATUS_FILE: statusFile, REDEVEN_TEST_PROCESS_INVENTORY_FILE: inventoryFile },
+      })).rejects.toThrow('does not match its verified process identity');
+    } finally { await fs.rm(dir, { recursive: true, force: true }); }
+  });
+
+  it('attaches verified alternate installations without version or owner metadata', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-runtime-alternate-'));
+    const stateRoot = path.join(dir, 'state');
+    const statusFile = path.join(dir, 'status.json');
+    const inventoryFile = path.join(dir, 'inventory.json');
+    const executablePath = await writeFakeRuntimeExecutable(dir);
+    try {
+      const status = runtimeStatusPayload('http://127.0.0.1:43123/');
+      await writeJSON(statusFile, status);
+      for (const layout_status of ['verified_alternate', 'unknown']) {
+        const inventory = processInventoryPayload({ stateRoot, executablePath: '/another/install/redeven', authority: 'automatic', pid: Number(status.pid) });
+        const instances = inventory.instances as Record<string, unknown>[];
+        instances[0]!.layout_status = layout_status;
+        await writeJSON(inventoryFile, inventory);
+        const attached = await attachManagedRuntimeFromStatus({
+          executablePath, stateRoot, env: { REDEVEN_TEST_STATUS_FILE: statusFile, REDEVEN_TEST_PROCESS_INVENTORY_FILE: inventoryFile },
+        });
+        expect(attached?.attached).toBe(true);
+        expect(attached?.startup.pid).toBe(status.pid);
+        expect(attached?.child).toBeNull();
+      }
+    } finally { await fs.rm(dir, { recursive: true, force: true }); }
+  });
+
   it('does not attach a persisted status report without a live runtime inventory', async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-runtime-process-stale-status-'));
     const stateRoot = path.join(dir, 'state');
@@ -730,6 +770,9 @@ describe('runtimeProcess', () => {
     });
     try {
       await waitForFile(inventoryFile);
+      const payload = JSON.parse(await fs.readFile(statusPayloadFile, 'utf8')) as Record<string, unknown>;
+      payload.pid = child.pid;
+      await writeJSON(statusPayloadFile, payload);
       const attached = await attachManagedRuntimeFromStatus({
         executablePath,
         stateRoot,
