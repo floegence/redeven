@@ -67,13 +67,13 @@ export function processPorts(identities) {
 export function sameProcess(expected, actual) {
   return Boolean(
     expected &&
-      actual &&
-      expected.pid === actual.pid &&
-      expected.birth === actual.birth &&
-      expected.executable === actual.executable &&
-      expected.device === actual.device &&
-      expected.inode === actual.inode &&
-      expected.group === actual.group,
+    actual &&
+    expected.pid === actual.pid &&
+    expected.birth === actual.birth &&
+    expected.executable === actual.executable &&
+    expected.device === actual.device &&
+    expected.inode === actual.inode &&
+    expected.group === actual.group,
   );
 }
 export function refreshOwnedProcesses(resource, snapshot = processSnapshot()) {
@@ -81,7 +81,7 @@ export function refreshOwnedProcesses(resource, snapshot = processSnapshot()) {
   const live = resource.members.filter((expected) => snapshot.some((actual) => sameProcess(expected, actual)));
   const ownsGroup = resource.group && resource.identity.group === resource.identity.pid && live.length > 0;
   const members = new Map(live.map((item) => [item.pid, item]));
-  for (let changed = true; changed; ) {
+  for (let changed = true; changed;) {
     changed = false;
     for (const item of snapshot) {
       if (members.has(item.pid)) continue;
@@ -188,9 +188,16 @@ export async function stopTarget({ executable, root }, observe = () => {}, execu
         args: ['desktop-target-process-inventory', '--target-root', root],
       }),
     );
-  const inventory = await inspect();
-  await observe(inventory);
   let failure, result;
+  const observed = async (inventory) => {
+    try {
+      await observe(inventory);
+    } catch (error) {
+      failure ??= error;
+    }
+  };
+  const inventory = await inspect();
+  await observed(inventory);
   try {
     result = JSON.parse(
       await execute({
@@ -208,10 +215,10 @@ export async function stopTarget({ executable, root }, observe = () => {}, execu
       }),
     );
   } catch (error) {
-    failure = error;
+    failure ??= error;
   }
   const after = await inspect();
-  await observe(after);
+  await observed(after);
   if (after.instances.length) {
     failure ??= new Error(`Owned target processes remain under ${root}`);
     await execute({
@@ -327,8 +334,10 @@ async function supervise(entry, options) {
         await remote('quiesce', null, options.gracefulMs);
         return true;
       });
-      if (!quiesced && sameProcess(workerIdentity, processIdentity(worker.pid))) {
-        await attempt('Unresponsive scenario stop', () => stopOwnedProcess({ identity: workerIdentity }, options));
+      if (!quiesced) {
+        await attempt('Unresponsive scenario stop', async () => {
+          if (sameProcess(workerIdentity, processIdentity(worker.pid))) await stopOwnedProcess({ identity: workerIdentity }, options);
+        });
       }
       // All paths use this ordering; failures never skip the next owner.
       for (const resource of report.resources.filter((item) => item.phase === 'release')) await cleanResource(resource);
