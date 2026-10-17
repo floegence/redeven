@@ -22,6 +22,45 @@ import (
 // model endpoint. Private fields exercise the presentation boundary as well.
 const openRouterSharedPoolFailure = `{"error":{"message":"Provider returned error","code":429,"metadata":{"raw":"private upstream prose Bearer sk-secret","provider_name":"Google AI Studio","is_byok":false,"provider_error_code":"429","limit_source":"upstream_provider_shared_pool","remedy_hint":"https://private.example/remedy"}},"user_id":"private-account-id"}`
 
+const toolArgumentsStalledMessage = "Tool arguments stopped making progress: consecutive whitespace outside JSON strings (output_index=24, whitespace_bytes=8192, limit_bytes=8192)"
+const toolArgumentsStalledFailure = `{"type":"response.failed","response":{"error":{"code":"basispoints_tool_arguments_stalled","message":"Tool arguments stopped making progress: consecutive whitespace outside JSON strings (output_index=24, whitespace_bytes=8192, limit_bytes=8192)"}}}`
+
+func TestToolArgumentsStalledFailureClassification(t *testing.T) {
+	for _, tc := range []struct {
+		name, code string
+		status     int
+		forbidden  bool
+		category   flprovider.RetryCategory
+		want       string
+	}{
+		{"stream", "basispoints_tool_arguments_stalled", 200, false, flprovider.RetryStreamInterrupted, runErrorCodeProviderStreamInterrupted},
+		{"forbidden", "basispoints_tool_arguments_stalled", 200, true, flprovider.RetryStreamInterrupted, runErrorCodeProviderStreamInterrupted},
+		{"auth", "basispoints_tool_arguments_stalled", 401, false, flprovider.RetryPermanent, runErrorCodeProviderAuthFailed},
+		{"contract", "basispoints_tool_arguments_stalled", 422, false, flprovider.RetryPermanent, runErrorCodeProviderRequestInvalid},
+		{"unknown", "basispoints_tool_arguments_stalled_extra", 200, false, "", runErrorCodeProviderRequestRejected},
+		{"prose_only", "", 200, false, "", runErrorCodeProviderRequestRejected},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			d := providerFailureDiagnostic{Provider: "openai", Status: tc.status, Code: tc.code, Message: toolArgumentsStalledMessage, RequestID: "req-stall", Shape: "stream_error"}
+			response := &http.Response{StatusCode: tc.status, Header: http.Header{}}
+			if tc.forbidden {
+				response.Header.Set("x-should-retry", "false")
+			}
+			advice := responseRetryAdvice(d, response)
+			if advice.Category != tc.category || advice.Forbidden != tc.forbidden {
+				t.Fatalf("advice=%+v", advice)
+			}
+			failure := &flruntime.ThreadTurnFailure{Code: flruntime.ThreadTurnFailureProvider, Message: (&providerFailure{diagnostic: d}).Error()}
+			code, _ := projectFloretTurnFailure(failure, runErrorCodeFloretEngineFailed)
+			detail := canonicalFailureDetail(failure)
+			var restored providerFailureDiagnostic
+			if code != tc.want || json.Unmarshal([]byte(detail), &restored) != nil || restored != d {
+				t.Fatalf("code=%s detail=%s", code, detail)
+			}
+		})
+	}
+}
+
 func TestOpenRouterFailurePresentation(t *testing.T) {
 	for _, status := range []int{429, 200} {
 		t.Run(fmt.Sprintf("http_%d", status), func(t *testing.T) {

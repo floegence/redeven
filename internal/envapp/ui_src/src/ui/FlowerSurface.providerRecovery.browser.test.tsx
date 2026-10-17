@@ -1,7 +1,7 @@
 import '../index.css';
 import './flower-feature.css';
 import { createSignal } from 'solid-js';
-import { beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { page, userEvent } from 'vitest/browser';
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../../../../flower_ui/src/copy';
 import type { FlowerSettingsDraft, FlowerSettingsSnapshot } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
@@ -9,6 +9,7 @@ import { adapter, deferred, flowerSurfaceNotifications, liveBootstrap, renderSur
 
 const copy = DEFAULT_FLOWER_SURFACE_COPY;
 beforeEach(() => page.viewport(1100, 900));
+afterEach(() => vi.restoreAllMocks());
 
 async function mountChildProviderRecovery() {
   const child = subagentSummary({ status: 'failed', can_interrupt: false });
@@ -105,8 +106,8 @@ it('opens the current provider and model and returns to the failed chat on cance
   expect(surface.querySelector('.flower-composer-submit')).not.toBeNull();
 });
 
-it('retains a failed save, saves once on repeated clicks, then retries manually with the saved preference', async () => {
-  const { surface, configure, saveModelProfile, retryThread, snapshot } = await mount();
+it.each(['provider_request_rejected', 'provider_stream_interrupted'])('retains a failed save for %s, saves once on repeated clicks, then retries manually with the saved preference', async (code) => {
+  const { surface, configure, saveModelProfile, retryThread, snapshot } = await mount({ code });
   saveModelProfile.mockRejectedValueOnce(new Error('settings save unavailable'));
   await userEvent.click(configure());
   await waitFor(() => Boolean(document.querySelector('[data-flower-provider-search] input')));
@@ -232,8 +233,8 @@ it('releases failed canonical preflight and refuses a newly unknown effect', asy
   expect(retryThread).not.toHaveBeenCalled();
 });
 
-it('releases a timed out retry, ignores its late result, and confirms canonical state before recovery', async () => {
-  const { surface, retryThread, loadThread, setFocusThreadRequest } = await mount({ code: 'floret_engine_failed' });
+it.each(['floret_engine_failed', 'provider_stream_interrupted'])('releases a timed out %s retry, ignores its late result, and confirms canonical state before recovery', async (code) => {
+  const { surface, retryThread, loadThread, setFocusThreadRequest } = await mount({ code });
   const pending = deferred<ReturnType<typeof liveBootstrap>>();
   retryThread.mockImplementationOnce(() => pending.promise);
   let expire!: () => void;

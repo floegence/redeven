@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	flconfig "github.com/floegence/floret/v7/config"
+	flprovider "github.com/floegence/floret/v7/provider"
 	flruntime "github.com/floegence/floret/v7/runtime"
 	flstorage "github.com/floegence/floret/v7/storage"
 	fltools "github.com/floegence/floret/v7/tools"
@@ -21,7 +23,21 @@ import (
 )
 
 func TestChatGPTFloretToolHistoryRestartAndCompaction(t *testing.T) {
-	var requests, effects atomic.Int32
+	testChatGPTFloretToolHistoryRestartAndCompaction(t, 0)
+}
+
+func TestFloretToolArgumentStallRecoversConfirmedToolHistory(t *testing.T) {
+	testChatGPTFloretToolHistoryRestartAndCompaction(t, 1)
+}
+
+func TestFloretToolArgumentStallManualRetryAfterRestartPreservesTools(t *testing.T) {
+	testChatGPTFloretToolHistoryRestartAndCompaction(t, 5)
+}
+
+func testChatGPTFloretToolHistoryRestartAndCompaction(t *testing.T, stalledAttempts int32) {
+	t.Helper()
+	var requests, effects, admitted, released atomic.Int32
+	var failedInput json.RawMessage
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body map[string]json.RawMessage
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -29,14 +45,41 @@ func TestChatGPTFloretToolHistoryRestartAndCompaction(t *testing.T) {
 			return
 		}
 		n := requests.Add(1)
+		logicalStep := n
+		if n > 1+stalledAttempts {
+			logicalStep -= stalledAttempts
+		}
 		if _, ok := body["previous_response_id"]; ok {
 			t.Error("ChatGPT relied on server continuation")
 		}
 		if n == 2 && (!strings.Contains(string(body["input"]), "opaque-history") || !strings.Contains(string(body["input"]), "Observed once.")) {
 			t.Error("tool continuation lost native state or canonical result")
 		}
-		if n == 3 && (!strings.Contains(string(body["input"]), "opaque-history") || !strings.Contains(string(body["input"]), "Inspect the available target.")) {
-			t.Error("restart lost canonical or native history")
+		if logicalStep == 3 {
+			if !strings.Contains(string(body["input"]), "Inspect the available target.") || !strings.Contains(string(body["input"]), "Observed once.") {
+				t.Error("restart lost canonical user or confirmed tool history")
+			}
+			if stalledAttempts < 5 && !strings.Contains(string(body["input"]), "opaque-history") {
+				t.Error("restart lost compatible native history")
+			}
+		}
+		if n >= 2 && n <= 1+stalledAttempts {
+			if len(failedInput) > 0 && !bytes.Equal(failedInput, body["input"]) {
+				t.Error("automatic retry changed frozen canonical input")
+			}
+			failedInput = append(json.RawMessage(nil), body["input"]...)
+			w.Header().Set("Content-Type", "text/event-stream")
+			fmt.Fprint(w, "data: {\"type\":\"response.output_text.delta\",\"delta\":\"Failed draft fragment\"}\n\n")
+			writeOpenAISSEJSON(w, w.(http.Flusher), map[string]any{"type": "response.output_item.added", "output_index": 24, "item": map[string]any{"type": "function_call", "id": "incomplete-item", "call_id": "incomplete-call", "name": "inspect", "namespace": "redeven", "arguments": ""}})
+			fmt.Fprint(w, "data: {\"type\":\"response.function_call_arguments.delta\",\"item_id\":\"incomplete-item\",\"delta\":\"{\"}\n\n")
+			fmt.Fprintf(w, "data: %s\n\n", toolArgumentsStalledFailure)
+			return
+		}
+		if stalledAttempts == 1 && n == 3 && !bytes.Equal(failedInput, body["input"]) {
+			t.Error("retry changed frozen canonical input")
+		}
+		if stalledAttempts == 5 && n == 7 && !strings.Contains(string(body["input"]), "Observed once.") {
+			t.Error("manual retry lost the confirmed tool result")
 		}
 		output := `[{"type":"message","id":"answer","role":"assistant","status":"completed","content":[{"type":"output_text","text":"The target was inspected once. The conversation then continued with complete historical context.","annotations":[]}]}]`
 		if n == 1 {
@@ -54,7 +97,10 @@ func TestChatGPTFloretToolHistoryRestartAndCompaction(t *testing.T) {
 	provider.chatGPT = true
 	provider.strictToolSchema = true
 	provider.chatGPTToken = func(context.Context) (string, error) { return "fixture", nil }
-	gateway := newFloretProviderAdapter(provider, "openai", "gpt-6.1-sol", ProviderControls{}, TurnBudgets{}, "")
+	gateway := newFloretProviderAdapter(provider, "openai", "gpt-6.1-sol", ProviderControls{}, TurnBudgets{}, "", withFloretRequestAdmission(func(ctx context.Context, _ flprovider.Request) (context.Context, func(), error) {
+		admitted.Add(1)
+		return ctx, func() { released.Add(1) }, nil
+	}))
 	gateway.identity, err = redevenFloretGatewayIdentity("openai", "openai", server.URL, "gpt-6.1-sol", "responses", "chatgpt", "fixture")
 	if err != nil {
 		t.Fatal(err)
@@ -66,7 +112,9 @@ func TestChatGPTFloretToolHistoryRestartAndCompaction(t *testing.T) {
 		effects.Add(1)
 		return fltools.Result{Text: "Observed once."}, nil
 	})
-	agent, err := flruntime.NewAgent(flconfig.AgentConfig{Profile: flconfig.AgentProfile{ID: "test", Name: "Test"}, SystemPrompt: "Inspect once.", Context: flconfig.ContextPolicy{ContextWindowTokens: 256000, CompactedContextTargetTokens: 2000, RecentTailTokens: 100, RecentUserTokens: 100, ReservedSummaryTokens: 1000}}, gateway, flruntime.WithAgentTools(tool), flruntime.WithAgentEffectAuthorization(floretAllowTestEffect))
+	policy := flruntime.DefaultProviderRetryPolicy()
+	policy.BaseDelay, policy.MaxDelay, policy.Jitter = time.Microsecond, time.Microsecond, 0
+	agent, err := flruntime.NewAgent(flconfig.AgentConfig{Profile: flconfig.AgentProfile{ID: "test", Name: "Test"}, SystemPrompt: "Inspect once.", Context: flconfig.ContextPolicy{ContextWindowTokens: 256000, CompactedContextTargetTokens: 2000, RecentTailTokens: 100, RecentUserTokens: 100, ReservedSummaryTokens: 1000}}, gateway, flruntime.WithAgentTools(tool), flruntime.WithAgentEffectAuthorization(floretAllowTestEffect), flruntime.WithAgentProviderRetryPolicy(policy))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,11 +140,41 @@ func TestChatGPTFloretToolHistoryRestartAndCompaction(t *testing.T) {
 		t.Fatal(err)
 	}
 	first := waitDesktopContinuation(t, service, created.ThreadID)
+	if stalledAttempts == 5 {
+		if first.Failure == nil {
+			t.Fatal("stall retries did not exhaust")
+		}
+		code, _ := projectFloretTurnFailure(first.Failure, runErrorCodeFloretEngineFailed)
+		if code != runErrorCodeProviderStreamInterrupted || requests.Load() != 6 || effects.Load() != 1 || admitted.Load() != released.Load() {
+			t.Fatalf("exhausted code=%s requests=%d effects=%d admissions=%d/%d", code, requests.Load(), effects.Load(), admitted.Load(), released.Load())
+		}
+		if err := host.Shutdown(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		host, service = open()
+		restored, err := service.View(t.Context(), created.ThreadID)
+		if err != nil || restored.Failure == nil || restored.Failure.Message != first.Failure.Message || requests.Load() != 6 {
+			t.Fatalf("restart changed failure: %+v err=%v", restored.Failure, err)
+		}
+		if _, err := service.Retry(t.Context(), flruntime.RetryInput{ThreadID: created.ThreadID, SourceTurnID: first.TurnID, RequestKey: "manual-retry"}); err != nil {
+			t.Fatal(err)
+		}
+		first = waitDesktopContinuation(t, service, created.ThreadID)
+	}
 	if first.Failure != nil {
 		t.Fatalf("tool continuation: %+v", first.Failure)
 	}
-	if requests.Load() != 2 || effects.Load() != 1 {
+	wantRequests := 2 + stalledAttempts
+	if requests.Load() != wantRequests || effects.Load() != 1 || admitted.Load() != released.Load() {
 		t.Fatalf("requests=%d effects=%d", requests.Load(), effects.Load())
+	}
+	if len(first.ToolCallPreviews) != 0 {
+		t.Fatal("failed argument preview survived recovery")
+	}
+	for _, item := range first.Items {
+		if stalledAttempts < 5 && strings.Contains(item.Text, "Failed draft fragment") {
+			t.Fatal("failed draft survived recovery")
+		}
 	}
 	if err := host.Shutdown(context.Background()); err != nil {
 		t.Fatal(err)
@@ -147,6 +225,7 @@ func TestFloretProviderFailureDiagnosticsSurviveRestart(t *testing.T) {
 		status                                                  int
 		chatGPT                                                 bool
 	}{
+		{"tool_arguments_stalled", "openai", "gpt-6.1-sol", "responses", "data: " + toolArgumentsStalledFailure + "\n\n", runErrorCodeProviderStreamInterrupted, toolArgumentsStalledMessage, 200, false},
 		{"server_stream", "openai", "gpt-6.1-sol", "responses", "data: {\"type\":\"response.failed\",\"response\":{\"error\":{\"code\":\"500\",\"message\":\"The model is overloaded. Please retry shortly.\"}}}\n\n", runErrorCodeProviderServerError, "The model is overloaded. Please retry shortly.", 200, false},
 		{"server_responses", "openai", "gpt-6.1-sol", "responses", `{"error":{"message":"The model is overloaded. Please retry shortly.","code":"server_error"}}`, runErrorCodeProviderServerError, "The model is overloaded. Please retry shortly.", 500, false},
 		{"server_chat", "openai", "gpt-6.1-sol", "chat_completions", `{"error":{"message":"The model is overloaded. Please retry shortly.","code":"server_error"}}`, runErrorCodeProviderServerError, "The model is overloaded. Please retry shortly.", 500, false},
@@ -234,6 +313,9 @@ func TestFloretProviderFailureDiagnosticsSurviveRestart(t *testing.T) {
 			restoredCode, restoredMessage := projectFloretTurnFailure(restored.Failure, runErrorCodeFloretEngineFailed)
 			if restored.Failure == nil || restored.Failure.Message != first.Failure.Message || canonicalFailureDetail(restored.Failure) != detail || restoredCode != code || restoredMessage != message {
 				t.Fatal("restart lost failure diagnostic")
+			}
+			if sends.Load() != wantSends {
+				t.Fatal("restart replayed a terminal provider failure")
 			}
 		})
 	}
