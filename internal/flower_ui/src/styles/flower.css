@@ -2084,16 +2084,16 @@
 .flower-composer-context-tooltip {
   box-sizing: border-box;
   position: relative;
-  width: min(23rem, calc(100vw - 2rem));
-  max-height: min(34rem, calc(100dvh - 4.5rem));
+  width: min(20rem, calc(100vw - 2rem));
+  max-height: min(28rem, calc(100dvh - 4.5rem));
   overflow-y: auto;
   overscroll-behavior: contain;
   pointer-events: none;
   scrollbar-width: thin;
   border: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 76%, transparent);
-  border-radius: 0.75rem;
+  border-radius: 0.625rem;
   background: color-mix(in srgb, var(--popover, var(--flower-chat-surface-elevated)) 96%, var(--background) 4%);
-  padding: 0.75rem;
+  padding: 0.625rem;
   color: var(--popover-foreground, var(--foreground));
   box-shadow:
     0 2px 6px color-mix(in srgb, var(--redeven-surface-shadow-source) 16%, transparent), 0 16px 36px -18px color-mix(in srgb, var(--redeven-surface-shadow-source) 32%, transparent);
@@ -12061,8 +12061,8 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
 /* Native capacity and request-scoped semantic token estimates. */
 .flower-composer-context-tooltip {
   --flower-context-color: var(--muted-foreground);
-  font-size: 0.75rem;
-  line-height: 1.5;
+  font-size: 0.6875rem;
+  line-height: 1.35;
   user-select: text;
 }
 .flower-composer-context-tooltip [data-category='input'] { --flower-context-color: var(--info, var(--primary)); }
@@ -12077,21 +12077,21 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 0.5rem;
+  gap: 0.375rem;
+  margin-bottom: 0.375rem;
   color: var(--muted-foreground);
 }
 .flower-context-total {
   flex: 0 0 auto;
   font-variant-numeric: tabular-nums;
   color: var(--foreground);
-  font-size: 0.71875rem;
+  font-size: inherit;
 }
 .flower-context-capacity, .flower-context-ratio { color: var(--muted-foreground); }
 .flower-context-stacked-bar {
   display: flex;
   gap: 1px;
-  height: 0.375rem;
+  height: 0.25rem;
   overflow: hidden;
   border-radius: 999px;
   background: color-mix(in srgb, var(--muted-foreground) 10%, transparent);
@@ -12101,8 +12101,8 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
 .flower-context-stacked-bar > span:last-child { border-radius: 0 999px 999px 0; }
 .flower-context-window-legend {
   display: flex;
-  gap: 0.75rem;
-  margin-top: 0.5rem;
+  gap: 0.625rem;
+  margin-top: 0.375rem;
 }
 .flower-context-window-stat { min-width: 0; flex: 1; overflow: hidden; }
 .flower-context-stat-label {
@@ -12110,7 +12110,7 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
   align-items: center;
   gap: 0.35rem;
   color: var(--muted-foreground);
-  font-size: 0.65625rem;
+  font-size: 0.625rem;
   white-space: nowrap;
   min-width: 0;
 }
@@ -12118,14 +12118,14 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
 .flower-context-stat-value {
   display: block;
   padding-left: 0.85rem;
-  font-size: 0.71875rem;
+  font-size: inherit;
   font-variant-numeric: tabular-nums;
 }
 .flower-context-swatch {
   display: inline-block;
-  flex: 0 0 0.5rem;
-  width: 0.5rem;
-  height: 0.5rem;
+  flex: 0 0 0.4375rem;
+  width: 0.4375rem;
+  height: 0.4375rem;
   border-radius: 0.15rem;
   background: var(--flower-context-color);
 }
@@ -12142,11 +12142,11 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
 .flower-model-context-status[data-used='true'] { background: var(--success, var(--primary)); }
 .flower-model-context-row {
   display: grid;
-  grid-template-columns: 0.5rem minmax(0, 1fr) 3.25rem 3.1rem;
-  column-gap: 0.5rem;
+  grid-template-columns: 0.4375rem minmax(0, 1fr) 2.875rem 2.5rem;
+  column-gap: 0.375rem;
   row-gap: 0.125rem;
   align-items: center;
-  font-size: 0.71875rem;
+  font-size: inherit;
   line-height: 1.25;
 }
 .flower-model-context-distribution {
@@ -12162,7 +12162,7 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
 .flower-model-context-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .flower-model-context-amount, .flower-model-context-share {
   color: var(--muted-foreground);
-  font-size: 0.71875rem;
+  font-size: inherit;
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
@@ -12180,16 +12180,16 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
 .flower-context-cache-stats span {
   display: block;
   color: var(--muted-foreground);
-  font-size: 0.65625rem;
+  font-size: 0.625rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.flower-context-cache-stats strong { font-size: 0.75rem; font-weight: 500; font-variant-numeric: tabular-nums; }
+.flower-context-cache-stats strong { font-size: inherit; font-weight: 500; font-variant-numeric: tabular-nums; }
 
 .flower-context-composition { border-top: 1px solid var(--flower-chat-surface-border); margin-top: 0.625rem; padding-top: 0.625rem; }
 .flower-context-composition-bar { margin-bottom: 0.4rem; }
-.flower-context-composition-row { padding-block: 0.25rem; row-gap: 0.25rem; display: grid; grid-template-columns: 0.5rem minmax(0, 1fr) 3.25rem 3.1rem; align-items: center; column-gap: 0.5rem; min-height: 1.25rem; }
+.flower-context-composition-row { padding-block: 0.1875rem; row-gap: 0.1875rem; display: grid; grid-template-columns: 0.4375rem minmax(0, 1fr) 2.875rem 2.5rem; align-items: center; column-gap: 0.375rem; min-height: 1.25rem; }
 .flower-context-composition-unavailable { display: flex; justify-content: space-between; gap: 0.5rem; margin-top: 0.625rem; font-size: 0.6875rem; color: var(--muted-foreground); }
 .flower-model-context-disclosure { cursor: pointer; list-style: none; }
 .flower-model-context-disclosure::-webkit-details-marker { display: none; }
@@ -12220,7 +12220,7 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
 
 .flower-context-categories > .flower-model-context-details + .flower-model-context-details,
 .flower-context-categories > .flower-context-composition-row + .flower-model-context-details { margin-top: 0.125rem; }
-.flower-model-context-distribution { display: grid; gap: 0.5rem; max-height: 13rem; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.flower-model-context-distribution { display: grid; gap: 0.375rem; max-height: 11rem; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
 .flower-context-composition-row .flower-model-context-track { height: 0.1875rem; }
 
 .flower-answer-actions { display: flex; align-items: center; justify-content: space-between; gap: 1rem; min-width: 0; margin-top: 0.5rem; font-family: var(--font-sans); line-height: 1; }
@@ -12238,7 +12238,7 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
 
 .flower-context-composition[data-token-amounts='false'] .flower-context-composition-row,
 .flower-context-composition[data-token-amounts='false'] .flower-model-context-row {
-  grid-template-columns: 0.5rem minmax(0, 1fr) 3.1rem;
+  grid-template-columns: 0.4375rem minmax(0, 1fr) 2.5rem;
 }
 .flower-composer-context-tooltip [data-category='protocol_framing'] { --flower-context-color: var(--muted-foreground); }
 
