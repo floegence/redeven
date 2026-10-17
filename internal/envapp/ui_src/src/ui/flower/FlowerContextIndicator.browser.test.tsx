@@ -61,6 +61,46 @@ function mount(locale: () => RedevenLocale, usage: () => FlowerContextUsage, pro
  dispose = render(() => <FlowerComposerContextIndicator copy={copy()} usage={usage()} placement={placement} />, host);
  return { host, copy, trigger: host.querySelector<HTMLElement>('[role="progressbar"]')!, panel: document.getElementById(host.querySelector<HTMLElement>('[role="progressbar"]')!.getAttribute('aria-controls')!)! };
 }
+for (const projected of [false, true]) {
+ it('keeps mouse interactions inside the popup open, projected=' + projected, async () => {
+  await page.viewport(820, 700);
+  const { host, trigger, panel } = mount(() => 'en-US', () => fixture(), projected);
+  await userEvent.hover(trigger);
+  await expect.poll(() => getComputedStyle(panel).opacity).toBe('1');
+  await userEvent.click(panel.querySelector<HTMLElement>('.flower-context-total')!, { delay: 160 });
+  await new Promise(resolve => setTimeout(resolve, 200));
+  expect(panel.dataset.open).toBe('true');
+  const category = panel.querySelector<HTMLDetailsElement>('[data-category="mcp_tools"]')!;
+  await userEvent.click(category.querySelector('summary')!);
+  await expect.poll(() => category.open).toBe(true);
+  await userEvent.hover(category.querySelector<HTMLElement>('.flower-model-context-row .flower-model-context-label')!);
+  (document.activeElement as HTMLElement).blur();
+  await new Promise(resolve => setTimeout(resolve, 200));
+  expect(panel.dataset.open).toBe('true');
+  await userEvent.click(category.querySelector<HTMLElement>('.flower-model-context-row .flower-model-context-label')!);
+  await new Promise(resolve => setTimeout(resolve, 200));
+  expect(panel.dataset.open).toBe('true');
+  await userEvent.click(category.querySelector('summary')!);
+  await expect.poll(() => category.open).toBe(false);
+  const outside = document.createElement('button');
+  outside.style.cssText = 'position:fixed;top:0;left:0;width:16px;height:16px';
+  host.append(outside);
+  await userEvent.click(outside);
+  expect(panel.getAttribute('aria-hidden')).toBe('true');
+  await userEvent.hover(trigger);
+  await expect.poll(() => panel.dataset.open).toBe('true');
+  category.querySelector<HTMLElement>('summary')!.focus();
+  await userEvent.hover(panel.querySelector<HTMLElement>('.flower-context-total')!);
+  outside.focus();
+  await expect.poll(() => panel.getAttribute('aria-hidden')).toBe('true');
+  outside.blur();
+  await userEvent.hover(trigger);
+  await expect.poll(() => panel.dataset.open).toBe('true');
+  await userEvent.hover(panel.querySelector<HTMLElement>('.flower-context-total')!);
+  await userEvent.hover(outside);
+  await expect.poll(() => panel.getAttribute('aria-hidden')).toBe('true');
+ });
+}
 for (const locale of ['en-US', 'zh-CN'] as const) for (const dark of [false, true]) {
  it('shows explicit sources, flat bars and stable keyboard interaction in ' + locale + ', dark=' + dark, async () => {
   await page.viewport(440, 720);
@@ -69,6 +109,9 @@ for (const locale of ['en-US', 'zh-CN'] as const) for (const dark of [false, tru
   const { host, copy, trigger, panel } = mount(() => locale, usage);
   trigger.focus();
   await expect.poll(() => getComputedStyle(panel).opacity).toBe('1');
+  expect(panel.getBoundingClientRect().width).toBeLessThanOrEqual(320);
+  expect(panel.getBoundingClientRect().height).toBeLessThanOrEqual(420);
+  expect(parseFloat(getComputedStyle(panel).fontSize)).toBeLessThanOrEqual(11);
   expect(panel.textContent).toContain(copy().chat.contextIndicator.sourceLabels.mcp_tools);
   expect(panel.textContent).toContain(copy().chat.contextIndicator.sourceLabels.system_tools);
   expect(panel.textContent).toContain(copy().chat.contextIndicator.sourceLabels.system_prompt);

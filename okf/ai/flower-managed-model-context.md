@@ -145,10 +145,15 @@ Shared context framing is explicit formatting overhead rather than a second
 auto-loaded snapshot breakdown. Retained historical updates and removals count
 through Floret's canonical request renderer.
 
-The popup keeps one header with the total and a trailing close button, the
+The compact popup uses a 20rem width with 11px body text and bounded scrolling.
+It keeps one header with the total and a trailing close button, the
 capacity bar and legend, source bars, and compact cache rates. Budget thresholds,
 request output limits and explanatory paragraphs are not shown in this popup.
-The indicator opens and dismisses by mouse, touch or keyboard. A keyed source
+The indicator opens and dismisses by mouse, touch or keyboard. Internal pointer
+interactions cancel pending hover dismissal; transient focus loss to the document
+body does not close a hovered popup. Moving focus to an external control, outside
+click, Escape and the close button still dismiss it. Internal clicks never reach
+the composer's blank-space focus handler. A keyed source
 keeps its disclosure state and keyboard focus through live reordering. Theme
 colors, bounded scrolling and localized labels work at narrow widths. Measured
 panel dimensions refresh placement after disclosure, content and viewport size

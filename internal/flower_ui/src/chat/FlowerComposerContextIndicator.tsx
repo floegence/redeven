@@ -52,9 +52,19 @@ export function FlowerComposerContextIndicator(props: {
   onCleanup(cancelDismiss);
   let container: HTMLDivElement | undefined;
   let panel: HTMLDivElement | undefined;
-  const [layout, setLayout] = createSignal({ position: { x: 0, y: 0 }, size: { width: 368, height: 500 } });
+  const [layout, setLayout] = createSignal({ position: { x: 0, y: 0 }, size: { width: 320, height: 420 } });
   const containsFocus = () => !!(container?.contains(document.activeElement) || panel?.contains(document.activeElement));
-  const close = () => { trigger?.focus({ preventScroll: true }); setTooltipOpen(false); };
+  const containsPointer = () => !!(container?.matches(':hover') || panel?.matches(':hover'));
+  const scheduleDismiss = () => {
+    cancelDismiss();
+    dismissTimer = setTimeout(() => {
+      if (!containsFocus() && !containsPointer()) setTooltipOpen(false);
+    }, 150);
+  };
+  const handleFocusOut = () => queueMicrotask(() => {
+    if (!containsFocus() && (document.activeElement !== document.body || !containsPointer())) setTooltipOpen(false);
+  });
+  const close = () => { cancelDismiss(); trigger?.focus({ preventScroll: true }); setTooltipOpen(false); };
   const escape = (event: KeyboardEvent) => {
     if (event.key === 'Escape' && tooltipOpen()) { event.stopPropagation(); event.preventDefault(); close(); }
   };
@@ -105,13 +115,9 @@ export function FlowerComposerContextIndicator(props: {
       data-context-ratio={dataRatio()}
       data-context-placement={props.placement ?? 'above-end'}
       onPointerEnter={() => { cancelDismiss(); setTooltipOpen(true); }}
-      onPointerLeave={() => {
-        if (!containsFocus()) dismissTimer = setTimeout(() => setTooltipOpen(false), 150);
-      }}
+      onPointerLeave={scheduleDismiss}
       onFocusIn={() => { cancelDismiss(); setTooltipOpen(true); }}
-      onFocusOut={() => {
-        queueMicrotask(() => { if (!containsFocus()) setTooltipOpen(false); });
-      }}
+      onFocusOut={handleFocusOut}
       onKeyDown={escape}
     >
       <div
@@ -141,8 +147,11 @@ export function FlowerComposerContextIndicator(props: {
         ref={panel}
         onKeyDown={escape}
         onPointerEnter={cancelDismiss}
-        onPointerLeave={() => { if (!containsFocus()) dismissTimer = setTimeout(() => setTooltipOpen(false), 150); }}
-        onFocusOut={() => queueMicrotask(() => { if (!containsFocus()) setTooltipOpen(false); })}
+        onPointerLeave={scheduleDismiss}
+        onPointerDown={cancelDismiss}
+        onClick={(event) => event.stopPropagation()}
+        onFocusIn={cancelDismiss}
+        onFocusOut={handleFocusOut}
         id={tooltipID}
         role="region"
         tabIndex={-1}
