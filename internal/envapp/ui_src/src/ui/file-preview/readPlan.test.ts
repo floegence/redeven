@@ -41,6 +41,10 @@ describe('Redeven file preview read plan', () => {
     });
   });
 
+  it('reads complete bounded presentations instead of a binary sniff', () => {
+    expect(getRedevenFilePreviewReadPlan({ mode: 'pptx' })).toMatchObject({ strategy: 'bytes', readBytes: 20 * 1024 * 1024, rejectOversizedBeforeRead: true, oversizedMessage: 'This presentation is too large to preview.' });
+  });
+
   it('uses browser resource URLs for media previews instead of reading bytes into JS memory', () => {
     expect(getRedevenFilePreviewReadPlan({ mode: 'video' })).toEqual({
       strategy: 'resource',

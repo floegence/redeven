@@ -418,10 +418,10 @@ export function createFilePreviewController(params: {
         return;
       }
 
-      if (baseDescriptor.mode === 'docx') {
+      if (baseDescriptor.mode === 'docx' || baseDescriptor.mode === 'pptx') {
         if (truncated) {
           setPreviewDescriptor({ mode: 'unsupported' });
-          setPreviewMessage(getRedevenFilePreviewOversizedMessage('docx'));
+          setPreviewMessage(getRedevenFilePreviewOversizedMessage(baseDescriptor.mode));
         }
         return;
       }

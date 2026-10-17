@@ -5,7 +5,7 @@ import { useI18n } from '../i18n';
 import { Tooltip } from '../primitives/Tooltip';
 import type { PreviewZoom } from './createPreviewZoom';
 
-export function FilePreviewZoomControls(props: { zoom: PreviewZoom; kind: 'Pdf' | 'Docx' | 'Image'; metadata?: JSX.Element }) {
+export function FilePreviewZoomControls(props: { zoom: PreviewZoom; kind: 'Pdf' | 'Docx' | 'Pptx' | 'Image'; metadata?: JSX.Element }) {
   const i18n = useI18n();
   const modeLabel = () => {
     switch (props.zoom.mode()) {

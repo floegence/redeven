@@ -1,6 +1,7 @@
 import { Show, createSignal, onCleanup } from 'solid-js';
 import { ChevronDown, ChevronRight, Copy, Check, Loader2 } from '@floegence/floe-webapp-core/icons';
 import { useI18n } from '../i18n';
+import { REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchTextSelectionSurface';
 import { writeTextToClipboard } from '../utils/clipboard';
 import { getFilePreviewErrorMeta, type FilePreviewErrorType } from './filePreviewErrorUtils';
 
@@ -58,6 +59,7 @@ export function FilePreviewErrorState(props: FilePreviewErrorStateProps) {
 
   return (
     <div
+      {...REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS}
       class="flex h-full min-w-0 items-center justify-center overflow-auto p-6"
       aria-busy={props.busy ?? false}
       data-testid="file-preview-recovery"

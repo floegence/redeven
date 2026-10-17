@@ -6997,7 +6997,13 @@
       "fitDocxToWidth": "讓 DOCX 預覽符合寬度",
       "zoomInPdf": "放大 PDF 預覽",
       "zoomOutPdf": "縮小 PDF 預覽",
-      "fitPdfToWidth": "讓 PDF 預覽符合寬度"
+      "fitPdfToWidth": "讓 PDF 預覽符合寬度",
+      "zoomInPptx": "放大 PPTX 預覽",
+      "zoomOutPptx": "縮小 PPTX 預覽",
+      "loadingPptx": "正在載入簡報…",
+      "pptxStaticNotice": "靜態預覽，動畫及部分效果可能與 PowerPoint 不同。",
+      "pptxExternalNotice": "已停用外部連結和資源。",
+      "pptxIncomplete": "部分投影片內容無法呈現，請下載檔案查看原稿。"
     },
     "git": {
       "noChangedComparison": "此比較中沒有變更的檔案。",

@@ -19,6 +19,9 @@ export function findForbiddenInitialAssetNames(assets, forbiddenNames) {
 
 function isForbiddenInitialModule(moduleId) {
   if (moduleId.startsWith('@floegence/floebrowser/dist/viewer/')) return true;
+  if (moduleId === '@floegence/floe-webapp-core/dist/pptx.js'
+      || moduleId.startsWith('@aiden0z/pptx-renderer/')
+      || moduleId.includes('/@aiden0z/pptx-renderer/')) return true;
   if (['FlowerSurface.tsx', 'FlowerInputChoices.tsx', 'SubagentDetailWindow.tsx', 'FlowerComputerStage.tsx', 'settings/FlowerSettingsSurface.tsx']
     .some((panel) => moduleId.endsWith(`/internal/flower_ui/src/${panel}`))) return true;
   if (moduleId === '@floegence/floe-webapp-boot'

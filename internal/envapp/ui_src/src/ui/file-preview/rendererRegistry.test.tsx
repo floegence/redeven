@@ -82,6 +82,7 @@ describe('Redeven file preview renderer registry', () => {
     expect(resolveRedevenFilePreviewRenderer({ mode: 'pdf' }).id).toBe('pdf');
     expect(resolveRedevenFilePreviewRenderer({ mode: 'docx' }).id).toBe('docx');
     expect(resolveRedevenFilePreviewRenderer({ mode: 'xlsx' }).id).toBe('xlsx');
+    expect(resolveRedevenFilePreviewRenderer(describeFilePreview('slides.pptx')).id).toBe('pptx');
     expect(resolveRedevenFilePreviewRenderer({ mode: 'video' }).id).toBe('video');
     expect(resolveRedevenFilePreviewRenderer({ mode: 'audio' }).id).toBe('audio');
     expect(resolveRedevenFilePreviewRenderer({ mode: 'binary' }).id).toBe('binary');

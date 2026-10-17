@@ -108,6 +108,9 @@ describe('describeFilePreview', () => {
   it('keeps binary-oriented modes unchanged', () => {
     expect(previewModeByName('diagram.png')).toBe('image');
     expect(previewModeByName('slides.pdf')).toBe('pdf');
+    expect(previewModeByName('slides.PPTX')).toBe('pptx');
+    expect(previewModeByName('slides.ppt')).toBe('binary');
+    expect(mimeFromExtDot('.pptx')).toBe('application/vnd.openxmlformats-officedocument.presentationml.presentation');
     expect(previewModeByName('sheet.xlsx')).toBe('xlsx');
     expect(previewModeByName('archive.bin')).toBe('binary');
   });

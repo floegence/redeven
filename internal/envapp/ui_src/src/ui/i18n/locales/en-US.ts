@@ -1292,6 +1292,12 @@ export const enUS = defineDictionary({
       renderingPage: 'Rendering page...',
       preparingPage: 'Preparing page...',
       loadingPdf: 'Loading PDF...',
+      zoomInPptx: "Zoom in PPTX preview",
+      zoomOutPptx: "Zoom out PPTX preview",
+      loadingPptx: "Loading presentation...",
+      pptxStaticNotice: "Static preview. Animations and some effects may differ from PowerPoint.",
+      pptxExternalNotice: "External links and resources are disabled.",
+      pptxIncomplete: "Some slide content could not be rendered. Download the file to inspect the original.",
       eyebrow: 'Preview',
     },
     git: {

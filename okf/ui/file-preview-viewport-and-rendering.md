@@ -8,9 +8,9 @@ timestamp: 2026-10-01T00:00:00Z
 # Summary
 
 Redeven owns preview modes, file identity, and renderer lifetimes. Published Floe
-Webapp owns measurement, fit scales, and synchronized PDF layers. PDF, DOCX, and
+Webapp owns measurement, fit scales, synchronized PDF layers, and static PPTX rendering. PDF, PPTX, DOCX, and
 images initially fit the reading area, including enlargement; resizing updates
-automatic fit but preserves manual zoom. Each PDF page has one rendering owner.
+automatic fit but preserves manual zoom. Each PDF or PPTX page has one rendering owner.
 Stale work cannot replace the current document; cancellation is neutral, and real
 page failures remain local and retryable. Markdown without Mermaid skips diagram
 theme sampling. HTML opens as an isolated page through published Floe document
@@ -36,7 +36,7 @@ at its upper right without a separate layout row or reserved padding. Their
 position stays fixed while content scrolls. Only the visible controls intercept
 pointer input; the remaining overlay area passes through to the reading surface.
 The strip stays on one line in narrow surfaces: zoom buttons flank a percentage
-menu containing fit-to-window, fit-to-width for documents, and actual size. PDF
+menu containing fit-to-window, fit-to-width for documents, and actual size. PDF and PPTX
 page counts remain available in that menu. Controls retain keyboard and touch
 access and expose localized labels and tooltips. The trigger shows the active
 mode icon and actual percentage, with an explicit accessible mode label; the menu
@@ -44,7 +44,7 @@ marks the selected mode. Published Floe dropdowns and the existing tooltip adapt
 over Floe floating layers preserve Workbench projection, focus, and input routing.
 Fixed minimum media heights must not push controls beyond a small preview surface.
 
-The initial mode is fit-to-window. PDF and DOCX also offer fit-to-width and actual
+The initial mode is fit-to-window. PDF, PPTX, and DOCX also offer fit-to-width and actual
 size; images offer actual size. Automatic fit may enlarge or shrink beyond the
 manual zoom range. Invalid or zero measurements mean not ready, not a zero-scale
 render. Percentage presentation must not report a positive tiny scale as zero.
@@ -54,7 +54,7 @@ bounds permit. Large content must remain reachable on every edge.
 
 Multi-page documents retain one stable scale derived from maximum individual page
 width and height. Fit-to-window must never shrink the entire document stack into
-one viewport or change scale merely because another page becomes visible. PDF
+one viewport or change scale merely because another page becomes visible. PDF and PPTX
 page labels consume unscaled reading space. DOCX measures native section layout
 and uses the document stack height only for scrolling.
 
@@ -114,6 +114,9 @@ verifies the exact engine resource licenses, including the Liberation font
 exception, and preserves original notices beside distributed assets. Scanned
 image-only PDFs need OCR to gain selectable text; this surface does not add OCR.
 
+The [PPTX preview contract](file-preview-pptx.md) owns static presentation rendering,
+resource isolation, licensing, and page lifetime over the published Floe surface.
+
 Each DOCX source owns distinct body and style nodes. A superseded render may finish
 only against its detached nodes; it cannot overwrite the current body or install
 styles back into the current surface. Layout observers belong to that source and
@@ -145,7 +148,7 @@ or native attachment PDF behavior.
 # Evidence
 
 - `redeven:internal/envapp/ui_src/src/ui/widgets/createPreviewZoom.ts` - Shared product zoom policy over published Floe geometry.
-- `redeven:internal/envapp/ui_src/src/ui/widgets/FilePreviewZoomControls.tsx` - Compact floating controls shared by the three sized preview renderers.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/FilePreviewZoomControls.tsx` - Compact floating controls shared by sized preview renderers.
 - `redeven:internal/envapp/ui_src/src/ui/widgets/PdfPreviewPane.tsx` - Product virtualization and controls over the published layered PDF surface.
 - `redeven:internal/envapp/ui_src/src/ui/widgets/DocxPreviewPane.tsx` - Source-owned DOM and intrinsic section measurement.
 - `redeven:internal/envapp/ui_src/src/ui/widgets/ImagePreviewPane.tsx` - Container-responsive image geometry and resource guards.

@@ -169,3 +169,15 @@ test('keeps the Flower surface and optional panels out of the initial load', () 
     assert.equal(analyzeInitialBuildGraph(manifest, chunks).forbiddenModules.length, 1);
   }
 });
+
+
+test('keeps the presentation engine out of every initial chunk', () => {
+  const result = analyzeInitialBuildGraph({
+    'index.html': entry('assets/index.js', { imports: ['shared'] }),
+    shared: { file: 'assets/shared.js' },
+  }, { chunks: {
+    'assets/index.js': chunk(['src/index.ts']),
+    'assets/shared.js': chunk(['@floegence/floe-webapp-core/dist/pptx.js', '@aiden0z/pptx-renderer/dist/aiden0z-pptx-renderer.browser.es.js']),
+  } });
+  assert.equal(result.forbiddenModules.length, 2);
+});

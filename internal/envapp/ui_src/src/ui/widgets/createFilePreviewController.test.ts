@@ -54,6 +54,23 @@ afterEach(() => {
 });
 
 describe('createFilePreviewController', () => {
+  it.each([false, true])('keeps presentation bytes intact and rejects truncated inputs (%s)', async truncated => {
+    const file = { id: '/deck.pptx', name: 'deck.pptx', path: '/deck.pptx', type: 'file' } satisfies FileItem;
+    openReadFileStreamChannelMock.mockResolvedValue(createTextChannel('PK synthetic presentation', truncated));
+    let controller!: ReturnType<typeof createFilePreviewController>;
+    const dispose = createRoot(disposeRoot => {
+      controller = createFilePreviewController({ client: () => ({} as any), rpc: () => null, canWrite: () => true });
+      return disposeRoot;
+    });
+    try {
+      await controller.openPreview(file);
+      expect(controller.descriptor().mode).toBe(truncated ? 'unsupported' : 'pptx');
+      expect(Array.from(controller.bytes()!)).toEqual(Array.from(new TextEncoder().encode('PK synthetic presentation')));
+      expect(controller.editing()).toBe(false);
+      if (truncated) expect(controller.message()).toBe('This presentation is too large to preview.');
+    } finally { dispose(); }
+  });
+
   it('retains presentation references only until the mounted preview releases them', async () => {
     const file = { id: '/report.html', name: 'report.html', path: '/report.html', type: 'file' } satisfies FileItem;
     openReadFileStreamChannelMock.mockResolvedValue(createTextChannel('<h1>Report</h1>'));
