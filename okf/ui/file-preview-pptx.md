@@ -20,7 +20,9 @@ PPTX uses the lazy published `@floegence/floe-webapp-core/pptx` entrypoint. Floe
 owns parsing, static shape/text/chart rendering, external-relationship removal,
 embedded SVG sanitization, and page resource cleanup. Redeven owns page windowing,
 fit, zoom, labels, localized notices, and document lifetime. Opening another file
-type must not load the PPTX engine. No host executable, document upload, or Office
+type must not load the PPTX engine. The released Floe package bundles the standalone
+engine as a build artifact and must not add renderer development trees to
+Redeven production dependencies. No host executable, document upload, or Office
 installation is required. Only `.pptx` is supported; legacy `.ppt` remains outside
 this contract. Inputs are limited to 20 MiB before reading and parsing.
 

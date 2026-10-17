@@ -41,11 +41,11 @@ importers:
   .:
     dependencies:
       '@floegence/floe-webapp-boot':
-        specifier: 0.86.44
-        version: 0.86.44
+        specifier: 0.86.45
+        version: 0.86.45
       '@floegence/floe-webapp-core':
-        specifier: 0.86.44
-        version: 0.86.44(solid-js@1.9.17)
+        specifier: 0.86.45
+        version: 0.86.45(solid-js@1.9.17)
       '@floegence/flowersec-core':
         specifier: 5.11.1
         version: 5.11.1
@@ -145,14 +145,6 @@ importers:
         version: 4.1.11(@types/node@26.2.0)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.0.16(@types/node@26.2.0)(esbuild@0.28.1)(jiti@2.7.0))
 
 packages:
-
-  '@aiden0z/pptx-renderer@1.3.0':
-    resolution: {integrity: sha512-VEXSn2vmdgTwWaw96bhsEyZiSxlrhF5O5dONI+dSBXmg1WH2XM9O1eyY2LFQ68J1SY+iZnE5BVgFGGX6iox9Og==}
-    peerDependencies:
-      pdfjs-dist: '>=5 <7'
-    peerDependenciesMeta:
-      pdfjs-dist:
-        optional: true
 
   '@antfu/install-pkg@1.1.0':
     resolution: {integrity: sha512-MGQsmw10ZyI+EJo45CdSER4zEb+p31LpDAFp2Z3gkSd1yqVZGi0Ebx++YTEMonJy4oChEMLsxZ64j8FH6sSqtQ==}
@@ -555,12 +547,12 @@ packages:
       '@noble/hashes':
         optional: true
 
-  '@floegence/floe-webapp-boot@0.86.44':
-    resolution: {integrity: sha512-Wy2qNm248SelQJQ4p3JQD3kD/5dV1yizNt3FhAD/czSJsPJi8KkdKLwdzmLEaMM55oI3oAKOlb7T6rv52rqLAQ==}
+  '@floegence/floe-webapp-boot@0.86.45':
+    resolution: {integrity: sha512-ND8+gw/QL6k51vA4TNrOpOaQI81qosHJpGuD8JZ7aw+m7zqA3JG7Fs45LSBelPCb7jTP5cLbDpkWvbiacnq+FA==}
     engines: {node: '>=24.20.0'}
 
-  '@floegence/floe-webapp-core@0.86.44':
-    resolution: {integrity: sha512-vfy7sIU8CZHf5P4g6g1ZQ49za3tx3A5HXIqYdMkHRa2ieRdRknr8V4rzMYT/tKX/MDsbD4O/fNNsWjdQensmnQ==}
+  '@floegence/floe-webapp-core@0.86.45':
+    resolution: {integrity: sha512-lpnNM4q20KyAmQGPjWX82/MaptXNfWNt3Gg5GbiAgep7U6yiMeKXNNAIm2FdD+0so7LG/eyryotwL5cWPPg/QQ==}
     engines: {node: '>=24.20.0'}
     peerDependencies:
       solid-js: ^1.9.17
@@ -1796,9 +1788,6 @@ packages:
   duplexer2@0.1.4:
     resolution: {integrity: sha512-asLFVfWWtJ90ZyOUHMqk7/S2w2guQKxUI2itj3d92ADHhxUSbCMGi1f1cBcJ7xM1To+pE/Khbwo1yuNbMEPKeA==}
 
-  echarts@6.1.0:
-    resolution: {integrity: sha512-q0yaFPggC9FUdsWH4blavRWFmxdrIodbkoKNAjJudAI6CA9gNPxHtV2RcZNEepZVlk4yvBYkOkbk6HIVpIyHZA==}
-
   ejs@3.1.10:
     resolution: {integrity: sha512-UeJmFfOrAQS8OJWPZ4qtgHyWExa088/MtK5UEyoJGFH67cDEXkZSviOiKRCZ4Xij0zxI3JECgYs3oKx+AizQBA==}
     engines: {node: '>=0.10.0'}
@@ -2163,9 +2152,6 @@ packages:
     resolution: {integrity: sha512-Hs59xBNfUIunMFgWAbGX5cq6893IbWg4KnrjbYwX3tx0ztorVgTDA6B2sxf8ejHJ4wz8BqGUMYlnzNBer5NvGg==}
     engines: {node: '>= 4'}
 
-  immediate@3.0.6:
-    resolution: {integrity: sha512-XXOFtyqDjNDAQxVfYxuF7g9Il/IbWmmlQg2MYKOH8ExIT1qg6xc4zyS3HaEEATgs1btfzxq15ciUiY7gjSXRGQ==}
-
   import-fresh@3.3.1:
     resolution: {integrity: sha512-TR3KfrTZTYLPB6jUjfx6MF9WcWrHL9su5TObK4ZkYgBdWKPOFoSoQIdEuTuR82pmtxH2spWG9h6etwfr1pLBqQ==}
     engines: {node: '>=6'}
@@ -2285,9 +2271,6 @@ packages:
   jsonfile@6.2.1:
     resolution: {integrity: sha512-zwOTdL3rFQ/lRdBnntKVOX6k5cKJwEc1HdilT71BWEu7J41gXIB2MRp+vxduPSwZJPWBxEzv4yH1wYLJGUHX4Q==}
 
-  jszip@3.10.2:
-    resolution: {integrity: sha512-3l+rb15IOWtUhU0H5MFqES/T6Kh7abYwjosBey/vD6hDt8zoEffkSC5Ws5SGtgVw3gBx2NEbhTeSW1+kWkpyTQ==}
-
   katex@0.18.10:
     resolution: {integrity: sha512-/B6p9eY9DX7aHBfpkHdpirDTZ5QH9xTwL9y837PWuzuv41O5jFdqNQwVQEQsimY0/iVNkwBY4+4hMfhQ7d4Dbw==}
     hasBin: true
@@ -2313,9 +2296,6 @@ packages:
 
   libavoid-js@0.5.0-beta.5:
     resolution: {integrity: sha512-jHkn6A10815TgFhZ1paUD/NDnQkg4C66qJc2Juj1NpmO/+QXnJ4UjIdKQarkXLmI/QgXhEO3RWDxMi3i+uHPwA==}
-
-  lie@3.3.0:
-    resolution: {integrity: sha512-UaiMJzeWRlEujzAuw5LokY1L5ecNQYZKfmyZ9L7wDHb/p5etKaxXhohBcrw0EYby+G/NA52vRSN4N39dxHAIwQ==}
 
   lightningcss-android-arm64@1.32.0:
     resolution: {integrity: sha512-YK7/ClTt4kAK0vo6w3X+Pnm0D2cf2vPHbhOXdoNti1Ga0al1P4TBZhwjATvjNwLEBCnKvjJc2jQgHXH0NEwlAg==}
@@ -2537,9 +2517,6 @@ packages:
   ms@2.1.3:
     resolution: {integrity: sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==}
 
-  mtx-decompressor@1.8.0:
-    resolution: {integrity: sha512-suXE376dUmLX4PPxSmVmdWvu09oeesqmlE5NfKjb6XIUpDRjF2Mn47kM8nXWRkHb3l7ac0P+Crp0J0O984imRQ==}
-
   nanoid@3.3.18:
     resolution: {integrity: sha512-DTg4MJbGMWkfi6VZFdNt2/caMbQy4Ou+Op/hJQvGEWcnVfoA1QA+xzRKAzw9jD6+GVOOeYr/mIcuDSdug6F6+w==}
     engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
@@ -2621,9 +2598,6 @@ packages:
 
   package-manager-detector@1.6.0:
     resolution: {integrity: sha512-61A5ThoTiDG/C8s8UMZwSorAGwMJ0ERVGj2OjoW5pAalsNOg15+iQiPzrLJ4jhZ1HJzmC2PIHT2oEiH3R5fzNA==}
-
-  pako@1.0.11:
-    resolution: {integrity: sha512-4hLB8Py4zZce5s4yd9XzopqwVv/yGNhV1Bl8NTmCq1763HeK2+EwVTv+leGeL13Dnh2wfbqowVPXCIO0z4taYw==}
 
   parent-module@1.0.1:
     resolution: {integrity: sha512-GQ2EWRpQV8/o+Aw8YqtfZZPfNRWZYkbidE9k5rpl/hC3vtHHBfGm2Ifi6qWV+coDGkrUKZAxE3Lot5kcsRlh+g==}
@@ -2867,9 +2841,6 @@ packages:
     resolution: {integrity: sha512-HlSgSAkTk4EqHcje1ptJjfZi1YDv5KbhVJ/d3P7T/nAXua2VmDu+AKDX5VTdFfZf48nDkWB2TKYt0DrCSa+3wg==}
     engines: {node: '>=10'}
 
-  setimmediate@1.0.5:
-    resolution: {integrity: sha512-MATJdZp8sLqDl/68LfQmbP8zKPLQNV6BIZoIgrscFDQ+RsvK/BxeDQOgyxKKoh0y/8h3BqVFnCqQ/gd+reiIXA==}
-
   shebang-command@2.0.0:
     resolution: {integrity: sha512-kHxr2zZpYtdmrN1qDjrrX/Z1rR1kG8Dx+gkpK1G4eXmvXswmcE1hTWBWYUzlraYw1/yZp6YuDY77YtvbN0dmDA==}
     engines: {node: '>=8'}
@@ -3051,9 +3022,6 @@ packages:
   ts-dedent@2.2.0:
     resolution: {integrity: sha512-q5W7tVM71e2xjHZTlgfTDoPF/SmqKG5hddq9SzR49CH2hayqRKJtQ4mtRlSxKaJlR/+9rEM+mnBHf7I2/BQcpQ==}
     engines: {node: '>=6.10'}
-
-  tslib@2.3.0:
-    resolution: {integrity: sha512-N82ooyxVNm6h1riLCoyS9e3fuJ3AMG2zIZs2Gd1ATcSFjSA23Q0fzjjZeh0jbJvWVDZ0cJT8yaNNaaXHzueNjg==}
 
   tslib@2.8.1:
     resolution: {integrity: sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w==}
@@ -3338,21 +3306,10 @@ packages:
     resolution: {integrity: sha512-rVksvsnNCdJ/ohGc6xgPwyN8eheCxsiLM8mxuE/t/mOVqJewPuO1miLpTHQiRgTKCLexL4MeAFVagts7HmNZ2Q==}
     engines: {node: '>=10'}
 
-  zrender@6.1.0:
-    resolution: {integrity: sha512-oEGMDB6pOP2S6OwRR4PdVv610zrjnA3Bh+JnSG12fYJlBKjtNAoEb5fSUoCOOINlH96I2fU38/A2UpRKs67xYQ==}
-
   zwitch@2.0.4:
     resolution: {integrity: sha512-bXE4cR/kVZhKZX/RjPEflHaKVhUVl85noU3v6b8apfQEc1x4A+zBxjZ4lN8LqGd6WZ3dl98pY4o717VFmoPp+A==}
 
 snapshots:
-
-  '@aiden0z/pptx-renderer@1.3.0(pdfjs-dist@6.3.289)':
-    dependencies:
-      echarts: 6.1.0
-      jszip: 3.10.2
-      mtx-decompressor: 1.8.0
-    optionalDependencies:
-      pdfjs-dist: 6.3.289
 
   '@antfu/install-pkg@1.1.0':
     dependencies:
@@ -3755,7 +3712,7 @@ snapshots:
     optionalDependencies:
       '@noble/hashes': 2.4.0
 
-  '@floegence/floe-webapp-boot@0.86.44':
+  '@floegence/floe-webapp-boot@0.86.45':
     dependencies:
       '@floegence/flowersec-core': 5.11.1
       '@noble/hashes': 2.4.0
@@ -3763,9 +3720,8 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@floegence/floe-webapp-core@0.86.44(solid-js@1.9.17)':
+  '@floegence/floe-webapp-core@0.86.45(solid-js@1.9.17)':
     dependencies:
-      '@aiden0z/pptx-renderer': 1.3.0(pdfjs-dist@6.3.289)
       clsx: 2.1.1
       diff: 8.0.4
       dompurify: 3.4.16
@@ -5082,11 +5038,6 @@ snapshots:
     dependencies:
       readable-stream: 2.3.8
 
-  echarts@6.1.0:
-    dependencies:
-      tslib: 2.3.0
-      zrender: 6.1.0
-
   ejs@3.1.10:
     dependencies:
       jake: 10.9.4
@@ -5563,8 +5514,6 @@ snapshots:
 
   ignore@7.0.5: {}
 
-  immediate@3.0.6: {}
-
   import-fresh@3.3.1:
     dependencies:
       parent-module: 1.0.1
@@ -5671,13 +5620,6 @@ snapshots:
     optionalDependencies:
       graceful-fs: 4.2.11
 
-  jszip@3.10.2:
-    dependencies:
-      lie: 3.3.0
-      pako: 1.0.11
-      readable-stream: 2.3.8
-      setimmediate: 1.0.5
-
   katex@0.18.10:
     dependencies:
       commander: 15.0.0
@@ -5700,10 +5642,6 @@ snapshots:
       type-check: 0.4.0
 
   libavoid-js@0.5.0-beta.5: {}
-
-  lie@3.3.0:
-    dependencies:
-      immediate: 3.0.6
 
   lightningcss-android-arm64@1.32.0:
     optional: true
@@ -5900,8 +5838,6 @@ snapshots:
 
   ms@2.1.3: {}
 
-  mtx-decompressor@1.8.0: {}
-
   nanoid@3.3.18: {}
 
   natural-compare@1.4.0: {}
@@ -5991,8 +5927,6 @@ snapshots:
       p-limit: 3.1.0
 
   package-manager-detector@1.6.0: {}
-
-  pako@1.0.11: {}
 
   parent-module@1.0.1:
     dependencies:
@@ -6227,8 +6161,6 @@ snapshots:
 
   seroval@1.6.8: {}
 
-  setimmediate@1.0.5: {}
-
   shebang-command@2.0.0:
     dependencies:
       shebang-regex: 3.0.0
@@ -6414,8 +6346,6 @@ snapshots:
       typescript: 5.9.3
 
   ts-dedent@2.2.0: {}
-
-  tslib@2.3.0: {}
 
   tslib@2.8.1: {}
 
@@ -6637,9 +6567,5 @@ snapshots:
       yargs-parser: 21.1.1
 
   yocto-queue@0.1.0: {}
-
-  zrender@6.1.0:
-    dependencies:
-      tslib: 2.3.0
 
   zwitch@2.0.4: {}

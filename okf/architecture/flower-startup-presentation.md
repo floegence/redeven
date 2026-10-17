@@ -8,7 +8,10 @@ timestamp: 2026-10-17T00:00:00Z
 # Summary
 
 Env App and Desktop render canonical readiness facts and explicit safe recovery actions.
-No surface starts another availability controller or hides unrelated product navigation.
+The single readiness owner controls Flower admission while navigation and shell-owned
+drafts remain available. No surface starts another availability controller. Stop and
+retry follow typed safety facts; a close failure requires application restart, and
+unknown or contradictory facts expose a non-retryable contract failure.
 
 # Contract
 
