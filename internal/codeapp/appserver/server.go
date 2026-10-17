@@ -3353,6 +3353,22 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusAccepted, apiResp{OK: true, Data: g.aiReadinessSnapshot()})
 		return
 
+	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/ai/readiness/stop":
+		if _, ok := g.requirePermission(w, r, requiredPermissionAdmin); !ok {
+			return
+		}
+		stopper, ok := g.aiProvider.(AIStartupStopper)
+		if !ok {
+			writeAIServiceUnavailable(w, g.aiReadinessSnapshot())
+			return
+		}
+		if err := stopper.StopAIReadiness(); err != nil {
+			writeAIServiceUnavailable(w, g.aiReadinessSnapshot())
+			return
+		}
+		writeJSON(w, http.StatusAccepted, apiResp{OK: true, Data: g.aiReadinessSnapshot()})
+		return
+
 	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/ai/maintenance/snapshots":
 		g.handleFlowerSnapshots(w, r)
 		return

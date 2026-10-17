@@ -112,7 +112,7 @@
     },
     "storage": {
       "title": "Flower 백업",
-      "description": "Flower 기록, 설정, 읽음 상태, 업로드를 자동으로 백업합니다. 최근 자동 백업 3개를 보관하며 보호된 백업은 계속 유지합니다.",
+      "description": "기존 백업에는 Flower 기록, 설정, 읽음 상태 및 업로드가 포함되며 모두 보존됩니다. 시작 및 업그레이드 시 자동 백업을 생성하지 않습니다.",
       "adminOnly": "백업 조회와 복원에는 관리자 권한이 필요합니다.",
       "view": "백업 보기",
       "unknownBuild": "원본 빌드 기록 없음",
@@ -131,11 +131,11 @@
       "externalImpact": "작업 디렉터리와 전역 로그인 설정은 제외됩니다. 명령이나 외부 작업은 취소되지 않습니다. 런타임 버전은 그대로 유지되며, 해결되지 않은 마이그레이션 결함으로 Flower가 시작되지 않을 수 있습니다.",
       "confirm": "복원 확인",
       "backingUp": "대화 백업 중",
-      "backingUpDescription": "업데이트 전에 대화 기록과 업로드한 파일의 복구용 사본을 저장하고 있습니다.",
+      "backingUpDescription": "복원 전에 현재 대화 기록과 업로드한 파일의 사본을 저장하고 있습니다.",
       "restoring": "Flower 복원 중",
       "restoringDescription": "선택한 백업을 준비하고 검증하고 있습니다. 터미널, 파일, 설정, 진단은 계속 사용할 수 있습니다.",
       "spaceTitle": "Flower에 디스크 공간이 더 필요합니다",
-      "spaceDescription": "런타임 디스크 공간을 확보한 후 다시 확인하세요. 백업과 업데이트가 완료될 때까지 Flower는 일시 중지됩니다.",
+      "spaceDescription": "실행 환경의 디스크 공간을 확보한 후 다시 확인하세요. 준비가 완료될 때까지 Flower가 일시 중지됩니다.",
       "failedTitle": "Flower 유지보수가 중지되었습니다",
       "failedDescription": "진단을 확인하거나 검증된 백업을 선택하세요. 터미널, 파일, 설정은 계속 사용할 수 있습니다.",
       "component": "구성 요소",
@@ -145,6 +145,20 @@
       "uploads": "업로드",
       "backup": "백업",
       "recovery": "복구"
+    },
+    "startup": {
+      "verifying": "데이터 확인 중",
+      "indexing": "검색 색인 생성 중",
+      "preparing": "대화 준비 중",
+      "stopping": "준비 중지 중",
+      "stopped": "준비 중지됨",
+      "stop": "준비 중지",
+      "prepareAgain": "다시 준비",
+      "indexingDescription": "첫 검색 색인을 생성하고 있습니다. 준비가 완료되면 Flower를 사용할 수 있습니다.",
+      "stoppingDescription": "현재 트랜잭션을 롤백하고 저장소를 닫을 때까지 기다리고 있습니다.",
+      "stoppedDescription": "데이터가 보존되었습니다. 준비되면 다시 준비를 선택하세요.",
+      "closeFailed": "Flower 저장소를 안전하게 닫지 못했습니다. 진단 정보를 복사하고 앱을 다시 시작한 후 준비를 다시 진행하세요.",
+      "progress": "대화 {completed} / {total}개"
     }
   },
   "common": {

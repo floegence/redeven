@@ -8,6 +8,9 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 
 ## Architecture
 
+- [Flower startup and recovery presentation](architecture/flower-startup-presentation.md) - Keep drafts, navigation, stop and retry usable throughout preparation.
+- [Flower startup performance acceptance](operations/flower-startup-performance.md) - Record published-module and complete product startup, memory, disk and query measurements.
+
 - [Control-plane capacity qualification](operations/controlplane-capacity-qualification.md) - Measure enrolled control sessions, dynamic heartbeat policy, and real Gateway recovery on independent load hosts.
 
 - [Tessiven DSL versioning](architecture/tessiven-dsl-versioning.md) - Select frozen semantic-version schemas and upgrade supported documents without rewriting history.

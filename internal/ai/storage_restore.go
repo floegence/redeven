@@ -165,9 +165,9 @@ func restoreFlowerSnapshotWith(ctx context.Context, opts Options, id string, rep
 	if err != nil {
 		return flowerStorageError("recovery", "verifying", err)
 	}
-	build, err := flowerBuildID(opts.BuildVersion)
-	if err != nil {
-		return err
+	build := strings.TrimSpace(opts.BuildVersion)
+	if build == "" {
+		build = "development"
 	}
 	if _, err := captureFlowerSnapshot(ctx, opts.StateDir, build, "before_restore", true); err != nil {
 		return flowerStorageError("backup", "backing_up", err)
@@ -470,9 +470,6 @@ func recoverFlowerReplacementWith(ctx context.Context, state string, afterRename
 		}
 	}
 	if err := verifyPreparedFlowerStorage(ctx, state); err != nil {
-		return err
-	}
-	if err := writeMaintenanceJSON(flowerOperationPath(state), flowerUpgradeOperation{Format: 1, TargetBuild: operation.TargetBuild, OriginalSnapshot: operation.SourceSnapshot}); err != nil {
 		return err
 	}
 	if err := writeMaintenanceJSON(filepath.Join(state, flowerMaintenanceDir, "storage-generation.json"), flowerStorageGeneration{ID: operation.ID}); err != nil {

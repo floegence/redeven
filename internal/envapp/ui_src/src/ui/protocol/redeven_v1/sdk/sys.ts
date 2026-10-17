@@ -44,12 +44,21 @@ export type RuntimeServiceAIReadinessState =
   | 'restoring'
   | 'migrating'
   | 'verifying'
+  | 'indexing'
+  | 'preparing'
+  | 'stopping'
+  | 'stopped'
   | 'blocked';
 
 export type RuntimeServiceAIReadiness = {
   state: RuntimeServiceAIReadinessState;
   reasonCode?: string;
   issueCount: number;
+  stoppable?: boolean;
+  retryable?: boolean;
+  safeToRetry?: boolean;
+  workCompleted?: number;
+  workTotal?: number;
 };
 
 export type RuntimeServiceWorkload = {

@@ -22,6 +22,7 @@ type controlledAIServiceProvider struct {
 	acquires       int
 	releases       int
 	retries        int
+	stops          int
 	retryErr       error
 	updates        []AIServiceStartupOptions
 	scopeRevisions []uint64
@@ -96,6 +97,40 @@ func (p *controlledAIServiceProvider) RetryAIReadiness() error {
 	defer p.mu.Unlock()
 	p.retries++
 	return p.retryErr
+}
+
+func (p *controlledAIServiceProvider) StopAIReadiness() error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.stops++
+	p.snapshot.State = AIReadinessStopping
+	p.snapshot.Stoppable = false
+	return nil
+}
+
+func TestAIReadinessStopRequiresAdminWithoutServiceLease(t *testing.T) {
+	provider := &controlledAIServiceProvider{snapshot: AIReadinessSnapshot{State: AIReadinessIndexing, Stoppable: true}}
+	reader, origin := newAIReadinessTestServer(t, provider, session.Meta{CanRead: true})
+	denied := serveAIReadinessTestRequest(reader, origin, http.MethodPost, "/_redeven_proxy/api/ai/readiness/stop", nil)
+	if denied.Code != http.StatusForbidden {
+		t.Fatalf("reader stop status = %d: %s", denied.Code, denied.Body.String())
+	}
+	provider.mu.Lock()
+	stops := provider.stops
+	provider.mu.Unlock()
+	if stops != 0 {
+		t.Fatal("denied stop reached the controller")
+	}
+	admin, origin := newAIReadinessTestServer(t, provider, session.Meta{CanAdmin: true})
+	for range 2 {
+		accepted := serveAIReadinessTestRequest(admin, origin, http.MethodPost, "/_redeven_proxy/api/ai/readiness/stop", nil)
+		if accepted.Code != http.StatusAccepted || !bytes.Contains(accepted.Body.Bytes(), []byte("\"state\":\"stopping\"")) {
+			t.Fatalf("admin stop = %d: %s", accepted.Code, accepted.Body.String())
+		}
+	}
+	if acquires, releases, _ := provider.counts(); acquires != 0 || releases != 0 {
+		t.Fatalf("stop acquired an unavailable generation: %d, %d", acquires, releases)
+	}
 }
 
 func (p *controlledAIServiceProvider) UpdateAIServiceStartupOptions(options AIServiceStartupOptions) {

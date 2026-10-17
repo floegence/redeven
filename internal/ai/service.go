@@ -99,8 +99,9 @@ type Options struct {
 	// It should read from a local secrets store, not from config.json.
 	ResolveWebSearchProviderAPIKey func(providerID string) (string, bool, error)
 
-	FlowerReadStateCleaner FlowerReadStateCleaner
-	StoreStartupProgress   func(FloretStoreStartupPhase)
+	FlowerReadStateCleaner   FlowerReadStateCleaner
+	StoreStartupProgress     func(FloretStoreStartupPhase)
+	StoreStartupWorkProgress func(flruntime.StartupWork)
 }
 
 type Service struct {
@@ -368,7 +369,7 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	floretBootstrap, err := openFloretRuntime(ctx, floretStorePath, opts.StoreStartupProgress, logger)
+	floretBootstrap, err := openFloretRuntime(ctx, floretStorePath, opts.StoreStartupProgress, logger, opts.StoreStartupWorkProgress)
 	if err != nil {
 		return nil, err
 	}
@@ -522,6 +523,7 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 	if svc.flowerReadStateCleaner == nil {
 		svc.flowerReadStateCleaner = reads
 	}
+	reportFloretStorePhase(opts.StoreStartupProgress, FloretStoreStartupPreparing)
 	if _, err := svc.ReconcileCanonicalRootOwnership(ctx); err != nil {
 		return nil, errors.Join(flowerStorageError("product", "verifying", err), svc.Close())
 	}
@@ -536,12 +538,6 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 	}
 	if interruptedUploads > 0 {
 		logger.Info("ai: interrupted upload recovery completed", "count", interruptedUploads)
-	}
-	if err := ctx.Err(); err != nil {
-		return nil, errors.Join(err, svc.Close())
-	}
-	if !opts.skipStorageMaintenance {
-		svc.maintainToolMedia(ctx, "pre_activation", true)
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, errors.Join(err, svc.Close())

@@ -3328,12 +3328,15 @@
     "startupPhase": {
       "starting": "Iniciando o serviço de IA...",
       "inspecting": "Verificando as conversas salvas...",
-      "backing_up": "Fazendo backup das conversas antes da atualização...",
+      "backing_up": "Salvando conversas antes da restauração…",
       "optimizing": "Otimizando o armazenamento de conversas...",
       "migrating": "Atualizando o armazenamento de conversas...",
       "verifying": "Validando os dados das conversas...",
       "recovering": "Aguardando a disponibilidade do armazenamento de conversas...",
-      "restoring": "Restaurando as conversas do backup selecionado..."
+      "restoring": "Restaurando as conversas do backup selecionado...",
+      "indexing": "Criando o índice de pesquisa…",
+      "preparing": "Preparando conversas…",
+      "stopping": "Interrompendo com segurança…"
     },
     "unavailableTitle": "O Flower está indisponível",
     "unavailableDetail": "O serviço de IA do Flower não pode processar solicitações no momento. Volte à lista de ambientes para verificar o status do ambiente de execução. Suas conversas e o rascunho não enviado serão preservados.",
@@ -3341,7 +3344,14 @@
     "desktopTitle": "Atualize o Desktop para usar o Flower",
     "runtimeDetail": "Este ambiente de execução é incompatível com o Desktop Flower. Atualize-o para continuar. Seu rascunho será mantido e o aplicativo do ambiente continuará disponível.",
     "desktopDetail": "Este ambiente de execução exige uma versão mais recente do Desktop. Atualize o Desktop para continuar. Seu rascunho será mantido e o aplicativo do ambiente continuará disponível.",
-    "connectedBuild": "Ambiente de execução conectado: {version} · {commit}"
+    "connectedBuild": "Ambiente de execução conectado: {version} · {commit}",
+    "stopPreparation": "Interromper preparação",
+    "stoppingPreparation": "Interrompendo…",
+    "prepareAgain": "Preparar novamente",
+    "stoppedDetail": "A preparação foi interrompida. Suas conversas e rascunhos não enviados foram preservados. Você pode preparar o Flower novamente a qualquer momento.",
+    "restartDetail": "Não foi possível fechar o armazenamento de conversas com segurança. Reinicie o aplicativo antes de preparar o Flower novamente. Arquivos, terminais e configurações continuam disponíveis.",
+    "startupActionFailed": "Não foi possível confirmar o resultado da preparação. Verifique a conexão do ambiente de execução e tente novamente.",
+    "workProgress": "{completed} de {total} concluídos"
   },
   "providerRecovery": {
     "waitingShort": "Aguardando",

@@ -52,7 +52,7 @@ func (a *Agent) RuntimeServiceSnapshot() runtimeservice.Snapshot {
 	aiReadiness := runtimeservice.AIReadiness{State: "unavailable"}
 	if a.code != nil {
 		readiness := a.code.AIReadiness()
-		aiReadiness = runtimeservice.AIReadiness{State: string(readiness.State), ReasonCode: readiness.ReasonCode, IssueCount: readiness.IssueCount}
+		aiReadiness = runtimeservice.AIReadiness{State: string(readiness.State), ReasonCode: readiness.ReasonCode, IssueCount: readiness.IssueCount, Stoppable: readiness.Stoppable, Retryable: readiness.Retryable, SafeToRetry: readiness.SafeToRetry, WorkCompleted: readiness.WorkCompleted, WorkTotal: readiness.WorkTotal}
 		aiSvc, _, _, release, err := a.code.AcquireAIService(context.Background())
 		if err == nil && aiSvc != nil && release != nil {
 			defer release()

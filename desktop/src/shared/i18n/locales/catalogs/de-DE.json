@@ -3327,12 +3327,15 @@
     "startupPhase": {
       "starting": "KI-Dienst wird gestartet...",
       "inspecting": "Gespeicherte Unterhaltungen werden geprüft...",
-      "backing_up": "Unterhaltungen werden vor dem Upgrade gesichert...",
+      "backing_up": "Unterhaltungen werden vor der Wiederherstellung gesichert…",
       "optimizing": "Unterhaltungsspeicher wird optimiert...",
       "migrating": "Unterhaltungsspeicher wird aktualisiert...",
       "verifying": "Unterhaltungsdaten werden überprüft...",
       "recovering": "Warten auf die Verfügbarkeit des Unterhaltungsspeichers...",
-      "restoring": "Unterhaltungen werden aus der ausgewählten Sicherung wiederhergestellt..."
+      "restoring": "Unterhaltungen werden aus der ausgewählten Sicherung wiederhergestellt...",
+      "indexing": "Suchindex wird erstellt…",
+      "preparing": "Unterhaltungen werden vorbereitet…",
+      "stopping": "Wird sicher angehalten…"
     },
     "unavailableTitle": "Flower ist nicht verfügbar",
     "unavailableDetail": "Der KI-Dienst von Flower kann derzeit keine Anfragen verarbeiten. Kehren Sie zur Umgebungsübersicht zurück, um den Status der Laufzeit zu prüfen. Ihre Unterhaltungen und Ihr ungesendeter Entwurf bleiben erhalten.",
@@ -3340,7 +3343,14 @@
     "desktopTitle": "Desktop aktualisieren, um Flower zu nutzen",
     "runtimeDetail": "Diese Laufzeit ist mit Desktop Flower nicht kompatibel. Aktualisieren Sie sie, um fortzufahren. Ihr Entwurf bleibt erhalten; die eigene App der Umgebung ist weiterhin verfügbar.",
     "desktopDetail": "Diese Laufzeit benötigt eine neuere Desktop-Version. Aktualisieren Sie Desktop, um fortzufahren. Ihr Entwurf bleibt erhalten; die eigene App der Umgebung ist weiterhin verfügbar.",
-    "connectedBuild": "Verbundene Laufzeit: {version} · {commit}"
+    "connectedBuild": "Verbundene Laufzeit: {version} · {commit}",
+    "stopPreparation": "Vorbereitung stoppen",
+    "stoppingPreparation": "Wird angehalten…",
+    "prepareAgain": "Erneut vorbereiten",
+    "stoppedDetail": "Die Vorbereitung wurde angehalten. Unterhaltungen und ungesendete Entwürfe bleiben erhalten. Sie können Flower jederzeit erneut vorbereiten.",
+    "restartDetail": "Der Unterhaltungsspeicher konnte nicht sicher geschlossen werden. Starten Sie die Anwendung neu, bevor Sie Flower erneut vorbereiten. Dateien, Terminals und Einstellungen bleiben verfügbar.",
+    "startupActionFailed": "Das Ergebnis der Vorbereitung konnte nicht bestätigt werden. Prüfen Sie die Verbindung zur Laufzeitumgebung und versuchen Sie es erneut.",
+    "workProgress": "{completed} von {total} abgeschlossen"
   },
   "providerRecovery": {
     "waitingShort": "Wartet",

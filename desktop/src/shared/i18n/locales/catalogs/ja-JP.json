@@ -3322,12 +3322,15 @@
     "startupPhase": {
       "starting": "AI サービスを起動しています...",
       "inspecting": "保存済みの会話を確認しています...",
-      "backing_up": "更新前に会話をバックアップしています...",
+      "backing_up": "復元前に会話をバックアップ中…",
       "optimizing": "会話ストレージを最適化しています...",
       "migrating": "会話ストレージを更新しています...",
       "verifying": "会話データを検証しています...",
       "recovering": "会話ストレージが利用可能になるまで待機しています...",
-      "restoring": "選択したバックアップから会話を復元しています..."
+      "restoring": "選択したバックアップから会話を復元しています...",
+      "indexing": "検索インデックスを作成中…",
+      "preparing": "会話を準備中…",
+      "stopping": "安全に停止中…"
     },
     "unavailableTitle": "Flower を利用できません",
     "unavailableDetail": "Flower の AI サービスは現在リクエストを処理できません。環境一覧に戻り、ランタイムの状態を確認してください。会話と未送信の下書きは保持されます。",
@@ -3335,7 +3338,14 @@
     "desktopTitle": "Flower を使うには Desktop を更新してください",
     "runtimeDetail": "このランタイムは Desktop Flower と互換性がありません。ランタイムを更新して続行してください。下書きは保持され、環境に付属するアプリは引き続き利用できます。",
     "desktopDetail": "このランタイムには新しい Desktop が必要です。Desktop を更新して続行してください。下書きは保持され、環境に付属するアプリは引き続き利用できます。",
-    "connectedBuild": "接続中のランタイム：{version} · {commit}"
+    "connectedBuild": "接続中のランタイム：{version} · {commit}",
+    "stopPreparation": "準備を停止",
+    "stoppingPreparation": "停止中…",
+    "prepareAgain": "再準備",
+    "stoppedDetail": "準備を停止しました。会話と未送信の下書きは保持されています。いつでも Flower の準備を再開できます。",
+    "restartDetail": "会話ストレージを安全に閉じられませんでした。アプリを再起動してから Flower を準備してください。ファイル、ターミナル、設定は引き続き使用できます。",
+    "startupActionFailed": "準備操作の結果を確認できませんでした。ランタイムの接続を確認して再試行してください。",
+    "workProgress": "{total} 件中 {completed} 件完了"
   },
   "providerRecovery": {
     "waitingShort": "待機中",

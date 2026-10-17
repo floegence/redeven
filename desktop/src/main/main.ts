@@ -33,7 +33,7 @@ import { HOST_APPLICATION_COMPONENTS_CHANNEL, HOST_APPLICATION_COMPONENTS_PROGRE
 import { desktopEnvironmentID } from './desktopPreferences';
 import { environmentSettingsFailure, withEnvironmentAccessOwner, buildEnvironmentAccessSnapshot, requireEnvironmentAccessHostAvailable, requireEnvironmentAccessCompatible, requireEnvironmentManagementAvailable, type EnvironmentAccessOwner } from './environmentAccessSettings';
 import { assertRuntimeFlowerCompatible } from '../shared/runtimeFlowerAccess';
-import { runtimeFlowerPath, runtimeFlowerMethod, runtimeFlowerMethodAllowed } from './runtimeFlowerRoutes';
+import { isRuntimeFlowerReadinessPath, runtimeFlowerPath, runtimeFlowerMethod, runtimeFlowerMethodAllowed } from './runtimeFlowerRoutes';
 import { certificateCommandArguments, selectDesktopCertificateExport, parseCertificateCommandReport, selectDesktopCertificateImport, runDesktopCertificateCommand, performDesktopCertificateOperation, requireHTTPSCertificateBeforeRestart, type CertificateImport } from './desktopCertificate';
 import { DESKTOP_CERTIFICATE_CHANNEL, parseDesktopCertificateRequest, parseDesktopCertificateReport, type DesktopCertificateRequest, type DesktopCertificateReport } from '../shared/desktopCertificate';
 import { DesktopTemplateSources } from './templateSources';
@@ -11658,7 +11658,7 @@ async function requestRuntimeFlower(request: RuntimeFlowerRequest): Promise<Runt
   const browserInstallation = path === '/_redeven_proxy/api/ai/computer/managed/browser';
   const sourceIcon = new URL(path, 'http://runtime-flower.local').pathname === '/_redeven_proxy/api/flower/source-icon';
   const flowerTarget = browserInstallation || sourceIcon ? await runningBrowserFlowerTarget() : await withRuntimeFlowerTimeout(
-    ensureRuntimeFlowerRecord(!isTessivenRuntimePath(path)),
+    ensureRuntimeFlowerRecord(!isTessivenRuntimePath(path) && !isRuntimeFlowerReadinessPath(path)),
     RUNTIME_FLOWER_READINESS_TIMEOUT_MS,
     'runtime_flower_readiness_timeout',
     'Desktop could not prepare the Runtime for Flower in time.',
@@ -11666,7 +11666,7 @@ async function requestRuntimeFlower(request: RuntimeFlowerRequest): Promise<Runt
   if (!flowerTarget || (request.environment_id && request.environment_id !== flowerTarget.record.environment_id)) {
     throw new Error('The browser installation environment session has ended.');
   }
-  const lease = await retainRuntimeFlowerTarget(flowerTarget, 'flower-request', !sourceIcon && !isTessivenRuntimePath(path));
+  const lease = await retainRuntimeFlowerTarget(flowerTarget, 'flower-request', !sourceIcon && !isTessivenRuntimePath(path) && !isRuntimeFlowerReadinessPath(path));
   try {
   const record = flowerTarget.record;
   const url = new URL(path, runtimeFlowerBaseURL(record));

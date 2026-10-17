@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { RuntimeFlowerRequestMethod } from '../shared/runtimeFlowerIPC';
-import { runtimeFlowerMethodAllowed, runtimeFlowerPath } from './runtimeFlowerRoutes';
+import { isRuntimeFlowerReadinessPath, runtimeFlowerMethodAllowed, runtimeFlowerPath } from './runtimeFlowerRoutes';
 
 const base = '/_redeven_proxy/api/ai/computer';
 
@@ -178,4 +178,19 @@ it('allows full event reads only through the recipient POST route', () => {
  expect(runtimeFlowerMethodAllowed(path, 'POST')).toBe(true);
  for (const method of ['GET', 'PUT', 'PATCH', 'DELETE'] as const) expect(runtimeFlowerMethodAllowed(path, method)).toBe(false);
  for (const suffix of ['?target=other', '/extra', '/']) expect(() => runtimeFlowerPath(path + suffix)).toThrow();
+});
+
+
+it('restricts readiness control to exact routes and methods without queries', () => {
+  for (const suffix of ['', '/stop', '/retry']) {
+    const path = '/_redeven_proxy/api/ai/readiness' + suffix;
+    expect(isRuntimeFlowerReadinessPath(path)).toBe(true);
+    expect(runtimeFlowerPath(path)).toBe(path);
+    for (const method of ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const) {
+      expect(runtimeFlowerMethodAllowed(path, method)).toBe(method === (suffix ? 'POST' : 'GET'));
+    }
+    expect(() => runtimeFlowerPath(path + '?extra=1')).toThrow();
+    expect(isRuntimeFlowerReadinessPath(path + '?extra=1')).toBe(false);
+    expect(isRuntimeFlowerReadinessPath(path + '/unknown')).toBe(false);
+  }
 });

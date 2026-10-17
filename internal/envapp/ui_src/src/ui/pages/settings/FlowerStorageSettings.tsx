@@ -27,7 +27,7 @@ export function FlowerStorageSettings(props: Readonly<{ controller: AIReadinessC
   const [pending, setPending] = createSignal(false);
   const [failed, setFailed] = createSignal<'load' | 'restore' | null>(null);
   const [accepted, setAccepted] = createSignal(false);
-  const busy = createMemo(() => !['ready', 'degraded', 'blocked'].includes(props.controller.snapshot().state));
+  const busy = createMemo(() => props.controller.snapshot().reason_code === 'generation_close_failed' || !['ready', 'degraded', 'blocked', 'stopped'].includes(props.controller.snapshot().state));
   let adminEpoch = 0;
   const hasAccess = (epoch: number): boolean => Boolean(props.canAdmin) && epoch === adminEpoch;
 

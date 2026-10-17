@@ -9,6 +9,10 @@ export type AIReadinessState =
   | 'inspecting'
   | 'optimizing'
   | 'migrating'
+  | 'indexing'
+  | 'preparing'
+  | 'stopping'
+  | 'stopped'
   | 'verifying'
   | 'recovering'
   | 'ready'
@@ -26,6 +30,7 @@ export type AIReadinessReasonCode =
   | 'backup_failed'
   | 'restore_failed'
   | 'store_io_error'
+  | 'generation_close_failed'
   | 'cancelled'
   | 'contract_error'
   | 'ai_service_startup_error'
@@ -41,6 +46,9 @@ export type AIReadinessSnapshot = Readonly<{
   issue_count?: number;
   trace_id?: string;
   startup_phase?: string;
+  stoppable?: boolean;
+  work_completed?: number;
+  work_total?: number;
   retry_reason?: string;
 }>;
 
@@ -53,6 +61,7 @@ export type AIReadinessController = Readonly<{
   longStartupReadySequence: Accessor<number>;
   refresh: () => Promise<AIReadinessSnapshot>;
   retry: () => Promise<AIReadinessSnapshot>;
+  stop: () => Promise<AIReadinessSnapshot>;
   pause: () => void;
   resume: () => Promise<AIReadinessSnapshot>;
   dispose: () => void;
@@ -86,6 +95,10 @@ const readinessStates = new Set<AIReadinessState>([
   'inspecting',
   'optimizing',
   'migrating',
+  'indexing',
+  'preparing',
+  'stopping',
+  'stopped',
   'verifying',
   'recovering',
   'ready',
@@ -104,6 +117,7 @@ const readinessReasonCodes = new Set<AIReadinessReasonCode>([
   'backup_failed',
   'restore_failed',
   'store_io_error',
+  'generation_close_failed',
   'cancelled',
   'contract_error',
   'ai_service_startup_error',
@@ -177,6 +191,14 @@ export function normalizeAIReadinessSnapshot(value: unknown): AIReadinessSnapsho
   const retryReason = optionalDiagnostic(value.retry_reason, 128);
   if (traceID === null || startupPhase === null || retryReason === null) return contractErrorSnapshot;
 
+  const completed = value.work_completed ?? 0;
+  const total = value.work_total ?? 0;
+  if (!Number.isSafeInteger(completed) || !Number.isSafeInteger(total)
+    || (completed as number) < 0 || (total as number) < 0
+    || ((total as number) > 0 && (completed as number) > (total as number))
+    || (value.stoppable !== undefined && typeof value.stoppable !== 'boolean')) return contractErrorSnapshot;
+  const work = { ...(value.stoppable === undefined ? {} : { stoppable: value.stoppable === true }), ...(value.work_completed === undefined ? {} : { work_completed: completed as number }), ...(value.work_total === undefined ? {} : { work_total: total as number }) };
+
   if (state === 'degraded') {
     if (reasonCode !== 'host_thread_settings_missing' || issueCount === 0
       || value.retryable || value.safe_to_retry) {
@@ -198,6 +220,7 @@ export function normalizeAIReadinessSnapshot(value: unknown): AIReadinessSnapsho
     return Object.freeze({
       ...unavailableSnapshot,
       state: 'recovering',
+      ...work,
       reason_code: (reasonCode ?? '') as AIReadinessReasonCode | '',
       retryable: value.retryable,
       safe_to_retry: value.safe_to_retry,
@@ -215,6 +238,7 @@ export function normalizeAIReadinessSnapshot(value: unknown): AIReadinessSnapsho
     if (state === 'ready') return stableSnapshot('ready');
     return Object.freeze({
       ...stableSnapshot(state as Exclude<AIReadinessState, 'blocked'>),
+      ...work,
       ...(owner ? { component: owner } : {}),
       ...(traceID ? { trace_id: traceID } : {}),
       ...(startupPhase ? { startup_phase: startupPhase } : {}),
@@ -256,6 +280,9 @@ function shouldPoll(snapshot: AIReadinessSnapshot): boolean {
     || snapshot.state === 'inspecting'
     || snapshot.state === 'optimizing'
     || snapshot.state === 'migrating'
+    || snapshot.state === 'indexing'
+    || snapshot.state === 'preparing'
+    || snapshot.state === 'stopping'
     || snapshot.state === 'verifying'
     || snapshot.state === 'recovering';
 }
@@ -294,10 +321,11 @@ export function createAIReadinessController(args: CreateAIReadinessControllerArg
 
   let refresh!: () => Promise<AIReadinessSnapshot>;
   let startRetry!: () => Promise<AIReadinessSnapshot>;
+  let stopInFlight: Promise<AIReadinessSnapshot> | null = null;
 
   const schedule = (nextSnapshot: AIReadinessSnapshot): void => {
     clearTimer();
-    if (disposed || paused || loading() || retryPending()) return;
+    if (disposed || paused || loading() || retryPending() || stopInFlight) return;
 
     if (shouldPoll(nextSnapshot)) {
       const delay = currentDelay();
@@ -318,7 +346,7 @@ export function createAIReadinessController(args: CreateAIReadinessControllerArg
         setLongStartupReadySequence((value) => value + 1);
       }
       setBusyStartedAt(null);
-    } else if (nextSnapshot.state === 'degraded' || nextSnapshot.state === 'blocked') {
+    } else if (nextSnapshot.state === 'degraded' || nextSnapshot.state === 'blocked' || nextSnapshot.state === 'stopped') {
       setStartupElapsedMs(elapsedMs);
       setBusyStartedAt(null);
     } else if (shouldPoll(nextSnapshot) && startedAt === null) {
@@ -343,6 +371,7 @@ export function createAIReadinessController(args: CreateAIReadinessControllerArg
 
   refresh = (): Promise<AIReadinessSnapshot> => {
     if (disposed || paused) return Promise.resolve(snapshot());
+    if (stopInFlight) return stopInFlight;
     if (retryInFlight) return retryInFlight;
     clearTimer();
     if (shouldPoll(snapshot()) && busyStartedAt() === null) {
@@ -373,6 +402,7 @@ export function createAIReadinessController(args: CreateAIReadinessControllerArg
 
   startRetry = (): Promise<AIReadinessSnapshot> => {
     if (disposed || paused) return Promise.resolve(snapshot());
+    if (stopInFlight) return stopInFlight;
     if (retryInFlight) return retryInFlight;
     clearTimer();
     setBusyStartedAt(Date.now());
@@ -405,12 +435,31 @@ export function createAIReadinessController(args: CreateAIReadinessControllerArg
 
   const retry = (): Promise<AIReadinessSnapshot> => startRetry();
 
+  const stop = (): Promise<AIReadinessSnapshot> => {
+    if (disposed || paused) return Promise.resolve(snapshot());
+    if (stopInFlight) return stopInFlight;
+    if (!snapshot().stoppable) return Promise.resolve(snapshot());
+    clearTimer();
+    const requestGeneration = ++generation;
+    loadingGeneration = 0;
+    setLoading(false);
+    setRetryPending(false);
+    setSnapshot(Object.freeze({ ...snapshot(), state: 'stopping', stoppable: false }));
+    const pending = invokeRequest('/_redeven_proxy/api/ai/readiness/stop', { method: 'POST' })
+      .then((value) => { const next = normalizeAIReadinessSnapshot(value); apply(requestGeneration, next); return next; })
+      .catch((error: unknown) => { const next = resolveFailure(error); apply(requestGeneration, next); return next; })
+      .finally(() => { if (stopInFlight === pending) stopInFlight = null; if (!disposed && generation === requestGeneration) schedule(snapshot()); });
+    stopInFlight = pending;
+    return pending;
+  };
+
   const pause = (): void => {
     if (disposed || paused) return;
     paused = true;
     generation += 1;
     loadingGeneration = 0;
     retryInFlight = null;
+    stopInFlight = null;
     clearTimer();
     setLoading(false);
     setRetryPending(false);
@@ -455,6 +504,7 @@ export function createAIReadinessController(args: CreateAIReadinessControllerArg
     longStartupReadySequence,
     refresh,
     retry,
+    stop,
     pause,
     resume,
     dispose,

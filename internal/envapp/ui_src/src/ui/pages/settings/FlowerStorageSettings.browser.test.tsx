@@ -19,6 +19,7 @@ it('keeps backup review readable at narrow width and requires explicit keyboard-
   writeStoredLanguagePreference('en-US');
   const snapshot: AIReadinessSnapshot = { state: 'blocked', reason_code: 'store_integrity_error', retryable: false, safe_to_retry: false };
   const controller: AIReadinessController = {
+    stop: async () => snapshot,
     snapshot: () => snapshot, loading: () => false, retryPending: () => false,
     busyStartedAt: () => null, startupElapsedMs: () => null, longStartupReadySequence: () => 0,
     refresh: async () => snapshot, retry: async () => snapshot, pause: () => undefined, resume: async () => snapshot, dispose: () => undefined,
@@ -44,4 +45,38 @@ it('keeps backup review readable at narrow width and requires explicit keyboard-
   request.mockResolvedValueOnce({});
   await page.getByRole('button', { name: 'Confirm restore', exact: true }).click();
   expect(request).toHaveBeenLastCalledWith('/_redeven_proxy/api/ai/maintenance/restore', { method: 'POST', body: JSON.stringify({ snapshot_id: id, confirmed: true }) });
+});
+
+it('keeps restore disabled when the previous storage owner failed to close', async () => {
+  writeStoredLanguagePreference('en-US');
+  const snapshot: AIReadinessSnapshot = { state: 'blocked', reason_code: 'generation_close_failed', retryable: false, safe_to_retry: false };
+  const controller: AIReadinessController = {
+    stop: async () => snapshot,
+    snapshot: () => snapshot, loading: () => false, retryPending: () => false,
+    busyStartedAt: () => null, startupElapsedMs: () => null, longStartupReadySequence: () => 0,
+    refresh: async () => snapshot, retry: async () => snapshot, pause: () => undefined, resume: async () => snapshot, dispose: () => undefined,
+  };
+  request.mockResolvedValueOnce({ snapshots: [{ id: 'a'.repeat(32), created_at: '2026-09-08T12:00:00Z', source_build: 'test', bytes: 15_000_000, kind: 'automatic', protected: true }] });
+  host = document.createElement('div');
+  document.body.appendChild(host);
+  dispose = render(() => <I18nProvider><FlowerStorageSettings controller={controller} canAdmin /></I18nProvider>, host);
+  await page.getByRole('button', { name: 'View backups', exact: true }).click();
+  await expect.element(page.getByRole('button', { name: 'Review restore', exact: true })).toBeDisabled();
+});
+
+it('explains missing backups without offering an empty restore action', async () => {
+  writeStoredLanguagePreference('en-US');
+  const snapshot: AIReadinessSnapshot = { state: 'stopped', reason_code: '', retryable: false, safe_to_retry: false };
+  const controller: AIReadinessController = {
+    stop: async () => snapshot, snapshot: () => snapshot, loading: () => false, retryPending: () => false,
+    busyStartedAt: () => null, startupElapsedMs: () => null, longStartupReadySequence: () => 0,
+    refresh: async () => snapshot, retry: async () => snapshot, pause: () => undefined, resume: async () => snapshot, dispose: () => undefined,
+  };
+  request.mockResolvedValueOnce({ snapshots: [] });
+  host = document.createElement('div');
+  document.body.appendChild(host);
+  dispose = render(() => <I18nProvider><FlowerStorageSettings controller={controller} canAdmin /></I18nProvider>, host);
+  await page.getByRole('button', { name: 'View backups', exact: true }).click();
+  expect(host.textContent).toContain('No completed Flower backups');
+  expect(host.textContent).not.toContain('Review restore');
 });

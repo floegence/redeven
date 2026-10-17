@@ -267,9 +267,7 @@ func TestImageReadReachesNativeProviderAndSurvivesRestartForkAndFileDeletion(t *
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := svc.toolMedia.read(t.Context(), orphan.ResourceRef); !errors.Is(err, os.ErrNotExist) {
-				t.Fatalf("startup did not collect orphan: %v", err)
-			}
+			waitForToolMediaRemoval(t, svc.toolMedia, orphan.ResourceRef)
 			fork, err := svc.ForkThread(t.Context(), meta, thread.ThreadID, "Fork image")
 			if err != nil {
 				t.Fatal(err)

@@ -10,7 +10,7 @@ import {
   onCleanup,
   type JSX,
 } from 'solid-js';
-import { AlertTriangle, Check, ChevronDown, Copy, Download, RefreshIcon, ShieldCheck } from '@floegence/floe-webapp-core/icons';
+import { AlertTriangle, Check, ChevronDown, Copy, Download, RefreshIcon, ShieldCheck, Stop } from '@floegence/floe-webapp-core/icons';
 
 import { useI18n } from '../i18n';
 import type { AIReadinessController } from './aiReadiness';
@@ -81,8 +81,13 @@ export function AIReadinessBoundary(props: AIReadinessBoundaryProps) {
   createEffect(() => {
     setBusyVisible(false);
     if (!busy()) return;
+
     const timer = window.setTimeout(() => setBusyVisible(true), 150);
     onCleanup(() => window.clearTimeout(timer));
+  });
+
+  createEffect(() => {
+    if (props.controller.snapshot().state === 'stopping') setBusyVisible(true);
   });
 
   createEffect(() => {
@@ -95,7 +100,7 @@ export function AIReadinessBoundary(props: AIReadinessBoundaryProps) {
 
   createEffect(() => {
     const isOperational = operational();
-    if (props.focusEnabled && !isOperational && (props.controller.snapshot().state === 'blocked' || busyVisible()) && !maintenanceFocused && focusStillBelongsToBoundary()) {
+    if (props.focusEnabled && !isOperational && (props.controller.snapshot().state === 'blocked' || props.controller.snapshot().state === 'stopped' || busyVisible()) && !maintenanceFocused && focusStillBelongsToBoundary()) {
       queueMicrotask(() => {
         if (!props.focusEnabled || operational() || !focusStillBelongsToBoundary()) return;
         maintenanceFocused = true;
@@ -120,7 +125,7 @@ export function AIReadinessBoundary(props: AIReadinessBoundaryProps) {
 
   const maintenanceVisible = createMemo(() => {
     const state = props.controller.snapshot().state;
-    return state !== 'ready' && (state === 'blocked' || busyVisible());
+    return state !== 'ready' && (state === 'blocked' || state === 'stopped' || busyVisible());
   });
 
   const toggleDiagnostics = (): void => {
@@ -130,6 +135,9 @@ export function AIReadinessBoundary(props: AIReadinessBoundaryProps) {
 
   const runAction = async (action: AIReadinessAction): Promise<void> => {
     switch (action) {
+      case 'stop':
+        await props.controller.stop();
+        return;
       case 'retry':
         restoreSurfaceFocus = true;
         await props.controller.retry();
@@ -152,10 +160,11 @@ export function AIReadinessBoundary(props: AIReadinessBoundaryProps) {
 
   const actionLabel = (action: AIReadinessAction): string => {
     switch (action) {
+      case 'stop': return i18n.t('aiReadiness.startup.stop');
       case 'retry':
         return props.controller.retryPending()
           ? i18n.t('aiReadiness.actions.retrying')
-          : i18n.t('aiReadiness.actions.retry');
+          : props.controller.snapshot().state === 'stopped' ? i18n.t('aiReadiness.startup.prepareAgain') : i18n.t('aiReadiness.actions.retry');
       case 'open_update':
         return i18n.t('aiReadiness.actions.openUpdate');
       case 'open_permissions':
@@ -193,6 +202,7 @@ export function AIReadinessBoundary(props: AIReadinessBoundaryProps) {
 
   const ActionIcon = (iconProps: Readonly<{ action: AIReadinessAction }>) => {
     switch (iconProps.action) {
+      case 'stop': return <Stop class="h-4 w-4" aria-hidden="true" />;
       case 'retry':
         return <RefreshIcon class={`h-4 w-4 ${props.controller.retryPending() ? 'animate-spin motion-reduce:animate-none' : ''}`} aria-hidden="true" />;
       case 'open_update':
@@ -289,10 +299,13 @@ export function AIReadinessBoundary(props: AIReadinessBoundaryProps) {
             </Show>
             <Show when={busy()}>
               <div class="ai-readiness-progress">
-                <div class="ai-readiness-progress__track" role="progressbar" aria-label={projection().title}>
+                <div class="ai-readiness-progress__track" role="progressbar" aria-label={projection().title} aria-valuemin={props.controller.snapshot().work_total ? 0 : undefined} aria-valuemax={props.controller.snapshot().work_total || undefined} aria-valuenow={props.controller.snapshot().work_total ? props.controller.snapshot().work_completed ?? 0 : undefined}>
                   <span />
                 </div>
               </div>
+            </Show>
+            <Show when={busy() && (props.controller.snapshot().work_total ?? 0) > 0}>
+              <p class="ai-readiness-elapsed" aria-live="polite">{i18n.t('aiReadiness.startup.progress', { completed: props.controller.snapshot().work_completed ?? 0, total: props.controller.snapshot().work_total ?? 0 })}</p>
             </Show>
             <Show when={!busy() && projection().dataStatement !== projection().description}>
               <div class="ai-readiness-data-statement">

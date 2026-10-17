@@ -3322,12 +3322,15 @@
     "startupPhase": {
       "starting": "正在啟動 AI 服務...",
       "inspecting": "正在檢查已儲存的對話...",
-      "backing_up": "正在備份對話，準備升級...",
+      "backing_up": "正在還原前備份對話…",
       "optimizing": "正在最佳化對話儲存空間...",
       "migrating": "正在升級對話儲存格式...",
       "verifying": "正在驗證對話資料...",
       "recovering": "正在等待對話儲存恢復可用...",
-      "restoring": "正在從選取的備份還原對話..."
+      "restoring": "正在從選取的備份還原對話...",
+      "indexing": "正在建立搜尋索引…",
+      "preparing": "正在準備對話…",
+      "stopping": "正在安全停止…"
     },
     "unavailableTitle": "Flower 暫時無法使用",
     "unavailableDetail": "Flower 的 AI 服務目前無法處理請求。請返回環境清單檢查執行階段狀態。你的對話和未傳送的草稿會保留。",
@@ -3335,7 +3338,14 @@
     "desktopTitle": "更新 Desktop 後使用 Flower",
     "runtimeDetail": "此執行階段與 Desktop Flower 不相容。請更新執行階段後繼續。草稿已保留，仍可使用環境內建的應用程式。",
     "desktopDetail": "此執行階段需要較新版本的 Desktop。請更新 Desktop 後繼續。草稿已保留，仍可使用環境內建的應用程式。",
-    "connectedBuild": "已連線的執行階段：{version} · {commit}"
+    "connectedBuild": "已連線的執行階段：{version} · {commit}",
+    "stopPreparation": "停止準備",
+    "stoppingPreparation": "正在停止…",
+    "prepareAgain": "重新準備",
+    "stoppedDetail": "準備已停止。對話和未傳送的草稿均已保留，可隨時重新準備 Flower。",
+    "restartDetail": "對話儲存空間未能安全關閉。請重新啟動應用程式後再準備 Flower。檔案、終端機和設定仍可使用。",
+    "startupActionFailed": "無法確認準備操作的結果。請檢查執行階段連線後重試。",
+    "workProgress": "已完成 {completed} / {total}"
   },
   "providerRecovery": {
     "waitingShort": "等待恢復",

@@ -3328,12 +3328,15 @@
     "startupPhase": {
       "starting": "Démarrage du service d’IA...",
       "inspecting": "Vérification des conversations enregistrées...",
-      "backing_up": "Sauvegarde des conversations avant la mise à niveau...",
+      "backing_up": "Sauvegarde des conversations avant restauration…",
       "optimizing": "Optimisation du stockage des conversations...",
       "migrating": "Mise à niveau du stockage des conversations...",
       "verifying": "Validation des données des conversations...",
       "recovering": "En attente de la disponibilité du stockage des conversations...",
-      "restoring": "Restauration des conversations depuis la sauvegarde sélectionnée..."
+      "restoring": "Restauration des conversations depuis la sauvegarde sélectionnée...",
+      "indexing": "Création de l’index de recherche…",
+      "preparing": "Préparation des conversations…",
+      "stopping": "Arrêt sécurisé en cours…"
     },
     "unavailableTitle": "Flower est indisponible",
     "unavailableDetail": "Le service d’IA de Flower ne peut pas traiter les requêtes pour le moment. Revenez à la liste des environnements pour vérifier l’état de l’environnement d’exécution. Vos conversations et votre brouillon non envoyé sont conservés.",
@@ -3341,7 +3344,14 @@
     "desktopTitle": "Mettez à jour Desktop pour utiliser Flower",
     "runtimeDetail": "Ce moteur d’exécution est incompatible avec Desktop Flower. Mettez-le à jour pour continuer. Votre brouillon est conservé ; l’application propre à l’environnement reste disponible.",
     "desktopDetail": "Ce moteur d’exécution nécessite une version plus récente de Desktop. Mettez à jour Desktop pour continuer. Votre brouillon est conservé ; l’application propre à l’environnement reste disponible.",
-    "connectedBuild": "Moteur d’exécution connecté : {version} · {commit}"
+    "connectedBuild": "Moteur d’exécution connecté : {version} · {commit}",
+    "stopPreparation": "Arrêter la préparation",
+    "stoppingPreparation": "Arrêt en cours…",
+    "prepareAgain": "Préparer à nouveau",
+    "stoppedDetail": "La préparation est arrêtée. Vos conversations et brouillons non envoyés sont conservés. Vous pouvez préparer Flower à nouveau à tout moment.",
+    "restartDetail": "Le stockage des conversations n’a pas pu être fermé correctement. Redémarrez l’application avant de préparer Flower à nouveau. Les fichiers, terminaux et paramètres restent disponibles.",
+    "startupActionFailed": "Le résultat de la préparation n’a pas pu être confirmé. Vérifiez la connexion à l’environnement d’exécution et réessayez.",
+    "workProgress": "{completed} sur {total} terminés"
   },
   "providerRecovery": {
     "waitingShort": "En attente",

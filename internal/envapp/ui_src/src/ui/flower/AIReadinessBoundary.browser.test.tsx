@@ -76,6 +76,11 @@ function mountHarness(
   const [retryPending, setRetryPending] = createSignal(pending);
   const startedAt = Date.now() - (options.elapsedMs ?? 0);
   const controller: AIReadinessController = {
+    stop: async () => {
+      const next = { ...snapshot(), state: 'stopping' as const, stoppable: false };
+      setSnapshot(next);
+      return next;
+    },
     snapshot,
     loading: () => false,
     retryPending,
@@ -196,7 +201,7 @@ describe('AIReadinessBoundary browser layout', () => {
   it('announces the focused status without a title frame and retains keyboard focus on controls', async () => {
     const { host } = mountHarness(blockedReason('', { state: 'verifying' }));
     await sizeReadinessSurface(1280, 720);
-    await expect.element(page.getByRole('heading', { name: 'Checking the final details' })).toBeVisible();
+    await expect.element(page.getByRole('heading', { name: 'Validating data' })).toBeVisible();
     const heading = host.querySelector<HTMLElement>('h1')!;
     expect(document.activeElement).toBe(heading);
     expect(heading.getAttribute('aria-live')).toBe('polite');
@@ -294,7 +299,7 @@ describe('AIReadinessBoundary browser layout', () => {
     [blockedReason('', { state: 'inspecting' }), 'Getting Flower ready'],
     [blockedReason('', { state: 'optimizing' }), 'Preparing your conversations'],
     [blockedReason('', { state: 'migrating' }), 'Updating your conversations'],
-    [blockedReason('', { state: 'verifying' }), 'Checking the final details'],
+    [blockedReason('', { state: 'verifying' }), 'Validating data'],
   ] as const)('audits the %s busy phase without inventing progress', async (snapshot, title) => {
     await page.viewport(1280, 720);
     mount(snapshot);
@@ -337,7 +342,7 @@ describe('AIReadinessBoundary browser layout', () => {
       expect(document.activeElement).toBe(focused);
     }
     expect(progress?.hasAttribute('aria-valuenow')).toBe(false);
-    expect(progress?.getAttribute('aria-label')).toBe('Checking the final details');
+    expect(progress?.getAttribute('aria-label')).toBe('Validating data');
   });
 
   it('keeps busy content readable at 200% text and disables decorative motion when requested', async () => {
@@ -359,7 +364,7 @@ describe('AIReadinessBoundary browser layout', () => {
     await mediaCommands.emulateMediaPreferences({ reducedMotion: 'no-preference' });
     const { host } = mountHarness(blockedReason('', { state: 'verifying' }));
     await sizeReadinessSurface(1280, 720);
-    await expect.element(page.getByRole('heading', { name: 'Checking the final details' })).toBeVisible();
+    await expect.element(page.getByRole('heading', { name: 'Validating data' })).toBeVisible();
     const bloom = host.querySelector<HTMLElement>('.flower-readiness-art__bloom')!;
     const style = getComputedStyle(bloom);
     expect(style.animationName).toBe('flower-model-status-flower-twirl');
@@ -467,4 +472,20 @@ it('keeps an embedded canvas visible during readiness and confines recovery to t
   runtime.setSnapshot({ state: 'ready', reason_code: '', retryable: false, safe_to_retry: false });
   await expect.element(page.getByRole('button', { name: 'Flower child' })).toBeVisible();
   expect(getComputedStyle(root).backgroundColor).toBe('rgba(0, 0, 0, 0)');
+});
+
+it('keeps startup details open through stop and explicit preparation retry', async () => {
+  const { host, setSnapshot } = mountHarness(blockedReason('', { state: 'indexing', stoppable: true, work_completed: 3, work_total: 10 }));
+  await sizeReadinessSurface(720, 720);
+  await expect.element(page.getByRole('heading', { name: 'Building search index', exact: true })).toBeVisible();
+  await expect.element(page.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '3');
+  await page.getByRole('button', { name: 'Startup details', exact: true }).click();
+  const details = host.querySelector('.ai-readiness-diagnostics');
+  await page.getByRole('button', { name: 'Stop preparation', exact: true }).click();
+  await expect.element(page.getByRole('heading', { name: 'Stopping preparation', exact: true })).toBeVisible();
+  expect(host.querySelector('.ai-readiness-diagnostics')).toBe(details);
+  setSnapshot(blockedReason('', { state: 'stopped' }));
+  await expect.element(page.getByRole('button', { name: 'Prepare again', exact: true })).toBeVisible();
+  expect(host.querySelector('.ai-readiness-diagnostics')).toBe(details);
+  await page.getByRole('button', { name: 'Prepare again', exact: true }).click();
 });

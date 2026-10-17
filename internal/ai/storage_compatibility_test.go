@@ -105,10 +105,6 @@ func TestFlowerEveryHistoricalWriterUpgradesAndContinues(t *testing.T) {
 			if calls.Load() == 0 {
 				t.Fatal("continuation did not call the model")
 			}
-			operation, err := readFlowerUpgrade(state)
-			if err != nil || !operation.Complete {
-				t.Fatalf("upgrade incomplete: %+v %v", operation, err)
-			}
 			if err := svc.Close(); err != nil {
 				t.Fatal(err)
 			}
@@ -116,9 +112,9 @@ func TestFlowerEveryHistoricalWriterUpgradesAndContinues(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			second, err := readFlowerUpgrade(state)
-			if err != nil || !reflect.DeepEqual(operation, second) {
-				t.Fatalf("second start repeated upgrade: %+v %v", second, err)
+			snapshots, err := ListFlowerSnapshots(t.Context(), state)
+			if err != nil || len(snapshots) != 0 {
+				t.Fatalf("unexpected automatic snapshots: %+v %v", snapshots, err)
 			}
 		})
 	}
@@ -126,6 +122,7 @@ func TestFlowerEveryHistoricalWriterUpgradesAndContinues(t *testing.T) {
 
 func TestFlowerRestoreLifecycleFixtureCannotResumeOldWork(t *testing.T) {
 	state, fixture := loadFlowerUpgradeFixture(t, "10ce4c152-lifecycle")
+	snapshotID := captureFixtureSnapshot(t, state)
 	opts := fixtureMaintenanceOptions(t, state)
 	calls := fixtureModelServer(t, &opts)
 	svc, err := NewServiceContext(t.Context(), opts)
@@ -135,11 +132,7 @@ func TestFlowerRestoreLifecycleFixtureCannotResumeOldWork(t *testing.T) {
 	if err := svc.Close(); err != nil {
 		t.Fatal(err)
 	}
-	op, err := readFlowerUpgrade(state)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := RestoreFlowerSnapshot(t.Context(), opts, op.OriginalSnapshot); err != nil {
+	if err := RestoreFlowerSnapshot(t.Context(), opts, snapshotID); err != nil {
 		t.Fatal(err)
 	}
 	repairFixtureExecutionDirectory(t, state, opts.AgentHomeDir)

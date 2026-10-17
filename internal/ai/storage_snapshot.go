@@ -14,10 +14,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
-	flruntime "github.com/floegence/floret/v7/runtime"
 	flstorage "github.com/floegence/floret/v7/storage"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/threadreadstate"
@@ -61,58 +59,8 @@ type flowerSnapshotManifest struct {
 	Files []flowerSnapshotFile `json:"files"`
 }
 
-type flowerUpgradeOperation struct {
-	Format           int    `json:"format"`
-	TargetBuild      string `json:"target_build"`
-	OriginalSnapshot string `json:"original_snapshot"`
-	Complete         bool   `json:"complete"`
-}
-
-var flowerExecutableBuild = sync.OnceValues(func() (string, error) {
-	path, err := os.Executable()
-	if err != nil {
-		return "", err
-	}
-	file, err := os.Open(path)
-	if err != nil {
-		return "", err
-	}
-	defer file.Close()
-	hash := sha256.New()
-	if _, err := io.Copy(hash, file); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(hash.Sum(nil)), nil
-})
-
-func flowerBuildID(version string) (string, error) {
-	hash, err := flowerExecutableBuild()
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(version) + ":" + hash, nil
-}
-
-func flowerOperationPath(state string) string {
-	return filepath.Join(state, flowerMaintenanceDir, "upgrade.json")
-}
-
-func readFlowerUpgrade(state string) (*flowerUpgradeOperation, error) {
-	var operation flowerUpgradeOperation
-	err := readMaintenanceJSON(flowerOperationPath(state), &operation)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	if operation.Format != 1 || operation.TargetBuild == "" || operation.OriginalSnapshot != "" && !validFlowerSnapshotID(operation.OriginalSnapshot) {
-		return nil, errors.New("unsupported Flower upgrade operation")
-	}
-	return &operation, nil
-}
-
 // prepareFlowerStorage runs while no service generation owns any Flower file.
+// Owners validate and migrate their databases once when they open them.
 func prepareFlowerStorage(ctx context.Context, opts Options) error {
 	if err := validateFlowerStoragePaths(opts.StateDir); err != nil {
 		return flowerStorageError("recovery", "inspecting", err)
@@ -121,80 +69,20 @@ func prepareFlowerStorage(ctx context.Context, opts Options) error {
 		return flowerStorageError("recovery", "restoring", err)
 	}
 	if err := cleanupFlowerStaging(opts.StateDir); err != nil {
-		return flowerStorageError("backup", "inspecting", err)
+		return flowerStorageError("recovery", "inspecting", err)
 	}
-	reportFloretStorePhase(opts.StoreStartupProgress, FloretStoreStartupInspecting)
-	readPath, err := threadreadstate.ExistingPath(opts.StateDir)
-	if err != nil {
-		return flowerStorageError("read_state", "inspecting", err)
-	}
-	product, err := threadstore.Inspect(filepath.Join(opts.StateDir, flowerStorageRoots[0]))
-	if err != nil {
-		return flowerStorageError("product", "inspecting", err)
-	}
-	floret, err := flruntime.InspectSQLite(ctx, filepath.Join(opts.StateDir, flowerStorageRoots[1]))
-	if err != nil {
-		return flowerStorageError("floret", "inspecting", err)
-	}
-	reads, err := threadreadstate.Inspect(readPath)
-	if err != nil {
-		return flowerStorageError("read_state", "inspecting", err)
-	}
-	build, err := flowerBuildID(opts.BuildVersion)
-	if err != nil {
-		return flowerStorageError("backup", "backing_up", err)
-	}
-	operation, err := readFlowerUpgrade(opts.StateDir)
-	if err != nil {
-		return flowerStorageError("backup", "inspecting", err)
-	}
-	if operation != nil && !operation.Complete {
-		// A changed binary may repair a failed migration. Preserve the first
-		// source snapshot even when this attempt targets that newer build.
-		if operation.OriginalSnapshot != "" {
-			if _, err := verifyFlowerSnapshot(ctx, opts.StateDir, operation.OriginalSnapshot); err != nil {
-				return flowerStorageError("backup", "verifying", err)
-			}
-		}
-		operation.TargetBuild = build
-		return writeMaintenanceJSON(flowerOperationPath(opts.StateDir), operation)
-	}
-	migration := product.MigrationRequired || floret.MigrationRequired || reads.MigrationRequired
-	if operation != nil && operation.TargetBuild == build && !migration {
-		return nil
-	}
-	next := &flowerUpgradeOperation{Format: 1, TargetBuild: build}
-	existing := product.Exists || floret.Exists || reads.Exists
-	if info, err := os.Stat(filepath.Join(opts.StateDir, "ai", "uploads")); err == nil {
-		existing = existing || info.IsDir()
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return flowerStorageError("uploads", "inspecting", err)
-	}
-	if existing {
-		reportFloretStorePhase(opts.StoreStartupProgress, FloretStoreStartupBackingUp)
-		sourceBuild := "before-maintenance-baseline"
-		if operation != nil {
-			sourceBuild = operation.TargetBuild
-		}
-		snapshot, err := captureFlowerSnapshot(ctx, opts.StateDir, sourceBuild, "automatic", false)
-		if err != nil {
-			return flowerStorageError("backup", "backing_up", err)
-		}
-		next.OriginalSnapshot = snapshot.ID
-	}
-	if err := writeMaintenanceJSON(flowerOperationPath(opts.StateDir), next); err != nil {
-		return flowerStorageError("backup", "backing_up", err)
-	}
-	return nil
+	return ctx.Err()
 }
 
-func completeFlowerUpgrade(state string) error {
-	operation, err := readFlowerUpgrade(state)
-	if err != nil || operation == nil || operation.Complete {
+// Retire obsolete build-driven bookkeeping only after the current data activates.
+func removeObsoleteFlowerUpgrade(state string) error {
+	path := filepath.Join(state, flowerMaintenanceDir, "upgrade.json")
+	if err := os.Remove(path); errors.Is(err, os.ErrNotExist) {
+		return nil
+	} else if err != nil {
 		return err
 	}
-	operation.Complete = true
-	return writeMaintenanceJSON(flowerOperationPath(state), operation)
+	return syncFlowerDirectory(filepath.Dir(path))
 }
 
 func captureFlowerSnapshot(ctx context.Context, state, build, kind string, raw bool) (manifest flowerSnapshotManifest, err error) {
@@ -310,9 +198,6 @@ func ListFlowerSnapshots(ctx context.Context, state string) ([]FlowerSnapshotSum
 	if err := validateFlowerDestination(state, flowerMaintenanceDir+"/snapshots"); err != nil {
 		return nil, err
 	}
-	operation, operationErr := readFlowerUpgrade(state)
-	// Damaged operation metadata must not hide recovery choices. Retention
-	// protects all snapshots until the operation can be understood or replaced.
 	entries, err := os.ReadDir(filepath.Join(state, flowerMaintenanceDir, "snapshots"))
 	if errors.Is(err, os.ErrNotExist) {
 		return []FlowerSnapshotSummary{}, nil
@@ -343,32 +228,11 @@ func ListFlowerSnapshots(ctx context.Context, state string) ([]FlowerSnapshotSum
 			continue
 		}
 		summary := manifest.FlowerSnapshotSummary
-		summary.Protected = operationErr != nil || summary.Kind == "before_restore" || operation != nil && !operation.Complete && operation.OriginalSnapshot == summary.ID
+		summary.Protected = summary.Protected || summary.Kind == "before_restore"
 		result = append(result, summary)
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].CreatedAt.After(result[j].CreatedAt) })
 	return result, nil
-}
-
-func pruneFlowerSnapshots(ctx context.Context, state string) error {
-	snapshots, err := ListFlowerSnapshots(ctx, state)
-	if err != nil {
-		return err
-	}
-	count := 0
-	for _, snapshot := range snapshots {
-		if snapshot.Unavailable || snapshot.Kind != "automatic" {
-			continue
-		}
-		count++
-		if count <= 3 || snapshot.Protected {
-			continue
-		}
-		if err := os.RemoveAll(filepath.Join(state, flowerMaintenanceDir, "snapshots", snapshot.ID)); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func validFlowerSnapshotID(id string) bool {

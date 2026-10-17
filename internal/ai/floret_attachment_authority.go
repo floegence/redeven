@@ -23,7 +23,6 @@ type openedCanonicalAttachment struct {
 }
 
 func (service *Service) retainCanonicalUploadResources(ctx context.Context, endpointID string, view flruntime.ThreadView) error {
-	var ids []string
 	var attachments []flruntime.MessageAttachment
 	for _, item := range view.Items {
 		attachments = append(attachments, item.Attachments...)
@@ -34,6 +33,11 @@ func (service *Service) retainCanonicalUploadResources(ctx context.Context, endp
 	for _, item := range view.RestoredInputs {
 		attachments = append(attachments, item.Input.Attachments...)
 	}
+	return service.retainCanonicalUploadDescriptors(ctx, endpointID, view.ThreadID.String(), attachments)
+}
+
+func (service *Service) retainCanonicalUploadDescriptors(ctx context.Context, endpointID, threadID string, attachments []flruntime.MessageAttachment) error {
+	var ids []string
 	for _, attachment := range attachments {
 		if isToolMediaRef(attachment.ResourceRef) {
 			continue
@@ -49,13 +53,13 @@ func (service *Service) retainCanonicalUploadResources(ctx context.Context, endp
 		if record == nil || record.State != threadstore.UploadStateLive || record.Name != attachment.Name || normalizeMediaType(record.DetectedMediaType) != normalizeMediaType(attachment.MIMEType) || record.SizeBytes != attachment.SizeBytes || !strings.EqualFold(record.ContentSHA256, digest) {
 			return errors.New("canonical attachment does not match the retained upload")
 		}
-		if _, err := service.threadsDB.GetThreadOwnedUpload(ctx, endpointID, view.ThreadID.String(), id); errors.Is(err, sql.ErrNoRows) {
+		if _, err := service.threadsDB.GetThreadOwnedUpload(ctx, endpointID, threadID, id); errors.Is(err, sql.ErrNoRows) {
 			ids = appendUniqueString(ids, id)
 		} else if err != nil {
 			return err
 		}
 	}
-	return service.threadsDB.RetainCanonicalUploads(ctx, endpointID, view.ThreadID.String(), ids)
+	return service.threadsDB.RetainCanonicalUploads(ctx, endpointID, threadID, ids)
 }
 
 func (authority floretLiveAttachmentAuthority) ReadCanonicalAttachmentMembership(ctx context.Context, threadID, turnID, attachmentID string) (CanonicalAttachmentMembership, error) {

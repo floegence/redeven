@@ -46,9 +46,14 @@ type Workload struct {
 }
 
 type AIReadiness struct {
-	State      string `json:"state"`
-	ReasonCode string `json:"reason_code,omitempty"`
-	IssueCount int    `json:"issue_count"`
+	State         string `json:"state"`
+	ReasonCode    string `json:"reason_code,omitempty"`
+	IssueCount    int    `json:"issue_count"`
+	Stoppable     bool   `json:"stoppable,omitempty"`
+	Retryable     bool   `json:"retryable,omitempty"`
+	SafeToRetry   bool   `json:"safe_to_retry,omitempty"`
+	WorkCompleted int64  `json:"work_completed,omitempty"`
+	WorkTotal     int64  `json:"work_total,omitempty"`
 }
 
 const RuntimeControlBindMethodV2 = "runtime_control_v2"
@@ -237,11 +242,23 @@ func NormalizeAIReadiness(readiness AIReadiness) AIReadiness {
 		if readiness.ReasonCode == "host_thread_settings_missing" && readiness.IssueCount > 0 {
 			return readiness
 		}
-	case "unavailable", "inspecting", "optimizing", "recovering", "migrating", "verifying", "backing_up", "restoring":
+	case "inspecting", "optimizing", "recovering", "migrating", "verifying", "indexing", "preparing", "backing_up", "restoring":
+		completed, total := readiness.WorkCompleted, readiness.WorkTotal
+		if completed < 0 {
+			completed = 0
+		}
+		if total < 0 {
+			total = 0
+		}
+		if total > 0 && completed > total {
+			completed = total
+		}
+		return AIReadiness{State: readiness.State, Stoppable: readiness.Stoppable, WorkCompleted: completed, WorkTotal: total}
+	case "unavailable", "stopping", "stopped":
 		return AIReadiness{State: readiness.State}
 	case "blocked":
 		if readiness.ReasonCode != "" {
-			return AIReadiness{State: "blocked", ReasonCode: readiness.ReasonCode}
+			return AIReadiness{State: "blocked", ReasonCode: readiness.ReasonCode, Retryable: readiness.Retryable, SafeToRetry: readiness.Retryable && readiness.SafeToRetry && readiness.ReasonCode != "generation_close_failed"}
 		}
 	}
 	return AIReadiness{State: "unavailable"}

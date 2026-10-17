@@ -446,10 +446,21 @@ export const enUS = {
     "unknown": "Connection not verified"
 },
   flowerRuntime: {
+    stopPreparation: "Stop preparation",
+    stoppingPreparation: "Stopping...",
+    prepareAgain: "Prepare again",
+    stoppedDetail: "Preparation is stopped. Your conversations and unsent draft are kept. You can prepare Flower again when ready.",
+    restartDetail: "Conversation storage could not be closed safely. Restart the application before preparing Flower again. Files, terminals and settings remain available.",
+    startupActionFailed: "The preparation action could not be confirmed. Check the runtime connection and try again.",
+    workProgress: "{completed} of {total} completed",
     startupPhase: {
+      indexing: "Building the search index...",
+      preparing: "Preparing conversations...",
+      stopping: "Stopping safely...",
+
       starting: 'Starting the AI service...',
       inspecting: 'Checking saved conversations...',
-      backing_up: 'Backing up conversations before the upgrade...',
+      backing_up: "Backing up conversations before restore...",
       optimizing: 'Optimizing conversation storage...',
       migrating: 'Upgrading conversation storage...',
       verifying: 'Verifying conversation data...',

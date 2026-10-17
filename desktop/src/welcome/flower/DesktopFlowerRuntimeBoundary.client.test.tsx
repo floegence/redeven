@@ -11,7 +11,7 @@ afterEach(() => { disposers.splice(0).forEach(dispose => dispose()); document.bo
 const settle = () => new Promise(resolve => setTimeout(resolve, 0));
 const runtime = (compatibility_epoch: number) => normalizeRuntimeServiceSnapshot({ protocol_version: protocol, compatibility_epoch, compatibility: 'compatible', open_readiness: { state: 'openable' }, ai_readiness: { state: 'ready' }, runtime_version: 'v0.0.0-dev', runtime_commit: '0123456789abcdef' });
 
-it.each(['starting', 'inspecting', 'backing_up', 'optimizing', 'migrating', 'verifying', 'recovering', 'restoring'] as const)(
+it.each(['starting', 'inspecting', 'backing_up', 'optimizing', 'migrating', 'verifying', 'recovering', 'restoring', 'indexing', 'preparing', 'stopping'] as const)(
   'waits for AI after the runtime is openable during %s, then mounts once', async state => {
     const [snapshot, setSnapshot] = createSignal({ ...runtime(epoch), ai_readiness: { state } } as ReturnType<typeof runtime>);
     const load = vi.fn();
@@ -44,7 +44,7 @@ it('updates each observed startup phase without mounting the client or changing 
   const Child = () => { onMount(load); return <textarea value={coordinator.read('').value.text} />; };
   const i18n = createDesktopI18n('zh-CN');
   disposers.push(render(() => <DesktopFlowerRuntimeBoundary snapshot={snapshot()} i18n={i18n} onRecover={vi.fn()} onBack={vi.fn()}><Child /></DesktopFlowerRuntimeBoundary>, document.body));
-  for (const state of ['backing_up', 'optimizing', 'migrating', 'verifying', 'recovering', 'restoring'] as const) {
+  for (const state of ['backing_up', 'optimizing', 'migrating', 'verifying', 'recovering', 'restoring', 'indexing', 'preparing', 'stopping'] as const) {
     setSnapshot({ ...runtime(epoch), ai_readiness: { state } });
     await settle();
     expect(document.querySelector('[data-flower-startup-phase]')?.textContent).toBe(i18n.t(`flowerRuntime.startupPhase.${state}`));
@@ -131,4 +131,41 @@ it('blocks client mounting before update and keeps the existing draft through fa
   setSnapshot(runtime(epoch));
   await settle();
   expect(document.querySelector('textarea')?.value).toBe('Keep this unsent draft');
+});
+
+
+it('stops once, keeps Back usable and offers explicit preparation after cleanup', async () => {
+  const [snapshot, setSnapshot] = createSignal({ ...runtime(epoch), ai_readiness: { state: 'indexing' as const, stoppable: true, work_completed: 3, work_total: 8 } } as ReturnType<typeof runtime>);
+  let finish!: () => void;
+  const action = vi.fn(() => new Promise<void>(resolve => { finish = resolve; }));
+  const back = vi.fn();
+  const i18n = createDesktopI18n('en-US');
+  disposers.push(render(() => <DesktopFlowerRuntimeBoundary snapshot={snapshot()} i18n={i18n} onRecover={vi.fn()} onStartupAction={action} onBack={back}><div data-ready-flower /></DesktopFlowerRuntimeBoundary>, document.body));
+  const button = () => [...document.querySelectorAll('button')].find(item => item.textContent?.includes(i18n.t('flowerRuntime.stopPreparation')))!;
+  expect(document.body.textContent).toContain('3 of 8 completed');
+  button().click(); button().click();
+  await settle();
+  expect(action).toHaveBeenCalledExactlyOnceWith('stop');
+  expect(document.querySelector('[data-flower-startup-phase]')?.textContent).toBe(i18n.t('flowerRuntime.startupPhase.stopping'));
+  [...document.querySelectorAll('button')].find(item => item.textContent?.includes(i18n.t('shell.backToEnvironments')))!.click();
+  expect(back).toHaveBeenCalledOnce();
+  setSnapshot({ ...runtime(epoch), ai_readiness: { state: 'stopped' } });
+  finish(); await settle();
+  expect(document.querySelector('[data-ready-flower]')).toBeNull();
+  [...document.querySelectorAll('button')].find(item => item.textContent?.includes(i18n.t('flowerRuntime.prepareAgain')))!.click();
+  expect(action).toHaveBeenLastCalledWith('retry');
+  finish(); await settle();
+});
+
+it('keeps failed stop recoverable and requires restart after close failure', async () => {
+  const [snapshot, setSnapshot] = createSignal({ ...runtime(epoch), ai_readiness: { state: 'preparing' as const, stoppable: true } } as ReturnType<typeof runtime>);
+  const action = vi.fn(async () => { throw new Error('Disconnected'); });
+  const i18n = createDesktopI18n('en-US');
+  disposers.push(render(() => <DesktopFlowerRuntimeBoundary snapshot={snapshot()} i18n={i18n} onRecover={vi.fn()} onStartupAction={action} onBack={vi.fn()}><div /></DesktopFlowerRuntimeBoundary>, document.body));
+  (document.querySelector('button') as HTMLButtonElement).click(); await settle();
+  expect(document.querySelector('[role="alert"]')?.textContent).toBe(i18n.t('flowerRuntime.startupActionFailed'));
+  expect(document.querySelector('button')?.disabled).toBe(false);
+  setSnapshot({ ...runtime(epoch), ai_readiness: { state: 'blocked', reason_code: 'generation_close_failed', safe_to_retry: true } }); await settle();
+  expect(document.body.textContent).toContain(i18n.t('flowerRuntime.restartDetail'));
+  expect(document.querySelectorAll('button')).toHaveLength(1);
 });

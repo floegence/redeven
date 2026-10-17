@@ -536,3 +536,49 @@ describe('createAIReadinessController', () => {
     expect(visibilitySource.listenerCount()).toBe(0);
   });
 });
+
+it('stops immediately, deduplicates stop requests, and polls until rollback completes', async () => {
+  const response = deferred<AIReadinessSnapshot>();
+  const request = vi.fn().mockResolvedValueOnce({ ...inspecting(), stoppable: true }).mockImplementationOnce(() => response.promise);
+  const controller = createAIReadinessController({ request, autoStart: false, visibilitySource: null });
+  await controller.refresh();
+  const pending = controller.stop();
+  expect(controller.snapshot().state).toBe('stopping');
+  expect(controller.stop()).toBe(pending);
+  expect(controller.refresh()).toBe(pending);
+  expect(controller.retry()).toBe(pending);
+  response.resolve({ ...inspecting(), state: 'stopped' });
+  await pending;
+  expect(controller.snapshot().state).toBe('stopped');
+  expect(controller.busyStartedAt()).toBeNull();
+  expect(request.mock.calls.filter(([url]) => String(url).endsWith('/stop'))).toHaveLength(1);
+  controller.dispose();
+});
+
+it('retains known work totals and rejects impossible progress', () => {
+  expect(normalizeAIReadinessSnapshot({ ...inspecting(), state: 'indexing', work_completed: 3, work_total: 10, stoppable: true })).toMatchObject({ state: 'indexing', work_completed: 3, work_total: 10, stoppable: true });
+  expect(normalizeAIReadinessSnapshot({ ...inspecting(), work_completed: 11, work_total: 10 }).reason_code).toBe('ai_readiness_contract_error');
+});
+
+it('ignores a pre-stop refresh and never leaves loading stuck after cancellation', async () => {
+  const oldRefresh = deferred<AIReadinessSnapshot>();
+  const stopResponse = deferred<AIReadinessSnapshot>();
+  const request = vi.fn()
+    .mockResolvedValueOnce({ ...inspecting(), stoppable: true })
+    .mockImplementationOnce(() => oldRefresh.promise)
+    .mockImplementationOnce(() => stopResponse.promise);
+  const controller = createAIReadinessController({ request, autoStart: false, visibilitySource: null });
+  await controller.refresh();
+  const old = controller.refresh();
+  expect(controller.loading()).toBe(true);
+  const stopping = controller.stop();
+  expect(controller.loading()).toBe(false);
+  oldRefresh.resolve(ready());
+  await old;
+  expect(controller.snapshot().state).toBe('stopping');
+  stopResponse.resolve({ ...inspecting(), state: 'stopped' });
+  await stopping;
+  expect(controller.loading()).toBe(false);
+  expect(controller.snapshot().state).toBe('stopped');
+  controller.dispose();
+});

@@ -1,7 +1,7 @@
 ---
 type: Recovery Contract
 title: Flower backup and recovery
-description: Preserve complete Flower data before upgrades and restore a verified collection without replaying old work.
+description: Restore preserved Flower collections without replaying old work or backing up every upgrade.
 tags: [ai, storage, recovery, backups]
 timestamp: 2026-09-08T00:00:00Z
 ---
@@ -9,23 +9,25 @@ timestamp: 2026-09-08T00:00:00Z
 
 - Authority: the readiness controller drains generations; each storage owner snapshots and migrates its own data; Floret alone terminates old execution.
 - Outcome: administrators can recover Flower history, settings, read state and uploads while other Runtime surfaces remain usable.
-- Invariants: no Flower writer during capture or replacement, complete verified collections, original upgrade snapshot preservation, and no automatic execution replay.
+- Invariants: no Flower writer during capture or replacement, complete verified collections, preservation of all existing snapshots, and no automatic execution replay.
 - Failure boundary: insufficient space, malformed backups, migration defects or interrupted replacement block Flower and preserve recoverable data; recovery does not roll back external actions or binaries.
 
 # Contract
 
-## Automatic snapshots
+## Preserved snapshots
 
-Readonly inspection precedes the first write. Existing data receives an automatic
-snapshot on first adoption of maintenance, a changed running build, or a required
-migration. The build identity combines the reported version and executable
-digest, so development binaries are covered too. An unfinished upgrade keeps its
-original snapshot across retries and repair builds; partially migrated data never
-replaces that source. Completion records successful storage preparation before
-execution activation, not the outcome of any conversation.
+Ordinary startup, binary changes and transactional migrations do not create full
+snapshots. Each storage owner validates and migrates its own data atomically.
+There is no executable digest, build-driven upgrade ledger or automatic snapshot
+rotation. Existing snapshots remain available indefinitely; obsolete upgrade
+records do not control startup and are removed only after successful activation.
+A damaged old snapshot cannot block healthy live data.
+
+Explicit destructive restoration still captures the original scene before any
+replacement. Snapshot capture and restore retain their complete-set boundaries.
 
 The collection contains `ai/threads.sqlite`, `ai/floret_threads.sqlite`,
-`apps/appserver/thread_read_state.sqlite` and Flower-managed `ai/uploads`.
+`apps/appserver/thread_read_state.sqlite` and Flower-managed `ai/uploads` and `computer/keyframes`.
 The supported former read-state location maps to the current snapshot path.
 Workspaces, external systems and global authentication configuration are outside
 the collection. Floret is accessed only through its published SQLite snapshot
@@ -37,12 +39,12 @@ Files are copied and checked, then a manifest records fixed managed roots,
 sizes, digests, time, source build and kind. Directory entries are synchronized
 before atomic publication beneath `flower-maintenance/snapshots`. Pending copies
 never appear as complete backups. Symlinks, unexpected files and malformed
-manifests are refused. Space and capture failures stop the upgrade before owner
-migration and remain local to Flower.
+manifests are refused. Space and capture failures stop explicit restoration before replacement and
+remain local to Flower.
 
-Retention keeps the newest three completed automatic snapshots. The source of an
-unfinished upgrade and every preserved pre-restore scene are protected. Damaged
-manifest entries remain visible as unavailable, without hiding valid choices.
+Every existing snapshot and preserved pre-restore scene remains available.
+Damaged manifest entries remain visible as unavailable, without hiding valid
+choices. An empty list explicitly reports that no recovery snapshot exists.
 Abandoned task staging is removed only after any durable replacement completes
 and before a new generation opens; an unclosed generation prevents that path.
 
@@ -95,7 +97,7 @@ are established. Core Runtime services remain available.
 
 # Evidence
 
-- `redeven:internal/ai/storage_snapshot.go` - Capture, upgrade operation, metadata and retention.
+- `redeven:internal/ai/storage_snapshot.go` - Explicit capture, metadata and preserved snapshot inventory.
 - `redeven:internal/ai/storage_restore.go` - Owner preparation and durable complete-set replacement.
 - `redeven:internal/ai/storage_files.go` - Directory durability, staging cleanup and replacement verification.
 - `redeven:internal/codeapp/ai_readiness.go` - Drain, close, restore and publication ownership.

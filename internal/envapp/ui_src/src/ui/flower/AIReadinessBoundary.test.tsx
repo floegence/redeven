@@ -53,6 +53,7 @@ function mount(
     });
   });
   const controller: AIReadinessController = {
+    stop: async () => current(),
     snapshot: current,
     loading: () => false,
     retryPending,

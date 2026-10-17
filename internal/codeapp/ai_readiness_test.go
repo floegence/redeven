@@ -606,3 +606,76 @@ func TestAIReadinessRestoreRejectsMissingSnapshotWithoutDraining(t *testing.T) {
 		t.Fatal("invalid recovery replaced the generation")
 	}
 }
+
+func TestAIReadinessStopWaitsForRollbackAndAllowsExplicitRetry(t *testing.T) {
+	entered, cancelled, rollback := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	var calls atomic.Int32
+	controller := newAIReadinessController(t.Context(), ai.Options{}, func(ctx context.Context, opts ai.Options) (*ai.Service, error) {
+		if calls.Add(1) != 1 {
+			return new(ai.Service), nil
+		}
+		close(entered)
+		<-ctx.Done()
+		close(cancelled)
+		opts.StoreStartupProgress(ai.FloretStoreStartupIndexing)
+		<-rollback
+		return nil, ctx.Err()
+	}, nil)
+	defer controller.Close()
+	controller.Start()
+	<-entered
+	if err := controller.StopAIReadiness(); err != nil {
+		t.Fatal(err)
+	}
+	<-cancelled
+	if got := controller.AIReadiness(); got.State != appserver.AIReadinessStopping {
+		t.Fatalf("stopping=%+v", got)
+	}
+	if err := controller.StopAIReadiness(); err != nil {
+		t.Fatal(err)
+	}
+	if err := controller.RetryAIReadiness(); !errors.Is(err, appserver.ErrAIRetryInProgress) {
+		t.Fatalf("overlapping retry=%v", err)
+	}
+	close(rollback)
+	waitForAIReadinessState(t, controller, appserver.AIReadinessStopped)
+	if calls.Load() != 1 {
+		t.Fatal("cancel automatically restarted")
+	}
+	if err := controller.RetryAIReadiness(); err != nil {
+		t.Fatal(err)
+	}
+	waitForAIReadinessState(t, controller, appserver.AIReadinessReady)
+	_, leaseCtx, _, release, err := controller.AcquireAIService(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
+	if leaseCtx.Err() != nil {
+		t.Fatal("attempt cleanup cancelled activated generation")
+	}
+}
+
+func TestAIReadinessStopCloseFailureRequiresApplicationRestart(t *testing.T) {
+	entered := make(chan struct{})
+	controller := newAIReadinessController(t.Context(), ai.Options{}, func(ctx context.Context, _ ai.Options) (*ai.Service, error) {
+		close(entered)
+		<-ctx.Done()
+		return new(ai.Service), nil
+	}, func(*ai.Service) error { return errors.New("close failed") })
+	controller.Start()
+	<-entered
+	if err := controller.StopAIReadiness(); err != nil {
+		t.Fatal(err)
+	}
+	waitForAIReadinessState(t, controller, appserver.AIReadinessBlocked)
+	if got := controller.AIReadiness(); got.ReasonCode != appserver.AIGenerationCloseFailedReasonCode {
+		t.Fatalf("close failure=%+v", got)
+	}
+	if err := controller.RetryAIReadiness(); !errors.Is(err, appserver.ErrAIServiceUnavailable) {
+		t.Fatalf("unsafe reopen=%v", err)
+	}
+	if err := controller.Close(); err == nil {
+		t.Fatal("close failure was discarded")
+	}
+}
