@@ -197,3 +197,26 @@ test('parallel sessions preserve independent owners and cleanup results', async 
     [[], []],
   );
 });
+
+test('target observation failure still stops its registered owner and preserves the original failure', async () => {
+  let stopped = false;
+  const failure = new Error('listener inventory unavailable');
+  const execute = async (command) => {
+    if (command.args[0] === 'desktop-target-process-stop') {
+      stopped = true;
+      return JSON.stringify({ after: { instances: [] } });
+    }
+    return JSON.stringify({ inventory_digest: 'owned', instances: stopped ? [] : [{ pid: 101 }] });
+  };
+  await assert.rejects(
+    stopTarget(
+      { executable: 'owned-runtime', root: '/owned-session' },
+      () => {
+        throw failure;
+      },
+      execute,
+    ),
+    (error) => error === failure,
+  );
+  assert.equal(stopped, true, 'Observation is evidence, not permission to skip cleanup');
+});

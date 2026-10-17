@@ -57,7 +57,7 @@ writes cleanup evidence. Recovery after timeout or forced termination never
 changes a failed qualification into a pass. Retry cleanup operates only on the
 explicit saved manifest and never upgrades its test result.
 
-## Gate boundary
+# Boundaries
 
 No-argument `scripts/check_desktop.sh` selects headless checks. `--ci` remains
 explicit; `--full` is required for full Desktop and browser qualification.
@@ -65,7 +65,7 @@ Ordinary commit, exact-main push, and cloud source CI run portable lifecycle
 or source policy checks without starting real Electron. Each broad
 qualification retains its own assertions, evidence, and original deadline.
 
-## Acceptance evidence
+# Acceptance evidence
 
 On macOS arm64, maintained Playwright typography and native Codespace
 scenarios verified their existing assertions and session cleanup. Chromium
