@@ -91,7 +91,7 @@ void app.whenReady().then(async () => {
     }
     await delay();
     assert.equal(state.getSnapshot().activeShellTheme, 'porcelain-light', 'Delayed renderer persistence must not revert the latest selection');
-    await writeFile(path.join(output, 'report.json'), JSON.stringify({ status: 'passed', electron: process.versions.electron, requests, metrics, checks: ['defaults', 'immediate feedback', 'duplicate clicks', 'close while pending', 'failure and retry', 'two-window synchronization', 'draft preservation', 'delayed persistence'] }, null, 2));
+    await writeFile(path.join(output, 'report.json'), JSON.stringify({ status: 'running', scenarioStatus: 'passed', electron: process.versions.electron, requests, metrics, checks: ['defaults', 'immediate feedback', 'duplicate clicks', 'close while pending', 'failure and retry', 'two-window synchronization', 'draft preservation', 'delayed persistence'] }, null, 2));
     state.dispose(); for (const win of windows) win.destroy(); app.exit(0);
   } catch (error) {
     await writeFile(path.join(output, 'report.json'), JSON.stringify({ status: 'failed', metrics, error: String(error) }, null, 2));

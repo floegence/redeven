@@ -150,7 +150,7 @@ void app.whenReady().then(async () => {
     assert.equal((await client.catalog(record)).members.length, 1);
     assert.equal(await unlocked(secure), true);
     cases.push('member removal rejects new access while other members keep serving');
-    await writeFile(path.join(output, 'report.json'), JSON.stringify({ status: 'passed', cases }, null, 2));
+    await writeFile(path.join(output, 'report.json'), JSON.stringify({ status: 'running', scenarioStatus: 'passed', cases }, null, 2));
   } finally {
     for (const window of windows) if (!window.isDestroyed()) window.destroy();
     await Promise.all(transports.map(closeGatewayMemberTransport));

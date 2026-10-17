@@ -724,19 +724,16 @@ test('Desktop smoke resets an existing surface and requires a predecoded install
   assert.match(source, /icon_responses: pluginIconResponses/u);
 });
 
-test('Desktop smoke verifies owned PID cleanup and includes it in the final summary', async () => {
-  const source = await import('node:fs/promises').then((fs) => fs.readFile(
-    new URL('./smoke_desktop_plugins.sh', import.meta.url),
-    'utf8',
-  ));
-  assert.match(source, /kill -0 "\$pid"/u);
-  assert.match(source, /electron_pid=\$\(listener_pid "\$CDP_PORT"\)/u);
-  assert.match(source, /runtime_pid=\$\(listener_pid "\$LOCAL_UI_PORT"\)/u);
-  assert.match(source, /wait_for_owned_exit 30/u);
-  assert.match(source, /owned_pid_active "\$pid" && kill -KILL/u);
-  assert.match(source, /PIDS_RELEASED=false/u);
-  assert.match(source, /cleanup:JSON\.parse\(f\.readFileSync\(p\.join\(root,"cleanup\.json"\)\)\)/u);
-  assert.doesNotMatch(source, /"pids_released":true/u);
+test('Desktop smoke delegates owned cleanup to the development launcher', async () => {
+  const source = await import('node:fs/promises').then((fs) => fs.readFile(new URL('./smoke_desktop_plugins.sh', import.meta.url), 'utf8'));
+  const stop = source.slice(source.indexOf('stop_owned()'), source.indexOf('cleanup() {', source.indexOf('stop_owned()')));
+  assert.ok(stop.includes('desktop_test_session.mjs'));
+  assert.ok(stop.includes('dev_desktop.sh'));
+  assert.ok(stop.includes('--stop-only'));
+  assert.ok(!stop.includes('listener_pid'));
+  assert.ok(!stop.includes('kill -'));
+  assert.ok(source.includes('PIDS_RELEASED=false'));
+  assert.ok(source.includes('cleanup:JSON.parse'));
 });
 
 test('Desktop smoke uninstalls the I/O plugin after cold restart acceptance', async () => {

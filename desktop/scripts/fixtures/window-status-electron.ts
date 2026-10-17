@@ -129,7 +129,7 @@ void app.whenReady().then(async () => {
         }
       }
     }
-    await writeFile(path.join(output, 'report.json'), JSON.stringify({ status: 'passed', electron: process.versions.electron, serviceURL, serviceRequests, cases }, null, 2));
+    await writeFile(path.join(output, 'report.json'), JSON.stringify({ status: 'running', scenarioStatus: 'passed', electron: process.versions.electron, serviceURL, serviceRequests, cases }, null, 2));
     console.log(`Window status Electron: ${cases.length} document/theme/locale/viewport cases passed`);
     await new Promise<void>((resolve) => server.close(() => resolve()));
     window.destroy(); app.exit(0);

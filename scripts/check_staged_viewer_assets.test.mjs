@@ -34,6 +34,7 @@ function fixture(t) {
   git('config', 'user.email', 'viewer-hook@invalid.example');
   git('config', 'core.hooksPath', '/dev/null');
   write('.githooks/pre-commit', fs.readFileSync(path.join(sourceRoot, 'scripts/local_gate_commit_checks.sh')));
+  write('scripts/desktop_test_session_policy.test.mjs', '');
   write(checker, fs.readFileSync(path.join(sourceRoot, checker)));
   for (const script of ['check_staged_third_party_notices.mjs', 'check_readme_localizations.mjs']) write(`scripts/${script}`, '');
   write('scripts/open_source_hygiene_check.sh', '#!/bin/sh\nexit 0\n');

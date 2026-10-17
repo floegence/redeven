@@ -38,7 +38,7 @@ void app.whenReady().then(async () => {
       return document.querySelector('.redeven-split-action-primary button').getAttribute('aria-expanded');
     })()`);
     assert.equal(expanded, 'true');
-    await writeFile(path.join(output, 'report.json'), JSON.stringify({ status: 'passed', url, electron: process.versions.electron, cases }, null, 2));
+    await writeFile(path.join(output, 'report.json'), JSON.stringify({ status: 'running', scenarioStatus: 'passed', url, electron: process.versions.electron, cases }, null, 2));
     window.destroy(); app.exit(0);
   } catch (error) {
     await writeFile(path.join(output, 'report.json'), JSON.stringify({ status: 'failed', cases, error: String(error) }, null, 2));

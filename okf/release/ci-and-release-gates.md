@@ -71,10 +71,12 @@ remote handshake, rejects merge commits in the unpublished range, and invokes
 `scripts/check_final_integration.sh` with the exact base and tip. Evidence from
 an earlier commit or pre-rebase tip does not transfer.
 
-The final script requires a clean worktree and runs the repository contracts,
-generated assets, ReDevPlugin/Gateway/Flower integration, UI/Desktop checks,
-Docker Runtime E2E, OKF, serial uncached Go tests, and golangci-lint. Any
-generator that changes the tree fails the gate.
+The final script requires a clean worktree and runs bounded source, dependency,
+release-manifest, compatibility, focused changed-package, and OKF contracts.
+Any generator that changes the tree fails the gate. Full Desktop, browser,
+Docker, stress, and performance suites belong to explicit qualification only.
+The [Desktop qualification lifecycle](../desktop/desktop-test-lifecycle.md) owns
+test teardown and final cleanup evidence.
 
 `go.mod` is the single authoritative Go toolchain version and currently pins
 Go 1.27.2. Every GitHub Actions `setup-go` step resolves that file through
@@ -109,9 +111,10 @@ verify it with `--check` before integration.
 Shipped Redeven Runtime binaries use cgo plus the `floeterm_native` tag so the
 published terminal-go Ghostty engine is present. The release matrix builds
 Linux amd64/arm64 and Darwin amd64/arm64 on matching native runners and never
-cross-builds a Darwin Runtime from Linux. The exact-main gate runs the full Go
-suite and golangci-lint with that tag, then separately proves that an untagged
-terminal live attachment fails closed rather than acting as a product fallback.
+cross-builds a Darwin Runtime from Linux. The exact-main gate checks the native
+build contract and focused changed
+packages; full native regression belongs to qualification. An untagged terminal
+live attachment must fail closed rather than act as a product fallback.
 A source-only contract test guards release, Desktop bundle, SSH source-build,
 and semantic carrier commands against reverting to `CGO_ENABLED=0` or omitting
 the native tag.

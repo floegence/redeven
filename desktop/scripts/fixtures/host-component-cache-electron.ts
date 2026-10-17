@@ -60,7 +60,7 @@ async function run() {
     }
     await request({ action: 'cancel' });
     evidence.push({ endpoint, phase, index, plan, bundle_bytes: bundle.size, final_progress: last, stages: [...new Set(progress.map(value => value.phase))] });
-    console.log(`PASS ${phase} receiver ${index}: download=${last.downloaded_bytes}, cache=${last.cached_bytes}, ZIP=${bundle.size}`);
+    console.log(`Assertions complete: ${phase} receiver ${index}: download=${last.downloaded_bytes}, cache=${last.cached_bytes}, ZIP=${bundle.size}`);
   }
   await fs.writeFile(path.join(directory, `${phase}.json`), JSON.stringify(evidence, null, 2));
   window.destroy(); app.quit();

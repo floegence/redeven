@@ -25,7 +25,7 @@ async function run() {
     assert.equal(JSON.parse(restored).applications[0].icon, 'data:image/png;base64,fixture');
     const entries = await window.webContents.executeJavaScript(`window.redevenDesktopResourceCache.list()`);
     assert.equal(entries.length, 1);
-    console.log('PASS: asynchronous production preload and disk snapshots survive Electron restart.');
+    console.log('Assertions complete: asynchronous production preload and disk snapshots survive Electron restart.');
   }
   window.destroy();
   app.quit();
