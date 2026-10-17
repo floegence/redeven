@@ -63,6 +63,7 @@ console.log(process.env.REDEVEN_NOTICE_TEST_WRONG_VERSION === '1' ? 'go1.27.1' :
   if (fs.existsSync(checker)) write('scripts/check_staged_third_party_notices.mjs', fs.readFileSync(checker));
   write('scripts/check_go_version_consistency.mjs', fs.readFileSync(path.join(sourceRoot, 'scripts/check_go_version_consistency.mjs')));
   write('scripts/check_readme_localizations.mjs', '');
+  write('scripts/check_staged_viewer_assets.mjs', '');
   write('scripts/open_source_hygiene_check.sh', '#!/bin/sh\nexit 0\n');
   fs.chmodSync(path.join(root, 'scripts/open_source_hygiene_check.sh'), 0o755);
   write('scripts/generate_third_party_notices.mjs', `

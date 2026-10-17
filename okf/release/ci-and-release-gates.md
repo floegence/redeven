@@ -216,6 +216,14 @@ contracts, and `okf/dist/okf_bundle.json`, manifest, and checksum are generated
 and committed together. Embedded Env App and Code App assets are built before
 Go tests that import their embed packages.
 
+Viewer catalogs, input assets, icons, and Desktop standalone styles have one
+generator: `internal/envapp/ui_src/scripts/buildHostApplicationAppearance.mjs`.
+Commit checks verify its outputs against the staged tree when catalog sources,
+published UI dependencies, or generated viewer assets change. They use installed
+locked dependencies without installing, regenerating, or staging files. Run the
+generator from the repository root and stage matching sources and outputs before
+committing. Env App builds continue to verify committed assets with `--check`.
+
 
 ## Focused release contracts
 

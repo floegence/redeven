@@ -7,6 +7,14 @@ import { builtInShellThemePresets, BUILT_IN_SHELL_THEME_DEFAULTS } from '@floege
 
 const root = path.resolve(import.meta.dirname, '..');
 const output = path.resolve(root, '../../codeapp/appserver/host_application_viewer');
+const repositoryRoot = path.resolve(root, '../../..');
+function emitArtifact(target, content) {
+  if (process.argv.includes('--check')) {
+    if (readFileSync(target, 'utf8') !== content) {
+      throw new Error(`${path.relative(repositoryRoot, target)} is stale; from the repository root, run node internal/envapp/ui_src/scripts/buildHostApplicationAppearance.mjs and stage the generated files`);
+    }
+  } else writeFileSync(target, content);
+}
 const require = createRequire(import.meta.url);
 const source = await build({
   stdin: { contents: `export { enUS } from './src/ui/i18n/locales/en-US'; export { hostApplicationCopyKeys, hostApplicationLaunchFailures } from './src/ui/services/hostApplicationPresentation'; export { SUPPORTED_LOCALES } from './src/ui/i18n/localeMeta';`, resolveDir: root, loader: 'ts' },
@@ -43,19 +51,14 @@ const artifacts = {
   'catalog.generated.js': `// Generated from explicit Env App catalogs and published Floe presets.\nconst hostApplicationCatalog = ${JSON.stringify(catalog).replaceAll('<', '\\u003c')};\n`,
 };
 for (const [file, content] of Object.entries(artifacts)) {
-  const target = path.join(output, file);
-  if (process.argv.includes('--check')) {
-    if (readFileSync(target, 'utf8') !== content) throw new Error(`${file} is stale; run node scripts/buildHostApplicationAppearance.mjs`);
-  } else writeFileSync(target, content);
+  emitArtifact(path.join(output, file), content);
 }
 
 // Both Node and browser launchers create trusted, scriptless documents. Keep
 // their scale and focus rules sourced from the same published standalone asset.
 const standaloneTarget = path.resolve(root, '../../..', 'desktop/src/shared/floeStandaloneStyles.generated.ts');
 const standaloneSource = `// Generated from published Floe standalone.css; run internal/envapp/ui_src/scripts/buildHostApplicationAppearance.mjs.\nexport const floeStandaloneStyleText = ${JSON.stringify(style.outputFiles[0].text)};\n`;
-if (process.argv.includes('--check')) {
-  if (readFileSync(standaloneTarget, 'utf8') !== standaloneSource) throw new Error('floeStandaloneStyles.generated.ts is stale');
-} else writeFileSync(standaloneTarget, standaloneSource);
+emitArtifact(standaloneTarget, standaloneSource);
 
 // Desktop and application viewers share the published input assets; each keeps
 // its own explicit product catalog.
@@ -66,9 +69,7 @@ const desktopLocales = Object.fromEntries(SUPPORTED_LOCALES.map(locale => {
 }));
 const desktopCatalogTarget = path.resolve(output, '../remote_desktop_viewer/catalog.generated.js');
 const desktopCatalogSource = `// Generated from explicit Env App catalogs; run buildHostApplicationAppearance.mjs.\nwindow.remoteDesktopCatalog = ${JSON.stringify(desktopLocales).replaceAll('<', '\\u003c')};\n`;
-if (process.argv.includes('--check')) {
-  if (readFileSync(desktopCatalogTarget, 'utf8') !== desktopCatalogSource) throw new Error('Desktop catalog is stale');
-} else writeFileSync(desktopCatalogTarget, desktopCatalogSource);
+emitArtifact(desktopCatalogTarget, desktopCatalogSource);
 
 const desktopIcons = await build({
   stdin: { contents: `import {render} from 'solid-js/web'; import {createComponent} from 'solid-js';
@@ -82,6 +83,4 @@ const desktopIcons = await build({
 });
 const desktopIconsTarget = path.resolve(output, '../remote_desktop_viewer/icons.generated.js');
 const desktopIconsSource = `// Generated from published Floe icons; run buildHostApplicationAppearance.mjs.\n${desktopIcons.outputFiles[0].text}`;
-if (process.argv.includes('--check')) {
-  if (readFileSync(desktopIconsTarget, 'utf8') !== desktopIconsSource) throw new Error('Desktop icons are stale');
-} else writeFileSync(desktopIconsTarget, desktopIconsSource);
+emitArtifact(desktopIconsTarget, desktopIconsSource);
