@@ -2071,6 +2071,17 @@ describe('buildEnvironmentCardModel', () => {
     expect(actionModel.action_presentation.primary_action_overlay).toMatchObject({
       kind: 'popover',
       title: 'Runtime restart required',
+      actions: expect.arrayContaining([expect.objectContaining({ label: 'Restart…' })]),
+    });
+    const nativeModel = buildProviderBackedEnvironmentActionModel({ ...localEntry!,
+      managed_runtime_placement: { kind: 'host_process', runtime_root: '/tmp/redeven-native' },
+    });
+    expect(nativeModel.action_presentation.primary_action_overlay).toMatchObject({
+      actions: expect.arrayContaining([expect.objectContaining({
+        label: 'Restart and open',
+        action: expect.objectContaining({ intent: 'restart_runtime',
+          label_key: 'environmentAction.restartRuntimeAndOpen', continue_open_after_completion: true }),
+      })]),
     });
     expect(actionModel.action_presentation.menu_actions.map((item) => item.id)).not.toContain('initialize_and_open');
   });

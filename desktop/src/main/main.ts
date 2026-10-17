@@ -410,6 +410,7 @@ import {
 import { observeRuntimePlacementBridge } from './runtimePlacementBridgeObservation';
 import {
   RuntimeProcessCommandError,
+  RuntimeProcessIdentityBlockedError,
   desktopRuntimeProcessStopTargetCount,
   requireDesktopRuntimeProcessIdentity,
   type DesktopRuntimeProcessInventory,
@@ -4629,7 +4630,7 @@ async function probeLocalEnvironmentRuntimeHealth(
         health: offlineRuntimeHealth(
           'local_runtime_probe',
           'unverified',
-          'Desktop found a local Runtime process whose core identity cannot be safely verified.',
+          new RuntimeProcessIdentityBlockedError(inventory).message,
         ),
       };
     }
@@ -9444,7 +9445,8 @@ async function failOpeningSession(
   reject?.(error);
   const pending = runtimeRestartWindows.get(sessionRecord.root_window.webContentsID);
   await finalizeSessionClosure(sessionRecord.session_key, { preserveRoot: Boolean(pending), expectedSession: sessionRecord });
-  if (pending) await showRuntimeRestartStatus(pending, 'failed');
+  // The restart restore owner presents its failure after this rejection. A
+  // second navigation here can abort that status document and hide recovery.
 }
 
 async function waitForSessionInitialLoad(
@@ -12954,6 +12956,7 @@ function openConnectionFailureNextActions(
     includeDesktopUpdate?: boolean;
     desktopUpdateAvailable?: boolean;
     retryAction?: DesktopLauncherActionRequest;
+    retryLabelKey?: DesktopTranslationKey;
     failureCode?: DesktopOperationFailurePresentation['code'];
   }> = {},
 ): readonly DesktopLauncherOperationNextAction[] {
@@ -12975,6 +12978,7 @@ function openConnectionFailureNextActions(
       kind: 'retry' as const,
       operation_key: operationKey,
       label: 'Try again',
+      ...(options.retryLabelKey ? { label_key: options.retryLabelKey } : {}),
       retry_action: options.retryAction,
     }] : []),
     {
@@ -14408,7 +14412,15 @@ function finishLocalHostOpenFailure(
   signal: AbortSignal | undefined,
   result: DesktopLauncherActionFailure,
   preferences: DesktopPreferences,
+  restartRequired = localRuntimeMaintenanceByEnvironmentID.get(target.environmentID)?.recovery_action === 'restart_runtime',
 ): DesktopLauncherActionFailure {
+  if (!restartRequired && result.failure && [...runtimeRestartWindows.values()].some(pending =>
+    pending.targetKey === runtimeLifecycleTargetKey(target.hostAccess, target.placement) && pending.detached)) {
+    result = { ...result, failure: { ...result.failure,
+      recovery_hint: createDesktopI18n(desktopLanguageState().getSnapshot().resolved_locale).t('sessionRestart.reopenHint'),
+      recovery_hint_key: 'sessionRestart.reopenHint',
+    } };
+  }
   launcherOperations.finish(operationKey, signal?.aborted ? 'canceled' : 'failed', {
     phase: signal?.aborted ? 'canceled' : 'failed',
     title: signal?.aborted ? 'Open canceled' : 'Open failed',
@@ -14420,9 +14432,13 @@ function finishLocalHostOpenFailure(
       }),
       failureCode: result.failure?.code,
       desktopUpdateAvailable: desktopUpdateHandoffAvailable(preferences, target.environmentID),
+      retryLabelKey: restartRequired
+        ? 'environmentAction.restartRuntimeAndOpen' : 'sessionRestart.reopen',
       retryAction: {
         kind: 'open_local_environment',
         environment_id: target.environmentID,
+        ...(restartRequired
+          ? { runtime_recovery: 'restart' as const } : {}),
         route: 'local_host',
         runtime_target_id: target.targetID,
         host_access: target.hostAccess,
@@ -14443,6 +14459,7 @@ async function openLocalEnvironmentRecord(
   environment: DesktopLocalEnvironmentState,
   options: Readonly<{
     stealAppFocus?: boolean;
+    runtimeRecovery?: 'restart';
   }> = {},
 ): Promise<DesktopLauncherActionResult> {
   const recoveryBlock = await reinstallRecoveryBlockForEnvironment(environment.id, environment.label);
@@ -14452,14 +14469,6 @@ async function openLocalEnvironmentRecord(
   const target = buildLocalEnvironmentDesktopTarget(environment, {
     route: 'local_host',
   });
-  const existingSession = liveSession(target.session_key);
-  if (existingSession && sessionTransportRecoveryFailed(existingSession)) {
-    const openTarget = localHostOpenTarget(environment);
-    return runEnvironmentRuntimeLifecycleFromLauncher({
-      kind: 'restart_environment_runtime', environment_id: environment.id, label: environment.label,
-      runtime_target_id: openTarget.targetID, host_access: openTarget.hostAccess, placement: openTarget.placement,
-    });
-  }
   const operationKey = `${localHostOpenTarget(environment).targetID}:open`;
   const lifecycleTargetKey = localHostRuntimeLifecycleTargetKey(environment);
   try {
@@ -14468,6 +14477,7 @@ async function openLocalEnvironmentRecord(
       fingerprint: runtimeLifecycleFingerprint({
         operation: 'open',
         target: lifecycleTargetKey,
+        runtime_recovery: options.runtimeRecovery,
       }),
       operation_key: operationKey,
       execute: () => openLocalEnvironmentRecordWithLifecycleOwner(preferences, environment, target, operationKey, options),
@@ -14492,10 +14502,10 @@ async function openLocalEnvironmentRecordWithLifecycleOwner(
   environment: DesktopLocalEnvironmentState,
   target: DesktopSessionTarget,
   operationKey: string,
-  options: Readonly<{ stealAppFocus?: boolean }>,
+  options: Readonly<{ stealAppFocus?: boolean; runtimeRecovery?: 'restart' }>,
 ): Promise<DesktopLauncherActionResult> {
   const existingSession = liveSession(target.session_key);
-  if (existingSession) {
+  if (existingSession && !sessionTransportRecoveryFailed(existingSession) && options.runtimeRecovery !== 'restart') {
     if (existingSession.lifecycle === 'opening') {
       return launcherActionFailureForOpeningSession(existingSession, {
         environmentID: environment.id,
@@ -14557,8 +14567,19 @@ async function openLocalEnvironmentRecordWithLifecycleOwner(
   let runtimeRecord: LocalEnvironmentRuntimeRecord | null = null;
   let coordinatedRuntimeRecord: LocalEnvironmentRuntimeRecord | null = null;
   let sessionRecord: DesktopSessionRecord | null = null;
+  let restarted = false;
+  let restoringWorkspace = false;
 
   try {
+    // A restored Runtime retains its saved workspace when only window restoration fails.
+    if (options.runtimeRecovery !== 'restart') {
+      for (const pending of runtimeRestartWindows.values()) {
+        if (pending.targetKey === localHostRuntimeLifecycleTargetKey(environment) && pending.detached) {
+          restoringWorkspace = true;
+          await restoreRuntimeRestartWindow(pending, signal ?? new AbortController().signal);
+        }
+      }
+    }
     for (;;) {
       updateOpenConnectionOperation(operationKey, {
         hostAccess: openTarget.hostAccess,
@@ -14576,15 +14597,18 @@ async function openLocalEnvironmentRecordWithLifecycleOwner(
         coordinatedRuntimeRecord = null;
       } else {
         await refreshWelcomeRuntimeHealthForEnvironment(environment.id);
-        runtimeRecord = await attachLocalEnvironmentRuntime(environment);
+        runtimeRecord = localRuntimeMaintenanceByEnvironmentID.get(environment.id)?.recovery_action === 'restart_runtime'
+          ? null : await attachLocalEnvironmentRuntime(environment);
       }
       let preflightFailure = !runtimeRecord
         ? launcherActionFailureForRuntimeHealthPreflight(localRuntimeHealthForOpenPreflight(environment.id), {
             environmentID: environment.id,
             targetLabel: environment.label,
+            maintenance: localRuntimeMaintenanceByEnvironmentID.get(environment.id),
           })
         : null;
-      let requiredOperation: ManagedRuntimeLifecycleOperation | undefined;
+      let requiredOperation: ManagedRuntimeLifecycleOperation | undefined =
+        localRuntimeMaintenanceByEnvironmentID.get(environment.id)?.recovery_action === 'restart_runtime' ? 'restart' : undefined;
       if (runtimeRecord) {
         const runtimePlan = buildDesktopLocalRuntimeOpenPlan({ kind: 'local_environment' }, runtimeRecord.startup);
         if (runtimePlan.requires_restart || !runtimePlan.can_open) {
@@ -14628,8 +14652,21 @@ async function openLocalEnvironmentRecordWithLifecycleOwner(
           requiredOperation = 'restart';
         }
       }
+      if (!restarted && requiredOperation !== 'update_runtime'
+        && (options.runtimeRecovery === 'restart' || !restoringWorkspace && existingSession && sessionTransportRecoveryFailed(existingSession))) {
+        requiredOperation = 'restart';
+        preflightFailure ??= launcherActionFailureForRuntimeOpenPreflightMessage(
+          'runtime_not_ready',
+          createDesktopI18n(desktopLanguageState().getSnapshot().resolved_locale).t('runtimeMessage.runtimeRestartRequiredDetail', { subject: environment.label }),
+          { ...failureContext, targetLabel: environment.label },
+        );
+      }
       if (!preflightFailure) {
         break;
+      }
+      // Opening an existing Runtime never grants implicit permission to interrupt it.
+      if (requiredOperation === 'restart' && (options.runtimeRecovery !== 'restart' || restarted)) {
+        return finishLocalHostOpenFailure(operationKey, openTarget, signal, preflightFailure, preferences, true);
       }
 
       const recoveryAttempts = managedEnvironmentOpenRecoveryAttemptsByTargetID.get(openTarget.targetID) ?? 0;
@@ -14657,6 +14694,7 @@ async function openLocalEnvironmentRecordWithLifecycleOwner(
       const retryOpenRequest: Extract<DesktopLauncherActionRequest, { kind: 'open_local_environment' }> = {
         kind: 'open_local_environment',
         environment_id: environment.id,
+        ...(options.runtimeRecovery ? { runtime_recovery: options.runtimeRecovery } : {}),
         route: 'local_host',
         runtime_target_id: openTarget.targetID,
         host_access: openTarget.hostAccess,
@@ -14689,8 +14727,12 @@ async function openLocalEnvironmentRecordWithLifecycleOwner(
           return lifecycleResult;
         }
         managedEnvironmentOpenRecoveryAttemptsByTargetID.delete(openTarget.targetID);
-        return finishLocalHostOpenFailure(operationKey, openTarget, signal, lifecycleResult, preferences);
+        return finishLocalHostOpenFailure(operationKey, openTarget, signal, lifecycleResult, preferences,
+          requiredOperation === 'restart' && ![...runtimeRestartWindows.values()].some(pending =>
+            pending.targetKey === localHostRuntimeLifecycleTargetKey(environment) && pending.detached
+              && currentLocalEnvironmentRuntimeRecord(environment)));
       }
+      if (requiredOperation === 'restart') restarted = true;
       coordinatedRuntimeRecord = currentLocalEnvironmentRuntimeRecord(environment);
     }
     if (!runtimeRecord) {
@@ -14719,16 +14761,18 @@ async function openLocalEnvironmentRecordWithLifecycleOwner(
       title: 'Opening environment',
       detail: 'Desktop is opening the local Env App window.',
     });
-    sessionRecord = await createSessionRecord(target, runtimeRecord.startup, {
+    sessionRecord = liveSession(target.session_key) ?? await createSessionRecord(target, runtimeRecord.startup, {
       runtimeTargetKey: localHostRuntimeLifecycleTargetKey(environment),
       runtimeHandle: runtimeRecord.runtime_handle,
       attached: runtimeRecord.runtime_handle.launch_mode === 'attached',
       stealAppFocus: options.stealAppFocus !== false,
     });
     await waitForSessionInitialLoad(sessionRecord);
+    focusEnvironmentSession(sessionRecord.session_key, { stealAppFocus: options.stealAppFocus !== false });
   } catch (error) {
     const result = launcherActionFailureFromSessionOpenError(error, failureContext);
-    return finishLocalHostOpenFailure(operationKey, openTarget, signal, result, preferences);
+    return finishLocalHostOpenFailure(operationKey, openTarget, signal, result, preferences,
+      !restoringWorkspace && !restarted && localRuntimeMaintenanceByEnvironmentID.get(environment.id)?.recovery_action === 'restart_runtime');
   }
   resetLauncherIssueState();
   managedEnvironmentOpenRecoveryAttemptsByTargetID.delete(openTarget.targetID);
@@ -15127,6 +15171,7 @@ async function openLocalEnvironmentFromLauncher(
   }
   return openLocalEnvironmentRecord(preferences, environment, {
     stealAppFocus: true,
+    runtimeRecovery: request.runtime_recovery,
   });
 }
 

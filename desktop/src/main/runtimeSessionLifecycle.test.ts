@@ -5,6 +5,11 @@ import { RuntimeSessionHandoff, runtimeSessionMatchesTarget } from './runtimeSes
 import { testProviderBoundLocalEnvironment } from '../testSupport/desktopTestHelpers';
 
 describe('managed Runtime session lifecycle', () => {
+  it('matches the same data directory across different installation roots', () => {
+    const key = runtimeLifecycleTargetKey({ kind: 'local_host' }, { kind: 'host_process', runtime_root: '/tmp/install-a', runtime_state_root: '/tmp/shared-state' });
+    const alias = runtimeLifecycleTargetKey({ kind: 'local_host' }, { kind: 'host_process', runtime_root: '/tmp/install-b', runtime_state_root: '/tmp/shared-state' });
+    expect(runtimeSessionMatchesTarget({ runtime_target_key: key }, alias)).toBe(true);
+  });
   it('matches the physical Local Runtime even when Cloud binding changes the window key', () => {
     const environment = testProviderBoundLocalEnvironment('https://redeven.test', 'env_demo');
     const target = buildLocalEnvironmentDesktopTarget(environment, { route: 'local_host' });
@@ -34,6 +39,19 @@ describe('managed Runtime session lifecycle', () => {
 
 describe('RuntimeSessionHandoff', () => {
   const state = { v: 1 as const, json: '{"draft":"unsent"}', files: [] };
+
+  it('retains unsent state when a failed destination is replaced by a reopen', async () => {
+    const handoff = new RuntimeSessionHandoff('source');
+    const prepared = handoff.prepare(() => undefined, new AbortController().signal);
+    expect(handoff.submit('source', handoff.ticket, state)).toBe(true);
+    await prepared;
+    handoff.bind('failed-destination');
+    handoff.bind('reopened-destination');
+    expect(handoff.read('failed-destination')).toBeNull();
+    expect(handoff.restored('failed-destination', handoff.ticket)).toBe(false);
+    expect(handoff.read('reopened-destination')?.state).toEqual(state);
+    expect(handoff.restored('reopened-destination', handoff.ticket)).toBe(true);
+  });
 
   it('transfers state only between the source and an acknowledged new document', async () => {
     const handoff = new RuntimeSessionHandoff('old');

@@ -1688,7 +1688,8 @@ function blockedRuntimePrimaryActionGuidanceActions(
         : primarySource.action.label;
     }
     if (primarySource.action.intent === 'restart_runtime') {
-      return 'Restart…';
+      return environment.kind === 'local_environment' && environment.managed_runtime_placement?.kind !== 'container_process'
+        ? 'Restart and open' : 'Restart…';
     }
     if (primarySource.action.intent === 'start_runtime') {
       return 'Start';
@@ -1703,6 +1704,9 @@ function blockedRuntimePrimaryActionGuidanceActions(
           action: {
             ...primarySource.action,
             label: primaryLabel,
+            ...(primarySource.action.intent === 'restart_runtime' && environment.kind === 'local_environment'
+              && environment.managed_runtime_placement?.kind !== 'container_process'
+              ? { label_key: 'environmentAction.restartRuntimeAndOpen' as const } : {}),
             ...(primarySource.action.intent === 'update_runtime' || primarySource.action.intent === 'restart_runtime' || primarySource.action.intent === 'start_runtime'
               ? { continue_open_after_completion: true }
               : {}),

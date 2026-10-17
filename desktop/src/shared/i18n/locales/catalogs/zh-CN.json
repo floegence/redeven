@@ -13,6 +13,7 @@
     "failed": "工作区无法重新连接",
     "detail": "工作区和未发送的草稿已保留。",
     "reopen": "重新打开环境",
+    "reopenHint": "重新打开环境，以重试连接并恢复已保留的工作区。",
     "connectionCenter": "连接中心"
   },
   "accessFlow": {
@@ -2669,6 +2670,7 @@
     "startRuntime": "启动",
     "stopRuntime": "停止",
     "restartRuntime": "重启",
+    "restartRuntimeAndOpen": "重启并打开",
     "updateRuntime": "更新",
     "updateRuntimeAndOpen": "更新并打开",
     "updateAndRestart": "更新并重启...",
@@ -3311,6 +3313,7 @@
     "openViaDesktop": "通过 Desktop 的“{action}”进入此环境。",
     "loopbackHelp": "此回环地址属于 {host} 自身。不同主机可以使用相同端口；它不是此设备访问该环境的浏览器入口。",
     "interfaceScanFailed": "无法读取网络地址。网络恢复后将自动更新。",
+    "defaultPortInUse": "默认本机端口已被占用。此运行时正在使用此处显示的可用地址。",
     "boundAddressUnavailable": "绑定的 IP 地址已不可用。请在访问设置中修改监听地址，并重启运行时。",
     "certificateHostsNotCovered": "HTTPS 证书未覆盖部分当前网络地址。请更新证书后再使用这些地址。",
     "certificateRefreshFailed": "无法刷新 HTTPS 证书。目前仅提供现有证书覆盖的地址，运行时将自动重试。"

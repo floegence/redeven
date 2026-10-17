@@ -753,7 +753,7 @@ async function verifyManagedLocalRuntimeProcessIdentity(args: Readonly<{
   const expectedRuntimeRoot = String(args.runtimeRoot ?? '').trim();
   const issues = [
     ...(inventory.summary.blocked > 0 ? [`blocked=${inventory.summary.blocked}`] : []),
-    ...(!desktopRuntimeProcessInventoryHasSingleUsable(inventory) ? ['current_layout=invalid'] : []),
+    ...(!desktopRuntimeProcessInventoryHasSingleUsable(inventory) ? ['process_identity=invalid'] : []),
     ...(inventory.instances.length !== 1 ? [`instances=${inventory.instances.length}`] : []),
     ...(!instance ? ['instance=missing'] : []),
     ...(instance && instance.pid !== args.startup.pid ? [`pid=${instance.pid}, expected=${args.startup.pid}`] : []),
@@ -762,7 +762,7 @@ async function verifyManagedLocalRuntimeProcessIdentity(args: Readonly<{
       ? [`runtime_root=${inventory.scope.runtime_root}, expected=${expectedRuntimeRoot}`]
       : []),
     ...(instance && instance.namespace_id !== inventory.scope.namespace_id ? ['namespace=mismatch'] : []),
-    ...(instance && expectedVersion !== '' && String(instance.runtime_version ?? '').trim() !== expectedVersion
+    ...(instance && expectedVersion !== '' && (args.runtimeProcessIntent !== 'start' || instance.runtime_version) && String(instance.runtime_version ?? '').trim() !== expectedVersion
       ? [`version=${instance.runtime_version ?? 'missing'}, expected=${expectedVersion}`]
       : []),
   ];
@@ -1250,6 +1250,9 @@ export async function attachManagedRuntimeFromStatus(args: Readonly<{
   // still running; otherwise this may resurrect a dead bridge from an old run.
   if (stateRoot && (!inventory || inventory.instances.length === 0)) {
     return null;
+  }
+  if (inventory && (!desktopRuntimeProcessInventoryHasSingleUsable(inventory) || inventory.instances[0]?.pid !== startup.pid)) {
+    throw new Error('The local Runtime status does not match its verified process identity. Refresh the environment and try again.');
   }
   return {
     child: null,

@@ -16,6 +16,14 @@ import {
 } from '../testSupport/desktopTestHelpers';
 
 describe('desktopLaunch', () => {
+  it('only enables port fallback for the native default without an explicit override', () => {
+    const environment = testLocalEnvironment({ access: testLocalAccess({ local_ui_bind: 'localhost:23998' }) });
+    expect(buildDesktopRuntimeArgs(environment)).toContain('--local-ui-default-port-fallback');
+    expect(buildDesktopRuntimeArgs(environment, { localUIBind: 'localhost:23998' })).not.toContain('--local-ui-default-port-fallback');
+    expect(buildDesktopRuntimeArgs(environment, { localUIBind: 'localhost:24000' })).not.toContain('--local-ui-default-port-fallback');
+    const custom = testLocalEnvironment({ access: testLocalAccess({ local_ui_bind: 'localhost:24000' }) });
+    expect(buildDesktopRuntimeArgs(custom)).not.toContain('--local-ui-default-port-fallback');
+  });
   it('auto-starts the local runtime unless an isolated test explicitly disables startup', () => {
     expect(desktopAutoStartRuntimeEnabled()).toBe(true);
     expect(desktopAutoStartRuntimeEnabled('1')).toBe(true);

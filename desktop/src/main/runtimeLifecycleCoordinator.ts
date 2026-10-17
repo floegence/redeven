@@ -1,6 +1,7 @@
 import path from 'node:path';
+import { realpathSync } from 'node:fs';
 
-import { type DesktopRuntimeHostAccess, type DesktopRuntimePlacement } from '../shared/desktopRuntimePlacement';
+import { desktopRuntimePlacementStateRoot, type DesktopRuntimeHostAccess, type DesktopRuntimePlacement } from '../shared/desktopRuntimePlacement';
 import { desktopSSHAuthority } from '../shared/desktopSSH';
 
 export type RuntimeLifecycleIntent = 'open' | 'start' | 'stop' | 'restart' | 'update' | 'refresh' | 'reinstall';
@@ -61,7 +62,13 @@ function normalizedTargetRoot(
 ): string {
   const targetRoot = required(rootValue, 'Runtime target root');
   if (hostAccess.kind === 'local_host' && placement.kind === 'host_process') {
-    return path.resolve(targetRoot);
+    const absolute = path.resolve(targetRoot);
+    try { return realpathSync.native(absolute); } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      const parent = path.dirname(absolute);
+      if (parent === absolute) return absolute;
+      return path.join(normalizedTargetRoot(hostAccess, placement, parent), path.basename(absolute));
+    }
   }
   const normalized = path.posix.normalize(targetRoot);
   const isResolvedDefaultRemoteRoot =
@@ -85,7 +92,9 @@ export function runtimeLifecycleTargetKey(
   hostAccess: DesktopRuntimeHostAccess,
   placement: DesktopRuntimePlacement,
 ): string {
-  const runtimeRoot = normalizedTargetRoot(hostAccess, placement, placement.runtime_root);
+  const runtimeRoot = normalizedTargetRoot(hostAccess, placement,
+    hostAccess.kind === 'local_host' && placement.kind === 'host_process'
+      ? desktopRuntimePlacementStateRoot(placement) : placement.runtime_root);
   if (hostAccess.kind === 'local_host') {
     if (placement.kind === 'host_process') {
       return targetKey(['local_host', 'host_process', runtimeRoot]);

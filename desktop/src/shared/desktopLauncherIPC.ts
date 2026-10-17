@@ -698,6 +698,7 @@ export type DesktopLauncherActionRequest = Readonly<
       kind: 'open_local_environment';
       environment_id: string;
       route?: 'auto' | DesktopLocalEnvironmentStateRoute;
+      runtime_recovery?: 'restart';
     } & DesktopLauncherRuntimeTarget
   | {
       kind: 'open_provider_environment';
@@ -1283,10 +1284,13 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
       if (environmentID === '') {
         return null;
       }
+      const recovery = (candidate as { runtime_recovery?: unknown }).runtime_recovery;
+      if (recovery !== undefined && recovery !== 'restart') return null;
       const target = normalizeDesktopLauncherRuntimeTarget(candidate as Record<string, unknown>);
       return {
         kind,
         environment_id: environmentID,
+        ...(recovery === 'restart' ? { runtime_recovery: recovery } : {}),
         ...(target ?? {}),
         route: (() => {
           const route = compact((candidate as { route?: unknown }).route);

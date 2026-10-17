@@ -336,6 +336,7 @@ describe('desktopWelcomeRuntimeState', () => {
           data: {
             local_ui_url: `http://${request.headers.host}/`,
             local_ui_urls: [`http://${request.headers.host}/`],
+            local_ui_address_issues: [{ code: 'default_port_in_use' }],
             status: 'online',
             password_required: false,
             exposure: loopbackExposure,
@@ -396,6 +397,7 @@ describe('desktopWelcomeRuntimeState', () => {
           status: 'ready',
           local_ui_url: `http://127.0.0.1:${address.port}/`,
           local_ui_urls: [`http://127.0.0.1:${address.port}/`],
+          local_ui_address_issues: [{ code: 'default_port_in_use' }],
           local_ui_bridge_url: `http://127.0.0.1:${address.port}/`,
           local_ui_bridge_token: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
           exposure: loopbackExposure,
@@ -439,6 +441,7 @@ describe('desktopWelcomeRuntimeState', () => {
 
       expect(hydrated.local_environment.local_hosting.current_runtime).toMatchObject({
         local_ui_url: `http://127.0.0.1:${address.port}/`,
+        local_ui_address_issues: [{ code: 'default_port_in_use' }],
         effective_run_mode: 'desktop',
         remote_enabled: true,
         password_required: false,

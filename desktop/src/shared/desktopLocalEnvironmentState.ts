@@ -5,6 +5,7 @@ import type { DesktopCloudEnvironmentRecord } from './desktopCloudEnvironment';
 import { normalizeRuntimeServiceSnapshot, type RuntimeServiceSnapshot } from './runtimeService';
 import type { DesktopRuntimeControlEndpoint } from './runtimeControl';
 import type { LocalUIExposure } from './localUIExposure';
+import { parseLocalUIAddressIssues, type LocalUIAddressIssue } from './localUIAddressIssues';
 import { normalizeDesktopRuntimeLinuxDistribution, normalizeDesktopRuntimePlatform, type DesktopRuntimePlatform } from './desktopRuntimePlatform';
 
 export type DesktopLocalEnvironmentAccess = Readonly<{
@@ -19,6 +20,7 @@ export type DesktopLocalEnvironmentPreferredOpenRoute = 'auto' | 'local_host' | 
 export type DesktopLocalEnvironmentRuntimeState = Readonly<{
   local_ui_url: string;
   local_ui_urls?: readonly string[];
+  local_ui_address_issues?: readonly LocalUIAddressIssue[];
   effective_run_mode: string;
   remote_enabled: boolean;
   access_point_origin?: string;
@@ -124,6 +126,7 @@ function normalizeRuntimeState(
   return {
     local_ui_url: localUIURL,
     local_ui_urls: value.local_ui_urls?.map(compact).filter(Boolean),
+    local_ui_address_issues: parseLocalUIAddressIssues(value.local_ui_address_issues),
     effective_run_mode: compact(value.effective_run_mode),
     remote_enabled: value.remote_enabled === true,
     access_point_origin: compact(value.access_point_origin) || undefined,

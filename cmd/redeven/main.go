@@ -272,6 +272,7 @@ func (c *cli) runCmd(args []string) int {
 	modeRaw := fs.String("mode", string(defaultRunMode), "Run mode: remote|hybrid|local|desktop")
 	localUIBindRaw := fs.String("local-ui-bind", "", "Local UI bind address (saved configuration or localhost:23998)")
 	localUIBindOverride := fs.String("local-ui-bind-override", "", "One-start Local UI bind override; does not change saved access settings")
+	localUIDefaultPortFallback := fs.Bool("local-ui-default-port-fallback", false, "Allow Desktop to use a free loopback port when localhost:23998 is occupied")
 	localUIProtocolRaw := fs.String("local-ui-protocol", "", "Local UI connection security: http|https (default: saved protocol or http)")
 	passwordPrompt := fs.Bool("password-prompt", false, "Prompt for the Local UI access password without echo")
 	passwordStdin := fs.Bool("password-stdin", false, "Read the access password from stdin")
@@ -887,6 +888,8 @@ func (c *cli) runCmd(args []string) int {
 		srv, err := localui.New(localui.Options{
 			Logger:                   localUILogger,
 			Bind:                     localUIBind,
+			ConfiguredBind:           configuredLocalUIBind,
+			AllowDefaultPortFallback: *localUIDefaultPortFallback && mode == runModeDesktop && strings.TrimSpace(*localUIBindOverride) == "",
 			DisableSelfUpgrade:       mode == runModeDesktop,
 			Protocol:                 localUIProtocol,
 			EffectiveRunMode:         string(effectiveRunMode),
@@ -949,6 +952,7 @@ func (c *cli) runCmd(args []string) int {
 				RuntimeLinuxDistribution: runtimemanagement.RuntimeLinuxDistribution(),
 				LocalUIURL:               firstNonEmptyString(localUIURLs),
 				LocalUIURLs:              append([]string(nil), localUIURLs...),
+				LocalUIAddressIssues:     srv.LocalUIAddressIssues(),
 				LocalUIBridgeURL:         srv.LocalUIBridgeURLForDesktop(),
 				LocalUIBridgeToken:       srv.LocalUIBridgeTokenForDesktop(),
 				RuntimeControl: func() *runtimeControlEndpoint {

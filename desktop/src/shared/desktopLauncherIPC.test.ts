@@ -31,6 +31,16 @@ const operationSnapshotHasNoLegacyInterruptionFields: [
   : false = true;
 
 describe('desktopLauncherIPC', () => {
+  it('preserves explicit restart recovery through launcher IPC', () => {
+    expect(normalizeDesktopLauncherActionRequest({
+      kind: 'open_local_environment', environment_id: 'local', route: 'local_host', runtime_recovery: 'restart',
+    })).toEqual({
+      kind: 'open_local_environment', environment_id: 'local', route: 'local_host', runtime_recovery: 'restart',
+    });
+    expect(normalizeDesktopLauncherActionRequest({
+      kind: 'open_local_environment', environment_id: 'local', runtime_recovery: 'takeover',
+    })).toBeNull();
+  });
   it('requires an exact Cloud account identity for sign-out and rejects the retired delete action', () => {
     const identity = { cloud_origin: 'https://redeven.test', cloud_id: 'redeven' };
     expect(normalizeDesktopLauncherActionRequest({ kind: 'sign_out_control_plane', ...identity })).toEqual({ kind: 'sign_out_control_plane', ...identity });

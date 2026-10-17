@@ -98,6 +98,7 @@ type runtimeProcessSnapshot struct {
 	ExecutableDevice       uint64
 	ExecutableInode        uint64
 	Args                   []string
+	WorkingDirectory       string
 	InstanceID             string
 	RuntimeVersion         string
 	RuntimeLockVerified    bool
@@ -109,9 +110,12 @@ type runtimeProcessExecutionScope struct {
 }
 
 type runtimeLockMetadata struct {
-	PID            int    `json:"pid"`
-	InstanceID     string `json:"instance_id"`
-	RuntimeVersion string `json:"runtime_version"`
+	PID             int    `json:"pid"`
+	InstanceID      string `json:"instance_id"`
+	RuntimeVersion  string `json:"runtime_version"`
+	StateRoot       string `json:"state_root"`
+	BinaryPath      string `json:"binary_path"`
+	StartedAtUnixMS int64  `json:"started_at_unix_ms"`
 }
 
 func normalizeRuntimeInventoryOptions(options RuntimeProcessInventoryOptions) (RuntimeProcessInventoryOptions, error) {
@@ -131,7 +135,7 @@ func normalizeRuntimeInventoryOptions(options RuntimeProcessInventoryOptions) (R
 	}
 	return RuntimeProcessInventoryOptions{
 		RuntimeRoot:        runtimeRoot,
-		StateRoot:          stateRoot,
+		StateRoot:          comparableRuntimePath(stateRoot),
 		CurrentExecutables: uniqueCleanPaths(options.CurrentExecutables),
 	}, nil
 }
@@ -277,6 +281,7 @@ func loadSystemRuntimeProcessSnapshot(ctx context.Context, candidate *processlib
 	}
 	device, inode := processExecutableIdentity(int(candidate.Pid), executablePath)
 	parentPID, _ := candidate.PpidWithContext(ctx)
+	workingDirectory, _ := candidate.CwdWithContext(ctx)
 	return runtimeProcessSnapshot{
 		PID:                    int(candidate.Pid),
 		ParentPID:              int(parentPID),
@@ -288,6 +293,7 @@ func loadSystemRuntimeProcessSnapshot(ctx context.Context, candidate *processlib
 		ExecutableDevice:       device,
 		ExecutableInode:        inode,
 		Args:                   append([]string(nil), args...),
+		WorkingDirectory:       workingDirectory,
 	}, nil
 }
 
@@ -295,16 +301,27 @@ func runtimeProcessArgs(args []string) bool {
 	return len(args) >= 2 && filepath.Base(strings.TrimSpace(args[0])) == "redeven" && strings.TrimSpace(args[1]) == "run"
 }
 
-func runtimeProcessStateRoot(args []string) string {
+func runtimeProcessStateRoot(args []string, workingDirectory string) string {
+	resolve := func(raw string) string {
+		value := strings.TrimSpace(raw)
+		if value == "" {
+			return ""
+		}
+		if !filepath.IsAbs(value) {
+			if !filepath.IsAbs(workingDirectory) {
+				return ""
+			}
+			value = filepath.Join(workingDirectory, value)
+		}
+		return comparableRuntimePath(value)
+	}
 	for index := 2; index < len(args); index++ {
 		arg := strings.TrimSpace(args[index])
 		if arg == "--state-root" && index+1 < len(args) {
-			clean, _ := absoluteCleanPath(args[index+1])
-			return clean
+			return resolve(args[index+1])
 		}
 		if strings.HasPrefix(arg, "--state-root=") {
-			clean, _ := absoluteCleanPath(strings.TrimPrefix(arg, "--state-root="))
-			return clean
+			return resolve(strings.TrimPrefix(arg, "--state-root="))
 		}
 	}
 	return ""
@@ -334,21 +351,7 @@ func currentManagedExecutable(options RuntimeProcessInventoryOptions, executable
 	return false
 }
 
-func managedRuntimeRootForExecutable(executablePath string) (string, bool) {
-	clean := comparableRuntimePath(executablePath)
-	suffix := filepath.Join("runtime", "managed", "bin", "redeven")
-	marker := string(filepath.Separator) + suffix
-	if !strings.HasSuffix(clean, marker) {
-		return "", false
-	}
-	root := strings.TrimSuffix(clean, marker)
-	if root == "" {
-		return "", false
-	}
-	return filepath.Clean(root), true
-}
-
-func enrichRuntimeProcessSnapshot(snapshot runtimeProcessSnapshot, stateRoot string) runtimeProcessSnapshot {
+func runtimeProcessMetadata(snapshot runtimeProcessSnapshot, stateRoot string) (runtimeLockMetadata, bool) {
 	for _, lockPath := range runtimeLockPaths(stateRoot) {
 		body, err := os.ReadFile(lockPath)
 		if err != nil {
@@ -358,12 +361,18 @@ func enrichRuntimeProcessSnapshot(snapshot runtimeProcessSnapshot, stateRoot str
 		if json.Unmarshal(body, &metadata) != nil || metadata.PID != snapshot.PID {
 			continue
 		}
-		snapshot.InstanceID = strings.TrimSpace(metadata.InstanceID)
-		snapshot.RuntimeVersion = strings.TrimSpace(metadata.RuntimeVersion)
-		snapshot.RuntimeLockVerified = snapshot.InstanceID != "" && snapshot.RuntimeVersion != ""
-		break
+		if metadata.StartedAtUnixMS > 0 && metadata.StartedAtUnixMS < snapshot.ProcessStartedAtUnixMS {
+			continue
+		}
+		if metadata.StateRoot != "" && comparableRuntimePath(metadata.StateRoot) != comparableRuntimePath(stateRoot) {
+			continue
+		}
+		if metadata.BinaryPath != "" && comparableRuntimePath(metadata.BinaryPath) != comparableRuntimePath(snapshot.ExecutablePath) {
+			continue
+		}
+		return metadata, true
 	}
-	return snapshot
+	return runtimeLockMetadata{}, false
 }
 
 func runtimeLockPaths(stateRoot string) []string {
@@ -377,21 +386,28 @@ func classifyRuntimeProcess(
 	scope runtimeProcessExecutionScope,
 	snapshot runtimeProcessSnapshot,
 ) (RuntimeProcessInstance, bool) {
-	stateRoot := runtimeProcessStateRoot(snapshot.Args)
+	stateRoot := runtimeProcessStateRoot(snapshot.Args, snapshot.WorkingDirectory)
+	metadata, hasMetadata := runtimeProcessMetadata(snapshot, options.StateRoot)
+	// Default and environment-selected roots are recorded by Runtime itself.
+	// Never infer another process's root from this helper's environment.
+	if stateRoot == "" && hasMetadata && metadata.StartedAtUnixMS > 0 &&
+		metadata.BinaryPath != "" && filepath.IsAbs(metadata.StateRoot) {
+		stateRoot = comparableRuntimePath(metadata.StateRoot)
+	}
 	if stateRoot == "" || comparableRuntimePath(stateRoot) != comparableRuntimePath(options.StateRoot) {
 		return RuntimeProcessInstance{}, false
 	}
 	if filepath.Base(snapshot.ExecutablePath) != "redeven" {
 		return RuntimeProcessInstance{}, false
 	}
-	if managedRuntimeRoot, managed := managedRuntimeRootForExecutable(snapshot.ExecutablePath); managed &&
-		comparableRuntimePath(managedRuntimeRoot) != comparableRuntimePath(options.RuntimeRoot) {
-		return RuntimeProcessInstance{}, false
-	}
 	if scope.NamespaceID != "" && snapshot.NamespaceID != "" && scope.NamespaceID != snapshot.NamespaceID {
 		return RuntimeProcessInstance{}, false
 	}
-	snapshot = enrichRuntimeProcessSnapshot(snapshot, stateRoot)
+	if hasMetadata {
+		snapshot.InstanceID = strings.TrimSpace(metadata.InstanceID)
+		snapshot.RuntimeVersion = strings.TrimSpace(metadata.RuntimeVersion)
+		snapshot.RuntimeLockVerified = true
+	}
 	reasonCode := "runtime_identity_incomplete"
 	identityComplete := snapshot.PID > 0 &&
 		snapshot.ProcessStartedAtUnixMS > 0 &&
@@ -414,10 +430,6 @@ func classifyRuntimeProcess(
 		layoutStatus = RuntimeProcessLayoutCurrent
 	} else if snapshot.RuntimeLockVerified {
 		layoutStatus = RuntimeProcessLayoutVerifiedAlternate
-	}
-	if layoutStatus == RuntimeProcessLayoutUnknown {
-		identityComplete = false
-		reasonCode = "runtime_layout_untrusted"
 	}
 	identityStatus := RuntimeProcessIdentityIncomplete
 	if identityComplete {

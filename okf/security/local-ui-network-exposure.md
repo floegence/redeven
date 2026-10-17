@@ -3,7 +3,7 @@ type: Security Contract
 title: Local UI network exposure
 description: Local UI separates network scope, password authentication, explicit HTTP or HTTPS, and private Desktop access.
 tags: [security, local-ui, desktop, env-app, flowersec]
-timestamp: 2026-09-30T00:00:00Z
+timestamp: 2026-10-17T00:00:00Z
 ---
 # Summary
 
@@ -17,11 +17,17 @@ Runtime owns a public client endpoint independently of the Desktop that starts i
 
 ## Listener and origin boundary
 
-The public listener accepts only canonical authorities derived from its actual bound addresses. An IPv4 wildcard uses `tcp4` and supplements it with same-port IPv6 loopback; an IPv6 wildcard uses `tcp6` and supplements it with same-port IPv4 loopback. Only an unavailable optional address family may be omitted; an occupied port fails the entire start. Specific IP binds remain exact. One public address policy combines usable same-family network interfaces with `localhost` and the loopback IPs actually served. Network interface enumeration excludes unspecified, multicast, link-local, zoned, mapped, inactive, and duplicate addresses. A wildcard with no usable network interface still serves its local addresses. Network URLs retain their primary order and local aliases follow them. Display URLs, startup reports, Runtime status, health, and access status expose complete actual HTTP or HTTPS URLs rather than wildcard placeholders or saved next-start settings. No current URL exists before successful binding.
+The public listener accepts only canonical authorities derived from its actual bound addresses. An IPv4 wildcard uses `tcp4` and supplements it with same-port IPv6 loopback; an IPv6 wildcard uses `tcp6` and supplements it with same-port IPv4 loopback. Only an unavailable optional address family may be omitted; an occupied fixed port fails the entire start, except for the native Desktop default-port recovery below. Specific IP binds remain exact. One public address policy combines usable same-family network interfaces with `localhost` and the loopback IPs actually served. Network interface enumeration excludes unspecified, multicast, link-local, zoned, mapped, inactive, and duplicate addresses. A wildcard with no usable network interface still serves its local addresses. Network URLs retain their primary order and local aliases follow them. Display URLs, startup reports, Runtime status, health, and access status expose complete actual HTTP or HTTPS URLs rather than wildcard placeholders or saved next-start settings. No current URL exists before successful binding.
 
 Each listener serves the common application handler and `/flowersec/v3/direct` through Flowersec's published server composition API. HTTP explicitly selects `flowersec-http-direct/1`, `IssueHTTPDirect`, and the public HTTPDirect browser connector. HTTPS uses normal `flowersec/3` artifacts and WSS with the CA TLS policy. Both protocols use the same product WebSocket admission callback: the Host must belong to the actual public address set and the Origin must match that request exactly after default-port normalization. Different public aliases cannot authorize each other. HTTPS uses Flowersec `AuthorizeWebSocketRequest` before protocol dispatch, upgrade, and session authorization, and its mutually exclusive dynamic `AcceptorOptions.CheckOrigin` instead of static `AllowedOrigins`. Both callbacks read the current public policy. TLS, current Origin policy, authorization, resource limits, spend transactions, and session ownership remain enforced. Sharing or opening an address never requires a second public port.
 
 Trusted Desktop, SSH, and container traffic can enter through a separate exact numeric-loopback bridge while public clients connect concurrently. Every bridge request requires a fresh 256-bit token carried only by private runtime status, a `0600` launch report, or stdio hello. Desktop injects it only for the exact authorized bridge authority. Bridge addresses and tokens never join public display, clipboard, QR, diagnostics, renderer startup, or exposure projections. Its isolated `flowersec-private-loopback/1` profile is unchanged and cannot authorize public clients.
+
+## Native Desktop default-port recovery
+
+Only native Desktop launches with saved default `localhost:23998` and no explicit one-start bind override opt in through `--local-ui-default-port-fallback`. Runtime first binds the default. Only `EADDRINUSE` permits up to five system-assigned allocation attempts. Each attempt holds its first listener while binding the other supported loopback family to the same port; every rejected attempt closes all of its listeners. Optional unavailable address families retain their existing policy. Other errors, custom ports, numeric loopback overrides, network binds, and wildcard binds never silently select another port. The process occupying the default is never stopped.
+
+The saved bind remains `localhost:23998`, so each new start tries it again. Public reports, health, copied links, and Host/Origin admission use the actual assigned port. A `default_port_in_use` information message accompanies the current addresses. Runtime access settings compare against the applied saved configuration rather than the temporary listener port, so fallback alone never creates a pending restart. Protocol, certificates, password, MFA, and private bridge authorization retain their existing boundaries. External bookmarks containing the old fixed port cannot follow the temporary address.
 
 ## Network changes and current reports
 
@@ -61,6 +67,7 @@ Installing trust in each HTTPS client is an explicit user action outside Runtime
 - `redeven:internal/config/catalog_test.go` - Preserves saved addresses, password protection, and explicit HTTPS while defaulting a missing protocol to HTTP without rewriting catalog bytes.
 - `redeven:internal/localui/network_server.go` - Composes public HTTP/WS or HTTPS/WSS on one listener.
 - `redeven:internal/localui/public_addresses.go` - Owns explicit listener families and shared startup/preflight host resolution.
+- `redeven:internal/localui/public_addresses_test.go` - Bounded dual-stack fallback, competing allocation cleanup, and explicit-bind exclusions.
 - `redeven:internal/localui/http_security.go` - Enforces exact actual public authorities and same-origin admission.
 - `redeven:internal/localui/localui.go` - Issues one-shot v3 artifacts and binds accepted sessions.
 - `redeven:internal/envapp/ui_src/src/ui/security/localTransportSecurity.ts` - Distinguishes public HTTP, public TLS, and exact Desktop private provenance.
