@@ -65,6 +65,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [udesk26 DRM cadence comparison](operations/remote-desktop-rustdesk-v43-results.md) - Inspect released cadence improvements, corrected motion validity and remaining latency, quality and memory deficits.
 - [Orange RustDesk comparison attempts](operations/remote-desktop-rustdesk-orange-results.md) - Inspect failed responses and unstable LAN conditions before applying another host's results to Orange.
 - [udesk26 v0.22.37 RustDesk comparison](operations/remote-desktop-rustdesk-v37-results.md) - Trace the failing H.264 baseline and clock limits before assessing successor releases.
+- [Remote desktop platform reacceptance](operations/remote-desktop-platform-reacceptance.md) - Verify fresh GDM, GNOME lock, Portal and macOS pixels, input and recovery with explicit native/product evidence boundaries.
 - [Desktop reconnect qualification](operations/remote-desktop-recovery-results.md) - Verify published sound continuity, Mac physical hotplug, locked reconnect and Wayland display recovery.
 - [Wayland desktop qualification](operations/remote-desktop-wayland-results.md) - Assess real GNOME office interaction and retained capture limits after virtual graphics provisioning.
 - [Host Applications](architecture/host-applications.md) - Browse host applications and apply shared authorization and session lifecycle rules.

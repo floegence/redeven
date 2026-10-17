@@ -9,7 +9,7 @@ require (
 	github.com/coder/websocket v1.8.15
 	github.com/coreos/go-oidc/v3 v3.21.0
 	github.com/creack/pty v1.1.24
-	github.com/floegence/floe-native-apps v0.23.3
+	github.com/floegence/floe-native-apps v0.23.9
 	github.com/floegence/floeterm/terminal-go v0.19.2
 	github.com/floegence/floret/v7 v7.50.0
 	github.com/floegence/flowersec/flowersec-go/v5 v5.11.1

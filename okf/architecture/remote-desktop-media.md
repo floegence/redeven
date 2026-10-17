@@ -3,7 +3,7 @@ type: Architecture Contract
 title: Remote desktop media and input scheduling
 description: Preserve bounded pixel ownership, cursor presentation and ordered input/video while reducing capture and playback work.
 tags: [desktop, media, input, wayland, latency]
-timestamp: 2026-10-13T02:00:00Z
+timestamp: 2026-10-17T01:46:00Z
 ---
 # Summary
 
@@ -111,7 +111,12 @@ composites the host pointer. Embedded-only portals retain embedded presentation.
 The [viewer contract](remote-desktop-viewer.md) owns single-cursor policy.
 Contiguous SPA header sequences permit damage-aware comparison and unchanged-copy
 suppression; missing metadata, corruption or discontinuity require full pixels.
-Cursor-only buffers cannot restore a baseline lost before them.
+Cursor-only buffers cannot restore a baseline lost before them. Out-of-surface
+VideoDamage rectangles invalidate all damage hints for that sample and require
+full bounded comparison. Advisory damage cannot reject valid pixel storage;
+malformed metadata storage and invalid pixel-plane bounds still fail closed.
+The [platform reacceptance record](../operations/remote-desktop-platform-reacceptance.md)
+owns the real GNOME reproduction and published repair evidence.
 Older compositors may provide readable MemFd without the MAPPABLE flag. The
 native client maps these bounded system-memory planes read-only when libpipewire
 has not mapped them, and releases its mappings on buffer removal or stream close.
