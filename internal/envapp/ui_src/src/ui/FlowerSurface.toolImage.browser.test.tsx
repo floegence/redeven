@@ -6,9 +6,13 @@ import { activityItem, activityTimeline, adapter, flowerSurfaceNotifications, li
 
 beforeEach(() => page.viewport(1280, 900));
 
-it.each([1280, 390])('shows authorized tool image thumbnails with preview recovery at %s px', async (width) => {
+it.each([
+  { width: 1280, resourceRef: 'image://' + 'a'.repeat(64) + '/png' },
+  { width: 390, resourceRef: 'image://' + 'a'.repeat(64) + '/png' },
+  { width: 1280, resourceRef: 'media:v1:' + 'a'.repeat(64) },
+  { width: 390, resourceRef: 'media:v1:' + 'a'.repeat(64) },
+])('shows authorized tool image $resourceRef with preview recovery at $width px', async ({ width, resourceRef }) => {
   await page.viewport(width, 900);
-  const resourceRef = `image://${'a'.repeat(64)}/png`;
   const canvas = document.createElement('canvas'); canvas.width = 16; canvas.height = 12;
   canvas.getContext('2d')!.fillRect(0, 0, 16, 12);
   const blob = await new Promise<Blob>(resolve => canvas.toBlob(value => resolve(value!), 'image/png'));

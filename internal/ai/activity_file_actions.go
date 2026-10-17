@@ -170,7 +170,7 @@ func sanitizeActivityTargetRefsValue(value any) []any {
 		if uri := activityMapString(ref, "uri"); activityPublicURI(uri) {
 			next["uri"] = uri
 		}
-		if resource := activityMapString(ref, "resource_ref"); kind == "computer_frame" && computerFrameResourcePattern.MatchString(resource) || kind == "tool_image" && imageSnapshotResourcePattern.MatchString(resource) {
+		if resource := activityMapString(ref, "resource_ref"); kind == "computer_frame" && computerFrameResourcePattern.MatchString(resource) || kind == "tool_image" && (imageSnapshotResourcePattern.MatchString(resource) || canonicalMediaLocatorPattern.MatchString(resource)) {
 			next["resource_ref"] = resource
 		}
 		if resource := activityMapString(ref, "resource_ref"); resource != "" {

@@ -35,6 +35,9 @@ func (service *Service) retainCanonicalUploadResources(ctx context.Context, endp
 		attachments = append(attachments, item.Input.Attachments...)
 	}
 	for _, attachment := range attachments {
+		if isToolMediaRef(attachment.ResourceRef) {
+			continue
+		}
 		id, digest, err := immutableUploadIdentityFromFloretResourceRef(attachment.ResourceRef)
 		if err != nil {
 			return err
@@ -67,23 +70,17 @@ func (authority floretLiveAttachmentAuthority) find(ctx context.Context, exactTu
 	if err != nil {
 		return CanonicalAttachmentMembership{}, err
 	}
-	for _, item := range view.Items {
-		if item.Kind != flruntime.ThreadItemUser || exactTurnID != "" && item.TurnID.String() != exactTurnID {
-			continue
-		}
-		for _, attachment := range item.Attachments {
-			id, digest, decodeErr := immutableUploadIdentityFromFloretResourceRef(attachment.ResourceRef)
-			if decodeErr != nil || id != attachmentID {
-				continue
-			}
-			return CanonicalAttachmentMembership{
-				ThreadID: authority.threadID, TurnID: item.TurnID.String(), AttachmentID: id,
-				ResourceRef: attachment.ResourceRef, ContentSHA256: digest, Name: attachment.Name,
-				DetectedMediaType: attachment.MIMEType, SizeBytes: attachment.SizeBytes,
-			}, nil
-		}
+	attachment, turnID, err := findCanonicalThreadAttachment(view, exactTurnID, func(attachment flruntime.MessageAttachment) bool {
+		id, _, err := immutableUploadIdentityFromFloretResourceRef(attachment.ResourceRef)
+		return err == nil && id == attachmentID
+	})
+	if err != nil {
+		return CanonicalAttachmentMembership{}, err
 	}
-	return CanonicalAttachmentMembership{}, sql.ErrNoRows
+	id, digest, _ := immutableUploadIdentityFromFloretResourceRef(attachment.ResourceRef)
+	return CanonicalAttachmentMembership{ThreadID: authority.threadID, TurnID: turnID, AttachmentID: id,
+		ResourceRef: attachment.ResourceRef, ContentSHA256: digest, Name: attachment.Name,
+		DetectedMediaType: attachment.MIMEType, SizeBytes: attachment.SizeBytes}, nil
 }
 
 func (service *Service) openCanonicalLiveAttachment(ctx context.Context, owner UploadOwner, threadID, attachmentID string) (openedCanonicalAttachment, error) {
@@ -112,4 +109,20 @@ func (service *Service) OpenCanonicalLiveAttachmentForTurn(ctx context.Context, 
 		return nil, NewUploadError(UploadErrorStoreUnavailable, true, fmt.Errorf("open canonical attachment authority: %w", err))
 	}
 	return service.OpenLiveUpload(ctx, owner, threadID, turnID, attachmentID, authority)
+}
+
+// Only canonical admitted items establish attachment membership. Queue, drafts
+// and Activity targets are not admitted image ownership.
+func findCanonicalThreadAttachment(view flruntime.ThreadView, exactTurnID string, matches func(flruntime.MessageAttachment) bool) (flruntime.MessageAttachment, string, error) {
+	for _, item := range view.Items {
+		if exactTurnID != "" && item.TurnID.String() != exactTurnID {
+			continue
+		}
+		for _, attachment := range item.Attachments {
+			if matches(attachment) {
+				return attachment, item.TurnID.String(), nil
+			}
+		}
+	}
+	return flruntime.MessageAttachment{}, "", sql.ErrNoRows
 }

@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	flruntime "github.com/floegence/floret/v7/runtime"
 	"image"
 	"image/color"
 	"image/png"
@@ -23,6 +22,7 @@ import (
 	"time"
 
 	flidentity "github.com/floegence/floret/v7/identity"
+	flruntime "github.com/floegence/floret/v7/runtime"
 	"github.com/floegence/redeven/internal/config"
 )
 
@@ -40,6 +40,7 @@ func TestImageReadReachesNativeProviderAndSurvivesRestartForkAndFileDeletion(t *
 		t.Run(tc.provider+"/"+string(permission), func(t *testing.T) {
 			var mu sync.Mutex
 			var requests [][]byte
+			var historicalLocator string
 			nativeReceived := make(chan struct{}, 1)
 			releaseNative := make(chan struct{})
 			var releaseOnce sync.Once
@@ -66,7 +67,7 @@ func TestImageReadReachesNativeProviderAndSurvivesRestartForkAndFileDeletion(t *
 				requests = append(requests, raw)
 				index := len(requests)
 				mu.Unlock()
-				if index == 1 {
+				if index == 1 || index == 3 {
 					found := false
 					for _, tool := range tools {
 						item, _ := tool.(map[string]any)
@@ -77,7 +78,14 @@ func TestImageReadReachesNativeProviderAndSurvivesRestartForkAndFileDeletion(t *
 					if !found {
 						t.Error("shared image.read absent from provider tools")
 					}
-					call := map[string]any{"type": "function_call", "id": "image-call", "call_id": "image-call", "name": "image_read", "arguments": `{"file_path":"source.png"}`}
+					args := map[string]any{"file_path": "source.png"}
+					if index == 3 {
+						mu.Lock()
+						args = map[string]any{"locator": historicalLocator}
+						mu.Unlock()
+					}
+					arguments, _ := json.Marshal(args)
+					call := map[string]any{"type": "function_call", "id": fmt.Sprintf("image-call-%d", index), "call_id": fmt.Sprintf("image-call-%d", index), "name": "image_read", "arguments": string(arguments)}
 					writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.output_item.added", "output_index": 0, "item": call})
 					writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.output_item.done", "output_index": 0, "item": call})
 					writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.completed", "response": map[string]any{"id": "image-read", "status": "completed", "output": []any{call}}})
@@ -196,6 +204,23 @@ func TestImageReadReachesNativeProviderAndSurvivesRestartForkAndFileDeletion(t *
 			if ref == "" {
 				t.Fatal("canonical result lost image membership")
 			}
+			for _, item := range detail.Current.Items {
+				for _, a := range item.Attachments {
+					if a.ResourceRef == ref {
+						historicalLocator, err = a.Locator()
+						if err != nil {
+							t.Fatal(err)
+						}
+					}
+				}
+			}
+			if historicalLocator == "" {
+				t.Fatal("confirmed tool image absent from canonical attachments")
+			}
+			original, err := svc.readCanonicalThreadImage(t.Context(), meta, thread.ThreadID, historicalLocator, "")
+			if err != nil || !bytes.Equal(original.Body, encoded.Bytes()) {
+				t.Fatalf("canonical locator reread: %v", err)
+			}
 			if _, err := svc.sweepToolMedia(t.Context(), false); err != nil {
 				t.Fatal(err)
 			}
@@ -209,6 +234,14 @@ func TestImageReadReachesNativeProviderAndSurvivesRestartForkAndFileDeletion(t *
 			other, err := svc.CreateThread(t.Context(), meta, "Other", tc.provider+"/"+vision.ModelName, "", state)
 			if err != nil {
 				t.Fatal(err)
+			}
+			if _, err := svc.readCanonicalThreadImage(t.Context(), meta, other.ThreadID, historicalLocator, ""); err == nil {
+				t.Fatal("locator granted cross-thread access")
+			}
+			revoked := *meta
+			revoked.CanRead = false
+			if _, err := svc.readCanonicalThreadImage(t.Context(), &revoked, thread.ThreadID, historicalLocator, ""); err == nil {
+				t.Fatal("revoked read permission accepted")
 			}
 			if _, _, err := svc.ResolveToolImageForThread(t.Context(), meta, other.ThreadID, ref); err == nil {
 				t.Fatal("cross-thread snapshot opened")
@@ -244,6 +277,10 @@ func TestImageReadReachesNativeProviderAndSurvivesRestartForkAndFileDeletion(t *
 			if err := svc.DeleteThread(t.Context(), meta, thread.ThreadID, false); err != nil {
 				t.Fatal(err)
 			}
+			recovered, err := svc.readCanonicalThreadImage(t.Context(), meta, fork.ThreadID, historicalLocator, "")
+			if err != nil || !bytes.Equal(recovered.Body, encoded.Bytes()) {
+				t.Fatalf("restart/fork locator changed snapshot: %v", err)
+			}
 			if _, _, err := svc.ResolveToolImageForThread(t.Context(), meta, fork.ThreadID, ref); err != nil {
 				t.Fatalf("fork snapshot missing: %v", err)
 			}
@@ -257,7 +294,7 @@ func TestImageReadReachesNativeProviderAndSurvivesRestartForkAndFileDeletion(t *
 			mu.Lock()
 			captured := append([][]byte(nil), requests...)
 			mu.Unlock()
-			if len(captured) != 3 {
+			if len(captured) != 4 {
 				t.Fatalf("provider requests=%d; unexpected extra tool work", len(captured))
 			}
 			for index := 1; index < len(captured); index++ {

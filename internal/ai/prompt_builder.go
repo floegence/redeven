@@ -271,7 +271,10 @@ func buildPromptToolUsageSection(snapshot promptRuntimeSnapshot) promptSection {
 		lines = append(lines, "- Use rgrep for scoped content search; narrow truncated results.")
 	}
 	if available("image.read") {
-		lines = append(lines, "- Inspect referenced local images with image.read; no browser or temporary HTTP service is needed. Report missing vision rather than bypassing it; repair permission/scope errors at their own boundary.")
+		lines = append(lines, "- Inspect referenced local images with image.read(file_path); reread historical snapshots with image.read(locator) using media:v1 locators from summaries or canonical history. Confirm exact text, numbers and positions from the original image; visual summaries are lossy. Locator mode never accepts target_id; no browser or temporary HTTP service is needed. Report missing vision rather than bypassing it; repair permission/scope errors at their own boundary.")
+		if available("threads.query") && available("threads.read") {
+			lines = append(lines, "- Discover older image names and MIME types with threads.query, then use paged threads.read to obtain their canonical media:v1 locators.")
+		}
 	}
 	if available("okf.index") {
 		lines = append(lines, "- Use okf.index for broad Redeven-internal knowledge discovery.")

@@ -798,7 +798,10 @@ func floretToolResultFromFlower(r *run, result ToolResult) (fltools.Result, erro
 	if err != nil {
 		return fltools.Result{}, err
 	}
-	attachments := floretToolAttachments(result.Attachments)
+	attachments, err := floretToolAttachments(result.Attachments)
+	if err != nil {
+		return fltools.Result{}, err
+	}
 	var outputPolicy *fltools.OutputPolicy
 	if name := strings.TrimSpace(result.ToolName); name == "subagents" || name == "subagent_events" {
 		// Explicit child reports must remain complete through savepoints and retry.
@@ -833,19 +836,22 @@ func floretToolResultFromFlower(r *run, result ToolResult) (fltools.Result, erro
 	}, nil
 }
 
-func floretToolAttachments(items []ToolAttachment) []fltools.ArtifactRef {
+func floretToolAttachments(items []ToolAttachment) ([]fltools.ArtifactRef, error) {
 	if len(items) == 0 {
-		return nil
+		return nil, nil
 	}
 	out := make([]fltools.ArtifactRef, 0, len(items))
 	for _, item := range items {
 		ref := strings.TrimSpace(item.ResourceRef)
 		if !isToolMediaRef(ref) {
-			continue
+			_, digest, err := immutableUploadIdentityFromFloretResourceRef(ref)
+			if err != nil || !strings.HasPrefix(item.MIMEType, "image/") || item.SHA256 != digest {
+				return nil, errors.New("invalid typed image attachment resource")
+			}
 		}
 		out = append(out, fltools.ArtifactRef{ID: ref, SafeLabel: strings.TrimSpace(item.Name), Kind: "image", MIME: strings.TrimSpace(item.MIMEType), SizeBytes: item.SizeBytes, SHA256: strings.TrimSpace(item.SHA256)})
 	}
-	return out
+	return out, nil
 }
 
 func floretToolResultProgressToken(result ToolResult, structured map[string]any) string {
@@ -1383,10 +1389,17 @@ func floretActivityForToolResult(r *run, result ToolResult) (*fltools.ActivityPr
 	}
 	if toolName == "image.read" {
 		for _, attachment := range result.Attachments {
-			if imageSnapshotResourcePattern.MatchString(attachment.ResourceRef) {
-				activity.TargetRefs = append(activity.TargetRefs, fltools.ActivityTargetRef{
-					Kind: "tool_image", ResourceRef: attachment.ResourceRef, Label: attachment.Name,
-				})
+			ref := attachment.ResourceRef
+			if !imageSnapshotResourcePattern.MatchString(ref) && strings.HasPrefix(attachment.MIMEType, "image/") {
+				descriptor := flruntime.MessageAttachment{ResourceRef: ref, Name: attachment.Name, MIMEType: attachment.MIMEType, SizeBytes: attachment.SizeBytes}
+				locator, err := descriptor.Locator()
+				if err != nil {
+					return nil, err
+				}
+				ref = locator
+			}
+			if imageSnapshotResourcePattern.MatchString(ref) || canonicalMediaLocatorPattern.MatchString(ref) {
+				activity.TargetRefs = append(activity.TargetRefs, fltools.ActivityTargetRef{Kind: "tool_image", ResourceRef: ref, Label: attachment.Name})
 			}
 		}
 	}

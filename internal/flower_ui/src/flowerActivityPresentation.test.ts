@@ -26,8 +26,7 @@ it('shows explicit zero for a successful no-op instead of retaining argument pre
   expect(presentation.changeStats).toEqual({ additions: 0, deletions: 0 });
 });
 
-it('renders a typed tool image as authorized media without a unavailable-result notice', () => {
-  const resource_ref = `image://${'c'.repeat(64)}/png`;
+it.each(['image://' + 'c'.repeat(64) + '/png', 'media:v1:' + 'c'.repeat(64)])('renders typed tool image %s as authorized media without an unavailable-result notice', resource_ref => {
   const result = presentFlowerActivityItem(item({ tool_name: 'image.read', label: 'photo.png', renderer: 'structured', target_refs: [{ kind: 'tool_image', label: 'photo.png', resource_ref }] }));
   expect(result.detailBlocks).toContainEqual({ kind: 'image', resource_ref, name: 'photo.png' });
   expect(result.detailBlocks.some(block => block.kind === 'structured_rows' && block.notice)).toBe(false);
