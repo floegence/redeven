@@ -31,6 +31,21 @@ test('repository npm package roots keep direct dependencies aligned with package
   }
 });
 
+test('presentation consumers retain the bundled engine without duplicate development trees', () => {
+  const buildOnly = new Set(['@aiden0z/pptx-renderer', 'echarts', 'zrender', 'mtx-decompressor']);
+  for (const root of npmPackageRoots.slice(0, 2)) {
+    const lock = readJson(root.path + '/package-lock.json');
+    for (const packagePath of Object.keys(lock.packages)) {
+      const name = packagePath.split('node_modules/').at(-1);
+      assert.equal(buildOnly.has(name), false, root.label + ' must use the released bundled renderer: ' + name);
+    }
+    const pnpm = readFileSync(new URL(root.path + '/pnpm-lock.yaml', import.meta.url), 'utf8');
+    for (const name of buildOnly) {
+      assert.equal(pnpm.includes(name + '@'), false, root.label + ' must not lock duplicate renderer assets: ' + name);
+    }
+  }
+});
+
 test('npm direct dependency lock validation accepts exact and ranged dependencies', () => {
   assert.doesNotThrow(() => assertNpmDirectDependenciesLocked(
     {

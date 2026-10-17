@@ -912,7 +912,8 @@ ${license.toString('utf8').trim()}
 function renderPptxNotices() {
   const coreRoot = path.join(repoRoot, 'internal/envapp/ui_src/node_modules/@floegence/floe-webapp-core');
   const core = JSON.parse(fs.readFileSync(path.join(coreRoot, 'package.json'), 'utf8'));
-  if (core.dependencies?.['@aiden0z/pptx-renderer'] !== '1.3.0') throw new Error('Review the new presentation renderer distribution contract.');
+  if (core.devDependencies?.['@aiden0z/pptx-renderer'] !== '1.3.0'
+      || core.dependencies?.['@aiden0z/pptx-renderer'] !== undefined) throw new Error('Review the new presentation renderer distribution contract.');
   const hashes = {
     'LICENSE': 'c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4',
     'THIRD_PARTY_NOTICES.md': '4e49f2e111bff02e594594abbca7924076649d9cc8826d80e42fd7ed2f4fa11c',
