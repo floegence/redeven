@@ -20,6 +20,8 @@ export function getRedevenFilePreviewOversizedMessage(mode: PreviewMode): string
       return 'This image is too large to preview.';
     case 'pdf':
       return 'This PDF is too large to preview.';
+    case 'pptx':
+      return 'This presentation is too large to preview.';
     case 'docx':
       return 'This document is too large to preview.';
     case 'xlsx':

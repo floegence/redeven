@@ -208,6 +208,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [File preview window actions](ui/file-preview-window-actions.md) - Read files with compact title-bar actions while preserving selection, editing, and dismissal behavior.
 - [File preview dismissal](ui/file-preview-dismissal.md) - Close previews without blank or brighter frames while cancelling work immediately and releasing content after exit.
 - [File preview viewport and rendering](ui/file-preview-viewport-and-rendering.md) - Fit pages and images to the full reading area, float zoom controls, and prevent stale or overlapping renders.
+- [Static PPTX file preview](ui/file-preview-pptx.md) — Read presentations locally with windowed slides, native text selection, isolated resources, and verified license provenance.
 - [HTML file preview](ui/file-preview-html.md) - Open HTML pages by default with isolated interaction, bounded reads, and explicit source editing.
 - [Git workspace generation and Files decoration](ui/git-workspace-generation-and-decoration.md) - Keep Git views and background Files status consistent through capability gating and monotonic invalidation.
 - [Shared surface material](ui/surface-material.md) - Apply lightweight shared depth, quiet seams, and immediate control feedback across Env App, Desktop, and Flower.

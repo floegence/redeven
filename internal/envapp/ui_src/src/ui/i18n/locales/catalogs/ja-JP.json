@@ -6997,7 +6997,13 @@
       "fitDocxToWidth": "DOCX プレビューを幅に合わせる",
       "zoomInPdf": "PDF プレビューを拡大",
       "zoomOutPdf": "PDF プレビューを縮小",
-      "fitPdfToWidth": "PDF プレビューを幅に合わせる"
+      "fitPdfToWidth": "PDF プレビューを幅に合わせる",
+      "zoomInPptx": "PPTX プレビューを拡大",
+      "zoomOutPptx": "PPTX プレビューを縮小",
+      "loadingPptx": "プレゼンテーションを読み込み中…",
+      "pptxStaticNotice": "静的プレビューです。アニメーションや一部の効果は PowerPoint と異なる場合があります。",
+      "pptxExternalNotice": "外部リンクと外部リソースは無効です。",
+      "pptxIncomplete": "一部のスライド内容を表示できませんでした。ファイルをダウンロードして元の内容を確認してください。"
     },
     "git": {
       "noChangedComparison": "この比較では変更されたファイルは見つかりませんでした。",

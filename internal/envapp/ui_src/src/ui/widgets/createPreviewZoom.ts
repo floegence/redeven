@@ -3,7 +3,7 @@ import { calculateFitScale, useResizeObserver, type Size } from '@floegence/floe
 
 export type PreviewZoomMode = 'contain' | 'width' | 'actual' | 'manual';
 
-/** Product zoom policy shared by the three sized file renderers. */
+/** Product zoom policy shared by sized file renderers. */
 export function createPreviewZoom(options: {
   viewport: Accessor<HTMLElement | undefined>;
   content: Accessor<Size | null>;
@@ -11,7 +11,7 @@ export function createPreviewZoom(options: {
   min: number;
   max: number;
   labelHeight?: number;
-  /** PDF page labels and gaps do not scale with the page bitmap. */
+  /** Document page labels and gaps do not scale with page content. */
   pageLayouts?: Accessor<readonly { top: number; height: number }[]>;
 }) {
   const viewportSize = useResizeObserver(options.viewport);

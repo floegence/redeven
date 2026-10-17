@@ -7001,7 +7001,13 @@
       "fitDocxToWidth": "Ajustar la vista previa de DOCX al ancho",
       "zoomInPdf": "Ampliar la vista previa de PDF",
       "zoomOutPdf": "Reducir la vista previa de PDF",
-      "fitPdfToWidth": "Ajustar la vista previa de PDF al ancho"
+      "fitPdfToWidth": "Ajustar la vista previa de PDF al ancho",
+      "zoomInPptx": "Ampliar la vista previa de PPTX",
+      "zoomOutPptx": "Reducir la vista previa de PPTX",
+      "loadingPptx": "Cargando presentación…",
+      "pptxStaticNotice": "Vista previa estática. Las animaciones y algunos efectos pueden diferir de PowerPoint.",
+      "pptxExternalNotice": "Los enlaces y recursos externos están desactivados.",
+      "pptxIncomplete": "No se pudo mostrar parte del contenido de las diapositivas. Descarga el archivo para consultar el original."
     },
     "git": {
       "noChangedComparison": "No se encontraron archivos modificados en esta comparación.",

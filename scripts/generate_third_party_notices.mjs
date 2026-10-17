@@ -909,6 +909,42 @@ ${license.toString('utf8').trim()}
 \`\`\``;
 }
 
+function renderPptxNotices() {
+  const coreRoot = path.join(repoRoot, 'internal/envapp/ui_src/node_modules/@floegence/floe-webapp-core');
+  const core = JSON.parse(fs.readFileSync(path.join(coreRoot, 'package.json'), 'utf8'));
+  if (core.dependencies?.['@aiden0z/pptx-renderer'] !== '1.3.0') throw new Error('Review the new presentation renderer distribution contract.');
+  const hashes = {
+    'LICENSE': 'c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4',
+    'THIRD_PARTY_NOTICES.md': '4e49f2e111bff02e594594abbca7924076649d9cc8826d80e42fd7ed2f4fa11c',
+    'bundled-dependencies.txt': 'f789852deea84eb1d80e7ed09d5ce1816aa84e57fb89e56f4ba4dbd29f5bb3a7',
+    'ECMA-text-copyright-notice.txt': '9a08c202df693f91f1f3b1674a64f5989d6269d5d89f710bc65e0fb2757d8f1f',
+    'mtx-decompressor-MPL-2.0.txt': '1f256ecad192880510e84ad60474eab7589218784b9a50bc7ceee34c2b91f1d5',
+    'mtx-decompressor-v1.4.2.tar.gz': 'e4edf429b1614a8f7366a55cffe58b35c58e784f0d4719d209cc3aa28ef3d970',
+    'source-manifest.json': 'ab675181c17d4e09acdbcfb1eb2f1f9c3d3306751d43fae197e1456e82fe3524',
+  };
+  const root = path.join(coreRoot, 'dist/licenses/pptx');
+  for (const [file, expected] of Object.entries(hashes)) {
+    const bytes = fs.readFileSync(path.join(root, file));
+    if (crypto.createHash('sha256').update(bytes).digest('hex') !== expected) throw new Error('Presentation distribution artifact changed: ' + file);
+  }
+  return [
+    '## Static PPTX Preview Licenses',
+    '',
+    'Floe supplies the standalone browser artifact of @aiden0z/pptx-renderer 1.3.0 under Apache-2.0. Its embedded mtx-decompressor 1.4.2 remains MPL-2.0; that license applies to the covered files and does not replace Redeven\'s license. The renderer is used without source changes. System fonts are not redistributed.',
+    '',
+    'The exact unmodified MPL source and original notices are included under dist/licenses/pptx/ in the published Floe package:',
+    'https://registry.npmjs.org/@floegence/floe-webapp-core/-/floe-webapp-core-' + core.version + '.tgz',
+    'Corresponding source: https://github.com/ChristopherVR/mtx-decompressor/archive/refs/tags/v1.4.2.tar.gz',
+    'Source archive SHA-256: ' + hashes['mtx-decompressor-v1.4.2.tar.gz'],
+    '',
+    'ECMA-derived preset geometry retains its original notice and provenance. JSZip is used under its MIT option. All notices below describe the embedded browser versions, which can differ from separately resolved npm dependencies. Preserve these notices and source access when redistributing.',
+    '',
+    ...['LICENSE', 'THIRD_PARTY_NOTICES.md', 'mtx-decompressor-MPL-2.0.txt', 'ECMA-text-copyright-notice.txt', 'source-manifest.json', 'bundled-dependencies.txt'].flatMap(file => [
+      '### ' + file, '', '~~~~text', fs.readFileSync(path.join(root, file), 'utf8').trim(), '~~~~', '',
+    ]),
+  ].join('\n');
+}
+
 function renderLibavoidNotices() {
   const coreRoot = fs.realpathSync(path.join(repoRoot, 'internal/envapp/ui_src/node_modules/@floegence/floe-webapp-core'));
   const core = JSON.parse(fs.readFileSync(path.join(coreRoot, 'package.json'), 'utf8'));
@@ -1116,6 +1152,8 @@ ${renderBrowserMediaNotices()}
 ${renderELKNotices()}
 
 ${renderLibavoidNotices()}
+
+${renderPptxNotices()}
 
 ## License Policy Guard
 

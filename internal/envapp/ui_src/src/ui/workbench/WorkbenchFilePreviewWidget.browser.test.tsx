@@ -21,7 +21,8 @@ import formsFixtureUrl from '../widgets/__fixtures__/pdf/forms.pdf?url';
 import unembeddedFixtureUrl from '../widgets/__fixtures__/pdf/mixed-unembedded.pdf?url';
 import longFixtureUrl from '../widgets/__fixtures__/pdf/long-text.pdf?url';
 import pdfFixtureUrl from '../widgets/__fixtures__/pdf/mixed-embedded.pdf?url';
-const pdfCommands = commands as unknown as { selectPdfText: (text: string) => Promise<{ selection: string; clipboard: string }>; savePdfEvidence: (base64: string, script: 'latin' | 'cjk') => Promise<void>; recordPdfEvidence: (metrics: { firstPaintMs: number; canvases: number }) => Promise<void> };
+import pptxFixtureUrl from '../widgets/__fixtures__/preview-pages.pptx?url';
+const pdfCommands = commands as unknown as { selectPreviewText: (text: string, selector?: string) => Promise<{ selection: string; clipboard: string }>; savePdfEvidence: (base64: string, script: 'latin' | 'cjk') => Promise<void>; recordPdfEvidence: (metrics: { firstPaintMs: number; canvases: number }) => Promise<void> };
 const io = vi.hoisted(() => ({
   pdfBytes: null as Uint8Array<ArrayBuffer> | null,
   controllers: [] as ReturnType<typeof createFilePreviewController>[],
@@ -93,7 +94,7 @@ afterEach(() => {
   io.write.mockReset().mockResolvedValue({});
 });
 
-function mount(mode: 'light' | 'dark', scale = 1) {
+function mount(mode: 'light' | 'dark', scale = 1, presentation = false) {
   document.documentElement.classList.add(mode);
   document.documentElement.dataset.floeShellTheme = mode === 'dark' ? 'classic-dark' : 'paper';
   document.documentElement.dataset.floeSurfaceStyle = 'soft-neumorphic';
@@ -101,9 +102,9 @@ function mount(mode: 'light' | 'dark', scale = 1) {
   host.style.cssText = 'width:100vw;height:100vh';
   document.body.append(host);
   const file = {
-    id: io.pdfBytes ? '/workspace/contract.pdf' : '/workspace/report.md',
-    path: io.pdfBytes ? '/workspace/contract.pdf' : '/workspace/report.md',
-    name: io.pdfBytes ? 'contract.pdf' : 'A very long preview report filename.md',
+    id: presentation ? '/workspace/deck.pptx' : io.pdfBytes ? '/workspace/contract.pdf' : '/workspace/report.md',
+    path: presentation ? '/workspace/deck.pptx' : io.pdfBytes ? '/workspace/contract.pdf' : '/workspace/report.md',
+    name: presentation ? 'deck.pptx' : io.pdfBytes ? 'contract.pdf' : 'A very long preview report filename.md',
     type: 'file' as const,
   };
   const definitions: WorkbenchWidgetDefinition[] = [
@@ -208,6 +209,27 @@ function select(element: Element) {
 }
 
 describe('Workbench preview header', () => {
+  it('keeps PPTX selection and local scrolling inside the projected preview', async () => {
+    await page.viewport(1400, 1000);
+    io.pdfBytes = new Uint8Array(await (await fetch(pptxFixtureUrl)).arrayBuffer());
+    const { host, state } = mount('light', 0.8, true);
+    await vi.waitFor(() => expect(host.textContent).toContain('Presentation page 1 中文预览'), { timeout: 15000 });
+    const viewport = host.querySelector<HTMLElement>('.pptx-preview-pane')!;
+    const before = { ...state().viewport };
+    const text = [...viewport.querySelectorAll('span')].find(element => element.textContent === 'Presentation page 1 中文预览')!;
+    expect(text).toBeTruthy();
+    const selected = await pdfCommands.selectPreviewText('Presentation page 1 中文预览', '.pptx-preview-pane span');
+    expect(selected.selection).toContain('中文预览'); expect(selected.clipboard).toContain('中文预览');
+    const wheel = commands as unknown as { wheelScrollRegion: (request: { regionSelector: string; deltaY: number }) => Promise<unknown> };
+    await wheel.wheelScrollRegion({ regionSelector: '.pptx-preview-pane', deltaY: 400 });
+    await vi.waitFor(() => expect(viewport.scrollTop).toBeGreaterThan(0));
+    expect(state().viewport).toEqual(before);
+    viewport.scrollTop = viewport.scrollHeight; viewport.dispatchEvent(new Event('scroll'));
+    await vi.waitFor(() => expect(host.textContent).toContain('Presentation page 30 中文预览'));
+    expect(host.querySelectorAll('.pptx-preview-pane__page').length).toBeLessThan(8);
+    await page.screenshot({ path: '__screenshots__/workbench-pptx-preview.png' });
+  });
+
   it.each([0.65, 1, 1.5])('selects, copies and quotes PDF text under a %s Workbench projection', async scale => {
     await page.viewport(1800, 1200);
     io.pdfBytes = new Uint8Array(await (await fetch(pdfFixtureUrl)).arrayBuffer());
@@ -215,10 +237,10 @@ describe('Workbench preview header', () => {
     await vi.waitFor(() => expect(host.querySelector('.textLayer span')).toBeTruthy());
     await vi.waitFor(() => expect(host.querySelector('[data-workbench-widget-motion]')).toBeNull());
     const before = { ...state().viewport };
-    const english = await pdfCommands.selectPdfText('Redeven selection');
+    const english = await pdfCommands.selectPreviewText('Redeven selection');
     expect(english.selection).toContain('Redeven selection test');
     expect(english.clipboard).toBe(english.selection);
-    const chinese = await pdfCommands.selectPdfText('中文合同');
+    const chinese = await pdfCommands.selectPreviewText('中文合同');
     expect(chinese.selection).toContain('中文合同预览');
     expect(chinese.clipboard).toBe(chinese.selection);
     await userEvent.click(page.getByRole('button', { name: 'Ask Flower', exact: true }));
@@ -248,7 +270,7 @@ describe('Workbench preview header', () => {
     expect(controller.dirty()).toBe(true);
     await userEvent.click(page.getByRole('button', { name: 'Zoom in PDF preview', exact: true }));
     await vi.waitFor(() => expect(host.querySelector<HTMLInputElement>('input[name="full_name"]')!.value).toBe(fieldValue));
-    await pdfCommands.selectPdfText('中文合同');
+    await pdfCommands.selectPreviewText('中文合同');
     await userEvent.click(page.getByRole('button', { name: 'Highlight selected text', exact: true }));
     await vi.waitFor(() => expect(host.querySelector('.highlightEditor')).toBeTruthy());
     resize(320);
@@ -314,7 +336,7 @@ describe('Workbench preview header', () => {
     io.pdfBytes = new Uint8Array(await (await fetch(unembeddedFixtureUrl)).arrayBuffer());
     const { host } = mount('light');
     await vi.waitFor(() => expect(host.querySelector('.textLayer span')).toBeTruthy());
-    const chinese = await pdfCommands.selectPdfText('中文合同');
+    const chinese = await pdfCommands.selectPreviewText('中文合同');
     expect(chinese.selection).toContain('中文合同预览');
     expect(chinese.clipboard).toBe(chinese.selection);
     await page.screenshot({ path: '__screenshots__/workbench-pdf-cjk-unembedded.png' });

@@ -8,6 +8,7 @@ import { MarkdownPreviewPane } from '../widgets/MarkdownPreviewPane';
 import { HtmlPreviewPane } from '../widgets/HtmlPreviewPane';
 import type { BindPdfPreviewEditor } from '../widgets/pdfPreviewEditor';
 import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
+const PptxPreviewPane = lazy(() => import('../widgets/PptxPreviewPane').then(module => ({ default: module.PptxPreviewPane })));
 const PdfPreviewPane = lazy(() => import('../widgets/PdfPreviewPane').then(module => ({ default: module.PdfPreviewPane })));
 import { TextFilePreviewPane } from '../widgets/TextFilePreviewPane';
 import { ImagePreviewPane } from '../widgets/ImagePreviewPane';
@@ -20,6 +21,7 @@ export type RedevenFilePreviewRendererId =
   | 'image'
   | 'pdf'
   | 'docx'
+  | 'pptx'
   | 'xlsx'
   | 'video'
   | 'audio'
@@ -206,6 +208,14 @@ export const REDEVEN_FILE_PREVIEW_RENDERERS: readonly RedevenFilePreviewRenderer
     id: 'docx',
     modes: ['docx'],
     render: (props) => <DocxPreviewPane onRenderError={message => props.onRenderError?.(props.item?.path ?? '', message)} bytes={props.bytes} surface={props.surface} />,
+  },
+  {
+    id: 'pptx',
+    modes: ['pptx'],
+    render: (props) => {
+      const i18n = useI18n();
+      return <Suspense fallback={<RedevenLoadingCurtain visible eyebrow={i18n.t('uiCopy.preview.eyebrow')} message={i18n.t('uiCopy.preview.loadingPptx')} />}><PptxPreviewPane onRenderError={message => props.onRenderError?.(props.item?.path ?? '', message)} bytes={props.bytes} surface={props.surface} /></Suspense>;
+    },
   },
   {
     id: 'xlsx',

@@ -1,6 +1,6 @@
 // File preview helpers: extension classification, language resolution, and basic content sniffing.
 
-export type PreviewMode = 'text' | 'markdown' | 'html' | 'image' | 'pdf' | 'docx' | 'xlsx' | 'video' | 'audio' | 'binary' | 'unsupported';
+export type PreviewMode = 'text' | 'markdown' | 'html' | 'image' | 'pdf' | 'docx' | 'pptx' | 'xlsx' | 'video' | 'audio' | 'binary' | 'unsupported';
 /** Surface ownership for a file preview. Desktop floating windows use the window material. */
 export type FilePreviewSurface = 'main' | 'window';
 export type TextPreviewPresentation = 'plain' | 'code';
@@ -45,6 +45,7 @@ export const IMAGE_PREVIEW_EXTENSIONS = [
 ] as const;
 
 export const PDF_PREVIEW_EXTENSIONS = ['.pdf'] as const;
+export const PPTX_PREVIEW_EXTENSIONS = ['.pptx'] as const;
 export const DOCX_PREVIEW_EXTENSIONS = ['.docx'] as const;
 export const XLSX_PREVIEW_EXTENSIONS = ['.xlsx', '.xls'] as const;
 export const VIDEO_PREVIEW_EXTENSIONS = ['.mp4', '.webm', '.mov', '.m4v', '.ogv', '.mkv'] as const;
@@ -62,6 +63,7 @@ const HTML_PREVIEW_EXTENSION_SET = new Set<string>(HTML_PREVIEW_EXTENSIONS);
 const CODE_PREVIEW_EXTENSION_SET = new Set<string>(CODE_PREVIEW_EXTENSIONS);
 const IMAGE_PREVIEW_EXTENSION_SET = new Set<string>(IMAGE_PREVIEW_EXTENSIONS);
 const PDF_PREVIEW_EXTENSION_SET = new Set<string>(PDF_PREVIEW_EXTENSIONS);
+const PPTX_PREVIEW_EXTENSION_SET = new Set<string>(PPTX_PREVIEW_EXTENSIONS);
 const DOCX_PREVIEW_EXTENSION_SET = new Set<string>(DOCX_PREVIEW_EXTENSIONS);
 const XLSX_PREVIEW_EXTENSION_SET = new Set<string>(XLSX_PREVIEW_EXTENSIONS);
 const VIDEO_PREVIEW_EXTENSION_SET = new Set<string>(VIDEO_PREVIEW_EXTENSIONS);
@@ -207,6 +209,7 @@ export function describeFilePreview(name: string): FilePreviewDescriptor {
   const ext = getExtDot(basename);
 
   if (PDF_PREVIEW_EXTENSION_SET.has(ext)) return { mode: 'pdf' };
+  if (PPTX_PREVIEW_EXTENSION_SET.has(ext)) return { mode: 'pptx' };
   if (DOCX_PREVIEW_EXTENSION_SET.has(ext)) return { mode: 'docx' };
   if (XLSX_PREVIEW_EXTENSION_SET.has(ext)) return { mode: 'xlsx' };
   if (IMAGE_PREVIEW_EXTENSION_SET.has(ext)) return { mode: 'image' };
@@ -306,6 +309,8 @@ export function mimeFromExtDot(ext: string): string | undefined {
       return 'audio/ogg';
     case '.flac':
       return 'audio/flac';
+    case '.pptx':
+      return 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
     case '.docx':
       return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
     case '.xlsx':

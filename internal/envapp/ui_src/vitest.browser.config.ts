@@ -289,8 +289,8 @@ export default mergeConfig(viteConfig, defineConfig({
             scope: 'Local fixture stream; includes document metadata and first text layer; not a network benchmark.',
           }, null, 2));
         },
-        selectPdfText: async ({ page }, text: string) => {
-          const frame = await frameForSelector(page, '.pdf-preview-pane .textLayer');
+        selectPreviewText: async ({ page }, text: string, selector = '.pdf-preview-pane .textLayer span') => {
+          const frame = await frameForSelector(page, selector);
           const frameElement = await frame.frameElement();
           const styles = await frameElement.evaluate(element => ({ frame: element.getAttribute('style'), host: element.parentElement!.getAttribute('style') }));
           try {
@@ -301,10 +301,10 @@ export default mergeConfig(viteConfig, defineConfig({
               (element as HTMLElement).style.setProperty('transform', 'none', 'important');
             });
             await frame.evaluate(() => document.getSelection()?.removeAllRanges());
-            const span = frame.locator('.pdf-preview-pane .textLayer span').filter({ hasText: text }).first();
+            const span = frame.locator(selector).filter({ hasText: text }).first();
             await span.scrollIntoViewIfNeeded();
             const rect = await span.boundingBox();
-            if (!rect) throw new Error('PDF text is unavailable');
+            if (!rect) throw new Error('Preview text is unavailable');
             await page.mouse.move(rect.x + 1, rect.y + rect.height / 2);
             await page.mouse.down();
             await page.mouse.move(rect.x + rect.width - 1, rect.y + rect.height / 2, { steps: 12 });
