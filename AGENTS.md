@@ -1306,7 +1306,8 @@ must select Node 26 without older-major fallbacks.
 - During implementation, run focused checks for changed behavior and affected
   contracts.
 - `.githooks/pre-commit` is intentionally fast. It runs staged diff validation,
-  the README localization contract, staged open-source hygiene, and offline
+  scoped generated viewer-asset verification, the README localization contract,
+  staged open-source hygiene, and offline
   third-party notice verification when dependency or attribution inputs change.
   Notice verification uses the staged tree and existing installed dependencies
   and Go cache; it must not download, install, regenerate, or stage files.

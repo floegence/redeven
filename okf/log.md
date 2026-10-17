@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-16: Verify generated viewer assets before commit
+
+- Keep remote desktop catalogs synchronized with explicit Env App translations. The [commit gate](release/ci-and-release-gates.md#documentation-and-generated-assets) checks staged viewer assets through the existing generator and reports the regeneration command before a stale catalog reaches Desktop builds.
+
 ## 2026-10-16: Bounded child waits and precise failure recovery
 
 - Adopt released Floret v7.50.0 [canonical waiting](ai/subagent-runtime.md), preserve passive parent events and full handoffs, and expose [typed failure causes and target-specific recovery](ui/flower-failure-recovery.md). Child attention retains explicit parent continuation, Stop and navigation.
