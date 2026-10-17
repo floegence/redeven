@@ -335,6 +335,9 @@ func providerDiagnosticRunCode(d providerFailureDiagnostic) string {
 	if d.Code == "invalid_request_error" || d.Code == "invalid_function_parameters" {
 		return runErrorCodeProviderRequestInvalid
 	}
+	if responseRetryAdvice(d, nil).Category == flprovider.RetryStreamInterrupted {
+		return runErrorCodeProviderStreamInterrupted
+	}
 	return runErrorCodeProviderRequestRejected
 }
 

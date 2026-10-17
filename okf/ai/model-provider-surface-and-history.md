@@ -71,6 +71,8 @@ Redeven disables SDK retries, maps structured HTTP/SSE/WebSocket facts into `pro
 
 Flower reads `ThreadRunProgress.Retry` from the authoritative current view. Main and companion surfaces display the absolute-deadline countdown and draft-replacement hint without admitting another turn. Stop stays available; manual retry appears only after terminal failure. No product retry loop, timer queue, or durable retry ledger exists.
 
+Published Floret v7.51.2 classifies the exact `basispoints_tool_arguments_stalled` code as a stream interruption, including HTTP 200 stream errors. Redeven consumes that category for live and historical failure presentation without duplicating the code list or restarting a terminal turn. The sanitized upstream message remains the primary displayed error; its machine code, transport status and request ID remain copyable diagnostics. Permanent errors and server retry prohibitions keep their existing priority.
+
 # Boundaries
 
 Redeven maps product model and permission state into Floret's typed surface. It does not persist provider envelopes, reconstruct canonical history, or infer execution authority from rendered Flower state. Usage accounting, compaction, and capacity errors belong to [Model context usage and compaction](model-context-usage-and-compaction.md).

@@ -2,11 +2,12 @@ import '../index.css';
 import './flower-feature.css';
 
 import { expect, it, vi } from 'vitest';
+import { createSignal } from 'solid-js';
 import { page } from 'vitest/browser';
 import type { FlowerLiveStreamEnvelope, FlowerThreadSnapshot } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { adapter, liveBootstrap, renderSurfaceWithAdapterProps, runtimeCurrentView, subagentDetail, subagentSummary, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 
-it.each([[1100, 'stop'], [420, 'stop'], [1100, 'success'], [420, 'failure']] as const)('keeps provider recovery in one turn at width %s through %s', async (width, outcome) => {
+it.each([[1100, 'stop'], [420, 'stop'], [1100, 'success'], [1100, 'failure'], [420, 'failure']] as const)('keeps provider recovery in one turn at width %s through %s', async (width, outcome) => {
   await page.viewport(width, 850);
   const threadID = `retry-${width}`;
   const runID = 'run-retry';
@@ -17,8 +18,10 @@ it.each([[1100, 'stop'], [420, 'stop'], [1100, 'success'], [420, 'failure']] as 
   });
   let emit: ((value: FlowerLiveStreamEnvelope | null) => void) | undefined;
   let version = 1;
+  const other = thread({ thread_id: 'other-thread', title: 'Other chat during recovery' });
+  const [focus, setFocus] = createSignal({ request_id: 'focus-retry', thread_id: threadID });
   const retryThread = vi.fn(async () => liveBootstrap(selected, version));
-  const base = { ...adapter(true), retryThread, listThreads: vi.fn(async () => [selected]), loadThread: vi.fn(async () => liveBootstrap(selected, version)),
+  const base = { ...adapter(true), retryThread, listThreads: vi.fn(async () => [selected, other]), loadThread: vi.fn(async (id: string) => liveBootstrap(id === other.thread_id ? other : selected, version)),
     async *connectLiveStream({ signal }: { signal: AbortSignal }) {
       yield { schema_version: 1 as const, kind: 'ready' as const, summaries: [selected] };
       while (!signal.aborted) {
@@ -35,7 +38,7 @@ it.each([[1100, 'stop'], [420, 'stop'], [1100, 'success'], [420, 'failure']] as 
     emit!({ schema_version: 1, kind: 'thread.batch', thread_id: threadID, current: runtimeCurrentView(next, version) });
   };
   const stopThread = vi.fn(async () => { await push({ ...selected, status: 'canceled', active_run_id: undefined, run_progress: null }); });
-  const surface = renderSurfaceWithAdapterProps({ ...base, stopThread }, { focusThreadRequest: { request_id: 'focus-retry', thread_id: threadID } });
+  const surface = renderSurfaceWithAdapterProps({ ...base, stopThread }, { get focusThreadRequest() { return focus(); } });
   surface.style.cssText = `width:${width}px;height:820px;position:relative`;
   await waitFor(() => surface.textContent?.includes('Failed draft fragment') ?? false);
   const nextAttemptAt = new Date(Date.now() + 3500).toISOString();
@@ -48,6 +51,11 @@ it.each([[1100, 'stop'], [420, 'stop'], [1100, 'success'], [420, 'failure']] as 
   const firstLabel = indicator()!.textContent;
   await vi.waitFor(() => expect(indicator()!.textContent).not.toBe(firstLabel), { timeout: 2500 });
   expect(surface.querySelectorAll('.flower-error-card')).toHaveLength(0);
+  setFocus({ request_id: 'leave-retry', thread_id: other.thread_id });
+  await waitFor(() => surface.querySelector('[data-flower-progress-kind="retrying"]') === null && surface.textContent?.includes(other.title) === true);
+  setFocus({ request_id: 'return-retry', thread_id: threadID });
+  await waitFor(() => indicator()?.textContent?.includes('1/4') ?? false);
+  expect(retryThread).not.toHaveBeenCalled();
   // Reopening reads the same deadline and attempt, rather than starting another recovery.
   const reopened = renderSurfaceWithAdapterProps({ ...base, stopThread }, { focusThreadRequest: { request_id: 'reopen-retry', thread_id: threadID } });
   reopened.style.cssText = `width:${width}px;height:820px;position:relative`;
@@ -70,12 +78,23 @@ it.each([[1100, 'stop'], [420, 'stop'], [1100, 'success'], [420, 'failure']] as 
     expect(reopened.querySelectorAll('.flower-error-card')).toHaveLength(0);
     expect(retryThread).not.toHaveBeenCalled();
   } else {
+    const reason = 'Tool arguments stopped making progress: consecutive whitespace outside JSON strings (output_index=24, whitespace_bytes=8192, limit_bytes=8192)';
+    const detail = JSON.stringify({ provider: 'openai', http_status: 200, code: 'basispoints_tool_arguments_stalled', message: reason, request_id: 'req-final', response_shape: 'stream_error' });
     await push({ ...selected, status: 'failed', active_run_id: undefined, run_progress: null,
       messages: [{ id: 'final-partial', role: 'assistant', turn_id: turnID, run_id: runID, status: 'error', content: 'Last unfinished fragment', created_at_ms: 2 }],
-      error: { code: 'provider_server_error', message: 'Service unavailable', detail: '{"http_status":500,"request_id":"req-final"}' },
+      error: { code: 'provider_stream_interrupted', message: 'controlled fallback', detail },
     });
     await waitFor(() => reopened.querySelector('.flower-error-card') != null);
     expect(reopened.querySelectorAll('.flower-error-card')).toHaveLength(1);
+    expect(reopened.querySelector('.flower-error-message')?.textContent).toBe(reason);
+    expect(reopened.querySelector('.flower-error-details pre')?.textContent).toBe(detail);
+    expect(reopened.querySelector('.flower-error-actions')?.textContent).toContain('Configure current provider');
+    const card = reopened.querySelector<HTMLElement>('.flower-error-card')!;
+    expect(card.scrollWidth).toBeLessThanOrEqual(card.clientWidth + 1);
+    for (const button of card.querySelectorAll('button')) {
+      expect(button.getBoundingClientRect().right).toBeLessThanOrEqual(card.getBoundingClientRect().right + 1);
+    }
+    await page.screenshot({ element: reopened, path: `__screenshots__/provider-stall-exhausted-${width}.png` });
     expect(reopened.querySelector('[data-flower-progress-kind="retrying"]')).toBeNull();
     expect(reopened.textContent).toContain('Last unfinished fragment');
     expect(reopened.querySelector('.flower-message-bubble-error')).toBeNull();

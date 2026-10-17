@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-17: Tool-argument stall recovery
+
+- Adopt published Floret v7.51.2 [bounded Provider recovery](ai/model-provider-surface-and-history.md), map its stream-interruption category for live and historical failures, and retain upstream error text and explicit recovery exits without a second retry owner or schema change.
+
 ## 2026-10-17: Visual image memory and original snapshot rereads
 
 - Adopt published Floret v7.51.1 [native image compaction](ai/model-context-usage-and-compaction.md) and canonical attachment discovery. Extend [image.read](ai/image-read-and-retention.md) with authorized stable locators; share preview membership, preserve upload and tool resources, and remove Activity-based ownership without a second store or schema change.
