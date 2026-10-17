@@ -1183,6 +1183,11 @@ migration lifecycle, or substitute cache deletion for an upstream migration.
 
 ## Desktop UI Verification
 
+- Explicit Desktop qualification must use `scripts/desktop_test_session.mjs` as
+  its lifecycle owner. Register task-owned resources immediately, preserve
+  production Quit confirmation and independent Runtime lifetime, and report
+  success only after process and port cleanup verification. Timeout, unexpected
+  exit, forced termination, and cleanup failure remain failed qualification.
 - Electron integration tests must use per-run temporary working and user-data
   directories, a random launch marker, and either a dedicated POSIX process
   group or an exact Windows process tree while its leader remains addressable.
@@ -1321,8 +1326,8 @@ must select Node 26 without older-major fallbacks.
   gate.
 
 `scripts/check_final_integration.sh` is the exact-main local integration entry
-point. It requires a clean worktree and exact `HEAD`, and delegates its existing
-43 checks to independently runnable source, dependency, release-contract,
+point. It requires a clean worktree and exact `HEAD`, and delegates its bounded
+checks to independently runnable source, dependency, release-contract,
 Runtime-contract and hygiene groups. Coverage includes formatting, shell
 syntax, workflow lint, localization, hooks, official dependency boundaries,
 artifact and compatibility contracts, Gateway/Flower source contracts,
@@ -1332,8 +1337,10 @@ qualification remains separate from this bounded main gate; result caching
 does not remove any qualification requirement.
 
 Commands with explicit full modes, especially
-`./scripts/check_desktop.sh --full`, belong only in the final integration script
-and must not be used as routine iteration checks. Ordinary GitHub Actions runs
+`./scripts/check_desktop.sh --full`, belong only in explicit local or dedicated
+qualification runs and must never be attached to commit, exact-main push, or
+ordinary CI. The no-argument Desktop check defaults to headless mode.
+Ordinary GitHub Actions runs
 only the bounded source checks in `./scripts/check_quick_ci.sh`; the tag release
 workflow performs only release-ref validation and the hosted build, signing,
 attestation, readback, and publication work required for official artifacts.

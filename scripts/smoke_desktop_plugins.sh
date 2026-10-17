@@ -456,59 +456,16 @@ capture_pids() {
   sort -u -o "$PID_FILE" "$PID_FILE"
 }
 
-owned_pid_active() {
-  local pid=$1 state
-  kill -0 "$pid" 2>/dev/null || return 1
-  state=$(ps -p "$pid" -o stat= 2>/dev/null | awk '{print $1}')
-  [[ -n "$state" && "$state" != Z* ]]
-}
-
-wait_for_owned_exit() {
-  local deadline=$((SECONDS + $1)) pid
-  shift
-  while [[ "$SECONDS" -lt "$deadline" ]]; do
-    local active=false
-    for pid in "$@"; do
-      if owned_pid_active "$pid"; then
-        active=true
-        break
-      fi
-    done
-    [[ "$active" == "false" ]] && return 0
-    sleep 0.1
-  done
-  return 1
-}
-
 stop_owned() {
-  capture_pids
-  if [[ ! -s "$PID_FILE" ]]; then
-    LAUNCH_PID=
-    return 0
-  fi
-  local owned_pids=()
-  while IFS= read -r pid; do
-    [[ "$pid" =~ ^[0-9]+$ ]] && owned_pids+=("$pid")
-  done <"$PID_FILE"
-  local electron_pid runtime_pid root_pid
-  electron_pid=$(listener_pid "$CDP_PORT")
-  runtime_pid=$(listener_pid "$LOCAL_UI_PORT")
-  for root_pid in "$electron_pid" "$runtime_pid" "$LAUNCH_PID"; do
-    [[ "$root_pid" =~ ^[0-9]+$ ]] && kill -TERM "$root_pid" 2>/dev/null || true
-  done
-  if ! wait_for_owned_exit 30 "${owned_pids[@]}"; then
+  [[ -n "$LAUNCH_PID" ]] || return 0
+  # The development launcher is the sole service owner. Listener PIDs are evidence only.
+  if ! REDEVEN_STATE_ROOT="$STATE_ROOT" REDEVEN_DESKTOP_USER_DATA_ROOT="$USER_DATA_ROOT" \
+    REDEVEN_DESKTOP_CACHE_ROOT="$CACHE_ROOT" REDEVEN_DESKTOP_TEMP_ROOT="$TEMP_ROOT" \
+    node "$ROOT_DIR/scripts/desktop_test_session.mjs" --command 45000 \
+      "$ROOT_DIR/scripts/dev_desktop.sh" --stop-only >>"$DESKTOP_LOG" 2>&1; then
     PIDS_RELEASED=false
-    for pid in "${owned_pids[@]}"; do
-      owned_pid_active "$pid" && kill -KILL "$pid" 2>/dev/null || true
-    done
   fi
-  [[ -n "$LAUNCH_PID" ]] && wait "$LAUNCH_PID" 2>/dev/null || true
-  wait_for_owned_exit 5 "${owned_pids[@]}" || true
-  for pid in "${owned_pids[@]}"; do
-    if owned_pid_active "$pid"; then
-      PIDS_RELEASED=false
-    fi
-  done
+  # stop-only has already verified the launcher-owned process and service inventory.
   LAUNCH_PID=
 }
 

@@ -71,10 +71,10 @@ async function run() {
       }
     }
     assert.equal(JSON.parse(state.getRendererItem(navigationKey)!).target.page, target);
-    console.log(`PASS Electron ${process.env.REDEVEN_CONTINUITY_PHASE}: ${target}`);
+    console.log(`Assertions complete: Electron ${process.env.REDEVEN_CONTINUITY_PHASE}: ${target}`);
     owners.delete(window.webContents.id); window.destroy();
   }
-  console.log(`PASS Electron completion: ${process.env.REDEVEN_CONTINUITY_PHASE}`);
+  console.log(`Assertions complete: Electron completion: ${process.env.REDEVEN_CONTINUITY_PHASE}`);
   app.quit();
 }
 run().catch(error => { console.error(error); app.exit(1); });

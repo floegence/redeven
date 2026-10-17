@@ -10,13 +10,13 @@ usage() {
   cat <<'USAGE'
 Usage: ./scripts/check_desktop.sh [--ci|--full]
 
-  --ci    Run the lightweight Desktop gate for GitHub Actions.
+  --ci    Run the headless Desktop checks (the default).
   --full  Run the full Desktop gate, including heavier Vitest suites.
 USAGE
 }
 
 main() {
-  local mode="full"
+  local mode="ci"
   local dir="$ROOT_DIR/desktop"
 
   while [ "$#" -gt 0 ]; do
@@ -64,12 +64,9 @@ main() {
     npm run lint
     npm run typecheck
     npm run test:runtime-compatibility
-    # IMPORTANT: GitHub Actions runs the lightweight Desktop gate; full Vitest
-    # coverage is intentionally owned by the final main pre-push gate. Routine
-    # commits stay fast, while the focused Runtime compatibility matrix always
-    # runs because it protects the open boundary.
-    # The focused continuity contract also runs at commit/integration boundaries;
-    # browser qualification remains owned by this full mode and its manual workflow.
+    # IMPORTANT: ordinary commit, exact-main push and CI stay source-only.
+    # Real Desktop/browser qualification requires explicit --full or its manual workflow.
+    # Runtime compatibility and focused continuity contracts remain mandatory.
     if [ "$mode" = "full" ]; then
       "$SCRIPT_DIR/check_desktop_electron_test_runtime.sh" "$dir"
       npm run test

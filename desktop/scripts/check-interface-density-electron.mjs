@@ -1,6 +1,7 @@
+import { createDesktopTestSession } from '../../scripts/desktop_test_session.mjs';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -8,125 +9,195 @@ import electron from 'electron';
 import { _electron } from '../../internal/envapp/ui_src/node_modules/playwright/index.mjs';
 import { createSSHSettingsPreviewServer } from './ssh-settings-preview.mjs';
 
-execFileSync('../scripts/check_desktop_electron_test_runtime.sh', [], { stdio: 'inherit' });
-const output = path.resolve('dist/interface-density-acceptance');
-await mkdir(output, { recursive: true });
-const report = { commit: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
-  sourceDiff: execFileSync('git', ['diff', '--stat'], { encoding: 'utf8' }).trim(),
-  floe: JSON.parse(await readFile('node_modules/@floegence/floe-webapp-core/package.json', 'utf8')).version,
-  marker: randomUUID(), cases: [], errors: [] };
-const state = await mkdtemp(path.join(tmpdir(), 'redeven-density-electron-'));
-let server;
-let app;
-try {
-  report.state = state;
-  server = await createSSHSettingsPreviewServer(0);
-  await server.watcher.close();
-  report.port = new URL(server.resolvedUrls.local[0]).port;
-  const { mixedEnvironmentFixture } = await server.ssrLoadModule(path.resolve('src/testSupport/mixedEnvironmentFixture.ts'));
-  const { RUNTIME_SERVICE_COMPATIBILITY_EPOCH: epoch, RUNTIME_SERVICE_PROTOCOL_VERSION: protocol } = await server.ssrLoadModule(path.resolve('src/shared/runtimeService.ts'));
-  const snapshot = mixedEnvironmentFixture().snapshot;
-  snapshot.environments = snapshot.environments.map(entry => {
-    const service = entry.runtime_service ?? entry.local_environment_runtime_service;
-    return { ...entry, runtime_service: service ? { ...service, compatibility_epoch: epoch, protocol_version: protocol,
-      compatibility: 'compatible', compatibility_message: undefined, open_readiness: { state: 'openable' }, ai_readiness: { state: 'inspecting' } } : undefined };
-  });
-  const entry = path.join(state, 'main.cjs');
-  await writeFile(entry, `const {app, BrowserWindow} = require('electron');
-    app.whenReady().then(() => { const win = new BrowserWindow({width:1440,height:1000,useContentSize:true,show:true,webPreferences:{contextIsolation:true,sandbox:true}}); win.loadURL('about:blank'); });`);
-  // Playwright owns the isolated process group and closes only this launch.
-  app = await _electron.launch({ executablePath: electron, cwd: state, args: [entry, `--user-data-dir=${state}/profile`, `--redeven-smoke-run=${report.marker}`],
-    env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined } });
-  report.pid = app.process().pid;
-  await writeFile(path.join(output, 'runtime.json'), JSON.stringify(report, null, 2));
-  report.electron = await app.evaluate(() => process.versions.electron);
-  const page = await app.firstWindow();
-  // Capture through Electron: Playwright can crop native windows at non-default zoom.
-  const screenshot = async (name) => {
-    const png = await app.evaluate(async ({ BrowserWindow }) =>
-      (await BrowserWindow.getAllWindows()[0].webContents.capturePage()).toPNG().toString('base64'));
-    await writeFile(path.join(output, name), Buffer.from(png, 'base64'));
+const session = await createDesktopTestSession(import.meta.url, {
+  timeoutMs: 180000,
+});
+await session.run(async () => {
+  execFileSync('../scripts/check_desktop_electron_test_runtime.sh', [], { stdio: 'inherit' });
+  const output = path.resolve('dist/interface-density-acceptance');
+  await mkdir(output, { recursive: true });
+  const report = {
+    commit: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
+    sourceDiff: execFileSync('git', ['diff', '--stat'], { encoding: 'utf8' }).trim(),
+    floe: JSON.parse(await readFile('node_modules/@floegence/floe-webapp-core/package.json', 'utf8')).version,
+    marker: randomUUID(),
+    cases: [],
+    errors: [],
   };
-  page.on('pageerror', error => report.errors.push(error.message));
-  await page.addInitScript(snapshot => {
-    window.navigationSnapshot = { ...snapshot, navigation_revision: 1 };
-    const material = new URL(location.href).searchParams.get('material');
-    localStorage.setItem('redeven-desktop-shell-theme-surface-style', JSON.stringify(material));
-    const language = { preference: 'zh-CN', resolved_locale: 'zh-CN', source: 'explicit', system_candidates: [] };
-    window.redevenDesktopLanguage = { getSnapshot: () => language, setPreference: () => language, subscribe: () => () => {} };
-  }, snapshot);
-  for (const material of ['standard', 'soft-neumorphic']) {
-    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.setZoomFactor(1));
-    const url = new URL('flower-navigation.html', server.resolvedUrls.local[0]);
-    url.searchParams.set('material', material);
-    await page.goto(url.href);
-    await page.locator('.redeven-flower-topbar-button').click();
-    await page.evaluate(() => window.navigationFixture.releaseRuntime());
-    await page.locator('[data-thread-id="navigation-thread"] .flower-thread-card-select-button').click();
-    await page.locator('.flower-message-bubble-assistant p').first().waitFor();
-    await page.evaluate(() => document.fonts.ready);
-    await page.evaluate(() => { window.densityComposer = document.querySelector('.flower-composer textarea'); });
-    for (const mode of ['light', 'dark']) {
+  const state = await mkdtemp(path.join(tmpdir(), 'redeven-density-electron-'));
+  await session.directory(state);
+  let server;
+  let app;
+  try {
+    report.state = state;
+    server = await createSSHSettingsPreviewServer(0);
+    await session.defer('preview server', () => server.close());
+    await session.port(new URL(server.resolvedUrls.local[0]).port);
+    await server.watcher.close();
+    report.port = new URL(server.resolvedUrls.local[0]).port;
+    const { mixedEnvironmentFixture } = await server.ssrLoadModule(path.resolve('src/testSupport/mixedEnvironmentFixture.ts'));
+    const { RUNTIME_SERVICE_COMPATIBILITY_EPOCH: epoch, RUNTIME_SERVICE_PROTOCOL_VERSION: protocol } = await server.ssrLoadModule(
+      path.resolve('src/shared/runtimeService.ts'),
+    );
+    const snapshot = mixedEnvironmentFixture().snapshot;
+    snapshot.environments = snapshot.environments.map((entry) => {
+      const service = entry.runtime_service ?? entry.local_environment_runtime_service;
+      return {
+        ...entry,
+        runtime_service: service
+          ? {
+              ...service,
+              compatibility_epoch: epoch,
+              protocol_version: protocol,
+              compatibility: 'compatible',
+              compatibility_message: undefined,
+              open_readiness: { state: 'openable' },
+              ai_readiness: { state: 'inspecting' },
+            }
+          : undefined,
+      };
+    });
+    const entry = path.join(state, 'main.cjs');
+    await writeFile(
+      entry,
+      `const {app, BrowserWindow} = require('electron');
+    app.whenReady().then(() => { const win = new BrowserWindow({width:1440,height:1000,useContentSize:true,show:true,webPreferences:{contextIsolation:true,sandbox:true}}); win.loadURL('about:blank'); });`,
+    );
+    // Playwright owns the isolated process group and closes only this launch.
+    app = await session.launchElectron(_electron, {
+      executablePath: electron,
+      cwd: state,
+      args: [entry, `--user-data-dir=${state}/profile`, `--redeven-smoke-run=${report.marker}`],
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined },
+    });
+    report.pid = app.process().pid;
+    await writeFile(path.join(output, 'runtime.json'), JSON.stringify(report, null, 2));
+    report.electron = await app.evaluate(() => process.versions.electron);
+    const page = await app.firstWindow();
+    // Capture through Electron: Playwright can crop native windows at non-default zoom.
+    const screenshot = async (name) => {
+      const png = await app.evaluate(async ({ BrowserWindow }) =>
+        (await BrowserWindow.getAllWindows()[0].webContents.capturePage()).toPNG().toString('base64'),
+      );
+      await writeFile(path.join(output, name), Buffer.from(png, 'base64'));
+    };
+    page.on('pageerror', (error) => report.errors.push(error.message));
+    await page.addInitScript((snapshot) => {
+      window.navigationSnapshot = { ...snapshot, navigation_revision: 1 };
+      const material = new URL(location.href).searchParams.get('material');
+      localStorage.setItem('redeven-desktop-shell-theme-surface-style', JSON.stringify(material));
+      const language = {
+        preference: 'zh-CN',
+        resolved_locale: 'zh-CN',
+        source: 'explicit',
+        system_candidates: [],
+      };
+      window.redevenDesktopLanguage = {
+        getSnapshot: () => language,
+        setPreference: () => language,
+        subscribe: () => () => {},
+      };
+    }, snapshot);
+    for (const material of ['standard', 'soft-neumorphic']) {
       await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.setZoomFactor(1));
-      await page.locator('button[aria-controls^="redeven-desktop-theme-picker-"]').click();
-      await page.locator(`.redeven-theme-picker__mode[id$="-${mode}"]`).click();
-      await page.locator(`[data-desktop-theme-preset="porcelain-${mode}"]`).click();
-      await page.locator('.redeven-theme-picker__close').click();
-      await page.locator('.flower-message-bubble-assistant p').first().click();
-      await page.getByRole('tooltip').waitFor({ state: 'hidden' });
-      for (const zoom of [1, 1.25, 2]) {
-        await app.evaluate(({ BrowserWindow }, zoom) => BrowserWindow.getAllWindows()[0].webContents.setZoomFactor(zoom), zoom);
-        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-        const metrics = await page.evaluate(() => {
-          const paragraph = document.querySelector('.flower-message-bubble-assistant p');
-          const composer = document.querySelector('.flower-composer');
-          const controls = [...composer.querySelectorAll('button')].filter(node => node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden');
-          const bounds = composer.getBoundingClientRect();
-          const css = getComputedStyle(paragraph);
-          return { root: getComputedStyle(document.documentElement).fontSize, font: css.fontFamily, size: css.fontSize, line: css.lineHeight,
-            weight: css.fontWeight, color: css.color, background: getComputedStyle(document.body).backgroundColor,
-            shellTheme: document.documentElement.dataset.floeShellTheme, material: document.documentElement.dataset.floeSurfaceStyle,
-            composerShadow: getComputedStyle(composer).boxShadow, dpr: devicePixelRatio, visualScale: visualViewport.scale, width: innerWidth, height: innerHeight,
-            header: document.querySelector('.flower-chat-header').getBoundingClientRect().height, composer: bounds.height,
-            retained: window.densityComposer === composer.querySelector('textarea'),
-            overflow: document.documentElement.scrollWidth > innerWidth,
-            controlsContained: controls.every(node => { const box = node.getBoundingClientRect(); return box.right <= innerWidth + 1 && box.left >= -1 && box.bottom <= innerHeight + 1; }) };
-        });
-        const actualZoom = await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.getZoomFactor());
-        report.cases.push({ mode, material, zoom: actualZoom, ...metrics });
-        await screenshot(`flower-${mode}-${material}-${zoom}.png`);
-        assert.equal(actualZoom, zoom);
-        assert.equal(metrics.shellTheme, `porcelain-${mode}`);
-        assert.equal(metrics.material, material);
-        const foregroundChannels = metrics.color.match(/[\d.]+/g).slice(0, 3).map(Number);
-        assert.ok(foregroundChannels.every(value => mode === 'dark' ? value > 150 : value < 100), metrics.color);
-        assert.equal(metrics.root, '16px');
-        assert.equal(metrics.size, '12px'); assert.equal(metrics.line, '20px'); assert.equal(metrics.weight, '400');
-        assert.ok(metrics.font.includes('Inter Variable'));
-        assert.equal(metrics.retained, true); assert.equal(metrics.overflow, false); assert.equal(metrics.controlsContained, true);
-        if (zoom === 1) { assert.equal(metrics.header, 40); assert.equal(metrics.composer, 84); }
+      const url = new URL('flower-navigation.html', server.resolvedUrls.local[0]);
+      url.searchParams.set('material', material);
+      await page.goto(url.href);
+      await page.locator('.redeven-flower-topbar-button').click();
+      await page.evaluate(() => window.navigationFixture.releaseRuntime());
+      await page.locator('[data-thread-id="navigation-thread"] .flower-thread-card-select-button').click();
+      await page.locator('.flower-message-bubble-assistant p').first().waitFor();
+      await page.evaluate(() => document.fonts.ready);
+      await page.evaluate(() => {
+        window.densityComposer = document.querySelector('.flower-composer textarea');
+      });
+      for (const mode of ['light', 'dark']) {
+        await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.setZoomFactor(1));
+        await page.locator('button[aria-controls^="redeven-desktop-theme-picker-"]').click();
+        await page.locator(`.redeven-theme-picker__mode[id$="-${mode}"]`).click();
+        await page.locator(`[data-desktop-theme-preset="porcelain-${mode}"]`).click();
+        await page.locator('.redeven-theme-picker__close').click();
+        await page.locator('.flower-message-bubble-assistant p').first().click();
+        await page.getByRole('tooltip').waitFor({ state: 'hidden' });
+        for (const zoom of [1, 1.25, 2]) {
+          await app.evaluate(({ BrowserWindow }, zoom) => BrowserWindow.getAllWindows()[0].webContents.setZoomFactor(zoom), zoom);
+          await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+          const metrics = await page.evaluate(() => {
+            const paragraph = document.querySelector('.flower-message-bubble-assistant p');
+            const composer = document.querySelector('.flower-composer');
+            const controls = [...composer.querySelectorAll('button')].filter(
+              (node) => node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden',
+            );
+            const bounds = composer.getBoundingClientRect();
+            const css = getComputedStyle(paragraph);
+            return {
+              root: getComputedStyle(document.documentElement).fontSize,
+              font: css.fontFamily,
+              size: css.fontSize,
+              line: css.lineHeight,
+              weight: css.fontWeight,
+              color: css.color,
+              background: getComputedStyle(document.body).backgroundColor,
+              shellTheme: document.documentElement.dataset.floeShellTheme,
+              material: document.documentElement.dataset.floeSurfaceStyle,
+              composerShadow: getComputedStyle(composer).boxShadow,
+              dpr: devicePixelRatio,
+              visualScale: visualViewport.scale,
+              width: innerWidth,
+              height: innerHeight,
+              header: document.querySelector('.flower-chat-header').getBoundingClientRect().height,
+              composer: bounds.height,
+              retained: window.densityComposer === composer.querySelector('textarea'),
+              overflow: document.documentElement.scrollWidth > innerWidth,
+              controlsContained: controls.every((node) => {
+                const box = node.getBoundingClientRect();
+                return box.right <= innerWidth + 1 && box.left >= -1 && box.bottom <= innerHeight + 1;
+              }),
+            };
+          });
+          const actualZoom = await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.getZoomFactor());
+          report.cases.push({ mode, material, zoom: actualZoom, ...metrics });
+          await screenshot(`flower-${mode}-${material}-${zoom}.png`);
+          assert.equal(actualZoom, zoom);
+          assert.equal(metrics.shellTheme, `porcelain-${mode}`);
+          assert.equal(metrics.material, material);
+          const foregroundChannels = metrics.color
+            .match(/[\d.]+/g)
+            .slice(0, 3)
+            .map(Number);
+          assert.ok(
+            foregroundChannels.every((value) => (mode === 'dark' ? value > 150 : value < 100)),
+            metrics.color,
+          );
+          assert.equal(metrics.root, '16px');
+          assert.equal(metrics.size, '12px');
+          assert.equal(metrics.line, '20px');
+          assert.equal(metrics.weight, '400');
+          assert.ok(metrics.font.includes('Inter Variable'));
+          assert.equal(metrics.retained, true);
+          assert.equal(metrics.overflow, false);
+          assert.equal(metrics.controlsContained, true);
+          if (zoom === 1) {
+            assert.equal(metrics.header, 40);
+            assert.equal(metrics.composer, 84);
+          }
+        }
       }
     }
-  }
-  const standard = report.cases.find(entry => entry.mode === 'light' && entry.material === 'standard' && entry.zoom === 1);
-  const soft = report.cases.find(entry => entry.mode === 'light' && entry.material === 'soft-neumorphic' && entry.zoom === 1);
-  assert.notEqual(standard.composerShadow, soft.composerShadow);
-  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.setZoomFactor(1));
-  await page.locator('.redeven-flower-back-button').click();
-  await screenshot('welcome.png');
-  assert.deepEqual(report.errors, []);
-  report.status = 'passed';
-  console.log('Electron interface density passed:', JSON.stringify(report));
-} catch (error) {
-  report.status = 'failed'; report.error = String(error); throw error;
-} finally {
-  try {
-    await writeFile(path.join(output, 'report.json'), JSON.stringify(report, null, 2));
+    const standard = report.cases.find((entry) => entry.mode === 'light' && entry.material === 'standard' && entry.zoom === 1);
+    const soft = report.cases.find((entry) => entry.mode === 'light' && entry.material === 'soft-neumorphic' && entry.zoom === 1);
+    assert.notEqual(standard.composerShadow, soft.composerShadow);
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.setZoomFactor(1));
+    await page.locator('.redeven-flower-back-button').click();
+    await screenshot('welcome.png');
+    assert.deepEqual(report.errors, []);
+    report.status = 'passed';
+    console.log('Electron interface density passed:', JSON.stringify(report));
+  } catch (error) {
+    report.status = 'failed';
+    report.error = String(error);
+    throw error;
   } finally {
-    try { await app?.close(); }
-    finally {
-      try { await server?.close(); }
-      finally { await rm(state, { recursive: true, force: true }); }
-    }
+    await session.writeEvidence(path.join(output, 'report.json'), JSON.stringify(report, null, 2));
   }
-}
+});

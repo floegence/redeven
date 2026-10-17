@@ -1,15 +1,21 @@
+import { createDesktopTestSession } from '../../scripts/desktop_test_session.mjs';
 import { build } from 'esbuild';
-import { spawn, execFileSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import electron from 'electron';
 
-const directory = await mkdtemp(path.join(tmpdir(), 'redeven-titlebar-'));
-const marker = randomUUID();
-const repository = path.resolve('..');
-try {
+const session = await createDesktopTestSession(import.meta.url, {
+  timeoutMs: 180000,
+});
+await session.run(async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'redeven-titlebar-'));
+  await session.directory(directory);
+  const marker = randomUUID();
+  const repository = path.resolve('..');
+
   execFileSync(path.join(repository, 'scripts/check_desktop_electron_test_runtime.sh'), [process.cwd()], { stdio: 'inherit' });
   const entries = [
     ['scripts/fixtures/host-application-titlebar.ts', 'fixture.cjs'],
@@ -17,42 +23,42 @@ try {
   ];
   for (const [entry, name] of entries) {
     await build({
-      entryPoints: [entry], outfile: path.join(directory, name),
-      bundle: true, platform: 'node', format: 'cjs', external: ['electron'],
+      entryPoints: [entry],
+      outfile: path.join(directory, name),
+      bundle: true,
+      platform: 'node',
+      format: 'cjs',
+      external: ['electron'],
     });
   }
-  const child = spawn(electron, [
-    path.join(directory, 'fixture.cjs'),
-    `--user-data-dir=${directory}/profile`,
-    `--redeven-titlebar-run=${marker}`,
-  ], {
-    cwd: directory, detached: process.platform !== 'win32', stdio: 'inherit',
-    env: {
-      ...process.env, ELECTRON_RUN_AS_NODE: undefined,
-      REDEVEN_TITLEBAR_REPOSITORY: repository,
-      REDEVEN_TITLEBAR_PRELOAD: path.join(directory, 'preload.cjs'),
+  const child = await session.spawn(
+    electron,
+    [path.join(directory, 'fixture.cjs'), `--user-data-dir=${directory}/profile`, `--redeven-titlebar-run=${marker}`],
+    {
+      cwd: directory,
+      detached: process.platform !== 'win32',
+      stdio: 'inherit',
+      env: {
+        ...process.env,
+        ELECTRON_RUN_AS_NODE: undefined,
+        REDEVEN_TITLEBAR_REPOSITORY: repository,
+        REDEVEN_TITLEBAR_PRELOAD: path.join(directory, 'preload.cjs'),
+      },
     },
-  });
-  console.log('Owned titlebar runtime:', JSON.stringify({
-    commit: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
-    pid: child.pid, state: directory, marker,
-  }));
-  let timedOut = false;
-  const timeout = setTimeout(() => {
-    if (!child.pid || child.exitCode !== null || child.signalCode !== null) return;
-    timedOut = true;
-    if (process.platform === 'win32') execFileSync('taskkill', ['/PID', String(child.pid), '/T', '/F']);
-    else process.kill(-child.pid, 'SIGTERM');
-  }, 60000);
-  try {
-    const result = await new Promise((resolve, reject) => {
-      child.once('error', reject);
-      child.once('exit', (code, signal) => resolve({ code, signal }));
-    });
-    if (timedOut || result.code !== 0) throw new Error(`Titlebar fixture failed: ${JSON.stringify({ ...result, timedOut })}`);
-  } finally {
-    clearTimeout(timeout);
-  }
-} finally {
-  await rm(directory, { recursive: true, force: true });
-}
+  );
+  console.log(
+    'Owned titlebar runtime:',
+    JSON.stringify({
+      commit: execFileSync('git', ['rev-parse', 'HEAD'], {
+        encoding: 'utf8',
+      }).trim(),
+      pid: child.pid,
+      state: directory,
+      marker,
+    }),
+  );
+
+  const result = await session.wait(child, 60000);
+
+  if (result.code !== 0) throw new Error(`Titlebar fixture failed: ${JSON.stringify({ ...result })}`);
+});

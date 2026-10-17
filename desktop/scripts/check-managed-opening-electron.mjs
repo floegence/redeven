@@ -1,26 +1,36 @@
+import { createDesktopTestSession } from '../../scripts/desktop_test_session.mjs';
 import assert from 'node:assert/strict';
-import { spawn, execFileSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import electron from 'electron';
 import { build } from 'esbuild';
 
-const desktop = fileURLToPath(new URL('../', import.meta.url));
-let raw = ''; for await (const chunk of process.stdin) raw += chunk;
-const input = JSON.parse(raw);
-const parsed = new URL(input.url);
-assert.equal(parsed.hostname, '127.0.0.1');
-assert.equal(parsed.protocol, 'http:');
-const directory = await mkdtemp(path.join(tmpdir(), 'redeven-managed-opening-electron-'));
-const marker = randomUUID();
-try {
+const session = await createDesktopTestSession(import.meta.url, {
+  timeoutMs: 180000,
+});
+await session.run(async () => {
+  const desktop = fileURLToPath(new URL('../', import.meta.url));
+  let raw = '';
+  for await (const chunk of process.stdin) raw += chunk;
+  const input = JSON.parse(raw);
+  const parsed = new URL(input.url);
+  assert.equal(parsed.hostname, '127.0.0.1');
+  assert.equal(parsed.protocol, 'http:');
+  const directory = await mkdtemp(path.join(tmpdir(), 'redeven-managed-opening-electron-'));
+  await session.directory(directory);
+  const marker = randomUUID();
+
   execFileSync(path.join(desktop, '../scripts/check_desktop_electron_test_runtime.sh'), [desktop], { stdio: 'inherit' });
   const script = path.join(directory, 'main.cjs');
-  await writeFile(path.join(directory,'entrance.json'),raw,{mode:0o600});
-  await build({ stdin: { resolveDir: desktop, contents: `
+  await writeFile(path.join(directory, 'entrance.json'), raw, { mode: 0o600 });
+  await build({
+    stdin: {
+      resolveDir: desktop,
+      contents: `
     import { app, BrowserWindow } from 'electron';
     import { readFileSync } from 'node:fs';
     import assert from 'node:assert/strict';
@@ -58,20 +68,42 @@ try {
       if(process.env.REDEVEN_MANAGED_OPENING_SCREENSHOT) {
         const {writeFileSync}=await import('node:fs');writeFileSync(process.env.REDEVEN_MANAGED_OPENING_SCREENSHOT,(await win.webContents.capturePage()).toPNG());
       }
-      win.destroy();console.log('PASS managed entrance: real Electron 401, authenticated redirect, Cookie, painted page, refresh and window reopen');app.quit();
+      win.destroy();console.log('Assertions complete: managed entrance: real Electron 401, authenticated redirect, Cookie, painted page, refresh and window reopen');app.quit();
     }).catch(()=>{console.error('Managed entrance Electron qualification failed.');app.exit(1);});
-  ` }, outfile: script, bundle: true, platform: 'node', format: 'cjs', external: ['electron'] });
-  const child = spawn(electron, [script, `--user-data-dir=${directory}/profile`, `--redeven-managed-opening-run=${marker}`], { cwd: directory, detached: process.platform !== 'win32', stdio: ['ignore','pipe','pipe'], env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined } });
-  console.log(JSON.stringify({pid:child.pid,state:directory,marker,commit:execFileSync('git',['rev-parse','HEAD'],{cwd:desktop,encoding:'utf8'}).trim()}));
-  let output='';for(const stream of [child.stdout,child.stderr])stream.on('data',chunk=>{output+=chunk;});
-  const timer=setTimeout(()=>{
-    if(!child.pid||child.exitCode!==null||child.signalCode!==null)return;
-    if(process.platform==='win32')execFileSync('taskkill',['/PID',String(child.pid),'/T','/F']);else process.kill(-child.pid,'SIGTERM');
-  },60000);
-  try {
-    const result=await new Promise((resolve,reject)=>{child.once('error',reject);child.once('exit',(code,signal)=>resolve({code,signal}));});
-    assert.equal(result.code,0,`Owned Electron failed: ${JSON.stringify(result)}\n${output}`);
-    assert.equal(result.signal,null);
-    assert.ok(output.includes('PASS managed entrance'));console.log(output.trim());
-  } finally {clearTimeout(timer);}
-} finally {await rm(directory,{recursive:true,force:true});}
+  `,
+    },
+    outfile: script,
+    bundle: true,
+    platform: 'node',
+    format: 'cjs',
+    external: ['electron'],
+  });
+  const child = await session.spawn(electron, [script, `--user-data-dir=${directory}/profile`, `--redeven-managed-opening-run=${marker}`], {
+    cwd: directory,
+    detached: process.platform !== 'win32',
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined },
+  });
+  console.log(
+    JSON.stringify({
+      pid: child.pid,
+      state: directory,
+      marker,
+      commit: execFileSync('git', ['rev-parse', 'HEAD'], {
+        cwd: desktop,
+        encoding: 'utf8',
+      }).trim(),
+    }),
+  );
+  let output = '';
+  for (const stream of [child.stdout, child.stderr])
+    stream.on('data', (chunk) => {
+      output += chunk;
+    });
+
+  const result = await session.wait(child, 60000);
+  assert.equal(result.code, 0, `Owned Electron failed: ${JSON.stringify(result)}\n${output}`);
+  assert.equal(result.signal, null);
+  assert.ok(output.includes('Assertions complete: managed entrance'));
+  console.log(output.trim());
+});
