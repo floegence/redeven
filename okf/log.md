@@ -4,6 +4,10 @@
 
 - Consume the released Floe static PPTX surface through a lazy [file preview](ui/file-preview-viewport-and-rendering.md), with bounded input, page windowing, native selection, stable local zoom, visible compatibility notices, and verified third-party licenses and corresponding source.
 
+## 2026-10-17: Persistent-index startup and safe preparation
+
+- Adopt published Floret v7.52.0 persistent canonical search indexes; remove build-driven snapshots and duplicate inspection, use canonical summaries and media inventory, and add serialized stoppable preparation with counted progress. See [readiness lifecycle](architecture/ai-readiness-lifecycle.md) and [recovery](ai/flower-backup-and-recovery.md). Record [performance acceptance](operations/flower-startup-performance.md) and the shared [interaction contract](architecture/flower-startup-presentation.md).
+
 ## 2026-10-17: Tool-argument stall recovery
 
 - Adopt published Floret v7.51.2 [bounded Provider recovery](ai/model-provider-surface-and-history.md), map its stream-interruption category for live and historical failures, and retain upstream error text and explicit recovery exits without a second retry owner or schema change.

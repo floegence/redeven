@@ -112,7 +112,7 @@
     },
     "storage": {
       "title": "Flower-Sicherungen",
-      "description": "Automatische Sicherungen umfassen Flower-Verlauf, Einstellungen, Lesestatus und Uploads. Die letzten drei automatischen Sicherungen bleiben erhalten, geschützte Sicherungen werden weiterhin aufbewahrt.",
+      "description": "Vorhandene Sicherungen enthalten Flower-Verlauf, Einstellungen, Lesestatus und Uploads und bleiben vollständig erhalten. Start und Updates erstellen keine automatischen Sicherungen.",
       "adminOnly": "Zum Anzeigen und Wiederherstellen sind Administratorrechte erforderlich.",
       "view": "Sicherungen anzeigen",
       "unknownBuild": "Quell-Build nicht erfasst",
@@ -131,11 +131,11 @@
       "externalImpact": "Arbeitsverzeichnisse und globale Anmeldeeinstellungen sind ausgenommen. Befehle und externe Aktionen werden nicht rückgängig gemacht. Die Laufzeitversion bleibt gleich; ein ungelöster Migrationsfehler kann Flower weiterhin am Start hindern.",
       "confirm": "Wiederherstellung bestätigen",
       "backingUp": "Deine Unterhaltungen werden gesichert",
-      "backingUpDescription": "Vor dem Update wird eine Wiederherstellungskopie deines Verlaufs und deiner Uploads gespeichert.",
+      "backingUpDescription": "Vor der Wiederherstellung wird eine Kopie deines aktuellen Verlaufs und deiner Uploads gespeichert.",
       "restoring": "Flower wird wiederhergestellt",
       "restoringDescription": "Die gewählte Sicherung wird vorbereitet und geprüft. Terminals, Dateien, Einstellungen und Diagnose bleiben verfügbar.",
       "spaceTitle": "Flower benötigt mehr Speicherplatz",
-      "spaceDescription": "Geben Sie Speicherplatz auf dem Laufzeitdatenträger frei und prüfen Sie erneut. Flower bleibt pausiert, bis Sicherung und Aktualisierung abgeschlossen werden können.",
+      "spaceDescription": "Geben Sie Speicherplatz auf dem Datenträger der Laufzeitumgebung frei und prüfen Sie erneut. Flower bleibt bis zum Abschluss der Vorbereitung pausiert.",
       "failedTitle": "Flower-Wartung angehalten",
       "failedDescription": "Prüfen Sie die Diagnose oder wählen Sie eine geprüfte Sicherung. Terminals, Dateien und Einstellungen bleiben verfügbar.",
       "component": "Komponente",
@@ -145,6 +145,20 @@
       "uploads": "Uploads",
       "backup": "Sicherung",
       "recovery": "Wiederherstellung"
+    },
+    "startup": {
+      "verifying": "Daten werden geprüft",
+      "indexing": "Suchindex wird erstellt",
+      "preparing": "Unterhaltungen werden vorbereitet",
+      "stopping": "Vorbereitung wird angehalten",
+      "stopped": "Vorbereitung angehalten",
+      "stop": "Vorbereitung anhalten",
+      "prepareAgain": "Erneut vorbereiten",
+      "indexingDescription": "Der erste Suchindex wird erstellt. Flower ist verfügbar, sobald die Vorbereitung abgeschlossen ist.",
+      "stoppingDescription": "Die laufende Transaktion wird zurückgerollt und der Speicher geschlossen.",
+      "stoppedDescription": "Ihre Daten bleiben erhalten. Wählen Sie bei Bedarf Erneut vorbereiten.",
+      "closeFailed": "Flower konnte den Speicher nicht sicher schließen. Kopieren Sie die Diagnose und starten Sie die Anwendung neu, bevor Sie die Vorbereitung wiederholen.",
+      "progress": "{completed} / {total} Unterhaltungen"
     }
   },
   "common": {

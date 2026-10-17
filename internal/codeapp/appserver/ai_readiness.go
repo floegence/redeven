@@ -19,6 +19,10 @@ const (
 	AIReadinessOptimizing  AIReadinessState = "optimizing"
 	AIReadinessMigrating   AIReadinessState = "migrating"
 	AIReadinessVerifying   AIReadinessState = "verifying"
+	AIReadinessIndexing    AIReadinessState = "indexing"
+	AIReadinessPreparing   AIReadinessState = "preparing"
+	AIReadinessStopping    AIReadinessState = "stopping"
+	AIReadinessStopped     AIReadinessState = "stopped"
 	AIReadinessRecovering  AIReadinessState = "recovering"
 	AIReadinessBackingUp   AIReadinessState = "backing_up"
 	AIReadinessRestoring   AIReadinessState = "restoring"
@@ -30,6 +34,7 @@ const (
 const (
 	AIServiceUnavailableErrorCode         = "AI_SERVICE_UNAVAILABLE"
 	AIReadinessContractErrorReasonCode    = "ai_readiness_contract_error"
+	AIGenerationCloseFailedReasonCode     = "generation_close_failed"
 	AIServiceStartupErrorReasonCode       = "ai_service_startup_error"
 	AIHostThreadSettingsMissingReasonCode = "host_thread_settings_missing"
 )
@@ -42,15 +47,18 @@ var (
 // AIReadinessSnapshot contains only Redeven-owned, sanitized availability
 // facts. It must never contain Floret Store or Agent snapshots.
 type AIReadinessSnapshot struct {
-	Component    string           `json:"component,omitempty"`
-	State        AIReadinessState `json:"state"`
-	ReasonCode   string           `json:"reason_code,omitempty"`
-	Retryable    bool             `json:"retryable"`
-	SafeToRetry  bool             `json:"safe_to_retry"`
-	IssueCount   int              `json:"issue_count,omitempty"`
-	TraceID      string           `json:"trace_id,omitempty"`
-	StartupPhase string           `json:"startup_phase,omitempty"`
-	RetryReason  string           `json:"retry_reason,omitempty"`
+	Stoppable     bool             `json:"stoppable,omitempty"`
+	WorkCompleted int64            `json:"work_completed,omitempty"`
+	WorkTotal     int64            `json:"work_total,omitempty"`
+	Component     string           `json:"component,omitempty"`
+	State         AIReadinessState `json:"state"`
+	ReasonCode    string           `json:"reason_code,omitempty"`
+	Retryable     bool             `json:"retryable"`
+	SafeToRetry   bool             `json:"safe_to_retry"`
+	IssueCount    int              `json:"issue_count,omitempty"`
+	TraceID       string           `json:"trace_id,omitempty"`
+	StartupPhase  string           `json:"startup_phase,omitempty"`
+	RetryReason   string           `json:"retry_reason,omitempty"`
 }
 
 // AIServiceStartupOptions contains the Redeven-owned inputs that may change
@@ -68,6 +76,8 @@ type AIServiceProvider interface {
 	RetryAIReadiness() error
 	UpdateAIServiceStartupOptions(AIServiceStartupOptions)
 }
+
+type AIStartupStopper interface{ StopAIReadiness() error }
 
 type AIOrphanRootMaintenanceProvider interface {
 	ReviewOrphanCanonicalRoots(context.Context) (ai.OrphanCanonicalRootReview, error)
@@ -122,6 +132,7 @@ func routeUsesAIService(r *http.Request) bool {
 		"/_redeven_proxy/api/ai/maintenance/snapshots",
 		"/_redeven_proxy/api/ai/maintenance/restore",
 		"/_redeven_proxy/api/ai/readiness/retry",
+		"/_redeven_proxy/api/ai/readiness/stop",
 		"/_redeven_proxy/api/ai/maintenance/orphan_roots",
 		"/_redeven_proxy/api/ai/maintenance/orphan_roots/adopt",
 		"/_redeven_proxy/api/ai/maintenance/orphan_roots/delete",
@@ -157,9 +168,10 @@ func (g *Server) aiReadinessSnapshot() AIReadinessSnapshot {
 
 func sanitizeAIReadinessSnapshot(snapshot AIReadinessSnapshot) AIReadinessSnapshot {
 	switch snapshot.State {
-	case AIReadinessUnavailable, AIReadinessInspecting, AIReadinessOptimizing, AIReadinessMigrating, AIReadinessVerifying, AIReadinessBackingUp, AIReadinessRestoring:
+	case AIReadinessIndexing, AIReadinessPreparing, AIReadinessStopping, AIReadinessStopped, AIReadinessUnavailable, AIReadinessInspecting, AIReadinessOptimizing, AIReadinessMigrating, AIReadinessVerifying, AIReadinessBackingUp, AIReadinessRestoring:
 		return sanitizeAIReadinessDiagnostics(AIReadinessSnapshot{
 			State: snapshot.State, TraceID: snapshot.TraceID, StartupPhase: snapshot.StartupPhase, Component: snapshot.Component,
+			Stoppable: snapshot.Stoppable, WorkCompleted: snapshot.WorkCompleted, WorkTotal: snapshot.WorkTotal,
 		})
 	case AIReadinessRecovering:
 		if !knownAIReadinessReasonCode(snapshot.ReasonCode) || !snapshot.Retryable || !snapshot.SafeToRetry ||
@@ -167,7 +179,7 @@ func sanitizeAIReadinessSnapshot(snapshot AIReadinessSnapshot) AIReadinessSnapsh
 			return AIReadinessSnapshot{State: AIReadinessBlocked, ReasonCode: AIReadinessContractErrorReasonCode}
 		}
 		return sanitizeAIReadinessDiagnostics(AIReadinessSnapshot{
-			State: snapshot.State, ReasonCode: strings.TrimSpace(snapshot.ReasonCode),
+			State: snapshot.State, ReasonCode: strings.TrimSpace(snapshot.ReasonCode), Stoppable: snapshot.Stoppable,
 			Retryable: snapshot.Retryable, SafeToRetry: snapshot.SafeToRetry,
 			TraceID: snapshot.TraceID, StartupPhase: snapshot.StartupPhase, RetryReason: snapshot.RetryReason, Component: snapshot.Component,
 		})
@@ -191,6 +203,9 @@ func sanitizeAIReadinessSnapshot(snapshot AIReadinessSnapshot) AIReadinessSnapsh
 }
 
 func sanitizeAIReadinessDiagnostics(snapshot AIReadinessSnapshot) AIReadinessSnapshot {
+	if snapshot.WorkCompleted < 0 || snapshot.WorkTotal < 0 || snapshot.WorkTotal > 0 && snapshot.WorkCompleted > snapshot.WorkTotal {
+		return AIReadinessSnapshot{State: AIReadinessBlocked, ReasonCode: AIReadinessContractErrorReasonCode}
+	}
 	var ok bool
 	switch snapshot.Component {
 	case "", "product", "floret", "read_state", "uploads", "backup", "recovery":
@@ -238,6 +253,7 @@ func knownAIReadinessReasonCode(code string) bool {
 		string(ai.FloretStoreStartupIOError),
 		string(ai.FloretStoreStartupCancelled),
 		string(ai.FloretStoreStartupContractError),
+		AIGenerationCloseFailedReasonCode,
 		AIServiceStartupErrorReasonCode,
 		AIReadinessContractErrorReasonCode:
 		return true

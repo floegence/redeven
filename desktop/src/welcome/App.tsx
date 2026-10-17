@@ -6118,6 +6118,22 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     await refreshSnapshot();
   }
 
+  async function performFlowerStartupAction(action: 'stop' | 'retry'): Promise<void> {
+    const environment = flowerRuntimeEnvironment();
+    if (!environment) throw new Error('The Flower environment is unavailable.');
+    try {
+      const result = await props.runtime.settings.requestRuntimeFlower({
+        environment_id: environment.id,
+        path: '/_redeven_proxy/api/ai/readiness/' + action,
+        method: 'POST',
+      });
+      if (!result.ok) throw new Error('The Flower preparation action failed.');
+    } finally {
+      await refreshEnvironmentRuntimeSilently(environment);
+      await refreshSnapshot();
+    }
+  }
+
   function openFlowerSurface(): void {
     navigateWelcomeSurface('flower');
   }
@@ -6495,7 +6511,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
               return <DesktopFlowerRuntimeBoundary embedded
                 snapshot={environmentRuntimeServiceSnapshot(flowerRuntimeEnvironment())} i18n={i18n()}
                 onBack={() => void openEnvironmentCenterSurface()}
-                onRecover={recoverFlowerRuntime}>
+                onRecover={recoverFlowerRuntime}
+                onStartupAction={performFlowerStartupAction}>
                 <FlowerSurface adapter={adapter} draftCoordinator={flowerDraftCoordinator} presentation="companion"
                 engaged={surface.engaged} transcriptVisible={surface.transcriptVisible}
                 embeddedConversation={surface.embeddedConversation} copy={flowerSurfaceCopy()}
@@ -6525,6 +6542,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
                     i18n={i18n()}
                     onBack={() => void openEnvironmentCenterSurface()}
                     onRecover={recoverFlowerRuntime}
+                    onStartupAction={performFlowerStartupAction}
                   >
                     <FlowerSurface
                       engaged={flowerVisible()}

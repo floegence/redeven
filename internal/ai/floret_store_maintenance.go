@@ -25,6 +25,8 @@ const (
 	FloretStoreStartupOptimizing FloretStoreStartupPhase = "optimizing"
 	FloretStoreStartupMigrating  FloretStoreStartupPhase = "migrating"
 	FloretStoreStartupVerifying  FloretStoreStartupPhase = "verifying"
+	FloretStoreStartupIndexing   FloretStoreStartupPhase = "indexing"
+	FloretStoreStartupPreparing  FloretStoreStartupPhase = "preparing"
 	FloretStoreStartupRecovering FloretStoreStartupPhase = "recovering"
 	FloretStoreStartupBackingUp  FloretStoreStartupPhase = "backing_up"
 	FloretStoreStartupRestoring  FloretStoreStartupPhase = "restoring"
@@ -86,7 +88,7 @@ var floretStoreMaintenancePolicy = flstorage.SQLiteMaintenancePolicy{
 
 type floretSQLiteMaintainer func(context.Context, string, flstorage.SQLiteMaintenancePolicy) (flstorage.SQLiteMaintenanceResult, error)
 
-func openFloretHost(ctx context.Context, path string, progress func(FloretStoreStartupPhase), logger *slog.Logger, maintain floretSQLiteMaintainer, open floretRuntimeOpener) (*flruntime.Host, error) {
+func openFloretHost(ctx context.Context, path string, progress func(FloretStoreStartupPhase), logger *slog.Logger, maintain floretSQLiteMaintainer, open floretRuntimeOpener, work ...func(flruntime.StartupWork)) (*flruntime.Host, error) {
 	if ctx == nil || strings.TrimSpace(path) == "" || path != strings.TrimSpace(path) || maintain == nil || open == nil {
 		return nil, floretStoreStartupError(FloretStoreStartupContractError, false, false, errors.New("floret storage startup requires a context, canonical path, SQLite maintainer, and runtime opener"))
 	}
@@ -126,11 +128,19 @@ func openFloretHost(ctx context.Context, path string, progress func(FloretStoreS
 		Storage:            source,
 		EnableParentEvents: true,
 		DeferExecution:     true,
+		StartupWorkProgress: flruntime.StartupWorkProgressFunc(func(value flruntime.StartupWork) {
+			if len(work) > 0 && work[0] != nil {
+				work[0](value)
+			}
+		}),
 		StartupProgress: flruntime.StartupProgressFunc(func(phase flruntime.StartupPhase) {
 			switch phase {
 			case flruntime.StartupPhaseMigrating:
 				openPhase = string(FloretStoreStartupMigrating)
 				reportFloretStorePhase(progress, FloretStoreStartupMigrating)
+			case flruntime.StartupPhaseIndexing:
+				openPhase = string(FloretStoreStartupIndexing)
+				reportFloretStorePhase(progress, FloretStoreStartupIndexing)
 			case flruntime.StartupPhaseVerifying:
 				openPhase = string(FloretStoreStartupVerifying)
 				reportFloretStorePhase(progress, FloretStoreStartupVerifying)

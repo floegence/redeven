@@ -122,12 +122,21 @@ function fromWireRuntimeServiceAIReadiness(value: unknown): RuntimeServiceAIRead
       }
       break;
     case 'unavailable':
+      return { state, issueCount: 0 };
     case 'inspecting':
     case 'migrating':
     case 'verifying':
-      return { state, issueCount: 0 };
+    case 'indexing':
+    case 'preparing':
+    case 'optimizing':
+    case 'recovering':
+    case 'restoring':
+    case 'backing_up':
+    case 'stopping':
+    case 'stopped':
+      return { state, issueCount: 0, stoppable: record.stoppable === true && !['unavailable', 'stopping', 'stopped'].includes(state), workCompleted: normalizeCount(record.work_completed), workTotal: normalizeCount(record.work_total) };
     case 'blocked':
-      if (reasonCode) return { state: 'blocked', reasonCode, issueCount: 0 };
+      if (reasonCode) return { state: 'blocked', reasonCode, issueCount: 0, retryable: record.retryable === true, safeToRetry: record.retryable === true && record.safe_to_retry === true && reasonCode !== 'generation_close_failed' };
       break;
   }
   return { state: 'unavailable', issueCount: 0 };

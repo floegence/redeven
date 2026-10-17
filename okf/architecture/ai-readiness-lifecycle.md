@@ -18,30 +18,40 @@ timestamp: 2026-09-08T00:00:00Z
 
 The Code App composition layer owns the only AI readiness controller. Its
 closed state set is `unavailable`, `inspecting`, `backing_up`, `optimizing`,
-`migrating`, `verifying`, `recovering`, `restoring`, `ready`, `degraded`, and
-`blocked`. Core terminal, files, settings and diagnostics become available
+`migrating`, `verifying`, `indexing`, `preparing`, `recovering`, `restoring`,
+`stopping`, `stopped`, `ready`, `degraded`, and `blocked`. Core terminal, files, settings and diagnostics become available
 independently of Flower preparation.
 
 One generation owns the retained Floret Host, product database, read-state
 path migration and database, view publisher, and attachment maintenance. The
-startup order is readonly owner inspection, required complete-set snapshot,
-Floret space maintenance, owner migrations, canonical validation and current
-execution-authority preparation, explicit activation, then publication. Floret
-inspection uses its published `InspectSQLite` API without a probe Host. The
-retained Host always opens with `DeferExecution`; `View`, queue import and
-hydration cannot execute models or tools during preparation. Floret remains
-the source of actual migration and verification progress. A standalone service
-activates by default only after the same preparation succeeds.
+startup order is unfinished replacement recovery, owner open and migration,
+canonical validation and persistent index reuse or first build, product
+preparation, explicit activation, then publication. Ordinary startup does not
+call full read-only inspection before opening. Published inspection remains
+available for explicit diagnosis and staged restore validation. The retained
+Host opens with execution deferred; preparation cannot execute models or tools.
 
-Published Floret v7.39.2 retains canonical and projection validation during
-inspection without building disposable text-search postings. The retained Host
-builds the full search index once during formal startup, with deduplicated Unicode
-fragments. Redeven keeps the existing complete-set snapshot policy and readiness
-phases; it does not cache, decode, or persist a second search index.
+Published Floret v7.52.0 maintains its rebuildable SQLite search index in the
+canonical write transaction. Ordinary reopening validates source correspondence
+and reuses the index; a missing index builds before activation. Redeven neither
+decodes canonical records nor owns another search projection. Startup queue
+selection uses the optional canonical summary reader. Upload retention uses the
+complete media descriptor inventory, including archived and inactive paths and
+queues. Tool media collection runs in existing background maintenance with its
+write gate, complete inventory and execution-idle constraint.
+
+One attempt context belongs to the readiness controller. Stop immediately
+publishes stopping and cancels that attempt. Stopped is published only after
+rollback and owner close finish; retry is then explicit and cannot overlap the
+previous attempt. Cancellation never triggers automatic recovery. A close
+failure publishes generation_close_failed and requires application restart;
+no later attempt may reopen those files. Known workload totals are shown as
+counts; unknown totals remain indeterminate. Activated service generations have
+their own controller-lifetime contexts.
 
 Welcome renders each observed phase in its existing readiness boundary,
-including checking, backup, optimization, upgrade, verification, recovery,
-and restore. Flower mounts only for `ready` or `degraded`, while navigation and
+including canonical validation, index construction, product preparation,
+recovery, restore and safe stopping. Flower mounts only for `ready` or `degraded`, while navigation and
 the shell-owned draft remain available. Phase changes do not start provider
 requests or create a second readiness timer. The controller records elapsed
 phase and total startup durations from its transition timestamps; failure
@@ -97,7 +107,7 @@ context so replacement can cancel their work before waiting for release.
 AI lifecycle routes return HTTP 503 with machine code
 `AI_SERVICE_UNAVAILABLE` and the current sanitized snapshot when no generation
 can be leased. Model-not-configured remains a distinct ready-service error.
-Readiness, retry, and administrator-only snapshot and restore routes never acquire a service. Provider-key and web-search-key
+Readiness, retry, stop, and administrator-only snapshot and restore routes never acquire a service. Provider-key and web-search-key
 status/update routes remain Redeven secrets operations and do not acquire AI,
 so users can repair credentials while runtime AI is blocked.
 
@@ -119,64 +129,10 @@ Denied admin or full-access requests and unknown AI routes never obtain a
 generation lease. Incomplete provider leases fail closed, release any supplied
 resource, and cannot be presented as `ready`.
 
-## Env App maintenance presentation
+## Maintenance presentation
 
-Env App shares one readiness controller across Activity, Workbench, and
-Settings. Its snapshot is the only admission boundary for the Flower product
-subtree: `ready` and `degraded` mount one surface, while every other state leaves
-the surface unmounted and shows maintenance in its slot. Unmounting stops the
-workspace stream, invalidates unfinished bootstrap work, and discards local
-errors and caches. Returning to an operational state creates one clean surface
-from server data. The Shell-owned composer draft coordinator stays outside this
-boundary, so unsent drafts survive. No Flower-local readiness state machine,
-poller, or 503 suppression path exists.
-
-The boundary never disables or hides the shell, Workbench, terminal, files,
-Settings, or a shared ancestor. Only the visible Flower placement may move or
-restore focus.
-
-Env App begins readiness inspection only after the HTTP access status has been
-checked and access is granted. The readiness HTTP route remains available while
-the encrypted direct RPC transport connects, resumes, or reconnects, so
-readiness refresh must not wait for RPC or access-resume UI state. Initial lock
-and every later grant revocation pause the controller, invalidate in-flight
-publication, clear polling and automatic retry state, and reject manual refresh
-or retry without issuing HTTP requests. A later grant resumes exactly one fresh
-inspection. Until that inspection returns an operational snapshot, Flower does
-not request settings, threads, attachments, handler resolution, or the live
-stream. When a Runtime restart invalidates local access, the password gate
-replaces the recovery presentation; a successful regrant begins one fresh
-readiness and Flower initialization sequence.
-
-Loading, backup, and restore share one compact Flower mark, one phase title, and
-a thin indeterminate progress track. The default view has no decorative documents,
-repeated brand label, or explanatory paragraphs; it never invents a percentage,
-remaining time, or polling countdown. The announcement-focused heading has no
-visual focus frame; interactive controls retain visible keyboard focus.
-The initial 150 ms delay applies once per busy period; phase changes update the
-same visible surface, retaining open details, keyboard focus, and animation nodes.
-While busy, the mark uses the [shared whole-bloom progress rotation](../ui/flower-output-progress.md#progress-symbol)
-without changing either theme's artwork.
-Startup details can be expanded throughout preparation to read the phase
-explanation, data-preservation statement, workspace availability, and diagnostics.
-After ten seconds the UI shows real elapsed time without live-region announcements;
-after thirty seconds it adds one short reminder that files and terminals remain
-available. Longer startup guidance stays inside details. Normal processing never exposes
-retry or cancel actions. Companion layout adapts to its own container, and reduced
-motion disables decorative movement without hiding progress or status. Text stays
-fully opaque during entry so contrast does not depend on animation completion.
-The process-level
-`agent.lock` remains the state-root owner, so another runtime attaches or reports
-conflict instead of opening an empty Store. A terminal retry is user-controlled,
-single-flight, and allowed only by typed safety plus current authority. Administrator-confirmed complete-set restoration follows the [Flower backup and recovery contract](../ai/flower-backup-and-recovery.md); it never offers force, reset, or ignore controls. Returning to `ready`
-mounts a fresh Flower DOM after the previous surface has completed cleanup and
-emits one non-blocking ready notice after a long startup.
-
-Displayed diagnostics and clipboard output use the same sanitized projection.
-Only the component, phase, real elapsed time, status, and bounded trace ID may appear;
-raw paths, schema or SQL details, credentials, provider state, retry internals,
-and tool output never cross the boundary. Unknown or contradictory facts become one
-non-retryable contract failure. Settings reports the unified Flower storage lifecycle and keeps other settings usable. Administrators can review backup metadata and recovery impact before confirming a restore.
+See [Flower startup and recovery presentation](flower-startup-presentation.md) for
+Env App and Desktop admission, phase progress, stop/retry, focus and draft continuity.
 
 # Boundaries
 
@@ -206,9 +162,4 @@ integrity check succeeds. Readiness history is not recovery authority.
 - `redeven:internal/ai/floret_store_maintenance_test.go:1` - Proves that one service startup opens exactly one retained Floret Host and preserves typed failure classification.
 - `redeven:internal/codeapp/appserver/ai_readiness_test.go:78` - Covers unified unavailable responses, optional Settings projection, exact permission ordering, invalid leases, and secrets-only routes.
 - `redeven:internal/agent/ai_rpc_registration_test.go:13` - Proves the stable RPC inventory remains registered and returns structured unavailability without a service.
-- `redeven:internal/envapp/ui_src/src/ui/flower/aiReadiness.ts:1` - Strictly normalizes the sanitized wire facts and owns bounded, permission-aware polling and retry state.
-- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.localAccess.e2e.test.tsx:1` - Verifies initial lock, grant, revocation, stable Activity ownership, and one fresh readiness request after local or remote regrant.
-- `redeven:internal/envapp/ui_src/src/ui/flower/AIReadinessBoundary.tsx:1` - Lazily admits the Flower subtree only for operational readiness while keeping maintenance local and diagnostics on the same source.
-- `redeven:internal/envapp/ui_src/src/ui/pages/settings/AIReadinessSettingsSection.tsx:1` - Projects unified Flower maintenance and administrator recovery actions.
-- `redeven:internal/envapp/ui_src/src/ui/flower/AIReadinessBoundary.browser.test.tsx:1` - Verifies rotation and theme artwork alongside narrow reflow, zoom, forced colors, reduced motion, overflow, and local interaction behavior in Chromium.
 - `redeven:scripts/check_floret_dependency_boundary.sh:1` - Rejects fixed service pointers, raw accessors, misplaced constructors, and readiness storage coupling.

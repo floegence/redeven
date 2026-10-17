@@ -1,7 +1,7 @@
 import { StableText, Button } from '@floegence/floe-webapp-core/ui';
 import { writeTextToClipboard } from '../../utils/clipboard';
 import { For, Show, createEffect, createMemo, createSignal } from 'solid-js';
-import { AlertTriangle, Check, Copy, Database, RefreshIcon, Trash } from '@floegence/floe-webapp-core/icons';
+import { AlertTriangle, Check, Copy, Database, RefreshIcon, Stop, Trash } from '@floegence/floe-webapp-core/icons';
 
 import { FlowerStorageSettings } from './FlowerStorageSettings';
 import { useI18n } from '../../i18n';
@@ -31,7 +31,7 @@ type AIReadinessSettingsSectionProps = Readonly<{
 
 export function AIReadinessSettingsSection(props: AIReadinessSettingsSectionProps) {
   const i18n = useI18n();
-  const presentation = createMemo(() => createAIReadinessPresentation(props.controller.snapshot(), i18n));
+  const presentation = createMemo(() => createAIReadinessPresentation(props.controller.snapshot(), i18n, { canRetryGeneration: props.canAdmin, canManageStorage: props.canAdmin }));
   const [diagnosticsOpen, setDiagnosticsOpen] = createSignal(false);
   const [copyPending, setCopyPending] = createSignal(false);
   const [copied, setCopied] = createSignal(false);
@@ -146,7 +146,6 @@ export function AIReadinessSettingsSection(props: AIReadinessSettingsSectionProp
   const statusLabel = createMemo(() => {
     if (props.controller.loading()) return i18n.t('aiReadiness.settings.refreshing');
     if (presentation().mode === 'ready') return i18n.t('aiReadiness.settings.noIssue');
-    if (presentation().mode === 'busy') return i18n.t('aiReadiness.diagnostics.statusChecking');
     return presentation().title;
   });
 
@@ -187,13 +186,28 @@ export function AIReadinessSettingsSection(props: AIReadinessSettingsSectionProp
           tone={statusTone()}
           control={<div class="flex flex-wrap items-center justify-end gap-2">
             <SettingsPill tone={statusTone()}>{statusLabel()}</SettingsPill>
+            <Show when={presentation().primaryAction === 'stop'}>
+              <Button size="sm" variant="outline" icon={Stop} onClick={() => void props.controller.stop()}>
+                {i18n.t('aiReadiness.startup.stop')}
+              </Button>
+            </Show>
+            <Show when={presentation().primaryAction === 'retry' || presentation().secondaryAction === 'retry'}>
+              <Button size="sm" variant="outline" icon={RefreshIcon} disabled={props.controller.retryPending()}
+                aria-busy={props.controller.retryPending() || undefined} onClick={() => void props.controller.retry()}>
+                <StableText reserve={[i18n.t('aiReadiness.startup.prepareAgain'), i18n.t('aiReadiness.actions.retry')]}>{props.controller.snapshot().state === 'stopped' ? i18n.t('aiReadiness.startup.prepareAgain') : i18n.t('aiReadiness.actions.retry')}</StableText>
+              </Button>
+            </Show>
             <Button size="icon" variant="ghost" icon={RefreshIcon}
               aria-label={props.controller.loading() ? i18n.t('aiReadiness.settings.refreshing') : i18n.t('common.actions.refresh')}
               disabled={props.controller.loading() || props.controller.retryPending()}
               data-pending={props.controller.loading() || undefined}
               aria-busy={props.controller.loading() || undefined} onClick={() => void props.controller.refresh()} />
           </div>}
-        />
+        >
+          <Show when={presentation().mode !== 'ready'}>
+            <p class="mt-3 text-xs leading-relaxed text-muted-foreground">{presentation().description}</p>
+          </Show>
+        </SettingRow>
         <SettingRow title={i18n.t('aiReadiness.actions.showDiagnostics')}
           description={i18n.t('aiReadiness.diagnostics.description')}
           control={<div class="flex flex-wrap items-center justify-end gap-2">

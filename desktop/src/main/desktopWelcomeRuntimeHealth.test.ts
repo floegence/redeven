@@ -139,7 +139,7 @@ describe('DesktopWelcomeRuntimeHealthStore', () => {
     expect(desktopWelcomeRuntimeHealthIsFresh({ ...freshHealth, freshness: 'failed' }, checkedAtUnixMS + 1)).toBe(false);
   });
 
-  it.each(['starting', 'inspecting', 'backing_up', 'optimizing', 'migrating', 'verifying', 'recovering', 'restoring'])(
+  it.each(['starting', 'inspecting', 'backing_up', 'optimizing', 'migrating', 'verifying', 'recovering', 'restoring', 'indexing', 'preparing', 'stopping'])(
     'observes AI %s on the next existing health tick instead of caching startup for 30 seconds', async state => {
       let probes = 0;
       const service = (state: string) => normalizeRuntimeServiceSnapshot({ ai_readiness: { state } });

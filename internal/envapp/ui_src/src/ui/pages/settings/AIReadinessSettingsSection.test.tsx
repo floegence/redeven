@@ -63,7 +63,10 @@ function mountSettings(refreshResult?: ReturnType<typeof deferred<AIReadinessSna
       return next;
     }).finally(() => setLoading(false));
   });
+  const stop = vi.fn(async () => snapshot());
+  const retry = vi.fn(async () => snapshot());
   const controller: AIReadinessController = {
+    stop,
     snapshot,
     loading,
     retryPending: () => false,
@@ -71,7 +74,7 @@ function mountSettings(refreshResult?: ReturnType<typeof deferred<AIReadinessSna
     startupElapsedMs: () => null,
     longStartupReadySequence: () => 0,
     refresh,
-    retry: async () => snapshot(),
+    retry,
     pause: () => undefined,
     resume: async () => snapshot(),
     dispose: () => undefined,
@@ -91,7 +94,7 @@ function mountSettings(refreshResult?: ReturnType<typeof deferred<AIReadinessSna
       />
     </I18nProvider>
   ), host);
-  return { host, dispose, refresh, setCanAdmin };
+  return { host, dispose, refresh, stop, retry, setSnapshot, setCanAdmin };
 }
 
 function buttonWithText(host: HTMLElement, text: string): HTMLButtonElement {
@@ -112,6 +115,18 @@ afterEach(() => {
 });
 
 describe('AIReadinessSettingsSection', () => {
+  it('offers authorized stop and prepare-again actions through the existing controller', () => {
+    const fixture = mountSettings(undefined, { ...blockedSnapshot(), state: 'indexing', stoppable: true });
+    buttonWithText(fixture.host, 'Stop').click();
+    expect(fixture.stop).toHaveBeenCalledTimes(1);
+    fixture.setSnapshot({ ...blockedSnapshot(), state: 'stopped' });
+    buttonWithText(fixture.host, 'Prepare again').click();
+    expect(fixture.retry).toHaveBeenCalledTimes(1);
+    fixture.setCanAdmin(false);
+    expect(Array.from(fixture.host.querySelectorAll('button')).some((button) => button.textContent?.includes('Prepare again'))).toBe(false);
+    fixture.dispose();
+  });
+
   it('loads the admin orphan review and submits every explicit host setting', async () => {
     fetchLocalApiJSON
       .mockResolvedValueOnce({ issue_count: 1, items: [{ thread_id: 'thread_orphan', phase: 'idle', status: 'idle', can_append_message: true, recoverable: false }] })

@@ -266,3 +266,8 @@ describe('sys codec', () => {
     });
   });
 });
+
+
+it.each(['indexing', 'preparing', 'stopping', 'stopped'] as const)('decodes startup readiness through sys.ping: %s', state => {
+  expect(fromWireSysPingResponse({ server_time_ms: 0, runtime_service: { ai_readiness: { state, stoppable: true, work_completed: 3, work_total: 8 } } }).runtimeService?.aiReadiness).toMatchObject({ state, stoppable: !['stopping', 'stopped'].includes(state), workCompleted: 3, workTotal: 8 });
+});

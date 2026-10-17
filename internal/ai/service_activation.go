@@ -20,6 +20,19 @@ func (s *Service) ThreadReadState() *threadreadstate.Store {
 }
 
 func (s *Service) prepareStartupThreads(ctx context.Context) error {
+	summaries, ok := s.threadRuntime.(flruntime.ThreadSummaryReader)
+	if !ok {
+		return errors.New("published Floret thread summary reader is unavailable")
+	}
+	inventory, err := s.floretMediaInventory(ctx)
+	if err != nil {
+		return err
+	}
+	descriptors := make(map[string][]flruntime.MessageAttachment)
+	for _, reference := range inventory.References {
+		id := reference.ThreadID.String()
+		descriptors[id] = append(descriptors[id], reference.Attachment)
+	}
 	var cursor threadstore.ThreadSettingsRecoveryCursor
 	for {
 		settings, next, more, err := s.threadsDB.ListThreadSettingsForRecoveryPage(ctx, cursor, 200)
@@ -27,17 +40,17 @@ func (s *Service) prepareStartupThreads(ctx context.Context) error {
 			return err
 		}
 		for _, setting := range settings {
-			view, err := s.threadRuntime.View(ctx, identity.ThreadID(setting.ThreadID))
+			summary, err := summaries.Summary(ctx, identity.ThreadID(setting.ThreadID))
 			if errors.Is(err, flruntime.ErrThreadNotFound) {
 				continue
 			}
 			if err != nil {
 				return err
 			}
-			if err := s.retainCanonicalUploadResources(ctx, setting.EndpointID, view); err != nil {
+			if err := s.retainCanonicalUploadDescriptors(ctx, setting.EndpointID, setting.ThreadID, descriptors[setting.ThreadID]); err != nil {
 				return err
 			}
-			if view.Activity == flruntime.ThreadActivityIdle && len(view.Queue) > 0 && (view.LastOutcome == nil || *view.LastOutcome == flruntime.TurnOutcomeCompleted) {
+			if summary.Activity == flruntime.ThreadActivityIdle && summary.QueueCount > 0 && (summary.LastOutcome == nil || *summary.LastOutcome == flruntime.TurnOutcomeCompleted) {
 				s.pendingStartupThreads = append(s.pendingStartupThreads, setting.ThreadID)
 			}
 		}
@@ -69,11 +82,6 @@ func (s *Service) Activate(ctx context.Context) error {
 	if s.activateFloret == nil {
 		return nil
 	}
-	if !s.skipStorageMaintenance {
-		if err := completeFlowerUpgrade(s.stateDir); err != nil {
-			return flowerStorageError("backup", "verifying", err)
-		}
-	}
 	if err := s.activateFloret(ctx); err != nil {
 		return err
 	}
@@ -87,16 +95,11 @@ func (s *Service) Activate(ctx context.Context) error {
 	if err := s.resumeMigratedPendingInputs(s.lifecycleCtx, s.pendingStartupThreads); err != nil && !errors.Is(err, context.Canceled) && s.log != nil {
 		s.log.Error("ai: pending input recovery failed", "error", err)
 	}
-	s.serviceWorkers.Add(1)
-	go func() {
-		defer s.serviceWorkers.Done()
-
-		if !s.skipStorageMaintenance {
-			if err := pruneFlowerSnapshots(s.lifecycleCtx, s.stateDir); err != nil && s.log != nil {
-				s.log.Warn("ai: snapshot retention failed", "error", err)
-			}
+	if !s.skipStorageMaintenance {
+		if err := removeObsoleteFlowerUpgrade(s.stateDir); err != nil && s.log != nil {
+			s.log.Warn("ai: obsolete upgrade record cleanup failed", "error", err)
 		}
-	}()
+	}
 	return nil
 }
 

@@ -3328,12 +3328,15 @@
     "startupPhase": {
       "starting": "Iniciando el servicio de IA...",
       "inspecting": "Comprobando las conversaciones guardadas...",
-      "backing_up": "Creando una copia de las conversaciones antes de actualizar...",
+      "backing_up": "Guardando una copia de las conversaciones antes de restaurar…",
       "optimizing": "Optimizando el almacenamiento de conversaciones...",
       "migrating": "Actualizando el almacenamiento de conversaciones...",
       "verifying": "Verificando los datos de las conversaciones...",
       "recovering": "Esperando a que el almacenamiento de conversaciones esté disponible...",
-      "restoring": "Restaurando las conversaciones desde la copia seleccionada..."
+      "restoring": "Restaurando las conversaciones desde la copia seleccionada...",
+      "indexing": "Creando el índice de búsqueda…",
+      "preparing": "Preparando las conversaciones…",
+      "stopping": "Deteniendo de forma segura…"
     },
     "unavailableTitle": "Flower no está disponible",
     "unavailableDetail": "El servicio de IA de Flower no puede procesar solicitudes en este momento. Vuelve a la lista de entornos para comprobar el estado del entorno de ejecución. Tus conversaciones y el borrador sin enviar se conservan.",
@@ -3341,7 +3344,14 @@
     "desktopTitle": "Actualiza Desktop para usar Flower",
     "runtimeDetail": "Este entorno de ejecución es incompatible con Desktop Flower. Actualízalo para continuar. Tu borrador se conserva y la aplicación del entorno sigue disponible.",
     "desktopDetail": "Este entorno de ejecución requiere una versión más reciente de Desktop. Actualiza Desktop para continuar. Tu borrador se conserva y la aplicación del entorno sigue disponible.",
-    "connectedBuild": "Entorno de ejecución conectado: {version} · {commit}"
+    "connectedBuild": "Entorno de ejecución conectado: {version} · {commit}",
+    "stopPreparation": "Detener preparación",
+    "stoppingPreparation": "Deteniendo…",
+    "prepareAgain": "Preparar de nuevo",
+    "stoppedDetail": "La preparación se ha detenido. Se conservan las conversaciones y los borradores sin enviar. Puede volver a preparar Flower cuando quiera.",
+    "restartDetail": "No se pudo cerrar el almacenamiento de conversaciones de forma segura. Reinicie la aplicación antes de preparar Flower de nuevo. Los archivos, terminales y ajustes siguen disponibles.",
+    "startupActionFailed": "No se pudo confirmar el resultado de la preparación. Compruebe la conexión del entorno de ejecución e inténtelo de nuevo.",
+    "workProgress": "{completed} de {total} completados"
   },
   "providerRecovery": {
     "waitingShort": "En espera",

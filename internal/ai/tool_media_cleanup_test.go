@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	flruntime "github.com/floegence/floret/v7/runtime"
 )
@@ -96,7 +97,7 @@ func TestToolMediaCleanupChecksExecutionWhileHoldingWriteGate(t *testing.T) {
 	}
 }
 
-func TestToolMediaStartupCollectsUnadmittedSnapshots(t *testing.T) {
+func TestToolMediaCleanupRunsAfterActivation(t *testing.T) {
 	state := t.TempDir()
 	store := newToolMediaStore(filepath.Join(state, "computer", "keyframes"))
 	body, attachment := computerFrameFixture(t)
@@ -108,7 +109,26 @@ func TestToolMediaStartupCollectsUnadmittedSnapshots(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer svc.Close()
-	if _, err := store.read(t.Context(), attachment.ResourceRef); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("startup did not collect the unadmitted snapshot: %v", err)
+	if _, err := store.read(t.Context(), attachment.ResourceRef); err != nil {
+		t.Fatalf("preparation removed media before activation: %v", err)
+	}
+	if err := svc.Activate(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	waitForToolMediaRemoval(t, store, attachment.ResourceRef)
+}
+
+func waitForToolMediaRemoval(t *testing.T, store toolMediaStore, ref string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		_, err := store.read(t.Context(), ref)
+		if errors.Is(err, os.ErrNotExist) {
+			break
+		}
+		if err != nil || time.Now().After(deadline) {
+			t.Fatalf("background cleanup did not collect the unadmitted snapshot: %v", err)
+		}
+		time.Sleep(time.Millisecond)
 	}
 }

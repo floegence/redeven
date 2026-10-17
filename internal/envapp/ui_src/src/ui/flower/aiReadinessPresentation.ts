@@ -1,7 +1,7 @@
 import type { I18nHelpers } from '../i18n';
 import type { AIReadinessSnapshot } from './aiReadiness';
 
-export type AIReadinessAction = 'retry' | 'open_update' | 'open_permissions' | 'review_issues' | 'show_diagnostics' | 'open_backups';
+export type AIReadinessAction = 'stop' | 'retry' | 'open_update' | 'open_permissions' | 'review_issues' | 'show_diagnostics' | 'open_backups';
 
 export type AIReadinessDiagnosticRow = Readonly<{
   label: string;
@@ -46,8 +46,10 @@ function diagnosticPhase(snapshot: AIReadinessSnapshot, i18n: I18nHelpers): stri
       return text(i18n, 'aiReadiness.diagnostics.phasePreparing');
     case 'migrating':
       return text(i18n, 'aiReadiness.diagnostics.phaseUpdating');
-    case 'verifying':
-      return text(i18n, 'aiReadiness.diagnostics.phaseFinalCheck');
+    case 'verifying': return text(i18n, 'aiReadiness.startup.verifying');
+    case 'indexing': return text(i18n, 'aiReadiness.startup.indexing');
+    case 'preparing': return text(i18n, 'aiReadiness.startup.preparing');
+    case 'stopping': return text(i18n, 'aiReadiness.startup.stopping');
     case 'ready':
     case 'degraded':
       return text(i18n, 'aiReadiness.diagnostics.phaseReady');
@@ -82,6 +84,8 @@ function presentationActions(
   canRetryGeneration: boolean,
   canManageStorage: boolean,
 ): Readonly<{ primaryAction?: AIReadinessAction; secondaryAction?: AIReadinessAction }> {
+  if (snapshot.state === 'stopped') return canRetryGeneration ? { primaryAction: 'retry', secondaryAction: 'show_diagnostics' } : { primaryAction: 'show_diagnostics' };
+  if (snapshot.stoppable && canRetryGeneration) return { primaryAction: 'stop' };
   if (snapshot.state !== 'blocked') return {};
   const canRetry = canRetryGeneration && snapshot.retryable && snapshot.safe_to_retry;
   switch (snapshot.reason_code) {
@@ -132,8 +136,11 @@ function stateCopy(snapshot: AIReadinessSnapshot): Readonly<{
         return { title: 'aiReadiness.states.optimizingTitle', description: 'aiReadiness.states.optimizingDescription', tone: 'neutral' };
       case 'migrating':
         return { title: 'aiReadiness.states.migratingTitle', description: 'aiReadiness.states.migratingDescription', tone: 'neutral' };
-      case 'verifying':
-        return { title: 'aiReadiness.states.verifyingTitle', description: 'aiReadiness.states.verifyingDescription', tone: 'neutral' };
+      case 'verifying': return { title: 'aiReadiness.startup.verifying', description: 'aiReadiness.states.verifyingDescription', tone: 'neutral' };
+      case 'indexing': return { title: 'aiReadiness.startup.indexing', description: 'aiReadiness.startup.indexingDescription', tone: 'neutral' };
+      case 'preparing': return { title: 'aiReadiness.startup.preparing', description: 'aiReadiness.states.unavailableDescription', tone: 'neutral' };
+      case 'stopping': return { title: 'aiReadiness.startup.stopping', description: 'aiReadiness.startup.stoppingDescription', tone: 'neutral' };
+      case 'stopped': return { title: 'aiReadiness.startup.stopped', description: 'aiReadiness.startup.stoppedDescription', tone: 'neutral' };
       case 'recovering':
         return { title: 'aiReadiness.states.optimizingTitle', description: 'aiReadiness.states.optimizingDescription', tone: 'neutral' };
       case 'ready':
@@ -144,6 +151,7 @@ function stateCopy(snapshot: AIReadinessSnapshot): Readonly<{
     }
   }
 
+  if (snapshot.reason_code === 'generation_close_failed') return { title: 'aiReadiness.states.needsCheckTitle', description: 'aiReadiness.startup.closeFailed', tone: 'danger' };
   if (snapshot.reason_code === 'insufficient_space') return { title: 'aiReadiness.storage.spaceTitle', description: 'aiReadiness.storage.spaceDescription', tone: 'warning' };
   if (['migration_failed', 'backup_failed', 'restore_failed'].includes(snapshot.reason_code)) return { title: 'aiReadiness.storage.failedTitle', description: 'aiReadiness.storage.failedDescription', tone: 'danger' };
   if (snapshot.retryable && snapshot.safe_to_retry) {
@@ -185,7 +193,7 @@ export function createAIReadinessPresentation(
   const copy = stateCopy(snapshot);
   const rows = diagnosticRows(snapshot, i18n, options.elapsedMs ?? -1);
   return {
-    mode: snapshot.state === 'ready' ? 'ready' : snapshot.state === 'degraded' ? 'degraded' : snapshot.state === 'blocked' ? 'blocked' : 'busy',
+    mode: snapshot.state === 'ready' ? 'ready' : snapshot.state === 'degraded' ? 'degraded' : snapshot.state === 'blocked' || snapshot.state === 'stopped' ? 'blocked' : 'busy',
     tone: copy.tone,
     title: text(i18n, copy.title),
     description: text(i18n, copy.description),

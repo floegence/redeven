@@ -16,15 +16,15 @@ func TestCurrentCompatibilityContractIsValid(t *testing.T) {
 	if contract.CompatibilityEpoch <= 0 {
 		t.Fatalf("CompatibilityEpoch = %d, want positive", contract.CompatibilityEpoch)
 	}
-	if contract.CompatibilityEpoch != 62 {
-		t.Fatalf("CompatibilityEpoch = %d, want explicit request reuse and SSH preparation epoch 62", contract.CompatibilityEpoch)
+	if contract.CompatibilityEpoch != 63 {
+		t.Fatalf("CompatibilityEpoch = %d, want persistent-index startup epoch 63", contract.CompatibilityEpoch)
 	}
-	if len(contract.UpgradeFromRuntimeEpochs) != 53 {
-		t.Fatalf("UpgradeFromRuntimeEpochs = %v, want the reviewed epochs 9 through 61", contract.UpgradeFromRuntimeEpochs)
+	if len(contract.UpgradeFromRuntimeEpochs) != 54 {
+		t.Fatalf("UpgradeFromRuntimeEpochs = %v, want the reviewed epochs 9 through 62", contract.UpgradeFromRuntimeEpochs)
 	}
 	for index, epoch := range contract.UpgradeFromRuntimeEpochs {
 		if epoch != index+9 {
-			t.Fatalf("UpgradeFromRuntimeEpochs = %v, want contiguous epochs 9 through 61", contract.UpgradeFromRuntimeEpochs)
+			t.Fatalf("UpgradeFromRuntimeEpochs = %v, want contiguous epochs 9 through 62", contract.UpgradeFromRuntimeEpochs)
 		}
 	}
 	if contract.MinimumDesktopVersion != "v0.13.0" || contract.MinimumRuntimeVersion != "v0.13.0" {
@@ -287,5 +287,24 @@ func TestNormalizeSnapshotPreservesCloudBindingWithoutManagementCapability(t *te
 	}
 	if NormalizeSnapshot(Snapshot{}).Bindings.CloudLink.State != CloudLinkStateUnsupported {
 		t.Fatal("an absent binding and capability must remain unsupported")
+	}
+}
+
+func TestNormalizeAIStartupProgressAndActions(t *testing.T) {
+	for _, state := range []string{"indexing", "preparing", "inspecting"} {
+		got := NormalizeAIReadiness(AIReadiness{State: state, Stoppable: true, WorkCompleted: 12, WorkTotal: 8})
+		if got.State != state || !got.Stoppable || got.WorkCompleted != 8 || got.WorkTotal != 8 {
+			t.Fatalf("unexpected progress: %#v", got)
+		}
+	}
+	for _, state := range []string{"stopping", "stopped"} {
+		got := NormalizeAIReadiness(AIReadiness{State: state, Stoppable: true})
+		if got.State != state || got.Stoppable {
+			t.Fatalf("unexpected terminal action: %#v", got)
+		}
+	}
+	got := NormalizeAIReadiness(AIReadiness{State: "blocked", ReasonCode: "generation_close_failed", Retryable: true, SafeToRetry: true})
+	if got.SafeToRetry {
+		t.Fatal("close failure must never authorize reopening")
 	}
 }

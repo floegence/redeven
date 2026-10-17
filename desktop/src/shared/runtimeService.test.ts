@@ -33,8 +33,8 @@ function normalizeRuntimeServiceSnapshot(value: unknown) {
 }
 
 describe('runtimeService', () => {
-  it('publishes the unified Cloud route compatibility window', () => {
-    expect(RUNTIME_SERVICE_COMPATIBILITY_EPOCH).toBe(61);
+  it('publishes the persistent-index startup compatibility window', () => {
+    expect(RUNTIME_SERVICE_COMPATIBILITY_EPOCH).toBe(63);
     expect(RUNTIME_SERVICE_MINIMUM_DESKTOP_VERSION).toBe('v0.13.0');
     expect(RUNTIME_SERVICE_MINIMUM_RUNTIME_VERSION).toBe('v0.13.0');
   });
@@ -454,7 +454,7 @@ describe('runtimeService', () => {
   });
 });
 
-it.each(['inspecting', 'optimizing', 'migrating', 'verifying', 'recovering', 'backing_up', 'restoring', 'blocked'])('keeps core surfaces openable during Flower %s', (state) => {
+it.each(['inspecting', 'optimizing', 'migrating', 'verifying', 'recovering', 'backing_up', 'restoring', 'indexing', 'preparing', 'stopping', 'stopped', 'blocked'])('keeps core surfaces openable during Flower %s', (state) => {
   const snapshot = normalizeRuntimeServiceSnapshot({ runtime_version: 'dev', compatibility: 'compatible', open_readiness: { state: 'openable' }, ai_readiness: { state }, active_workload: {} });
   expect(snapshot.ai_readiness?.state).toBe(state);
   expect(runtimeServiceIsOpenable(snapshot)).toBe(true);
@@ -464,4 +464,11 @@ it.each(['connected', 'connecting', 'retrying', 'authorization_required', 'error
   const snapshot = normalizeRuntimeServiceSnapshot({ remote_enabled: true, capabilities: { cloud_link: { supported: true } },
     bindings: { cloud_link: { state: 'linked', remote_enabled: true, connection_state } } });
   expect(runtimeServiceProviderConnectionState(snapshot)).toBe(connection_state);
+});
+
+
+it('retains startup workload and actions without allowing retry after close failure', () => {
+  const snapshot = normalizeRuntimeServiceSnapshot({ ai_readiness: { state: 'indexing', stoppable: true, work_completed: 7, work_total: 12 } });
+  expect(snapshot.ai_readiness).toMatchObject({ state: 'indexing', stoppable: true, work_completed: 7, work_total: 12 });
+  expect(normalizeRuntimeServiceSnapshot({ ai_readiness: { state: 'blocked', reason_code: 'generation_close_failed', retryable: true, safe_to_retry: true } }).ai_readiness?.safe_to_retry).toBe(false);
 });

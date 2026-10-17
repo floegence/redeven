@@ -3322,12 +3322,15 @@
     "startupPhase": {
       "starting": "AI 서비스를 시작하고 있습니다...",
       "inspecting": "저장된 대화를 확인하고 있습니다...",
-      "backing_up": "업그레이드 전에 대화를 백업하고 있습니다...",
+      "backing_up": "복원 전 대화 백업 중…",
       "optimizing": "대화 저장소를 최적화하고 있습니다...",
       "migrating": "대화 저장소를 업그레이드하고 있습니다...",
       "verifying": "대화 데이터를 검증하고 있습니다...",
       "recovering": "대화 저장소를 사용할 수 있을 때까지 기다리고 있습니다...",
-      "restoring": "선택한 백업에서 대화를 복원하고 있습니다..."
+      "restoring": "선택한 백업에서 대화를 복원하고 있습니다...",
+      "indexing": "검색 인덱스 생성 중…",
+      "preparing": "대화 준비 중…",
+      "stopping": "안전하게 중지 중…"
     },
     "unavailableTitle": "Flower를 사용할 수 없습니다",
     "unavailableDetail": "Flower의 AI 서비스가 현재 요청을 처리할 수 없습니다. 환경 목록으로 돌아가 런타임 상태를 확인하세요. 대화와 보내지 않은 초안은 유지됩니다.",
@@ -3335,7 +3338,14 @@
     "desktopTitle": "Flower를 사용하려면 Desktop을 업데이트하세요",
     "runtimeDetail": "이 런타임은 Desktop Flower와 호환되지 않습니다. 런타임을 업데이트한 후 계속하세요. 초안은 보존되며 환경에 포함된 앱은 계속 사용할 수 있습니다.",
     "desktopDetail": "이 런타임에는 최신 Desktop이 필요합니다. Desktop을 업데이트한 후 계속하세요. 초안은 보존되며 환경에 포함된 앱은 계속 사용할 수 있습니다.",
-    "connectedBuild": "연결된 런타임: {version} · {commit}"
+    "connectedBuild": "연결된 런타임: {version} · {commit}",
+    "stopPreparation": "준비 중지",
+    "stoppingPreparation": "중지 중…",
+    "prepareAgain": "다시 준비",
+    "stoppedDetail": "준비가 중지되었습니다. 대화와 보내지 않은 초안은 보존됩니다. 언제든지 Flower를 다시 준비할 수 있습니다.",
+    "restartDetail": "대화 저장소를 안전하게 닫지 못했습니다. 앱을 다시 시작한 후 Flower를 준비하세요. 파일, 터미널 및 설정은 계속 사용할 수 있습니다.",
+    "startupActionFailed": "준비 작업의 결과를 확인하지 못했습니다. 런타임 연결을 확인한 후 다시 시도하세요.",
+    "workProgress": "{total}개 중 {completed}개 완료"
   },
   "providerRecovery": {
     "waitingShort": "대기 중",

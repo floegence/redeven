@@ -44,6 +44,12 @@ const runtimeFlowerSkillBrowseQuery = (kind: 'dir' | 'file') => (parsed: URL): b
     && parsed.searchParams.getAll(kind).length === 1
     && [...parsed.searchParams.values()].every(value => value.length <= 8192);
 };
+export function isRuntimeFlowerReadinessPath(path: string): boolean {
+  return path === '/_redeven_proxy/api/ai/readiness'
+    || path === '/_redeven_proxy/api/ai/readiness/stop'
+    || path === '/_redeven_proxy/api/ai/readiness/retry';
+}
+
 const RUNTIME_FLOWER_ROUTES: readonly RuntimeFlowerRoute[] = [
   ...TESSIVEN_RUNTIME_ROUTES,
   { path: '/_redeven_proxy/api/flower/source-icon', methods: ['GET'], allowsQuery: runtimeFlowerIdentifierQuery('origin') },
@@ -59,6 +65,9 @@ const RUNTIME_FLOWER_ROUTES: readonly RuntimeFlowerRoute[] = [
   { path: '/_redeven_proxy/api/ai/skills/browse/tree', methods: ['GET'], allowsQuery: runtimeFlowerSkillBrowseQuery('dir') },
   { path: '/_redeven_proxy/api/ai/skills/browse/file', methods: ['GET'], allowsQuery: runtimeFlowerSkillBrowseQuery('file') },
   { path: '/_redeven_proxy/api/settings', methods: ['GET'] },
+  { path: '/_redeven_proxy/api/ai/readiness', methods: ['GET'] },
+  { path: '/_redeven_proxy/api/ai/readiness/stop', methods: ['POST'] },
+  { path: '/_redeven_proxy/api/ai/readiness/retry', methods: ['POST'] },
   { path: '/_redeven_proxy/api/fs/path_context', methods: ['GET'] },
   { path: '/_redeven_proxy/api/fs/list', methods: ['POST'] },
   { path: '/_redeven_proxy/api/fs/file', methods: ['GET'], allowsQuery: parsed => {

@@ -112,7 +112,7 @@
     },
     "storage": {
       "title": "Backups do Flower",
-      "description": "Os backups automáticos incluem o histórico do Flower, configurações, status de leitura e arquivos enviados. Os três backups automáticos mais recentes são mantidos, assim como os backups protegidos.",
+      "description": "Os backups existentes incluem o histórico do Flower, configurações, status de leitura e uploads. Todos são preservados. A inicialização e as atualizações não criam backups automáticos.",
       "adminOnly": "É preciso ter acesso de administrador para visualizar e restaurar backups.",
       "view": "Ver backups",
       "unknownBuild": "Compilação de origem não registrada",
@@ -131,11 +131,11 @@
       "externalImpact": "Os diretórios de trabalho e as configurações globais de login estão excluídos. Comandos e ações externas não serão desfeitos. A versão do ambiente de execução permanece igual; uma falha de migração não resolvida ainda pode impedir que o Flower inicie.",
       "confirm": "Confirmar restauração",
       "backingUp": "Fazendo backup das suas conversas",
-      "backingUpDescription": "Uma cópia de recuperação do histórico e dos arquivos enviados está sendo salva antes desta atualização.",
+      "backingUpDescription": "Uma cópia do histórico e dos arquivos enviados atuais está sendo salva antes da restauração.",
       "restoring": "Restaurando o Flower",
       "restoringDescription": "Preparando e verificando o backup selecionado. Terminais, arquivos, configurações e diagnósticos continuam disponíveis.",
       "spaceTitle": "O Flower precisa de mais espaço em disco",
-      "spaceDescription": "Libere espaço no disco do ambiente de execução e verifique novamente. O Flower ficará pausado até que o backup e a atualização possam ser concluídos.",
+      "spaceDescription": "Libere espaço no disco do ambiente de execução e verifique novamente. O Flower fica pausado até a preparação terminar.",
       "failedTitle": "Manutenção do Flower interrompida",
       "failedDescription": "Verifique o diagnóstico ou escolha um backup verificado. Terminais, arquivos e configurações continuam disponíveis.",
       "component": "Componente",
@@ -145,6 +145,20 @@
       "uploads": "Arquivos enviados",
       "backup": "Backup",
       "recovery": "Recuperação"
+    },
+    "startup": {
+      "verifying": "Validando dados",
+      "indexing": "Criando índice de pesquisa",
+      "preparing": "Preparando conversas",
+      "stopping": "Interrompendo a preparação",
+      "stopped": "Preparação interrompida",
+      "stop": "Interromper preparação",
+      "prepareAgain": "Preparar novamente",
+      "indexingDescription": "O primeiro índice de pesquisa está sendo criado. O Flower estará disponível quando a preparação terminar.",
+      "stoppingDescription": "Aguardando a reversão da transação atual e o fechamento do armazenamento.",
+      "stoppedDescription": "Seus dados foram preservados. Selecione Preparar novamente quando quiser continuar.",
+      "closeFailed": "O Flower não conseguiu fechar o armazenamento com segurança. Copie os diagnósticos e reinicie o aplicativo antes de preparar novamente.",
+      "progress": "{completed} / {total} conversas"
     }
   },
   "common": {

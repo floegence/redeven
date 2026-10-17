@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	flruntime "github.com/floegence/floret/v7/runtime"
 	"github.com/floegence/redeven/internal/ai"
 	"github.com/floegence/redeven/internal/codeapp/appserver"
 	"github.com/floegence/redeven/internal/logsafe"
@@ -39,12 +40,14 @@ type aiReadinessController struct {
 	close         aiServiceCloser
 	reconcile     func(context.Context, *ai.Service) (int, error)
 
-	snapshot    appserver.AIReadinessSnapshot
-	current     *aiServiceGeneration
-	nextID      uint64
-	running     bool
-	closed      bool
-	terminalErr error
+	snapshot      appserver.AIReadinessSnapshot
+	current       *aiServiceGeneration
+	nextID        uint64
+	attemptCancel context.CancelFunc
+	stopRequested bool
+	running       bool
+	closed        bool
+	terminalErr   error
 
 	workers     sync.WaitGroup
 	closeOnce   sync.Once
@@ -88,6 +91,7 @@ func newAIReadinessController(parent context.Context, opts ai.Options, create ai
 		return service.ReconcileCanonicalRootOwnership(ctx)
 	}
 	controller.opts.StoreStartupProgress = controller.observeStoreStartupPhase
+	controller.opts.StoreStartupWorkProgress = controller.observeStoreStartupWork
 	controller.opts.DeferExecution = true
 	go func() {
 		<-ctx.Done()
@@ -147,6 +151,39 @@ func (c *aiReadinessController) RetryAIReadiness() error {
 	}
 	c.mu.Unlock()
 	return c.startAttempt()
+}
+
+// StopAIReadiness cancels preparation, then waits for its owner to roll back and
+// close before a new attempt can start. Repeated requests are idempotent.
+func (c *aiReadinessController) StopAIReadiness() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.closed || c.terminalErr != nil {
+		return appserver.ErrAIServiceUnavailable
+	}
+	if c.stopRequested || c.snapshot.State == appserver.AIReadinessStopped {
+		return nil
+	}
+	if !c.running || c.attemptCancel == nil || !c.snapshot.Stoppable {
+		return appserver.ErrAIServiceUnavailable
+	}
+	c.stopRequested = true
+	c.snapshot = appserver.AIReadinessSnapshot{State: appserver.AIReadinessStopping, TraceID: c.startupTraceID, StartupPhase: c.startupPhase}
+	c.attemptCancel()
+	return nil
+}
+
+func (c *aiReadinessController) finishAttempt() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.attemptCancel != nil {
+		c.attemptCancel()
+		c.attemptCancel = nil
+	}
+	c.running = false
+	if c.stopRequested && !c.closed && c.terminalErr == nil {
+		c.snapshot = appserver.AIReadinessSnapshot{State: appserver.AIReadinessStopped, TraceID: c.startupTraceID, StartupPhase: c.startupPhase}
+	}
 }
 
 func (c *aiReadinessController) runDegradedRecheck(generation *aiServiceGeneration) {
@@ -252,6 +289,9 @@ func (c *aiReadinessController) startAttemptWithRestore(restoreID string) error 
 		return appserver.ErrAIRetryInProgress
 	}
 	c.running = true
+	c.stopRequested = false
+	attemptCtx, attemptCancel := context.WithCancel(c.ctx)
+	c.attemptCancel = attemptCancel
 	previous := c.current
 	c.current = nil
 	if previous != nil {
@@ -261,7 +301,7 @@ func (c *aiReadinessController) startAttemptWithRestore(restoreID string) error 
 			close(previous.drained)
 		}
 	}
-	c.snapshot = appserver.AIReadinessSnapshot{State: appserver.AIReadinessUnavailable}
+	c.snapshot = appserver.AIReadinessSnapshot{State: appserver.AIReadinessInspecting, Stoppable: true}
 	if restoreID != "" {
 		c.snapshot.State = appserver.AIReadinessRestoring
 	}
@@ -269,19 +309,22 @@ func (c *aiReadinessController) startAttemptWithRestore(restoreID string) error 
 	c.startupPhase = ""
 	c.startupStartedAt = time.Now()
 	c.startupPhaseStartedAt = c.startupStartedAt
+	c.logStartupPhaseLocked(string(c.snapshot.State))
+	c.snapshot.TraceID, c.snapshot.StartupPhase = c.startupTraceID, c.startupPhase
 	c.workers.Add(1)
 	c.mu.Unlock()
 
-	go c.runAttempt(previous, restoreID)
+	go c.runAttempt(attemptCtx, previous, restoreID)
 	return nil
 }
 
-func (c *aiReadinessController) runAttempt(previous *aiServiceGeneration, restoreID string) {
+func (c *aiReadinessController) runAttempt(attemptCtx context.Context, previous *aiServiceGeneration, restoreID string) {
 	defer c.workers.Done()
+	defer c.finishAttempt()
 	if previous != nil {
 		select {
 		case <-previous.drained:
-		case <-c.ctx.Done():
+		case <-attemptCtx.Done():
 			<-previous.drained
 		}
 		if err := c.close(previous.service); err != nil {
@@ -294,7 +337,7 @@ func (c *aiReadinessController) runAttempt(previous *aiServiceGeneration, restor
 		c.mu.Lock()
 		opts := c.opts
 		c.mu.Unlock()
-		if err := ai.RestoreFlowerSnapshot(c.ctx, opts, restoreID); err != nil {
+		if err := ai.RestoreFlowerSnapshot(attemptCtx, opts, restoreID); err != nil {
 			if errors.Is(err, ai.ErrFlowerGenerationClose) {
 				c.finishCloseFailure(err)
 				return
@@ -311,22 +354,19 @@ func (c *aiReadinessController) runAttempt(previous *aiServiceGeneration, restor
 		revision := c.optsRevision
 		c.mu.Unlock()
 
-		service, err := c.create(c.ctx, opts)
+		service, err := c.create(attemptCtx, opts)
 		if err != nil {
 			if errors.Is(err, ai.ErrFlowerGenerationClose) {
 				c.finishCloseFailure(err)
 				return
 			}
 			var startupErr *ai.FloretStoreStartupError
-			if errors.As(err, &startupErr) && isAutomaticStartupRecovery(startupErr) && retryAttempt < c.maxStartupRetries {
+			if attemptCtx.Err() == nil && errors.As(err, &startupErr) && isAutomaticStartupRecovery(startupErr) && retryAttempt < c.maxStartupRetries {
 				retryAttempt++
 				delay := c.startupRetryDelay(retryAttempt)
 				c.setRecovering(startupErr)
 				c.logStartupRetry(startupErr, retryAttempt, delay)
-				if !waitForStartupRetry(c.ctx, delay) {
-					c.mu.Lock()
-					c.running = false
-					c.mu.Unlock()
+				if !waitForStartupRetry(attemptCtx, delay) {
 					return
 				}
 				continue
@@ -340,10 +380,10 @@ func (c *aiReadinessController) runAttempt(previous *aiServiceGeneration, restor
 		}
 
 		c.mu.Lock()
-		closed := c.closed || c.ctx.Err() != nil
+		closed := c.closed || attemptCtx.Err() != nil
 		stale := revision != c.optsRevision
 		if !closed && !stale {
-			if err := service.Activate(c.ctx); err != nil {
+			if err := service.Activate(attemptCtx); err != nil {
 				c.mu.Unlock()
 				if closeErr := c.close(service); closeErr != nil {
 					c.finishCloseFailure(closeErr)
@@ -363,12 +403,8 @@ func (c *aiReadinessController) runAttempt(previous *aiServiceGeneration, restor
 			if c.opts.Logger != nil {
 				c.opts.Logger.Info("ai: service startup complete", "trace_id", c.startupTraceID, "state", c.snapshot.State, "duration_ms", time.Since(c.startupStartedAt).Milliseconds())
 			}
-			c.running = false
 			c.mu.Unlock()
 			return
-		}
-		if closed {
-			c.running = false
 		}
 		c.mu.Unlock()
 
@@ -400,6 +436,10 @@ func (c *aiReadinessController) observeStoreStartupPhase(phase ai.FloretStoreSta
 		state = appserver.AIReadinessOptimizing
 	case ai.FloretStoreStartupMigrating:
 		state = appserver.AIReadinessMigrating
+	case ai.FloretStoreStartupIndexing:
+		state = appserver.AIReadinessIndexing
+	case ai.FloretStoreStartupPreparing:
+		state = appserver.AIReadinessPreparing
 	case ai.FloretStoreStartupVerifying:
 		state = appserver.AIReadinessVerifying
 	case ai.FloretStoreStartupInspecting:
@@ -415,24 +455,24 @@ func (c *aiReadinessController) observeStoreStartupPhase(phase ai.FloretStoreSta
 func (c *aiReadinessController) setTransientState(state appserver.AIReadinessState) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.closed || !c.running {
+	if c.closed || !c.running || c.stopRequested {
 		return
 	}
 	c.logStartupPhaseLocked(string(state))
 	c.snapshot = appserver.AIReadinessSnapshot{
-		State: state, TraceID: c.startupTraceID, StartupPhase: c.startupPhase,
+		State: state, TraceID: c.startupTraceID, StartupPhase: c.startupPhase, Stoppable: true,
 	}
 }
 
 func (c *aiReadinessController) setRecovering(startupErr *ai.FloretStoreStartupError) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.closed || !c.running {
+	if c.closed || !c.running || c.stopRequested {
 		return
 	}
 	c.logStartupPhaseLocked(string(ai.FloretStoreStartupRecovering))
 	snapshot := appserver.AIReadinessSnapshot{
-		State: appserver.AIReadinessRecovering, TraceID: c.startupTraceID,
+		State: appserver.AIReadinessRecovering, TraceID: c.startupTraceID, Stoppable: true,
 		StartupPhase: string(ai.FloretStoreStartupRecovering), RetryReason: "temporary_store_open",
 	}
 	if startupErr != nil {
@@ -441,6 +481,18 @@ func (c *aiReadinessController) setRecovering(startupErr *ai.FloretStoreStartupE
 		snapshot.SafeToRetry = startupErr.SafeToRetry
 	}
 	c.snapshot = snapshot
+}
+
+func (c *aiReadinessController) observeStoreStartupWork(work flruntime.StartupWork) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.closed || !c.running || c.stopRequested {
+		return
+	}
+	if string(c.snapshot.State) != string(work.Phase) {
+		return
+	}
+	c.snapshot.WorkCompleted, c.snapshot.WorkTotal = work.Completed, work.Total
 }
 
 // Timings follow the existing phase transitions; no timer or parallel lifecycle
@@ -543,12 +595,10 @@ func (c *aiReadinessController) finishFailure(err error) {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.closed {
-		c.running = false
+	if c.closed || c.stopRequested {
 		return
 	}
 	c.snapshot = snapshot
-	c.running = false
 }
 
 func (c *aiReadinessController) finishCloseFailure(err error) {
@@ -561,8 +611,10 @@ func (c *aiReadinessController) finishCloseFailure(err error) {
 	c.running = false
 	if !c.closed {
 		c.snapshot = appserver.AIReadinessSnapshot{
-			State:      appserver.AIReadinessBlocked,
-			ReasonCode: appserver.AIServiceStartupErrorReasonCode,
+			State:        appserver.AIReadinessBlocked,
+			ReasonCode:   appserver.AIGenerationCloseFailedReasonCode,
+			TraceID:      c.startupTraceID,
+			StartupPhase: c.startupPhase,
 		}
 	}
 }

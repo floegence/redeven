@@ -104,52 +104,56 @@ func fixtureMaintenanceOptions(t *testing.T, state string) Options {
 	return Options{StateDir: state, AgentHomeDir: t.TempDir(), Shell: "/bin/sh", BuildVersion: "test-v1", DeferExecution: true, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
 }
 
-func TestFlowerUpgradeRetainsOriginalSnapshotAcrossFailedGenerations(t *testing.T) {
+func TestFlowerUpgradeReusesDataWithoutAutomaticSnapshots(t *testing.T) {
 	state, fixture := loadFlowerUpgradeFixture(t, "10ce4c152")
 	opts := fixtureMaintenanceOptions(t, state)
-	service, err := NewServiceContext(t.Context(), opts)
-	if err != nil {
+	obsolete := filepath.Join(state, flowerMaintenanceDir, "upgrade.json")
+	if err := os.MkdirAll(filepath.Dir(obsolete), 0700); err != nil {
 		t.Fatal(err)
 	}
-	operation, err := readFlowerUpgrade(state)
-	if err != nil || operation == nil || operation.OriginalSnapshot == "" || operation.Complete {
-		t.Fatalf("operation=%+v %v", operation, err)
+	if err := os.WriteFile(obsolete, []byte("damaged obsolete record"), 0600); err != nil {
+		t.Fatal(err)
 	}
-	id := operation.OriginalSnapshot
-	for _, threadID := range fixture.ThreadIDs {
-		view, err := service.threadRuntime.View(t.Context(), identity.ThreadID(threadID))
-		if err != nil || len(view.Items) == 0 {
-			t.Fatalf("history=%+v %v", view, err)
+	for _, version := range []string{"test-v1", "test-v2"} {
+		opts.BuildVersion = version
+		service, err := NewServiceContext(t.Context(), opts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, id := range fixture.ThreadIDs {
+			view, err := service.threadRuntime.View(t.Context(), identity.ThreadID(id))
+			if err != nil || len(view.Items) == 0 {
+				t.Fatalf("history=%+v %v", view, err)
+			}
+		}
+		if err := service.Activate(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+		if err := service.Close(); err != nil {
+			t.Fatal(err)
+		}
+		snapshots, err := ListFlowerSnapshots(t.Context(), state)
+		if err != nil || len(snapshots) != 0 {
+			t.Fatalf("automatic snapshots=%+v %v", snapshots, err)
+		}
+		if _, err := os.Stat(obsolete); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("obsolete record retained: %v", err)
 		}
 	}
-	if err = service.Close(); err != nil {
-		t.Fatal(err)
-	}
-	// A newer repair build must still reuse the original pre-upgrade snapshot.
-	opts.BuildVersion = "test-v2"
-	service, err = NewServiceContext(t.Context(), opts)
+}
+
+func captureFixtureSnapshot(t *testing.T, state string) string {
+	t.Helper()
+	snapshot, err := captureFlowerSnapshot(t.Context(), state, "fixture", "automatic", false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer service.Close()
-	operation, err = readFlowerUpgrade(state)
-	if err != nil || operation.OriginalSnapshot != id {
-		t.Fatalf("source snapshot replaced: %+v %v", operation, err)
-	}
-	if _, err = verifyFlowerSnapshot(t.Context(), state, id); err != nil {
-		t.Fatal(err)
-	}
-	snapshots, err := ListFlowerSnapshots(t.Context(), state)
-	if err != nil || len(snapshots) != 1 || !snapshots[0].Protected {
-		t.Fatalf("snapshots=%+v %v", snapshots, err)
-	}
-	if err = service.Activate(t.Context()); err != nil {
-		t.Fatal(err)
-	}
+	return snapshot.ID
 }
 
 func TestFlowerRestoreStopsHistoricalWaitingTurnAndPreservesQueue(t *testing.T) {
 	state, fixture := loadFlowerUpgradeFixture(t, "10ce4c152-waiting")
+	snapshotID := captureFixtureSnapshot(t, state)
 	opts := fixtureMaintenanceOptions(t, state)
 	service, err := NewServiceContext(t.Context(), opts)
 	if err != nil {
@@ -162,11 +166,7 @@ func TestFlowerRestoreStopsHistoricalWaitingTurnAndPreservesQueue(t *testing.T) 
 	if err = service.Close(); err != nil {
 		t.Fatal(err)
 	}
-	operation, err := readFlowerUpgrade(state)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err = RestoreFlowerSnapshot(t.Context(), opts, operation.OriginalSnapshot); err != nil {
+	if err = RestoreFlowerSnapshot(t.Context(), opts, snapshotID); err != nil {
 		t.Fatal(err)
 	}
 	service, err = NewServiceContext(t.Context(), opts)
@@ -233,6 +233,7 @@ func TestFlowerUpgradePreservesAttachmentAuthorityInHistoricalFork(t *testing.T)
 
 func TestFlowerRestoreResumesAfterEveryFileRename(t *testing.T) {
 	state, fixture := loadFlowerUpgradeFixture(t, "10ce4c152-waiting")
+	snapshotID := captureFixtureSnapshot(t, state)
 	opts := fixtureMaintenanceOptions(t, state)
 	service, err := NewServiceContext(t.Context(), opts)
 	if err != nil {
@@ -241,13 +242,9 @@ func TestFlowerRestoreResumesAfterEveryFileRename(t *testing.T) {
 	if err = service.Close(); err != nil {
 		t.Fatal(err)
 	}
-	operation, err := readFlowerUpgrade(state)
-	if err != nil {
-		t.Fatal(err)
-	}
 	interrupted := errors.New("simulated process exit")
 	// Publish a fully prepared operation, but stop before replacing any file.
-	err = restoreFlowerSnapshotWith(t.Context(), opts, operation.OriginalSnapshot, func(context.Context, string) error { return interrupted })
+	err = restoreFlowerSnapshotWith(t.Context(), opts, snapshotID, func(context.Context, string) error { return interrupted })
 	if !errors.Is(err, interrupted) {
 		t.Fatal(err)
 	}
@@ -267,6 +264,35 @@ func TestFlowerRestoreResumesAfterEveryFileRename(t *testing.T) {
 	if renameCount < 8 {
 		t.Fatalf("incomplete fault coverage: %d renames", renameCount)
 	}
+	t.Run("cancelled_replacement", func(t *testing.T) {
+		target := filepath.Join(t.TempDir(), "state")
+		if err := copyFlowerTree(t.Context(), state, target); err != nil {
+			t.Fatal(err)
+		}
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+		err := recoverFlowerReplacementWith(ctx, target, func() error { cancel(); return ctx.Err() })
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("cancelled replacement = %v", err)
+		}
+		if _, err := os.Stat(filepath.Join(target, flowerMaintenanceDir, "restore.json")); err != nil {
+			t.Fatalf("cancel removed the recovery journal: %v", err)
+		}
+		for _, scene := range []string{"prepared", "previous"} {
+			if _, err := os.Stat(filepath.Join(target, flowerMaintenanceDir, "restore-"+journal.ID, scene)); err != nil {
+				t.Fatalf("cancel lost %s scene: %v", scene, err)
+			}
+		}
+		resumed, err := NewServiceContext(t.Context(), fixtureMaintenanceOptions(t, target))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resumed.Close()
+		view, err := resumed.threadRuntime.View(t.Context(), identity.ThreadID(fixture.WaitingThreadID))
+		if err != nil || view.Activity != flruntime.ThreadActivityIdle || len(view.RestoredInputs) != 1 {
+			t.Fatalf("cancel resumed mixed or executable data: %+v %v", view, err)
+		}
+	})
 	for cut := 1; cut <= renameCount; cut++ {
 		t.Run(fmt.Sprintf("rename_%02d", cut), func(t *testing.T) {
 			target := filepath.Join(t.TempDir(), "state")
@@ -307,6 +333,7 @@ func TestFlowerRestoreResumesAfterEveryFileRename(t *testing.T) {
 
 func TestFlowerRestoreRejectsAlteredSnapshotBeforeChangingLiveData(t *testing.T) {
 	state, _ := loadFlowerUpgradeFixture(t, "10ce4c152")
+	snapshotID := captureFixtureSnapshot(t, state)
 	opts := fixtureMaintenanceOptions(t, state)
 	service, err := NewServiceContext(t.Context(), opts)
 	if err != nil {
@@ -315,15 +342,11 @@ func TestFlowerRestoreRejectsAlteredSnapshotBeforeChangingLiveData(t *testing.T)
 	if err = service.Close(); err != nil {
 		t.Fatal(err)
 	}
-	operation, err := readFlowerUpgrade(state)
-	if err != nil {
-		t.Fatal(err)
-	}
 	before, err := hashFlowerFiles(t.Context(), state)
 	if err != nil {
 		t.Fatal(err)
 	}
-	source := filepath.Join(state, flowerMaintenanceDir, "snapshots", operation.OriginalSnapshot, flowerStorageRoots[0])
+	source := filepath.Join(state, flowerMaintenanceDir, "snapshots", snapshotID, flowerStorageRoots[0])
 	file, err := os.OpenFile(source, os.O_APPEND|os.O_WRONLY, 0)
 	if err != nil {
 		t.Fatal(err)
@@ -334,7 +357,7 @@ func TestFlowerRestoreRejectsAlteredSnapshotBeforeChangingLiveData(t *testing.T)
 	if err = file.Close(); err != nil {
 		t.Fatal(err)
 	}
-	err = RestoreFlowerSnapshot(t.Context(), opts, operation.OriginalSnapshot)
+	err = RestoreFlowerSnapshot(t.Context(), opts, snapshotID)
 	var startup *FloretStoreStartupError
 	if !errors.As(err, &startup) || startup.Class != FloretStoreStartupIntegrityError {
 		t.Fatalf("classification: %v", err)
@@ -355,6 +378,7 @@ func TestFlowerRestoreRejectsAlteredSnapshotBeforeChangingLiveData(t *testing.T)
 
 func TestFlowerRestoreRejectsOldTransportGeneration(t *testing.T) {
 	state, _ := loadFlowerUpgradeFixture(t, "10ce4c152-waiting")
+	snapshotID := captureFixtureSnapshot(t, state)
 	opts := fixtureMaintenanceOptions(t, state)
 	service, err := NewServiceContext(t.Context(), opts)
 	if err != nil {
@@ -363,13 +387,9 @@ func TestFlowerRestoreRejectsOldTransportGeneration(t *testing.T) {
 	if err = service.Close(); err != nil {
 		t.Fatal(err)
 	}
-	operation, err := readFlowerUpgrade(state)
-	if err != nil {
-		t.Fatal(err)
-	}
 	var previous string
 	for range 2 {
-		if err = RestoreFlowerSnapshot(t.Context(), opts, operation.OriginalSnapshot); err != nil {
+		if err = RestoreFlowerSnapshot(t.Context(), opts, snapshotID); err != nil {
 			t.Fatal(err)
 		}
 		resumed, err := NewServiceContext(t.Context(), opts)

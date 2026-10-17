@@ -112,7 +112,7 @@
     },
     "storage": {
       "title": "Flower 备份",
-      "description": "自动备份包含 Flower 历史、设置、阅读状态和上传资源。保留最近三组自动备份，受保护的备份会继续保留。",
+      "description": "既有备份包含 Flower 历史记录、设置、已读状态和上传文件，并全部保留。启动和升级不会自动创建备份。",
       "adminOnly": "查看和恢复备份需要管理员权限。",
       "view": "查看备份",
       "unknownBuild": "未记录来源构建",
@@ -131,11 +131,11 @@
       "externalImpact": "不包含工作目录和全局登录设置，不会撤销命令或外部操作。运行时版本保持不变，尚未修复的迁移缺陷仍可能阻止 Flower 启动。",
       "confirm": "确认恢复",
       "backingUp": "正在备份你的对话",
-      "backingUpDescription": "更新前保存一份对话记录与上传文件的恢复副本。",
+      "backingUpDescription": "恢复前保存当前对话记录与上传文件的副本。",
       "restoring": "正在恢复 Flower",
       "restoringDescription": "正在准备并校验所选备份。终端、文件、设置和诊断仍可使用。",
       "spaceTitle": "Flower 需要更多磁盘空间",
-      "spaceDescription": "请释放运行时所在磁盘的空间，然后重新检查。备份和更新完成前，Flower 会保持暂停。",
+      "spaceDescription": "请释放运行环境磁盘空间后重试。准备完成前 Flower 会保持暂停。",
       "failedTitle": "Flower 维护已停止",
       "failedDescription": "请查看诊断或选择已校验的备份。终端、文件和设置仍可使用。",
       "component": "组件",
@@ -145,6 +145,20 @@
       "uploads": "上传资源",
       "backup": "备份",
       "recovery": "恢复"
+    },
+    "startup": {
+      "verifying": "正在校验数据",
+      "indexing": "正在建立搜索索引",
+      "preparing": "正在准备会话",
+      "stopping": "正在停止准备",
+      "stopped": "准备已停止",
+      "stop": "停止准备",
+      "prepareAgain": "重新准备",
+      "indexingDescription": "首次搜索索引正在建立，准备完成后即可使用 Flower。",
+      "stoppingDescription": "正在等待当前事务回滚并关闭存储。",
+      "stoppedDescription": "数据已保留，可在准备好后选择“重新准备”。",
+      "closeFailed": "Flower 无法安全关闭存储。请复制诊断信息并重启应用后再重新准备。",
+      "progress": "{completed} / {total} 个会话"
     }
   },
   "common": {

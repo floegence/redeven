@@ -234,12 +234,12 @@ func configureFloretRuntime(host *flruntime.Host) (*floretBootstrapResult, error
 	}, nil
 }
 
-func openFloretRuntime(ctx context.Context, storePath string, progress func(FloretStoreStartupPhase), logger *slog.Logger) (*floretBootstrapResult, error) {
-	return openFloretRuntimeWith(ctx, storePath, progress, logger, flstorage.MaintainSQLite, flruntime.Open)
+func openFloretRuntime(ctx context.Context, storePath string, progress func(FloretStoreStartupPhase), logger *slog.Logger, work ...func(flruntime.StartupWork)) (*floretBootstrapResult, error) {
+	return openFloretRuntimeWith(ctx, storePath, progress, logger, flstorage.MaintainSQLite, flruntime.Open, work...)
 }
 
-func openFloretRuntimeWith(ctx context.Context, storePath string, progress func(FloretStoreStartupPhase), logger *slog.Logger, maintain floretSQLiteMaintainer, open floretRuntimeOpener) (*floretBootstrapResult, error) {
-	host, err := openFloretHost(ctx, storePath, progress, logger, maintain, open)
+func openFloretRuntimeWith(ctx context.Context, storePath string, progress func(FloretStoreStartupPhase), logger *slog.Logger, maintain floretSQLiteMaintainer, open floretRuntimeOpener, work ...func(flruntime.StartupWork)) (*floretBootstrapResult, error) {
+	host, err := openFloretHost(ctx, storePath, progress, logger, maintain, open, work...)
 	if err != nil {
 		return nil, err
 	}

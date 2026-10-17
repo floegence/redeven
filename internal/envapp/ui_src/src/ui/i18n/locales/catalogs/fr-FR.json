@@ -112,7 +112,7 @@
     },
     "storage": {
       "title": "Sauvegardes Flower",
-      "description": "Les sauvegardes automatiques couvrent l’historique Flower, les paramètres, l’état de lecture et les fichiers téléversés. Les trois dernières sont conservées, ainsi que les sauvegardes protégées.",
+      "description": "Les sauvegardes existantes couvrent l’historique Flower, les paramètres, les statuts de lecture et les fichiers importés. Elles sont toutes conservées. Le démarrage et les mises à jour ne créent pas de sauvegarde automatique.",
       "adminOnly": "Les droits d’administration sont requis pour consulter et restaurer les sauvegardes.",
       "view": "Voir les sauvegardes",
       "unknownBuild": "Version source non enregistrée",
@@ -131,11 +131,11 @@
       "externalImpact": "Les répertoires de travail et les paramètres de connexion globaux sont exclus. Les commandes et actions externes ne sont pas annulées. La version du moteur d’exécution reste identique ; un défaut de migration non résolu peut toujours empêcher le démarrage de Flower.",
       "confirm": "Confirmer la restauration",
       "backingUp": "Sauvegarde de vos conversations",
-      "backingUpDescription": "Une copie de votre historique et de vos fichiers importés est enregistrée pour permettre leur restauration avant cette mise à jour.",
+      "backingUpDescription": "Une copie de votre historique actuel et de vos fichiers importés est enregistrée avant la restauration.",
       "restoring": "Restauration de Flower",
       "restoringDescription": "Préparation et vérification de la sauvegarde choisie. Les terminaux, fichiers, paramètres et diagnostics restent disponibles.",
       "spaceTitle": "Flower a besoin d’espace disque",
-      "spaceDescription": "Libérez de l’espace sur le disque du moteur d’exécution, puis relancez la vérification. Flower reste en pause jusqu’à ce que la sauvegarde et la mise à jour puissent aboutir.",
+      "spaceDescription": "Libérez de l’espace sur le disque de l’environnement d’exécution, puis réessayez. Flower reste en pause jusqu’à la fin de la préparation.",
       "failedTitle": "Maintenance Flower interrompue",
       "failedDescription": "Consultez le diagnostic ou choisissez une sauvegarde vérifiée. Les terminaux, fichiers et paramètres restent disponibles.",
       "component": "Composant",
@@ -145,6 +145,20 @@
       "uploads": "Fichiers téléversés",
       "backup": "Sauvegarde",
       "recovery": "Restauration"
+    },
+    "startup": {
+      "verifying": "Validation des données",
+      "indexing": "Création de l’index de recherche",
+      "preparing": "Préparation des conversations",
+      "stopping": "Arrêt de la préparation",
+      "stopped": "Préparation arrêtée",
+      "stop": "Arrêter la préparation",
+      "prepareAgain": "Préparer à nouveau",
+      "indexingDescription": "Le premier index de recherche est en cours de création. Flower sera disponible une fois la préparation terminée.",
+      "stoppingDescription": "En attente de l’annulation de la transaction en cours et de la fermeture du stockage.",
+      "stoppedDescription": "Vos données sont conservées. Choisissez Préparer à nouveau lorsque vous le souhaitez.",
+      "closeFailed": "Flower n’a pas pu fermer son stockage de manière sûre. Copiez les diagnostics et redémarrez l’application avant de réessayer.",
+      "progress": "{completed} / {total} conversations"
     }
   },
   "common": {

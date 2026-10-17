@@ -47,6 +47,11 @@ export type wire_sys_ping_resp = {
       state?: string;
       reason_code?: string;
       issue_count?: number;
+      stoppable?: boolean;
+      retryable?: boolean;
+      safe_to_retry?: boolean;
+      work_completed?: number;
+      work_total?: number;
     };
     active_workload?: {
       terminal_count?: number;

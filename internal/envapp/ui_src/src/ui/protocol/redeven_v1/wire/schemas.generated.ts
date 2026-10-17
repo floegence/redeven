@@ -3889,6 +3889,51 @@ export const redevenWireSchemas = {
               },
               "issue_count": {
                 "kind": "number"
+              },
+              "stoppable": {
+                "kind": "union",
+                "options": [
+                  {
+                    "kind": "literal",
+                    "value": false
+                  },
+                  {
+                    "kind": "literal",
+                    "value": true
+                  }
+                ]
+              },
+              "retryable": {
+                "kind": "union",
+                "options": [
+                  {
+                    "kind": "literal",
+                    "value": false
+                  },
+                  {
+                    "kind": "literal",
+                    "value": true
+                  }
+                ]
+              },
+              "safe_to_retry": {
+                "kind": "union",
+                "options": [
+                  {
+                    "kind": "literal",
+                    "value": false
+                  },
+                  {
+                    "kind": "literal",
+                    "value": true
+                  }
+                ]
+              },
+              "work_completed": {
+                "kind": "number"
+              },
+              "work_total": {
+                "kind": "number"
               }
             },
             "required": []

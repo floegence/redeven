@@ -68,7 +68,7 @@ describe('createAIReadinessPresentation', () => {
     ['inspecting', 'busy', 'Getting Flower ready'],
     ['optimizing', 'busy', 'Preparing your conversations'],
     ['migrating', 'busy', 'Updating your conversations'],
-    ['verifying', 'busy', 'Checking the final details'],
+    ['verifying', 'busy', 'Validating data'],
     ['recovering', 'busy', 'Preparing your conversations'],
     ['ready', 'ready', 'Ready'],
   ] as const)('maps %s to the %s presentation mode', (state, mode, title) => {
@@ -117,7 +117,7 @@ describe('createAIReadinessPresentation', () => {
     const projection = createAIReadinessPresentation(sensitiveFixture, i18n, { elapsedMs: 31_000 });
 
     expect(projection.diagnosticRows).toEqual([
-      { label: 'Phase', value: 'Final check' },
+      { label: 'Phase', value: 'Validating data' },
       { label: 'Elapsed', value: '31s' },
       { label: 'Status', value: 'Stopped' },
       { label: 'Trace ID', value: 'ai-start-safe' },

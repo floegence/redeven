@@ -18,12 +18,17 @@ export type RuntimeServiceOpenReadiness = Readonly<{
   message?: string;
 }>;
 
-export type RuntimeServiceAIReadinessState = 'starting' | 'ready' | 'degraded' | 'blocked' | 'recovering' | 'migrating' | 'unavailable' | 'inspecting' | 'optimizing' | 'verifying' | 'backing_up' | 'restoring';
+export type RuntimeServiceAIReadinessState = 'starting' | 'ready' | 'degraded' | 'blocked' | 'recovering' | 'migrating' | 'unavailable' | 'inspecting' | 'optimizing' | 'verifying' | 'backing_up' | 'restoring' | 'indexing' | 'preparing' | 'stopping' | 'stopped';
 
 export type RuntimeServiceAIReadiness = Readonly<{
   state: RuntimeServiceAIReadinessState;
   reason_code?: string;
   issue_count?: number;
+  stoppable?: boolean;
+  retryable?: boolean;
+  safe_to_retry?: boolean;
+  work_completed?: number;
+  work_total?: number;
 }>;
 
 export function runtimeServiceAIIsPreparing(snapshot: RuntimeServiceSnapshot | null | undefined): boolean {
@@ -36,6 +41,9 @@ export function runtimeServiceAIIsPreparing(snapshot: RuntimeServiceSnapshot | n
     case 'verifying':
     case 'recovering':
     case 'restoring':
+    case 'indexing':
+    case 'preparing':
+    case 'stopping':
       return true;
     default:
       return false;
@@ -162,7 +170,7 @@ export type RuntimeServiceIdentity = Readonly<{
 }>;
 
 export const RUNTIME_SERVICE_PROTOCOL_VERSION = 'redeven-runtime-v2';
-export const RUNTIME_SERVICE_COMPATIBILITY_EPOCH = 62;
+export const RUNTIME_SERVICE_COMPATIBILITY_EPOCH = 63;
 export const RUNTIME_SERVICE_MINIMUM_DESKTOP_VERSION = 'v0.13.0';
 export const RUNTIME_SERVICE_MINIMUM_RUNTIME_VERSION = 'v0.13.0';
 export const RUNTIME_SERVICE_ENV_APP_SHELL_UNAVAILABLE_REASON = 'env_app_shell_unavailable';
@@ -276,12 +284,17 @@ function normalizeOpenReadiness(
 function normalizeAIReadiness(value: unknown): RuntimeServiceAIReadiness | undefined {
   const record = value && typeof value === 'object' ? value as Record<string, unknown> : {};
   const state = compact(record.state) as RuntimeServiceAIReadinessState;
-  if (!['starting', 'ready', 'degraded', 'blocked', 'recovering', 'migrating', 'unavailable', 'inspecting', 'optimizing', 'verifying', 'backing_up', 'restoring'].includes(state)) return undefined;
+  if (!['starting', 'ready', 'degraded', 'blocked', 'recovering', 'migrating', 'unavailable', 'inspecting', 'optimizing', 'verifying', 'backing_up', 'restoring', 'indexing', 'preparing', 'stopping', 'stopped'].includes(state)) return undefined;
   const issueCount = normalizeCount(record.issue_count);
   return {
     state,
     reason_code: compact(record.reason_code) || undefined,
     ...(issueCount > 0 ? { issue_count: issueCount } : {}),
+    stoppable: record.stoppable === true && !['ready', 'degraded', 'stopping', 'stopped', 'blocked', 'unavailable'].includes(state),
+    retryable: record.retryable === true,
+    safe_to_retry: record.retryable === true && record.safe_to_retry === true && record.reason_code !== 'generation_close_failed',
+    work_completed: normalizeCount(record.work_completed),
+    work_total: normalizeCount(record.work_total),
   };
 }
 

@@ -11,7 +11,7 @@ import (
 )
 
 func TestFlowerPreparationCancellationNeverExecutes(t *testing.T) {
-	for _, phase := range []FloretStoreStartupPhase{FloretStoreStartupInspecting, FloretStoreStartupBackingUp, FloretStoreStartupVerifying} {
+	for _, phase := range []FloretStoreStartupPhase{FloretStoreStartupInspecting, FloretStoreStartupIndexing, FloretStoreStartupVerifying, FloretStoreStartupPreparing} {
 		t.Run(string(phase), func(t *testing.T) {
 			state, _ := loadFlowerUpgradeFixture(t, "10ce4c152-lifecycle")
 			opts := fixtureMaintenanceOptions(t, state)
@@ -36,36 +36,29 @@ func TestFlowerPreparationCancellationNeverExecutes(t *testing.T) {
 	}
 }
 
-func TestFlowerBackupFailurePreservesSourceAndPreventsExecution(t *testing.T) {
+func TestFlowerPreparationIgnoresDamagedHistoricalSnapshots(t *testing.T) {
 	state, _ := loadFlowerUpgradeFixture(t, "10ce4c152-lifecycle")
 	opts := fixtureMaintenanceOptions(t, state)
-	calls := fixtureModelServer(t, &opts)
-	before, err := hashFlowerFiles(t.Context(), filepath.Join(state, "ai"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	path := filepath.Join(state, flowerMaintenanceDir)
+	path := filepath.Join(state, flowerMaintenanceDir, "snapshots", "00000000000000000000000000000000")
 	if err := os.MkdirAll(path, 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(path, "snapshots"), []byte("occupied"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(path, "manifest.json"), []byte("broken"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	svc, err := NewServiceContext(t.Context(), opts)
-	if svc != nil || err == nil || calls.Load() != 0 {
-		t.Fatalf("backup failure=%v calls=%d", err, calls.Load())
-	}
-	after, err := hashFlowerFiles(t.Context(), filepath.Join(state, "ai"))
+	service, err := NewServiceContext(t.Context(), opts)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(before) != len(after) {
-		t.Fatal("backup failure changed source file set")
+	if err := service.Activate(t.Context()); err != nil {
+		t.Fatal(err)
 	}
-	for i := range before {
-		if before[i] != after[i] {
-			t.Fatal("backup failure changed source bytes")
-		}
+	if err := service.Close(); err != nil {
+		t.Fatal(err)
+	}
+	snapshots, err := ListFlowerSnapshots(t.Context(), state)
+	if err != nil || len(snapshots) != 1 || !snapshots[0].Unavailable {
+		t.Fatalf("snapshots=%+v %v", snapshots, err)
 	}
 }
 
@@ -83,9 +76,6 @@ func TestFlowerSnapshotRetentionProtectsRecoveryAndListsDamagedBackups(t *testin
 		}
 		ids = append(ids, m.ID)
 	}
-	if err := writeMaintenanceJSON(flowerOperationPath(state), flowerUpgradeOperation{Format: 1, TargetBuild: "test", OriginalSnapshot: ids[0]}); err != nil {
-		t.Fatal(err)
-	}
 	scene, err := captureFlowerSnapshot(t.Context(), state, "test", "before_restore", true)
 	if err != nil {
 		t.Fatal(err)
@@ -94,22 +84,19 @@ func TestFlowerSnapshotRetentionProtectsRecoveryAndListsDamagedBackups(t *testin
 	if err := os.WriteFile(broken, []byte("broken"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := pruneFlowerSnapshots(t.Context(), state); err != nil {
-		t.Fatal(err)
-	}
 	items, err := ListFlowerSnapshots(t.Context(), state)
-	if err != nil || len(items) != 6 {
+	if err != nil || len(items) != 7 {
 		t.Fatalf("retention=%+v %v", items, err)
 	}
 	found := make(map[string]FlowerSnapshotSummary)
 	for _, item := range items {
 		found[item.ID] = item
 	}
-	if !found[ids[0]].Protected || !found[scene.ID].Protected || !found[ids[1]].Unavailable {
+	if !found[scene.ID].Protected || !found[ids[1]].Unavailable {
 		t.Fatalf("protected snapshots=%+v", found)
 	}
-	if _, exists := found[ids[2]]; exists {
-		t.Fatal("unprotected old automatic snapshot was retained")
+	if _, exists := found[ids[2]]; !exists {
+		t.Fatal("historical snapshot was removed")
 	}
 }
 

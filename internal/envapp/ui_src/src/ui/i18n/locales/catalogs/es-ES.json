@@ -112,7 +112,7 @@
     },
     "storage": {
       "title": "Copias de seguridad de Flower",
-      "description": "Las copias automáticas incluyen el historial de Flower, los ajustes, el estado de lectura y los archivos subidos. Se conservan las tres últimas copias automáticas y las copias protegidas.",
+      "description": "Las copias existentes incluyen el historial de Flower, la configuración, el estado de lectura y las cargas. Se conservan todas. El inicio y las actualizaciones no crean copias automáticas.",
       "adminOnly": "Se necesitan permisos de administración para ver y restaurar copias.",
       "view": "Ver copias",
       "unknownBuild": "Compilación de origen no registrada",
@@ -131,11 +131,11 @@
       "externalImpact": "No se incluyen los directorios de trabajo ni los ajustes globales de inicio de sesión. No se deshacen comandos ni acciones externas. La versión del entorno de ejecución no cambia; un fallo de migración pendiente puede seguir impidiendo que Flower arranque.",
       "confirm": "Confirmar restauración",
       "backingUp": "Guardando tus conversaciones",
-      "backingUpDescription": "Se está guardando una copia de recuperación del historial y de los archivos subidos antes de esta actualización.",
+      "backingUpDescription": "Se está guardando una copia del historial y de los archivos subidos actuales antes de restaurar.",
       "restoring": "Restaurando Flower",
       "restoringDescription": "Preparando y verificando la copia elegida. Los terminales, archivos, ajustes y diagnósticos siguen disponibles.",
       "spaceTitle": "Flower necesita más espacio en disco",
-      "spaceDescription": "Libera espacio en el disco del entorno de ejecución y vuelve a comprobarlo. Flower permanecerá en pausa hasta que puedan completarse la copia y la actualización.",
+      "spaceDescription": "Libera espacio en el disco del entorno de ejecución y vuelve a comprobar. Flower seguirá en pausa hasta que termine la preparación.",
       "failedTitle": "Mantenimiento de Flower detenido",
       "failedDescription": "Revisa el diagnóstico o elige una copia verificada. Los terminales, archivos y ajustes siguen disponibles.",
       "component": "Componente",
@@ -145,6 +145,20 @@
       "uploads": "Archivos subidos",
       "backup": "Copia de seguridad",
       "recovery": "Recuperación"
+    },
+    "startup": {
+      "verifying": "Validando datos",
+      "indexing": "Creando el índice de búsqueda",
+      "preparing": "Preparando conversaciones",
+      "stopping": "Deteniendo la preparación",
+      "stopped": "Preparación detenida",
+      "stop": "Detener preparación",
+      "prepareAgain": "Preparar de nuevo",
+      "indexingDescription": "Se está creando el primer índice de búsqueda. Flower estará disponible al finalizar la preparación.",
+      "stoppingDescription": "Esperando a que se revierta la transacción actual y se cierre el almacenamiento.",
+      "stoppedDescription": "Tus datos se conservan. Selecciona Preparar de nuevo cuando quieras continuar.",
+      "closeFailed": "Flower no pudo cerrar su almacenamiento de forma segura. Copia los diagnósticos y reinicia la aplicación antes de volver a preparar.",
+      "progress": "{completed} / {total} conversaciones"
     }
   },
   "common": {
