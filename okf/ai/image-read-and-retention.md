@@ -3,12 +3,14 @@ type: AI Media Contract
 title: Direct image reading and tool media retention
 description: Authorized image reads produce immutable native model attachments with canonical retention and preview membership.
 tags: [ai, tools, images, media, security]
-timestamp: 2026-10-15T00:00:00Z
+timestamp: 2026-10-17T00:00:00Z
 ---
 # Summary
 
 `image.read(file_path, target_id)` reads an image directly in every permission
-mode. Redeven owns authorization and immutable bytes; Floret owns the typed
+mode. Its exclusive `locator` mode rereads an admitted immutable snapshot in the
+current thread without reopening the original file or copying bytes. Redeven
+owns authorization and immutable bytes; Floret owns the typed
 attachment, model history and canonical membership. File references stay file
 references. The tool creates native image content without a browser, temporary
 HTTP server, path-to-image inference or Base64 in ordinary result JSON.
@@ -42,6 +44,30 @@ to text. OpenAI Responses uses the officially supported typed
 allows images and files in tool output. Native image budgeting inspects these
 protocol parts and does not count Base64 transport as ordinary text.
 
+## Visual summaries and rereads
+
+Published Floret v7.51.1 projects user and confirmed tool attachments into one
+ordered visual compaction input. Each image reaches the selected model as native
+image content next to its safe descriptor locator. Full rendered request budgets
+include image cost; an image that cannot fit fails explicitly. Frozen transport
+retries do not reread bytes. Only complete successful coverage installs a
+checkpoint; the domain schema stays 19.
+
+A summary retains task-relevant visual facts, locators and uncertainty, but is
+lossy. Exact text, numbers and positions require `image.read(locator)`. Older
+images remain discoverable through canonical `threads.query` and paged
+`threads.read`, without an unbounded checkpoint catalog. Existing checkpoints
+are not rewritten or credited with visual facts that were never generated.
+
+The locator hashes the complete versioned attachment descriptor and remains
+stable across restart and fork. It conveys no access rights or storage path.
+Preview and reread share product authorization, current canonical membership,
+resource resolution, descriptor/size/digest validation and bounded image decoding.
+Uploaded images reuse the authorized upload resource; tool and Computer images
+reuse the existing media store. No caption store, locator map or second media
+lifecycle is introduced. File reads keep their 10 MiB bound; admitted Computer
+frames retain their existing 16 MiB bound.
+
 ## Immutable bytes and retention
 
 One `toolMediaStore` owns image snapshots and existing Computer keyframes under
@@ -71,7 +97,10 @@ The resolver is the only membership and endpoint authorization entry point.
 It reads product thread ownership and one public canonical view, without the
 full product detail mapper. GET
 `/threads/<thread>/tool-media/<digest>/<format>` requires an exact canonical
-`tool_image` target reference. Cross-thread and cross-endpoint access fails.
+attachment descriptor from either a user message or a confirmed tool result.
+The same route accepts `/tool-media/locator/<locator-digest>` for a
+`media:v1:<sha256>` descriptor locator. Activity target references are display
+requests only. Cross-thread, cross-endpoint and upload-owner access fails.
 The response is bounded, uses a closed image MIME set and `no-store`.
 
 Env App and Desktop use authenticated binary transport. Activity and assistant
@@ -97,6 +126,8 @@ Model attachment history and compaction remain upstream-owned.
 
 - [Shared image tool](../../internal/ai/image_read.go)
 - [Typed tool boundary](../../internal/ai/floret_tools.go)
+- [Canonical image resolver](../../internal/ai/canonical_image.go)
+- [Upload reread and authorization tests](../../internal/ai/image_locator_test.go)
 - [Canonical preview authority](../../internal/ai/tool_media_authority.go)
 - [Shared retention](../../internal/ai/tool_media_cleanup.go)
 - [Native provider, restart and fork tests](../../internal/ai/image_read_integration_test.go)

@@ -3,11 +3,11 @@ type: AI Runtime Contract
 title: Model context usage and compaction
 description: Independent manual compaction, automatic continuation, and canonical usage presentation.
 tags: [ai, models, context, compaction]
-timestamp: 2026-10-10T00:00:00Z
+timestamp: 2026-10-17T00:00:00Z
 ---
 # Summary
 
-Published Floret v7.27.2 owns context compaction, cancellation, canonical installation, restart recovery, and usage. Redeven authorizes an independent manual operation and presents the canonical result. Manual compaction ends after installation; automatic compaction continues the current task. Failure, cancellation before installation, and noop retain effective context.
+Published Floret v7.51.1 owns context compaction, cancellation, canonical installation, restart recovery, and usage. Redeven authorizes an independent manual operation and presents the canonical result. Manual compaction ends after installation; automatic compaction continues the current task. Failure, cancellation before installation, and noop retain effective context.
 
 # Contract
 
@@ -24,8 +24,13 @@ formatting, tool arguments, references, and runtime facts. Its single budgeted
 loop carries the latest candidate summary through ordered lossless fragments
 when a request cannot fit. It does not clip ordinary messages to fixed previews
 or install truncated output. Intermediate candidates remain upstream-owned
-memory; failure or cancellation preserves the effective context. Redeven adds
-no summary generator, batching policy, or durable compaction state.
+memory; failure or cancellation preserves the effective context. User and
+confirmed tool images use the same loop with indivisible native image inputs
+and safe source labels. The [visual summary and original reread contract](image-read-and-retention.md#visual-summaries-and-rereads)
+defines image budgets, frozen retries, locators and exact-detail recovery.
+Projection revision v10 resets prior request lineage through Floret's explicit
+boundary; existing checkpoints and canonical v19 bytes are not rewritten.
+Redeven adds no summary generator, batching policy, or durable compaction state.
 
 The 50,000-token target guides tail selection; it does not require a fixed-length summary or fill unused budget. The actual result combines the generated summary, preserved user requirements, retained complete tail, and checkpoint structure. The summary has a ceiling, so the result may be substantially below the target. Protecting the latest complete input or tool exchange can also exceed the target; Floret records that pressure instead of clipping those messages. The divider reports estimated message context after installation, independently of system-prefix and tool-definition tokens in a complete provider request.
 

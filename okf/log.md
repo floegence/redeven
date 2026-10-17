@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-17: Visual image memory and original snapshot rereads
+
+- Adopt published Floret v7.51.1 [native image compaction](ai/model-context-usage-and-compaction.md) and canonical attachment discovery. Extend [image.read](ai/image-read-and-retention.md) with authorized stable locators; share preview membership, preserve upload and tool resources, and remove Activity-based ownership without a second store or schema change.
+
 ## 2026-10-16: Verify generated viewer assets before commit
 
 - Keep remote desktop catalogs synchronized with explicit Env App translations. The [commit gate](release/ci-and-release-gates.md#documentation-and-generated-assets) checks staged viewer assets through the existing generator and reports the regeneration command before a stale catalog reaches Desktop builds.

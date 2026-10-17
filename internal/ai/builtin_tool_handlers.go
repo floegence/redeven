@@ -550,8 +550,8 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:         "image.read",
-			Description:  "Read an authorized PNG, JPEG, WebP or GIF image directly for visual inspection. Requires an image-capable model. Detects the actual format, preserves resolution within limits, and reads the first GIF frame. The immutable image snapshot remains in this thread history. Do not start a browser or HTTP server to inspect a local image.",
-			InputSchema:  toSchema(map[string]any{"type": "object", "properties": withTargetID(map[string]any{"file_path": map[string]any{"type": "string", "minLength": 1, "description": "Image path relative to the working directory, or an authorized absolute path."}}), "required": []string{"file_path"}, "additionalProperties": false}),
+			Description:  "Read an authorized PNG, JPEG, WebP or GIF image directly for visual inspection. Requires an image-capable model. Detects the actual format, preserves resolution within limits, and reads the first GIF frame. The immutable image snapshot remains in this thread history. Use exactly one of file_path or a media:v1 locator from canonical thread history. Locator rereads use the original snapshot and do not accept target_id. Do not start a browser or HTTP server to inspect a local image.",
+			InputSchema:  toSchema(map[string]any{"type": "object", "properties": withTargetID(map[string]any{"locator": map[string]any{"type": "string", "pattern": "^media:v1:[a-f0-9]{64}$", "description": "Canonical image snapshot locator from threads.read or a compaction summary."}, "file_path": map[string]any{"type": "string", "minLength": 1, "description": "Image path relative to the working directory, or an authorized absolute path."}}), "additionalProperties": false}),
 			Visibility:   ToolVisibilitySharedReadonly,
 			Capabilities: []ToolCapabilityClass{ToolCapabilityReadonlyLocal},
 			Source:       "builtin", Namespace: "builtin.image", Priority: 100,

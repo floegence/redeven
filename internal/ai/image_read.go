@@ -68,8 +68,12 @@ func validateToolMedia(attachment TargetToolAttachment, body []byte) error {
 }
 
 func decodeBoundedImage(body []byte) (image.Image, string, image.Config, error) {
-	if len(body) == 0 || len(body) > maxImageReadBytes {
-		return nil, "", image.Config{}, errors.New("image exceeds 10 MiB; choose a smaller image")
+	return decodeBoundedImageWithinLimit(body, maxImageReadBytes)
+}
+
+func decodeBoundedImageWithinLimit(body []byte, maxBytes int) (image.Image, string, image.Config, error) {
+	if len(body) == 0 || len(body) > maxBytes {
+		return nil, "", image.Config{}, fmt.Errorf("image exceeds %d MiB; choose a smaller image", maxBytes>>20)
 	}
 	dimensions, format, err := image.DecodeConfig(bytes.NewReader(body))
 	if err != nil {
@@ -92,6 +96,7 @@ func decodeBoundedImage(body []byte) (image.Image, string, image.Config, error) 
 
 type imageReadResult struct {
 	FilePath    string `json:"file_path,omitempty"`
+	Locator     string `json:"locator,omitempty"`
 	DisplayName string `json:"display_name"`
 	MIMEType    string `json:"mime_type"`
 	Width       int    `json:"width"`
@@ -134,6 +139,32 @@ func (r *run) toolImageRead(ctx context.Context, meta *session.Meta, toolID stri
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
+	}
+	filePath, hasPath := args["file_path"]
+	locator, hasLocator := args["locator"]
+	if hasPath == hasLocator {
+		return nil, errors.New("provide exactly one of file_path or locator")
+	}
+	if hasLocator {
+		if _, hasTarget := args["target_id"]; hasTarget {
+			return nil, errors.New("locator mode does not accept target_id")
+		}
+		value, ok := locator.(string)
+		if !ok || !canonicalMediaLocatorPattern.MatchString(value) {
+			return nil, errors.New("invalid canonical image locator")
+		}
+		if r.host.readImageAttachment == nil {
+			return nil, errors.New("canonical image authority is unavailable")
+		}
+		snapshot, err := r.host.readImageAttachment(ctx, meta, value)
+		if err != nil {
+			return nil, err
+		}
+		a := snapshot.Attachment
+		return toolExecutionOutput{Payload: imageReadResult{Locator: value, DisplayName: a.Name, MIMEType: a.MIMEType, Width: snapshot.Width, Height: snapshot.Height, SizeBytes: a.SizeBytes}, Attachments: []ToolAttachment{{ResourceRef: a.ResourceRef, Name: a.Name, MIMEType: a.MIMEType, SizeBytes: a.SizeBytes, SHA256: snapshot.SHA256}}}, nil
+	}
+	if value, ok := filePath.(string); !ok || strings.TrimSpace(value) == "" {
+		return nil, errors.New("file_path must be a non-empty string")
 	}
 	if r.host.saveToolMedia == nil {
 		return nil, errors.New("image snapshot storage is unavailable; retry after reconnecting")

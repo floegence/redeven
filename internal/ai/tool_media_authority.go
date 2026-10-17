@@ -39,33 +39,18 @@ func (s *Service) authorizeToolMediaThread(ctx context.Context, meta *session.Me
 }
 
 func (s *Service) ResolveToolImageForThread(ctx context.Context, meta *session.Meta, threadID, ref string) ([]byte, string, error) {
-	if !imageSnapshotResourcePattern.MatchString(ref) {
+	if !imageSnapshotResourcePattern.MatchString(ref) && !canonicalMediaLocatorPattern.MatchString(ref) {
 		return nil, "", errors.New("invalid tool image reference")
 	}
-	current, err := s.authorizeToolMediaThread(ctx, meta, strings.TrimSpace(threadID))
+	locator, resource := "", ref
+	if canonicalMediaLocatorPattern.MatchString(ref) {
+		locator, resource = ref, ""
+	}
+	snapshot, err := s.readCanonicalThreadImage(ctx, meta, strings.TrimSpace(threadID), locator, resource)
 	if err != nil {
 		return nil, "", err
 	}
-	owned := false
-	for _, item := range current.Items {
-		if item.Activity == nil || item.Activity.Presentation == nil {
-			continue
-		}
-		for _, target := range item.Activity.Presentation.TargetRefs {
-			if target.Kind == "tool_image" && target.ResourceRef == ref {
-				owned = true
-				break
-			}
-		}
-	}
-	if !owned {
-		return nil, "", errors.New("tool image does not belong to this thread")
-	}
-	body, err := s.toolMedia.read(ctx, ref)
-	if err != nil {
-		return nil, "", err
-	}
-	return body, toolMediaDescriptor(ref).MIMEType, nil
+	return snapshot.Body, snapshot.Attachment.MIMEType, nil
 }
 
 func (s *Service) validateThreadImageModel(ctx context.Context, threadID, modelID string, cfg *config.AIConfig) error {
@@ -98,14 +83,6 @@ func (s *Service) validateThreadImageModel(ctx context.Context, threadID, modelI
 	for _, item := range current.Items {
 		for _, attachment := range item.Attachments {
 			if strings.HasPrefix(attachment.MIMEType, "image/") {
-				return ErrThreadImageModelUnsupported
-			}
-		}
-		if item.Activity == nil || item.Activity.Presentation == nil {
-			continue
-		}
-		for _, ref := range item.Activity.Presentation.TargetRefs {
-			if ref.Kind == "tool_image" || ref.Kind == "computer_frame" {
 				return ErrThreadImageModelUnsupported
 			}
 		}

@@ -1,9 +1,11 @@
 package ai
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -11,6 +13,7 @@ import (
 
 	flconfig "github.com/floegence/floret/v7/config"
 	"github.com/floegence/floret/v7/florettest"
+	flidentity "github.com/floegence/floret/v7/identity"
 	flprovider "github.com/floegence/floret/v7/provider"
 	flruntime "github.com/floegence/floret/v7/runtime"
 	flstorage "github.com/floegence/floret/v7/storage"
@@ -19,7 +22,7 @@ import (
 )
 
 func TestThreadImageModelGuardPreservesCompactedToolMedia(t *testing.T) {
-	attachment, _, _, err := imageSnapshot(imageReadFixture(t, "png"), "history.png")
+	attachment, _, imageBody, err := imageSnapshot(imageReadFixture(t, "png"), "history.png")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -27,7 +30,7 @@ func TestThreadImageModelGuardPreservesCompactedToolMedia(t *testing.T) {
 		return florettest.Step{Events: []flprovider.Event{{Type: flprovider.EventDelta, Text: text}, {Type: flprovider.EventDone, Reason: "stop"}}}
 	}
 	call := florettest.Step{Events: []flprovider.Event{{Type: flprovider.EventToolCalls, ToolCalls: []flprovider.ToolCall{{ID: "image", Name: "image.read", Args: `{}`}}}, {Type: flprovider.EventDone, Reason: "tool_calls"}}}
-	gateway := florettest.NewScriptedGateway(flprovider.Identity{Provider: "test", Model: "image", StateCompatibilityKey: "image:v1"}, flprovider.Capabilities{Reasoning: flprovider.ReasoningUnsupported}, call, answer("The image has a red square."), answer("ACK"), answer("ACK"), answer("ACK"), answer("The image showed a red square. Three filler turns were acknowledged."))
+	gateway := florettest.NewScriptedGateway(flprovider.Identity{Provider: "test", Model: "image", StateCompatibilityKey: "image:v1"}, flprovider.Capabilities{Reasoning: flprovider.ReasoningUnsupported}, call, answer("The image has a red square."), answer("ACK"), answer("ACK"), answer("ACK"), answer("The image showed a red square. Three filler turns were acknowledged."), answer("ACK"), answer("ACK"), answer("The retained image showed a red square."))
 	imageTool := fltools.Define[map[string]any](fltools.Definition{Name: "image.read", ReadOnly: true, InputSchema: fltools.StrictObject(nil, nil), Permission: fltools.PermissionSpec{Mode: fltools.PermissionAllow}}, nil, nil, func(context.Context, fltools.Invocation[map[string]any]) (fltools.Result, error) {
 		return fltools.Result{Text: "Read history.png", Attachments: []fltools.ArtifactRef{{ID: attachment.ResourceRef, Kind: "image", SafeLabel: attachment.Name, MIME: attachment.MIMEType, SizeBytes: attachment.SizeBytes, SHA256: attachment.SHA256}}, Activity: &fltools.ActivityPresentation{Label: "Read image", TargetRefs: []fltools.ActivityTargetRef{{Kind: "tool_image", ResourceRef: attachment.ResourceRef, Label: attachment.Name}}}}, nil
 	})
@@ -37,21 +40,32 @@ func TestThreadImageModelGuardPreservesCompactedToolMedia(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	host, err := flruntime.Open(t.Context(), flruntime.Options{Storage: flstorage.SQLite(filepath.Join(t.TempDir(), "threads.sqlite"))})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		if err := host.Shutdown(context.Background()); err != nil {
-			t.Error(err)
+	database := filepath.Join(t.TempDir(), "threads.sqlite")
+	open := func() (*flruntime.Host, flruntime.ThreadService) {
+		host, err := flruntime.Open(t.Context(), flruntime.Options{Storage: flstorage.SQLite(database)})
+		if err != nil {
+			t.Fatal(err)
 		}
-	}()
-	threads, err := host.ThreadService(flruntime.AgentFactoryFunc(func(context.Context, flruntime.AgentRequest) (*flruntime.Agent, error) { return agent, nil }))
+		t.Cleanup(func() { _ = host.Shutdown(context.Background()) })
+		threads, err := host.ThreadService(flruntime.AgentFactoryFunc(func(context.Context, flruntime.AgentRequest) (*flruntime.Agent, error) { return agent, nil }))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return host, threads
+	}
+	host, threads := open()
+	svc := newTestService(t, &config.AIConfig{CurrentModelID: "openai/vision", Providers: []config.AIProvider{{ID: "openai", Type: "openai", Models: []config.AIProviderModel{{ModelName: "vision", InputModalities: []string{"text", "image"}}}}}})
+	svc.threadRuntime = threads
+	meta := testSendTurnMeta()
+	product, err := svc.CreateThread(t.Context(), meta, "Image history", "", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	created, err := threads.Create(t.Context(), flruntime.CreateThreadInput{RequestKey: "create"})
+	created, err := threads.View(t.Context(), flidentity.ThreadID(product.ThreadID))
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.toolMedia.put(t.Context(), attachment, imageBody); err != nil {
 		t.Fatal(err)
 	}
 	await := func(admitted flruntime.ThreadView) flruntime.ThreadView {
@@ -97,7 +111,36 @@ func TestThreadImageModelGuardPreservesCompactedToolMedia(t *testing.T) {
 	if len(after.Items) != len(before.Items) {
 		t.Fatal("compaction changed complete canonical history")
 	}
-	svc := &Service{threadRuntime: threads, floretEffects: newFloretEffectAdapter()}
+	requests := gateway.Requests()
+	if len(requests) != 6 {
+		t.Fatalf("unexpected provider request count: %d", len(requests))
+	}
+	summary := requests[len(requests)-1]
+	descriptor := flruntime.MessageAttachment{ResourceRef: attachment.ResourceRef, Name: attachment.Name, MIMEType: attachment.MIMEType, SizeBytes: attachment.SizeBytes}
+	locator, err := descriptor.Locator()
+	if err != nil {
+		t.Fatal(err)
+	}
+	imageCount := 0
+	for _, message := range summary.Messages {
+		for _, image := range message.Attachments {
+			imageCount++
+			if message.Role != flprovider.RoleUser || image.ResourceRef != attachment.ResourceRef || !strings.Contains(message.Text, locator) || strings.Contains(message.Text, attachment.ResourceRef) {
+				t.Fatalf("summary lost native historical image or safe source label: %+v", message)
+			}
+		}
+	}
+	if imageCount != 1 || len(summary.Tools) != 0 || summary.PreviousState != nil {
+		t.Fatalf("summary image count=%d tools=%d continuation=%v", imageCount, len(summary.Tools), summary.PreviousState)
+	}
+	retained, _, err := findCanonicalThreadAttachment(after, "", func(a flruntime.MessageAttachment) bool {
+		candidate, err := a.Locator()
+		return err == nil && candidate == locator
+	})
+	if err != nil || retained.ResourceRef != attachment.ResourceRef {
+		t.Fatalf("compaction lost original image discovery: %+v %v", retained, err)
+	}
+
 	cfg := &config.AIConfig{Providers: []config.AIProvider{{ID: "test", Type: "openai", Models: []config.AIProviderModel{{ModelName: "text", InputModalities: []string{"text"}}}}}}
 	if err := svc.validateThreadImageModel(t.Context(), created.ThreadID.String(), "test/text", cfg); !errors.Is(err, ErrThreadImageModelUnsupported) {
 		t.Fatalf("compacted tool image allowed a text model: %v", err)
@@ -105,5 +148,52 @@ func TestThreadImageModelGuardPreservesCompactedToolMedia(t *testing.T) {
 	inventory, err := host.MediaInventory(t.Context())
 	if err != nil || !inventory.Idle || len(inventory.References) != 1 || inventory.References[0].Attachment.ResourceRef != attachment.ResourceRef {
 		t.Fatalf("compacted canonical media retention=%#v %v", inventory, err)
+	}
+	checkOriginal := func(threadID string) {
+		t.Helper()
+		snapshot, err := svc.readCanonicalThreadImage(t.Context(), meta, threadID, locator, "")
+		if err != nil || !bytes.Equal(snapshot.Body, imageBody) || snapshot.SHA256 != attachment.SHA256 {
+			t.Fatalf("historical original changed: %v", err)
+		}
+	}
+	checkOriginal(created.ThreadID.String())
+	if err := host.Shutdown(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	host, threads = open()
+	svc.threadRuntime = threads
+	checkOriginal(created.ThreadID.String())
+	fork, err := svc.ForkThread(t.Context(), meta, created.ThreadID.String(), "Image fork")
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkOriginal(fork.ThreadID)
+	created.ThreadID = flidentity.ThreadID(fork.ThreadID)
+	for index := 0; index < 2; index++ {
+		admission, err := threads.Send(t.Context(), flruntime.SendInput{ThreadID: created.ThreadID, RequestKey: flruntime.RequestKey(fmt.Sprintf("fork-filler-%d", index)), Input: flruntime.UserInput{Text: strings.Repeat("additional historical image context ", 800)}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		await(admission)
+	}
+	admitted, err = threads.(flruntime.ThreadContextCompactor).CompactContext(t.Context(), flruntime.CompactContextInput{ThreadID: created.ThreadID, RequestKey: "compact-again"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	await(admitted)
+	contextView, err = threads.(flruntime.ThreadContextReader).Context(t.Context(), created.ThreadID)
+	if err != nil || len(contextView.Compactions) != 2 || contextView.Compactions[1].Status != "compacted" {
+		t.Fatalf("repeated compaction=%+v %v", contextView.Compactions, err)
+	}
+	checkOriginal(fork.ThreadID)
+	storagePath, err := svc.toolMedia.path(attachment.ResourceRef)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(storagePath); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := svc.ResolveToolImageForThread(t.Context(), meta, fork.ThreadID, locator); err == nil || strings.Contains(err.Error(), storagePath) {
+		t.Fatalf("missing tool snapshot must fail without a storage path: %v", err)
 	}
 }

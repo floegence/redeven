@@ -49,12 +49,11 @@ describe('Flower Markdown resource resolution', () => {
     expect(openMessageURL).not.toHaveBeenCalled();
   });
 
-  it('loads a canonical tool image through thread membership and never reopens the source file', async () => {
+  it.each(['image://' + 'b'.repeat(64) + '/jpeg', 'media:v1:' + 'b'.repeat(64)])('loads canonical tool image %s through thread membership without reopening the source file', async ref => {
     const loadToolImage = vi.fn(async () => new Blob(['pixels'], { type: 'image/jpeg' }));
     const loadMessageFile = vi.fn();
     const adapter = { loadToolImage, loadMessageFile } as unknown as FlowerSurfaceAdapter;
     const controller = new AbortController();
-    const ref = `image://${'b'.repeat(64)}/jpeg`;
     const resource = await resolveFlowerMarkdownMedia({ kind: 'image', title: 'photo.jpg', src: ref }, controller.signal, { adapter, threadID: 'thread-a', workingDirectory: '/project', copy: markdownMediaEnUS, onActionError: vi.fn() });
     expect(loadToolImage).toHaveBeenCalledWith({ thread_id: 'thread-a', resource_ref: ref, signal: controller.signal });
     expect(loadMessageFile).not.toHaveBeenCalled();

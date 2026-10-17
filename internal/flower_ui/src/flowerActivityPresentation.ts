@@ -1513,7 +1513,7 @@ function presentationForStructured(item: FlowerActivityItem, copy?: FlowerActivi
   else if (item.tool_name === 'computer.exec' && active) detailBlocks.push({ kind: 'structured_rows', section: 'results', rows: [], notice: words.waitingResult });
   else if (!active && (!computer || item.payload?.rows_provided !== true) && (!errorBlock || item.chips?.some(chip => chip.kind === 'partial_execution'))) detailBlocks.push({ kind: 'structured_rows', section: 'results', rows: [], notice: item.chips?.some(chip => chip.kind === 'partial_execution') ? words.partialOutput : item.target_refs?.some(ref => ref.kind === 'computer_frame' || ref.kind === 'tool_image') ? undefined : item.payload?.rows_provided === true ? words.noOutput : words.detailsUnavailable });
   if (detailLines.length > 0) detailBlocks.push({ kind: 'structured', lines: detailLines });
-  const image = item.target_refs?.find(ref => ref.kind === 'tool_image' && /^image:\/\/[a-f0-9]{64}\/(png|jpeg|webp)$/u.test(ref.resource_ref ?? ''));
+  const image = item.target_refs?.find(ref => ref.kind === 'tool_image' && (/^media:v1:[a-f0-9]{64}$/u.test(ref.resource_ref ?? '') || /^image:\/\/[a-f0-9]{64}\/(png|jpeg|webp)$/u.test(ref.resource_ref ?? '')));
   if (image?.resource_ref) detailBlocks.push({ kind: 'image', resource_ref: image.resource_ref, name: image.label || trimString(item.label) });
   let meta = trimString(item.description) !== titleText(title) && !repeatsItemError(item, trimString(item.description)) ? trimString(item.description) : '';
   if (computer) {

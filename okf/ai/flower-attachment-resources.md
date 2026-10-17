@@ -3,7 +3,7 @@ type: AI Resource Contract
 title: Flower attachment resources
 description: Owner-scoped uploads, canonical membership, provider reads, quotas, and last-reference cleanup.
 tags: [ai, flower, attachments, storage, security]
-timestamp: 2026-07-27T00:00:00Z
+timestamp: 2026-10-17T00:00:00Z
 ---
 # Summary
 
@@ -31,6 +31,18 @@ Every initial, queued, follow-up, replacement, RPC, and service admission path r
 Redeven derives one model-scoped capability snapshot from the selected provider route and model modalities. The revision binds the exact MIME route matrix and product limits. A native image or file route is advertised only when the provider adapter can render and conservatively estimate that complete request. Strict UTF-8 text may instead use the bounded `attachment.read` host tool. Binary, image, and PDF content never use the text fallback.
 
 Floret v7 receives canonical attachment descriptors through typed `Send` and owns their durable association with the accepted user item, queue intent, retry lineage, and child Thread. A known-Turn attachment read uses one identity-bound exact typed view and never falls back to product history; only typed not-found is absence, while storage and corruption failures remain unavailable errors. Redeven opens and hashes bytes after Floret identifies the exact canonical input and before provider dispatch. The effect adapter freezes the rendered provider request for one attempt and closes it on every non-stream path. Historical reads repeat canonical membership and byte-integrity checks rather than trusting acceptance-time state.
+
+## Canonical image recovery
+
+Floret v7.51.1 exposes user and confirmed tool attachment descriptors through
+one canonical view. Image locators use `media:v1:<sha256>` over the complete
+versioned descriptor; the existing `attachment://v1/...` text-read and upload
+presentation contract is unchanged. Both are opaque references, not grants.
+The shared [image resolver](image-read-and-retention.md) authorizes preview and
+`image.read(locator)` against current canonical membership and product owner
+scope before opening immutable bytes. Confirmed upload rereads remain typed
+native images and reuse the same resource. Upload retention recognizes tool
+media separately and never parses tool image references as upload records.
 
 # Boundaries
 

@@ -5028,6 +5028,9 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		resourceRef := "image://" + parts[1]
+		if strings.HasPrefix(parts[1], "locator/") {
+			resourceRef = "media:v1:" + strings.TrimPrefix(parts[1], "locator/")
+		}
 		body, mimeType, err := aiSvc.ResolveToolImageForThread(r.Context(), meta, parts[0], resourceRef)
 		if err != nil {
 			writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "tool image is unavailable"})
