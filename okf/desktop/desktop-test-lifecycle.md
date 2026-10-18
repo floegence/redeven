@@ -79,6 +79,9 @@ unexpected commands. Native transport tests preserve explicit recovery intent
 through the existing Open owner. Canvas and Flower assertions follow their
 current relation and retained-settings contracts; container fixtures use saved
 targets rather than replacing the native Local Environment through Presence.
+Connection popovers exercise the shared pointer dismissal contract. Runtime or
+session replacement refreshes filesystem context and scoped model reads while
+health-only snapshots retain both the mounted Flower surface and its requests.
 Service-canvas qualification verifies all nine existing scenarios, including
 Welcome Open after automatic Runtime startup, window reuse, canvas navigation,
 route isolation and reopening, then verifies empty owned inventory.

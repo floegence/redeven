@@ -173,7 +173,7 @@ it('releases the previous Flower when the selected runtime identity changes', as
   expect(card?.isConnected).toBe(false);
 });
 
-it('keeps filesystem requests stable through health snapshots and refreshes after runtime or session replacement', async () => {
+it('keeps filesystem and model reads stable through health snapshots and refreshes after runtime or session replacement', async () => {
   const h = await mount('flower');
   const mounted = flower();
   const initialCalls = h.requestRuntimeFlower.mock.calls.length;
@@ -190,8 +190,14 @@ it('keeps filesystem requests stable through health snapshots and refreshes afte
   h.publish({ environments: h.snapshot.environments.map(entry => ({ ...entry, runtime_started_at_unix_ms: 42 })) });
   await settle();
   expect(flower()).toBe(mounted);
-  expect(h.requestRuntimeFlower).toHaveBeenCalledTimes(initialCalls + 1);
+  const replacementReads = [
+    '/_redeven_proxy/api/fs/path_context',
+    '/_redeven_proxy/api/settings',
+    '/_redeven_proxy/api/ai/models?mode=baseline',
+  ];
+  expect(h.requestRuntimeFlower.mock.calls.slice(initialCalls).map(([request]) => request.path).sort()).toEqual([...replacementReads].sort());
   h.publish({ environments: h.snapshot.environments.map(entry => ({ ...entry, runtime_started_at_unix_ms: 42, open_session_key: 'replacement' })) });
   await settle();
-  expect(h.requestRuntimeFlower).toHaveBeenCalledTimes(initialCalls + 2);
+  expect(flower()).toBe(mounted);
+  expect(h.requestRuntimeFlower.mock.calls.slice(initialCalls + replacementReads.length).map(([request]) => request.path).sort()).toEqual([...replacementReads].sort());
 });
