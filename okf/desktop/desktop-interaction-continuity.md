@@ -15,6 +15,8 @@ Desktop Welcome owns interaction sessions; Launcher and Runtime own business fac
 
 Each interaction field has one owner: the existing library overlay, guidance, lifecycle disclosure, Gateway foreground action or settings opening. Snapshot membership and capability branches do not own an already-open session. Retained cards supply presentation only; submission reads current authoritative data. Health checks and equivalent snapshots never reinitialize a form or replace retained content with initial loading.
 
+The native Local Environment's host-process placement comes from its saved Runtime root and the configured state root through one shared projection. Both lifecycle commands and Welcome use these coordinates even while a probe withdraws live Presence. Retained verified identity does not retain management capability. A real coordinate or verified identity change still revokes the existing disclosure's consent.
+
 Destructive confirmation remains visible after target removal, replacement or capability loss, but its consent stays revoked even if the original target returns. Explicit verification starts a fresh target review and preserves the chosen reinstall mode. Expired invitations also revoke nested enrollment consent without clearing its address, code or current step.
 
 Published KeyedFor retains nodes by business identity while item/index accessors read current data. Menus use action identity and timelines use step/task identity. Published Stepper and Tabs preserve semantic identity. Keys cannot use presentation positions. Disabled state and callbacks read current values even when the node survives.
@@ -24,6 +26,8 @@ A target removed from a list or whose connection identity, authorization or prev
 # Admission, handoff and completion
 
 Before the first asynchronous submission, one synchronous transition records the attempt, closes its menu and opens its operation surface. Admission is a named UI phase, not fabricated backend execution steps. Rejection, exceptions and unexpected results remain on that surface with retry and close. Duplicate activation cannot submit twice.
+
+After Start, Restart or Update succeeds at Runtime ready, the card's enabled Open or Focus action resumes its normal behavior, including the current Open preflight. Completed progress does not intercept that action to reopen its timeline. Active work and failures retain their progress or recovery trigger; settings restart and revoked target disclosures retain their existing explicit continuation and review.
 
 Launcher progress is selected by operation key and start time. Arrival order, temporarily absent progress, conflict binding and a late response cannot redirect a newer session. Settings save-and-restart retains its original target and passes visibly to its exact lifecycle disclosure; returning restores the draft. Successful current completion may close its surface. An older response never closes or reopens a newer opening. Menu exit does not restore focus into its old trigger during handoff; the destination owns focus. Deferred initial focus never overrides a user-selected menu item.
 

@@ -59,7 +59,7 @@ export function runtimeLifecycleReadyPrimaryAction(
     || !RUNTIME_READY_ACTIONS.includes(progress.action)
     || !RUNTIME_READY_OPERATIONS.includes(lifecycle.operation)
     || !primaryAction?.enabled
-    || (primaryAction.intent !== 'open' && primaryAction.intent !== 'focus')
+    || (primaryAction.intent !== 'open' && primaryAction.intent !== 'open_with_preflight' && primaryAction.intent !== 'focus')
   ) {
     return null;
   }

@@ -96,15 +96,18 @@ describe('Tessiven projection contracts', () => {
     });
     const result = projectCanvas(doc, new Set(), {});
     expect(result.relations.has('application/application')).toBe(false);
-    expect(result.internalRelations.get('application')).toEqual([
+    expect(result.internalRelations.has('application')).toBe(false);
+    expect(result.groupRelations.get('application')).toContainEqual(
       expect.objectContaining({
-        relation: expect.objectContaining({
-          id: 'peer', from: 'orders-node-0', to: 'orders-node-1',
-          evidenceRefs: ['config'],
-        }),
-        fromServiceRef: 'api', toServiceRef: 'api',
+        relationRefs: ['peer'],
+        locality: 'cross-node',
+        from: expect.objectContaining({ ref: 'orders-node-0', serviceRef: 'api' }),
+        to: expect.objectContaining({ ref: 'orders-node-1', serviceRef: 'api' }),
       }),
-    ]);
+    );
+    expect(result.relationDetails.get('peer')?.relation).toEqual({
+      id: 'peer', from: 'orders-node-0', to: 'orders-node-1', kind: 'peers', evidenceRefs: ['config'],
+    });
     expect(result.graph.nodes.every((n) => n.parentId === undefined)).toBe(
       true,
     );

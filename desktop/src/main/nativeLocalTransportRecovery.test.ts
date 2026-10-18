@@ -83,24 +83,22 @@ describe('native Local Runtime transport loss', () => {
     const f = fixture(); f.record.closing = true; f.fail(); expect(f.send).not.toHaveBeenCalled();
   });
 
-  it('routes explicit Open of an unavailable local session through the existing workspace-preserving Restart owner', async () => {
-    const f = fixture(); f.record.transport_recovery_snapshot = { phase: 'failed' };
-    const restart = vi.fn(async () => ({ ok: true, outcome: 'restarted_environment_runtime' }));
-    const coordinator = { runOpen: vi.fn(async () => ({ ok: true, outcome: 'focused_environment_window' })) };
+  it.each([{}, { runtimeRecovery: 'restart' }])('preserves explicit recovery intent through the single Open lifecycle owner: %j', async options => {
+    const ownedOpen = vi.fn(async () => ({ ok: true, outcome: 'opened_environment_window' }));
+    const coordinator = { runOpen: vi.fn(async ({ execute }: { execute: () => Promise<unknown> }) => execute()) };
+    const preferences = {}, environment = { id: 'local', label: 'Local Environment' };
     const open = productionBoundary('openLocalEnvironmentRecord', {
       reinstallRecoveryBlockForEnvironment: async () => null, buildLocalEnvironmentDesktopTarget: () => target,
       localHostOpenTarget: () => ({ targetID: 'local-target', hostAccess: { kind: 'local_host' }, placement: { kind: 'host_process' } }),
-      localHostRuntimeLifecycleTargetKey: () => 'local-target', liveSession: () => f.record,
+      localHostRuntimeLifecycleTargetKey: () => 'local-target',
       runtimeLifecycleFingerprint: () => 'open-local',
-      sessionTransportRecoveryFailed: (record: typeof f.record) => record.transport_recovery_snapshot?.phase === 'failed',
-      runEnvironmentRuntimeLifecycleFromLauncher: restart, runtimeLifecycleCoordinator: coordinator,
-    }) as (preferences: object, environment: object) => Promise<unknown>;
-    expect(await open({}, { id: 'local', label: 'Local Environment' })).toMatchObject({ ok: true });
-    expect(restart).toHaveBeenCalledExactlyOnceWith({
-      kind: 'restart_environment_runtime', environment_id: 'local', label: 'Local Environment',
-      runtime_target_id: 'local-target', host_access: { kind: 'local_host' }, placement: { kind: 'host_process' },
-    });
-    expect(coordinator.runOpen).not.toHaveBeenCalled();
+      openLocalEnvironmentRecordWithLifecycleOwner: ownedOpen, runtimeLifecycleCoordinator: coordinator,
+    }) as (preferences: object, environment: object, options: object) => Promise<unknown>;
+    expect(await open(preferences, environment, options)).toMatchObject({ ok: true });
+    expect(coordinator.runOpen).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
+      target_key: 'local-target', fingerprint: 'open-local', operation_key: 'local-target:open',
+    }));
+    expect(ownedOpen).toHaveBeenCalledExactlyOnceWith(preferences, environment, target, 'local-target:open', options);
   });
 
   it('recovers a failed native session when the launcher action is Show Env App', async () => {

@@ -74,12 +74,16 @@ locale, and viewport cases. The Quit qualification opened a real environment,
 canceled Quit and resumed interaction, restarted Runtime, quit normally, and
 verified Runtime remained alive until its session owner reclaimed it.
 
-The full Desktop Vitest suite currently exposes independent failures in
-Gateway update fixtures, native transport recovery, Welcome canvas data, and
-Flower boundary expectations. Service-canvas qualification also exposes a
-stale target authority disclosure when opening Env App from Welcome; it
-remains failed, with bounded clean shutdown and empty owned inventory. These
-failures are not qualification passes and do not change product behavior.
+Gateway update fixtures consume the structured service-start response and reject
+unexpected commands. Native transport tests preserve explicit recovery intent
+through the existing Open owner. Canvas and Flower assertions follow their
+current relation and retained-settings contracts; container fixtures use saved
+targets rather than replacing the native Local Environment through Presence.
+Service-canvas qualification verifies all nine existing scenarios, including
+Welcome Open after automatic Runtime startup, window reuse, canvas navigation,
+route isolation and reopening, then verifies empty owned inventory.
+The [interaction continuity contract](desktop-interaction-continuity.md) owns
+the stable Local authority projection and completed-startup Open handoff.
 
 Portable lifecycle tests also run on Linux; the Windows tree adapter has
 identity and PID-reuse tests. These do not claim Windows or Linux native

@@ -1479,11 +1479,10 @@ describe('main routing', () => {
     expect(attachSrc).toContain('stateRoot: localEnvironmentStateRoot(),');
     expect(attachSrc).not.toContain('stateRoot: localEnvironmentRuntimeRoot(environment),');
 
-    const placementStart = mainSrc.indexOf('function localHostRuntimeLifecyclePlacement(');
-    const placementEnd = mainSrc.indexOf('function localHostRuntimeLifecycleTargetKey(', placementStart);
-    const placementSrc = mainSrc.slice(placementStart, placementEnd);
-    expect(placementSrc).toContain('runtime_root: localEnvironmentRuntimeRoot(environment),');
-    expect(placementSrc).toContain('runtime_state_root: localEnvironmentStateRoot(),');
+    const placementSrc = readMainModuleSource('localRuntimePlacement.ts');
+    expect(placementSrc).toContain('runtime_root: String(environment.local_hosting.state_dir');
+    expect(placementSrc).toContain('runtime_state_root: resolveStateRoot(),');
+    expect(mainSrc).toContain("import { localHostRuntimeLifecyclePlacement } from './localRuntimePlacement'");
 
     expect(mainSrc).toContain('stateRoot: localEnvironmentStateRoot(),');
     expect(mainSrc).not.toContain('currentRuntimeFromProbeStateDir');

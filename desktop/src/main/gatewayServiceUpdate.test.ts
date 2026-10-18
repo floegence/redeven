@@ -35,10 +35,14 @@ describe('Gateway package preparation and service replacement', () => {
       const script = argv[2];
       if (commandOptions?.stdinData) { events.push('install'); packageStatus = 'ready'; return { stdout: '', stderr: '' }; }
       if (script.includes('exec "$binary" service-stop')) { events.push('stop'); running = false; return { stdout: '', stderr: '' }; }
-      if (script.includes('exec "$binary" service-start')) { events.push('start'); running = true; return { stdout: '', stderr: '' }; }
+      if (script.includes('if "$binary" service-start')) {
+        events.push('start'); running = true;
+        return { stdout: JSON.stringify({ status: 'running', pid: 1234, listen: '127.0.0.1:43123' }), stderr: '' };
+      }
       if (script.includes('service-status --state-root')) return { stdout: JSON.stringify({ status: running ? 'running' : 'not_running' }), stderr: '' };
       if (script.includes('gateway_package_is_ready')) return { stdout: `status=${packageStatus}\nbinary_path=/fixture/state/managed/bin/redeven-gateway\nstamp_path=/fixture/state/managed/managed-gateway.stamp\n`, stderr: '' };
-      return { stdout: 'Darwin\narm64\n', stderr: '' };
+      if (script === 'set -eu\nuname -s\nuname -m') return { stdout: 'Darwin\narm64\n', stderr: '' };
+      throw new Error(`Unexpected Gateway command: ${script}`);
     });
   });
 

@@ -10,6 +10,7 @@ import { DesktopWelcomeShell, type DesktopWelcomeRuntime } from './App';
 import { linkedEnvironmentFixture } from '../testSupport/linkedEnvironmentFixture';
 import type { DesktopWelcomeSnapshot, DesktopLauncherActionRequest, DesktopLauncherActionResult, DesktopLauncherActionProgress } from '../shared/desktopLauncherIPC';
 import { openConnectionProgress } from '../shared/desktopOpenConnectionProgress';
+import { runtimeLifecycleProgress } from '../shared/desktopRuntimeLifecycleProgress';
 import { launchLocalEnvironmentFlowerTurn } from './flower/localEnvironmentFlowerSurfaceAdapter';
 
 vi.mock('./flower/localEnvironmentFlowerSurfaceAdapter', async importOriginal => ({
@@ -910,6 +911,57 @@ describe('perspective ownership across navigation and removal', () => {
 });
 
 describe('background interaction continuity', () => {
+  it('opens the ready environment instead of reopening completed startup progress', async () => {
+    const f = await runtimeGatewayBackgroundProbeFixture('local');
+    const snapshot = f.snapshot();
+    const progress: DesktopLauncherActionProgress = {
+      action: 'start_environment_runtime', environment_id: f.environment.id,
+      operation_key: 'local:auto_start', subject_kind: 'local_environment',
+      status: 'succeeded', phase: 'runtime_started', title: 'Runtime ready', detail: '',
+      started_at_unix_ms: Date.now(), active_progress_surface: 'runtime_lifecycle',
+      lifecycle_progress: runtimeLifecycleProgress({ location: 'local_host', operation: 'start',
+        phase: 'runtime_ready', targetID: f.environment.managed_runtime_placement_target_id!,
+        targetLabel: f.environment.label }),
+    };
+    const h = await mount({ ...snapshot, action_progress: [progress] });
+    button(document.querySelector('[data-environment-group]')!, 'Open Env App').click();
+    await settle();
+    expect(h.performAction).toHaveBeenCalledOnce();
+    expect(h.performAction.mock.calls[0][0]).toMatchObject({
+      kind: 'open_local_environment', environment_id: f.environment.id,
+    });
+  });
+  it('keeps completed startup from authorizing a replaced target and preserves an exit', async () => {
+    const f = await runtimeGatewayBackgroundProbeFixture('local');
+    const snapshot = f.snapshot();
+    const progress: DesktopLauncherActionProgress = {
+      action: 'start_environment_runtime', environment_id: f.environment.id,
+      operation_key: 'local:auto_start', subject_kind: 'local_environment',
+      status: 'running', phase: 'starting_runtime_process', title: 'Starting Runtime', detail: '',
+      started_at_unix_ms: Date.now(), active_progress_surface: 'runtime_lifecycle',
+      lifecycle_progress: runtimeLifecycleProgress({ location: 'local_host', operation: 'start',
+        phase: 'starting_runtime_process', targetID: f.environment.managed_runtime_placement_target_id!,
+        targetLabel: f.environment.label }),
+    };
+    const h = await mount({ ...snapshot, action_progress: [progress] });
+    const card = document.querySelector('[data-environment-group]')!;
+    card.querySelector<HTMLButtonElement>('[aria-label$="Show progress."]')!.click(); await settle();
+    const ready = { ...snapshot, action_progress: [{ ...progress, status: 'succeeded' as const,
+      phase: 'runtime_started', lifecycle_progress: runtimeLifecycleProgress({ location: 'local_host',
+        operation: 'start', phase: 'runtime_ready', targetID: f.environment.managed_runtime_placement_target_id!,
+        targetLabel: f.environment.label }) }] };
+    h.publish(ready); await settle();
+    h.publish({ ...ready, environments: ready.environments.map(entry => ({ ...entry,
+      managed_runtime_placement: { kind: 'host_process' as const, runtime_root: '/replacement' },
+    })) }); await settle();
+    h.publish(ready); await settle();
+    const panel = document.querySelector('.redeven-environment-progress')!;
+    expect(button(panel, 'Open Env App').disabled).toBe(true);
+    expect(button(document, 'Verify current target').disabled).toBe(false);
+    button(card, 'Open Env App').click(); await settle();
+    expect(h.performAction).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(document.querySelector('.redeven-action-popover-surface')).toBeNull());
+  });
   it('retains exactly one interaction host when an open Cloud owner changes groups', async () => {
     const h = await mount(); await h.select('cloud');
     button(h.owner('cloud'), 'Actions').click(); await settle();
