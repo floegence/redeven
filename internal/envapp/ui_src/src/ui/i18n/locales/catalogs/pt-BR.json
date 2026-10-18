@@ -5692,7 +5692,8 @@
       "contextIndicatorDistributionUnavailable": "Distribuição indisponível",
       "contextIndicatorProtocolFraming": "Formatação do protocolo",
       "inspectAndContinue": "Verificar e continuar",
-      "inspectAndContinuePrompt": "O turno anterior parou porque os efeitos não foram confirmados. Primeiro verifique o estado atual e os arquivos existentes com ferramentas somente de leitura e continue o trabalho restante com base nas evidências. Não repita ações anteriores sem verificá-las."
+      "inspectAndContinuePrompt": "O turno anterior parou porque os efeitos não foram confirmados. Primeiro verifique o estado atual e os arquivos existentes com ferramentas somente de leitura e continue o trabalho restante com base nas evidências. Não repita ações anteriores sem verificá-las.",
+      "runErrorProviderRequestFailed": "Não foi possível concluir a solicitação ao modelo. Tente novamente ou verifique a fonte do modelo atual se o problema persistir."
     },
     "threadList": {
       "title": "Conversas",

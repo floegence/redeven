@@ -289,7 +289,7 @@ func testNativeSearchLifecycle(t *testing.T, failure string) {
 	}
 	failed := waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(view *ThreadView) bool { return view.RunStatus == "failed" })
 	if failure == "misrouted" {
-		if failed.RunErrorCode != runErrorCodeProviderRequestRejected {
+		if failed.RunErrorCode != runErrorCodeProviderRequestFailed {
 			t.Fatalf("hosted tool contract failure was replaced: %s", failed.RunError)
 		}
 	} else if failed.RunErrorCode != runErrorCodeProviderRequestInvalid || !strings.Contains(failed.RunErrorDetail, `"http_status": 400`) || !strings.Contains(failed.RunErrorDetail, `"code": "search_unavailable"`) {

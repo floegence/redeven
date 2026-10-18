@@ -254,6 +254,21 @@ func (s *openAIWebSocketEvents) send(body map[string]json.RawMessage) error {
 	}
 	return s.lease.entry.conn.Create(s.lease.ctx, param.Override[responses.ResponsesClientEventResponseCreateParam](json.RawMessage(raw)))
 }
+func openAIWebSocketFailure(err error) error {
+	var adviser flprovider.RetryAdviser
+	if errors.As(err, &adviser) || errors.Is(err, context.Canceled) {
+		return err
+	}
+	switch wire.CloseStatus(err) {
+	case wire.StatusNormalClosure, wire.StatusGoingAway, wire.StatusAbnormalClosure, wire.StatusNoStatusRcvd, wire.StatusInternalError, wire.StatusServiceRestart, wire.StatusTryAgainLater:
+		return flprovider.WithRetryAdvice(err, flprovider.RetryAdvice{Category: flprovider.RetryStreamInterrupted})
+	case wire.StatusProtocolError, wire.StatusUnsupportedData, wire.StatusInvalidFramePayloadData, wire.StatusPolicyViolation, wire.StatusMessageTooBig, wire.StatusMandatoryExtension:
+		return flprovider.WithRetryAdvice(err, flprovider.RetryAdvice{Category: flprovider.RetryPermanent})
+	default:
+		return err
+	}
+}
+
 func (s *openAIWebSocketEvents) Next() bool {
 	if s.done || s.err != nil {
 		return false
@@ -261,10 +276,7 @@ func (s *openAIWebSocketEvents) Next() bool {
 	for {
 		event, err := s.lease.entry.conn.Recv(s.lease.ctx)
 		if err != nil {
-			switch wire.CloseStatus(err) {
-			case wire.StatusNormalClosure, wire.StatusGoingAway, wire.StatusAbnormalClosure, wire.StatusNoStatusRcvd, wire.StatusInternalError, wire.StatusServiceRestart, wire.StatusTryAgainLater:
-				err = flprovider.WithRetryAdvice(err, flprovider.RetryAdvice{Category: flprovider.RetryStreamInterrupted})
-			}
+			err = openAIWebSocketFailure(err)
 			s.err = err
 			return false
 		}

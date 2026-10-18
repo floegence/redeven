@@ -282,7 +282,7 @@ func (p *floretProviderAdapter) streamPreparedTurn(ctx context.Context, provider
 			if usage := floretUsageFromFlower(result.Usage); usage.Available {
 				sendFloretProviderEvent(ctx, out, flprovider.Event{Type: flprovider.EventUsage, Usage: usage})
 			}
-			err = canonicalProviderFailure(err)
+			err = providerTransportFailure(err, p.providerType)
 			sendFloretProviderEvent(ctx, out, flprovider.Event{Type: flprovider.EventError, Err: err, Reason: err.Error()})
 			return
 		}

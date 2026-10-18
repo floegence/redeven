@@ -61,9 +61,9 @@ func TestFloretProviderContextFailureSurvivesRestartAndRetry(t *testing.T) {
 				t.Fatalf("failure=%+v cancellation=%+v", failed.Failure, failed.Cancellation)
 			}
 			code, message := projectFloretTurnFailure(failed.Failure, runErrorCodeFloretEngineFailed)
-			wantCode := runErrorCodeProviderUnreachable
+			wantCode := runErrorCodeProviderRequestTimeout
 			if failure == context.Canceled {
-				wantCode = runErrorCodeProviderRequestRejected
+				wantCode = runErrorCodeProviderRequestFailed
 			}
 			if code != wantCode {
 				t.Fatalf("code=%s message=%s", code, message)

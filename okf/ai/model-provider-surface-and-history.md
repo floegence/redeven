@@ -3,7 +3,7 @@ type: AI Runtime Contract
 title: Model provider surface and history
 description: Keep provider-visible model history, tool surface refresh, and render lineage under Floret ownership.
 tags: [ai, models, providers, history]
-timestamp: 2026-10-15T00:00:00Z
+timestamp: 2026-10-18T00:00:00Z
 ---
 # Summary
 
@@ -41,6 +41,12 @@ Historical tool calls and results remain canonical facts even when their definit
 Published Floret v7.26.0 owns `EstimateRenderedRequest` for local Responses, Chat Completions, Gemini signatures, Moonshot, and Anthropic. Each adapter freezes its final SDK-rendered input once, and estimation plus dispatch use those same bytes. Verified model mappings select official vocabularies; unknown models use an explicit multilingual BPE proxy. Image parts use model and dimension budgets, opaque files retain conservative budgets, and Desktop/platform transports omit runtime IDs, routing, and product tool metadata. DeepSeek uses the official V4 tokenizer with 10% text headroom and documented image budgets; calibration invalidates when history, execution surface, model, compaction lineage, or estimator changes. These remain estimates because server rendering can differ; Redeven adds no network preflight or calibration ledger.
 
 ## Temporary provider failures
+
+Published Floret v7.58.0 shares provider.RetryAdviceForError across direct and Desktop paths. Wrapped ordinary EOF and unexpected EOF are interrupted streams only at the provider boundary. Adapters supply HTTP/stream/close-code facts; Engine owns bounded replay, cancellation, attempt identity and draft retirement. Explicit outer advice, even empty or Forbidden, stays authoritative. SDK retries remain disabled; no generic adapter resend or HTTPS fallback is added.
+
+A failed WebSocket attempt discards its connection and continuation metadata before the next Engine attempt acquires a fresh connection. Completion ends reading before a later socket EOF. Only the existing unsupported-upgrade fallback and one pre-output stale-response full resend remain protocol repairs.
+
+Diagnostics use transport_error for established transport failures and unknown when facts are absent. Empty means an actually read empty HTTP error body. Unknown failures use provider_request_failed, never a fabricated rejection. One envelope preserves actual provider identity, whitelisted protocol facts and private cause without nesting; prose classification exists only in historical read-only presentation. No provider, status or request ID is reconstructed from current settings or written back to old conversations.
 
 Published Floret v7.42.0 owns one cancellable recovery budget for each frozen model request, including parent turns, SubAgent turns, compaction batches and titles. Defaults allow four extra sends (three for timeouts), jittered exponential delays and a five-minute recovery window. Server retry deadlines are captured at response receipt; long waits terminate without early redispatch. Authentication, exhausted quota, invalid contracts, unknown errors and tool effects remain terminal boundaries.
 

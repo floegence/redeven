@@ -5692,7 +5692,8 @@
       "contextIndicatorDistributionUnavailable": "Distribución no disponible",
       "contextIndicatorProtocolFraming": "Formato del protocolo",
       "inspectAndContinue": "Comprobar y continuar",
-      "inspectAndContinuePrompt": "El turno anterior se detuvo porque los efectos no están confirmados. Primero comprueba el estado actual y los archivos existentes con herramientas de solo lectura y continúa el trabajo pendiente según las pruebas. No repitas acciones anteriores sin comprobarlas."
+      "inspectAndContinuePrompt": "El turno anterior se detuvo porque los efectos no están confirmados. Primero comprueba el estado actual y los archivos existentes con herramientas de solo lectura y continúa el trabajo pendiente según las pruebas. No repitas acciones anteriores sin comprobarlas.",
+      "runErrorProviderRequestFailed": "No se pudo completar la solicitud al modelo. Reinténtalo o revisa la fuente del modelo actual si el problema persiste."
     },
     "threadList": {
       "title": "Conversaciones",

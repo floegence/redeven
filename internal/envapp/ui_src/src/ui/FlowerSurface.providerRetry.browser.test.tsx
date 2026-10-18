@@ -7,7 +7,7 @@ import { page } from 'vitest/browser';
 import type { FlowerLiveStreamEnvelope, FlowerThreadSnapshot } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { adapter, liveBootstrap, renderSurfaceWithAdapterProps, runtimeCurrentView, subagentDetail, subagentSummary, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 
-it.each([[1100, 'stop'], [420, 'stop'], [1100, 'success'], [1100, 'failure'], [420, 'failure']] as const)('keeps provider recovery in one turn at width %s through %s', async (width, outcome) => {
+it.each([[1100, 'stop'], [420, 'stop'], [1100, 'success'], [1100, 'failure'], [420, 'failure'], [420, 'eof']] as const)('keeps provider recovery in one turn at width %s through %s', async (width, outcome) => {
   await page.viewport(width, 850);
   const threadID = `retry-${width}`;
   const runID = 'run-retry';
@@ -78,8 +78,8 @@ it.each([[1100, 'stop'], [420, 'stop'], [1100, 'success'], [1100, 'failure'], [4
     expect(reopened.querySelectorAll('.flower-error-card')).toHaveLength(0);
     expect(retryThread).not.toHaveBeenCalled();
   } else {
-    const reason = 'Tool arguments stopped making progress: consecutive whitespace outside JSON strings (output_index=24, whitespace_bytes=8192, limit_bytes=8192)';
-    const detail = JSON.stringify({ provider: 'openai', http_status: 200, code: 'basispoints_tool_arguments_stalled', message: reason, request_id: 'req-final', response_shape: 'stream_error' });
+    const reason = outcome==='eof' ? 'The selected AI provider ended the response stream unexpectedly. Try again, or check the provider endpoint if this keeps happening.' : 'Tool arguments stopped making progress: consecutive whitespace outside JSON strings (output_index=24, whitespace_bytes=8192, limit_bytes=8192)';
+    const detail = JSON.stringify({ provider: 'openai', http_status: 200, code: outcome==='eof' ? 'provider_stream_interrupted' : 'basispoints_tool_arguments_stalled', ...(outcome==='eof' ? {} : {message:reason}), request_id: 'req-final', response_shape: outcome==='eof' ? 'transport_error' : 'stream_error' });
     await push({ ...selected, status: 'failed', active_run_id: undefined, run_progress: null,
       messages: [{ id: 'final-partial', role: 'assistant', turn_id: turnID, run_id: runID, status: 'error', content: 'Last unfinished fragment', created_at_ms: 2 }],
       error: { code: 'provider_stream_interrupted', message: 'controlled fallback', detail },

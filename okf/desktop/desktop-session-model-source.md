@@ -3,7 +3,7 @@ type: Desktop Contract
 title: Desktop session and model source
 description: Session routing, Desktop model catalog, Flower attach, and lifecycle invalidation.
 tags: [desktop, sessions, models, flower]
-timestamp: 2026-10-08T10:00:00Z
+timestamp: 2026-10-18T00:00:00Z
 ---
 # Summary
 
@@ -15,7 +15,11 @@ Desktop session context publishes an explicit target route and owns the current 
 
 Desktop main owns the complete session-context route contract. Every `DesktopSessionContextSnapshot` carries a required `target_route`: Local Environment targets publish their declared `local_host` or `remote_desktop` route, while SSH, Gateway, and External Local UI targets always publish `remote_desktop`. Preload and Env App accept only `local_host` or `remote_desktop` and reject an incomplete or invalid snapshot instead of inferring route from target kind, URL, SSH metadata, or browser placement. Env App therefore exposes the Desktop Flower model source only from the explicit `remote_desktop` route. The Desktop shell also owns the internal `flower_settings` navigation action, which opens or focuses Welcome Flower and advances an explicit settings-focus revision so the local Flower provider editor is focused without duplicating settings UI in Env App.
 
-Desktop model-source RPC v1 publishes opaque `desktop:model_<hash>` identifiers plus an optional sanitized capability descriptor. Desktop reads the local provider profile and Runtime-owned atomic model snapshots without supplier discovery, then replaces provider and model identity in the descriptor with the opaque Desktop identity while retaining operational limits, modality support, tool-schema behavior, and reasoning controls. The runtime uses that descriptor consistently for UI model listing and execution. A runtime receiving an older v1 descriptor derives a compatibility capability from the existing model fields rather than guessing from the opaque hash. Provider ids, base URLs, API keys, and secret locations remain local to Desktop.
+Desktop model-source RPC v3 publishes opaque desktop:model_<hash> identifiers and sanitized capability descriptors. Both peers require this exact protocol under compatibility epoch 64; older epochs enter the existing upgrade path. Desktop reads local provider profiles and Runtime-owned atomic catalog snapshots without supplier discovery. It replaces catalog identity with the opaque Desktop identity while retaining operational limits, modality support, tool-schema behavior and reasoning controls. Credentials, endpoints and secret locations remain local to Desktop.
+
+Every ai.turn.stream error carries a bounded provider-failure envelope in Message and explicit RetryAdvice, including empty advice for unknown failures. The envelope retains the actual supplier; advice carries Category, absolute NotBefore and Forbidden independently. The receiver validates advice and never derives execution policy from prose. ChatGPT authorization/storage codes retain their account-stop behavior. Floret's Engine alone schedules model retries; the connector only restores connection readiness and never replays model calls.
+
+The connection owner closes failed sockets and settles every pending call with its original classified cause. Valid bindings may await transient reconnection within the Engine's remaining budget; explicit disconnect, expired binding and protocol errors terminate. Missing terminal fields, empty errors, malformed results and bounded queue overflow fail explicitly and close the connection. Writes use a cancellable serial gate; failure closes the connection and cancels associated work. Stop's cancel frame waits at most one second and returns the original cancellation outcome. Normal generation uses the Engine's existing request deadlines, without a new RPC-wide timeout.
 
 The Runtime status projection also publishes `configured`, the authoritative fact that Desktop has a Flower provider profile. A bound, connected source with `configured:false` is an intentional unconfigured state rather than a bridge failure; an empty catalog or missing provider keys are separate availability states. Connection, protocol, catalog, and runtime failures retain diagnostics and are the only states that use connection recovery. Remote Runtime and Desktop provider profiles remain independent and are never copied or used as an implicit fallback.
 

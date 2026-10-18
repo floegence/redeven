@@ -5692,7 +5692,8 @@
       "contextIndicatorDistributionUnavailable": "Keine Verteilung verfügbar",
       "contextIndicatorProtocolFraming": "Protokollformatierung",
       "inspectAndContinue": "Status prüfen und fortfahren",
-      "inspectAndContinuePrompt": "Der vorherige Durchgang wurde wegen unbestätigter Auswirkungen angehalten. Prüfe zuerst mit schreibgeschützten Werkzeugen den aktuellen Zustand und vorhandene Ergebnisse. Setze die restliche Aufgabe anhand dieser Erkenntnisse fort. Wiederhole frühere Aktionen nicht ungeprüft."
+      "inspectAndContinuePrompt": "Der vorherige Durchgang wurde wegen unbestätigter Auswirkungen angehalten. Prüfe zuerst mit schreibgeschützten Werkzeugen den aktuellen Zustand und vorhandene Ergebnisse. Setze die restliche Aufgabe anhand dieser Erkenntnisse fort. Wiederhole frühere Aktionen nicht ungeprüft.",
+      "runErrorProviderRequestFailed": "Die Modellanfrage konnte nicht abgeschlossen werden. Versuchen Sie es erneut oder prüfen Sie bei anhaltenden Problemen die aktuelle Modellquelle."
     },
     "threadList": {
       "title": "Unterhaltungen",

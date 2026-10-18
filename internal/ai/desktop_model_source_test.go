@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -45,7 +46,7 @@ func TestDesktopModelSourceConnectionErrorRetryability(t *testing.T) {
 
 func TestDesktopModelSourceRejectsIncompatibleFramesWithoutWaiting(t *testing.T) {
 	for _, peer := range []string{"runtime", "executor"} {
-		for _, version := range []string{"", "redeven-desktop-model-source-rpc-v1"} {
+		for _, version := range []string{"", "redeven-desktop-model-source-rpc-v1", "redeven-desktop-model-source-rpc-v2"} {
 			t.Run(peer+"/"+version, func(t *testing.T) {
 				served := make(chan error, 1)
 				ready := make(chan struct{})
@@ -978,5 +979,229 @@ func TestDesktopModelSourceExecutesCatalogWireNameWithOptionalEndpointKey(t *tes
 				t.Fatalf("Desktop route: %+v, %v", result, err)
 			}
 		})
+	}
+}
+
+func TestDesktopModelSourceRetryAdviceRoundTrip(t *testing.T) {
+	at := time.Date(2026, 10, 18, 15, 0, 0, 0, time.UTC)
+	for _, advice := range []flprovider.RetryAdvice{{}, {Category: flprovider.RetryStreamInterrupted}, {Category: flprovider.RetryRateLimit, NotBefore: at, Forbidden: true}} {
+		cause := providerRequestFailure(flprovider.WithRetryAdvice(io.EOF, advice), nil, "chatgpt")
+		source, cleanup := startTestDesktopModelSource(t, func(frame DesktopModelSourceRPCFrame) DesktopModelSourceRPCFrame {
+			return DesktopModelSourceRPCFrame{Type: "error", ID: frame.ID, Error: &DesktopModelSourceRPCError{Code: "TURN_STREAM_FAILED", Message: cause.Error(), RetryAdvice: &advice}}
+		})
+		_, err := source.StreamTurn(t.Context(), ModelGatewayRequest{Model: "desktop:model_test"}, nil)
+		normalized := providerTransportFailure(err, DesktopModelSourceProviderType)
+		d, ok := parseProviderFailure(normalized.Error())
+		if !ok || d.Provider != "chatgpt" || flprovider.RetryAdviceForError(normalized) != advice {
+			t.Fatalf("diagnostic=%#v advice=%#v err=%v", d, flprovider.RetryAdviceForError(normalized), err)
+		}
+		cleanup()
+	}
+}
+func TestDesktopModelSourceRejectsMalformedTerminals(t *testing.T) {
+	for _, frame := range []DesktopModelSourceRPCFrame{
+		{Type: "error"},
+		{Type: "error", Error: &DesktopModelSourceRPCError{Code: "TURN_STREAM_FAILED", Message: "unsafe error"}},
+		{Type: "error", Error: &DesktopModelSourceRPCError{Code: "TURN_STREAM_FAILED", Message: "failure", RetryAdvice: &flprovider.RetryAdvice{Category: "invalid"}}},
+		{Type: "result"}, {Type: "result", Result: json.RawMessage("null")}, {Type: "result", Result: json.RawMessage("{}")},
+	} {
+		source, cleanup := startTestDesktopModelSource(t, func(request DesktopModelSourceRPCFrame) DesktopModelSourceRPCFrame {
+			frame.ID = request.ID
+			return frame
+		})
+		ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+		_, err := source.StreamTurn(ctx, ModelGatewayRequest{Model: "desktop:model_test"}, nil)
+		cancel()
+		cleanup()
+		if !errors.Is(err, errDesktopModelSourceProtocol) {
+			t.Fatalf("frame=%#v error=%v", frame, err)
+		}
+	}
+}
+func TestDesktopModelSourceQueueOverflowAndClosedCause(t *testing.T) {
+	c := newDesktopModelSourceRuntimeConn(nil)
+	ch := make(chan DesktopModelSourceRPCFrame, 1)
+	if err := c.addPending("request", ch); err != nil {
+		t.Fatal(err)
+	}
+	c.dispatch(DesktopModelSourceRPCFrame{ID: "request", Type: "event"})
+	c.dispatch(DesktopModelSourceRPCFrame{ID: "request", Type: "result"})
+	if !c.closed || !errors.Is(c.closeErr, errDesktopModelSourceProtocol) {
+		t.Fatalf("closed=%v err=%v", c.closed, c.closeErr)
+	}
+	if err := c.addPending("later", make(chan DesktopModelSourceRPCFrame)); !errors.Is(err, c.closeErr) {
+		t.Fatalf("cause lost: %v", err)
+	}
+	<-ch
+	if _, open := <-ch; open {
+		t.Fatal("pending call left open")
+	}
+}
+func TestDesktopModelSourceReconnectReadinessAdvice(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		session DesktopModelSourceSession
+		cause   error
+		want    flprovider.RetryCategory
+	}{
+		{"valid reconnect", DesktopModelSourceSession{SessionID: "valid"}, nil, flprovider.RetryTransient},
+		{"explicit disconnect", DesktopModelSourceSession{}, nil, flprovider.RetryPermanent},
+		{"expired", DesktopModelSourceSession{SessionID: "expired", ExpiresAtUnixMS: 1}, nil, flprovider.RetryPermanent},
+		{"protocol", DesktopModelSourceSession{SessionID: "valid"}, desktopModelSourceTransportError(errDesktopModelSourceProtocol), flprovider.RetryPermanent},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := &desktopModelSourceClient{session: tc.session, connectionErr: tc.cause}
+			_, err := c.StreamTurn(t.Context(), ModelGatewayRequest{}, nil)
+			if a := flprovider.RetryAdviceForError(err); a.Category != tc.want {
+				t.Fatalf("advice=%#v", a)
+			}
+		})
+	}
+}
+
+func TestDesktopModelSourceCanceledWriteDoesNotWaitForWriter(t *testing.T) {
+	ready := make(chan *desktopModelSourceRuntimeConn, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ws, err := (&websocket.Upgrader{}).Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer ws.Close()
+		c := newDesktopModelSourceRuntimeConn(ws)
+		c.writeGate <- struct{}{}
+		ready <- c
+		_, _, _ = ws.ReadMessage()
+	}))
+	defer server.Close()
+	ws, _, err := websocket.DefaultDialer.Dial(strings.Replace(server.URL, "http://", "ws://", 1), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+	c := <-ready
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	start := time.Now()
+	err = c.writeFrame(ctx, DesktopModelSourceRPCFrame{Type: "cancel"})
+	if !errors.Is(err, context.Canceled) || time.Since(start) > time.Second {
+		t.Fatalf("cancel blocked: %v", err)
+	}
+}
+func TestLiveProviderClassificationDoesNotGuessProse(t *testing.T) {
+	for _, message := range []string{"unexpected EOF", "rate limit", "missing api key for provider", "POST https://private.invalid 503"} {
+		err := errors.New(message)
+		if got := classifyRunFailureCode(err, runErrorCodeProviderRequestFailed); got != runErrorCodeProviderRequestFailed {
+			t.Fatalf("prose classified: %s", got)
+		}
+		if a := flprovider.RetryAdviceForError(providerRequestFailure(err, nil, "openai")); a.Category != "" {
+			t.Fatalf("prose granted retry: %#v", a)
+		}
+	}
+}
+
+func TestDesktopModelSourceRejectsInvalidRetryTime(t *testing.T) {
+	var frame DesktopModelSourceRPCFrame
+	if err := json.Unmarshal([]byte("{\"type\":\"error\",\"error\":{\"code\":\"TURN_STREAM_FAILED\",\"message\":\"failed\",\"retry_advice\":{\"category\":\"rate_limit\",\"not_before\":\"tomorrow\"}}}"), &frame); err == nil {
+		t.Fatal("invalid absolute deadline accepted")
+	}
+}
+
+func TestDesktopModelSourceRPCErrorRetainsContractAndAccountCodes(t *testing.T) {
+	for _, code := range []string{"MODEL_RESULT_INVALID", "CHATGPT_AUTHORIZATION_REQUIRED", "CHATGPT_STORAGE_UNAVAILABLE"} {
+		advice := flprovider.RetryAdvice{Category: flprovider.RetryPermanent}
+		rpc := &DesktopModelSourceRPCError{Code: code, Message: (&providerFailure{diagnostic: providerFailureDiagnostic{Provider: "chatgpt", Code: "authorization_required", Shape: "unknown"}}).Error(), RetryAdvice: &advice}
+		normalized := providerTransportFailure(rpc, DesktopModelSourceProviderType)
+		if code == "MODEL_RESULT_INVALID" {
+			var contract *modelGatewayContractError
+			if !errors.As(normalized, &contract) {
+				t.Fatal("remote contract was lost")
+			}
+		}
+		var original *DesktopModelSourceRPCError
+		if !errors.As(normalized, &original) || original.Code != code || flprovider.RetryAdviceForError(normalized).Category != flprovider.RetryPermanent {
+			t.Fatal("remote code or advice lost")
+		}
+	}
+}
+
+func TestDesktopModelSourceTruncatedJSONIsPermanentProtocolFailure(t *testing.T) {
+	ready := make(chan *desktopModelSourceRuntimeConn, 1)
+	served := make(chan error, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ws, err := (&websocket.Upgrader{}).Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer ws.Close()
+		conn := newDesktopModelSourceRuntimeConn(ws)
+		ready <- conn
+		served <- conn.readLoop(t.Context())
+	}))
+	defer server.Close()
+	ws, _, err := websocket.DefaultDialer.Dial(strings.Replace(server.URL, "http://", "ws://", 1), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+	conn := <-ready
+	if err := ws.WriteMessage(websocket.TextMessage, []byte("{")); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-served:
+		if !errors.Is(err, errDesktopModelSourceProtocol) || flprovider.RetryAdviceForError(err).Category != flprovider.RetryPermanent {
+			t.Fatalf("error=%v", err)
+		}
+		if !errors.Is(conn.closeErr, errDesktopModelSourceProtocol) {
+			t.Fatal("connection cause lost")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("malformed frame left read pending")
+	}
+}
+
+func TestDesktopModelSourceStopBoundsOccupiedCancelWriter(t *testing.T) {
+	ready := make(chan *desktopModelSourceRuntimeConn, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ws, err := (&websocket.Upgrader{}).Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer ws.Close()
+		conn := newDesktopModelSourceRuntimeConn(ws)
+		ready <- conn
+		_ = conn.readLoop(t.Context())
+	}))
+	defer server.Close()
+	ws, _, err := websocket.DefaultDialer.Dial(strings.Replace(server.URL, "http://", "ws://", 1), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+	conn := <-ready
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- conn.call(ctx, "ai.turn.stream", nil, nil, &ModelGatewayResult{}) }()
+	var request DesktopModelSourceRPCFrame
+	if err := ws.ReadJSON(&request); err != nil {
+		t.Fatal(err)
+	}
+	conn.writeGate <- struct{}{}
+	started := time.Now()
+	cancel()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) || time.Since(started) > 1500*time.Millisecond {
+			t.Fatalf("cancel=%v elapsed=%s", err, time.Since(started))
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Stop blocked behind writer")
+	}
+	conn.mu.Lock()
+	closed := conn.closed
+	conn.mu.Unlock()
+	if !closed {
+		t.Fatal("timed out cancel left connection open")
 	}
 }

@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-18 — Provider stream recovery and diagnosis
+
+- Consume published Floret v7.58.0 shared EOF classification; retain one Engine retry owner and one safe provider envelope. Require [Desktop RPC v3](desktop/desktop-session-model-source.md) under epoch 64, settle malformed/overflow/write failures, and keep [manual recovery](ui/flower-failure-recovery.md) bounded and available. See [provider ownership](ai/model-provider-surface-and-history.md#temporary-provider-failures).
+
 ## 2026-10-18 — Unified Flower process disclosure
 
 - Adopt published Floret v7.57.0 parent turn ownership and fold ordinary [child events](ui/flower-parent-events.md) through the single [turn-process projection](ui/flower-turn-process-disclosure.md), retaining unresolved controls, safety blockers, reading protection and manual choices.

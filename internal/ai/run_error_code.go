@@ -33,6 +33,7 @@ const (
 	runErrorCodeProviderStreamInterrupted   = "provider_stream_interrupted"
 	runErrorCodeProviderModelUnavailable    = "provider_model_unavailable"
 	runErrorCodeProviderRequestInvalid      = "provider_request_invalid"
+	runErrorCodeProviderRequestFailed       = "provider_request_failed"
 	runErrorCodeProviderRequestRejected     = "provider_request_rejected"
 	runErrorCodeModelGatewayContract        = "model_gateway_contract_failed"
 	runErrorCodeModelContextUnavailable     = "model_context_unavailable"
@@ -88,6 +89,8 @@ func userFacingRunError(code string, fallback string) string {
 		return "The selected model is not available from this provider. Choose another model in the Local AI Profile."
 	case runErrorCodeProviderRequestInvalid:
 		return "The selected AI provider rejected Flower's request format. Update Redeven and retry."
+	case runErrorCodeProviderRequestFailed:
+		return "The model request could not be completed. Retry, or check the current model source if it keeps happening."
 	case runErrorCodeProviderRequestRejected:
 		return "The selected AI provider rejected Flower's request. Check the diagnostic details and try again later."
 	case runErrorCodeModelGatewayContract:
@@ -135,6 +138,9 @@ func userFacingRunError(code string, fallback string) string {
 func classifyRunFailureCode(err error, fallback string) string {
 	if err == nil {
 		return strings.TrimSpace(fallback)
+	}
+	if errors.Is(err, errModelGatewayMissingKey) {
+		return runErrorCodeProviderMissingKey
 	}
 	if errors.Is(err, flruntime.ErrModelContextUnavailable) {
 		return runErrorCodeModelContextUnavailable
@@ -185,21 +191,29 @@ func classifyRunFailureCode(err error, fallback string) string {
 	if errors.As(err, &gatewayContractError) {
 		return runErrorCodeModelGatewayContract
 	}
-	if errors.Is(err, context.DeadlineExceeded) {
-		return runErrorCodeProviderUnreachable
-	}
 	if errors.Is(err, context.Canceled) {
 		return strings.TrimSpace(fallback)
 	}
+	advice := flprovider.RetryAdviceForError(err)
+	switch advice.Category {
+	case flprovider.RetryStreamInterrupted:
+		return runErrorCodeProviderStreamInterrupted
+	case flprovider.RetryTimeout:
+		return runErrorCodeProviderRequestTimeout
+	case flprovider.RetryTransient:
+		return runErrorCodeProviderUnreachable
+	}
 	var netErr net.Error
-	if errors.As(err, &netErr) {
-		return runErrorCodeProviderUnreachable
-	}
 	var urlErr *url.Error
-	if errors.As(err, &urlErr) {
+	if errors.As(err, &netErr) || errors.As(err, &urlErr) {
 		return runErrorCodeProviderUnreachable
 	}
-	text := strings.ToLower(strings.TrimSpace(err.Error()))
+	return strings.TrimSpace(fallback)
+}
+
+// Historical strings are presentation-only; they never establish retry advice.
+func historicalRunFailureCode(message string, fallback string) string {
+	text := strings.ToLower(strings.TrimSpace(message))
 	if _, code, ok := strings.Cut(text, "chatgpt: "); ok {
 		if result := chatGPTRunFailureCode(strings.TrimSpace(code)); result != "" {
 			return result
@@ -226,7 +240,7 @@ func classifyRunFailureCode(err error, fallback string) string {
 		return runErrorCodeProviderModelUnavailable
 	case strings.Contains(text, "connection refused") || strings.Contains(text, "no such host") || strings.Contains(text, "timeout") || strings.Contains(text, "deadline exceeded") || strings.Contains(text, "runtime-control returned http 5"):
 		return runErrorCodeProviderUnreachable
-	case strings.Contains(text, "unexpected eof") || strings.Contains(text, "stream closed") || strings.Contains(text, "response stream"):
+	case strings.HasSuffix(text, "failed to read frame header: eof") || strings.Contains(text, "unexpected eof") || strings.Contains(text, "stream closed") || strings.Contains(text, "response stream"):
 		return runErrorCodeProviderStreamInterrupted
 	case strings.Contains(text, "flower tool call requires id, name, and args") || strings.Contains(text, "model gateway result tool call"):
 		return runErrorCodeModelGatewayContract
@@ -242,9 +256,12 @@ func classifyRunFailureCode(err error, fallback string) string {
 func projectRunFailure(raw string, fallbackCode string) (string, string) {
 	raw = strings.TrimSpace(raw)
 	code := classifyRunFailureCode(errors.New(raw), fallbackCode)
+	if code == fallbackCode {
+		code = historicalRunFailureCode(raw, fallbackCode)
+	}
 	if _, ok := parseProviderFailure(raw); ok || strings.EqualFold(raw, "ChatGPT:") {
 		if code == fallbackCode {
-			code = runErrorCodeProviderRequestRejected
+			code = runErrorCodeProviderRequestFailed
 		}
 		return code, userFacingRunError(code, "")
 	}
@@ -271,7 +288,7 @@ func projectFloretTurnFailure(failure *flruntime.ThreadTurnFailure, fallbackCode
 		if message == "provider output was content filtered" {
 			return runErrorCodeProviderRequestRejected, message
 		}
-		return projectRunFailure(message, runErrorCodeProviderRequestRejected)
+		return projectRunFailure(message, runErrorCodeProviderRequestFailed)
 	case flruntime.ThreadTurnFailureContextBudgetInvalid:
 		return runErrorCodeContextBudgetInvalid, userFacingRunError(runErrorCodeContextBudgetInvalid, "")
 	case flruntime.ThreadTurnFailureContextFixedOverhead:
@@ -400,8 +417,8 @@ func canonicalFailureDetail(failure *flruntime.ThreadTurnFailure) string {
 		if detail := providerFailureDetail(failure.Message); detail != "" {
 			return detail
 		}
-		code, _ := projectFloretTurnFailure(failure, runErrorCodeProviderRequestRejected)
-		diagnostic := providerFailureDiagnostic{Provider: "unknown", Code: code, Shape: "empty"}
+		code, _ := projectFloretTurnFailure(failure, runErrorCodeProviderRequestFailed)
+		diagnostic := providerFailureDiagnostic{Provider: "unknown", Code: code, Shape: "unknown"}
 		if failure.Message == "provider output was content filtered" {
 			diagnostic.Code, diagnostic.Message = "content_filter", "provider output was content filtered"
 		}

@@ -5692,7 +5692,8 @@
       "contextIndicatorDistributionUnavailable": "内訳はありません",
       "contextIndicatorProtocolFraming": "プロトコルの書式",
       "inspectAndContinue": "状態を確認して続行",
-      "inspectAndContinuePrompt": "前のターンは操作結果を確認できず停止しました。まず読み取り専用ツールで現在の状態と既存の成果物を確認し、その証拠に基づいて残りの作業を続けてください。以前の操作を無条件に繰り返さないでください。"
+      "inspectAndContinuePrompt": "前のターンは操作結果を確認できず停止しました。まず読み取り専用ツールで現在の状態と既存の成果物を確認し、その証拠に基づいて残りの作業を続けてください。以前の操作を無条件に繰り返さないでください。",
+      "runErrorProviderRequestFailed": "モデルへのリクエストを完了できませんでした。再試行し、問題が続く場合は現在のモデルの接続元を確認してください。"
     },
     "threadList": {
       "title": "会話",

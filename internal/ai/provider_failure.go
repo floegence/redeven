@@ -41,6 +41,7 @@ type providerFailure struct {
 	diagnostic providerFailureDiagnostic
 	cause      error
 	advice     flprovider.RetryAdvice
+	adviceSet  bool
 }
 
 func (e *providerFailure) Error() string {
@@ -51,7 +52,7 @@ func (e *providerFailure) ProviderRetryAdvice() flprovider.RetryAdvice {
 	if e == nil {
 		return flprovider.RetryAdvice{}
 	}
-	if e.advice.Category != "" || !e.advice.NotBefore.IsZero() || e.advice.Forbidden {
+	if e.adviceSet || e.advice.Category != "" || !e.advice.NotBefore.IsZero() || e.advice.Forbidden {
 		return e.advice
 	}
 	return responseRetryAdvice(e.diagnostic, nil)
@@ -86,9 +87,9 @@ func (d providerFailureDiagnostic) sanitized() providerFailureDiagnostic {
 		d.LimitSource = ""
 	}
 	switch d.Shape {
-	case "standard_error", "detail", "json_object", "json_array", "json_value", "empty", "non_json", "stream_error", "truncated":
+	case "standard_error", "detail", "json_object", "json_array", "json_value", "empty", "non_json", "stream_error", "truncated", "transport_error", "unknown":
 	default:
-		d.Shape = "empty"
+		d.Shape = "unknown"
 	}
 	return d
 }
@@ -203,11 +204,14 @@ func providerRequestFailure(err error, response *http.Response, providerType str
 	if err == nil {
 		return nil
 	}
+	var existing *providerFailure
+	if errors.As(err, &existing) {
+		return canonicalProviderFailure(err)
+	}
 	var streamError *ssestream.StreamError
 	if errors.As(err, &streamError) {
 		failure := providerStreamFailure(string(streamError.Event.Data), response, providerType)
-		failure.cause = errors.Join(err, failure.cause)
-		return failure
+		return newProviderFailure(failure.diagnostic, errors.Join(err, failure.cause), failure.ProviderRetryAdvice())
 	}
 	d := providerFailureDiagnostic{Provider: providerType}
 	var anthropicHTTP *anthropic.Error
@@ -225,19 +229,76 @@ func providerRequestFailure(err error, response *http.Response, providerType str
 			response = upstream.Response
 		}
 	}
-	if response == nil || response.StatusCode < 400 {
-		return err
+	if response == nil {
+		if d.Status >= 400 {
+			if d.Shape == "" {
+				d.Shape = "standard_error"
+			}
+			return newProviderFailure(d, err, responseRetryAdvice(d, nil))
+		}
+		return providerTransportFailure(err, providerType)
+	}
+	if response.StatusCode < 400 {
+		return providerTransportFailure(err, providerType)
 	}
 	d.Status, d.RequestID = response.StatusCode, response.Header.Get("x-request-id")
 	var raw []byte
+	var readErr error
 	if response.Body != nil {
-		raw, _ = io.ReadAll(io.LimitReader(response.Body, (64<<10)+1))
+		raw, readErr = io.ReadAll(io.LimitReader(response.Body, (64<<10)+1))
 	}
-	d = diagnosticFromBody(d, raw)
+	if readErr != nil {
+		d.Shape = "transport_error"
+		err = errors.Join(err, readErr)
+		raw = nil
+	} else if response.Body != nil {
+		d = diagnosticFromBody(d, raw)
+	} else {
+		d.Shape = "unknown"
+	}
 	if providerType == "chatgpt" {
 		err = errors.Join(err, &chatgpt.RequestError{Status: d.Status, Code: d.Code, RequestID: d.RequestID, Body: raw})
 	}
-	return &providerFailure{diagnostic: d, cause: err, advice: responseRetryAdvice(d, response)}
+	return newProviderFailure(d, err, responseRetryAdvice(d, response))
+}
+
+// Transport classification is shared with the Engine; protocol facts remain in
+// responseRetryAdvice. Raw error prose never enters the diagnostic envelope.
+func providerTransportFailure(err error, providerType string) error {
+	if err == nil {
+		return nil
+	}
+	var failure *providerFailure
+	var rpc *DesktopModelSourceRPCError
+	var httpError *flprovider.ProviderHTTPError
+	var account *chatgpt.RequestError
+	var accountError *chatgpt.Error
+	if errors.As(err, &failure) || errors.As(err, &httpError) || errors.As(err, &account) || errors.As(err, &accountError) {
+		return canonicalProviderFailure(err)
+	}
+	var contract *modelGatewayContractError
+	if errors.As(err, &contract) {
+		return err
+	}
+	if errors.As(err, &rpc) {
+		if rpc.Code == "MODEL_RESULT_INVALID" {
+			return &modelGatewayContractError{Cause: err}
+		}
+		if d, ok := parseProviderFailure(rpc.Message); ok {
+			return newProviderFailure(d, err, rpc.ProviderRetryAdvice())
+		}
+	}
+	advice := flprovider.RetryAdviceForError(err)
+	d := providerFailureDiagnostic{Provider: providerType, Code: runErrorCodeProviderRequestFailed, Shape: "unknown"}
+	switch advice.Category {
+	case flprovider.RetryStreamInterrupted:
+		d.Code, d.Shape = runErrorCodeProviderStreamInterrupted, "transport_error"
+	case flprovider.RetryTimeout:
+		d.Code, d.Shape = runErrorCodeProviderRequestTimeout, "transport_error"
+	case flprovider.RetryTransient:
+		d.Code, d.Shape = runErrorCodeProviderUnreachable, "transport_error"
+	}
+	return &providerFailure{diagnostic: d.sanitized(), cause: err, advice: advice, adviceSet: true}
 }
 
 func providerStreamFailure(raw string, response *http.Response, providerType string) *providerFailure {
@@ -263,29 +324,46 @@ func providerStreamFailure(raw string, response *http.Response, providerType str
 	return &providerFailure{diagnostic: d.sanitized(), cause: cause, advice: responseRetryAdvice(d, response)}
 }
 
+// One envelope owns presentation; the original chain retains private causes and
+// the outermost explicit advice remains authoritative, including empty advice.
+func newProviderFailure(d providerFailureDiagnostic, cause error, advice flprovider.RetryAdvice) *providerFailure {
+	var adviser flprovider.RetryAdviser
+	if errors.As(cause, &adviser) {
+		advice = adviser.ProviderRetryAdvice()
+	}
+	return &providerFailure{diagnostic: d.sanitized(), cause: cause, advice: advice, adviceSet: true}
+}
+
 func canonicalProviderFailure(err error) error {
 	var failure *providerFailure
 	if errors.As(err, &failure) {
+		if err == failure {
+			return failure
+		}
 		var adviser flprovider.RetryAdviser
 		if errors.As(err, &adviser) {
 			copy := *failure
 			copy.cause = err
 			copy.advice = adviser.ProviderRetryAdvice()
+			copy.adviceSet = true
 			return &copy
 		}
 		return failure
 	}
 	var account *chatgpt.RequestError
 	if errors.As(err, &account) {
-		d := diagnosticFromBody(providerFailureDiagnostic{Provider: "chatgpt", Status: account.Status, Code: account.Code, RequestID: account.RequestID}, account.Body)
-		return &providerFailure{diagnostic: d, cause: err}
+		d := providerFailureDiagnostic{Provider: "chatgpt", Status: account.Status, Code: account.Code, RequestID: account.RequestID, Shape: "unknown"}
+		if account.Body != nil {
+			d = diagnosticFromBody(d, account.Body)
+		}
+		return newProviderFailure(d, err, responseRetryAdvice(d, nil))
 	}
 	var accountFailure *chatgpt.Error
 	if errors.As(err, &accountFailure) {
-		d := providerFailureDiagnostic{Provider: "chatgpt", Code: accountFailure.Code, Shape: "empty"}.sanitized()
+		d := providerFailureDiagnostic{Provider: "chatgpt", Code: accountFailure.Code, Shape: "unknown"}.sanitized()
 		advice := responseRetryAdvice(d, nil)
 		advice.NotBefore = accountFailure.RetryAt
-		return &providerFailure{diagnostic: d, cause: err, advice: advice}
+		return newProviderFailure(d, err, advice)
 	}
 	var floretHTTP *flprovider.ProviderHTTPError
 	if errors.As(err, &floretHTTP) && floretHTTP != nil {
@@ -298,7 +376,7 @@ func canonicalProviderFailure(err error) error {
 		if errors.As(err, &adviser) {
 			advice = adviser.ProviderRetryAdvice()
 		}
-		return &providerFailure{diagnostic: d.sanitized(), cause: err, advice: advice}
+		return newProviderFailure(d, err, advice)
 	}
 	return err
 }
@@ -315,6 +393,7 @@ func providerFailureDetail(message string) string {
 func providerDiagnosticRunCode(d providerFailureDiagnostic) string {
 	d = d.sanitized()
 	status := d.failureStatus()
+
 	if d.Provider == "chatgpt" {
 		if code := chatGPTRunFailureCode(d.Code); code != "" {
 			return code
@@ -332,17 +411,23 @@ func providerDiagnosticRunCode(d providerFailureDiagnostic) string {
 	if code := providerHTTPStatusRunErrorCode(status); code != "" {
 		return code
 	}
+	if d.Shape == "transport_error" || d.Shape == "unknown" {
+		switch d.Code {
+		case runErrorCodeProviderStreamInterrupted, runErrorCodeProviderRequestTimeout, runErrorCodeProviderUnreachable, runErrorCodeProviderRequestFailed, runErrorCodeProviderMissingKey:
+			return d.Code
+		}
+	}
 	if d.Code == "invalid_request_error" || d.Code == "invalid_function_parameters" {
 		return runErrorCodeProviderRequestInvalid
 	}
 	if responseRetryAdvice(d, nil).Category == flprovider.RetryStreamInterrupted {
 		return runErrorCodeProviderStreamInterrupted
 	}
-	return runErrorCodeProviderRequestRejected
+	return runErrorCodeProviderRequestFailed
 }
 
 func strictSchemaError(format string, args ...any) error {
-	return &providerFailure{diagnostic: providerFailureDiagnostic{Provider: "openai", Code: "invalid_function_parameters", Param: "tools", Shape: "empty"}, cause: fmt.Errorf(format, args...)}
+	return &providerFailure{diagnostic: providerFailureDiagnostic{Provider: "openai", Code: "invalid_function_parameters", Param: "tools", Shape: "unknown"}, cause: fmt.Errorf(format, args...)}
 }
 
 // Capture response receipt once, before consuming a potentially long stream.

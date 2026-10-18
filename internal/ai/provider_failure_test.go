@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -25,6 +26,35 @@ const openRouterSharedPoolFailure = `{"error":{"message":"Provider returned erro
 const toolArgumentsStalledMessage = "Tool arguments stopped making progress: consecutive whitespace outside JSON strings (output_index=24, whitespace_bytes=8192, limit_bytes=8192)"
 const toolArgumentsStalledFailure = `{"type":"response.failed","response":{"error":{"code":"basispoints_tool_arguments_stalled","message":"Tool arguments stopped making progress: consecutive whitespace outside JSON strings (output_index=24, whitespace_bytes=8192, limit_bytes=8192)"}}}`
 
+type failedProviderBody struct {
+	data string
+}
+
+func (b *failedProviderBody) Read(p []byte) (int, error) {
+	n := copy(p, b.data)
+	b.data = b.data[n:]
+	return n, io.ErrUnexpectedEOF
+}
+
+func TestProviderHTTPBodyReadFailurePreservesStatus(t *testing.T) {
+	for _, body := range []string{"", `{"error":{"message":"private partial response`} {
+		for _, status := range []int{401, 429, 503} {
+			t.Run(fmt.Sprintf("status_%d/bytes_%d", status, len(body)), func(t *testing.T) {
+				response := &http.Response{StatusCode: status, Header: http.Header{}, Body: io.NopCloser(&failedProviderBody{data: body})}
+				err := providerRequestFailure(errors.New("request failed"), response, "openai")
+				d, ok := parseProviderFailure(err.Error())
+				if !ok || d.Status != status || d.Shape != "transport_error" || d.Message != "" || !errors.Is(err, io.ErrUnexpectedEOF) {
+					t.Fatalf("diagnostic=%+v cause=%v", d, errors.Unwrap(err))
+				}
+				want := flprovider.HTTPRetryAdvice(status, "", response.Header, time.Now()).Category
+				if advice := flprovider.RetryAdviceForError(err); advice.Category != want {
+					t.Fatalf("advice=%+v want category=%s", advice, want)
+				}
+			})
+		}
+	}
+}
+
 func TestToolArgumentsStalledFailureClassification(t *testing.T) {
 	for _, tc := range []struct {
 		name, code string
@@ -37,8 +67,8 @@ func TestToolArgumentsStalledFailureClassification(t *testing.T) {
 		{"forbidden", "basispoints_tool_arguments_stalled", 200, true, flprovider.RetryStreamInterrupted, runErrorCodeProviderStreamInterrupted},
 		{"auth", "basispoints_tool_arguments_stalled", 401, false, flprovider.RetryPermanent, runErrorCodeProviderAuthFailed},
 		{"contract", "basispoints_tool_arguments_stalled", 422, false, flprovider.RetryPermanent, runErrorCodeProviderRequestInvalid},
-		{"unknown", "basispoints_tool_arguments_stalled_extra", 200, false, "", runErrorCodeProviderRequestRejected},
-		{"prose_only", "", 200, false, "", runErrorCodeProviderRequestRejected},
+		{"unknown", "basispoints_tool_arguments_stalled_extra", 200, false, "", runErrorCodeProviderRequestFailed},
+		{"prose_only", "", 200, false, "", runErrorCodeProviderRequestFailed},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			d := providerFailureDiagnostic{Provider: "openai", Status: tc.status, Code: tc.code, Message: toolArgumentsStalledMessage, RequestID: "req-stall", Shape: "stream_error"}
@@ -146,7 +176,7 @@ func TestProviderLimitReasonRequiresExplicitEvidence(t *testing.T) {
 		{"wrong_provider", "openai", openRouterSharedPoolFailure, runErrorCodeProviderRateLimited, 429},
 		{"auth_is_authoritative", "openrouter", openRouterSharedPoolFailure, runErrorCodeProviderAuthFailed, 401},
 		{"private_metadata", "openrouter", `{"error":{"code":429,"metadata":{"limit_source":"Bearer sk-secret"}}}`, runErrorCodeProviderRateLimited, 429},
-		{"invalid_numeric_code", "openrouter", `{"error":{"code":429.5}}`, runErrorCodeProviderRequestRejected, 200},
+		{"invalid_numeric_code", "openrouter", `{"error":{"code":429.5}}`, runErrorCodeProviderRequestFailed, 200},
 		{"chatgpt_numeric_auth", "chatgpt", `{"error":{"code":401}}`, runErrorCodeChatGPTReview, 200},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -273,7 +303,7 @@ func TestProviderDiagnosticProjectionRejectsUntrustedFields(t *testing.T) {
 		t.Fatal("unsupported envelope accepted")
 	}
 	code, message := projectRunFailure("ChatGPT:", runErrorCodeFloretEngineFailed)
-	if code != runErrorCodeProviderRequestRejected || message == "ChatGPT:" || message == "" {
+	if code != runErrorCodeProviderRequestFailed || message == "ChatGPT:" || message == "" {
 		t.Fatal("historical empty failure remained blank")
 	}
 }
@@ -411,5 +441,55 @@ func TestChatGPTRetryFactsRespectAccountAndQuotaBoundaries(t *testing.T) {
 				t.Fatalf("advice for %s: %v", tc.code, err)
 			}
 		})
+	}
+}
+
+func TestProviderTransportFailurePreservesFacts(t *testing.T) {
+	cause := fmt.Errorf("failed to get reader: failed to read frame header: %w", io.EOF)
+	err := providerRequestFailure(cause, nil, "chatgpt")
+	d, ok := parseProviderFailure(err.Error())
+	if !ok || d.Provider != "chatgpt" || d.Shape != "transport_error" || d.Code != "provider_stream_interrupted" || d.Status != 0 || d.Message != "" {
+		t.Fatalf("diagnostic=%#v err=%v", d, err)
+	}
+	if !errors.Is(err, io.EOF) || flprovider.RetryAdviceForError(err).Category != flprovider.RetryStreamInterrupted {
+		t.Fatalf("cause/advice lost: %v", err)
+	}
+	if again := canonicalProviderFailure(err); again.Error() != err.Error() {
+		t.Fatal("nested diagnostic")
+	}
+	for _, advice := range []flprovider.RetryAdvice{{}, {Category: flprovider.RetryPermanent}, {Category: flprovider.RetryStreamInterrupted, Forbidden: true}} {
+		got := providerRequestFailure(flprovider.WithRetryAdvice(cause, advice), nil, "openai")
+		if flprovider.RetryAdviceForError(got) != advice {
+			t.Fatalf("explicit advice lost: %v", got)
+		}
+	}
+}
+func TestHistoricalWebSocketEOFFailurePresentation(t *testing.T) {
+	f := &flruntime.ThreadTurnFailure{Code: flruntime.ThreadTurnFailureProvider, Message: "failed to get reader: failed to read frame header: EOF"}
+	code, _ := projectFloretTurnFailure(f, runErrorCodeFloretEngineFailed)
+	detail := canonicalFailureDetail(f)
+	if code != runErrorCodeProviderStreamInterrupted || strings.Contains(detail, "empty") || strings.Contains(detail, "rejected") || strings.Contains(detail, "chatgpt") {
+		t.Fatalf("%s %s", code, detail)
+	}
+}
+
+func TestProviderNormalizationKeepsOutermostAdviceAndSingleEnvelope(t *testing.T) {
+	for _, advice := range []flprovider.RetryAdvice{{}, {Category: flprovider.RetryPermanent}, {Category: flprovider.RetryRateLimit, NotBefore: time.Date(2026, 10, 18, 17, 0, 0, 0, time.UTC), Forbidden: true}} {
+		for _, cause := range []error{io.EOF, &chatgpt.RequestError{Status: 503}, &chatgpt.Error{Code: "temporarily_unavailable"}, &flprovider.ProviderHTTPError{Provider: "openai", StatusCode: 503}} {
+			wrapped := flprovider.WithRetryAdvice(cause, advice)
+			for _, err := range []error{providerTransportFailure(wrapped, "openai"), providerRequestFailure(wrapped, &http.Response{StatusCode: 503, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(""))}, "openai")} {
+				if got := flprovider.RetryAdviceForError(err); got != advice {
+					t.Fatalf("outer advice lost: %#v != %#v", got, advice)
+				}
+				for n := 0; n < 5; n++ {
+					if again := canonicalProviderFailure(err); again != err {
+						t.Fatal("normalization added a second envelope")
+					}
+				}
+				if !errors.Is(err, cause) {
+					t.Fatal("cause lost")
+				}
+			}
+		}
 	}
 }

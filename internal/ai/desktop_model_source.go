@@ -21,6 +21,7 @@ import (
 	"sync"
 	"time"
 
+	flprovider "github.com/floegence/floret/v7/provider"
 	contextadapter "github.com/floegence/redeven/internal/ai/context/adapter"
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
 	"github.com/floegence/redeven/internal/chatgpt"
@@ -33,7 +34,7 @@ import (
 
 const (
 	DesktopModelSourceProviderType      = "desktop_model_source"
-	DesktopModelSourceProtocolVersion   = "redeven-desktop-model-source-rpc-v2"
+	DesktopModelSourceProtocolVersion   = "redeven-desktop-model-source-rpc-v3"
 	DesktopModelSourceDefaultSource     = "desktop_local_environment"
 	desktopModelSourceModelIDPrefix     = "desktop:model_"
 	defaultDesktopModelSourceRPCTimeout = 30 * time.Second
@@ -163,8 +164,68 @@ type DesktopModelSourceRPCFrame struct {
 }
 
 type DesktopModelSourceRPCError struct {
-	Code    string `json:"code,omitempty"`
-	Message string `json:"message,omitempty"`
+	Code        string                  `json:"code,omitempty"`
+	Message     string                  `json:"message,omitempty"`
+	RetryAdvice *flprovider.RetryAdvice `json:"retry_advice,omitempty"`
+}
+
+func (e *DesktopModelSourceRPCError) ProviderRetryAdvice() flprovider.RetryAdvice {
+	if e == nil || e.RetryAdvice == nil {
+		return flprovider.RetryAdvice{}
+	}
+	return *e.RetryAdvice
+}
+func validateDesktopModelSourceRPCError(e *DesktopModelSourceRPCError, model bool) error {
+	if e == nil || strings.TrimSpace(e.Code) == "" || strings.TrimSpace(e.Message) == "" || (model && e.RetryAdvice == nil) {
+		return fmt.Errorf("%w: missing error facts", errDesktopModelSourceProtocol)
+	}
+	if model {
+		if _, ok := parseProviderFailure(e.Message); !ok {
+			return fmt.Errorf("%w: missing provider failure envelope", errDesktopModelSourceProtocol)
+		}
+	}
+	if e.RetryAdvice != nil {
+		switch e.RetryAdvice.Category {
+		case "", flprovider.RetryTransient, flprovider.RetryRateLimit, flprovider.RetryTimeout, flprovider.RetryStreamInterrupted, flprovider.RetryPermanent:
+		default:
+			return fmt.Errorf("%w: invalid retry category", errDesktopModelSourceProtocol)
+		}
+	}
+	return nil
+}
+
+func desktopModelSourceFailureMessage(err error) string {
+	if errors.Is(err, errDesktopModelSourceProtocol) {
+		return "Desktop model source protocol is incompatible. Update and reconnect Desktop."
+	}
+	if errors.Is(err, context.Canceled) {
+		return "Desktop model source disconnected."
+	}
+	code := classifyRunFailureCode(err, runErrorCodeProviderRequestFailed)
+	return userFacingRunError(code, "")
+}
+
+// The connector owns readiness; this mapping only classifies a failed call.
+func desktopModelSourceTransportError(err error) error {
+	if err == nil {
+		return nil
+	}
+	var adviser flprovider.RetryAdviser
+	if errors.As(err, &adviser) {
+		return err
+	}
+	advice := flprovider.RetryAdviceForError(err)
+	if errors.Is(err, errDesktopModelSourceProtocol) || errors.Is(err, context.Canceled) {
+		advice = flprovider.RetryAdvice{Category: flprovider.RetryPermanent}
+	}
+	var closed *websocket.CloseError
+	if errors.As(err, &closed) {
+		advice.Category = flprovider.RetryStreamInterrupted
+		if !desktopModelSourceConnectionErrorRetryable(err) {
+			advice.Category = flprovider.RetryPermanent
+		}
+	}
+	return flprovider.WithRetryAdvice(err, advice)
 }
 
 func (e *DesktopModelSourceRPCError) Error() string {
@@ -200,6 +261,7 @@ type desktopModelSourceClient struct {
 	conn              *desktopModelSourceRuntimeConn
 	connectedAtUnixMS int64
 	lastErr           string
+	connectionErr     error
 	lastSnapshot      *DesktopModelSourceModelSnapshot
 	currentModelID    string
 }
@@ -211,12 +273,12 @@ type desktopModelSourceProvider struct {
 }
 
 type desktopModelSourceRuntimeConn struct {
-	ws       *websocket.Conn
-	writeMu  sync.Mutex
-	mu       sync.Mutex
-	pending  map[string]chan DesktopModelSourceRPCFrame
-	closed   bool
-	closeErr error
+	ws        *websocket.Conn
+	writeGate chan struct{}
+	mu        sync.Mutex
+	pending   map[string]chan DesktopModelSourceRPCFrame
+	closed    bool
+	closeErr  error
 }
 
 func normalizeDesktopModelSourceSession(session DesktopModelSourceSession) (DesktopModelSourceSession, error) {
@@ -280,6 +342,7 @@ func (c *desktopModelSourceClient) Prepare(session DesktopModelSourceSession) (*
 	c.session = normalized
 	c.connectedAtUnixMS = 0
 	c.lastErr = ""
+	c.connectionErr = nil
 	c.lastSnapshot = nil
 	status := c.statusLocked(time.Now())
 	c.mu.Unlock()
@@ -322,6 +385,7 @@ func (c *desktopModelSourceClient) ServeRPC(ctx context.Context, session Desktop
 	c.conn = runtimeConn
 	c.connectedAtUnixMS = time.Now().UnixMilli()
 	c.lastErr = ""
+	c.connectionErr = nil
 	c.mu.Unlock()
 	if old != nil {
 		old.Close()
@@ -366,6 +430,7 @@ func (c *desktopModelSourceClient) ServeRPC(ctx context.Context, session Desktop
 
 	c.mu.Lock()
 	if c.conn == runtimeConn {
+		c.connectionErr = desktopModelSourceTransportError(err)
 		c.conn = nil
 		c.connectedAtUnixMS = 0
 		if strings.TrimSpace(c.session.SessionID) != "" && c.session.ExpiresAtUnixMS > 0 && time.Now().UnixMilli() >= c.session.ExpiresAtUnixMS {
@@ -373,7 +438,7 @@ func (c *desktopModelSourceClient) ServeRPC(ctx context.Context, session Desktop
 		} else if strings.TrimSpace(c.session.SessionID) != "" {
 			c.lastErr = "Desktop model source disconnected."
 			if err != nil && !errors.Is(err, context.Canceled) {
-				c.lastErr = err.Error()
+				c.lastErr = desktopModelSourceFailureMessage(err)
 			}
 		}
 	}
@@ -398,6 +463,7 @@ func (c *desktopModelSourceClient) Disconnect() {
 	c.session = DesktopModelSourceSession{}
 	c.connectedAtUnixMS = 0
 	c.lastErr = ""
+	c.connectionErr = nil
 	c.lastSnapshot = nil
 	c.currentModelID = ""
 	c.mu.Unlock()
@@ -523,7 +589,7 @@ func (c *desktopModelSourceClient) ListModels(ctx context.Context) (*DesktopMode
 	var out DesktopModelSourceModelSnapshot
 	if err := conn.call(checkCtx, "ai.models.list", nil, nil, &out); err != nil {
 		c.mu.Lock()
-		c.lastErr = strings.TrimSpace(err.Error())
+		c.lastErr = desktopModelSourceFailureMessage(err)
 		c.mu.Unlock()
 		return nil, err
 	}
@@ -559,21 +625,30 @@ func (c *desktopModelSourceClient) StreamTurn(ctx context.Context, req ModelGate
 	}
 	c.mu.Lock()
 	conn := c.conn
+	session := c.session
+	connectionErr := c.connectionErr
 	c.mu.Unlock()
-	if conn == nil {
-		return ModelGatewayResult{}, errors.New("desktop model source is not connected")
+	if conn == nil || (session.ExpiresAtUnixMS > 0 && time.Now().UnixMilli() >= session.ExpiresAtUnixMS) {
+		advice := flprovider.RetryAdvice{Category: flprovider.RetryPermanent}
+		if session.SessionID != "" && (session.ExpiresAtUnixMS == 0 || time.Now().UnixMilli() < session.ExpiresAtUnixMS) {
+			advice.Category = flprovider.RetryTransient
+			if connectionErr != nil {
+				advice = flprovider.RetryAdviceForError(connectionErr)
+			}
+		}
+		return ModelGatewayResult{}, flprovider.WithRetryAdvice(errors.New("desktop model source is not connected"), advice)
 	}
 	var out ModelGatewayResult
 	if err := conn.call(ctx, "ai.turn.stream", desktopModelSourceStreamRequest{Request: req}, onEvent, &out); err != nil {
 		c.mu.Lock()
-		c.lastErr = strings.TrimSpace(err.Error())
+		c.lastErr = desktopModelSourceFailureMessage(err)
 		c.mu.Unlock()
 		return ModelGatewayResult{}, err
 	}
 	if err := validateModelGatewayResult(out); err != nil {
 		wrapped := fmt.Errorf("desktop model source RPC result: %w", err)
 		c.mu.Lock()
-		c.lastErr = wrapped.Error()
+		c.lastErr = desktopModelSourceFailureMessage(wrapped)
 		c.mu.Unlock()
 		if c.log != nil {
 			c.log.Error("desktop model source returned an invalid model result",
@@ -667,12 +742,34 @@ func (c *desktopModelSourceClient) bindingLocked(now time.Time) runtimeservice.B
 
 func newDesktopModelSourceRuntimeConn(ws *websocket.Conn) *desktopModelSourceRuntimeConn {
 	return &desktopModelSourceRuntimeConn{
-		ws:      ws,
-		pending: make(map[string]chan DesktopModelSourceRPCFrame),
+		ws:        ws,
+		writeGate: make(chan struct{}, 1),
+		pending:   make(map[string]chan DesktopModelSourceRPCFrame),
 	}
 }
 
-func (c *desktopModelSourceRuntimeConn) readLoop(ctx context.Context) error {
+func readDesktopModelSourceRPCFrame(ws *websocket.Conn) (DesktopModelSourceRPCFrame, error) {
+	var frame DesktopModelSourceRPCFrame
+	_, data, err := ws.ReadMessage()
+	if err != nil {
+		return frame, err
+	}
+	if json.Unmarshal(data, &frame) != nil {
+		return frame, fmt.Errorf("%w: invalid JSON frame", errDesktopModelSourceProtocol)
+	}
+	return frame, nil
+}
+
+func (c *desktopModelSourceRuntimeConn) readLoop(ctx context.Context) (err error) {
+	defer func() {
+		if c != nil {
+			c.mu.Lock()
+			if c.closed {
+				err = c.closeErr
+			}
+			c.mu.Unlock()
+		}
+	}()
 	if c == nil || c.ws == nil {
 		return errors.New("desktop model source websocket is not connected")
 	}
@@ -687,8 +784,8 @@ func (c *desktopModelSourceRuntimeConn) readLoop(ctx context.Context) error {
 			return ctx.Err()
 		default:
 		}
-		var frame DesktopModelSourceRPCFrame
-		if err := c.ws.ReadJSON(&frame); err != nil {
+		frame, err := readDesktopModelSourceRPCFrame(c.ws)
+		if err != nil {
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
@@ -702,8 +799,14 @@ func (c *desktopModelSourceRuntimeConn) readLoop(ctx context.Context) error {
 			return err
 		}
 		frame.Type = strings.TrimSpace(frame.Type)
+		frame.ID = strings.TrimSpace(frame.ID)
 		switch frame.Type {
 		case "event", "result", "error":
+			if frame.ID == "" || (frame.Type == "event" && frame.Event == nil) {
+				err := fmt.Errorf("%w: missing frame fields", errDesktopModelSourceProtocol)
+				c.closeWithError(err)
+				return err
+			}
 			c.dispatch(frame)
 		case "ping":
 			_ = c.writeFrame(ctx, DesktopModelSourceRPCFrame{
@@ -711,6 +814,11 @@ func (c *desktopModelSourceRuntimeConn) readLoop(ctx context.Context) error {
 				Type:            "pong",
 				ID:              strings.TrimSpace(frame.ID),
 			})
+		case "pong":
+		default:
+			err := fmt.Errorf("%w: unsupported frame type", errDesktopModelSourceProtocol)
+			c.closeWithError(err)
+			return err
 		}
 	}
 }
@@ -731,6 +839,7 @@ func (c *desktopModelSourceRuntimeConn) call(ctx context.Context, method string,
 		return err
 	}
 	defer c.removePending(id)
+	failProtocol := func(err error) error { c.closeWithError(err); return desktopModelSourceTransportError(err) }
 
 	rawParams, err := marshalRawMessage(params)
 	if err != nil {
@@ -749,36 +858,61 @@ func (c *desktopModelSourceRuntimeConn) call(ctx context.Context, method string,
 	for {
 		select {
 		case <-ctx.Done():
-			_ = c.writeFrame(context.Background(), DesktopModelSourceRPCFrame{
+			cancelCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+			_ = c.writeFrame(cancelCtx, DesktopModelSourceRPCFrame{
 				ProtocolVersion: DesktopModelSourceProtocolVersion,
 				Type:            "cancel",
 				ID:              id,
 				Method:          "ai.turn.cancel",
 			})
+			cancel()
 			return ctx.Err()
 		case frame, ok := <-ch:
-			if !ok {
-				return errors.New("desktop model source disconnected")
+			c.mu.Lock()
+			closed, failure := c.closed, c.closeErr
+			c.mu.Unlock()
+			if !ok || (closed && errors.Is(failure, errDesktopModelSourceProtocol)) {
+				return failure
 			}
 			switch strings.TrimSpace(frame.Type) {
 			case "event":
 				if frame.Event != nil && onEvent != nil {
 					if frame.Event.Usage != nil {
 						if err := validatePartialUsage(*frame.Event.Usage); err != nil {
-							return fmt.Errorf("desktop model source RPC usage event: %w", err)
+							return failProtocol(fmt.Errorf("%w: invalid usage event", errDesktopModelSourceProtocol))
 						}
 					}
 					onEvent(*frame.Event)
 				}
 			case "result":
+				if frame.Error != nil || frame.Event != nil {
+					return failProtocol(fmt.Errorf("%w: conflicting terminal fields", errDesktopModelSourceProtocol))
+				}
 				if out == nil {
 					return nil
 				}
-				if len(frame.Result) == 0 {
-					return nil
+				if len(frame.Result) == 0 || string(frame.Result) == "null" {
+					return failProtocol(fmt.Errorf("%w: missing result", errDesktopModelSourceProtocol))
 				}
-				return json.Unmarshal(frame.Result, out)
+				if method == "ai.turn.stream" {
+					var result struct {
+						FinishReason string `json:"finish_reason"`
+					}
+					if json.Unmarshal(frame.Result, &result) != nil || strings.TrimSpace(result.FinishReason) == "" {
+						return failProtocol(fmt.Errorf("%w: missing model finish reason", errDesktopModelSourceProtocol))
+					}
+				}
+				if err := json.Unmarshal(frame.Result, out); err != nil {
+					return failProtocol(fmt.Errorf("%w: invalid result", errDesktopModelSourceProtocol))
+				}
+				return nil
 			case "error":
+				if len(frame.Result) != 0 || frame.Event != nil {
+					return failProtocol(fmt.Errorf("%w: conflicting terminal fields", errDesktopModelSourceProtocol))
+				}
+				if err := validateDesktopModelSourceRPCError(frame.Error, method == "ai.turn.stream"); err != nil {
+					return failProtocol(err)
+				}
 				return frame.Error
 			}
 		}
@@ -789,7 +923,7 @@ func (c *desktopModelSourceRuntimeConn) addPending(id string, ch chan DesktopMod
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.closed {
-		return errors.New("desktop model source disconnected")
+		return c.closeErr
 	}
 	c.pending[id] = ch
 	return nil
@@ -807,14 +941,17 @@ func (c *desktopModelSourceRuntimeConn) dispatch(frame DesktopModelSourceRPCFram
 		return
 	}
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	ch := c.pending[id]
 	if ch == nil {
+		c.mu.Unlock()
 		return
 	}
 	select {
 	case ch <- frame:
+		c.mu.Unlock()
 	default:
+		c.mu.Unlock()
+		c.closeWithError(fmt.Errorf("%w: pending frame queue overflow", errDesktopModelSourceProtocol))
 	}
 }
 
@@ -826,24 +963,39 @@ func (c *desktopModelSourceRuntimeConn) writeFrame(ctx context.Context, frame De
 		ctx = context.Background()
 	}
 	c.mu.Lock()
-	closed := c.closed
+	closed, closeErr := c.closed, c.closeErr
 	c.mu.Unlock()
 	if closed {
-		return errors.New("desktop model source disconnected")
+		return closeErr
 	}
 	frame.ProtocolVersion = DesktopModelSourceProtocolVersion
-	c.writeMu.Lock()
-	defer c.writeMu.Unlock()
+	select {
+	case c.writeGate <- struct{}{}:
+	case <-ctx.Done():
+		c.closeWithError(ctx.Err())
+		return ctx.Err()
+	}
+	defer func() { <-c.writeGate }()
+	stopCancellation := context.AfterFunc(ctx, func() { c.closeWithError(ctx.Err()) })
+	defer stopCancellation()
+	if err := ctx.Err(); err != nil {
+		c.closeWithError(err)
+		return err
+	}
 	deadline := time.Now().Add(defaultDesktopModelSourceRPCTimeout)
 	if d, ok := ctx.Deadline(); ok {
 		deadline = d
 	}
 	_ = c.ws.SetWriteDeadline(deadline)
-	return c.ws.WriteJSON(frame)
+	err := c.ws.WriteJSON(frame)
+	if err != nil {
+		c.closeWithError(err)
+	}
+	return err
 }
 
 func (c *desktopModelSourceRuntimeConn) Close() {
-	c.closeWithError(errors.New("desktop model source disconnected"))
+	c.closeWithError(flprovider.WithRetryAdvice(errors.New("desktop model source disconnected"), flprovider.RetryAdvice{Category: flprovider.RetryPermanent}))
 }
 
 func (c *desktopModelSourceRuntimeConn) closeWithError(err error) {
@@ -856,7 +1008,10 @@ func (c *desktopModelSourceRuntimeConn) closeWithError(err error) {
 		return
 	}
 	c.closed = true
-	c.closeErr = err
+	if err == nil {
+		err = errors.New("desktop model source disconnected")
+	}
+	c.closeErr = desktopModelSourceTransportError(err)
 	pending := c.pending
 	c.pending = make(map[string]chan DesktopModelSourceRPCFrame)
 	c.mu.Unlock()
@@ -1067,6 +1222,7 @@ func (e *desktopModelSourceExecutor) serve(ctx context.Context, ws *websocket.Co
 	var workers sync.WaitGroup
 	pool := e.openAIConnectionPool()
 	defer func() {
+		_ = ws.Close()
 		cancelAll()
 		pool.Close()
 		workers.Wait()
@@ -1082,15 +1238,20 @@ func (e *desktopModelSourceExecutor) serve(ctx context.Context, ws *websocket.Co
 		writeMu.Lock()
 		defer writeMu.Unlock()
 		_ = ws.SetWriteDeadline(time.Now().Add(defaultDesktopModelSourceRPCTimeout))
-		return ws.WriteJSON(frame)
+		err := ws.WriteJSON(frame)
+		if err != nil {
+			cancelAll()
+			_ = ws.Close()
+		}
+		return err
 	}
 
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		var frame DesktopModelSourceRPCFrame
-		if err := ws.ReadJSON(&frame); err != nil {
+		frame, err := readDesktopModelSourceRPCFrame(ws)
+		if err != nil {
 			return err
 		}
 		frame.ProtocolVersion = strings.TrimSpace(frame.ProtocolVersion)
@@ -1102,11 +1263,16 @@ func (e *desktopModelSourceExecutor) serve(ctx context.Context, ws *websocket.Co
 		frame.Method = strings.TrimSpace(frame.Method)
 		switch frame.Type {
 		case "request":
-			if frame.ID == "" {
-				continue
+			if frame.ID == "" || frame.Method == "" {
+				return fmt.Errorf("%w: missing request fields", errDesktopModelSourceProtocol)
 			}
 			reqCtx, cancel := context.WithCancel(ctx)
 			activeMu.Lock()
+			if active[frame.ID] != nil {
+				activeMu.Unlock()
+				cancel()
+				return fmt.Errorf("%w: duplicate request ID", errDesktopModelSourceProtocol)
+			}
 			active[frame.ID] = cancel
 			activeMu.Unlock()
 			workers.Add(1)
@@ -1121,6 +1287,9 @@ func (e *desktopModelSourceExecutor) serve(ctx context.Context, ws *websocket.Co
 				e.handleRequest(reqCtx, frame, write)
 			}(frame)
 		case "cancel":
+			if frame.ID == "" {
+				return fmt.Errorf("%w: missing cancellation identity", errDesktopModelSourceProtocol)
+			}
 			activeMu.Lock()
 			cancel := active[frame.ID]
 			activeMu.Unlock()
@@ -1128,26 +1297,32 @@ func (e *desktopModelSourceExecutor) serve(ctx context.Context, ws *websocket.Co
 				cancel()
 			}
 		case "ping":
-			_ = write(DesktopModelSourceRPCFrame{Type: "pong", ID: frame.ID})
+			if err := write(DesktopModelSourceRPCFrame{Type: "pong", ID: frame.ID}); err != nil {
+				return err
+			}
+		case "pong":
+		default:
+			return fmt.Errorf("%w: unsupported frame type", errDesktopModelSourceProtocol)
 		}
 	}
 }
 
 func (e *desktopModelSourceExecutor) handleRequest(ctx context.Context, frame DesktopModelSourceRPCFrame, write func(DesktopModelSourceRPCFrame) error) {
 	sendErr := func(code string, err error) {
-		msg := ""
-		if err != nil {
-			msg = err.Error()
+		failure := &DesktopModelSourceRPCError{Code: code, Message: "Desktop model source request failed."}
+		if frame.Method == "ai.turn.stream" {
+			err = providerTransportFailure(err, "unknown")
+			if _, ok := parseProviderFailure(err.Error()); ok {
+				failure.Message = err.Error()
+			} else {
+				failure.Message = (&providerFailure{diagnostic: providerFailureDiagnostic{Provider: "unknown", Code: runErrorCodeProviderRequestFailed, Shape: "unknown"}}).Error()
+			}
+			advice := flprovider.RetryAdviceForError(err)
+			failure.RetryAdvice = &advice
 		}
-		if msg == "" {
-			msg = "Desktop model source request failed."
-		}
-		_ = write(DesktopModelSourceRPCFrame{
-			Type:  "error",
-			ID:    frame.ID,
-			Error: &DesktopModelSourceRPCError{Code: code, Message: msg},
-		})
+		_ = write(DesktopModelSourceRPCFrame{Type: "error", ID: frame.ID, Error: failure})
 	}
+
 	sendResult := func(v any) {
 		raw, err := json.Marshal(v)
 		if err != nil {
@@ -1174,6 +1349,7 @@ func (e *desktopModelSourceExecutor) handleRequest(ctx context.Context, frame De
 	case "ai.turn.stream":
 		result, err := e.streamTurn(ctx, frame, write)
 		if err != nil {
+			err = canonicalProviderFailure(err)
 			code := "TURN_STREAM_FAILED"
 			var contractErr *modelGatewayContractError
 			if errors.As(err, &contractErr) {
@@ -1211,7 +1387,7 @@ func (e *desktopModelSourceExecutor) status() (*DesktopModelSourceStatus, error)
 	}, nil
 }
 
-func (e *desktopModelSourceExecutor) streamTurn(ctx context.Context, frame DesktopModelSourceRPCFrame, write func(DesktopModelSourceRPCFrame) error) (ModelGatewayResult, error) {
+func (e *desktopModelSourceExecutor) streamTurn(ctx context.Context, frame DesktopModelSourceRPCFrame, write func(DesktopModelSourceRPCFrame) error) (result ModelGatewayResult, err error) {
 	var body desktopModelSourceStreamRequest
 	if len(frame.Params) > 0 {
 		if err := json.Unmarshal(frame.Params, &body); err != nil {
@@ -1230,15 +1406,20 @@ func (e *desktopModelSourceExecutor) streamTurn(ctx context.Context, frame Deskt
 	if !ok || cfg == nil || !cfg.AI.HasModelProfile() {
 		return ModelGatewayResult{}, fmt.Errorf("model not allowed: %s", publicModelID)
 	}
+	defer func() {
+		if err != nil {
+			err = providerTransportFailure(err, strings.TrimSpace(entry.ProviderCfg.Type))
+		}
+	}()
 	if !desktopModelSourceSnapshotHasModel(snapshot, publicModelID) {
-		return ModelGatewayResult{}, errors.New("desktop model is missing its local API key")
+		return ModelGatewayResult{}, newProviderFailure(providerFailureDiagnostic{Provider: entry.ProviderCfg.Type, Code: runErrorCodeProviderMissingKey, Shape: "unknown"}, errors.New("desktop model is missing its local API key"), flprovider.RetryAdvice{Category: flprovider.RetryPermanent})
 	}
 	apiKey, available, err := resolveProviderCredential(ctx, entry.ProviderCfg, secretStore.GetAIProviderAPIKey, chatgpt.New(secretStore))
 	if err != nil {
 		return ModelGatewayResult{}, err
 	}
 	if !available {
-		return ModelGatewayResult{}, errors.New("desktop provider is missing its local API key")
+		return ModelGatewayResult{}, newProviderFailure(providerFailureDiagnostic{Provider: entry.ProviderCfg.Type, Code: runErrorCodeProviderMissingKey, Shape: "unknown"}, errors.New("desktop provider is missing its local API key"), flprovider.RetryAdvice{Category: flprovider.RetryPermanent})
 	}
 	adapter, err := newProviderAdapter(strings.TrimSpace(entry.ProviderCfg.Type), strings.TrimSpace(entry.ProviderCfg.BaseURL), strings.TrimSpace(apiKey), entry.ProviderCfg.StrictToolSchema, parallelToolCallsWireOmit)
 	if err != nil {
@@ -1249,7 +1430,7 @@ func (e *desktopModelSourceExecutor) streamTurn(ctx context.Context, frame Deskt
 	configureOpenAIConnections(adapter, entry.ProviderCfg.ID, entry.ProviderCfg.BaseURL, string(entry.ProviderCfg.EffectiveAuthMethod())+":"+entry.ProviderCfg.AccountID, e.openAIConnectionPool())
 	req := body.Request
 	req.Model = strings.TrimSpace(entry.WireModelName)
-	result, err := adapter.StreamTurn(ctx, req, func(ev StreamEvent) {
+	result, err = adapter.StreamTurn(ctx, req, func(ev StreamEvent) {
 		_ = write(DesktopModelSourceRPCFrame{
 			Type:  "event",
 			ID:    frame.ID,

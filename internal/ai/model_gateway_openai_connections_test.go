@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	wire "github.com/coder/websocket"
 	flidentity "github.com/floegence/floret/v7/identity"
 	flprovider "github.com/floegence/floret/v7/provider"
 	"github.com/floegence/redeven/internal/chatgpt"
@@ -315,6 +316,11 @@ func TestOpenAIWebSocketDisconnectAndCancelDoNotReplay(t *testing.T) {
 			case err := <-done:
 				if err == nil {
 					t.Fatal("partial disconnect succeeded")
+				}
+				if !cancelRequest {
+					if advice := flprovider.RetryAdviceForError(err); advice.Category != flprovider.RetryStreamInterrupted {
+						t.Fatalf("disconnect advice=%#v error=%v", advice, err)
+					}
 				}
 			case <-time.After(3 * time.Second):
 				t.Fatal("cancel did not release socket")
@@ -651,5 +657,25 @@ func TestSupplementalRequestClosesExistingReusableConnection(t *testing.T) {
 	case <-closed:
 	case <-time.After(time.Second):
 		t.Fatal("supplemental input retained reusable socket")
+	}
+}
+
+func TestOpenAIWebSocketCloseAdvicePriority(t *testing.T) {
+	for _, code := range []wire.StatusCode{wire.StatusNormalClosure, wire.StatusGoingAway, wire.StatusAbnormalClosure, wire.StatusNoStatusRcvd, wire.StatusInternalError, wire.StatusServiceRestart, wire.StatusTryAgainLater, wire.StatusProtocolError, wire.StatusUnsupportedData, wire.StatusInvalidFramePayloadData, wire.StatusPolicyViolation, wire.StatusMessageTooBig, wire.StatusMandatoryExtension} {
+		cause := wire.CloseError{Code: code}
+		err := openAIWebSocketFailure(cause)
+		want := flprovider.RetryPermanent
+		switch code {
+		case wire.StatusNormalClosure, wire.StatusGoingAway, wire.StatusAbnormalClosure, wire.StatusNoStatusRcvd, wire.StatusInternalError, wire.StatusServiceRestart, wire.StatusTryAgainLater:
+			want = flprovider.RetryStreamInterrupted
+		}
+		if flprovider.RetryAdviceForError(err).Category != want {
+			t.Fatalf("close %d: %v", code, err)
+		}
+		for _, advice := range []flprovider.RetryAdvice{{}, {Category: flprovider.RetryPermanent}, {Category: flprovider.RetryStreamInterrupted, Forbidden: true}} {
+			if got := flprovider.RetryAdviceForError(openAIWebSocketFailure(flprovider.WithRetryAdvice(cause, advice))); got != advice {
+				t.Fatalf("close %d overrode advice", code)
+			}
+		}
 	}
 }
