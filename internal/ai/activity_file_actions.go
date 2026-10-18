@@ -6,6 +6,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/floegence/floret/v7/identity"
 	"github.com/floegence/floret/v7/observation"
 	fltools "github.com/floegence/floret/v7/tools"
 )
@@ -179,6 +180,12 @@ func sanitizeActivityTargetRefsValue(value any) []any {
 			// and every action. Other opaque references remain private.
 			allowed := false
 			switch kind {
+			case "subagent":
+				_, err := identity.ParseThreadID(resource)
+				allowed = err == nil
+			case "parent_event":
+				_, err := identity.ParseThreadID(label)
+				allowed = err == nil && len(resource) <= 240 && !strings.ContainsAny(resource, "/\\ \x00\t\n\r")
 			case "computer_target", "computer_control":
 				allowed = len(resource) <= 128 && !strings.ContainsAny(resource, "/\\: \x00\t\n\r")
 			case "computer_origin":

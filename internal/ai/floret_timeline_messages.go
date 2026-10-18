@@ -83,7 +83,7 @@ func (service *Service) hydrateTimelineMessageTargets(ctx context.Context, meta 
 			indices = append(indices, index)
 		}
 	}
-	hydrated, err := service.hydrateFileActivityTargets(ctx, meta, threadID, items)
+	hydrated, err := service.hydrateActivityTargets(ctx, meta, threadID, items)
 	if err != nil {
 		return err
 	}

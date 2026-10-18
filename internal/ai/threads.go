@@ -504,7 +504,7 @@ func (s *Service) GetFlowerThreadDetail(ctx context.Context, meta *session.Meta,
 	if err != nil {
 		return nil, fmt.Errorf("read thread runtime view: %w", err)
 	}
-	current.Items, err = s.hydrateFileActivityTargets(ctx, meta, current.ThreadID.String(), current.Items)
+	current.Items, err = s.hydrateActivityTargets(ctx, meta, current.ThreadID.String(), current.Items)
 	if err != nil {
 		return nil, err
 	}

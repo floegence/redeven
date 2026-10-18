@@ -131,7 +131,7 @@ func TestHydrateFileActivityTargetsExactCanonicalIdentity(t *testing.T) {
 	wrong.RunID = "another-run"
 	runtime := &fileTargetQueryRuntime{records: []threadquery.Record{wrong, record}, bodies: map[threadquery.RecordRef]string{"correct": "{\"status\":\"success\",\"data\":{\"file_path\":\"/no-longer-present/a.txt\"}}", "wrong": "{\"status\":\"success\",\"data\":{\"file_path\":\"/wrong/a.txt\"}}"}}
 	svc.threadRuntime = runtime
-	got, err := svc.hydrateFileActivityTargets(t.Context(), meta, thread.ThreadID, []flruntime.ThreadItem{item})
+	got, err := svc.hydrateActivityTargets(t.Context(), meta, thread.ThreadID, []flruntime.ThreadItem{item})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,7 +145,7 @@ func TestHydrateFileActivityTargetsExactCanonicalIdentity(t *testing.T) {
 	if got[0].Activity.Presentation.Payload.(fltools.FileActivityPayload).Content != "historical snapshot" {
 		t.Fatal("historical content changed")
 	}
-	_, err = svc.hydrateFileActivityTargets(t.Context(), meta, thread.ThreadID, got)
+	_, err = svc.hydrateActivityTargets(t.Context(), meta, thread.ThreadID, got)
 	if err != nil || runtime.queries != 1 {
 		t.Fatalf("modern target queried again: %v", err)
 	}
@@ -209,7 +209,7 @@ func TestHistoricalFileTargetsReauthorizeEveryCanonicalRead(t *testing.T) {
 		},
 	}
 	svc.threadRuntime = runtime
-	if _, err := svc.hydrateFileActivityTargets(t.Context(), meta, thread.ThreadID, []flruntime.ThreadItem{item}); !errors.Is(err, errReadPermissionDenied) || runtime.reads != 0 {
+	if _, err := svc.hydrateActivityTargets(t.Context(), meta, thread.ThreadID, []flruntime.ThreadItem{item}); !errors.Is(err, errReadPermissionDenied) || runtime.reads != 0 {
 		t.Fatalf("revocation err=%v reads=%d", err, runtime.reads)
 	}
 }
@@ -238,7 +238,7 @@ func TestHistoricalFileTargetsValidateEveryResultChunk(t *testing.T) {
 				return threadquery.ReadPage{Record: record, Chunks: []threadquery.Chunk{{Field: "result", Offset: offset, Text: "\"/restored/a.txt\"}}"}}}, nil
 			}
 			svc.threadRuntime = runtime
-			out, err := svc.hydrateFileActivityTargets(t.Context(), meta, thread.ThreadID, []flruntime.ThreadItem{item})
+			out, err := svc.hydrateActivityTargets(t.Context(), meta, thread.ThreadID, []flruntime.ThreadItem{item})
 			if invalid {
 				if err == nil {
 					t.Fatal("discontinuous result accepted")

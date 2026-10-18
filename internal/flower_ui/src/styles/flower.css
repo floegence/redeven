@@ -12276,3 +12276,40 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
 .flower-context-close:hover { color: var(--foreground); background: color-mix(in srgb, var(--foreground) 6%, transparent); }
 .flower-context-close:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .flower-context-panel-layer { pointer-events: none; }
+
+/* Report tools share the existing row; avatars align with the title's center. */
+.flower-activity-inline-row-reports .flower-activity-inline-copy {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.flower-activity-inline-row-reports .flower-activity-inline-title {
+  width: auto;
+  flex: 0 1 auto;
+}
+
+.flower-activity-inline-row-reports .flower-activity-inline-button-static {
+  grid-template-columns: 1rem minmax(0, 1fr) auto;
+}
+
+.flower-activity-report-sources {
+  display: inline-flex;
+  flex: 0 1 auto;
+  min-width: 1.125rem;
+  max-width: 6rem;
+  align-items: center;
+  gap: 0.125rem;
+  overflow: hidden;
+}
+
+.flower-activity-report-source {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+}
+
+.flower-activity-report-source .flower-subagent-avatar {
+  width: 1.125rem;
+  height: 1.125rem;
+}

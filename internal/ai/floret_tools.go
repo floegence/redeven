@@ -910,6 +910,9 @@ func floretActivityForToolCall(toolName string, args map[string]any) *fltools.Ac
 	}
 	if structured, ok := activity.Payload.(fltools.StructuredActivityPayload); ok {
 		structured.Inputs = structuredToolInputs(toolName, args, spec)
+		if toolName == "subagent_events" {
+			structured.Operation = anyToString(args["action"])
+		}
 		activity.Payload = structured
 	}
 	if renderer == fltools.ActivityRendererTerminal {
@@ -1303,12 +1306,17 @@ func floretActivityForToolResult(r *run, result ToolResult) (*fltools.ActivityPr
 	}
 	if structured, ok := activity.Payload.(fltools.StructuredActivityPayload); ok {
 		structured.Inputs = structuredToolInputs(toolName, result.activityInput, spec)
+		if toolName == "subagent_events" {
+			structured.Operation = anyToString(result.activityInput["action"])
+			activity.Label = structured.Operation
+		}
 		structured.Rows = structuredToolResults(toolName, result.Data, structured.Rows)
 		structured.RowsProvided = true
 		activity.Payload = structured
 	}
 	if status == toolResultStatusSuccess && (r == nil || !r.shouldRouteTargetTool(toolName)) {
 		applyFileActivityTargets(activity, toolName, result.Data)
+		applyParentEventActivity(activity, toolName, result.Data)
 	}
 	if isComputerUseTool(toolName) {
 		activity.Label = activityPresentationLabel(anyToString(result.activityInput["description"]))

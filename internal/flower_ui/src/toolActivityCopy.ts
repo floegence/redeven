@@ -1,4 +1,12 @@
 export const toolActivityEnUS = {
+  "parentReportSubmit": "Report to parent task",
+  "parentReportAccepted": "Accepted",
+  "parentReportRecorded": "The report was recorded in the parent task.",
+  "parentReportView": "View report in parent task",
+  "parentReportContent": "Submitted report",
+  "subagentReports": "Subagent reports",
+  "subagentReportsRead": "Read subagent reports",
+  "subagentReportsList": "List subagent reports",
   "effectUncertain": "Result unconfirmed",
   "previewUnavailable": "This tool did not provide a result preview.",
   "computerPageChanges": "Page changes",
