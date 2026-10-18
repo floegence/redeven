@@ -238,6 +238,7 @@ export const flowerSurfaceEnUS = {
     runErrorProviderStreamInterrupted: 'The selected AI provider ended the response stream unexpectedly. Try again, or check the provider endpoint if this keeps happening.',
     runErrorProviderModelUnavailable: 'The selected model is not available from this provider. Choose another model in the Local AI Profile.',
     runErrorProviderRequestInvalid: "The selected AI provider rejected Flower's request format. Update Redeven and retry.",
+    runErrorProviderRequestFailed: "The model request could not be completed. Retry, or check the current model source if it keeps happening.",
     runErrorProviderRequestRejected: "The selected AI provider rejected Flower's request. Check the diagnostic details and try again later.",
     runErrorModelGatewayContractFailed: 'The model source returned an incomplete tool call. No tool was run. Try again or choose another model.',
     runContextErrorTitle: 'Model context limit',

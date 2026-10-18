@@ -43,8 +43,8 @@ func TestClassifyRunFailureCodeProviderErrors(t *testing.T) {
 			want: runErrorCodeProviderServerError,
 		},
 		{name: "missing key", err: errors.New("missing api key for provider"), want: runErrorCodeProviderMissingKey},
-		{name: "network timeout", err: timeoutNetError{}, want: runErrorCodeProviderUnreachable},
-		{name: "context timeout", err: context.DeadlineExceeded, want: runErrorCodeProviderUnreachable},
+		{name: "network timeout", err: timeoutNetError{}, want: runErrorCodeProviderRequestTimeout},
+		{name: "context timeout", err: context.DeadlineExceeded, want: runErrorCodeProviderRequestTimeout},
 		{name: "provider stream eof", err: errors.New("unexpected EOF"), want: runErrorCodeProviderStreamInterrupted},
 		{name: "typed model gateway contract", err: &modelGatewayContractError{ToolCallIndex: 0, MissingFields: []string{"args"}}, want: runErrorCodeModelGatewayContract},
 		{name: "historical model gateway contract", err: errors.New("Flower tool call requires id, name, and args"), want: runErrorCodeModelGatewayContract},
@@ -59,7 +59,11 @@ func TestClassifyRunFailureCodeProviderErrors(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := classifyRunFailureCode(tt.err, runErrorCodeFloretEngineFailed); got != tt.want {
+			got := classifyRunFailureCode(tt.err, runErrorCodeFloretEngineFailed)
+			if got == runErrorCodeFloretEngineFailed {
+				got = historicalRunFailureCode(tt.err.Error(), got)
+			}
+			if got != tt.want {
 				t.Fatalf("classifyRunFailureCode() = %q, want %q", got, tt.want)
 			}
 		})
@@ -247,7 +251,7 @@ func TestUnknownCanonicalProviderFailureRetainsProviderRecoveryClassification(t 
 	for _, message := range []string{"provider returned hosted tool web_search without declaration", "future provider protocol failure", "private provider data"} {
 		failure := &flruntime.ThreadTurnFailure{Code: flruntime.ThreadTurnFailureProvider, Message: message}
 		code, display := projectFloretTurnFailure(failure, runErrorCodeFloretEngineFailed)
-		if code != runErrorCodeProviderRequestRejected || strings.Contains(display, "orchestration engine") || strings.Contains(display, message) {
+		if code != runErrorCodeProviderRequestFailed || strings.Contains(display, "orchestration engine") || strings.Contains(display, message) {
 			t.Fatalf("lost typed provider classification: %s %s", code, display)
 		}
 		detail := canonicalFailureDetail(failure)

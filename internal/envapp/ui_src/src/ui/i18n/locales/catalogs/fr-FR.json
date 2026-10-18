@@ -5692,7 +5692,8 @@
       "contextIndicatorDistributionUnavailable": "Répartition indisponible",
       "contextIndicatorProtocolFraming": "Formatage du protocole",
       "inspectAndContinue": "Vérifier et continuer",
-      "inspectAndContinuePrompt": "Le tour précédent s’est arrêté car les effets des actions ne sont pas confirmés. Vérifiez d’abord l’état actuel et les fichiers existants avec des outils en lecture seule, puis poursuivez le travail restant selon les preuves. Ne répétez pas aveuglément les actions précédentes."
+      "inspectAndContinuePrompt": "Le tour précédent s’est arrêté car les effets des actions ne sont pas confirmés. Vérifiez d’abord l’état actuel et les fichiers existants avec des outils en lecture seule, puis poursuivez le travail restant selon les preuves. Ne répétez pas aveuglément les actions précédentes.",
+      "runErrorProviderRequestFailed": "La requête au modèle n’a pas pu aboutir. Réessayez ou vérifiez la source du modèle actuel si le problème persiste."
     },
     "threadList": {
       "title": "Discussions",

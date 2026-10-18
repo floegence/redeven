@@ -55,7 +55,7 @@ func (s *Service) initResolvedProviderAdapter(resolved resolvedRunModel) (resolv
 		return resolvedProviderAdapter{}, fmt.Errorf("resolve provider key failed: %w", err)
 	}
 	if !available {
-		return resolvedProviderAdapter{}, fmt.Errorf("missing api key for provider %q", resolved.ProviderID)
+		return resolvedProviderAdapter{}, fmt.Errorf("%w: provider %q", errModelGatewayMissingKey, resolved.ProviderID)
 	}
 	adapter, err := newProviderAdapter(providerType, strings.TrimSpace(resolved.Provider.BaseURL), strings.TrimSpace(apiKey), resolved.Provider.StrictToolSchema)
 	if err != nil {

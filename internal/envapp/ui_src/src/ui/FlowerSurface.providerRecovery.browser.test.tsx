@@ -102,11 +102,11 @@ it('opens the current provider and model and returns to the failed chat on cance
   expect(document.querySelector('[data-flower-model-search]')).not.toBeNull();
   await userEvent.click(page.getByRole('button', { name: copy.settings.dialog.discard, exact: true }));
   await waitFor(() => !document.querySelector('.flower-provider-dialog') && Boolean(surface.querySelector('.flower-error-card')));
-  expect(retryThread).not.toHaveBeenCalled();
+   expect(retryThread).not.toHaveBeenCalled();
   expect(surface.querySelector('.flower-composer-submit')).not.toBeNull();
 });
 
-it.each(['provider_request_rejected', 'provider_stream_interrupted'])('retains a failed save for %s, saves once on repeated clicks, then retries manually with the saved preference', async (code) => {
+it.each(['provider_request_rejected', 'provider_stream_interrupted', 'provider_request_failed'])('retains a failed save for %s, saves once on repeated clicks, then retries manually with the saved preference', async (code) => {
   const { surface, configure, saveModelProfile, retryThread, snapshot } = await mount({ code });
   saveModelProfile.mockRejectedValueOnce(new Error('settings save unavailable'));
   await userEvent.click(configure());
@@ -114,7 +114,7 @@ it.each(['provider_request_rejected', 'provider_stream_interrupted'])('retains a
   await userEvent.click(document.querySelector('[data-flower-provider-search] input')!);
   await userEvent.click(page.getByRole('button', { name: copy.settings.dialog.saveProvider, exact: true }));
   await waitFor(() => document.querySelector('.flower-provider-dialog')?.textContent?.includes('settings save unavailable') === true);
-  expect(retryThread).not.toHaveBeenCalled();
+   expect(retryThread).not.toHaveBeenCalled();
   const saving = deferred<typeof snapshot>();
   saveModelProfile.mockImplementationOnce(() => saving.promise);
   const save = page.getByRole('button', { name: copy.settings.dialog.saveProvider, exact: true }).element() as HTMLButtonElement;
@@ -125,7 +125,7 @@ it.each(['provider_request_rejected', 'provider_stream_interrupted'])('retains a
   expect(draft.model_profile!.providers[0].web_search?.enabled).toBe(true);
   saving.resolve({ ...snapshot, model_profile: draft.model_profile! });
   await waitFor(() => !document.querySelector('.flower-provider-dialog') && Boolean(surface.querySelector('.flower-error-card')));
-  expect(retryThread).not.toHaveBeenCalled();
+   expect(retryThread).not.toHaveBeenCalled();
   const pending = deferred<ReturnType<typeof liveBootstrap>>();
   retryThread.mockImplementationOnce(() => pending.promise);
   const retry = [...surface.querySelectorAll<HTMLButtonElement>('.flower-error-card button')].find(button => button.textContent === copy.chat.retryReply)!;
@@ -216,7 +216,7 @@ for (const width of [1100, 420]) {
 it('does not offer retry for an unknown effect outcome', async () => {
   const { surface, retryThread } = await mount({ code: 'floret_effect_outcome_unknown' });
   expect([...surface.querySelectorAll('button')].some(button => button.textContent === copy.chat.retryReply)).toBe(false);
-  expect(retryThread).not.toHaveBeenCalled();
+   expect(retryThread).not.toHaveBeenCalled();
 });
 
 
@@ -226,14 +226,14 @@ it('releases failed canonical preflight and refuses a newly unknown effect', asy
   const retry = () => [...surface.querySelectorAll<HTMLButtonElement>('.flower-error-card button')].find(button => button.textContent === copy.chat.retryReply)!;
   retry().click();
   await waitFor(() => !retry().disabled && surface.textContent?.includes(copy.chat.threadLoadErrorTitle) === true);
-  expect(retryThread).not.toHaveBeenCalled();
+   expect(retryThread).not.toHaveBeenCalled();
   loadThread.mockResolvedValueOnce(liveBootstrap(thread({ status: 'failed', error: { code: 'floret_effect_outcome_unknown', message: 'unconfirmed operation' } }), 3));
   retry().click();
   await waitFor(() => ![...surface.querySelectorAll('button')].some(button => button.textContent === copy.chat.retryReply));
-  expect(retryThread).not.toHaveBeenCalled();
+   expect(retryThread).not.toHaveBeenCalled();
 });
 
-it.each(['floret_engine_failed', 'provider_stream_interrupted'])('releases a timed out %s retry, ignores its late result, and confirms canonical state before recovery', async (code) => {
+it.each(['floret_engine_failed', 'provider_stream_interrupted', 'provider_request_failed'])('releases a timed out %s retry, ignores its late result, and confirms canonical state before recovery', async (code) => {
   const { surface, retryThread, loadThread, setFocusThreadRequest } = await mount({ code });
   const pending = deferred<ReturnType<typeof liveBootstrap>>();
   retryThread.mockImplementationOnce(() => pending.promise);
@@ -271,7 +271,15 @@ it('does not dispatch recovery when navigation supersedes canonical preflight', 
   await waitFor(() => surface.textContent?.includes('Other chat') === true);
   preflight.resolve(liveBootstrap(thread({ status: 'failed', error: { code: 'floret_engine_failed', message: 'late failure' } }), 9));
   await Promise.resolve();
-  expect(retryThread).not.toHaveBeenCalled();
+   expect(retryThread).not.toHaveBeenCalled();
   expect(surface.querySelector('.flower-error-card')).toBeNull();
   expect(surface.textContent).toContain('Other chat');
+});
+
+it('keeps an unknown provider failure actionable without guessing rejection', async () => {
+  const { surface, retryThread } = await mount({ code: 'provider_request_failed' });
+  await waitFor(() => Boolean(surface.querySelector('.flower-error-card')));
+  expect(surface.querySelector('.flower-error-message')?.textContent).toBe(copy.chat.runErrors.providerRequestFailed);
+  expect(surface.querySelector('.flower-error-actions')?.textContent).toContain(copy.settings.dialog.catalog.searchConfigure);
+  expect(retryThread).not.toHaveBeenCalled();
 });

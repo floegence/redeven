@@ -2532,6 +2532,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       case 'provider_stream_interrupted':
         return copy().chat.runErrors.providerStreamInterrupted;
       case 'provider_request_invalid': return copy().chat.runErrors.providerRequestInvalid;
+      case 'provider_request_failed': return copy().chat.runErrors.providerRequestFailed;
       case 'provider_request_rejected': return copy().chat.runErrors.providerRequestRejected;
       case 'provider_model_unavailable':
         return copy().chat.runErrors.providerModelUnavailable;
@@ -6694,6 +6695,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       case 'provider_missing_key':
         return copy().chat.runErrorActions.addAPIKey;
       case 'provider_request_invalid': return copy().chat.runErrors.providerRequestInvalid;
+      case 'provider_request_failed': return copy().chat.runErrors.providerRequestFailed;
       case 'provider_request_rejected': return copy().chat.runErrors.providerRequestRejected;
       case 'provider_model_unavailable':
       case 'model_gateway_contract_failed':
@@ -7068,6 +7070,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     });
     const actionable = code === 'chatgpt_review_required' || code === 'chatgpt_storage_unavailable' || code === 'chatgpt_authorization_required' || code === 'chatgpt_plan_permission_required' || code === 'provider_auth_failed'
       || code === 'provider_missing_key'
+      || code === 'provider_request_failed'
+      || code === 'provider_request_timeout'
       || code === 'provider_model_unavailable'
       || code === 'provider_unreachable'
       || code === 'provider_stream_interrupted'

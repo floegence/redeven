@@ -3,6 +3,7 @@ package ai
 import (
 	"encoding/json"
 	"fmt"
+	flprovider "github.com/floegence/floret/v7/provider"
 	"strings"
 )
 
@@ -24,6 +25,10 @@ func (e *modelGatewayContractError) Error() string {
 		return fmt.Sprintf("%s: arguments are not valid JSON: %v", prefix, e.Cause)
 	}
 	return prefix
+}
+
+func (e *modelGatewayContractError) ProviderRetryAdvice() flprovider.RetryAdvice {
+	return flprovider.RetryAdvice{Category: flprovider.RetryPermanent}
 }
 
 func (e *modelGatewayContractError) Unwrap() error {

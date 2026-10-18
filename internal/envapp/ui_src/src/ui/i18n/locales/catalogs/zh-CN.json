@@ -5692,7 +5692,8 @@
       "contextIndicatorDistributionUnavailable": "暂无分布",
       "contextIndicatorProtocolFraming": "协议格式开销",
       "inspectAndContinue": "检查状态并继续",
-      "inspectAndContinuePrompt": "上一轮因操作结果未确认而停止。请先使用只读工具检查当前状态和已有产物，再依据证据继续剩余任务。不要盲目重复之前的操作。"
+      "inspectAndContinuePrompt": "上一轮因操作结果未确认而停止。请先使用只读工具检查当前状态和已有产物，再依据证据继续剩余任务。不要盲目重复之前的操作。",
+      "runErrorProviderRequestFailed": "模型请求未能完成。请重试；如果问题持续，请检查当前模型来源。"
     },
     "threadList": {
       "title": "对话",

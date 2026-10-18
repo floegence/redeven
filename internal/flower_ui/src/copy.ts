@@ -590,6 +590,7 @@ export type FlowerSurfaceCopy = Readonly<{
       providerRequestTimeout: string;
       providerModelUnavailable: string;
       providerRequestInvalid: string;
+      providerRequestFailed: string;
       providerRequestRejected: string;
       modelGatewayContractFailed: string;
       contextBudgetInvalid: string;
@@ -1032,6 +1033,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       providerStreamInterrupted: 'The selected AI provider ended the response stream unexpectedly. Try again, or check the provider endpoint if this keeps happening.',
       providerModelUnavailable: 'The selected model is not available from this provider. Choose another model in the Local AI Profile.',
       providerRequestInvalid: "The selected AI provider rejected Flower's request format. Update Redeven and retry.",
+      providerRequestFailed: "The model request could not be completed. Retry, or check the current model source if it keeps happening.",
       providerRequestRejected: "The selected AI provider rejected Flower's request. Check the diagnostic details and try again later.",
       modelGatewayContractFailed: 'The model source returned an incomplete tool call. No tool was run. Try again or choose another model.',
       repeatedToolCalls: "Repeated identical tool requests made no effective progress, so this turn was stopped. Confirmed results and completed child reports are preserved. Retry to continue from saved progress.",

@@ -5692,7 +5692,8 @@
       "contextIndicatorDistributionUnavailable": "분포 정보 없음",
       "contextIndicatorProtocolFraming": "프로토콜 형식",
       "inspectAndContinue": "상태 확인 후 계속",
-      "inspectAndContinuePrompt": "이전 턴은 작업 결과를 확인하지 못해 중지되었습니다. 먼저 읽기 전용 도구로 현재 상태와 기존 결과물을 확인한 다음 증거에 따라 남은 작업을 계속하세요. 이전 작업을 무작정 반복하지 마세요."
+      "inspectAndContinuePrompt": "이전 턴은 작업 결과를 확인하지 못해 중지되었습니다. 먼저 읽기 전용 도구로 현재 상태와 기존 결과물을 확인한 다음 증거에 따라 남은 작업을 계속하세요. 이전 작업을 무작정 반복하지 마세요.",
+      "runErrorProviderRequestFailed": "모델 요청을 완료하지 못했습니다. 다시 시도하고 문제가 계속되면 현재 모델 소스를 확인하세요."
     },
     "threadList": {
       "title": "대화",

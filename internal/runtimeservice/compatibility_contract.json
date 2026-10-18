@@ -3,11 +3,12 @@
   "release_review": {
     "release_version": "v0.13.12",
     "previous_release": "v0.13.11",
-    "reviewed_at": "2026-10-17",
-    "review_id": "flower-persistent-index-startup-v1",
-    "summary": "Epoch 63 requires published Floret v7.52.0 persistent transactional search indexes and explicit Flower startup stop/retry. Runtime readiness adds indexing, preparing, stopping and stopped with sanitized workload and action facts. Desktop and Env App preserve navigation and drafts while reusing the existing readiness owner.",
-    "same_window_rationale": "Returned uncertainty uses existing Activity chips and ordinary Send requests; no Runtime Service or Desktop bridge wire shape changes. The bundled native helper has its own exact protocol 4 handshake. Canonical storage migrations remain Floret-owned and existing transport surfaces retain epoch 63.",
+    "reviewed_at": "2026-10-18",
+    "review_id": "provider-stream-recovery-rpc-v3",
+    "summary": "Epoch 64 requires Desktop model-source RPC v3 with explicit retry advice, safe provider diagnostics and bounded terminal delivery. Floret v7.58.0 remains the only provider retry scheduler.",
+    "same_window_rationale": "Desktop and Runtime must agree on required model-error retry facts. Incompatible peers use the existing upgrade flow; model requests are never replayed by the connector. Runtime service protocol and product storage schema remain unchanged.",
     "checked_surfaces": [
+      "Epoch 64: Desktop model-source RPC v3 preserves Category, absolute NotBefore and Forbidden with sanitized actual-provider diagnostics. EOF recovery uses published Floret v7.58.0. Desktop attach/start, Local UI health, startup reports, sys.ping, Env App maintenance and SSH bootstrap require the canonical epoch; prior epochs remain upgrade-only. Stop, failed writes, malformed terminals and queue overflow settle through the existing connection owner.",
       "Returned effect uncertainty: published Floret v7.55.1 preserves canonical tool errors and post-result retry boundaries without new Runtime Service fields. Desktop and Env App use existing Activity chips and normal Send for Inspect and continue; Stop, child routing, drafts, offline outbox resend and navigation retain their owners. Bundled macOS computer helper protocol 4 requires exact per-event input receipts. Runtime attach/start, Local UI health, startup reports, sys.ping, maintenance and SSH bootstrap retain epoch 63.",
       "Epoch 63: Runtime attach/start, Local UI health, startup reports, sys.ping, Env App maintenance and SSH bootstrap use the canonical compatibility epoch. Desktop decodes all preparation states and forwards authenticated readiness stop/retry without model preparation. SQLite formats 2-to-3 and logical storage 8-to-9 migrate through published Floret v7.52.0; domain schema 19 is unchanged. Existing snapshots and interrupted restore recovery remain supported; routine upgrade backups are removed.",
       "Epoch 60: Desktop model-source RPC preserves optional provider-state reuse_policy. Runtime uses the published Floret v7.34.0 reader to reopen schema-15 canonical-history state without host database repair. ChatGPT accepts old native state and the optional recent response identity while validating canonical prefixes. Runtime attach/start, Local UI health, startup reports, sys.ping, Env App maintenance and SSH bootstrap consume the canonical epoch and existing upgrade path. Product storage schema and Runtime wire protocol remain unchanged.",
@@ -110,7 +111,7 @@
     ]
   },
   "runtime_protocol_version": "redeven-runtime-v2",
-  "compatibility_epoch": 63,
+  "compatibility_epoch": 64,
   "upgrade_from_runtime_epochs": [
     9,
     10,
@@ -165,7 +166,8 @@
     59,
     60,
     61,
-    62
+    62,
+    63
   ],
   "minimum_desktop_version": "v0.13.0",
   "minimum_runtime_version": "v0.13.0"
