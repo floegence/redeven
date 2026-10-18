@@ -90,6 +90,8 @@ describe('Flower approval command presentation', () => {
     expect(surface).toContain('class="flower-approval-operation-description"');
     expect(surface).toContain('presentation().risk');
     expect(cssRule(css, '.flower-approval-operation-description')).toContain('overflow-wrap: anywhere');
-    expect(surface).toContain('<details class="flower-approval-details">');
+    expect(surface).toContain('class="flower-approval-context"');
+    expect(surface).not.toContain('toolApprovalDetails');
+    expect(readFile(rowPath)).not.toContain('toolApprovalDetails');
   });
 });

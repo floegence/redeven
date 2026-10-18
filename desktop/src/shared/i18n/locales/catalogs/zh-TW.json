@@ -638,7 +638,6 @@
       "toolApprovalExecuteRequestedAction": "執行要求的操作",
       "toolApprovalWorkingDirectoryDetail": "工作目錄：{target}",
       "toolApprovalComposerDescription": "在你核准或拒絕此操作前，對話會暫停。",
-      "toolApprovalDetails": "檢視操作詳情",
       "toolApprovalScope": "授權僅適用於列出的操作。",
       "toolApprovalQueueCount": "還有 {count} 個核准等待處理",
       "toolApprovalPendingCount": "待核准 · {count} 項",

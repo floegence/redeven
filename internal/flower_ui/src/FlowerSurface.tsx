@@ -9057,14 +9057,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             )}
           </Show>
           <Show when={presentation().details.length > 0}>
-            <details class="flower-approval-details">
-              <summary>{copy().chat.toolApprovalDetails}</summary>
+            <div class="flower-approval-context">
               <div class="flower-approval-targets">
                 <For each={presentation().details}>
                   {(detail) => <span class="flower-approval-target">{detail}</span>}
                 </For>
               </div>
-            </details>
+            </div>
           </Show>
           <Show when={presentation().risk}>
             {(note) => <p class="flower-approval-risk"><AlertCircle class="h-3.5 w-3.5" aria-hidden="true" /><span>{note()}</span></p>}
@@ -12472,10 +12471,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                           </FlowerKeyedList>
                         </div>
                         <div class="flower-composer-approval-actions flower-approval-queue-footer">
-                          <Button variant="secondary" icon={FlowerStopIcon} size="icon" class="flower-composer-stop-thread rounded-full"
-                            aria-label={selectedThreadStopLabel()} title={selectedThreadStopLabel()}
-                            disabled={!selectedThreadCanStop() || selectedThreadStopPending()} loading={selectedThreadStopPending()}
-                            onClick={() => void stopSelectedThreadFromComposer()} />
+                          <div class="flower-approval-controls">
+                            <Button variant="secondary" icon={FlowerStopIcon} size="icon" class="flower-composer-stop-thread rounded-full"
+                              aria-label={selectedThreadStopLabel()} title={selectedThreadStopLabel()}
+                              disabled={!selectedThreadCanStop() || selectedThreadStopPending()} loading={selectedThreadStopPending()}
+                              onClick={() => void stopSelectedThreadFromComposer()} />
+                            {permissionSelector()}
+                          </div>
                           <span class="flower-approval-scope" title={copy().chat.toolApprovalScope}>{copy().chat.toolApprovalOnceScope}</span>
                           <Show when={selectedComposerApprovalActions().length > 1}>
                             <FlowerApprovalDecisionActions

@@ -638,7 +638,6 @@
       "toolApprovalExecuteRequestedAction": "要求された操作を実行",
       "toolApprovalWorkingDirectoryDetail": "作業ディレクトリ：{target}",
       "toolApprovalComposerDescription": "この操作を承認または拒否するまで会話は一時停止します。",
-      "toolApprovalDetails": "操作の詳細を表示",
       "toolApprovalScope": "承認は表示されている操作にのみ適用されます。",
       "toolApprovalQueueCount": "ほかに {count} 件の承認待ち",
       "toolApprovalPendingCount": "承認待ち · {count} 件",

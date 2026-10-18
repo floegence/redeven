@@ -20,6 +20,7 @@ import { adapter, deferred, inputRequest, liveBootstrap, thread, waitFor } from 
 function mountApprovals(count: number, options: { input?: ReturnType<typeof inputRequest>; copy?: FlowerSurfaceProps['copy']; full?: boolean; command?: string; transformAction?: (action: FlowerApprovalAction, index: number) => FlowerApprovalAction } = {}) {
   let snapshot = thread({
     thread_id: 'approval-layout', status: options.input ? 'waiting_user' : 'waiting_approval', input_request: options.input,
+    permission_type: 'approval_required',
     approval_actions: Array.from({ length: count }, (_, index) => ({
       action_id: `approval-${index}`, turn_id: 'turn-fixture', origin: 'main_tool' as const, run_id: 'run-layout',
       tool_id: `tool-${index}`, tool_name: 'terminal.exec', state: 'requested' as const,
@@ -41,6 +42,10 @@ function mountApprovals(count: number, options: { input?: ReturnType<typeof inpu
   };
   const surfaceAdapter = { ...base, submitApproval: vi.fn(base.submitApproval), listThreads: vi.fn(async () => [snapshot]),
     loadThread: vi.fn(async () => liveBootstrap(snapshot, version)),
+    setThreadPermissionType: vi.fn(async (_threadID, permissionType) => {
+      snapshot = { ...snapshot, permission_type: permissionType, settings_revision: (snapshot.settings_revision ?? 0) + 1 };
+      return liveBootstrap(snapshot, ++version);
+    }),
     connectLiveStream: vi.fn(async function* (input) {
       yield { schema_version: 1 as const, kind: 'ready' as const, summaries: [snapshot] };
       while (!input.signal.aborted) {
@@ -287,7 +292,38 @@ it('preserves the reading position when expanding and collapsing a command in a 
   expectFooterInside(fixture.mount);
 });
 
-it('keeps actual targets, declared risks, and unavailable reasons visible while disclosing supporting context', async () => {
+it.each([
+  { full: true, width: 1280 }, { full: false, width: 1280 },
+  { full: true, width: 320 }, { full: false, width: 320 },
+])('keeps the approval permission menu usable at $width pixels with full=$full', async ({ full, width }) => {
+  await page.viewport(width, 800);
+  const fixture = mountApprovals(2, { full });
+  if (full) Object.assign(fixture.mount.style, { width: '100%', transform: 'scale(0.9)', transformOrigin: 'top left' });
+  await waitFor(() => Boolean(fixture.mount.querySelector('button.flower-permission-trigger')));
+  if (!full) await waitFor(() => fixture.phase() === 'expanded');
+  const trigger = fixture.mount.querySelector<HTMLButtonElement>('.flower-approval-queue-footer button.flower-permission-trigger')!;
+  expect(trigger.disabled).toBe(false);
+  expect(getComputedStyle(trigger).cursor).toBe('pointer');
+  await userEvent.click(trigger);
+  const menu = fixture.mount.querySelector<HTMLElement>('.flower-permission-menu')!;
+  await expect.poll(() => menu.getBoundingClientRect().top).toBeGreaterThanOrEqual(0);
+  const bounds = menu.getBoundingClientRect();
+  expect(bounds.left).toBeGreaterThanOrEqual(0);
+  expect(bounds.right).toBeLessThanOrEqual(width);
+  await userEvent.keyboard('{Escape}');
+  await expect.poll(() => document.activeElement).toBe(trigger);
+  expect(fixture.mount.querySelector('.flower-permission-menu')).toBeNull();
+  await userEvent.keyboard('{Enter}');
+  await waitFor(() => Boolean(fixture.mount.querySelector('.flower-permission-menu')));
+  await userEvent.click(fixture.mount.querySelector('[role=option][data-permission-type=full_access]')!);
+  await expect.poll(() => trigger.dataset.permissionType).toBe('full_access');
+  expect(fixture.surfaceAdapter.setThreadPermissionType).toHaveBeenCalledExactlyOnceWith('approval-layout', 'full_access');
+  expect(fixture.surfaceAdapter.submitApproval).not.toHaveBeenCalled();
+  expect(fixture.mount.querySelectorAll('[data-flower-composer-approval]')).toHaveLength(2);
+  expectFooterInside(fixture.mount);
+});
+
+it('keeps targets, risks, unavailable reasons, and supporting context directly visible', async () => {
   await page.viewport(320, 640);
   const path = '/workspace/' + 'long-directory/'.repeat(12) + 'settings.json';
   const fixture = mountApprovals(2, { transformAction: (action, index) => ({ ...action,
@@ -307,12 +343,10 @@ it('keeps actual targets, declared risks, and unavailable reasons visible while 
   expect(rows[1].querySelector('.flower-approval-status')?.textContent).toBe('This action requires the task owner.');
   expect(rows[1].querySelector<HTMLButtonElement>('.flower-approval-decision-approve')!.disabled).toBe(true);
   expect(fixture.mount.querySelector('.flower-approval-eligible-count')?.textContent).toBe('Can approve · 1');
-  const details = rows[0].querySelector('details')!;
-  expect(details.open).toBe(false);
-  await userEvent.click(details.querySelector('summary')!);
-  expect(details.open).toBe(true);
-  expect(details.textContent).toContain('Apply the selected development configuration.');
-  expect(details.textContent).toContain('/workspace');
+  expect(rows[0].querySelector('details')).toBeNull();
+  const context = rows[0].querySelector('.flower-approval-context')!;
+  expect(context.textContent).toContain('Apply the selected development configuration.');
+  expect(context.textContent).toContain('/workspace');
   const list = fixture.mount.querySelector<HTMLElement>('.flower-approval-queue-list')!;
   expect(list.scrollWidth).toBeLessThanOrEqual(list.clientWidth + 1);
   expectFooterInside(fixture.mount);

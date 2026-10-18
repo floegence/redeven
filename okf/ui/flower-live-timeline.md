@@ -223,6 +223,13 @@ flight, then accepts or rolls back to the server-confirmed value. A mid-run
 permission change applies only to later tool operations; running tools and
 already-created approvals are not reconsidered.
 
+The approval footer retains the same permission selector as the chat composer,
+including in the companion. Users can change permission while an approval is
+pending without stopping the task. Saving disables only the selector; Stop and
+approval decisions remain available. Existing approvals still require an explicit
+decision. Approval rows show supporting context directly, without a details
+disclosure, while long commands retain their expand and copy controls.
+
 Floret installs a canonical fallback title with the first accepted user message.
 Automatic-title pending and failure summaries retain it. Flower consumes title,
 status, and `title_generation` as one canonical snapshot from the published

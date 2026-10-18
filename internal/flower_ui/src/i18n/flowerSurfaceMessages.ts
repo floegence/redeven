@@ -410,7 +410,6 @@ export const flowerSurfaceEnUS = {
     toolApprovalExecuteRequestedAction: 'Execute requested action',
     toolApprovalWorkingDirectoryDetail: 'Working directory: {target}',
     toolApprovalComposerDescription: 'The conversation is paused until you approve or reject this action.',
-    toolApprovalDetails: 'View action details',
     feedbackClose: 'Close feedback',
     toolApprovalOnceScope: 'This time only',
     toolApprovalExpandCommand: 'View full command',

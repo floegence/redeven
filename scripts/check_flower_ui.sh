@@ -64,6 +64,7 @@ main() {
       src/ui/FlowerContextAccounting.test.ts \
       src/ui/FlowerSurface.providerReadiness.test.tsx \
       src/ui/FlowerSurface.modelMenu.test.tsx \
+      src/ui/FlowerSurface.approvalMode.test.tsx \
       src/ui/modelMenu.test.ts \
       src/ui/FlowerSurface.directoryActions.test.tsx \
       src/ui/FlowerSurface.directoryPicker.test.tsx \
