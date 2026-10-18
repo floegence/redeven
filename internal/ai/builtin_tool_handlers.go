@@ -147,6 +147,8 @@ func (h *builtInToolHandler) Execute(ctx context.Context, call ToolCall) (result
 		Error:                 outcome.ToolError,
 		cancellationConfirmed: outcome.cancellationConfirmed,
 		dispatchErr:           outcome.dispatchErr,
+		effectUncertain:       outcome.effectUncertain,
+		executionFacts:        outcome.executionFacts,
 	}, nil
 }
 

@@ -47,7 +47,7 @@ func TestFlowerPromptMatchesSelectedToolSurface(t *testing.T) {
 						assertPromptContains(t, prompt, "Do not pretend to wait for an answer")
 					}
 					assertPromptContains(t, prompt, "Answer directly when the supplied context is sufficient")
-					assertPromptContains(t, prompt, "Never replay an effect with an unknown outcome")
+					assertPromptContains(t, prompt, "Never blindly repeat an uncertain operation")
 				})
 			}
 		}

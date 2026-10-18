@@ -117,7 +117,7 @@ func TestComputerRuntimeRejectsPathDependentNodeBeforeLaunch(t *testing.T) {
 func TestNativeReadinessTimeoutAndPermissions(t *testing.T) {
 	for _, test := range []struct{ script, code string }{
 		{"exec sleep 30", "TARGET_SETUP_REQUIRED"},
-		{`printf '{"protocol_version":3,"screen_recording":false,"accessibility":true}'`, "TARGET_PERMISSION_REQUIRED"},
+		{`printf '{"protocol_version":4,"screen_recording":false,"accessibility":true}'`, "TARGET_PERMISSION_REQUIRED"},
 	} {
 		t.Run(test.code, func(t *testing.T) {
 			helper := filepath.Join(t.TempDir(), "native")

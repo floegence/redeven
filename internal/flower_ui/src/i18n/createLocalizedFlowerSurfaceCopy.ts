@@ -97,6 +97,8 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
         open: t(i18n, k('chat.media.open')),
         close: t(i18n, k('chat.media.close')),
       },
+      inspectAndContinue: t(i18n, k('chat.inspectAndContinue')),
+      inspectAndContinuePrompt: t(i18n, k('chat.inspectAndContinuePrompt')),
       restoredInputTitle: t(i18n, k('chat.restoredInputTitle')),
       restoredInputDescription: t(i18n, k('chat.restoredInputDescription')),
       restoredInputCopy: t(i18n, k('chat.restoredInputCopy')),
@@ -151,6 +153,7 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
       terminalTimedOut: t(i18n, k('chat.terminalTimedOut')),
       terminalNoNewOutput: t(i18n, k('chat.terminalNoNewOutput')),
       toolActivity: {
+        effectUncertain: t(i18n, k('chat.toolActivity.effectUncertain')),
         computerPageChanges: t(i18n, k('chat.toolActivity.computerPageChanges')),
         computerDefault: t(i18n, k('chat.toolActivity.computerDefault')),
         computerNewTab: t(i18n, k('chat.toolActivity.computerNewTab')),

@@ -169,3 +169,52 @@ done
 		t.Fatalf("lost confirmed observation failure: %+v %+v", result, classified)
 	}
 }
+
+func TestNativeDesktopReturnedResultClassification(t *testing.T) {
+	for _, test := range []struct {
+		name, response         string
+		uncertain, observation bool
+	}{
+		{"unconfirmed", "\"type\":\"error\",\"error_code\":\"EFFECT_OUTCOME_UNKNOWN\",\"payload\":{\"input_progress\":{\"posted\":1,\"observed\":0,\"expected\":2,\"stage\":\"input_delivery\"},\"reason\":\"receipt_timeout\"}", true, false},
+		{"invalid-envelope", "\"type\":\"unexpected\"", true, false},
+		{"capture-decode", "\"type\":\"result\",\"payload\":{\"action_executed\":true,\"screenshot_mime\":\"image/png\",\"screenshot_base64\":\"invalid!\",\"input_progress\":{\"posted\":2,\"observed\":2,\"expected\":2,\"stage\":\"input_observed\"}}", false, true},
+		{"cancelled", "\"type\":\"error\",\"error_code\":\"CANCELLED\"", false, false},
+		{"before-input-rejection", "\"type\":\"error\",\"error_code\":\"TARGET_NOT_ALLOWED\",\"payload\":{\"action_executed\":false}", false, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			helper := filepath.Join(t.TempDir(), "helper.sh")
+			source := "#!/bin/sh\nwhile IFS= read -r line; do\nrequest_id=$(printf '%s' \"$line\" | sed -n 's/.*\"request_id\":\"\\([^\"]*\\)\".*/\\1/p')\ntarget_id=$(printf '%s' \"$line\" | sed -n 's/.*\"target_id\":\"\\([^\"]*\\)\".*/\\1/p')\nprintf '{\"request_id\":\"%s\",\"target_id\":\"%s\"," + test.response + "}\\n' \"$request_id\" \"$target_id\"\ndone\n"
+			if err := os.WriteFile(helper, []byte(source), 0700); err != nil {
+				t.Fatal(err)
+			}
+			executor := NewNativeDesktopTargetExecutor(helper)
+			defer executor.Close()
+			result, err := executor.ExecuteTargetTool(t.Context(), TargetToolCall{ToolCallID: "input", TargetID: "desktop-main", ToolName: "computer.click"})
+			if err == nil || errors.Is(err, errComputerEffectUnknown) != test.uncertain {
+				t.Fatalf("classification=%v", err)
+			}
+			if test.name == "cancelled" && !errors.Is(err, context.Canceled) {
+				t.Fatalf("lost cancellation authority: %v", err)
+			}
+			payload, _ := result.Result.(map[string]any)
+			if test.name == "unconfirmed" && (payload["reason"] != "receipt_timeout" || computerInputProgress(payload["input_progress"])["posted"] != int64(1)) {
+				t.Fatalf("missing input progress: %+v", result)
+			}
+			if test.observation && (payload["action_executed"] != true || computerInputProgress(payload["input_progress"])["observed"] != int64(2)) {
+				t.Fatalf("lost confirmed input: %+v %v", result, err)
+			}
+		})
+	}
+}
+
+func TestComputerDiagnosticsAreClosedAndNonSecret(t *testing.T) {
+	rows := computerActivityResultRows("computer.click", map[string]any{"reason": "private exception", "stage": "typed password", "target_state": "private", "input_progress": map[string]any{"posted": -1, "observed": "secret", "expected": 1.5, "stage": "private"}})
+	for _, row := range rows {
+		if strings.Contains(row.Content, "private") || strings.Contains(row.Content, "secret") {
+			t.Fatalf("unsafe diagnostics: %+v", rows)
+		}
+	}
+	if progress := computerInputProgress(map[string]any{"posted": 2, "observed": float64(1), "expected": 4, "stage": "input_delivery"}); len(progress) != 4 {
+		t.Fatalf("lost safe progress: %+v", progress)
+	}
+}

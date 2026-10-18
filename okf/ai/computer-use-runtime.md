@@ -43,8 +43,10 @@ process-local state. There is no browser action journal, durable program counter
 or second Agent lifecycle store. Only product settings, managed browser profiles,
 downloaded files, canonical tool results and necessary media survive restart.
 The [takeover contract](computer-use-takeover.md) owns private input and safe
-continuation. Uncertain irreversible effects remain terminal
-`effect_outcome_unknown`; neither script nor helper replay is allowed.
+continuation. Returned uncertainty is a canonical tool error and lets the model
+inspect current state without replaying the original invocation. Unsettled
+runtime failures remain terminal effect_outcome_unknown. See the
+[adapter result contract](floret-redeven-adapter-and-projection.md).
 
 ## Platform adapters
 
@@ -83,7 +85,7 @@ where work runs; it is not another confirmation of an already authorized action.
 Browser execution JSONL and Native Messaging use protocol 6 for Runtime-owned pause control, explicit page
 selection, reveal, popup progress and confirmed progress on observation failure.
 Only readonly inspection is retried; actions and scripts are never replayed.
-Native execution remains protocol 3. All carry
+Native execution requires protocol 4. All carry
 host-owned `full_access` authorization. Inventory and isolated JavaScript helpers
 retain protocol 2. Desktop and Runtime negotiate compatibility epoch 27 and
 minimum version v0.13.0. Older execution helpers and

@@ -103,7 +103,8 @@ final class NativeWindow {
         return false
     }
 
-    func safety(allowedApps: [String], fullAccess: Bool = false, privateInput: Bool = false) throws -> [String: Any] {
+    func safety(allowedApps: [String], fullAccess: Bool = false, privateInput: Bool = false, check: () throws -> Void = {}) throws -> [String: Any] {
+        try check()
         try validate()
         var reasons: Set<String> = []
         if !privateInput {
@@ -113,6 +114,7 @@ final class NativeWindow {
             // contribute their labels, values or pixels to model observations.
             var queue = [element], visited = 0
             while !queue.isEmpty && visited < 5000 {
+                try check()
                 let node = queue.removeLast()
                 visited += 1
                 if axString(node, kAXSubroleAttribute) == kAXSecureTextFieldSubrole { reasons.insert("secret_input") }
@@ -187,13 +189,15 @@ final class NativeWindow {
         return output
     }
 
-    func observe(_ args: [String: Any]) throws -> [String: Any] {
+    func observe(_ args: [String: Any], check: () throws -> Void = {}) throws -> [String: Any] {
+        try check()
         let limit = args["limit"] as? Int ?? 200
         guard limit > 0 && limit <= 1000 else { throw NativeInput.invalid("Observation limit must be between 1 and 1000.") }
         let root = try (args["root_ref"] as? String).map { try resolve(["ref": $0]) } ?? element
         var queue: [(AXUIElement, String?)] = [(root, nil)], nodes: [[String: Any]] = [], elements: [AXUIElement] = [], visited: [AXUIElement] = []
         var indices: [String: Int] = [:]
         while !queue.isEmpty && nodes.count < limit && visited.count < 5000 {
+            try check()
             let (node, parentRef) = queue.removeFirst()
             if visited.contains(where: { CFEqual($0, node) }) { continue }
             visited.append(node)
@@ -212,6 +216,7 @@ final class NativeWindow {
             if let children = axValue(node, kAXChildrenAttribute) as? [AXUIElement] { queue.append(contentsOf: children.prefix(1001).map { ($0, childParent) }) }
         }
         for (index, node) in elements.enumerated() {
+            try check()
             if let title = axValue(node, kAXTitleUIElementAttribute), CFGetTypeID(title) == AXUIElementGetTypeID(),
                let related = elements.firstIndex(where: { CFEqual($0, title) }) {
                 nodes[index]["relations"] = ["labelled_by": [nodes[related]["ref"] as! String]]

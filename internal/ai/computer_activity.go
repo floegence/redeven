@@ -1,8 +1,11 @@
 package ai
 
 import (
+	"encoding/json"
+	"math"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 
 	fltools "github.com/floegence/floret/v7/tools"
@@ -23,6 +26,18 @@ func computerActivityResultRows(tool string, payload map[string]any) []fltools.S
 			return
 		}
 		rows = append(rows, toolDetailRow(title, meta, content, format, "", false))
+	}
+	if progress := computerInputProgress(payload["input_progress"]); len(progress) > 0 {
+		for _, key := range []string{"stage", "posted", "observed", "expected"} {
+			if value, exists := progress[key]; exists {
+				add(key, "", toolDetailValue(value), fltools.StructuredActivityRowFormatText)
+			}
+		}
+	}
+	for _, key := range []string{"reason", "stage", "target_state", "observation_stage"} {
+		if value := computerDiagnosticValue(key, payload[key]); value != "" {
+			add(key, "", value, fltools.StructuredActivityRowFormatText)
+		}
 	}
 	if tool == "computer.targets" {
 		candidates := toAnySlice(payload["candidates"])
@@ -178,4 +193,50 @@ func computerActivityBlankPage(payload map[string]any) bool {
 		}
 	}
 	return true
+}
+
+// Only the closed non-secret diagnostic vocabulary crosses into presentation.
+func computerDiagnosticValue(key string, value any) string {
+	text, _ := value.(string)
+	allowed := map[string][]string{
+		"stage":             {"preparation", "input_delivery", "input_observed", "action", "helper_exchange"},
+		"reason":            {"unavailable", "receipt_timeout", "cancelled", "target_unavailable", "target_not_ready", "permission_required", "invalid_request", "action_failed", "response_unavailable"},
+		"target_state":      {"available", "unavailable", "unknown"},
+		"observation_stage": {"frame_inventory", "safety_scan", "semantic_read", "capture", "metadata"},
+	}
+	if slices.Contains(allowed[key], text) {
+		return text
+	}
+	return ""
+}
+
+func computerInputProgress(value any) map[string]any {
+	raw, _ := value.(map[string]any)
+	result := map[string]any{}
+	if stage := computerDiagnosticValue("stage", raw["stage"]); stage != "" {
+		result["stage"] = stage
+	}
+	for _, key := range []string{"posted", "observed", "expected"} {
+		var count float64
+		switch v := raw[key].(type) {
+		case int:
+			count = float64(v)
+		case int64:
+			count = float64(v)
+		case float64:
+			count = v
+		case json.Number:
+			var err error
+			count, err = strconv.ParseFloat(string(v), 64)
+			if err != nil {
+				continue
+			}
+		default:
+			continue
+		}
+		if count >= 0 && count <= 1<<31 && math.Trunc(count) == count {
+			result[key] = int64(count)
+		}
+	}
+	return result
 }

@@ -141,7 +141,7 @@ describe('Flower final thread cache and workspace transport', () => {
     await waitFor(() => Boolean(runtime.querySelector('.flower-error-card')));
     expect(runtime.querySelector('.flower-error-card')?.textContent).toContain('Stopped with unconfirmed results');
     expect(runtime.querySelector('.flower-error-card')?.textContent).toContain('This turn will not be replayed automatically.');
-    expect(runtime.querySelector('.flower-error-actions button')).toBeNull();
+    expect(runtime.querySelector('.flower-error-actions button')?.textContent).toContain('Inspect and continue');
     expect(runtime.querySelector('.flower-error-card')?.textContent).not.toContain('private effect details');
     expect((runtime.querySelector('.flower-composer textarea') as HTMLTextAreaElement).disabled).toBe(false);
   });
@@ -167,9 +167,9 @@ describe('Flower final thread cache and workspace transport', () => {
     await waitFor(() => Boolean(runtime.querySelector('.flower-error-card')));
 
     const errorText = runtime.querySelector('.flower-error-card')?.textContent ?? '';
-    expect(errorText).toContain('The task was stopped to avoid duplicate execution.');
+    expect(errorText).toContain('This turn cannot be retried.');
     expect(errorText).not.toContain('private effect dispatch state');
-    expect(runtime.querySelector('.flower-error-actions button')).toBeNull();
+    expect(runtime.querySelector('.flower-error-actions button')?.textContent).toContain('Inspect and continue');
     expect(runtime.querySelector('[data-flower-effect-retry]')).toBeNull();
     expect(runtime.querySelector('.flower-model-status-indicator')).toBeNull();
     expect((runtime.querySelector('.flower-composer textarea') as HTMLTextAreaElement).disabled).toBe(false);

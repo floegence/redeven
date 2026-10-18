@@ -344,7 +344,7 @@ func buildPromptTodoDisciplineSection() promptSection {
 func buildPromptToolFailureRecoverySection() promptSection {
 	return newPromptSection("tool_failure_recovery", "# Tool Failure Recovery",
 		"- Read structured outcomes. Repair confirmed pre-execution failures from current evidence. After partial execution, inspect completed actions and continue only remaining work; failed verification does not undo an effect.",
-		"- Never replay an effect with an unknown outcome. effect_outcome_unknown is terminal for that operation: do not offer retry choices or ask for approval to replay it, including after timeout, cancellation or connection loss. Call an available authorized read-only tool now to inspect current state; this inspection needs no extra confirmation. Never bypass an actual permission/target rejection through another tool.",
+		"- An unconfirmed external effect is tool feedback. Inspect current state and completed facts with authorized read-only tools before deciding whether a new action is necessary. Never blindly repeat an uncertain operation. Continue remaining work, choose a justified new action through normal authorization, or ask the user only when their decision is necessary. Never bypass permission or target rejection.",
 		"- Observe changing state with returned cursors/conditions; avoid tight polling and stop when evidence suffices. Runtime owns schema correction; do not add a separate correction loop.")
 }
 

@@ -5299,7 +5299,8 @@
         "computerUnavailable": "Indisponible",
         "computerBlankPage": "Page vierge",
         "computerNoTargets": "Aucune page ni application disponible",
-        "previewUnavailable": "Cet outil n’a pas fourni d’aperçu du résultat."
+        "previewUnavailable": "Cet outil n’a pas fourni d’aperçu du résultat.",
+        "effectUncertain": "Résultat non confirmé"
       },
       "toolActivityDetailsPending": "En attente des détails de l’outil",
       "toolActivityNoAdditionalDetails": "Aucun détail supplémentaire",
@@ -5347,7 +5348,7 @@
       "stop": "Arrêter",
       "stopping": "Arrêt en cours...",
       "stopOutcomeUnknownTitle": "Arrêté avec des résultats non confirmés",
-      "stopOutcomeUnknownDescription": "Certaines opérations sont peut-être terminées. Vérifiez leurs résultats avant de continuer. Ce tour ne sera pas relancé automatiquement.",
+      "stopOutcomeUnknownDescription": "Certaines opérations ont peut-être abouti. Ce tour ne sera pas relancé automatiquement. Utilisez « Vérifier et continuer » pour examiner la situation et poursuivre dans un nouveau tour.",
       "commandMenuLabel": "Commandes Flower",
       "commandCompactContext": "Compresser le contexte de cette conversation",
       "compactContext": "Compresser le contexte",
@@ -5412,7 +5413,7 @@
       "runErrorFloretEngineFailed": "Flower n'a pas pu terminer ce tour en raison d'une panne du moteur d'orchestration.",
       "runErrorFloretControlContractFailed": "Flower n’a pas pu générer une question valide. La réponse déjà rédigée a été conservée. Réessayez pour continuer.",
       "runErrorFloretAuthorityConsistencyFailed": "Flower n'a pas pu terminer ce tour, car le résultat d'outil validé n'a pas pu être vérifié. L'outil n'a pas été réexécuté ; envoyez un nouveau message pour continuer.",
-      "runErrorFloretEffectOutcomeUnknown": "Certaines opérations ont peut-être abouti, mais leurs résultats n’ont pas pu être confirmés. La tâche a été arrêtée pour éviter une double exécution. Vérifiez les effets réels avant de commencer un nouveau travail ; ce tour ne peut pas être relancé.",
+      "runErrorFloretEffectOutcomeUnknown": "Certaines opérations ont peut-être abouti, mais leurs résultats ne sont pas confirmés. Ce tour ne peut pas être relancé. Utilisez « Vérifier et continuer » pour que Flower examine la situation et les résultats existants avant de poursuivre dans un nouveau tour.",
       "runErrorRuntimeRestarted": "L’environnement d’exécution local a redémarré avant la fin de cette réponse. Lancez une nouvelle réponse lorsqu’il est prêt.",
       "runtimeRestartedDivider": "L'environnement d'exécution Redeven a redémarré",
       "copyCode": "Copier le code",
@@ -5678,7 +5679,9 @@
       "queueTakeBackConflict": "Ce message a déjà démarré ou a été modifié. Actualisez la vue et réessayez.",
       "queueTakeBackUnknown": "Le message a été remis dans le champ de saisie, mais son retrait de la file n’a pas pu être confirmé. Vérifiez la file avant de l’envoyer.",
       "contextIndicatorDistributionUnavailable": "Répartition indisponible",
-      "contextIndicatorProtocolFraming": "Formatage du protocole"
+      "contextIndicatorProtocolFraming": "Formatage du protocole",
+      "inspectAndContinue": "Vérifier et continuer",
+      "inspectAndContinuePrompt": "Le tour précédent s’est arrêté car les effets des actions ne sont pas confirmés. Vérifiez d’abord l’état actuel et les fichiers existants avec des outils en lecture seule, puis poursuivez le travail restant selon les preuves. Ne répétez pas aveuglément les actions précédentes."
     },
     "threadList": {
       "title": "Discussions",

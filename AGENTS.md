@@ -1096,7 +1096,7 @@ its opaque storage, including the schema 21 to 22 accounting boundary.
 
 Redeven consumes the published `github.com/floegence/floret/v7` typed thread runtime. Redeven owns product authorization, attachment resolution, effect execution, provider configuration, read acknowledgement, and UI mapping. Floret owns each thread current view, canonical journal, queue, interactions, effect-attempt identity, immutable provider checkpoints, context lineage, and restart recovery.
 
-Product handlers perform authorization and DTO mapping, then call typed `View`, `Send`, `Respond`, `Cancel`, `Retry`, `Subscribe`, or optional `ThreadContextCompactor.CompactContext` and `ThreadSteeringController.Steer` / `SteerQueued` operations. Parent guidance uses steering; ordinary user Send retains queue semantics. They must not wait for provider work or maintain receipt, admission, authority, recovery, projection, replay, or lifecycle mirrors. Effects execute only through the exact one-shot authorization supplied by the Floret invocation. Standalone `/compact` uses the dedicated context command, never ordinary Send, fabricated user input, or a host-owned compaction lifecycle. Manual and automatic compaction share the released Floret implementation. An irreversible effect with an unknown outcome is a terminal `effect_outcome_unknown` failure; Redeven must not retry it or expose a retry command.
+Product handlers perform authorization and DTO mapping, then call typed `View`, `Send`, `Respond`, `Cancel`, `Retry`, `Subscribe`, or optional `ThreadContextCompactor.CompactContext` and `ThreadSteeringController.Steer` / `SteerQueued` operations. Parent guidance uses steering; ordinary user Send retains queue semantics. They must not wait for provider work or maintain receipt, admission, authority, recovery, projection, replay, or lifecycle mirrors. Effects execute only through the exact one-shot authorization supplied by the Floret invocation. Standalone `/compact` uses the dedicated context command, never ordinary Send, fabricated user input, or a host-owned compaction lifecycle. Manual and automatic compaction share the released Floret implementation. An interrupted irreversible effect without a committed trustworthy result is a terminal `effect_outcome_unknown` failure; Redeven must not retry it or expose a retry command. A returned unconfirmed result instead uses Floret EffectOutcomeUncertain and continues through the canonical tool-result path.
 
 Flower uses one workspace live transport, a summary/detail-separated bounded thread cache, composer drafts, and a short-lived request-key outbox. Summary updates never mutate detail. Thread selection never owns execution or reconnects transport. Approval, waiting, loading, and commands never disable thread navigation.
 
@@ -1161,8 +1161,13 @@ encoding failure with raw-value fallback, stringified subtrees or JSON slicing.
 A confirmed completed mutation whose optional output cannot be encoded settles
 as an error with the existing InputRequired interaction; the next model step
 must inspect read-only state and must not replay the completed invocation.
-Dispatch errors, uncertain effects and unconfirmed cancellation retain their
-terminal authority. Only Floret owns schema 20 migration and durable recovery.
+Returned unconfirmed effects use the published Floret EffectOutcomeUncertain
+tool result and continue to the model with safe progress facts, without a
+DispatchErr or mandatory input interaction. Blind repetition is forbidden;
+new evidence may inform the next normally authorized action. Runtime failures
+that cannot commit a trustworthy result and unconfirmed cancellation retain
+their terminal authority. Only Floret owns its domain migrations and durable
+recovery, including the 20 -> 21 uncertain-result edge and subsequent edges.
 
 ## UI Interaction Affordance
 

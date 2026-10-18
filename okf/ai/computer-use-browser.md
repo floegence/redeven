@@ -136,7 +136,8 @@ Navigation changes invalidate old references and observations. Failed navigation
 stops the current script and returns a normal tool error, allowing the same turn
 to choose its next call. It never triggers argument regeneration, automatic retry
 or script replay. Missing acknowledgement, corrupt results and response identity
-mismatch remain unknown effects and terminal under Floret. Downloads retain their
+mismatch return uncertain tool feedback without automatically repeating the
+call. Unsettled runtime failures remain terminal under Floret. Downloads retain their
 successful download contract. See [script continuation](computer-use-scripts.md)
 for completed-prefix semantics.
 

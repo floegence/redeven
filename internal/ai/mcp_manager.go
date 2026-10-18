@@ -551,7 +551,7 @@ func (m *mcpManager) Call(ctx context.Context, name string, args map[string]any)
 	}
 	data, err := json.Marshal(result)
 	if err != nil {
-		return nil, errMCPEffectUnknown
+		return json.RawMessage("{\"invocation_completed\":true,\"result_unavailable\":true,\"stage\":\"result_encoding\"}"), errors.New("MCP tool returned a result, but its output could not be encoded; inspect current state")
 	}
 	if len(data) > 1<<20 {
 		data = json.RawMessage(`{"message":"MCP result exceeded the display limit","truncated":true}`)

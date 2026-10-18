@@ -3,7 +3,6 @@ package ai
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"github.com/floegence/floret/v7/observation"
 	fltools "github.com/floegence/floret/v7/tools"
 	"io"
@@ -87,24 +86,12 @@ func TestComputerPartialErrorAndUnknownOutcomeSurviveRestart(t *testing.T) {
 				t.Fatal(err)
 			}
 			view := waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(view *ThreadView) bool { return view.RunStatus == "success" || view.RunStatus == "failed" })
-			if uncertain && view.RunErrorCode != runErrorCodeFloretEffectOutcomeUnknown {
-				t.Fatalf("uncertain effect must be terminal: %s %s", view.RunStatus, view.RunError)
+			if view.RunStatus != "success" || requests.Load() != 2 {
+				t.Fatalf("returned result did not continue: %s requests=%d", view.RunStatus, requests.Load())
 			}
 			check := func() {
 				t.Helper()
-				if uncertain {
-					// Floret seals an uncertain invocation with a fixed terminal
-					// result, not an ordinary partial-success result. Verify that
-					// this authority boundary survives restart and rejects replay.
-					current, err := svc.threadRuntime.View(t.Context(), identity.ThreadID(thread.ThreadID))
-					if err != nil || current.Failure == nil || current.Failure.Code != flruntime.ThreadTurnFailureEffectOutcomeUnknown {
-						t.Fatalf("unknown outcome lost: %+v %v", current, err)
-					}
-					if _, err := svc.threadRuntime.Retry(t.Context(), flruntime.RetryInput{ThreadID: current.ThreadID, SourceTurnID: current.TurnID, RequestKey: "never-replay"}); !errors.Is(err, flruntime.ErrEffectOutcomeUnknown) {
-						t.Fatalf("unknown outcome became retryable: %v", err)
-					}
-					return
-				}
+
 				history, err := svc.threadRuntime.History(t.Context(), identity.ThreadID(thread.ThreadID), "", 100)
 				if err != nil {
 					t.Fatal(err)
@@ -125,6 +112,13 @@ func TestComputerPartialErrorAndUnknownOutcomeSurviveRestart(t *testing.T) {
 					activity := publicActivityItem(*item.Activity)
 					if activity.Status != observation.ActivityStatusError || activity.Presentation.Label != "Update the fixture" {
 						t.Fatalf("wrong script intent/status: %+v", activity)
+					}
+					hasUncertain := false
+					for _, chip := range activity.Presentation.Chips {
+						hasUncertain = hasUncertain || chip.Kind == "effect_outcome" && chip.Value == "uncertain"
+					}
+					if hasUncertain != uncertain {
+						t.Fatalf("uncertainty chip mismatch: %+v", activity.Presentation.Chips)
 					}
 					payload := activity.Presentation.Payload.(fltools.StructuredActivityPayload)
 					if len(payload.Inputs) != 1 || payload.Inputs[0].Content != "await ui.click(1,1);" || payload.Inputs[0].Language != "javascript" || !payload.RowsProvided || len(payload.Rows) < 3 {

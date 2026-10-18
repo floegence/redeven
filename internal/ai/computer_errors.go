@@ -234,8 +234,11 @@ func computerObservationFailure(call TargetToolCall, payload map[string]any, loc
 	if !confirmed || computerObservationStage(stage) == "unknown" {
 		return TargetToolResult{}, errors.New("invalid browser observation failure")
 	}
-	return TargetToolResult{TargetID: call.TargetID, ExecutionLocation: location,
-		Result: map[string]any{"action_executed": executed, "observation_stage": stage}}, computerTargetFailure(call, "TARGET_OBSERVATION_UNAVAILABLE")
+	facts := map[string]any{"action_executed": executed, "observation_stage": stage}
+	if progress := computerInputProgress(payload["input_progress"]); len(progress) > 0 {
+		facts["input_progress"] = progress
+	}
+	return TargetToolResult{TargetID: call.TargetID, ExecutionLocation: location, Result: facts}, computerTargetFailure(call, "TARGET_OBSERVATION_UNAVAILABLE")
 }
 
 func computerObservationStage(stage string) string {

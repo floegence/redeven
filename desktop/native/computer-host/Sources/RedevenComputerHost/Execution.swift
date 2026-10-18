@@ -67,11 +67,22 @@ struct NativePendingInput {
     }
 }
 
-// A completed input is never replayed because its following read failed. Failures
-// during input dispatch retain the unknown-effect boundary.
-func nativeFailureCode(_ code: String, observing: Bool, effectStarted: Bool) -> String {
-    if code == "TARGET_OBSERVATION_UNAVAILABLE" || (observing && ["FRAME_UNAVAILABLE", "TARGET_NOT_READY"].contains(code)) {
-        return "TARGET_OBSERVATION_UNAVAILABLE"
+// Returned failures describe the actual stage; cancellation never becomes a
+// permission to continue and a later observation cannot undo confirmed input.
+func nativeFailureCode(_ code: String, observing: Bool, effectStarted: Bool, inputConfirmed: Bool) -> String {
+    if code == "CANCELLED" { return code }
+    if effectStarted && !inputConfirmed { return "EFFECT_OUTCOME_UNKNOWN" }
+    if observing { return "TARGET_OBSERVATION_UNAVAILABLE" }
+    return code
+}
+
+func nativeFailureReason(_ code: String) -> String {
+    switch code {
+    case "CANCELLED": return "cancelled"
+    case "TARGET_CONNECTION_REQUIRED": return "target_unavailable"
+    case "TARGET_NOT_READY": return "target_not_ready"
+    case "TARGET_PERMISSION_REQUIRED": return "permission_required"
+    case "INVALID_REQUEST": return "invalid_request"
+    default: return "action_failed"
     }
-    return effectStarted ? "EFFECT_OUTCOME_UNKNOWN" : code
 }

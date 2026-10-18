@@ -1270,6 +1270,7 @@ func isMutatingInvocation(toolName string, args map[string]any) bool {
 }
 
 type toolCallOutcome struct {
+	effectUncertain       bool
 	executionFacts        toolExecutionFacts
 	cancellationConfirmed bool
 	dispatchErr           error
@@ -1583,8 +1584,8 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 			outcome.Attachments = append([]ToolAttachment(nil), target.Attachments...)
 		}
 		if errors.Is(toolErrRaw, errComputerEffectUnknown) || errors.Is(toolErrRaw, errMCPEffectUnknown) || errors.Is(toolErrRaw, tessiven.ErrOutcomeUnknown) {
-			outcome.dispatchErr = toolErrRaw
-			setToolError(&aitools.ToolError{Code: aitools.ErrorCodeUnknown, Message: toolErrRaw.Error(), Retryable: false}, "", partial)
+			outcome.effectUncertain = true
+			setToolError(&aitools.ToolError{Code: aitools.ErrorCodeUnknown, Message: "The external effect is unconfirmed. Inspect current state and completed facts before deciding the next action; do not blindly repeat this operation.", Retryable: false}, "", partial)
 			return outcome, nil
 		}
 		if errors.Is(toolErrRaw, context.Canceled) {

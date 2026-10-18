@@ -107,9 +107,10 @@ permission setting. Execution also requires the authenticated read/write/execute
 ceiling and the exact Floret effect proof. An MCP handler cannot run directly
 without that proof.
 
-SDK call transport failure becomes an unknown-effect dispatch error. Floret
-seals it as `effect_outcome_unknown` and rejects Retry; neither the adapter nor
-the SDK retries the call. An explicit MCP tool error retains bounded tool output
+SDK transport failure returns a canonical EffectOutcomeUncertain tool error.
+Floret continues the model after committing that result; neither adapter nor SDK
+retries the call. A received result that cannot be encoded is a completed output
+error, not an unknown effect. Unsettled runtime failures retain terminal protection. An explicit MCP tool error retains bounded tool output
 as error context. Server tool errors and known connection failures remain
 distinct from an unknown execution outcome.
 

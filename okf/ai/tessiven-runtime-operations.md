@@ -14,8 +14,9 @@ and Desktop lifecycle coordinator. Discovery observes registered paths without
 starting a process or acquiring a business session. A reference identifies one
 path; it grants no permission. Lost source authority, changed path generations,
 replaced identities, and revoked permissions stop dispatch. A lost mutation
-response reports an unknown outcome and permits only observation of the original
-operation until its result is known.
+response reports an uncertain canonical tool outcome. The model first inspects
+the original operation or current state before deciding what work remains; the
+original invocation never replays automatically.
 
 # Contract
 

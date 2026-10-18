@@ -282,7 +282,7 @@ func TestWebResearchBrowserFallbackMatchesFinalToolSurface(t *testing.T) {
 		assertPromptContains(t, prompt, "computer.select_target")
 		assertPromptContains(t, prompt, "computer.exec")
 		assertPromptContains(t, prompt, "Never bypass permission denial or URL blocking")
-		assertPromptContains(t, prompt, "Never replay an effect with an unknown outcome")
+		assertPromptContains(t, prompt, "Never blindly repeat an uncertain operation")
 	}
 }
 

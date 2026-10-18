@@ -260,6 +260,17 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 					release()
 				}
 				if errors.Is(err, errComputerEffectUnknown) {
+					// The failed operation's safe progress and same-target read
+					// belong to this result alongside the completed prefix.
+					facts, _ := observed.Result.(map[string]any)
+					result.Result = map[string]any{"summary": args.Description, "completed_actions": completed, "action_executed": actionExecuted, "operations": operations, "completed": false, "script_error": "SCRIPT_STOPPED"}
+					payload := result.Result.(map[string]any)
+					for _, key := range []string{"input_progress", "stage", "reason", "target_state", "observation"} {
+						if value, found := facts[key]; found {
+							payload[key] = value
+						}
+					}
+					result.ExecutionLocation = observed.ExecutionLocation
 					return result, err
 				}
 			}

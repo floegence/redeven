@@ -1,5 +1,5 @@
 import { render } from 'solid-js/web';
-import { createSignal } from 'solid-js';
+import { Show, createEffect, createSignal } from 'solid-js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createFlowerComposerDraftCoordinator } from '../../../../../flower_ui/src/composer/createFlowerComposerDraftCoordinator';
 
@@ -284,7 +284,10 @@ vi.mock('@floegence/floe-webapp-core/ui', async () => ({
   Checkbox: (props: any) => (
     <input type="checkbox" checked={!!props.checked} disabled={props.disabled} onChange={(event) => props.onChange?.((event.currentTarget as HTMLInputElement).checked)} />
   ),
-  Dialog: (props: any) => (props.open ? <div role="dialog">{props.children}</div> : null),
+  Dialog: (props: any) => {
+    createEffect(() => props.onPresenceChange?.(Boolean(props.open)));
+    return <Show when={props.open}><div role="dialog"><button type="button" aria-label={props.closeLabel} onClick={() => props.onOpenChange?.(false)} />{props.children}</div></Show>;
+  },
   FloatingWindow: (props: any) => (props.open ? (
     <div role="dialog" class={props.class}>
       <div>{props.title}</div>
@@ -645,8 +648,8 @@ export function registerEnvAIPageSendTests() {
           expect(openWindow).not.toHaveBeenCalled();
           expect(welcome.textContent).not.toContain('remote environment');
           expect(mocks.openSettingsMock).not.toHaveBeenCalled();
-          settingsPanel.querySelector<HTMLButtonElement>('button[aria-label="Back to chat"]')!.click();
-          expect(settingsPanel.hidden).toBe(true);
+          document.querySelector<HTMLButtonElement>('[role="dialog"] button[aria-label="Close"]')!.click();
+          expect(host.querySelector('[data-flower-panel="settings"]')?.hasAttribute('hidden')).toBe(true);
           expect(host.querySelector('textarea')).toBe(editor);
           expect(editor.value).toBe('Keep this conversation draft');
         }

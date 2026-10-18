@@ -382,7 +382,8 @@
         "computerUnavailable": "利用不可",
         "computerBlankPage": "空白のページ",
         "computerNoTargets": "利用可能なページやアプリがありません",
-        "previewUnavailable": "このツールは結果のプレビューを提供していません。"
+        "previewUnavailable": "このツールは結果のプレビューを提供していません。",
+        "effectUncertain": "結果未確認"
       },
       "toolActivityDetailsPending": "ツールの詳細を待っています",
       "toolActivityNoAdditionalDetails": "追加の詳細はありません",
@@ -430,7 +431,7 @@
       "stop": "停止",
       "stopping": "停止中...",
       "stopOutcomeUnknownTitle": "停止しましたが、一部の結果は未確認です",
-      "stopOutcomeUnknownDescription": "一部の操作は完了している可能性があります。続ける前に結果を確認してください。このターンが自動的に再実行されることはありません。",
+      "stopOutcomeUnknownDescription": "一部の操作は完了している可能性があります。このターンは自動で再実行されません。「状態を確認して続行」で現状を確認し、新しいターンで続行できます。",
       "commandMenuLabel": "Flower コマンド",
       "commandCompactContext": "この会話のコンテキストを圧縮",
       "compactContext": "コンテキストを圧縮",
@@ -494,7 +495,7 @@
       "runErrorFloretEngineFailed": "Flower は、オーケストレーション エンジンが失敗したため、このターンを終了できませんでした。",
       "runErrorFloretControlContractFailed": "Flower は有効な質問を生成できませんでした。生成済みの回答は保存されています。再試行して続けてください。",
       "runErrorFloretAuthorityConsistencyFailed": "確定済みのツール結果を検証できなかったため、Flower はこのターンを完了できませんでした。ツールは再実行されません。新しいメッセージを送信して続行してください。",
-      "runErrorFloretEffectOutcomeUnknown": "一部の操作は完了した可能性がありますが、結果を確認できませんでした。重複実行を避けるため、タスクを停止しました。実際の結果を確認してから新しい作業を開始してください。このターンは再試行できません。",
+      "runErrorFloretEffectOutcomeUnknown": "一部の操作は完了している可能性がありますが、結果を確認できません。このターンは再試行できません。「状態を確認して続行」で Flower が現状と既存の成果物を確認してから、新しいターンで続行します。",
       "runErrorRuntimeRestarted": "この返信が完了する前にローカル実行環境が再起動しました。実行環境の準備ができたら新しい返信を開始してください。",
       "runtimeRestartedDivider": "Redeven ランタイムが再起動しました",
       "copyCode": "コードをコピー",
@@ -776,7 +777,9 @@
       "contextIndicatorMeasured": "実測値",
       "contextIndicatorLastRequest": "前回のリクエスト",
       "contextIndicatorCurrentRequest": "現在のリクエスト",
-      "contextIndicatorSourceUnattributed": "未分類"
+      "contextIndicatorSourceUnattributed": "未分類",
+      "inspectAndContinue": "状態を確認して続行",
+      "inspectAndContinuePrompt": "前のターンは操作結果を確認できず停止しました。まず読み取り専用ツールで現在の状態と既存の成果物を確認し、その証拠に基づいて残りの作業を続けてください。以前の操作を無条件に繰り返さないでください。"
     },
     "threadList": {
       "title": "会話",

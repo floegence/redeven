@@ -117,6 +117,7 @@ type ToolCall struct {
 }
 
 type ToolResult struct {
+	effectUncertain       bool
 	executionFacts        toolExecutionFacts
 	ToolID                string             `json:"tool_id,omitempty"`
 	ToolName              string             `json:"tool_name,omitempty"`

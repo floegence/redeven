@@ -1,15 +1,16 @@
 import AppKit
 import ApplicationServices
+import FloeNativeDesktop
 
 // Marked events acknowledge delivery; other input only suppresses optional
 // focus restoration. Explicit Stop/takeover owns pausing. Key contents are never read.
 final class NativeForegroundInput {
-    static let eventMarker = Int64.random(in: 1...Int64.max)
     var target: NativeWindow?
     private var tap: CFMachPort?
     private var source: CFRunLoopSource?
     private var pending = NativePendingInput()
-    private var delivered = 0
+    private let delivery = NativeInputDelivery()
+    private(set) var inputProgress: [String: Any] = [:]
     private(set) var inputCount = 0
 
     init() {
@@ -19,8 +20,7 @@ final class NativeForegroundInput {
         tap = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .headInsertEventTap, options: .listenOnly, eventsOfInterest: mask, callback: { _, type, event, pointer in
             guard let pointer else { return Unmanaged.passUnretained(event) }
             let guardState = Unmanaged<NativeForegroundInput>.fromOpaque(pointer).takeUnretainedValue()
-            if event.getIntegerValueField(.eventSourceUserData) == NativeForegroundInput.eventMarker { guardState.delivered += 1 }
-            else { guardState.inputCount += 1 }
+            if event.getIntegerValueField(.eventSourceUnixProcessID) != Int64(getpid()) { guardState.inputCount += 1 }
             if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
                 guardState.target?.userInControl = true
                 guardState.target?.invalidate()
@@ -42,9 +42,19 @@ final class NativeForegroundInput {
 
     var available: Bool { tap.map { CGEvent.tapIsEnabled(tap: $0) } ?? false }
 
+    func resetProgress() { inputProgress = [:] }
+    func markActionStarted() { inputProgress["stage"] = "action" }
+
     func post(_ events: [CGEvent], window: NativeWindow, allowed: Bool, privateInput: Bool, activate: Bool = true, started: () -> Void, prepare: () throws -> Void, didPost: () -> Void) throws {
+        inputProgress = ["posted": 0, "observed": 0, "expected": events.count, "stage": "preparation"]
+        let initialProgress = delivery.progress
+        defer {
+            let progress = delivery.progress
+            inputProgress["posted"] = progress.posted - initialProgress.posted
+            inputProgress["observed"] = progress.observed - initialProgress.observed
+        }
         try execution.check()
-        guard available else { throw HostFailure(code: "TARGET_PERMISSION_REQUIRED", message: "Allow input monitoring before foreground control.") }
+        guard available && delivery.available else { throw HostFailure(code: "TARGET_PERMISSION_REQUIRED", message: "Allow input monitoring before foreground control.") }
         guard allowed || privateInput else { throw HostFailure(code: "FOREGROUND_PERMISSION_REQUIRED", message: "Allow temporary foreground use for this task.") }
         try window.validate()
         guard !window.userInControl || privateInput else { throw HostFailure(code: "TAKEOVER_REQUIRED", message: "Automation is paused. Return control in Flower to continue.") }
@@ -57,7 +67,7 @@ final class NativeForegroundInput {
         defer {
             // Complete only outstanding releases, even after user intervention.
             for release in pending.takeReleases(at: CGEvent(source: nil)?.location ?? .zero, flags: CGEventSource.flagsState(.hidSystemState)) {
-                release.setIntegerValueField(.eventSourceUserData, value: Self.eventMarker)
+                try? NativeInputDelivery.markAuxiliary(release)
                 release.post(tap: .cghidEventTap)
             }
             // Focus restoration is conditional. Never override an intervening
@@ -71,7 +81,7 @@ final class NativeForegroundInput {
                     original.activate(options: [])
                     AXUIElementPerformAction(element, kAXRaiseAction as CFString)
                     if let point = originalPointer, let move = CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: point, mouseButton: .left) {
-                        move.setIntegerValueField(.eventSourceUserData, value: Self.eventMarker); move.post(tap: .cghidEventTap)
+                        if (try? NativeInputDelivery.markAuxiliary(move)) != nil { move.post(tap: .cghidEventTap) }
                     }
                 }
             }
@@ -106,20 +116,16 @@ final class NativeForegroundInput {
                 window.userInControl = true; window.invalidate()
                 throw HostFailure(code: "TAKEOVER_REQUIRED", message: "Select the active application window before continuing.")
             }
-            event.setIntegerValueField(.eventSourceUserData, value: Self.eventMarker)
-            let before = delivered
-            event.post(tap: .cghidEventTap)
-            pending.posted(event)
-            didPost()
-            // Wait for the event tap receipt instead of flooding the HID queue.
-            // Explicit cancellation is checked between delivery receipts.
-            let deadline = Date().addingTimeInterval(1)
-            while delivered == before && Date() < deadline && (!window.userInControl || privateInput) {
+            inputProgress["stage"] = "input_delivery"
+            try delivery.post(event, check: {
                 try execution.check()
-                CFRunLoopRunInMode(.defaultMode, deadline.timeIntervalSinceNow, true)
-            }
-            if delivered == before && !window.userInControl { throw HostFailure(code: "EFFECT_OUTCOME_UNKNOWN", message: "macOS did not confirm input delivery.") }
+                guard !window.userInControl || privateInput else { throw HostFailure(code: "TAKEOVER_REQUIRED", message: "The user took control.") }
+            }, didPost: {
+                self.pending.posted(event)
+                didPost()
+            })
         }
+        inputProgress["stage"] = "input_observed"
         CFRunLoopRunInMode(.defaultMode, 0, true)
     }
 }

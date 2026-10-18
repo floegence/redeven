@@ -3,7 +3,7 @@ import { createDesktopTestSession } from '../../../../scripts/desktop_test_sessi
 /* global window, document, innerHeight, getComputedStyle, requestAnimationFrame, cancelAnimationFrame */
 // A fresh product Runtime and optional owned Electron tree qualify pool summaries.
 import assert from 'node:assert/strict';
-import { execFileSync, spawn } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { copyFile, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';

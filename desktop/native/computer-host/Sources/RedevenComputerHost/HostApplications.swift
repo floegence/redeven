@@ -1,3 +1,4 @@
+import FloeNativeDesktop
 import AppKit
 import ApplicationServices
 import CryptoKit
@@ -106,43 +107,6 @@ enum HostApplicationCatalog {
     }
 }
 
-// A process-scoped receipt preserves pointer/key ordering without sleeps or
-// observing other applications. Unmarked input contents are never inspected.
-private final class HostApplicationDelivery {
-    private var tap: CFMachPort?
-    private var source: CFRunLoopSource?
-    private var marker: Int64 = 0
-    private var received = false
-    init(pid: pid_t) {
-        let types: [CGEventType] = [.keyDown, .keyUp, .flagsChanged, .leftMouseDown, .leftMouseUp, .rightMouseDown, .rightMouseUp,
-                                   .otherMouseDown, .otherMouseUp, .mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged, .scrollWheel]
-        let mask = types.reduce(CGEventMask(0)) { $0 | (1 << $1.rawValue) }
-        tap = CGEvent.tapCreateForPid(pid: pid, place: .tailAppendEventTap, options: .listenOnly, eventsOfInterest: mask, callback: { _, _, event, pointer in
-            guard let pointer else { return Unmanaged.passUnretained(event) }
-            let delivery = Unmanaged<HostApplicationDelivery>.fromOpaque(pointer).takeUnretainedValue()
-            if event.getIntegerValueField(.eventSourceUserData) == delivery.marker { delivery.received = true }
-            return Unmanaged.passUnretained(event)
-        }, userInfo: Unmanaged.passUnretained(self).toOpaque())
-        if let tap {
-            source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
-            if let source { CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes) }
-        }
-    }
-    deinit {
-        if let tap { CGEvent.tapEnable(tap: tap, enable: false); CFMachPortInvalidate(tap) }
-        if let source { CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes) }
-    }
-    func post(_ event: CGEvent) throws {
-        guard let tap, CGEvent.tapIsEnabled(tap: tap) else { throw NativeInput.unavailable() }
-        marker = Int64.random(in: 1...Int64.max); received = false
-        event.setIntegerValueField(.eventSourceUserData, value: marker)
-        event.post(tap: .cghidEventTap)
-        let deadline = Date().addingTimeInterval(1)
-        while !received && Date() < deadline { CFRunLoopRunInMode(.defaultMode, deadline.timeIntervalSinceNow, true) }
-        guard received else { throw HostFailure(code: "INPUT_UNCONFIRMED", message: "The application did not receive input.") }
-    }
-}
-
 final class HostApplicationSession {
     private let output: ([String: Any]) -> Void
     private let mayControl: () -> Bool
@@ -160,7 +124,7 @@ final class HostApplicationSession {
     private var selected: NativeWindow?
     private var preferredWindowID: String?
     private var capture: HostApplicationStream?
-    private var delivery: HostApplicationDelivery?
+    private var delivery: NativeInputDelivery?
     private var timer: Timer?
     private var generation = 0
     private var selectionInFlight = false
@@ -233,7 +197,7 @@ final class HostApplicationSession {
                 blockedReason = nil
                 guard checkAccess() else { return }
                 releaseInput()
-                if let app { delivery = HostApplicationDelivery(pid: app.processIdentifier) }
+                if let app { delivery = NativeInputDelivery(pid: app.processIdentifier) }
                 app?.unhide()
                 captureFailed = false
                 // Minimized windows can lose their old WindowServer surface.
@@ -307,7 +271,7 @@ final class HostApplicationSession {
                 if native { self.output(["type": "opened"]); return }
                 guard application.bundleURL?.resolvingSymlinksInPath() == url else { self.output(["type": "error", "code": "APPLICATION_MISMATCH"]); return }
                 self.app = application
-                if self.viewerReady { self.delivery = HostApplicationDelivery(pid: application.processIdentifier) }
+                if self.viewerReady { self.delivery = NativeInputDelivery(pid: application.processIdentifier) }
                 self.output(["type": "launched", "instance": HostApplicationCatalog.instanceIdentifier(application) ?? "", "pid": application.processIdentifier, "existing_application": existing.contains(application.processIdentifier)])
                 self.timer = Timer.scheduledTimer(withTimeInterval: 0.4, repeats: true) { [weak self] _ in
                     guard let self else { return }
@@ -532,8 +496,8 @@ final class HostApplicationSession {
                 let button = request["button"] as? Int ?? 0
                 guard (0...2).contains(button), ["down", "up", "move"].contains(kind) else { throw NativeInput.invalid("Invalid pointer event.") }
                 let type: CGEventType
-                if kind == "down" { heldButtons.insert(button); type = button == 2 ? .rightMouseDown : button == 1 ? .otherMouseDown : .leftMouseDown }
-                else if kind == "up" { heldButtons.remove(button); type = button == 2 ? .rightMouseUp : button == 1 ? .otherMouseUp : .leftMouseUp }
+                if kind == "down" { type = button == 2 ? .rightMouseDown : button == 1 ? .otherMouseDown : .leftMouseDown }
+                else if kind == "up" { type = button == 2 ? .rightMouseUp : button == 1 ? .otherMouseUp : .leftMouseUp }
                 else { type = heldButtons.contains(0) ? .leftMouseDragged : heldButtons.contains(2) ? .rightMouseDragged : heldButtons.contains(1) ? .otherMouseDragged : .mouseMoved }
                 let mouse: CGMouseButton = button == 2 ? .right : button == 1 ? .center : .left
                 let source = CGEventSource(stateID: .hidSystemState)
@@ -560,17 +524,35 @@ final class HostApplicationSession {
         for event in events {
             guard NSWorkspace.shared.frontmostApplication?.processIdentifier == window.app.processIdentifier else { throw HostFailure(code: "WINDOW_NOT_FOCUSED", message: "The user changed applications.") }
             guard let delivery else { throw NativeInput.unavailable() }
-            try delivery.post(event)
-            if kind == "key" {
-                let code = CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode))
-                if request["pressed"] as? Bool == true {
-                    let release = event.copy()!
-                    if release.type != .flagsChanged { release.type = .keyUp }
-                    release.flags = []
-                    release.setIntegerValueField(.keyboardEventAutorepeat, value: 0)
-                    heldKeys[code] = release
-                } else { heldKeys.removeValue(forKey: code) }
-            }
+            try delivery.post(event, check: {
+                guard self.viewerReady, self.mayControl(), self.checkAccess(),
+                      request["generation"] as? Int == self.generation,
+                      NSWorkspace.shared.frontmostApplication?.processIdentifier == window.app.processIdentifier else {
+                    throw HostFailure(code: "WINDOW_NOT_FOCUSED", message: "Application control changed.")
+                }
+            }, didPost: {
+                // Retain releases at dispatch, including a press whose receipt
+                // never arrives. A timed-out press must not leave a key held.
+                switch event.type {
+                case .leftMouseDown: self.heldButtons.insert(0)
+                case .otherMouseDown: self.heldButtons.insert(1)
+                case .rightMouseDown: self.heldButtons.insert(2)
+                case .leftMouseUp: self.heldButtons.remove(0)
+                case .otherMouseUp: self.heldButtons.remove(1)
+                case .rightMouseUp: self.heldButtons.remove(2)
+                default: break
+                }
+                if kind == "key" {
+                    let code = CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode))
+                    if request["pressed"] as? Bool == true {
+                        let release = event.copy()!
+                        if release.type != .flagsChanged { release.type = .keyUp }
+                        release.flags = []
+                        release.setIntegerValueField(.keyboardEventAutorepeat, value: 0)
+                        self.heldKeys[code] = release
+                    } else { self.heldKeys.removeValue(forKey: code) }
+                }
+            })
         }
     }
     func revokeControl() {
@@ -581,11 +563,17 @@ final class HostApplicationSession {
 
     func releaseInput() {
         if let app {
-            for release in heldKeys.values { release.postToPid(app.processIdentifier) }
+            for release in heldKeys.values {
+                try? NativeInputDelivery.markAuxiliary(release)
+                release.postToPid(app.processIdentifier)
+            }
             for button in heldButtons {
                 let type: CGEventType = button == 2 ? .rightMouseUp : button == 1 ? .otherMouseUp : .leftMouseUp
                 let mouse: CGMouseButton = button == 2 ? .right : button == 1 ? .center : .left
-                CGEvent(mouseEventSource: nil, mouseType: type, mouseCursorPosition: CGEvent(source: nil)?.location ?? .zero, mouseButton: mouse)?.postToPid(app.processIdentifier)
+                if let release = CGEvent(mouseEventSource: nil, mouseType: type, mouseCursorPosition: CGEvent(source: nil)?.location ?? .zero, mouseButton: mouse) {
+                    try? NativeInputDelivery.markAuxiliary(release)
+                    release.postToPid(app.processIdentifier)
+                }
             }
         }
         heldButtons.removeAll()

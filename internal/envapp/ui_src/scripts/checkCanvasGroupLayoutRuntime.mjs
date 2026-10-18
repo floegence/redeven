@@ -4,7 +4,7 @@ import { createDesktopTestSession } from '../../../../scripts/desktop_test_sessi
 // Qualify the actual Kubernetes regression through an isolated Runtime and
 // optional Desktop. Only model output is scripted; all tools and UI are real.
 import assert from 'node:assert/strict';
-import { execFileSync, spawn } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { copyFile, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import http from 'node:http';

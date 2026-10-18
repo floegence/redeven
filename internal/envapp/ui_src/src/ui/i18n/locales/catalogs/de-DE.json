@@ -5299,7 +5299,8 @@
         "computerUnavailable": "Nicht verfügbar",
         "computerBlankPage": "Leere Seite",
         "computerNoTargets": "Keine verfügbaren Seiten oder Anwendungen",
-        "previewUnavailable": "Dieses Werkzeug hat keine Ergebnisvorschau bereitgestellt."
+        "previewUnavailable": "Dieses Werkzeug hat keine Ergebnisvorschau bereitgestellt.",
+        "effectUncertain": "Ergebnis unbestätigt"
       },
       "toolActivityDetailsPending": "Warten auf Tool-Details",
       "toolActivityNoAdditionalDetails": "Keine weiteren Details",
@@ -5347,7 +5348,7 @@
       "stop": "Stoppen",
       "stopping": "Wird gestoppt...",
       "stopOutcomeUnknownTitle": "Gestoppt mit unbestätigten Ergebnissen",
-      "stopOutcomeUnknownDescription": "Einige Vorgänge wurden möglicherweise abgeschlossen. Prüfen Sie die Ergebnisse, bevor Sie fortfahren. Dieser Durchgang wird nicht automatisch erneut ausgeführt.",
+      "stopOutcomeUnknownDescription": "Einige Vorgänge wurden möglicherweise abgeschlossen. Dieser Durchgang wird nicht automatisch wiederholt. Mit „Prüfen und fortfahren“ prüfen Sie den aktuellen Zustand und setzen die Arbeit in einem neuen Durchgang fort.",
       "commandMenuLabel": "Flower-Befehle",
       "commandCompactContext": "Kontext dieser Unterhaltung komprimieren",
       "compactContext": "Kontext komprimieren",
@@ -5412,7 +5413,7 @@
       "runErrorFloretEngineFailed": "Flower konnte diesen Dialogschritt nicht abschließen, da die Orchestrierungs-Engine ausgefallen ist.",
       "runErrorFloretControlContractFailed": "Flower konnte keine gültige Frage erstellen. Die bisherige Antwort wurde gespeichert. Versuchen Sie es erneut, um fortzufahren.",
       "runErrorFloretAuthorityConsistencyFailed": "Flower konnte diesen Dialogschritt nicht abschließen, da das festgeschriebene Tool-Ergebnis nicht verifiziert werden konnte. Das Tool wurde nicht erneut ausgeführt; sende zum Fortfahren eine neue Nachricht.",
-      "runErrorFloretEffectOutcomeUnknown": "Einige Vorgänge wurden möglicherweise abgeschlossen, ihre Ergebnisse konnten jedoch nicht bestätigt werden. Die Aufgabe wurde gestoppt, um eine doppelte Ausführung zu vermeiden. Prüfen Sie die tatsächlichen Auswirkungen, bevor Sie neue Arbeit beginnen. Dieser Durchgang kann nicht wiederholt werden.",
+      "runErrorFloretEffectOutcomeUnknown": "Einige Vorgänge wurden möglicherweise abgeschlossen, ihre Ergebnisse sind jedoch unbestätigt. Dieser Durchgang kann nicht wiederholt werden. Mit „Prüfen und fortfahren“ prüft Flower den aktuellen Zustand und vorhandene Ergebnisse und setzt die Arbeit in einem neuen Durchgang fort.",
       "runErrorRuntimeRestarted": "Die lokale Laufzeit wurde neu gestartet, bevor diese Antwort abgeschlossen war. Starte eine neue Antwort, sobald die Laufzeit bereit ist.",
       "runtimeRestartedDivider": "Redeven-Laufzeit neu gestartet",
       "copyCode": "Code kopieren",
@@ -5678,7 +5679,9 @@
       "queueTakeBackConflict": "Diese Nachricht wurde bereits gestartet oder geändert. Aktualisiere die Ansicht und versuche es erneut.",
       "queueTakeBackUnknown": "Die Nachricht ist wieder im Eingabefeld. Das Entfernen aus der Warteschlange konnte nicht bestätigt werden. Prüfe die Warteschlange vor dem Senden.",
       "contextIndicatorDistributionUnavailable": "Keine Verteilung verfügbar",
-      "contextIndicatorProtocolFraming": "Protokollformatierung"
+      "contextIndicatorProtocolFraming": "Protokollformatierung",
+      "inspectAndContinue": "Status prüfen und fortfahren",
+      "inspectAndContinuePrompt": "Der vorherige Durchgang wurde wegen unbestätigter Auswirkungen angehalten. Prüfe zuerst mit schreibgeschützten Werkzeugen den aktuellen Zustand und vorhandene Ergebnisse. Setze die restliche Aufgabe anhand dieser Erkenntnisse fort. Wiederhole frühere Aktionen nicht ungeprüft."
     },
     "threadList": {
       "title": "Unterhaltungen",

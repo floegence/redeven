@@ -46,11 +46,13 @@ There is no host waiting state or duplicate question before tool approval.
 A running command is observed through its existing process identity and cursor;
 repeated observations are valid when state may change. Timeouts do not establish
 that an effect never executed and do not independently authorize replay. An
-unknown effect remains terminal. Denials cannot be bypassed with another tool.
+returned uncertainty requires inspection before another action; unsettled
+runtime effects remain terminal. Denials cannot be bypassed with another tool.
 Schema correction, approval, cancellation and restart recovery remain Floret-owned.
 Todos permit at most one `in_progress` item and an explicit empty-list clear.
 Finite running commands require another `terminal.read` in the same turn, not a
-promise to wait after completion. Unknown effects cannot become retry choices.
+promise to wait after completion. Uncertain effects cannot be blindly repeated. Evidence-based new actions
+retain normal authorization and repeated-call protection.
 
 The working directory is a relative-path default. Configured filesystem roots
 and their read/write permissions define authorization; task scope and repository

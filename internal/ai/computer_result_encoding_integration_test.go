@@ -3,7 +3,6 @@ package ai
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"log/slog"
 	"math"
@@ -242,20 +241,14 @@ func TestComputerCompletedEncodingFailureWaitsAndNeverReplays(t *testing.T) {
 			if _, err := svc.SendUserTurn(t.Context(), meta, SendUserTurnRequest{ThreadID: thread.ThreadID, ClientRequestID: "effect", Model: "openai/gpt-5-mini", Input: RunInput{Text: "Update fixture once."}, Options: RunOptions{PermissionType: config.AIPermissionFullAccess}}); err != nil {
 				t.Fatal(err)
 			}
-			waiting := waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(v *ThreadView) bool { return v.RunStatus == "waiting_user" || v.RunStatus == "failed" })
 			if mode == "unknown" {
-				if waiting.RunErrorCode != runErrorCodeFloretEffectOutcomeUnknown {
-					t.Fatalf("unknown lost: %+v", waiting)
-				}
-				view, _ := svc.threadRuntime.View(t.Context(), identity.ThreadID(thread.ThreadID))
-				if _, err := svc.threadRuntime.Retry(t.Context(), flruntime.RetryInput{ThreadID: view.ThreadID, SourceTurnID: view.TurnID, RequestKey: "no-replay"}); !errors.Is(err, flruntime.ErrEffectOutcomeUnknown) {
-					t.Fatalf("retry allowed: %v", err)
-				}
-				if executor.effects.Load() != 1 || requests.Load() != 1 {
-					t.Fatal("unknown effect replayed")
+				final := waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(v *ThreadView) bool { return v.RunStatus == "success" })
+				if final.WaitingPrompt != nil || executor.effects.Load() != 1 || requests.Load() != 3 {
+					t.Fatalf("uncertainty did not continue once: %+v requests=%d effects=%d", final, requests.Load(), executor.effects.Load())
 				}
 				return
 			}
+			waiting := waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(v *ThreadView) bool { return v.RunStatus == "waiting_user" || v.RunStatus == "failed" })
 			if waiting.WaitingPrompt == nil {
 				t.Fatalf("no pause: %+v", waiting)
 			}

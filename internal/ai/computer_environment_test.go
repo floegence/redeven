@@ -22,8 +22,8 @@ func TestComputerEnvironmentSeparatesSetupPermissionsAndConnection(t *testing.T)
 	service := &Service{targetToolExecutor: host, threadsDB: store}
 	meta := &session.Meta{CanRead: true, CanWrite: true, CanExecute: true, EndpointID: "env"}
 	for _, test := range []struct{ name, payload, state, reason string }{
-		{"missing permission", `{"protocol_version":3,"screen_recording":false,"accessibility":true}`, "permission_required", "screen_recording_or_accessibility_missing"},
-		{"ready", `{"protocol_version":3,"screen_recording":true,"accessibility":true}`, "ready", ""},
+		{"missing permission", `{"protocol_version":4,"screen_recording":false,"accessibility":true}`, "permission_required", "screen_recording_or_accessibility_missing"},
+		{"ready", `{"protocol_version":4,"screen_recording":true,"accessibility":true}`, "ready", ""},
 		{"incompatible helper", `{"protocol_version":1}`, "setup_required", "native_handshake_failed"},
 	} {
 		t.Run(test.name, func(t *testing.T) {

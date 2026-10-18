@@ -74,7 +74,7 @@ func (e *NativeDesktopTargetExecutor) checkSetupLocked(ctx context.Context) erro
 		ScreenRecording bool `json:"screen_recording"`
 		Accessibility   bool `json:"accessibility"`
 	}
-	if err != nil || json.Unmarshal(output, &capabilities) != nil || capabilities.ProtocolVersion != 3 {
+	if err != nil || json.Unmarshal(output, &capabilities) != nil || capabilities.ProtocolVersion != 4 {
 		return &TargetStartupError{Code: "TARGET_SETUP_REQUIRED", Reason: "native_handshake_failed"}
 	}
 	if !capabilities.ScreenRecording || !capabilities.Accessibility {
@@ -147,18 +147,21 @@ func (e *NativeDesktopTargetExecutor) executeTargetTool(ctx context.Context, cal
 	// Interrupted exchanges retire the helper before another action is admitted.
 	// Do not replay an action whose external outcome may be unknown.
 	healthy := false
+	resultReceived := false
 	defer func() {
 		if !healthy {
 			e.stopLocked()
 		}
 	}()
 	requestID := fmt.Sprintf("%s-%d", strings.TrimSpace(call.ToolCallID), time.Now().UnixNano())
-	payload, err := json.Marshal(map[string]any{"protocol_version": 3, "request_id": requestID, "target_id": call.TargetID, "tool_name": call.ToolName, "args": args, "full_access": call.fullAccess, "allowed_apps": call.allowedApps, "allow_foreground": call.allowForeground, "script_operation": call.scriptOperation, "user_control": userControl, "recovery_observation": call.recoveryObservation})
+	payload, err := json.Marshal(map[string]any{"protocol_version": 4, "request_id": requestID, "target_id": call.TargetID, "tool_name": call.ToolName, "args": args, "full_access": call.fullAccess, "allowed_apps": call.allowedApps, "allow_foreground": call.allowForeground, "script_operation": call.scriptOperation, "user_control": userControl, "recovery_observation": call.recoveryObservation})
 	if err != nil {
 		return TargetToolResult{}, err
 	}
 	defer func() {
-		if outErr != nil && !userControl && computerCallMutates(call) && !computerKnownRejection(outErr) {
+		if outErr != nil && !resultReceived && !userControl && computerCallMutates(call) && !computerKnownRejection(outErr) {
+			out.Result = map[string]any{"stage": "helper_exchange", "reason": "response_unavailable"}
+			out.TargetID, out.ExecutionLocation = call.TargetID, "macos_desktop"
 			outErr = errComputerEffectUnknown
 		}
 	}()
@@ -231,15 +234,19 @@ func (e *NativeDesktopTargetExecutor) executeTargetTool(ctx context.Context, cal
 			call.progress("foreground", event.Reason)
 		}
 	}
+	if event.Type != "result" && event.Type != "error" {
+		return TargetToolResult{}, errors.New("desktop target helper returned no result")
+	}
+	resultReceived = true
 	if event.Type == "error" || strings.TrimSpace(event.Error) != "" {
 		healthy = true
+		if event.ErrorCode == "CANCELLED" {
+			return TargetToolResult{}, context.Canceled
+		}
 		if event.ErrorCode == "TARGET_OBSERVATION_UNAVAILABLE" {
 			return computerObservationFailure(call, event.Payload, "macos_desktop")
 		}
-		return TargetToolResult{}, computerTargetFailure(call, event.ErrorCode)
-	}
-	if event.Type != "result" {
-		return TargetToolResult{}, errors.New("desktop target helper returned no result")
+		return TargetToolResult{TargetID: call.TargetID, ExecutionLocation: "macos_desktop", Result: event.Payload}, computerTargetFailure(call, event.ErrorCode)
 	}
 	result := TargetToolResult{TargetID: event.TargetID, ExecutionLocation: "macos_desktop", Result: event.Payload, Safety: event.Safety}
 	result.ActionSummary = strings.TrimSpace(anyToString(event.Payload["summary"]))
@@ -258,7 +265,8 @@ func (e *NativeDesktopTargetExecutor) executeTargetTool(ctx context.Context, cal
 		if raw := strings.TrimSpace(anyToString(event.Payload["screenshot_base64"])); raw != "" {
 			body, decodeErr := base64.StdEncoding.DecodeString(raw)
 			if decodeErr != nil {
-				return TargetToolResult{}, decodeErr
+				healthy = true
+				return computerObservationFailure(call, map[string]any{"action_executed": event.Payload["action_executed"], "input_progress": event.Payload["input_progress"], "observation_stage": "capture"}, "macos_desktop")
 			}
 			if userControl {
 				result.frameBytes = body
@@ -287,7 +295,7 @@ func (e *NativeDesktopTargetExecutor) startLocked() error {
 		return nil
 	}
 	// The executor owns this session across tool calls and turns.
-	cmd := exec.Command(e.HelperPath, "--protocol-version", "3")
+	cmd := exec.Command(e.HelperPath, "--protocol-version", "4")
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return err
