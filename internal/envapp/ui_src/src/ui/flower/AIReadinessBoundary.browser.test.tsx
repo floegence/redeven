@@ -6,7 +6,7 @@ import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it } from 'vitest';
 import { commands, page, userEvent } from 'vitest/browser';
 
-import { I18nProvider } from '../i18n';
+import { I18nProvider, type RedevenLocale } from '../i18n';
 import { writeStoredLanguagePreference } from '../i18n/storage';
 import { AIReadinessBoundary } from './AIReadinessBoundary';
 import type { AIReadinessController, AIReadinessSnapshot } from './aiReadiness';
@@ -69,9 +69,9 @@ function mountHarness(
   initial = blocked(),
   pending = false,
   retryResult?: Promise<AIReadinessSnapshot>,
-  options: Readonly<{ presentation?: 'full' | 'companion'; elapsedMs?: number; embedded?: boolean }> = {},
+  options: Readonly<{ presentation?: 'full' | 'companion'; elapsedMs?: number; embedded?: boolean; locale?: RedevenLocale }> = {},
 ): Readonly<{ host: HTMLElement; setSnapshot: (snapshot: AIReadinessSnapshot) => void }> {
-  writeStoredLanguagePreference('en-US');
+  writeStoredLanguagePreference(options.locale ?? 'en-US');
   const [snapshot, setSnapshot] = createSignal(initial);
   const [retryPending, setRetryPending] = createSignal(pending);
   const startedAt = Date.now() - (options.elapsedMs ?? 0);
@@ -166,6 +166,78 @@ afterEach(async () => {
 });
 
 describe('AIReadinessBoundary browser layout', () => {
+  it.each([
+    ['light', 1280],
+    ['dark', 1280],
+    ['light', 320],
+    ['dark', 320],
+  ] as const)('centers quiet startup controls at %s theme and %ipx', async (theme, width) => {
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+    const { host } = mountHarness(blockedReason('', { state: 'indexing', stoppable: true }));
+    await sizeReadinessSurface(width, 720);
+    await expect.element(page.getByRole('button', { name: 'Stop preparation', exact: true })).toBeVisible();
+    await settleFrames();
+
+    const surface = host.querySelector<HTMLElement>('.ai-readiness-surface')!;
+    const actions = host.querySelector<HTMLElement>('.ai-readiness-actions')!;
+    const stop = page.getByRole('button', { name: 'Stop preparation', exact: true }).element() as HTMLButtonElement;
+    const details = page.getByRole('button', { name: 'Startup details', exact: true }).element() as HTMLButtonElement;
+    expect(actions.contains(details)).toBe(true);
+    expect(stop.classList.contains('ai-readiness-action--primary')).toBe(false);
+    const stopStyle = getComputedStyle(stop);
+    expect(stopStyle.backgroundColor).toBe('rgba(0, 0, 0, 0)');
+    expect(stopStyle.boxShadow).toBe('none');
+    expect(stopStyle.fontWeight).toBe('400');
+    expect(stopStyle.cursor).toBe('pointer');
+    expect(stop.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+
+    const expectCentered = () => {
+      const surfaceRect = surface.getBoundingClientRect();
+      const detailsRect = details.getBoundingClientRect();
+      const stopRect = stop.getBoundingClientRect();
+      expect(Math.abs((detailsRect.left + stopRect.right) / 2 - (surfaceRect.left + surfaceRect.right) / 2)).toBeLessThanOrEqual(1);
+      expect(Math.abs(detailsRect.top - stopRect.top)).toBeLessThanOrEqual(1);
+      expect(stopRect.width).toBeLessThan(actions.clientWidth);
+      expect(surface.scrollWidth).toBeLessThanOrEqual(surface.clientWidth + 1);
+    };
+    expectCentered();
+    await userEvent.hover(host.querySelector('h1')!);
+    await page.screenshot({ element: surface, path: `__screenshots__/readiness-${theme}-${width}.png` });
+    await page.getByRole('button', { name: 'Startup details', exact: true }).click();
+    await settleFrames();
+    expectCentered();
+    await userEvent.hover(host.querySelector('h1')!);
+    await page.screenshot({ element: surface, path: `__screenshots__/readiness-details-${theme}-${width}.png` });
+    await expectAuditedVisualEvidence(width, 720);
+  });
+
+  it.each(['100%', '200%'])('keeps localized startup actions usable at %s text in a narrow companion', async (textSize) => {
+    document.documentElement.style.fontSize = textSize;
+    document.documentElement.classList.add('dark');
+    const { host } = mountHarness(blockedReason('', { state: 'indexing', stoppable: true }), false, undefined, { locale: 'zh-CN', presentation: 'companion' });
+    await expect.element(page.getByRole('button', { name: '停止准备', exact: true })).toBeVisible();
+    await sizeReadinessSurface(320, 720);
+    const surface = host.querySelector<HTMLElement>('.ai-readiness-surface')!;
+    for (const button of surface.querySelectorAll('button')) {
+      expect(getComputedStyle(button).whiteSpace).toBe('nowrap');
+      expect(button.scrollWidth).toBeLessThanOrEqual(button.clientWidth + 1);
+    }
+    expect(surface.scrollWidth).toBeLessThanOrEqual(surface.clientWidth + 1);
+    await userEvent.hover(host.querySelector('h1')!);
+    await page.screenshot({ element: surface, path: `__screenshots__/readiness-zh-CN-${textSize}.png` });
+    await page.getByRole('button', { name: '启动详情', exact: true }).click();
+    await userEvent.keyboard('{Escape}');
+    await userEvent.tab();
+    const stop = page.getByRole('button', { name: '停止准备', exact: true }).element();
+    expect(document.activeElement).toBe(stop);
+    expect(stop.matches(':focus-visible')).toBe(true);
+    expect(getComputedStyle(stop).outlineStyle).toBe('solid');
+    await userEvent.keyboard('{Enter}');
+    await expect.element(page.getByRole('heading', { name: '正在停止准备', exact: true })).toBeVisible();
+    await expect.element(page.getByRole('button', { name: '停止准备', exact: true })).not.toBeInTheDocument();
+    await expectAuditedVisualEvidence(320, 720);
+  });
+
   it('uses the shared twelve-pixel reading role for blocked guidance and actions', async () => {
     const host = mount();
     await sizeReadinessSurface(544, 720);
