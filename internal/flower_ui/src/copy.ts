@@ -720,7 +720,6 @@ export type FlowerSurfaceCopy = Readonly<{
     toolApprovalExecuteRequestedAction: string;
     toolApprovalWorkingDirectoryDetail: (target: string) => string;
     toolApprovalComposerDescription: string;
-    toolApprovalDetails: string;
     feedbackClose: string;
     toolApprovalScope: string;
     toolApprovalOnceScope: string;
@@ -1197,7 +1196,6 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     toolApprovalExecuteRequestedAction: 'Execute requested action',
     toolApprovalWorkingDirectoryDetail: (target) => 'Working directory: ' + target,
     toolApprovalComposerDescription: 'The conversation is paused until you approve or reject this action.',
-    toolApprovalDetails: 'View action details',
     feedbackClose: 'Close feedback',
     toolApprovalScope: 'Approval applies only to the listed actions.',
     toolApprovalOnceScope: 'This time only',

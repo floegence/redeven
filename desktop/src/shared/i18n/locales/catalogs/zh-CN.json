@@ -638,7 +638,6 @@
       "toolApprovalExecuteRequestedAction": "执行请求的操作",
       "toolApprovalWorkingDirectoryDetail": "工作目录：{target}",
       "toolApprovalComposerDescription": "在你批准或拒绝此操作前，对话会暂停。",
-      "toolApprovalDetails": "查看操作详情",
       "toolApprovalScope": "授权仅对列出的操作生效。",
       "toolApprovalQueueCount": "还有 {count} 个批准等待处理",
       "toolApprovalPendingCount": "待审批 · {count} 项",

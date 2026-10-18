@@ -645,7 +645,6 @@
       "toolApprovalExecuteRequestedAction": "Выполнить запрошенное действие",
       "toolApprovalWorkingDirectoryDetail": "Рабочий каталог: {target}",
       "toolApprovalComposerDescription": "Диалог приостановлен, пока вы не одобрите или не отклоните это действие.",
-      "toolApprovalDetails": "Показать подробности действия",
       "toolApprovalScope": "Разрешение действует только для перечисленных действий.",
       "toolApprovalQueueCount": "Еще ожидают подтверждения: {count}",
       "toolApprovalPendingCount": "Ожидают подтверждения · {count}",

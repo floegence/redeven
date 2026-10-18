@@ -638,7 +638,6 @@
       "toolApprovalExecuteRequestedAction": "Exécuter l’action demandée",
       "toolApprovalWorkingDirectoryDetail": "Répertoire de travail : {target}",
       "toolApprovalComposerDescription": "La conversation est suspendue jusqu'à ce que vous approuviez ou rejetiez cette action.",
-      "toolApprovalDetails": "Voir les détails de l’action",
       "toolApprovalScope": "L’autorisation s’applique uniquement aux actions indiquées.",
       "toolApprovalQueueCount": "Approbations supplémentaires en attente : {count}",
       "toolApprovalPendingCount": "À approuver · {count}",

@@ -500,7 +500,6 @@
     "toolApprovalExecuteRequestedAction": "Execute requested action",
     "toolApprovalWorkingDirectoryDetail": "Working directory: {target}",
     "toolApprovalComposerDescription": "The conversation is paused until you approve or reject this action.",
-    "toolApprovalDetails": "View action details",
     "toolApprovalScope": "Approval applies only to the listed actions.",
     "toolApprovalQueueCount": "{count} more approval(s) waiting",
     "toolApprovalPendingCount": "Approval required · {count}",

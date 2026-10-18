@@ -30,7 +30,7 @@ export function FlowerApprovalDecisionActions(props: Readonly<{
   </div>;
 }
 
-/** One mounted row owns only its disclosure state; runtime current views own decisions. */
+/** One mounted row owns command expansion; runtime current views own decisions. */
 export function FlowerApprovalRow(props: Readonly<{
   action: FlowerApprovalAction;
   presentation: FlowerApprovalPresentation;
@@ -114,10 +114,10 @@ export function FlowerApprovalRow(props: Readonly<{
       </div>}</Show>
       <Show when={props.presentation.risk}>{risk => <p class="flower-approval-risk"><AlertCircle class="h-3.5 w-3.5" aria-hidden="true" /><span>{risk()}</span></p>}</Show>
       <Show when={props.presentation.description || props.presentation.details.length}>
-        <details class="flower-approval-details"><summary>{props.copy.toolApprovalDetails}</summary>
+        <div class="flower-approval-context">
           <Show when={props.presentation.description}>{description => <p class="flower-approval-operation-description">{description()}</p>}</Show>
           <For each={props.presentation.details}>{detail => <div class="flower-approval-target">{detail}</div>}</For>
-        </details>
+        </div>
       </Show>
       <Show when={props.status}><p id={`${id}-status`} class="flower-approval-status" role="status">{props.status}</p></Show>
       <Show when={props.error}><p id={`${id}-error`} class="flower-visually-hidden">{props.error}</p></Show>

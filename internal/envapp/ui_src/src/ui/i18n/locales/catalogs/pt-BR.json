@@ -5554,7 +5554,6 @@
       "toolApprovalExecuteRequestedAction": "Executar a ação solicitada",
       "toolApprovalWorkingDirectoryDetail": "Diretório de trabalho: {target}",
       "toolApprovalComposerDescription": "A conversa fica pausada até você aprovar ou rejeitar esta ação.",
-      "toolApprovalDetails": "Ver detalhes da ação",
       "toolApprovalScope": "A autorização se aplica apenas às ações listadas.",
       "toolApprovalQueueCount": "Aprovações adicionais aguardando: {count}",
       "toolApprovalPendingCount": "Aprovações pendentes · {count}",

@@ -638,7 +638,6 @@
       "toolApprovalExecuteRequestedAction": "요청된 작업 실행",
       "toolApprovalWorkingDirectoryDetail": "작업 디렉터리: {target}",
       "toolApprovalComposerDescription": "이 작업을 승인하거나 거절할 때까지 대화가 일시 중지됩니다.",
-      "toolApprovalDetails": "작업 세부 정보 보기",
       "toolApprovalScope": "승인은 나열된 작업에만 적용됩니다.",
       "toolApprovalQueueCount": "대기 중인 승인 {count}개 더 있음",
       "toolApprovalPendingCount": "승인 대기 · {count}개",
