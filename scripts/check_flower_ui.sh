@@ -67,6 +67,7 @@ main() {
       src/ui/modelMenu.test.ts \
       src/ui/FlowerSurface.directoryActions.test.tsx \
       src/ui/FlowerSurface.directoryPicker.test.tsx \
+      src/ui/FlowerSurface.parentEventRecovery.test.tsx \
       src/ui/FlowerSurface.fork.test.tsx \
       src/ui/FlowerSurface.title.test.tsx \
       src/ui/FlowerSurface.orderedPresentation.test.tsx \
@@ -124,6 +125,7 @@ main() {
       internal/flower_ui/src/threadTitleSnapshot.test.ts \
       internal/flower_ui/src/flowerThreadTitle.test.ts \
       internal/flower_ui/src/transportOutbox.test.ts \
+      internal/flower_ui/src/parentEventPage.test.ts \
       internal/flower_ui/src/runtimeCurrentView.test.ts \
       internal/flower_ui/src/runtimeCurrentView.stability.test.ts \
       internal/flower_ui/src/flowerDecisionCurrent.test.ts \
@@ -187,6 +189,7 @@ main() {
     if [ "$skip_browser" = false ]; then
       ui_pkg_log ""
       ui_pkg_log "Flower UI: Chromium interaction contracts..."
+      (cd "$ROOT_DIR" && REDEVEN_FORK_PARENT_EVENTS_UI=1 GOWORK=off go test ./internal/ai -run '^TestFlowerForkParentEventsUI$' -count=1)
       ui_pkg_run_pnpm run test:browser -- \
         src/ui/EnvAppShell.flowerCompanion.browser.test.tsx \
         src/ui/flowerCompanionTailMotion.browser.test.tsx \

@@ -24,7 +24,7 @@ const stopUnconfirmed = 'Stop status is unconfirmed. Resync before trying again.
 describe('parent event synchronization boundaries', () => {
   it('offers canonical resynchronization when report reading is unavailable', async () => {
     const report = { id: 'report-unavailable', parent_thread_id: 'thread-report-unavailable', source_thread_id: 'child', source_turn_id: 'turn', source_run_id: 'run', source_entry_id: 'entry', kind: 'report' as const, received_at: '2026-10-18T00:00:00Z', admitted: false };
-    const selected = thread({ thread_id: report.parent_thread_id, parent_events: { events: [report], first_event_id: report.id, last_event_id: report.id } });
+    const selected = thread({ thread_id: report.parent_thread_id, parent_events: { thread_id: report.parent_thread_id, events: [report], first_event_id: report.id, last_event_id: report.id } });
     const loadThread = vi.fn(async () => liveBootstrap(selected, 1));
     const launchTurn = vi.fn(); const stopThread = vi.fn();
     const surface = renderSurfaceWithAdapterProps({ ...adapter(), listThreads: vi.fn(async () => [selected]), loadThread, readParentEvents: undefined, launchTurn, stopThread },
@@ -39,7 +39,7 @@ describe('parent event synchronization boundaries', () => {
     expect(stopThread).not.toHaveBeenCalled(); expect(launchTurn).not.toHaveBeenCalled();
   });
   it('rejects malformed canonical events before publication and resyncs without sending', async () => {
-    const selected = thread({ thread_id: 'thread-parent-contract', parent_events: { events: [] } });
+    const selected = thread({ thread_id: 'thread-parent-contract', parent_events: { thread_id: 'thread-parent-contract', events: [] } });
     const broken = deferred<void>();
     let connections = 0;
     const launchTurn = vi.fn();
@@ -72,7 +72,7 @@ describe('parent event synchronization boundaries', () => {
 
   it('keeps report failures local while preserving drafts, navigation and same-page retry', async () => {
     const report = { id: 'report-local', parent_thread_id: 'thread-report-local', source_thread_id: 'child', source_turn_id: 'child-turn', source_run_id: 'child-run', source_entry_id: 'child-entry', kind: 'report' as const, received_at: '2026-10-18T00:00:00Z', admitted: false };
-    const events = { events: [report], first_event_id: report.id, last_event_id: report.id };
+    const events = { thread_id: report.parent_thread_id, events: [report], first_event_id: report.id, last_event_id: report.id };
     const selected = thread({ thread_id: report.parent_thread_id, parent_events: events });
     const second = thread({ thread_id: 'thread-other-report', title: 'Other report conversation' });
     const readParentEvents = vi.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValue({ ...events, events: [{ ...report, message: 'Saved report recovered' }] });

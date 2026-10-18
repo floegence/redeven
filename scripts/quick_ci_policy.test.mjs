@@ -378,3 +378,11 @@ fi
     });
   }
 }
+
+// Keep the behavioral suite registered without adding browser work to quick CI.
+test('Flower qualification includes parent event scope, recovery and real fork boundaries', () => {
+  for (const path of ['internal/flower_ui/src/parentEventPage.test.ts', 'src/ui/FlowerSurface.parentEventRecovery.test.tsx', 'src/ui/FlowerSurface.fork.test.tsx', 'src/ui/FlowerSurface.parentEvents.browser.test.tsx']) {
+    assert.ok(flowerGate.includes(path), 'missing Flower qualification: ' + path);
+  }
+  assert.match(flowerGate, /REDEVEN_FORK_PARENT_EVENTS_UI=1 GOWORK=off go test .*TestFlowerForkParentEventsUI/u);
+});

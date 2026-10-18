@@ -515,7 +515,7 @@ export function buildFlowerTimelineEntries(thread: FlowerThreadSnapshot | null |
   // Insert observations without reordering canonical messages or their decorations.
   const seenEvents = new Set<string>();
   const eventEntries: Extract<FlowerTimelineEntry, { type: 'parent_event' }>[] = parentEvents.flatMap(event => {
-    if (event.parent_thread_id !== thread.thread_id || seenEvents.has(event.id)) return [];
+    if (seenEvents.has(event.id)) return [];
     seenEvents.add(event.id);
     return [{ type: 'parent_event' as const, key: `parent-event:${event.id}`, event }];
   }).sort((left, right) => Date.parse(left.event.received_at) - Date.parse(right.event.received_at));

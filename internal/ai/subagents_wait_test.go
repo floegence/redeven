@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -27,6 +28,22 @@ func TestSubagentWaitReportsDeletedFrozenTargets(t *testing.T) {
 	}
 	if ids := result["missing_ids"].([]identity.ThreadID); len(ids) != 1 || ids[0] != "deleted-child" {
 		t.Fatalf("missing=%#v", ids)
+	}
+}
+
+func TestSubagentWaitWithoutParentEventsKeepsScopedEmptyPage(t *testing.T) {
+	adapter, _ := newSubagentHandoffTestAdapter(t, nil, nil)
+	result, err := adapter.wait(t.Context(), map[string]any{"timeout_ms": 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := result["events"].(flruntime.ParentEventPage)
+	if page.ThreadID != "thread-parent" || page.Events == nil || len(page.Events) != 0 {
+		t.Fatalf("empty page=%+v", page)
+	}
+	raw, err := json.Marshal(result)
+	if err != nil || !strings.Contains(string(raw), "\"thread_id\":\"thread-parent\"") {
+		t.Fatalf("result=%s err=%v", raw, err)
 	}
 }
 

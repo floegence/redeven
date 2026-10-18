@@ -24,6 +24,17 @@ One reader owns request state, body hydration, fixed-range pagination and retry.
 
 Both Env App and Desktop call the authorized POST recipient route with a strict request body. Reads do not answer input or approval, change admission, start execution, or infer authority from an event identifier. Expanded reports preserve complete Unicode and native text selection inside the parent transcript. Compact controls stay on one line and fit narrow light/dark surfaces.
 
+Parent event pages carry the queried canonical thread in required page-level
+thread_id, supplied by published Floret v7.56.0. Individual parent_thread_id
+values remain immutable original recipients across forks. Empty wait-result pages
+also identify the current parent when the optional capability supplies no page. The shared validator
+checks page scope, shape and cursor boundaries; readers and timeline projection
+never infer scope from event recipients. Inherited reports remain readable, but
+do not grant membership or source navigation. Detail retry keeps the created
+fork and never repeats creation. An isolated Service/SQLite/scripted-provider
+browser qualification exercises actual fork, detail and report JSON through the
+production adapter and FlowerSurface, including read failures and restart.
+
 # Boundaries
 
 [Subagent runtime](../ai/subagent-runtime.md) owns delivery, tool authorization and complete report reads. Floret remains the only durable owner. The timeline must not add an inbox, model-read receipt, transcript, lifecycle cache, or periodic refresh. It does not copy reports into model context; the canonical admission path does that at the next natural provider boundary.
@@ -35,3 +46,4 @@ Both Env App and Desktop call the authorized POST recipient route with a strict 
 - `redeven:internal/ai/parent_events.go` - Recipient authorization and canonical event reads.
 - `redeven:internal/ai/flower_runtime_current_publisher.go` - Receipt, admission and resolution boundaries.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.parentEvents.browser.test.tsx` - Full Unicode reading, navigation, pagination and narrow themed surfaces.
+- `redeven:internal/ai/parent_event_fork_ui_test.go` - Published runtime scope and real product/browser fork regression.

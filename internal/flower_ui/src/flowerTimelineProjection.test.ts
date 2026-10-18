@@ -80,7 +80,7 @@ describe('buildFlowerTimelineEntries', () => {
     ];
     const report: FlowerParentEvent = { id: 'report', kind: 'report', parent_thread_id: 'thread-1', source_thread_id: 'child',
       source_turn_id: 'turn-child', source_run_id: 'run-child', source_entry_id: 'entry-child', received_at: new Date(20).toISOString(), admitted: false };
-    const value = thread({ messages, parent_events: { events: [report] } });
+    const value = thread({ messages, parent_events: { thread_id: 'thread-1', events: [report] } });
     const initial = buildFlowerTimelineEntries(value);
     expect(initial.map(entry => entry.key)).toEqual(['message:user', 'parent-event:report', 'message:assistant']);
     const events = [{ ...report, admitted: true, message: 'Complete report' }, { ...report, id: 'failed', kind: 'failed' as const, received_at: new Date(40).toISOString() }];
@@ -88,7 +88,7 @@ describe('buildFlowerTimelineEntries', () => {
     expect(updated.map(entry => entry.key)).toEqual(['message:user', 'parent-event:report', 'message:assistant', 'parent-event:failed']);
     expect(updated[1]).toMatchObject({ event: { admitted: true, message: 'Complete report' } });
     expect(buildFlowerTimelineEntries(value, events)).toBe(updated);
-    expect(buildFlowerTimelineEntries(thread({ messages }), [report, report, { ...report, id: 'foreign', parent_thread_id: 'other' }]).filter(entry => entry.type === 'parent_event')).toHaveLength(1);
+    expect(buildFlowerTimelineEntries(thread({ messages }), [report, report, { ...report, id: 'inherited', parent_thread_id: 'ancestor' }]).filter(entry => entry.type === 'parent_event')).toHaveLength(2);
   });
 
   it('keeps transient run progress out of the canonical message timeline', () => {

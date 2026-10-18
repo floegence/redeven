@@ -5,7 +5,7 @@ import { afterEach, expect, it, onTestFinished, vi } from 'vitest';
 import { createParentEventReading } from '../../../../flower_ui/src/parentEvents';
 import type { FlowerParentEvent, FlowerParentEventPage } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 const event = (id: string, message?: string): FlowerParentEvent => ({ id, parent_thread_id: 'parent', source_thread_id: 'child', source_turn_id: 'turn', source_run_id: 'run', source_entry_id: 'entry', kind: 'report', received_at: '2026-10-18T00:00:00Z', admitted: false, ...(message ? { message } : {}) });
-const page = (events: FlowerParentEvent[], more = false): FlowerParentEventPage => ({ events, first_event_id: 'first', last_event_id: 'last', ...(more ? { next_after_event_id: events.at(-1)!.id } : {}) });
+const page = (events: FlowerParentEvent[], more = false): FlowerParentEventPage => ({ thread_id: 'parent', events, first_event_id: 'first', last_event_id: 'last', ...(more ? { next_after_event_id: events.at(-1)!.id } : {}) });
 const flush = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
 afterEach(() => vi.useRealTimers());
 function mount(read: Parameters<typeof createParentEventReading>[0]['read'], initial: FlowerParentEventPage) {
@@ -19,7 +19,7 @@ function mount(read: Parameters<typeof createParentEventReading>[0]['read'], ini
 }
 it('keeps empty event pages idle without making a request', async () => {
   const read = vi.fn();
-  const { reading } = mount(read, JSON.parse('{"events":[]}'));
+  const { reading } = mount(read, JSON.parse('{"thread_id":"parent","events":[]}'));
   await flush();
   expect(reading.events()).toEqual([]); expect(reading.failed()).toBe(false); expect(reading.busy()).toBe(false);
   expect(read).not.toHaveBeenCalled();
@@ -94,7 +94,7 @@ it('invalidates a stalled read when its fixed range changes and on unmount', asy
     .mockImplementationOnce(() => new Promise<FlowerParentEventPage>(() => {}));
   const { reading, setValue, dispose } = mount(read, page([event('first')]));
   await flush();
-  setValue({ events: [event('new')], first_event_id: 'new', last_event_id: 'new' }); await flush();
+  setValue({ thread_id: 'parent', events: [event('new')], first_event_id: 'new', last_event_id: 'new' }); await flush();
   finish(page([event('first', 'Obsolete'), event('last', 'Obsolete')])); await flush();
   expect(reading.events().map(value => value.id)).toEqual(['new']);
   expect(vi.getTimerCount()).toBe(1);
@@ -108,7 +108,7 @@ it('discards a previous thread read and releases its timer when navigating away'
   let reading!: ReturnType<typeof createParentEventReading>;
   const host = document.createElement('div'); document.body.append(host);
   const dispose = render(() => { reading = createParentEventReading({ get threadID() { return selected(); },
-    get page() { return selected() === 'parent' ? page([event('first')]) : { events: [] }; }, read }); return null; }, host);
+    get page() { return selected() === 'parent' ? page([event('first')]) : { thread_id: selected(), events: [] }; }, read }); return null; }, host);
   onTestFinished(() => { dispose(); host.remove(); });
   await flush(); setSelected('other'); await flush();
   finish(page([event('first', 'Obsolete'), event('last', 'Obsolete')])); await flush();
@@ -123,4 +123,15 @@ it('rejects a continuation that repeats an earlier loaded page without advancing
   await flush(); await reading.more();
   expect(reading.failed()).toBe(true); expect(reading.cursor()).toBe('middle');
   expect(reading.events().map(value => value.message)).toEqual(['One', 'Two']);
+});
+
+it('reads inherited reports under the page scope and rejects a response for another scope', async () => {
+  const inherited = { ...event('first'), parent_thread_id: 'ancestor' };
+  const read = vi.fn().mockResolvedValueOnce({ ...page([inherited, event('last', 'Last')]), thread_id: 'ancestor' })
+    .mockResolvedValueOnce(page([{ ...inherited, message: 'Inherited report' }, event('last', 'Last')]));
+  const { reading } = mount(read, page([inherited]));
+  await flush(); expect(reading.failed()).toBe(true);
+  expect(read).toHaveBeenCalledWith('parent', expect.objectContaining({ first_event_id: 'first', last_event_id: 'last' }));
+  await reading.retry(); expect(reading.failed()).toBe(false);
+  expect(reading.events()[0]).toMatchObject({ parent_thread_id: 'ancestor', message: 'Inherited report' });
 });

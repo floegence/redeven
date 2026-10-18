@@ -69,7 +69,7 @@ export function createParentEventReading(props: Readonly<{
   const request = (more: boolean): EventReadRequest | undefined => {
     const page = props.page;
     if (!page?.first_event_id || !page.last_event_id || (more && !cursor())
-      || page.events.some(event => event.parent_thread_id !== props.threadID)) return;
+      || page.thread_id !== props.threadID) return;
     return { threadID: props.threadID, query: { action: 'read', first_event_id: page.first_event_id,
       last_event_id: page.last_event_id, ...(more ? { after_event_id: cursor() } : {}), limit: 50 } };
   };

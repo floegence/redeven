@@ -961,9 +961,16 @@ describe('canonical parent event array contract', () => {
     expect(() => applyFlowerRuntimeCurrentView(base, current)).toThrow('Flower contract error:');
     expect(base.messages[0].content).toBe('old');
   });
+  it('rejects wrong or missing page scope while preserving the accepted conversation', () => {
+    const base = summary();
+    for (const parent_events of [{ thread_id: 'other', events: [] }, { events: [] }]) {
+      expect(() => applyFlowerRuntimeCurrentView(base, { thread_id: base.thread_id, view_version: 1, activity: 'idle', items: [], parent_events } as FlowerRuntimeCurrentView)).toThrow('Flower contract error:');
+    }
+    expect(base.messages[0].content).toBe('old');
+  });
   it('preserves a real serialized empty page and the disabled capability', () => {
     const base = summary();
-    const current = JSON.parse(JSON.stringify({ thread_id: base.thread_id, view_version: 1, activity: 'idle', items: [], parent_events: { events: [] } })) as FlowerRuntimeCurrentView;
+    const current = JSON.parse(JSON.stringify({ thread_id: base.thread_id, view_version: 1, activity: 'idle', items: [], parent_events: { thread_id: base.thread_id, events: [] } })) as FlowerRuntimeCurrentView;
     expect(applyFlowerRuntimeCurrentView(base, current).parent_events?.events).toEqual([]);
     expect(applyFlowerRuntimeCurrentView(base, { ...current, parent_events: undefined }).parent_events).toBeUndefined();
   });

@@ -610,6 +610,7 @@ export function runtimeCurrentView(
   });
   return {
     thread_id: threadValue.thread_id,
+    parent_events: threadValue.parent_events,
     view_version: version,
     cancellation: threadValue.cancellation,
     ...(threadValue.error ? { error: threadValue.error.message, run_error_code: threadValue.error.code, run_error_detail: threadValue.error.detail } : {}),

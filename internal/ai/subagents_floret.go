@@ -443,7 +443,7 @@ func (runtime *floretSubagentRuntime) wait(ctx context.Context, args map[string]
 	if timedOut {
 		reason = "wait_timeout"
 	}
-	eventPage := flruntime.ParentEventPage{Events: []flruntime.ParentEvent{}}
+	eventPage := flruntime.ParentEventPage{ThreadID: parentID, Events: []flruntime.ParentEvent{}}
 	if result.ParentEvents != nil {
 		eventPage = *result.ParentEvents
 	}

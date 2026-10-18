@@ -1933,3 +1933,5 @@ text coverage. Document relative-only, historical and unavailable states in
 [context usage](ai/model-context-usage-and-compaction.md). See the
 [qualification report](operations/flower-context-distribution-qualification.md) for fixed
 samples, real tasks, the corrected compaction oracle and retained failures.
+
+- 2026-10-18: Consume Floret v7.56.0 scoped parent event pages; preserve inherited recipients, local report recovery and fork creation identity. Register contract, recovery and real Service/browser regression in Flower qualification.

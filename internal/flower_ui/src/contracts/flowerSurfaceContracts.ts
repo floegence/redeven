@@ -947,7 +947,7 @@ export type FlowerParentEvent = Readonly<{
   source_entry_id: string; kind: 'report' | 'completed' | 'failed' | 'cancelled' | 'interrupted' | 'timed_out' | 'input_required' | 'approval_required';
   reason_code?: string; interaction_id?: string; message?: string; received_at: string; admitted: boolean; resolved?: boolean;
 }>;
-export type FlowerParentEventPage = Readonly<{ events: readonly FlowerParentEvent[]; first_event_id?: string; last_event_id?: string; next_after_event_id?: string }>;
+export type FlowerParentEventPage = Readonly<{ thread_id: string; events: readonly FlowerParentEvent[]; first_event_id?: string; last_event_id?: string; next_after_event_id?: string }>;
 export type FlowerParentEventQuery = Readonly<{ action: 'list' | 'read'; event_id?: string; first_event_id?: string; last_event_id?: string; after_event_id?: string; limit?: number }>;
 
 export type FlowerRuntimeCurrentView = Readonly<{

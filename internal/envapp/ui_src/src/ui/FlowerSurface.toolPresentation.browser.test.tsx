@@ -12,20 +12,21 @@ import { activityItem, activityTimeline, adapter, liveBootstrap, renderSurfaceWi
 
 it('animates every tool type and restores static glyphs at settlement', async () => {
   await page.viewport(1100, 1000);
+  const toolNames = Object.keys(flowerToolMotion);
   const [running, setRunning] = createSignal(true);
   const host = document.createElement('div');
   host.className = 'flower-activity-inline';
   host.style.cssText = 'display:grid;grid-template-columns:repeat(3,1fr);gap:6px 24px;padding:24px;background:var(--background);color:var(--foreground);font:12px sans-serif';
   document.body.append(host);
-  const dispose = render(() => <For each={Object.keys(flowerToolMotion)}>{name => <div style="display:flex;align-items:center;gap:12px;height:28px">
+  const dispose = render(() => <For each={toolNames}>{name => <div style="display:flex;align-items:center;gap:12px;height:28px">
     <FlowerToolIcon toolName={name} running={running()} /><code>{name}</code>
     <span style="margin-left:auto;color:var(--flower-activity-tool-row-ok)"><FlowerToolIcon toolName={name} running={false} /></span>
     <span style="color:var(--flower-activity-tool-row-error)"><FlowerToolIcon toolName={name} running={false} /></span>
   </div>}</For>, host);
   try {
-    await waitFor(() => host.getAnimations({ subtree: true }).length > 58);
+    await waitFor(() => host.getAnimations({ subtree: true }).length > toolNames.length);
     const svgs = [...host.querySelectorAll('svg')];
-    expect(svgs).toHaveLength(172);
+    expect(svgs).toHaveLength(toolNames.length * 3 - 2);
     expect(host.querySelectorAll('.flower-activity-inline-loader')).toHaveLength(2);
     expect(host.querySelectorAll('.flower-activity-inline-loader-square')).toHaveLength(8);
     const animations = host.getAnimations({ subtree: true });
@@ -33,11 +34,11 @@ it('animates every tool type and restores static glyphs at settlement', async ()
     for (const phase of [0, 0.35, 0.7, 0.999]) {
       animations.forEach((animation, index) => { animation.pause(); animation.currentTime = start[index] * phase; });
       for (const svg of svgs) expect(svg.getBoundingClientRect().width).toBe(16);
-      if (phase === 0.35) await page.screenshot({ element: host, path: '__screenshots__/flower-tool-icons-58.png' });
+      if (phase === 0.35) await page.screenshot({ element: host, path: '__screenshots__/flower-tool-icons.png' });
     }
     setRunning(false);
     expect(host.getAnimations({ subtree: true })).toHaveLength(0);
-    expect(host.querySelectorAll('svg')).toHaveLength(174);
+    expect(host.querySelectorAll('svg')).toHaveLength(toolNames.length * 3);
     expect(host.querySelector('.flower-activity-inline-loader')).toBeNull();
     expect(svgs.every(svg => svg.isConnected)).toBe(true);
     expect([...host.querySelectorAll('g')].every(group => !group.style.strokeDasharray && !group.style.opacity)).toBe(true);
