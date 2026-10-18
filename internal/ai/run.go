@@ -1270,6 +1270,7 @@ func isMutatingInvocation(toolName string, args map[string]any) bool {
 }
 
 type toolCallOutcome struct {
+	executionFacts        toolExecutionFacts
 	cancellationConfirmed bool
 	dispatchErr           error
 	Success               bool
@@ -1283,6 +1284,7 @@ type toolCallOutcome struct {
 }
 
 type toolExecutionOutput struct {
+	facts       toolExecutionFacts
 	TargetID    string
 	Payload     any
 	Attachments []ToolAttachment
@@ -1559,6 +1561,14 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 
 	r.debug("ai.run.tool.exec.start", "tool_id", toolID, "tool_name", toolName)
 	result, toolErrRaw := r.execTool(ctx, meta, toolID, toolName, args)
+	outcome.executionFacts = toolExecutionFacts{callID: toolID, toolName: toolName, potentialMutation: mutating,
+		completed: !errors.Is(toolErrRaw, context.Canceled) && !errors.Is(toolErrRaw, context.DeadlineExceeded) && !errors.Is(toolErrRaw, errComputerEffectUnknown) && !errors.Is(toolErrRaw, errMCPEffectUnknown) && !errors.Is(toolErrRaw, tessiven.ErrOutcomeUnknown)}
+	if target, ok := result.(toolExecutionOutput); ok {
+		outcome.executionFacts.targetID = target.TargetID
+		outcome.executionFacts.completedActions = append([]string(nil), target.facts.completedActions...)
+		outcome.executionFacts.needsObservation = target.facts.needsObservation || (isComputerUseTool(toolName) && mutating)
+	}
+
 	if toolErrRaw != nil {
 		var partial any
 		var documentError *tessiven.ValidationError
@@ -3152,7 +3162,7 @@ func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string
 			if result.TargetName == "" {
 				result.TargetName = target.DisplayName
 			}
-			return toolExecutionOutput{TargetID: targetID, Payload: targetToolResultPayload(result, targetID, target), Attachments: toolAttachmentsFromTarget(result.Attachments)}, err
+			return toolExecutionOutput{facts: result.executionFacts, TargetID: targetID, Payload: targetToolResultPayload(result, targetID, target), Attachments: toolAttachmentsFromTarget(result.Attachments)}, err
 		}
 		return nil, err
 	}
@@ -3168,7 +3178,7 @@ func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string
 	if result.TargetName == "" {
 		result.TargetName = target.DisplayName
 	}
-	return toolExecutionOutput{TargetID: targetID, Payload: targetToolResultPayload(result, targetID, target), Attachments: toolAttachmentsFromTarget(result.Attachments)}, nil
+	return toolExecutionOutput{facts: result.executionFacts, TargetID: targetID, Payload: targetToolResultPayload(result, targetID, target), Attachments: toolAttachmentsFromTarget(result.Attachments)}, nil
 }
 
 func toolAttachmentsFromTarget(source []TargetToolAttachment) []ToolAttachment {

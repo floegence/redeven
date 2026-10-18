@@ -80,7 +80,10 @@ func applyFileActivityTargets(activity *fltools.ActivityPresentation, name strin
 	if activity == nil || !localFileActivityTool(name) {
 		return
 	}
-	normalized, _ := normalizeJSONCompatibleToolPayload(data)
+	normalized, err := normalizeJSONCompatibleToolPayload(data)
+	if err != nil {
+		return
+	}
 	payload, _ := normalized.(map[string]any)
 	// Routed results carry explicit target provenance, never local filesystem paths.
 	if payload["target_id"] != nil || payload["execution_location"] != nil || payload["target_kind"] != nil {
@@ -105,7 +108,7 @@ func applyFileActivityTargets(activity *fltools.ActivityPresentation, name strin
 			if !ok {
 				continue
 			}
-			safe, _ := contractSafePayloadMap(record, 0)
+			safe, _ := boundedJSONMap(record, 0)
 			target := mutationActivityTarget(record)
 			mutation := fileMutationActivityPayload(safe)
 			mutation.Target = target

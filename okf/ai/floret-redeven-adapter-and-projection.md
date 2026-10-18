@@ -3,7 +3,7 @@ type: AI Runtime Contract
 title: Floret Redeven adapter and projection
 description: Map authorized Redeven requests and Floret typed views without creating a second thread lifecycle.
 tags: [ai, floret, adapter, projection]
-timestamp: 2026-10-08T00:00:00Z
+timestamp: 2026-10-18T00:00:00Z
 quality_exception: Cross-boundary adapter contract spanning authorization, live projections, Activity sanitization, recovery, and browser ordering.
 ---
 # Summary
@@ -11,6 +11,50 @@ quality_exception: Cross-boundary adapter contract spanning authorization, live 
 Redeven's adapter is a thin typed boundary over published Floret. It authorizes endpoint and thread ownership, resolves resources, sanitizes Activity, maps typed views and failures, and projects live summaries. Floret remains the only lifecycle, persistence, migration, cancellation, and provider-state owner; Redeven never waits on provider work or mirrors a receipt, authority barrier, transcript, or execution projection.
 
 # Contract
+
+## Model output and presentation
+
+[tool_result_encoding.go](../../internal/ai/tool_result_encoding.go) owns the
+single final result encoder: execution facts, tool content policy, final JSON,
+then Text and an independent Decoder.UseNumber Structured snapshot. Computer
+results retain objects, arrays, numbers, booleans and null without Activity's
+depth, key or string limits. Activity independently projects valid source data;
+its display truncation never changes model output. Other bounded tools retain
+their content limits and default output policy. Complete child reports bypass
+model display projection directly, without restoring data after truncation.
+
+Computer final envelopes through 1 MiB inclusive remain complete. Larger outputs
+return TOOL_RESULT_TOO_LARGE; unencodable outputs return
+TOOL_RESULT_ENCODING_FAILED. These are final output bounds, not a bound on all
+execution memory. Source semantic ownership retains its 1000-node, per-node text
+and 256 KiB budgets, privacy checks and screenshot authorization. Observe failures
+recommend smaller root/limit scopes, scripts recommend smaller output, and target
+management retains target selection guidance. Attachment pagination is unchanged.
+
+Published Floret v7.53.0 independently archives Text above 64 KiB even when
+visibility is complete; only actual visible trimming sets Floret Truncated.
+The existing atomic settlement owns the unique FullOutput artifact and hash.
+Model JSON truncated reports only confirmed source semantic pruning.
+
+Typed private execution facts identify the invocation, authorized target and
+confirmed operation prefix. A completed mutation with unavailable output settles
+an error and those facts with generic InputRequired. The normal card offers
+“Checked, continue”, Stop and navigation; refresh and restart restore the same
+canonical wait. User response resumes the model with explicit read-only inspection
+guidance, never redispatching the completed tool. A closed target cannot prevent
+Stop or continuation. No synthetic takeover or product lifecycle is created.
+DispatchErr, uncertain effects and unconfirmed cancellation retain their existing
+terminal classification. Confirmed cancellation is classified before encoding,
+so Text and Structured agree even when optional content is invalid. Safe fallback
+envelopes contain neither damaged values nor scripts.
+
+[contract tests](../../internal/ai/computer_result_contract_test.go) cover exact
+types, numbers, boundaries, hash plans and retained file limits.
+[provider integration](../../internal/ai/computer_result_encoding_integration_test.go)
+checks canonical history, retry, restart, error waits and one counted effect.
+[opt-in UI qualification](computer-use-qualification.md#result-encoding-recovery)
+uses the real Service and production Flower renderer.
+
 
 Computer and browser action results use Floret's published tool-result image
 contract: Redeven supplies opaque screenshot descriptors and a host resolver,

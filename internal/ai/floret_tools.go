@@ -308,7 +308,7 @@ func activityPresentationDescription(value string) string {
 	return out
 }
 
-func activityToolErrorPayload(toolErr *aitools.ToolError) map[string]any {
+func toolErrorPayload(toolErr *aitools.ToolError) map[string]any {
 	if toolErr == nil {
 		return map[string]any{}
 	}
@@ -330,10 +330,10 @@ func activityToolErrorPayloadFromValue(value any) (map[string]any, bool) {
 		if typed == nil {
 			return nil, false
 		}
-		return activityToolErrorPayload(typed), true
+		return toolErrorPayload(typed), true
 	case aitools.ToolError:
 		toolErr := typed
-		return activityToolErrorPayload(&toolErr), true
+		return toolErrorPayload(&toolErr), true
 	default:
 		return nil, false
 	}
@@ -376,46 +376,46 @@ func validateToolResultStatus(status string) (string, error) {
 	}
 }
 
+// modelToolResultPayload applies the tool's content policy before final encoding.
+// Computer output is already sanitized by its owner and is never a display projection.
 func modelToolResultPayload(result ToolResult) (map[string]any, error) {
 	status := strings.TrimSpace(result.Status)
 	if result.Pending != nil {
-		if status == "" {
-			status = "pending"
-		}
+		status = "pending"
 	} else {
 		var err error
-		status, err = validateToolResultStatus(result.Status)
+		status, err = validateToolResultStatus(status)
 		if err != nil {
 			return nil, err
 		}
 	}
 	if result.Error != nil && status == toolResultStatusSuccess {
-		return nil, fmt.Errorf("tool result status %q cannot carry an error", status)
+		return nil, fmt.Errorf("successful result cannot carry an error")
 	}
-	raw := map[string]any{
-		"status":      status,
-		"summary":     strings.TrimSpace(result.Summary),
-		"details":     strings.TrimSpace(result.Details),
-		"truncated":   result.Truncated,
-		"content_ref": strings.TrimSpace(result.ContentRef),
-	}
-	preserveSubagentData := (strings.TrimSpace(result.ToolName) == "subagents" || strings.TrimSpace(result.ToolName) == "subagent_events") && result.Data != nil
-	if result.Data != nil && !preserveSubagentData {
+	raw := map[string]any{"status": status, "summary": strings.TrimSpace(result.Summary), "details": strings.TrimSpace(result.Details), "truncated": result.Truncated || (isComputerUseTool(result.ToolName) && computerSourceTruncated(result.Data)), "content_ref": strings.TrimSpace(result.ContentRef)}
+	if result.Data != nil {
 		raw["data"] = result.Data
 	}
 	if result.Error != nil {
-		raw["error"] = activityToolErrorPayload(result.Error)
+		raw["error"] = toolErrorPayload(result.Error)
 	}
-	payload, truncated := contractSafePayloadMap(raw, 0)
-	if preserveSubagentData {
-		normalized, _ := normalizeJSONCompatibleToolPayload(result.Data)
-		payload["data"] = normalized
+	if status == toolResultStatusAborted && result.cancellationConfirmed {
+		raw["outcome"] = fltools.ResultOutcomeCanceled
 	}
-	if truncated || result.Truncated {
-		payload["truncated"] = true
+	if isComputerUseTool(result.ToolName) || completeReportTool(result.ToolName) {
+		return raw, nil
 	}
+	// Validate before the bounded projection can turn an unsupported value into text.
+	normalized, err := normalizeJSONCompatibleToolPayload(raw)
+	if err != nil {
+		return nil, err
+	}
+	payload, bounded := boundedJSONMap(normalized.(map[string]any), 0)
+	payload["truncated"] = result.Truncated || bounded
 	return payload, nil
 }
+
+func completeReportTool(name string) bool { return name == "subagents" || name == "subagent_events" }
 
 func floretToolDefinitionForSnapshot(def ToolDef, authorizationSnapshot PermissionSnapshot) (fltools.Definition, error) {
 	def = normalizeToolPermissionMetadata(def)
@@ -752,38 +752,21 @@ func floretToolEffects(def ToolDef) []fltools.Effect {
 }
 
 func floretToolResultFromFlower(r *run, result ToolResult) (fltools.Result, error) {
-	structured, err := modelToolResultPayload(result)
+	encoded, err := encodeModelToolResult(result)
 	if err != nil {
 		return fltools.Result{}, err
 	}
+	result, structured, text := encoded.result, encoded.structured, encoded.text
 	if result.Pending != nil {
-		activity := pendingToolActivityFromFlower(result, structured)
-		return fltools.Result{
-			CallID:     strings.TrimSpace(result.ToolID),
-			Name:       strings.TrimSpace(result.ToolName),
-			Structured: structured,
-			Activity:   activity,
-			Pending: &fltools.PendingToolResult{
-				Handle:      strings.TrimSpace(result.Pending.Handle),
-				State:       fltools.PendingToolResultRunning,
-				Summary:     strings.TrimSpace(result.Pending.Summary),
-				Instruction: strings.TrimSpace(result.Pending.Instruction),
-				Metadata:    cloneStringMap(result.Pending.Metadata),
-			},
-		}, nil
+		return fltools.Result{CallID: strings.TrimSpace(result.ToolID), Name: strings.TrimSpace(result.ToolName), Text: string(text), Structured: structured,
+			Activity: pendingToolActivityFromFlower(result, structured), Pending: &fltools.PendingToolResult{Handle: strings.TrimSpace(result.Pending.Handle), State: fltools.PendingToolResultRunning, Summary: strings.TrimSpace(result.Pending.Summary), Instruction: strings.TrimSpace(result.Pending.Instruction), Metadata: cloneStringMap(result.Pending.Metadata)}}, nil
 	}
-	text, err := json.Marshal(structured)
-	if err != nil {
-		return fltools.Result{}, fmt.Errorf("encode %s tool result: %w", result.ToolName, err)
-	}
-	status := strings.TrimSpace(anyToString(structured["status"]))
+	status := result.Status
 	metadata := map[string]any(nil)
 	dispatchErr := result.dispatchErr
 	isError := status != toolResultStatusSuccess
 	if status == toolResultStatusAborted {
-		if result.cancellationConfirmed {
-			structured["outcome"] = fltools.ResultOutcomeCanceled
-		} else if dispatchErr == nil {
+		if !result.cancellationConfirmed && dispatchErr == nil {
 			dispatchErr = context.Canceled
 		}
 		isError = false
@@ -803,13 +786,16 @@ func floretToolResultFromFlower(r *run, result ToolResult) (fltools.Result, erro
 		return fltools.Result{}, err
 	}
 	var outputPolicy *fltools.OutputPolicy
-	if name := strings.TrimSpace(result.ToolName); name == "subagents" || name == "subagent_events" {
+	if name := strings.TrimSpace(result.ToolName); completeReportTool(name) || isComputerUseTool(name) {
 		// Explicit child reports must remain complete through savepoints and retry.
 		// The normal provider request budget still applies to the full result.
 		outputPolicy = &fltools.OutputPolicy{VisibleMaxBytes: len(text) + 1, VisibleMaxLines: strings.Count(string(text), "\n") + 1, Strategy: fltools.OutputHead, PreserveFull: true}
+		if isComputerUseTool(name) {
+			outputPolicy.ArchiveAboveBytes = computerResultArchiveBytes
+		}
 	}
 	var boundedWait *fltools.BoundedWait
-	var inputRequired *fltools.InputRequest
+	inputRequired := encoded.inputRequired
 	if result.ToolName == "subagents" && !isError {
 		data, _ := structured["data"].(map[string]any)
 		if anyToString(data["action"]) == subagentActionWait {
@@ -910,7 +896,7 @@ func floretActivityForToolCall(toolName string, args map[string]any) *fltools.Ac
 		payload["operation"] = "search"
 	}
 	payload = publicActivityPayloadForTool(toolName, payload)
-	payload, _ = contractSafePayloadMap(payload, 0)
+	payload, _ = boundedJSONMap(payload, 0)
 	activity := &fltools.ActivityPresentation{
 		Label:    activityCallLabel(toolName, spec, hasSpec, renderer, args, payload),
 		Renderer: renderer,
@@ -1253,7 +1239,10 @@ func floretActivityForToolResult(r *run, result ToolResult) (*fltools.ActivityPr
 	var rawPayload map[string]any
 	dataTruncated := false
 	if renderer == fltools.ActivityRendererSubAgentOperation {
-		normalized, _ := normalizeJSONCompatibleToolPayload(result.Data)
+		normalized, err := normalizeJSONCompatibleToolPayload(result.Data)
+		if err != nil {
+			return nil, err
+		}
 		rawPayload, _ = normalized.(map[string]any)
 		rawPayload = cloneAnyMap(rawPayload)
 	} else {
@@ -1282,7 +1271,7 @@ func floretActivityForToolResult(r *run, result ToolResult) (*fltools.ActivityPr
 		payload["content_ref"] = strings.TrimSpace(result.ContentRef)
 	}
 	if result.Error != nil {
-		payload["error"] = activityToolErrorPayload(result.Error)
+		payload["error"] = toolErrorPayload(result.Error)
 	} else if status != toolResultStatusSuccess {
 		if message := firstActionableToolActivityText(result.Details, result.Summary); message != "" {
 			payload["error"] = map[string]any{"message": message}
@@ -1295,7 +1284,7 @@ func floretActivityForToolResult(r *run, result ToolResult) (*fltools.ActivityPr
 		payload["operation"] = "search"
 	}
 	payload = publicActivityPayloadForTool(toolName, payload)
-	payload, payloadTruncated := contractSafePayloadMapForTool(toolName, payload, 0)
+	payload, payloadTruncated := boundedJSONMapForTool(toolName, payload, 0)
 	if payloadTruncated && !isOKFToolName(toolName) {
 		payload["truncated"] = true
 	}
@@ -1480,68 +1469,67 @@ func activityPayloadFromResultDataWithDepth(data any, maxDepth int) (map[string]
 		return map[string]any{}, false
 	}
 	if record, ok := data.(map[string]any); ok {
-		return contractSafePayloadMapWithMaxDepth(record, 0, maxDepth)
+		return boundedJSONMapWithMaxDepth(record, 0, maxDepth)
 	}
 	raw, err := json.Marshal(data)
 	if err != nil || len(raw) == 0 {
-		value, truncated := contractSafePayloadValueWithMaxDepth(strings.TrimSpace(fmt.Sprint(data)), 1, maxDepth)
+		value, truncated := boundedJSONValueWithMaxDepth(strings.TrimSpace(fmt.Sprint(data)), 1, maxDepth)
 		return map[string]any{"value": value}, truncated
 	}
-	var out map[string]any
-	if err := json.Unmarshal(raw, &out); err == nil && out != nil {
-		return contractSafePayloadMapWithMaxDepth(out, 0, maxDepth)
-	}
-	var value any
-	if err := json.Unmarshal(raw, &value); err != nil {
-		safeValue, truncated := contractSafePayloadValueWithMaxDepth(string(raw), 1, maxDepth)
+	value, err := decodeToolJSON(raw)
+	if err != nil {
+		safeValue, truncated := boundedJSONValueWithMaxDepth(string(raw), 1, maxDepth)
 		return map[string]any{"value": safeValue}, truncated
 	}
-	safeValue, truncated := contractSafePayloadValueWithMaxDepth(value, 1, maxDepth)
+	if out, ok := value.(map[string]any); ok {
+		return boundedJSONMapWithMaxDepth(out, 0, maxDepth)
+	}
+	safeValue, truncated := boundedJSONValueWithMaxDepth(value, 1, maxDepth)
 	return map[string]any{"value": safeValue}, truncated
 }
 
-func contractSafePayloadMap(in map[string]any, depth int) (map[string]any, bool) {
-	return contractSafePayloadMapWithMaxDepth(in, depth, activityPayloadMaxDepth)
+func boundedJSONMap(in map[string]any, depth int) (map[string]any, bool) {
+	return boundedJSONMapWithMaxDepth(in, depth, activityPayloadMaxDepth)
 }
 
-func contractSafePayloadMapForTool(toolName string, in map[string]any, depth int) (map[string]any, bool) {
+func boundedJSONMapForTool(toolName string, in map[string]any, depth int) (map[string]any, bool) {
 	if isOKFToolName(toolName) {
-		return contractSafePayloadMapWithMaxDepth(in, depth, okfActivityPayloadMaxDepth)
+		return boundedJSONMapWithMaxDepth(in, depth, okfActivityPayloadMaxDepth)
 	}
-	return contractSafePayloadMap(in, depth)
+	return boundedJSONMap(in, depth)
 }
 
-func contractSafePayloadMapWithMaxDepth(in map[string]any, depth int, maxDepth int) (map[string]any, bool) {
+func boundedJSONMapWithMaxDepth(in map[string]any, depth int, maxDepth int) (map[string]any, bool) {
 	out := make(map[string]any, len(in))
 	truncated := false
 	for key, value := range in {
-		key = contractSafePayloadKey(key)
+		key = boundedJSONKey(key)
 		if key == "" {
 			truncated = true
 			continue
 		}
 		if key == "error" {
 			if errorPayload, ok := activityToolErrorRecordFromValue(value); ok {
-				safeError, errorTruncated := contractSafePayloadMapWithMaxDepth(errorPayload, depth+1, maxDepth)
+				safeError, errorTruncated := boundedJSONMapWithMaxDepth(errorPayload, depth+1, maxDepth)
 				out[key] = safeError
 				truncated = truncated || errorTruncated
 				continue
 			}
 		}
-		safeValue, valueTruncated := contractSafePayloadValueWithMaxDepth(value, depth+1, maxDepth)
+		safeValue, valueTruncated := boundedJSONValueWithMaxDepth(value, depth+1, maxDepth)
 		out[key] = safeValue
 		truncated = truncated || valueTruncated
 	}
 	return out, truncated
 }
 
-func contractSafePayloadValueWithMaxDepth(value any, depth int, maxDepth int) (any, bool) {
+func boundedJSONValueWithMaxDepth(value any, depth int, maxDepth int) (any, bool) {
 	if depth > maxDepth {
 		text, truncated := contractSafeString(compactJSONForActivityPayload(value), activityPayloadStringLimit)
 		return text, true || truncated
 	}
 	if errorPayload, ok := activityToolErrorPayloadFromValue(value); ok {
-		safeError, truncated := contractSafePayloadMapWithMaxDepth(errorPayload, depth, maxDepth)
+		safeError, truncated := boundedJSONMapWithMaxDepth(errorPayload, depth, maxDepth)
 		return safeError, truncated
 	}
 	switch typed := value.(type) {
@@ -1549,6 +1537,8 @@ func contractSafePayloadValueWithMaxDepth(value any, depth int, maxDepth int) (a
 		return nil, false
 	case string:
 		return contractSafeString(typed, activityPayloadStringLimit)
+	case json.Number:
+		return typed, false
 	case bool,
 		int, int8, int16, int32, int64,
 		uint, uint8, uint16, uint32, uint64:
@@ -1568,7 +1558,7 @@ func contractSafePayloadValueWithMaxDepth(value any, depth int, maxDepth int) (a
 			text, truncated := contractSafeString(compactJSONForActivityPayload(typed), activityPayloadStringLimit)
 			return text, true || truncated
 		}
-		return contractSafePayloadMapWithMaxDepth(typed, depth, maxDepth)
+		return boundedJSONMapWithMaxDepth(typed, depth, maxDepth)
 	case []any:
 		if depth >= maxDepth {
 			text, truncated := contractSafeString(compactJSONForActivityPayload(typed), activityPayloadStringLimit)
@@ -1577,7 +1567,7 @@ func contractSafePayloadValueWithMaxDepth(value any, depth int, maxDepth int) (a
 		out := make([]any, 0, len(typed))
 		truncated := false
 		for _, item := range typed {
-			safeItem, itemTruncated := contractSafePayloadValueWithMaxDepth(item, depth+1, maxDepth)
+			safeItem, itemTruncated := boundedJSONValueWithMaxDepth(item, depth+1, maxDepth)
 			out = append(out, safeItem)
 			truncated = truncated || itemTruncated
 		}
@@ -1590,7 +1580,7 @@ func contractSafePayloadValueWithMaxDepth(value any, depth int, maxDepth int) (a
 		out := make([]any, 0, len(typed))
 		truncated := false
 		for _, item := range typed {
-			safeItem, itemTruncated := contractSafePayloadMapWithMaxDepth(item, depth+1, maxDepth)
+			safeItem, itemTruncated := boundedJSONMapWithMaxDepth(item, depth+1, maxDepth)
 			out = append(out, safeItem)
 			truncated = truncated || itemTruncated
 		}
@@ -1598,13 +1588,13 @@ func contractSafePayloadValueWithMaxDepth(value any, depth int, maxDepth int) (a
 	default:
 		raw, err := json.Marshal(value)
 		if err != nil || len(raw) == 0 {
-			return contractSafePayloadValueWithMaxDepth(strings.TrimSpace(fmt.Sprint(value)), depth, maxDepth)
+			return boundedJSONValueWithMaxDepth(strings.TrimSpace(fmt.Sprint(value)), depth, maxDepth)
 		}
-		var out any
-		if err := json.Unmarshal(raw, &out); err != nil {
-			return contractSafePayloadValueWithMaxDepth(string(raw), depth, maxDepth)
+		out, err := decodeToolJSON(raw)
+		if err != nil {
+			return boundedJSONValueWithMaxDepth(string(raw), depth, maxDepth)
 		}
-		return contractSafePayloadValueWithMaxDepth(out, depth, maxDepth)
+		return boundedJSONValueWithMaxDepth(out, depth, maxDepth)
 	}
 }
 
@@ -2053,7 +2043,16 @@ func activityIntValue(value any) (int, bool) {
 	switch typed := value.(type) {
 	case int:
 		return typed, true
+	case json.Number:
+		value, err := typed.Int64()
+		if err != nil || int64(int(value)) != value {
+			return 0, false
+		}
+		return int(value), true
 	case int64:
+		if int64(int(typed)) != typed {
+			return 0, false
+		}
 		return int(typed), true
 	case float64:
 		return int(typed), true
@@ -2071,7 +2070,7 @@ func isOKFToolName(toolName string) bool {
 	}
 }
 
-func contractSafePayloadKey(key string) string {
+func boundedJSONKey(key string) string {
 	key = strings.TrimSpace(key)
 	if key == "" {
 		return ""
@@ -2228,6 +2227,8 @@ func activityScalarString(value any) string {
 		return v
 	case []byte:
 		return string(v)
+	case json.Number:
+		return v.String()
 	case int:
 		return fmt.Sprintf("%d", v)
 	case int8:

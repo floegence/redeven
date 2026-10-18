@@ -1148,6 +1148,18 @@ atomic SQLite upgrade contract. Readiness phases drive Welcome feedback and
 controller timing logs; Redeven must not decode cache records, keep a parallel
 migration lifecycle, or substitute cache deletion for an upstream migration.
 
+Computer model results use one final JSON envelope encoder, independently of
+Activity presentation. Preserve Computer JSON types and source-side truncation;
+accept complete final envelopes through 1 MiB inclusive and archive Text above
+64 KiB through published Floret v7.53.0 OutputPolicy. Other tool content limits
+and complete child reports retain their existing policies. Never repair an
+encoding failure with raw-value fallback, stringified subtrees or JSON slicing.
+A confirmed completed mutation whose optional output cannot be encoded settles
+as an error with the existing InputRequired interaction; the next model step
+must inspect read-only state and must not replay the completed invocation.
+Dispatch errors, uncertain effects and unconfirmed cancellation retain their
+terminal authority. Only Floret owns schema 20 migration and durable recovery.
+
 ## UI Interaction Affordance
 
 - Button labels must always remain on one line, including localized, loading, and completion states. Reserve transient label widths through the published `StableText`; let action groups reflow whole controls at narrow widths. Keep explanatory paragraphs outside buttons. Constrained selection labels may truncate with their complete text available; never solve overflow by wrapping action text or changing its height during a request.

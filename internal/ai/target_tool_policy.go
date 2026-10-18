@@ -150,6 +150,7 @@ type TargetToolCall struct {
 }
 
 type TargetToolResult struct {
+	executionFacts    toolExecutionFacts
 	frameBytes        []byte
 	TargetID          string                     `json:"target_id"`
 	TargetName        string                     `json:"target_name,omitempty"`

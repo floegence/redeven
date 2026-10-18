@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	flruntime "github.com/floegence/floret/v7/runtime"
 	"os"
@@ -137,9 +138,12 @@ func TestFlowerReadFilePreservesCompleteRulePages(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		data, truncated := normalizeTruncatedToolPayload("read_file", page)
+		data, truncated, err := normalizeTruncatedToolPayload("read_file", page)
+		if err != nil {
+			t.Fatal(err)
+		}
 		record, ok := data.(map[string]any)
-		if truncated || !ok || record["content"] != page.Content || record["total_lines"] != float64(901) {
+		if truncated || !ok || record["content"] != page.Content || record["total_lines"] != json.Number("901") {
 			t.Fatalf("bounded rule page lost its content or continuation: %#v", data)
 		}
 		complete.WriteString(record["content"].(string))

@@ -18,8 +18,9 @@ func (o *computerObservationOutput) render(value any, scope string, full bool) a
 		*o = computerObservationOutput{}
 		return value
 	}
-	var current map[string]any
-	if json.Unmarshal(body, &current) != nil || current == nil {
+	decoded, err := decodeToolJSON(body)
+	current, ok := decoded.(map[string]any)
+	if err != nil || !ok || current == nil {
 		*o = computerObservationOutput{}
 		return value
 	}

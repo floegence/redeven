@@ -3,7 +3,7 @@ type: AI Runtime Contract
 title: Floret thread runtime integration
 description: Typed Floret v7 thread runtime ownership and Redeven product boundaries.
 tags: [ai, floret, threads, runtime]
-timestamp: 2026-10-15T00:00:00Z
+timestamp: 2026-10-18T00:00:00Z
 quality_exception: Typed Floret ThreadService lifecycle and restart contract covering canonical journal ownership, idempotent effects, and migration safety.
 ---
 # Summary
@@ -13,6 +13,17 @@ Floret v7 `ThreadService` is the sole owner of active and canonical thread lifec
 # Contract
 
 ## Typed runtime
+
+Redeven consumes published Floret v7.53.0. Its additive
+OutputPolicy.ArchiveAboveBytes archives complete large tool text independently
+of visible truncation. Completed error results may request input while preserving
+error status. Floret owns batch settlement, waiting, Respond and restart; Redeven
+never redispatches a completed invocation when a user answers.
+The permanent schema 19-to-20 edge validates exact v19 authority and atomically
+upgrades the envelope in the existing namespace. Older writers reject v20;
+historical validators remain success-only for tool input. Redeven treats all
+Floret records as opaque and performs no product-side rewrite or migration.
+
 
 Published Floret v7.50.0 adds optional `ThreadWaiter` and typed canonical
 failure reasons without changing required ThreadService methods or schema 19.
