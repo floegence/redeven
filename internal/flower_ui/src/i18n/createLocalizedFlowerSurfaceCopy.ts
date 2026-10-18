@@ -570,14 +570,14 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
       liveProgressOutput: t(i18n, k('chat.liveProgressOutput')),
       contextIndicator: {
         currentContents: t(i18n, k('chat.contextIndicatorCurrentContents')), currentContentsHint: t(i18n, k('chat.contextIndicatorCurrentContentsHint')), collected: t(i18n, k('chat.contextIndicatorCollected')), used: t(i18n, k('chat.contextIndicatorUsed')), updated: t(i18n, k('chat.contextIndicatorUpdated')), removed: t(i18n, k('chat.contextIndicatorRemoved')),
-        textShare: t(i18n, k('chat.contextIndicatorTextShare')),
+        measured: t(i18n, k('chat.contextIndicatorMeasured')),
+        lastRequest: t(i18n, k('chat.contextIndicatorLastRequest')),
+        currentRequest: t(i18n, k('chat.contextIndicatorCurrentRequest')),
         composition: t(i18n, k('chat.contextIndicatorComposition')),
         compositionHint: t(i18n, k('chat.contextIndicatorCompositionHint')),
-        relativeHint: t(i18n, k('chat.contextIndicatorRelativeHint')),
-        historical: t(i18n, k('chat.contextIndicatorHistorical')),
-        historicalHint: t(i18n, k('chat.contextIndicatorHistoricalHint')),
         distributionUnavailable: t(i18n, k('chat.contextIndicatorDistributionUnavailable')),
         sourceLabels: {
+          unattributed_usage: t(i18n, k('chat.contextIndicatorSourceUnattributed')),
           system_prompt: t(i18n, k('chat.contextIndicatorSourceSystemPrompt')),
           system_tools: t(i18n, k('chat.contextIndicatorSourceSystemTools')),
           mcp_tools: t(i18n, k('chat.contextIndicatorSourceMcpTools')),

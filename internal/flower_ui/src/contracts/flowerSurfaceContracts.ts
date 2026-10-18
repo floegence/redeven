@@ -397,10 +397,22 @@ export type FlowerContextTokenDetail = Readonly<{
   category: 'tool_definition' | 'model_context'; key: string; source?: string; namespace?: string; tokens: number;
 }>;
 export type FlowerContextBreakdown = Readonly<{
+  attribution_coverage?: 'complete' | 'partial'; limitation?: string; opaque_bytes?: number;
   source: string; tokenizer?: string; quality?: 'token_estimate' | 'relative_weight'; details?: Readonly<{ items: readonly FlowerContextTokenDetail[] }>;
 } & Partial<Record<FlowerContextCategory, number>>>;
 
 export type FlowerContextSample = Readonly<{
+  available?: boolean;
+  measured?: boolean;
+  breakdown_available?: boolean;
+  unattributed_tokens?: number;
+  limitation?: string;
+  request_id?: string;
+  attempt_id?: string;
+  attempt_epoch?: number;
+  payload_fingerprint?: string;
+  provider?: string;
+  model?: string;
   breakdown?: FlowerContextBreakdown;
   run_id?: string;
   step_index?: number;

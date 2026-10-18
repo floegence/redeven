@@ -397,8 +397,8 @@ describe('Flower workspace synchronization recovery', () => {
 
 
 describe('Canonical managed facts on the existing workspace transport', () => {
- const sourceUsage = { confirmed: { phase: 'provider_usage', pressure_status: 'stable', updated_at_ms: 1, input_tokens: 100, context_window_tokens: 1000,
-  breakdown: { source: 'prepared_content_v3', quality: 'token_estimate', tokenizer: 'deepseek_v4', model_context_tokens: 60,
+ const sourceUsage = { confirmed: { available:true, measured:true, breakdown_available:true, unattributed_tokens:40, phase: 'provider_usage', pressure_status: 'stable', updated_at_ms: 1, input_tokens: 100, context_window_tokens: 1000,
+  breakdown: { source: 'prepared_content_v4', quality: 'token_estimate', tokenizer: 'deepseek_v4', model_context_tokens: 60,
    details: { items: [{ category: 'model_context', key: 'skills', tokens: 60 }] } } } } as const;
 
  it('updates background detail without creating user messages or changing selection', async () => {
@@ -426,7 +426,7 @@ describe('Canonical managed facts on the existing workspace transport', () => {
   await flush();
   const contextTrigger = surface.querySelector('[role="progressbar"]') as HTMLElement;
   contextTrigger.focus();
-  expect(surface.querySelector('[data-category="skills"]')?.textContent).toContain('≈100');
+  expect(surface.querySelector('[data-category="skills"]')?.textContent).toContain('≈60');
   expect(document.activeElement).toBe(contextTrigger);
   expect(surface.textContent).not.toContain('Background catalog changed');
   expect(surface.querySelectorAll('.flower-user-message')).toHaveLength(0);
@@ -459,7 +459,7 @@ describe('Canonical managed facts on the existing workspace transport', () => {
   (document.querySelector('[data-flower-subagent-row="0"]') as HTMLButtonElement).click();
   await waitFor(() => Boolean(document.querySelector('[data-flower-subagent-detail="open"]')));
   await flush();publish.resolve();
-  await waitFor(() => document.querySelector('[data-flower-subagent-detail="open"] [data-category="skills"]')?.textContent?.includes('≈100') ?? false);
+  await waitFor(() => document.querySelector('[data-flower-subagent-detail="open"] [data-category="skills"]')?.textContent?.includes('≈60') ?? false);
   expect(document.body.textContent).not.toContain('Current child catalog');
   expect(surface.querySelector('.flower-composer [data-category="skills"]')).toBeNull();
  });

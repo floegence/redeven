@@ -38,8 +38,8 @@ describe('Canonical thread reference identity', () => {
 });
 
 describe('Flower context usage contract', () => {
-  const confirmed = { phase: 'provider_usage', pressure_status: 'stable', input_tokens: 71872, context_window_tokens: 950000, updated_at_ms: 10 };
-  const estimate = { ...confirmed, phase: 'projected_request', input_tokens: 82346, updated_at_ms: 11 };
+  const confirmed = { available:true, measured:true, breakdown_available:false, unattributed_tokens:0, phase: 'provider_usage', pressure_status: 'stable', input_tokens: 71872, context_window_tokens: 950000, updated_at_ms: 10 };
+  const estimate = { ...confirmed, measured:false, phase: 'projected_request', input_tokens: 82346, updated_at_ms: 11 };
   const thread_usage = { input_tokens: 50, output_tokens: 20, cache_read_tokens: 45, cache_write_tokens: 5 };
 
   it.each([
@@ -59,7 +59,7 @@ describe('Flower context usage contract', () => {
     { quality: 'token_estimate', tokenizer: 'deepseek_v4', attachment_tokens: 1 },
     { quality: 'relative_weight', tokenizer: 7 },
   ])('rejects unsupported distribution claims %j', metadata => {
-    expect(() => mapContextUsage({ confirmed: { ...confirmed, breakdown: { source: 'rendered_content_v3', ...metadata } } })).toThrow();
+    expect(mapContextUsage({ confirmed: { ...confirmed, breakdown: { source: 'rendered_content_v3', ...metadata } } })?.confirmed).toMatchObject({available:true,breakdown_available:false,limitation:'invalid_breakdown'});
   });
 
   it('maps the same confirmed and estimated samples for live and reconnect', () => {
@@ -434,12 +434,12 @@ describe('Canonical managed model context', () => {
 });
 
 it('retains request-scoped context categories and zero native input', () => {
- const sample = { phase:'provider_usage', pressure_status:'stable', updated_at_ms:1, input_tokens:0,
+ const sample = { available:true,measured:true,breakdown_available:false,unattributed_tokens:0,phase:'provider_usage', pressure_status:'stable', updated_at_ms:1, input_tokens:0,
   breakdown:{ source:'semantic_input_bpe_v1', tool_result_tokens:1234, tool_call_tokens:70, attachment_tokens:4096 } };
  const mapped = mapContextUsage({ confirmed:sample })!;
  expect(mapped.confirmed?.input_tokens).toBe(0);
  expect(mapped.confirmed?.breakdown).toEqual(sample.breakdown);
  for (const value of [-1, 1.5, Number.MAX_SAFE_INTEGER+1, '100']) {
-  expect(() => mapContextUsage({ confirmed:{...sample, breakdown:{source:'test',tool_result_tokens:value}} })).toThrow();
+  expect(mapContextUsage({ confirmed:{...sample, breakdown:{source:'test',tool_result_tokens:value}} })?.confirmed).toMatchObject({available:true,input_tokens:0,breakdown_available:false,limitation:'invalid_breakdown'});
  }
 });

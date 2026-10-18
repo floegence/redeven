@@ -543,9 +543,8 @@
       "toolArgumentPreviewTooltip": "行数は準備中の変更のプレビューです。ツールの完了後に実際の変更が表示されます。",
       "contextIndicatorCurrentContents": "現在の内容",
       "contextIndicatorCurrentContentsHint": "現在のテキストの文字数比率。token の合計には保持中の過去の更新も含みます。",
-      "contextIndicatorTextShare": "相対比率",
       "contextIndicatorComposition": "入力構成の推定",
-      "contextIndicatorCompositionHint": "使用済みコンテキストの合計と各割合からトークン数を推定します。",
+      "contextIndicatorCompositionHint": "表示中のリクエストの分類別推定値です。未分類の入力は別に表示します。",
       "contextIndicatorSourceSystemPrompt": "システムプロンプト",
       "contextIndicatorSourceSystemTools": "システムツール定義",
       "contextIndicatorSourceMcpTools": "MCP ツール定義",
@@ -772,11 +771,12 @@
       "queuedEdit": "入力欄に戻す",
       "queueTakeBackConflict": "このメッセージは実行を開始したか、変更されています。更新して再試行してください。",
       "queueTakeBackUnknown": "メッセージを入力欄に戻しました。キューから削除されたことを確認できませんでした。送信前にキューを確認してください。",
-      "contextIndicatorRelativeHint": "使用済みコンテキストの合計がないため、割合のみ表示します。",
-      "contextIndicatorHistorical": "過去データから推定",
-      "contextIndicatorHistoricalHint": "過去の割合と記録されたコンテキストの合計から推定します。",
       "contextIndicatorDistributionUnavailable": "内訳はありません",
-      "contextIndicatorProtocolFraming": "プロトコルの書式"
+      "contextIndicatorProtocolFraming": "プロトコルの書式",
+      "contextIndicatorMeasured": "実測値",
+      "contextIndicatorLastRequest": "前回のリクエスト",
+      "contextIndicatorCurrentRequest": "現在のリクエスト",
+      "contextIndicatorSourceUnattributed": "未分類"
     },
     "threadList": {
       "title": "会話",

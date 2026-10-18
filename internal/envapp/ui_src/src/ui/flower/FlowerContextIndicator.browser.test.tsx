@@ -19,9 +19,9 @@ afterEach(() => {
  document.documentElement.removeAttribute('style');
  document.documentElement.classList.remove('dark', 'light');
 });
-const base = { phase: 'provider_usage', pressure_status: 'stable', input_tokens: 95400, context_window_tokens: 1000000, output_headroom_tokens: 33000, updated_at_ms: 1 } as const;
+const base = { available: true, measured: true, phase: 'provider_usage', pressure_status: 'stable', input_tokens: 110000, context_window_tokens: 1000000, output_headroom_tokens: 33000, updated_at_ms: 1 } as const;
 function fixture(mcpTokens = 48700): FlowerContextUsage {
- return { confirmed: { ...base, breakdown: { source: 'rendered_deepseek_v4_content_v3', quality: 'token_estimate', tokenizer: 'deepseek_v4', system_tokens: 3700,
+ return { confirmed: { ...base, breakdown_available: true, unattributed_tokens: 9560, breakdown: { source: 'prepared_content_v4', quality: 'token_estimate', tokenizer: 'deepseek_v4', system_tokens: 3700,
   tool_definition_tokens: mcpTokens + 30700, user_tokens: 4200, assistant_tokens: 3000, tool_call_tokens: 1700,
   tool_result_tokens: 2000, framing_tokens: 240, model_context_tokens: 6200, details: { items: [
    { category: 'tool_definition', key: 'search', source: 'mcp', namespace: 'docs', tokens: mcpTokens - 4000 },
@@ -61,6 +61,23 @@ function mount(locale: () => RedevenLocale, usage: () => FlowerContextUsage, pro
  dispose = render(() => <FlowerComposerContextIndicator copy={copy()} usage={usage()} placement={placement} />, host);
  return { host, copy, trigger: host.querySelector<HTMLElement>('[role="progressbar"]')!, panel: document.getElementById(host.querySelector<HTMLElement>('[role="progressbar"]')!.getAttribute('aria-controls')!)! };
 }
+it('owns Escape after opening with the mouse and returns focus', async () => {
+ await page.viewport(820, 700);
+ const { host, trigger, panel } = mount(() => 'en-US', () => fixture());
+ const outside = document.createElement('button'); host.append(outside); outside.focus();
+ let escaped = false;
+ const onEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') escaped = true; };
+ document.addEventListener('keydown', onEscape);
+ try {
+  await userEvent.click(trigger);
+  await expect.poll(() => document.activeElement).toBe(panel);
+  await userEvent.keyboard('{Escape}');
+  expect(panel.getAttribute('aria-hidden')).toBe('true');
+  expect(document.activeElement).toBe(trigger);
+  expect(escaped).toBe(false);
+ } finally { document.removeEventListener('keydown', onEscape); }
+});
+
 for (const projected of [false, true]) {
  it('keeps mouse interactions inside the popup open, projected=' + projected, async () => {
   await page.viewport(820, 700);
@@ -68,6 +85,7 @@ for (const projected of [false, true]) {
   await userEvent.hover(trigger);
   await expect.poll(() => getComputedStyle(panel).opacity).toBe('1');
   await userEvent.click(panel.querySelector<HTMLElement>('.flower-context-total')!, { delay: 160 });
+  expect(document.activeElement).toBe(panel);
   await new Promise(resolve => setTimeout(resolve, 200));
   expect(panel.dataset.open).toBe('true');
   const category = panel.querySelector<HTMLDetailsElement>('[data-category="mcp_tools"]')!;
@@ -124,7 +142,7 @@ for (const locale of ['en-US', 'zh-CN'] as const) for (const dark of [false, tru
   expect(closeButton.getBoundingClientRect().right).toBeCloseTo(heading.getBoundingClientRect().right, 0);
   expect(total.getBoundingClientRect().right).toBeLessThan(closeButton.getBoundingClientRect().left);
   const rows = [...panel.querySelectorAll<HTMLElement>('.flower-context-composition-row')];
-  expect(rows.length).toBe(10);
+  expect(rows.length).toBe(11);
   for (const row of rows) {
    expect(row.querySelector('.flower-model-context-fill')).not.toBeNull();
    expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth);
@@ -157,7 +175,7 @@ for (const locale of ['en-US', 'zh-CN'] as const) for (const dark of [false, tru
   const outside = document.createElement('button'); outside.style.cssText = 'position:fixed;top:0;left:0;width:24px;height:24px'; host.append(outside);
   await userEvent.click(outside); expect(panel.getAttribute('aria-hidden')).toBe('true');
   setUsage(mapContextUsage({ confirmed: base, estimate: { ...base, phase: 'projected_request', input_tokens: 291336 } })!);
-  trigger.focus(); expect(trigger.getAttribute('aria-valuenow')).toBe('10');
+  trigger.focus(); expect(trigger.getAttribute('aria-valuenow')).toBe('11');
   expect(panel.querySelector('.flower-context-composition')).toBeNull();
  });
 }
@@ -212,31 +230,19 @@ for (const placement of ['above-end', 'below-start'] as const) {
  });
 }
 
-for (const mode of ['relative', 'historical', 'media'] as const) {
- it('presents proportional token estimates for '+mode+' data', async () => {
-  await page.viewport(320,480);
-  theme(builtInShellThemePresets.find(preset => preset.name === 'classic-dark')!);
-  const value=fixture(); const {quality: _quality,tokenizer: _tokenizer,...historical}=value.confirmed!.breakdown!;
-  const breakdown=mode==='historical'?historical:{...historical,quality:'relative_weight' as const,...(mode==='media'?{attachment_tokens:100}:{})};
-  const [usage,setUsage]=createSignal<FlowerContextUsage>({...value,confirmed:{...value.confirmed!,breakdown}});
-  const {trigger,panel,copy}=mount(()=>'zh-CN',usage);trigger.focus();
-  await expect.poll(()=>getComputedStyle(panel).opacity).toBe('1');
-  const distribution=panel.querySelector('.flower-context-composition')!;
-  const summary=distribution.querySelector<HTMLElement>('[data-category="mcp_tools"] summary')!;
-  summary.focus();await userEvent.keyboard('{Enter}');
-  expect(distribution.getAttribute('data-token-amounts')).toBe('true');
-  expect(distribution.textContent).toContain('≈');
-  expect(distribution.getAttribute('title')).toBe(mode==='historical'?copy().chat.contextIndicator.historicalHint:copy().chat.contextIndicator.compositionHint);
-  for(const row of distribution.querySelectorAll('.flower-context-composition-row, .flower-model-context-row')){
-   expect(row.querySelector('.flower-model-context-amount')?.textContent).toMatch(/^≈\d/);
-   expect((row as HTMLElement).scrollWidth).toBeLessThanOrEqual((row as HTMLElement).clientWidth);
-  }
-  expect(panel.scrollWidth).toBe(panel.clientWidth);
-  setUsage({confirmed:base});
-  await expect.poll(()=>panel.textContent).toContain(copy().chat.contextIndicator.distributionUnavailable);
-  await userEvent.keyboard('{Escape}');expect(document.activeElement).toBe(trigger);
- });
-}
+it('recovers focus when attribution disappears during a live update', async () => {
+ await page.viewport(320,480);
+ const [usage,setUsage] = createSignal(fixture());
+ const {trigger,panel,copy} = mount(() => 'zh-CN',usage); trigger.focus();
+ const summary = panel.querySelector<HTMLElement>('[data-category="mcp_tools"] summary')!;
+ summary.focus(); await userEvent.keyboard('{Enter}');
+ setUsage({confirmed:base});
+ await expect.poll(() => document.activeElement).toBe(trigger);
+ expect(panel.textContent).toContain(copy().chat.contextIndicator.distributionUnavailable);
+ expect(panel.querySelector('.flower-context-total')?.textContent).toContain('= 110k');
+ await userEvent.keyboard('{Escape}');
+ expect(panel.getAttribute('aria-hidden')).toBe('true');
+});
 
 it('uses shared projected placement and restores focus after touch and keyboard close', async()=>{
  await page.viewport(820,700);

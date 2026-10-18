@@ -377,21 +377,11 @@ func flowerContextSampleFromFloret(status *observation.ContextStatus) (FlowerCon
 	if status == nil {
 		return FlowerContextSample{}, nil
 	}
-	if err := status.Validate(); err != nil {
-		return FlowerContextSample{}, err
-	}
+	// Floret preserves trustworthy totals even when optional attribution is damaged.
+	// Statistical limitations never block conversation or interaction updates.
+	accounting, _ := observation.ReconcileContextStatus(*status)
 	pressure := status.ContextPressure
 	usage := status.Usage
-	inputTokens := usage.WindowInputTokens
-	if inputTokens <= 0 {
-		inputTokens = usage.InputTokens + usage.CacheReadTokens + usage.CacheWriteTokens
-	}
-	if inputTokens <= 0 {
-		inputTokens = pressure.WindowInputTokens
-	}
-	if inputTokens <= 0 {
-		inputTokens = pressure.ProjectedInputTokens
-	}
 	source := strings.TrimSpace(string(pressure.Source))
 	if source == "" {
 		source = strings.TrimSpace(usage.Source)
@@ -413,7 +403,7 @@ func flowerContextSampleFromFloret(status *observation.ContextStatus) (FlowerCon
 		return FlowerContextSample{}, err
 	}
 	var breakdown *flconfig.ContextBreakdown
-	if status.RequestEstimate.Breakdown.Source != "" {
+	if accounting.BreakdownAvailable {
 		value := status.RequestEstimate.Breakdown
 		if value.Details != nil {
 			details := *value.Details
@@ -423,11 +413,13 @@ func flowerContextSampleFromFloret(status *observation.ContextStatus) (FlowerCon
 		breakdown = &value
 	}
 	return FlowerContextSample{
+		Available: accounting.Available, Measured: accounting.Measured, BreakdownAvailable: accounting.BreakdownAvailable, UnattributedTokens: accounting.UnattributedTokens, Limitation: accounting.Limitation,
+		RequestID: status.RequestID, AttemptID: status.AttemptID, AttemptEpoch: status.AttemptEpoch, PayloadFingerprint: status.PayloadFingerprint, Provider: status.Provider, Model: status.Model,
 		Breakdown:              breakdown,
 		RunID:                  runID,
 		StepIndex:              status.Step,
 		Phase:                  phase,
-		InputTokens:            inputTokens,
+		InputTokens:            accounting.InputTokens,
 		ContextWindowTokens:    pressure.ContextWindowTokens,
 		ThresholdTokens:        pressure.ThresholdTokens,
 		RequestSafeLimitTokens: pressure.RequestSafeLimit,

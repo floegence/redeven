@@ -2085,7 +2085,7 @@
   box-sizing: border-box;
   position: relative;
   width: min(20rem, calc(100vw - 2rem));
-  max-height: min(28rem, calc(100dvh - 4.5rem));
+  max-height: min(26.25rem, calc(100dvh - 4.5rem));
   overflow-y: auto;
   overscroll-behavior: contain;
   pointer-events: none;
@@ -2101,7 +2101,7 @@
   opacity: 0;
   transform: translateY(0.2rem);
   transition:
-    opacity 120ms ease, transform 120ms ease, visibility 120ms ease;
+    opacity 120ms ease, transform 120ms ease, visibility 0s linear 120ms;
 }
 
 .flower-composer-context-tooltip[data-open='true'] {
@@ -2109,6 +2109,7 @@
   visibility: visible;
   opacity: 1;
   transform: translateY(0);
+  transition-delay: 0s;
 }
 
 
@@ -12102,6 +12103,11 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
 .flower-composer-context-tooltip [data-category='repository_rules'] { --flower-context-color: var(--redeven-categorical-graph-6, var(--chart-5, var(--destructive, var(--primary)))); }
 .flower-composer-context-tooltip [data-category='skills'] { --flower-context-color: var(--redeven-categorical-graph-4, var(--chart-3, var(--success, var(--primary)))); }
 .flower-context-heading {
+  position: sticky;
+  top: -0.625rem;
+  z-index: 1;
+  background: var(--popover, var(--flower-chat-surface-elevated));
+  padding-block: 0.25rem;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
@@ -12264,10 +12270,6 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
 @media (pointer: coarse) { .flower-answer-action, .flower-answer-actions .flower-message-copy-button { width: 2.75rem; height: 2.75rem; } }
 @media (prefers-reduced-motion: reduce) { .flower-answer-action, .flower-answer-actions .flower-message-copy-button { transition: none; } }
 
-.flower-context-composition[data-token-amounts='false'] .flower-context-composition-row,
-.flower-context-composition[data-token-amounts='false'] .flower-model-context-row {
-  grid-template-columns: 0.4375rem minmax(0, 1fr) 2.5rem;
-}
 .flower-composer-context-tooltip [data-category='protocol_framing'] { --flower-context-color: var(--muted-foreground); }
 
 .flower-context-close { display: inline-flex; align-items: center; justify-content: center; width: 1.5rem; height: 1.5rem; cursor: pointer; border: 0; background: transparent; color: inherit; border-radius: 0.25rem; padding: 0; }

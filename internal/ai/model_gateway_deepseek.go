@@ -184,7 +184,7 @@ func (p *deepSeekPreparedTurn) StreamTurn(ctx context.Context, onEvent func(Stre
 			}
 		case flprovider.EventUsage:
 			u := event.Usage
-			result.Usage = TurnUsage{InputTokens: u.InputTokens, OutputTokens: u.OutputTokens, ReasoningTokens: u.ReasoningTokens, CacheReadTokens: u.CacheReadTokens, CacheWriteTokens: u.CacheWriteTokens}
+			result.Usage = TurnUsage{TotalTokens: u.TotalTokens, TotalTokensReported: u.TotalTokensReported, OutputIncludesReasoning: u.OutputIncludesReasoning, Available: u.Available, InputTokens: u.InputTokens, OutputTokens: u.OutputTokens, ReasoningTokens: u.ReasoningTokens, CacheReadTokens: u.CacheReadTokens, CacheWriteTokens: u.CacheWriteTokens}
 		case flprovider.EventDone, flprovider.EventTruncated:
 			terminal = true
 			result.FinishReason = event.Reason

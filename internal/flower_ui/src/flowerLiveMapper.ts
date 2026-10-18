@@ -326,7 +326,10 @@ function mapContextBreakdown(raw: unknown): FlowerContextBreakdown | undefined {
   if (raw === undefined || raw === null) return undefined;
   const record = recordValue(raw);
   if (!record || !trim(record.source)) throw new Error('context breakdown requires an estimate source');
-  const result: { source: string; tokenizer?: string; quality?: 'token_estimate' | 'relative_weight' } & Partial<Record<typeof FLOWER_CONTEXT_CATEGORIES[number], number>> = { source: trim(record.source) };
+  const result: { -readonly [K in keyof FlowerContextBreakdown]: FlowerContextBreakdown[K] } = { source: trim(record.source) };
+  if (record.attribution_coverage === 'complete' || record.attribution_coverage === 'partial') result.attribution_coverage = record.attribution_coverage;
+  if (typeof record.limitation === 'string') result.limitation = record.limitation;
+  if (record.opaque_bytes !== undefined) result.opaque_bytes = nonNegativeInteger(record.opaque_bytes, 'opaque_bytes');
   if (record.quality !== undefined) {
     if (record.quality !== 'token_estimate' && record.quality !== 'relative_weight') throw new Error('invalid context quality');
     result.quality = record.quality;
@@ -375,7 +378,12 @@ function mapContextBreakdown(raw: unknown): FlowerContextBreakdown | undefined {
 function mapContextSample(raw: unknown): FlowerContextSample | null {
   const record = recordValue(raw);
   if (!record) return null;
-  const breakdown = mapContextBreakdown(record.breakdown);
+  // Optional statistics must never discard the surrounding conversation update.
+  let breakdown: FlowerContextBreakdown | undefined;
+  let limitation = trim(record.limitation);
+  try { breakdown = mapContextBreakdown(record.breakdown) ?? undefined; }
+  catch { limitation = 'invalid_breakdown'; }
+
   const phase = mapContextUsagePhase(record.phase);
   const pressureStatus = mapContextPressureStatus(record.pressure_status);
   const updatedAt = integerOrZero(record.updated_at_ms ?? record.updated_at_unix_ms);
@@ -395,6 +403,13 @@ function mapContextSample(raw: unknown): FlowerContextSample | null {
   const usedRatio = clampRatio(record.used_ratio);
   const thresholdRatio = clampRatio(record.threshold_ratio);
   return {
+    available: record.available === true,
+    measured: record.measured === true,
+    breakdown_available: record.breakdown_available === true && !!breakdown,
+    unattributed_tokens: nonNegativeInteger(record.unattributed_tokens ?? 0, 'unattributed_tokens'),
+    ...(limitation ? { limitation } : {}),
+    ...Object.fromEntries(['request_id', 'attempt_id', 'payload_fingerprint', 'provider', 'model'].filter(key => trim(record[key])).map(key => [key, trim(record[key])])),
+    ...(record.attempt_epoch !== undefined ? { attempt_epoch: nonNegativeInteger(record.attempt_epoch, 'attempt_epoch') } : {}),
     ...(trim(record.run_id) ? { run_id: trim(record.run_id) } : {}),
     ...(stepIndex ? { step_index: stepIndex } : {}),
     phase,

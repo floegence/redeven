@@ -97,7 +97,7 @@ func TestFloretProviderPreparedRequestFreezesCompleteRenderedPayload(t *testing.
 	if estimate.EstimatedInputTokens <= 0 ||
 		estimate.PrefixTokens+estimate.MessageTokens+estimate.ToolDefinitionTokens != estimate.EstimatedInputTokens ||
 		estimate.Coverage != "complete_request" ||
-		estimate.Confidence != "conservative" || estimate.Method != "generic_payload_estimate" {
+		estimate.Confidence != "approximate" || estimate.Method != "generic_payload_estimate" {
 		t.Fatalf("prepared estimate = %#v, payload bytes = %d", estimate, len(payload))
 	}
 	if !strings.HasPrefix(prepared.RenderedPayloadFingerprint(), "sha256:") || len(prepared.RenderedPayloadFingerprint()) != len("sha256:")+64 {
@@ -250,7 +250,7 @@ func TestDeepSeekPreparedDesktopImageUsesUpstreamBudgetAndExactBody(t *testing.T
 	}
 	defer prepared.Close()
 	estimate := prepared.TokenEstimate()
-	if estimate.EstimatedInputTokens < 1024 || estimate.EstimatedInputTokens > 200000 || estimate.Source != "rendered_deepseek_v4_content_v3" || estimate.Breakdown.Quality != "relative_weight" || estimate.AttachmentTokens < 1024 {
+	if estimate.EstimatedInputTokens < 1024 || estimate.EstimatedInputTokens > 200000 || estimate.Source != "rendered_deepseek_v4_content_v4" || estimate.Breakdown.Quality != "token_estimate" || estimate.Breakdown.AttributionCoverage != "partial" || estimate.Breakdown.AttachmentTokens != 0 || estimate.AttachmentTokens < 1024 {
 		t.Fatalf("desktop image did not use upstream visual estimate: %+v", estimate)
 	}
 	if admissions != 0 || resolutions != 1 {

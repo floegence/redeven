@@ -543,9 +543,8 @@
       "toolArgumentPreviewTooltip": "Ces nombres de lignes donnent un aperçu des modifications en cours de préparation. Les modifications réelles sont affichées une fois l’outil terminé.",
       "contextIndicatorCurrentContents": "Contenu actuel",
       "contextIndicatorCurrentContentsHint": "Texte actuel en nombre de caractères ; le total de tokens inclut les mises à jour précédentes conservées.",
-      "contextIndicatorTextShare": "Parts relatives",
       "contextIndicatorComposition": "Composition estimée de l’entrée",
-      "contextIndicatorCompositionHint": "Le nombre de tokens est estimé à partir du contexte utilisé et de chaque proportion.",
+      "contextIndicatorCompositionHint": "Catégories estimées de la requête affichée ; les entrées non attribuées restent séparées.",
       "contextIndicatorSourceSystemPrompt": "Prompt système",
       "contextIndicatorSourceSystemTools": "Définitions des outils système",
       "contextIndicatorSourceMcpTools": "Définitions des outils MCP",
@@ -772,11 +771,12 @@
       "queuedEdit": "Reprendre dans le champ de saisie",
       "queueTakeBackConflict": "Ce message a déjà démarré ou a été modifié. Actualisez la vue et réessayez.",
       "queueTakeBackUnknown": "Le message a été remis dans le champ de saisie, mais son retrait de la file n’a pas pu être confirmé. Vérifiez la file avant de l’envoyer.",
-      "contextIndicatorRelativeHint": "Seules les proportions sont disponibles, car le total du contexte utilisé manque.",
-      "contextIndicatorHistorical": "Estimation historique",
-      "contextIndicatorHistoricalHint": "Les estimations utilisent les proportions historiques et le total du contexte enregistré.",
       "contextIndicatorDistributionUnavailable": "Répartition indisponible",
-      "contextIndicatorProtocolFraming": "Formatage du protocole"
+      "contextIndicatorProtocolFraming": "Formatage du protocole",
+      "contextIndicatorMeasured": "Mesuré",
+      "contextIndicatorLastRequest": "Dernière requête",
+      "contextIndicatorCurrentRequest": "Requête actuelle",
+      "contextIndicatorSourceUnattributed": "Non attribué"
     },
     "threadList": {
       "title": "Discussions",

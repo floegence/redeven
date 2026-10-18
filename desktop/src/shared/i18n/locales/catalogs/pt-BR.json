@@ -543,9 +543,8 @@
       "toolArgumentPreviewTooltip": "Estas contagens de linhas mostram uma prévia das alterações em preparação. As alterações reais são exibidas quando a ferramenta termina.",
       "contextIndicatorCurrentContents": "Conteúdo atual",
       "contextIndicatorCurrentContentsHint": "Texto atual por número de caracteres; o total de tokens inclui as atualizações anteriores mantidas.",
-      "contextIndicatorTextShare": "Proporções relativas",
       "contextIndicatorComposition": "Estimativa da composição da entrada",
-      "contextIndicatorCompositionHint": "Os tokens são estimados a partir do contexto usado e de cada proporção.",
+      "contextIndicatorCompositionHint": "Categorias estimadas da solicitação exibida; a entrada sem atribuição permanece separada.",
       "contextIndicatorSourceSystemPrompt": "Prompt do sistema",
       "contextIndicatorSourceSystemTools": "Definições de ferramentas do sistema",
       "contextIndicatorSourceMcpTools": "Definições de ferramentas MCP",
@@ -772,11 +771,12 @@
       "queuedEdit": "Voltar ao campo de texto",
       "queueTakeBackConflict": "Esta mensagem já começou a ser executada ou foi alterada. Atualize e tente novamente.",
       "queueTakeBackUnknown": "A mensagem voltou ao campo de texto, mas não foi possível confirmar sua remoção da fila. Confira a fila antes de enviar.",
-      "contextIndicatorRelativeHint": "Apenas proporções estão disponíveis porque falta o total do contexto usado.",
-      "contextIndicatorHistorical": "Estimativa histórica",
-      "contextIndicatorHistoricalHint": "As estimativas usam as proporções históricas e o total de contexto registrado.",
       "contextIndicatorDistributionUnavailable": "Distribuição indisponível",
-      "contextIndicatorProtocolFraming": "Formatação do protocolo"
+      "contextIndicatorProtocolFraming": "Formatação do protocolo",
+      "contextIndicatorMeasured": "Medido",
+      "contextIndicatorLastRequest": "Última solicitação",
+      "contextIndicatorCurrentRequest": "Solicitação atual",
+      "contextIndicatorSourceUnattributed": "Sem atribuição"
     },
     "threadList": {
       "title": "Conversas",
