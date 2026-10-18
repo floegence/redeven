@@ -484,6 +484,7 @@
       "runErrorProviderStreamInterrupted": "選択中の AI プロバイダーが応答ストリームを予期せず終了しました。再試行し、問題が続く場合はプロバイダーのエンドポイントを確認してください。",
       "runErrorProviderModelUnavailable": "選択したモデルはこのプロバイダーでは利用できません。Local AI Profile で別のモデルを選択してください。",
       "runErrorProviderRequestInvalid": "選択した AI プロバイダーが Flower のリクエスト形式を拒否しました。Redeven を更新して再試行してください。",
+      "runErrorProviderRequestFailed": "モデルへのリクエストを完了できませんでした。再試行し、問題が続く場合は現在のモデルの接続元を確認してください。",
       "runErrorProviderRequestRejected": "選択した AI プロバイダーが Flower のリクエストを拒否しました。診断の詳細を確認し、後でもう一度試してください。",
       "runErrorModelGatewayContractFailed": "モデルソースから不完全なツール呼び出しが返されたため、ツールは実行されませんでした。再試行するか、別のモデルを選択してください。",
       "runErrorRepeatedToolCalls": "同じツールへの要求が繰り返され、有効な進展がなかったため、このターンを停止しました。確認済みの結果と完了済みの子スレッドのレポートは保存されています。再試行すると保存済みの進捗から続行できます。",

@@ -484,6 +484,7 @@
       "runErrorProviderStreamInterrupted": "O provedor de modelos selecionado interrompeu o fluxo de resposta inesperadamente. Tente novamente; se o problema continuar, verifique o endpoint do provedor.",
       "runErrorProviderModelUnavailable": "O modelo selecionado não está disponível neste provedor de modelos. Escolha outro modelo no perfil de IA local.",
       "runErrorProviderRequestInvalid": "O provedor de IA selecionado rejeitou o formato da solicitação do Flower. Atualize o Redeven e tente novamente.",
+      "runErrorProviderRequestFailed": "Não foi possível concluir a solicitação ao modelo. Tente novamente ou verifique a fonte do modelo atual se o problema persistir.",
       "runErrorProviderRequestRejected": "O provedor de IA selecionado rejeitou a solicitação do Flower. Confira os detalhes do diagnóstico e tente novamente mais tarde.",
       "runErrorModelGatewayContractFailed": "A fonte do modelo retornou uma chamada de ferramenta incompleta. Nenhuma ferramenta foi executada. Tente novamente ou escolha outro modelo.",
       "runErrorRepeatedToolCalls": "Solicitações idênticas foram repetidas sem progresso efetivo. Este turno foi interrompido. Os resultados confirmados e os relatórios dos chats filhos concluídos foram preservados. Tente novamente para continuar do progresso salvo.",

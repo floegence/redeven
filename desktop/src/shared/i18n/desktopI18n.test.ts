@@ -250,6 +250,15 @@ describe('Desktop shared i18n resolver', () => {
 });
 
 describe('Desktop shared i18n dictionaries', () => {
+  it('provides neutral Flower provider failure recovery copy in every locale', () => {
+    const key = 'flowerSurface.chat.runErrorProviderRequestFailed';
+    for (const locale of REDEVEN_SUPPORTED_LOCALES) {
+      const message = flattenDictionaryMessages(DESKTOP_I18N_DICTIONARIES[locale]).find((entry) => entry.path === key)?.value;
+      expect(typeof message, locale).toBe('string');
+      expect(message, locale).not.toBe(key);
+    }
+  });
+
   it('provides localized Flower turn duration plurals through the Desktop translator', () => {
     for (const locale of REDEVEN_SUPPORTED_LOCALES) {
       const i18n = createDesktopI18n(locale);
