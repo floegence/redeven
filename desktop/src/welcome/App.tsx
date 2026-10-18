@@ -324,6 +324,7 @@ import {
   type EnvironmentProgressPrimaryPresentation,
   environmentProgressPanelPrimaryAction,
   environmentProgressPrimaryPresentation,
+  runtimeLifecycleReadyPrimaryAction,
 } from './environmentProgressPrimaryPresentation';
 import {
   buildEnvironmentFlowerContextAction,
@@ -9675,6 +9676,11 @@ export function EnvironmentSplitActionButton(
   const primaryProgressPresentation = createMemo(() =>
     localizedPrimaryProgressPresentation(props.i18n, environmentProgressPrimaryPresentation(panelProgress())),
   );
+  const readyPrimaryAction = createMemo(() => {
+    const progress = panelProgress();
+    return !props.settingsRestart && !props.lifecycleDisclosure?.authority_revoked && progress
+      ? runtimeLifecycleReadyPrimaryAction(progress, props.presentation.primary_action) : null;
+  });
   const primaryActionOverlay = createMemo(() =>
     primaryProgressPresentation() || progressPanelVisible() || props.settingsRestart
       ? undefined
@@ -9703,8 +9709,8 @@ export function EnvironmentSplitActionButton(
   );
   const primaryFallbackRunsAction = createMemo(
     () =>
-      props.presentation.primary_action.enabled &&
-      (popoverOverlay() === undefined || popoverOverlay()?.actions.length === 0),
+      readyPrimaryAction() !== null || (props.presentation.primary_action.enabled &&
+        (popoverOverlay() === undefined || popoverOverlay()?.actions.length === 0)),
   );
   const popoverOpen = createMemo(
     () => progressPanelVisible() || (props.guidanceOpen && popoverOverlay() !== undefined),
@@ -10010,7 +10016,7 @@ export function EnvironmentSplitActionButton(
                   }}
                   disabled={!props.settingsRestart && props.operationState.actionsDisabled && primaryFallbackRunsAction()}
                   aria-disabled={blockedPrimaryActionDisabled() ? true : undefined}
-                  aria-haspopup={hasPanelProgress() || popoverOverlay() ? 'dialog' : undefined}
+                  aria-haspopup={(hasPanelProgress() && !readyPrimaryAction()) || popoverOverlay() ? 'dialog' : undefined}
                   aria-expanded={props.settingsRestart ? props.progressOpen : popoverOverlay() ? props.guidanceOpen : undefined}
                   title={props.settingsRestart ? settingsProgressLabel() : props.presentation.primary_action.label}
                   aria-label={
@@ -10020,11 +10026,11 @@ export function EnvironmentSplitActionButton(
                   }
                   onClick={() => {
                     closeMenu();
-                    if (hasPanelProgress()) { props.onProgressOpenChange(!props.progressOpen); return; }
+                    if (hasPanelProgress() && !readyPrimaryAction()) { props.onProgressOpenChange(!props.progressOpen); return; }
                     if (primaryFallbackRunsAction()) {
                       props.onGuidanceOpenChange(false);
                       props.onProgressOpenChange(false);
-                      props.onRunAction(props.presentation.primary_action);
+                      props.onRunAction(readyPrimaryAction() ?? props.presentation.primary_action);
                       return;
                     }
                     props.onProgressOpenChange(false);

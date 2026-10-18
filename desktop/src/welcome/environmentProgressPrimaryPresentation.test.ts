@@ -114,6 +114,11 @@ function openConnectionProgress(
 }
 
 describe('runtimeLifecycleReadyPrimaryAction', () => {
+  it('preserves the current preflight Open action after startup completes', () => {
+    const action: EnvironmentActionModel = { ...openAction, intent: 'open_with_preflight' };
+    expect(runtimeLifecycleReadyPrimaryAction(lifecycleActionProgress(), action)).toBe(action);
+    expect(environmentProgressPanelPrimaryAction(lifecycleActionProgress(), action)?.action).toBe(action);
+  });
   it('returns the Open action once a runtime start or restart reaches runtime_ready', () => {
     expect(runtimeLifecycleReadyPrimaryAction(lifecycleActionProgress(), openAction)).toBe(openAction);
     expect(runtimeLifecycleReadyPrimaryAction(

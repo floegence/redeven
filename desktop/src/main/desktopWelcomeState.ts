@@ -1,4 +1,5 @@
 import { decorateEnvironmentAccess } from './environmentAccess';
+import { localHostRuntimeLifecyclePlacement } from './localRuntimePlacement';
 import { reportedRuntimeURLs } from '../shared/desktopEnvironmentConnection';
 import { formatBlockedLaunchDiagnostics, type LaunchBlockedReport } from './launchReport';
 import {
@@ -1256,11 +1257,8 @@ function buildLocalEnvironmentEntry(
     localRuntimeFallbackHealth,
   );
   const runtimeMaintenance = runtimeMaintenanceFromHealth(runtimeHealth);
-  const effectiveHostAccess = presence?.host_access ?? { kind: 'local_host' as const };
-  const effectivePlacement = presence?.placement ?? {
-    kind: 'host_process' as const,
-    runtime_root: environment.local_hosting.state_dir,
-  };
+  const effectiveHostAccess = { kind: 'local_host' as const };
+  const effectivePlacement = localHostRuntimeLifecyclePlacement(environment);
   const runtimeOperations = managedRuntimeOperations({
     presence,
     hostAccess: effectiveHostAccess,
@@ -1318,10 +1316,8 @@ function buildLocalEnvironmentEntry(
     local_environment_close_behavior: resolvedLocalCloseBehavior,
     provider_runtime_link_target: providerRuntimeLinkTarget,
     ...managedRuntimeEntryFields(presence),
-    managed_runtime_target_id: presence?.target_id
-      ?? desktopRuntimeTargetID(effectiveHostAccess, effectivePlacement),
-    managed_runtime_placement_target_id: presence?.placement_target_id
-      ?? desktopRuntimeTargetID(effectiveHostAccess, effectivePlacement, environment.id),
+    managed_runtime_target_id: desktopRuntimeTargetID(effectiveHostAccess, effectivePlacement, environment.id),
+    managed_runtime_placement_target_id: desktopRuntimeTargetID(effectiveHostAccess, effectivePlacement, environment.id),
     managed_runtime_host_access: effectiveHostAccess,
     managed_runtime_placement: effectivePlacement,
     local_environment_has_local_hosting: true,

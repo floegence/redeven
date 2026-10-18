@@ -1,4 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { environmentAccessBinding, rememberEnvironmentIdentity } from './environmentAccess';
+import { environmentInteractionIdentity } from '../welcome/environmentInteractionIdentity';
+import { resolveStateRoot } from './statePaths';
+import { resolveDesktopPlatformCapabilities } from '../shared/desktopPlatformCapabilities';
 
 import { normalizeDesktopCloud } from '../shared/cloud';
 import type { DesktopRuntimePresence } from '../shared/desktopRuntimePresence';
@@ -44,6 +48,30 @@ it('preserves an explicit Welcome navigation request independently of Flower set
   const reopened = buildDesktopWelcomeSnapshot({ ...args, navigationRevision: 5 });
   expect(reopened.surface).toBe(opened.surface);
   expect(reopened.navigation_revision).toBe(5);
+});
+
+it('keeps configured local authority stable while live Presence is withdrawn', () => {
+  const platformCapabilities = resolveDesktopPlatformCapabilities('darwin');
+  const preferences = testDesktopPreferences({ local_environment: testLocalEnvironment({ stateDir: '/fixture/local-environment' }) });
+  const base = buildDesktopWelcomeSnapshot({ preferences, platformCapabilities }).environments.find(entry => entry.id === 'local')!;
+  const identity = `runtime:${'a'.repeat(64)}`;
+  const remembered = rememberEnvironmentIdentity(preferences, base, identity);
+  const presence = localRuntimePresence({ placement: { kind: 'host_process',
+    runtime_root: preferences.local_environment.local_hosting.state_dir, runtime_state_root: resolveStateRoot() } });
+  const fresh = buildDesktopWelcomeSnapshot({ preferences: remembered, platformCapabilities,
+    managedRuntimePresenceByTargetID: { 'local:local': presence } }).environments.find(entry => entry.id === 'local')!;
+  const checking = buildDesktopWelcomeSnapshot({ preferences: remembered, platformCapabilities, localRuntimeHealth: { local: {
+    status: 'online', checked_at_unix_ms: Date.now(), source: 'local_runtime_probe', freshness: 'checking',
+  } } }).environments.find(entry => entry.id === 'local')!;
+  expect(environmentAccessBinding(fresh)).toBe(environmentAccessBinding(base));
+  expect(environmentInteractionIdentity(fresh)).toBe(environmentInteractionIdentity(checking));
+  expect(fresh.verified_runtime_identity).toBe(identity);
+  expect(checking.verified_runtime_identity).toBe(identity);
+  expect(checking.provider_runtime_link_target?.runtime_control_status.state).not.toBe('available');
+  const moved = buildDesktopWelcomeSnapshot({ platformCapabilities, preferences: { ...remembered,
+    local_environment: testLocalEnvironment({ stateDir: '/other/local-environment' }) } }).environments.find(entry => entry.id === 'local')!;
+  expect(moved.verified_runtime_identity).toBeUndefined();
+  expect(environmentInteractionIdentity(moved)).not.toBe(environmentInteractionIdentity(checking));
 });
 
 function sshRuntimeTarget(input: Readonly<{
@@ -1631,7 +1659,7 @@ describe('desktopWelcomeState', () => {
 
     const localEntry = snapshot.environments.find((entry) => entry.kind === 'local_environment');
     expect(localEntry).toMatchObject({
-      managed_runtime_target_id: 'local:local',
+      managed_runtime_target_id: 'local:host:local',
       runtime_operations: expect.objectContaining({
         stop: expect.objectContaining({
           availability: 'available',
@@ -1674,7 +1702,7 @@ describe('desktopWelcomeState', () => {
     const entry = snapshot.environments.find((environment) => environment.kind === 'local_environment');
 
     expect(entry).toMatchObject({
-      managed_runtime_target_id: 'local:local',
+      managed_runtime_target_id: 'local:host:local',
       runtime_operations: expect.objectContaining({
         open: expect.objectContaining({
           availability: 'available',
@@ -2699,10 +2727,10 @@ describe('desktopWelcomeState', () => {
 
     const localEntry = snapshot.environments.find((entry) => entry.kind === 'local_environment');
     expect(localEntry).toMatchObject({
-      managed_runtime_target_id: 'local:local',
+      managed_runtime_target_id: 'local:host:local',
       managed_runtime_placement_target_id: 'local:host:local',
       managed_runtime_host_access: { kind: 'local_host' },
-      managed_runtime_placement: { kind: 'host_process', runtime_root: '' },
+      managed_runtime_placement: { kind: 'host_process', runtime_root: testLocalEnvironment().local_hosting.state_dir, runtime_state_root: resolveStateRoot() },
     });
     expect(localEntry?.provider_runtime_link_target).toMatchObject({
       id: 'local:local',

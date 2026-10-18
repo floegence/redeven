@@ -154,7 +154,7 @@ describe('shared Flower UI boundary', () => {
       expect(surfaceSrc).not.toContain(token);
     }
     expect(surfaceSrc).toContain('const companionThreadItems = createMemo');
-    expect(surfaceSrc).toContain('return threads().map((summary) => {');
+    expect(surfaceSrc).toContain('return threads().filter(thread => !thread.parent_thread_id).map((summary) => {');
     expect(surfaceSrc).toContain('const cache = threadCache();');
     expect(surfaceSrc).toContain("detail?.status === 'running'");
     expect(surfaceSrc).toContain('trimString(detail.active_run_id) === activeRunID');
@@ -295,7 +295,10 @@ describe('shared Flower UI boundary', () => {
     const surfaceSrc = readText(path.join(flowerRoot, 'FlowerSurface.tsx'));
     const settingsSrc = readText(path.join(flowerRoot, 'settings', 'FlowerSettingsSurface.tsx'));
 
-    expect(surfaceSrc).toContain('data-flower-panel="settings" hidden={visiblePanel() !== \'settings\'}');
+    expect(surfaceSrc).toContain('const SettingsContent = createRetainedContent');
+    expect(surfaceSrc).toContain('data-flower-panel="settings" hidden={!settingsDialogPresent() && sidePanel() !== \'settings\'}');
+    expect(surfaceSrc).toContain('inert={!settingsDialogPresent()} aria-hidden={!settingsDialogPresent()}');
+    expect(surfaceSrc).toContain('<Show when={!settingsDialogPresent()}><div hidden inert aria-hidden="true"><SettingsContent /></div></Show>');
     expect(settingsSrc).toContain('const confirmProviderDialog = async');
     expect(settingsSrc).toContain('const saved = await saveBuiltDraft(result);');
     expect(settingsSrc).not.toContain('Save provider draft');

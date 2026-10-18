@@ -189,6 +189,7 @@ import {
   type DesktopWelcomeRuntimeHealthTarget,
 } from './desktopWelcomeRuntimeHealth';
 import { canReuseFreshRuntimeOpenPreflight } from './runtimeOpenPreflight';
+import { localHostRuntimeLifecyclePlacement } from './localRuntimePlacement';
 import {
   resolveConfiguredDesktopCacheRoot,
   resolveConfiguredDesktopTempRoot,
@@ -15538,16 +15539,6 @@ function runtimeTargetEnvironmentIDFromRequest(
   return compact(request.environment_id) || runtimeTargetIDFromRequest(request);
 }
 
-
-function localHostRuntimeLifecyclePlacement(
-  environment: DesktopLocalEnvironmentState,
-): Extract<DesktopRuntimePlacement, Readonly<{ kind: 'host_process' }>> {
-  return {
-    kind: 'host_process',
-    runtime_root: localEnvironmentRuntimeRoot(environment),
-    runtime_state_root: localEnvironmentStateRoot(),
-  };
-}
 
 function localHostRuntimeLifecycleTargetKey(environment: DesktopLocalEnvironmentState): string {
   return runtimeLifecycleTargetKey({ kind: 'local_host' }, localHostRuntimeLifecyclePlacement(environment));

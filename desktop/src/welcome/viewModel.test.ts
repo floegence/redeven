@@ -156,6 +156,22 @@ function buildDesktopWelcomeSnapshot(args: Parameters<typeof buildSnapshot>[0]) 
   });
 }
 
+function localContainerSnapshot(presence: DesktopRuntimePresence) {
+  if (presence.host_access.kind !== 'local_host' || presence.placement.kind !== 'container_process') {
+    throw new Error('Expected a saved local container target');
+  }
+  const id = desktopRuntimeTargetID(presence.host_access, presence.placement);
+  return buildDesktopWelcomeSnapshot({
+    preferences: testDesktopPreferences({ saved_runtime_targets: [{
+      schema_version: 1, id, label: presence.label, host_access: presence.host_access, placement: presence.placement,
+      pinned: false, auto_runtime_probe_enabled: true, created_at_ms: 1, updated_at_ms: 1, last_used_at_ms: 0,
+    }] }),
+    managedRuntimePresenceByTargetID: { [`local:${id}`]: { ...presence,
+      environment_id: id, target_id: `local:${id}`, placement_target_id: id,
+    } },
+  });
+}
+
 function sshRuntimeTarget(input: Readonly<{
   id: string;
   label: string;
@@ -1576,34 +1592,26 @@ describe('buildEnvironmentCardModel', () => {
   });
 
   it('shows container placement facts and hides start when the container is unavailable', () => {
-    const snapshot = buildDesktopWelcomeSnapshot({
-      preferences: testDesktopPreferences({
-        local_environment: testLocalEnvironment(),
-      }),
-      managedRuntimePresenceByTargetID: {
-        'local:local': localRuntimePresence(undefined, {
-          placement_target_id: 'local:container:docker:container-stable-id:abc12345',
-          placement: {
-            kind: 'container_process',
-            container_engine: 'docker',
-            container_id: 'container-stable-id',
-            container_ref: 'dev-container',
-            container_label: 'dev-container',
-            runtime_root: '/root/.redeven',
-            bridge_strategy: 'exec_stream',
-          },
-          running: false,
-          local_ui_url: '',
-          openable: false,
-          runtime_control_status: {
-            state: 'missing',
-            reason_code: 'container_not_running',
-            message: 'Container dev-container was not found. Choose a running container, then try again.',
-          },
-        }),
+    const snapshot = localContainerSnapshot(localRuntimePresence(undefined, {
+      placement: {
+        kind: 'container_process',
+        container_engine: 'docker',
+        container_id: 'container-stable-id',
+        container_ref: 'dev-container',
+        container_label: 'dev-container',
+        runtime_root: '/root/.redeven',
+        bridge_strategy: 'exec_stream',
       },
-    });
-    const localEntry = snapshot.environments.find((environment) => environment.kind === 'local_environment');
+      running: false,
+      local_ui_url: '',
+      openable: false,
+      runtime_control_status: {
+        state: 'missing',
+        reason_code: 'container_not_running',
+        message: 'Container dev-container was not found. Choose a running container, then try again.',
+      },
+    }));
+    const localEntry = snapshot.environments.find((environment) => environment.managed_runtime_placement?.kind === 'container_process');
 
     expect(localEntry).toMatchObject({
       managed_runtime_placement: {
@@ -1635,34 +1643,26 @@ describe('buildEnvironmentCardModel', () => {
 
   it('shows setup-required guidance when the local container engine CLI is unavailable', () => {
     const message = 'Docker CLI was not found. Install Docker Desktop or make docker available to Redeven Desktop, then refresh and try again.';
-    const snapshot = buildDesktopWelcomeSnapshot({
-      preferences: testDesktopPreferences({
-        local_environment: testLocalEnvironment(),
-      }),
-      managedRuntimePresenceByTargetID: {
-        'local:local': localRuntimePresence(undefined, {
-          placement_target_id: 'local:container:docker:container-stable-id:abc12345',
-          placement: {
-            kind: 'container_process',
-            container_engine: 'docker',
-            container_id: 'container-stable-id',
-            container_ref: 'dev-container',
-            container_label: 'dev-container',
-            runtime_root: '/root/.redeven',
-            bridge_strategy: 'exec_stream',
-          },
-          running: false,
-          local_ui_url: '',
-          openable: false,
-          runtime_control_status: {
-            state: 'missing',
-            reason_code: 'container_engine_unavailable',
-            message,
-          },
-        }),
+    const snapshot = localContainerSnapshot(localRuntimePresence(undefined, {
+      placement: {
+        kind: 'container_process',
+        container_engine: 'docker',
+        container_id: 'container-stable-id',
+        container_ref: 'dev-container',
+        container_label: 'dev-container',
+        runtime_root: '/root/.redeven',
+        bridge_strategy: 'exec_stream',
       },
-    });
-    const localEntry = snapshot.environments.find((environment) => environment.kind === 'local_environment');
+      running: false,
+      local_ui_url: '',
+      openable: false,
+      runtime_control_status: {
+        state: 'missing',
+        reason_code: 'container_engine_unavailable',
+        message,
+      },
+    }));
+    const localEntry = snapshot.environments.find((environment) => environment.managed_runtime_placement?.kind === 'container_process');
     const actionModel = buildProviderBackedEnvironmentActionModel(localEntry!);
 
     expect(actionModel).toMatchObject({
@@ -1678,34 +1678,26 @@ describe('buildEnvironmentCardModel', () => {
   });
 
   it('shows Start runtime for a running container target without an active bridge', () => {
-    const snapshot = buildDesktopWelcomeSnapshot({
-      preferences: testDesktopPreferences({
-        local_environment: testLocalEnvironment(),
-      }),
-      managedRuntimePresenceByTargetID: {
-        'local:local': localRuntimePresence(undefined, {
-          placement_target_id: 'local:container:docker:dev-container:abc12345',
-          placement: {
-            kind: 'container_process',
-            container_engine: 'docker',
-            container_id: 'new-container-id',
-            container_ref: 'dev-container',
-            container_label: 'dev-container',
-            runtime_root: '/root/.redeven',
-            bridge_strategy: 'exec_stream',
-          },
-          running: false,
-          local_ui_url: '',
-          openable: false,
-          runtime_control_status: {
-            state: 'missing',
-            reason_code: 'not_started',
-            message: 'Start this runtime before connecting it to a provider.',
-          },
-        }),
+    const snapshot = localContainerSnapshot(localRuntimePresence(undefined, {
+      placement: {
+        kind: 'container_process',
+        container_engine: 'docker',
+        container_id: 'new-container-id',
+        container_ref: 'dev-container',
+        container_label: 'dev-container',
+        runtime_root: '/root/.redeven',
+        bridge_strategy: 'exec_stream',
       },
-    });
-    const localEntry = snapshot.environments.find((environment) => environment.kind === 'local_environment');
+      running: false,
+      local_ui_url: '',
+      openable: false,
+      runtime_control_status: {
+        state: 'missing',
+        reason_code: 'not_started',
+        message: 'Start this runtime before connecting it to a provider.',
+      },
+    }));
+    const localEntry = snapshot.environments.find((environment) => environment.managed_runtime_placement?.kind === 'container_process');
     const actionModel = buildProviderBackedEnvironmentActionModel(localEntry!);
 
     expectEnvironmentInitialization(actionModel);
@@ -1717,35 +1709,27 @@ describe('buildEnvironmentCardModel', () => {
   });
 
   it('shows ready-to-open for a container runtime prepared by Start runtime but not yet opened', () => {
-    const snapshot = buildDesktopWelcomeSnapshot({
-      preferences: testDesktopPreferences({
-        local_environment: testLocalEnvironment(),
-      }),
-      managedRuntimePresenceByTargetID: {
-        'local:local': localRuntimePresence(undefined, {
-          placement_target_id: 'local:container:docker:redeven-nginx-dev:63ce185e',
-          placement: {
-            kind: 'container_process',
-            container_engine: 'docker',
-            container_id: '63ce185e',
-            container_ref: 'redeven-nginx-dev',
-            container_label: 'redeven-nginx-dev',
-            runtime_root: '/root/.redeven',
-            bridge_strategy: 'exec_stream',
-          },
-          running: true,
-          local_ui_url: '',
-          openable: false,
-          open_connection_required: true,
-          runtime_control_status: {
-            state: 'missing',
-            reason_code: 'forward_unavailable',
-            message: 'Open this runtime to prepare the Desktop bridge and provider connection.',
-          },
-        }),
+    const snapshot = localContainerSnapshot(localRuntimePresence(undefined, {
+      placement: {
+        kind: 'container_process',
+        container_engine: 'docker',
+        container_id: '63ce185e',
+        container_ref: 'redeven-nginx-dev',
+        container_label: 'redeven-nginx-dev',
+        runtime_root: '/root/.redeven',
+        bridge_strategy: 'exec_stream',
       },
-    });
-    const localEntry = snapshot.environments.find((environment) => environment.kind === 'local_environment');
+      running: true,
+      local_ui_url: '',
+      openable: false,
+      open_connection_required: true,
+      runtime_control_status: {
+        state: 'missing',
+        reason_code: 'forward_unavailable',
+        message: 'Open this runtime to prepare the Desktop bridge and provider connection.',
+      },
+    }));
+    const localEntry = snapshot.environments.find((environment) => environment.managed_runtime_placement?.kind === 'container_process');
     const actionModel = buildProviderBackedEnvironmentActionModel(localEntry!);
 
     expect(localEntry).toMatchObject({
@@ -1842,46 +1826,38 @@ describe('buildEnvironmentCardModel', () => {
   });
 
   it('keeps Start available while offering Update runtime for a stopped container target with a stale package', () => {
-    const snapshot = buildDesktopWelcomeSnapshot({
-      preferences: testDesktopPreferences({
-        local_environment: testLocalEnvironment(),
-      }),
-      managedRuntimePresenceByTargetID: {
-        'local:local': localRuntimePresence(undefined, {
-          placement_target_id: 'local:container:docker:dev-container:abc12345',
-          placement: {
-            kind: 'container_process',
-            container_engine: 'docker',
-            container_id: 'new-container-id',
-            container_ref: 'dev-container',
-            container_label: 'dev-container',
-            runtime_root: '/root/.redeven',
-            bridge_strategy: 'exec_stream',
-          },
-          running: false,
-          local_ui_url: '',
-          openable: false,
-          runtime_control_status: {
-            state: 'missing',
-            reason_code: 'not_started',
-            message: 'Start this runtime before connecting it to a provider.',
-          },
-          maintenance: {
-            kind: 'runtime_update_required',
-            required_for: 'open',
-            recovery_action: 'update_runtime',
-            can_desktop_start: false,
-            can_desktop_restart: true,
-            has_active_work: false,
-            active_work_label: 'No active work',
-            current_runtime_version: 'v0.5.9',
-            target_runtime_version: 'v0.6.7',
-            message: 'Update this container runtime before starting it with the bundled runtime.',
-          },
-        }),
+    const snapshot = localContainerSnapshot(localRuntimePresence(undefined, {
+      placement: {
+        kind: 'container_process',
+        container_engine: 'docker',
+        container_id: 'new-container-id',
+        container_ref: 'dev-container',
+        container_label: 'dev-container',
+        runtime_root: '/root/.redeven',
+        bridge_strategy: 'exec_stream',
       },
-    });
-    const localEntry = snapshot.environments.find((environment) => environment.kind === 'local_environment');
+      running: false,
+      local_ui_url: '',
+      openable: false,
+      runtime_control_status: {
+        state: 'missing',
+        reason_code: 'not_started',
+        message: 'Start this runtime before connecting it to a provider.',
+      },
+      maintenance: {
+        kind: 'runtime_update_required',
+        required_for: 'open',
+        recovery_action: 'update_runtime',
+        can_desktop_start: false,
+        can_desktop_restart: true,
+        has_active_work: false,
+        active_work_label: 'No active work',
+        current_runtime_version: 'v0.5.9',
+        target_runtime_version: 'v0.6.7',
+        message: 'Update this container runtime before starting it with the bundled runtime.',
+      },
+    }));
+    const localEntry = snapshot.environments.find((environment) => environment.managed_runtime_placement?.kind === 'container_process');
     const actionModel = buildProviderBackedEnvironmentActionModel(localEntry!);
 
     expectEnvironmentInitialization(actionModel);
@@ -1901,47 +1877,39 @@ describe('buildEnvironmentCardModel', () => {
   });
 
   it('guides stale lease recovery as a stopped local container runtime', () => {
-    const snapshot = buildDesktopWelcomeSnapshot({
-      preferences: testDesktopPreferences({
-        local_environment: testLocalEnvironment(),
-      }),
-      managedRuntimePresenceByTargetID: {
-        'local:local': localRuntimePresence(undefined, {
-          placement_target_id: 'local:container:docker:redeven-nginx-dev:abc12345',
-          placement: {
-            kind: 'container_process',
-            container_engine: 'docker',
-            container_id: 'abc12345',
-            container_ref: 'redeven-nginx-dev',
-            container_label: 'redeven-nginx-dev',
-            runtime_root: '/root/.redeven',
-            bridge_strategy: 'exec_stream',
-          },
-          running: false,
-          local_ui_url: '',
-          openable: false,
-          runtime_control_status: {
-            state: 'missing',
-            reason_code: 'not_started',
-            message: 'Runtime lock metadata is present but no live runtime is reachable.',
-          },
-          maintenance: {
-            kind: 'runtime_stale_lock',
-            required_for: 'open',
-            recovery_action: 'start_runtime',
-            can_desktop_start: true,
-            can_desktop_restart: false,
-            has_active_work: false,
-            active_work_label: 'No active work',
-            attach_state: 'stale_lock',
-            failure_code: 'lock_pid_not_alive',
-            lock_pid: 4321,
-            message: 'Runtime lock metadata is present but no live runtime is reachable.',
-          },
-        }),
+    const snapshot = localContainerSnapshot(localRuntimePresence(undefined, {
+      placement: {
+        kind: 'container_process',
+        container_engine: 'docker',
+        container_id: 'abc12345',
+        container_ref: 'redeven-nginx-dev',
+        container_label: 'redeven-nginx-dev',
+        runtime_root: '/root/.redeven',
+        bridge_strategy: 'exec_stream',
       },
-    });
-    const localEntry = snapshot.environments.find((environment) => environment.kind === 'local_environment');
+      running: false,
+      local_ui_url: '',
+      openable: false,
+      runtime_control_status: {
+        state: 'missing',
+        reason_code: 'not_started',
+        message: 'Runtime lock metadata is present but no live runtime is reachable.',
+      },
+      maintenance: {
+        kind: 'runtime_stale_lock',
+        required_for: 'open',
+        recovery_action: 'start_runtime',
+        can_desktop_start: true,
+        can_desktop_restart: false,
+        has_active_work: false,
+        active_work_label: 'No active work',
+        attach_state: 'stale_lock',
+        failure_code: 'lock_pid_not_alive',
+        lock_pid: 4321,
+        message: 'Runtime lock metadata is present but no live runtime is reachable.',
+      },
+    }));
+    const localEntry = snapshot.environments.find((environment) => environment.managed_runtime_placement?.kind === 'container_process');
     expect(localEntry).toBeTruthy();
 
     const actionModel = buildProviderBackedEnvironmentActionModel(localEntry!);
@@ -1970,34 +1938,26 @@ describe('buildEnvironmentCardModel', () => {
   });
 
   it('guides stopped local container runtimes through Start while keeping other lifecycle actions explicit', () => {
-    const snapshot = buildDesktopWelcomeSnapshot({
-      preferences: testDesktopPreferences({
-        local_environment: testLocalEnvironment(),
-      }),
-      managedRuntimePresenceByTargetID: {
-        'local:local': localRuntimePresence(undefined, {
-          placement_target_id: 'local:container:docker:redeven-nginx-dev:abc12345',
-          placement: {
-            kind: 'container_process',
-            container_engine: 'docker',
-            container_id: 'abc12345',
-            container_ref: 'redeven-nginx-dev',
-            container_label: 'redeven-nginx-dev',
-            runtime_root: '/root/.redeven',
-            bridge_strategy: 'exec_stream',
-          },
-          running: false,
-          local_ui_url: '',
-          openable: false,
-          runtime_control_status: {
-            state: 'missing',
-            reason_code: 'not_started',
-            message: 'Start this runtime before connecting it to a provider.',
-          },
-        }),
+    const snapshot = localContainerSnapshot(localRuntimePresence(undefined, {
+      placement: {
+        kind: 'container_process',
+        container_engine: 'docker',
+        container_id: 'abc12345',
+        container_ref: 'redeven-nginx-dev',
+        container_label: 'redeven-nginx-dev',
+        runtime_root: '/root/.redeven',
+        bridge_strategy: 'exec_stream',
       },
-    });
-    const localEntry = snapshot.environments.find((environment) => environment.kind === 'local_environment');
+      running: false,
+      local_ui_url: '',
+      openable: false,
+      runtime_control_status: {
+        state: 'missing',
+        reason_code: 'not_started',
+        message: 'Start this runtime before connecting it to a provider.',
+      },
+    }));
+    const localEntry = snapshot.environments.find((environment) => environment.managed_runtime_placement?.kind === 'container_process');
     expect(localEntry).toBeTruthy();
 
     const actionModel = buildProviderBackedEnvironmentActionModel(localEntry!);
@@ -2033,37 +1993,29 @@ describe('buildEnvironmentCardModel', () => {
       lock_pid: 4242,
       message: 'A Redeven runtime process is alive, but its management socket is not reachable.',
     };
-    const snapshot = buildDesktopWelcomeSnapshot({
-      preferences: testDesktopPreferences({
-        local_environment: testLocalEnvironment(),
-      }),
-      managedRuntimePresenceByTargetID: {
-        'local:local': localRuntimePresence(providerRuntimeService({
-          state: 'blocked',
-          reason_code: 'runtime_control_missing',
-          message: 'A Redeven runtime process is alive, but its management socket is not reachable.',
-        }), {
-          placement_target_id: 'local:container:docker:redeven-nginx-dev:abc12345',
-          placement: {
-            kind: 'container_process',
-            container_engine: 'docker',
-            container_id: 'abc12345',
-            container_ref: 'redeven-nginx-dev',
-            container_label: 'redeven-nginx-dev',
-            runtime_root: '/root/.redeven',
-            bridge_strategy: 'exec_stream',
-          },
-          openable: false,
-          maintenance: restartMaintenance,
-          runtime_control_status: {
-            state: 'missing',
-            reason_code: 'not_reported',
-            message: 'Restart this runtime from Desktop so runtime-control can be prepared.',
-          },
-        }),
+    const snapshot = localContainerSnapshot(localRuntimePresence(providerRuntimeService({
+      state: 'blocked',
+      reason_code: 'runtime_control_missing',
+      message: 'A Redeven runtime process is alive, but its management socket is not reachable.',
+    }), {
+      placement: {
+        kind: 'container_process',
+        container_engine: 'docker',
+        container_id: 'abc12345',
+        container_ref: 'redeven-nginx-dev',
+        container_label: 'redeven-nginx-dev',
+        runtime_root: '/root/.redeven',
+        bridge_strategy: 'exec_stream',
       },
-    });
-    const localEntry = snapshot.environments.find((environment) => environment.kind === 'local_environment');
+      openable: false,
+      maintenance: restartMaintenance,
+      runtime_control_status: {
+        state: 'missing',
+        reason_code: 'not_reported',
+        message: 'Restart this runtime from Desktop so runtime-control can be prepared.',
+      },
+    }));
+    const localEntry = snapshot.environments.find((environment) => environment.managed_runtime_placement?.kind === 'container_process');
     expect(localEntry).toBeTruthy();
 
     const actionModel = buildProviderBackedEnvironmentActionModel(localEntry!);

@@ -24795,22 +24795,22 @@
         "title": "Desktop interaction continuity",
         "type": "Interaction Contract"
       },
-      "body_length": 5555,
+      "body_length": 6380,
       "summary": "Desktop Welcome owns interaction sessions; Launcher and Runtime own business facts and execution progress. Background observations must preserve an open dialog or popup, its draft, selection, step, details, focus, native text selection and scroll. Only explicit opening, closing, switching, handoff or the current operation's completion changes visibility. Invalid authority preserves the visible session and input, blocks stale submission and offers verification or an accessible exit. Closing progress does not cancel its task.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Ownership and observations\n\nEach interaction field has one owner: the existing library overlay, guidance, lifecycle disclosure, Gateway foreground action or settings opening. Snapshot membership and capability branches do not own an already-open session. Retained cards supply presentation only; submission reads current authoritative data. Health checks and equivalent snapshots never reinitialize a form or replace retained content with initial loading.\n\nDestructive confirmation remains visible after target removal, replacement or capability loss, but its consent stays revoked even if the original target returns. Explicit verification starts a fresh target review and preserves the chosen reinstall mode. Expired invitations also revoke nested enrollment consent without clearing its address, code or current step.\n\nPublished KeyedFor retains nodes by business identity while item/index accessors read current data. Menus use action identity and timelines use step/task identity. Published Stepper and Tabs preserve semantic identity. Keys cannot use presentation positions. Disabled state and callbacks read current values even when the node survives.\n\nA target removed from a list or whose connection identity, authorization or preview changes remains visible with its draft. Invalid actions are disabled in controls and handlers. Explicit revalidation fences older results; it never silently chooses another target or restores old consent. Expired security previews require fresh authorization. Addresses no longer shareable still lose QR disclosure under the connection-security contract.",
-          "char_count": 1601
+          "body": "## Ownership and observations\n\nEach interaction field has one owner: the existing library overlay, guidance, lifecycle disclosure, Gateway foreground action or settings opening. Snapshot membership and capability branches do not own an already-open session. Retained cards supply presentation only; submission reads current authoritative data. Health checks and equivalent snapshots never reinitialize a form or replace retained content with initial loading.\n\nThe native Local Environment's host-process placement comes from its saved Runtime root and the configured state root through one shared projection. Both lifecycle commands and Welcome use these coordinates even while a probe withdraws live Presence. Retained verified identity does not retain management capability. A real coordinate or verified identity change still revokes the existing disclosure's consent.\n\nDestructive confirmation remains visible after target removal, replacement or capability loss, but its consent stays revoked even if the original target returns. Explicit verification starts a fresh target review and preserves the chosen reinstall mode. Expired invitations also revoke nested enrollment consent without clearing its address, code or current step.\n\nPublished KeyedFor retains nodes by business identity while item/index accessors read current data. Menus use action identity and timelines use step/task identity. Published Stepper and Tabs preserve semantic identity. Keys cannot use presentation positions. Disabled state and callbacks read current values even when the node survives.\n\nA target removed from a list or whose connection identity, authorization or preview changes remains visible with its draft. Invalid actions are disabled in controls and handlers. Explicit revalidation fences older results; it never silently chooses another target or restores old consent. Expired security previews require fresh authorization. Addresses no longer shareable still lose QR disclosure under the connection-security contract.",
+          "char_count": 2014
         },
         {
           "id": "admission-handoff-and-completion",
           "title": "Admission, handoff and completion",
           "level": 1,
-          "body": "Before the first asynchronous submission, one synchronous transition records the attempt, closes its menu and opens its operation surface. Admission is a named UI phase, not fabricated backend execution steps. Rejection, exceptions and unexpected results remain on that surface with retry and close. Duplicate activation cannot submit twice.\n\nLauncher progress is selected by operation key and start time. Arrival order, temporarily absent progress, conflict binding and a late response cannot redirect a newer session. Settings save-and-restart retains its original target and passes visibly to its exact lifecycle disclosure; returning restores the draft. Successful current completion may close its surface. An older response never closes or reopens a newer opening. Menu exit does not restore focus into its old trigger during handoff; the destination owns focus. Deferred initial focus never overrides a user-selected menu item.",
-          "char_count": 933
+          "body": "Before the first asynchronous submission, one synchronous transition records the attempt, closes its menu and opens its operation surface. Admission is a named UI phase, not fabricated backend execution steps. Rejection, exceptions and unexpected results remain on that surface with retry and close. Duplicate activation cannot submit twice.\n\nAfter Start, Restart or Update succeeds at Runtime ready, the card's enabled Open or Focus action resumes its normal behavior, including the current Open preflight. Completed progress does not intercept that action to reopen its timeline. Active work and failures retain their progress or recovery trigger; settings restart and revoked target disclosures retain their existing explicit continuation and review.\n\nLauncher progress is selected by operation key and start time. Arrival order, temporarily absent progress, conflict binding and a late response cannot redirect a newer session. Settings save-and-restart retains its original target and passes visibly to its exact lifecycle disclosure; returning restores the draft. Successful current completion may close its surface. An older response never closes or reopens a newer opening. Menu exit does not restore focus into its old trigger during handoff; the destination owns focus. Deferred initial focus never overrides a user-selected menu item.",
+          "char_count": 1345
         },
         {
           "id": "boundaries",
@@ -24864,6 +24864,12 @@
           "path": "desktop/desktop-reinstall-operations.md",
           "concept_id": "desktop.desktop-reinstall-operations",
           "title": "Desktop managed Environment reinstall"
+        },
+        {
+          "label": "Desktop qualification lifecycle",
+          "path": "desktop/desktop-test-lifecycle.md",
+          "concept_id": "desktop.desktop-test-lifecycle",
+          "title": "Desktop qualification lifecycle"
         },
         {
           "label": "Redeven OKF Bundle",
@@ -26287,7 +26293,7 @@
         "title": "Desktop qualification lifecycle",
         "type": "Development Contract"
       },
-      "body_length": 5467,
+      "body_length": 5787,
       "summary": "- Authority: the Desktop test supervisor owns scenario termination, resource registration, cleanup deadlines, and final qualification status.\n- Outcome: an explicit acceptance run ends within its scenario and cleanup budgets without leaving its Electron, Runtime, bridge, or fixture resources behind.\n- Invariants: production Quit confirmation and independent Runtime lifetime remain intact; no process name, generic port, or foreground window grants stop authority.\n- Recovery boundary: timeout, interruption, unexpected exit, forced termination, cleanup error, and residual resources fail the run, retain diagnostics, and expose an explicit manifest cleanup command.",
       "sections": [
         {
@@ -26308,8 +26314,8 @@
           "id": "acceptance-evidence",
           "title": "Acceptance evidence",
           "level": 1,
-          "body": "On macOS arm64, maintained Playwright typography and native Codespace\nscenarios verified their existing assertions and session cleanup. Chromium\nbranches use the same process owner and failure cleanup. The window-status fixture retained all 120 document, theme,\nlocale, and viewport cases. The Quit qualification opened a real environment,\ncanceled Quit and resumed interaction, restarted Runtime, quit normally, and\nverified Runtime remained alive until its session owner reclaimed it.\n\nThe full Desktop Vitest suite currently exposes independent failures in\nGateway update fixtures, native transport recovery, Welcome canvas data, and\nFlower boundary expectations. Service-canvas qualification also exposes a\nstale target authority disclosure when opening Env App from Welcome; it\nremains failed, with bounded clean shutdown and empty owned inventory. These\nfailures are not qualification passes and do not change product behavior.\n\nPortable lifecycle tests also run on Linux; the Windows tree adapter has\nidentity and PID-reuse tests. These do not claim Windows or Linux native\nDesktop qualification. Historical or other-task runtimes are outside the\nsession manifest and remain untouched.",
-          "char_count": 1192
+          "body": "On macOS arm64, maintained Playwright typography and native Codespace\nscenarios verified their existing assertions and session cleanup. Chromium\nbranches use the same process owner and failure cleanup. The window-status fixture retained all 120 document, theme,\nlocale, and viewport cases. The Quit qualification opened a real environment,\ncanceled Quit and resumed interaction, restarted Runtime, quit normally, and\nverified Runtime remained alive until its session owner reclaimed it.\n\nGateway update fixtures consume the structured service-start response and reject\nunexpected commands. Native transport tests preserve explicit recovery intent\nthrough the existing Open owner. Canvas and Flower assertions follow their\ncurrent relation and retained-settings contracts; container fixtures use saved\ntargets rather than replacing the native Local Environment through Presence.\nService-canvas qualification verifies all nine existing scenarios, including\nWelcome Open after automatic Runtime startup, window reuse, canvas navigation,\nroute isolation and reopening, then verifies empty owned inventory.\nThe [interaction continuity contract](desktop-interaction-continuity.md) owns\nthe stable Local authority projection and completed-startup Open handoff.\n\nPortable lifecycle tests also run on Linux; the Windows tree adapter has\nidentity and PID-reuse tests. These do not claim Windows or Linux native\nDesktop qualification. Historical or other-task runtimes are outside the\nsession manifest and remain untouched.",
+          "char_count": 1512
         }
       ],
       "snippet": "- Authority: the Desktop test supervisor owns scenario termination, resource registration, cleanup deadlines, and final qualification status. - Outcome: an explicit acceptance run ends within its scenario and cleanup budgets without leaving",
@@ -26319,6 +26325,12 @@
           "path": "desktop/desktop-development-bundles.md",
           "concept_id": "desktop.desktop-development-bundles",
           "title": "Desktop development sessions and bundles"
+        },
+        {
+          "label": "interaction continuity contract",
+          "path": "desktop/desktop-interaction-continuity.md",
+          "concept_id": "desktop.desktop-interaction-continuity",
+          "title": "Desktop interaction continuity"
         }
       ],
       "backlinks": [
@@ -44059,5 +44071,5 @@
       ]
     }
   ],
-  "source_sha256": "610d0290d779e210d097058a441eaa70c14a1905b1c7b05a5eeda661f870ea43"
+  "source_sha256": "c495ca67b3ac33a8da717af744bcba8349fad07a6fb9d96fea7794400d54508a"
 }
