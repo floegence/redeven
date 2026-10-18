@@ -878,12 +878,14 @@
         "title": "Wichtige Ereignisse",
         "received": "Empfangen",
         "admitted": "Zum Kontext hinzugefügt",
-        "read": "Vollständiges Ereignis lesen",
+        "read": "Bericht aufklappen",
         "more": "Weitere Ereignisse laden",
-        "report": "Bericht",
+        "report": "Bericht des Unteragenten",
         "input": "Eingabe erforderlich",
         "approval": "Genehmigung erforderlich",
-        "interrupted": "Unterbrochen"
+        "interrupted": "Unterbrochen",
+        "collapse": "Bericht zuklappen",
+        "open": "Unteraufgabe anzeigen"
       },
       "title": "Sub-Agenten",
       "description": "Delegierte Arbeiten in der aktuellen Flower-Unterhaltung.",

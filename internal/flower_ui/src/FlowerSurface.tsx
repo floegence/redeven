@@ -1,4 +1,4 @@
-import { ParentEventsPanel } from './ParentEventsPanel';
+import { ParentEventRow, createParentEventReading } from './parentEvents';
 import { FlowerAnswerActions } from './FlowerAnswerActions';
 import { flowerAnswerHTML, downloadFlowerAnswer } from './chat/markdown/flowerAnswerExport';
 import { flowerToolCallPreviewIdentity } from './toolCallPreview';
@@ -1595,6 +1595,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const thread = selectedThread();
     if (!thread) return false;
     return thread.messages.length > 0
+      || (thread.parent_events?.events.length ?? 0) > 0
       || (thread.queued_turns?.length ?? 0) > 0
       || !!visibleInputRequest(thread)
       || (thread.approval_actions?.length ?? 0) > 0
@@ -6180,7 +6181,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
   });
 
-  const selectedTimelineEntries = createMemo(() => buildFlowerTimelineEntries(selectedThread()));
+  const parentEventReading = createParentEventReading({
+    get threadID() { return selectedThreadID(); },
+    get page() { return selectedThread()?.parent_events; },
+    get read() { return props.adapter.readParentEvents; },
+  });
+  const selectedTimelineEntries = createMemo(() => buildFlowerTimelineEntries(selectedThread(), parentEventReading.events()));
   const [computerDialog, setComputerDialog] = createSignal<'settings' | 'connection' | 'installation' | null>(null);
   createEffect(on([selectedThreadID, () => selectedInputRequest()?.prompt_id], () => setComputerDialog(null), { defer: true }));
   const [computerStageOpen, setComputerStageOpen] = createSignal(false);
@@ -7218,6 +7224,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   createEffect(() => {
     selectedThreadID();
     selectedThreadHasContent();
+    parentEventReading.events();
     selectedThreadHasLiveProgress();
     transcriptLayoutRevision();
     measureTranscriptNearBottomAfterLayout();
@@ -10945,6 +10952,17 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         return inputRequestEntry(entry, thread);
       case 'error':
         return errorEntry(entry, thread);
+      case 'parent_event': {
+        const event = () => (entry() as Extract<FlowerTimelineEntry, { type: 'parent_event' }>).event;
+        const source = () => event().parent_thread_id === selectedThreadID()
+          ? selectedSubagentItems().find(item => item.threadID === event().source_thread_id) : undefined;
+        return <ParentEventRow event={event()} copy={subagentsCopy()} sourceName={source() ? subagentRowTitle(source()!) : event().source_thread_id}
+          canOpenSource={Boolean(source())} onOpenSource={() => { const item = source(); if (item) openSubagentDetail(item); }}
+          onDisclosureClick={title => {
+            viewportScope.activateDisclosure(title);
+            requestTranscriptAnimationFrame(() => viewportScope.finishDisclosure(title));
+          }} />;
+      }
     }
   };
 
@@ -11107,11 +11125,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             </Show>
           </div>
           <div class="flower-subagents-dropdown-content" {...props.approvalScrollViewportProps}>
-            <ParentEventsPanel threadID={selectedThreadID()} page={selectedThread()?.parent_events} copy={subagentsCopy()}
-              read={props.adapter.readParentEvents}
-              sourceName={(id) => { const item = selectedSubagentItems().find((value) => value.threadID === id); return item ? subagentRowTitle(item) : id; }}
-              canOpenSource={(id) => selectedSubagentItems().some((value) => value.threadID === id)}
-              onOpenSource={(id) => { const item = selectedSubagentItems().find((value) => value.threadID === id); if (item) openSubagentDetail(item); }} />
             <Show
               when={selectedSubagentItems().length > 0}
               fallback={(
@@ -11170,7 +11183,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     </Show>
   );
 
-  const subagentDetailTimelineEntries = createMemo(() => buildFlowerTimelineEntries(subagentDetailThread()).filter(entry => entry.type !== 'queued_turn'));
+  const subagentDetailTimelineEntries = createMemo(() => buildFlowerTimelineEntries(subagentDetailThread(), []).filter(entry => entry.type !== 'queued_turn'));
   const subagentDetailWindowTitle = createMemo(() => activeSubagentTitle());
   const showSubagentDetailScrollToLatestButton = createMemo(() => (
     Boolean(subagentDetailThread())
@@ -12926,6 +12939,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 runtimeID={props.adapter.runtime.runtime_id} scope="main" choices={turnDisclosureChoices}
                 scroll={transcriptScroll} reducedMotion={reducedMotionPreferred} copy={copy().chat.turnProcess}
                 renderEntry={(entry) => timelineEntry(entry, transcriptScroll, selectedThread)} />
+              <Show when={parentEventReading.failed()}>
+                <div class="flower-parent-event-reading" role="alert">
+                  <span>{subagentsCopy().unavailableThread}</span>
+                  <button type="button" class="flower-parent-event-action" onClick={() => void parentEventReading.retry()}>{subagentsCopy().detailRetry}</button>
+                </div>
+              </Show>
+              <Show when={parentEventReading.cursor() && props.adapter.readParentEvents}>
+                <button type="button" class="flower-parent-event-action" disabled={parentEventReading.busy()} aria-busy={parentEventReading.busy()}
+                  onClick={() => void parentEventReading.more()}>{subagentsCopy().events.more}</button>
+              </Show>
               {threadLevelApprovalPanel()}
             </Show>
           </div>

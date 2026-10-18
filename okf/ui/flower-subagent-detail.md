@@ -61,7 +61,7 @@ Canonical steering renders as one stable user message with pending, applied, or 
 
 Flower must not recover a missing child identity from activity sidecars, a title, a delegated approval alias, a fallback thread id, or local state. It must not humanize an absent task name into a role-based label. Redeven does not read Floret storage tables, persist child membership, poll child detail, rebuild it from detail events, or maintain a second transcript authority; optional child product settings contain presentation and policy only.
 
-Important child events use the same dropdown and child routing; see [Parent event disclosure](flower-parent-events.md).
+Important child events appear in the parent transcript with the same canonical child avatars and parent-scoped detail routing; see [Parent event timeline](flower-parent-events.md). The dropdown contains task inventory only.
 
 # Evidence
 

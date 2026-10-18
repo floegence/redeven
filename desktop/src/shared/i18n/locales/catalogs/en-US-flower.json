@@ -739,12 +739,14 @@
       "title": "Important events",
       "received": "Received",
       "admitted": "Added to context",
-      "read": "Read full event",
+      "read": "Expand full report",
       "more": "Load more events",
-      "report": "Report",
+      "report": "Subagent report",
       "input": "Input required",
       "approval": "Approval required",
-      "interrupted": "Interrupted"
+      "interrupted": "Interrupted",
+      "collapse": "Collapse full report",
+      "open": "View subtask"
     },
     "title": "Subagents",
     "description": "Delegated work managed inside the current Flower conversation.",

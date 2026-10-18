@@ -878,12 +878,14 @@
         "title": "重要なイベント",
         "received": "受信済み",
         "admitted": "コンテキストに追加済み",
-        "read": "イベントの全文を読む",
+        "read": "報告の全文を展開",
         "more": "さらにイベントを読み込む",
-        "report": "報告",
+        "report": "サブエージェントの報告",
         "input": "入力が必要",
         "approval": "承認が必要",
-        "interrupted": "中断"
+        "interrupted": "中断",
+        "collapse": "報告の全文を折りたたむ",
+        "open": "サブタスクを表示"
       },
       "title": "サブエージェント",
       "description": "現在の Flower 会話内で管理される委任作業です。",

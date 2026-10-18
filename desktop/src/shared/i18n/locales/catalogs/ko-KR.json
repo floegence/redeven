@@ -878,12 +878,14 @@
         "title": "중요 이벤트",
         "received": "수신됨",
         "admitted": "컨텍스트에 추가됨",
-        "read": "전체 이벤트 읽기",
+        "read": "전체 보고 펼치기",
         "more": "이벤트 더 불러오기",
-        "report": "보고",
+        "report": "하위 에이전트 보고",
         "input": "입력 필요",
         "approval": "승인 필요",
-        "interrupted": "중단됨"
+        "interrupted": "중단됨",
+        "collapse": "전체 보고 접기",
+        "open": "하위 작업 보기"
       },
       "title": "하위 에이전트",
       "description": "현재 Flower 대화 안에서 관리되는 위임 작업입니다.",

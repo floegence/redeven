@@ -4,6 +4,7 @@ import { applyFlowerRuntimeCurrentView } from './runtimeCurrentView';
 import type {
   FlowerActivityItem,
   FlowerActivityTimelineBlock,
+  FlowerParentEvent,
   FlowerThreadSnapshot,
 } from './contracts/flowerSurfaceContracts';
 import {
@@ -72,6 +73,24 @@ function thread(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThreadSnap
 }
 
 describe('buildFlowerTimelineEntries', () => {
+  it('interleaves parent events by received time without reordering messages and refreshes with the same message array', () => {
+    const messages: FlowerThreadSnapshot['messages'] = [
+      { id: 'user', role: 'user', content: 'Research', status: 'complete', created_at_ms: 10 },
+      { id: 'assistant', role: 'assistant', content: 'Results', status: 'complete', created_at_ms: 30 },
+    ];
+    const report: FlowerParentEvent = { id: 'report', kind: 'report', parent_thread_id: 'thread-1', source_thread_id: 'child',
+      source_turn_id: 'turn-child', source_run_id: 'run-child', source_entry_id: 'entry-child', received_at: new Date(20).toISOString(), admitted: false };
+    const value = thread({ messages, parent_events: { events: [report] } });
+    const initial = buildFlowerTimelineEntries(value);
+    expect(initial.map(entry => entry.key)).toEqual(['message:user', 'parent-event:report', 'message:assistant']);
+    const events = [{ ...report, admitted: true, message: 'Complete report' }, { ...report, id: 'failed', kind: 'failed' as const, received_at: new Date(40).toISOString() }];
+    const updated = buildFlowerTimelineEntries(value, events);
+    expect(updated.map(entry => entry.key)).toEqual(['message:user', 'parent-event:report', 'message:assistant', 'parent-event:failed']);
+    expect(updated[1]).toMatchObject({ event: { admitted: true, message: 'Complete report' } });
+    expect(buildFlowerTimelineEntries(value, events)).toBe(updated);
+    expect(buildFlowerTimelineEntries(thread({ messages }), [report, report, { ...report, id: 'foreign', parent_thread_id: 'other' }]).filter(entry => entry.type === 'parent_event')).toHaveLength(1);
+  });
+
   it('keeps transient run progress out of the canonical message timeline', () => {
     const user = {
       id: 'user:turn-live', turn_id: 'turn-live', role: 'user' as const,
