@@ -126,8 +126,8 @@ No online count runs before sending.
 
 One last confirmed request owns the overview, characters and recent cache rate.
 New estimates only drive current-request pressure. Missing historical characters
-show a short unavailable state until the next valid request. No valid confirmed
-sample displays an em dash; explicit measured zero remains = 0. Missing capacity
+show a short unavailable state until the next valid request. Without a valid confirmed
+sample, the overview displays an em dash; explicit measured zero remains = 0. Missing capacity
 does not hide measured input. Input / capacity is a reference ratio, not exact
 current occupation or guaranteed remaining space. Unqualified hosted/opaque
 native usage cannot calibrate an exact window-pressure anchor.

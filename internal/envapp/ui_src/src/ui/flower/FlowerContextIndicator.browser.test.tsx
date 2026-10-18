@@ -261,10 +261,12 @@ it('keeps zero input and close reachable at high zoom after a disclosure becomes
  const summary=panel.querySelector<HTMLElement>('[data-category="environment"] summary')!;
  summary.focus();await userEvent.keyboard('{Enter}');
  const next=fixture();
- next.confirmed!.characters!.categories=next.confirmed!.characters!.categories.filter(item=>item.category!=='model_context');
- next.confirmed!.characters!.categories.push({category:'model_context',characters:250,details:[{key:'execution_environment',characters:250}]});
- next.confirmed!.characters!.total_characters=next.confirmed!.characters!.categories.reduce((sum,item)=>sum+item.characters,0);
- setUsage(next);
+ const characters=next.confirmed!.characters!;
+ const categories=[...characters.categories.filter(item=>item.category!=='model_context'),
+  {category:'model_context' as const,characters:250,details:[{key:'execution_environment',characters:250}]}];
+ const nextUsage={...next,confirmed:{...next.confirmed!,characters:{...characters,categories,
+  total_characters:categories.reduce((sum,item)=>sum+item.characters,0)}}};
+ setUsage(nextUsage);
  await expect.poll(()=>document.activeElement).toBe(trigger);
  setUsage({confirmed:{...base,input_tokens:0,context_window_tokens:undefined,characters_available:true,characters:{source:'prepared_characters_v1',unit:'unicode_code_points',total_characters:0,categories:[]}}});
  expect(panel.querySelector('.flower-context-total')?.textContent).toContain('= 0');
