@@ -5909,7 +5909,9 @@
         "approval": "Aprovação necessária",
         "interrupted": "Interrompido",
         "collapse": "Recolher relatório",
-        "open": "Ver subtarefa"
+        "open": "Ver subtarefa",
+        "readFailed": "Não foi possível carregar os relatórios. O conteúdo carregado foi preservado. Tente novamente para continuar.",
+        "readTimeout": "O carregamento dos relatórios expirou. Tente novamente para continuar."
       }
     },
     "settings": {

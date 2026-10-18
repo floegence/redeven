@@ -7,7 +7,7 @@ import { flowerMessageTextForCopy } from './chat/markdown/flowerCitations';
 import { flowerDraftReferenceIdentity, flowerDraftReferenceContextItem, flowerDraftReferenceDescription } from './composer/flowerDraftReferenceModel';
 import type { ThreadReferenceSnapshot } from './contextActionWire';
 import { withFlowerModelDirectory } from './modelDirectory';
-import { FlowerRequestDeadlineError, withFlowerRequestDeadline } from './requestDeadline';
+import { FlowerRequestDeadlineError, withFlowerRequestDeadline, withFlowerReadDeadline } from './requestDeadline';
 import { FileItemIcon } from '@floegence/floe-webapp-core/file-browser';
 import { flowerMenuModels } from './modelMenu';
 import { flowerDirectoryDesktopStatus } from './modelDirectory';
@@ -849,24 +849,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [liveSyncState, setLiveSyncState] = createSignal<LiveTransportState>({ status: 'stopped', connectionEpoch: 0 });
   const livePresentationConfirmed = () => !props.adapter.connectLiveStream || liveSyncState().status === 'ready';
   const [unconfirmedStops, setUnconfirmedStops] = createSignal<ReadonlySet<string>>(new Set());
-  const readDetail = async <T,>(read: () => Promise<T>, signal?: AbortSignal): Promise<T> => {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    let cancel: (() => void) | undefined;
-    try {
-      return await Promise.race([
-        Promise.resolve().then(read),
-        new Promise<T>((_, reject) => {
-          timer = setTimeout(() => reject(new Error(copy().chat.syncTimeout)), 15_000);
-          cancel = () => reject(new DOMException('Detail read was superseded.', 'AbortError'));
-          if (signal?.aborted) cancel();
-          else signal?.addEventListener('abort', cancel, { once: true });
-        }),
-      ]);
-    } finally {
-      if (timer !== undefined) clearTimeout(timer);
-      if (cancel) signal?.removeEventListener('abort', cancel);
-    }
-  };
+  const readDetail = <T,>(read: () => Promise<T>, signal?: AbortSignal): Promise<T> => (
+    withFlowerReadDeadline(read, copy().chat.syncTimeout, signal)
+  );
   let subagentDetailReadController: AbortController | undefined;
   const [computerObserverID, setComputerObserverID] = createSignal('');
   const [computerLiveFrame, setComputerLiveFrame] = createSignal<FlowerLiveStreamEnvelope>();
@@ -1595,7 +1580,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const thread = selectedThread();
     if (!thread) return false;
     return thread.messages.length > 0
-      || (thread.parent_events?.events.length ?? 0) > 0
+      || (thread.parent_events ? thread.parent_events.events.length : 0) > 0
       || (thread.queued_turns?.length ?? 0) > 0
       || !!visibleInputRequest(thread)
       || (thread.approval_actions?.length ?? 0) > 0
@@ -6185,6 +6170,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     get threadID() { return selectedThreadID(); },
     get page() { return selectedThread()?.parent_events; },
     get read() { return props.adapter.readParentEvents; },
+    get connectionEpoch() { return liveSyncState().connectionEpoch; },
+    get timeoutMessage() { return subagentsCopy().events.readTimeout; },
   });
   const selectedTimelineEntries = createMemo(() => buildFlowerTimelineEntries(selectedThread(), parentEventReading.events()));
   const [computerDialog, setComputerDialog] = createSignal<'settings' | 'connection' | 'installation' | null>(null);
@@ -12939,17 +12926,19 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 runtimeID={props.adapter.runtime.runtime_id} scope="main" choices={turnDisclosureChoices}
                 scroll={transcriptScroll} reducedMotion={reducedMotionPreferred} copy={copy().chat.turnProcess}
                 renderEntry={(entry) => timelineEntry(entry, transcriptScroll, selectedThread)} />
-              <Show when={parentEventReading.failed()}>
-                <div class="flower-parent-event-reading" role="alert">
-                  <span>{subagentsCopy().unavailableThread}</span>
-                  <button type="button" class="flower-parent-event-action" onClick={() => void parentEventReading.retry()}>{subagentsCopy().detailRetry}</button>
-                </div>
-              </Show>
-              <Show when={parentEventReading.cursor() && props.adapter.readParentEvents}>
-                <button type="button" class="flower-parent-event-action" disabled={parentEventReading.busy()} aria-busy={parentEventReading.busy()}
-                  onClick={() => void parentEventReading.more()}>{subagentsCopy().events.more}</button>
-              </Show>
               {threadLevelApprovalPanel()}
+            </Show>
+            <Show when={parentEventReading.recovering()}>
+              <div class="flower-parent-event-reading" role="alert">
+                <span>{parentEventReading.timedOut() ? subagentsCopy().events.readTimeout : subagentsCopy().events.readFailed}</span>
+                <Show when={props.adapter.readParentEvents} fallback={<button type="button" class="flower-parent-event-action" onClick={retrySelectedThreadDetail}>{copy().chat.handlerRetry}</button>}>
+                  <button type="button" class="flower-parent-event-action" disabled={parentEventReading.busy()} aria-busy={parentEventReading.busy()} onClick={() => void parentEventReading.retry()}>{subagentsCopy().detailRetry}</button>
+                </Show>
+              </div>
+            </Show>
+            <Show when={parentEventReading.cursor() && props.adapter.readParentEvents}>
+              <button type="button" class="flower-parent-event-action" disabled={parentEventReading.busy() || parentEventReading.failed()} aria-busy={parentEventReading.busy()}
+                onClick={() => void parentEventReading.more()}>{subagentsCopy().events.more}</button>
             </Show>
           </div>
         </div>

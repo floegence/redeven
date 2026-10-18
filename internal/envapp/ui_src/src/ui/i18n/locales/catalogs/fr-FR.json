@@ -5909,7 +5909,9 @@
         "approval": "Approbation requise",
         "interrupted": "Interrompu",
         "collapse": "Replier le rapport",
-        "open": "Voir la sous-tâche"
+        "open": "Voir la sous-tâche",
+        "readFailed": "Impossible de charger les rapports. Le contenu chargé est conservé. Réessayez pour continuer.",
+        "readTimeout": "Le chargement des rapports a expiré. Réessayez pour continuer."
       }
     },
     "settings": {

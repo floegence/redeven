@@ -953,3 +953,18 @@ it('retains one user message identity while canonical steering settles', () => {
   expect(applied.messages[0]).toMatchObject({ id: 'steer-a', role: 'user', steering: { status: 'applied' } });
   expect(flowerMessageSignature(pending.messages[0])).not.toBe(flowerMessageSignature(applied.messages[0]));
 });
+
+describe('canonical parent event array contract', () => {
+  it.each([null, {}, { events: null }, { events: 'invalid' }])('rejects malformed parent event pages before cache publication: %j', parent_events => {
+    const base = summary();
+    const current = { thread_id: base.thread_id, view_version: 1, activity: 'idle', items: [], parent_events } as unknown as FlowerRuntimeCurrentView;
+    expect(() => applyFlowerRuntimeCurrentView(base, current)).toThrow('Flower contract error:');
+    expect(base.messages[0].content).toBe('old');
+  });
+  it('preserves a real serialized empty page and the disabled capability', () => {
+    const base = summary();
+    const current = JSON.parse(JSON.stringify({ thread_id: base.thread_id, view_version: 1, activity: 'idle', items: [], parent_events: { events: [] } })) as FlowerRuntimeCurrentView;
+    expect(applyFlowerRuntimeCurrentView(base, current).parent_events?.events).toEqual([]);
+    expect(applyFlowerRuntimeCurrentView(base, { ...current, parent_events: undefined }).parent_events).toBeUndefined();
+  });
+});

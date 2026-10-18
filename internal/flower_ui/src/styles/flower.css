@@ -9656,7 +9656,7 @@ button.flower-attachment-preview-trigger:disabled {
 .flower-parent-event-type { color: var(--foreground); white-space: nowrap; }
 .flower-parent-event-source { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-foreground); }
 .flower-parent-event button { cursor: pointer; }
-.flower-parent-event button:disabled, .flower-parent-event-action:disabled { cursor: default; opacity: 0.5; }
+.flower-parent-event button:disabled { cursor: default; opacity: 0.5; }
 .flower-parent-event-source:is(button):hover, .flower-parent-event-action:hover { color: var(--foreground); text-decoration: underline; text-underline-offset: 3px; }
 .flower-parent-event-heading time { margin-left: auto; flex-shrink: 0; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
 .flower-parent-event-status { display: inline-flex; align-items: center; gap: 0.25rem; white-space: nowrap; }
@@ -9670,10 +9670,12 @@ button.flower-attachment-preview-trigger:disabled {
 .flower-parent-event-actions { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; min-width: 0; margin-top: 0.25rem; }
 .flower-parent-event-action { display: inline-flex; align-items: center; justify-content: center; gap: 0.25rem; min-height: 1.75rem; cursor: pointer; white-space: nowrap; color: var(--muted-foreground); font-size: var(--floe-type-caption); flex-shrink: 0; }
 .flower-parent-event-action svg { width: 0.75rem; height: 0.75rem; flex-shrink: 0; }
+.flower-parent-event-action:disabled { cursor: default; opacity: 0.6; }
 .flower-parent-event-disclosure[aria-expanded='true'] svg { transform: rotate(180deg); }
 .flower-parent-event-actions .flower-parent-event-open { margin-left: auto; }
 .flower-parent-event-heading>.flower-parent-event-open { margin-left: 0.25rem; }
-.flower-parent-event-reading { display: flex; align-items: center; gap: 0.75rem; color: var(--destructive); font-size: var(--floe-type-caption); }
+.flower-parent-event-reading { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; color: var(--destructive); font-size: var(--floe-type-caption); }
+.flower-parent-event-reading>span { flex: 1 1 15rem; min-width: 0; overflow-wrap: anywhere; }
 @media (max-width: 639px) {
   .flower-parent-event-type { display: none; }
   .flower-parent-event-heading { display: grid; grid-template-columns: 1.25rem minmax(0, 1fr) auto; column-gap: 0.375rem; row-gap: 0.125rem; }

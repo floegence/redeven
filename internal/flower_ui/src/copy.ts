@@ -329,7 +329,7 @@ export type FlowerProviderDialogCopy = Readonly<{
 }>;
 
 export type FlowerSubagentsCopy = Readonly<{
-  events: Readonly<Record<'title' | 'received' | 'admitted' | 'read' | 'collapse' | 'open' | 'more' | 'report' | 'input' | 'approval' | 'interrupted', string>>;
+  events: Readonly<Record<'title' | 'received' | 'admitted' | 'read' | 'collapse' | 'open' | 'more' | 'report' | 'input' | 'approval' | 'interrupted' | 'readFailed' | 'readTimeout', string>>;
   title: string;
   description: string;
 	openLabel: string;
@@ -1380,7 +1380,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     completedLabel: 'Ended',
     threadIDLabel: 'Thread',
     lastMessageLabel: 'Latest handoff',
-    events: {"title": "Important events", "received": "Received", "admitted": "Added to context", "read": "Expand full report", "collapse": "Collapse full report", "open": "View subtask", "more": "Load more events", "report": "Subagent report", "input": "Input required", "approval": "Approval required", "interrupted": "Interrupted"},
+    events: {"title": "Important events", "readFailed": "Unable to load reports. Loaded content is preserved; retry to continue.", "readTimeout": "Loading reports timed out. Retry to continue.", "received": "Received", "admitted": "Added to context", "read": "Expand full report", "collapse": "Collapse full report", "open": "View subtask", "more": "Load more events", "report": "Subagent report", "input": "Input required", "approval": "Approval required", "interrupted": "Interrupted"},
     detailTimelineLabel: 'Subagent execution record',
     detailInstructionLabel: 'Delegated instruction',
     detailConstraintsLabel: 'Runtime constraints',

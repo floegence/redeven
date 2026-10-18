@@ -186,10 +186,11 @@ it('ignores a late report response after selecting another parent and supports r
   const [id, setID] = createSignal('parent');
   const [value, setValue] = createSignal<FlowerParentEventPage>({ events: [event('first')], first_event_id: 'first', last_event_id: 'first' });
   let resolve!: (page: FlowerParentEventPage) => void;
-  const read = vi.fn().mockImplementationOnce(() => new Promise<FlowerParentEventPage>(done => { resolve = done; })).mockRejectedValueOnce(new Error('offline')).mockResolvedValue({ events: [{ ...event('second'), parent_thread_id: 'other', message: 'Other report' }] });
+  const read = vi.fn().mockImplementationOnce(() => new Promise<FlowerParentEventPage>(done => { resolve = done; })).mockRejectedValueOnce(new Error('offline')).mockResolvedValue({ events: [{ ...event('second'), parent_thread_id: 'other', message: 'Other report' }], first_event_id: 'second', last_event_id: 'second' });
   let reading!: ReturnType<typeof createParentEventReading>;
   const dispose = render(() => { reading = createParentEventReading({ get threadID() { return id(); }, get page() { return value(); }, read }); return null; }, host);
   onTestFinished(() => { dispose(); host.remove(); });
+  await waitFor(() => read.mock.calls.length === 1);
   setID('other');
   setValue({ events: [{ ...event('second'), parent_thread_id: 'other' }], first_event_id: 'second', last_event_id: 'second' });
   await waitFor(reading.failed);
@@ -206,10 +207,11 @@ it('drops pages outside a changed fixed range and ignores the old range response
   const [value, setValue] = createSignal<FlowerParentEventPage>({ events: [event('first')], first_event_id: 'first', last_event_id: 'first' });
   let resolve!: (page: FlowerParentEventPage) => void;
   const read = vi.fn().mockImplementationOnce(() => new Promise<FlowerParentEventPage>(done => { resolve = done; }))
-    .mockResolvedValue({ events: [{ ...event('next'), message: 'Current range' }] });
+    .mockResolvedValue({ events: [{ ...event('next'), message: 'Current range' }], first_event_id: 'next', last_event_id: 'next' });
   let reading!: ReturnType<typeof createParentEventReading>;
   const dispose = render(() => { reading = createParentEventReading({ threadID: 'parent', get page() { return value(); }, read }); return null; }, host);
   onTestFinished(() => { dispose(); host.remove(); });
+  await waitFor(() => read.mock.calls.length === 1);
   setValue({ events: [event('next')], first_event_id: 'next', last_event_id: 'next' });
   await waitFor(() => reading.events()[0]?.message === 'Current range');
   resolve({ events: [{ ...event('first'), message: 'Old range' }], next_after_event_id: 'first' });

@@ -746,7 +746,9 @@
       "approval": "Approval required",
       "interrupted": "Interrupted",
       "collapse": "Collapse full report",
-      "open": "View subtask"
+      "open": "View subtask",
+      "readFailed": "Unable to load reports. Loaded content is preserved; retry to continue.",
+      "readTimeout": "Loading reports timed out. Retry to continue."
     },
     "title": "Subagents",
     "description": "Delegated work managed inside the current Flower conversation.",
