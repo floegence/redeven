@@ -204,7 +204,7 @@ describe('Environment connection popover', () => {
       await settle();
       expect(document.querySelector('img')).toBeNull();
     }
-    document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    document.body.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
     expect(test.open()).toBe(false);
   });
 

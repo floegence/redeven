@@ -26293,7 +26293,7 @@
         "title": "Desktop qualification lifecycle",
         "type": "Development Contract"
       },
-      "body_length": 5787,
+      "body_length": 6023,
       "summary": "- Authority: the Desktop test supervisor owns scenario termination, resource registration, cleanup deadlines, and final qualification status.\n- Outcome: an explicit acceptance run ends within its scenario and cleanup budgets without leaving its Electron, Runtime, bridge, or fixture resources behind.\n- Invariants: production Quit confirmation and independent Runtime lifetime remain intact; no process name, generic port, or foreground window grants stop authority.\n- Recovery boundary: timeout, interruption, unexpected exit, forced termination, cleanup error, and residual resources fail the run, retain diagnostics, and expose an explicit manifest cleanup command.",
       "sections": [
         {
@@ -26314,8 +26314,8 @@
           "id": "acceptance-evidence",
           "title": "Acceptance evidence",
           "level": 1,
-          "body": "On macOS arm64, maintained Playwright typography and native Codespace\nscenarios verified their existing assertions and session cleanup. Chromium\nbranches use the same process owner and failure cleanup. The window-status fixture retained all 120 document, theme,\nlocale, and viewport cases. The Quit qualification opened a real environment,\ncanceled Quit and resumed interaction, restarted Runtime, quit normally, and\nverified Runtime remained alive until its session owner reclaimed it.\n\nGateway update fixtures consume the structured service-start response and reject\nunexpected commands. Native transport tests preserve explicit recovery intent\nthrough the existing Open owner. Canvas and Flower assertions follow their\ncurrent relation and retained-settings contracts; container fixtures use saved\ntargets rather than replacing the native Local Environment through Presence.\nService-canvas qualification verifies all nine existing scenarios, including\nWelcome Open after automatic Runtime startup, window reuse, canvas navigation,\nroute isolation and reopening, then verifies empty owned inventory.\nThe [interaction continuity contract](desktop-interaction-continuity.md) owns\nthe stable Local authority projection and completed-startup Open handoff.\n\nPortable lifecycle tests also run on Linux; the Windows tree adapter has\nidentity and PID-reuse tests. These do not claim Windows or Linux native\nDesktop qualification. Historical or other-task runtimes are outside the\nsession manifest and remain untouched.",
-          "char_count": 1512
+          "body": "On macOS arm64, maintained Playwright typography and native Codespace\nscenarios verified their existing assertions and session cleanup. Chromium\nbranches use the same process owner and failure cleanup. The window-status fixture retained all 120 document, theme,\nlocale, and viewport cases. The Quit qualification opened a real environment,\ncanceled Quit and resumed interaction, restarted Runtime, quit normally, and\nverified Runtime remained alive until its session owner reclaimed it.\n\nGateway update fixtures consume the structured service-start response and reject\nunexpected commands. Native transport tests preserve explicit recovery intent\nthrough the existing Open owner. Canvas and Flower assertions follow their\ncurrent relation and retained-settings contracts; container fixtures use saved\ntargets rather than replacing the native Local Environment through Presence.\nConnection popovers exercise the shared pointer dismissal contract. Runtime or\nsession replacement refreshes filesystem context and scoped model reads while\nhealth-only snapshots retain both the mounted Flower surface and its requests.\nService-canvas qualification verifies all nine existing scenarios, including\nWelcome Open after automatic Runtime startup, window reuse, canvas navigation,\nroute isolation and reopening, then verifies empty owned inventory.\nThe [interaction continuity contract](desktop-interaction-continuity.md) owns\nthe stable Local authority projection and completed-startup Open handoff.\n\nPortable lifecycle tests also run on Linux; the Windows tree adapter has\nidentity and PID-reuse tests. These do not claim Windows or Linux native\nDesktop qualification. Historical or other-task runtimes are outside the\nsession manifest and remain untouched.",
+          "char_count": 1748
         }
       ],
       "snippet": "- Authority: the Desktop test supervisor owns scenario termination, resource registration, cleanup deadlines, and final qualification status. - Outcome: an explicit acceptance run ends within its scenario and cleanup budgets without leaving",
@@ -44071,5 +44071,5 @@
       ]
     }
   ],
-  "source_sha256": "c495ca67b3ac33a8da717af744bcba8349fad07a6fb9d96fea7794400d54508a"
+  "source_sha256": "462442f3c703829b58d67589c81f6ea9edda0933dbe4bb8b4092b532c7dac7bd"
 }
