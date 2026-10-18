@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-18: In-place child report disclosure
+
+- Expand the original [parent report content](ui/flower-parent-events.md) without a duplicate preview, keeping compact controls below the text and preserving the reading position through the shared transcript viewport controller.
+
 ## 2026-10-17: Parent event timeline
 
 - Present important child reports and automatic events directly in the [parent transcript](ui/flower-parent-events.md), with canonical avatars, real report previews, stable expansion and compact inline navigation. Keep the dropdown focused on task inventory and preserve Floret ownership without receipt or admission notices.

@@ -9665,14 +9665,14 @@ button.flower-attachment-preview-trigger:disabled {
 .flower-parent-event[data-parent-event-kind='timed_out'] .flower-parent-event-status svg { color: var(--destructive); }
 .flower-parent-event[data-parent-event-kind='completed'] .flower-parent-event-status svg { color: var(--success); }
 .flower-parent-event-report { margin: 0.5rem 0 0 0.625rem; padding-left: 1.125rem; border-left: 1px solid var(--border); min-width: 0; }
-.flower-parent-event-preview { overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; margin: 0; font-size: var(--floe-type-supporting); font-weight: 500; overflow-wrap: anywhere; }
+.flower-parent-event-body { white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; line-height: var(--floe-line-body); font-size: var(--floe-type-supporting); }
+.flower-parent-event-body[data-expanded='false'] { overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .flower-parent-event-actions { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; min-width: 0; margin-top: 0.25rem; }
 .flower-parent-event-action { display: inline-flex; align-items: center; justify-content: center; gap: 0.25rem; min-height: 1.75rem; cursor: pointer; white-space: nowrap; color: var(--muted-foreground); font-size: var(--floe-type-caption); flex-shrink: 0; }
 .flower-parent-event-action svg { width: 0.75rem; height: 0.75rem; flex-shrink: 0; }
 .flower-parent-event-disclosure[aria-expanded='true'] svg { transform: rotate(180deg); }
 .flower-parent-event-actions .flower-parent-event-open { margin-left: auto; }
 .flower-parent-event-heading>.flower-parent-event-open { margin-left: 0.25rem; }
-.flower-parent-event-body { white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; padding-top: 0.5rem; line-height: var(--floe-line-body); font-size: var(--floe-type-supporting); }
 .flower-parent-event-reading { display: flex; align-items: center; gap: 0.75rem; color: var(--destructive); font-size: var(--floe-type-caption); }
 @media (max-width: 639px) {
   .flower-parent-event-type { display: none; }

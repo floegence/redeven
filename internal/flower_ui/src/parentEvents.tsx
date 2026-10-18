@@ -75,7 +75,7 @@ export function ParentEventRow(props: Readonly<{
   const [open, setOpen] = createSignal(false);
   const report = () => props.event.kind === 'report';
   const message = () => props.event.message ?? '';
-  const preview = () => message().trim().split(/\r?\n/, 1)[0];
+  let reportBody!: HTMLDivElement;
   const time = () => {
     const date = new Date(props.event.received_at);
     return Number.isFinite(date.getTime()) ? date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : '';
@@ -108,12 +108,18 @@ export function ParentEventRow(props: Readonly<{
     </div>
     <Show when={report()}>
       <div class="flower-parent-event-report">
-        <Show when={preview()}><p class="flower-parent-event-preview">{preview()}</p></Show>
+        <Show when={message()}>
+          <div ref={reportBody} id={`flower-parent-event-body-${encodeURIComponent(props.event.parent_thread_id + ':' + props.event.id)}`}
+            class="flower-parent-event-body" data-parent-event-body={props.event.id} data-expanded={open()}>{message()}</div>
+        </Show>
         <div class="flower-parent-event-actions">
           <Show when={message()}>
             <button type="button" class="flower-parent-event-action flower-parent-event-disclosure" data-flower-disclosure-trigger aria-expanded={open()}
               aria-controls={`flower-parent-event-body-${encodeURIComponent(props.event.parent_thread_id + ':' + props.event.id)}`}
-              onClick={event => { props.onDisclosureClick(event.currentTarget); setOpen(value => !value); }}>
+              onClick={event => {
+                props.onDisclosureClick(open() ? event.currentTarget : reportBody);
+                setOpen(value => !value);
+              }}>
               {open() ? props.copy.events.collapse : props.copy.events.read}<ChevronDown aria-hidden="true" />
             </button>
           </Show>
@@ -123,10 +129,6 @@ export function ParentEventRow(props: Readonly<{
             </button>
           </Show>
         </div>
-        <Show when={open()}>
-          <div id={`flower-parent-event-body-${encodeURIComponent(props.event.parent_thread_id + ':' + props.event.id)}`}
-            class="flower-parent-event-body" data-parent-event-body={props.event.id}>{message()}</div>
-        </Show>
       </div>
     </Show>
   </article>;
