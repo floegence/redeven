@@ -5660,7 +5660,11 @@
         },
         "failed": "Flower가 이번 대화를 완료하지 못했습니다.",
         "cancelled": "중지됨",
-        "interrupted": "이번 대화가 중단되었습니다."
+        "interrupted": "이번 대화가 중단되었습니다.",
+        "subtaskUpdates": {
+          "one": "하위 작업 업데이트 {count}개",
+          "other": "하위 작업 업데이트 {count}개"
+        }
       },
       "modelUnavailableMissingKeys": "이 모델 공급자의 인증 정보가 설정되어 있지 않습니다. 설정에서 인증 정보를 추가하세요.",
       "modelUnavailableProviderDisabled": "이 모델 공급자는 비활성화되어 있습니다. 설정에서 활성화하거나 다른 모델을 선택하세요.",

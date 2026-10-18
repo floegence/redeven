@@ -10005,6 +10005,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           && parentEventReading.events().some(event => event.id === blockOfKind('parent_report')().eventID)}>
           <button type="button" class="flower-parent-event-action" onClick={() => {
             const eventID = blockOfKind('parent_report')().eventID;
+            const event = parentEventReading.events().find(event => event.id === eventID);
+            if (event?.parent_turn_id) turnDisclosureChoices.retainExpanded(JSON.stringify([
+              props.adapter.runtime.runtime_id, selectedThreadID(), event.parent_turn_id,
+            ]));
             closeSubagentOverlays();
             requestTranscriptAnimationFrame(() => {
               const row = [...(transcriptScroll.viewport()?.querySelectorAll<HTMLElement>('[data-parent-event]') ?? [])].find(row => row.dataset.parentEvent === eventID);

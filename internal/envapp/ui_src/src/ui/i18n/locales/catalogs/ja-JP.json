@@ -5660,7 +5660,11 @@
         },
         "failed": "Flower はこのターンを完了できませんでした。",
         "cancelled": "停止しました",
-        "interrupted": "このターンは中断されました。"
+        "interrupted": "このターンは中断されました。",
+        "subtaskUpdates": {
+          "one": "サブタスクの更新 {count} 件",
+          "other": "サブタスクの更新 {count} 件"
+        }
       },
       "modelUnavailableMissingKeys": "このモデルプロバイダーの認証情報が設定されていません。設定で認証情報を追加してください。",
       "modelUnavailableProviderDisabled": "このモデルプロバイダーは無効です。設定で有効にするか、別のモデルを選択してください。",

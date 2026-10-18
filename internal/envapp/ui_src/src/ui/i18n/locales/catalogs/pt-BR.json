@@ -5660,7 +5660,11 @@
         },
         "failed": "Flower não conseguiu concluir este turno.",
         "cancelled": "Parado",
-        "interrupted": "Este turno foi interrompido."
+        "interrupted": "Este turno foi interrompido.",
+        "subtaskUpdates": {
+          "one": "{count} atualização de subtarefa",
+          "other": "{count} atualizações de subtarefas"
+        }
       },
       "modelUnavailableMissingKeys": "Este provedor de modelos não tem credenciais configuradas. Adicione-as nas configurações.",
       "modelUnavailableProviderDisabled": "Este provedor de modelos está desativado. Ative-o nas configurações ou selecione outro modelo.",

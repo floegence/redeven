@@ -754,7 +754,14 @@
         },
         "failed": "Flower 未能完成這輪對話。",
         "cancelled": "已停止",
-        "interrupted": "這輪對話異常中斷。"
+        "interrupted": "這輪對話異常中斷。",
+        "subtaskUpdates": {
+          "kind": "plural",
+          "forms": {
+            "one": "{count} 則子任務動態",
+            "other": "{count} 則子任務動態"
+          }
+        }
       },
       "modelUnavailableMissingKeys": "此模型的模型供應商尚未設定憑證。請在設定中新增憑證。",
       "modelUnavailableProviderDisabled": "此模型的模型供應商已停用。請在設定中啟用，或選擇其他模型。",

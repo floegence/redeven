@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-18 — Unified Flower process disclosure
+
+- Adopt published Floret v7.57.0 parent turn ownership and fold ordinary [child events](ui/flower-parent-events.md) through the single [turn-process projection](ui/flower-turn-process-disclosure.md), retaining unresolved controls, safety blockers, reading protection and manual choices.
+
 ## 2026-10-18: Compact parent report tool rows
 
 - Localize list/read report tools, retain only returned source avatars in static aligned rows, and preserve visible errors and canonical report disclosure. Recover historical source facts through the authorized tool-result reader and show confirmed submission receipts in the child view. See [parent event presentation](ui/flower-parent-events.md).

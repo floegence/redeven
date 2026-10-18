@@ -5660,7 +5660,11 @@
         },
         "failed": "Flower 未能完成本轮对话。",
         "cancelled": "已停止",
-        "interrupted": "本轮对话异常中断。"
+        "interrupted": "本轮对话异常中断。",
+        "subtaskUpdates": {
+          "one": "{count} 条子任务动态",
+          "other": "{count} 条子任务动态"
+        }
       },
       "modelUnavailableMissingKeys": "此模型的模型提供商尚未配置凭据。请在设置中添加凭据。",
       "modelUnavailableProviderDisabled": "此模型的模型提供商已停用。请在设置中启用，或选择其他模型。",

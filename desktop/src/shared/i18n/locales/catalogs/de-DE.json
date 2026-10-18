@@ -754,7 +754,14 @@
         },
         "failed": "Flower konnte diesen Durchlauf nicht abschließen.",
         "cancelled": "Gestoppt",
-        "interrupted": "Dieser Durchlauf wurde unterbrochen."
+        "interrupted": "Dieser Durchlauf wurde unterbrochen.",
+        "subtaskUpdates": {
+          "kind": "plural",
+          "forms": {
+            "one": "{count} Unteraufgaben-Update",
+            "other": "{count} Unteraufgaben-Updates"
+          }
+        }
       },
       "modelUnavailableMissingKeys": "Für diesen Modellanbieter sind keine Zugangsdaten eingerichtet. Füge sie in den Einstellungen hinzu.",
       "modelUnavailableProviderDisabled": "Dieser Modellanbieter ist deaktiviert. Aktiviere ihn in den Einstellungen oder wähle ein anderes Modell.",
