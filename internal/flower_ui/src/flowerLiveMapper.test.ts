@@ -38,28 +38,15 @@ describe('Canonical thread reference identity', () => {
 });
 
 describe('Flower context usage contract', () => {
-  const confirmed = { available:true, measured:true, breakdown_available:false, unattributed_tokens:0, phase: 'provider_usage', pressure_status: 'stable', input_tokens: 71872, context_window_tokens: 950000, updated_at_ms: 10 };
+  const confirmed = { available:true, measured:true, characters_available:false, phase: 'provider_usage', pressure_status: 'stable', input_tokens: 71872, context_window_tokens: 950000, updated_at_ms: 10 };
   const estimate = { ...confirmed, measured:false, phase: 'projected_request', input_tokens: 82346, updated_at_ms: 11 };
   const thread_usage = { input_tokens: 50, output_tokens: 20, cache_read_tokens: 45, cache_write_tokens: 5 };
 
-  it.each([
-    { source: 'rendered_content_v3', tokenizer: 'deepseek_v4', quality: 'token_estimate', framing_tokens: 40 },
-    { source: 'rendered_content_v3', quality: 'relative_weight', attachment_tokens: 4096 },
-    { source: 'semantic_input_bpe_v1', user_tokens: 100 },
-  ])('preserves distribution quality on live and restored snapshots %j', breakdown => {
-    const wire = { confirmed: { ...confirmed, breakdown } };
-    expect(mapContextUsage(wire)?.confirmed?.breakdown).toEqual(breakdown);
+  it('maps optional character statistics without converting native usage', () => {
+    const characters = { source: 'prepared_characters_v1', unit: 'unicode_code_points', total_characters: 2, categories: [{ category: 'user', characters: 2 }] };
+    const wire = { confirmed: { ...confirmed, characters_available: true, characters } };
+    expect(mapContextUsage(wire)?.confirmed?.characters).toEqual(characters);
     expect(mapContextUsage(JSON.parse(JSON.stringify(wire)))).toEqual(mapContextUsage(wire));
-  });
-
-  it.each([
-    { quality: 'precise', tokenizer: 'deepseek_v4' },
-    { quality: 'token_estimate' },
-    { quality: 'token_estimate', tokenizer: '' },
-    { quality: 'token_estimate', tokenizer: 'deepseek_v4', attachment_tokens: 1 },
-    { quality: 'relative_weight', tokenizer: 7 },
-  ])('rejects unsupported distribution claims %j', metadata => {
-    expect(mapContextUsage({ confirmed: { ...confirmed, breakdown: { source: 'rendered_content_v3', ...metadata } } })?.confirmed).toMatchObject({available:true,breakdown_available:false,limitation:'invalid_breakdown'});
   });
 
   it('maps the same confirmed and estimated samples for live and reconnect', () => {
@@ -433,13 +420,9 @@ describe('Canonical managed model context', () => {
  });
 });
 
-it('retains request-scoped context categories and zero native input', () => {
- const sample = { available:true,measured:true,breakdown_available:false,unattributed_tokens:0,phase:'provider_usage', pressure_status:'stable', updated_at_ms:1, input_tokens:0,
-  breakdown:{ source:'semantic_input_bpe_v1', tool_result_tokens:1234, tool_call_tokens:70, attachment_tokens:4096 } };
- const mapped = mapContextUsage({ confirmed:sample })!;
- expect(mapped.confirmed?.input_tokens).toBe(0);
- expect(mapped.confirmed?.breakdown).toEqual(sample.breakdown);
- for (const value of [-1, 1.5, Number.MAX_SAFE_INTEGER+1, '100']) {
-  expect(mapContextUsage({ confirmed:{...sample, breakdown:{source:'test',tool_result_tokens:value}} })?.confirmed).toMatchObject({available:true,input_tokens:0,breakdown_available:false,limitation:'invalid_breakdown'});
+it('preserves zero native input when optional characters are damaged', () => {
+ const sample = { available: true, measured: true, characters_available: true, phase: 'provider_usage', pressure_status: 'stable', updated_at_ms: 1, input_tokens: 0 };
+ for (const value of [-1, 1.5, Number.MAX_SAFE_INTEGER + 1, '100']) {
+  expect(mapContextUsage({ confirmed: { ...sample, characters: { source: 'prepared_characters_v1', unit: 'unicode_code_points', total_characters: value, categories: [] } } })?.confirmed).toMatchObject({ available: true, input_tokens: 0, characters_available: false, character_limitation: 'invalid_characters' });
  }
 });

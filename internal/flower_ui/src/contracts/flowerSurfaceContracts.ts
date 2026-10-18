@@ -388,32 +388,31 @@ export type FlowerContextUsage = Readonly<{
 }>;
 
 export const FLOWER_CONTEXT_CATEGORIES = [
-  'system_tokens', 'tool_definition_tokens', 'user_tokens', 'assistant_tokens',
-  'tool_call_tokens', 'tool_result_tokens', 'model_context_tokens', 'compaction_tokens',
-  'reasoning_tokens', 'attachment_tokens', 'framing_tokens',
+  'system', 'user', 'assistant', 'tool_definition', 'tool_call', 'tool_result',
+  'model_context', 'compaction', 'reasoning', 'hosted_context', 'unlabelled',
 ] as const;
 export type FlowerContextCategory = typeof FLOWER_CONTEXT_CATEGORIES[number];
-export type FlowerContextTokenDetail = Readonly<{
-  category: 'tool_definition' | 'model_context'; key: string; source?: string; namespace?: string; tokens: number;
+export type FlowerContextCharacterDetail = Readonly<{
+  key: string; source?: string; namespace?: string; characters: number;
 }>;
-export type FlowerContextBreakdown = Readonly<{
-  attribution_coverage?: 'complete' | 'partial'; limitation?: string; opaque_bytes?: number;
-  source: string; tokenizer?: string; quality?: 'token_estimate' | 'relative_weight'; details?: Readonly<{ items: readonly FlowerContextTokenDetail[] }>;
-} & Partial<Record<FlowerContextCategory, number>>>;
+export type FlowerContextCharacterBreakdown = Readonly<{
+  source: 'prepared_characters_v1'; unit: 'unicode_code_points'; total_characters: number;
+  categories: readonly Readonly<{ category: FlowerContextCategory; characters: number; details?: readonly FlowerContextCharacterDetail[] }>[];
+  limitations?: readonly string[];
+}>;
 
 export type FlowerContextSample = Readonly<{
   available?: boolean;
   measured?: boolean;
-  breakdown_available?: boolean;
-  unattributed_tokens?: number;
-  limitation?: string;
+  characters_available?: boolean;
+  character_limitation?: string;
   request_id?: string;
   attempt_id?: string;
   attempt_epoch?: number;
   payload_fingerprint?: string;
   provider?: string;
   model?: string;
-  breakdown?: FlowerContextBreakdown;
+  characters?: FlowerContextCharacterBreakdown;
   run_id?: string;
   step_index?: number;
   phase: FlowerContextUsagePhase;

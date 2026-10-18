@@ -6,6 +6,7 @@ import (
 
 	"github.com/floegence/floret/v7/config"
 	"github.com/floegence/floret/v7/observation"
+	flruntime "github.com/floegence/floret/v7/runtime"
 	oresponses "github.com/openai/openai-go/v3/responses"
 )
 
@@ -29,75 +30,63 @@ func TestOpenAIReasoningIsIncludedOnceInTotal(t *testing.T) {
 	t.Logf("reported_total=%d normalized_total=%d window_input=%d", raw.TotalTokens, got.TotalTokens, (got.InputTokens + got.CacheReadTokens + got.CacheWriteTokens))
 }
 
-func TestFlowerContextMappingUsesPublishedReconciliation(t *testing.T) {
-	for _, tc := range []struct {
-		name                                string
-		total, category                     int64
-		legacy, damaged, partial, projected bool
-		available, details                  bool
-	}{
-		{name: "screenshot", total: 46292, category: 18363, available: true, details: true},
-		{name: "equal", total: 100, category: 100, available: true, details: true},
-		{name: "over", total: 100, category: 101, available: true},
-		{name: "zero", available: true, details: true},
-		{name: "legacy", total: 100, category: 99, legacy: true, available: true},
-		{name: "damaged", total: 100, category: 20, damaged: true, available: true},
-		{name: "partial", category: 20, partial: true, projected: true},
-		{name: "complete_estimate", category: 20, projected: true, available: true, details: true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			status := observation.ContextStatus{RunID: "run", RequestID: "request", PayloadFingerprint: "fingerprint", Provider: "openai", Model: "test", Phase: observation.ContextPhaseProviderUsage, Status: observation.ContextStatusStable,
-				Usage:           observation.ProviderUsage{Available: true, Source: "native", WindowInputTokens: tc.total},
-				RequestEstimate: config.RequestEstimate{EstimatedInputTokens: 99999, Breakdown: config.ContextBreakdown{Source: "prepared_content_v4", Quality: "token_estimate", Tokenizer: "proxy_bpe", AttributionCoverage: "complete", UserTokens: tc.category}},
-			}
-			if tc.legacy {
-				status.RequestEstimate.Breakdown.Source = "prepared_content_v3"
-			}
-			if tc.damaged {
-				status.RequestEstimate.Breakdown.Details = &config.ContextBreakdownDetails{Items: []config.ContextTokenDetail{{Category: "tool_definition", Key: "read", Tokens: 1}}}
-			}
-			if tc.partial {
-				status.RequestEstimate.Breakdown.AttributionCoverage = "partial"
-				status.RequestEstimate.Breakdown.Limitation = "hosted_context"
-			}
-			if tc.projected {
-				status.Phase = observation.ContextPhaseProjectedRequest
-			}
-			want, _ := observation.ReconcileContextStatus(status)
-			got, err := flowerContextSampleFromFloret(&status)
-			if err != nil || got.Available != tc.available || got.BreakdownAvailable != tc.details || got.InputTokens != want.InputTokens || got.UnattributedTokens != want.UnattributedTokens || got.Measured != want.Measured || got.Limitation != want.Limitation {
-				t.Fatalf("mapping=%+v expected=%+v err=%v", got, want, err)
-			}
-			if got.RequestID != status.RequestID || got.PayloadFingerprint != status.PayloadFingerprint {
-				t.Fatal("request identity lost")
-			}
-			raw, err := json.Marshal(got)
-			if err != nil {
-				t.Fatal(err)
-			}
-			var fields map[string]any
-			if err := json.Unmarshal(raw, &fields); err != nil {
-				t.Fatal(err)
-			}
-			if _, ok := fields["input_tokens"]; !ok {
-				t.Fatal("explicit zero omitted")
-			}
-		})
+func TestFlowerContextMappingUsesPublishedCharacters(t *testing.T) {
+	for _, total := range []int64{0, 1, 126467} {
+		status := observation.ContextStatus{RunID: "run", RequestID: "request", PayloadFingerprint: "fingerprint", Provider: "openai", Model: "test", Phase: observation.ContextPhaseProviderUsage, Status: observation.ContextStatusStable,
+			Usage:           observation.ProviderUsage{Available: true, InputTokensReported: true, InputTokenScope: "provider_execution", Source: "native", InputTokens: total, WindowInputTokens: total},
+			RequestEstimate: config.RequestEstimate{Characters: &config.ContextCharacterBreakdown{Source: "prepared_characters_v1", Unit: "unicode_code_points", TotalCharacters: 169903, Categories: []config.ContextCharacterCategory{{Category: "tool_result", Characters: 169903}}}},
+		}
+		got, err := flowerContextSampleFromFloret(&status)
+		if err != nil || !got.Available || !got.Measured || !got.CharactersAvailable || got.Characters.TotalCharacters != 169903 || got.InputTokens != total {
+			t.Fatalf("mapping=%+v err=%v", got, err)
+		}
+		if got.RequestID != status.RequestID || got.PayloadFingerprint != status.PayloadFingerprint {
+			t.Fatal("request identity lost")
+		}
+		status.RequestEstimate.Characters = nil
+		historical, err := flowerContextSampleFromFloret(&status)
+		if err != nil || !historical.Available || historical.CharactersAvailable {
+			t.Fatalf("historical=%+v err=%v", historical, err)
+		}
+		raw, err := json.Marshal(historical)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var fields map[string]any
+		if err := json.Unmarshal(raw, &fields); err != nil {
+			t.Fatal(err)
+		}
+		if _, ok := fields["input_tokens"]; !ok {
+			t.Fatal("explicit zero omitted")
+		}
+		if _, ok := fields["unattributed_tokens"]; ok {
+			t.Fatal("obsolete token remainder exposed")
+		}
 	}
 }
 
-func TestFlowerContextMappingCopiesAttributionDetails(t *testing.T) {
+func TestFlowerContextMappingCopiesCharacterDetails(t *testing.T) {
 	status := observation.ContextStatus{RunID: "run", RequestID: "request", PayloadFingerprint: "fingerprint", Provider: "test", Model: "test", Phase: observation.ContextPhaseProviderUsage, Status: observation.ContextStatusStable,
-		Usage:           observation.ProviderUsage{Available: true, Source: "native", WindowInputTokens: 100},
-		RequestEstimate: config.RequestEstimate{Breakdown: config.ContextBreakdown{Source: "prepared_content_v4", Quality: "token_estimate", Tokenizer: "proxy_bpe", AttributionCoverage: "complete", ToolDefinitionTokens: 20, Details: &config.ContextBreakdownDetails{Items: []config.ContextTokenDetail{{Category: "tool_definition", Key: "read", Tokens: 20}}}}},
+		Usage:           observation.ProviderUsage{Available: true, Source: "native", InputTokens: 100, WindowInputTokens: 100},
+		RequestEstimate: config.RequestEstimate{Characters: &config.ContextCharacterBreakdown{Source: "prepared_characters_v1", Unit: "unicode_code_points", TotalCharacters: 20, Categories: []config.ContextCharacterCategory{{Category: "tool_definition", Characters: 20, Details: []config.ContextCharacterDetail{{Key: "read", Characters: 20}}}}}},
 	}
 	got, err := flowerContextSampleFromFloret(&status)
-	if err != nil || got.Breakdown == nil {
+	if err != nil || got.Characters == nil {
 		t.Fatalf("%+v %v", got, err)
 	}
-	got.Breakdown.Details.Items[0].Tokens = -1
-	if status.RequestEstimate.Breakdown.Details.Items[0].Tokens != 20 {
+	got.Characters.Categories[0].Details[0].Characters = -1
+	if status.RequestEstimate.Characters.Categories[0].Details[0].Characters != 20 {
 		t.Fatal("display mutated canonical attribution")
+	}
+	status.RequestEstimate.Characters.Categories[0].Characters = -1
+	got, err = flowerContextSampleFromFloret(&status)
+	if err != nil || !got.Available || got.CharactersAvailable {
+		t.Fatalf("optional damage discarded usable total: %+v %v", got, err)
+	}
+	status.Phase = observation.ContextPhaseProjectedRequest
+	got, err = flowerContextSampleFromFloret(&status)
+	if err != nil || got.Available {
+		t.Fatalf("estimate became measured display: %+v %v", got, err)
 	}
 }
 
@@ -141,5 +130,18 @@ func TestEmptyOpenAIUsageIsNotAMeasurement(t *testing.T) {
 	}
 	if floretUsageFromFlower(turn).Available {
 		t.Fatal("missing usage became measured zero")
+	}
+}
+
+func TestFlowerRecentCacheRequiresConfirmedInputMeasurement(t *testing.T) {
+	for _, reported := range []bool{false, true} {
+		status := &observation.ContextStatus{RunID: "run", RequestID: "request", PayloadFingerprint: "fingerprint", Provider: "openai", Model: "test", Phase: observation.ContextPhaseProviderUsage, Status: observation.ContextStatusStable, Usage: observation.ProviderUsage{Available: true, Source: "native", InputTokensReported: reported, InputTokenScope: "provider_execution", OutputTokens: 1}}
+		got, err := flowerContextUsageFromFloret(&flruntime.ThreadContextUsage{Confirmed: status}, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if (got.RecentRequestUsage != nil) != reported || got.Confirmed.Available != reported {
+			t.Fatalf("reported=%t mapping=%+v", reported, got)
+		}
 	}
 }

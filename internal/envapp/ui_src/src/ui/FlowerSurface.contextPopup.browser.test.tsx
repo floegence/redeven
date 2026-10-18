@@ -8,10 +8,14 @@ it('keeps popup clicks out of composer blank-space focus handling', async () => 
   await page.viewport(1280, 900);
   const selected = thread({ messages: [], context_usage: { confirmed: {
     phase: 'provider_usage', pressure_status: 'stable', updated_at_ms: 1, input_tokens: 600, context_window_tokens: 1000,
-    breakdown: { source: 'rendered_content_v3', quality: 'relative_weight', system_tokens: 100, tool_definition_tokens: 500, details: { items: [
-      { category: 'tool_definition', key: 'search', source: 'mcp', namespace: 'docs', tokens: 300 },
-      { category: 'tool_definition', key: 'read', source: 'mcp', namespace: 'docs', tokens: 200 },
-    ] } },
+    available: true, measured: true, characters_available: true,
+    characters: { source: 'prepared_characters_v1', unit: 'unicode_code_points', total_characters: 600, categories: [
+      { category: 'system', characters: 100 },
+      { category: 'tool_definition', characters: 500, details: [
+        { key: 'search', source: 'mcp', namespace: 'docs', characters: 300 },
+        { key: 'read', source: 'mcp', namespace: 'docs', characters: 200 },
+      ] },
+    ] },
   } } });
   const surface = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: async () => [selected], loadThread: async () => liveBootstrap(selected) },
     { focusThreadRequest: { request_id: 'context-popup', thread_id: selected.thread_id } });

@@ -1,4 +1,4 @@
-import { FLOWER_CONTEXT_CATEGORIES, type FlowerContextBreakdown } from './contracts/flowerSurfaceContracts';
+import { FLOWER_CONTEXT_CATEGORIES, type FlowerContextCharacterBreakdown } from './contracts/flowerSurfaceContracts';
 import { mapFlowerProviderRequestProgress } from './providerRequestProgress';
 import { mapFlowerCitationSources } from './chat/markdown/flowerCitations';
 import { threadTitleSnapshot } from './threadTitleSnapshot';
@@ -322,67 +322,44 @@ export function mapContextUsage(raw: unknown): FlowerContextUsage | null {
   };
 }
 
-function mapContextBreakdown(raw: unknown): FlowerContextBreakdown | undefined {
+// Floret reconciles counts and identity. This decoder only checks the wire shape;
+// optional character damage must not discard a conversation update.
+function characterCount(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) throw new Error('invalid character count');
+  return value;
+}
+
+function mapContextCharacters(raw: unknown): FlowerContextCharacterBreakdown | undefined {
   if (raw === undefined || raw === null) return undefined;
   const record = recordValue(raw);
-  if (!record || !trim(record.source)) throw new Error('context breakdown requires an estimate source');
-  const result: { -readonly [K in keyof FlowerContextBreakdown]: FlowerContextBreakdown[K] } = { source: trim(record.source) };
-  if (record.attribution_coverage === 'complete' || record.attribution_coverage === 'partial') result.attribution_coverage = record.attribution_coverage;
-  if (typeof record.limitation === 'string') result.limitation = record.limitation;
-  if (record.opaque_bytes !== undefined) result.opaque_bytes = nonNegativeInteger(record.opaque_bytes, 'opaque_bytes');
-  if (record.quality !== undefined) {
-    if (record.quality !== 'token_estimate' && record.quality !== 'relative_weight') throw new Error('invalid context quality');
-    result.quality = record.quality;
-  }
-  if (record.tokenizer !== undefined) {
-    if (typeof record.tokenizer !== 'string') throw new Error('invalid context tokenizer');
-    result.tokenizer = record.tokenizer;
-  }
-  if (result.quality === 'token_estimate' && (!result.tokenizer || Number(record.attachment_tokens ?? 0) > 0)) throw new Error('incomplete context vocabulary coverage');
-  for (const key of FLOWER_CONTEXT_CATEGORIES) {
-    if (record[key] === undefined) continue;
-    const value = record[key];
-    if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) throw new Error('invalid context breakdown tokens');
-    result[key] = value;
-  }
-  if (record.details !== undefined) {
-    const details = recordValue(record.details);
-    if (!details || !Array.isArray(details.items)) throw new Error('invalid context attribution');
-    const seen = new Set<string>();
-    const sums = { tool_definition: 0, model_context: 0 };
-    const items = details.items.map((raw: unknown) => {
-      const item = recordValue(raw);
-      if (!item || (item.category !== 'tool_definition' && item.category !== 'model_context')
-        || typeof item.key !== 'string' || (item.category === 'tool_definition' && !item.key)
-        || (item.source !== undefined && typeof item.source !== 'string')
-        || (item.namespace !== undefined && typeof item.namespace !== 'string')
-        || typeof item.tokens !== 'number' || !Number.isSafeInteger(item.tokens) || item.tokens < 0
-        || (item.category === 'model_context' && (item.source || item.namespace))) throw new Error('invalid context attribution item');
-      const category = item.category as 'tool_definition' | 'model_context';
-      const key = JSON.stringify([category, item.key, item.source ?? '', item.namespace ?? '']);
-      if (seen.has(key)) throw new Error('duplicate context attribution');
-      seen.add(key);
-      sums[category] += item.tokens;
-      if (!Number.isSafeInteger(sums[category])) throw new Error('context attribution overflow');
-      return { category, key: item.key, tokens: item.tokens,
-        ...(item.source ? { source: item.source as string } : {}),
-        ...(item.namespace ? { namespace: item.namespace as string } : {}),
-      };
-    });
-    if (sums.tool_definition !== (result.tool_definition_tokens ?? 0) || sums.model_context !== (result.model_context_tokens ?? 0)) throw new Error('context attribution totals disagree');
-    return { ...result, details: { items } };
-  }
-  return result;
+  if (!record || record.source !== 'prepared_characters_v1' || record.unit !== 'unicode_code_points' || !Array.isArray(record.categories)) throw new Error('invalid character attribution');
+  const categories = record.categories.map((raw: unknown) => {
+    const item = recordValue(raw);
+    if (!item || !FLOWER_CONTEXT_CATEGORIES.includes(item.category as typeof FLOWER_CONTEXT_CATEGORIES[number])) throw new Error('invalid character category');
+    const details = item.details === undefined ? undefined : (() => {
+      if (!Array.isArray(item.details)) throw new Error('invalid character details');
+      return item.details.map((raw: unknown) => {
+        const detail = recordValue(raw);
+        if (!detail || typeof detail.key !== 'string' || (detail.source !== undefined && typeof detail.source !== 'string') || (detail.namespace !== undefined && typeof detail.namespace !== 'string')) throw new Error('invalid character detail');
+        return { key: detail.key, characters: characterCount(detail.characters),
+          ...(detail.source ? { source: detail.source as string } : {}), ...(detail.namespace ? { namespace: detail.namespace as string } : {}) };
+      });
+    })();
+    return { category: item.category as typeof FLOWER_CONTEXT_CATEGORIES[number], characters: characterCount(item.characters), ...(details ? { details } : {}) };
+  });
+  if (record.limitations !== undefined && (!Array.isArray(record.limitations) || record.limitations.some(item => typeof item !== 'string'))) throw new Error('invalid character limitations');
+  return { source: record.source, unit: record.unit, total_characters: characterCount(record.total_characters), categories,
+    ...(record.limitations ? { limitations: record.limitations as string[] } : {}) };
 }
 
 function mapContextSample(raw: unknown): FlowerContextSample | null {
   const record = recordValue(raw);
   if (!record) return null;
   // Optional statistics must never discard the surrounding conversation update.
-  let breakdown: FlowerContextBreakdown | undefined;
-  let limitation = trim(record.limitation);
-  try { breakdown = mapContextBreakdown(record.breakdown) ?? undefined; }
-  catch { limitation = 'invalid_breakdown'; }
+  let characters: FlowerContextCharacterBreakdown | undefined;
+  let limitation = trim(record.character_limitation);
+  try { characters = mapContextCharacters(record.characters); }
+  catch { limitation = 'invalid_characters'; }
 
   const phase = mapContextUsagePhase(record.phase);
   const pressureStatus = mapContextPressureStatus(record.pressure_status);
@@ -405,16 +382,15 @@ function mapContextSample(raw: unknown): FlowerContextSample | null {
   return {
     available: record.available === true,
     measured: record.measured === true,
-    breakdown_available: record.breakdown_available === true && !!breakdown,
-    unattributed_tokens: nonNegativeInteger(record.unattributed_tokens ?? 0, 'unattributed_tokens'),
-    ...(limitation ? { limitation } : {}),
+    characters_available: record.characters_available === true && !!characters,
+    ...(limitation ? { character_limitation: limitation } : {}),
     ...Object.fromEntries(['request_id', 'attempt_id', 'payload_fingerprint', 'provider', 'model'].filter(key => trim(record[key])).map(key => [key, trim(record[key])])),
     ...(record.attempt_epoch !== undefined ? { attempt_epoch: nonNegativeInteger(record.attempt_epoch, 'attempt_epoch') } : {}),
     ...(trim(record.run_id) ? { run_id: trim(record.run_id) } : {}),
     ...(stepIndex ? { step_index: stepIndex } : {}),
     phase,
     ...(inputTokens !== undefined ? { input_tokens: inputTokens } : {}),
-    ...(breakdown ? { breakdown } : {}),
+    ...(characters ? { characters } : {}),
     ...(contextWindowTokens ? { context_window_tokens: contextWindowTokens } : {}),
     ...(thresholdTokens ? { threshold_tokens: thresholdTokens } : {}),
     ...(requestSafeLimitTokens ? { request_safe_limit_tokens: requestSafeLimitTokens } : {}),

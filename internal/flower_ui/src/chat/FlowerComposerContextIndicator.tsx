@@ -42,7 +42,7 @@ export function FlowerComposerContextIndicator(props: {
         <ChevronRight class="flower-context-chevron" aria-hidden="true" />
       </Show>
     </span>
-    <Show when={composition()}><span class="flower-model-context-amount" title={labels().estimated + ': ≈' + labels().tokens(String(rowProps.row.tokens))}>≈{formatContextAmount(rowProps.row.tokens)}</span></Show>
+    <Show when={composition()}><span class="flower-model-context-amount" title={labels().characters(String(rowProps.row.characters))}>{labels().characters(formatContextAmount(rowProps.row.characters))}</span></Show>
     <span class="flower-model-context-share">{percent(rowProps.row.share)}</span>
     <div class="flower-model-context-track" aria-hidden="true"><span class="flower-model-context-fill" style={{ width: rowProps.row.share + '%' }} /></div>
   </>;
@@ -176,36 +176,26 @@ export function FlowerComposerContextIndicator(props: {
       >
         <div class="flower-context-heading">
           <span>{labels().label}</span>
-          <span class="flower-context-total" title={contextWindow() ? `${labels().tokens(String(contextWindow()!.input))} / ${labels().tokens(String(contextWindow()!.capacity))}` : undefined}>
-            <Show when={contextWindow()}>{(window) => <>
-              <span title={(window().estimated ? labels().estimated : labels().measured) + ' · ' + (window().estimated ? labels().currentRequest : labels().lastRequest)} aria-label={(window().estimated ? labels().estimated : labels().measured) + ' · ' + (window().estimated ? labels().currentRequest : labels().lastRequest)}>{window().estimated ? '≈ ' : '= '}</span>
-              {formatContextAmount(window().input)}<span class="flower-context-capacity"> / {formatContextAmount(window().capacity)}</span>
-              {' '}
+          <span class="flower-context-total" title={contextWindow() ? labels().input + ' · = ' + labels().tokens(String(contextWindow()!.input)) : labels().input}>
+            <Show when={contextWindow()} fallback={<span>{labels().unknownPercent}</span>}>{(window) => <>
+              <span title={labels().measured + ' · ' + labels().lastRequest} aria-label={labels().measured + ' · ' + labels().lastRequest}>= </span>
+              {formatContextAmount(window().input)}
+              <Show when={window().capacity}>{(capacity) => <span class="flower-context-capacity"> / {formatContextAmount(capacity())}</span>}</Show>
+              <Show when={window().capacity}><span class="flower-context-ratio"> ({view().ratioValue})</span></Show>
             </>}</Show>
-            <span class="flower-context-ratio">{contextWindow() ? `(${view().ratioValue})` : view().ratioValue}</span>
           </span>
           <button type="button" class="flower-context-close" aria-label={labels().close} onClick={close}><X size={14} aria-hidden="true" /></button>
         </div>
         <div class="flower-context-stacked-bar flower-context-window-bar" aria-hidden="true">
-          <Show when={contextWindow()} fallback={<span data-category="input" style={{ width: `${view().progressValue ?? 0}%` }} />}>
-            {(window) => <For each={window().segments}>{(segment) => <span data-category={segment.key} style={{ width: `${segment.share}%` }} />}</For>}
-          </Show>
+          <span data-category="input" style={{ width: (contextWindow()?.share ?? 0) + '%' }} />
         </div>
-        <Show when={contextWindow()}>{(window) =>
-          <div class="flower-context-window-legend">
-            <For each={window().segments}>{(segment) =>
-              <div class="flower-context-window-stat" data-category={segment.key} title={`${labels()[segment.key]}: ${labels().tokens(String(segment.tokens))} (${percent(segment.share)})`}>
-                <span class="flower-context-stat-label"><i class="flower-context-swatch" aria-hidden="true" /><span>{labels()[segment.key]}</span></span>
-                <span class="flower-context-stat-value">{formatContextAmount(segment.tokens)}</span>
-              </div>
-            }</For>
-          </div>
-        }</Show>
+        <Show when={contextWindow()}><div class="flower-context-window-legend"><span>{labels().input}</span></div></Show>
         <Show when={composition()}>
           <div class="flower-context-categories flower-context-composition" role="group" aria-label={labels().composition} title={labels().compositionHint}>
+            <div class="flower-context-composition-heading"><span>{labels().composition}</span><span>{labels().characters(formatContextAmount(composition()!.total))}</span></div>
             <For each={[...categories().rows.keys()]}>{(key) => {
               const row = () => categories().rows.get(key)!;
-              const description = () => [labels().sourceLabels[key], labels().estimated, '≈' + labels().tokens(String(row().tokens)), percent(row().share)].join(' · ');
+              const description = () => [labels().sourceLabels[key], labels().characters(String(row().characters)), percent(row().share)].join(' · ');
               return <Show when={row().items.length > 1 || (row().items.length > 0 && key.endsWith('_tools'))} fallback={
                 <div class="flower-context-composition-row" data-category={key} aria-label={description()}><SourceRow row={row()} /></div>
               }>
@@ -218,7 +208,7 @@ export function FlowerComposerContextIndicator(props: {
                     <For each={row().items}>{(item) => <div class="flower-model-context-row" data-source-key={item.key}>
                       <i class="flower-context-swatch" aria-hidden="true" />
                       <span class="flower-model-context-label" title={item.label}>{item.category ? labels().categoryLabels[item.category] : labels().sectionLabels[item.key] ?? item.label ?? labels().sourceLabels[key]}</span>
-                      <Show when={composition()}><span class="flower-model-context-amount" title={labels().estimated + ': ≈' + labels().tokens(String(item.tokens))}>≈{formatContextAmount(item.tokens)}</span></Show>
+                      <Show when={composition()}><span class="flower-model-context-amount" title={labels().characters(String(item.characters))}>{labels().characters(formatContextAmount(item.characters))}</span></Show>
                       <span class="flower-model-context-share">{percent(item.share)}</span>
                       <div class="flower-model-context-track" aria-hidden="true"><span class="flower-model-context-fill" style={{ width: item.share + '%' }} /></div>
                     </div>}</For>
@@ -228,7 +218,7 @@ export function FlowerComposerContextIndicator(props: {
             }}</For>
           </div>
         </Show>
-        <Show when={!composition() && (props.usage?.confirmed || props.usage?.estimate)}>
+        <Show when={!composition() && props.usage?.confirmed}>
           <div class="flower-context-composition-unavailable">{labels().composition}<span>{labels().distributionUnavailable}</span></div>
         </Show>
         <div class="flower-context-cache-stats">

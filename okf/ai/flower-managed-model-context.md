@@ -107,30 +107,30 @@ enforced at actual tool authorization, independently of displayed historical fac
 
 Authorized canonical reads and the existing workspace subscription carry the
 same snapshot, record location, changed/removed keys and latest request use.
-The shared context panel groups the displayed request by explicit source:
-system prompt, system tool definitions, MCP tool definitions, provider tool
-definitions, messages, retained tool execution outputs, skill catalog, repository
-rule sources, environment, summaries,
-retained reasoning, expanded media, context wrappers and protocol formatting. Floret v7.47.1
-provides exact tool names with registry source/namespace annotations and
-canonical managed-section token estimates. Flower groups only its known source
-values and section keys. It never guesses from tool names or parses prompt text.
+The shared context panel groups one confirmed frozen request by explicit source:
+system prompt, system tools, MCP tools, provider tools, messages, retained tool
+outputs, skill catalog, repository rules, environment, summary, visible reasoning,
+visible hosted context, and unlabelled sources. It maps the published Floret
+v7.60.3 ReconcileContextStatus result for live and canonical reads; Flower never
+scans prompt text or guesses sources from tool names.
 
-Flower consumes published Floret v7.55.0 accounting through one pure
-ReconcileContextStatus mapping for live events and canonical reads. The last
-confirmed sample owns the total, category estimates and recent cache rate.
-Newer request estimates drive only current-request pressure. A measured total
-uses =; estimates use ≈ in visible values, titles and accessible labels.
+The overview uses native input tokens with =. Visible input shows exact Unicode
+code-point characters and percentages of its character total. Parent and child
+characters add exactly; percentage rounding never modifies counts. Tools and
+structured arguments use deterministic JSON content. Decoded whitespace,
+newlines and combining marks are preserved. Ciphertext, binary/media transport,
+control envelopes, framing estimates, output reserves and safety margins are
+excluded. Coverage limitations do not create fictional content or differences.
+Characters and tokens are independent units; no scale or residual connects them.
+No online count runs before sending.
 
-Category and child values retain their upstream token estimates. Shares describe
-the displayed total or parent group and never allocate or scale token amounts.
-A positive difference is a separate Unattributed row, however large it is.
-Categories above the total, damaged details, missing request identity or legacy
-mixed units suppress distribution while retaining a trustworthy measured total.
-A complete qualified local estimate may supply an approximate total; partial
-content without native usage cannot. Explicit measured zero remains available.
-Opaque reasoning bytes, media proxies, output reservation and safety margins do
-not enter content categories. No online count is performed before sending.
+One last confirmed request owns the overview, characters and recent cache rate.
+New estimates only drive current-request pressure. Missing historical characters
+show a short unavailable state until the next valid request. No valid confirmed
+sample displays an em dash; explicit measured zero remains = 0. Missing capacity
+does not hide measured input. Input / capacity is a reference ratio, not exact
+current occupation or guaranteed remaining space. Unqualified hosted/opaque
+native usage cannot calibrate an exact window-pressure anchor.
 
 Model or policy changes and successful compaction invalidate old samples through
 Floret's canonical boundaries. Stop, failed requests and missing usage preserve
@@ -144,8 +144,8 @@ raw prompt text. MCP entries identify the registered server namespace and tool.
 The skill row explicitly names the catalog; activated skill instructions returned
 by use_skill remain retained tool outputs. Repository rule sources identify the
 discovery list, not unread file contents; subsequent file reads remain outputs.
-Shared context framing is explicit formatting overhead rather than a second
-auto-loaded snapshot breakdown. Retained historical updates and removals count
+Visible shared managed-section separators retain their upstream source attribution.
+Protocol framing never invents characters. Retained historical updates and removals count
 through Floret's canonical request renderer.
 
 The compact popup uses a 20rem width with 11px body text and bounded scrolling.

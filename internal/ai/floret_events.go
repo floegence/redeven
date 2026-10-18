@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strings"
 
-	flconfig "github.com/floegence/floret/v7/config"
 	"github.com/floegence/floret/v7/observation"
 	flruntime "github.com/floegence/floret/v7/runtime"
 )
@@ -366,7 +365,7 @@ func flowerContextUsageFromFloret(usage *flruntime.ThreadContextUsage, totals *f
 		}
 		*item.target = &sample
 	}
-	if usage.Confirmed != nil && usage.Confirmed.Usage.Available {
+	if out.Confirmed != nil && out.Confirmed.Available && out.Confirmed.Measured {
 		native := usage.Confirmed.Usage
 		out.RecentRequestUsage = &FlowerThreadTokenUsage{InputTokens: native.InputTokens, OutputTokens: native.OutputTokens, CacheReadTokens: native.CacheReadTokens, CacheWriteTokens: native.CacheWriteTokens}
 	}
@@ -402,20 +401,10 @@ func flowerContextSampleFromFloret(status *observation.ContextStatus) (FlowerCon
 	if err != nil {
 		return FlowerContextSample{}, err
 	}
-	var breakdown *flconfig.ContextBreakdown
-	if accounting.BreakdownAvailable {
-		value := status.RequestEstimate.Breakdown
-		if value.Details != nil {
-			details := *value.Details
-			details.Items = append([]flconfig.ContextTokenDetail(nil), details.Items...)
-			value.Details = &details
-		}
-		breakdown = &value
-	}
 	return FlowerContextSample{
-		Available: accounting.Available, Measured: accounting.Measured, BreakdownAvailable: accounting.BreakdownAvailable, UnattributedTokens: accounting.UnattributedTokens, Limitation: accounting.Limitation,
+		Available: accounting.Available && accounting.Measured, Measured: accounting.Measured, CharactersAvailable: accounting.CharactersAvailable, CharacterLimitation: accounting.CharacterLimitation,
 		RequestID: status.RequestID, AttemptID: status.AttemptID, AttemptEpoch: status.AttemptEpoch, PayloadFingerprint: status.PayloadFingerprint, Provider: status.Provider, Model: status.Model,
-		Breakdown:              breakdown,
+		Characters:             accounting.Characters.Clone(),
 		RunID:                  runID,
 		StepIndex:              status.Step,
 		Phase:                  phase,

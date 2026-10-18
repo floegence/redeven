@@ -773,6 +773,7 @@ func flowerProviderStateToFloret(state *ModelGatewayState) (*flprovider.State, e
 
 func floretUsageFromFlower(usage TurnUsage) flprovider.Usage {
 	out := flprovider.Usage{
+		InputTokensReported: usage.InputTokensReported, InputTokenScope: usage.InputTokenScope,
 		TotalTokens: usage.TotalTokens, TotalTokensReported: usage.TotalTokensReported, OutputIncludesReasoning: usage.OutputIncludesReasoning,
 		Source: "native", Available: usage.Available || usage.TotalTokensReported || usage.TotalTokens > 0 || usage.InputTokens > 0 || usage.OutputTokens > 0 || usage.ReasoningTokens > 0 || usage.CacheReadTokens > 0 || usage.CacheWriteTokens > 0,
 		InputTokens:      usage.InputTokens,

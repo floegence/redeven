@@ -102,7 +102,7 @@ func TestPublishedFloretUsageReachesLiveAndCanonicalFlowerProjections(t *testing
 	}
 	// ScriptedGateway supplies semantic budget estimates, not qualified rendered
 	// token attribution. Native totals remain visible without historical weights.
-	if !projected.Usage.Confirmed.Available || !projected.Usage.Confirmed.Measured || projected.Usage.Confirmed.Breakdown != nil || projected.Usage.Confirmed.BreakdownAvailable {
+	if !projected.Usage.Confirmed.Available || !projected.Usage.Confirmed.Measured || projected.Usage.Confirmed.Characters != nil || projected.Usage.Confirmed.CharactersAvailable {
 		t.Fatalf("unqualified attribution reached display: %+v", projected.Usage.Confirmed)
 	}
 	var latest FlowerContextUsage
@@ -325,7 +325,7 @@ func TestFlowerThreadContextProjectionIncludesCanonicalUsage(t *testing.T) {
 			Phase: observation.ContextPhaseProviderUsage, ObservedAt: observedAt,
 			Provider: "test", Model: "test", RequestID: "request-context", PayloadFingerprint: "fingerprint-context",
 			Usage:           observation.ProviderUsage{Available: true, Source: "native", WindowInputTokens: 500, InputTokens: 30, CacheReadTokens: 60, CacheWriteTokens: 10},
-			RequestEstimate: config.RequestEstimate{Breakdown: config.ContextBreakdown{Source: "prepared_content_v4", Quality: "token_estimate", Tokenizer: "proxy_bpe", AttributionCoverage: "complete", ToolResultTokens: 200, ToolCallTokens: 40}},
+			RequestEstimate: config.RequestEstimate{Characters: &config.ContextCharacterBreakdown{Source: "prepared_characters_v1", Unit: "unicode_code_points", TotalCharacters: 240, Categories: []config.ContextCharacterCategory{{Category: "tool_result", Characters: 200}, {Category: "tool_call", Characters: 40}}}},
 			ContextPressure: config.ContextPressure{ContextWindowTokens: 1000},
 			UsedRatio:       0.5, Status: observation.ContextStatusStable,
 		}},
@@ -339,7 +339,7 @@ func TestFlowerThreadContextProjectionIncludesCanonicalUsage(t *testing.T) {
 	if projection.Usage == nil || projection.Usage.Confirmed.InputTokens != 500 || projection.Usage.Confirmed.ContextWindowTokens != 1000 || projection.Usage.Confirmed.UpdatedAtMs != observedAt.UnixMilli() {
 		t.Fatalf("usage=%#v", projection.Usage)
 	}
-	if projection.Usage.Confirmed.Breakdown == nil || projection.Usage.Confirmed.Breakdown.ToolResultTokens != 200 || projection.Usage.Confirmed.Breakdown.ToolCallTokens != 40 {
+	if projection.Usage.Confirmed.Characters == nil || projection.Usage.Confirmed.Characters.TotalCharacters != 240 {
 		t.Fatalf("canonical composition=%+v", projection.Usage.Confirmed)
 	}
 	if projection.Usage.ThreadUsage == nil || *projection.Usage.ThreadUsage != (FlowerThreadTokenUsage{

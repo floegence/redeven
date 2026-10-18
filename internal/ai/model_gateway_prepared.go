@@ -105,6 +105,7 @@ func (p *preparedModelWire) withMaxOutputTokens(ctx context.Context, limit int64
 }
 
 func cloneModelTokenEstimate(value flprovider.TokenEstimate) flprovider.TokenEstimate {
+	value.Characters = value.Characters.Clone()
 	if value.Breakdown.Details != nil {
 		details := *value.Breakdown.Details
 		details.Items = append(details.Items[:0:0], details.Items...)

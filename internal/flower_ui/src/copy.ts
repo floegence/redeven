@@ -669,7 +669,6 @@ export type FlowerSurfaceCopy = Readonly<{
       hardLimit: string;
       unknownPercent: string;
       unavailable: string;
-      currentContents: string; currentContentsHint: string; collected: string; used: string; updated: string; removed: string;
       measured: string;
       lastRequest: string;
       currentRequest: string;
@@ -680,8 +679,6 @@ export type FlowerSurfaceCopy = Readonly<{
       sourceLabels: Readonly<Record<FlowerContextSource, string>>;
       input: string;
       close: string;
-      freeSpace: string;
-      estimated: string;
       characters: (value: string) => string;
       tokens: (value: string) => string;
       recentCacheHitShortLabel: string;
@@ -1111,37 +1108,33 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     liveProgressTool: 'Using a tool',
     liveProgressOutput: 'Writing the reply',
     contextIndicator: {
-      label: 'Context window',
+      label: 'Request input',
       nearThreshold: 'Near limit',
       willCompact: 'Compacting soon',
       hardLimit: 'At limit',
       unknownPercent: '—',
       unavailable: 'Not available',
-      currentContents: 'Current contents', currentContentsHint: 'Current text by character count; token totals include retained updates.', collected: 'Loaded', used: 'Last used', updated: 'Updated', removed: 'Removed',
       measured: 'Measured',
       lastRequest: 'Last request',
       currentRequest: 'Current request',
-      composition: 'Input composition estimate',
-      compositionHint: "Estimated categories of the displayed request; unattributed input stays separate.",
-      distributionUnavailable: 'No distribution available',
+      composition: 'Visible input',
+      compositionHint: "Unicode code points in the last confirmed request. Characters and tokens use independent units.",
+      distributionUnavailable: 'Categories available after the next request',
       sourceLabels: {
-        unattributed_usage: 'Unattributed',
         system_prompt: 'System prompt', system_tools: 'System tool definitions', mcp_tools: 'MCP tool definitions', provider_tools: 'Provider tool definitions',
         messages: 'Messages', tool_outputs: 'Tool execution outputs', skills: 'Skill catalog', rule_files: 'Rule file index', environment: 'Environment',
-        summary: 'Conversation summary', reasoning: 'Reasoning', attachments: 'Images & files',
-        protocol_framing: 'Protocol formatting', context_framing: 'Context wrappers', unattributed_tools: 'Tools without source data', unattributed_context: 'Context without source data',
+        summary: 'Conversation summary', reasoning: 'Reasoning', hosted_context: 'Visible hosted context', unlabelled: 'Source unlabelled',
+        context_framing: 'Context wrappers', unattributed_tools: 'Tools without source data', unattributed_context: 'Context without source data',
       },
       categoryLabels: {
-        system_tokens: 'System instructions', tool_definition_tokens: 'Tool definitions',
-        user_tokens: 'Your messages', assistant_tokens: 'Assistant messages',
-        tool_call_tokens: 'Tool calls', tool_result_tokens: 'Tool execution outputs',
-        model_context_tokens: 'Auto-loaded context', compaction_tokens: 'Conversation summary',
-        reasoning_tokens: 'Reasoning', attachment_tokens: 'Images & files', framing_tokens: 'Protocol formatting',
+        system: 'System instructions', tool_definition: 'Tool definitions',
+        user: 'Your messages', assistant: 'Assistant messages',
+        tool_call: 'Tool calls', tool_result: 'Tool execution outputs',
+        model_context: 'Auto-loaded context', compaction: 'Conversation summary',
+        reasoning: 'Reasoning', hosted_context: 'Visible hosted context', unlabelled: 'Source unlabelled',
       },
-      input: 'Input usage',
+      input: 'Last request input / model capacity',
       close: 'Close context details',
-      freeSpace: 'Remaining window',
-      estimated: 'Estimated',
       characters: (value) => `${value} chars`,
       tokens: (value) => `${value} tokens`,
       recentCacheHitShortLabel: 'Latest cache hit',

@@ -1,17 +1,17 @@
 ---
 type: Qualification Evidence
 title: Flower context distribution qualification
-description: Historical native comparisons and current request accounting, recovery and UI qualification with published Floret v7.55.0.
+description: Historical token attribution evidence and current native-token plus visible-character qualification.
 tags: [flower, context, deepseek, qualification]
 timestamp: 2026-10-18T00:00:00Z
 ---
 # Summary
 
-Flower now consumes one frozen-request estimator for content distribution and
-safety budgets. This report records the fixed 24-request native-usage comparison,
-real DeepSeek Flash tasks, retained compaction-oracle failures and presentation
-regressions. Content amounts remain estimates; safety reserves and native totals
-have separate meanings. No production prompt is changed.
+Current presentation uses published Floret v7.60.3: native input tokens and
+same-request visible Unicode characters are independent facts. Historical token
+comparison and remainder results below are retained as evidence, not current
+product behavior or proof of complete OpenAI attribution. The current contract
+is [Presentation](../ai/flower-managed-model-context.md#presentation).
 
 # Contract
 
@@ -117,7 +117,7 @@ portable committed fixtures. The 24 synthetic upstream fixtures are committed.
 ## Presentation and regression coverage
 
 The original fixed-request measurements above remain historical evidence.
-The current [presentation contract](../ai/flower-managed-model-context.md#presentation)
+The superseded v7.55.0 [presentation contract](../ai/flower-managed-model-context.md#presentation)
 uses Floret v7.55.0 request accounting: no proportional allocation, mixed-unit
 categories or aggregate-error threshold qualifies attribution. Valid estimated
 categories retain their values and a separate Unattributed row accounts for

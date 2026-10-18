@@ -125,9 +125,8 @@ async function mountWindow(theme: Theme, withContext = false) {
       <LayoutProvider>
         <SubagentDetailWindow {...windowProps(open(), setOpen)} contextIndicator={withContext ? <FlowerComposerContextIndicator
           placement="below-start" copy={DEFAULT_FLOWER_SURFACE_COPY} usage={{
-            confirmed: { available: true, measured: true, breakdown_available: true, input_tokens: 30, phase: 'provider_usage', pressure_status: 'stable', updated_at_ms: 1,
-              breakdown: { source: 'prepared_content_v4', tool_definition_tokens: 30,
-                details: { items: [{ category: 'tool_definition', source: 'builtin', key: 'terminal.exec', tokens: 30 }] } } },
+            confirmed: { available: true, measured: true, characters_available: true, input_tokens: 30, phase: 'provider_usage', pressure_status: 'stable', updated_at_ms: 1,
+              characters: { source: 'prepared_characters_v1', unit: 'unicode_code_points', total_characters: (30), categories: [{ category: 'tool_definition', characters: 30, details: [{ source: 'builtin', key: 'terminal.exec', characters: 30 }] }] } },
           }} modelContext={{
             snapshot: { sections: [{ key: 'skills', title: 'Available skills', text: 'Complete current catalog' }] },
             entry_id: 'context-entry', path_depth: 1, turn_id: 'turn-child', run_id: 'run-child',

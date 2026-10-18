@@ -27,7 +27,7 @@ func TestProviderUsageNormalizationKeepsDisjointCacheBuckets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertTurnUsage(t, response, TurnUsage{Available: true, TotalTokensReported: true, TotalTokens: 120, OutputIncludesReasoning: true, InputTokens: 60, OutputTokens: 20, ReasoningTokens: 5, CacheReadTokens: 40})
+	assertTurnUsage(t, response, TurnUsage{InputTokensReported: true, InputTokenScope: "provider_execution", Available: true, TotalTokensReported: true, TotalTokens: 120, OutputIncludesReasoning: true, InputTokens: 60, OutputTokens: 20, ReasoningTokens: 5, CacheReadTokens: 40})
 
 	var chatUsage openai.CompletionUsage
 	if err := json.Unmarshal([]byte(`{
@@ -41,7 +41,7 @@ func TestProviderUsageNormalizationKeepsDisjointCacheBuckets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertTurnUsage(t, chat, TurnUsage{Available: true, TotalTokensReported: true, TotalTokens: 120, OutputIncludesReasoning: true, InputTokens: 60, OutputTokens: 20, ReasoningTokens: 5, CacheReadTokens: 40})
+	assertTurnUsage(t, chat, TurnUsage{InputTokensReported: true, InputTokenScope: "request_input", Available: true, TotalTokensReported: true, TotalTokens: 120, OutputIncludesReasoning: true, InputTokens: 60, OutputTokens: 20, ReasoningTokens: 5, CacheReadTokens: 40})
 
 	var deepSeekUsage openai.CompletionUsage
 	if err := json.Unmarshal([]byte(`{
@@ -54,7 +54,7 @@ func TestProviderUsageNormalizationKeepsDisjointCacheBuckets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertTurnUsage(t, deepSeek, TurnUsage{Available: true, TotalTokensReported: true, TotalTokens: 120, OutputIncludesReasoning: true, InputTokens: 65, OutputTokens: 20, CacheReadTokens: 35})
+	assertTurnUsage(t, deepSeek, TurnUsage{InputTokensReported: true, InputTokenScope: "request_input", Available: true, TotalTokensReported: true, TotalTokens: 120, OutputIncludesReasoning: true, InputTokens: 65, OutputTokens: 20, CacheReadTokens: 35})
 
 	var anthropicUsage anthropic.Usage
 	if err := json.Unmarshal([]byte(`{
@@ -67,7 +67,7 @@ func TestProviderUsageNormalizationKeepsDisjointCacheBuckets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertTurnUsage(t, claude, TurnUsage{Available: true, InputTokens: 10, OutputTokens: 20, CacheReadTokens: 70, CacheWriteTokens: 20})
+	assertTurnUsage(t, claude, TurnUsage{InputTokensReported: true, InputTokenScope: "provider_execution", Available: true, InputTokens: 10, OutputTokens: 20, CacheReadTokens: 70, CacheWriteTokens: 20})
 }
 
 func TestProviderUsageNormalizationRejectsInvalidCacheCounts(t *testing.T) {
@@ -161,7 +161,7 @@ func TestResponsesFailedAttemptRetainsOnlyExplicitUsage(t *testing.T) {
 			}
 			want := TurnUsage{}
 			if tc.usage != "" {
-				want = TurnUsage{Available: true, OutputIncludesReasoning: true, InputTokens: 60, OutputTokens: 20, CacheReadTokens: 40}
+				want = TurnUsage{InputTokensReported: true, InputTokenScope: "provider_execution", Available: true, OutputIncludesReasoning: true, InputTokens: 60, OutputTokens: 20, CacheReadTokens: 40}
 			}
 			assertTurnUsage(t, result.Usage, want)
 			if result.FinishReason != "" || len(result.ToolCalls) != 0 {
@@ -193,7 +193,7 @@ data: {"type":"message_start","message":{"id":"msg-usage","type":"message","role
 			if err == nil {
 				t.Fatal("unfinished response accepted")
 			}
-			assertTurnUsage(t, result.Usage, TurnUsage{Available: true, InputTokens: 60, OutputTokens: 2, CacheReadTokens: 40})
+			assertTurnUsage(t, result.Usage, TurnUsage{InputTokensReported: true, InputTokenScope: "provider_execution", Available: true, InputTokens: 60, OutputTokens: 2, CacheReadTokens: 40})
 		})
 	}
 }

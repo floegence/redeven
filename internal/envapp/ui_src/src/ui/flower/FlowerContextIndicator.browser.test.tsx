@@ -21,22 +21,7 @@ afterEach(() => {
 });
 const base = { available: true, measured: true, phase: 'provider_usage', pressure_status: 'stable', input_tokens: 110000, context_window_tokens: 1000000, output_headroom_tokens: 33000, updated_at_ms: 1 } as const;
 function fixture(mcpTokens = 48700): FlowerContextUsage {
- return { confirmed: { ...base, breakdown_available: true, unattributed_tokens: 9560, breakdown: { source: 'prepared_content_v4', quality: 'token_estimate', tokenizer: 'deepseek_v4', system_tokens: 3700,
-  tool_definition_tokens: mcpTokens + 30700, user_tokens: 4200, assistant_tokens: 3000, tool_call_tokens: 1700,
-  tool_result_tokens: 2000, framing_tokens: 240, model_context_tokens: 6200, details: { items: [
-   { category: 'tool_definition', key: 'search', source: 'mcp', namespace: 'docs', tokens: mcpTokens - 4000 },
-   { category: 'tool_definition', key: 'read', source: 'mcp', namespace: 'docs', tokens: 2000 },
-   { category: 'tool_definition', key: 'query', source: 'mcp', namespace: 'database', tokens: 2000 },
-   { category: 'tool_definition', key: 'terminal.exec', source: 'builtin', tokens: 20700 },
-   { category: 'tool_definition', key: 'files.read', source: 'builtin', tokens: 10000 },
-   { category: 'model_context', key: 'skills', tokens: 5100 },
-   { category: 'model_context', key: 'repository_rules', tokens: 500 },
-   { category: 'model_context', key: 'execution_environment', tokens: 250 },
-   { category: 'model_context', key: 'local_time', tokens: 100 },
-   { category: 'model_context', key: 'repository', tokens: 100 },
-   { category: 'model_context', key: 'delegation', tokens: 50 },
-   { category: 'model_context', key: '', tokens: 100 },
-  ] } } },
+ return { confirmed: { ...base, characters_available: true, characters: { source: 'prepared_characters_v1', unit: 'unicode_code_points', total_characters: (3700)+(mcpTokens + 30700)+(4200)+(3000)+(1700)+(2000)+(6200), categories: [{ category: 'system', characters: 3700 },{ category: 'tool_definition', characters: mcpTokens + 30700, details: [{ key: 'search', source: 'mcp', namespace: 'docs', characters: mcpTokens - 4000 },{ key: 'read', source: 'mcp', namespace: 'docs', characters: 2000 },{ key: 'query', source: 'mcp', namespace: 'database', characters: 2000 },{ key: 'terminal.exec', source: 'builtin', characters: 20700 },{ key: 'files.read', source: 'builtin', characters: 10000 }] },{ category: 'user', characters: 4200 },{ category: 'assistant', characters: 3000 },{ category: 'tool_call', characters: 1700 },{ category: 'tool_result', characters: 2000 },{ category: 'model_context', characters: 6200, details: [{ key: 'skills', characters: 5100 },{ key: 'repository_rules', characters: 500 },{ key: 'execution_environment', characters: 250 },{ key: 'local_time', characters: 100 },{ key: 'repository', characters: 100 },{ key: 'delegation', characters: 50 },{ key: '', characters: 100 }] }] } },
   thread_usage: { input_tokens: 55, output_tokens: 10, cache_read_tokens: 45, cache_write_tokens: 0 },
   recent_request_usage: { input_tokens: 25, output_tokens: 10, cache_read_tokens: 75, cache_write_tokens: 0 },
  };
@@ -142,7 +127,7 @@ for (const locale of ['en-US', 'zh-CN'] as const) for (const dark of [false, tru
   expect(closeButton.getBoundingClientRect().right).toBeCloseTo(heading.getBoundingClientRect().right, 0);
   expect(total.getBoundingClientRect().right).toBeLessThan(closeButton.getBoundingClientRect().left);
   const rows = [...panel.querySelectorAll<HTMLElement>('.flower-context-composition-row')];
-  expect(rows.length).toBe(11);
+  expect(rows.length).toBe(9);
   for (const row of rows) {
    expect(row.querySelector('.flower-model-context-fill')).not.toBeNull();
    expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth);
@@ -264,5 +249,27 @@ it('uses shared projected placement and restores focus after touch and keyboard 
  await userEvent.keyboard('{Enter}');
  expect(panel.dataset.open).toBe('true');
  await userEvent.keyboard('{Escape}');
+ expect(panel.getAttribute('aria-hidden')).toBe('true');expect(document.activeElement).toBe(trigger);
+});
+
+it('keeps zero input and close reachable at high zoom after a disclosure becomes flat', async () => {
+ await page.viewport(440,720);
+ const [usage,setUsage]=createSignal(fixture());
+ const {host,trigger,panel}=mount(()=> 'en-US',usage);
+ host.style.zoom='2';
+ trigger.focus();
+ const summary=panel.querySelector<HTMLElement>('[data-category="environment"] summary')!;
+ summary.focus();await userEvent.keyboard('{Enter}');
+ const next=fixture();
+ next.confirmed!.characters!.categories=next.confirmed!.characters!.categories.filter(item=>item.category!=='model_context');
+ next.confirmed!.characters!.categories.push({category:'model_context',characters:250,details:[{key:'execution_environment',characters:250}]});
+ next.confirmed!.characters!.total_characters=next.confirmed!.characters!.categories.reduce((sum,item)=>sum+item.characters,0);
+ setUsage(next);
+ await expect.poll(()=>document.activeElement).toBe(trigger);
+ setUsage({confirmed:{...base,input_tokens:0,context_window_tokens:undefined,characters_available:true,characters:{source:'prepared_characters_v1',unit:'unicode_code_points',total_characters:0,categories:[]}}});
+ expect(panel.querySelector('.flower-context-total')?.textContent).toContain('= 0');
+ expect(panel.querySelector('.flower-context-composition-heading')?.textContent).toContain('0 chars');
+ const close=panel.querySelector<HTMLButtonElement>('.flower-context-close')!;
+ close.focus();await userEvent.keyboard('{Enter}');
  expect(panel.getAttribute('aria-hidden')).toBe('true');expect(document.activeElement).toBe(trigger);
 });
