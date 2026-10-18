@@ -87,6 +87,12 @@ Welcome Open after automatic Runtime startup, window reuse, canvas navigation,
 route isolation and reopening, then verifies empty owned inventory.
 The [interaction continuity contract](desktop-interaction-continuity.md) owns
 the stable Local authority projection and completed-startup Open handoff.
+Browser acceptance measures geometry after finite entry animations settle and
+checks deferred tab selection together with its committed active panel. Settings
+address rows follow their compact, frameless presentation while endpoint
+popovers retain their framed tables; both preserve alignment and reachable
+actions. These checks retain the existing keyboard, focus, localized help and
+no-overflow assertions.
 
 Portable lifecycle tests also run on Linux; the Windows tree adapter has
 identity and PID-reuse tests. These do not claim Windows or Linux native

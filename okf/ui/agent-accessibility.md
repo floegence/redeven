@@ -40,6 +40,9 @@ Welcome retains one active owner panel and inert mounted inactive panels. Its
 localized owner names and native controls remain intact. Owner cards and settings
 windows supply unique stable `domId`/`panelId` pairs through released Tabs APIs;
 TabPanel uses matching `id`/`labelledBy`. Snapshot refresh preserves identities.
+Published Tabs presents selection before committing owner content after paint.
+Acceptance waits for selected-tab and active-panel state together before
+checking focus, inert siblings, or issuing the next interaction.
 A single owner or settings panel without Tabs has no dangling `aria-labelledby`. Workbench retains the
 published local interaction, wheel, text-selection and floating-layer boundaries.
 Adding roles must not claim keyboard behavior that a surface does not implement.
@@ -65,15 +68,10 @@ Focused Chromium axe checks cover Files, terminal, Flower and Workbench.
 Semantic-only Flower auditing excludes the existing timestamp color-contrast
 finding at `.flower-thread-card-time`, because this task preserves UI colors.
 That finding is a separate visual-design follow-up, not an upstream semantic gap.
-The Welcome filesystem request-count test also fails unchanged on the baseline
-main commit (expects five calls, observes seven); it is not accessibility
-regression evidence. Keep both findings visible rather than weakening assertions.
-
-The existing Welcome tab-motion qualification also fails on unchanged main
-`08f045b56` with published Core 0.86.25: populated Gateway cards are expected to
-animate, while the existing entrance selector excludes `.redeven-gateway-card`.
-The same assertion fails with this semantic change. Preserve its assertion and
-animation behavior; this is a separate motion follow-up, not a Tabs relation gap.
+Runtime or session replacement asserts the current filesystem, settings and
+model-read contract; health-only snapshots preserve requests and mounted views.
+Welcome tab-motion qualification includes populated Gateway cards in the same
+entrance lifecycle as Environment cards, retaining its per-card assertions.
 
 Welcome's optional list-section heading also exposes an existing axe
 `heading-order` best-practice finding when that heading is omitted. The focused

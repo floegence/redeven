@@ -7488,7 +7488,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
       if (revision !== tabEntranceRevision || tab !== props.activeTab || !props.visible
         || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
       const targets = [...tabContent.querySelectorAll<HTMLElement>(
-        '.redeven-environment-card, .redeven-cloud-source-header, .redeven-empty-panel, .redeven-console-empty',
+        '.redeven-environment-card, .redeven-gateway-card, .redeven-cloud-source-header, .redeven-empty-panel, .redeven-console-empty',
       )].filter(element => !element.closest('[hidden]'));
       targets.forEach((element, index) => {
         const animation = element.animate(

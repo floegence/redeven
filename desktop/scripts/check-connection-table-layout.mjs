@@ -29,8 +29,10 @@ try {
       if (await summary.count() && !await group.evaluate(element => element.open)) await summary.click();
       await settle();
       const metrics = await group.evaluate(element => {
-        const heading = element.querySelector('th').getBoundingClientRect();
+        const compact = element.matches('.redeven-address-group--summary');
+        const heading = element.querySelector(compact ? '.redeven-card-endpoint-label' : 'th').getBoundingClientRect();
         const viewport = element.querySelector('.redeven-address-viewport');
+        const header = element.querySelector('thead').getBoundingClientRect();
         const scopeStyle = getComputedStyle(element.querySelector('.redeven-card-endpoint-label'));
         const columnStyle = getComputedStyle(element.querySelector('th'));
         const viewportStyle = getComputedStyle(viewport);
@@ -42,24 +44,33 @@ try {
               const rect = button.getBoundingClientRect(); return { width: rect.width, height: rect.height };
             }) };
         });
-        return { heading: heading.left + 12, rows, scopeWeight: Number(scopeStyle.fontWeight), columnWeight: Number(columnStyle.fontWeight),
+        return { compact, heading: heading.left + (compact ? 0 : 12), rows,
+          headerHeight: header.height, headerClip: getComputedStyle(element.querySelector('thead')).clipPath,
+          scopeWeight: Number(scopeStyle.fontWeight), columnWeight: Number(columnStyle.fontWeight),
           frameWidth: viewportStyle.borderTopWidth, frameColor: viewportStyle.borderTopColor, fill: viewportStyle.backgroundColor,
           paragraphs: element.querySelectorAll('.redeven-card-endpoint-detail').length,
           tables: element.querySelectorAll('table[aria-labelledby]').length, overflow: viewport.scrollWidth > viewport.clientWidth,
           outerOverflow: element.scrollWidth > element.clientWidth, tableBottom: viewport.getBoundingClientRect().bottom };
       });
       assert.ok(metrics.rows.length > 0, `${name}: addresses remain visible`);
-      assert.ok(metrics.rows.every(row => Math.abs(row.left - metrics.heading) <= 1), `${name}: URL rows align with their column heading; no phantom label column`);
+      assert.ok(metrics.rows.every(row => Math.abs(row.left - metrics.heading) <= 1), `${name}: URL rows align with the visible heading; no phantom label column`);
       assert.equal(metrics.paragraphs, 0, `${name}: scope help does not consume a body row`);
       assert.equal(metrics.tables, 1, `${name}: addresses form one labelled table`);
-      assert.equal(metrics.frameWidth, '1px', `${name}: the URL list has a visible frame`);
-      assert.notEqual(metrics.frameColor, metrics.fill, `${name}: the frame contrasts with the table fill`);
+      assert.equal(metrics.frameWidth, metrics.compact ? '0px' : '1px', `${name}: settings share the card while popover tables retain a frame`);
+      if (metrics.compact) {
+        assert.equal(metrics.headerHeight, 1, `${name}: settings retain an accessible column header without a visible duplicate`);
+        assert.equal(metrics.headerClip, 'inset(50%)');
+      } else {
+        assert.ok(Math.abs(metrics.headerHeight - 28) <= 1, `${name}: popover column headers remain visible`);
+        assert.notEqual(metrics.frameColor, metrics.fill, `${name}: the frame contrasts with the table fill`);
+      }
       assert.ok(metrics.scopeWeight > metrics.columnWeight, `${name}: scope titles are stronger than column headers`);
       assert.equal(new Set(metrics.rows.map(row => row.background)).size, 1, `${name}: data rows use one uniform fill without zebra stripes`);
       assert.equal(metrics.overflow || metrics.outerOverflow, false, `${name}: values wrap inside the available width`);
       assert.ok(metrics.rows.every(row => !row.overlap), `${name}: URL and action cells do not overlap`);
-      assert.ok(metrics.rows.every(row => row.buttons.every(button => button.width === 28 && button.height === 28)), `${name}: action targets have one consistent size`);
-      if (!name.includes('long')) assert.ok(metrics.rows.every(row => row.height <= 40), `${name}: single-line address rows are compact`);
+      const actionSize = metrics.compact ? 32 : 28;
+      assert.ok(metrics.rows.every(row => row.buttons.every(button => button.width === actionSize && button.height === actionSize)), `${name}: action targets follow their surface size`);
+      if (!name.includes('long')) assert.ok(metrics.rows.every(row => row.height <= (metrics.compact ? 50 : 40)), `${name}: single-line address rows are compact`);
       assert.ok(metrics.rows.every(row => Math.abs(row.right - metrics.rows[0].right) <= 1), `${name}: actions share a trailing edge`);
     }
     report.cases.push(name);

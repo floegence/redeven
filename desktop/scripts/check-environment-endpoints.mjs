@@ -43,7 +43,9 @@ try {
   async function assertActionAlignment(surface) {
     const offsets = await surface.locator('.redeven-card-endpoint-row:visible').evaluateAll(rows => rows.flatMap(row => {
       const actions = row.querySelectorAll('.redeven-endpoint-action');
-      return actions.length ? [Math.abs(row.getBoundingClientRect().right - actions[actions.length - 1].getBoundingClientRect().right - (row.dataset.endpointKind === 'address' ? 8 : 0))] : [];
+      const inset = row.dataset.endpointKind === 'address'
+        ? parseFloat(getComputedStyle(row.querySelector('.redeven-endpoint-action-cell')).paddingRight) : 0;
+      return actions.length ? [Math.abs(row.getBoundingClientRect().right - actions[actions.length - 1].getBoundingClientRect().right - inset)] : [];
     }));
     assert.ok(offsets.every(offset => offset < 1), 'available actions stay on the same trailing edge');
   }
@@ -58,7 +60,11 @@ try {
     const groups = surface.locator('[data-address-scope="this_device"], [data-address-scope="network"]');
     for (const group of await groups.all()) {
       assert.equal(await group.locator('.redeven-card-endpoint-detail').count(), 0, 'address guidance does not occupy a description row');
-      const help = group.locator('.redeven-address-help');
+      // Compact settings keep help beside the native details element so it
+      // cannot toggle the address disclosure. Full popovers keep it inside.
+      const helpOwner = await group.evaluate(element => element.matches('details')) ? group.locator('..') : group;
+      const help = helpOwner.locator('.redeven-address-help');
+      assert.equal(await help.count(), 1, 'each address scope owns one help control');
       const description = await help.evaluate(button => {
         const description = document.getElementById(button.getAttribute('aria-describedby'));
         const name = button.getAttribute('aria-labelledby').split(' ').map(id => document.getElementById(id)?.textContent).join(' ');
@@ -684,6 +690,7 @@ try {
   await page.locator('[data-environment="Network"] [aria-haspopup="dialog"]').click();
   const diagnosticPanel = page.locator('.redeven-endpoints-popover');
   await diagnosticPanel.waitFor();
+  await settleDisclosure();
   const diagnostic = diagnosticPanel.locator('[data-address-diagnostic]');
   assert.ok((await diagnostic.innerText()).includes('HTTPS 证书未覆盖'));
   const action = diagnostic.getByRole('button');

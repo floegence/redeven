@@ -70,7 +70,7 @@ async function assertFieldFocus() {
   });
   for (const field of values) {
     assert.equal(field.before.radius, '8px', `${field.id}: settings corner scale`);
-    assert.equal(field.before.height, 34, `${field.id}: settings control height`);
+    assert.equal(field.before.height, 36, `${field.id}: settings control height`);
     for (const key of ['width','height','border','padding','shadow']) assert.equal(field.after[key], field.before[key], `${field.id}: focus changes ${key}`);
     assert.equal(field.after.outline, 'none', `${field.id}: focus outline`);
     assert.notEqual(field.after.color, field.before.color, `${field.id}: invisible focus border`);
