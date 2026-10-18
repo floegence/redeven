@@ -195,6 +195,38 @@ func TestComputerScriptUnknownEffectNeverReplays(t *testing.T) {
 	}
 }
 
+func TestComputerScriptUncertainResultRetainsCompletedPrefixAndProgress(t *testing.T) {
+	dispatched := 0
+	runtime, call := scriptRuntimeFixture(t, func(_ context.Context, _ TargetToolCall) (TargetToolResult, error) {
+		dispatched++
+		if dispatched == 1 {
+			return TargetToolResult{Result: map[string]any{"action_executed": true}}, nil
+		}
+		return TargetToolResult{ExecutionLocation: "macos_desktop", Result: map[string]any{
+			"input_progress": map[string]any{"posted": 1, "observed": 0, "expected": 2},
+			"stage":          "input_delivery", "reason": "receipt_timeout", "target_state": "available",
+			"observation": semanticFixtureText("current document"),
+		}}, errComputerEffectUnknown
+	})
+	result, err := executeTestScript(t.Context(), runtime, call, `await ui.click(1, 2); try { await ui.click(3, 4); } catch {} await ui.click(5, 6);`)
+	if !errors.Is(err, errComputerEffectUnknown) || dispatched != 2 || len(runtime.scripts) != 0 {
+		t.Fatalf("uncertain operation resumed: calls=%d err=%v", dispatched, err)
+	}
+	payload := result.Result.(map[string]any)
+	prefix, _ := payload["completed_actions"].([]string)
+	if len(prefix) != 1 || prefix[0] != "pointer_click" || payload["operations"] != 2 || payload["completed"] != false || payload["action_executed"] != true {
+		t.Fatalf("completed prefix changed: %+v", payload)
+	}
+	progress, _ := payload["input_progress"].(map[string]any)
+	observation, _ := payload["observation"].(map[string]any)
+	if progress["posted"] != 1 || progress["observed"] != 0 || progress["expected"] != 2 || payload["stage"] != "input_delivery" || payload["reason"] != "receipt_timeout" || payload["target_state"] != "available" || observation["document_id"] != "current document" || result.ExecutionLocation != "macos_desktop" {
+		t.Fatalf("uncertain facts lost: %+v", result)
+	}
+	if payload["effect_outcome_unknown"] != true || payload["failed_operation_index"] != 1 || payload["failed_action"] != "pointer_click" {
+		t.Fatalf("failed operation identity lost: %+v", payload)
+	}
+}
+
 func TestComputerScriptTakeoverDiscardsObservedContent(t *testing.T) {
 	dispatched := 0
 	runtime, call := scriptRuntimeFixture(t, func(_ context.Context, _ TargetToolCall) (TargetToolResult, error) {

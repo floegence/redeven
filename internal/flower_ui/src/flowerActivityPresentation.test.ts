@@ -1749,3 +1749,12 @@ describe('canvas activity readability', () => {
     expect(p.meta).toBe('SSH host');
   });
 });
+
+it.each(['computer.click', 'mcp_fixture', 'tessiven.action'])('labels returned uncertainty on the completed %s card', tool_name => {
+  const result = presentFlowerActivityItem(item({ tool_name, renderer: 'structured', status: 'error',
+    chips: [{ kind: 'effect_outcome', value: 'uncertain', label: 'result', tone: 'warning' }],
+    payload: { rows_provided: true, rows: [{ title: 'stage', content: 'input_delivery', format: 'text' }] },
+  }));
+  expect(result.meta).toBe(toolActivityEnUS.effectUncertain);
+  expect(result.detailBlocks.some(block => block.kind === 'structured_rows' && block.rows.some(row => row.content === 'input_delivery'))).toBe(true);
+});

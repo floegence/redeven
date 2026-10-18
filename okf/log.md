@@ -1,5 +1,11 @@
 # Redeven OKF Update Log
 
+## 2026-10-18: Returned effect uncertainty and inspection recovery
+
+- Consume published Floret v7.55.1: returned uncertainty continues the model through canonical tool results; unsettled execution remains terminal. Preserve schema 20-to-21 and the subsequent published migration lineage.
+- Replace duplicate native receipt counters with published per-event delivery; require helper protocol 4, retain safe progress, and separate confirmed input from observation failures.
+- Add normal-message Inspect and continue for historical terminal failures, preserving drafts, request identity, child routing and navigation through the existing outbox.
+
 ## 2026-10-18: Computer result fidelity and recoverable encoding failure
 
 - Adopt published Floret v7.53.0 [archive and completed-error input contracts](ai/floret-thread-runtime.md), isolate [model encoding from Activity](ai/floret-redeven-adapter-and-projection.md), preserve Computer JSON types through the inclusive 1 MiB envelope limit, and qualify [canonical recovery controls](ai/computer-use-qualification.md#result-encoding-recovery) without replaying effects.

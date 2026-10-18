@@ -1,3 +1,4 @@
+import FloeNativeDesktop
 import AppKit
 import ApplicationServices
 import CoreGraphics
@@ -49,9 +50,14 @@ let accessibility = NativeAccessibility()
 let foreground = NativeForegroundInput()
 
 func handle(_ line: String) {
+    foreground.resetProgress()
     var envelope: [String: Any] = ["type": "error", "request_id": "", "target_id": ""]
     var window: NativeWindow?
     var effectStarted = false
+    var inputConfirmed = false
+    var privateRequest = false
+    var requestAllowedApps: [String] = []
+    var requestFullAccess = false
     var observationStage = "safety_scan"
     var observing = false
     do {
@@ -63,7 +69,7 @@ func handle(_ line: String) {
               let tool = request["tool_name"] as? String,
               let args = request["args"] as? [String: Any] else { throw NativeInput.invalid("Expected a versioned JSONL request.") }
         envelope["request_id"] = id; envelope["target_id"] = target
-        guard request["protocol_version"] as? Int == 3 else { throw HostFailure(code: "PROTOCOL_VERSION_MISMATCH", message: "Computer host protocol version 3 is required.") }
+        guard request["protocol_version"] as? Int == 4 else { throw HostFailure(code: "PROTOCOL_VERSION_MISMATCH", message: "Computer host protocol version 4 is required.") }
         if tool == "computer.targets" && target == "desktop-main" {
             emit(["type": "result", "request_id": id, "target_id": target, "payload": ["targets": try accessibility.inventory()]])
             return
@@ -71,10 +77,12 @@ func handle(_ line: String) {
         guard let selected = accessibility.windows[target] else { throw HostFailure(code: "TARGET_CONNECTION_REQUIRED", message: "Select an application window before using it.") }
         window = selected; foreground.target = selected
         let privateInput = request["user_control"] as? Bool == true
+        privateRequest = privateInput
         let returning = request["recovery_observation"] as? Bool == true
         let fullAccess = request["full_access"] as? Bool == true
         let allowForeground = fullAccess || request["allow_foreground"] as? Bool == true
         let allowedApps = request["allowed_apps"] as? [String] ?? []
+        requestAllowedApps = allowedApps; requestFullAccess = fullAccess
         if returning {
             guard ["computer.observe", "computer.screenshot"].contains(tool) else { throw NativeInput.invalid("Recovery requires a fresh observation.") }
             selected.userInControl = false; selected.invalidate()
@@ -85,7 +93,7 @@ func handle(_ line: String) {
         func pause(_ safety: [String: Any]) {
             selected.userInControl = true; selected.invalidate()
             emit(["type": "result", "request_id": id, "target_id": target, "safety": safety,
-                  "payload": ["code": "TAKEOVER_REQUIRED", "action_executed": effectStarted]])
+                  "payload": ["code": "TAKEOVER_REQUIRED", "action_executed": inputConfirmed && effectStarted, "input_progress": foreground.inputProgress]])
         }
         observing = true
         let before = try selected.safety(allowedApps: allowedApps, fullAccess: fullAccess, privateInput: privateInput)
@@ -135,7 +143,7 @@ func handle(_ line: String) {
                 try foreground.post([], window: selected, allowed: allowForeground, privateInput: privateInput, activate: false, started: {
                     emit(["type": "started", "request_id": id, "target_id": target, "execution_mode": "foreground", "reason": "application_may_activate"])
                 }, prepare: {
-                    payload = try selected.action(args, willMutate: { effectStarted = true })
+                    payload = try selected.action(args, willMutate: { effectStarted = true; foreground.markActionStarted() })
                     if beforeApplication != NSWorkspace.shared.frontmostApplication?.processIdentifier || beforePointer != CGEvent(source: nil)?.location { mode = "foreground" }
                 }, didPost: {})
             }
@@ -175,6 +183,7 @@ func handle(_ line: String) {
                 }
             }, didPost: { effectStarted = true })
         }
+        inputConfirmed = true
         observing = true
         observationStage = "safety_scan"
         effectStarted = effectStarted || payload["action_executed"] as? Bool == true
@@ -203,29 +212,64 @@ func handle(_ line: String) {
             let captured = try selected.safety(allowedApps: allowedApps, fullAccess: fullAccess)
             if captured["level"] as? String == "takeover" { pause(captured); return }
         }
+        payload["input_progress"] = foreground.inputProgress
         payload["summary"] = tool; payload["action_executed"] = effectStarted
         payload["execution_mode"] = mode; payload["execution_location"] = "macos_desktop"
         emit(["type": "result", "request_id": id, "target_id": target, "payload": payload, "safety": after])
     } catch {
-        let failure = error as? HostFailure ?? HostFailure(code: "INVALID_REQUEST", message: "Unable to decode the computer host request.")
+        let receiptFailure = error as? NativeInputDeliveryFailure
+        let failure = error as? HostFailure ?? HostFailure(code: receiptFailure == nil ? "INVALID_REQUEST" : "INPUT_UNCONFIRMED", message: receiptFailure == nil ? "Unable to process the computer host request." : "macOS input delivery was not confirmed.")
         if ["TAKEOVER_REQUIRED", "FOREGROUND_PERMISSION_REQUIRED"].contains(failure.code) {
             window?.userInControl = true; window?.invalidate()
             envelope["type"] = "result"
             envelope["safety"] = ["level": "takeover", "reason_codes": [failure.code == "FOREGROUND_PERMISSION_REQUIRED" ? "foreground_permission" : "user_control"], "safe_to_capture": false, "safe_to_send_to_model": false]
-            envelope["payload"] = ["code": "TAKEOVER_REQUIRED", "action_executed": effectStarted]
-        } else if nativeFailureCode(failure.code, observing: observing, effectStarted: effectStarted) == "TARGET_OBSERVATION_UNAVAILABLE" {
+            envelope["payload"] = ["code": "TAKEOVER_REQUIRED", "action_executed": inputConfirmed && effectStarted, "input_progress": foreground.inputProgress]
+        } else if nativeFailureCode(failure.code, observing: observing, effectStarted: effectStarted, inputConfirmed: inputConfirmed) == "TARGET_OBSERVATION_UNAVAILABLE" {
             envelope["error_code"] = "TARGET_OBSERVATION_UNAVAILABLE"
-            envelope["payload"] = ["action_executed": effectStarted, "observation_stage": observationStage]
+            envelope["payload"] = ["action_executed": effectStarted, "input_progress": foreground.inputProgress, "observation_stage": observationStage]
         } else {
-            envelope["error_code"] = nativeFailureCode(failure.code, observing: observing, effectStarted: effectStarted)
-            envelope["error"] = failure.message
+            let uncertain = nativeFailureCode(failure.code, observing: observing, effectStarted: effectStarted, inputConfirmed: inputConfirmed) == "EFFECT_OUTCOME_UNKNOWN"
+            envelope["error_code"] = uncertain ? "EFFECT_OUTCOME_UNKNOWN" : failure.code
+            envelope["error"] = uncertain ? "Input was posted but its delivery is unconfirmed. Inspect current state before another action." : failure.message
+            var facts: [String: Any] = ["action_executed": inputConfirmed && effectStarted,
+                "input_progress": foreground.inputProgress, "stage": foreground.inputProgress["stage"] ?? (uncertain ? "action" : "preparation"),
+                "reason": receiptFailure?.reason.rawValue ?? nativeFailureReason(failure.code)]
+            // Recovery is one bounded, same-target semantic read. Recheck safety
+            // after reading, so takeover/cancellation never releases captured text.
+            if uncertain && !privateRequest && (try? execution.check()) != nil, let window, !window.userInControl {
+                facts["target_state"] = "unknown"
+                let deadline = ProcessInfo.processInfo.systemUptime + 1
+                let check = {
+                    try execution.check()
+                    guard !window.userInControl, ProcessInfo.processInfo.systemUptime < deadline else {
+                        throw NativeInput.unavailable()
+                    }
+                }
+                do {
+                    try check()
+                    let safety = try window.safety(allowedApps: requestAllowedApps, fullAccess: requestFullAccess, check: check)
+                    guard safety["safe_to_send_to_model"] as? Bool == true else { throw NativeInput.unavailable() }
+                    let observation = try window.observe(["limit": 20], check: check)
+                    let after = try window.safety(allowedApps: requestAllowedApps, fullAccess: requestFullAccess, check: check)
+                    try check()
+                    if after["safe_to_send_to_model"] as? Bool == true {
+                        facts["observation"] = observation
+                        facts["target_state"] = "available"
+                    }
+                } catch {
+                    if let failure = error as? HostFailure, failure.code == "TARGET_CONNECTION_REQUIRED" {
+                        facts["target_state"] = "unavailable"
+                    }
+                }
+            }
+            envelope["payload"] = facts
         }
         emit(envelope)
     }
 }
 
 if CommandLine.arguments.contains("--capabilities") {
-    emit(["protocol_version": 3, "screen_recording": CGPreflightScreenCaptureAccess(), "accessibility": AXIsProcessTrusted(),
+    emit(["protocol_version": 4, "screen_recording": CGPreflightScreenCaptureAccess(), "accessibility": AXIsProcessTrusted(),
           "input_monitoring": foreground.available, "execution_location": "macos_desktop"])
 } else {
     // stdin is decoded off the main thread; AXObserver and the event tap retain
@@ -253,7 +297,7 @@ if CommandLine.arguments.contains("--capabilities") {
                       let requestID = request["request_id"] as? String, !requestID.isEmpty else {
                     execution.cancel(); return
                 }
-                if request["type"] as? String == "cancel" && request["protocol_version"] as? Int == 3 {
+                if request["type"] as? String == "cancel" && request["protocol_version"] as? Int == 4 {
                     execution.cancel(requestID); continue
                 }
                 guard execution.begin(requestID) else {

@@ -31,7 +31,7 @@ and 256 KiB budgets, privacy checks and screenshot authorization. Observe failur
 recommend smaller root/limit scopes, scripts recommend smaller output, and target
 management retains target selection guidance. Attachment pagination is unchanged.
 
-Published Floret v7.53.0 independently archives Text above 64 KiB even when
+Published Floret v7.55.1 independently archives Text above 64 KiB even when
 visibility is complete; only actual visible trimming sets Floret Truncated.
 The existing atomic settlement owns the unique FullOutput artifact and hash.
 Model JSON truncated reports only confirmed source semantic pruning.
@@ -43,8 +43,10 @@ an error and those facts with generic InputRequired. The normal card offers
 canonical wait. User response resumes the model with explicit read-only inspection
 guidance, never redispatching the completed tool. A closed target cannot prevent
 Stop or continuation. No synthetic takeover or product lifecycle is created.
-DispatchErr, uncertain effects and unconfirmed cancellation retain their existing
-terminal classification. Confirmed cancellation is classified before encoding,
+Returned EffectOutcomeUncertain commits a failed tool result without DispatchErr
+or mandatory InputRequired. The model receives completed facts and chooses its
+next action. Dispatch failures and unsettled cancellation retain the terminal
+unknown-effect contract. Confirmed cancellation is classified before encoding,
 so Text and Structured agree even when optional content is invalid. Safe fallback
 envelopes contain neither damaged values nor scripts.
 
@@ -101,8 +103,8 @@ independent roots and queued inputs remain untouched. Each thread publishes its
 own stopping and terminal views. Floret records the exact
 ThreadID, TurnID, RunID, source, and request time before cancelling execution.
 One five-second window lets dispatched tools finish their existing output and
-result commits. Confirmed results end the turn as cancelled; unconfirmed
-side effects remain `effect_outcome_unknown` and cannot be replayed or retried.
+result commits. Returned results, including explicit uncertainty, end the turn as cancelled;
+unsettled side effects remain `effect_outcome_unknown` and cannot be replayed or retried.
 Undispatched tools are cancelled and real tool errors are preserved. Stop never
 automatically starts queued input. A new message continues in a new turn.
 Summary and detail forward optional canonical `Cancellation` unchanged; active

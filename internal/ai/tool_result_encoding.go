@@ -118,7 +118,7 @@ func safeToolResultAfterEncodingFailure(source ToolResult, code aitools.ErrorCod
 			data["target_id"] = facts.targetID
 		}
 	}
-	safe := ToolResult{ToolID: source.ToolID, ToolName: source.ToolName, Status: toolResultStatusError, Summary: "Tool result unavailable", Details: guidance, Data: data, Error: &aitools.ToolError{Code: code, Message: guidance}, dispatchErr: source.dispatchErr, executionFacts: facts}
+	safe := ToolResult{ToolID: source.ToolID, ToolName: source.ToolName, Status: toolResultStatusError, Summary: "Tool result unavailable", Details: guidance, Data: data, Error: &aitools.ToolError{Code: code, Message: guidance}, dispatchErr: source.dispatchErr, effectUncertain: source.effectUncertain, executionFacts: facts}
 	// Terminal dispatch/cancellation authority always wins over optional content.
 	if source.dispatchErr != nil || source.Status == toolResultStatusAborted {
 		safe.Status = source.Status
@@ -132,7 +132,7 @@ func safeToolResultAfterEncodingFailure(source ToolResult, code aitools.ErrorCod
 		safe.Pending = source.Pending
 		return safe, nil
 	}
-	if !confirmed || !facts.potentialMutation || (source.Error != nil && source.Error.Code == aitools.ErrorCodePermissionDenied) {
+	if source.effectUncertain || !confirmed || !facts.potentialMutation || (source.Error != nil && source.Error.Code == aitools.ErrorCodePermissionDenied) {
 		return safe, nil
 	}
 	safe.Details += " The operation returned a confirmed result, but its output is unavailable. The action may already be complete. Check the current interface before continuing. After your response, the Agent must first inspect current state without changing it; completed actions must not be replayed. You can also stop this task."

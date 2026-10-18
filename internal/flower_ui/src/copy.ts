@@ -419,6 +419,8 @@ export type FlowerSurfaceCopy = Readonly<{
   }>;
   chat: Readonly<{
     media: FlowerMarkdownMediaCopy;
+    inspectAndContinue: string;
+    inspectAndContinuePrompt: string;
     restoredInputTitle: string;
     restoredInputDescription: string;
     restoredInputCopy: string;
@@ -836,6 +838,8 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
   },
   chat: {
     media: markdownMediaEnUS,
+    inspectAndContinue: 'Inspect and continue',
+    inspectAndContinuePrompt: 'The previous turn stopped with unconfirmed effects. First inspect current state and existing artifacts using read-only tools, then continue the remaining task from the evidence. Do not blindly repeat earlier actions.',
     restoredInputTitle: 'Input preserved after restore',
     restoredInputDescription: 'This input will not run automatically. Copy it into a new task to run it again.',
     restoredInputCopy: 'Copy input',
@@ -943,7 +947,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     stop: 'Stop',
     stopping: 'Stopping...',
     stopOutcomeUnknownTitle: "Stopped with unconfirmed results",
-    stopOutcomeUnknownDescription: "Some operations may have completed. Check their results before continuing. This turn will not be replayed automatically.",
+    stopOutcomeUnknownDescription: "Some operations may have completed. This turn will not be replayed automatically. Use Inspect and continue to check current state and continue in a new turn.",
     commandMenuLabel: 'Flower commands',
     commandCompactContext: 'Compact this conversation context',
     compactContext: 'Compact context',
@@ -1041,7 +1045,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       floretControlContractFailed: 'Flower could not generate a valid question. The reply so far has been preserved. Retry to continue.',
       floretAuthorityConsistencyFailed: 'Flower could not finish this turn because the committed tool result could not be verified. The tool was not run again; start a new reply to continue.',
       modelContextUnavailable: 'Could not load the current context. Resolve the issue shown in the error details, then retry.',
-      floretEffectOutcomeUnknown: 'Some operations may have completed, but their results could not be confirmed. The task was stopped to avoid duplicate execution. Verify the actual effects before starting new work; this turn cannot be retried.',
+      floretEffectOutcomeUnknown: 'Some operations may have completed, but their results could not be confirmed. This turn cannot be retried. Use Inspect and continue to let Flower check current state and existing artifacts before continuing in a new turn.',
       runtimeRestarted: 'The local runtime restarted before this reply finished. Start a new reply when the runtime is ready.',
     },
     copyCode: 'Copy code',

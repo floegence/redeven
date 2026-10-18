@@ -22,8 +22,8 @@ require_source() {
 }
 
 echo "[INFO] checking published Floret v7 dependency"
-rg -q '^\s*github\.com/floegence/floret/v7 v7\.55\.0$' go.mod \
-  || fail "go.mod must consume github.com/floegence/floret/v7 v7.55.0"
+rg -q '^\s*github\.com/floegence/floret/v7 v7\.55\.1$' go.mod \
+  || fail "go.mod must consume github.com/floegence/floret/v7 v7.55.1"
 redeven_go_version=$(GOWORK=off go list -m -f '{{.GoVersion}}')
 floret_go_version=$(GOWORK=off go list -m -f '{{.GoVersion}}' github.com/floegence/floret/v7)
 [[ "$redeven_go_version" == "$floret_go_version" ]] \
@@ -107,5 +107,7 @@ fi
 echo "[INFO] checking product schema boundary"
 GOWORK=off go run ./internal/cmd/threadstore-boundary-contract --check --root .
 GOWORK=off go test ./internal/ai/threadstore ./internal/boundarycontract -count=1
+
+require_source internal/ai/floret_tools.go "EffectOutcomeUncertain"
 
 echo "[INFO] Floret v7 dependency boundary passed"

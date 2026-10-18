@@ -137,10 +137,11 @@ pause removes previous logs, semantic content and image attachments, retaining
 only closed progress facts. `InputRequired` ends execution; after the user
 responds, a new invocation must observe and continue from the actual state.
 There is no suspended program counter and no automatic replay of the original
-code. A lost effect acknowledgement terminates with `effect_outcome_unknown`.
-Floret seals that uncertain invocation with its fixed terminal result and rejects
-retry after restart. It does not persist a normal partial-success payload for
-that invocation; the host must not invent one in a second history store.
+code. A returned lost-acknowledgement result retains the completed prefix and
+safe progress or same-target observation. Floret commits EffectOutcomeUncertain
+and continues the model; the interpreter does not resume or replay the script.
+Canonical retry after restart retains the result. An unsettled dispatch remains
+terminal effect_outcome_unknown. No second history or recovery ledger exists.
 
 # Evidence
 
@@ -148,6 +149,6 @@ that invocation; the host must not invent one in a second history store.
 - `redeven:internal/ai/computer_observation.go` - bounded output diffs and document/scope resets.
 - `redeven:internal/envapp/ui_src/scripts/redevenComputerScript.mjs` - restricted QuickJS API and process protocol.
 - `redeven:internal/ai/computer_script_test.go` - lifetime, revocation, partial prefixes and uncertain effects.
-- `redeven:internal/ai/computer_partial_result_integration_test.go` - canonical timeout results and unknown-effect retry rejection after restart.
+- `redeven:internal/ai/computer_partial_result_integration_test.go` - canonical partial and uncertain results across continuation and restart.
 - `redeven:internal/envapp/ui_src/scripts/computerScript.node-test.mjs` - heap/CPU/operation bounds and no escaping host calls.
 - `redeven:internal/envapp/ui_src/scripts/computerBrowserPage.mjs` - browser references and event-driven waits.

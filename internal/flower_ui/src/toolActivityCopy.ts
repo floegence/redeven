@@ -1,4 +1,5 @@
 export const toolActivityEnUS = {
+  "effectUncertain": "Result unconfirmed",
   "previewUnavailable": "This tool did not provide a result preview.",
   "computerPageChanges": "Page changes",
   "computerDefault": "Default",

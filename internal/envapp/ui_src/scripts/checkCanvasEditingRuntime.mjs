@@ -4,7 +4,7 @@ import { createDesktopTestSession } from '../../../../scripts/desktop_test_sessi
 // Test a built canvas window against a fresh Runtime with a deliberately paused
 // provider. Streaming assertions run before the provider is allowed to finish.
 import assert from 'node:assert/strict';
-import { execFileSync, spawn } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import http from 'node:http';
 import os from 'node:os';

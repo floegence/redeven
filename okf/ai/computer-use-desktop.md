@@ -43,8 +43,15 @@ intervened. Incidental keyboard or pointer input does not pause the task; it
 only suppresses optional focus restoration. Before each HID injection, the
 helper verifies the exact authorized application and window remain focused.
 Losing that target focus stops injection rather than sending events elsewhere.
-The event tap acknowledges helper-marked input without inspecting key contents;
-missing delivery confirmation is an unknown effect. Cancellation balances
+Published floe-native-apps owns exact per-event receipt matching, unique markers
+and one monotonic deadline. Auxiliary releases and pointer restoration cannot
+acknowledge later input. A receipt proves event observation, never application
+success. Missing receipts return posted/observed/expected progress and a closed
+reason in a canonical uncertain result; no event is reinjected automatically.
+The helper makes at most one bounded same-window semantic read when the request
+remains active and privacy permits it. A missing window differs from unavailable
+observation; neither selects another target. Confirmed input followed by failed
+capture returns an observation error retaining input facts. Cancellation balances
 helper-owned input without releasing keys physically held by the user.
 Wheel events bind their coordinates to the selected control as well as moving
 the pointer. Event creation precedes injection, so the wheel must not inherit

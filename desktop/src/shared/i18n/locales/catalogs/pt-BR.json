@@ -382,7 +382,8 @@
         "computerUnavailable": "Indisponível",
         "computerBlankPage": "Página em branco",
         "computerNoTargets": "Nenhuma página ou aplicativo disponível",
-        "previewUnavailable": "Esta ferramenta não forneceu uma prévia do resultado."
+        "previewUnavailable": "Esta ferramenta não forneceu uma prévia do resultado.",
+        "effectUncertain": "Resultado não confirmado"
       },
       "toolActivityDetailsPending": "Aguardando detalhes da ferramenta",
       "toolActivityNoAdditionalDetails": "Nenhum detalhe adicional",
@@ -430,7 +431,7 @@
       "stop": "Parar",
       "stopping": "Parando...",
       "stopOutcomeUnknownTitle": "Interrompido com resultados não confirmados",
-      "stopOutcomeUnknownDescription": "Algumas operações podem ter sido concluídas. Verifique os resultados antes de continuar. Este turno não será executado novamente de forma automática.",
+      "stopOutcomeUnknownDescription": "Algumas operações podem ter sido concluídas. Este turno não será repetido automaticamente. Use “Verificar e continuar” para conferir o estado atual e continuar em um novo turno.",
       "commandMenuLabel": "Comandos do Flower",
       "commandCompactContext": "Comprimir o contexto desta conversa",
       "compactContext": "Comprimir contexto",
@@ -494,7 +495,7 @@
       "runErrorFloretEngineFailed": "Flower não pôde terminar este turno porque o mecanismo de orquestração falhou.",
       "runErrorFloretControlContractFailed": "Flower não conseguiu gerar uma pergunta válida. A resposta gerada foi preservada. Tente novamente para continuar.",
       "runErrorFloretAuthorityConsistencyFailed": "Flower não pôde concluir este turno porque o resultado confirmado da ferramenta não pôde ser verificado. A ferramenta não foi executada novamente; envie uma nova mensagem para continuar.",
-      "runErrorFloretEffectOutcomeUnknown": "Algumas operações podem ter sido concluídas, mas não foi possível confirmar os resultados. A tarefa foi interrompida para evitar execução duplicada. Verifique os efeitos reais antes de iniciar um novo trabalho; este turno não pode ser repetido.",
+      "runErrorFloretEffectOutcomeUnknown": "Algumas operações podem ter sido concluídas, mas seus resultados não foram confirmados. Este turno não pode ser repetido. Use “Verificar e continuar” para que Flower confira o estado atual e os resultados existentes antes de continuar em um novo turno.",
       "runErrorRuntimeRestarted": "O ambiente de execução local reiniciou antes que esta resposta terminasse. Inicie uma nova resposta quando ele estiver pronto.",
       "runtimeRestartedDivider": "O ambiente de execução do Redeven foi reiniciado",
       "copyCode": "Copiar código",
@@ -776,7 +777,9 @@
       "contextIndicatorMeasured": "Medido",
       "contextIndicatorLastRequest": "Última solicitação",
       "contextIndicatorCurrentRequest": "Solicitação atual",
-      "contextIndicatorSourceUnattributed": "Sem atribuição"
+      "contextIndicatorSourceUnattributed": "Sem atribuição",
+      "inspectAndContinue": "Verificar e continuar",
+      "inspectAndContinuePrompt": "O turno anterior parou porque os efeitos não foram confirmados. Primeiro verifique o estado atual e os arquivos existentes com ferramentas somente de leitura e continue o trabalho restante com base nas evidências. Não repita ações anteriores sem verificá-las."
     },
     "threadList": {
       "title": "Conversas",

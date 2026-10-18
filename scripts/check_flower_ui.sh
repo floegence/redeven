@@ -57,6 +57,7 @@ main() {
       src/ui/activityFlowerCompletionNotice.test.ts \
       src/ui/activityFlowerSummary.test.ts \
       src/ui/FlowerSurface.emptyStatePresentation.test.tsx \
+      src/ui/FlowerSurface.uncertainRecovery.test.tsx \
       src/ui/FlowerSurface.navigation.test.tsx \
       src/ui/FlowerSurface.liveRecovery.test.tsx \
       src/ui/FlowerComposerContextIndicator.test.tsx \

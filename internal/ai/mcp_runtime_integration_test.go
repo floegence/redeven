@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -79,7 +78,7 @@ func TestMCPRuntimeExecutionAndUnknownOutcome(t *testing.T) {
 					return
 				}
 				outputs := collectOpenAIFunctionOutputs(body["input"])
-				if len(outputs) != 1 || !strings.Contains(outputs[0].Output, "fixture:record-42") {
+				if len(outputs) != 1 || (outcome != "transport_error" && !strings.Contains(outputs[0].Output, "fixture:record-42")) || (outcome == "transport_error" && !strings.Contains(outputs[0].Output, "External effect unconfirmed")) {
 					t.Errorf("MCP output lost: %+v", outputs)
 				}
 				writeAskUserIntegrationTextResponse(w, flush, "done", "The tool result is available.")
@@ -106,15 +105,8 @@ func TestMCPRuntimeExecutionAndUnknownOutcome(t *testing.T) {
 			if calls.Load() != 1 {
 				t.Fatalf("MCP effect calls=%d, error=%v failure=%+v", calls.Load(), err, terminal.Failure)
 			}
-			if outcome == "transport_error" {
-				if err == nil || terminal.Failure == nil || terminal.Failure.Code != flruntime.ThreadTurnFailureEffectOutcomeUnknown || providerCalls.Load() != 1 {
-					t.Fatalf("unknown result escaped terminal boundary: %+v err=%v calls=%d", terminal.Failure, err, providerCalls.Load())
-				}
-				if _, err := svc.threadRuntime.Retry(t.Context(), flruntime.RetryInput{ThreadID: terminal.ThreadID, SourceTurnID: terminal.TurnID, RequestKey: "no-retry"}); !errors.Is(err, flruntime.ErrEffectOutcomeUnknown) {
-					t.Fatalf("unknown effect retry accepted: %v", err)
-				}
-			} else if err != nil || providerCalls.Load() != 2 {
-				t.Fatalf("MCP execution: %v failure=%+v calls=%d", err, terminal.Failure, providerCalls.Load())
+			if err != nil || terminal.Failure != nil || providerCalls.Load() != 2 {
+				t.Fatalf("MCP result did not continue once: %v failure=%+v calls=%d", err, terminal.Failure, providerCalls.Load())
 			}
 		})
 	}

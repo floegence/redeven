@@ -244,7 +244,8 @@
       "computerUnavailable": "Unavailable",
       "computerBlankPage": "Blank page",
       "computerNoTargets": "No available pages or applications",
-      "previewUnavailable": "This tool did not provide a result preview."
+      "previewUnavailable": "This tool did not provide a result preview.",
+      "effectUncertain": "Result unconfirmed"
     },
     "toolActivityDetailsPending": "Waiting for tool details",
     "toolActivityNoAdditionalDetails": "No additional details",
@@ -292,7 +293,7 @@
     "stop": "Stop",
     "stopping": "Stopping...",
     "stopOutcomeUnknownTitle": "Stopped with unconfirmed results",
-    "stopOutcomeUnknownDescription": "Some operations may have completed. Check their results before continuing. This turn will not be replayed automatically.",
+    "stopOutcomeUnknownDescription": "Some operations may have completed. This turn will not be replayed automatically. Use Inspect and continue to check current state and continue in a new turn.",
     "commandMenuLabel": "Flower commands",
     "commandCompactContext": "Compact this conversation context",
     "compactContext": "Compact context",
@@ -356,7 +357,7 @@
     "runErrorFloretEngineFailed": "Flower could not finish this turn because the orchestration engine failed.",
     "runErrorFloretControlContractFailed": "Flower could not generate a valid question. The reply so far has been preserved. Retry to continue.",
     "runErrorFloretAuthorityConsistencyFailed": "Flower could not finish this turn because the committed tool result could not be verified. The tool was not run again; start a new reply to continue.",
-    "runErrorFloretEffectOutcomeUnknown": "Some operations may have completed, but their results could not be confirmed. The task was stopped to avoid duplicate execution. Verify the actual effects before starting new work; this turn cannot be retried.",
+    "runErrorFloretEffectOutcomeUnknown": "Some operations may have completed, but their results could not be confirmed. This turn cannot be retried. Use Inspect and continue to let Flower check current state and existing artifacts before continuing in a new turn.",
     "runErrorRuntimeRestarted": "The local runtime restarted before this reply finished. Start a new reply when the runtime is ready.",
     "runtimeRestartedDivider": "Redeven runtime restarted",
     "copyCode": "Copy code",
@@ -637,7 +638,9 @@
     "contextIndicatorMeasured": "Measured",
     "contextIndicatorLastRequest": "Last request",
     "contextIndicatorCurrentRequest": "Current request",
-    "contextIndicatorSourceUnattributed": "Unattributed"
+    "contextIndicatorSourceUnattributed": "Unattributed",
+    "inspectAndContinue": "Inspect and continue",
+    "inspectAndContinuePrompt": "The previous turn stopped with unconfirmed effects. First inspect current state and existing artifacts using read-only tools, then continue the remaining task from the evidence. Do not blindly repeat earlier actions."
   },
   "threadList": {
     "title": "Conversations",

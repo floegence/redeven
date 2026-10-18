@@ -1489,6 +1489,7 @@ function presentationForStructured(item: FlowerActivityItem, copy?: FlowerActivi
   const words = copy?.tools ?? toolActivityEnUS;
   const title = structuredTitle(item, words);
   const computer = trimString(item.tool_name).startsWith('computer.') || trimString(item.tool_name).startsWith('browser.');
+  const uncertain = item.chips?.some(chip => chip.kind === 'effect_outcome' && chip.value === 'uncertain');
   const outcome = item.chips?.find(chip => chip.kind === 'computer_result')?.value;
   const rowMeta = (meta: string) => meta.split(' ').map(token => ({
     default: words.computerDefault, new_tab: words.computerNewTab,
@@ -1507,6 +1508,7 @@ function presentationForStructured(item: FlowerActivityItem, copy?: FlowerActivi
   const active = item.status === 'running' || item.status === 'pending' || item.status === 'waiting';
   const detailLines = computer || rows.length > 0 ? [] : meaningfulStructuredSummary(item, title).map(line => ({ ...line, label: words.summary }));
   const detailBlocks: FlowerActivityDetailBlock[] = [];
+  if (uncertain) detailBlocks.push({ kind: 'structured_rows', section: 'results', rows: [], notice: words.effectUncertain });
   if (inputs.length > 0) detailBlocks.push({ kind: 'structured_rows', section: 'inputs', rows: inputs });
   else if (item.tool_name === 'computer.exec' && !active) detailBlocks.push({ kind: 'structured_rows', section: 'inputs', rows: [], notice: words.inputUnavailable });
   if (rows.length > 0) detailBlocks.push({ kind: 'structured_rows', section: 'results', rows, ...(!errorBlock && (item.status === 'error' || item.status === 'canceled') ? { notice: words.partialOutput } : {}) });
@@ -1527,6 +1529,7 @@ function presentationForStructured(item: FlowerActivityItem, copy?: FlowerActivi
       else detailBlocks.push(notice);
     }
   }
+  if (uncertain) meta = words.effectUncertain;
   const missingPresenter = ['threads.query', 'threads.read', 'threads.aggregate', 'computer.targets',
     'tessiven.runtimes', 'tessiven.runtime.inspect', 'tessiven.runtime.action', 'tessiven.inspect', 'tessiven.action'].includes(item.tool_name ?? '');
   if (missingPresenter) {

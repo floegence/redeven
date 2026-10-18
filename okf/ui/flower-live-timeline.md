@@ -30,7 +30,12 @@ keeps “Stopping...” visible after acknowledgement, navigation, and reload.
 Confirmed cancellation shows a neutral “Stopped” notice, retains output and
 changes, and permits continuation through a new message. An unconfirmed effect
 with explicit user Stop provenance shows a specific result warning without
-replay controls; older failures retain their recorded classification. Stop
+replay controls; older failures retain their recorded classification. Both
+offer Inspect and continue through one visible normal Send message using the
+latest canonical state, storage generation and existing outbox. Drafts remain
+untouched. Root and child views expose resend or removal after transport errors;
+navigation and Stop retain their owners. Returned uncertainty instead ends the
+tool card with Result unconfirmed and continues without a turn error banner. Stop
 failure produces an actionable localized notification and leaves Stop retryable.
 Thread navigation, draft editing, and attachments remain available throughout.
 Queued input follows Floret admission and never starts automatically after Stop.

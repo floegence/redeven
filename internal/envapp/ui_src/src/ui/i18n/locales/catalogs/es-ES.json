@@ -5299,7 +5299,8 @@
         "computerUnavailable": "No disponible",
         "computerBlankPage": "Página en blanco",
         "computerNoTargets": "No hay páginas ni aplicaciones disponibles",
-        "previewUnavailable": "Esta herramienta no proporcionó una vista previa del resultado."
+        "previewUnavailable": "Esta herramienta no proporcionó una vista previa del resultado.",
+        "effectUncertain": "Resultado sin confirmar"
       },
       "toolActivityDetailsPending": "Esperando los detalles de la herramienta",
       "toolActivityNoAdditionalDetails": "No hay más detalles",
@@ -5347,7 +5348,7 @@
       "stop": "Detener",
       "stopping": "Deteniendo...",
       "stopOutcomeUnknownTitle": "Detenido con resultados sin confirmar",
-      "stopOutcomeUnknownDescription": "Es posible que algunas operaciones hayan finalizado. Comprueba sus resultados antes de continuar. Este turno no se volverá a ejecutar automáticamente.",
+      "stopOutcomeUnknownDescription": "Algunas operaciones pueden haber finalizado. Este turno no se repetirá automáticamente. Usa «Comprobar y continuar» para revisar el estado actual y continuar en un turno nuevo.",
       "commandMenuLabel": "Comandos de Flower",
       "commandCompactContext": "Comprimir el contexto de esta conversación",
       "compactContext": "Comprimir contexto",
@@ -5412,7 +5413,7 @@
       "runErrorFloretEngineFailed": "Flower no pudo finalizar este turno porque falló el motor de orquestación.",
       "runErrorFloretControlContractFailed": "Flower no pudo generar una pregunta válida. La respuesta generada se ha conservado. Vuelve a intentarlo para continuar.",
       "runErrorFloretAuthorityConsistencyFailed": "Flower no pudo finalizar este turno porque no se pudo verificar el resultado confirmado de la herramienta. La herramienta no se volvió a ejecutar; envía un mensaje nuevo para continuar.",
-      "runErrorFloretEffectOutcomeUnknown": "Es posible que algunas operaciones se hayan completado, pero no se pudieron confirmar sus resultados. La tarea se detuvo para evitar duplicarlas. Comprueba los efectos reales antes de iniciar un trabajo nuevo; este turno no se puede reintentar.",
+      "runErrorFloretEffectOutcomeUnknown": "Algunas operaciones pueden haber finalizado, pero sus resultados no se han confirmado. No se puede reintentar este turno. Usa «Comprobar y continuar» para que Flower revise el estado actual y los resultados existentes antes de continuar en un turno nuevo.",
       "runErrorRuntimeRestarted": "El entorno de ejecución local se reinició antes de que terminara esta respuesta. Vuelve a solicitar una respuesta cuando el entorno de ejecución esté listo.",
       "runtimeRestartedDivider": "El entorno de ejecución de Redeven se reinició",
       "copyCode": "Copiar código",
@@ -5678,7 +5679,9 @@
       "queueTakeBackConflict": "Este mensaje ya ha empezado a ejecutarse o ha cambiado. Actualiza e inténtalo de nuevo.",
       "queueTakeBackUnknown": "El mensaje está en el cuadro de texto, pero no se pudo confirmar su retirada de la cola. Revisa la cola antes de enviarlo.",
       "contextIndicatorDistributionUnavailable": "Distribución no disponible",
-      "contextIndicatorProtocolFraming": "Formato del protocolo"
+      "contextIndicatorProtocolFraming": "Formato del protocolo",
+      "inspectAndContinue": "Comprobar y continuar",
+      "inspectAndContinuePrompt": "El turno anterior se detuvo porque los efectos no están confirmados. Primero comprueba el estado actual y los archivos existentes con herramientas de solo lectura y continúa el trabajo pendiente según las pruebas. No repitas acciones anteriores sin comprobarlas."
     },
     "threadList": {
       "title": "Conversaciones",

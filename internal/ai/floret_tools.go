@@ -796,6 +796,11 @@ func floretToolResultFromFlower(r *run, result ToolResult) (fltools.Result, erro
 	}
 	var boundedWait *fltools.BoundedWait
 	inputRequired := encoded.inputRequired
+	var effectOutcome fltools.EffectOutcome
+	if result.effectUncertain && dispatchErr == nil && status != toolResultStatusAborted {
+		effectOutcome = fltools.EffectOutcomeUncertain
+		inputRequired = nil
+	}
 	if result.ToolName == "subagents" && !isError {
 		data, _ := structured["data"].(map[string]any)
 		if anyToString(data["action"]) == subagentActionWait {
@@ -808,17 +813,18 @@ func floretToolResultFromFlower(r *run, result ToolResult) (fltools.Result, erro
 		}
 	}
 	return fltools.Result{
-		CallID:       strings.TrimSpace(result.ToolID),
-		Name:         strings.TrimSpace(result.ToolName),
-		Text:         string(text),
-		Structured:   structured,
-		Metadata:     metadata,
-		Activity:     activity,
-		Attachments:  attachments,
-		IsError:      isError,
-		DispatchErr:  dispatchErr,
-		OutputPolicy: outputPolicy,
-		BoundedWait:  boundedWait, InputRequired: inputRequired,
+		CallID:        strings.TrimSpace(result.ToolID),
+		Name:          strings.TrimSpace(result.ToolName),
+		Text:          string(text),
+		Structured:    structured,
+		Metadata:      metadata,
+		Activity:      activity,
+		Attachments:   attachments,
+		IsError:       isError,
+		DispatchErr:   dispatchErr,
+		EffectOutcome: effectOutcome,
+		OutputPolicy:  outputPolicy,
+		BoundedWait:   boundedWait, InputRequired: inputRequired,
 	}, nil
 }
 
@@ -1391,6 +1397,9 @@ func floretActivityForToolResult(r *run, result ToolResult) (*fltools.ActivityPr
 				activity.TargetRefs = append(activity.TargetRefs, fltools.ActivityTargetRef{Kind: "tool_image", ResourceRef: ref, Label: attachment.Name})
 			}
 		}
+	}
+	if result.effectUncertain {
+		activity.Chips = append(activity.Chips, fltools.ActivityChip{Kind: "effect_outcome", Label: "result", Value: "uncertain", Tone: "warning"})
 	}
 	return contractSafeActivityPresentationForTool(toolName, activity), nil
 }

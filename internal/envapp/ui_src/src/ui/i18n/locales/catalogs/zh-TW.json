@@ -5299,7 +5299,8 @@
         "computerUnavailable": "無法使用",
         "computerBlankPage": "空白頁面",
         "computerNoTargets": "沒有可用的頁面或應用程式",
-        "previewUnavailable": "此工具未提供結果預覽。"
+        "previewUnavailable": "此工具未提供結果預覽。",
+        "effectUncertain": "結果未確認"
       },
       "toolActivityDetailsPending": "正在等待工具詳細資訊",
       "toolActivityNoAdditionalDetails": "沒有更多詳細資訊",
@@ -5347,7 +5348,7 @@
       "stop": "停止",
       "stopping": "正在停止...",
       "stopOutcomeUnknownTitle": "已停止，部分操作結果尚未確認",
-      "stopOutcomeUnknownDescription": "部分操作可能已經完成。繼續之前，請先檢查結果。本輪不會自動重新執行。",
+      "stopOutcomeUnknownDescription": "部分操作可能已完成。本輪不會自動重新執行。選擇「檢查狀態並繼續」，先檢查現況，再開始新一輪繼續任務。",
       "commandMenuLabel": "Flower 指令",
       "commandCompactContext": "壓縮目前對話上下文",
       "compactContext": "壓縮上下文",
@@ -5412,7 +5413,7 @@
       "runErrorFloretEngineFailed": "編排引擎失敗，Flower 未能完成本輪回覆。",
       "runErrorFloretControlContractFailed": "Flower 未能產生有效的提問。已產生的回覆已保留，請重試以繼續。",
       "runErrorFloretAuthorityConsistencyFailed": "已提交的工具結果無法完成一致性驗證，Flower 未能完成本輪回覆。工具不會重複執行；請傳送新訊息繼續。",
-      "runErrorFloretEffectOutcomeUnknown": "部分操作可能已完成，但無法確認結果。任務已停止，以避免重複執行。請先核對實際效果，再開始新的工作；本輪無法重試。",
+      "runErrorFloretEffectOutcomeUnknown": "部分操作可能已完成，但結果無法確認。本輪無法重試。選擇「檢查狀態並繼續」，讓 Flower 先檢查現況和既有產物，再開始新一輪繼續任務。",
       "runErrorRuntimeRestarted": "本機執行環境在這次回覆完成前重新啟動。請在執行環境就緒後重新開始回覆。",
       "runtimeRestartedDivider": "Redeven 執行環境已重新啟動",
       "copyCode": "複製程式碼",
@@ -5678,7 +5679,9 @@
       "queueTakeBackConflict": "這則佇列訊息已開始執行或有變更，請重新整理後再試。",
       "queueTakeBackUnknown": "訊息已放回輸入框，但尚未確認移出佇列，請檢查佇列後再傳送。",
       "contextIndicatorDistributionUnavailable": "暫無分布",
-      "contextIndicatorProtocolFraming": "協定格式開銷"
+      "contextIndicatorProtocolFraming": "協定格式開銷",
+      "inspectAndContinue": "檢查狀態並繼續",
+      "inspectAndContinuePrompt": "上一輪因操作結果未確認而停止。請先使用唯讀工具檢查目前狀態和既有產物，再依據證據繼續剩餘工作。請勿盲目重複先前的操作。"
     },
     "threadList": {
       "title": "對話",

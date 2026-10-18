@@ -315,7 +315,7 @@ func TestSubagentPromptUsesOneHandoffContract(t *testing.T) {
 			t.Fatalf("prompt is missing failure guidance %q:\n%s", required, prompt)
 		}
 	}
-	assertPromptContains(t, buildPromptToolFailureRecoverySection().render(), "effect_outcome_unknown is terminal")
+	assertPromptContains(t, buildPromptToolFailureRecoverySection().render(), "An unconfirmed external effect is tool feedback")
 	for _, def := range builtInToolDefinitions() {
 		if def.Name == "subagents" {
 			assertPromptContains(t, def.Description, "handoffs[].content")

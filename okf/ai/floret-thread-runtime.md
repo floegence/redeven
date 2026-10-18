@@ -14,7 +14,7 @@ Floret v7 `ThreadService` is the sole owner of active and canonical thread lifec
 
 ## Typed runtime
 
-Redeven consumes published Floret v7.53.0. Its additive
+Redeven consumes published Floret v7.55.1. Its additive
 OutputPolicy.ArchiveAboveBytes archives complete large tool text independently
 of visible truncation. Completed error results may request input while preserving
 error status. Floret owns batch settlement, waiting, Respond and restart; Redeven
@@ -23,6 +23,10 @@ The permanent schema 19-to-20 edge validates exact v19 authority and atomically
 upgrades the envelope in the existing namespace. Older writers reject v20;
 historical validators remain success-only for tool input. Redeven treats all
 Floret records as opaque and performs no product-side rewrite or migration.
+The 20-to-21 edge admits explicit unconfirmed tool results without changing
+historical failures. The subsequent 21-to-22 accounting edge is also retained;
+the current schema is 22 and older writers reject upgraded stores. All edges
+run through the published upstream startup transaction.
 
 
 Published Floret v7.50.0 adds optional `ThreadWaiter` and typed canonical
@@ -146,7 +150,7 @@ and the single provider retry remain unchanged.
 
 One `ThreadRuntime` plus mutex owns each active thread. Provider and tool I/O run outside that mutex and return through a stable execution token; late results for a replaced, canceled, or terminal token are ignored. The public boundary is typed `Create`, `Fork`, `Delete`, `View`, `Send`, `Respond`, `Cancel`, `Retry`, queue mutation, and workspace `Subscribe`. There is no public generic command receipt, event replay cursor, execution handle, or projection delta.
 
-`Send` validates a stable `(thread_id, request_key)` and completes canonical turn acceptance before returning or publishing the user segment. Acceptance failure leaves the in-memory view unchanged; provider work starts asynchronously only after the accepted receipt. The canonical journal is the only durable lifecycle fact source. Unique request, turn, tool-call, effect-attempt, and terminal keys make repeated provider dispatch safe without duplicating the visible timeline. Irreversible effects alone require a minimal durable intent before dispatch. If an effect outcome cannot be confirmed, Floret atomically closes the Turn with `effect_outcome_unknown`; it never replays or exposes that effect for retry.
+`Send` validates a stable `(thread_id, request_key)` and completes canonical turn acceptance before returning or publishing the user segment. Acceptance failure leaves the in-memory view unchanged; provider work starts asynchronously only after the accepted receipt. The canonical journal is the only durable lifecycle fact source. Unique request, turn, tool-call, effect-attempt, and terminal keys make repeated provider dispatch safe without duplicating the visible timeline. Irreversible effects alone require a minimal durable intent before dispatch. Returned EffectOutcomeUncertain commits a canonical tool error and continues the model without a mandatory question. Repeated invocation identity returns that result; retry retains a boundary after the latest uncertain result. Crashes, panics, failed persistence and unsettled cancellation retain terminal effect_outcome_unknown and cannot replay the effect.
 
 Transport retries read the original admitted input through Floret's published
 `ThreadSendReader.LookupSend`. Redeven checks submitted text, ordered upload

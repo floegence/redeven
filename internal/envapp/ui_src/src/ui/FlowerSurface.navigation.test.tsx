@@ -1612,7 +1612,7 @@ describe('FlowerSurface navigation', () => {
     expect((runtime.querySelector('.flower-composer textarea') as HTMLTextAreaElement).disabled).toBe(false);
   });
 
-  it('shows unknown effect failure without any retry action', async () => {
+  it('offers inspection for unknown effects without replaying the failed turn', async () => {
     const failedThread = thread({
       thread_id: 'thread-unknown-effect',
       title: 'Unknown effect',
@@ -1635,7 +1635,7 @@ describe('FlowerSurface navigation', () => {
     const errorText = runtime.querySelector('.flower-error-card')?.textContent ?? '';
     expect(errorText).toContain('Some operations may have completed, but their results could not be confirmed.');
     expect(errorText).not.toContain('internal effect outcome detail');
-    expect(runtime.querySelector('.flower-error-actions button')).toBeNull();
+    expect(runtime.querySelector('.flower-error-actions button')?.textContent).toBe('Inspect and continue');
     expect(runtime.querySelector('[data-flower-effect-retry]')).toBeNull();
     expect((runtime.querySelector('.flower-composer textarea') as HTMLTextAreaElement).disabled).toBe(false);
   });

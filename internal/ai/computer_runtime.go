@@ -422,6 +422,12 @@ func (r *ComputerUseRuntime) executeComputerToolLocked(ctx context.Context, call
 			"tool_call_id", call.ToolCallID, "target_id", call.TargetID, "operation", call.ToolName,
 			"code", navigationFailure.code, "stage", navigationFailure.stage, "network_error", navigationFailure.reason, "action_executed", true)
 	}
+	if errors.Is(err, errComputerEffectUnknown) {
+		payload, _ := result.Result.(map[string]any)
+		slog.Info("computer effect unconfirmed", "thread_id", call.ThreadID, "turn_id", call.TurnID, "run_id", call.RunID,
+			"tool_call_id", call.ToolCallID, "target_id", call.TargetID, "stage", computerDiagnosticValue("stage", payload["stage"]),
+			"reason", computerDiagnosticValue("reason", payload["reason"]), "input_progress", computerInputProgress(payload["input_progress"]))
+	}
 	var observationFailure *targetToolPolicyError
 	if errors.As(err, &observationFailure) && observationFailure.code == "target_observation_unavailable" {
 		payload, _ := result.Result.(map[string]any)
@@ -445,7 +451,7 @@ func (r *ComputerUseRuntime) executeComputerToolLocked(ctx context.Context, call
 					target.Ready, target.State = false, failure.targetState
 					_ = r.registry.Update(target)
 				}
-			} else if navigationFailure == nil {
+			} else if navigationFailure == nil && !errors.Is(err, errComputerEffectUnknown) {
 				target.Ready, target.State = false, "stopped"
 				_ = r.registry.Update(target)
 			}

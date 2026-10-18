@@ -3,7 +3,6 @@ package ai
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -131,7 +130,7 @@ func TestTessivenCanonicalRuntimeSaveAndUnknownEffect(t *testing.T) {
 					writeAskUserIntegrationTextResponse(w, flush, "done", "The authorized directory was inspected.")
 					return
 				}
-				if len(outputs) != 1 || !strings.Contains(outputs[0].Output, "surface=tessiven") {
+				if len(outputs) != 1 || (!action && !strings.Contains(outputs[0].Output, "surface=tessiven")) || (action && !strings.Contains(outputs[0].Output, "External effect unconfirmed")) {
 					t.Errorf("saved canvas link missing: %+v", outputs)
 				}
 				writeAskUserIntegrationTextResponse(w, flush, "done", "The canvas has been saved.")
@@ -159,12 +158,10 @@ func TestTessivenCanonicalRuntimeSaveAndUnknownEffect(t *testing.T) {
 				t.Fatalf("Tessiven tool was not exposed to the provider: %v", runErr)
 			}
 			if action {
-				if effects.Load() != 1 || runErr == nil || terminal.Failure == nil || terminal.Failure.Code != flruntime.ThreadTurnFailureEffectOutcomeUnknown {
-					t.Fatalf("unknown effect did not settle once: effects=%d error=%v terminal=%+v", effects.Load(), runErr, terminal.Failure)
+				if effects.Load() != 1 || runErr != nil || terminal.Failure != nil || providerCalls.Load() != 2 {
+					t.Fatalf("unconfirmed action did not continue: effects=%d err=%v failure=%+v requests=%d", effects.Load(), runErr, terminal.Failure, providerCalls.Load())
 				}
-				if _, err := svc.threadRuntime.Retry(t.Context(), flruntime.RetryInput{ThreadID: terminal.ThreadID, SourceTurnID: terminal.TurnID, RequestKey: "never-repeat"}); !errors.Is(err, flruntime.ErrEffectOutcomeUnknown) {
-					t.Fatalf("unknown mutation allowed retry: %v", err)
-				}
+
 			} else {
 				if runErr != nil {
 					t.Fatal(runErr)
