@@ -5660,7 +5660,11 @@
         },
         "failed": "Flower n’a pas pu terminer ce tour.",
         "cancelled": "Arrêté",
-        "interrupted": "Ce tour a été interrompu."
+        "interrupted": "Ce tour a été interrompu.",
+        "subtaskUpdates": {
+          "one": "{count} mise à jour de sous-tâche",
+          "other": "{count} mises à jour de sous-tâches"
+        }
       },
       "modelUnavailableMissingKeys": "Aucun identifiant n’est configuré pour ce fournisseur de modèles. Ajoutez-les dans les réglages.",
       "modelUnavailableProviderDisabled": "Ce fournisseur de modèles est désactivé. Activez-le dans les réglages ou sélectionnez un autre modèle.",

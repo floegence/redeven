@@ -3,7 +3,8 @@ import './flower-feature.css';
 import { builtInShellThemePresets } from '@floegence/floe-webapp-core/themes';
 import { commands, page, userEvent } from 'vitest/browser';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { FlowerLiveStreamEnvelope, FlowerRuntimeCurrentView, FlowerRuntimeTurn } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import type { FlowerLiveStreamEnvelope, FlowerParentEvent, FlowerRuntimeCurrentView, FlowerRuntimeTurn, FlowerSurfaceAdapter } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import { parentProcessEvents, parentProcessPage } from '../../../../flower_ui/src/flowerParentEventProcess.testFixture';
 import { applyFlowerRuntimeCurrentView } from '../../../../flower_ui/src/runtimeCurrentView';
 import { createLocalizedFlowerSurfaceCopy, type FlowerSurfaceTranslator } from '../../../../flower_ui/src/i18n/createLocalizedFlowerSurfaceCopy';
 import type { FlowerSurfaceCopy } from '../../../../flower_ui/src/copy';
@@ -50,14 +51,14 @@ function liveStream(initial: FlowerRuntimeCurrentView) {
     },
   };
 }
-async function mount(initial = current(), copy?: FlowerSurfaceCopy) {
+async function mount(initial = current(), copy?: FlowerSurfaceCopy, overrides: Partial<FlowerSurfaceAdapter> = {}) {
   await page.viewport(1280, 900);
   const seed = applyFlowerRuntimeCurrentView(thread({ thread_id: 'process', title: 'Process disclosure', messages: [] }), initial);
   const peer = thread({ thread_id: 'peer', title: 'Another conversation' });
   const live = liveStream(initial);
   live.envelope({ schema_version: 1, kind: 'ready', summaries: [seed, peer] });
   const root = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: vi.fn(async () => [applyFlowerRuntimeCurrentView(seed, live.current()), peer]),
-    loadThread: vi.fn(async (id) => id === peer.thread_id ? liveBootstrap(peer) : { thread: applyFlowerRuntimeCurrentView(seed, live.current()), current: live.current() }), connectLiveStream: live.connect }, { copy });
+    loadThread: vi.fn(async (id) => id === peer.thread_id ? liveBootstrap(peer) : { thread: applyFlowerRuntimeCurrentView(seed, live.current()), current: live.current() }), connectLiveStream: live.connect, ...overrides }, { copy });
   root.style.height = '780px';
   await waitFor(() => Boolean(root.querySelector('[data-thread-id="process"] button')));
   root.querySelector<HTMLButtonElement>('[data-thread-id="process"] button')!.click();
@@ -71,6 +72,125 @@ const hidden = (root: HTMLElement, id: string) => message(root, id).closest('.fl
 afterEach(async () => { document.getSelection()?.removeAllRanges(); await media.emulateMediaPreferences({ reducedMotion: 'no-preference', forcedColors: 'none' }); });
 
 describe('completed turn process disclosure', () => {
+  const eventRow = (root: HTMLElement, id: string) => root.querySelector<HTMLElement>('[data-parent-event="' + id + '"]')!;
+  const eventHidden = (root: HTMLElement, id: string) => eventRow(root, id).closest('.flower-turn-row-viewport')?.getAttribute('aria-hidden') === 'true';
+  it('keeps failed report reads and continuation retries reachable outside collapsed work', async () => {
+    const complete = parentProcessPage();
+    const partial = { ...complete, events: [parentProcessEvents[0]], next_after_event_id: parentProcessEvents[0].id };
+    const read = vi.fn().mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValueOnce(partial).mockRejectedValueOnce(new Error('page offline'))
+      .mockResolvedValueOnce({ ...complete, events: parentProcessEvents.slice(1) });
+    const initial = { ...partial, events: [{ ...parentProcessEvents[0], message: undefined }] };
+    const { root } = await mount(current(true, { parent_events: initial }), undefined, { readParentEvents: read });
+    const recovery = () => root.querySelector<HTMLElement>('.flower-parent-event-reading');
+    await waitFor(() => Boolean(recovery()?.querySelector('button:not(:disabled)')));
+    expect(summary(root)?.getAttribute('aria-expanded')).toBe('false');
+    expect(recovery()?.closest('[inert], [aria-hidden="true"]')).toBeNull();
+    recovery()!.querySelector<HTMLButtonElement>('button')!.click();
+    await waitFor(() => !recovery());
+    const more = root.querySelector<HTMLButtonElement>('.flower-transcript-stack > button.flower-parent-event-action')!;
+    expect(more.disabled).toBe(false);
+    expect(more.closest('[inert], [aria-hidden="true"]')).toBeNull();
+    more.click();
+    await waitFor(() => Boolean(recovery()?.querySelector('button:not(:disabled)')));
+    recovery()!.querySelector<HTMLButtonElement>('button')!.click();
+    await waitFor(() => root.querySelectorAll('[data-parent-event]').length === 11);
+    expect(read.mock.calls[2]).toEqual(read.mock.calls[3]);
+    expect(summary(root)?.textContent).toContain('11 subtask updates');
+    expect(summary(root)?.getAttribute('aria-expanded')).toBe('false');
+    expect(parentProcessEvents.every((event) => eventHidden(root, event.id))).toBe(true);
+    expect(recovery()).toBeNull();
+    expect(more.isConnected).toBe(false);
+    summary(root)!.click();
+    expect(eventHidden(root, 'event-10')).toBe(false);
+  });
+  it('folds all eleven child dynamics with failed work and preserves reports, order and late updates', async () => {
+    const failed = current(true, { last_outcome: 'failed', turns: [turn({ outcome: 'failed', final_item_ids: [], final_boundary_complete: false })], parent_events: parentProcessPage(parentProcessEvents.slice(0, 9)) });
+    const { root, live } = await mount(failed);
+    await waitFor(() => root.querySelectorAll('[data-parent-event]').length === 9);
+    const report = eventRow(root, 'event-0');
+    const body = report.querySelector('[data-parent-event-body]');
+    const full = report.querySelector<HTMLButtonElement>('.flower-parent-event-disclosure')!;
+    full.click();
+    expect(full.getAttribute('aria-expanded')).toBe('true');
+    expect(summary(root)?.getAttribute('aria-expanded')).toBe('true');
+    expect(summary(root)?.textContent).toContain('9 subtask updates');
+    const order = [...root.querySelectorAll('[data-parent-event]')].map((node) => node.getAttribute('data-parent-event'));
+    const final = message(root, 'final-a');
+    summary(root)!.click();
+    await waitFor(() => eventHidden(root, 'event-0'));
+    live.push({ ...failed, view_version: 3, parent_events: parentProcessPage() });
+    await waitFor(() => root.querySelectorAll('[data-parent-event]').length === 11);
+    expect(summary(root)?.textContent).toContain('11 subtask updates');
+    expect(summary(root)?.getAttribute('aria-expanded')).toBe('false');
+    expect(parentProcessEvents.every((event) => eventHidden(root, event.id))).toBe(true);
+    expect(eventRow(root, 'event-0')).toBe(report);
+    expect(report.querySelector('[data-parent-event-body]')).toBe(body);
+    expect(full.getAttribute('aria-expanded')).toBe('true');
+    expect(message(root, 'final-a')).toBe(final);
+    expect(hidden(root, 'final-a')).toBe(false);
+    expect(hidden(root, 'user')).toBe(false);
+    expect(report.closest('[inert]')).not.toBeNull();
+    expect(summary(root)?.getAttribute('aria-controls')).toContain(eventRow(root, 'event-10').closest('.flower-turn-row-viewport')!.id);
+    summary(root)!.click();
+    await waitFor(() => !eventHidden(root, 'event-10'));
+    expect([...root.querySelectorAll('[data-parent-event]')].slice(0, 9).map((node) => node.getAttribute('data-parent-event'))).toEqual(order);
+    expect(full.getAttribute('aria-expanded')).toBe('true');
+    full.focus(); summary(root)!.click();
+    expect(document.activeElement).toBe(summary(root));
+  });
+  it('keeps unresolved admitted actions, unknown effects and unowned events visible under collapsed successful work', async () => {
+    const base = parentProcessEvents[0];
+    const events: FlowerParentEvent[] = [base,
+      { ...base, id: 'input', kind: 'input_required', interaction_id: 'ask', message: undefined },
+      { ...base, id: 'approval', kind: 'approval_required', interaction_id: 'approve', message: undefined },
+      { ...base, id: 'unsafe', kind: 'failed', reason_code: 'effect_outcome_unknown', message: undefined },
+      { ...base, id: 'unowned', parent_turn_id: undefined },
+    ];
+    const { root, live } = await mount(current(true, { parent_events: parentProcessPage(events) }));
+    expect(summary(root)?.getAttribute('aria-expanded')).toBe('false');
+    expect(eventHidden(root, base.id)).toBe(true);
+    for (const id of ['input', 'approval', 'unsafe', 'unowned']) expect(eventHidden(root, id)).toBe(false);
+    live.push(current(true, { view_version: 3, parent_events: parentProcessPage(events.map((event) => event.id === 'input' ? { ...event, resolved: true } : event)) }));
+    await waitFor(() => eventHidden(root, 'input'));
+    expect(eventHidden(root, 'approval')).toBe(false);
+    expect(eventHidden(root, 'unsafe')).toBe(false);
+    expect(summary(root)?.textContent).toContain('2 subtask updates');
+  });
+  it.each(['selection', 'focus', 'pointer', 'keyboard', 'menu', 'reading'] as const)('protects %s before a resolved event becomes foldable', async (protection) => {
+    const pending: FlowerParentEvent = { ...parentProcessEvents[0], id: 'pending', kind: 'input_required', interaction_id: 'ask', message: undefined };
+    const initial = current(true, { parent_events: parentProcessPage([pending]) });
+    const { root, live } = await mount(initial);
+    const row = eventRow(root, pending.id);
+    expect(eventHidden(root, pending.id)).toBe(false);
+    if (protection === 'selection') {
+      (document.activeElement as HTMLElement | null)?.blur();
+      document.getSelection()!.removeAllRanges();
+      const range = document.createRange(); range.selectNodeContents(row); document.getSelection()!.addRange(range);
+      expect(document.getSelection()?.isCollapsed).toBe(false);
+    } else if (protection === 'focus') { row.tabIndex = 0; row.focus(); }
+    else if (protection === 'pointer') row.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    else if (protection === 'keyboard') row.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Enter' }));
+    else if (protection === 'menu') {
+      row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+      const menu = document.createElement('div'); menu.setAttribute('role', 'menu'); root.append(menu);
+    } else root.querySelector('.flower-chat-transcript')!.dispatchEvent(new WheelEvent('wheel', { deltaY: -10, bubbles: true }));
+    live.push(current(true, { view_version: 3, parent_events: parentProcessPage([{ ...pending, resolved: true }]) }));
+    await waitFor(() => summary(root)?.textContent?.includes('1 subtask update') === true);
+    expect(summary(root)?.getAttribute('aria-expanded')).toBe('true');
+    expect(eventHidden(root, pending.id)).toBe(false);
+    expect(row.closest('[inert]')).toBeNull();
+    if (protection === 'focus') expect(document.activeElement).toBe(row);
+    document.getSelection()?.removeAllRanges();
+    root.querySelector('[role="menu"]')?.remove();
+    document.dispatchEvent(new PointerEvent('pointerup'));
+    document.dispatchEvent(new KeyboardEvent('keyup'));
+    summary(root)!.click();
+    expect(eventHidden(root, pending.id)).toBe(true);
+    live.push(current(true, { view_version: 4, parent_events: parentProcessPage([{ ...pending, resolved: true }]) }));
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    expect(summary(root)?.getAttribute('aria-expanded')).toBe('false');
+  });
   it('shows answer actions and time only after canonical final completion', async () => {
     const { root, live } = await mount();
     expect(message(root, 'progress').querySelector('.flower-answer-actions')).toBeNull();
@@ -400,7 +520,7 @@ describe('completed turn process disclosure', () => {
   });
   it('supports reduced motion, forced colors, and a narrow window', async () => {
     await media.emulateMediaPreferences({ reducedMotion: 'reduce', forcedColors: 'active' });
-    const { root } = await mount(current(true));
+    const { root } = await mount(current(true, { parent_events: parentProcessPage() }));
     await page.viewport(420, 900);
     const button = summary(root)!; button.click();
     await waitFor(() => message(root, 'progress').closest('.flower-turn-row-viewport')?.getAttribute('data-state') === 'open');
@@ -433,7 +553,7 @@ describe('completed turn process disclosure', () => {
   });
   it('keeps the disclosure aligned and compact in representative themed layouts', async () => {
     const copy = createLocalizedFlowerSurfaceCopy(createTestI18nHelpers('zh-CN') as unknown as FlowerSurfaceTranslator);
-    const { root } = await mount(current(true), copy);
+    const { root } = await mount(current(true, { parent_events: parentProcessPage() }), copy);
     const themeRoot = document.documentElement;
     const previousStyle = themeRoot.getAttribute('style');
     const previousClass = themeRoot.getAttribute('class');
@@ -476,11 +596,11 @@ describe('completed turn process disclosure', () => {
   });
   it.each(SUPPORTED_LOCALES)('renders localized durations and accessible controls at narrow width in %s', async (locale) => {
     const copy = createLocalizedFlowerSurfaceCopy(createTestI18nHelpers(locale) as unknown as FlowerSurfaceTranslator);
-    const { root } = await mount(current(true), copy);
+    const { root } = await mount(current(true, { parent_events: parentProcessPage() }), copy);
     await page.viewport(420, 900);
     const button = summary(root)!;
     const worked = copy.chat.turnProcess.worked(`${copy.chat.turnProcess.minute(2)} ${copy.chat.turnProcess.second(18)}`);
-    expect(button.textContent).toBe(worked);
+    expect(button.textContent).toBe(worked + ' · ' + copy.chat.turnProcess.subtaskUpdates(11));
     expect(button.getAttribute('aria-label')).toContain(copy.chat.turnProcess.expand);
     button.click();
     await waitFor(() => button.getAttribute('aria-expanded') === 'true');

@@ -23,7 +23,7 @@ export function validateParentEventPage(value: unknown, threadID: string, query?
       || typeof event.kind !== 'string' || !kinds.has(event.kind) || !nonempty(event.received_at) || !Number.isFinite(Date.parse(event.received_at))
       || typeof event.admitted !== 'boolean' || (event.resolved !== undefined && typeof event.resolved !== 'boolean')
       || (event.message !== undefined && typeof event.message !== 'string') || seen.has(event.id as string)) return invalid();
-    if (['reason_code', 'interaction_id'].some(field => event[field] !== undefined && !nonempty(event[field]))) return invalid();
+    if (['parent_turn_id', 'reason_code', 'interaction_id'].some(field => event[field] !== undefined && !nonempty(event[field]))) return invalid();
     if (query?.action === 'read' && event.kind === 'report' && (typeof event.message !== 'string' || !event.message.trim())) return invalid();
     seen.add(event.id as string);
   }

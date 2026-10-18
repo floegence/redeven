@@ -325,11 +325,14 @@ it('shows report-read failures inline without making the compact row expandable'
   expect(row.querySelector('[aria-expanded], .flower-activity-inline-chevron, .flower-activity-inline-details')).toBeNull();
 });
 
-it('keeps accepted report receipts in the child view and locates their canonical parent report', async () => {
+it.each([false, true])('locates the canonical parent report from its accepted child receipt with folded work: %s', async (folded) => {
   await page.viewport(1100, 850);
   const child = subagentSummary({ parent_thread_id: 'parent', thread_id: 'child', task_name: 'Research' });
-  const events = { thread_id: 'parent', events: [{ ...event('receipt-event'), message: 'Verified finding' }], first_event_id: 'receipt-event', last_event_id: 'receipt-event' };
-  const parent = thread({ thread_id: 'parent', subagents: [child], parent_events: events });
+  const events = { thread_id: 'parent', events: [{ ...event('receipt-event'), parent_turn_id: folded ? 'parent-turn' : undefined, message: 'Verified finding' }], first_event_id: 'receipt-event', last_event_id: 'receipt-event' };
+  const parent = thread({ thread_id: 'parent', subagents: [child], parent_events: events, turns: [{
+    turn_id: 'parent-turn', run_id: 'parent-run', started_at: '2026-10-15T23:59:58Z', ended_at: '2026-10-15T23:59:59Z',
+    outcome: 'completed', elapsed_ms: 1000, waiting_ms: 0, work_duration_ms: 1000, final_item_ids: [], final_boundary_complete: false,
+  }] });
   const base = liveBootstrap(parent, 1);
   const childCurrent = { thread_id: 'child', view_version: 1, activity: 'idle' as const, last_outcome: 'completed' as const, items: [{
     id: 'submitted-report', turn_id: 'child-turn', run_id: 'child-run', ordinal: 1, kind: 'tool' as const,
@@ -339,7 +342,13 @@ it('keeps accepted report receipts in the child view and locates their canonical
   const surface = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: async () => [parent], loadThread: async () => ({ ...base, current: { ...base.current, parent_events: events } }),
     loadSubagentDetail: async () => ({ summary: child, current: childCurrent }) }, { focusThreadRequest: { request_id: 'receipt-parent', thread_id: 'parent' } });
   await waitFor(() => Boolean(surface.querySelector('[data-parent-event="receipt-event"]')));
-  surface.querySelector<HTMLButtonElement>('[data-parent-event="receipt-event"] .flower-parent-event-source')!.click();
+  const report = surface.querySelector<HTMLElement>('[data-parent-event="receipt-event"]')!;
+  if (folded) {
+    expect(report.closest('[inert]')).not.toBeNull();
+    surface.querySelector<HTMLButtonElement>('button[aria-controls="flower-subagents-dropdown"]')!.click();
+    await waitFor(() => Boolean(document.querySelector('[data-flower-subagent-row]')));
+    document.querySelector<HTMLButtonElement>('[data-flower-subagent-row]')!.click();
+  } else report.querySelector<HTMLButtonElement>('.flower-parent-event-source')!.click();
   await waitFor(() => Boolean(document.querySelector('[data-flower-activity-item-id="submitted-report"]')));
   const row = document.querySelector('[data-flower-activity-item-id="submitted-report"]')!;
   expect(row.querySelector('.flower-activity-inline-title')?.textContent).toBe('Report to parent task');
@@ -351,4 +360,12 @@ it('keeps accepted report receipts in the child view and locates their canonical
   expect(row.textContent!.split('Verified finding')).toHaveLength(2);
   view.click();
   await waitFor(() => surface.querySelector('[data-parent-event="receipt-event"] .flower-parent-event-disclosure')?.getAttribute('aria-expanded') === 'true');
+  if (folded) {
+    await waitFor(() => report.closest('.flower-turn-row-viewport')?.getAttribute('data-state') === 'open');
+    expect(surface.querySelector('.flower-turn-summary-button')?.getAttribute('aria-expanded')).toBe('true');
+    expect(report.closest('[inert], [aria-hidden="true"]')).toBeNull();
+    expect(report.getBoundingClientRect().height).toBeGreaterThan(0);
+    expect(document.activeElement).toBe(report.querySelector('.flower-parent-event-disclosure'));
+    expect(document.querySelector('[data-flower-subagent-detail="open"]')).toBeNull();
+  }
 });

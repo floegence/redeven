@@ -27,6 +27,12 @@ export function createFlowerTurnDisclosureStore() {
       setRevision((value) => value + 1);
       return !expanded && Boolean(previous);
     },
+    retainExpanded(key: string) {
+      const previous = choices.get(key);
+      if (!previous?.settled || previous.expanded) return;
+      choices.set(key, { settled: true, expanded: true });
+      setRevision((value) => value + 1);
+    },
     toggle(key: string, policy: FlowerTurnDisclosurePolicy) {
       if (policy === 'none') return;
       const expanded = !(choices.get(key)?.expanded ?? policy !== 'automatic');

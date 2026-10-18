@@ -615,7 +615,14 @@
       },
       "failed": "Flower could not complete this turn.",
       "cancelled": "Stopped",
-      "interrupted": "This turn was interrupted."
+      "interrupted": "This turn was interrupted.",
+      "subtaskUpdates": {
+        "kind": "plural",
+        "forms": {
+          "one": "{count} subtask update",
+          "other": "{count} subtask updates"
+        }
+      }
     },
     "modelUnavailableMissingKeys": "This model provider has no credentials configured. Add credentials in settings.",
     "modelUnavailableProviderDisabled": "This model provider is disabled. Enable it in settings or select another model.",

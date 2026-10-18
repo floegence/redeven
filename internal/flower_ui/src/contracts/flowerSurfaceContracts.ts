@@ -943,7 +943,7 @@ export type FlowerRuntimeTurn = Readonly<{
 }>;
 
 export type FlowerParentEvent = Readonly<{
-  id: string; parent_thread_id: string; source_thread_id: string; source_turn_id: string; source_run_id: string;
+  id: string; parent_thread_id: string; parent_turn_id?: string; source_thread_id: string; source_turn_id: string; source_run_id: string;
   source_entry_id: string; kind: 'report' | 'completed' | 'failed' | 'cancelled' | 'interrupted' | 'timed_out' | 'input_required' | 'approval_required';
   reason_code?: string; interaction_id?: string; message?: string; received_at: string; admitted: boolean; resolved?: boolean;
 }>;

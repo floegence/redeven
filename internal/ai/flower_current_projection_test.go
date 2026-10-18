@@ -76,6 +76,26 @@ func TestFlowerCurrentEnvelopesUseThePublicProjection(t *testing.T) {
 	}
 }
 
+func TestFlowerCurrentPreservesCanonicalParentEventTurnOwnership(t *testing.T) {
+	current := flruntime.ThreadView{ThreadID: "fork", ParentEvents: &flruntime.ParentEventPage{
+		ThreadID: "fork", FirstEventID: "event", LastEventID: "event",
+		Events: []flruntime.ParentEvent{{ID: "event", ParentThreadID: "original", ParentTurnID: "original-turn", SourceThreadID: "child", SourceTurnID: "child-turn", SourceRunID: "child-run", SourceEntryID: "source-entry", Kind: flruntime.ParentEventCompleted}},
+	}}
+	encoded, err := flowerCurrentJSON(current)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wire struct {
+		ParentEvents flruntime.ParentEventPage `json:"parent_events"`
+	}
+	if err := json.Unmarshal(encoded, &wire); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(wire.ParentEvents, *current.ParentEvents) {
+		t.Fatalf("canonical ownership changed: %s", encoded)
+	}
+}
+
 func TestFlowerCurrentEnvelopesPreserveExactIntegerFields(t *testing.T) {
 	const revision = 9_007_199_254_740_993
 	current := flruntime.ThreadView{ThreadID: "thread-exact-revision", ViewVersion: revision}

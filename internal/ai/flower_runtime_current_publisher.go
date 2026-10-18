@@ -304,6 +304,7 @@ func flowerRuntimeCurrentBoundaryKey(current flruntime.ThreadView) string {
 	if current.ParentEvents != nil {
 		for _, event := range current.ParentEvents.Events {
 			builder.add(event.ID)
+			builder.add(event.ParentTurnID.String())
 			builder.addBool(event.Admitted)
 			builder.addBool(event.Resolved)
 		}
