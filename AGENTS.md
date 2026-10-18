@@ -1086,13 +1086,16 @@ Floret owns request input projection and output fitting. Pass model capability
 separately from explicit request limits; never turn model maximum output into
 fixed input reservation. Gateways must declare client or server output control,
 and refit frozen input without repeated attachment reads or authorization.
-Flower maps the published Floret ReconcileContextStatus result. The last valid
-confirmed sample owns the displayed total, category estimates and recent cache
-rate; newer estimates only drive current-request pressure. Category estimates
-retain their original units and values, with a separate unattributed remainder.
-Never scale categories or derive provider totals locally. Floret alone migrates
-its opaque storage, including the schema 21 to 22 accounting boundary.
-
+Flower maps published Floret v7.60.3 ReconcileContextStatus results. One last
+confirmed frozen request owns native input tokens, Unicode code-point character
+categories, and recent cache rate. New estimates only drive current-request
+pressure. Characters describe visible decoded input and use their own total as
+the percentage denominator; never compare, convert, scale, or subtract them
+against tokens. Missing historical characters remain unavailable until a new
+confirmed request. Native input is last request input, not an independently
+measured current window or guaranteed remaining capacity. Floret alone
+qualifies pressure anchors, normalizes usage, and migrates its opaque storage,
+including schema 23 to 24. No host accounting ledger or legacy token fallback.
 
 Redeven consumes the published `github.com/floegence/floret/v7` typed thread runtime. Redeven owns product authorization, attachment resolution, effect execution, provider configuration, read acknowledgement, and UI mapping. Floret owns each thread current view, canonical journal, queue, interactions, effect-attempt identity, immutable provider checkpoints, context lineage, and restart recovery.
 

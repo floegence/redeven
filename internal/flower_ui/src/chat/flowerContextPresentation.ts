@@ -12,81 +12,71 @@ export function formatContextAmount(value: number): string {
 }
 
 export function buildFlowerContextWindow(usage: FlowerContextUsage) {
-  const sample = usage.confirmed ?? usage.estimate;
+  const sample = usage.confirmed;
   const input = sample?.input_tokens;
-  const capacity = sample?.context_window_tokens;
-  if (!sample?.available || input === undefined || !Number.isFinite(input) || input < 0
-    || capacity === undefined || !Number.isFinite(capacity) || capacity <= 0) return null;
-  const used = Math.min(input, capacity);
-  return {
-    input,
-    capacity,
-    estimated: !sample.measured,
-    segments: [
-      { key: 'input' as const, tokens: input },
-      { key: 'freeSpace' as const, tokens: capacity - used },
-    ].map((segment) => ({ ...segment, share: Math.min(1, segment.tokens / capacity) * 100 })),
-  };
+  if (!sample?.available || !sample.measured || input === undefined || !Number.isSafeInteger(input) || input < 0) return null;
+  const capacity = sample.context_window_tokens && sample.context_window_tokens > 0 ? sample.context_window_tokens : null;
+  return { input, capacity, share: capacity ? Math.min(1, input / capacity) * 100 : 0 };
 }
 
 export const FLOWER_CONTEXT_SOURCES = [
   'system_prompt', 'system_tools', 'mcp_tools', 'provider_tools', 'messages',
   'tool_outputs', 'skills', 'rule_files', 'environment', 'summary', 'reasoning',
-  'attachments', 'protocol_framing', 'context_framing', 'unattributed_tools', 'unattributed_context', 'unattributed_usage',
+  'hosted_context', 'context_framing', 'unattributed_tools', 'unattributed_context', 'unlabelled',
 ] as const;
 export type FlowerContextSource = typeof FLOWER_CONTEXT_SOURCES[number];
-export type FlowerContextSourceRow = { key: FlowerContextSource; tokens: number; share: number;
-  items: { key: string; label?: string; category?: FlowerContextCategory; tokens: number; share: number }[] };
+export type FlowerContextSourceRow = { key: FlowerContextSource; characters: number; share: number;
+  items: { key: string; label?: string; category?: FlowerContextCategory; characters: number; share: number }[] };
 
-// Attribution always belongs to the displayed request. Current snapshot text
-// and newer projected requests cannot be used to allocate confirmed usage.
+// Only the confirmed frozen request owns visible-input distribution. Characters
+// never participate in token accounting, pressure, or native-usage reconciliation.
 export function buildFlowerContextComposition(usage: FlowerContextUsage) {
-  const sample = usage.confirmed ?? usage.estimate;
-  const breakdown = sample?.breakdown;
-  if (!sample?.available || !sample.breakdown_available || !breakdown?.source) return null;
+  const sample = usage.confirmed;
+  const breakdown = sample?.characters;
+  if (!sample?.available || !sample.measured || !sample.characters_available || !breakdown) return null;
   const rows = new Map<FlowerContextSource, FlowerContextSourceRow>();
-  const add = (key: FlowerContextSource, tokens: number, item?: Omit<FlowerContextSourceRow['items'][number], 'share'>) => {
-    if (!Number.isSafeInteger(tokens) || tokens <= 0) return;
-    const row = rows.get(key) ?? { key, tokens: 0, share: 0, items: [] };
-    row.tokens += tokens;
+  const add = (key: FlowerContextSource, characters: number, item?: Omit<FlowerContextSourceRow['items'][number], 'share'>) => {
+    if (characters <= 0) return;
+    const row = rows.get(key) ?? { key, characters: 0, share: 0, items: [] };
+    row.characters += characters;
     if (item) row.items.push({ ...item, share: 0 });
     rows.set(key, row);
   };
-  add('system_prompt', breakdown.system_tokens ?? 0);
-  for (const category of ['user_tokens', 'assistant_tokens', 'tool_call_tokens'] as const) {
-    const tokens = breakdown[category] ?? 0;
-    add('messages', tokens, { key: category, category, tokens });
-  }
-  add('tool_outputs', breakdown.tool_result_tokens ?? 0);
-  add('summary', breakdown.compaction_tokens ?? 0);
-  add('reasoning', breakdown.reasoning_tokens ?? 0);
-  add('attachments', breakdown.attachment_tokens ?? 0);
-  add('protocol_framing', breakdown.framing_tokens ?? 0);
-  if (breakdown.details) {
-    for (const item of breakdown.details.items) {
-      if (item.category === 'tool_definition') {
-        const source = item.source === 'mcp' ? 'mcp_tools'
-          : item.source === 'provider' ? 'provider_tools'
-          : item.source === 'builtin' || item.source === 'floret' ? 'system_tools' : 'unattributed_tools';
-        add(source, item.tokens, { key: JSON.stringify([item.key, item.source, item.namespace]),
-          label: item.namespace ? item.namespace + ' · ' + item.key : item.key, tokens: item.tokens });
-      } else {
-        const source = item.key === 'skills' ? 'skills' : item.key === 'repository_rules' ? 'rule_files'
-          : ['execution_environment', 'local_time', 'repository', 'delegation'].includes(item.key) ? 'environment' : item.key ? 'unattributed_context' : 'context_framing';
-        add(source, item.tokens, { key: item.key, label: item.key || undefined, tokens: item.tokens });
+  for (const category of breakdown.categories) {
+    const characters = category.characters;
+    switch (category.category) {
+      case 'tool_definition':
+      case 'model_context': {
+        if (!category.details?.length) {
+          add(category.category === 'tool_definition' ? 'unattributed_tools' : 'unattributed_context', characters);
+          break;
+        }
+        for (const item of category.details) {
+          const source = category.category === 'tool_definition'
+            ? item.source === 'mcp' ? 'mcp_tools' : item.source === 'provider' ? 'provider_tools'
+              : item.source === 'builtin' || item.source === 'floret' ? 'system_tools' : 'unattributed_tools'
+            : item.key === 'skills' ? 'skills' : item.key === 'repository_rules' ? 'rule_files'
+              : ['execution_environment', 'local_time', 'repository', 'delegation'].includes(item.key) ? 'environment'
+                : item.key ? 'unattributed_context' : 'context_framing';
+          add(source, item.characters, { key: category.category === 'model_context' ? item.key : JSON.stringify([item.key, item.source, item.namespace]),
+            label: item.namespace ? item.namespace + ' · ' + item.key : item.key, characters: item.characters });
+        }
+        break;
+      }
+      case 'user': case 'assistant': case 'tool_call':
+        add('messages', characters, { key: category.category, category: category.category, characters }); break;
+      default: {
+        const source = { system: 'system_prompt', tool_result: 'tool_outputs', compaction: 'summary', reasoning: 'reasoning', hosted_context: 'hosted_context', unlabelled: 'unlabelled' } as const;
+        add(source[category.category], characters);
       }
     }
-  } else {
-    add('unattributed_tools', breakdown.tool_definition_tokens ?? 0);
-    add('unattributed_context', breakdown.model_context_tokens ?? 0);
   }
-  add('unattributed_usage', sample.unattributed_tokens ?? 0);
-  const total = sample.input_tokens ?? 0;
-  const ordered = [...rows.values()].sort((a, b) => b.tokens - a.tokens || FLOWER_CONTEXT_SOURCES.indexOf(a.key) - FLOWER_CONTEXT_SOURCES.indexOf(b.key));
+  const total = breakdown.total_characters;
+  const ordered = [...rows.values()].sort((a, b) => b.characters - a.characters || FLOWER_CONTEXT_SOURCES.indexOf(a.key) - FLOWER_CONTEXT_SOURCES.indexOf(b.key));
   for (const row of ordered) {
-    row.share = total > 0 ? row.tokens / total * 100 : 0;
-    row.items.sort((a, b) => b.tokens - a.tokens || a.key.localeCompare(b.key));
-    for (const item of row.items) item.share = row.tokens > 0 ? item.tokens / row.tokens * 100 : 0;
+    row.share = total > 0 ? row.characters / total * 100 : 0;
+    row.items.sort((a, b) => b.characters - a.characters || a.key.localeCompare(b.key));
+    for (const item of row.items) item.share = total > 0 ? item.characters / total * 100 : 0;
   }
   return { total, rows: ordered };
 }
@@ -114,7 +104,7 @@ export function formatContextTokenCount(tokens: number | undefined): string {
 }
 
 export function contextUsageRatio(usage: FlowerContextSample): number | null {
-  if (!usage.available) return null;
+  if (!usage.available || !usage.measured) return null;
   const input = Number(usage.input_tokens);
   const windowTokens = Number(usage.context_window_tokens ?? 0);
   if (!Number.isFinite(input) || !Number.isFinite(windowTokens) || input < 0 || windowTokens <= 0) return null;
@@ -168,9 +158,7 @@ export function buildFlowerComposerContextIndicatorView(
   copy: FlowerSurfaceCopy,
 ): FlowerComposerContextIndicatorView {
   const labels = copy.chat.contextIndicator ?? DEFAULT_FLOWER_SURFACE_COPY.chat.contextIndicator;
-  // Native usage remains preferred. Compaction invalidates that sample, so its
-  // installed estimate is the current measurement until the next normal request.
-  const sample = usage.confirmed ?? usage.estimate;
+  const sample = usage.confirmed;
   const ratio = sample ? contextUsageRatio(sample) : null;
   const progressValue = ratio === null ? null : Math.round(ratio * 100);
   const ratioValue = progressValue === null ? labels.unknownPercent : labels.percent(progressValue);
@@ -185,13 +173,13 @@ export function buildFlowerComposerContextIndicatorView(
   })();
   const warning = pressureWarning && pressure !== sample ? labels.currentRequest + ': ' + pressureWarning : pressureWarning;
   const cacheHitValue = formatCacheHitPercent(usage.thread_usage, labels.unknownPercent);
-  const recentCacheHitValue = formatCacheHitPercent(usage.recent_request_usage, labels.unknownPercent);
-  const accessibleRecentCache = formatCacheHitPercent(usage.recent_request_usage, labels.unavailable);
+  const recentCacheHitValue = formatCacheHitPercent(sample?.available ? usage.recent_request_usage : undefined, labels.unknownPercent);
+  const accessibleRecentCache = formatCacheHitPercent(sample?.available ? usage.recent_request_usage : undefined, labels.unavailable);
   const accessibleUsage = progressValue === null ? labels.unavailable : ratioValue;
   const accessibleCache = formatCacheHitPercent(usage.thread_usage, labels.unavailable);
   return {
     ariaLabel: labels.label,
-    ariaValueText: `${labels.label}: ${sample?.available && sample.input_tokens !== undefined ? (sample.measured ? "= " + labels.measured : "≈ " + labels.estimated) + ", " + (sample.measured ? labels.lastRequest : labels.currentRequest) + ", " : ""}${accessibleUsage}, ${labels.recentCacheHitLabel}: ${accessibleRecentCache}, ${labels.cacheHitLabel}: ${accessibleCache}${warning ? `, ${warning}` : ''}`,
+    ariaValueText: labels.label + ': ' + (sample?.available && sample.measured && sample.input_tokens !== undefined ? '= ' + labels.tokens(String(sample.input_tokens)) + ', ' + labels.measured + ', ' + labels.lastRequest + ', ' : '') + accessibleUsage + ', ' + labels.recentCacheHitLabel + ': ' + accessibleRecentCache + ', ' + labels.cacheHitLabel + ': ' + accessibleCache + (warning ? ', ' + warning : ''),
     ratioValue,
     tone: usage.confirmed ? contextPressureTone(pressure?.pressure_status ?? 'estimated') : 'estimated',
     ratio,

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /* global document */
-// Qualify context accounting through a task-owned production Runtime and UI.
+// Deterministic arithmetic and interaction qualification through an isolated Runtime.
+// Synthetic usage is not evidence of provider token accuracy.
 import assert from 'node:assert/strict';
 import { spawn, execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -25,11 +26,12 @@ const provider = http.createServer(async (request, response) => {
   try {
     if (request.url === '/v1/models') { response.end(JSON.stringify({ data: [{ id: 'gpt-5-mini' }] })); return; }
     const chunks = []; for await (const chunk of request) chunks.push(chunk);
-    const input = JSON.parse(Buffer.concat(chunks));
+    const wire = Buffer.concat(chunks);
+    const input = JSON.parse(wire);
     const main = input.tools?.length > 0;
     const latest = JSON.stringify([...(input.input ?? [])].reverse().find(item => item.role === 'user' && JSON.stringify(item).includes('QUALIFY_')) ?? {});
     const index = report.requests.length + 1;
-    report.requests.push({ index, main, latest: latest.slice(0, 160) });
+    report.requests.push({ index, main, latest: latest.slice(0, 160), fingerprint: 'sha256:' + createHash('sha256').update(wire).digest('hex'), characters: independentCharacters(input) });
     if (main && latest.includes('QUALIFY_FAIL') && !failedOnce) {
       failedOnce = true; response.writeHead(401, { 'Content-Type': 'application/json' });
       response.end(JSON.stringify({ error: { message: 'Qualification authentication failure', type: 'authentication_error', code: 'invalid_api_key' } })); return;
@@ -51,6 +53,27 @@ const provider = http.createServer(async (request, response) => {
     response.end('data: [DONE]\n\n');
   } catch (error) { report.provider_error = error.stack; if (!response.headersSent) response.writeHead(500); response.end(); }
 });
+// Independent decoded Responses content oracle, unrelated to usage or budgets.
+function independentCharacters(body) {
+  let count = 0;
+  const text = value => { if (typeof value === 'string') count += [...value].length; };
+  const canonical = value => Array.isArray(value) ? value.map(canonical) : value && typeof value === 'object' ? Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key])])) : value;
+  const json = value => { if (value !== undefined && value !== null) text(JSON.stringify(canonical(value))); };
+  const parts = value => { if (typeof value === 'string') text(value); else if (Array.isArray(value)) for (const part of value) text(part.text); };
+  text(body.instructions);
+  for (const item of body.input ?? []) {
+    switch (item.type) {
+      case 'function_call': text(item.name); try { json(JSON.parse(item.arguments)); } catch { text(item.arguments); } break;
+      case 'function_call_output': parts(item.output); break;
+      case 'reasoning': parts(item.summary); parts(item.content); break;
+      case 'web_search_call': json(item.action); break;
+      default: parts(item.content);
+    }
+  }
+  for (const tool of body.tools ?? []) json(tool);
+  json(body.text?.format);
+  return count;
+}
 async function until(read, label, timeout = 60000) {
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) {
@@ -113,8 +136,12 @@ try {
   const route = '/_redeven_proxy/api/ai/threads/' + id;
   const detail = await until(async () => { const d = await api(route); return d.current.activity === 'idle' && d.current.last_outcome === 'completed' ? d : null; }, 'first confirmed request');
   const usage = detail.context_usage ?? detail.thread.context_usage; assert(usage, JSON.stringify(detail).slice(0, 600));
-  const sample = usage.confirmed; assert(sample?.available && sample.measured && sample.breakdown_available, JSON.stringify(usage));
-  assert.equal(sample.input_tokens, 90000); assert(sample.unattributed_tokens > 0);
+  const sample = usage.confirmed; assert(sample?.available && sample.measured && sample.characters_available, JSON.stringify(usage));
+  assert.equal(sample.input_tokens, 90000); assert(sample.characters && sample.characters.total_characters > 0);
+  const captured = report.requests.find(request => request.fingerprint === sample.payload_fingerprint);
+  assert(captured, "confirmed sample does not match a sent body");
+  assert.equal(sample.characters.total_characters, captured.characters);
+  assert.equal(sample.characters.categories.reduce((sum, item) => sum + item.characters, 0), captured.characters);
   assert.equal(usage.recent_request_usage.cache_read_tokens, 18000);
   report.confirmed = sample;
   const trigger = canvas.locator('.tessiven-flower-output .flower-composer-context-progress');
@@ -128,7 +155,8 @@ try {
   };
   await openPanel();
   assert((await panel.locator('.flower-context-total').innerText()).includes('= 90k'));
-  assert((await panel.locator('[data-category="unattributed_usage"]').innerText()).includes('≈'));
+  assert((await panel.locator('.flower-context-composition-heading').innerText()).includes('chars'));
+  assert.equal(await panel.locator('[data-category="unattributed_usage"]').count(), 0);
   assert.equal(await panel.locator('.flower-context-cache-stats strong').first().innerText(), '20%');
   const categories = await panel.locator('.flower-context-categories').innerText();
   await until(() => panel.evaluate(element => element === document.activeElement), 'mouse activation focus');

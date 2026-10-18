@@ -36,10 +36,10 @@ describe('flower context presentation', () => {
       pressure_status: 'near_threshold',
     }), DEFAULT_FLOWER_SURFACE_COPY);
     expect(view).toMatchObject({
-      ariaLabel: 'Context window', ratioValue: '91%',
+      ariaLabel: 'Request input', ratioValue: '91%',
       cacheHitLabel: 'Session cache hit rate', cacheHitValue: '—', tone: 'warning',
       ratio: 0.91, progressValue: 91, warning: 'Near limit',
-      ariaValueText: 'Context window: = Measured, Last request, 91%, Latest request cache hit rate: Not available, Session cache hit rate: Not available, Near limit',
+      ariaValueText: 'Request input: = 182000 tokens, Measured, Last request, 91%, Latest request cache hit rate: Not available, Session cache hit rate: Not available, Near limit',
     });
   });
 
@@ -50,7 +50,7 @@ describe('flower context presentation', () => {
     expect(unknown.progressValue).toBeNull();
     expect(unknown.ratioValue).toBe('—');
     expect(unknown.warning).toBe('');
-    expect(unknown.ariaValueText).toBe('Context window: Not available, Latest request cache hit rate: Not available, Session cache hit rate: Not available');
+    expect(unknown.ariaValueText).toBe('Request input: Not available, Latest request cache hit rate: Not available, Session cache hit rate: Not available');
   });
 
   it('localizes tooltip percentages and accessible usage', () => {
@@ -59,7 +59,7 @@ describe('flower context presentation', () => {
     } };
     const view = buildFlowerComposerContextIndicatorView(usage({ input_tokens: 72000, context_window_tokens: 100000 }), copy);
     expect(view.ratioValue).toBe('72% 已用');
-    expect(view.ariaValueText).toBe('Context window: = Measured, Last request, 72% 已用, Latest request cache hit rate: Not available, Session cache hit rate: Not available');
+    expect(view.ariaValueText).toBe('Request input: = 72000 tokens, Measured, Last request, 72% 已用, Latest request cache hit rate: Not available, Session cache hit rate: Not available');
   });
 
   it('calculates the whole-conversation cache hit rate from disjoint input buckets', () => {
@@ -107,11 +107,11 @@ describe('flower context presentation', () => {
     }).thread_usage, 'Not available')).toBe('Not available');
   });
 
-  it('prefers confirmed usage and shows the installed estimate after invalidation', () => {
+  it('shows confirmed usage and waits for another confirmation after invalidation', () => {
     const confirmed: FlowerContextSample = { available: true, measured: true, phase: 'provider_usage', pressure_status: 'stable', updated_at_ms: 1, input_tokens: 71872, context_window_tokens: 950000 };
     const estimate: FlowerContextSample = { ...confirmed, phase: 'projected_request', input_tokens: 291336, updated_at_ms: 2 };
     const build = (snapshot: FlowerContextUsage) => buildFlowerComposerContextIndicatorView(snapshot, DEFAULT_FLOWER_SURFACE_COPY);
-    expect(build({ estimate }).progressValue).toBe(31);
+    expect(build({ estimate }).progressValue).toBeNull();
     const running = build({ confirmed, estimate });
     expect(running.ratioValue).toBe('8%');
     expect(running.warning).toBe('');
@@ -123,7 +123,7 @@ describe('flower context presentation', () => {
     expect(risk.warning).toBe('Current request: At limit');
     // Canonical invalidation clears old measurements on compaction/model changes.
     expect(build({}).progressValue).toBeNull();
-    expect(build({ estimate: { ...estimate, input_tokens: 1000, context_window_tokens: 100000 } })).toMatchObject({ progressValue: 1, tone: 'estimated' });
+    expect(build({ estimate: { ...estimate, input_tokens: 1000, context_window_tokens: 100000 } })).toMatchObject({ progressValue: null, tone: 'estimated' });
     expect(build({ confirmed: { ...confirmed, input_tokens: 1000, context_window_tokens: 100000 } }).ratioValue).toBe('1%');
   });
 
@@ -178,48 +178,35 @@ describe('flower context presentation', () => {
 });
 
  it('shows distinct latest and cumulative rates through the same formatter', () => {
-  const view=buildFlowerComposerContextIndicatorView({recent_request_usage:{input_tokens:30,output_tokens:5,cache_read_tokens:60,cache_write_tokens:10},thread_usage:{input_tokens:80,output_tokens:20,cache_read_tokens:60,cache_write_tokens:10}},DEFAULT_FLOWER_SURFACE_COPY);
+  const view=buildFlowerComposerContextIndicatorView({confirmed:{available:true,measured:true,phase:'provider_usage',pressure_status:'stable',input_tokens:100,updated_at_ms:1},recent_request_usage:{input_tokens:30,output_tokens:5,cache_read_tokens:60,cache_write_tokens:10},thread_usage:{input_tokens:80,output_tokens:20,cache_read_tokens:60,cache_write_tokens:10}},DEFAULT_FLOWER_SURFACE_COPY);
   expect(view.recentCacheHitValue).toBe('60%');expect(view.cacheHitValue).toBe('40%');
   expect(view.ariaValueText).toContain('Latest request cache hit rate: 60%');
-  expect(buildFlowerComposerContextIndicatorView({recent_request_usage:{input_tokens:100,output_tokens:1,cache_read_tokens:0,cache_write_tokens:0}},DEFAULT_FLOWER_SURFACE_COPY).recentCacheHitValue).toBe('0%');
+  expect(buildFlowerComposerContextIndicatorView({confirmed:{available:true,measured:true,phase:'provider_usage',pressure_status:'stable',input_tokens:100,updated_at_ms:1},recent_request_usage:{input_tokens:100,output_tokens:1,cache_read_tokens:0,cache_write_tokens:0}},DEFAULT_FLOWER_SURFACE_COPY).recentCacheHitValue).toBe('0%');
  });
 
 describe('request source attribution', () => {
   it('groups released category values without scaling parents or children', () => {
-    const confirmed: FlowerContextSample = { available:true, measured:true, breakdown_available:true, unattributed_tokens:50,
+    const confirmed: FlowerContextSample = { available:true, measured:true, characters_available:true,
       phase:'provider_usage', pressure_status:'stable', updated_at_ms:1, input_tokens:1100,
-      breakdown: { source:'prepared_content_v4', quality:'token_estimate', tokenizer:'proxy_bpe', attribution_coverage:'complete',
-        system_tokens:100,tool_definition_tokens:600,model_context_tokens:240,
-        user_tokens:30,assistant_tokens:20,tool_call_tokens:10,tool_result_tokens:50,
-        details:{items:[
-          {category:'tool_definition',key:'opaque',source:'mcp',namespace:'docs',tokens:300},
-          {category:'tool_definition',key:'terminal.exec',source:'builtin',tokens:200},
-          {category:'tool_definition',key:'web_search',source:'provider',tokens:100},
-          {category:'model_context',key:'skills',tokens:100},
-          {category:'model_context',key:'repository_rules',tokens:70},
-          {category:'model_context',key:'execution_environment',tokens:40},
-          {category:'model_context',key:'',tokens:30},
-        ]},
-      },
+      characters: { source: 'prepared_characters_v1', unit: 'unicode_code_points', total_characters: (100)+(600)+(240)+(30)+(20)+(10)+(50), categories: [{ category: 'system', characters: 100 },{ category: 'tool_definition', characters: 600, details: [{ key:'opaque',source:'mcp',namespace:'docs',characters:300 },{ key:'terminal.exec',source:'builtin',characters:200 },{ key:'web_search',source:'provider',characters:100 }] },{ category: 'model_context', characters: 240, details: [{ key:'skills',characters:100 },{ key:'repository_rules',characters:70 },{ key:'execution_environment',characters:40 },{ key:'',characters:30 }] },{ category: 'user', characters: 30 },{ category: 'assistant', characters: 20 },{ category: 'tool_call', characters: 10 },{ category: 'tool_result', characters: 50 }] },
     };
     const result = buildFlowerContextComposition({confirmed})!;
     const rows = new Map(result.rows.map(row => [row.key,row]));
-    expect(rows.get('mcp_tools')).toMatchObject({tokens:300,items:[{label:'docs · opaque',tokens:300}]});
-    expect(rows.get('system_tools')?.tokens).toBe(200);
-    expect(rows.get('provider_tools')?.tokens).toBe(100);
-    expect(rows.get('messages')?.tokens).toBe(60);
-    expect(rows.get('skills')?.tokens).toBe(100);
-    expect(rows.get('rule_files')?.tokens).toBe(70);
-    expect(rows.get('environment')?.tokens).toBe(40);
-    expect(rows.get('context_framing')?.tokens).toBe(30);
-    expect(rows.get('unattributed_usage')?.tokens).toBe(50);
-    expect(result.rows.reduce((sum,row)=>sum+row.tokens,0)).toBe(1100);
+    expect(rows.get('mcp_tools')).toMatchObject({characters:300,items:[{label:'docs · opaque',characters:300}]});
+    expect(rows.get('system_tools')?.characters).toBe(200);
+    expect(rows.get('provider_tools')?.characters).toBe(100);
+    expect(rows.get('messages')?.characters).toBe(60);
+    expect(rows.get('skills')?.characters).toBe(100);
+    expect(rows.get('rule_files')?.characters).toBe(70);
+    expect(rows.get('environment')).toMatchObject({characters:40,items:[{key:'execution_environment',characters:40}]});
+    expect(rows.get('context_framing')?.characters).toBe(30);
+    expect(result.rows.reduce((sum,row)=>sum+row.characters,0)).toBe(1050);
     expect(result.rows.reduce((sum,row)=>sum+row.share,0)).toBeCloseTo(100);
   });
   it('only renders upstream-approved attribution and never borrows from a newer request', () => {
     const base: FlowerContextSample = {available:true,measured:true,phase:'provider_usage',pressure_status:'stable',updated_at_ms:1,input_tokens:100};
-    const estimate = {...base,breakdown_available:true,breakdown:{source:'prepared_content_v4',user_tokens:100}};
+    const estimate: FlowerContextSample = {...base,characters_available:true,characters: { source: 'prepared_characters_v1', unit: 'unicode_code_points', total_characters: (100), categories: [{ category: 'user', characters: 100 }] }};
     expect(buildFlowerContextComposition({confirmed:base,estimate})).toBeNull();
-    expect(buildFlowerContextComposition({confirmed:{...base,breakdown_available:false,breakdown:{source:'legacy',user_tokens:100}}})).toBeNull();
+    expect(buildFlowerContextComposition({confirmed:{...base,characters_available:false,characters: undefined}})).toBeNull();
   });
 });

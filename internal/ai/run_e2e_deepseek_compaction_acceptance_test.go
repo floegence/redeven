@@ -316,17 +316,22 @@ func saveCompactionQualificationJSON(t *testing.T, path string, value any) {
 func assertQualificationContextAttribution(t *testing.T, detail *FlowerThreadDetail) {
 	t.Helper()
 	usage := detail.Thread.ContextUsage
-	if usage == nil || usage.Confirmed == nil || usage.Confirmed.Breakdown == nil {
+	if usage == nil || usage.Confirmed == nil || usage.Confirmed.Characters == nil {
 		t.Fatal("confirmed distribution unavailable")
 	}
-	b := usage.Confirmed.Breakdown
-	if (b.Quality != "token_estimate" && b.Quality != "relative_weight") || b.Tokenizer != "deepseek_v4" || b.Details == nil {
+	b := usage.Confirmed.Characters
+	if b.Source != "prepared_characters_v1" || b.Unit != "unicode_code_points" {
 		t.Fatalf("unexpected distribution quality: %+v", b)
 	}
 	keys := map[string]bool{}
-	for _, item := range b.Details.Items {
-		if item.Category == "model_context" && item.Tokens > 0 {
-			keys[item.Key] = true
+	for _, category := range b.Categories {
+		if category.Category != "model_context" {
+			continue
+		}
+		for _, item := range category.Details {
+			if item.Characters > 0 {
+				keys[item.Key] = true
+			}
 		}
 	}
 	for _, key := range []string{"skills", "repository_rules", "execution_environment", "local_time"} {
@@ -386,7 +391,7 @@ func TestRecordedDeepSeekContextAttribution(t *testing.T) {
 				}
 				assertOllamaContextRecall(t, detail, "COMPACTION_FACT_9C47_"+scenario)
 			}
-			t.Logf("recorded scenario=%s quality=%s native_before=%d native_after=%d sources=verified", scenario, detail.Thread.ContextUsage.Confirmed.Breakdown.Quality, report.Before, report.After)
+			t.Logf("recorded scenario=%s quality=%s native_before=%d native_after=%d sources=verified", scenario, detail.Thread.ContextUsage.Confirmed.Characters.Source, report.Before, report.After)
 		})
 	}
 }

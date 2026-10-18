@@ -1947,3 +1947,12 @@ text coverage. Document relative-only, historical and unavailable states in
 samples, real tasks, the corrected compaction oracle and retained failures.
 
 - 2026-10-18: Consume Floret v7.56.0 scoped parent event pages; preserve inherited recipients, local report recovery and fork creation identity. Register contract, recovery and real Service/browser regression in Flower qualification.
+
+## 2026-10-18 — Native tokens and visible input characters
+
+Consume published Floret v7.60.0. Separate native last-request input from
+Unicode code-point categories; retain one confirmed request for overview,
+characters and recent cache. Remove token residual/scaling and unused telemetry
+paths. Qualify actual frozen bodies independently, real official-account calls,
+Runtime restart, and compact-panel recovery. See the
+[qualification record](operations/flower-context-distribution-qualification.md).

@@ -108,6 +108,18 @@ func TestProviderPreparationFreezesDispatchedWireAndEstimate(t *testing.T) {
 			if !bytes.Equal(raw, actual) || prepared.RenderedPayloadFingerprint() != fmt.Sprintf("sha256:%x", sha256.Sum256(actual)) {
 				t.Fatal("dispatched bytes differ from prepared fingerprint")
 			}
+			if tc.protocol == "openai-responses" {
+				if estimate.Characters == nil {
+					t.Fatal("frozen character attribution missing")
+				}
+				if got := independentResponseCharacters(t, actual); got != estimate.Characters.TotalCharacters {
+					t.Fatalf("independent chars=%d frozen chars=%d", got, estimate.Characters.TotalCharacters)
+				}
+				estimate.Characters.Categories[0].Characters = -1
+				if prepared.TokenEstimate().Characters.Validate() != nil {
+					t.Fatal("prepared character copy aliases caller")
+				}
+			}
 			if strings.Contains(string(actual), "MUTATED") || result.Text != "ok" {
 				t.Fatalf("request/result changed: %q", result.Text)
 			}

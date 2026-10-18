@@ -14,17 +14,7 @@ const facts: FlowerModelContext = { snapshot: { sections: [{ key: 'skills', titl
  entry_id: 'facts', path_depth: 1, turn_id: 'turn', run_id: 'run', updated_at: '2026-10-15T12:00:00Z', changed_keys: ['skills'], removed_keys: [] };
 const sample = { available: true, measured: true, phase: 'provider_usage', pressure_status: 'stable', updated_at_ms: 1, input_tokens: 800, context_window_tokens: 1000, output_headroom_tokens: 200 } as const;
 function fixture(mcpTokens = 200): FlowerContextUsage {
- return { confirmed: { ...sample, breakdown_available: true, unattributed_tokens: 20, breakdown: { source: 'prepared_content_v4', quality: 'token_estimate', tokenizer: 'deepseek_v4', system_tokens: 50, tool_definition_tokens: mcpTokens + 100,
-  user_tokens: 40, assistant_tokens: 30, tool_call_tokens: 10, tool_result_tokens: 100, model_context_tokens: 120,
-  details: { items: [
-   { category: 'tool_definition', key: 'docs.search', source: 'mcp', namespace: 'docs', tokens: mcpTokens },
-   { category: 'tool_definition', key: 'terminal.exec', source: 'builtin', tokens: 100 },
-   { category: 'model_context', key: 'skills', tokens: 60 },
-   { category: 'model_context', key: 'repository_rules', tokens: 40 },
-   { category: 'model_context', key: 'execution_environment', tokens: 10 },
-   { category: 'model_context', key: '', tokens: 10 },
-  ] },
- } } };
+ return { confirmed: { ...sample, characters_available: true, characters: { source: 'prepared_characters_v1', unit: 'unicode_code_points', total_characters: (50)+(mcpTokens + 100)+(40)+(30)+(10)+(100)+(120), categories: [{ category: 'system', characters: 50 },{ category: 'tool_definition', characters: mcpTokens + 100, details: [{ key: 'docs.search', source: 'mcp', namespace: 'docs', characters: mcpTokens },{ key: 'terminal.exec', source: 'builtin', characters: 100 }] },{ category: 'user', characters: 40 },{ category: 'assistant', characters: 30 },{ category: 'tool_call', characters: 10 },{ category: 'tool_result', characters: 100 },{ category: 'model_context', characters: 120, details: [{ key: 'skills', characters: 60 },{ key: 'repository_rules', characters: 40 },{ key: 'execution_environment', characters: 10 },{ key: '', characters: 10 }] }] } } };
 }
 function mount(usage?: () => FlowerContextUsage) {
  const host = document.createElement('div'); document.body.append(host);
@@ -43,13 +33,14 @@ describe('Flower context source breakdown', () => {
   }
   expect(host.querySelectorAll('.flower-context-heading')).toHaveLength(1);
   expect(host.querySelectorAll('.flower-context-composition-row').length).toBeGreaterThan(0);
-  expect(host.querySelector('.flower-model-context-amount')?.textContent).toMatch(/^≈\d/);
+  expect(host.querySelector('.flower-model-context-amount')?.textContent).toMatch(/^\d.*chars$/);
  });
  it('displays real source names and horizontal bars with flat detail rows', async () => {
   const { host } = mount(() => fixture());
   for (const text of ['System prompt', 'System tool definitions', 'MCP tool definitions', 'Skill catalog', 'Rule file index', 'Messages', 'Tool execution outputs']) expect(host.textContent).toContain(text);
   expect(host.textContent).not.toContain('Auto-loaded context');
-  expect(host.textContent).not.toContain('chars');
+  expect(host.textContent).toContain('Visible input');
+  expect(host.textContent).toContain('chars');
   expect(host.textContent).not.toContain('Complete selectable catalog');
   const rows = host.querySelectorAll('.flower-context-composition-row');
   expect(host.querySelectorAll('.flower-context-composition-row .flower-model-context-track')).toHaveLength(rows.length);
@@ -72,7 +63,7 @@ describe('Flower context source breakdown', () => {
   expect(host.querySelector('[data-category="mcp_tools"] summary')).toBe(summary);
   await expect.poll(() => document.activeElement).toBe(summary);
   expect(category.open).toBe(true);
-  expect(summary.querySelector('.flower-model-context-amount')?.textContent).toBe('≈20');
+  expect(summary.querySelector('.flower-model-context-amount')?.textContent).toBe('20 chars');
  });
  it('dismisses through Escape, outside click and focus navigation', async () => {
   const { trigger, panel } = mount(() => fixture());
@@ -89,8 +80,8 @@ describe('Flower context source breakdown', () => {
  });
  it('suppresses historical and unreliable categories while retaining the measured total', () => {
   const value = fixture();
-  const { host } = mount(() => ({ confirmed: { ...value.confirmed!, breakdown_available: false, breakdown: undefined, limitation: 'unavailable_attribution' } }));
-  expect(host.textContent).toContain('No distribution available');
+  const { host } = mount(() => ({ confirmed: { ...value.confirmed!, characters_available: false, characters: undefined, character_limitation: 'unavailable_attribution' } }));
+  expect(host.textContent).toContain('Categories available after the next request');
   expect(host.querySelector('.flower-context-composition')).toBeNull();
   expect(host.querySelector('.flower-context-total')?.textContent).toContain('= 800');
   expect(mount().host.querySelector('.flower-context-composition')).toBeNull();
@@ -103,37 +94,23 @@ describe('Flower context source breakdown', () => {
  it('keeps the displayed request authoritative when its distribution is missing', () => {
   const value = { confirmed: { ...sample }, estimate: fixture().confirmed };
   const { host } = mount(() => value);
-  expect(host.textContent).toContain('No distribution available');
+  expect(host.textContent).toContain('Categories available after the next request');
   expect(host.querySelector('.flower-context-composition')).toBeNull();
  });
- it('isolates malformed, duplicate and mismatched source allocations at the wire boundary', () => {
-  expect(mapContextUsage(JSON.parse(JSON.stringify(fixture())))).toEqual(fixture());
-  const invalid = (mutate: (value: ReturnType<typeof fixture>) => void) => {
-   const raw = JSON.parse(JSON.stringify(fixture())); mutate(raw);
-   const mapped = mapContextUsage(raw)!;
-   expect(mapped.confirmed!.available).toBe(true);
-   expect(mapped.confirmed!.breakdown_available).toBe(false);
-   expect(mapped.confirmed!.input_tokens).toBe(800);
-   expect(mapped.confirmed!.limitation).toBe('invalid_breakdown');
-  };
-  invalid(value => { (value.confirmed!.breakdown!.details!.items as unknown[])[0] = { category: 'tool_definition', key: 'x', tokens: -1 }; });
-  invalid(value => { (value.confirmed!.breakdown!.details!.items as unknown[]).push(value.confirmed!.breakdown!.details!.items[0]); });
-  invalid(value => { (value.confirmed!.breakdown as { tool_definition_tokens: number }).tool_definition_tokens = 1; });
+ it('isolates malformed optional character transport without dropping measured usage', () => {
+  const raw = JSON.parse(JSON.stringify(fixture()));
+  raw.confirmed.characters.categories[0].characters = -1;
+  expect(mapContextUsage(raw)?.confirmed).toMatchObject({ available: true, input_tokens: 800, characters_available: false, character_limitation: 'invalid_characters' });
  });
 });
 
-describe('Flower context capacity partitions', () => {
- it('partitions measured capacity independently from source estimates', () => {
-  expect(buildFlowerContextWindow({ confirmed: sample })).toEqual({ input: 800, capacity: 1000, estimated: false, segments: [
-   { key: 'input', tokens: 800, share: 80 }, { key: 'freeSpace', tokens: 200, share: 20 },
-  ] });
-  expect(buildFlowerContextWindow({ confirmed: sample, estimate: { ...sample, phase: 'projected_request', input_tokens: 900 } })?.input).toBe(800);
-  expect(buildFlowerContextWindow({ estimate: { ...sample, measured: false, phase: 'projected_request' } })?.estimated).toBe(true);
- });
- it('handles unknown and exhausted windows without negative allocations', () => {
-  expect(buildFlowerContextWindow({})).toBeNull();
-  expect(buildFlowerContextWindow({ confirmed: { ...sample, context_window_tokens: 0 } })).toBeNull();
-  expect(buildFlowerContextWindow({ confirmed: { ...sample, input_tokens: 1200 } })?.segments).toEqual([{ key: 'input', tokens: 1200, share: 100 }, { key: 'freeSpace', tokens: 0, share: 0 }]);
+describe('Flower request input comparison', () => {
+ it('compares confirmed input to capacity without claiming exact remaining space', () => {
+  expect(buildFlowerContextWindow({ confirmed: sample })).toEqual({ input: 800, capacity: 1000, share: 80 });
+  expect(buildFlowerContextWindow({ confirmed: sample, estimate: { ...sample, input_tokens: 900 } })?.input).toBe(800);
+  expect(buildFlowerContextWindow({ estimate: sample })).toBeNull();
+  expect(buildFlowerContextWindow({ confirmed: { ...sample, context_window_tokens: 0 } })).toEqual({ input: 800, capacity: null, share: 0 });
+  expect(buildFlowerContextWindow({ confirmed: { ...sample, input_tokens: 1200 } })?.share).toBe(100);
  });
 });
 
@@ -145,7 +122,7 @@ describe('Flower compact context popup', () => {
   expect(host.textContent).not.toContain('855k');
   expect(host.textContent).not.toContain('393.2k');
   expect(host.querySelector('.flower-context-total')?.textContent).toContain('68.4k');
-  expect(host.querySelector('[data-category="mcp_tools"] .flower-model-context-amount')?.textContent).toBe('≈200');
+  expect(host.querySelector('[data-category="mcp_tools"] .flower-model-context-amount')?.textContent).toBe('200 chars');
  });
  it('keeps server-managed and missing output facts out of the popup', () => {
   const [usage,update]=createSignal<FlowerContextUsage>({confirmed:{...sample,output_control:'server',safety_margin_tokens:10}});

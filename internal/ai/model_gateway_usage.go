@@ -20,6 +20,8 @@ func turnUsageFromOpenAIResponse(usage oresponses.ResponseUsage) (TurnUsage, err
 		usage.InputTokensDetails.CacheWriteTokens,
 	)
 	out.TotalTokens, out.TotalTokensReported = usage.TotalTokens, usage.JSON.TotalTokens.Valid()
+	out.InputTokensReported = usage.JSON.InputTokens.Valid() || usage.InputTokens > 0
+	out.InputTokenScope = "provider_execution"
 	out.Available = usage.JSON.InputTokens.Valid() || usage.JSON.OutputTokens.Valid() || usage.InputTokens > 0 || usage.OutputTokens > 0
 	if err == nil {
 		err = validateTurnUsage(out)
@@ -54,6 +56,8 @@ func turnUsageFromOpenAICompletion(usage openai.CompletionUsage) (TurnUsage, err
 		0,
 	)
 	out.TotalTokens, out.TotalTokensReported = usage.TotalTokens, usage.JSON.TotalTokens.Valid()
+	out.InputTokensReported = usage.JSON.PromptTokens.Valid() || usage.PromptTokens > 0
+	out.InputTokenScope = "request_input"
 	out.Available = usage.JSON.PromptTokens.Valid() || usage.JSON.CompletionTokens.Valid() || usage.PromptTokens > 0 || usage.CompletionTokens > 0
 	if err == nil {
 		err = validateTurnUsage(out)
@@ -63,8 +67,10 @@ func turnUsageFromOpenAICompletion(usage openai.CompletionUsage) (TurnUsage, err
 
 func turnUsageFromAnthropic(usage anthropic.Usage) (TurnUsage, error) {
 	out := TurnUsage{
-		Available:   usage.JSON.InputTokens.Valid() || usage.JSON.OutputTokens.Valid() || usage.InputTokens > 0 || usage.OutputTokens > 0,
-		InputTokens: usage.InputTokens, OutputTokens: usage.OutputTokens,
+		InputTokensReported: usage.JSON.InputTokens.Valid() || usage.InputTokens > 0,
+		InputTokenScope:     "provider_execution",
+		Available:           usage.JSON.InputTokens.Valid() || usage.JSON.OutputTokens.Valid() || usage.InputTokens > 0 || usage.OutputTokens > 0,
+		InputTokens:         usage.InputTokens, OutputTokens: usage.OutputTokens,
 		CacheReadTokens: usage.CacheReadInputTokens, CacheWriteTokens: usage.CacheCreationInputTokens,
 	}
 	if err := validateTurnUsage(out); err != nil {
@@ -111,6 +117,7 @@ func validateTurnUsage(usage TurnUsage) error {
 
 func partialUsageFromTurnUsage(usage TurnUsage) *PartialUsage {
 	return &PartialUsage{
+		InputTokensReported: usage.InputTokensReported, InputTokenScope: usage.InputTokenScope,
 		TotalTokens: usage.TotalTokens, TotalTokensReported: usage.TotalTokensReported, OutputIncludesReasoning: usage.OutputIncludesReasoning, Available: usage.Available,
 		InputTokens: usage.InputTokens, OutputTokens: usage.OutputTokens, ReasoningTokens: usage.ReasoningTokens,
 		CacheReadTokens: usage.CacheReadTokens, CacheWriteTokens: usage.CacheWriteTokens,

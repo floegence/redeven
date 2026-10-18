@@ -7,7 +7,7 @@ timestamp: 2026-10-17T00:00:00Z
 ---
 # Summary
 
-Published Floret v7.51.1 owns context compaction, cancellation, canonical installation, restart recovery, and usage. Redeven authorizes an independent manual operation and presents the canonical result. Manual compaction ends after installation; automatic compaction continues the current task. Failure, cancellation before installation, and noop retain effective context.
+Published Floret v7.60.3 owns context compaction, cancellation, canonical installation, restart recovery, and usage. Redeven authorizes an independent manual operation and presents the canonical result. Manual compaction ends after installation; automatic compaction continues the current task. Failure, cancellation before installation, and noop retain effective context.
 
 # Contract
 
@@ -17,7 +17,7 @@ Published Floret v7.51.1 owns context compaction, cancellation, canonical instal
 
 The command menu, button, and standalone `/compact` use that one action, including embedded canvas conversations. Enter, the selected suggestion, and the primary action resolve an incomplete prefix such as `/com` to the same command. Ordinary Send rejects standalone `/compact`, even with context or attachments. Admission preserves draft attachments, file references, canvas selection, and edited text. Acceptance clears unchanged complete command text or its submitted prefix; the suggestion menu follows the remaining draft and closes when that text is cleared. Rejection retains the draft, and composition or Shift+Enter does not execute a command. Navigation and editing stay available. Transport uncertainty retains the same request key in the short-lived transport outbox; replays use the dedicated route. A failed or cancelled operation retries with a new key through the same capability. Ordinary Retry cannot reinterpret the operation as the earlier conversation.
 
-Floret installs the summary, model-context boundary, and manual terminal result in one transaction. Installation and cancellation have one transaction winner. Successful installation invalidates provider continuation and confirmed input usage; the installed estimate describes current usage until the next normal request confirms it. Noop does not alter context, generation, or continuation. Manual requests do not require the automatic threshold, but still require context above the 50,000-token target, a complete cut, and useful savings. There is no force mode.
+Floret installs the summary, model-context boundary, and manual terminal result in one transaction. Installation and cancellation have one transaction winner. Successful installation invalidates provider continuation and confirmed input usage; the installed estimate serves pressure decisions; the overview remains unavailable until the next valid request confirms input usage. Noop does not alter context, generation, or continuation. Manual requests do not require the automatic threshold, but still require context above the 50,000-token target, a complete cut, and useful savings. There is no force mode.
 
 Floret reads complete eligible canonical history for summarization, preserving
 formatting, tool arguments, references, and runtime facts. Its single budgeted
@@ -38,9 +38,20 @@ The 50,000-token target guides tail selection; it does not require a fixed-lengt
 
 Workspace live frames and bootstrap/reconnect use the same public canonical context reader. Redeven neither stores compaction lifecycle records nor accumulates usage. Floret supplies `AfterItemID`; Redeven uses that exact anchor and stable operation identity for one divider. Empty history has no invented anchor and displays a noop notice. Fork, pagination, refresh, and reconnect preserve canonical operation identity.
 
-Native usage remains preferred to estimates. After its invalidation, the composer displays the installed estimate with the estimated tone.
+The compact panel displays native input tokens from the last confirmed request
+with =. Without a valid confirmed request it displays an em dash, including
+after model/policy changes or successful compaction. Legal native zero displays
+= 0. The capacity ratio is labeled Last request input / model capacity; native
+provider execution usage is not an independent current-window measurement.
 
-The compact context panel shows the last measured input with =, or a complete qualified estimate with ≈. The [source breakdown](flower-managed-model-context.md#presentation) preserves upstream category estimates and displays the positive unattributed remainder separately. Invalid or historical mixed-unit attribution retains only a trustworthy measured total. Totals, categories and recent cache rate belong to one request; current pressure may differ and is labeled Current request. Budget thresholds and output limits remain outside the compact popup. Controls, focus restoration and closing remain available when distribution changes.
+The [visible-input categories](flower-managed-model-context.md#presentation)
+use Unicode code points and their own character denominator. They never fit a
+provider token total or expose a token remainder. One frozen request owns the
+total, characters and recent cache rate. Historical or unavailable characters
+leave the native overview intact without borrowing newer context. New estimates
+only drive warnings labeled Current request. Budget thresholds and output limits
+remain outside the compact popup. Controls and focus recovery remain available
+when distribution changes.
 
 Cumulative thread totals survive installation. Cache hit rate is `cache_read / (input + cache_read + cache_write)` over those disjoint buckets. Pressure supplies only actionable warnings. No host watermark or second ledger is retained.
 
