@@ -1,6 +1,6 @@
 import '../index.css';
 import './flower-feature.css';
-import { page } from 'vitest/browser';
+import { page, userEvent } from 'vitest/browser';
 import { expect, it, onTestFinished, vi } from 'vitest';
 import { For, createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
@@ -14,6 +14,85 @@ import { SUPPORTED_LOCALES } from './i18n/localeMeta';
 const copy = DEFAULT_FLOWER_SURFACE_COPY.subagents!;
 const event = (id: string, kind: FlowerParentEvent['kind'] = 'report'): FlowerParentEvent => ({ id, parent_thread_id: 'parent', source_thread_id: 'child', source_turn_id: 'turn-child', source_run_id: 'run-child', source_entry_id: 'entry-' + id, kind, received_at: '2026-10-16T00:00:00Z', admitted: false });
 
+it('expands the original report in place without repeating its preview', async () => {
+  await page.viewport(700, 850);
+  const host = document.createElement('div'); host.style.width = '620px'; document.body.append(host);
+  const message = 'Verified source dates\n' + 'Complete findings with original formatting.\n'.repeat(12);
+  const onDisclosureClick = vi.fn();
+  const dispose = render(() => <ParentEventRow event={{ ...event('report'), message }} copy={copy}
+    sourceName="Research" canOpenSource onOpenSource={() => {}} onDisclosureClick={onDisclosureClick} />, host);
+  onTestFinished(() => { dispose(); host.remove(); });
+  const disclosure = host.querySelector<HTMLButtonElement>('.flower-parent-event-disclosure')!;
+  const content = document.getElementById(disclosure.getAttribute('aria-controls')!);
+  expect(content).not.toBeNull();
+  expect(content!.textContent).toBe(message);
+  const collapsed = content!.getBoundingClientRect();
+  expect(content!.scrollHeight).toBeGreaterThan(collapsed.height);
+  expect(disclosure.getAttribute('aria-expanded')).toBe('false');
+  disclosure.click(); disclosure.focus();
+  expect(document.getElementById(disclosure.getAttribute('aria-controls')!)).toBe(content);
+  expect(host.textContent!.split('Verified source dates')).toHaveLength(2);
+  expect(content!.getBoundingClientRect().top).toBe(collapsed.top);
+  expect(content!.getBoundingClientRect().height).toBeGreaterThan(collapsed.height);
+  expect(content!.scrollHeight).toBeLessThanOrEqual(content!.clientHeight + 1);
+  expect(getComputedStyle(content!).userSelect).toBe('text');
+  const actions = host.querySelector<HTMLElement>('.flower-parent-event-actions')!;
+  expect(actions.getBoundingClientRect().top).toBeGreaterThanOrEqual(content!.getBoundingClientRect().bottom);
+  expect(onDisclosureClick).toHaveBeenLastCalledWith(content);
+  expect(document.activeElement).toBe(disclosure);
+  await page.screenshot({ element: host, path: '__screenshots__/parent-events/expanded-in-place.png' });
+  disclosure.click();
+  expect(document.getElementById(disclosure.getAttribute('aria-controls')!)).toBe(content);
+  expect(disclosure.getAttribute('aria-expanded')).toBe('false');
+  expect(content!.getBoundingClientRect().height).toBe(collapsed.height);
+  expect(host.textContent!.split('Verified source dates')).toHaveLength(2);
+  expect(onDisclosureClick).toHaveBeenLastCalledWith(disclosure);
+});
+
+it.each(['mouse', 'keyboard'] as const)('keeps the report start visible on %s expansion and the action stable on collapse', async input => {
+  await page.viewport(1100, 850);
+  const child = subagentSummary({ parent_thread_id: 'parent', thread_id: 'child', task_name: 'Research' });
+  const message = 'Verified source dates\n' + 'Complete findings with original formatting.\n'.repeat(80);
+  const events = { events: Array.from({ length: 41 }, (_, index) => ({
+    ...event('event-' + index, index === 36 ? 'report' : 'completed'),
+    received_at: new Date(Date.UTC(2026, 9, 16, 0, 0, index)).toISOString(),
+    ...(index === 36 ? { message } : {}),
+  })), first_event_id: 'event-0', last_event_id: 'event-40' };
+  const parent = thread({ thread_id: 'parent', subagents: [child], parent_events: events });
+  const base = liveBootstrap(parent, 1);
+  const runtime = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: vi.fn(async () => [parent]),
+    loadThread: vi.fn(async () => ({ ...base, current: { ...base.current, parent_events: events } })) },
+  { focusThreadRequest: { request_id: 'focus-disclosure', thread_id: 'parent' } });
+  runtime.style.height = '780px';
+  await waitFor(() => Boolean(runtime.querySelector('[data-parent-event="event-36"] [data-parent-event-body]')));
+  const viewport = runtime.querySelector<HTMLElement>('.flower-chat-transcript')!;
+  await waitFor(() => viewport.getAttribute('data-flower-tail-preparing') !== 'true');
+  const settle = () => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+  await settle();
+  const row = runtime.querySelector<HTMLElement>('[data-parent-event="event-36"]')!;
+  const content = row.querySelector<HTMLElement>('[data-parent-event-body]')!;
+  const disclosure = row.querySelector<HTMLButtonElement>('.flower-parent-event-disclosure')!;
+  let contentTop = 0, actionTop = 0;
+  const capturePosition = () => { contentTop = content.getBoundingClientRect().top; actionTop = disclosure.getBoundingClientRect().top; };
+  disclosure.addEventListener(input === 'mouse' ? 'pointerdown' : 'keydown', capturePosition);
+  const activate = async () => {
+    if (input === 'mouse') await userEvent.click(disclosure);
+    else { disclosure.focus(); await settle(); await userEvent.keyboard('{Enter}'); }
+    await settle();
+  };
+  await activate();
+  expect(disclosure.getAttribute('aria-expanded')).toBe('true');
+  expect(Math.abs(content.getBoundingClientRect().top - contentTop)).toBeLessThanOrEqual(1);
+  expect(content.getBoundingClientRect().top).toBeGreaterThanOrEqual(viewport.getBoundingClientRect().top);
+  expect(content.getBoundingClientRect().top).toBeLessThan(viewport.getBoundingClientRect().bottom);
+  expect(viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight).toBeGreaterThan(100);
+  expect(row.textContent!.split('Verified source dates')).toHaveLength(2);
+  await activate();
+  expect(disclosure.getAttribute('aria-expanded')).toBe('false');
+  expect(Math.abs(disclosure.getBoundingClientRect().top - actionTop)).toBeLessThanOrEqual(1);
+  expect(document.activeElement).toBe(disclosure);
+});
+
 it('shows reports and terminal events with child avatars in the parent transcript before opening the dropdown', async () => {
   await page.viewport(1100, 850);
   const child = subagentSummary({ parent_thread_id: 'parent', thread_id: 'child', task_name: 'Research', status: 'failed' });
@@ -24,7 +103,7 @@ it('shows reports and terminal events with child avatars in the parent transcrip
   const read = vi.fn(async () => ({ ...events, events: [{ ...event('report'), message: 'Verified source dates\nComplete findings' }, event('failed', 'failed')] }));
   const loadChild = vi.fn(async () => { throw new Error('Child details unavailable'); });
   const runtime = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: vi.fn(async () => [parent]), loadThread: vi.fn(async () => bootstrap), readParentEvents: read, loadSubagentDetail: loadChild }, { focusThreadRequest: { request_id: 'focus-events', thread_id: 'parent' } });
-  await waitFor(() => Boolean(runtime.querySelector('[data-parent-event="report"] .flower-parent-event-preview')));
+  await waitFor(() => Boolean(runtime.querySelector('[data-parent-event="report"] [data-parent-event-body]')));
   expect(runtime.querySelectorAll('.flower-transcript-stack [data-parent-event]')).toHaveLength(2);
   const avatars = [...runtime.querySelectorAll('[data-parent-event] [data-flower-subagent-avatar]')];
   expect(avatars).toHaveLength(2);
@@ -89,7 +168,7 @@ it('reads full Unicode reports once, pages a fixed range and preserves reports o
     return <For each={reading.events()}>{event => <ParentEventRow event={event} copy={copy} sourceName="Research" canOpenSource onOpenSource={() => {}} onDisclosureClick={() => {}} />}</For>;
   }, host);
   onTestFinished(() => { dispose(); host.remove(); });
-  await waitFor(() => Boolean(host.querySelector('.flower-parent-event-preview')));
+  await waitFor(() => Boolean(host.querySelector('[data-parent-event-body]')));
   host.querySelector<HTMLButtonElement>('.flower-parent-event-disclosure')!.click();
   expect(host.querySelector('[data-parent-event-body]')?.textContent).toBe(message);
   await reading.more();
