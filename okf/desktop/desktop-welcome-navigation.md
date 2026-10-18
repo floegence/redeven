@@ -47,6 +47,8 @@ capped at 150ms across the destination. The whole pane does not animate. Header
 controls, layout dimensions, scroll position, and keyboard focus remain steady.
 Content stays interactive; there is no outgoing-content delay or animation queue.
 Completed effects are released so cards retain no presentation transform.
+Populated Gateway cards use this same entrance owner even though their DOM
+class differs from Environment cards; both receive per-card motion coverage.
 
 Selecting the active tab, refreshing snapshots, searching, and updating operation
 progress do not start or restart this motion, including empty search results. A

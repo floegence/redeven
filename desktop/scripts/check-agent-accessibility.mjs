@@ -8,6 +8,27 @@ import { createSSHSettingsPreviewServer } from './ssh-settings-preview.mjs';
 
 const server = await createSSHSettingsPreviewServer(0, ['flower-navigation.html', 'environment-settings.html']);
 let browser;
+async function selectedPanel(page, tabs, index) {
+  const tab = tabs.nth(index);
+  const tabID = await tab.getAttribute('id');
+  const panelID = await tab.getAttribute('aria-controls');
+  assert(tabID && panelID);
+  // Shared Tabs presents selection before committing owner content after paint.
+  // Wait for both states together; a visual selection alone is provisional.
+  await page.waitForFunction(({ tabID, panelID }) => {
+    const tab = document.getElementById(tabID);
+    const panel = document.getElementById(panelID);
+    return tab?.getAttribute('aria-selected') === 'true' && panel
+      && panel.getAttribute('aria-hidden') !== 'true'
+      && getComputedStyle(panel).visibility === 'visible'
+      && getComputedStyle(panel).display !== 'none';
+  }, { tabID, panelID });
+  const panel = page.locator(`[id="${panelID}"]`);
+  await panel.waitFor({ state: 'visible' });
+  assert.equal(await panel.getAttribute('inert'), null);
+  assert.equal(await tab.getAttribute('aria-selected'), 'true');
+  return panel;
+}
 async function assertUnchangedPresentation(surface, nodesSelector = '*') {
   await surface.scrollIntoViewIfNeeded();
   await surface.evaluate(async root => {
@@ -76,29 +97,20 @@ try {
         await page.evaluate(() => window.navigationFixture.publish({ environments: window.navigationSnapshot.environments.map(entry => ({ ...entry })) }));
         assert.deepEqual(await page.getByRole('tab').evaluateAll(elements => elements.map(tab => tab.id)), tabIDs, 'refresh preserves tab identities');
         await assertUnchangedPresentation(card, '[role="tab"], [role="tabpanel"]');
-        const selectedPanel = async index => {
-          const target = await tabs.nth(index).getAttribute('aria-controls');
-          assert(target);
-          const panel = page.locator(`[id="${target}"]`);
-          await panel.waitFor({ state: 'visible' });
-          assert.equal(await panel.getAttribute('inert'), null);
-          assert.equal(await tabs.nth(index).getAttribute('aria-selected'), 'true');
-          return panel;
-        };
         await tabs.first().focus();
         await page.keyboard.press('ArrowRight');
-        await selectedPanel(1);
+        await selectedPanel(page, tabs, 1);
         assert.equal(await tabs.nth(1).evaluate(tab => document.activeElement === tab), true);
         const firstPanelID = await tabs.first().getAttribute('aria-controls');
         assert.equal(await page.locator(`[id="${firstPanelID}"]`).getAttribute('inert'), '');
         await page.keyboard.press('Home');
-        await selectedPanel(0);
+        await selectedPanel(page, tabs, 0);
         await tabs.nth(1).click();
-        await selectedPanel(1);
+        await selectedPanel(page, tabs, 1);
         await page.keyboard.press('End');
-        await selectedPanel(relations.length - 1);
+        await selectedPanel(page, tabs, relations.length - 1);
         await page.keyboard.press('Home');
-        await selectedPanel(0);
+        await selectedPanel(page, tabs, 0);
         await page.close();
       }
     }
@@ -135,15 +147,14 @@ try {
       await assertUnchangedPresentation(dialog, '[role="tab"], [role="tabpanel"]');
       await tabs.first().focus();
       await page.keyboard.press('ArrowRight');
-      assert.equal(await tabs.nth(1).getAttribute('aria-selected'), 'true');
+      await selectedPanel(page, tabs, 1);
       assert.equal(await tabs.nth(1).evaluate(tab => document.activeElement === tab), true);
-      const panelID = await tabs.nth(1).getAttribute('aria-controls');
-      await page.locator(`[id="${panelID}"]`).waitFor({ state: 'visible' });
       const hiddenID = await tabs.first().getAttribute('aria-controls');
       assert.equal(await page.locator(`[id="${hiddenID}"]`).getAttribute('aria-hidden'), 'true');
       await page.keyboard.press('Home');
+      await selectedPanel(page, tabs, 0);
       await tabs.nth(1).click();
-      assert.equal(await tabs.nth(1).getAttribute('aria-selected'), 'true');
+      await selectedPanel(page, tabs, 1);
       await page.keyboard.press('Escape');
       await dialog.waitFor({ state: 'detached' });
       await page.waitForFunction(name => document.activeElement?.getAttribute('aria-label') === name, await trigger.getAttribute('aria-label'));

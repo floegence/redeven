@@ -37,7 +37,7 @@ try {
       const samples = await page.evaluate(async ({ snapshot, reducedMotion }) => {
         const content = document.querySelector('.redeven-center-content');
         const tabs = [...document.querySelectorAll('.redeven-console-tab')];
-        const selector = '.redeven-environment-card, .redeven-cloud-source-header, .redeven-empty-panel, .redeven-console-empty';
+        const selector = '.redeven-environment-card, .redeven-gateway-card, .redeven-cloud-source-header, .redeven-empty-panel, .redeven-console-empty';
         const targets = () => [...content.querySelectorAll(selector)].filter(el => !el.closest('[hidden]'));
         const animations = () => content.getAnimations({ subtree: true }).filter(animation => targets().includes(animation.effect?.target));
         const read = el => {
