@@ -125,8 +125,8 @@ async function mountWindow(theme: Theme, withContext = false) {
       <LayoutProvider>
         <SubagentDetailWindow {...windowProps(open(), setOpen)} contextIndicator={withContext ? <FlowerComposerContextIndicator
           placement="below-start" copy={DEFAULT_FLOWER_SURFACE_COPY} usage={{
-            confirmed: { phase: 'provider_usage', pressure_status: 'stable', updated_at_ms: 1,
-              breakdown: { source: 'semantic_input_bpe_v2', tool_definition_tokens: 30,
+            confirmed: { available: true, measured: true, breakdown_available: true, input_tokens: 30, phase: 'provider_usage', pressure_status: 'stable', updated_at_ms: 1,
+              breakdown: { source: 'prepared_content_v4', tool_definition_tokens: 30,
                 details: { items: [{ category: 'tool_definition', source: 'builtin', key: 'terminal.exec', tokens: 30 }] } } },
           }} modelContext={{
             snapshot: { sections: [{ key: 'skills', title: 'Available skills', text: 'Complete current catalog' }] },
@@ -181,9 +181,12 @@ describe('Subagent detail window boundary', () => {
     panel.querySelector<HTMLElement>('summary')!.click();
     await expect.poll(() => panel.textContent).toContain('terminal.exec');
     expect(panel.textContent).not.toContain('Complete current catalog');
-    trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    panel.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     await nextFrame();
     expect(panel.getAttribute('data-open')).toBeNull();
+    expect(open()).toBe(true);
+    trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await nextFrame();
     expect(open()).toBe(false);
   });
 

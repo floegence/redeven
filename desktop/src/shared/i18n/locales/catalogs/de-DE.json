@@ -543,9 +543,8 @@
       "toolArgumentPreviewTooltip": "Diese Zeilenzahlen zeigen eine Vorschau der vorbereiteten Änderungen. Die tatsächlichen Änderungen werden nach Abschluss des Werkzeugs angezeigt.",
       "contextIndicatorCurrentContents": "Aktueller Inhalt",
       "contextIndicatorCurrentContentsHint": "Aktueller Text nach Zeichenanzahl; die Token-Summe enthält auch beibehaltene frühere Aktualisierungen.",
-      "contextIndicatorTextShare": "Relative Anteile",
       "contextIndicatorComposition": "Geschätzte Eingabezusammensetzung",
-      "contextIndicatorCompositionHint": "Tokenzahlen werden aus dem genutzten Kontext und den jeweiligen Anteilen geschätzt.",
+      "contextIndicatorCompositionHint": "Geschätzte Kategorien der angezeigten Anfrage; nicht zugeordnete Eingaben bleiben separat.",
       "contextIndicatorSourceSystemPrompt": "Systemprompt",
       "contextIndicatorSourceSystemTools": "Systemwerkzeug-Definitionen",
       "contextIndicatorSourceMcpTools": "MCP-Werkzeugdefinitionen",
@@ -772,11 +771,12 @@
       "queuedEdit": "Ins Eingabefeld zurückholen",
       "queueTakeBackConflict": "Diese Nachricht wurde bereits gestartet oder geändert. Aktualisiere die Ansicht und versuche es erneut.",
       "queueTakeBackUnknown": "Die Nachricht ist wieder im Eingabefeld. Das Entfernen aus der Warteschlange konnte nicht bestätigt werden. Prüfe die Warteschlange vor dem Senden.",
-      "contextIndicatorRelativeHint": "Nur Anteile verfügbar, da der Gesamtwert des genutzten Kontexts fehlt.",
-      "contextIndicatorHistorical": "Historische Schätzung",
-      "contextIndicatorHistoricalHint": "Schätzungen basieren auf historischen Anteilen und dem erfassten Gesamtkontext.",
       "contextIndicatorDistributionUnavailable": "Keine Verteilung verfügbar",
-      "contextIndicatorProtocolFraming": "Protokollformatierung"
+      "contextIndicatorProtocolFraming": "Protokollformatierung",
+      "contextIndicatorMeasured": "Gemessen",
+      "contextIndicatorLastRequest": "Letzte Anfrage",
+      "contextIndicatorCurrentRequest": "Aktuelle Anfrage",
+      "contextIndicatorSourceUnattributed": "Nicht zugeordnet"
     },
     "threadList": {
       "title": "Unterhaltungen",

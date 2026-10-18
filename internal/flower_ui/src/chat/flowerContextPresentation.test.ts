@@ -16,7 +16,7 @@ import {
 
 function usage(overrides: Partial<FlowerContextSample> & Pick<FlowerContextUsage, 'thread_usage'> = {}): FlowerContextUsage {
   const { thread_usage, ...sample } = overrides;
-  return { confirmed: { phase: 'provider_usage', pressure_status: 'stable', updated_at_ms: 1000, ...sample }, thread_usage };
+  return { confirmed: { available: true, measured: true, phase: 'provider_usage', pressure_status: 'stable', updated_at_ms: 1000, ...sample }, thread_usage };
 }
 
 function compaction(overrides: Partial<FlowerContextCompaction> = {}): FlowerContextCompaction {
@@ -39,7 +39,7 @@ describe('flower context presentation', () => {
       ariaLabel: 'Context window', ratioValue: '91%',
       cacheHitLabel: 'Session cache hit rate', cacheHitValue: '—', tone: 'warning',
       ratio: 0.91, progressValue: 91, warning: 'Near limit',
-      ariaValueText: 'Context window: 91%, Latest request cache hit rate: Not available, Session cache hit rate: Not available, Near limit',
+      ariaValueText: 'Context window: = Measured, Last request, 91%, Latest request cache hit rate: Not available, Session cache hit rate: Not available, Near limit',
     });
   });
 
@@ -59,7 +59,7 @@ describe('flower context presentation', () => {
     } };
     const view = buildFlowerComposerContextIndicatorView(usage({ input_tokens: 72000, context_window_tokens: 100000 }), copy);
     expect(view.ratioValue).toBe('72% 已用');
-    expect(view.ariaValueText).toBe('Context window: 72% 已用, Latest request cache hit rate: Not available, Session cache hit rate: Not available');
+    expect(view.ariaValueText).toBe('Context window: = Measured, Last request, 72% 已用, Latest request cache hit rate: Not available, Session cache hit rate: Not available');
   });
 
   it('calculates the whole-conversation cache hit rate from disjoint input buckets', () => {
@@ -108,7 +108,7 @@ describe('flower context presentation', () => {
   });
 
   it('prefers confirmed usage and shows the installed estimate after invalidation', () => {
-    const confirmed: FlowerContextSample = { phase: 'provider_usage', pressure_status: 'stable', updated_at_ms: 1, input_tokens: 71872, context_window_tokens: 950000 };
+    const confirmed: FlowerContextSample = { available: true, measured: true, phase: 'provider_usage', pressure_status: 'stable', updated_at_ms: 1, input_tokens: 71872, context_window_tokens: 950000 };
     const estimate: FlowerContextSample = { ...confirmed, phase: 'projected_request', input_tokens: 291336, updated_at_ms: 2 };
     const build = (snapshot: FlowerContextUsage) => buildFlowerComposerContextIndicatorView(snapshot, DEFAULT_FLOWER_SURFACE_COPY);
     expect(build({ estimate }).progressValue).toBe(31);
@@ -120,7 +120,7 @@ describe('flower context presentation', () => {
     const risk = build({ confirmed, estimate: { ...estimate, input_tokens: 960000, pressure_status: 'hard_limit' } });
     expect(risk.ratioValue).toBe('8%');
     expect(risk.tone).toBe('danger');
-    expect(risk.warning).toBe('At limit');
+    expect(risk.warning).toBe('Current request: At limit');
     // Canonical invalidation clears old measurements on compaction/model changes.
     expect(build({}).progressValue).toBeNull();
     expect(build({ estimate: { ...estimate, input_tokens: 1000, context_window_tokens: 100000 } })).toMatchObject({ progressValue: 1, tone: 'estimated' });
@@ -184,38 +184,27 @@ describe('flower context presentation', () => {
   expect(buildFlowerComposerContextIndicatorView({recent_request_usage:{input_tokens:100,output_tokens:1,cache_read_tokens:0,cache_write_tokens:0}},DEFAULT_FLOWER_SURFACE_COPY).recentCacheHitValue).toBe('0%');
  });
 
-describe('used context composition', () => {
-  it('allocates the displayed input total using that same request distribution', () => {
-    const base = { phase: 'provider_usage', pressure_status: 'stable', updated_at_ms: 1, input_tokens: 10000 } as const;
-    const result = buildFlowerContextComposition({ confirmed: { ...base, breakdown: { source: 'semantic_input_bpe_v1', tool_result_tokens: 300, user_tokens: 100 } },
-      estimate: { ...base, phase: 'projected_request', breakdown: { source: 'next', tool_result_tokens: 90000 } } })!;
-    expect(result.total).toBe(10000);
-    expect(result.rows.map(({ key, tokens, share }) => ({ key, tokens, share }))).toEqual([{ key: 'tool_outputs', tokens: 7500, share: 75 }, { key: 'messages', tokens: 2500, share: 25 }]);
-    expect(buildFlowerContextComposition({ confirmed: base, estimate: { ...base, breakdown: { source: 'next', user_tokens: 10 } } })).toBeNull();
-    expect(buildFlowerContextComposition({ estimate: { ...base, breakdown: { source: 'empty' } } })).toBeNull();
-  });
-});
-
-
 describe('request source attribution', () => {
-  it('separates registry origins and managed sections without adding parent weights again', () => {
-    const sample = { phase: 'provider_usage', pressure_status: 'stable', updated_at_ms: 1, input_tokens: 1050 } as const;
-    const result = buildFlowerContextComposition({ confirmed: { ...sample, breakdown: { source: 'semantic_input_bpe_v2',
-      system_tokens: 100, tool_definition_tokens: 600, model_context_tokens: 240,
-      user_tokens: 30, assistant_tokens: 20, tool_call_tokens: 10, tool_result_tokens: 50,
-      details: { items: [
-        { category: 'tool_definition', key: 'opaque', source: 'mcp', namespace: 'docs', tokens: 300 },
-        { category: 'tool_definition', key: 'terminal.exec', source: 'builtin', tokens: 200 },
-        { category: 'tool_definition', key: 'web_search', source: 'provider', tokens: 100 },
-        { category: 'model_context', key: 'skills', tokens: 100 },
-        { category: 'model_context', key: 'repository_rules', tokens: 70 },
-        { category: 'model_context', key: 'execution_environment', tokens: 40 },
-        { category: 'model_context', key: '', tokens: 30 },
-      ] },
-    } } })!;
-    expect(result.total).toBe(1050);
-    const rows = new Map(result.rows.map(row => [row.key, row]));
-    expect(rows.get('mcp_tools')).toMatchObject({ tokens: 300, items: [{ label: 'docs · opaque', tokens: 300 }] });
+  it('groups released category values without scaling parents or children', () => {
+    const confirmed: FlowerContextSample = { available:true, measured:true, breakdown_available:true, unattributed_tokens:50,
+      phase:'provider_usage', pressure_status:'stable', updated_at_ms:1, input_tokens:1100,
+      breakdown: { source:'prepared_content_v4', quality:'token_estimate', tokenizer:'proxy_bpe', attribution_coverage:'complete',
+        system_tokens:100,tool_definition_tokens:600,model_context_tokens:240,
+        user_tokens:30,assistant_tokens:20,tool_call_tokens:10,tool_result_tokens:50,
+        details:{items:[
+          {category:'tool_definition',key:'opaque',source:'mcp',namespace:'docs',tokens:300},
+          {category:'tool_definition',key:'terminal.exec',source:'builtin',tokens:200},
+          {category:'tool_definition',key:'web_search',source:'provider',tokens:100},
+          {category:'model_context',key:'skills',tokens:100},
+          {category:'model_context',key:'repository_rules',tokens:70},
+          {category:'model_context',key:'execution_environment',tokens:40},
+          {category:'model_context',key:'',tokens:30},
+        ]},
+      },
+    };
+    const result = buildFlowerContextComposition({confirmed})!;
+    const rows = new Map(result.rows.map(row => [row.key,row]));
+    expect(rows.get('mcp_tools')).toMatchObject({tokens:300,items:[{label:'docs · opaque',tokens:300}]});
     expect(rows.get('system_tools')?.tokens).toBe(200);
     expect(rows.get('provider_tools')?.tokens).toBe(100);
     expect(rows.get('messages')?.tokens).toBe(60);
@@ -223,69 +212,14 @@ describe('request source attribution', () => {
     expect(rows.get('rule_files')?.tokens).toBe(70);
     expect(rows.get('environment')?.tokens).toBe(40);
     expect(rows.get('context_framing')?.tokens).toBe(30);
-    expect(result.rows.reduce((sum, row) => sum + row.share, 0)).toBeCloseTo(100);
+    expect(rows.get('unattributed_usage')?.tokens).toBe(50);
+    expect(result.rows.reduce((sum,row)=>sum+row.tokens,0)).toBe(1100);
+    expect(result.rows.reduce((sum,row)=>sum+row.share,0)).toBeCloseTo(100);
   });
-  it('does not infer origins from names or allocate historical samples from current snapshots', () => {
-    const base = { phase: 'provider_usage', pressure_status: 'stable', updated_at_ms: 1 } as const;
-    const current = buildFlowerContextComposition({ confirmed: { ...base, breakdown: { source: 'v2', tool_definition_tokens: 20,
-      details: { items: [{ category: 'tool_definition', key: 'mcp_looks_external', tokens: 20 }] } } } })!;
-    expect(current.rows[0].key).toBe('unattributed_tools');
-    const old = buildFlowerContextComposition({ confirmed: { ...base, breakdown: { source: 'v1', model_context_tokens: 30 } } })!;
-    expect(old.rows[0].key).toBe('unattributed_context');
-  });
-});
-
-
-describe('distribution quality', () => {
-  it('includes protocol formatting in shares without adding budget reserves to the total', () => {
-    const result = buildFlowerContextComposition({ estimate: { phase: 'projected_request', pressure_status: 'stable', updated_at_ms: 1,
-      input_tokens: 900, breakdown: { source: 'rendered', quality: 'token_estimate', tokenizer: 'deepseek_v4', user_tokens: 100, framing_tokens: 20 } } })!;
-    expect(result.total).toBe(900);
-    expect(result.showTokenAmounts).toBe(true);
-    expect(result.rows.find(row => row.key === 'protocol_framing')?.tokens).toBe(150);
-    expect(result.rows.find(row => row.key === 'protocol_framing')?.share).toBeCloseTo(100 / 6);
-  });
-  it('shows proportional amounts for unknown vocabularies, media and historical records', () => {
-    for (const metadata of [{}, { quality: 'relative_weight' as const }, { quality: 'token_estimate' as const, tokenizer: 'deepseek_v4', attachment_tokens: 10 }]) {
-      const result = buildFlowerContextComposition({ confirmed: { phase: 'provider_usage', pressure_status: 'stable', updated_at_ms: 1,
-        input_tokens: 1100, breakdown: { source: 'recorded', user_tokens: 100, ...metadata } } })!;
-      expect(result.showTokenAmounts).toBe(true);
-      expect(result.total).toBe(1100);
-      expect(result.rows.reduce((sum, row) => sum + row.tokens, 0)).toBe(1100);
-      expect(result.historical).toBe(!metadata.quality);
-    }
-  });
-  it('keeps rounded category and nested allocations additive without changing their shares', () => {
-    const result = buildFlowerContextComposition({ confirmed: { phase: 'provider_usage', pressure_status: 'stable', updated_at_ms: 1,
-      input_tokens: 7, breakdown: { source: 'rendered', system_tokens: 2, tool_definition_tokens: 3, user_tokens: 1,
-        details: { items: [
-          { category: 'tool_definition', key: 'first', source: 'mcp', tokens: 1 },
-          { category: 'tool_definition', key: 'second', source: 'mcp', tokens: 1 },
-          { category: 'tool_definition', key: 'third', source: 'mcp', tokens: 1 },
-        ] } } } })!;
-    expect(result.rows.map(row => [row.key, row.tokens])).toEqual([['mcp_tools', 4], ['system_prompt', 2], ['messages', 1]]);
-    expect(result.rows.reduce((sum, row) => sum + row.tokens, 0)).toBe(7);
-    const group = result.rows[0];
-    expect(group.share).toBe(50);
-    expect(group.items.map(item => item.tokens)).toEqual([1, 2, 1]);
-    expect(group.items.reduce((sum, item) => sum + item.tokens, 0)).toBe(group.tokens);
-    expect(group.items.every(item => Math.abs(item.share - 100 / 3) < 1e-10)).toBe(true);
-  });
-  it('shows zero amounts but keeps only shares when the displayed request total is unavailable', () => {
-    const sample = { phase: 'provider_usage', pressure_status: 'stable', updated_at_ms: 1,
-      breakdown: { source: 'rendered', user_tokens: 2, system_tokens: 1 } } as const;
-    const zero = buildFlowerContextComposition({ confirmed: { ...sample, input_tokens: 0 } })!;
-    expect(zero.total).toBe(0);
-    expect(zero.showTokenAmounts).toBe(true);
-    expect(zero.rows.every(row => row.tokens === 0)).toBe(true);
-    for (const input_tokens of [undefined, NaN, Infinity, -1]) {
-      const unknown = buildFlowerContextComposition({ confirmed: { ...sample, input_tokens }, estimate: { ...sample, input_tokens: 100 } })!;
-      expect(unknown.total).toBeNull();
-      expect(unknown.showTokenAmounts).toBe(false);
-      expect(unknown.rows[0].share).toBeCloseTo(200 / 3);
-    }
-    const estimate = buildFlowerContextComposition({ estimate: { ...sample, phase: 'projected_request', input_tokens: 300 } })!;
-    expect(estimate.total).toBe(300);
-    expect(estimate.rows[0].tokens).toBe(200);
+  it('only renders upstream-approved attribution and never borrows from a newer request', () => {
+    const base: FlowerContextSample = {available:true,measured:true,phase:'provider_usage',pressure_status:'stable',updated_at_ms:1,input_tokens:100};
+    const estimate = {...base,breakdown_available:true,breakdown:{source:'prepared_content_v4',user_tokens:100}};
+    expect(buildFlowerContextComposition({confirmed:base,estimate})).toBeNull();
+    expect(buildFlowerContextComposition({confirmed:{...base,breakdown_available:false,breakdown:{source:'legacy',user_tokens:100}}})).toBeNull();
   });
 });

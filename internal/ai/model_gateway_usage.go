@@ -12,13 +12,19 @@ import (
 )
 
 func turnUsageFromOpenAIResponse(usage oresponses.ResponseUsage) (TurnUsage, error) {
-	return normalizedPromptUsage(
+	out, err := normalizedPromptUsage(
 		usage.InputTokens,
 		usage.OutputTokens,
 		usage.OutputTokensDetails.ReasoningTokens,
 		usage.InputTokensDetails.CachedTokens,
 		usage.InputTokensDetails.CacheWriteTokens,
 	)
+	out.TotalTokens, out.TotalTokensReported = usage.TotalTokens, usage.JSON.TotalTokens.Valid()
+	out.Available = usage.JSON.InputTokens.Valid() || usage.JSON.OutputTokens.Valid() || usage.InputTokens > 0 || usage.OutputTokens > 0
+	if err == nil {
+		err = validateTurnUsage(out)
+	}
+	return out, err
 }
 
 func turnUsageFromOpenAICompletion(usage openai.CompletionUsage) (TurnUsage, error) {
@@ -40,17 +46,24 @@ func turnUsageFromOpenAICompletion(usage openai.CompletionUsage) (TurnUsage, err
 			cacheRead = *extra.PromptCacheHitTokens
 		}
 	}
-	return normalizedPromptUsage(
+	out, err := normalizedPromptUsage(
 		usage.PromptTokens,
 		usage.CompletionTokens,
 		usage.CompletionTokensDetails.ReasoningTokens,
 		cacheRead,
 		0,
 	)
+	out.TotalTokens, out.TotalTokensReported = usage.TotalTokens, usage.JSON.TotalTokens.Valid()
+	out.Available = usage.JSON.PromptTokens.Valid() || usage.JSON.CompletionTokens.Valid() || usage.PromptTokens > 0 || usage.CompletionTokens > 0
+	if err == nil {
+		err = validateTurnUsage(out)
+	}
+	return out, err
 }
 
 func turnUsageFromAnthropic(usage anthropic.Usage) (TurnUsage, error) {
 	out := TurnUsage{
+		Available:   usage.JSON.InputTokens.Valid() || usage.JSON.OutputTokens.Valid() || usage.InputTokens > 0 || usage.OutputTokens > 0,
 		InputTokens: usage.InputTokens, OutputTokens: usage.OutputTokens,
 		CacheReadTokens: usage.CacheReadInputTokens, CacheWriteTokens: usage.CacheCreationInputTokens,
 	}
@@ -68,7 +81,8 @@ func normalizedPromptUsage(totalInput, output, reasoning, cacheRead, cacheWrite 
 		return TurnUsage{}, errors.New("provider cached tokens exceed total input tokens")
 	}
 	out := TurnUsage{
-		InputTokens: totalInput - cacheRead - cacheWrite, OutputTokens: output, ReasoningTokens: reasoning,
+		OutputIncludesReasoning: true,
+		InputTokens:             totalInput - cacheRead - cacheWrite, OutputTokens: output, ReasoningTokens: reasoning,
 		CacheReadTokens: cacheRead, CacheWriteTokens: cacheWrite,
 	}
 	if err := validateTurnUsage(out); err != nil {
@@ -78,11 +92,15 @@ func normalizedPromptUsage(totalInput, output, reasoning, cacheRead, cacheWrite 
 }
 
 func validateTurnUsage(usage TurnUsage) error {
-	if usage.InputTokens < 0 || usage.OutputTokens < 0 || usage.ReasoningTokens < 0 || usage.CacheReadTokens < 0 || usage.CacheWriteTokens < 0 {
+	if usage.TotalTokens < 0 || usage.InputTokens < 0 || usage.OutputTokens < 0 || usage.ReasoningTokens < 0 || usage.CacheReadTokens < 0 || usage.CacheWriteTokens < 0 {
 		return errors.New("model gateway usage token counts must not be negative")
 	}
+	reasoning := usage.ReasoningTokens
+	if usage.OutputIncludesReasoning {
+		reasoning = 0
+	}
 	remaining := int64(math.MaxInt64)
-	for _, tokens := range []int64{usage.InputTokens, usage.OutputTokens, usage.ReasoningTokens, usage.CacheReadTokens, usage.CacheWriteTokens} {
+	for _, tokens := range []int64{usage.InputTokens, usage.OutputTokens, reasoning, usage.CacheReadTokens, usage.CacheWriteTokens} {
 		if tokens > remaining {
 			return errors.New("model gateway usage total overflows int64")
 		}
@@ -93,6 +111,7 @@ func validateTurnUsage(usage TurnUsage) error {
 
 func partialUsageFromTurnUsage(usage TurnUsage) *PartialUsage {
 	return &PartialUsage{
+		TotalTokens: usage.TotalTokens, TotalTokensReported: usage.TotalTokensReported, OutputIncludesReasoning: usage.OutputIncludesReasoning, Available: usage.Available,
 		InputTokens: usage.InputTokens, OutputTokens: usage.OutputTokens, ReasoningTokens: usage.ReasoningTokens,
 		CacheReadTokens: usage.CacheReadTokens, CacheWriteTokens: usage.CacheWriteTokens,
 	}

@@ -666,12 +666,11 @@ export type FlowerSurfaceCopy = Readonly<{
       unknownPercent: string;
       unavailable: string;
       currentContents: string; currentContentsHint: string; collected: string; used: string; updated: string; removed: string;
-      textShare: string;
+      measured: string;
+      lastRequest: string;
+      currentRequest: string;
       composition: string;
       compositionHint: string;
-      relativeHint: string;
-      historical: string;
-      historicalHint: string;
       distributionUnavailable: string;
       categoryLabels: Readonly<Record<FlowerContextCategory, string>>;
       sourceLabels: Readonly<Record<FlowerContextSource, string>>;
@@ -1112,14 +1111,14 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       unknownPercent: '—',
       unavailable: 'Not available',
       currentContents: 'Current contents', currentContentsHint: 'Current text by character count; token totals include retained updates.', collected: 'Loaded', used: 'Last used', updated: 'Updated', removed: 'Removed',
-      textShare: 'Relative shares',
+      measured: 'Measured',
+      lastRequest: 'Last request',
+      currentRequest: 'Current request',
       composition: 'Input composition estimate',
-      compositionHint: "Token amounts are estimated from used context and each share.",
-      relativeHint: "Only shares are available because the used context total is missing.",
-      historical: "Historical estimate",
-      historicalHint: "Estimates use historical shares and the recorded context total.",
+      compositionHint: "Estimated categories of the displayed request; unattributed input stays separate.",
       distributionUnavailable: 'No distribution available',
       sourceLabels: {
+        unattributed_usage: 'Unattributed',
         system_prompt: 'System prompt', system_tools: 'System tool definitions', mcp_tools: 'MCP tool definitions', provider_tools: 'Provider tool definitions',
         messages: 'Messages', tool_outputs: 'Tool execution outputs', skills: 'Skill catalog', rule_files: 'Rule file index', environment: 'Environment',
         summary: 'Conversation summary', reasoning: 'Reasoning', attachments: 'Images & files',

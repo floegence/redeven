@@ -20,7 +20,7 @@ export function FlowerComposerContextIndicator(props: {
   const disclosures = new Map<string, HTMLElement>();
   const expanded = new Set<string>();
   const categories = createMemo(() => {
-    const focused = [...disclosures.values()].find(element => element === document.activeElement);
+    const focused = [...disclosures.values()].find(element => element === document.activeElement || element.parentElement?.contains(document.activeElement));
     return { rows: new Map(composition()?.rows.map(row => [row.key, row])), focused };
   });
   createEffect(() => {
@@ -29,7 +29,7 @@ export function FlowerComposerContextIndicator(props: {
     // keyed rows settle so keyboard events still reach the panel.
     if (focused) queueMicrotask(() => {
       if (document.activeElement === document.body) {
-        (focused.isConnected ? focused : trigger)?.focus({ preventScroll: true });
+        (focused.isConnected && composition()?.rows.some(row => disclosures.get(row.key) === focused) ? focused : trigger)?.focus({ preventScroll: true });
       }
     });
   });
@@ -42,7 +42,7 @@ export function FlowerComposerContextIndicator(props: {
         <ChevronRight class="flower-context-chevron" aria-hidden="true" />
       </Show>
     </span>
-    <Show when={composition()?.showTokenAmounts}><span class="flower-model-context-amount" title={labels().estimated + ': ≈' + labels().tokens(String(rowProps.row.tokens))}>≈{formatContextAmount(rowProps.row.tokens)}</span></Show>
+    <Show when={composition()}><span class="flower-model-context-amount" title={labels().estimated + ': ≈' + labels().tokens(String(rowProps.row.tokens))}>≈{formatContextAmount(rowProps.row.tokens)}</span></Show>
     <span class="flower-model-context-share">{percent(rowProps.row.share)}</span>
     <div class="flower-model-context-track" aria-hidden="true"><span class="flower-model-context-fill" style={{ width: rowProps.row.share + '%' }} /></div>
   </>;
@@ -65,6 +65,15 @@ export function FlowerComposerContextIndicator(props: {
     if (!containsFocus() && (document.activeElement !== document.body || !containsPointer())) setTooltipOpen(false);
   });
   const close = () => { cancelDismiss(); trigger?.focus({ preventScroll: true }); setTooltipOpen(false); };
+  const activate = () => {
+    trigger?.focus({ preventScroll: true });
+    setTooltipOpen(true);
+    requestAnimationFrame(() => {
+      void Promise.allSettled(panel?.getAnimations?.().map(animation => animation.finished) ?? []).then(() => {
+        if (tooltipOpen() && document.activeElement === trigger) panel?.focus({ preventScroll: true });
+      });
+    });
+  };
   const escape = (event: KeyboardEvent) => {
     if (event.key === 'Escape' && tooltipOpen()) { event.stopPropagation(); event.preventDefault(); close(); }
   };
@@ -118,7 +127,7 @@ export function FlowerComposerContextIndicator(props: {
       onPointerLeave={scheduleDismiss}
       onFocusIn={() => { cancelDismiss(); setTooltipOpen(true); }}
       onFocusOut={handleFocusOut}
-      onKeyDown={escape}
+      on:keydown={escape}
     >
       <div
         ref={trigger}
@@ -131,29 +140,34 @@ export function FlowerComposerContextIndicator(props: {
         aria-valuetext={view().ariaValueText}
         aria-describedby={tooltipOpen() ? tooltipID : undefined}
         aria-controls={tooltipID}
+        aria-haspopup="dialog"
         tabIndex={0}
         style={progressStyle()}
         onFocus={() => setTooltipOpen(true)}
-        onClick={() => setTooltipOpen(true)}
+        onClick={activate}
         onKeyDown={(event) => {
           if (event.key === 'Enter' || event.key === ' ') {
             event.preventDefault();
-            setTooltipOpen((open) => !open);
+            if (tooltipOpen()) close(); else activate();
           }
         }}
       />
       <SurfaceFloatingLayer owner={anchor()} position={layout().position} estimatedSize={layout().size} class="flower-context-panel-layer" data-flower-floating-layer="true">
       <div
         ref={panel}
-        onKeyDown={escape}
+        on:keydown={escape}
         onPointerEnter={cancelDismiss}
         onPointerLeave={scheduleDismiss}
         onPointerDown={cancelDismiss}
-        onClick={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          event.stopPropagation();
+          if (tooltipOpen() && panel && !panel.contains(document.activeElement)) panel.focus({ preventScroll: true });
+        }}
         onFocusIn={cancelDismiss}
         onFocusOut={handleFocusOut}
         id={tooltipID}
-        role="region"
+        role="dialog"
+        aria-modal="false"
         tabIndex={-1}
         aria-label={labels().label}
         class="flower-composer-context-tooltip"
@@ -164,7 +178,7 @@ export function FlowerComposerContextIndicator(props: {
           <span>{labels().label}</span>
           <span class="flower-context-total" title={contextWindow() ? `${labels().tokens(String(contextWindow()!.input))} / ${labels().tokens(String(contextWindow()!.capacity))}` : undefined}>
             <Show when={contextWindow()}>{(window) => <>
-              <Show when={window().estimated}><span title={labels().estimated} aria-label={labels().estimated}>≈ </span></Show>
+              <span title={(window().estimated ? labels().estimated : labels().measured) + ' · ' + (window().estimated ? labels().currentRequest : labels().lastRequest)} aria-label={(window().estimated ? labels().estimated : labels().measured) + ' · ' + (window().estimated ? labels().currentRequest : labels().lastRequest)}>{window().estimated ? '≈ ' : '= '}</span>
               {formatContextAmount(window().input)}<span class="flower-context-capacity"> / {formatContextAmount(window().capacity)}</span>
               {' '}
             </>}</Show>
@@ -188,10 +202,10 @@ export function FlowerComposerContextIndicator(props: {
           </div>
         }</Show>
         <Show when={composition()}>
-          <div class="flower-context-categories flower-context-composition" role="group" aria-label={labels().composition} title={!composition()?.showTokenAmounts ? labels().relativeHint : composition()?.historical ? labels().historicalHint : labels().compositionHint} data-token-amounts={composition()?.showTokenAmounts ? 'true' : 'false'}>
+          <div class="flower-context-categories flower-context-composition" role="group" aria-label={labels().composition} title={labels().compositionHint}>
             <For each={[...categories().rows.keys()]}>{(key) => {
               const row = () => categories().rows.get(key)!;
-              const description = () => [labels().sourceLabels[key], composition()?.historical ? labels().historical : composition()?.showTokenAmounts ? labels().estimated : labels().textShare, ...(composition()?.showTokenAmounts ? ['≈' + labels().tokens(String(row().tokens))] : []), percent(row().share)].join(' · ');
+              const description = () => [labels().sourceLabels[key], labels().estimated, '≈' + labels().tokens(String(row().tokens)), percent(row().share)].join(' · ');
               return <Show when={row().items.length > 1 || (row().items.length > 0 && key.endsWith('_tools'))} fallback={
                 <div class="flower-context-composition-row" data-category={key} aria-label={description()}><SourceRow row={row()} /></div>
               }>
@@ -204,7 +218,7 @@ export function FlowerComposerContextIndicator(props: {
                     <For each={row().items}>{(item) => <div class="flower-model-context-row" data-source-key={item.key}>
                       <i class="flower-context-swatch" aria-hidden="true" />
                       <span class="flower-model-context-label" title={item.label}>{item.category ? labels().categoryLabels[item.category] : labels().sectionLabels[item.key] ?? item.label ?? labels().sourceLabels[key]}</span>
-                      <Show when={composition()?.showTokenAmounts}><span class="flower-model-context-amount" title={labels().estimated + ': ≈' + labels().tokens(String(item.tokens))}>≈{formatContextAmount(item.tokens)}</span></Show>
+                      <Show when={composition()}><span class="flower-model-context-amount" title={labels().estimated + ': ≈' + labels().tokens(String(item.tokens))}>≈{formatContextAmount(item.tokens)}</span></Show>
                       <span class="flower-model-context-share">{percent(item.share)}</span>
                       <div class="flower-model-context-track" aria-hidden="true"><span class="flower-model-context-fill" style={{ width: item.share + '%' }} /></div>
                     </div>}</For>
@@ -214,7 +228,7 @@ export function FlowerComposerContextIndicator(props: {
             }}</For>
           </div>
         </Show>
-        <Show when={!composition() && contextWindow()}>
+        <Show when={!composition() && (props.usage?.confirmed || props.usage?.estimate)}>
           <div class="flower-context-composition-unavailable">{labels().composition}<span>{labels().distributionUnavailable}</span></div>
         </Show>
         <div class="flower-context-cache-stats">

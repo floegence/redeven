@@ -117,6 +117,17 @@ type FlowerContextUsage struct {
 }
 
 type FlowerContextSample struct {
+	Available              bool                       `json:"available"`
+	Measured               bool                       `json:"measured"`
+	BreakdownAvailable     bool                       `json:"breakdown_available"`
+	UnattributedTokens     int64                      `json:"unattributed_tokens"`
+	Limitation             string                     `json:"limitation,omitempty"`
+	RequestID              string                     `json:"request_id,omitempty"`
+	AttemptID              string                     `json:"attempt_id,omitempty"`
+	AttemptEpoch           int                        `json:"attempt_epoch,omitempty"`
+	PayloadFingerprint     string                     `json:"payload_fingerprint,omitempty"`
+	Provider               string                     `json:"provider,omitempty"`
+	Model                  string                     `json:"model,omitempty"`
 	RequestOutputTokens    int64                      `json:"request_output_tokens,omitempty"`
 	OutputControl          string                     `json:"output_control,omitempty"`
 	SafetyMarginTokens     int64                      `json:"safety_margin_tokens,omitempty"`
@@ -124,7 +135,7 @@ type FlowerContextSample struct {
 	RunID                  string                     `json:"run_id,omitempty"`
 	StepIndex              int                        `json:"step_index,omitempty"`
 	Phase                  string                     `json:"phase"`
-	InputTokens            int64                      `json:"input_tokens,omitempty"`
+	InputTokens            int64                      `json:"input_tokens"`
 	ContextWindowTokens    int64                      `json:"context_window_tokens,omitempty"`
 	ThresholdTokens        int64                      `json:"threshold_tokens,omitempty"`
 	RequestSafeLimitTokens int64                      `json:"request_safe_limit_tokens,omitempty"`

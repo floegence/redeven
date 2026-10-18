@@ -15,13 +15,13 @@ export function buildFlowerContextWindow(usage: FlowerContextUsage) {
   const sample = usage.confirmed ?? usage.estimate;
   const input = sample?.input_tokens;
   const capacity = sample?.context_window_tokens;
-  if (input === undefined || !Number.isFinite(input) || input < 0
+  if (!sample?.available || input === undefined || !Number.isFinite(input) || input < 0
     || capacity === undefined || !Number.isFinite(capacity) || capacity <= 0) return null;
   const used = Math.min(input, capacity);
   return {
     input,
     capacity,
-    estimated: !usage.confirmed,
+    estimated: !sample.measured,
     segments: [
       { key: 'input' as const, tokens: input },
       { key: 'freeSpace' as const, tokens: capacity - used },
@@ -32,7 +32,7 @@ export function buildFlowerContextWindow(usage: FlowerContextUsage) {
 export const FLOWER_CONTEXT_SOURCES = [
   'system_prompt', 'system_tools', 'mcp_tools', 'provider_tools', 'messages',
   'tool_outputs', 'skills', 'rule_files', 'environment', 'summary', 'reasoning',
-  'attachments', 'protocol_framing', 'context_framing', 'unattributed_tools', 'unattributed_context',
+  'attachments', 'protocol_framing', 'context_framing', 'unattributed_tools', 'unattributed_context', 'unattributed_usage',
 ] as const;
 export type FlowerContextSource = typeof FLOWER_CONTEXT_SOURCES[number];
 export type FlowerContextSourceRow = { key: FlowerContextSource; tokens: number; share: number;
@@ -43,7 +43,7 @@ export type FlowerContextSourceRow = { key: FlowerContextSource; tokens: number;
 export function buildFlowerContextComposition(usage: FlowerContextUsage) {
   const sample = usage.confirmed ?? usage.estimate;
   const breakdown = sample?.breakdown;
-  if (!breakdown?.source) return null;
+  if (!sample?.available || !sample.breakdown_available || !breakdown?.source) return null;
   const rows = new Map<FlowerContextSource, FlowerContextSourceRow>();
   const add = (key: FlowerContextSource, tokens: number, item?: Omit<FlowerContextSourceRow['items'][number], 'share'>) => {
     if (!Number.isSafeInteger(tokens) || tokens <= 0) return;
@@ -80,33 +80,15 @@ export function buildFlowerContextComposition(usage: FlowerContextUsage) {
     add('unattributed_tools', breakdown.tool_definition_tokens ?? 0);
     add('unattributed_context', breakdown.model_context_tokens ?? 0);
   }
-  const weightTotal = [...rows.values()].reduce((sum, row) => sum + row.tokens, 0);
-  if (!Number.isSafeInteger(weightTotal) || weightTotal <= 0) return null;
+  add('unattributed_usage', sample.unattributed_tokens ?? 0);
+  const total = sample.input_tokens ?? 0;
   const ordered = [...rows.values()].sort((a, b) => b.tokens - a.tokens || FLOWER_CONTEXT_SOURCES.indexOf(a.key) - FLOWER_CONTEXT_SOURCES.indexOf(b.key));
   for (const row of ordered) {
-    row.share = row.tokens / weightTotal * 100;
+    row.share = total > 0 ? row.tokens / total * 100 : 0;
     row.items.sort((a, b) => b.tokens - a.tokens || a.key.localeCompare(b.key));
-    for (const item of row.items) item.share = item.tokens / row.tokens * 100;
+    for (const item of row.items) item.share = row.tokens > 0 ? item.tokens / row.tokens * 100 : 0;
   }
-  const input = sample?.input_tokens;
-  const total = input !== undefined && Number.isSafeInteger(input) && input >= 0 ? input : null;
-  if (total !== null) {
-    // Round cumulative allocations so each group's displayed amounts add up.
-    const allocate = (entries: { tokens: number }[], amount: number) => {
-      const weight = entries.reduce((sum, entry) => sum + entry.tokens, 0);
-      let cumulative = 0;
-      let allocated = 0;
-      for (const entry of entries) {
-        cumulative += entry.tokens;
-        const next = Math.round(amount * (cumulative / weight));
-        entry.tokens = next - allocated;
-        allocated = next;
-      }
-    };
-    allocate(ordered, total);
-    for (const row of ordered) allocate(row.items, row.tokens);
-  }
-  return { total, rows: ordered, showTokenAmounts: total !== null, historical: !breakdown.quality };
+  return { total, rows: ordered };
 }
 
 export type FlowerComposerContextIndicatorView = Readonly<{
@@ -132,8 +114,7 @@ export function formatContextTokenCount(tokens: number | undefined): string {
 }
 
 export function contextUsageRatio(usage: FlowerContextSample): number | null {
-  const direct = Number(usage.used_ratio);
-  if (Number.isFinite(direct) && direct >= 0) return Math.min(1, direct);
+  if (!usage.available) return null;
   const input = Number(usage.input_tokens);
   const windowTokens = Number(usage.context_window_tokens ?? 0);
   if (!Number.isFinite(input) || !Number.isFinite(windowTokens) || input < 0 || windowTokens <= 0) return null;
@@ -194,7 +175,7 @@ export function buildFlowerComposerContextIndicatorView(
   const progressValue = ratio === null ? null : Math.round(ratio * 100);
   const ratioValue = progressValue === null ? labels.unknownPercent : labels.percent(progressValue);
   const pressure = usage.estimate ?? usage.confirmed;
-  const warning = (() => {
+  const pressureWarning = (() => {
     switch (pressure?.pressure_status) {
       case 'near_threshold': return labels.nearThreshold;
       case 'will_compact': return labels.willCompact;
@@ -202,6 +183,7 @@ export function buildFlowerComposerContextIndicatorView(
       default: return '';
     }
   })();
+  const warning = pressureWarning && pressure !== sample ? labels.currentRequest + ': ' + pressureWarning : pressureWarning;
   const cacheHitValue = formatCacheHitPercent(usage.thread_usage, labels.unknownPercent);
   const recentCacheHitValue = formatCacheHitPercent(usage.recent_request_usage, labels.unknownPercent);
   const accessibleRecentCache = formatCacheHitPercent(usage.recent_request_usage, labels.unavailable);
@@ -209,7 +191,7 @@ export function buildFlowerComposerContextIndicatorView(
   const accessibleCache = formatCacheHitPercent(usage.thread_usage, labels.unavailable);
   return {
     ariaLabel: labels.label,
-    ariaValueText: `${labels.label}: ${accessibleUsage}, ${labels.recentCacheHitLabel}: ${accessibleRecentCache}, ${labels.cacheHitLabel}: ${accessibleCache}${warning ? `, ${warning}` : ''}`,
+    ariaValueText: `${labels.label}: ${sample?.available && sample.input_tokens !== undefined ? (sample.measured ? "= " + labels.measured : "≈ " + labels.estimated) + ", " + (sample.measured ? labels.lastRequest : labels.currentRequest) + ", " : ""}${accessibleUsage}, ${labels.recentCacheHitLabel}: ${accessibleRecentCache}, ${labels.cacheHitLabel}: ${accessibleCache}${warning ? `, ${warning}` : ''}`,
     ratioValue,
     tone: usage.confirmed ? contextPressureTone(pressure?.pressure_status ?? 'estimated') : 'estimated',
     ratio,

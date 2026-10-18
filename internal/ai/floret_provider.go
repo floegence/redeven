@@ -773,13 +773,15 @@ func flowerProviderStateToFloret(state *ModelGatewayState) (*flprovider.State, e
 
 func floretUsageFromFlower(usage TurnUsage) flprovider.Usage {
 	out := flprovider.Usage{
+		TotalTokens: usage.TotalTokens, TotalTokensReported: usage.TotalTokensReported, OutputIncludesReasoning: usage.OutputIncludesReasoning,
+		Source: "native", Available: usage.Available || usage.TotalTokensReported || usage.TotalTokens > 0 || usage.InputTokens > 0 || usage.OutputTokens > 0 || usage.ReasoningTokens > 0 || usage.CacheReadTokens > 0 || usage.CacheWriteTokens > 0,
 		InputTokens:      usage.InputTokens,
 		OutputTokens:     usage.OutputTokens,
 		ReasoningTokens:  usage.ReasoningTokens,
 		CacheReadTokens:  usage.CacheReadTokens,
 		CacheWriteTokens: usage.CacheWriteTokens,
 	}
-	return normalizeFloretUsage(out)
+	return out.Normalized()
 }
 
 func cloneStringMap(in map[string]string) map[string]string {
@@ -807,19 +809,6 @@ func runtimeAttachmentFromProvider(attachment flprovider.Attachment) flruntime.M
 		}
 	}
 	return out
-}
-
-func normalizeFloretUsage(usage flprovider.Usage) flprovider.Usage {
-	if usage.TotalTokens <= 0 {
-		usage.TotalTokens = usage.InputTokens + usage.OutputTokens + usage.ReasoningTokens + usage.CacheReadTokens + usage.CacheWriteTokens
-	}
-	if usage.Source == "" && usage.TotalTokens > 0 {
-		usage.Source = "model_gateway"
-	}
-	if usage.TotalTokens > 0 || usage.InputTokens > 0 || usage.OutputTokens > 0 || usage.ReasoningTokens > 0 {
-		usage.Available = true
-	}
-	return usage
 }
 
 // WithMaxOutputTokens derives a new single-use handle from frozen input only.

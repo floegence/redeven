@@ -116,24 +116,27 @@ provides exact tool names with registry source/namespace annotations and
 canonical managed-section token estimates. Flower groups only its known source
 values and section keys. It never guesses from tool names or parses prompt text.
 
-Every source uses an aligned horizontal bar and a share of this request's
-content weight. Flower estimates category token amounts by allocating the displayed
-used-context total according to those shares, regardless of tokenizer quality or
-media coverage. Child amounts allocate their parent total by their group shares.
-Integer rounding preserves category and group sums; every amount carries an
-approximation mark, including tooltips and accessible labels. The calculation
-and historical status stay in tooltips and accessible labels rather than adding
-another visible heading or badge. A missing used-context total leaves shares only; a missing
-breakdown shows an unavailable state. These are display estimates, not
-provider-measured category counts or changes to Floret's budget calculations.
-Content and protocol framing share the upstream counting core; safety margins
-and media budget reserves do not enter category shares. The capacity bar separates
-used input and remaining capacity; request output limits stay separate. Parent
-source weights replace their detailed weights and are never added twice.
-Confirmed total and composition describe the same request; newer snapshots and
-projected requests cannot fill gaps in an older sample. Historical missing source
-data is visibly unattributed, with no inferred MCP/system split or character-based
-allocation.
+Flower consumes published Floret v7.55.0 accounting through one pure
+ReconcileContextStatus mapping for live events and canonical reads. The last
+confirmed sample owns the total, category estimates and recent cache rate.
+Newer request estimates drive only current-request pressure. A measured total
+uses =; estimates use ≈ in visible values, titles and accessible labels.
+
+Category and child values retain their upstream token estimates. Shares describe
+the displayed total or parent group and never allocate or scale token amounts.
+A positive difference is a separate Unattributed row, however large it is.
+Categories above the total, damaged details, missing request identity or legacy
+mixed units suppress distribution while retaining a trustworthy measured total.
+A complete qualified local estimate may supply an approximate total; partial
+content without native usage cannot. Explicit measured zero remains available.
+Opaque reasoning bytes, media proxies, output reservation and safety margins do
+not enter content categories. No online count is performed before sending.
+
+Model or policy changes and successful compaction invalidate old samples through
+Floret's canonical boundaries. Stop, failed requests and missing usage preserve
+still-valid confirmed samples. The next confirmed sample restores distribution
+automatically. Flower stores no second accounting ledger and never reconstructs
+provider history or estimates missing provider categories.
 
 Sources with multiple fragments and tool sources have one collapsed disclosure.
 Opening a source reveals flat horizontal rows; no item expands again or exposes

@@ -405,9 +405,8 @@
     "toolArgumentPreviewTooltip": "These line counts preview the changes being prepared. Actual changes are shown after the tool finishes.",
     "contextIndicatorCurrentContents": "Current contents",
     "contextIndicatorCurrentContentsHint": "Current text by character count; token totals include retained updates.",
-    "contextIndicatorTextShare": "Relative shares",
     "contextIndicatorComposition": "Input composition estimate",
-    "contextIndicatorCompositionHint": "Token amounts are estimated from used context and each share.",
+    "contextIndicatorCompositionHint": "Estimated categories of the displayed request; unattributed input stays separate.",
     "contextIndicatorSourceSystemPrompt": "System prompt",
     "contextIndicatorSourceSystemTools": "System tool definitions",
     "contextIndicatorSourceMcpTools": "MCP tool definitions",
@@ -633,11 +632,12 @@
     "queuedEdit": "Move to input box",
     "queueTakeBackConflict": "This queued message has already started or changed. Refresh and try again.",
     "queueTakeBackUnknown": "Message restored to the input box. Queue removal could not be confirmed; check the queue before sending.",
-    "contextIndicatorRelativeHint": "Only shares are available because the used context total is missing.",
-    "contextIndicatorHistorical": "Historical estimate",
-    "contextIndicatorHistoricalHint": "Estimates use historical shares and the recorded context total.",
     "contextIndicatorDistributionUnavailable": "No distribution available",
-    "contextIndicatorProtocolFraming": "Protocol formatting"
+    "contextIndicatorProtocolFraming": "Protocol formatting",
+    "contextIndicatorMeasured": "Measured",
+    "contextIndicatorLastRequest": "Last request",
+    "contextIndicatorCurrentRequest": "Current request",
+    "contextIndicatorSourceUnattributed": "Unattributed"
   },
   "threadList": {
     "title": "Conversations",

@@ -88,7 +88,7 @@ func TestRenderedContextAttributionAfterChatToolImages(t *testing.T) {
 	}
 	defer prepared.Close()
 	estimate := prepared.TokenEstimate()
-	if estimate.Breakdown.Diagnostic != "" || estimate.Breakdown.Source == "" || estimate.Breakdown.Quality != "relative_weight" || estimate.Breakdown.Details == nil {
+	if estimate.Breakdown.Diagnostic != "" || estimate.Breakdown.Source == "" || estimate.Breakdown.Quality != "token_estimate" || estimate.Breakdown.AttributionCoverage != "partial" || estimate.Breakdown.AttachmentTokens != 0 || estimate.Breakdown.Details == nil {
 		t.Fatalf("lost distribution after synthetic image message: %+v", estimate.Breakdown)
 	}
 	for _, item := range estimate.Breakdown.Details.Items {

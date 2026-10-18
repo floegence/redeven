@@ -1,9 +1,9 @@
 ---
 type: Qualification Evidence
 title: Flower context distribution qualification
-description: Fixed native-usage comparisons, real DeepSeek tasks and presentation evidence for published Floret v7.47.1.
+description: Historical native comparisons and current request accounting, recovery and UI qualification with published Floret v7.55.0.
 tags: [flower, context, deepseek, qualification]
-timestamp: 2026-10-16T00:00:00Z
+timestamp: 2026-10-18T00:00:00Z
 ---
 # Summary
 
@@ -116,18 +116,14 @@ portable committed fixtures. The 24 synthetic upstream fixtures are committed.
 
 ## Presentation and regression coverage
 
-The following records the original qualification behavior. The current
-[presentation contract](../ai/flower-managed-model-context.md#presentation)
-uses proportional token estimates for all recorded distribution qualities,
-including media and historical samples. This display-only follow-up does not
-change the estimator measurements or recorded live-task outcomes below.
-
-The displayed total prefers native usage. Its content distribution comes from
-the same request. Matching vocabulary plus complete text permits approximate
-token amounts and shares. Media, opaque inputs or unmatched vocabularies show
-shares throughout visible text, titles and accessibility labels. Legacy samples
-show explicitly historical shares; absent samples show no distribution.
-Top-level shares use all content weights; child shares use their own group.
+The original fixed-request measurements above remain historical evidence.
+The current [presentation contract](../ai/flower-managed-model-context.md#presentation)
+uses Floret v7.55.0 request accounting: no proportional allocation, mixed-unit
+categories or aggregate-error threshold qualifies attribution. Valid estimated
+categories retain their values and a separate Unattributed row accounts for
+unobserved input. Legacy categories are unavailable; their measured totals remain.
+These rules supersede the previous display behavior without rewriting its recorded
+provider results or treating whole-request accuracy as category accuracy.
 
 System tool definitions, MCP tool definitions, tool execution outputs, skill
 catalog, rule files and environment retain explicit names. Disclosures are one
@@ -144,6 +140,72 @@ published Floret dependency boundaries, live protocol and generated OKF checks.
 Floret's complete Go suite, v7 compatibility, candidate and published-release
 adoption checks passed before release. Normal Redeven commit hooks are required.
 The Redeven push gate is intentionally excluded and no Redeven code is pushed.
+
+## Request accounting qualification, 2026-10-18
+
+Published Floret v7.55.0, commit 86e30ca, owns reconciliation and usage
+normalization. Concurrent upstream work had already occupied schema 21, so the
+accounting migration is the contiguous 21 to 22 edge. It preserves historical
+entry bytes and every earlier migration. Redeven uses the published module
+with GOWORK=off, without a local workspace, replacement or dependency overlay.
+
+Sanitized screenshot and official-account fixtures retain their native totals
+and visible categories, including 18,363 visible versus 46,292 measured input.
+The 27,929 remainder stays unattributed; it is neither assigned to tools nor
+evidence that the tokenizer has a 60.33% error. Fixed tool definitions keep
+their original estimates as native input grows. Regression tests cover zero,
+missing and inclusive reasoning usage, partial coverage, legacy units, invalid
+details, categories exceeding totals and shared stream/final normalization.
+
+The task-owned production Runtime qualification uses the built Env App,
+verified ReDevPlugin v3.0.35 companions, Playwright Chromium and an isolated
+deterministic OpenAI Responses SSE endpoint. It uses a synthetic qualification
+key, never a user's credential or production state. The fixture reports
+90,000 input, 18,000 cached input, 40 output including 20 reasoning, and
+90,040 total tokens. This verifies integration and interaction, not live
+provider tokenizer accuracy. The maintained runner is
+[checkFlowerContextAccountingRuntime.mjs](../../internal/envapp/ui_src/scripts/checkFlowerContextAccountingRuntime.mjs).
+
+The final run passes five scenarios: one confirmed sample owns the total,
+categories and 20% recent cache rate during a newer estimate; Stop preserves
+that sample and releases the composer; missing usage and an explicit provider
+failure retain it and user Retry reply installs the next confirmed sample;
+canonical reload preserves categories with keyboard/mouse close and focus
+return at 360px width; Runtime restart preserves the exact canonical confirmed
+sample. Real interaction exposed mouse activation and Escape ownership gaps;
+the panel now owns focus after activation and Escape does not close its outer
+conversation window. Browser Mode independently passes all 15 focused tests,
+including local projected placement, locale layouts and changing attribution.
+
+Final evidence is retained locally at
+/Volumes/JianDisk/.codex-cc/artifacts/flower-context-accounting-20261018.
+It contains the runtime report, screenshots and validation logs, excluding
+credentials and runtime state. Earlier failed qualification runs remain failed
+in their original /tmp/redeven-context-accounting-e2e/run-* directories.
+
+Validation results:
+
+- Floret: complete Go tests, vet, focused race, v7 API baseline, candidate
+  adoption and public-proxy published adoption pass. Vulnerability analysis
+  finds zero reachable/imported vulnerabilities and five in required but
+  uncalled modules. The live online-count qualification was not run. The
+  credentialed SQLite example cannot run without OPENAI_API_KEY; it is not
+  reported as passing.
+- Redeven: affected AI, threadstore, appserver and boundarycontract Go tests,
+  vet and focused accounting race pass. Dependency/protocol/generated-artifact
+  and OKF checks, Env App/Desktop type checks, production UI builds, changed
+  source lint, localization and focused Node/Browser tests pass. A broader
+  shared Flower run passes 810 tests.
+- Broader qualification is not all green: five Node failures, six Browser
+  failures and three unused-import lint errors are independently reproduced
+  on the unchanged b6317fd4e baseline archive. Node failures concern stale
+  Back to chat lookups and Code export mocks; Browser failures concern
+  companion dialog mode, subagent floating geometry and a hardcoded tool-icon
+  count. The lint errors are unused spawn imports in the existing canvas
+  editing, group-layout and relation qualification scripts. These unrelated
+  failures remain visible and are not counted as passes.
+- Normal commit hooks run. Redeven's push gate and its component groups are
+  deliberately not executed; Redeven main and feature branches are not pushed.
 
 # Boundaries
 

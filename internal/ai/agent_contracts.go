@@ -31,11 +31,15 @@ type PartialToolCall struct {
 }
 
 type PartialUsage struct {
-	InputTokens      int64 `json:"input_tokens,omitempty"`
-	OutputTokens     int64 `json:"output_tokens,omitempty"`
-	ReasoningTokens  int64 `json:"reasoning_tokens,omitempty"`
-	CacheReadTokens  int64 `json:"cache_read_tokens,omitempty"`
-	CacheWriteTokens int64 `json:"cache_write_tokens,omitempty"`
+	OutputIncludesReasoning bool  `json:"output_includes_reasoning,omitempty"`
+	TotalTokensReported     bool  `json:"total_tokens_reported,omitempty"`
+	TotalTokens             int64 `json:"total_tokens,omitempty"`
+	Available               bool  `json:"available,omitempty"`
+	InputTokens             int64 `json:"input_tokens,omitempty"`
+	OutputTokens            int64 `json:"output_tokens,omitempty"`
+	ReasoningTokens         int64 `json:"reasoning_tokens,omitempty"`
+	CacheReadTokens         int64 `json:"cache_read_tokens,omitempty"`
+	CacheWriteTokens        int64 `json:"cache_write_tokens,omitempty"`
 }
 
 type StreamEvent struct {
@@ -153,11 +157,15 @@ type SourceRef struct {
 }
 
 type TurnUsage struct {
-	InputTokens      int64 `json:"input_tokens,omitempty"`
-	OutputTokens     int64 `json:"output_tokens,omitempty"`
-	ReasoningTokens  int64 `json:"reasoning_tokens,omitempty"`
-	CacheReadTokens  int64 `json:"cache_read_tokens,omitempty"`
-	CacheWriteTokens int64 `json:"cache_write_tokens,omitempty"`
+	OutputIncludesReasoning bool  `json:"output_includes_reasoning,omitempty"`
+	TotalTokensReported     bool  `json:"total_tokens_reported,omitempty"`
+	TotalTokens             int64 `json:"total_tokens,omitempty"`
+	Available               bool  `json:"available,omitempty"`
+	InputTokens             int64 `json:"input_tokens,omitempty"`
+	OutputTokens            int64 `json:"output_tokens,omitempty"`
+	ReasoningTokens         int64 `json:"reasoning_tokens,omitempty"`
+	CacheReadTokens         int64 `json:"cache_read_tokens,omitempty"`
+	CacheWriteTokens        int64 `json:"cache_write_tokens,omitempty"`
 }
 
 type ModelGatewayState struct {

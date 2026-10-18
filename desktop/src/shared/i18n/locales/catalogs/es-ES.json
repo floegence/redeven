@@ -543,9 +543,8 @@
       "toolArgumentPreviewTooltip": "Estos recuentos de líneas muestran una vista previa de los cambios que se están preparando. Los cambios reales se muestran cuando termina la herramienta.",
       "contextIndicatorCurrentContents": "Contenido actual",
       "contextIndicatorCurrentContentsHint": "Texto actual por número de caracteres; el total de tokens incluye las actualizaciones anteriores conservadas.",
-      "contextIndicatorTextShare": "Proporciones relativas",
       "contextIndicatorComposition": "Estimación de la composición de entrada",
-      "contextIndicatorCompositionHint": "Los tokens se estiman a partir del contexto utilizado y de cada proporción.",
+      "contextIndicatorCompositionHint": "Categorías estimadas de la solicitud mostrada; la entrada sin atribuir se muestra por separado.",
       "contextIndicatorSourceSystemPrompt": "Prompt del sistema",
       "contextIndicatorSourceSystemTools": "Definiciones de herramientas del sistema",
       "contextIndicatorSourceMcpTools": "Definiciones de herramientas MCP",
@@ -772,11 +771,12 @@
       "queuedEdit": "Volver al cuadro de texto",
       "queueTakeBackConflict": "Este mensaje ya ha empezado a ejecutarse o ha cambiado. Actualiza e inténtalo de nuevo.",
       "queueTakeBackUnknown": "El mensaje está en el cuadro de texto, pero no se pudo confirmar su retirada de la cola. Revisa la cola antes de enviarlo.",
-      "contextIndicatorRelativeHint": "Solo hay proporciones disponibles porque falta el total del contexto utilizado.",
-      "contextIndicatorHistorical": "Estimación histórica",
-      "contextIndicatorHistoricalHint": "Las estimaciones usan las proporciones históricas y el total de contexto registrado.",
       "contextIndicatorDistributionUnavailable": "Distribución no disponible",
-      "contextIndicatorProtocolFraming": "Formato del protocolo"
+      "contextIndicatorProtocolFraming": "Formato del protocolo",
+      "contextIndicatorMeasured": "Medido",
+      "contextIndicatorLastRequest": "Última solicitud",
+      "contextIndicatorCurrentRequest": "Solicitud actual",
+      "contextIndicatorSourceUnattributed": "Sin atribuir"
     },
     "threadList": {
       "title": "Conversaciones",

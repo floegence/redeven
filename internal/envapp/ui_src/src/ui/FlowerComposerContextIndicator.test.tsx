@@ -12,9 +12,9 @@ const disposers: (() => void)[] = [];
 afterEach(() => { disposers.splice(0).forEach(dispose => dispose()); document.body.replaceChildren(); });
 const facts: FlowerModelContext = { snapshot: { sections: [{ key: 'skills', title: 'Available skills', text: 'Complete selectable catalog' }] },
  entry_id: 'facts', path_depth: 1, turn_id: 'turn', run_id: 'run', updated_at: '2026-10-15T12:00:00Z', changed_keys: ['skills'], removed_keys: [] };
-const sample = { phase: 'provider_usage', pressure_status: 'stable', updated_at_ms: 1, input_tokens: 600, context_window_tokens: 1000, output_headroom_tokens: 200 } as const;
+const sample = { available: true, measured: true, phase: 'provider_usage', pressure_status: 'stable', updated_at_ms: 1, input_tokens: 800, context_window_tokens: 1000, output_headroom_tokens: 200 } as const;
 function fixture(mcpTokens = 200): FlowerContextUsage {
- return { confirmed: { ...sample, breakdown: { source: 'rendered_deepseek_v4_content_v3', quality: 'token_estimate', tokenizer: 'deepseek_v4', system_tokens: 50, tool_definition_tokens: mcpTokens + 100,
+ return { confirmed: { ...sample, breakdown_available: true, unattributed_tokens: 20, breakdown: { source: 'prepared_content_v4', quality: 'token_estimate', tokenizer: 'deepseek_v4', system_tokens: 50, tool_definition_tokens: mcpTokens + 100,
   user_tokens: 40, assistant_tokens: 30, tool_call_tokens: 10, tool_result_tokens: 100, model_context_tokens: 120,
   details: { items: [
    { category: 'tool_definition', key: 'docs.search', source: 'mcp', namespace: 'docs', tokens: mcpTokens },
@@ -72,7 +72,7 @@ describe('Flower context source breakdown', () => {
   expect(host.querySelector('[data-category="mcp_tools"] summary')).toBe(summary);
   await expect.poll(() => document.activeElement).toBe(summary);
   expect(category.open).toBe(true);
-  expect(summary.querySelector('.flower-model-context-amount')?.textContent).toBe('≈25');
+  expect(summary.querySelector('.flower-model-context-amount')?.textContent).toBe('≈20');
  });
  it('dismisses through Escape, outside click and focus navigation', async () => {
   const { trigger, panel } = mount(() => fixture());
@@ -87,37 +87,18 @@ describe('Flower context source breakdown', () => {
   const outside = document.createElement('button'); document.body.append(outside); outside.focus();
   await expect.poll(() => panel.getAttribute('aria-hidden')).toBe('true');
  });
- it('never substitutes current snapshot characters for unavailable request attribution', () => {
-  const { host } = mount(() => ({ confirmed: { ...sample, breakdown: { source: 'historical', tool_definition_tokens: 100, model_context_tokens: 50 } } }));
-  expect(host.textContent).toContain('Tools without source data');
-  expect(host.textContent).toContain('Context without source data');
-  expect(host.querySelector('[data-category="unattributed_tools"] summary')).toBeNull();
-  expect(host.textContent).not.toContain('Skill catalog');
+ it('suppresses historical and unreliable categories while retaining the measured total', () => {
+  const value = fixture();
+  const { host } = mount(() => ({ confirmed: { ...value.confirmed!, breakdown_available: false, breakdown: undefined, limitation: 'unavailable_attribution' } }));
+  expect(host.textContent).toContain('No distribution available');
+  expect(host.querySelector('.flower-context-composition')).toBeNull();
+  expect(host.querySelector('.flower-context-total')?.textContent).toContain('= 800');
   expect(mount().host.querySelector('.flower-context-composition')).toBeNull();
  });
- it.each(['relative', 'historical', 'media'] as const)('shows proportional estimated amounts for %s distributions', mode => {
-  const value = fixture(); const breakdown = value.confirmed!.breakdown!;
-  const { quality: _quality, tokenizer: _tokenizer, ...historical } = breakdown;
-  const metadata = mode === 'historical' ? historical : { ...breakdown, quality: 'relative_weight' as const, ...(mode === 'media' ? { attachment_tokens: 100 } : {}) };
-  const { host } = mount(() => ({ ...value, confirmed: { ...value.confirmed!, breakdown: metadata } }));
-  const distribution = host.querySelector('.flower-context-composition')!;
-  expect(distribution.textContent).toContain('≈');
-  expect(distribution.getAttribute('title')).toBe(mode === 'historical' ? DEFAULT_FLOWER_SURFACE_COPY.chat.contextIndicator.historicalHint : DEFAULT_FLOWER_SURFACE_COPY.chat.contextIndicator.compositionHint);
-  for (const row of distribution.querySelectorAll('.flower-context-composition-row')) {
-   expect(row.querySelector('.flower-model-context-amount')?.textContent).toMatch(/^≈\d/);
-   expect(row.getAttribute('aria-label')).toContain('≈');
-   expect(row.querySelector('.flower-model-context-amount')?.getAttribute('title')).toContain('Estimated: ≈');
-  }
-  const amount = distribution.querySelector('[data-category="mcp_tools"] .flower-model-context-amount')!;
-  expect(amount.textContent).toBe(mode === 'media' ? '≈160' : '≈185');
- });
- it('shows shares without amounts only when the displayed input total is missing', () => {
-  const value = fixture();
-  const { host } = mount(() => ({ confirmed: { ...value.confirmed!, input_tokens: undefined }, estimate: { ...value.confirmed!, input_tokens: 1000 } }));
-  const distribution = host.querySelector('.flower-context-composition')!;
-  expect(distribution.querySelector('.flower-model-context-amount')).toBeNull();
-  expect(distribution.getAttribute('title')).toBe(DEFAULT_FLOWER_SURFACE_COPY.chat.contextIndicator.relativeHint);
-  expect(distribution.textContent).not.toContain('≈');
+ it('never presents partial input as a total', () => {
+  const { host, trigger } = mount(() => ({ estimate: { ...sample, available: false, measured: false, phase: 'projected_request' } }));
+  expect(host.querySelector('.flower-context-total')?.textContent).toBe('—');
+  expect(trigger.getAttribute('aria-valuenow')).toBeNull();
  });
  it('keeps the displayed request authoritative when its distribution is missing', () => {
   const value = { confirmed: { ...sample }, estimate: fixture().confirmed };
@@ -125,11 +106,15 @@ describe('Flower context source breakdown', () => {
   expect(host.textContent).toContain('No distribution available');
   expect(host.querySelector('.flower-context-composition')).toBeNull();
  });
- it('rejects malformed, duplicate and mismatched source allocations at the wire boundary', () => {
+ it('isolates malformed, duplicate and mismatched source allocations at the wire boundary', () => {
   expect(mapContextUsage(JSON.parse(JSON.stringify(fixture())))).toEqual(fixture());
   const invalid = (mutate: (value: ReturnType<typeof fixture>) => void) => {
    const raw = JSON.parse(JSON.stringify(fixture())); mutate(raw);
-   expect(() => mapContextUsage(raw)).toThrow();
+   const mapped = mapContextUsage(raw)!;
+   expect(mapped.confirmed!.available).toBe(true);
+   expect(mapped.confirmed!.breakdown_available).toBe(false);
+   expect(mapped.confirmed!.input_tokens).toBe(800);
+   expect(mapped.confirmed!.limitation).toBe('invalid_breakdown');
   };
   invalid(value => { (value.confirmed!.breakdown!.details!.items as unknown[])[0] = { category: 'tool_definition', key: 'x', tokens: -1 }; });
   invalid(value => { (value.confirmed!.breakdown!.details!.items as unknown[]).push(value.confirmed!.breakdown!.details!.items[0]); });
@@ -139,11 +124,11 @@ describe('Flower context source breakdown', () => {
 
 describe('Flower context capacity partitions', () => {
  it('partitions measured capacity independently from source estimates', () => {
-  expect(buildFlowerContextWindow({ confirmed: sample })).toEqual({ input: 600, capacity: 1000, estimated: false, segments: [
-   { key: 'input', tokens: 600, share: 60 }, { key: 'freeSpace', tokens: 400, share: 40 },
+  expect(buildFlowerContextWindow({ confirmed: sample })).toEqual({ input: 800, capacity: 1000, estimated: false, segments: [
+   { key: 'input', tokens: 800, share: 80 }, { key: 'freeSpace', tokens: 200, share: 20 },
   ] });
-  expect(buildFlowerContextWindow({ confirmed: sample, estimate: { ...sample, phase: 'projected_request', input_tokens: 900 } })?.input).toBe(600);
-  expect(buildFlowerContextWindow({ estimate: { ...sample, phase: 'projected_request' } })?.estimated).toBe(true);
+  expect(buildFlowerContextWindow({ confirmed: sample, estimate: { ...sample, phase: 'projected_request', input_tokens: 900 } })?.input).toBe(800);
+  expect(buildFlowerContextWindow({ estimate: { ...sample, measured: false, phase: 'projected_request' } })?.estimated).toBe(true);
  });
  it('handles unknown and exhausted windows without negative allocations', () => {
   expect(buildFlowerContextWindow({})).toBeNull();
@@ -153,14 +138,14 @@ describe('Flower context capacity partitions', () => {
 });
 
 describe('Flower compact context popup', () => {
- it('keeps measured input and proportional amounts without showing request budgets', () => {
+ it('keeps measured input and unscaled amounts without showing request budgets', () => {
   const usage=fixture();
   const {host}=mount(()=>({...usage, confirmed:{...usage.confirmed!, input_tokens:68400,context_window_tokens:950000,threshold_tokens:855000,request_output_tokens:393216,output_control:'client',safety_margin_tokens:4096}}));
   expect(host.querySelector('[data-category="outputReserve"]')).toBeNull();
   expect(host.textContent).not.toContain('855k');
   expect(host.textContent).not.toContain('393.2k');
   expect(host.querySelector('.flower-context-total')?.textContent).toContain('68.4k');
-  expect(host.querySelector('[data-category="mcp_tools"] .flower-model-context-amount')?.textContent).toBe('≈21k');
+  expect(host.querySelector('[data-category="mcp_tools"] .flower-model-context-amount')?.textContent).toBe('≈200');
  });
  it('keeps server-managed and missing output facts out of the popup', () => {
   const [usage,update]=createSignal<FlowerContextUsage>({confirmed:{...sample,output_control:'server',safety_margin_tokens:10}});

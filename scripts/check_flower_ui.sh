@@ -60,6 +60,7 @@ main() {
       src/ui/FlowerSurface.navigation.test.tsx \
       src/ui/FlowerSurface.liveRecovery.test.tsx \
       src/ui/FlowerComposerContextIndicator.test.tsx \
+      src/ui/FlowerContextAccounting.test.ts \
       src/ui/FlowerSurface.providerReadiness.test.tsx \
       src/ui/FlowerSurface.modelMenu.test.tsx \
       src/ui/modelMenu.test.ts \

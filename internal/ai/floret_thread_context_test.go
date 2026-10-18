@@ -100,18 +100,11 @@ func TestPublishedFloretUsageReachesLiveAndCanonicalFlowerProjections(t *testing
 	if projected.Usage == nil || projected.Usage.Confirmed == nil || projected.Usage.Confirmed.InputTokens != 100 || projected.Usage.Estimate == nil {
 		t.Fatalf("pending context=%+v", projected.Usage)
 	}
-	if projected.Usage.Confirmed.Breakdown == nil || projected.Usage.Confirmed.Breakdown.UserTokens <= 0 || projected.Usage.Estimate.Breakdown == nil || projected.Usage.Estimate.Breakdown.AssistantTokens <= 0 {
-		t.Fatalf("input breakdown missing: %+v", projected.Usage)
+	// ScriptedGateway supplies semantic budget estimates, not qualified rendered
+	// token attribution. Native totals remain visible without historical weights.
+	if !projected.Usage.Confirmed.Available || !projected.Usage.Confirmed.Measured || projected.Usage.Confirmed.Breakdown != nil || projected.Usage.Confirmed.BreakdownAvailable {
+		t.Fatalf("unqualified attribution reached display: %+v", projected.Usage.Confirmed)
 	}
-	if projected.Usage.Confirmed.Breakdown.Details == nil || len(projected.Usage.Confirmed.Breakdown.Details.Items) == 0 {
-		t.Fatal("published request attribution did not reach Flower canonical projection")
-	}
-	canonicalTokens := pending.ContextUsage.Confirmed.RequestEstimate.Breakdown.Details.Items[0].Tokens
-	projected.Usage.Confirmed.Breakdown.Details.Items[0].Tokens = -1
-	if pending.ContextUsage.Confirmed.RequestEstimate.Breakdown.Details.Items[0].Tokens != canonicalTokens {
-		t.Fatal("Flower DTO mutation reached canonical attribution")
-	}
-	projected.Usage.Confirmed.Breakdown.Details.Items[0].Tokens = canonicalTokens
 	var latest FlowerContextUsage
 	for len(contextUsageSnapshots) > 0 {
 		latest = <-contextUsageSnapshots
@@ -330,8 +323,9 @@ func TestFlowerThreadContextProjectionIncludesCanonicalUsage(t *testing.T) {
 		ContextUsage: &flruntime.ThreadContextUsage{Confirmed: &observation.ContextStatus{
 			RunID: "run-context", ThreadID: "thread-context", TurnID: "turn-context", Step: 2,
 			Phase: observation.ContextPhaseProviderUsage, ObservedAt: observedAt,
-			Usage:           observation.ProviderUsage{Available: true, WindowInputTokens: 500, InputTokens: 30, CacheReadTokens: 60, CacheWriteTokens: 10},
-			RequestEstimate: config.RequestEstimate{Breakdown: config.ContextBreakdown{Source: "semantic_input_bpe_v1", ToolResultTokens: 200, ToolCallTokens: 40}},
+			Provider: "test", Model: "test", RequestID: "request-context", PayloadFingerprint: "fingerprint-context",
+			Usage:           observation.ProviderUsage{Available: true, Source: "native", WindowInputTokens: 500, InputTokens: 30, CacheReadTokens: 60, CacheWriteTokens: 10},
+			RequestEstimate: config.RequestEstimate{Breakdown: config.ContextBreakdown{Source: "prepared_content_v4", Quality: "token_estimate", Tokenizer: "proxy_bpe", AttributionCoverage: "complete", ToolResultTokens: 200, ToolCallTokens: 40}},
 			ContextPressure: config.ContextPressure{ContextWindowTokens: 1000},
 			UsedRatio:       0.5, Status: observation.ContextStatusStable,
 		}},
