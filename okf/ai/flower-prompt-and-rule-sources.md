@@ -49,7 +49,7 @@ that an effect never executed and do not independently authorize replay. An
 returned uncertainty requires inspection before another action; unsettled
 runtime effects remain terminal. Denials cannot be bypassed with another tool.
 Schema correction, approval, cancellation and restart recovery remain Floret-owned.
-Todos permit at most one `in_progress` item and an explicit empty-list clear.
+Default prompts contain no Todo discipline or current Todo state. [Goal reflection](flower-goals.md) is Floret-owned, uses stable instructions and appends typed current facts without depending on Todo.
 Finite running commands require another `terminal.read` in the same turn, not a
 promise to wait after completion. Uncertain effects cannot be blindly repeated. Evidence-based new actions
 retain normal authorization and repeated-call protection.

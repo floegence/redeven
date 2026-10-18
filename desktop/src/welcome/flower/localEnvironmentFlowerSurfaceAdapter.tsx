@@ -44,6 +44,7 @@ import type {
   FlowerRouterDecision,
   FlowerSubmitInputReceipt,
   FlowerTurnLaunchInput,
+  FlowerGoalResult,
   FlowerRuntimeCurrentView,
   FlowerTurnLaunchReceipt,
   FlowerSettingsDraft,
@@ -69,6 +70,7 @@ import {
   buildFlowerTurnHTTPBody,
   buildFlowerQueuedEditHTTPBody,
   normalizeFlowerTurnLaunchReceipt,
+  flowerTurnAdmissionError,
   type FlowerTurnHTTPResponse,
 } from '../../../../internal/flower_ui/src/flowerTurnAdmission';
 import type {
@@ -958,6 +960,13 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
       return capability;
     },
     createAttachmentStagingScope: (threadID) => createDesktopAttachmentStagingScope(bridge, threadID),
+    bindAttachmentStagingScope: async (scope, threadID) => {
+      const bound = await runtimeJSON<Omit<FlowerAttachmentStagingScope, 'capability'>>(
+        bridge, 'PATCH', '/_redeven_proxy/api/ai/upload-staging-scopes/' + encodeURIComponent(scope.staging_scope_id),
+        { expected_target_id: scope.target_id, thread_id: threadID }, scope,
+      );
+      return { ...bound, capability: scope.capability };
+    },
     releaseAttachmentStagingScope: async (scope) => {
       await runtimeJSON<unknown>(
         bridge,
@@ -1003,6 +1012,15 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
     },
     launchTurn: async (input: FlowerTurnLaunchInput) => {
       return launchLocalEnvironmentFlowerTurn(bridge, input, resource);
+    },
+    manageGoal: async (input) => {
+      try {
+        return await runtimeJSON<FlowerGoalResult>(bridge, 'POST', '/_redeven_proxy/api/ai/thread-goal', input);
+      } catch (error) {
+        const rejected = error instanceof RuntimeFlowerResponseError && error.failureKind === 'response'
+          && error.code !== 'AI_GOAL_OUTCOME_UNKNOWN' && (error.status ?? 500) < 500;
+        throw flowerTurnAdmissionError(rejected ? 'rejected' : 'unknown', error);
+      }
     },
     compactThreadContext: async (threadID, input) => {
       const response = await runtimeJSON<{ current: FlowerRuntimeCurrentView }>(bridge, 'POST', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/context/compact`, input);

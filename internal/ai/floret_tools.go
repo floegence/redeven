@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"math"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/floegence/floret/v7/identity"
@@ -15,12 +14,6 @@ import (
 	fltools "github.com/floegence/floret/v7/tools"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 )
-
-type floretToolRuntimeState struct {
-	mu    sync.Mutex
-	state todoRuntimeState
-	items []TodoItem
-}
 
 const (
 	subagentToolHostContextAgentTypeKey     = "subagent_agent_type"
@@ -34,52 +27,7 @@ const (
 	floretToolHostContextAuthorityThreadIDKey    = "permission_authority_thread_id"
 )
 
-func newFloretToolRuntimeState(state todoRuntimeState) *floretToolRuntimeState {
-	return &floretToolRuntimeState{state: state}
-}
-
-func (s *floretToolRuntimeState) todos() ([]TodoItem, int64) {
-	if s == nil {
-		return nil, 0
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return append([]TodoItem(nil), s.items...), s.state.TodoSnapshotVersion
-}
-
-func (s *floretToolRuntimeState) replaceTodos(items []TodoItem, expectedVersion *int64) (todoRuntimeState, error) {
-	if s == nil {
-		return todoRuntimeState{}, errors.New("todo runtime state is unavailable")
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if expectedVersion != nil && *expectedVersion != s.state.TodoSnapshotVersion {
-		return todoRuntimeState{}, fmt.Errorf("todo version conflict: have %d, expected %d", s.state.TodoSnapshotVersion, *expectedVersion)
-	}
-	s.items = append([]TodoItem(nil), items...)
-	summary := summarizeTodos(items)
-	actionable := actionableTodoSummary(items)
-	s.state.TodoTrackingEnabled = true
-	s.state.TodoTotalCount = summary.Total
-	s.state.TodoOpenCount = actionable.Pending + actionable.InProgress
-	s.state.TodoInProgressCount = actionable.InProgress
-	s.state.TodoSnapshotVersion++
-	return s.state, nil
-}
-
-func (s *floretToolRuntimeState) updateFromToolResult(call ToolCall, result ToolResult, round int) {
-	if s == nil {
-		return
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if result.Pending != nil {
-		return
-	}
-	updateTodoRuntimeState(&s.state, []ToolCall{call}, []ToolResult{result}, round)
-}
-
-func buildFloretTools(r *run, activeTools []ToolDef, state *floretToolRuntimeState) ([]fltools.Tool, error) {
+func buildFloretTools(r *run, activeTools []ToolDef) ([]fltools.Tool, error) {
 	if r == nil {
 		return nil, errors.New("missing Floret tool registry run")
 	}
@@ -159,9 +107,6 @@ func buildFloretTools(r *run, activeTools []ToolDef, state *floretToolRuntimeSta
 					if _, err := validateToolResultStatus(result.Status); err != nil {
 						return fltools.Result{}, err
 					}
-				}
-				if state != nil {
-					state.updateFromToolResult(call, result, inv.Step)
 				}
 				toolResult, err := floretToolResultFromFlower(execRun, result)
 				if err != nil {

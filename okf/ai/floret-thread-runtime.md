@@ -14,7 +14,9 @@ Floret v7 `ThreadService` is the sole owner of active and canonical thread lifec
 
 ## Typed runtime
 
-Redeven consumes published Floret v7.55.1. Its additive
+Optional ThreadGoalController and WithAgentGoals provide [canonical Goals](flower-goals.md). Product handlers authorize and map; they never maintain a second Goal state or completion loop.
+
+Redeven consumes published Floret v7.60.3. Its additive
 OutputPolicy.ArchiveAboveBytes archives complete large tool text independently
 of visible truncation. Completed error results may request input while preserving
 error status. Floret owns batch settlement, waiting, Respond and restart; Redeven
@@ -25,7 +27,7 @@ historical validators remain success-only for tool input. Redeven treats all
 Floret records as opaque and performs no product-side rewrite or migration.
 The 20-to-21 edge admits explicit unconfirmed tool results without changing
 historical failures. The subsequent 21-to-22 accounting edge is also retained;
-the current schema is 22 and older writers reject upgraded stores. All edges
+the 22-to-23 Goal edge and 23-to-24 character-attribution edge are retained; the current schema is 24 and older writers reject upgraded stores. All edges
 run through the published upstream startup transaction.
 
 

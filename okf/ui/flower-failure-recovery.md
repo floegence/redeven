@@ -16,6 +16,8 @@ Transport uncertainty never proves backend success or authorizes replay.
 
 Automatic stream recovery displays only canonical run_progress attempts and deadlines. Flower adds no retry timer or automatic Retry API call. Stop, navigation and confirmed output remain available. Success clears recovery naturally; exhaustion settles the turn and exposes manual Retry and current-source settings. Unknown request failures have neutral localized copy rather than claiming rejection; uncertain tool effects still prohibit Retry.
 
+[Goal reflection](../ai/flower-goals.md) uses the existing recoverable failure and explicit retry/continue path. Exhaustion retains the objective. Stop cancels further reflection; deletion cancels future checks without stopping execution. Unknown Goal mutations retain the exact retry payload and may be dismissed only as a local recovery copy.
+
 Provider failures expose Configure current provider, Retry reply and diagnostics.
 Typed model-request timeouts use localized recovery copy and the same actions;
 [request deadlines and automatic recovery](../ai/model-provider-surface-and-history.md)

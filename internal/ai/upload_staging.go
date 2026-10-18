@@ -14,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/floegence/redeven/internal/ai/threadstore"
+	"github.com/floegence/redeven/internal/session"
 )
 
 const uploadStagingScopeTTL = 24 * time.Hour
@@ -170,4 +171,30 @@ func (s *Service) ReadStagingLongText(ctx context.Context, owner UploadOwner, st
 		return nil, NewUploadError(UploadErrorIntegrityMismatch, false, errors.New("long text attachment failed integrity validation"))
 	}
 	return &StagedLongTextResponse{Attachment: opened.Info, Text: string(body), ContentSHA256: actualDigest}, nil
+}
+
+// BindDraftUploadStaging authorizes both the exact draft capability and target thread.
+func (s *Service) BindDraftUploadStaging(ctx context.Context, meta *session.Meta, scopeID, capability, expectedTargetID, threadID string) (UploadStagingScopeResponse, error) {
+	if err := requireRWX(meta); err != nil {
+		return UploadStagingScopeResponse{}, err
+	}
+	if err := s.requireEndpointThreadAuthority(ctx, meta.EndpointID, threadID); err != nil {
+		return UploadStagingScopeResponse{}, err
+	}
+	owner, err := NewUploadOwner(meta.EndpointID, meta.UserPublicID, meta.ChannelID)
+	if err != nil {
+		return UploadStagingScopeResponse{}, err
+	}
+	scope, err := s.authorizeUploadStagingScope(ctx, owner, scopeID, capability)
+	if err != nil {
+		return UploadStagingScopeResponse{}, err
+	}
+	if scope.TargetID != expectedTargetID && scope.TargetID != threadID {
+		return UploadStagingScopeResponse{}, errors.New("upload staging target changed")
+	}
+	scope.TargetID = expectedTargetID
+	if err := s.threadsDB.BindDraftUploadStagingToThread(ctx, scope, threadID); err != nil {
+		return UploadStagingScopeResponse{}, err
+	}
+	return UploadStagingScopeResponse{StagingScopeID: scope.StagingScopeID, TargetID: threadID, ExpiresAtUnixMs: scope.ExpiresAtUnixMs}, nil
 }

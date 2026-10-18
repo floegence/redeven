@@ -103,33 +103,6 @@ func TestAgentShadowContractScannerRejectsForbiddenShapes(t *testing.T) {
 	}
 }
 
-func TestTodoRuntimeStateShapeIsExact(t *testing.T) {
-	typeOfState := reflect.TypeOf(todoRuntimeState{})
-	want := []string{
-		"TodoTrackingEnabled",
-		"TodoTotalCount",
-		"TodoOpenCount",
-		"TodoInProgressCount",
-		"TodoSnapshotVersion",
-		"TodoLastUpdatedRound",
-	}
-	if typeOfState.NumField() != len(want) {
-		t.Fatalf("todoRuntimeState fields=%d, want %d", typeOfState.NumField(), len(want))
-	}
-	for index, name := range want {
-		field := typeOfState.Field(index)
-		if field.Name != name {
-			t.Fatalf("todoRuntimeState field %d=%q, want %q", index, field.Name, name)
-		}
-		if field.Tag != "" {
-			t.Fatalf("todoRuntimeState field %q has serialization tag %q", field.Name, field.Tag)
-		}
-	}
-	if state := newTodoRuntimeState(); state.TodoLastUpdatedRound != -1 {
-		t.Fatalf("new todo state last updated round=%d, want -1", state.TodoLastUpdatedRound)
-	}
-}
-
 func inspectAgentBoundarySource(filename string, source []byte, durable bool) ([]string, error) {
 	file, err := parser.ParseFile(token.NewFileSet(), filename, source, parser.SkipObjectResolution)
 	if err != nil {

@@ -245,6 +245,7 @@ export type FlowerCitationSource = Readonly<{
 }>;
 
 export type FlowerChatMessage = Readonly<{
+  goal?: FlowerGoalChange;
   id: string;
   // Canonical root-thread and SubAgent messages always carry turn_id. Synthetic
   // local presentation rows may omit it because they are not admission records.
@@ -701,6 +702,7 @@ export type FlowerQueuedTurnAttachment = Readonly<{
 }>;
 
 export type FlowerThreadSnapshot = Readonly<{
+  goal?: FlowerGoal;
   parent_events?: FlowerParentEventPage;
   turns?: readonly FlowerRuntimeTurn[];
   cancellation?: FlowerThreadCancellation;
@@ -836,12 +838,22 @@ export type FlowerLiveStreamConnectInput = Readonly<{
   signal: AbortSignal;
 }>;
 
+export type FlowerGoal = Readonly<{ version: number; text?: string; status: 'absent' | 'active' | 'completed'; actor: 'user' | 'model' | ''; reviewing?: boolean }>;
+export type FlowerGoalChange = Readonly<{ goal: FlowerGoal; operation: 'set' | 'delete' | 'completed'; actor: 'user' | 'model'; reason?: string; at: string }>;
+export type FlowerGoalInput = Readonly<{
+  storage_generation: string; client_request_id: string; thread_id?: string;
+  operation: 'set' | 'delete'; expected_version: number; text?: string;
+  new_thread?: Readonly<{ model_id?: string; working_dir?: string; permission_type?: FlowerPermissionType; reasoning_selection?: FlowerReasoningSelection }>;
+}>;
+export type FlowerGoalResult = Readonly<{ client_request_id: string; thread_id: string; current: FlowerRuntimeCurrentView; goal: FlowerGoal; conflict: boolean; replayed?: boolean }>;
+
 export type FlowerRuntimeCurrentItem = Readonly<{
   id: string;
-  turn_id: string;
-  run_id: string;
+  turn_id?: string;
+  run_id?: string;
   ordinal: number;
-  kind: 'user' | 'steering' | 'thinking' | 'assistant' | 'tool' | 'interaction';
+  kind: 'user' | 'steering' | 'thinking' | 'assistant' | 'tool' | 'interaction' | 'goal';
+  goal?: FlowerGoalChange;
   steering?: FlowerChatMessage['steering'];
   sources?: readonly FlowerCitationSource[];
   text?: string;
@@ -950,6 +962,7 @@ export type FlowerParentEventPage = Readonly<{ thread_id: string; events: readon
 export type FlowerParentEventQuery = Readonly<{ action: 'list' | 'read'; event_id?: string; first_event_id?: string; last_event_id?: string; after_event_id?: string; limit?: number }>;
 
 export type FlowerRuntimeCurrentView = Readonly<{
+  goal?: FlowerGoal;
   parent_events?: FlowerParentEventPage;
   turns?: readonly FlowerRuntimeTurn[] | null;
   turn_kind?: 'context_compaction';
@@ -1543,6 +1556,7 @@ export type FlowerSurfaceAdapter = Readonly<{
   resolveHandler: (input?: FlowerResolveHandlerInput) => Promise<FlowerRouterDecision>;
   loadAttachmentCapability?: (modelID: string) => Promise<FlowerAttachmentCapability>;
   createAttachmentStagingScope?: (targetID?: string) => Promise<FlowerAttachmentStagingScope>;
+  bindAttachmentStagingScope?: (scope: FlowerAttachmentStagingScope, threadID: string) => Promise<FlowerAttachmentStagingScope>;
   releaseAttachmentStagingScope?: (scope: FlowerAttachmentStagingScope) => Promise<void>;
   uploadAttachment?: (input: FlowerAttachmentUploadInput) => Promise<FlowerStagedAttachment>;
   deleteStagedAttachment?: (attachmentID: string, scope: FlowerAttachmentStagingScope) => Promise<void>;
@@ -1565,6 +1579,7 @@ export type FlowerSurfaceAdapter = Readonly<{
   computerManagement?: FlowerComputerManagement;
   resolveStorageGeneration?: () => Promise<string>;
   launchTurn: (input: FlowerTurnLaunchInput) => Promise<FlowerTurnLaunchReceipt>;
+  manageGoal?: (input: FlowerGoalInput) => Promise<FlowerGoalResult>;
   compactThreadContext?: (threadID: string, input: FlowerCompactContextInput) => Promise<FlowerRuntimeCurrentView>;
   retryThread: (threadID: string) => Promise<FlowerThreadView>;
   stopThread: (threadID: string) => Promise<void>;

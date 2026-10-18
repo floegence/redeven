@@ -511,6 +511,22 @@ export type FlowerSurfaceCopy = Readonly<{
     stopping: string;
     stopOutcomeUnknownTitle: string;
     stopOutcomeUnknownDescription: string;
+    goalTitle: string;
+    goalDescription: string;
+    goalEmpty: string;
+    goalSave: string;
+    goalDelete: string;
+    goalConflict: string;
+    goalReviewing: string;
+    goalActive: string;
+    goalCompleted: string;
+    goalCreated: string;
+    goalUpdated: string;
+    goalDeleted: string;
+    goalActorUser: string;
+    goalActorModel: string;
+    commandGoal: string;
+    goalUnavailable: string;
     commandMenuLabel: string;
     commandCompactContext: string;
     compactContext: string;
@@ -946,6 +962,22 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     stopping: 'Stopping...',
     stopOutcomeUnknownTitle: "Stopped with unconfirmed results",
     stopOutcomeUnknownDescription: "Some operations may have completed. This turn will not be replayed automatically. Use Inspect and continue to check current state and continue in a new turn.",
+    goalTitle: "Goal",
+    goalDescription: "Describe the result you want. Changes apply to the next model request.",
+    goalEmpty: "Set a goal",
+    goalSave: "Save goal",
+    goalDelete: "Delete goal",
+    goalConflict: "This goal changed. Your edit is preserved; review the current goal and submit again.",
+    goalReviewing: "Checking goal",
+    goalActive: "In progress",
+    goalCompleted: "Completed",
+    goalCreated: "Goal created",
+    goalUpdated: "Goal updated",
+    goalDeleted: "Goal deleted",
+    goalActorUser: "You",
+    goalActorModel: "Model",
+    commandGoal: "View or manage the conversation goal",
+    goalUnavailable: "Goal management is unavailable in this environment.",
     commandMenuLabel: 'Flower commands',
     commandCompactContext: 'Compact this conversation context',
     compactContext: 'Compact context',

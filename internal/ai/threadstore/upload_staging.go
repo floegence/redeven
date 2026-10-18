@@ -98,14 +98,14 @@ func (s *Store) CompleteUploadAttemptToStaging(ctx context.Context, attempt Uplo
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	var active int
-	if err := tx.QueryRowContext(ctxOrBackground(ctx), `
-SELECT COUNT(1) FROM ai_upload_staging_scopes
-WHERE staging_scope_id = ? AND endpoint_id = ? AND owner_user_hash = ? AND target_id = ?
-  AND capability_hash = ? AND expires_at_unix_ms > ?
-`, scope.StagingScopeID, scope.EndpointID, scope.OwnerUserHash, scope.TargetID, scope.CapabilityHash, time.Now().UnixMilli()).Scan(&active); err != nil || active != 1 {
+	current, err := loadUploadStagingScopeRow(tx.QueryRowContext(ctxOrBackground(ctx), `
+SELECT staging_scope_id, endpoint_id, owner_user_hash, target_id, capability_hash, expires_at_unix_ms
+FROM ai_upload_staging_scopes WHERE staging_scope_id = ?
+`, scope.StagingScopeID))
+	if err != nil || current.EndpointID != scope.EndpointID || current.OwnerUserHash != scope.OwnerUserHash || current.CapabilityHash != scope.CapabilityHash || current.ExpiresAtUnixMs <= time.Now().UnixMilli() {
 		return errors.New("upload staging scope is unavailable")
 	}
+	scope = current
 	var storedFingerprint, storedUploadID, status string
 	if err := tx.QueryRowContext(ctxOrBackground(ctx), `
 SELECT request_fingerprint, upload_id, status FROM ai_upload_attempts
@@ -477,4 +477,45 @@ ORDER BY u.upload_id
 		return nil, 0, err
 	}
 	return cleanup, len(scopes), nil
+}
+
+// BindDraftUploadStagingToThread binds one unadmitted draft to an authorized
+// thread. Its existing scope remains the sole authority for in-flight uploads.
+func (s *Store) BindDraftUploadStagingToThread(ctx context.Context, scope UploadStagingScope, threadID string) error {
+	if s == nil || s.db == nil {
+		return errors.New("store not initialized")
+	}
+	scope = normalizeUploadStagingScope(scope)
+	tx, err := s.db.BeginTx(ctxOrBackground(ctx), nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	current, err := loadUploadStagingScopeRow(tx.QueryRowContext(ctxOrBackground(ctx), `SELECT staging_scope_id, endpoint_id, owner_user_hash, target_id, capability_hash, expires_at_unix_ms FROM ai_upload_staging_scopes WHERE staging_scope_id = ?`, scope.StagingScopeID))
+	if err != nil || current.EndpointID != scope.EndpointID || current.OwnerUserHash != scope.OwnerUserHash || current.CapabilityHash != scope.CapabilityHash || current.ExpiresAtUnixMs <= time.Now().UnixMilli() {
+		return errors.New("upload staging scope is unavailable")
+	}
+	if err := requireThreadWritableTx(ctxOrBackground(ctx), tx, scope.EndpointID, threadID); err != nil {
+		return err
+	}
+	if current.TargetID == threadID {
+		return tx.Commit()
+	}
+	if current.TargetID != scope.TargetID {
+		return errors.New("upload staging target changed")
+	}
+	var existing int
+	if err := tx.QueryRowContext(ctxOrBackground(ctx), `SELECT COUNT(*) FROM ai_thread_settings WHERE thread_id = ?`, current.TargetID).Scan(&existing); err != nil {
+		return err
+	}
+	if existing != 0 {
+		return errors.New("only an unadmitted draft staging scope may be bound")
+	}
+	if _, err := tx.ExecContext(ctxOrBackground(ctx), `UPDATE ai_upload_staging_scopes SET target_id = ? WHERE staging_scope_id = ?`, threadID, scope.StagingScopeID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctxOrBackground(ctx), `UPDATE ai_upload_refs SET target_id = ? WHERE endpoint_id = ? AND ref_kind = ? AND ref_id = ?`, threadID, scope.EndpointID, UploadRefKindStaging, stagingUploadRefID(scope.OwnerUserHash, scope.StagingScopeID)); err != nil {
+		return err
+	}
+	return tx.Commit()
 }

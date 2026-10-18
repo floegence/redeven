@@ -144,7 +144,6 @@ type run struct {
 	uploadsDir           string
 	product              runProductCapabilities
 	threadRuntime        flruntime.ThreadService
-	toolRuntimeState     *floretToolRuntimeState
 	effectAuthorizations *floretEffectAuthorizationRegistry
 
 	onStreamEvent func(any)
@@ -2208,18 +2207,6 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 			BodyOffset:      p.BodyOffset,
 			BodyLimit:       p.BodyLimit,
 		})
-
-	case "write_todos":
-		var p struct {
-			Todos           []TodoItem `json:"todos"`
-			ExpectedVersion *int64     `json:"expected_version"`
-			Explanation     string     `json:"explanation"`
-		}
-		b, _ := json.Marshal(args)
-		if err := json.Unmarshal(b, &p); err != nil {
-			return nil, errors.New("invalid args")
-		}
-		return r.toolWriteTodos(ctx, toolID, p.Todos, p.ExpectedVersion, p.Explanation)
 
 	case "use_skill":
 		if meta == nil || !meta.CanExecute {

@@ -15,6 +15,8 @@ The product owns collection and authorized presentation only.
 
 # Contract
 
+[Goal changes](flower-goals.md) use Floret-owned typed context facts, separate from the four product-collected partitions. They apply at each new logical request while prepared retries retain their frozen snapshot.
+
 Admission and the existing dynamic tool surface invoke the same collector. Each
 logical provider request uses the current execution configuration and the same
 resolved permission for tools and facts. Dates change only on date/timezone

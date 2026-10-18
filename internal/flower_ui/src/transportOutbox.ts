@@ -1,4 +1,5 @@
 import type {
+  FlowerGoalInput,
   FlowerPermissionType,
   FlowerReasoningSelection,
   FlowerRuntimeCurrentView,
@@ -20,7 +21,8 @@ export type TransportOutboxEntry = Readonly<{
   presentation?: 'composer' | 'queue';
   /** Captured input cannot dispatch until the transport owner completes preparation. */
   preparation?: 'pending';
-  operation?: 'context_compaction';
+  operation?: 'context_compaction' | 'goal';
+  goalInput?: FlowerGoalInput;
   /** Product routing for a child command; canonical lifecycle stays upstream. */
   parentThreadId?: string;
   requestId: string;

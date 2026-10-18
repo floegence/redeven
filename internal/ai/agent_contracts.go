@@ -230,16 +230,3 @@ type ModelSelectInput struct {
 type ModelSelector interface {
 	Select(ctx context.Context, in ModelSelectInput) (provider string, model string, reason string)
 }
-
-type todoRuntimeState struct {
-	TodoTrackingEnabled  bool
-	TodoTotalCount       int
-	TodoOpenCount        int
-	TodoInProgressCount  int
-	TodoSnapshotVersion  int64
-	TodoLastUpdatedRound int
-}
-
-func newTodoRuntimeState() todoRuntimeState {
-	return todoRuntimeState{TodoLastUpdatedRound: -1}
-}

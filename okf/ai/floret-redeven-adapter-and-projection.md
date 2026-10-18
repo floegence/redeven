@@ -12,6 +12,8 @@ Redeven's adapter is a thin typed boundary over published Floret. It authorizes 
 
 # Contract
 
+[Flower Goals](flower-goals.md) use the optional published Goal controller. Current and historical Goal facts may precede the first Turn; omit missing execution identity only for validated Goal facts. Ordinary executable items retain strict identity.
+
 ## Model output and presentation
 
 [tool_result_encoding.go](../../internal/ai/tool_result_encoding.go) owns the

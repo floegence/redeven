@@ -89,6 +89,9 @@ func (s *Service) SendUserTurn(ctx context.Context, meta *session.Meta, req Send
 	if strings.TrimSpace(req.Input.Text) == "/compact" {
 		return SendUserTurnResponse{}, errors.New("use the dedicated context compaction operation")
 	}
+	if text := strings.TrimSpace(req.Input.Text); text == "/goal" || strings.HasPrefix(text, "/goal ") || strings.HasPrefix(text, "/goal\n") || strings.HasPrefix(text, "/goal\t") {
+		return SendUserTurnResponse{}, errors.New("use the dedicated goal management operation")
+	}
 	if err := validateInlineTurnText(req.Input.Text); err != nil {
 		return SendUserTurnResponse{}, err
 	}

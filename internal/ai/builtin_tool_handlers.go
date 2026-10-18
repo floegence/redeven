@@ -748,18 +748,6 @@ func builtInToolDefinitions() []ToolDef {
 			Priority:         100,
 		},
 		{
-			Name:             "write_todos",
-			Description:      "Replace the current thread todo list snapshot for actionable work. Track work items only, not control signals such as ask_user. Keep at most one in_progress item, avoid empty lists unless explicitly clearing prior todos, and use at least 3 todos when the user asks for explicit planning/task breakdown.",
-			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"todos": map[string]any{"type": "array", "items": map[string]any{"type": "object", "properties": map[string]any{"id": map[string]any{"type": "string"}, "content": map[string]any{"type": "string"}, "status": map[string]any{"type": "string", "enum": []string{TodoStatusPending, TodoStatusInProgress, TodoStatusCompleted}}}, "required": []string{"id", "content", "status"}, "additionalProperties": false}}, "expected_version": map[string]any{"type": "integer", "minimum": 0}, "explanation": map[string]any{"type": "string", "maxLength": 500}}, "required": []string{"todos"}, "additionalProperties": false}),
-			Mutating:         false,
-			RequiresApproval: false,
-			Visibility:       ToolVisibilityInteraction,
-			Capabilities:     []ToolCapabilityClass{ToolCapabilityInteraction},
-			Source:           "builtin",
-			Namespace:        "builtin.state",
-			Priority:         100,
-		},
-		{
 			Name:         "use_skill",
 			Description:  "Read the currently available skill instructions by name and record activation. Every explicit call returns the full current body, including repeated reads after context compaction.",
 			InputSchema:  toSchema(map[string]any{"type": "object", "properties": map[string]any{"name": map[string]any{"type": "string"}, "reason": map[string]any{"type": "string"}}, "required": []string{"name"}, "additionalProperties": false}),
