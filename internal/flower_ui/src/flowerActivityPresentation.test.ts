@@ -19,6 +19,49 @@ function item(overrides: Partial<FlowerActivityItem>): FlowerActivityItem {
   };
 }
 
+describe('parent event tool rows', () => {
+  it('shows an accepted submission without exposing protocol receipts as rows', () => {
+    const result = presentFlowerActivityItem(item({ tool_name: 'report_to_parent', renderer: 'structured',
+      payload: { inputs: [{ title: 'message', content: 'Verified finding', format: 'text' }] },
+      target_refs: [{ kind: 'parent_event', label: 'parent', resource_ref: 'event' }],
+    }));
+    expect(result).toMatchObject({ label: 'Report to parent task', meta: 'Accepted', detailBlocks: [
+      { kind: 'parent_report', accepted: true, message: 'Verified finding', parentThreadID: 'parent', eventID: 'event' },
+    ] });
+  });
+
+  it.each(['running', 'pending', 'success'] as const)('never claims an unconfirmed %s report was accepted', status => {
+    const result = presentFlowerActivityItem(item({ tool_name: 'report_to_parent', renderer: 'structured', status }));
+    expect(result.meta).toBe('');
+    expect(result.detailBlocks).toEqual([]);
+  });
+
+  it('uses a neutral report title when the historical action is unknown', () => {
+    const result = presentFlowerActivityItem(item({ tool_name: 'subagent_events', renderer: 'structured' }));
+    expect(result.label).toBe('Subagent reports');
+  });
+  it.each(['list', 'read'])('keeps %s compact with unique returned source identities', action => {
+    const result = presentFlowerActivityItem(item({ tool_name: 'subagent_events', renderer: 'structured', label: action,
+      description: 'Technical result summary', payload: { operation: action, rows_provided: true, inputs: [{ title: 'action', content: action, format: 'text' }] },
+      target_refs: [{ kind: 'subagent', label: 'child-a', resource_ref: 'child-a' }, { kind: 'subagent', label: 'child-a', resource_ref: 'child-a' }, { kind: 'subagent', label: 'child-b', resource_ref: 'child-b' }],
+    }));
+    expect(result.label).toBe(action === 'read' ? 'Read subagent reports' : 'List subagent reports');
+    expect(result).toMatchObject({ meta: '', detailLines: [], detailBlocks: [], suppressEmptyDisclosure: true, subagentThreadIDs: ['child-a', 'child-b'] });
+  });
+
+  it('uses the saved action for historical titles without inventing source avatars', () => {
+    const result = presentFlowerActivityItem(item({ tool_name: 'subagent_events', renderer: 'structured', label: 'read' }), { subagentSummaries: [subagentSummary()] });
+    expect(result.label).toBe('Read subagent reports');
+    expect(result.subagentThreadIDs).toEqual([]);
+    expect(result.detailBlocks).toEqual([]);
+  });
+
+  it('preserves real errors while hiding routine tool inputs and empty notices', () => {
+    const result = presentFlowerActivityItem(item({ tool_name: 'subagent_events', renderer: 'structured', label: 'read', status: 'error', payload: { error: { message: 'Access denied' } } }));
+    expect(result.detailBlocks).toEqual([expect.objectContaining({ kind: 'error', error: expect.objectContaining({ message: 'Access denied' }) })]);
+  });
+});
+
 it('shows explicit zero for a successful no-op instead of retaining argument preview counts', () => {
   const presentation = presentFlowerActivityItem(item({ tool_name: 'file.write', renderer: 'file',
     argument_preview: { additions: 99 }, payload: { display_name: 'same.txt', operation: 'write', change_type: 'noop' },

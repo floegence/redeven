@@ -792,7 +792,7 @@ func (service *Service) GetFlowerSubagentDetail(ctx context.Context, meta *sessi
 		return nil, err
 	}
 	snapshot := subagentSnapshotFromThread(*summary, view)
-	view.Items, err = service.hydrateFileActivityTargets(ctx, meta, childThreadID, view.Items)
+	view.Items, err = service.hydrateActivityTargets(ctx, meta, childThreadID, view.Items)
 	if err != nil {
 		return nil, err
 	}

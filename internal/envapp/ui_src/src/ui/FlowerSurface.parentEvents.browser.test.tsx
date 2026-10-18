@@ -7,9 +7,12 @@ import { render } from 'solid-js/web';
 import { ParentEventRow, createParentEventReading } from '../../../../flower_ui/src/parentEvents';
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../../../../flower_ui/src/copy';
 import type { FlowerLiveStreamEnvelope, FlowerParentEvent, FlowerParentEventPage } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
-import { adapter, liveBootstrap, renderSurfaceWithAdapterProps, subagentSummary, thread, waitFor } from './FlowerSurface.navigation.testHarness';
+import { activityItem, activityTimeline, adapter, liveBootstrap, renderSurfaceWithAdapterProps, subagentSummary, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 import { loadEnvAppDictionary } from './i18n/locales';
 import { SUPPORTED_LOCALES } from './i18n/localeMeta';
+import { createLocalizedFlowerSurfaceCopy } from '../../../../flower_ui/src/i18n/createLocalizedFlowerSurfaceCopy';
+import type { EnvAppTranslationKey } from './i18n';
+import { createTestI18nHelpers } from './i18n/locales/testDictionaries';
 
 const copy = DEFAULT_FLOWER_SURFACE_COPY.subagents!;
 const event = (id: string, kind: FlowerParentEvent['kind'] = 'report'): FlowerParentEvent => ({ id, parent_thread_id: 'parent', source_thread_id: 'child', source_turn_id: 'turn-child', source_run_id: 'run-child', source_entry_id: 'entry-' + id, kind, received_at: '2026-10-16T00:00:00Z', admitted: false });
@@ -264,4 +267,88 @@ for (const theme of ['light', 'dark']) it('keeps report actions inline and event
   expect(host.scrollWidth).toBeLessThanOrEqual(host.clientWidth + 1);
   disclosure.click();
   await page.screenshot({ element: host, path: '__screenshots__/parent-events/' + theme + '.png' });
+});
+
+
+it.each([['zh-CN', 320, 'light'], ['zh-CN', 390, 'dark'], ['en-US', 1100, 'light'], ['ja-JP', 320, 'dark']] as const)(
+  'keeps report tools static and vertically aligned in %s at %s px (%s)', async (locale, width, theme) => {
+    await page.viewport(width, 850);
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+    onTestFinished(() => document.documentElement.classList.remove('dark'));
+    const i18n = createTestI18nHelpers(locale);
+    const localized = createLocalizedFlowerSurfaceCopy({ locale, t: (key, params) => i18n.t(key as EnvAppTranslationKey, params), tn: (key, count, params) => i18n.tn(key as EnvAppTranslationKey, count, params) });
+    const items = ['read', 'list'].map((action, index) => activityItem({ item_id: action, tool_id: action, tool_name: 'subagent_events', renderer: 'structured', label: action,
+      started_at_unix_ms: 1000, ended_at_unix_ms: 1250,
+      payload: { operation: action, rows_provided: true, inputs: [{ title: 'action', content: action, format: 'text' }] },
+      target_refs: (index ? ['child-a'] : ['child-a', 'child-a', 'child-b']).map(id => ({ kind: 'subagent', label: id, resource_ref: id })),
+    }));
+    const child = subagentSummary({ parent_thread_id: 'parent', thread_id: 'child-a', task_name: 'Research' });
+    const seed = thread({ thread_id: 'parent', subagents: [child, subagentSummary({ parent_thread_id: 'parent', thread_id: 'unrelated' })], messages: [{
+      id: 'tools', turn_id: 'turn-tools', run_id: 'run-tools', role: 'assistant', status: 'complete', content: '', created_at_ms: 1,
+      blocks: [activityTimeline({ thread_id: 'parent', turn_id: 'turn-tools', run_id: 'run-tools', items })],
+    }] });
+    const surface = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: async () => [seed], loadThread: async () => liveBootstrap(seed) }, { copy: localized,
+      focusThreadRequest: { request_id: 'report-rows', thread_id: seed.thread_id } });
+    surface.style.cssText = 'width:' + width + 'px;height:800px;position:relative;';
+    await waitFor(() => Boolean(surface.querySelector('[data-flower-activity-item-id="read"]')));
+    for (const action of ['read', 'list']) {
+      const row = surface.querySelector<HTMLElement>('[data-flower-activity-item-id="' + action + '"]')!;
+      expect(row.querySelector('button, [aria-expanded], .flower-activity-inline-chevron, .flower-activity-inline-details, .flower-activity-inline-detail')).toBeNull();
+      expect(row.querySelectorAll('[data-flower-report-source]')).toHaveLength(action === 'read' ? 2 : 1);
+      expect(row.querySelector('[data-flower-report-source="unrelated"]')).toBeNull();
+      const title = row.querySelector<HTMLElement>('.flower-activity-inline-title')!;
+      expect(title.textContent).toBe(action === 'read' ? localized.chat.toolActivity.subagentReportsRead : localized.chat.toolActivity.subagentReportsList);
+      const box = title.getBoundingClientRect();
+      for (const avatar of row.querySelectorAll('[data-flower-subagent-avatar]')) {
+        const rect = avatar.getBoundingClientRect();
+        expect(Math.abs(rect.top + rect.height / 2 - box.top - box.height / 2)).toBeLessThan(1);
+      }
+      expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth + 1);
+      expect(getComputedStyle(row.querySelector('.flower-activity-inline-button')!).cursor).toBe('default');
+      row.querySelector<HTMLElement>('.flower-activity-inline-button')!.click();
+      expect(row.querySelector('.flower-activity-inline-details')).toBeNull();
+    }
+    await page.screenshot({ element: surface, path: '__screenshots__/parent-events/tool-rows-' + locale + '-' + width + '-' + theme + '.png' });
+  },
+);
+
+
+it('shows report-read failures inline without making the compact row expandable', async () => {
+  const failed = activityItem({ item_id: 'report-error', tool_id: 'report-error', tool_name: 'subagent_events', renderer: 'structured', status: 'error', label: 'read', payload: { error: { message: 'Report access was revoked.' } } });
+  const seed = thread({ thread_id: 'report-error-parent', messages: [{ id: 'error-tools', turn_id: 'turn', run_id: 'run', role: 'assistant', status: 'complete', content: '', created_at_ms: 1,
+    blocks: [activityTimeline({ thread_id: 'report-error-parent', turn_id: 'turn', run_id: 'run', items: [failed] })] }] });
+  const surface = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: async () => [seed], loadThread: async () => liveBootstrap(seed) }, {
+    focusThreadRequest: { request_id: 'report-error-focus', thread_id: seed.thread_id } });
+  await waitFor(() => Boolean(surface.querySelector('[data-flower-activity-item-id="report-error"] .flower-activity-error-message')));
+  const row = surface.querySelector('[data-flower-activity-item-id="report-error"]')!;
+  expect(row.querySelector('.flower-activity-error-message')?.textContent).toBe('Report access was revoked.');
+  expect(row.querySelector('[aria-expanded], .flower-activity-inline-chevron, .flower-activity-inline-details')).toBeNull();
+});
+
+it('keeps accepted report receipts in the child view and locates their canonical parent report', async () => {
+  await page.viewport(1100, 850);
+  const child = subagentSummary({ parent_thread_id: 'parent', thread_id: 'child', task_name: 'Research' });
+  const events = { thread_id: 'parent', events: [{ ...event('receipt-event'), message: 'Verified finding' }], first_event_id: 'receipt-event', last_event_id: 'receipt-event' };
+  const parent = thread({ thread_id: 'parent', subagents: [child], parent_events: events });
+  const base = liveBootstrap(parent, 1);
+  const childCurrent = { thread_id: 'child', view_version: 1, activity: 'idle' as const, last_outcome: 'completed' as const, items: [{
+    id: 'submitted-report', turn_id: 'child-turn', run_id: 'child-run', ordinal: 1, kind: 'tool' as const,
+    activity: { item_id: 'submitted-report', tool_id: 'report-call', tool_name: 'report_to_parent', kind: 'tool', status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false,
+      presentation: { renderer: 'structured', target_refs: [{ kind: 'parent_event', label: 'parent', resource_ref: 'receipt-event' }], payload: { inputs: [{ title: 'message', content: 'Verified finding', format: 'text' }], rows_provided: true } } },
+  }] };
+  const surface = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: async () => [parent], loadThread: async () => ({ ...base, current: { ...base.current, parent_events: events } }),
+    loadSubagentDetail: async () => ({ summary: child, current: childCurrent }) }, { focusThreadRequest: { request_id: 'receipt-parent', thread_id: 'parent' } });
+  await waitFor(() => Boolean(surface.querySelector('[data-parent-event="receipt-event"]')));
+  surface.querySelector<HTMLButtonElement>('[data-parent-event="receipt-event"] .flower-parent-event-source')!.click();
+  await waitFor(() => Boolean(document.querySelector('[data-flower-activity-item-id="submitted-report"]')));
+  const row = document.querySelector('[data-flower-activity-item-id="submitted-report"]')!;
+  expect(row.querySelector('.flower-activity-inline-title')?.textContent).toBe('Report to parent task');
+  expect(row.querySelector('.flower-activity-inline-detail')?.textContent).toBe('Accepted');
+  row.querySelector<HTMLButtonElement>('[data-flower-disclosure-trigger]')!.click();
+  await waitFor(() => row.textContent!.includes('The report was recorded in the parent task.'));
+  const view = [...row.querySelectorAll('button')].find(button => button.textContent === 'View report in parent task')!;
+  expect(view).toBeTruthy();
+  expect(row.textContent!.split('Verified finding')).toHaveLength(2);
+  view.click();
+  await waitFor(() => surface.querySelector('[data-parent-event="receipt-event"] .flower-parent-event-disclosure')?.getAttribute('aria-expanded') === 'true');
 });

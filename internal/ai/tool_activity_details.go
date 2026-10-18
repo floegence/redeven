@@ -17,6 +17,14 @@ func structuredToolInputs(toolName string, args map[string]any, spec aitools.Too
 	if isThreadQueryTool(toolName) {
 		return nil
 	}
+	if toolName == "report_to_parent" {
+		// Preserve the complete allowed report, including leading whitespace.
+		// Code rows use the published byte budget rather than the text preview cap.
+		if message, ok := args["message"].(string); ok && message != "" {
+			return []fltools.StructuredActivityRow{toolDetailRow("message", "", message, fltools.StructuredActivityRowFormatCode, "text", false)}
+		}
+		return nil
+	}
 	if toolName == "computer.exec" {
 		if code, ok := args["code"].(string); ok && code != "" {
 			return []fltools.StructuredActivityRow{toolDetailRow("", "", code, fltools.StructuredActivityRowFormatCode, "javascript", false)}

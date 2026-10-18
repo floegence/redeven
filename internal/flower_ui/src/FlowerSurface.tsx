@@ -9998,6 +9998,28 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       };
     });
     return <Switch>
+      <Match when={detailProps.block.kind === 'parent_report'}>
+        <FlowerActivityRows block={{ kind: 'structured_rows', section: 'results', rows: [],
+          notice: blockOfKind('parent_report')().accepted ? copy().chat.toolActivity.parentReportRecorded : undefined }} copy={copy().chat} />
+        <Show when={blockOfKind('parent_report')().accepted && blockOfKind('parent_report')().parentThreadID === selectedThreadID()
+          && parentEventReading.events().some(event => event.id === blockOfKind('parent_report')().eventID)}>
+          <button type="button" class="flower-parent-event-action" onClick={() => {
+            const eventID = blockOfKind('parent_report')().eventID;
+            closeSubagentOverlays();
+            requestTranscriptAnimationFrame(() => {
+              const row = [...(transcriptScroll.viewport()?.querySelectorAll<HTMLElement>('[data-parent-event]') ?? [])].find(row => row.dataset.parentEvent === eventID);
+              if (!row) return;
+              transcriptScroll.stopFollowing();
+              const disclosure = row.querySelector<HTMLButtonElement>('.flower-parent-event-disclosure');
+              if (disclosure?.getAttribute('aria-expanded') === 'false') disclosure.click();
+              row.scrollIntoView({ block: 'nearest' });
+              disclosure?.focus({ preventScroll: true });
+            });
+          }}>{copy().chat.toolActivity.parentReportView}<ExternalLink class="h-3 w-3" aria-hidden="true" /></button>
+        </Show>
+        <FlowerActivityRows block={{ kind: 'structured_rows', section: 'inputs', rows: blockOfKind('parent_report')().message
+          ? [{ title: copy().chat.toolActivity.parentReportContent, content: blockOfKind('parent_report')().message, meta: '', format: 'text' }] : [] }} copy={copy().chat} />
+      </Match>
       <Match when={detailProps.block.kind === 'error'}>{errorDetailBlock(blockOfKind('error'))}</Match>
       <Match when={detailProps.block.kind === 'structured_rows'}>
         <Show when={blockOfKind('structured_rows')().preview} fallback={<FlowerActivityRows block={blockOfKind('structured_rows')()} copy={copy().chat} renderTargetActions={target => fileActionButtons(() => ({ path: target.path ?? '', target_kind: target.kind, display_name: target.label, can_preview: target.kind === 'file', can_browse_directory: true }))} />}>
@@ -10115,7 +10137,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       block.kind === 'subagents' && block.subagents.action === 'spawn'
       && block.subagents.items.length === 1 && Boolean(block.subagents.items[0]?.open_messages)
     )));
-    const expandable = createMemo(() => !subagentOperation() && ((presentation().suppressEmptyDisclosure
+    const compactReports = () => item().tool_name === 'subagent_events';
+    const expandable = createMemo(() => !compactReports() && !subagentOperation() && ((presentation().suppressEmptyDisclosure
       || item().renderer === 'web_search' && !item().tool_name?.startsWith('okf.')) ? hasDetails() : item().kind === 'tool' || hasDetails()));
     const open = () => expandable() && disclosureControl.open();
     let toggleButtonRef: HTMLButtonElement | undefined;
@@ -10172,6 +10195,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         </span>
         <div class="flower-activity-inline-copy">
           <span class="flower-activity-inline-title" data-floe-progress-shimmer={livePresentationConfirmed() && displayStatus() === 'running' ? 'text' : undefined}>{activityTitle(displayTitle())}</span>
+          <Show when={presentation().subagentThreadIDs?.length}>
+            <span class="flower-activity-report-sources">
+              <For each={presentation().subagentThreadIDs}>{threadID => {
+                const name = () => selectedSubagentSummaries()?.find(child => child.thread_id === threadID)?.task_name || threadID;
+                return <span class="flower-activity-report-source" data-flower-report-source={threadID} role="img" aria-label={name()} title={name()}>
+                  <SubagentAvatar threadID={threadID} />
+                </span>;
+              }}</For>
+            </span>
+          </Show>
           <Show when={inlineSubagent()}>{(block) => (
             <ActivityDetailBlock threadID={timeline().thread_id ?? ''} block={block() as FlowerNonTerminalDetailBlock} />
           )}</Show>
@@ -10190,13 +10223,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     );
     return (
       <div
-        class={cn('flower-activity-inline-row', `flower-activity-inline-row-${displayStatus()}`, item().renderer === 'web_search' && 'flower-activity-inline-row-web-search', subagentOperation() && 'flower-activity-inline-row-subagents', inlineSubagent() && 'flower-activity-inline-row-single-subagent')}
+        class={cn('flower-activity-inline-row', `flower-activity-inline-row-${displayStatus()}`, item().tool_name === 'subagent_events' && 'flower-activity-inline-row-reports', item().renderer === 'web_search' && 'flower-activity-inline-row-web-search', subagentOperation() && 'flower-activity-inline-row-subagents', inlineSubagent() && 'flower-activity-inline-row-single-subagent')}
         data-flower-activity-item-id={item().item_id}
         data-flower-activity-status={displayStatus()}
         data-flower-activity-approval-state={item().approval_state}
         data-flower-control-error={controlError() ? 'true' : undefined}
         data-state={disclosure.state()}
-        aria-label={activityItemAriaLabel(item())}
+        aria-label={compactReports() ? presentation().label + ': ' + copy().chat.toolStatuses[displayStatus()] : activityItemAriaLabel(item())}
       >
         <div class="flower-activity-inline-line">
           <Show
@@ -10217,7 +10250,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           </Show>
           {fileActionButtons(rowFileAction, rowAttachmentPreviewTarget)}
         </div>
-        <Show when={subagentOperation()}>
+        <Show when={subagentOperation() || compactReports()}>
           <For each={detailKeys().filter((key) => detailsByKey().get(key) !== inlineSubagent())}>{(key) => {
             const block = createMemo(() => detailsByKey().get(key)!);
             return <ActivityDetailBlock threadID={timeline().thread_id ?? ''} block={block() as FlowerNonTerminalDetailBlock} />;

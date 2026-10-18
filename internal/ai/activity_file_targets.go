@@ -129,7 +129,7 @@ func applyFileActivityTargets(activity *fltools.ActivityPresentation, name strin
 	}
 }
 
-func canonicalFileActivityData(content string) (any, bool) {
+func canonicalActivityResultData(content string) (any, bool) {
 	var result struct {
 		Status string
 		Data   json.RawMessage
@@ -145,9 +145,9 @@ func canonicalFileActivityData(content string) (any, bool) {
 	return data, true
 }
 
-// hydrateFileActivityTargets enriches response copies only. Canonical records
+// hydrateActivityTargets enriches response copies only. Canonical records
 // remain immutable and no filesystem operation runs while reading history.
-func (s *Service) hydrateFileActivityTargets(ctx context.Context, meta *session.Meta, threadID string, items []flruntime.ThreadItem) ([]flruntime.ThreadItem, error) {
+func (s *Service) hydrateActivityTargets(ctx context.Context, meta *session.Meta, threadID string, items []flruntime.ThreadItem) ([]flruntime.ThreadItem, error) {
 	reader, ok := s.threadRuntime.(flruntime.ThreadQueryReader)
 	if !ok {
 		return items, nil
@@ -160,7 +160,7 @@ func (s *Service) hydrateFileActivityTargets(ctx context.Context, meta *session.
 	}
 	pending := map[key]int{}
 	for i, item := range items {
-		if item.Activity == nil || item.Activity.Status != observation.ActivityStatusSuccess || !localFileActivityTool(item.Activity.ToolName) {
+		if item.Activity == nil || item.Activity.Status != observation.ActivityStatusSuccess || (!localFileActivityTool(item.Activity.ToolName) && item.Activity.ToolName != "subagent_events" && item.Activity.ToolName != "report_to_parent") {
 			continue
 		}
 		activity := item.Activity.Presentation
@@ -170,7 +170,7 @@ func (s *Service) hydrateFileActivityTargets(ctx context.Context, meta *session.
 		if item.TurnID == "" || item.RunID == "" || item.Activity.ToolID == "" {
 			continue
 		}
-		if !fileActivityTargetsComplete(activity) {
+		if !activityTargetsComplete(item.Activity.ToolName, activity) {
 			pending[key{identity.ThreadID(threadID), item.TurnID, item.RunID, item.Activity.ToolID}] = i
 		}
 	}
@@ -241,12 +241,12 @@ func (s *Service) hydrateFileActivityTargets(ctx context.Context, meta *session.
 					return nil, err
 				}
 				if part.Record.ThreadID != record.ThreadID || part.Record.TurnID != record.TurnID || part.Record.RunID != record.RunID || part.Record.ToolCallID != record.ToolCallID || part.Record.ToolName != record.ToolName || part.Record.Status != "success" {
-					return nil, errors.New("canonical file result identity changed")
+					return nil, errors.New("canonical activity result identity changed")
 				}
 				for _, chunk := range part.Chunks {
 					if chunk.Field == "result" {
 						if chunk.Offset != content.Len() {
-							return nil, errors.New("canonical file result chunk discontinuity")
+							return nil, errors.New("canonical activity result chunk discontinuity")
 						}
 						content.WriteString(chunk.Text)
 					}
@@ -256,7 +256,7 @@ func (s *Service) hydrateFileActivityTargets(ctx context.Context, meta *session.
 				}
 				read.Cursor = part.NextCursor
 			}
-			if data, confirmed := canonicalFileActivityData(content.String()); confirmed {
+			if data, confirmed := canonicalActivityResultData(content.String()); confirmed {
 				item := *out[index].Activity
 				item.Presentation = fltools.CloneActivityPresentation(item.Presentation)
 				kept := item.Presentation.TargetRefs[:0]
@@ -266,7 +266,11 @@ func (s *Service) hydrateFileActivityTargets(ctx context.Context, meta *session.
 					}
 				}
 				item.Presentation.TargetRefs = kept
-				mergeHistoricalFileActivityTargets(item.Presentation, record.ToolName, data)
+				if record.ToolName == "subagent_events" || record.ToolName == "report_to_parent" {
+					applyParentEventActivity(item.Presentation, record.ToolName, data)
+				} else {
+					mergeHistoricalFileActivityTargets(item.Presentation, record.ToolName, data)
+				}
 				out[index].Activity = &item
 			}
 			delete(pending, k)

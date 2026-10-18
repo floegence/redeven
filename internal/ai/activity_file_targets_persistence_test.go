@@ -88,7 +88,7 @@ func TestHistoricalFileTargetsSurviveCanonicalCompactionForkAndRestart(t *testin
 		if err != nil {
 			t.Fatal(err)
 		}
-		hydrated, err := svc.hydrateFileActivityTargets(ctx, meta, threadID.String(), view.Items)
+		hydrated, err := svc.hydrateActivityTargets(ctx, meta, threadID.String(), view.Items)
 		if err != nil {
 			t.Fatal(err)
 		}

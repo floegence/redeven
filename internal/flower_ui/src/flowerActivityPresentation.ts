@@ -202,6 +202,7 @@ export type FlowerActivitySubagentsDetail = Readonly<{
 }>;
 
 export type FlowerActivityDetailBlock =
+  | Readonly<{ kind: 'parent_report'; message: string; accepted: boolean; parentThreadID: string; eventID: string }>
   | Readonly<{ kind: 'image'; resource_ref: string; name: string }>
   | Readonly<{
     kind: 'structured';
@@ -273,6 +274,7 @@ export type FlowerActivityPresentation = Readonly<{
   detailLines: readonly FlowerActivityDetailLine[];
   detailBlocks: readonly FlowerActivityDetailBlock[];
   suppressEmptyDisclosure?: boolean;
+  subagentThreadIDs?: readonly string[];
 }>;
 
 type FlowerActivityPresentationCopy = Readonly<{
@@ -1487,6 +1489,26 @@ function structuredTitle(item: FlowerActivityItem, words: FlowerToolActivityCopy
 
 function presentationForStructured(item: FlowerActivityItem, copy?: FlowerActivityPresentationCopy): FlowerActivityPresentation {
   const words = copy?.tools ?? toolActivityEnUS;
+  if (item.tool_name === 'report_to_parent') {
+    const label = words.parentReportSubmit;
+    const receipt = item.target_refs?.find(ref => ref.kind === 'parent_event');
+    const message = structuredRowsFromPayload(item.payload, 'inputs').find(row => row.title === 'message')?.content ?? '';
+    const error = errorDetailBlockForItem(item, item.payload);
+    return { label, title: { kind: 'plain', text: label }, meta: receipt ? words.parentReportAccepted : '', detailLines: [], suppressEmptyDisclosure: true,
+      detailBlocks: [...(receipt || message ? [{ kind: 'parent_report' as const, message, accepted: Boolean(receipt), parentThreadID: receipt?.label ?? '', eventID: receipt?.resource_ref ?? '' }] : []), ...(error ? [error] : [])] };
+  }
+  if (item.tool_name === 'subagent_events') {
+    const savedAction = payloadValue(item.payload, 'operation');
+    const action = ['list', 'read'].includes(savedAction) ? savedAction
+      : structuredRowsFromPayload(item.payload, 'inputs').find(row => row.title === 'action')?.content || trimString(item.label);
+    const label = action === 'read' ? words.subagentReportsRead : action === 'list' ? words.subagentReportsList : words.subagentReports;
+    const error = errorDetailBlockForItem(item, item.payload);
+    const subagentThreadIDs = [...new Set((item.target_refs ?? [])
+      .filter(ref => ref.kind === 'subagent' && ref.resource_ref?.trim() && ref.resource_ref === ref.resource_ref.trim())
+      .map(ref => ref.resource_ref!))];
+    return { label, title: { kind: 'plain', text: label }, meta: '', detailLines: [],
+      detailBlocks: error ? [error] : [], suppressEmptyDisclosure: true, subagentThreadIDs };
+  }
   const title = structuredTitle(item, words);
   const computer = trimString(item.tool_name).startsWith('computer.') || trimString(item.tool_name).startsWith('browser.');
   const uncertain = item.chips?.some(chip => chip.kind === 'effect_outcome' && chip.value === 'uncertain');
