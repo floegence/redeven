@@ -81,8 +81,6 @@ func (r *run) prepareFloretHostedAgent(ctx context.Context, req RunRequest, prov
 	}
 	r.webSearch = webSearchCapability
 	r.attachmentToolReadEnabled = req.ModelCapability.SupportsTools && r.host.openLiveAttachment != nil
-	sharedState := newFloretToolRuntimeState(newTodoRuntimeState())
-	r.toolRuntimeState = sharedState
 	r.ensureSkillManager()
 
 	contextWindow := modelGatewayDefaultContextWindowTokens
@@ -90,7 +88,7 @@ func (r *run) prepareFloretHostedAgent(ctx context.Context, req RunRequest, prov
 		contextWindow = req.ModelCapability.MaxContextTokens
 	}
 	hostLabels := floretHostLabelsForRun(r)
-	surfaceConfig := r.buildRunToolSurfaceConfig(req.ModelCapability.SupportsAskUserQuestionBatches, sharedState, hostLabels)
+	surfaceConfig := r.buildRunToolSurfaceConfig(req.ModelCapability.SupportsAskUserQuestionBatches, hostLabels)
 	permission, err := r.liveThreadPermissionType(ctx)
 	if err != nil {
 		return nil, err
@@ -217,6 +215,7 @@ func buildFloretThreadAgent(
 		return nil, errors.New("floret effect adapter requires a run and provider")
 	}
 	agentOptions := []flruntime.AgentOption{
+		flruntime.WithAgentGoals(),
 		flruntime.WithAgentProviderRequestTimeoutPolicy(r.providerRequestTimeoutPolicy),
 		flruntime.WithAgentDynamicToolSurface(r.liveFloretToolSurface(surfaceConfig)),
 		flruntime.WithAgentRunLabels(labels),

@@ -364,7 +364,7 @@ func TestModelContextNecessaryFactsAndToolSurfaceStillRefresh(t *testing.T) {
 			return &threadstore.ThreadSettings{PermissionType: string(permission)}, nil
 		},
 	}})
-	cfg := r.buildRunToolSurfaceConfig(true, newFloretToolRuntimeState(newTodoRuntimeState()), nil)
+	cfg := r.buildRunToolSurfaceConfig(true, nil)
 	live := r.liveFloretToolSurface(cfg)
 	done := florettest.Step{Events: []flprovider.Event{{Type: flprovider.EventDelta, Text: "done"}, {Type: flprovider.EventDone, Reason: "stop"}}}
 	gateway := florettest.NewScriptedGateway(flprovider.Identity{Provider: "test", Model: "required-facts", StateCompatibilityKey: "test:required-facts:v1"}, flprovider.Capabilities{Reasoning: flprovider.ReasoningUnsupported}, done, done, done)

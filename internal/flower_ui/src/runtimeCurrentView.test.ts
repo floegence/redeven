@@ -975,3 +975,18 @@ describe('canonical parent event array contract', () => {
     expect(applyFlowerRuntimeCurrentView(base, { ...current, parent_events: undefined }).parent_events).toBeUndefined();
   });
 });
+
+it('renders Goal facts before the first Turn and preserves their control identity', () => {
+  const goal = { version: 1, text: 'Verify the result', status: 'active' as const, actor: 'user' as const };
+  const change = { goal, operation: 'set' as const, actor: 'user' as const, at: '2026-10-18T00:00:00Z' };
+  const current: FlowerRuntimeCurrentView = { thread_id: 'thread-a', view_version: 1, activity: 'idle', goal, items: [{ id: 'goal:a', ordinal: 1, kind: 'goal', goal: change }] };
+  const next = applyFlowerRuntimeCurrentView(summary(), current);
+  expect(next.goal).toEqual(goal);
+  expect(next.messages).toHaveLength(1);
+  expect(next.messages[0]).toMatchObject({ role: 'system', goal: change });
+  expect(next.messages[0].turn_id).toBeUndefined();
+  expect(next.messages[0].run_id).toBeUndefined();
+  const entries = buildFlowerTimelineEntries(next);
+  expect(entries).toHaveLength(1);
+  expect(entries[0]).toMatchObject({ type: 'message', message: { goal: change } });
+});

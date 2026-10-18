@@ -2,7 +2,7 @@ import { validateParentEventPage } from './parentEventPage';
 import { flowerCurrentToolCallPreviews } from './toolCallPreview';
 import { mapFlowerProviderRequestProgress } from './providerRequestProgress';
 import { mapFlowerCitationSources } from './chat/markdown/flowerCitations';
-import { mapFlowerCancellation } from './flowerLiveMapper';
+import { mapFlowerGoal, mapFlowerGoalChange, mapFlowerCancellation } from './flowerLiveMapper';
 import type {
   FlowerActivityApprovalState,
   FlowerActivityItem,
@@ -43,7 +43,7 @@ function runtimeItemIdentity(item: FlowerRuntimeCurrentItem): RuntimeExecutionId
   const itemID = trim(item.id);
   const turnID = trim(item.turn_id);
   const runID = trim(item.run_id);
-  if (!itemID || !turnID || !runID) {
+  if (!itemID || (item.kind !== 'goal' && (!turnID || !runID))) {
     throw new Error('Flower contract error: current item requires exact id, turn_id, and run_id.');
   }
   if (item.interaction) {
@@ -233,6 +233,11 @@ function runtimeMessages(base: FlowerThreadSnapshot, view: FlowerRuntimeCurrentV
     const createdAtMs = itemCreatedAt(item, base.updated_at_ms);
     const references = itemReferences(item);
     const attachmentBlocks = itemAttachmentBlocks(item);
+    if (item.kind === 'goal') {
+      const goal = mapFlowerGoalChange(item.goal);
+      messages.push({ id: itemID, thread_id: base.thread_id, ...(identity.turnID ? { turn_id: identity.turnID, run_id: identity.runID } : {}), role: 'system', content: '', status: 'complete', created_at_ms: createdAtMs, goal });
+      continue;
+    }
     if (item.kind === 'interaction') {
       const interaction = item.interaction;
       if (!interaction?.resolved) continue;
@@ -463,6 +468,7 @@ export function applyFlowerRuntimeCurrentView(
   }
   const projected: FlowerThreadSnapshot = {
     ...base,
+    goal: current.goal === undefined ? undefined : mapFlowerGoal(current.goal),
     updated_at_ms: base.updated_at_ms,
     status,
     active_run_id: activeRunID || undefined,

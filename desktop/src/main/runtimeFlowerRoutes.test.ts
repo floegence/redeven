@@ -194,3 +194,18 @@ it('restricts readiness control to exact routes and methods without queries', ()
     expect(isRuntimeFlowerReadinessPath(path + '/unknown')).toBe(false);
   }
 });
+
+it('admits Goal mutations only through the declared POST route', () => {
+  const path = '/_redeven_proxy/api/ai/thread-goal';
+  expect(runtimeFlowerPath(path)).toBe(path);
+  for (const method of ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const) {
+    expect(runtimeFlowerMethodAllowed(path, method)).toBe(method === 'POST');
+  }
+  for (const suffix of ['?thread_id=t', '/extra', '#fragment']) expect(() => runtimeFlowerPath(path + suffix)).toThrow();
+});
+
+it('allows authenticated staging binding only on the exact scope route', () => {
+ const path = '/_redeven_proxy/api/ai/upload-staging-scopes/scope-1';
+ for (const method of ['GET','POST','PUT','PATCH','DELETE'] as const) expect(runtimeFlowerMethodAllowed(path,method)).toBe(method === 'PATCH' || method === 'DELETE');
+ expect(() => runtimeFlowerPath(path+'/extra')).toThrow();
+});

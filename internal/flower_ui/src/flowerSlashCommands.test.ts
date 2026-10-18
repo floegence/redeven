@@ -22,3 +22,11 @@ describe('Flower slash commands', () => {
     expect(parseFlowerSlashCommand('please compact later')).toEqual({ kind: 'none' });
   });
 });
+
+it('parses goal viewing, exact desired text, deletion and prefixes', () => {
+  expect(parseFlowerSlashCommand('/goal')).toEqual({ kind: 'intent', command: '/goal', operation: 'open' });
+  expect(parseFlowerSlashCommand('/goal Ship a verified result')).toEqual({ kind: 'intent', command: '/goal', operation: 'set', text: 'Ship a verified result' });
+  expect(parseFlowerSlashCommand('/goal clear')).toEqual({ kind: 'intent', command: '/goal', operation: 'delete' });
+  expect(parseFlowerSlashCommand('/go')).toEqual({ kind: 'suggest', query: 'go' });
+  expect(parseFlowerSlashCommand('/goalkeeper')).toEqual({ kind: 'invalid', reason: 'unknown', command: '/goalkeeper' });
+});

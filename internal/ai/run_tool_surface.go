@@ -22,15 +22,13 @@ type runToolSurface struct {
 }
 
 type runToolSurfaceConfig struct {
-	State                          *floretToolRuntimeState
 	HostLabels                     map[string]string
 	SupportsAskUserQuestionBatches bool
 	InitialProviderSurface         *flruntime.ProviderToolSurface
 }
 
-func (r *run) buildRunToolSurfaceConfig(capabilitySupportsAskUserBatches bool, state *floretToolRuntimeState, hostLabels map[string]string) runToolSurfaceConfig {
+func (r *run) buildRunToolSurfaceConfig(capabilitySupportsAskUserBatches bool, hostLabels map[string]string) runToolSurfaceConfig {
 	return runToolSurfaceConfig{
-		State:                          state,
 		HostLabels:                     cloneStringMap(hostLabels),
 		SupportsAskUserQuestionBatches: capabilitySupportsAskUserBatches,
 	}
@@ -76,7 +74,7 @@ func (r *run) buildRunToolSurface(cfg runToolSurfaceConfig, permissionType Flowe
 		hosted = cfg.InitialProviderSurface.HostedToolDefinitions
 	}
 	capabilityContract := resolveRunCapabilityContract(r, activeTools, activeSignals, cfg.SupportsAskUserQuestionBatches, hosted...)
-	floretToolItems, err := buildFloretTools(r, activeTools, cfg.State)
+	floretToolItems, err := buildFloretTools(r, activeTools)
 	if err != nil {
 		return runToolSurface{}, err
 	}

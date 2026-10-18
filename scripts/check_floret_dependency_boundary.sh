@@ -68,6 +68,8 @@ require_source internal/ai/floret_bootstrap.go 'threadRuntime  flruntime.ThreadS
 require_source internal/ai/send_user_turn.go 's.threadRuntime.Send'
 require_source internal/ai/compact_thread_context.go 'flruntime.ThreadContextCompactor'
 require_source internal/ai/compact_thread_context.go 'compactor.CompactContext'
+require_source internal/ai/thread_goal.go 'flruntime.ThreadGoalController'
+require_source internal/ai/floret_runtime.go 'flruntime.WithAgentGoals()'
 if rg -n --glob '*.go' --glob '!**/*_test.go' 'WithAgentManualCompactions|ManualCompactionSource|flowerManualCompactionSource' internal/ai; then
   fail "Redeven must use independent compaction instead of ordinary-turn manual sources"
 fi

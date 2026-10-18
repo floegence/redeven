@@ -12329,3 +12329,18 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
 .flower-context-composition-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.375rem; color: var(--muted-foreground); }
 .flower-context-composition-heading > :last-child { flex-shrink: 0; font-variant-numeric: tabular-nums; }
 .flower-composer-context-tooltip [data-category='hosted_context'], .flower-composer-context-tooltip [data-category='unlabelled'] { --flower-context-color: var(--muted-foreground); }
+
+.flower-goal { margin: 0 0 0.5rem; border: 1px solid var(--border); border-radius: 0.75rem; background: var(--background); }
+.flower-goal-summary { display: flex; align-items: center; gap: 0.5rem; width: 100%; padding: 0.5rem 0.75rem; cursor: pointer; text-align: left; font-size: 0.75rem; }
+.flower-goal-label, .flower-goal-status { flex-shrink: 0; white-space: nowrap; }
+.flower-goal-label { font-weight: 600; }
+.flower-goal-text { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-foreground); }
+.flower-goal-status { color: var(--muted-foreground); }
+.flower-goal-editor { display: grid; gap: 0.625rem; padding: 0 0.75rem 0.75rem; max-height: min(24rem, 45vh); overflow-y: auto; }
+.flower-goal-input { width: 100%; min-height: 5rem; resize: vertical; border: 1px solid var(--border); border-radius: 0.5rem; padding: 0.5rem; font-size: 0.8125rem; line-height: 1.5; background: var(--background); }
+.flower-goal-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.flower-goal-current, .flower-goal-history p { white-space: pre-wrap; overflow-wrap: anywhere; }
+.flower-goal-history { display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 0.5rem 0.75rem; font-size: 0.75rem; border-left: 2px solid var(--border); }
+.flower-goal-history details { flex-basis: 100%; }
+.flower-goal-history summary { cursor: pointer; }
+.flower-goal-history p { margin-top: 0.375rem; }

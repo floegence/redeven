@@ -153,6 +153,7 @@ export type RuntimeFlowerSurfaceAdapterOptions = Readonly<{
   resolveHandler: (input?: FlowerResolveHandlerInput) => Promise<FlowerRouterDecision>;
   loadAttachmentCapability?: FlowerSurfaceAdapter['loadAttachmentCapability'];
   createAttachmentStagingScope?: FlowerSurfaceAdapter['createAttachmentStagingScope'];
+  bindAttachmentStagingScope?: FlowerSurfaceAdapter['bindAttachmentStagingScope'];
   releaseAttachmentStagingScope?: FlowerSurfaceAdapter['releaseAttachmentStagingScope'];
   uploadAttachment?: FlowerSurfaceAdapter['uploadAttachment'];
   deleteStagedAttachment?: FlowerSurfaceAdapter['deleteStagedAttachment'];
@@ -173,6 +174,7 @@ export type RuntimeFlowerSurfaceAdapterOptions = Readonly<{
   resolveStorageGeneration?: () => Promise<string>;
   launchTurn: (input: FlowerTurnLaunchInput) => Promise<FlowerTurnLaunchReceipt>;
   compactThreadContext?: FlowerSurfaceAdapter['compactThreadContext'];
+  manageGoal?: FlowerSurfaceAdapter['manageGoal'];
   retryThread: (threadID: string) => Promise<unknown>;
   stopThread: (threadID: string) => Promise<unknown>;
   submitInput: (input: FlowerSubmitInputRequest) => Promise<FlowerSubmitInputReceipt>;
@@ -520,6 +522,7 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
     resolveHandler: options.resolveHandler,
     ...(options.canMutate !== false && options.loadAttachmentCapability ? { loadAttachmentCapability: options.loadAttachmentCapability } : {}),
     ...(options.canMutate !== false && options.createAttachmentStagingScope ? { createAttachmentStagingScope: options.createAttachmentStagingScope } : {}),
+    ...(options.canMutate !== false && options.bindAttachmentStagingScope ? { bindAttachmentStagingScope: options.bindAttachmentStagingScope } : {}),
     ...(options.canMutate !== false && options.releaseAttachmentStagingScope ? { releaseAttachmentStagingScope: options.releaseAttachmentStagingScope } : {}),
     ...(options.canMutate !== false && options.uploadAttachment ? { uploadAttachment: options.uploadAttachment } : {}),
     ...(options.canMutate !== false && options.deleteStagedAttachment ? { deleteStagedAttachment: options.deleteStagedAttachment } : {}),
@@ -540,6 +543,7 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
     ...(options.extensions ? { extensions: options.extensions } : {}),
     resolveStorageGeneration: options.resolveStorageGeneration,
     launchTurn: options.launchTurn,
+    ...(options.canMutate !== false && options.manageGoal ? { manageGoal: options.manageGoal } : {}),
     ...(options.canMutate !== false && options.compactThreadContext ? {
       compactThreadContext: async (threadID, input) => {
         const tid = trim(threadID);

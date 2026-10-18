@@ -251,3 +251,22 @@ it('preserves restored reference snapshots as an ordinary draft across restart',
   expect(restored.read('thread').value).toMatchObject({ text: 'Taken back', references: [reference], page_context_captured: true, omit_embedded_context: true });
   expect(restored.scopes()).toEqual(['thread']);
 });
+
+it('keeps Goal edits independent and accepts concurrent identical staging bindings', async () => {
+ const coordinator = createFlowerComposerDraftCoordinator();
+ const original = {staging_scope_id:'scope',capability:'secret',target_id:'draft',expires_at_unix_ms:Date.now()+600000};
+ const session = coordinator.open('draft');
+ session.mutate(value => ({...value,goal_edit:{text:'Retained result',version:2}}));
+ await coordinator.ensureAttachmentStagingScope('draft',async()=>original,async()=>undefined);
+ coordinator.moveScope('draft','thread');
+ const bound = {...original,target_id:'thread'};
+ coordinator.updateAttachmentStagingScope('thread',original,bound);
+ coordinator.updateAttachmentStagingScope('thread',original,{...bound});
+ expect(coordinator.attachmentStagingScope('thread')).toEqual(bound);
+ expect(coordinator.read('thread').value.goal_edit?.text).toBe('Retained result');
+ expect(() => coordinator.updateAttachmentStagingScope('thread',original,{...bound,capability:'other'})).toThrow('changed authority');
+ const restored = createFlowerComposerDraftCoordinator();
+ restored.restoreAfterRestart(coordinator.exportForRestart());
+ expect(restored.read('thread').value.goal_edit).toEqual({text:'Retained result',version:2});
+ coordinator.dispose(); restored.dispose();
+});

@@ -14,6 +14,8 @@ import type {
   FlowerActivityTargetRef,
   FlowerActivityTimelineBlock,
   FlowerChatMessage,
+  FlowerGoal,
+  FlowerGoalChange,
   FlowerContextCompaction,
   FlowerContextUsage,
   FlowerModelContext,
@@ -1114,6 +1116,35 @@ function mapMessageReferences(raw: unknown, messageID: string): FlowerChatMessag
   });
 }
 
+export function mapFlowerGoal(raw: unknown): FlowerGoal {
+  const goal = plainRecordValue(raw);
+  if (!goal || !Number.isSafeInteger(goal.version) || Number(goal.version) < 0
+    || !['active', 'absent', 'completed'].includes(String(goal.status))
+    || (goal.version === 0 ? goal.status !== 'absent' || goal.actor !== '' : !['user', 'model'].includes(String(goal.actor)))
+    || goal.status !== 'absent' && (typeof goal.text !== 'string' || !goal.text.trim())
+    || goal.status === 'absent' && goal.text !== undefined && goal.text !== ''
+    || goal.reviewing !== undefined && typeof goal.reviewing !== 'boolean') {
+    throw new Error('Flower contract error: invalid Goal state.');
+  }
+  return goal as FlowerGoal;
+}
+
+export function mapFlowerGoalChange(raw: unknown): FlowerGoalChange {
+  const change = plainRecordValue(raw), goal = mapFlowerGoal(change?.goal);
+  if (!change || !goal || !Number.isSafeInteger(goal.version) || Number(goal.version) < 1
+    || !['active', 'absent', 'completed'].includes(String(goal.status))
+    || !['user', 'model'].includes(String(goal.actor)) || !['user', 'model'].includes(String(change.actor))
+    || !['set', 'delete', 'completed'].includes(String(change.operation))
+    || typeof change.at !== 'string' || !Number.isFinite(Date.parse(change.at))
+    || goal.status !== 'absent' && (typeof goal.text !== 'string' || !goal.text.trim())
+    || change.operation === 'delete' && goal.status !== 'absent'
+    || change.operation === 'completed' && goal.status !== 'completed'
+    || change.operation === 'set' && goal.status !== 'active') {
+    throw new Error('Flower contract error: invalid Goal change.');
+  }
+  return change as FlowerGoalChange;
+}
+
 export function mapFlowerMessage(raw: unknown): FlowerChatMessage {
   const message = recordValue(raw);
   if (!message) throw new Error('Flower contract error: timeline message must be an object.');
@@ -1123,13 +1154,15 @@ export function mapFlowerMessage(raw: unknown): FlowerChatMessage {
   const runID = trim(message.run_id);
   const logicalRequestID = trim(message.logical_request_id);
   const role = trim(message.role).toLowerCase();
+  const goal = message.goal === undefined ? undefined : mapFlowerGoalChange(message.goal);
+  if (goal && role !== 'system') throw new Error('Flower contract error: Goal changes require the system role.');
   if (!id) throw new Error('Flower contract error: timeline message requires id.');
   if (role !== 'user' && role !== 'assistant' && role !== 'system') {
     throw new Error(`Flower contract error: timeline message ${id} has invalid role.`);
   }
   if (!threadID) throw new Error(`Flower contract error: timeline message ${id} requires thread_id.`);
-  if (!turnID) throw new Error(`Flower contract error: timeline message ${id} requires turn_id.`);
-  if (!runID) throw new Error(`Flower contract error: timeline message ${id} requires run_id.`);
+  if (!turnID && !goal) throw new Error(`Flower contract error: timeline message ${id} requires turn_id.`);
+  if (!runID && !goal) throw new Error(`Flower contract error: timeline message ${id} requires run_id.`);
   if (message.blocks !== undefined && !Array.isArray(message.blocks)) {
     throw new Error(`Flower contract error: timeline message ${id} blocks must be an array.`);
   }
@@ -1157,6 +1190,7 @@ export function mapFlowerMessage(raw: unknown): FlowerChatMessage {
     turn_id: turnID,
     run_id: runID,
     ...(logicalRequestID ? { logical_request_id: logicalRequestID } : {}),
+    ...(goal ? { goal } : {}),
     role,
     ...(role === 'assistant' && message.sources ? { sources: mapFlowerCitationSources(message.sources) } : {}),
     content,

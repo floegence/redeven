@@ -2350,3 +2350,13 @@ it('reads complete parent events through the authorized recipient route', async 
  const adapter = createEnvLocalFlowerSurfaceAdapter({ envPublicID: 'env', envLabel: 'Environment', rpc: { ai: {} } as never });
  await expect(adapter.readParentEvents!('parent/id', { action: 'read', event_id: 'event' })).resolves.toEqual({ events: [event] });
 });
+
+it.each([
+  [503, 'AI_GOAL_OUTCOME_UNKNOWN', 'unknown'],
+  [500, 'INTERNAL_ERROR', 'unknown'],
+  [409, 'AI_STORAGE_RESTORED', 'rejected'],
+])('preserves Goal outcome recovery for HTTP %s', async (status, code, kind) => {
+  fetchMock.mockResolvedValue({ ok: false, status, text: async () => JSON.stringify({ ok: false, error: 'Goal response unavailable', error_code: code }) } as Response);
+  const adapter = createEnvLocalFlowerSurfaceAdapter({ envPublicID: 'env', envLabel: 'Environment', rpc: { ai: {} } as never });
+  await expect(adapter.manageGoal!({ storage_generation: 'generation', client_request_id: 'same-goal-request', thread_id: 'thread', operation: 'set', expected_version: 0, text: 'Verify result' })).rejects.toMatchObject({ admission_kind: kind, code });
+});

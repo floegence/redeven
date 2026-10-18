@@ -126,9 +126,6 @@ func buildPromptStaticSections(spec promptProfileSpec, snapshot promptRuntimeSna
 	if promptToolAvailable(snapshot.AvailableToolNames, "subagents") {
 		sections = append(sections, buildPromptSubagentSection(spec))
 	}
-	if promptToolAvailable(snapshot.AvailableToolNames, "write_todos") {
-		sections = append(sections, buildPromptTodoDisciplineSection())
-	}
 	sections = append(sections,
 		buildPromptFileToolsSection(snapshot),
 		buildPromptTerminalSection(snapshot),
@@ -334,11 +331,6 @@ func buildPromptWebResearchCapabilitySection(snapshot promptRuntimeSnapshot) pro
 	}
 	lines = append(lines, "- A missing tool or confirmed pre-execution failure permits another available route. Never bypass permission denial or URL blocking; choose an allowed alternate source.")
 	return newPromptSection("online_research_capability", lines...)
-}
-
-func buildPromptTodoDisciplineSection() promptSection {
-	return newPromptSection("todo_discipline", "# Todo Discipline",
-		"- Use write_todos for substantial multi-step work when useful. Keep at most one active task; update progress/cancellation and clear obsolete work.")
 }
 
 func buildPromptToolFailureRecoverySection() promptSection {

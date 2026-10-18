@@ -5,6 +5,8 @@ import {
   mapModelContext,
   mapFlowerActivityItem,
   mapFlowerMessage,
+  mapFlowerGoal,
+  mapFlowerGoalChange,
   mapFlowerThread,
   mergeFlowerContextUsage,
 } from './flowerLiveMapper';
@@ -425,4 +427,34 @@ it('preserves zero native input when optional characters are damaged', () => {
  for (const value of [-1, 1.5, Number.MAX_SAFE_INTEGER + 1, '100']) {
   expect(mapContextUsage({ confirmed: { ...sample, characters: { source: 'prepared_characters_v1', unit: 'unicode_code_points', total_characters: value, categories: [] } } })?.confirmed).toMatchObject({ available: true, input_tokens: 0, characters_available: false, character_limitation: 'invalid_characters' });
  }
+});
+
+it('maps historical Goal changes independently of execution and keeps ordinary message identities strict', () => {
+  const goal = { version: 2, status: 'absent', actor: 'user' };
+  const change = { goal, operation: 'delete', actor: 'user', at: '2026-10-18T00:00:00Z' };
+  const raw = { id: 'goal:deleted', thread_id: 'thread-a', role: 'system', status: 'complete', timestamp: 10, goal: change };
+  expect(mapFlowerMessage(raw)).toMatchObject({ goal: change, role: 'system' });
+  expect(() => mapFlowerMessage({ ...raw, goal: undefined })).toThrow('requires turn_id');
+});
+
+it('rejects malformed Goal facts before relaxing execution identity', () => {
+ const valid = { goal: { version:1,status:'active',actor:'user',text:'Exact goal' }, operation:'set', actor:'user', at:'2026-10-18T00:00:00Z' };
+ expect(mapFlowerGoalChange(valid)).toEqual(valid);
+ for (const changed of [{goal:{...valid.goal,version:0}}, {goal:{...valid.goal,version:1.5}}, {goal:{...valid.goal,text:''}}, {goal:{...valid.goal,status:'absent'}}, {operation:'completed'}, {actor:'other'}, {at:'invalid'}]) {
+   expect(() => mapFlowerGoalChange({...valid,...changed})).toThrow('invalid Goal');
+ }
+ expect(() => mapFlowerMessage({id:'goal',thread_id:'t',role:'user',goal:valid})).toThrow('require the system role');
+});
+
+it('validates current Goal states without truncating user text', () => {
+  expect(mapFlowerGoal({ version: 0, status: 'absent', actor: '' })).toEqual({ version: 0, status: 'absent', actor: '' });
+  const text = 'Readable result. '.repeat(1000);
+  expect(mapFlowerGoal({ version: 1, status: 'active', actor: 'user', text }).text).toBe(text);
+  for (const goal of [
+    { version: -1, status: 'absent', actor: '' },
+    { version: 0, status: 'active', actor: 'user', text: 'Forged' },
+    { version: 1, status: 'active', actor: 'unknown', text: 'Forged' },
+    { version: 1, status: 'active', actor: 'user', text: '' },
+    { version: 2, status: 'absent', actor: 'user', text: 'Retained text' },
+  ]) expect(() => mapFlowerGoal(goal)).toThrow('invalid Goal state');
 });

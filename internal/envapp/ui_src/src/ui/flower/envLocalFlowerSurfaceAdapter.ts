@@ -34,6 +34,7 @@ import type {
   FlowerRouterDecision,
   FlowerTurnLaunchInput,
   FlowerRuntimeCurrentView,
+  FlowerGoalResult,
   FlowerSettingsDraft,
   FlowerSettingsSnapshot,
   FlowerModelDirectory,
@@ -760,6 +761,13 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       return capability;
     },
     createAttachmentStagingScope: createEnvAttachmentStagingScope,
+    bindAttachmentStagingScope: async (scope, threadID) => {
+      const bound = await fetchLocalApiJSON<Omit<FlowerAttachmentStagingScope, 'capability'>>(
+        '/_redeven_proxy/api/ai/upload-staging-scopes/' + encodeURIComponent(scope.staging_scope_id),
+        { method: 'PATCH', headers: flowerAttachmentStagingHeaders(scope), body: JSON.stringify({ expected_target_id: scope.target_id, thread_id: threadID }) },
+      );
+      return { ...bound, capability: scope.capability };
+    },
     releaseAttachmentStagingScope: releaseEnvAttachmentStagingScope,
     uploadAttachment: options.uploadAttachment ?? uploadEnvLocalFlowerAttachment,
     deleteStagedAttachment: async (attachmentID, scope) => {
@@ -861,6 +869,17 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
         throw flowerTurnAdmissionError('unknown', error, 'Flower response was not received.');
       }
       return normalizeFlowerTurnLaunchReceipt(response, { clientRequestID, existingThreadID });
+    },
+    manageGoal: async (input) => {
+      try {
+        return await fetchLocalApiJSON<FlowerGoalResult>('/_redeven_proxy/api/ai/thread-goal', { method: 'POST', body: JSON.stringify(input) });
+      } catch (error) {
+        if (error instanceof LocalApiError) {
+          const unusableSuccess = error.code === 'INVALID_JSON_RESPONSE' && error.status >= 200 && error.status < 300;
+          throw flowerTurnAdmissionError(unusableSuccess || error.code === 'AI_GOAL_OUTCOME_UNKNOWN' || error.status >= 500 ? 'unknown' : 'rejected', error);
+        }
+        throw flowerTurnAdmissionError('unknown', error, 'Flower response was not received.');
+      }
     },
     compactThreadContext: async (threadID, input) => {
       try {

@@ -475,3 +475,61 @@ func TestQueueEditUploadClaimRetainsExactStagingOwnershipUntilSettlement(t *test
 		t.Fatal("unrelated staging scope claimed live upload")
 	}
 }
+
+func TestBindDraftUploadStagingPreservesInflightUploadsAndRejectsOtherTargets(t *testing.T) {
+	store, err := Open(filepath.Join(t.TempDir(), "threads.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	scope := stagingScopeForTest("env_quota", "draft-request", strings.Repeat("a", 64), "scope_bind")
+	if err := store.CreateUploadStagingScope(t.Context(), scope); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"target-thread", "other-thread"} {
+		if err := store.CreateThreadSettings(t.Context(), ThreadSettings{ThreadID: id, EndpointID: scope.EndpointID, PermissionType: "approval_required"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rec := quotaUploadRecord(scope.OwnerUserHash, "upl_bound_scope", 4)
+	attempt := UploadAttemptRecord{EndpointID: scope.EndpointID, OwnerUserHash: scope.OwnerUserHash, UploadRequestID: "bind-upload", RequestFingerprint: "bind-fingerprint", UploadID: rec.UploadID, CreatedAtUnixMs: 1}
+	if _, _, err := store.ReserveUploadAttempt(t.Context(), attempt); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.BindDraftUploadStagingToThread(t.Context(), scope, "target-thread"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.BindDraftUploadStagingToThread(t.Context(), scope, "target-thread"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.BindDraftUploadStagingToThread(t.Context(), scope, "other-thread"); err == nil {
+		t.Fatal("bound scope moved to another thread")
+	}
+	// The upload began before binding; commit must use the current canonical target.
+	if err := store.CompleteUploadAttemptToStaging(t.Context(), attempt, rec, scope); err != nil {
+		t.Fatal(err)
+	}
+	current, err := store.AuthorizeUploadStagingScope(t.Context(), scope.EndpointID, scope.OwnerUserHash, scope.StagingScopeID, scope.CapabilityHash, time.Now().UnixMilli())
+	if err != nil || current.TargetID != "target-thread" {
+		t.Fatalf("scope=%+v err=%v", current, err)
+	}
+	var target string
+	if err := store.db.QueryRow("SELECT target_id FROM ai_upload_refs WHERE upload_id = ?", rec.UploadID).Scan(&target); err != nil || target != current.TargetID {
+		t.Fatalf("target=%q err=%v", target, err)
+	}
+	if _, err := store.GetStagingOwnedUpload(t.Context(), scope.EndpointID, scope.OwnerUserHash, scope.StagingScopeID, rec.UploadID); err != nil {
+		t.Fatal(err)
+	}
+	wrong := scope
+	wrong.CapabilityHash = strings.Repeat("f", 64)
+	if err := store.BindDraftUploadStagingToThread(t.Context(), wrong, "target-thread"); err == nil {
+		t.Fatal("invalid capability bound scope")
+	}
+	existing := stagingScopeForTest(scope.EndpointID, "other-thread", scope.OwnerUserHash, "scope_existing")
+	if err := store.CreateUploadStagingScope(t.Context(), existing); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.BindDraftUploadStagingToThread(t.Context(), existing, "target-thread"); err == nil {
+		t.Fatal("existing thread scope was rebound")
+	}
+}

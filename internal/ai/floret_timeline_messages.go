@@ -101,7 +101,7 @@ func typedThreadItemMessage(threadID string, item flruntime.ThreadItem) (json.Ra
 	threadID = strings.TrimSpace(threadID)
 	turnID := strings.TrimSpace(item.TurnID.String())
 	runID := strings.TrimSpace(item.RunID.String())
-	if threadID == "" || turnID == "" || runID == "" || strings.TrimSpace(item.ID) == "" {
+	if threadID == "" || strings.TrimSpace(item.ID) == "" || (item.Kind != flruntime.ThreadItemGoal && (turnID == "" || runID == "")) {
 		return nil, false, errors.New("typed thread item has incomplete execution identity")
 	}
 	if item.Interaction != nil && (item.Interaction.TurnID != item.TurnID || item.Interaction.RunID != item.RunID) {
@@ -109,6 +109,12 @@ func typedThreadItemMessage(threadID string, item flruntime.ThreadItem) (json.Ra
 	}
 	createdAt := item.CreatedAt.UnixMilli()
 	switch item.Kind {
+	case flruntime.ThreadItemGoal:
+		if item.Goal == nil {
+			return nil, false, errors.New("goal timeline item is missing its canonical change")
+		}
+		raw, err := json.Marshal(map[string]any{"id": item.ID, "thread_id": threadID, "turn_id": turnID, "run_id": runID, "role": "system", "status": "complete", "timestamp": createdAt, "content": "", "goal": item.Goal})
+		return raw, err == nil, err
 	case flruntime.ThreadItemUser:
 		raw, err := canonicalUserTimelineMessageForThread(threadID, turnID, runID, item.ID, item.Text, item.Attachments, item.References, createdAt)
 		return raw, err == nil, err

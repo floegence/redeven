@@ -150,6 +150,7 @@ export function flowerMessageSignature(message: FlowerChatMessage): string {
     message.role,
     message.content,
     JSON.stringify(message.steering ?? null),
+    JSON.stringify(message.goal ?? null),
     JSON.stringify(message.sources ?? []),
     message.status,
     String(message.created_at_ms),
@@ -369,7 +370,7 @@ function messageSegmentEntry(
   segmentIndex: number,
   totalSegments: number,
 ): Extract<FlowerTimelineEntry, { type: 'message' }> | null {
-  if (blocks.length === 0 && !message.references?.length && message.active_cursor !== true) return null;
+  if (blocks.length === 0 && !message.goal && !message.references?.length && message.active_cursor !== true) return null;
   const activity = blocks.find((block) => block.type === 'activity' || block.type === 'tool_preview');
   return {
     type: 'message',
@@ -403,7 +404,7 @@ function messageTimelineEntries(
   };
   const flushMessageSegment = () => {
     flushActivity();
-    if (currentBlocks.length > 0 || message.references?.length || message.active_cursor === true) {
+    if (message.goal || currentBlocks.length > 0 || message.references?.length || message.active_cursor === true) {
       rawEntries.push(currentBlocks);
       currentBlocks = [];
     }

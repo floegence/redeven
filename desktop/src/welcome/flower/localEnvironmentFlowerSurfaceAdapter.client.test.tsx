@@ -1612,3 +1612,23 @@ it('reads full parent events using the current recipient runtime route', async (
  await expect(adapter.readParentEvents!('parent/id', query)).resolves.toEqual(result);
  expect(bridge.requestRuntimeFlower).toHaveBeenCalledExactlyOnceWith({ method: 'POST', path: '/_redeven_proxy/api/ai/threads/parent%2Fid/subagent-events', body: query });
 });
+
+it('maps Goal commands without creating a user Turn and preserves conflict results', async () => {
+  const input = { storage_generation: 'generation', client_request_id: 'goal-request', thread_id: 'thread-1', operation: 'set' as const, expected_version: 2, text: 'Verify the result' };
+  const result = { client_request_id: input.client_request_id, thread_id: 'thread-1', current: currentView(), goal: { version: 3, text: 'Changed elsewhere', status: 'active', actor: 'user' }, conflict: true };
+  const bridge = bridgeFor(request => { expect(request.path).toBe('/_redeven_proxy/api/ai/thread-goal'); expect(request.method).toBe('POST'); expect(request.body).toEqual(input); return result; });
+  const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge);
+  expect(await adapter.manageGoal!(input)).toEqual(result);
+  expect(bridge.requestRuntimeFlower).toHaveBeenCalledTimes(1);
+});
+
+it.each([
+  [503, 'AI_GOAL_OUTCOME_UNKNOWN', 'unknown'],
+  [500, 'INTERNAL_ERROR', 'unknown'],
+  [409, 'AI_STORAGE_RESTORED', 'rejected'],
+])('preserves Goal outcome recovery through Desktop for HTTP %s', async (status, code, kind) => {
+  const bridge = bridgeFor(() => ({}));
+  vi.mocked(bridge.requestRuntimeFlower).mockResolvedValue({ ok: false, error: { code, status, message: 'Goal response unavailable' }, failureKind: 'response' });
+  const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge);
+  await expect(adapter.manageGoal!({ storage_generation: 'generation', client_request_id: 'same-goal-request', thread_id: 'thread', operation: 'set', expected_version: 0, text: 'Verify result' })).rejects.toMatchObject({ admission_kind: kind, code });
+});

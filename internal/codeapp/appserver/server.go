@@ -4885,6 +4885,43 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: view})
 		return
 
+	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/ai/thread-goal":
+		meta, ok := g.requirePermission(w, r, requiredPermissionFull)
+		if !ok || !g.requireAIService(w, aiSvc) {
+			return
+		}
+		decoder := json.NewDecoder(r.Body)
+		decoder.DisallowUnknownFields()
+		var body ai.ThreadGoalRequest
+		if err := decoder.Decode(&body); err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return
+		}
+		if err := decoder.Decode(&struct{}{}); err != io.EOF {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return
+		}
+		result, current, err := aiSvc.ManageThreadGoal(r.Context(), meta, body)
+		if err != nil {
+			code := ""
+			status := aiThreadActionHTTPStatus(err)
+			if errors.Is(err, ai.ErrFlowerStorageRestored) {
+				code = "AI_STORAGE_RESTORED"
+			}
+			if errors.Is(err, ai.ErrThreadGoalOutcomeUnknown) {
+				code, status = ai.ThreadGoalOutcomeUnknownErrorCode, http.StatusServiceUnavailable
+			}
+			writeJSON(w, status, apiResp{OK: false, Error: err.Error(), ErrorCode: code})
+			return
+		}
+		public, err := ai.MarshalFlowerCurrentView(current)
+		if err != nil {
+			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: err.Error(), ErrorCode: ai.ThreadGoalOutcomeUnknownErrorCode})
+			return
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"client_request_id": body.ClientRequestID, "thread_id": current.ThreadID, "current": public, "goal": result.Goal, "conflict": result.Conflict, "replayed": result.Replayed}})
+		return
+
 	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/ai/threads":
 		meta, ok := g.requirePermission(w, r, requiredPermissionFull)
 		if !ok {
@@ -6099,6 +6136,30 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set(uploadStagingCapabilityHeader, created.Capability)
 		w.Header().Set("Access-Control-Expose-Headers", uploadStagingCapabilityHeader)
 		writeJSON(w, http.StatusCreated, apiResp{OK: true, Data: created})
+		return
+
+	case r.Method == http.MethodPatch && strings.HasPrefix(r.URL.Path, "/_redeven_proxy/api/ai/upload-staging-scopes/"):
+		meta, ok := g.requirePermission(w, r, requiredPermissionFull)
+		if !ok || !g.requireAIService(w, aiSvc) {
+			return
+		}
+		scopeID := strings.TrimPrefix(r.URL.Path, "/_redeven_proxy/api/ai/upload-staging-scopes/")
+		var body struct {
+			ExpectedTargetID string `json:"expected_target_id"`
+			ThreadID         string `json:"thread_id"`
+		}
+		decoder := json.NewDecoder(r.Body)
+		decoder.DisallowUnknownFields()
+		if scopeID == "" || strings.Contains(scopeID, "/") || len(r.Header.Values(uploadStagingCapabilityHeader)) != 1 || decoder.Decode(&body) != nil || decoder.Decode(&struct{}{}) != io.EOF {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid staging binding request"})
+			return
+		}
+		bound, err := aiSvc.BindDraftUploadStaging(r.Context(), meta, scopeID, r.Header.Get(uploadStagingCapabilityHeader), body.ExpectedTargetID, body.ThreadID)
+		if err != nil {
+			writeJSON(w, aiThreadActionHTTPStatus(err), apiResp{OK: false, Error: err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: bound})
 		return
 
 	case r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/_redeven_proxy/api/ai/upload-staging-scopes/"):

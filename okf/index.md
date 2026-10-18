@@ -234,6 +234,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Files context menus](ui/files-context-menu.md) - Keep file actions inside the whole Files workspace and above mobile Flower chrome with shared touch, keyboard, and scroll handling.
 - [Plugin Center interaction](ui/plugin-center-interaction.md) - Browse, filter, and manage plugins with retained drawer state and correct modal input.
 - [Plugin surfaces](ui/plugin-surfaces.md) - Review exact plugin inventory and place SDK surfaces in Activity windows or Workbench widgets.
+- [Flower thread Goals](ai/flower-goals.md) - Manage a concise objective, reflect before completion and recover without losing drafts.
 - [Flower turn launcher](ui/flower-turn-launcher.md) - Use one strict turn endpoint, connection-local composer state, typed admission outcomes, and host handoff responsibilities.
 - [Flower Activity origin page references](ui/flower-page-context.md) - Capture once from the actual Activity page, inspect the frozen reference and remove it without replenishment.
 - [Flower conversation references](ui/flower-thread-references.md) - Add frozen conversation snapshots, preview basic facts and open authorized threads without losing drafts.

@@ -143,7 +143,7 @@ func validateFlowerCurrentIdentity(current flruntime.ThreadView) error {
 		return errors.New("flower current view requires thread_id")
 	}
 	for _, item := range current.Items {
-		if strings.TrimSpace(item.ID) == "" || strings.TrimSpace(item.TurnID.String()) == "" || strings.TrimSpace(item.RunID.String()) == "" {
+		if strings.TrimSpace(item.ID) == "" || (item.Kind != flruntime.ThreadItemGoal && (strings.TrimSpace(item.TurnID.String()) == "" || strings.TrimSpace(item.RunID.String()) == "")) {
 			return errors.New("flower current item requires exact id, turn_id, and run_id")
 		}
 		if item.Interaction != nil && (item.Interaction.TurnID != item.TurnID || item.Interaction.RunID != item.RunID) {

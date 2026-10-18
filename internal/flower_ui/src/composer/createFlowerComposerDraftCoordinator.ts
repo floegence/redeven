@@ -43,6 +43,7 @@ export type FlowerComposerDraftReference = Readonly<{
 
 export type FlowerComposerDraftValue = Readonly<{
   text: string;
+  goal_edit?: Readonly<{ text: string; version: number; error?: string }>;
   omit_embedded_context?: boolean;
   attachments: readonly FlowerComposerDraftAttachment[];
   references: readonly FlowerComposerDraftReference[];
@@ -107,6 +108,7 @@ export type FlowerComposerDraftCoordinator = Readonly<{
     create: () => Promise<FlowerAttachmentStagingScope>,
     release: (scope: FlowerAttachmentStagingScope) => Promise<void>,
   ) => Promise<FlowerAttachmentStagingScope>;
+  updateAttachmentStagingScope: (scopeID: string, previous: FlowerAttachmentStagingScope, next: FlowerAttachmentStagingScope) => void;
   releaseAttachmentStagingScope: (scopeID: string) => void;
   moveScope: (fromScopeID: string, toScopeID: string) => FlowerComposerDraftSnapshot;
   dispose: () => void;
@@ -262,7 +264,7 @@ export function createFlowerComposerDraftCoordinator(
         // Copy user intent explicitly. Staging capabilities, model capability
         // revisions and previously prepared submissions belong to the old session.
         drafts.push({ scope_id: scopeID, files, value: {
-          text: value.text, mode: 'ordinary',
+          text: value.text, goal_edit: value.goal_edit, mode: 'ordinary',
           omit_embedded_context: value.omit_embedded_context,
           references: value.references.map(reference => ({ ...reference })),
           page_context_captured: value.page_context_captured,
@@ -345,6 +347,15 @@ export function createFlowerComposerDraftCoordinator(
       operation.promise = creation;
       handle.stagingScopeOperation = operation;
       return creation;
+    },
+    updateAttachmentStagingScope: (scopeID, previous, next) => {
+      const handle = stateFor(scopeID);
+      const current = handle.stagingScope;
+      if (!current || current.staging_scope_id !== previous.staging_scope_id || current.capability !== previous.capability
+        || current.target_id !== previous.target_id && current.target_id !== next.target_id) throw new Error('Attachment staging changed during binding.');
+      if (previous.staging_scope_id !== next.staging_scope_id || previous.capability !== next.capability) throw new Error('Attachment staging binding changed authority.');
+      handle.stagingScope = next;
+      handle.attachmentController?.setStagingScope(next);
     },
     releaseAttachmentStagingScope: (scopeID) => releaseStagingScope(stateFor(scopeID)),
     moveScope: (rawFromScopeID, rawToScopeID) => {
