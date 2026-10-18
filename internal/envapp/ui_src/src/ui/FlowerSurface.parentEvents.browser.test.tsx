@@ -53,7 +53,7 @@ it.each(['mouse', 'keyboard'] as const)('keeps the report start visible on %s ex
   await page.viewport(1100, 850);
   const child = subagentSummary({ parent_thread_id: 'parent', thread_id: 'child', task_name: 'Research' });
   const message = 'Verified source dates\n' + 'Complete findings with original formatting.\n'.repeat(80);
-  const events = { events: Array.from({ length: 41 }, (_, index) => ({
+  const events = { thread_id: 'parent', events: Array.from({ length: 41 }, (_, index) => ({
     ...event('event-' + index, index === 36 ? 'report' : 'completed'),
     received_at: new Date(Date.UTC(2026, 9, 16, 0, 0, index)).toISOString(),
     ...(index === 36 ? { message } : {}),
@@ -96,7 +96,7 @@ it.each(['mouse', 'keyboard'] as const)('keeps the report start visible on %s ex
 it('shows reports and terminal events with child avatars in the parent transcript before opening the dropdown', async () => {
   await page.viewport(1100, 850);
   const child = subagentSummary({ parent_thread_id: 'parent', thread_id: 'child', task_name: 'Research', status: 'failed' });
-  const events = { events: [event('report'), event('failed', 'failed')], first_event_id: 'report', last_event_id: 'failed' };
+  const events = { thread_id: 'parent', events: [event('report'), event('failed', 'failed')], first_event_id: 'report', last_event_id: 'failed' };
   const parent = thread({ thread_id: 'parent', subagents: [child], parent_events: events });
   const initial = liveBootstrap(parent, 1);
   const bootstrap = { ...initial, current: { ...initial.current, parent_events: events } };
@@ -121,7 +121,7 @@ it('shows reports and terminal events with child avatars in the parent transcrip
 
 it('preserves the mounted report, expansion and keyboard focus across canonical current updates', async () => {
   const child = subagentSummary({ parent_thread_id: 'parent', thread_id: 'child', task_name: 'Research' });
-  const events = { events: [event('report')], first_event_id: 'report', last_event_id: 'report' };
+  const events = { thread_id: 'parent', events: [event('report')], first_event_id: 'report', last_event_id: 'report' };
   const parent = thread({ thread_id: 'parent', subagents: [child], parent_events: events });
   const base = liveBootstrap(parent, 1);
   const current = { ...base.current, parent_events: events };
@@ -157,11 +157,11 @@ it('preserves the mounted report, expansion and keyboard focus across canonical 
 it('reads full Unicode reports once, pages a fixed range and preserves reports on admission updates', async () => {
   const host = document.createElement('div'); document.body.append(host);
   const first = event('first'), last = event('last');
-  const [value, setValue] = createSignal<FlowerParentEventPage>({ events: [first], first_event_id: first.id, last_event_id: last.id, next_after_event_id: first.id });
+  const [value, setValue] = createSignal<FlowerParentEventPage>({ thread_id: 'parent', events: [first], first_event_id: first.id, last_event_id: last.id, next_after_event_id: first.id });
   const message = '核验摘要\n' + '界'.repeat(2700);
   const read = vi.fn(async (_thread: string, query: { after_event_id?: string }) => query.after_event_id
-    ? { events: [{ ...last, message: 'Additional findings' }], first_event_id: first.id, last_event_id: last.id }
-    : { events: [{ ...first, message }], first_event_id: first.id, last_event_id: last.id, next_after_event_id: first.id });
+    ? { thread_id: 'parent', events: [{ ...last, message: 'Additional findings' }], first_event_id: first.id, last_event_id: last.id }
+    : { thread_id: 'parent', events: [{ ...first, message }], first_event_id: first.id, last_event_id: last.id, next_after_event_id: first.id });
   let reading!: ReturnType<typeof createParentEventReading>;
   const dispose = render(() => {
     reading = createParentEventReading({ threadID: 'parent', get page() { return value(); }, read });
@@ -184,17 +184,17 @@ it('reads full Unicode reports once, pages a fixed range and preserves reports o
 it('ignores a late report response after selecting another parent and supports retry', async () => {
   const host = document.createElement('div'); document.body.append(host);
   const [id, setID] = createSignal('parent');
-  const [value, setValue] = createSignal<FlowerParentEventPage>({ events: [event('first')], first_event_id: 'first', last_event_id: 'first' });
+  const [value, setValue] = createSignal<FlowerParentEventPage>({ thread_id: 'parent', events: [event('first')], first_event_id: 'first', last_event_id: 'first' });
   let resolve!: (page: FlowerParentEventPage) => void;
-  const read = vi.fn().mockImplementationOnce(() => new Promise<FlowerParentEventPage>(done => { resolve = done; })).mockRejectedValueOnce(new Error('offline')).mockResolvedValue({ events: [{ ...event('second'), parent_thread_id: 'other', message: 'Other report' }], first_event_id: 'second', last_event_id: 'second' });
+  const read = vi.fn().mockImplementationOnce(() => new Promise<FlowerParentEventPage>(done => { resolve = done; })).mockRejectedValueOnce(new Error('offline')).mockResolvedValue({ thread_id: 'other', events: [{ ...event('second'), parent_thread_id: 'other', message: 'Other report' }], first_event_id: 'second', last_event_id: 'second' });
   let reading!: ReturnType<typeof createParentEventReading>;
   const dispose = render(() => { reading = createParentEventReading({ get threadID() { return id(); }, get page() { return value(); }, read }); return null; }, host);
   onTestFinished(() => { dispose(); host.remove(); });
   await waitFor(() => read.mock.calls.length === 1);
   setID('other');
-  setValue({ events: [{ ...event('second'), parent_thread_id: 'other' }], first_event_id: 'second', last_event_id: 'second' });
+  setValue({ thread_id: 'other', events: [{ ...event('second'), parent_thread_id: 'other' }], first_event_id: 'second', last_event_id: 'second' });
   await waitFor(reading.failed);
-  resolve({ events: [{ ...event('first'), message: 'Stale report' }] });
+  resolve({ thread_id: 'parent', events: [{ ...event('first'), message: 'Stale report' }] });
   await Promise.resolve();
   expect(reading.events().some(event => event.message === 'Stale report')).toBe(false);
   await reading.retry();
@@ -204,17 +204,17 @@ it('ignores a late report response after selecting another parent and supports r
 
 it('drops pages outside a changed fixed range and ignores the old range response', async () => {
   const host = document.createElement('div'); document.body.append(host);
-  const [value, setValue] = createSignal<FlowerParentEventPage>({ events: [event('first')], first_event_id: 'first', last_event_id: 'first' });
+  const [value, setValue] = createSignal<FlowerParentEventPage>({ thread_id: 'parent', events: [event('first')], first_event_id: 'first', last_event_id: 'first' });
   let resolve!: (page: FlowerParentEventPage) => void;
   const read = vi.fn().mockImplementationOnce(() => new Promise<FlowerParentEventPage>(done => { resolve = done; }))
-    .mockResolvedValue({ events: [{ ...event('next'), message: 'Current range' }], first_event_id: 'next', last_event_id: 'next' });
+    .mockResolvedValue({ thread_id: 'parent', events: [{ ...event('next'), message: 'Current range' }], first_event_id: 'next', last_event_id: 'next' });
   let reading!: ReturnType<typeof createParentEventReading>;
   const dispose = render(() => { reading = createParentEventReading({ threadID: 'parent', get page() { return value(); }, read }); return null; }, host);
   onTestFinished(() => { dispose(); host.remove(); });
   await waitFor(() => read.mock.calls.length === 1);
-  setValue({ events: [event('next')], first_event_id: 'next', last_event_id: 'next' });
+  setValue({ thread_id: 'parent', events: [event('next')], first_event_id: 'next', last_event_id: 'next' });
   await waitFor(() => reading.events()[0]?.message === 'Current range');
-  resolve({ events: [{ ...event('first'), message: 'Old range' }], next_after_event_id: 'first' });
+  resolve({ thread_id: 'parent', events: [{ ...event('first'), message: 'Old range' }], next_after_event_id: 'first' });
   await Promise.resolve();
   expect(reading.events().map(event => event.id)).toEqual(['next']);
   expect(reading.cursor()).toBe('');

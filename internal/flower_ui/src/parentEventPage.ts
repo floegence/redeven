@@ -8,7 +8,7 @@ export function validateParentEventPage(value: unknown, threadID: string, query?
   const invalid = (): never => { throw new Error('Flower contract error: invalid parent event page.'); };
   if (!value || typeof value !== 'object' || Array.isArray(value)) return invalid();
   const page = value as Record<string, unknown>;
-  if (!Array.isArray(page.events)) return invalid();
+  if (!nonempty(threadID) || page.thread_id !== threadID || !Array.isArray(page.events)) return invalid();
   for (const field of ['first_event_id', 'last_event_id', 'next_after_event_id']) {
     if (page[field] !== undefined && !nonempty(page[field])) return invalid();
   }
@@ -19,7 +19,7 @@ export function validateParentEventPage(value: unknown, threadID: string, query?
   for (const raw of page.events) {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return invalid();
     const event = raw as Record<string, unknown>;
-    if (identityFields.some(field => !nonempty(event[field])) || event.parent_thread_id !== threadID
+    if (identityFields.some(field => !nonempty(event[field]))
       || typeof event.kind !== 'string' || !kinds.has(event.kind) || !nonempty(event.received_at) || !Number.isFinite(Date.parse(event.received_at))
       || typeof event.admitted !== 'boolean' || (event.resolved !== undefined && typeof event.resolved !== 'boolean')
       || (event.message !== undefined && typeof event.message !== 'string') || seen.has(event.id as string)) return invalid();

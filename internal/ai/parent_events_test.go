@@ -175,7 +175,7 @@ func (s *parentEventWaitRuntime) ReadParentEvents(context.Context, flruntime.Rea
 func (s *parentEventWaitRuntime) ListParentEvents(_ context.Context, in flruntime.ListParentEventsInput) (flruntime.ParentEventPage, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	page := flruntime.ParentEventPage{Events: []flruntime.ParentEvent{}}
+	page := flruntime.ParentEventPage{ThreadID: in.ThreadID, Events: []flruntime.ParentEvent{}}
 	for _, event := range s.events {
 		if in.PendingOnly && event.Admitted {
 			continue
@@ -311,7 +311,7 @@ func TestFlowerParentEventWaitWithoutTargetsIncludesEveryDirectChild(t *testing.
 func TestFlowerParentEventBoundaryPublishesReceiptAdmissionAndResolution(t *testing.T) {
 	current := thinkingCurrent(1, "", true, flruntime.ThreadActivityActive)
 	initial := flowerRuntimeCurrentBoundaryKey(current)
-	current.ParentEvents = &flruntime.ParentEventPage{Events: []flruntime.ParentEvent{{ID: "event", Kind: flruntime.ParentEventInputRequired}}}
+	current.ParentEvents = &flruntime.ParentEventPage{ThreadID: "thread-parent", Events: []flruntime.ParentEvent{{ID: "event", Kind: flruntime.ParentEventInputRequired}}}
 	receipt := flowerRuntimeCurrentBoundaryKey(current)
 	current.ParentEvents.Events[0].Admitted = true
 	admitted := flowerRuntimeCurrentBoundaryKey(current)
@@ -445,7 +445,7 @@ func TestFlowerParentEventProductEffectAndPassiveNaturalRequest(t *testing.T) {
 }
 
 func TestFlowerParentEventFullPageBypassesPresentationAndGenericOutputCaps(t *testing.T) {
-	page := flruntime.ParentEventPage{Events: make([]flruntime.ParentEvent, 20)}
+	page := flruntime.ParentEventPage{ThreadID: "thread-parent", Events: make([]flruntime.ParentEvent, 20)}
 	for i := range page.Events {
 		page.Events[i] = flruntime.ParentEvent{ID: fmt.Sprintf("event-%d", i), ParentThreadID: "thread-parent", SourceThreadID: "thread-child", SourceTurnID: "turn-child", SourceRunID: "run-child", SourceEntryID: fmt.Sprintf("entry-%d", i), Kind: flruntime.ParentEventReport, Message: strings.Repeat("x", 8192)}
 	}

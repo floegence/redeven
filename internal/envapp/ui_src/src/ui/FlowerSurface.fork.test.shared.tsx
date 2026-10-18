@@ -102,6 +102,28 @@ describe('Flower fork results', () => {
     expect(loadThread.mock.calls.every(([id]) => id === 'destination')).toBe(true);
   });
 
+  it('loads inherited reports after a detail failure without recreating the fork or granting source navigation', async () => {
+    const source = thread({ thread_id: 'source', title: 'Original' });
+    const report = { id: 'inherited', parent_thread_id: 'source', source_thread_id: 'original-child', source_turn_id: 'turn-child', source_run_id: 'run-child', source_entry_id: 'entry-child', kind: 'report' as const, received_at: '2026-10-18T00:00:00Z', admitted: true };
+    const page = { thread_id: 'destination', events: [report], first_event_id: report.id, last_event_id: report.id };
+    const forked = thread({ thread_id: 'destination', title: 'Original · Fork', messages: [], parent_events: page });
+    const forkThread = vi.fn(async () => forked);
+    const loadThread = vi.fn().mockRejectedValueOnce(new Error('detail unavailable')).mockResolvedValue(liveBootstrap(forked));
+    const readParentEvents = vi.fn(async () => ({ ...page, events: [{ ...report, message: 'Inherited findings' }] }));
+    const runtime = renderSurfaceWithAdapter({ ...adapter(true), listThreads: vi.fn(async () => [source]), forkThread, loadThread, readParentEvents });
+    await waitFor(() => !!runtime.querySelector('[data-thread-id="source"]'));
+    await forkFrom(runtime, 'source');
+    await waitFor(() => !!runtime.querySelector('.flower-thread-load-error button'));
+    (runtime.querySelector('.flower-thread-load-error button') as HTMLButtonElement).click();
+    await waitFor(() => runtime.textContent!.includes('Inherited findings'));
+    expect(readParentEvents).toHaveBeenCalledWith('destination', expect.objectContaining({ first_event_id: 'inherited', last_event_id: 'inherited' }));
+    expect(runtime.querySelector('[data-parent-event="inherited"] .flower-parent-event-open')).toBeNull();
+    expect(runtime.querySelector('[data-parent-event="inherited"] button.flower-parent-event-source')).toBeNull();
+    expect(runtime.querySelector<HTMLTextAreaElement>('.flower-composer textarea')?.disabled).toBe(false);
+    expect(forkThread).toHaveBeenCalledTimes(1);
+    expect(runtime.querySelector('.flower-thread-load-error')).toBeNull();
+  });
+
   it('reuses the exact request and title after a lost response', async () => {
     const source = thread({ thread_id: 'source', title: 'Original' });
     const forked = thread({ thread_id: 'destination', title: 'Original · Fork' });
