@@ -885,7 +885,9 @@
         "approval": "Se requiere aprobación",
         "interrupted": "Interrumpido",
         "collapse": "Contraer informe",
-        "open": "Ver subtarea"
+        "open": "Ver subtarea",
+        "readFailed": "No se pudieron cargar los informes. Se conserva el contenido cargado. Reinténtalo para continuar.",
+        "readTimeout": "Se agotó el tiempo para cargar los informes. Reinténtalo para continuar."
       },
       "title": "Subagentes",
       "description": "Trabajo delegado gestionado dentro de la conversación actual de Flower.",

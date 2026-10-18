@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-18: Parent event empty pages and bounded reading recovery
+
+- Consume published Floret v7.52.1 empty-array snapshots. Validate [parent event pages](ui/flower-parent-events.md) before canonical publication and explicit reads, share the detail-read deadline, and retain reports and exact paging cursors through local retries without changing canonical synchronization or Stop authority.
+
 ## 2026-10-18: In-place child report disclosure
 
 - Expand the original [parent report content](ui/flower-parent-events.md) without a duplicate preview, keeping compact controls below the text and preserving the reading position through the shared transcript viewport controller.

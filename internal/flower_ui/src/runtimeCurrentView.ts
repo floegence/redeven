@@ -1,3 +1,4 @@
+import { validateParentEventPage } from './parentEventPage';
 import { flowerCurrentToolCallPreviews } from './toolCallPreview';
 import { mapFlowerProviderRequestProgress } from './providerRequestProgress';
 import { mapFlowerCitationSources } from './chat/markdown/flowerCitations';
@@ -477,7 +478,7 @@ export function applyFlowerRuntimeCurrentView(
     queued_turn_count: queuedTurns.length,
     queued_turns: queuedTurns,
     restored_inputs: current.restored_inputs ?? [],
-    parent_events: current.parent_events,
+    parent_events: current.parent_events === undefined ? undefined : validateParentEventPage(current.parent_events, threadID),
     messages,
     turns,
     error: trim(current.error)

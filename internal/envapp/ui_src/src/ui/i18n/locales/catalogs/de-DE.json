@@ -5909,7 +5909,9 @@
         "approval": "Genehmigung erforderlich",
         "interrupted": "Unterbrochen",
         "collapse": "Bericht zuklappen",
-        "open": "Unteraufgabe anzeigen"
+        "open": "Unteraufgabe anzeigen",
+        "readFailed": "Berichte konnten nicht geladen werden. Geladene Inhalte bleiben erhalten. Versuchen Sie es erneut.",
+        "readTimeout": "Zeitüberschreitung beim Laden der Berichte. Versuchen Sie es erneut."
       }
     },
     "settings": {

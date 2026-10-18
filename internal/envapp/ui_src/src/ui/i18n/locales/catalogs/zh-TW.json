@@ -5909,7 +5909,9 @@
         "approval": "需要核准",
         "interrupted": "已中斷",
         "collapse": "收合完整回報",
-        "open": "查看子任務"
+        "open": "查看子任務",
+        "readFailed": "報告載入失敗。已保留載入的內容，請重試以繼續。",
+        "readTimeout": "報告載入逾時，請重試以繼續。"
       }
     },
     "settings": {

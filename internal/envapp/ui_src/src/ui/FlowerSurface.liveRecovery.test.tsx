@@ -21,6 +21,83 @@ import {
 const syncFailure = 'Live updates stopped because data could not be read or applied. Displayed state may be outdated.';
 const stopUnconfirmed = 'Stop status is unconfirmed. Resync before trying again.';
 
+describe('parent event synchronization boundaries', () => {
+  it('offers canonical resynchronization when report reading is unavailable', async () => {
+    const report = { id: 'report-unavailable', parent_thread_id: 'thread-report-unavailable', source_thread_id: 'child', source_turn_id: 'turn', source_run_id: 'run', source_entry_id: 'entry', kind: 'report' as const, received_at: '2026-10-18T00:00:00Z', admitted: false };
+    const selected = thread({ thread_id: report.parent_thread_id, parent_events: { events: [report], first_event_id: report.id, last_event_id: report.id } });
+    const loadThread = vi.fn(async () => liveBootstrap(selected, 1));
+    const launchTurn = vi.fn(); const stopThread = vi.fn();
+    const surface = renderSurfaceWithAdapterProps({ ...adapter(), listThreads: vi.fn(async () => [selected]), loadThread, readParentEvents: undefined, launchTurn, stopThread },
+      { focusThreadRequest: { request_id: 'unavailable-report', thread_id: selected.thread_id } });
+    await waitFor(() => Boolean(surface.querySelector('.flower-parent-event-reading button')));
+    const retry = surface.querySelector<HTMLButtonElement>('.flower-parent-event-reading button')!;
+    expect(retry.textContent).toBe('Retry'); expect(retry.disabled).toBe(false);
+    expect(surface.querySelector<HTMLTextAreaElement>('.flower-composer textarea')?.disabled).toBe(false);
+    const before = loadThread.mock.calls.length; retry.click();
+    await waitFor(() => loadThread.mock.calls.length > before);
+    expect(surface.querySelector('.flower-workspace-sync')).toBeNull();
+    expect(stopThread).not.toHaveBeenCalled(); expect(launchTurn).not.toHaveBeenCalled();
+  });
+  it('rejects malformed canonical events before publication and resyncs without sending', async () => {
+    const selected = thread({ thread_id: 'thread-parent-contract', parent_events: { events: [] } });
+    const broken = deferred<void>();
+    let connections = 0;
+    const launchTurn = vi.fn();
+    const loadThread = vi.fn(async () => liveBootstrap(selected, connections > 1 ? 3 : 1));
+    const surface = renderSurfaceWithAdapter({ ...adapter(true), listThreads: vi.fn(async () => [selected]), loadThread, launchTurn,
+      connectLiveStream: async function* (input): AsyncIterable<FlowerLiveStreamEnvelope> {
+        connections++;
+        yield { schema_version: 1, kind: 'ready', summaries: [selected] };
+        if (connections === 1) {
+          await broken.promise;
+          yield { schema_version: 1, kind: 'thread.batch', thread_id: selected.thread_id,
+            current: { ...runtimeCurrentView(selected, 2), parent_events: JSON.parse('{"events":null}') } };
+        }
+        await waitForAbort(input);
+      },
+    });
+    await waitFor(() => Boolean(surface.querySelector('[data-thread-id="thread-parent-contract"] button')));
+    selectThread(surface, selected.thread_id);
+    await waitFor(() => surface.textContent?.includes('Plan deploy') ?? false);
+    const message = surface.querySelector('[data-flower-message-id]');
+    broken.resolve();
+    await waitFor(() => Boolean(surface.querySelector('[data-flower-sync-state="failed"]')));
+    expect(surface.querySelector('[data-flower-message-id]')).toBe(message);
+    expect(surface.textContent).not.toContain(stopUnconfirmed);
+    (surface.querySelector('.flower-workspace-sync button') as HTMLButtonElement).click();
+    await waitFor(() => connections === 2 && !surface.querySelector('.flower-workspace-sync'));
+    expect(surface.textContent).toContain('Plan deploy');
+    expect(launchTurn).not.toHaveBeenCalled();
+  });
+
+  it('keeps report failures local while preserving drafts, navigation and same-page retry', async () => {
+    const report = { id: 'report-local', parent_thread_id: 'thread-report-local', source_thread_id: 'child', source_turn_id: 'child-turn', source_run_id: 'child-run', source_entry_id: 'child-entry', kind: 'report' as const, received_at: '2026-10-18T00:00:00Z', admitted: false };
+    const events = { events: [report], first_event_id: report.id, last_event_id: report.id };
+    const selected = thread({ thread_id: report.parent_thread_id, parent_events: events });
+    const second = thread({ thread_id: 'thread-other-report', title: 'Other report conversation' });
+    const readParentEvents = vi.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValue({ ...events, events: [{ ...report, message: 'Saved report recovered' }] });
+    const stopThread = vi.fn(); const launchTurn = vi.fn();
+    const surface = renderSurfaceWithAdapter({ ...adapter(true), listThreads: vi.fn(async () => [selected, second]),
+      loadThread: vi.fn(async id => liveBootstrap(id === selected.thread_id ? selected : second, 1)), readParentEvents, stopThread, launchTurn });
+    await waitFor(() => Boolean(surface.querySelector('[data-thread-id="thread-report-local"] button')));
+    selectThread(surface, selected.thread_id);
+    await waitFor(() => Boolean(surface.querySelector('.flower-parent-event-reading')));
+    expect(surface.querySelector('.flower-parent-event-reading')?.textContent).toContain('Unable to load reports');
+    expect(surface.querySelector('.flower-workspace-sync')).toBeNull();
+    expect(surface.textContent).not.toContain(stopUnconfirmed);
+    const editor = surface.querySelector<HTMLTextAreaElement>('.flower-composer textarea')!;
+    expect(editor.disabled).toBe(false);
+    editor.value = 'Keep my report draft'; editor.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    (surface.querySelector('.flower-parent-event-reading button') as HTMLButtonElement).click();
+    await waitFor(() => surface.textContent?.includes('Saved report recovered') ?? false);
+    expect(readParentEvents.mock.calls[1]).toEqual(readParentEvents.mock.calls[0]);
+    expect(editor.value).toBe('Keep my report draft');
+    selectThread(surface, second.thread_id); await waitFor(() => surface.querySelector('main')?.getAttribute('data-flower-selected-thread-id') === second.thread_id);
+    selectThread(surface, selected.thread_id); await waitFor(() => surface.querySelector<HTMLTextAreaElement>('.flower-composer textarea')?.value === 'Keep my report draft');
+    expect(stopThread).not.toHaveBeenCalled(); expect(launchTurn).not.toHaveBeenCalled();
+  });
+});
+
 function encodingFailure(): Error & { code: string } {
   return Object.assign(new Error('internal encoding diagnostic'), { code: 'envelope_encoding_failed' });
 }
@@ -284,13 +361,14 @@ describe('Flower workspace synchronization recovery', () => {
       }
       await waitForAbort(input);
     });
-    const surface = renderSurfaceWithAdapter({
+    let selectionCommitted = false;
+    const surface = renderSurfaceWithAdapterProps({
       ...adapter(true), listThreads: vi.fn(async () => [parent]), loadThread: vi.fn(async () => liveBootstrap(parent, 9)),
       loadSubagentDetail, connectLiveStream,
-    });
+    }, { onThreadSelectionEvent: event => { if (event.phase === 'committed') selectionCommitted = true; } });
     await waitFor(() => surface.querySelector(`[data-thread-id="${parent.thread_id}"] button`) !== null);
     selectThread(surface, parent.thread_id);
-    await waitFor(() => surface.querySelector('[data-flower-subagent-count]')?.getAttribute('data-flower-subagent-count') === '1');
+    await waitFor(() => selectionCommitted && surface.querySelector('[data-flower-subagent-count]')?.getAttribute('data-flower-subagent-count') === '1');
     (surface.querySelector('button[aria-controls="flower-subagents-dropdown"]') as HTMLButtonElement).click();
     await waitFor(() => Boolean(document.querySelector('[data-flower-subagent-disclosure]')));
     document.querySelector<HTMLButtonElement>('[data-flower-subagent-disclosure]')!.click();
@@ -348,7 +426,7 @@ describe('Canonical managed facts on the existing workspace transport', () => {
   await flush();
   const contextTrigger = surface.querySelector('[role="progressbar"]') as HTMLElement;
   contextTrigger.focus();
-  expect(surface.querySelector('[data-category="skills"]')?.textContent).toContain('≈60');
+  expect(surface.querySelector('[data-category="skills"]')?.textContent).toContain('≈100');
   expect(document.activeElement).toBe(contextTrigger);
   expect(surface.textContent).not.toContain('Background catalog changed');
   expect(surface.querySelectorAll('.flower-user-message')).toHaveLength(0);
@@ -381,7 +459,7 @@ describe('Canonical managed facts on the existing workspace transport', () => {
   (document.querySelector('[data-flower-subagent-row="0"]') as HTMLButtonElement).click();
   await waitFor(() => Boolean(document.querySelector('[data-flower-subagent-detail="open"]')));
   await flush();publish.resolve();
-  await waitFor(() => document.querySelector('[data-flower-subagent-detail="open"] [data-category="skills"]')?.textContent?.includes('≈60') ?? false);
+  await waitFor(() => document.querySelector('[data-flower-subagent-detail="open"] [data-category="skills"]')?.textContent?.includes('≈100') ?? false);
   expect(document.body.textContent).not.toContain('Current child catalog');
   expect(surface.querySelector('.flower-composer [data-category="skills"]')).toBeNull();
  });

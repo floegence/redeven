@@ -478,7 +478,7 @@ const queueProjections = new WeakMap<FlowerQueuedTurn, Readonly<{ threadID: stri
 
 const emptyParentEvents: readonly FlowerParentEvent[] = [];
 
-export function buildFlowerTimelineEntries(thread: FlowerThreadSnapshot | null | undefined, parentEvents = thread?.parent_events?.events ?? emptyParentEvents): readonly FlowerTimelineEntry[] {
+export function buildFlowerTimelineEntries(thread: FlowerThreadSnapshot | null | undefined, parentEvents = thread?.parent_events ? thread.parent_events.events : emptyParentEvents): readonly FlowerTimelineEntry[] {
   if (!thread) return [];
   const threadRunning = thread.status === 'running';
   const activeCursorMessageID = threadRunning

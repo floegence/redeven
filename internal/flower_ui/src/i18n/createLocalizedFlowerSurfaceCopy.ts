@@ -785,6 +785,8 @@ function createLocalizedFlowerSubagentsCopy(i18n: FlowerSurfaceTranslator): Flow
     lastMessageLabel: t(i18n, k('lastMessageLabel')),
     events: {
       title: t(i18n, k('events.title')),
+      readFailed: t(i18n, k('events.readFailed')),
+      readTimeout: t(i18n, k('events.readTimeout')),
       received: t(i18n, k('events.received')),
       admitted: t(i18n, k('events.admitted')),
       read: t(i18n, k('events.read')),

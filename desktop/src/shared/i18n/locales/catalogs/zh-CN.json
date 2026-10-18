@@ -885,7 +885,9 @@
         "approval": "需要审批",
         "interrupted": "已中断",
         "collapse": "收起完整回报",
-        "open": "查看子任务"
+        "open": "查看子任务",
+        "readFailed": "报告加载失败。已加载内容已保留，可重试继续。",
+        "readTimeout": "报告加载超时，可重试继续。"
       },
       "title": "子代理",
       "description": "当前 Flower 对话中托管的委派工作。",
