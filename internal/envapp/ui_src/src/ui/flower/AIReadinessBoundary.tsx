@@ -10,7 +10,7 @@ import {
   onCleanup,
   type JSX,
 } from 'solid-js';
-import { AlertTriangle, Check, ChevronDown, Copy, Download, RefreshIcon, ShieldCheck, Stop } from '@floegence/floe-webapp-core/icons';
+import { AlertTriangle, Check, ChevronDown, Copy, Download, RefreshIcon, ShieldCheck } from '@floegence/floe-webapp-core/icons';
 
 import { useI18n } from '../i18n';
 import type { AIReadinessController } from './aiReadiness';
@@ -202,7 +202,7 @@ export function AIReadinessBoundary(props: AIReadinessBoundaryProps) {
 
   const ActionIcon = (iconProps: Readonly<{ action: AIReadinessAction }>) => {
     switch (iconProps.action) {
-      case 'stop': return <Stop class="h-4 w-4" aria-hidden="true" />;
+      case 'stop': return null;
       case 'retry':
         return <RefreshIcon class={`h-4 w-4 ${props.controller.retryPending() ? 'animate-spin motion-reduce:animate-none' : ''}`} aria-hidden="true" />;
       case 'open_update':
@@ -230,7 +230,7 @@ export function AIReadinessBoundary(props: AIReadinessBoundaryProps) {
         if (actionProps.action === 'show_diagnostics') diagnosticsButton = element;
       }}
       type="button"
-      class={`ai-readiness-action ${INTERACTIVE_CLASS} ${actionProps.primary ? 'ai-readiness-action--primary' : 'ai-readiness-action--secondary'}`}
+      class={`ai-readiness-action ${INTERACTIVE_CLASS} ${actionProps.action === 'stop' ? 'ai-readiness-action--quiet' : actionProps.primary ? 'ai-readiness-action--primary' : 'ai-readiness-action--secondary'}`}
       disabled={actionProps.action === 'retry' && props.controller.retryPending()}
       aria-busy={actionProps.action === 'retry' && props.controller.retryPending() ? 'true' : undefined}
       data-pending={actionProps.action === 'retry' && props.controller.retryPending() ? 'true' : undefined}
@@ -313,7 +313,7 @@ export function AIReadinessBoundary(props: AIReadinessBoundaryProps) {
                 <span>{projection().dataStatement}</span>
               </div>
             </Show>
-            <Show when={!busy() && showElapsed()}>
+            <Show when={showElapsed()}>
               <p class="ai-readiness-elapsed" data-ai-readiness-elapsed>
                 {i18n.t('aiReadiness.slow.elapsed', { duration: elapsedText() })}
               </p>
@@ -321,29 +321,21 @@ export function AIReadinessBoundary(props: AIReadinessBoundaryProps) {
             <Show when={longBusy() && busy()}>
               <p class="ai-readiness-workspace-hint" data-ai-readiness-long-task>{i18n.t('aiReadiness.workspaceAvailable')}</p>
             </Show>
-            <Show when={busy()}>
-              <div class="ai-readiness-details-entry">
-                <Show when={showElapsed()}>
-                  <span class="ai-readiness-elapsed" data-ai-readiness-elapsed>
-                    {i18n.t('aiReadiness.slow.elapsed', { duration: elapsedText() })}
-                  </span>
-                </Show>
-                <button
-                  ref={diagnosticsButton}
-                  type="button"
-                  class="ai-readiness-details-toggle"
-                  aria-expanded={diagnosticsOpen()}
-                  aria-controls={diagnosticContentID}
-                  onClick={toggleDiagnostics}
-                >
-                  {i18n.t('aiReadiness.diagnostics.title')}
-                  <ChevronDown class={`h-3.5 w-3.5 transition-transform motion-reduce:transition-none ${diagnosticsOpen() ? 'rotate-180' : ''}`} aria-hidden="true" />
-                </button>
-              </div>
-            </Show>
-
-            <Show when={projection().primaryAction || projection().secondaryAction}>
+            <Show when={busy() || projection().primaryAction || projection().secondaryAction}>
               <div class="ai-readiness-actions">
+                <Show when={busy()}>
+                  <button
+                    ref={diagnosticsButton}
+                    type="button"
+                    class="ai-readiness-details-toggle"
+                    aria-expanded={diagnosticsOpen()}
+                    aria-controls={diagnosticContentID}
+                    onClick={toggleDiagnostics}
+                  >
+                    {i18n.t('aiReadiness.diagnostics.title')}
+                    <ChevronDown class={`h-3.5 w-3.5 transition-transform motion-reduce:transition-none ${diagnosticsOpen() ? 'rotate-180' : ''}`} aria-hidden="true" />
+                  </button>
+                </Show>
                 <Show when={projection().primaryAction}>
                   {(action) => <ActionButton action={action()} primary />}
                 </Show>
