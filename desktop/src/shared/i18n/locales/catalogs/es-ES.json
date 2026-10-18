@@ -878,12 +878,14 @@
         "title": "Eventos importantes",
         "received": "Recibido",
         "admitted": "Añadido al contexto",
-        "read": "Leer evento completo",
+        "read": "Ampliar informe",
         "more": "Cargar más eventos",
-        "report": "Informe",
+        "report": "Informe del subagente",
         "input": "Se requiere información",
         "approval": "Se requiere aprobación",
-        "interrupted": "Interrumpido"
+        "interrupted": "Interrumpido",
+        "collapse": "Contraer informe",
+        "open": "Ver subtarea"
       },
       "title": "Subagentes",
       "description": "Trabajo delegado gestionado dentro de la conversación actual de Flower.",

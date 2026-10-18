@@ -788,6 +788,8 @@ function createLocalizedFlowerSubagentsCopy(i18n: FlowerSurfaceTranslator): Flow
       received: t(i18n, k('events.received')),
       admitted: t(i18n, k('events.admitted')),
       read: t(i18n, k('events.read')),
+      collapse: t(i18n, k('events.collapse')),
+      open: t(i18n, k('events.open')),
       more: t(i18n, k('events.more')),
       report: t(i18n, k('events.report')),
       input: t(i18n, k('events.input')),

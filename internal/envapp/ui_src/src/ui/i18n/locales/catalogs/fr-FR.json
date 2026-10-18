@@ -5902,12 +5902,14 @@
         "title": "Événements importants",
         "received": "Reçu",
         "admitted": "Ajouté au contexte",
-        "read": "Lire l’événement complet",
+        "read": "Développer le rapport",
         "more": "Charger plus d’événements",
-        "report": "Rapport",
+        "report": "Rapport du sous-agent",
         "input": "Saisie requise",
         "approval": "Approbation requise",
-        "interrupted": "Interrompu"
+        "interrupted": "Interrompu",
+        "collapse": "Replier le rapport",
+        "open": "Voir la sous-tâche"
       }
     },
     "settings": {

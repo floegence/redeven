@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-17: Parent event timeline
+
+- Present important child reports and automatic events directly in the [parent transcript](ui/flower-parent-events.md), with canonical avatars, real report previews, stable expansion and compact inline navigation. Keep the dropdown focused on task inventory and preserve Floret ownership without receipt or admission notices.
+
 ## 2026-10-17: Lightweight presentation preview
 
 - Consume the released Floe static PPTX surface through a lazy [file preview](ui/file-preview-viewport-and-rendering.md), with bounded input, page windowing, native selection, stable local zoom, visible compatibility notices, and verified third-party licenses and corresponding source.

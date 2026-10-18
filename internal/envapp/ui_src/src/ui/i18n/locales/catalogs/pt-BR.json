@@ -5902,12 +5902,14 @@
         "title": "Eventos importantes",
         "received": "Recebido",
         "admitted": "Adicionado ao contexto",
-        "read": "Ler evento completo",
+        "read": "Expandir relatório",
         "more": "Carregar mais eventos",
-        "report": "Relatório",
+        "report": "Relatório do subagente",
         "input": "Entrada necessária",
         "approval": "Aprovação necessária",
-        "interrupted": "Interrompido"
+        "interrupted": "Interrompido",
+        "collapse": "Recolher relatório",
+        "open": "Ver subtarefa"
       }
     },
     "settings": {

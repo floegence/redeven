@@ -878,12 +878,14 @@
         "title": "重要事件",
         "received": "已接收",
         "admitted": "已加入上下文",
-        "read": "檢視完整事件",
+        "read": "展開完整回報",
         "more": "載入更多事件",
-        "report": "回報",
+        "report": "子代理回報",
         "input": "需要輸入",
         "approval": "需要核准",
-        "interrupted": "已中斷"
+        "interrupted": "已中斷",
+        "collapse": "收合完整回報",
+        "open": "查看子任務"
       },
       "title": "子代理",
       "description": "目前 Flower 對話中託管的委派工作。",

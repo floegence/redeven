@@ -4,6 +4,7 @@ import type {
   FlowerChatMessage,
   FlowerCitationSource,
   FlowerInputRequest,
+  FlowerParentEvent,
   FlowerQueuedTurn,
   FlowerTimelineDecoration,
   FlowerThreadError,
@@ -59,6 +60,7 @@ export type FlowerRenderableMessageBlock =
   }>;
 
 export type FlowerTimelineEntry =
+  | Readonly<{ type: 'parent_event'; key: string; event: FlowerParentEvent }>
   | Readonly<{
     type: 'message';
     key: string;
@@ -469,11 +471,14 @@ const timelineProjections = new WeakMap<readonly FlowerChatMessage[], Readonly<{
   input: FlowerThreadSnapshot['input_request'];
   error: FlowerThreadSnapshot['error'];
   status: FlowerThreadSnapshot['status'];
+  parentEvents: readonly FlowerParentEvent[];
   entries: readonly FlowerTimelineEntry[];
 }>>();
 const queueProjections = new WeakMap<FlowerQueuedTurn, Readonly<{ threadID: string; entry: FlowerTimelineEntry }>>();
 
-export function buildFlowerTimelineEntries(thread: FlowerThreadSnapshot | null | undefined): readonly FlowerTimelineEntry[] {
+const emptyParentEvents: readonly FlowerParentEvent[] = [];
+
+export function buildFlowerTimelineEntries(thread: FlowerThreadSnapshot | null | undefined, parentEvents = thread?.parent_events?.events ?? emptyParentEvents): readonly FlowerTimelineEntry[] {
   if (!thread) return [];
   const threadRunning = thread.status === 'running';
   const activeCursorMessageID = threadRunning
@@ -484,7 +489,8 @@ export function buildFlowerTimelineEntries(thread: FlowerThreadSnapshot | null |
   const previous = timelineProjections.get(thread.messages);
   if (previous && previous.threadID === thread.thread_id && previous.cursorID === activeCursorMessageID
     && previous.decorations === sourceDecorations && previous.queued === thread.queued_turns
-    && previous.input === input && previous.error === thread.error && previous.status === thread.status) return previous.entries;
+    && previous.input === input && previous.error === thread.error && previous.status === thread.status
+    && previous.parentEvents === parentEvents) return previous.entries;
   let decorations = decorationProjections.get(sourceDecorations);
   if (!decorations) {
     decorations = decorationsByTimelineAnchor(sourceDecorations);
@@ -506,6 +512,25 @@ export function buildFlowerTimelineEntries(thread: FlowerThreadSnapshot | null |
     messageProjections.set(message, { threadID: thread.thread_id, activeCursor, decorations: sourceDecorations, entries });
     return entries;
   });
+  // Insert observations without reordering canonical messages or their decorations.
+  const seenEvents = new Set<string>();
+  const eventEntries: Extract<FlowerTimelineEntry, { type: 'parent_event' }>[] = parentEvents.flatMap(event => {
+    if (event.parent_thread_id !== thread.thread_id || seenEvents.has(event.id)) return [];
+    seenEvents.add(event.id);
+    return [{ type: 'parent_event' as const, key: `parent-event:${event.id}`, event }];
+  }).sort((left, right) => Date.parse(left.event.received_at) - Date.parse(right.event.received_at));
+  let eventIndex = 0;
+  const chronological: FlowerTimelineEntry[] = [];
+  for (const entry of entries) {
+    if (entry.type === 'message') {
+      while (eventIndex < eventEntries.length && Date.parse(eventEntries[eventIndex].event.received_at) <= entry.message.created_at_ms) {
+        chronological.push(eventEntries[eventIndex++]);
+      }
+    }
+    chronological.push(entry);
+  }
+  chronological.push(...eventEntries.slice(eventIndex));
+  entries.splice(0, entries.length, ...chronological);
   const queuedIDs = new Set<string>();
   for (const turn of thread.queued_turns ?? []) {
     const queueID = trimString(turn.queue_id);
@@ -545,7 +570,7 @@ export function buildFlowerTimelineEntries(thread: FlowerThreadSnapshot | null |
   }
   timelineProjections.set(thread.messages, {
     threadID: thread.thread_id, cursorID: activeCursorMessageID, decorations: sourceDecorations,
-    queued: thread.queued_turns, input, error: thread.error, status: thread.status, entries,
+    queued: thread.queued_turns, input, error: thread.error, status: thread.status, parentEvents, entries,
   });
   return entries;
 }

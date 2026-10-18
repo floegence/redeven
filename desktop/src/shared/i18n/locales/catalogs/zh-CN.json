@@ -878,12 +878,14 @@
         "title": "重要事件",
         "received": "已接收",
         "admitted": "已加入上下文",
-        "read": "查看完整事件",
+        "read": "展开完整回报",
         "more": "加载更多事件",
-        "report": "回报",
+        "report": "子代理回报",
         "input": "需要输入",
         "approval": "需要审批",
-        "interrupted": "已中断"
+        "interrupted": "已中断",
+        "collapse": "收起完整回报",
+        "open": "查看子任务"
       },
       "title": "子代理",
       "description": "当前 Flower 对话中托管的委派工作。",
