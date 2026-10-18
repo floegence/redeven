@@ -205,6 +205,8 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 			output = result
 			output.Result = map[string]any{"summary": args.Description, "completed_actions": completed, "action_executed": actionExecuted, "operations": operations, "completed": false, "script_error": "SCRIPT_STOPPED"}
 		}
+		output.executionFacts.completedActions = append([]string(nil), completed...)
+		output.executionFacts.needsObservation = observationInvalidated || observationFailureStage != "" || actionExecuted
 		if payload, ok := output.Result.(map[string]any); ok {
 			if failedOperationIndex >= 0 {
 				payload["failed_operation_index"] = failedOperationIndex

@@ -255,6 +255,9 @@ func TestComputerSemanticRuntimeRejectsContentWithoutReplayingEffect(t *testing.
 	if payload["observation"] != nil || strings.Contains(string(body), "private content") || payload["action_executed"] != true {
 		t.Fatalf("unsafe failure projection: %s", body)
 	}
+	if !slices.Contains(result.executionFacts.completedActions, "pointer_click") || !result.executionFacts.needsObservation {
+		t.Fatal("typed execution prefix lost")
+	}
 	if !slices.Contains(payload["completed_actions"].([]string), "pointer_click") {
 		t.Fatal("confirmed effect lost")
 	}

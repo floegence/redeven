@@ -3083,11 +3083,11 @@ func buildToolResultMessages(results []ToolResult, calls []ToolCall) []Message {
 				callID = strings.TrimSpace(call.ID)
 			}
 		}
-		payload, err := modelToolResultPayload(result)
+		encoded, err := encodeModelToolResult(result)
 		if err != nil {
 			panic(fmt.Sprintf("invalid tool result message: %v", err))
 		}
-		b, _ := json.Marshal(payload)
+		b := encoded.text
 		out = append(out, Message{Role: "tool", Content: []ContentPart{{Type: "tool_result", ToolCallID: callID, Text: string(b), JSON: b}}})
 	}
 	return out

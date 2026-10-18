@@ -129,7 +129,10 @@ func TestToolActivityDetailsKeepBoundedTypedResults(t *testing.T) {
 	code := "  await ui.observe();\n" + strings.Repeat("// detail\n", 4000)
 	for _, name := range []string{"computer.exec", "rgrep", "find", "read_files", "use_skill"} {
 		data := map[string]any{"content": code, "logs": []any{[]any{code}}}
-		normalized, truncated := normalizeTruncatedToolPayload(name, data)
+		normalized, truncated, err := normalizeTruncatedToolPayload(name, data)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if truncated || normalized.(map[string]any)["raw"] != nil {
 			t.Fatalf("%s lost its typed result", name)
 		}
@@ -198,7 +201,10 @@ func TestStructuredOutputMarksOnlyActualTruncation(t *testing.T) {
 
 func TestCanvasReadKeepsLiteralTypedResult(t *testing.T) {
 	yaml := "metadata:\n  title: Readable canvas\n" + strings.Repeat("# unchanged context\n", 500)
-	data, truncated := normalizeTruncatedToolPayload("tessiven.read", map[string]any{"title": "Readable canvas", "version": int64(3), "document_yaml": yaml})
+	data, truncated, err := normalizeTruncatedToolPayload("tessiven.read", map[string]any{"title": "Readable canvas", "version": int64(3), "document_yaml": yaml})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if truncated || data.(map[string]any)["document_yaml"] != yaml {
 		t.Fatal("bounded YAML was converted to truncated JSON")
 	}

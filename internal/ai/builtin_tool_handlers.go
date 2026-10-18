@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -79,11 +80,14 @@ func (h *builtInToolHandler) Execute(ctx context.Context, call ToolCall) (result
 	if err != nil {
 		return ToolResult{}, err
 	}
+	if outcome != nil {
+		defer func() { result.executionFacts = outcome.executionFacts }()
+	}
 	if outcome == nil {
 		return ToolResult{ToolID: call.ID, ToolName: toolName, Status: toolResultStatusError, Summary: "Tool failed", Details: "empty tool outcome"}, nil
 	}
 	if outcome.Pending != nil {
-		data, truncated := normalizeTruncatedToolPayload(toolName, outcome.Result)
+		data, truncated := outcome.Result, isComputerUseTool(toolName) && computerSourceTruncated(outcome.Result)
 		return ToolResult{
 			ToolID:    strings.TrimSpace(call.ID),
 			ToolName:  toolName,
@@ -96,7 +100,7 @@ func (h *builtInToolHandler) Execute(ctx context.Context, call ToolCall) (result
 		}, nil
 	}
 	if outcome.Success {
-		data, truncated := normalizeTruncatedToolPayload(toolName, outcome.Result)
+		data, truncated := outcome.Result, isComputerUseTool(toolName) && computerSourceTruncated(outcome.Result)
 		return ToolResult{
 			ToolID:      strings.TrimSpace(call.ID),
 			ToolName:    toolName,
@@ -130,7 +134,7 @@ func (h *builtInToolHandler) Execute(ctx context.Context, call ToolCall) (result
 	if details == "" {
 		details = "tool execution failed"
 	}
-	data, truncated := normalizeTruncatedToolPayload(toolName, outcome.Result)
+	data, truncated := outcome.Result, isComputerUseTool(toolName) && computerSourceTruncated(outcome.Result)
 	return ToolResult{
 		ToolID:                strings.TrimSpace(call.ID),
 		ToolName:              toolName,
@@ -172,17 +176,23 @@ func extractStringSlice(v any) []string {
 	return out
 }
 
-func normalizeTruncatedToolPayload(toolName string, payload any) (any, bool) {
+func normalizeTruncatedToolPayload(toolName string, payload any) (any, bool, error) {
 	toolName = strings.TrimSpace(toolName)
 	if isComputerUseTool(toolName) {
-		return normalizeJSONCompatibleToolPayload(payload)
+		return payload, false, nil
 	}
+	normalized, err := normalizeJSONCompatibleToolPayload(payload)
+	if err != nil {
+		return nil, false, err
+	}
+	payload = normalized
 	switch toolName {
 	case "terminal.exec", "terminal.read", "terminal.terminate":
 		m, _ := payload.(map[string]any)
 		if m == nil {
-			return payload, false
+			return payload, false, nil
 		}
+		m = cloneAnyMap(m)
 		truncated := false
 		if output, ok := m["output"].(string); ok {
 			limit := 4000
@@ -196,9 +206,9 @@ func normalizeTruncatedToolPayload(toolName string, payload any) (any, bool) {
 		if truncated {
 			m["truncated"] = true
 		}
-		return m, truncated
+		return m, truncated, nil
 	case "attachment.read", "image.read":
-		return normalizeJSONCompatibleToolPayload(payload)
+		return payload, false, nil
 	case "file.edit", "file.write":
 		return normalizeFileMutationPayload(payload)
 	case "apply_patch":
@@ -206,51 +216,54 @@ func normalizeTruncatedToolPayload(toolName string, payload any) (any, bool) {
 	case "write_todos":
 		return normalizeTodosPayload(payload)
 	case "subagents":
-		return normalizeSubagentsPayload(payload)
+		return payload, false, nil
 	case "report_to_parent", "subagent_events", "threads.query", "threads.read", "threads.aggregate", "okf.index", "okf.search", "okf.open", "rgrep", "find", "read_file", "read_files", "use_skill", "sources", "tessiven.runtimes", "tessiven.runtime.inspect", "tessiven.runtime.action", "tessiven.schema", "tessiven.list", "tessiven.read", "tessiven.search", "tessiven.versions", "tessiven.validate", "tessiven.save", "tessiven.edit":
 		// These executors already bound their content. Keep the typed shape;
 		// truncating an entire JSON object destroys every usable result field.
-		return normalizeJSONCompatibleToolPayload(payload)
+		return payload, false, nil
 	default:
 		if payload == nil {
-			return nil, false
+			return nil, false, nil
 		}
 		b, err := json.Marshal(payload)
 		if err != nil {
-			return payload, false
+			return nil, false, err
 		}
 		trimmed, truncated := truncateByRunes(string(b), 4000)
 		if truncated {
-			return map[string]any{"raw": trimmed, "truncated": true}, true
+			return map[string]any{"raw": trimmed, "truncated": true}, true, nil
 		}
-		var normalized any
-		if err := json.Unmarshal(b, &normalized); err != nil {
-			return payload, false
+		normalized, err := decodeToolJSON(b)
+		if err != nil {
+			return nil, false, err
 		}
-		return normalized, false
+		return normalized, false, nil
 	}
 }
 
-func normalizeJSONCompatibleToolPayload(payload any) (any, bool) {
-	if payload == nil {
-		return nil, false
+func decodeToolJSON(raw []byte) (any, error) {
+	var value any
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	if err := decoder.Decode(&value); err != nil {
+		return nil, err
 	}
-	b, err := json.Marshal(payload)
-	if err != nil || len(b) == 0 {
-		return payload, false
-	}
-	var normalized any
-	if err := json.Unmarshal(b, &normalized); err != nil {
-		return payload, false
-	}
-	return normalized, false
+	return value, nil
 }
 
-func normalizeTodosPayload(payload any) (any, bool) {
-	normalized, _ := normalizeJSONCompatibleToolPayload(payload)
+func normalizeJSONCompatibleToolPayload(payload any) (any, error) {
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+	return decodeToolJSON(raw)
+}
+
+func normalizeTodosPayload(payload any) (any, bool, error) {
+	normalized := payload
 	record, ok := normalized.(map[string]any)
 	if !ok || record == nil {
-		return normalized, false
+		return normalized, false, nil
 	}
 	truncated := false
 	if todos, ok := record["todos"].([]any); ok {
@@ -274,11 +287,7 @@ func normalizeTodosPayload(payload any) (any, bool) {
 	if truncated {
 		record["truncated"] = true
 	}
-	return record, truncated
-}
-
-func normalizeSubagentsPayload(payload any) (any, bool) {
-	return normalizeJSONCompatibleToolPayload(payload)
+	return record, truncated, nil
 }
 
 func truncateTodoActivityItems(items []any) bool {
@@ -305,21 +314,21 @@ func truncateTodoActivityItems(items []any) bool {
 	return truncated
 }
 
-func normalizeFileMutationPayload(payload any) (any, bool) {
-	normalized, _ := normalizeJSONCompatibleToolPayload(payload)
+func normalizeFileMutationPayload(payload any) (any, bool, error) {
+	normalized := payload
 	record, ok := normalized.(map[string]any)
 	if !ok || record == nil {
-		return normalized, false
+		return normalized, false, nil
 	}
 	truncated := truncateFileMutationRecord(record)
-	return record, truncated
+	return record, truncated, nil
 }
 
-func normalizeApplyPatchPayload(payload any) (any, bool) {
-	normalized, _ := normalizeJSONCompatibleToolPayload(payload)
+func normalizeApplyPatchPayload(payload any) (any, bool, error) {
+	normalized := payload
 	record, ok := normalized.(map[string]any)
 	if !ok || record == nil {
-		return normalized, false
+		return normalized, false, nil
 	}
 	truncated := false
 	if mutations, ok := record["mutations"].([]any); ok {
@@ -334,7 +343,7 @@ func normalizeApplyPatchPayload(payload any) (any, bool) {
 	if truncated {
 		record["truncated"] = true
 	}
-	return record, truncated
+	return record, truncated, nil
 }
 
 func truncateFileMutationRecord(record map[string]any) bool {

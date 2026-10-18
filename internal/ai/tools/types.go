@@ -15,6 +15,8 @@ const (
 type ErrorCode string
 
 const (
+	ErrorCodeToolResultEncodingFailed     ErrorCode = "TOOL_RESULT_ENCODING_FAILED"
+	ErrorCodeToolResultTooLarge           ErrorCode = "TOOL_RESULT_TOO_LARGE"
 	ErrorCodeNotFound                     ErrorCode = "NOT_FOUND"
 	ErrorCodeInvalidPath                  ErrorCode = "INVALID_PATH"
 	ErrorCodeInvalidArguments             ErrorCode = "INVALID_ARGUMENTS"

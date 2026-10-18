@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-18: Computer result fidelity and recoverable encoding failure
+
+- Adopt published Floret v7.53.0 [archive and completed-error input contracts](ai/floret-thread-runtime.md), isolate [model encoding from Activity](ai/floret-redeven-adapter-and-projection.md), preserve Computer JSON types through the inclusive 1 MiB envelope limit, and qualify [canonical recovery controls](ai/computer-use-qualification.md#result-encoding-recovery) without replaying effects.
+
 ## 2026-10-18: Parent event empty pages and bounded reading recovery
 
 - Consume published Floret v7.52.1 empty-array snapshots. Validate [parent event pages](ui/flower-parent-events.md) before canonical publication and explicit reads, share the detail-read deadline, and retain reports and exact paging cursors through local retries without changing canonical synchronization or Stop authority.

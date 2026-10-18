@@ -113,6 +113,7 @@ type ToolCall struct {
 }
 
 type ToolResult struct {
+	executionFacts        toolExecutionFacts
 	ToolID                string             `json:"tool_id,omitempty"`
 	ToolName              string             `json:"tool_name,omitempty"`
 	Status                string             `json:"status"`

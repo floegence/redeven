@@ -123,7 +123,10 @@ func TestFlowerParentEventReportToolAndNaturalProviderDelivery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	normalized, truncated := normalizeTruncatedToolPayload("subagent_events", result)
+	normalized, truncated, err := normalizeTruncatedToolPayload("subagent_events", result)
+	if err != nil {
+		t.Fatal(err)
+	}
 	encoded, _ := json.Marshal(normalized)
 	if truncated || !strings.Contains(string(encoded), message) {
 		t.Fatal("explicit full event read truncated")

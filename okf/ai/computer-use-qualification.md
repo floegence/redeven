@@ -3,7 +3,7 @@ type: Acceptance Contract
 title: Computer use product qualification
 description: Establish scope-specific evidence for decoded frames, real target input, control handback and isolated cleanup.
 tags: [ai, computer-use, desktop, testing]
-timestamp: 2026-09-17T00:00:00Z
+timestamp: 2026-10-18T00:00:00Z
 ---
 # Summary
 
@@ -15,6 +15,24 @@ insufficient. Failed input and uncertain effects must never be replayed to
 manufacture a passing result.
 
 # Contract
+
+## Result encoding recovery
+
+Run the explicit local browser qualification from the repository root:
+
+    REDEVEN_COMPUTER_RESULT_UI=1 GOWORK=off go test ./internal/ai -run '^TestComputerResultFlowerUI$' -count=1 -v
+
+It builds the production FlowerSurface with installed published UI packages,
+uses the production runtime adapter and canonical detail projection against a
+real task-owned Service, and injects one counted executor effect followed by an
+invalid optional result. Isolated state, process ID, port and source commit are
+logged. Browser scenarios check the error input card, restart plus refresh,
+Continue, Stop, a failed response submission and a closed target without replaying
+the action. Runtime,
+provider, browser and temporary state are disposed by their test owners. This
+proves the result-recovery interaction, not native OS control or model performance.
+It is opt-in and stays outside ordinary CI and exact-main gates.
+
 
 ## Semantic execution acceptance
 

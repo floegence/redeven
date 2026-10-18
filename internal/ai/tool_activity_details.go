@@ -106,7 +106,10 @@ func structuredToolResults(toolName string, data any, existing []fltools.Structu
 	if isThreadQueryTool(toolName) {
 		return nil
 	}
-	value, _ := normalizeJSONCompatibleToolPayload(data)
+	value, err := normalizeJSONCompatibleToolPayload(data)
+	if err != nil {
+		return nil
+	}
 	payload, _ := value.(map[string]any)
 	rows := []fltools.StructuredActivityRow{}
 	omitted := false
