@@ -484,6 +484,7 @@
       "runErrorProviderStreamInterrupted": "所選模型供應商意外中斷了回應串流。請重試；若問題持續發生，請檢查模型供應商端點。",
       "runErrorProviderModelUnavailable": "該模型供應商無法提供所選模型。請在本機 AI 設定檔中選擇其他模型。",
       "runErrorProviderRequestInvalid": "所選模型供應商拒絕了 Flower 的請求格式。請更新 Redeven 後重試。",
+      "runErrorProviderRequestFailed": "模型請求未能完成。請重試；如果問題持續，請檢查目前的模型來源。",
       "runErrorProviderRequestRejected": "所選模型供應商拒絕了 Flower 的請求。請查看診斷詳細資料，稍後重試。",
       "runErrorModelGatewayContractFailed": "模型來源傳回了不完整的工具呼叫，因此未執行任何工具。請重試或切換模型。",
       "runErrorRepeatedToolCalls": "連續請求相同工具且沒有有效進展，系統已停止本輪。已確認的結果與已完成的子執行緒報告均已保留，可重試並從儲存的進度繼續。",

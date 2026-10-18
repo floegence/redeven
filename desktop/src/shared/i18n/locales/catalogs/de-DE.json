@@ -484,6 +484,7 @@
       "runErrorProviderStreamInterrupted": "Der ausgewählte KI-Modellanbieter hat den Antwortstream unerwartet beendet. Versuche es erneut; prüfe bei wiederholtem Auftreten den Anbieterendpunkt.",
       "runErrorProviderModelUnavailable": "Das ausgewählte Modell ist bei diesem KI-Modellanbieter nicht verfügbar. Wähle im lokalen KI-Profil ein anderes Modell aus.",
       "runErrorProviderRequestInvalid": "Der ausgewählte KI-Anbieter hat das Anfrageformat von Flower abgelehnt. Aktualisieren Sie Redeven und versuchen Sie es erneut.",
+      "runErrorProviderRequestFailed": "Die Modellanfrage konnte nicht abgeschlossen werden. Versuchen Sie es erneut oder prüfen Sie bei anhaltenden Problemen die aktuelle Modellquelle.",
       "runErrorProviderRequestRejected": "Der ausgewählte KI-Anbieter hat die Anfrage von Flower abgelehnt. Prüfen Sie die Diagnosedetails und versuchen Sie es später erneut.",
       "runErrorModelGatewayContractFailed": "Die Modellquelle hat einen unvollständigen Tool-Aufruf zurückgegeben. Es wurde kein Tool ausgeführt. Versuche es erneut oder wähle ein anderes Modell.",
       "runErrorRepeatedToolCalls": "Dieselben Werkzeuganfragen wurden ohne wirksamen Fortschritt wiederholt. Dieser Durchlauf wurde gestoppt. Bestätigte Ergebnisse und fertige Berichte der untergeordneten Chats bleiben erhalten. Ein erneuter Versuch setzt am gespeicherten Fortschritt an.",
